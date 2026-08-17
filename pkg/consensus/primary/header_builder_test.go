@@ -448,8 +448,8 @@ func TestBatchesConsumedOnSuccessfulHeaderCreation(t *testing.T) {
 
 	// Verify the batch is in the header's payload
 	require.Len(t, createdHeader.Payload, 1, "header should contain the batch")
-	_, ok := createdHeader.Payload[testBatch.Digest()]
-	require.True(t, ok, "header should contain our test batch")
+	require.Equal(t, testBatch.Digest(), createdHeader.Payload[0].Digest,
+		"header should contain our test batch")
 }
 
 // TestBatchesAvailableInNextHeaderAfterFailure verifies that batches remain
@@ -525,6 +525,11 @@ func TestBatchesAvailableInNextHeaderAfterFailure(t *testing.T) {
 	require.Len(t, w.AvailableBatches(), 0, "batches should be consumed after successful header")
 
 	// Verify the batch is in the header's payload
-	_, ok := createdHeader.Payload[testBatch.Digest()]
-	require.True(t, ok, "header should contain the test batch from before the failure")
+	found := false
+	for _, entry := range createdHeader.Payload {
+		if entry.Digest == testBatch.Digest() {
+			found = true
+		}
+	}
+	require.True(t, found, "header should contain the test batch from before the failure")
 }

@@ -20,10 +20,10 @@ import (
 
 // MockDispatcher is a mock implementation of Dispatcher for testing.
 type MockDispatcher struct {
-	mu              sync.Mutex
-	anchors         []*Anchor
-	syntheticTxs    map[string][][]byte // partition -> transactions
-	anchorHandler   func(*Anchor) error
+	mu                 sync.Mutex
+	anchors            []*Anchor
+	syntheticTxs       map[string][][]byte // partition -> transactions
+	anchorHandler      func(*Anchor) error
 	syntheticTxHandler func(string, []byte) error
 }
 

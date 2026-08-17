@@ -12,3 +12,123 @@ SequenceOptions:
       type: p2p.PeerID
       marshal-as: union
       zero-value: '""'
+
+# MajorHeaderRecord is one entry of a MajorHeaderRange response (#4058): a
+# major block's index entry plus the quorum-signed anchor of the minor block
+# that closed it.
+MajorHeaderRecord:
+  fields:
+    - name: Index
+      description: is the major block index
+      type: uint
+    - name: Entry
+      description: is the major-block index chain entry
+      type: protocol.IndexEntry
+      marshal-as: reference
+      pointer: true
+    - name: Anchor
+      description: is the partition's self-anchor for the closing minor block
+      type: messaging.SequencedMessage
+      marshal-as: reference
+      pointer: true
+    - name: Signatures
+      description: is the archived validator quorum over the anchor
+      type: protocol.KeySignature
+      marshal-as: union
+      repeatable: true
+    - name: Updates
+      description: is the network-account transactions of this major block's window, proven into the anchor
+      type: NetworkUpdateProof
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+# NetworkUpdateProof is a network-account transaction (e.g. a validator-set
+# change) proven into a spine anchor's root chain anchor (#4058). The receipt
+# binds the transaction hash to the RootChainAnchor of the anchor that closes
+# the major block, so the update inherits the anchor's quorum trust without
+# its own quorum check.
+NetworkUpdateProof:
+  fields:
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+    - name: Receipt
+      type: merkle.Receipt
+      marshal-as: reference
+      pointer: true
+
+# MinorRootRecord binds a run of minor blocks to the verified spine (#4058):
+# the self-anchor covering the end of the run with its archived quorum, the
+# window's network-account updates, and a receipt list proving the root chain
+# extends the client's last verified root to this anchor's root.
+MinorRootRecord:
+  fields:
+    - name: Anchor
+      description: is the partition's self-anchor covering the end of the run
+      type: messaging.SequencedMessage
+      marshal-as: reference
+      pointer: true
+    - name: Signatures
+      description: is the archived validator quorum over the anchor
+      type: protocol.KeySignature
+      marshal-as: union
+      repeatable: true
+    - name: Updates
+      description: is the network-account transactions of the run, proven into the anchor
+      type: NetworkUpdateProof
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: RootProof
+      description: proves the root chain extends the previously verified root to this anchor's root
+      type: merkle.ReceiptList
+      marshal-as: reference
+      pointer: true
+
+# SnapshotChunk is one chunk of a pinned-epoch snapshot stream (#4058). The
+# first request (epoch zero) pins the server's current state as the sync
+# epoch and returns its block; subsequent requests page through the collected
+# snapshot by offset.
+SnapshotChunk:
+  fields:
+    - name: Block
+      description: is the minor block the snapshot was taken at
+      type: uint
+    - name: Total
+      description: is the total size of the snapshot in bytes
+      type: uint
+    - name: Offset
+      description: is the offset of this chunk
+      type: uint
+    - name: Data
+      description: is the chunk data
+      type: bytes
+    - name: Round
+      description: is the consensus round that committed the epoch block (zero if unknown)
+      type: uint
+    - name: Epoch
+      description: is the committee epoch of that round (may be zero)
+      type: uint
+    - name: StateRoot
+      description: is the state tree anchor of the pinned block's prepared anchor, for verification against a directory receipt (BVN sync, #4058)
+      type: hash
+
+# PartitionRootRecord proves a BVN's state root into the directory (#4058
+# phase 3b): the directory records every received partition anchor's
+# StateTreeAnchor on a dedicated chain, so one receipt from that entry to a
+# quorum-anchored directory root proves the state root without a separate BVN
+# quorum check. DirectoryBlock is the directory block whose root chain anchor
+# the receipt ends at — the client binds its verified spine to exactly that
+# block and compares roots.
+PartitionRootRecord:
+  fields:
+    - name: Receipt
+      description: proves the state root entry into the directory root chain anchor
+      type: merkle.Receipt
+      marshal-as: reference
+      pointer: true
+    - name: DirectoryBlock
+      description: is the directory block whose root chain anchor the receipt ends at
+      type: uint

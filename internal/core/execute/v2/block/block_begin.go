@@ -196,16 +196,50 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		return errors.UnknownError.WithFormat("load system ledger: %w", err)
 	}
 
-	// Did anything happen last block?
-	if ledger.Index < block.Index-1 {
-		x.logger.Debug("Skipping anchor", "module", "anchoring", "index", ledger.Index)
-		return nil
-	}
+	// Anchor the last non-empty block if it has not been anchored yet. This
+	// used to require the non-empty block to be the IMMEDIATELY previous
+	// block (ledger.Index == block.Index-1), which assumes the anchor is
+	// always recorded on the very next block. Under CometBFT at one block
+	// per second that nearly always holds, but DAG-BFT produces a block per
+	// committed certificate — dozens per second — and if the one-block
+	// window is missed the anchor is never recorded and the anchor sequence
+	// stalls (#4054: 4 anchors recorded out of 55 anchored blocks). The new
+	// behavior changes when anchors are recorded (which is part of state),
+	// so it is version-gated to preserve replay of pre-Kourou history.
+	//
+	// Note that recording the anchor and dispatching the last block's
+	// synthetic messages are INDEPENDENT duties of this function — skipping
+	// the anchor must not skip the synthetics.
+	if x.globals.Active.ExecutorVersion.V2KourouEnabled() {
+		if ledger.Anchor != nil {
+			last, err := x.lastAnchoredBlock(block.Batch)
+			if err != nil {
+				return errors.UnknownError.WithFormat("determine last anchored block: %w", err)
+			}
+			if ledger.Index > last {
+				err = x.recordAnchor(block, ledger)
+				if err != nil {
+					return errors.UnknownError.WithFormat("send anchor: %w", err)
+				}
+			}
+		}
 
-	// Send the anchor first, before synthetic transactions
-	err = x.recordAnchor(block, ledger)
-	if err != nil {
-		return errors.UnknownError.WithFormat("send anchor: %w", err)
+		// Did anything happen last block?
+		if ledger.Index < block.Index-1 {
+			return nil
+		}
+	} else {
+		// Did anything happen last block?
+		if ledger.Index < block.Index-1 {
+			x.logger.Debug("Skipping anchor", "module", "anchoring", "index", ledger.Index)
+			return nil
+		}
+
+		// Send the anchor first, before synthetic transactions
+		err = x.recordAnchor(block, ledger)
+		if err != nil {
+			return errors.UnknownError.WithFormat("send anchor: %w", err)
+		}
 	}
 
 	// If the previous block included a directory anchor, send synthetic
@@ -220,6 +254,36 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	return nil
+}
+
+// lastAnchoredBlock returns the block index anchored by the most recently
+// recorded anchor, or zero if no anchor has been recorded.
+func (x *Executor) lastAnchoredBlock(batch *database.Batch) (uint64, error) {
+	sequence := batch.Account(x.Describe.AnchorPool()).AnchorSequenceChain()
+	head, err := sequence.Head().Get()
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load anchor sequence chain head: %w", err)
+	}
+	if head.Count == 0 {
+		return 0, nil
+	}
+
+	hash, err := sequence.Entry(head.Count - 1)
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load anchor sequence chain entry %d: %w", head.Count-1, err)
+	}
+
+	var msg messaging.MessageWithTransaction
+	err = batch.Message2(hash).Main().GetAs(&msg)
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load anchor %d: %w", head.Count, err)
+	}
+
+	anchor, ok := msg.GetTransaction().Body.(protocol.AnchorBody)
+	if !ok {
+		return 0, errors.InternalError.WithFormat("anchor sequence entry %d is not an anchor: got %v", head.Count-1, msg.GetTransaction().Body.Type())
+	}
+	return anchor.GetPartitionAnchor().MinorBlockIndex, nil
 }
 
 func (x *Executor) recordAnchor(block *Block, ledger *protocol.SystemLedger) error {

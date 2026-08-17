@@ -10,10 +10,12 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -30,24 +32,77 @@ func startDHT(host host.Host, ctx context.Context, mode dht.ModeOpt, bootstrapPe
 
 	// Connect to the bootstrap peers
 	wg := new(sync.WaitGroup)
+	var peers []*peer.AddrInfo
 	for _, addr := range bootstrapPeers {
 		addr = oldQuicCompat(addr)
 		pi, err := peer.AddrInfoFromP2pAddr(addr)
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("parse address: %w", err)
 		}
+		peers = append(peers, pi)
 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			err := host.Connect(ctx, *pi)
-			if err != nil {
-				slog.Info("Unable to connect to bootstrap peer", "error", err, "module", "api")
+			if err == nil {
+				return
 			}
+			slog.Info("Unable to connect to bootstrap peer, will retry", "error", err, "module", "api")
+
+			// When an entire network starts simultaneously, peers may not be
+			// listening yet and every initial dial fails - without a retry
+			// the node is permanently isolated, since the DHT has no other
+			// way in (#4054). Keep retrying with backoff in the background.
+			go func() {
+				for delay := time.Second; ; {
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(delay):
+					}
+					if err := host.Connect(ctx, *pi); err == nil {
+						slog.Info("Connected to bootstrap peer after retry", "peer", pi.ID, "module", "api")
+						return
+					}
+					if delay < 30*time.Second {
+						delay *= 2
+					}
+				}
+			}()
 		}()
 	}
 	wg.Wait()
+
+	// Keep bootstrap connectivity alive FOREVER, not just at startup.
+	// Connections die when a peer is unreachable for a while (network
+	// outage, paused or restarting container) and nothing else re-dials:
+	// gossipsub only attaches peers when a connection forms, so a node
+	// that loses its peers stays isolated indefinitely — observed as a
+	// partition whose consensus never resumes after a brief outage (#4056).
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			for _, pi := range peers {
+				if host.Network().Connectedness(pi.ID) == network.Connected {
+					continue
+				}
+				pi := pi
+				go func() {
+					if err := host.Connect(ctx, *pi); err == nil {
+						slog.Info("Reconnected to bootstrap peer", "peer", pi.ID, "module", "api")
+					}
+				}()
+			}
+		}
+	}()
 
 	// Bootstrap the DHT?
 	err = d.Bootstrap(ctx)
@@ -59,23 +114,32 @@ func startDHT(host host.Host, ctx context.Context, mode dht.ModeOpt, bootstrapPe
 }
 
 // startServiceDiscovery sets up pubsub for node events.
-func startServiceDiscovery(ctx context.Context, host host.Host) (chan<- event, <-chan event, error) {
+//
+// The returned PubSub is the host's ONE gossipsub router. Attaching a second
+// router to the same host makes the two compete for the meshsub protocol
+// streams — whichever registers last receives everything and the other's
+// topics never see any peers (#4054). Anything else that needs pubsub on this
+// host (e.g. DAG-BFT) must reuse this instance via Node.Pubsub.
+func startServiceDiscovery(ctx context.Context, host host.Host) (*pubsub.PubSub, chan<- event, <-chan event, error) {
 	// Create the pubsub
-	ps, err := pubsub.NewGossipSub(ctx, host)
+	ps, err := pubsub.NewGossipSub(ctx, host,
+		pubsub.WithPeerExchange(true),
+		pubsub.WithFloodPublish(true),
+	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Join the topic
 	topic, err := ps.Join(api.ServiceTypeNode.Address().String())
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Subscribe
 	sub, err := topic.Subscribe()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Parse events and forward them to a channel
@@ -132,5 +196,5 @@ func startServiceDiscovery(ctx context.Context, host host.Host) (chan<- event, <
 		}
 	}()
 
-	return send, recv, nil
+	return ps, send, recv, nil
 }

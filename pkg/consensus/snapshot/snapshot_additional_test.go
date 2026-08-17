@@ -955,7 +955,7 @@ func TestUnmarshalCommittee_Truncated(t *testing.T) {
 func TestUnmarshalCertificates_Truncated(t *testing.T) {
 	// Data has count > 0 but missing actual cert data
 	data := make([]byte, 8)
-	data[3] = 1 // count = 1
+	data[3] = 1   // count = 1
 	data[7] = 100 // cert length = 100, but data not provided
 
 	_, err := unmarshalCertificates(data)

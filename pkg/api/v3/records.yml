@@ -163,6 +163,15 @@ MessageRecord[T messaging.Message]:
       marshal-as: reference
       pointer: true
 
+    # For synthetic messages served as part of a range - a collection proof
+    # covering every message of the range (#4048). Set on the last record of
+    # the range only.
+    - name: SourceReceiptList
+      type: merkle.ReceiptList
+      marshal-as: reference
+      pointer: true
+      optional: true
+
     - name: LastBlockTime
       type: time
       pointer: true

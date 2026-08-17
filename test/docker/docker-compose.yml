@@ -10,6 +10,14 @@
 #   docker compose -f test/docker/docker-compose.yml logs -f
 #   docker compose -f test/docker/docker-compose.yml down -v
 
+# Cap container logs: nodes log heavily (~700 MB/hour each at DAG-BFT block
+# rates) and this host's drives must stay under 50% capacity.
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "200m"
+    max-file: "2"
+
 services:
   # CRITICAL: Bootstrap server is REQUIRED for peer discovery
   # All validators need this to find each other on the network
@@ -19,9 +27,13 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bootstrap
-    mem_limit: 1g
+    logging: *bounded-logging
+    mem_limit: 4g
     ports:
-      - "16593:16593"
+      # Host port 16653 (not 16593) - accman-managed follower nodes use the
+      # 165xx range on the host. In-network peers reach acc-bootstrap:16593
+      # via docker DNS regardless of this mapping.
+      - "16653:16593"
     entrypoint: ["/bin/accumulated-bootstrap"]
     command:
       - --listen
@@ -36,22 +48,32 @@ services:
       retries: 3
       start_period: 10s
 
-  # Initialize network configuration
+  # Initialize network configuration.
+  #
+  # ⚠️  Guarded by a marker file: compose re-runs this service whenever a
+  # dependent is started via `docker compose start/up` — and an unguarded
+  # `--reset` regenerates every config and genesis with NEW RANDOM KEYS while
+  # the validators keep running on the old ones, silently poisoning the
+  # network. (Use `docker start acc-<name>` to restart single nodes.)
   init:
     build:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-init
+    logging: *bounded-logging
     volumes:
       - network-config:/root/.accumulate
       - ../..:/workspace
     working_dir: /workspace
+    entrypoint: ["sh", "-c"]
     command:
-      - init
-      - network
-      - test/docker/docker-network.yml
-      - --reset
-      - --faucet-seed=FAUCET
+      - |
+        if [ -f /root/.accumulate/init-done ]; then
+          echo 'network already initialized — skipping (remove the volume to re-init)'
+          exit 0
+        fi
+        accumulated init network test/docker/docker-network.yml --reset --faucet-seed=FAUCET \
+          && touch /root/.accumulate/init-done
 
   # BVN1 Validators
   bvn1-val1:
@@ -59,7 +81,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn1-val1
-    mem_limit: 1g
+    logging: *bounded-logging
+    mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -78,7 +101,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn1-val2
-    mem_limit: 1g
+    logging: *bounded-logging
+    mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -97,7 +121,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn1-val3
-    mem_limit: 1g
+    logging: *bounded-logging
+    mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -116,7 +141,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn1-val4
-    mem_limit: 1g
+    logging: *bounded-logging
+    mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -136,7 +162,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn2-val1
-    mem_limit: 1g
+    logging: *bounded-logging
+    mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -155,7 +182,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn2-val2
-    mem_limit: 1g
+    logging: *bounded-logging
+    mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -174,7 +202,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn2-val3
-    mem_limit: 1g
+    logging: *bounded-logging
+    mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -193,7 +222,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn2-val4
-    mem_limit: 1g
+    logging: *bounded-logging
+    mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -213,7 +243,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn3-val1
-    mem_limit: 1g
+    logging: *bounded-logging
+    mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -232,7 +263,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn3-val2
-    mem_limit: 1g
+    logging: *bounded-logging
+    mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -251,7 +283,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn3-val3
-    mem_limit: 1g
+    logging: *bounded-logging
+    mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -270,7 +303,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
     container_name: acc-bvn3-val4
-    mem_limit: 1g
+    logging: *bounded-logging
+    mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
     command:

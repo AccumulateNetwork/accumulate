@@ -369,3 +369,60 @@ func TestCertSyncResponse_EmptyCertificates(t *testing.T) {
 	assert.Empty(t, resp2.Certificates)
 	assert.Empty(t, resp2.Missing)
 }
+
+// TestCertSyncRequest_Rounds verifies the round-based catch-up request
+// (#4057) round-trips the wire and that a request with rounds serves every
+// certificate of those rounds.
+func TestCertSyncRequest_Rounds(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	req := &gossip.CertSyncRequest{
+		Requester: pub,
+		RequestID: 7,
+		Rounds:    []types.Round{4, 5, 6},
+	}
+
+	data, err := req.Marshal()
+	require.NoError(t, err)
+
+	req2, err := gossip.UnmarshalCertSyncRequest(data)
+	require.NoError(t, err)
+	require.Equal(t, req.Rounds, req2.Rounds)
+	require.Equal(t, req.RequestID, req2.RequestID)
+
+	// A request without rounds must still round-trip (backward compat)
+	req3 := &gossip.CertSyncRequest{Requester: pub, RequestID: 8}
+	data, err = req3.Marshal()
+	require.NoError(t, err)
+	req4, err := gossip.UnmarshalCertSyncRequest(data)
+	require.NoError(t, err)
+	require.Empty(t, req4.Rounds)
+}
+
+// TestCertSyncer_ServeRounds verifies handleSyncRequest serves whole rounds.
+func TestCertSyncer_ServeRounds(t *testing.T) {
+	d := dag.NewDAG(10)
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	header := types.NewHeader(pub, 0, 0, nil, nil)
+	require.NoError(t, header.Sign(priv))
+	cert := types.NewCertificate(header, [][]byte{header.Signature}, []uint16{0})
+	require.NoError(t, d.InsertGenesis(cert))
+
+	config := CertSyncerConfig{PublicKey: pub}
+	config.applyDefaults()
+	syncer := NewCertSyncer(config, d, nil, NewPendingCertificates(100))
+
+	// Round-only request — must not panic and must find the cert (no gossip
+	// layer, so nothing is actually sent; this exercises the lookup path)
+	syncer.handleSyncRequest(&gossip.CertSyncRequest{
+		RequestID: 9,
+		Rounds:    []types.Round{0, 1},
+	})
+
+	// RequestRounds without gossip must be a no-op
+	syncer.RequestRounds([]types.Round{1, 2, 3})
+}

@@ -195,14 +195,14 @@ func (m *Manager) RevokeKey(operator, reason string) error {
 
 	// Log audit event
 	if m.audit != nil {
-		_ = m.audit.Log(&AuditEvent{
-			Timestamp:     now,
-			Event:         "key_revoked",
-			KeyID:         m.activeKey.KeyID,
-			ValidatorID:   m.validatorID,
-			RotationType:  RotationTypeEmergency,
-			Operator:      operator,
-			Reason:        reason,
+		m.audit.Log(&AuditEvent{
+			Timestamp:    now,
+			Event:        "key_revoked",
+			KeyID:        m.activeKey.KeyID,
+			ValidatorID:  m.validatorID,
+			RotationType: RotationTypeEmergency,
+			Operator:     operator,
+			Reason:       reason,
 		})
 	}
 
@@ -265,7 +265,7 @@ func (m *Manager) rotateKeyLocked(rotationType RotationType, operator, reason st
 		m.graceKey = m.activeKey
 
 		if m.audit != nil {
-			_ = m.audit.Log(&AuditEvent{
+			m.audit.Log(&AuditEvent{
 				Timestamp:      now,
 				Event:          "key_grace_started",
 				KeyID:          m.activeKey.KeyID,
@@ -287,7 +287,7 @@ func (m *Manager) rotateKeyLocked(rotationType RotationType, operator, reason st
 
 	// Log audit event
 	if m.audit != nil {
-		_ = m.audit.Log(&AuditEvent{
+		m.audit.Log(&AuditEvent{
 			Timestamp:      now,
 			Event:          "key_rotated",
 			KeyID:          newKey.KeyID,
@@ -326,7 +326,7 @@ func (m *Manager) generateInitialKey() error {
 	m.keys[key.KeyID] = key
 
 	if m.audit != nil {
-		_ = m.audit.Log(&AuditEvent{
+		m.audit.Log(&AuditEvent{
 			Timestamp:   now,
 			Event:       "key_generated",
 			KeyID:       key.KeyID,

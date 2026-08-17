@@ -31,8 +31,15 @@ import (
 
 // Default configuration values.
 const (
-	DefaultNumWorkers       = 1
-	DefaultDAGGCDepth       = 50
+	DefaultNumWorkers = 1
+	// DefaultDAGGCDepth is how many rounds of DAG history are retained past
+	// the last commit. This is also the round catch-up window (#4057): a
+	// node that falls further behind than this cannot recover round-by-round
+	// because its peers have pruned the certificates it needs. At ~10
+	// rounds/second the old value of 50 retained FIVE SECONDS of history —
+	// any outage longer than that wedged the node permanently. 10,000
+	// rounds is ~16 minutes at that rate and costs roughly 25 MB.
+	DefaultDAGGCDepth       = 10_000
 	DefaultCommitBufferSize = 5000 // Increased from 1000 for high throughput
 )
 
@@ -153,6 +160,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 
 	// Create Bullshark
 	bs := bullshark.New(committee, d)
+	bs.SetPartition(config.Partition)
 
 	// NOTE: We intentionally do NOT set an onCommit callback for batch pruning here.
 	// The consumer of the committed channel (e.g., main.go or test code) is responsible
@@ -348,6 +356,20 @@ func (n *Node) CurrentRound() types.Round {
 }
 
 // LastCommitRound returns the last committed leader round.
+// Rejoin seeds the consensus position after a fast sync (#4058). The node's
+// executor state was restored to a block committed at the given round, so
+// consensus resumes there: the primary participates from the next round and
+// Bullshark orders nothing at or below the seed. The seed must be within
+// DAGGCDepth of the network's current round — fast sync's epoch is always a
+// few blocks behind the tip, so it is — and the normal certificate-sync
+// catch-up covers the remainder.
+func (n *Node) Rejoin(round types.Round) {
+	n.primary.SetRound(round)
+	n.bullshark.SetLastCommitRound(round)
+	n.dag.SetLastCommitRound(round)
+	slog.Info("Rejoined consensus", "partition", n.config.Partition, "round", round)
+}
+
 func (n *Node) LastCommitRound() types.Round {
 	return n.bullshark.LastCommitRound()
 }

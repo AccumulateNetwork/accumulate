@@ -68,3 +68,23 @@ Type:
     value: 0x80
   PrivateSequenceResponse:
     value: 0x81
+  PrivateSequenceRangeRequest:
+    value: 0x82
+  PrivateSequenceRangeResponse:
+    value: 0x83
+  PrivateMajorHeaderRangeRequest:
+    value: 0x84
+  PrivateMajorHeaderRangeResponse:
+    value: 0x85
+  PrivateMinorRootRangeRequest:
+    value: 0x86
+  PrivateMinorRootRangeResponse:
+    value: 0x87
+  PrivateSnapshotRangeRequest:
+    value: 0x88
+  PrivateSnapshotRangeResponse:
+    value: 0x89
+  PrivatePartitionRootRangeRequest:
+    value: 0x8a
+  PrivatePartitionRootRangeResponse:
+    value: 0x8b

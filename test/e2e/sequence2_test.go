@@ -25,8 +25,9 @@ import (
 )
 
 func TestMissingSynthTxn(t *testing.T) {
-	t.Skip("Flaky")
-
+	// This test was flaky because the simulator lost messages that healing
+	// submitted from background tasks — fixed by the shared hub dispatcher
+	// (#4048).
 	Run(t, map[string]ExecutorVersion{
 		"v1":     ExecutorVersionV1SignatureAnchoring,
 		"latest": ExecutorVersionLatest,

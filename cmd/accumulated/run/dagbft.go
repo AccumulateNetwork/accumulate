@@ -22,7 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	multiexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -93,7 +92,13 @@ func (s *DAGBFTService) prestart(inst *Instance) error {
 // start initializes and starts the DAG-BFT service.
 func (s *DAGBFTService) start(inst *Instance) error {
 	// Apply defaults
-	setDefaultPtr(&s.EnableHealing, false)
+	// Healing recovers lost synthetic messages and anchors via range
+	// requests (#4048/#4056). Without it a gap is PERMANENT: delivery is
+	// strictly sequential, so one lost message wedges everything after it —
+	// observed as a BVN that never delivered a single synthetic transaction
+	// (seq-want=1, seq-got=388) and therefore never produced an anchor. The
+	// per-block scan is paced inside the executor.
+	setDefaultPtr(&s.EnableHealing, true)
 	setDefaultPtr(&s.EnableDirectDispatch, true)
 	setDefaultPtr(&s.MaxEnvelopesPerBlock, uint64(100))
 	setDefaultPtr(&s.NumWorkers, dagconfig.DefaultNumWorkers)
@@ -206,13 +211,19 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 	// Start conductor for cross-chain communication
 	conductor := &crosschain.Conductor{
-		Partition:           s.Partition,
-		ValidatorKey:        execOpts.Key,
-		Database:            execOpts.Database,
-		Querier:             v3.Querier2{Querier: client},
-		Dispatcher:          execOpts.NewDispatcher(),
-		RunTask:             execOpts.BackgroundTaskLauncher,
-		EnableAnchorHealing: Ptr(false),
+		Partition:    s.Partition,
+		ValidatorKey: execOpts.Key,
+		Database:     execOpts.Database,
+		Querier:      v3.Querier2{Querier: client},
+		Dispatcher:   execOpts.NewDispatcher(),
+		RunTask:      execOpts.BackgroundTaskLauncher,
+		// Healing is the ONLY retry mechanism for anchors — the conductor's
+		// per-block dispatch is one-shot, and a single lost anchor freezes
+		// the destination's delivered-sequence forever (observed as BVN
+		// ledgers stuck at height 2, #4054). The conductor paces healing
+		// scans internally (HealInterval), so this is safe even at DAG-BFT
+		// block rates.
+		EnableAnchorHealing: Ptr(true),
 	}
 	err = conductor.Start(s.eventBus)
 	if err != nil {
@@ -270,6 +281,14 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		globals = new(network.GlobalValues)
 	}
 
+	// Seed the conductor's globals directly. The conductor subscribes to
+	// WillChangeGlobals, but whether it observes the INITIAL event is a
+	// startup ordering race — a conductor that misses it returns early from
+	// every willBeginBlock and never sends or heals a single anchor, which
+	// is exactly the same race the InitialValidators handling above works
+	// around for the adapter (#4056).
+	conductor.Globals.Store(globals)
+
 	// Extract initial validators from globals
 	var initialValidators []adapter.ValidatorInfo
 	if globals != nil && globals.Network != nil {
@@ -293,6 +312,13 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			"validators", len(initialValidators))
 	}
 
+	// Apply a fast-sync rejoin seed if one was written by `accumulated
+	// fastsync` (#4058) — consumed once, on the first start after the sync
+	rejoin, err := dagbft.LoadRejoinSeed(inst.path(), s.Partition.ID)
+	if err != nil {
+		slog.Error("Failed to load fast-sync rejoin seed — starting without it", "partition", s.Partition.ID, "error", err)
+	}
+
 	// Create the service
 	svcConfig := dagbft.ServiceConfig{
 		Partition:         s.Partition,
@@ -302,6 +328,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Logger:            logger.With("module", "dagbft"),
 		Genesis:           inst.path(s.Genesis),
 		InitialValidators: initialValidators,
+		Rejoin:            rejoin,
+	}
+	if globals != nil && globals.Network != nil {
+		// The committee epoch is the network definition version (state-derived)
+		svcConfig.InitialNetworkVersion = globals.Network.Version
 	}
 
 	// Wire in libp2p networking if available
@@ -407,8 +438,11 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 // loadGenesisIfNeeded loads the genesis snapshot into the database if needed.
 // It returns true if genesis was loaded, false if the database already has data.
 func (s *DAGBFTService) loadGenesisIfNeeded(db *database.Database, genesisPath string, logger logging.Logger) (bool, error) {
-	// Set the database observer (required for BPT updates)
-	db.SetObserver(execute.NewDatabaseObserver())
+	// Do NOT override the database observer. The default (production)
+	// observer computes real account hashes; execute.NewDatabaseObserver is a
+	// stub whose hasher is nil, so with it every account hash is empty — the
+	// BPT stops committing to state and genesis restore fails its hash check
+	// against the snapshot (#4053).
 
 	// Check if database already has state
 	batch := db.Begin(false)

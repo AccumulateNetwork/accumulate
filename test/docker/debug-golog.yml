@@ -1,0 +1,19 @@
+# Debug overlay: surface go-libp2p internal errors (rcmgr denials, identify
+# failures, stream resets) on stderr so `docker logs` shows why gossipsub
+# peers fail to attach during a simultaneous-start connection storm (#4054).
+#
+# Usage:
+#   docker compose -f test/docker/docker-compose.yml -f test/docker/debug-golog.yml up -d
+services:
+  bvn1-val1: { environment: { GOLOG_LOG_LEVEL: warn } }
+  bvn1-val2: { environment: { GOLOG_LOG_LEVEL: warn } }
+  bvn1-val3: { environment: { GOLOG_LOG_LEVEL: warn } }
+  bvn1-val4: { environment: { GOLOG_LOG_LEVEL: warn } }
+  bvn2-val1: { environment: { GOLOG_LOG_LEVEL: warn } }
+  bvn2-val2: { environment: { GOLOG_LOG_LEVEL: warn } }
+  bvn2-val3: { environment: { GOLOG_LOG_LEVEL: warn } }
+  bvn2-val4: { environment: { GOLOG_LOG_LEVEL: warn } }
+  bvn3-val1: { environment: { GOLOG_LOG_LEVEL: "error,pubsub=debug" } }
+  bvn3-val2: { environment: { GOLOG_LOG_LEVEL: warn } }
+  bvn3-val3: { environment: { GOLOG_LOG_LEVEL: warn } }
+  bvn3-val4: { environment: { GOLOG_LOG_LEVEL: warn } }

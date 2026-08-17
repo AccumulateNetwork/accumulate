@@ -359,6 +359,14 @@ func init() {
 					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
 				},
 			},
+			{
+				Name:     "DagGcDepth",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
 		},
 	}).SetGoType()
 

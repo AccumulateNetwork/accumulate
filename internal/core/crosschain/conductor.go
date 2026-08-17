@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -53,6 +55,109 @@ type Conductor struct {
 
 	// **FOR TESTING PURPOSES ONLY**. Intercepts dispatched envelopes.
 	Intercept interceptor
+
+	// HealInterval is the minimum time between anchor-healing scans per
+	// destination. Healing fires from WillBeginBlock; with CometBFT that is
+	// ~1 block/s but DAG-BFT produces a block per committed certificate —
+	// dozens per second — and each scan queries the destination partition,
+	// so healing must be paced independently of block cadence. Defaults to
+	// DefaultHealInterval.
+	HealInterval time.Duration
+
+	// HealTimeout is the deadline for a single healing scan, including its
+	// queries to the destination. Defaults to DefaultHealTimeout.
+	HealTimeout *time.Duration
+
+	// lastHeal tracks the last healing scan per destination.
+	lastHealMu sync.Mutex
+	lastHeal   map[string]time.Time
+
+	// delivery tracks each destination's anchor-delivery progress across scans,
+	// so healing acts only when delivery is genuinely stalled rather than
+	// merely catching up or momentarily paused.
+	deliveryMu sync.Mutex
+	delivery   map[string]*deliveryProgress
+}
+
+// StallScans is the number of consecutive scans a destination's delivered
+// anchor count must fail to advance, while anchors remain undelivered, before
+// its next anchor is treated as stuck and resubmitted. At DefaultHealInterval
+// this is a ~30s window — long enough that normal, bursty delivery (which
+// pauses for a scan or two between batches) is not mistaken for a stall, short
+// enough to recover a genuinely lost quorum promptly.
+const StallScans = 3
+
+type deliveryProgress struct {
+	delivered uint64 // delivered count at the last scan
+	stalls    int    // consecutive scans with no advance while behind
+}
+
+// DefaultHealInterval is the default minimum time between anchor-healing
+// scans per destination.
+const DefaultHealInterval = 10 * time.Second
+
+// DefaultHealTimeout is the default deadline for a single healing scan.
+const DefaultHealTimeout = 30 * time.Second
+
+// shouldHeal returns true if enough time has passed since the last healing
+// scan for the given destination, and records the scan time.
+func (c *Conductor) shouldHeal(destination string) bool {
+	interval := c.HealInterval
+	if interval <= 0 {
+		interval = DefaultHealInterval
+	}
+
+	c.lastHealMu.Lock()
+	defer c.lastHealMu.Unlock()
+
+	if c.lastHeal == nil {
+		c.lastHeal = make(map[string]time.Time)
+	}
+	if time.Since(c.lastHeal[destination]) < interval {
+		return false
+	}
+	c.lastHeal[destination] = time.Now()
+	return true
+}
+
+// deliveryStalled reports whether the destination's delivered anchor count has
+// failed to advance across StallScans consecutive scans while anchors remain
+// undelivered. Anchors deliver sequentially, so a destination whose Delivered
+// is climbing is flowing on its own and needs no help — re-driving its in-flight
+// anchors only adds load, and under DAG-BFT's dozens-of-blocks-per-second
+// cadence that is the feedback that saturates a partition. Delivery is bursty
+// (a batch, then a pause), so a single stalled scan is not enough to conclude a
+// stall; only Delivered pinned across the whole window marks the next anchor as
+// genuinely stuck — a quorum lost to validator churn, say — and worth a
+// resubmission (#4056). It updates the destination's progress each call.
+func (c *Conductor) deliveryStalled(destination string, delivered, produced uint64) bool {
+	c.deliveryMu.Lock()
+	defer c.deliveryMu.Unlock()
+
+	if c.delivery == nil {
+		c.delivery = make(map[string]*deliveryProgress)
+	}
+	p := c.delivery[destination]
+	if p == nil {
+		p = new(deliveryProgress)
+		c.delivery[destination] = p
+	}
+
+	switch {
+	case delivered >= produced:
+		// Caught up — nothing undelivered
+		p.delivered, p.stalls = delivered, 0
+		return false
+	case delivered > p.delivered:
+		// Advancing — flowing on its own, reset the stall count
+		p.delivered, p.stalls = delivered, 0
+		return false
+	default:
+		// Behind and not advancing this scan — stuck only once the count has
+		// been pinned across the whole window
+		p.stalls++
+		return p.stalls >= StallScans
+	}
 }
 
 func (c *Conductor) Start(bus *events.Bus) error {
@@ -100,30 +205,33 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 		})
 	}()
 
-	// Check old anchors
-	if c.Partition.Type != protocol.PartitionTypeDirectory {
+	// Check old anchors. Healing queries the DESTINATION, so every scan gets
+	// a deadline: an unreachable or restarted destination (stale peer IDs)
+	// otherwise hangs the query forever — the goroutine leaks silently and
+	// that destination is never healed again (#4056).
+	healOne := func(destination *url.URL) {
 		c.runTask(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), def(c.HealTimeout, DefaultHealTimeout))
+			defer cancel()
+
 			batch := c.Database.Begin(false)
 			defer batch.Discard()
 
-			err := c.healAnchors(context.Background(), batch, protocol.DnUrl(), e.Index)
+			err := c.healAnchors(ctx, batch, destination, e.Index)
 			if err != nil {
-				slog.Error("Error while healing anchors", "error", err)
+				slog.Error("Error while healing anchors", "destination", destination, "error", err)
 			}
 		})
-
+	}
+	if c.Partition.Type != protocol.PartitionTypeDirectory {
+		if c.shouldHeal(protocol.Directory) {
+			healOne(protocol.DnUrl())
+		}
 	} else {
 		for _, dst := range c.Globals.Load().Network.Partitions {
-			dst := dst
-			c.runTask(func() {
-				batch := c.Database.Begin(false)
-				defer batch.Discard()
-
-				err := c.healAnchors(context.Background(), batch, protocol.PartitionUrl(dst.ID), e.Index)
-				if err != nil {
-					slog.Error("Error while healing anchors", "error", err)
-				}
-			})
+			if c.shouldHeal(dst.ID) {
+				healOne(protocol.PartitionUrl(dst.ID))
+			}
 		}
 	}
 
@@ -221,6 +329,7 @@ func (c *Conductor) submit(ctx context.Context, url *url.URL, env *messaging.Env
 func (c *Conductor) runTask(task func()) {
 	if c.RunTask != nil {
 		c.RunTask(task)
+		return
 	}
 
 	go func() {

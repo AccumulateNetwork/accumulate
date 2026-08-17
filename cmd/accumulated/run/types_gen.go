@@ -228,6 +228,7 @@ type CoreValidatorConfiguration struct {
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType
 	NumWorkers           *int64
+	DagGcDepth           *int64
 }
 
 func (CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }

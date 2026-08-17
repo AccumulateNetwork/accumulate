@@ -74,8 +74,8 @@ var ErrTimeout = errors.New("timeout waiting for transaction status")
 
 // Default configuration values.
 const (
-	DefaultMaxTracked     = 100000          // Maximum tracked transactions
-	DefaultExpiryDuration = 5 * time.Minute // Transaction tracking expiry
+	DefaultMaxTracked      = 100000           // Maximum tracked transactions
+	DefaultExpiryDuration  = 5 * time.Minute  // Transaction tracking expiry
 	DefaultCleanupInterval = 30 * time.Second // Cleanup interval
 )
 
@@ -110,8 +110,8 @@ func (c *TrackerConfig) applyDefaults() {
 
 // TxInfo contains information about a tracked transaction.
 type TxInfo struct {
-	Hash      [32]byte
-	Status    Status
+	Hash       [32]byte
+	Status     Status
 	SubmitTime time.Time
 	BatchTime  time.Time
 	CommitTime time.Time
@@ -121,18 +121,18 @@ type TxInfo struct {
 
 // trackedTx is internal tracking state for a transaction.
 type trackedTx struct {
-	info      TxInfo
-	waiters   []chan Status
-	mu        sync.Mutex
+	info    TxInfo
+	waiters []chan Status
+	mu      sync.Mutex
 }
 
 // Tracker tracks transaction status through the consensus pipeline.
 type Tracker struct {
 	config TrackerConfig
 
-	mu       sync.RWMutex
-	txns     map[[32]byte]*trackedTx
-	order    [][32]byte // Track insertion order for LRU eviction
+	mu    sync.RWMutex
+	txns  map[[32]byte]*trackedTx
+	order [][32]byte // Track insertion order for LRU eviction
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -200,8 +200,8 @@ func (t *Tracker) Track(tx []byte) [32]byte {
 	// Add new transaction
 	t.txns[hash] = &trackedTx{
 		info: TxInfo{
-			Hash:      hash,
-			Status:    StatusPending,
+			Hash:       hash,
+			Status:     StatusPending,
 			SubmitTime: time.Now(),
 		},
 	}
@@ -234,8 +234,8 @@ func (t *Tracker) TrackWithHash(hash [32]byte) {
 	// Add new transaction
 	t.txns[hash] = &trackedTx{
 		info: TxInfo{
-			Hash:      hash,
-			Status:    StatusPending,
+			Hash:       hash,
+			Status:     StatusPending,
 			SubmitTime: time.Now(),
 		},
 	}

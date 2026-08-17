@@ -8,6 +8,7 @@ package accumulated
 
 import (
 	"context"
+	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -20,9 +21,16 @@ import (
 
 // dispatcher implements [block.Dispatcher].
 type dispatcher struct {
-	network  string
-	router   routing.Router
-	dialer   message.Dialer
+	network string
+	router  routing.Router
+	dialer  message.Dialer
+
+	// mu guards messages: Submit appends from many goroutines (the healing
+	// path dispatches recovered messages concurrently) while Send reads and
+	// clears the queue. Without it the slice header is read torn — a nil data
+	// pointer with a non-zero length — and RoundTrip crashes the node ranging
+	// over it (observed mid-replay during a fast-sync rejoin, #4058).
+	mu       sync.Mutex
 	messages []message.Message
 }
 
@@ -42,6 +50,16 @@ func (d *dispatcher) Close() { /* Nothing to do */ }
 // Submit routes the account URL, constructs a multiaddr, and queues addressed
 // submit requests.
 func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Envelope) error {
+	// A panic here takes down the node — observed twice from the conductor's
+	// healing path during post-fast-sync replay (#4058). Report the problem
+	// instead; the caller logs it and healing retries.
+	if u == nil {
+		return errors.InternalError.With("cannot submit: no destination")
+	}
+	if d.router == nil {
+		return errors.InternalError.With("cannot submit: router not set")
+	}
+
 	// If there's something wrong with the envelope, it's better for that error
 	// to be logged closer to the source, at the sending side instead of the
 	// receiving side
@@ -63,24 +81,39 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Enve
 	}
 
 	// Queue a pre-addressed message
+	d.mu.Lock()
 	d.messages = append(d.messages, &message.Addressed{
 		Address: addr,
 		Message: &message.SubmitRequest{Envelope: env},
 	})
+	d.mu.Unlock()
 	return nil
 }
 
 // Send sends all of the batches asynchronously using one connection per
 // partition.
 func (d *dispatcher) Send(ctx context.Context) <-chan error {
+	d.mu.Lock()
 	messages := d.messages
 	d.messages = nil
+	d.mu.Unlock()
 
 	errs := make(chan error)
 	check := func(err error) {
 		if err == nil {
 			return
 		}
+
+		// Benign: the message was already delivered. CometBFT's "tx already in
+		// cache" variants went with CometBFT, but this one is ours and still
+		// happens, so it is still filtered here. Reporting it would recreate
+		// #4054's symptom from the other side — noise that buries the real
+		// dispatch failures the fix exists to surface.
+		var errObj *errors.Error
+		if errors.As(err, &errObj) && errObj.Code == errors.Delivered {
+			return
+		}
+
 		errs <- err
 	}
 

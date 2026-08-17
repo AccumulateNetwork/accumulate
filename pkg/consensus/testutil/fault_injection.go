@@ -23,10 +23,10 @@ import (
 type FaultInjector struct {
 	mu           sync.RWMutex
 	network      *TestNetwork
-	packetLoss   map[int]float64   // node index -> loss probability (0-1)
+	packetLoss   map[int]float64       // node index -> loss probability (0-1)
 	latency      map[int]time.Duration // node index -> latency to add
-	partitions   [][]int           // groups of node indices that can communicate
-	isolated     map[int]bool      // node index -> true if isolated
+	partitions   [][]int               // groups of node indices that can communicate
+	isolated     map[int]bool          // node index -> true if isolated
 	rng          *rand.Rand
 	interceptors map[int]network.Notifiee // node index -> interceptor
 }

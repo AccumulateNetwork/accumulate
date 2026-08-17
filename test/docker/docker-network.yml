@@ -9,7 +9,7 @@ bootstrap:
 
 # Global network configuration
 globals:
-  executorVersion: "v2"
+  executorVersion: "v2-kourou"
   oracle:
     price: 10000000  # 1000 * AcmeOraclePrecision (devnet default: 0.10 USD per ACME)
   globals:

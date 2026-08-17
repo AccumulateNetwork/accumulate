@@ -20,10 +20,23 @@ func (p *Primary) OnCertificateReceived(cert *types.Certificate) {
 		return
 	}
 
+	// Cheap dedup FIRST: during round sync every broadcast response reaches
+	// every node, so most certificates are duplicates — checking the DAG
+	// costs a map lookup while Verify costs an ed25519 check per signature.
+	// Observed without this: 281k duplicate verifications in 3 minutes of
+	// catch-up (#4057).
+	if p.dag.Contains(cert.Digest()) {
+		return
+	}
+
 	// Verify certificate
 	if err := cert.Verify(p.committee); err != nil {
-		slog.Debug("Invalid certificate",
+		// Info, not Debug: silently dropping peers' certificates stalls
+		// round advancement with no externally visible cause (#4054).
+		slog.Info("Invalid certificate",
 			"error", err,
+			"round", cert.Round(),
+			"author", hexEncode(cert.Author()),
 			"digest", cert.Digest().String())
 		return
 	}
@@ -67,9 +80,15 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) {
 			return
 		}
 
-		// Some other error (e.g., already exists)
-		slog.Debug("Failed to insert certificate into DAG",
+		// Duplicates are routine — during round sync every broadcast response
+		// reaches every node, so most certificates have already been inserted
+		if strings.Contains(err.Error(), "already exists") {
+			slog.Debug("Duplicate certificate", "round", cert.Round())
+			return
+		}
+		slog.Info("Failed to insert certificate into DAG",
 			"error", err,
+			"round", cert.Round(),
 			"digest", cert.Digest().String())
 		return
 	}

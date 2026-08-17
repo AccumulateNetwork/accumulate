@@ -13,6 +13,7 @@ package bullshark
 import (
 	"crypto/ed25519"
 	"encoding/hex"
+	"log/slog"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
@@ -56,6 +57,10 @@ type Bullshark struct {
 	committee *types.Committee
 	// dag is the certificate DAG.
 	dag *dag.DAG
+	// partition names the partition in log output. Both partitions of a dual
+	// node log through the same slog default; without this tag their commit
+	// decisions are indistinguishable (#4054).
+	partition string
 
 	// mu protects commit tracking state.
 	mu sync.RWMutex
@@ -142,16 +147,30 @@ func (b *Bullshark) ProcessCertificate(cert *types.Certificate) []ConsensusOutpu
 	leader := b.electLeader(leaderRound)
 	if leader == nil {
 		// No leader certificate exists for this round.
+		slog.Info("Bullshark: no leader certificate",
+			"partition", b.partition,
+			"leaderRound", leaderRound,
+			"dagCertsInRound", len(b.dag.GetRound(leaderRound)))
 		return nil
 	}
 
 	// Check if leader has f+1 support from round+1 certificates.
 	if !b.hasSupport(leader, round) {
+		slog.Info("Bullshark: leader lacks support",
+			"partition", b.partition,
+			"leaderRound", leaderRound,
+			"votingRound", round,
+			"votingCerts", len(b.dag.GetRound(round)))
 		return nil
 	}
 
 	// Leader has support! Commit the leader chain.
-	return b.commitLeaderChain(leader)
+	outputs := b.commitLeaderChain(leader)
+	slog.Info("Bullshark: committing leader chain",
+		"partition", b.partition,
+		"leaderRound", leaderRound,
+		"outputs", len(outputs))
+	return outputs
 }
 
 // LastCommitRound returns the most recently committed leader round.
@@ -222,6 +241,13 @@ func (b *Bullshark) SetLastCommittedForAuthor(authorHex string, round types.Roun
 	if lastRound, ok := b.lastCommitted[key]; !ok || round > lastRound {
 		b.lastCommitted[key] = round
 	}
+}
+
+// SetPartition sets the partition name used to tag log output.
+func (b *Bullshark) SetPartition(partition string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.partition = partition
 }
 
 // SetOnCommit sets the callback function that is invoked when certificates

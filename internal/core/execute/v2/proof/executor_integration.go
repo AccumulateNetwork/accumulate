@@ -18,10 +18,10 @@ import (
 
 // ExecutorProofContext provides proof generation capabilities integrated with the executor
 type ExecutorProofContext struct {
-	service      *Service
-	partitionID  string
-	logger       logging.Logger
-	db           database.Beginner
+	service     *Service
+	partitionID string
+	logger      logging.Logger
+	db          database.Beginner
 }
 
 // NewExecutorProofContext creates a new proof context for executor integration
@@ -50,10 +50,10 @@ func (epc *ExecutorProofContext) CreateCrossPartitionProof(ctx context.Context, 
 	anchorUrl := protocol.PartitionUrl(destPartition)
 
 	req := &ProofRequest{
-		Account:   sourceAccount,
-		Anchor:    anchorUrl,
-		Sequence:  sequence,
-		Root:      root,
+		Account:  sourceAccount,
+		Anchor:   anchorUrl,
+		Sequence: sequence,
+		Root:     root,
 	}
 
 	proof, err := epc.service.CreateProof(ctx, req)

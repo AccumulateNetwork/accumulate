@@ -11,7 +11,7 @@ type ExecutorVersion uint64
 
 // ExecutorVersionLatest is the latest version of the executor.
 // ExecutorVersionLatest is intended primarily for testing.
-const ExecutorVersionLatest = ExecutorVersionV2Tanegashima
+const ExecutorVersionLatest = ExecutorVersionV2Kourou
 
 func init() {
 	// Verify that ExecutorVersionLatest has been updated, so that tests can
@@ -61,4 +61,10 @@ func (v ExecutorVersion) V2JiuquanEnabled() bool {
 // V2TanegashimaEnabled checks if the version is at least V2 Tanegashima.
 func (v ExecutorVersion) V2TanegashimaEnabled() bool {
 	return v >= ExecutorVersionV2Tanegashima
+}
+
+// V2KourouEnabled checks if the version is at least V2 Kourou. Kourou
+// activates collection proofs for cross-partition messaging (#4048).
+func (v ExecutorVersion) V2KourouEnabled() bool {
+	return v >= ExecutorVersionV2Kourou
 }

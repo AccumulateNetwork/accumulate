@@ -19,15 +19,21 @@ import (
 
 // mockChainEntryProvider is a mock implementation for testing.
 type mockChainEntryProvider struct {
-	mu              sync.RWMutex
-	chainHeads      map[[32]byte]struct{ count uint64; anchor [32]byte }
+	mu         sync.RWMutex
+	chainHeads map[[32]byte]struct {
+		count  uint64
+		anchor [32]byte
+	}
 	expectedAnchors map[[32]byte][32]byte
 	chainKeys       [][32]byte
 }
 
 func newMockChainEntryProvider() *mockChainEntryProvider {
 	return &mockChainEntryProvider{
-		chainHeads:      make(map[[32]byte]struct{ count uint64; anchor [32]byte }),
+		chainHeads: make(map[[32]byte]struct {
+			count  uint64
+			anchor [32]byte
+		}),
 		expectedAnchors: make(map[[32]byte][32]byte),
 	}
 }
@@ -65,7 +71,10 @@ func (p *mockChainEntryProvider) IterateChainKeys(fn func(chainKey [32]byte, exp
 func (p *mockChainEntryProvider) SetChainHead(chainKey [32]byte, count uint64, anchor [32]byte) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.chainHeads[chainKey] = struct{ count uint64; anchor [32]byte }{count, anchor}
+	p.chainHeads[chainKey] = struct {
+		count  uint64
+		anchor [32]byte
+	}{count, anchor}
 }
 
 func (p *mockChainEntryProvider) SetExpectedAnchor(chainKey [32]byte, anchor [32]byte) {

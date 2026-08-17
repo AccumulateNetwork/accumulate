@@ -27,6 +27,12 @@ type DidCommitBlock struct {
 	Index uint64
 	Time  time.Time
 	Major uint64
+
+	// Round and Epoch are the DAG-BFT leader round and committee epoch that
+	// committed this block. Zero under CometBFT, which has no such concepts.
+	// A fast-syncing node needs them to rejoin consensus (#4058).
+	Round uint64
+	Epoch uint64
 }
 
 type DidSaveSnapshot struct {

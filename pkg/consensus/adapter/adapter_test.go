@@ -56,23 +56,23 @@ func (m *mockStateProvider) StateHash() [32]byte {
 // mockValidatorSetProvider implements ValidatorSetProvider for testing.
 type mockValidatorSetProvider struct {
 	validators []adapter.ValidatorInfo
-	callback   func([]adapter.ValidatorInfo)
+	callback   func([]adapter.ValidatorInfo, uint64)
 }
 
 func (m *mockValidatorSetProvider) Validators() []adapter.ValidatorInfo {
 	return m.validators
 }
 
-func (m *mockValidatorSetProvider) OnValidatorSetChange(callback func([]adapter.ValidatorInfo)) {
+func (m *mockValidatorSetProvider) OnValidatorSetChange(callback func([]adapter.ValidatorInfo, uint64)) {
 	m.callback = callback
 }
 
 // Verify interface compliance at compile time
 var (
-	_ adapter.BlockProducer         = (*mockBlockProducer)(nil)
-	_ adapter.TransactionValidator  = (*mockTransactionValidator)(nil)
-	_ adapter.StateProvider         = (*mockStateProvider)(nil)
-	_ adapter.ValidatorSetProvider  = (*mockValidatorSetProvider)(nil)
+	_ adapter.BlockProducer        = (*mockBlockProducer)(nil)
+	_ adapter.TransactionValidator = (*mockTransactionValidator)(nil)
+	_ adapter.StateProvider        = (*mockStateProvider)(nil)
+	_ adapter.ValidatorSetProvider = (*mockValidatorSetProvider)(nil)
 )
 
 func TestBlockParams(t *testing.T) {
@@ -83,7 +83,7 @@ func TestBlockParams(t *testing.T) {
 		IsLeader:    true,
 		LeaderRound: types.Round(50),
 		Certificate: nil, // Can be nil for testing
-		Batches:     make(map[types.BatchDigest]*types.Batch),
+		Batches:     nil,
 	}
 
 	assert.Equal(t, uint64(100), params.Index)
@@ -155,7 +155,7 @@ func TestMockValidatorSetProvider(t *testing.T) {
 
 	assert.Equal(t, validators, mock.Validators())
 
-	mock.OnValidatorSetChange(func(v []adapter.ValidatorInfo) {
+	mock.OnValidatorSetChange(func(v []adapter.ValidatorInfo, version uint64) {
 		// Callback registered
 	})
 	assert.NotNil(t, mock.callback)

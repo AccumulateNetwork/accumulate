@@ -24,10 +24,10 @@ const Version = 1
 
 // Default configuration values for snapshots.
 const (
-	DefaultSnapshotInterval   = 1000  // Create snapshot every N blocks
-	DefaultRetainedSnapshots  = 3     // Number of snapshots to retain
+	DefaultSnapshotInterval   = 1000            // Create snapshot every N blocks
+	DefaultRetainedSnapshots  = 3               // Number of snapshots to retain
 	DefaultChunkSize          = 1 * 1024 * 1024 // 1MB chunks
-	DefaultCertificateHistory = 100   // Number of recent certificate rounds to include
+	DefaultCertificateHistory = 100             // Number of recent certificate rounds to include
 )
 
 // SnapshotConfig contains configuration for snapshot creation.
@@ -452,13 +452,13 @@ func (c *SnapshotCreator) ShouldSnapshot(height uint64) bool {
 
 // CreateSnapshotParams contains parameters for creating a snapshot.
 type CreateSnapshotParams struct {
-	Height      uint64
-	Round       types.Round
-	StateHash   [32]byte
-	Committee   *types.Committee
-	GetCerts    func(fromRound, toRound types.Round) []*types.Certificate
-	ChainID     string
-	NodeID      string
+	Height    uint64
+	Round     types.Round
+	StateHash [32]byte
+	Committee *types.Committee
+	GetCerts  func(fromRound, toRound types.Round) []*types.Certificate
+	ChainID   string
+	NodeID    string
 }
 
 // CreateSnapshot creates a new snapshot from the given parameters.

@@ -51,7 +51,7 @@ type ProofMetrics struct {
 
 // ProofBatch groups multiple proof requests for optimization
 type ProofBatch struct {
-	Requests   []*ProofRequest
+	Requests    []*ProofRequest
 	Destination *url.URL
 	CreatedAt   time.Time
 }

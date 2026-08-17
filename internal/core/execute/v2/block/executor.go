@@ -8,6 +8,7 @@ package block
 
 import (
 	"crypto/ed25519"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -37,6 +38,7 @@ type Executor struct {
 	isValidator        bool
 	isGenesis          bool
 	mainDispatcher     Dispatcher
+	lastHealAttempt    atomic.Int64
 }
 
 type ExecutorOptions = execute.Options

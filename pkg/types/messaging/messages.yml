@@ -95,6 +95,12 @@ BlockAnchor:
     - name: Anchor
       type: Message
       marshal-as: union
+    - name: Proof
+      description: authorizes a healed anchor with a collection proof under a known directory root instead of a validator signature quorum (#4056)
+      type: protocol.AnnotatedReceipt
+      marshal-as: reference
+      pointer: true
+      optional: true
 
 SignatureRequest:
   union: { type: message }

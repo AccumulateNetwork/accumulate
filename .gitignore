@@ -100,3 +100,11 @@ test/docker/loadtest
 test/docker/docker-compose-*.yml
 test/docker/docker-network-*.yml
 test/docker/performance-results/
+# Compiled test and tooling binaries
+/netsim
+/export-snapshot
+/parallel-loadtest
+/promote-validator
+/acc/acc
+/test/docker/loadtest-bin
+/cmd/accumulated/go_build*

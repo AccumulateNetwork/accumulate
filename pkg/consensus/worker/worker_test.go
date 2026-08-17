@@ -240,9 +240,9 @@ func TestWorker_BatchCreation_OnByteSizeLimit(t *testing.T) {
 	w := worker.New(worker.Config{
 		ID:            0,
 		Partition:     "test",
-		BatchSize:     1000,                   // Large transaction count
-		BatchTimeout:  10 * time.Second,       // Long timeout
-		MaxBatchBytes: 100,                    // Small byte limit
+		BatchSize:     1000,             // Large transaction count
+		BatchTimeout:  10 * time.Second, // Long timeout
+		MaxBatchBytes: 100,              // Small byte limit
 	}, nil)
 
 	// Start worker in background
@@ -721,8 +721,8 @@ func TestWorker_FinalBatchOnClose(t *testing.T) {
 	w := worker.New(worker.Config{
 		ID:           0,
 		Partition:    "test",
-		BatchSize:    100,                   // Large batch size
-		BatchTimeout: 10 * time.Second,      // Long timeout
+		BatchSize:    100,              // Large batch size
+		BatchTimeout: 10 * time.Second, // Long timeout
 	}, nil)
 
 	// Start worker

@@ -40,9 +40,11 @@ type BlockParams struct {
 	// Certificate is the committed certificate that triggered this block.
 	Certificate *types.Certificate
 
-	// Batches contains the transaction batches referenced by the certificate.
-	// Map from batch digest to batch data.
-	Batches map[types.BatchDigest]*types.Batch
+	// Batches contains the transaction batches referenced by the
+	// certificate, in the certificate's canonical payload order. Batches
+	// are executed in this order, so it must be identical on every
+	// validator (#4054).
+	Batches []*types.Batch
 }
 
 // TransactionValidator validates transactions before they are added to batches.
@@ -66,9 +68,13 @@ type ValidatorSetProvider interface {
 	// Validators returns the current validator set.
 	Validators() []ValidatorInfo
 
-	// OnValidatorSetChange is called when the validator set changes.
-	// The callback should update the consensus committee.
-	OnValidatorSetChange(callback func(validators []ValidatorInfo))
+	// OnValidatorSetChange is called when the validator set or the network
+	// definition version changes. The callback should update the consensus
+	// committee, using the version as the committee epoch: the version is
+	// part of executed state, so every node — including one that replays or
+	// restores from a snapshot — derives the same epoch for the same
+	// committee, which a locally incremented counter cannot guarantee.
+	OnValidatorSetChange(callback func(validators []ValidatorInfo, version uint64))
 }
 
 // ValidatorInfo contains information about a validator.

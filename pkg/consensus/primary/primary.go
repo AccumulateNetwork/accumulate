@@ -127,6 +127,14 @@ type Primary struct {
 	// Set of headers we've already voted on (to avoid duplicate votes)
 	// Maps header digest to the round it was for (enables round-based cleanup)
 	votedHeaders map[types.HeaderDigest]types.Round
+	sentVotes    map[types.HeaderDigest]*types.Vote
+
+	// Round-sync pacing (#4057)
+	roundSyncMu       sync.Mutex
+	lastRoundPull     time.Time
+	lastRoundPush     time.Time
+	lastStallRecovery time.Time
+	lastStrandedWarn  time.Time
 
 	// pendingCerts buffers certificates that cannot be inserted due to missing parents
 	pendingCerts *PendingCertificates
@@ -174,6 +182,7 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 		ourHeaders:   make(map[types.HeaderDigest]*types.Header),
 		ourCerts:     make(map[types.Round]*types.Certificate),
 		votedHeaders: make(map[types.HeaderDigest]types.Round),
+		sentVotes:    make(map[types.HeaderDigest]*types.Vote),
 		pendingCerts: pendingCerts,
 		newCerts:     make(chan *types.Certificate, config.NewCertsChannelSize),
 	}
@@ -222,6 +231,9 @@ func (p *Primary) Start(ctx context.Context) error {
 	ticker := time.NewTicker(p.config.RoundAdvanceInterval)
 	defer ticker.Stop()
 
+	// Pacing for header rebroadcast — see the ticker case below.
+	var lastRebroadcast time.Time
+
 	// Get current round/epoch for logging (thread-safe)
 	p.roundMu.Lock()
 	startRound := p.currentRound
@@ -260,8 +272,24 @@ func (p *Primary) Start(ctx context.Context) error {
 			p.tryAdvanceRound()
 			// Periodically prune old pending certificates
 			p.prunePendingCerts()
-			// Re-broadcast pending headers that haven't achieved quorum
-			p.rebroadcastPendingHeaders()
+			// Re-broadcast pending headers that haven't achieved quorum.
+			// This is a recovery mechanism for lost deliveries, so pace it
+			// at 1s rather than the ticker's 50ms: every rebroadcast makes
+			// every validator that already voted resend its vote, and at
+			// ticker frequency that vote storm trips the per-peer rate
+			// limiter and permanently stalls large committees (#4054).
+			if time.Since(lastRebroadcast) >= time.Second {
+				lastRebroadcast = time.Now()
+				p.rebroadcastPendingHeaders()
+			}
+			// Recover from a silent stall (#4057): after an outage all
+			// validators can end up with their OWN header certified but
+			// missing each other's certificates — nothing is pending (so
+			// nothing rebroadcasts), the round cannot advance (no quorum
+			// of certificates), and with no traffic nothing triggers
+			// round sync. Re-share the current round's certificates and
+			// pull for what we are missing.
+			p.recoverFromStall()
 		}
 	}
 }
@@ -370,7 +398,7 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 
 	p.headersCreated.Add(1)
 
-	slog.Debug("Created header",
+	slog.Info("Created header",
 		"digest", digest.String(),
 		"round", header.Round,
 		"payload", len(header.Payload),
@@ -489,10 +517,23 @@ func (p *Primary) rebroadcastPendingHeaders() {
 		return
 	}
 
+	p.roundMu.Lock()
+	currentRound := p.currentRound
+	p.roundMu.Unlock()
+
 	p.pendingMu.Lock()
 	// Collect headers that need rebroadcast (those without certificates yet)
 	var toRebroadcast []*types.Header
-	for _, header := range p.ourHeaders {
+	for digest, header := range p.ourHeaders {
+		// Voters accept rounds no older than their current round minus one, so
+		// a header two or more rounds behind can never gather votes — drop it
+		// here rather than spam the network with it (cleanupOldHeaders only
+		// runs when the round advances, which it may not during a stall)
+		if header.Round+1 < currentRound {
+			delete(p.ourHeaders, digest)
+			delete(p.pendingVotes, digest)
+			continue
+		}
 		// Only rebroadcast if we don't have a certificate for this round yet
 		if _, hasCert := p.ourCerts[header.Round]; !hasCert {
 			toRebroadcast = append(toRebroadcast, header)
@@ -521,4 +562,62 @@ func (p *Primary) rebroadcastPendingHeaders() {
 			}
 		}(header)
 	}
+}
+
+// recoverFromStall re-shares the current round's certificates and requests
+// the ones we are missing when the round has not advanced for a while. Paced
+// internally; a no-op while consensus is healthy.
+func (p *Primary) recoverFromStall() {
+	p.roundMu.Lock()
+	current := p.currentRound
+	stalled := !p.lastRoundAdvance.IsZero() && time.Since(p.lastRoundAdvance) > 5*time.Second
+	p.roundMu.Unlock()
+	if !stalled {
+		return
+	}
+
+	p.roundSyncMu.Lock()
+	if time.Since(p.lastStallRecovery) < 2*time.Second {
+		p.roundSyncMu.Unlock()
+		return
+	}
+	p.lastStallRecovery = time.Now()
+	p.roundSyncMu.Unlock()
+
+	// Re-share every certificate we hold for the current and previous round
+	// so peers that missed the one-shot broadcast can assemble quorum
+	var shared int
+	if p.gossip != nil {
+		start := current
+		if start > 0 {
+			start--
+		}
+		for r := start; r <= current; r++ {
+			for _, cert := range p.dag.GetRound(r) {
+				cert := cert
+				p.wg.Add(1)
+				go func() {
+					defer p.wg.Done()
+					if err := p.gossip.BroadcastCertificate(p.ctx, cert); err != nil {
+						slog.Debug("Failed to re-share certificate", "error", err)
+					}
+				}()
+				shared++
+			}
+		}
+	}
+
+	// And pull whatever we are missing around the current round
+	if p.certSyncer != nil {
+		rounds := []types.Round{current, current + 1}
+		if current > 0 {
+			rounds = append([]types.Round{current - 1}, rounds...)
+		}
+		p.certSyncer.RequestRounds(rounds)
+	}
+
+	slog.Info("Consensus stalled - re-sharing certificates",
+		"partition", p.config.Partition,
+		"round", current,
+		"shared", shared)
 }

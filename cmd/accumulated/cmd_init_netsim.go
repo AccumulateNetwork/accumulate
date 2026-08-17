@@ -107,6 +107,10 @@ func applyDevNetFlags(cmd *cobra.Command, cfg *run.Config, dev *run.NetSimConfig
 			fatalf("--database: %q is not a valid storage type", flagRunDevnet.Database)
 		}
 		dev.StorageType = &typ
+	} else if dev.StorageType == nil {
+		// Pin the storage backend in the generated config so the backend of an
+		// existing devnet never depends on the running binary's default
+		dev.StorageType = run.Ptr(run.DefaultStorageType)
 	}
 
 	applyDevNetFlag(cmd, "name", &cfg.Network, flagRunDevnet.Name, onlyChanged)

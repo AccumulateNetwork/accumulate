@@ -48,6 +48,13 @@ type ServiceConfig struct {
 	// Genesis is the path to the genesis file/snapshot.
 	Genesis string
 
+	// Rejoin seeds the consensus position after a fast sync (#4058). The
+	// executor database was restored to a block committed at Rejoin.Round in
+	// committee epoch Rejoin.Epoch; consensus resumes from there instead of
+	// round zero, which would wedge once the network's age exceeds the DAG
+	// GC depth.
+	Rejoin *RejoinSeed
+
 	// Host is the libp2p host for networking (optional, enables multi-node).
 	Host host.Host
 
@@ -58,6 +65,12 @@ type ServiceConfig struct {
 	// This is needed because the WillChangeGlobals event that populates the adapter's
 	// validators fires before the adapter is created.
 	InitialValidators []adapter.ValidatorInfo
+
+	// InitialNetworkVersion is the network definition version the initial
+	// validators were read from. It becomes the initial committee epoch —
+	// the epoch tracks the version so that every node, including one
+	// restoring from a snapshot, derives the same epoch from state.
+	InitialNetworkVersion uint64
 }
 
 // Service wraps the DAG-BFT consensus node for integration with accumulated.
@@ -132,6 +145,15 @@ func (s *Service) Start(ctx context.Context) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("initialize committee: %w", err)
 	}
+
+	// The committee epoch is the network definition version, which is part
+	// of executed state — a rejoining node derives it from its restored
+	// globals (InitialNetworkVersion), so the seed epoch normally matches.
+	// Prefer the seed only if it is ahead (a version bump between the
+	// snapshot pin and the epoch block the seed was cut from).
+	if s.config.Rejoin != nil && s.config.Rejoin.Epoch > committee.Epoch {
+		committee = types.NewCommittee(committee.Validators, s.config.Rejoin.Epoch)
+	}
 	s.committee = committee
 
 	// Create consensus node with optional libp2p networking
@@ -147,6 +169,16 @@ func (s *Service) Start(ctx context.Context) error {
 	// Initialize genesis if needed
 	if err := s.initializeGenesis(); err != nil {
 		return errors.UnknownError.WithFormat("initialize genesis: %w", err)
+	}
+
+	// Seed the consensus position for a fast-sync rejoin
+	if s.config.Rejoin != nil && s.config.Rejoin.Round > 0 {
+		s.node.Rejoin(types.Round(s.config.Rejoin.Round))
+		s.logger.Info("Seeded consensus for fast-sync rejoin",
+			"partition", s.config.Partition.ID,
+			"round", s.config.Rejoin.Round,
+			"epoch", s.config.Rejoin.Epoch,
+			"block", s.lastBlockIndex)
 	}
 
 	// Start consensus node
@@ -305,7 +337,7 @@ func (s *Service) initializeCommittee() (*types.Committee, error) {
 			"partition", s.config.Partition.ID)
 	}
 
-	committee := types.NewCommittee(validators, 0)
+	committee := types.NewCommittee(validators, s.config.InitialNetworkVersion)
 	return committee, nil
 }
 
@@ -414,24 +446,25 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	blockIndex := s.lastBlockIndex + 1
 	s.mu.Unlock()
 
-	// Get batches from workers outside the lock - this involves I/O
-	batches := make(map[types.BatchDigest]*types.Batch)
+	// Get batches from workers outside the lock - this involves I/O.
+	// The payload slice is in canonical order and batches are executed in
+	// payload order — identical on every validator (#4054).
+	batches := make([]*types.Batch, 0, len(cert.Header.Payload))
 	committedDigests := make([]types.BatchDigest, 0)
-	for digest := range cert.Header.Payload {
-		digest := digest // local copy to avoid range-var aliasing
+	for _, entry := range cert.Header.Payload {
 		var found bool
 		for _, w := range workers {
-			batch, err := w.GetBatch(digest)
+			batch, err := w.GetBatch(entry.Digest)
 			if err == nil && batch != nil {
-				batches[digest] = batch
-				committedDigests = append(committedDigests, digest)
+				batches = append(batches, batch)
+				committedDigests = append(committedDigests, entry.Digest)
 				found = true
 				break
 			}
 		}
 		if !found {
 			s.logger.Error("Batch missing from all workers",
-				"digest", fmt.Sprintf("%x", digest[:]),
+				"digest", fmt.Sprintf("%x", entry.Digest[:]),
 				"round", cert.Header.Round)
 		}
 	}
@@ -440,8 +473,21 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	pubKey := s.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey)
 	isLeader := types.ValidatorsEqual(cert.Header.Author, pubKey)
 
-	// Produce block
-	blockTime := time.Now()
+	// Produce block. The block time MUST be derived from the certificate,
+	// not the local clock: block time is part of executed state, so if each
+	// validator stamps its own wall clock the state trees diverge on the
+	// very first block and cross-partition anchors never gather a signature
+	// quorum — each validator signs a different version of the "same" anchor
+	// (#4054). The header timestamp is the author's clock, covered by the
+	// header signature; clamp it to be strictly increasing so a bad clock
+	// cannot move time backwards.
+	s.mu.RLock()
+	lastTime := s.lastBlockTime
+	s.mu.RUnlock()
+	blockTime := time.Unix(0, cert.Header.Timestamp).UTC()
+	if !blockTime.After(lastTime) {
+		blockTime = lastTime.Add(time.Millisecond)
+	}
 
 	params := adapter.BlockParams{
 		Index:       blockIndex,
@@ -478,6 +524,8 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	event := events.DidCommitBlock{
 		Index: blockIndex,
 		Time:  blockTime,
+		Round: uint64(cert.Header.Round),
+		Epoch: s.committee.Epoch,
 	}
 	if err := s.eventBus.Publish(event); err != nil {
 		s.logger.Error("Failed to publish block event", "error", err)
@@ -495,18 +543,18 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 
 // Status returns the current status of the DAG-BFT service.
 type Status struct {
-	Running          bool
-	Partition        string
-	CurrentRound     types.Round
-	LastCommitRound  types.Round
-	LastBlockIndex   uint64
-	LastBlockTime    time.Time
-	ValidatorCount   int
-	TxSubmitted      uint64
-	CertsCommitted   uint64
+	Running         bool
+	Partition       string
+	CurrentRound    types.Round
+	LastCommitRound types.Round
+	LastBlockIndex  uint64
+	LastBlockTime   time.Time
+	ValidatorCount  int
+	TxSubmitted     uint64
+	CertsCommitted  uint64
 	// State verification status
-	StateHalted      bool
-	StateHaltReason  string
+	StateHalted     bool
+	StateHaltReason string
 }
 
 // Status returns the current status of the service.
@@ -515,11 +563,11 @@ func (s *Service) Status() Status {
 	defer s.mu.RUnlock()
 
 	status := Status{
-		Running:         s.running && !s.stopping,
-		Partition:       s.config.Partition.ID,
-		LastBlockIndex:  s.lastBlockIndex,
-		LastBlockTime:   s.lastBlockTime,
-		StateHalted:     s.halted,
+		Running:        s.running && !s.stopping,
+		Partition:      s.config.Partition.ID,
+		LastBlockIndex: s.lastBlockIndex,
+		LastBlockTime:  s.lastBlockTime,
+		StateHalted:    s.halted,
 	}
 
 	if s.haltReason != nil {
@@ -539,15 +587,28 @@ func (s *Service) Status() Status {
 	return status
 }
 
-
-// onValidatorSetChange is called when the adapter detects a validator set change.
-// It updates the consensus node's committee to reflect the new validator set.
-func (s *Service) onValidatorSetChange(validators []adapter.ValidatorInfo) {
+// onValidatorSetChange is called when the adapter detects a validator set
+// change (or a network definition version bump). It updates the consensus
+// node's committee to reflect the new validator set.
+//
+// The committee epoch IS the network definition version. The version is part
+// of executed state, so a node that replays these blocks later — or restores
+// state from a snapshot — derives exactly the same epoch at exactly the same
+// block as every node that executed them live. A locally incremented counter
+// (the previous scheme) only exists in the memory of nodes that were running
+// at the time, which is precisely what a joining node is not.
+func (s *Service) onValidatorSetChange(validators []adapter.ValidatorInfo, version uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.node == nil {
 		slog.Warn("Validator set change received but node not started")
+		return
+	}
+
+	if version <= s.committee.Epoch {
+		// Replayed or out-of-order notification — the committee is already at
+		// or past this version
 		return
 	}
 
@@ -560,8 +621,7 @@ func (s *Service) onValidatorSetChange(validators []adapter.ValidatorInfo) {
 		}
 	}
 
-	// Create new committee with incremented epoch
-	newEpoch := s.committee.Epoch + 1
+	newEpoch := version
 	newCommittee := types.NewCommittee(committeeValidators, newEpoch)
 
 	slog.Info("Validator set changed, updating committee",

@@ -10,7 +10,9 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"log/slog"
+	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -30,7 +32,7 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 	p.committeeMu.RUnlock()
 
 	if !inCommittee {
-		slog.Debug("Vote from unknown validator",
+		slog.Info("Vote from unknown validator",
 			"author", hexEncode(vote.Author))
 		return
 	}
@@ -38,7 +40,7 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 	// EXPENSIVE CHECK SECOND: Signature verification (~29µs)
 	// Only verify signatures from committee members
 	if err := vote.Verify(); err != nil {
-		slog.Debug("Invalid vote signature",
+		slog.Info("Invalid vote signature",
 			"error", err,
 			"author", hexEncode(vote.Author))
 		return
@@ -57,14 +59,14 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 
 	// Check vote round/epoch matches
 	if vote.Round != header.Round {
-		slog.Debug("Vote round mismatch",
+		slog.Info("Vote round mismatch",
 			"voteRound", vote.Round,
 			"headerRound", header.Round)
 		return
 	}
 
 	if vote.Epoch != header.Epoch {
-		slog.Debug("Vote epoch mismatch",
+		slog.Info("Vote epoch mismatch",
 			"voteEpoch", vote.Epoch,
 			"headerEpoch", header.Epoch)
 		return
@@ -103,13 +105,11 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 
 	// Add the unique vote
 	p.pendingVotes[vote.HeaderDigest] = append(votes, vote)
-	totalVotes := len(p.pendingVotes[vote.HeaderDigest])
 
-	slog.Info("Added vote - attempting certificate",
+	slog.Info("Added vote",
 		"headerDigest", vote.HeaderDigest.String(),
 		"author", hexEncode(vote.Author),
-		"totalVotes", totalVotes,
-		"quorumCount", quorumCount)
+		"totalVotes", len(p.pendingVotes[vote.HeaderDigest]))
 
 	// Try to create certificate
 	p.tryCreateCertificateLocked(vote.HeaderDigest)
@@ -121,28 +121,15 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 	votes := p.pendingVotes[headerDigest]
 	header := p.ourHeaders[headerDigest]
 
-	slog.Debug("tryCreateCertificateLocked",
-		"headerDigest", headerDigest.String(),
-		"votesForThisHeader", len(votes),
-		"headerExists", header != nil)
-
 	if header == nil {
-		slog.Warn("tryCreateCertificateLocked: header not found",
-			"headerDigest", headerDigest.String())
 		return
 	}
 
 	// Calculate total stake from votes (needs committeeMu for reading stake)
 	p.committeeMu.RLock()
 	var totalStake uint64
-	for i, v := range votes {
-		stake := p.committee.StakeOf(v.Author)
-		totalStake += stake
-		slog.Debug("Vote stake",
-			"voteIndex", i,
-			"author", hexEncode(v.Author),
-			"stake", stake,
-			"runningTotal", totalStake)
+	for _, v := range votes {
+		totalStake += p.committee.StakeOf(v.Author)
 	}
 	hasQuorum := p.committee.HasQuorum(totalStake)
 	quorumThreshold := p.committee.QuorumThreshold()
@@ -153,17 +140,9 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 		slog.Info("Not enough stake for certificate",
 			"headerDigest", headerDigest.String(),
 			"totalStake", totalStake,
-			"threshold", quorumThreshold,
-			"numVotes", len(votes),
-			"hasQuorum", hasQuorum)
+			"threshold", quorumThreshold)
 		return
 	}
-
-	slog.Info("Quorum achieved - creating certificate",
-		"headerDigest", headerDigest.String(),
-		"totalStake", totalStake,
-		"threshold", quorumThreshold,
-		"numVotes", len(votes))
 
 	// Create certificate (needs committeeMu for finding validators)
 	cert := p.createCertificateFromVotes(header, votes)
@@ -260,9 +239,14 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return
 	}
 
+	slog.Info("Header handled by primary",
+		"partition", p.config.Partition,
+		"author", hexEncode(header.Author),
+		"round", header.Round)
+
 	// Verify header signature
 	if err := header.Verify(); err != nil {
-		slog.Debug("Invalid header signature",
+		slog.Info("Invalid header signature",
 			"error", err,
 			"author", hexEncode(header.Author))
 		return
@@ -274,7 +258,7 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	p.committeeMu.RUnlock()
 
 	if !inCommittee {
-		slog.Debug("Header from unknown validator",
+		slog.Info("Header from unknown validator",
 			"author", hexEncode(header.Author))
 		return
 	}
@@ -282,8 +266,6 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	// Don't vote on our own headers
 	pubKey := p.config.KeyPair.Public().(ed25519.PublicKey)
 	if bytes.Equal(header.Author, pubKey) {
-		slog.Info("TRACE: skipping own header",
-			"author", hexEncode(header.Author))
 		return
 	}
 
@@ -293,15 +275,9 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	currentRound := p.currentRound
 	p.roundMu.Unlock()
 
-	slog.Info("TRACE: epoch/round check",
-		"headerEpoch", header.Epoch,
-		"currentEpoch", currentEpoch,
-		"headerRound", header.Round,
-		"currentRound", currentRound)
-
 	// Check epoch matches
 	if header.Epoch != currentEpoch {
-		slog.Debug("Header epoch mismatch",
+		slog.Info("Header epoch mismatch",
 			"headerEpoch", header.Epoch,
 			"currentEpoch", currentEpoch)
 		return
@@ -317,11 +293,37 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	maxRound := currentRound + 1
 
 	if header.Round < minRound || header.Round > maxRound {
-		slog.Debug("Header round out of range",
+		slog.Info("Header round out of range",
 			"headerRound", header.Round,
 			"currentRound", currentRound,
 			"minRound", minRound,
 			"maxRound", maxRound)
+
+		// A round mismatch after an outage is a deadlock without recovery:
+		// certificates are broadcast exactly once, so a node that missed
+		// them can neither advance (it rejects newer headers) nor help a
+		// stale author advance (the author never learns its round already
+		// completed). Sync rounds in both directions (#4057).
+		switch {
+		case header.Round > maxRound:
+			// We are behind. Certificate catch-up can only bridge a gap that
+			// peers still retain — up to the DAG's GC depth. A wider gap
+			// (a fast-sync rejoin whose seed aged past the horizon before the
+			// node restarted, or an outage longer than the horizon) is
+			// unbridgeable: the intervening certificates have been collected,
+			// so pulling them returns nothing and the node stays pinned at its
+			// seed round forever, voting on nothing while gossip floods its
+			// channels. Surface that explicitly rather than spinning silently;
+			// recovery requires a fresh fast-sync (#4058 fallback).
+			if header.Round-currentRound > p.dag.GCDepth() {
+				p.warnStrandedBeyondHorizon(currentRound, header.Round)
+			} else {
+				p.requestRoundCatchUp(currentRound, header.Round)
+			}
+		case header.Round < minRound:
+			// The author is behind — push the certificates it is missing
+			p.pushCertsForStaleRound(header.Round, currentRound)
+		}
 		return
 	}
 
@@ -329,7 +331,16 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	headerDigest := header.Digest()
 	p.pendingMu.Lock()
 	if _, voted := p.votedHeaders[headerDigest]; voted {
+		// The author rebroadcasts a header until it achieves quorum. If we
+		// see the header again, our vote may have been lost — votes are
+		// otherwise sent exactly once, which permanently stalls the round if
+		// the gossip mesh was still forming when we voted (#4054). Resend the
+		// stored vote; receivers deduplicate.
+		vote := p.sentVotes[headerDigest]
 		p.pendingMu.Unlock()
+		if vote != nil {
+			p.broadcastVoteAsync(vote, headerDigest)
+		}
 		return
 	}
 	p.pendingMu.Unlock()
@@ -337,7 +348,7 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	// Check we have all parent certificates
 	for _, parentDigest := range header.Parents {
 		if p.dag.GetByDigest(parentDigest) == nil {
-			slog.Debug("Missing parent for header",
+			slog.Info("Missing parent for header",
 				"headerDigest", headerDigest.String(),
 				"parentDigest", parentDigest.String())
 			return // missing parent, can't vote
@@ -352,20 +363,27 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return
 	}
 
-	// Mark as voted (store round for cleanup)
+	// Mark as voted (store round for cleanup) and keep the vote so it can be
+	// resent if the author rebroadcasts the header (#4054)
 	p.pendingMu.Lock()
 	p.votedHeaders[headerDigest] = header.Round
+	p.sentVotes[headerDigest] = vote
 	p.pendingMu.Unlock()
 
 	p.votesSent.Add(1)
 
-	slog.Info("Successfully voting on header",
+	slog.Info("Voting on header",
+		"partition", p.config.Partition,
 		"headerDigest", headerDigest.String(),
 		"author", hexEncode(header.Author),
-		"round", header.Round,
-		"epoch", header.Epoch)
+		"round", header.Round)
 
 	// Broadcast vote
+	p.broadcastVoteAsync(vote, headerDigest)
+}
+
+// broadcastVoteAsync broadcasts a vote in the background.
+func (p *Primary) broadcastVoteAsync(vote *types.Vote, headerDigest types.HeaderDigest) {
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -395,4 +413,100 @@ func hexEncode(key ed25519.PublicKey) string {
 		return ""
 	}
 	return types.HeaderDigest(key).String()[:8]
+}
+
+// warnStrandedBeyondHorizon reports, at most once a minute, that this node has
+// fallen further behind than certificate catch-up can bridge — the live round
+// exceeds its own by more than the DAG's GC depth, so the certificates it would
+// need have already been collected by every peer. Without a fresh fast-sync the
+// node cannot advance; the warning turns a silent freeze (a seed round pinned
+// forever while gossip floods the channels) into a diagnosable one.
+func (p *Primary) warnStrandedBeyondHorizon(current, live types.Round) {
+	p.roundSyncMu.Lock()
+	if time.Since(p.lastStrandedWarn) < time.Minute {
+		p.roundSyncMu.Unlock()
+		return
+	}
+	p.lastStrandedWarn = time.Now()
+	p.roundSyncMu.Unlock()
+
+	slog.Warn("Stranded beyond the catch-up horizon — a fresh fast-sync is required",
+		"partition", p.config.Partition,
+		"round", current,
+		"liveRound", live,
+		"gap", live-current,
+		"gcDepth", p.dag.GCDepth())
+}
+
+// requestRoundCatchUp pulls the certificates of rounds (current, target] so
+// this node can advance after falling behind (#4057). Paced to once per
+// second; the certificate handler inserts what arrives and round advancement
+// follows naturally.
+func (p *Primary) requestRoundCatchUp(current, target types.Round) {
+	if p.certSyncer == nil {
+		return
+	}
+
+	p.roundSyncMu.Lock()
+	if time.Since(p.lastRoundPull) < time.Second {
+		p.roundSyncMu.Unlock()
+		return
+	}
+	p.lastRoundPull = time.Now()
+	p.roundSyncMu.Unlock()
+
+	// Request at most MaxSyncRounds rounds, starting from where we are —
+	// certificates insert parent-first, so pulling the oldest gap first
+	// makes steady forward progress even across a large gap.
+	first := current
+	if first > 0 {
+		first-- // Re-fetch the previous round in case our copy is partial
+	}
+	var rounds []types.Round
+	for r := first; r <= target && len(rounds) < gossip.MaxSyncRounds; r++ {
+		rounds = append(rounds, r)
+	}
+	p.certSyncer.RequestRounds(rounds)
+}
+
+// pushCertsForStaleRound rebroadcasts the certificates of a stale round (and
+// the following round) when a peer is observed rebroadcasting a header for
+// it (#4057). The peer is behind: it never saw these certificates — they are
+// broadcast exactly once — so it can neither complete its round nor advance.
+// Paced to once per second.
+func (p *Primary) pushCertsForStaleRound(stale, current types.Round) {
+	if p.gossip == nil {
+		return
+	}
+
+	p.roundSyncMu.Lock()
+	if time.Since(p.lastRoundPush) < time.Second {
+		p.roundSyncMu.Unlock()
+		return
+	}
+	p.lastRoundPush = time.Now()
+	p.roundSyncMu.Unlock()
+
+	end := stale + 1
+	if end > current {
+		end = current
+	}
+	var pushed int
+	for r := stale; r <= end; r++ {
+		for _, cert := range p.dag.GetRound(r) {
+			cert := cert
+			p.wg.Add(1)
+			go func() {
+				defer p.wg.Done()
+				if err := p.gossip.BroadcastCertificate(p.ctx, cert); err != nil {
+					slog.Debug("Failed to push certificate", "error", err)
+				}
+			}()
+			pushed++
+		}
+	}
+	if pushed > 0 {
+		slog.Info("Pushed certificates for stale round",
+			"staleRound", stale, "certificates", pushed)
+	}
 }

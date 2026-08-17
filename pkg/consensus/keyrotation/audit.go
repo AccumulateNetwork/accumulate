@@ -22,9 +22,9 @@ type AuditLogger struct {
 	directory     string
 	retentionDays int
 
-	mu              sync.Mutex
-	currentFile     *os.File
-	currentDate     string
+	mu               sync.Mutex
+	currentFile      *os.File
+	currentDate      string
 	previousChecksum string
 }
 

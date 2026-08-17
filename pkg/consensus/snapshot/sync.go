@@ -25,19 +25,19 @@ import (
 
 // Protocol IDs for snapshot sync.
 const (
-	ProtocolSnapshotList   = "/acc/consensus/snapshot/list/1.0.0"
-	ProtocolSnapshotFetch  = "/acc/consensus/snapshot/fetch/1.0.0"
-	ProtocolSnapshotChunk  = "/acc/consensus/snapshot/chunk/1.0.0"
-	ProtocolStateSync      = "/acc/consensus/state-sync/1.0.0"
+	ProtocolSnapshotList  = "/acc/consensus/snapshot/list/1.0.0"
+	ProtocolSnapshotFetch = "/acc/consensus/snapshot/fetch/1.0.0"
+	ProtocolSnapshotChunk = "/acc/consensus/snapshot/chunk/1.0.0"
+	ProtocolStateSync     = "/acc/consensus/state-sync/1.0.0"
 )
 
 // Default timeouts and limits.
 const (
-	DefaultSyncTimeout     = 5 * time.Minute
-	DefaultChunkTimeout    = 30 * time.Second
-	MaxSnapshotSize        = 1 * 1024 * 1024 * 1024 // 1GB
-	MaxChunkSize           = 2 * 1024 * 1024        // 2MB
-	MaxSnapshotsInList     = 100
+	DefaultSyncTimeout  = 5 * time.Minute
+	DefaultChunkTimeout = 30 * time.Second
+	MaxSnapshotSize     = 1 * 1024 * 1024 * 1024 // 1GB
+	MaxChunkSize        = 2 * 1024 * 1024        // 2MB
+	MaxSnapshotsInList  = 100
 )
 
 // SyncStatus represents the status of a state sync operation.
@@ -77,12 +77,12 @@ func (s SyncStatus) String() string {
 
 // SnapshotInfo contains metadata about an available snapshot.
 type SnapshotInfo struct {
-	Height    uint64
-	Round     types.Round
-	StateHash [32]byte
-	Size      uint64
+	Height     uint64
+	Round      types.Round
+	StateHash  [32]byte
+	Size       uint64
 	ChunkCount int
-	Digest    SnapshotDigest
+	Digest     SnapshotDigest
 }
 
 // Marshal serializes snapshot info.
@@ -195,14 +195,14 @@ func UnmarshalSnapshotChunk(data []byte) (*SnapshotChunk, error) {
 
 // SyncProgress tracks the progress of a state sync operation.
 type SyncProgress struct {
-	Status       SyncStatus
-	Height       uint64
-	TotalChunks  int
+	Status         SyncStatus
+	Height         uint64
+	TotalChunks    int
 	ReceivedChunks int
 	BytesReceived  uint64
 	TotalBytes     uint64
-	StartTime    time.Time
-	Error        error
+	StartTime      time.Time
+	Error          error
 }
 
 // PercentComplete returns the completion percentage.

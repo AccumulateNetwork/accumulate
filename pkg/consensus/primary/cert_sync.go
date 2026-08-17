@@ -111,6 +111,11 @@ type CertSyncer struct {
 	// Request ID counter
 	nextReqID atomic.Uint64
 
+	// Response suppression (#4057): requests are broadcast, so peers skip
+	// answering when another peer's response has already been observed
+	answered   map[uint64]struct{}
+	answeredMu sync.Mutex
+
 	// Callback for received certificates
 	onCertReceived func(*types.Certificate)
 
@@ -143,6 +148,7 @@ func NewCertSyncer(
 	config.applyDefaults()
 
 	return &CertSyncer{
+		answered: map[uint64]struct{}{},
 		config:   config,
 		dag:      d,
 		gossip:   g,
@@ -235,6 +241,32 @@ func (s *CertSyncer) RequestMissing(digests []types.CertificateDigest) {
 		jitter := time.Duration(rand.Int64N(int64(s.config.JitterMax)))
 		s.batchTimer = time.AfterFunc(s.config.BatchInterval+jitter, s.sendBatchRequest)
 	}
+}
+
+// RequestRounds requests every certificate of the given rounds from peers.
+// Used for round catch-up (#4057): a node that has fallen behind cannot know
+// which digests it is missing, only which rounds. The caller is responsible
+// for pacing.
+func (s *CertSyncer) RequestRounds(rounds []types.Round) {
+	if len(rounds) == 0 || s.gossip == nil {
+		return
+	}
+	if len(rounds) > gossip.MaxSyncRounds {
+		rounds = rounds[:gossip.MaxSyncRounds]
+	}
+
+	req := &gossip.CertSyncRequest{
+		Rounds:    rounds,
+		Requester: s.config.PublicKey,
+		RequestID: s.nextReqID.Add(1),
+	}
+	if err := s.gossip.BroadcastSyncRequest(s.ctx, req); err != nil {
+		slog.Warn("Failed to send round sync request",
+			"error", err, "start", rounds[0], "end", rounds[len(rounds)-1])
+		return
+	}
+	slog.Info("Requested certificates by round",
+		"start", rounds[0], "end", rounds[len(rounds)-1], "count", len(rounds))
 }
 
 // sendBatchRequest sends a batch of certificate sync requests.
@@ -343,7 +375,28 @@ func (s *CertSyncer) handleSyncRequests() {
 
 // handleSyncRequest processes a single sync request.
 func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
-	if req == nil || len(req.Digests) == 0 {
+	if req == nil || (len(req.Digests) == 0 && len(req.Rounds) == 0) {
+		return
+	}
+
+	// Requests and responses are broadcast, so without suppression every
+	// peer answers every request — an N-fold amplification that floods the
+	// requester with duplicates (#4057). Delay a beat, then skip if another
+	// peer's response for this request has already been observed.
+	jitter := time.Duration(rand.Int64N(int64(200 * time.Millisecond)))
+	if s.ctx != nil {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-time.After(jitter):
+		}
+	} else {
+		time.Sleep(jitter)
+	}
+	s.answeredMu.Lock()
+	_, answered := s.answered[req.RequestID]
+	s.answeredMu.Unlock()
+	if answered {
 		return
 	}
 
@@ -364,8 +417,28 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 		}
 	}
 
+	// Serve whole rounds for round catch-up (#4057)
+	for _, round := range req.Rounds {
+		for _, cert := range s.dag.GetRound(round) {
+			if len(certs) >= gossip.MaxSyncCertificates {
+				break
+			}
+			certs = append(certs, cert)
+		}
+	}
+
 	// Only respond if we have certificates to send
 	if len(certs) == 0 {
+		if len(req.Rounds) > 0 {
+			// A round request that matches nothing means the requester is
+			// asking for rounds we do not have — that is load-bearing
+			// diagnosis for round catch-up (#4057), not noise.
+			slog.Info("Sync request matched nothing",
+				"rounds", len(req.Rounds),
+				"firstRound", req.Rounds[0],
+				"lastRound", req.Rounds[len(req.Rounds)-1],
+				"requestID", req.RequestID)
+		}
 		return
 	}
 
@@ -381,14 +454,15 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 	}
 
 	if err := s.gossip.BroadcastSyncResponse(s.ctx, resp); err != nil {
-		slog.Debug("Failed to send sync response",
-			"error", err)
+		slog.Warn("Failed to send sync response",
+			"error", err, "certificates", len(certs))
 		return
 	}
 
-	slog.Debug("Sent sync response",
+	slog.Info("Sent sync response",
 		"certificates", len(certs),
 		"missing", len(missing),
+		"rounds", len(req.Rounds),
 		"requestID", req.RequestID)
 }
 
@@ -424,6 +498,14 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 		return
 	}
 
+	// Note the response so we do not also answer this request (suppression)
+	s.answeredMu.Lock()
+	if len(s.answered) > 4096 {
+		s.answered = make(map[uint64]struct{})
+	}
+	s.answered[resp.RequestID] = struct{}{}
+	s.answeredMu.Unlock()
+
 	s.responsesRecv.Add(1)
 
 	for _, cert := range resp.Certificates {
@@ -446,7 +528,7 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 		s.certificatesRecv.Add(1)
 	}
 
-	slog.Debug("Received sync response",
+	slog.Info("Received sync response",
 		"certificates", len(resp.Certificates),
 		"requestID", resp.RequestID)
 }

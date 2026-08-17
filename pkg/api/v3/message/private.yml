@@ -19,3 +19,111 @@ PrivateSequenceResponse:
       type: { name: api.MessageRecord, parameters: [{ type: messaging.Message }] }
       marshal-as: reference
       pointer: true
+
+PrivateSequenceRangeRequest:
+  union: { type: message }
+  fields:
+    - name: Source
+      type: url
+      pointer: true
+    - name: Destination
+      type: url
+      pointer: true
+    - name: Start
+      type: uint
+    - name: End
+      type: uint
+    - type: private.SequenceOptions
+      marshal-as: reference
+
+PrivateSequenceRangeResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: { name: api.MessageRecord, parameters: [{ type: messaging.Message }] }
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+PrivateMajorHeaderRangeRequest:
+  union: { type: message }
+  fields:
+    - name: Partition
+      type: url
+      pointer: true
+    - name: Start
+      type: uint
+    - name: End
+      type: uint
+    - type: private.SequenceOptions
+      marshal-as: reference
+
+PrivateMajorHeaderRangeResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: private.MajorHeaderRecord
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+PrivateMinorRootRangeRequest:
+  union: { type: message }
+  fields:
+    - name: Partition
+      type: url
+      pointer: true
+    - name: Since
+      type: uint
+    - name: Until
+      type: uint
+    - type: private.SequenceOptions
+      marshal-as: reference
+
+PrivateMinorRootRangeResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: private.MinorRootRecord
+      marshal-as: reference
+      pointer: true
+
+PrivateSnapshotRangeRequest:
+  union: { type: message }
+  fields:
+    - name: Partition
+      type: url
+      pointer: true
+    - name: Epoch
+      type: uint
+    - name: Offset
+      type: uint
+    - type: private.SequenceOptions
+      marshal-as: reference
+
+PrivateSnapshotRangeResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: private.SnapshotChunk
+      marshal-as: reference
+      pointer: true
+
+PrivatePartitionRootRangeRequest:
+  union: { type: message }
+  fields:
+    - name: Partition
+      type: url
+      pointer: true
+    - name: StateRoot
+      type: hash
+    - type: private.SequenceOptions
+      marshal-as: reference
+
+PrivatePartitionRootRangeResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: private.PartitionRootRecord
+      marshal-as: reference
+      pointer: true

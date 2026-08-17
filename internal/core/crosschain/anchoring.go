@@ -27,12 +27,33 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		return nil
 	}
 
+	// Once collection proofs are active the DESTINATION owns anchor recovery:
+	// its healing loop pulls missed runs with a range request and a single
+	// collection proof, which executes without a signature quorum (#4048,
+	// #4056). The source-side push below — every validator independently
+	// re-signing and re-submitting historical anchors — is then redundant and
+	// is the flooding-prone path, so retire it.
+	if c.Globals.Load().ExecutorVersion.V2KourouEnabled() {
+		return nil
+	}
+
 	// Load the source sequence chain
 	sequence := batch.Account(c.Url(protocol.AnchorPool)).AnchorSequenceChain()
 	head, err := sequence.Head().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load anchor sequence chain head: %w", err)
 	}
+
+	// Paced to HealInterval, so this is cheap — and scan visibility is what
+	// makes silent anchor-delivery failures diagnosable (#4054). Log BEFORE
+	// querying the destination: if the destination is unreachable the query
+	// blocks until the scan deadline, and a scan that never logs is
+	// indistinguishable from healing being broken (#4056).
+	slog.Info("Anchor heal scan", "module", "conductor",
+		"source", c.Url(),
+		"destination", destination,
+		"produced", head.Count,
+		"currentBlock", currentBlock)
 
 	// Load the destination anchor ledger
 	var ledger1 *protocol.AnchorLedger
@@ -41,6 +62,15 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		return errors.UnknownError.WithFormat("query %v anchor ledger: %w", destination, err)
 	}
 	ledger2 := ledger1.Partition(c.Url())
+
+	// Heal only when delivery is genuinely stalled. A destination that is
+	// delivering our anchors — including one merely catching up — advances its
+	// Delivered count between scans and needs no help; re-driving its in-flight
+	// anchors would just add cross-partition traffic. Only a stalled Delivered
+	// marks the next anchor as stuck and in need of resubmission.
+	if !c.deliveryStalled(destination.String(), ledger2.Delivered, uint64(head.Count)) {
+		return nil
+	}
 
 	// For each not-yet delivered anchor
 	for i := ledger2.Delivered + 1; i <= uint64(head.Count); i++ {
@@ -63,6 +93,10 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 
 		// Ignore anchors from the last 10 blocks
 		if currentBlock-anchor.GetPartitionAnchor().MinorBlockIndex < 10 {
+			slog.Info("Heal: anchor too recent", "module", "conductor",
+				"destination", destination, "sequence", i,
+				"anchorBlock", anchor.GetPartitionAnchor().MinorBlockIndex,
+				"currentBlock", currentBlock)
 			continue
 		}
 
@@ -83,10 +117,17 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		}
 		if ok {
 			// If we've already signed this one, skip it
+			slog.Info("Heal: already signed", "module", "conductor",
+				"destination", destination, "sequence", i, "txid", txn.ID())
 			continue
 		}
 
 		// Submit it
+		slog.Info("Healing anchor", "module", "conductor",
+			"source", c.Url(),
+			"destination", destination,
+			"sequence", i,
+			"delivered", ledger2.Delivered)
 		err = c.submit(ctx, destination, env)
 		if err != nil {
 			return err

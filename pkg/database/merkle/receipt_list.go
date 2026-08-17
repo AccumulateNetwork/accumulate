@@ -71,11 +71,10 @@ func (r *ReceiptList) Validate(opts *ValidateOptions) bool {
 
 // Included
 // Tests an entry for inclusion in the given ReceiptList
-// Note that while a ReceiptList proves inclusion in a Merkle Tree, and the fact
-// that the list of elements proceed in order up to and including the anchor point,
-// the ReceiptList does not necessarily prove the indices of the elements in the
-// Merkle Tree.  This could be solved by salting Receipts with the index of the
-// hash at the anchor point.
+// Note that a ReceiptList also proves the absolute index of each element:
+// MerkleState is a counted state (State.Count), and replaying Elements onto it
+// must reproduce the committed anchor, which binds element j to absolute index
+// State.Count + j. No salting is required.
 func (r *ReceiptList) Included(entry []byte) bool {
 	for _, e := range r.Elements { // Every entry in Elements is included
 		if bytes.Equal(e, entry) { // in the ReceiptList proof.

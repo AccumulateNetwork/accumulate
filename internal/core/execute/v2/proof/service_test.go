@@ -42,10 +42,10 @@ func TestServiceCreateProof(t *testing.T) {
 	}
 
 	req := &ProofRequest{
-		Account: accountUrl,
-		Anchor:  protocol.PartitionUrl("Directory"),
+		Account:  accountUrl,
+		Anchor:   protocol.PartitionUrl("Directory"),
 		Sequence: 1,
-		Root:    root,
+		Root:     root,
 	}
 
 	proof, err := service.CreateProof(context.Background(), req)
@@ -74,10 +74,10 @@ func TestServiceValidateProof(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	req := &ProofRequest{
-		Account: accountUrl,
-		Anchor:  protocol.PartitionUrl("Directory"),
+		Account:  accountUrl,
+		Anchor:   protocol.PartitionUrl("Directory"),
 		Sequence: 1,
-		Root:    root,
+		Root:     root,
 	}
 
 	proof, err := service.CreateProof(context.Background(), req)
