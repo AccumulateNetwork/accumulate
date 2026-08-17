@@ -25,6 +25,12 @@ TransactionHeader:
       optional: true
       pointer: true
       marshal-as: reference
+    - name: HashLock
+      description: locks the synthetic output until preimage is revealed or expiration
+      type: HashLockOptions
+      optional: true
+      pointer: true
+      marshal-as: reference
     - name: Authorities
       description: is a list of additional authorities that must approve the transaction
       type: url
@@ -61,6 +67,21 @@ ExpireOptions:
     - name: AtTime
       type: time
       optional: true
+      pointer: true
+
+HashLockOptions:
+  description: specifies conditions for a hash-locked operation
+  fields:
+    - name: HashAlgorithm
+      description: the hash algorithm used (SHA256, SHA256D, HASH160)
+      type: HashAlgorithm
+      marshal-as: enum
+    - name: Hash
+      description: hash of the secret preimage (length depends on algorithm)
+      type: bytes
+    - name: Expiration
+      description: absolute time when the lock expires and tokens are refunded
+      type: time
       pointer: true
 
 TransactionStatus:

@@ -146,6 +146,18 @@ const ExecutorVersionV2Kourou ExecutorVersion = 9
 // ExecutorVersionVNext is a placeholder for testing. DO NOT USE.
 const ExecutorVersionVNext ExecutorVersion = 10
 
+// HashAlgorithmUnknown is used when the hash algorithm is not known.
+const HashAlgorithmUnknown HashAlgorithm = 0
+
+// HashAlgorithmSHA256 SHA-256, 32 bytes output (Ethereum, Bitcoin OP_SHA256).
+const HashAlgorithmSHA256 HashAlgorithm = 1
+
+// HashAlgorithmSHA256D double SHA-256, 32 bytes output (Bitcoin block hashing).
+const HashAlgorithmSHA256D HashAlgorithm = 2
+
+// HashAlgorithmHASH160 RIPEMD160(SHA256(x)), 20 bytes output (Bitcoin OP_HASH160, addresses).
+const HashAlgorithmHASH160 HashAlgorithm = 3
+
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
 
@@ -323,6 +335,9 @@ const TransactionTypeUpdateKey TransactionType = 22
 // TransactionTypeSetLiteAccountDelegate sets or clears the delegate authority on a lite token account.
 const TransactionTypeSetLiteAccountDelegate TransactionType = 23
 
+// TransactionTypeReleaseLockedOperation releases a locked deposit by revealing the hash preimage.
+const TransactionTypeReleaseLockedOperation TransactionType = 24
+
 // TransactionTypeNetworkMaintenance executes network maintenance operations.
 const TransactionTypeNetworkMaintenance TransactionType = 46
 
@@ -349,6 +364,9 @@ const TransactionTypeSyntheticBurnTokens TransactionType = 53
 
 // TransactionTypeSyntheticForwardTransaction forwards a transaction from one partition to another.
 const TransactionTypeSyntheticForwardTransaction TransactionType = 54
+
+// TransactionTypeSyntheticLockedDeposit deposits locked tokens requiring preimage revelation to unlock.
+const TransactionTypeSyntheticLockedDeposit TransactionType = 55
 
 // TransactionTypeSystemGenesis initializes system chains.
 const TransactionTypeSystemGenesis TransactionType = 96
@@ -909,6 +927,71 @@ func (v *ExecutorVersion) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GetEnumValue returns the value of the Hash Algorithm
+func (v HashAlgorithm) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *HashAlgorithm) SetEnumValue(id uint64) bool {
+	u := HashAlgorithm(id)
+	switch u {
+	case HashAlgorithmUnknown, HashAlgorithmSHA256, HashAlgorithmSHA256D, HashAlgorithmHASH160:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Hash Algorithm.
+func (v HashAlgorithm) String() string {
+	switch v {
+	case HashAlgorithmUnknown:
+		return "unknown"
+	case HashAlgorithmSHA256:
+		return "sha256"
+	case HashAlgorithmSHA256D:
+		return "sha256D"
+	case HashAlgorithmHASH160:
+		return "hash160"
+	}
+	return fmt.Sprintf("HashAlgorithm:%d", v)
+}
+
+// HashAlgorithmByName returns the named Hash Algorithm.
+func HashAlgorithmByName(name string) (HashAlgorithm, bool) {
+	switch strings.ToLower(name) {
+	case "unknown":
+		return HashAlgorithmUnknown, true
+	case "sha256":
+		return HashAlgorithmSHA256, true
+	case "sha256d":
+		return HashAlgorithmSHA256D, true
+	case "hash160":
+		return HashAlgorithmHASH160, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Hash Algorithm to JSON as a string.
+func (v HashAlgorithm) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Hash Algorithm from JSON as a string.
+func (v *HashAlgorithm) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = HashAlgorithmByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Hash Algorithm %q", s)
+	}
+	return nil
+}
+
 // GetEnumValue returns the value of the Key Page Operation Type
 func (v KeyPageOperationType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -1364,7 +1447,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeSetLiteAccountDelegate, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeSetLiteAccountDelegate, TransactionTypeReleaseLockedOperation, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSyntheticLockedDeposit, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	}
@@ -1418,6 +1501,8 @@ func (v TransactionType) String() string {
 		return "updateKey"
 	case TransactionTypeSetLiteAccountDelegate:
 		return "setLiteAccountDelegate"
+	case TransactionTypeReleaseLockedOperation:
+		return "releaseLockedOperation"
 	case TransactionTypeNetworkMaintenance:
 		return "networkMaintenance"
 	case TransactionTypeActivateProtocolVersion:
@@ -1436,6 +1521,8 @@ func (v TransactionType) String() string {
 		return "syntheticBurnTokens"
 	case TransactionTypeSyntheticForwardTransaction:
 		return "syntheticForwardTransaction"
+	case TransactionTypeSyntheticLockedDeposit:
+		return "syntheticLockedDeposit"
 	case TransactionTypeSystemGenesis:
 		return "systemGenesis"
 	case TransactionTypeDirectoryAnchor:
@@ -1495,6 +1582,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateKey, true
 	case "setliteaccountdelegate":
 		return TransactionTypeSetLiteAccountDelegate, true
+	case "releaselockedoperation":
+		return TransactionTypeReleaseLockedOperation, true
 	case "networkmaintenance":
 		return TransactionTypeNetworkMaintenance, true
 	case "activateprotocolversion":
@@ -1515,6 +1604,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSyntheticBurnTokens, true
 	case "syntheticforwardtransaction":
 		return TransactionTypeSyntheticForwardTransaction, true
+	case "syntheticlockeddeposit":
+		return TransactionTypeSyntheticLockedDeposit, true
 	case "systemgenesis":
 		return TransactionTypeSystemGenesis, true
 	case "directoryanchor":

@@ -21,6 +21,10 @@ func NewTransactionResult(typ TransactionType) (TransactionResult, error) {
 		return new(WriteDataResult), nil
 	case TransactionTypeAddCredits:
 		return new(AddCreditsResult), nil
+	case TransactionTypeReleaseLockedOperation:
+		return new(ReleaseLockedOperationResult), nil
+	case TransactionTypeSyntheticLockedDeposit:
+		return new(SyntheticLockedDepositResult), nil
 	case TransactionTypeUnknown:
 		return new(EmptyResult), nil
 	}
@@ -45,6 +49,12 @@ func EqualTransactionResult(a, b TransactionResult) bool {
 		return ok && a.Equal(b)
 	case *AddCreditsResult:
 		b, ok := b.(*AddCreditsResult)
+		return ok && a.Equal(b)
+	case *ReleaseLockedOperationResult:
+		b, ok := b.(*ReleaseLockedOperationResult)
+		return ok && a.Equal(b)
+	case *SyntheticLockedDepositResult:
+		b, ok := b.(*SyntheticLockedDepositResult)
 		return ok && a.Equal(b)
 	case *EmptyResult:
 		b, ok := b.(*EmptyResult)

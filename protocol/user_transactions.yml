@@ -283,3 +283,15 @@ SetLiteAccountDelegate:
       marshal-as: reference
       pointer: true
       optional: true
+
+ReleaseLockedOperation:
+  union: { type: transaction }
+  description: releases a locked deposit by revealing the hash preimage
+  fields:
+    - name: LockedTxID
+      description: the transaction ID of the SyntheticLockedDeposit to release
+      type: txid
+      pointer: true
+    - name: Preimage
+      description: the secret value that SHA-256 hashes to the locked hash
+      type: bytes

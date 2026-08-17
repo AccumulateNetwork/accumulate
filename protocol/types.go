@@ -26,6 +26,9 @@ const ChainTypeIndex = merkle.ChainTypeIndex
 // BookType is the type of a key book.
 type BookType uint64
 
+// HashAlgorithm specifies the hash algorithm for HTLC operations.
+type HashAlgorithm uint64
+
 // ObjectType is the type of an object in the database.
 type ObjectType uint64
 
