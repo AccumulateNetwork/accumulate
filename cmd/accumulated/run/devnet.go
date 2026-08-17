@@ -127,8 +127,15 @@ func (d *DevnetConfiguration) apply(inst *Instance, cfg *Config) error {
 	for bvn := range nodes {
 		for node := range nodes[bvn] {
 			n := nodes[bvn][node]
-			dnPeers = append(dnPeers, addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portDir, portCmtP2P), n.PeerID))
-			bvnPeers[bvn] = append(bvnPeers[bvn], addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portBVN, portCmtP2P), n.PeerID))
+			// These become ConsensusService.BootstrapPeers, which are
+			// libp2p (Accumulate P2P, base+2) addresses — cmtPeerAddress
+			// subtracts the offset to reach the CometBFT port. Building them
+			// at portCmtP2P (base+0) meant that subtraction ran against an
+			// address that had never had the offset applied, so every node
+			// dialled base-2 and no multi-node devnet ever reached consensus
+			// (#4081). init network has always used AccumulateP2P here.
+			dnPeers = append(dnPeers, addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portDir, portAccP2P), n.PeerID))
+			bvnPeers[bvn] = append(bvnPeers[bvn], addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portBVN, portAccP2P), n.PeerID))
 		}
 	}
 
