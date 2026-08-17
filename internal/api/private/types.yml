@@ -12,3 +12,14 @@ SequenceOptions:
       type: p2p.PeerID
       marshal-as: union
       zero-value: '""'
+    # The sequence number of an anchor from the source that the REQUESTER
+    # already holds and has already validated. The source roots its collection
+    # proof at the state that anchor commits to, so the answer is verifiable
+    # against something the requester has rather than against anything the
+    # directory has yet caught up to (#4087).
+    #
+    # Zero means "you choose", which is what the anchor path does: a gap in the
+    # anchor stream is bounded by the entry that exposed it, so the source can
+    # infer the held anchor without being told.
+    - name: ProveAgainstAnchor
+      type: uint

@@ -166,6 +166,14 @@ MessageRecord[T messaging.Message]:
     - name: LastBlockTime
       type: time
       pointer: true
+    # For messages served as part of a range: a collection proof covering every
+    # message of the range (#4087). Set on the LAST record of the range only.
+    # Appended so existing field numbers are unchanged.
+    - name: SourceReceiptList
+      type: merkle.ReceiptList
+      marshal-as: reference
+      pointer: true
+      optional: true
 
 SignatureSetRecord:
   union: { type: record }

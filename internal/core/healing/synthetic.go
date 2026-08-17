@@ -164,7 +164,12 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 			}
 
 			err := waitFor(ctx, Q, sub.Status.TxID)
-			if err != nil && strings.HasSuffix(err.Error(), " is not a known directory anchor") {
+			// Both spellings: pre-Kourou the destination only ever waited on a
+			// directory anchor, so that is what it said. From Kourou a proof may
+			// be rooted at the source's own anchor and the message dropped the
+			// word "directory" — and this tool talks to nodes of both kinds.
+			if err != nil && (strings.HasSuffix(err.Error(), " is not a known directory anchor") ||
+				strings.HasSuffix(err.Error(), " is not a known anchor")) {
 				return ErrRetry, false
 			}
 		}

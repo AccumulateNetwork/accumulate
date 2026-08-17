@@ -19,3 +19,28 @@ PrivateSequenceResponse:
       type: { name: api.MessageRecord, parameters: [{ type: messaging.Message }] }
       marshal-as: reference
       pointer: true
+
+PrivateSequenceRangeRequest:
+  union: { type: message }
+  fields:
+    - name: Source
+      type: url
+      pointer: true
+    - name: Destination
+      type: url
+      pointer: true
+    - name: Start
+      type: uint
+    - name: End
+      type: uint
+    - type: private.SequenceOptions
+      marshal-as: reference
+
+PrivateSequenceRangeResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: { name: api.MessageRecord, parameters: [{ type: messaging.Message }] }
+      marshal-as: reference
+      pointer: true
+      repeatable: true

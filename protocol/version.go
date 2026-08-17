@@ -11,7 +11,7 @@ type ExecutorVersion uint64
 
 // ExecutorVersionLatest is the latest version of the executor.
 // ExecutorVersionLatest is intended primarily for testing.
-const ExecutorVersionLatest = ExecutorVersionV2Jiuquan
+const ExecutorVersionLatest = ExecutorVersionV2Kourou
 
 func init() {
 	// Verify that ExecutorVersionLatest has been updated, so that tests can
@@ -56,4 +56,17 @@ func (v ExecutorVersion) V2VandenbergEnabled() bool {
 // V2JiuquanEnabled checks if the version is at least V2 Jiuquan.
 func (v ExecutorVersion) V2JiuquanEnabled() bool {
 	return v >= ExecutorVersionV2Jiuquan
+}
+
+// V2KourouEnabled checks if the version is at least V2 Kourou. Kourou enables
+// collection proofs: a single proof covering a contiguous range of messages,
+// instead of one proof per message and — for anchors — one signature quorum per
+// anchor (#4087).
+//
+// This gates ACCEPTANCE, not just emission. What a node is willing to accept is
+// consensus-critical: if one node accepted a collection proof while another
+// rejected it, they would disagree about the state. Emission must therefore
+// never precede acceptance being active network-wide.
+func (v ExecutorVersion) V2KourouEnabled() bool {
+	return v >= ExecutorVersionV2Kourou
 }
