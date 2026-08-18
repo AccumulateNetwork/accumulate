@@ -54,6 +54,11 @@ func (x BurnTokens) Execute(st *StateManager, tx *Delivery) (protocol.Transactio
 		return nil, fmt.Errorf("cannot burn more tokens than is available in account")
 	}
 
+	// Burning is two-phase: the originating account is debited above, and
+	// a SyntheticBurnTokens is submitted to the token issuer. When the
+	// synthetic executes (synthetic_burn_tokens.go) it decrements the
+	// issuer's Issued field, returning the burnt ACME to the unissued
+	// supply (SupplyLimit - Issued rises by exactly body.Amount).
 	burn := new(protocol.SyntheticBurnTokens)
 	burn.Amount = body.Amount
 	st.Submit(account.GetTokenUrl(), burn)
