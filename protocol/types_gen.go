@@ -1076,11 +1076,11 @@ type TransactionHeader struct {
 	Expire *ExpireOptions `json:"expire,omitempty" form:"expire" query:"expire"`
 	// HoldUntil holds the transaction as pending until the condition(s) are met.
 	HoldUntil *HoldUntilOptions `json:"holdUntil,omitempty" form:"holdUntil" query:"holdUntil"`
-	// HashLock locks the synthetic output until preimage is revealed or expiration.
-	HashLock *HashLockOptions `json:"hashLock,omitempty" form:"hashLock" query:"hashLock"`
 	// Authorities is a list of additional authorities that must approve the transaction.
 	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
-	extraData   []byte
+	// HashLock locks the synthetic output until preimage is revealed or expiration.
+	HashLock  *HashLockOptions `json:"hashLock,omitempty" form:"hashLock" query:"hashLock"`
+	extraData []byte
 }
 
 type TransactionResultSet struct {
@@ -3637,15 +3637,15 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 	if v.HoldUntil != nil {
 		u.HoldUntil = (v.HoldUntil).Copy()
 	}
-	if v.HashLock != nil {
-		u.HashLock = (v.HashLock).Copy()
-	}
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
 		v := v
 		if v != nil {
 			u.Authorities[i] = v
 		}
+	}
+	if v.HashLock != nil {
+		u.HashLock = (v.HashLock).Copy()
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -6311,14 +6311,6 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 	case !((v.HoldUntil).Equal(u.HoldUntil)):
 		return false
 	}
-	switch {
-	case v.HashLock == u.HashLock:
-		// equal
-	case v.HashLock == nil || u.HashLock == nil:
-		return false
-	case !((v.HashLock).Equal(u.HashLock)):
-		return false
-	}
 	if len(v.Authorities) != len(u.Authorities) {
 		return false
 	}
@@ -6326,6 +6318,14 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 		if !((v.Authorities[i]).Equal(u.Authorities[i])) {
 			return false
 		}
+	}
+	switch {
+	case v.HashLock == u.HashLock:
+		// equal
+	case v.HashLock == nil || u.HashLock == nil:
+		return false
+	case !((v.HashLock).Equal(u.HashLock)):
+		return false
 	}
 
 	return true
@@ -14330,8 +14330,8 @@ var fieldNames_TransactionHeader = []string{
 	4: "Metadata",
 	5: "Expire",
 	6: "HoldUntil",
-	7: "HashLock",
-	8: "Authorities",
+	7: "Authorities",
+	8: "HashLock",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -14362,13 +14362,13 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	if !(v.HoldUntil == nil) {
 		writer.WriteValue(6, v.HoldUntil.MarshalBinary)
 	}
-	if !(v.HashLock == nil) {
-		writer.WriteValue(7, v.HashLock.MarshalBinary)
-	}
 	if !(len(v.Authorities) == 0) {
 		for _, v := range v.Authorities {
-			writer.WriteUrl(8, v)
+			writer.WriteUrl(7, v)
 		}
+	}
+	if !(v.HashLock == nil) {
+		writer.WriteValue(8, v.HashLock.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionHeader)
@@ -19921,15 +19921,15 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(HoldUntilOptions); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.HoldUntil = x
 	}
-	if x := new(HashLockOptions); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
-		v.HashLock = x
-	}
 	for {
-		if x, ok := reader.ReadUrl(8); ok {
+		if x, ok := reader.ReadUrl(7); ok {
 			v.Authorities = append(v.Authorities, x)
 		} else {
 			break
 		}
+	}
+	if x := new(HashLockOptions); reader.ReadValue(8, x.UnmarshalBinaryFrom) {
+		v.HashLock = x
 	}
 
 	seen, err := reader.Reset(fieldNames_TransactionHeader)
@@ -21467,8 +21467,8 @@ func init() {
 		encoding.NewTypeField("metadata", "bytes"),
 		encoding.NewTypeField("expire", "ExpireOptions"),
 		encoding.NewTypeField("holdUntil", "HoldUntilOptions"),
-		encoding.NewTypeField("hashLock", "HashLockOptions"),
 		encoding.NewTypeField("authorities", "string[]"),
+		encoding.NewTypeField("hashLock", "HashLockOptions"),
 	}, "TransactionHeader", "transactionHeader")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -23872,8 +23872,8 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 		Metadata    *string                     `json:"metadata,omitempty"`
 		Expire      *ExpireOptions              `json:"expire,omitempty"`
 		HoldUntil   *HoldUntilOptions           `json:"holdUntil,omitempty"`
-		HashLock    *HashLockOptions            `json:"hashLock,omitempty"`
 		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		HashLock    *HashLockOptions            `json:"hashLock,omitempty"`
 		ExtraData   *string                     `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Principal == nil) {
@@ -23894,11 +23894,11 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	if !(v.HoldUntil == nil) {
 		u.HoldUntil = v.HoldUntil
 	}
-	if !(v.HashLock == nil) {
-		u.HashLock = v.HashLock
-	}
 	if !(len(v.Authorities) == 0) {
 		u.Authorities = v.Authorities
+	}
+	if !(v.HashLock == nil) {
+		u.HashLock = v.HashLock
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -27479,8 +27479,8 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 		Metadata    *string                     `json:"metadata,omitempty"`
 		Expire      *ExpireOptions              `json:"expire,omitempty"`
 		HoldUntil   *HoldUntilOptions           `json:"holdUntil,omitempty"`
-		HashLock    *HashLockOptions            `json:"hashLock,omitempty"`
 		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		HashLock    *HashLockOptions            `json:"hashLock,omitempty"`
 		ExtraData   *string                     `json:"$epilogue,omitempty"`
 	}{}
 	u.Principal = v.Principal
@@ -27489,8 +27489,8 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	u.Expire = v.Expire
 	u.HoldUntil = v.HoldUntil
-	u.HashLock = v.HashLock
 	u.Authorities = v.Authorities
+	u.HashLock = v.HashLock
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -27509,8 +27509,8 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	}
 	v.Expire = u.Expire
 	v.HoldUntil = u.HoldUntil
-	v.HashLock = u.HashLock
 	v.Authorities = u.Authorities
+	v.HashLock = u.HashLock
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

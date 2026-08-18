@@ -25,18 +25,18 @@ TransactionHeader:
       optional: true
       pointer: true
       marshal-as: reference
-    - name: HashLock
-      description: locks the synthetic output until preimage is revealed or expiration
-      type: HashLockOptions
-      optional: true
-      pointer: true
-      marshal-as: reference
     - name: Authorities
       description: is a list of additional authorities that must approve the transaction
       type: url
       optional: true
       pointer: true
       repeatable: true
+    - name: HashLock
+      description: locks the synthetic output until preimage is revealed or expiration
+      type: HashLockOptions
+      optional: true
+      pointer: true
+      marshal-as: reference
 
 Transaction:
   fields:

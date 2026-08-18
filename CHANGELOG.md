@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.4.6.4
+
+Fixes a wire-compatibility break in 1.4.6.3. **1.4.6.3 should not be
+deployed.**
+
+- Transaction header (#4093)
+  - `HashLock`, added by HTLC in 1.4.6.3, was inserted between `HoldUntil` and
+    `Authorities`. Field numbers are positional, so `HashLock` took field 7 —
+    the number `Authorities` has held since #3457 — and `Authorities` moved to
+    8.
+  - A transaction header written by any earlier release, with additional
+    authorities set, therefore failed to decode on 1.4.6.3:
+    `field HashLock: failed to unmarshal value: failed to read field number:
+    field number is invalid`. The same logical transaction also hashed
+    differently, which splits a mixed-version network and invalidates
+    signatures made over the old hash.
+  - This was live, not theoretical: additional authorities are gated behind
+    `v2-baikonur` and `v2-vandenberg`, and mainnet runs `v2-vandenberg`.
+  - `HashLock` now takes field 8 and `Authorities` returns to 7. Headers
+    written by 1.4.6.2 decode unchanged and transaction hashes match it
+    exactly. No migration is required, because no released binary ever wrote a
+    `HashLock` at field 7 — the field is new in 1.4.6.3.
+  - Golden-byte tests now pin the pre-HashLock encoding and the transaction
+    hash, as literals rather than values recomputed from the code under test.
+  - Every generated type in the repository was compared field by field
+    between 1.4.6.2 and 1.4.6.3 — 319 types, this was the only
+    incompatibility.
+
 ## 1.4.6.3
 
 Fifty-six commits since 1.4.6.2, against two to five in each of the releases
