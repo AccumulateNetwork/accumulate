@@ -4,12 +4,18 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-//go:build !ci
-// +build !ci
-
-// These tests start real DevNet instances and test the halt functionality
-// end-to-end. They are excluded from CI builds due to Prometheus metrics
-// conflicts when running multiple CometBFT instances in the same process.
+// These tests start real DevNet instances and exercise the halt functionality
+// end-to-end.
+//
+// They used to carry a `!ci` build constraint, described as excluding them
+// from CI. It never did: CI runs `go test -tags testnet ./...` and nothing
+// passes `-tags ci`, so the constraint was always satisfied and these tests
+// have always run there. The tag is removed rather than left to imply a
+// protection that does not exist — if these should not run in CI, that has to
+// be a tag CI actually passes.
+//
+// Ports are allocated per run by freeDevnetBase; see the comment there for
+// why fixed ports failed in CI and passed locally.
 //
 // Run these tests individually:
 //   go test -run TestHaltDevNetIntegration -v
@@ -47,6 +53,8 @@ func TestHaltDevNetIntegration(t *testing.T) {
 		t.Skip("Skipping DevNet integration test in short mode")
 	}
 
+	basePort := freeDevnetBase(t, 1)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -75,7 +83,7 @@ func TestHaltDevNetIntegration(t *testing.T) {
 		},
 		Configurations: []Configuration{
 			&DevnetConfiguration{
-				Listen:     multiaddr.StringCast("/tcp/36656"), // Use non-standard port to avoid conflicts
+				Listen:     multiaddr.StringCast(fmt.Sprintf("/tcp/%d", basePort)),
 				Bvns:       1,
 				Validators: 1,
 				Globals:    globals,
@@ -96,7 +104,7 @@ func TestHaltDevNetIntegration(t *testing.T) {
 
 	// Find the HTTP port - it should be at the default offset from the listen port
 	// DevNet bootstrap node listens on port + 4 for HTTP
-	httpAddr := "http://127.0.0.1:36660"
+	httpAddr := fmt.Sprintf("http://127.0.0.1:%d", basePort+int(portAccAPI))
 
 	// Wait for HTTP server to be ready
 	t.Log("Waiting for HTTP server to be ready...")
@@ -174,6 +182,8 @@ func TestHaltDevNetCancel(t *testing.T) {
 		t.Skip("Skipping DevNet integration test in short mode")
 	}
 
+	basePort := freeDevnetBase(t, 1)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -199,7 +209,7 @@ func TestHaltDevNetCancel(t *testing.T) {
 		},
 		Configurations: []Configuration{
 			&DevnetConfiguration{
-				Listen:     multiaddr.StringCast("/tcp/37656"),
+				Listen:     multiaddr.StringCast(fmt.Sprintf("/tcp/%d", basePort)),
 				Bvns:       1,
 				Validators: 1,
 				Globals:    globals,
@@ -218,7 +228,7 @@ func TestHaltDevNetCancel(t *testing.T) {
 	require.NoError(t, err)
 	defer inst.Stop()
 
-	httpAddr := "http://127.0.0.1:37660"
+	httpAddr := fmt.Sprintf("http://127.0.0.1:%d", basePort+int(portAccAPI))
 
 	// Wait for HTTP server
 	var httpReady bool
@@ -278,6 +288,8 @@ func TestHaltDevNetAPIResponses(t *testing.T) {
 		t.Skip("Skipping DevNet integration test in short mode")
 	}
 
+	basePort := freeDevnetBase(t, 1)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -300,7 +312,7 @@ func TestHaltDevNetAPIResponses(t *testing.T) {
 		},
 		Configurations: []Configuration{
 			&DevnetConfiguration{
-				Listen:     multiaddr.StringCast("/tcp/38656"),
+				Listen:     multiaddr.StringCast(fmt.Sprintf("/tcp/%d", basePort)),
 				Bvns:       1,
 				Validators: 1,
 				Globals:    globals,
@@ -319,7 +331,7 @@ func TestHaltDevNetAPIResponses(t *testing.T) {
 	require.NoError(t, err)
 	defer inst.Stop()
 
-	httpAddr := "http://127.0.0.1:38660"
+	httpAddr := fmt.Sprintf("http://127.0.0.1:%d", basePort+int(portAccAPI))
 
 	// Wait for HTTP server
 	var httpReady bool
