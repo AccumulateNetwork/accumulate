@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"testing"
 
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/require"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -29,9 +28,9 @@ func init() { acctesting.EnableDebugFeatures() }
 
 var rng = rand.New(rand.NewSource(0))
 
-func generateKey() tmed25519.PrivKey {
+func generateKey() ed25519.PrivateKey {
 	_, key, _ := ed25519.GenerateKey(rng)
-	return tmed25519.PrivKey(key)
+	return key
 }
 
 func doHash(b []byte) []byte {
@@ -48,9 +47,9 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
 	batch := db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book", testKey[32:]))
+	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book", testKey[32:]))
+	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book", testKey[32:]))
 	require.NoError(t, batch.Commit())
 
 	bookUrl := protocol.AccountUrl("foo", "book")
@@ -58,8 +57,8 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	for _, idx := range []uint64{0, 1, 2} {
 		t.Run(fmt.Sprint(idx), func(t *testing.T) {
 			op := new(protocol.UpdateKeyOperation)
-			kh := sha256.Sum256(testKey.PubKey().Bytes())
-			nkh := sha256.Sum256(newKey.PubKey().Bytes())
+			kh := sha256.Sum256(testKey[32:])
+			nkh := sha256.Sum256(newKey[32:])
 			op.OldEntry.KeyHash = kh[:]
 			op.NewEntry.KeyHash = nkh[:]
 			body := new(protocol.UpdateKeyPage)

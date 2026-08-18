@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
 )
 
@@ -24,7 +23,7 @@ type TendermintZeroLogger struct {
 
 // NewTendermintLogger is the default logger implementation for our Tendermint
 // nodes. It is based on part of Tendermint's NewTendermintLogger.
-func NewTendermintLogger(zl zerolog.Logger, level string, trace bool) (log.Logger, error) {
+func NewTendermintLogger(zl zerolog.Logger, level string, trace bool) (Logger, error) {
 	logLevel, err := zerolog.ParseLevel(level)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse log level: %v", err)
@@ -63,7 +62,7 @@ func (l *TendermintZeroLogger) Debug(msg string, keyVals ...interface{}) {
 	l.Zerolog.Debug().Fields(getLogFields(keyVals...)).Msg(msg)
 }
 
-func (l *TendermintZeroLogger) With(keyVals ...interface{}) log.Logger {
+func (l *TendermintZeroLogger) With(keyVals ...interface{}) Logger {
 	return &TendermintZeroLogger{
 		Zerolog: l.Zerolog.With().Fields(getLogFields(keyVals...)).Logger(),
 		Trace:   l.Trace,

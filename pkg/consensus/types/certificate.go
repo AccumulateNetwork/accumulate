@@ -44,8 +44,10 @@ func (h StateHash) String() string {
 // Certificate represents a certified header with signatures from 2f+1 validators.
 // A certificate proves that a quorum of validators have seen and validated the header.
 type Certificate struct {
-	// Header is the underlying header being certified.
-	Header Header
+	// Header is the underlying header being certified. Stored by pointer so the
+	// Header's internal RWMutex (used to guard the lazy digest cache) is not
+	// copied into certificates.
+	Header *Header
 	// Signatures contains the ed25519 signatures from validators who signed this header.
 	// Each signature is over the header digest.
 	Signatures [][]byte
@@ -60,10 +62,9 @@ type Certificate struct {
 }
 
 // NewCertificate creates a new certificate from a header and collected signatures.
-// The header fields are copied to avoid copying the mutex.
 func NewCertificate(header *Header, signatures [][]byte, signedAuthorities []uint16) *Certificate {
 	return &Certificate{
-		Header:            header.copyFields(),
+		Header:            header,
 		Signatures:        signatures,
 		SignedAuthorities: signedAuthorities,
 	}
@@ -85,30 +86,55 @@ func (c *Certificate) HasStateHash() bool {
 	return !c.StateHash.IsZero()
 }
 
+// Header was changed from a value to *Header in the CometBFT-removal MR
+// (to avoid copying Header's internal RWMutex). The accessors below all
+// dereference Header — guard each one so that a zero-value Certificate{}
+// returns the zero value of the field type instead of panicking. Callers
+// performing real consensus work must construct Certificate via
+// NewCertificate; the zero-value support is for incidental uses such as
+// map keys, equality checks, or test fixtures.
+
 // Digest returns the certificate digest, which is the same as the header digest.
-// Certificates are uniquely identified by their headers.
+// Certificates are uniquely identified by their headers. Returns the zero
+// digest if Header is nil.
 func (c *Certificate) Digest() CertificateDigest {
+	if c == nil || c.Header == nil {
+		return CertificateDigest{}
+	}
 	hd := c.Header.Digest()
 	return CertificateDigest(hd)
 }
 
-// Round returns the round number of this certificate.
+// Round returns the round number of this certificate, or zero if Header is nil.
 func (c *Certificate) Round() Round {
+	if c == nil || c.Header == nil {
+		return 0
+	}
 	return c.Header.Round
 }
 
-// Author returns the public key of the validator who created this certificate's header.
+// Author returns the public key of the validator who created this certificate's
+// header, or nil if Header is nil.
 func (c *Certificate) Author() ed25519.PublicKey {
+	if c == nil || c.Header == nil {
+		return nil
+	}
 	return c.Header.Author
 }
 
-// Epoch returns the epoch number of this certificate.
+// Epoch returns the epoch number of this certificate, or zero if Header is nil.
 func (c *Certificate) Epoch() uint64 {
+	if c == nil || c.Header == nil {
+		return 0
+	}
 	return c.Header.Epoch
 }
 
-// Parents returns the parent certificate digests.
+// Parents returns the parent certificate digests, or nil if Header is nil.
 func (c *Certificate) Parents() []CertificateDigest {
+	if c == nil || c.Header == nil {
+		return nil
+	}
 	return c.Header.Parents
 }
 
@@ -119,6 +145,12 @@ func (c *Certificate) Parents() []CertificateDigest {
 //  3. The signers have sufficient stake (quorum)
 //  4. The header author is in the committee
 func (c *Certificate) Verify(committee *Committee) error {
+	if c == nil {
+		return errors.New("certificate is nil")
+	}
+	if c.Header == nil {
+		return errors.New("certificate has no header")
+	}
 	if committee == nil {
 		return errors.New("committee is nil")
 	}
@@ -359,7 +391,7 @@ func UnmarshalCertificate(data []byte) (*Certificate, error) {
 	}
 
 	return &Certificate{
-		Header:            header.copyFields(),
+		Header:            header,
 		Signatures:        signatures,
 		SignedAuthorities: authorities,
 		StateHash:         stateHash,
@@ -378,7 +410,7 @@ func (c *Certificate) Clone() *Certificate {
 	copy(authorities, c.SignedAuthorities)
 
 	return &Certificate{
-		Header:            c.Header.copyFields(),
+		Header:            c.Header.Clone(),
 		Signatures:        signatures,
 		SignedAuthorities: authorities,
 		StateHash:         c.StateHash,

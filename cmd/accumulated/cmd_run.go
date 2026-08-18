@@ -19,12 +19,11 @@ import (
 	"syscall"
 	"time"
 
-	tmconfig "github.com/cometbft/cometbft/config"
-	service2 "github.com/cometbft/cometbft/libs/service"
 	"github.com/fatih/color"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -96,12 +95,11 @@ func runNode(cmd *cobra.Command, _ []string) (string, error) {
 	color.HiGreen("------ starting a new node ------")
 
 	err := prog.Run()
-	if err != nil {
-		//if it is already stopped, that is ok.
-		if !errors.Is(err, service2.ErrAlreadyStopped) {
-			slog.Error("Service failed", "error", err)
-			return "", err
-		}
+	if err != nil && !errors.Is(err, accumulated.ErrAlreadyStopped) {
+		// "already stopped" is a benign signal that Stop() was called twice
+		// (e.g. by both the watchdog and a SIGTERM); any other error is fatal.
+		slog.Error("Service failed", "error", err)
+		return "", err
 	}
 	return "shutdown complete", nil
 }
@@ -159,7 +157,7 @@ func newLogWriter() func(string, logAnnotator) (io.Writer, error) {
 		if logFile != nil {
 			w := io.Writer(logFile)
 			if annotate != nil {
-				w = annotate(w, tmconfig.LogFormatPlain, false)
+				w = annotate(w, "plain", false)
 			}
 			writers = append(writers, &zerolog.ConsoleWriter{
 				Out:        w,
@@ -177,7 +175,7 @@ func newLogWriter() func(string, logAnnotator) (io.Writer, error) {
 		if jsonLogFile != nil {
 			w := io.Writer(jsonLogFile)
 			if annotate != nil {
-				w = annotate(w, tmconfig.LogFormatJSON, false)
+				w = annotate(w, "json", false)
 			}
 			writers = append(writers, w)
 		}

@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -51,26 +50,25 @@ type LoadGenConfig struct {
 
 // OperationMixConfig defines the percentage distribution of operations
 type OperationMixConfig struct {
-	LiteToLiteTransfer   int `json:"liteToLiteTransfer"`
-	LiteToADITransfer    int `json:"liteToADITransfer"`
-	ADIToADITransfer     int `json:"adiToAdiTransfer"`
-	KeyRotation          int `json:"keyRotation"`
-	AddKeyBook           int `json:"addKeyBook"`
-	AddKeyPage           int `json:"addKeyPage"`
-	WriteData            int `json:"writeData"`
-	CreateAccount        int `json:"createAccount"`
-	UpdateKeyWeight      int `json:"updateKeyWeight"`
+	LiteToLiteTransfer int `json:"liteToLiteTransfer"`
+	LiteToADITransfer  int `json:"liteToADITransfer"`
+	ADIToADITransfer   int `json:"adiToAdiTransfer"`
+	KeyRotation        int `json:"keyRotation"`
+	AddKeyBook         int `json:"addKeyBook"`
+	AddKeyPage         int `json:"addKeyPage"`
+	WriteData          int `json:"writeData"`
+	CreateAccount      int `json:"createAccount"`
+	UpdateKeyWeight    int `json:"updateKeyWeight"`
 }
 
 // Metrics tracks load generator performance
 type Metrics struct {
-	TotalSubmitted   atomic.Uint64
-	TotalSuccess     atomic.Uint64
-	TotalFailed      atomic.Uint64
-	LatencySum       atomic.Uint64
-	LatencyCount     atomic.Uint64
-	OperationCounts  map[string]*atomic.Uint64
-	mu               sync.RWMutex
+	TotalSubmitted  atomic.Uint64
+	TotalSuccess    atomic.Uint64
+	TotalFailed     atomic.Uint64
+	LatencySum      atomic.Uint64
+	LatencyCount    atomic.Uint64
+	OperationCounts map[string]*atomic.Uint64
 }
 
 func newMetrics() *Metrics {
@@ -865,7 +863,7 @@ func randInt(max int) int {
 		return 0
 	}
 	b := make([]byte, 4)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	n := int(b[0])<<24 | int(b[1])<<16 | int(b[2])<<8 | int(b[3])
 	if n < 0 {
 		n = -n

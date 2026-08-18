@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -44,19 +44,19 @@ func init() {
 
 // TuningRecommendation represents a single tuning suggestion
 type TuningRecommendation struct {
-	Category    string                 `json:"category"`
-	Priority    string                 `json:"priority"`
-	Description string                 `json:"description"`
-	Expected    string                 `json:"expected"`
-	Actions     []string               `json:"actions,omitempty"`
+	Category    string   `json:"category"`
+	Priority    string   `json:"priority"`
+	Description string   `json:"description"`
+	Expected    string   `json:"expected"`
+	Actions     []string `json:"actions,omitempty"`
 
 	// Legacy fields for compatibility with existing code
-	Parameter   string                 `json:"parameter,omitempty"`
-	CurrentVal  interface{}            `json:"current_value,omitempty"`
-	Suggested   interface{}            `json:"suggested_value,omitempty"`
-	Reason      string                 `json:"reason,omitempty"`
-	Impact      string                 `json:"expected_impact,omitempty"`
-	Additional  map[string]interface{} `json:"additional_info,omitempty"`
+	Parameter  string                 `json:"parameter,omitempty"`
+	CurrentVal interface{}            `json:"current_value,omitempty"`
+	Suggested  interface{}            `json:"suggested_value,omitempty"`
+	Reason     string                 `json:"reason,omitempty"`
+	Impact     string                 `json:"expected_impact,omitempty"`
+	Additional map[string]interface{} `json:"additional_info,omitempty"`
 }
 
 // BottleneckAnalysis identifies performance bottlenecks
@@ -71,35 +71,35 @@ type BottleneckAnalysis struct {
 
 // TuningReport contains the complete tuning analysis
 type TuningReport struct {
-	Recommendations  []TuningRecommendation `json:"recommendations"`
-	Regressions      []Regression           `json:"regressions,omitempty"`
+	Recommendations []TuningRecommendation `json:"recommendations"`
+	Regressions     []Regression           `json:"regressions,omitempty"`
 
 	// Legacy fields for compatibility with existing code
-	ReportFile         string              `json:"report_file,omitempty"`
-	AnalysisTime       string              `json:"analysis_time,omitempty"`
-	Summary            TuningSummary       `json:"summary,omitempty"`
+	ReportFile         string               `json:"report_file,omitempty"`
+	AnalysisTime       string               `json:"analysis_time,omitempty"`
+	Summary            TuningSummary        `json:"summary,omitempty"`
 	Bottlenecks        []BottleneckAnalysis `json:"bottlenecks,omitempty"`
-	BaselineComparison *BaselineComparison `json:"baseline_comparison,omitempty"`
+	BaselineComparison *BaselineComparison  `json:"baseline_comparison,omitempty"`
 }
 
 // TuningSummary provides high-level analysis
 type TuningSummary struct {
-	TPSAchievement     float64 `json:"tps_achievement_percent"`
-	SuccessRate        float64 `json:"success_rate_percent"`
-	ErrorRate          float64 `json:"error_rate_percent"`
-	AvgLatency         float64 `json:"avg_latency_ms"`
-	OverallHealth      string  `json:"overall_health"`
-	CriticalIssues     int     `json:"critical_issues"`
-	WarningIssues      int     `json:"warning_issues"`
+	TPSAchievement float64 `json:"tps_achievement_percent"`
+	SuccessRate    float64 `json:"success_rate_percent"`
+	ErrorRate      float64 `json:"error_rate_percent"`
+	AvgLatency     float64 `json:"avg_latency_ms"`
+	OverallHealth  string  `json:"overall_health"`
+	CriticalIssues int     `json:"critical_issues"`
+	WarningIssues  int     `json:"warning_issues"`
 }
 
 // BaselineComparison compares current performance with baseline
 type BaselineComparison struct {
-	BaselineFile       string  `json:"baseline_file"`
-	TPSDelta           float64 `json:"tps_delta_percent"`
-	LatencyDelta       float64 `json:"latency_delta_percent"`
-	SuccessRateDelta   float64 `json:"success_rate_delta_percent"`
-	Verdict            string  `json:"verdict"`
+	BaselineFile     string  `json:"baseline_file"`
+	TPSDelta         float64 `json:"tps_delta_percent"`
+	LatencyDelta     float64 `json:"latency_delta_percent"`
+	SuccessRateDelta float64 `json:"success_rate_delta_percent"`
+	Verdict          string  `json:"verdict"`
 }
 
 func perfMonTuner(_ *cobra.Command, args []string) {
@@ -335,59 +335,59 @@ func generateThroughputRecommendations(report *PerformanceReport, bottleneck Bot
 	// Consensus timeout adjustments
 	if report.AvgBlockInterval > 0 && report.AvgBlockInterval > 2000 {
 		recs = append(recs, TuningRecommendation{
-			Category:   "consensus",
-			Parameter:  "TimeoutPropose",
-			Suggested:  "1s",
-			Reason:     "Block intervals are high, reducing propose timeout may increase throughput",
-			Impact:     "Faster block production, potentially 20-30% TPS improvement",
-			Priority:   "HIGH",
+			Category:  "consensus",
+			Parameter: "TimeoutPropose",
+			Suggested: "1s",
+			Reason:    "Block intervals are high, reducing propose timeout may increase throughput",
+			Impact:    "Faster block production, potentially 20-30% TPS improvement",
+			Priority:  "HIGH",
 		})
 		recs = append(recs, TuningRecommendation{
-			Category:   "consensus",
-			Parameter:  "TimeoutCommit",
-			Suggested:  "500ms",
-			Reason:     "Reduce time between blocks to increase throughput",
-			Impact:     "More blocks per minute, improved TPS",
-			Priority:   "HIGH",
+			Category:  "consensus",
+			Parameter: "TimeoutCommit",
+			Suggested: "500ms",
+			Reason:    "Reduce time between blocks to increase throughput",
+			Impact:    "More blocks per minute, improved TPS",
+			Priority:  "HIGH",
 		})
 	}
 
 	// Mempool settings
 	recs = append(recs, TuningRecommendation{
-		Category:   "mempool",
-		Parameter:  "Size",
-		Suggested:  10000,
-		Reason:     "Increase mempool capacity to handle higher transaction volumes",
-		Impact:     "Better transaction buffering, reduced rejection rate",
-		Priority:   "MEDIUM",
+		Category:  "mempool",
+		Parameter: "Size",
+		Suggested: 10000,
+		Reason:    "Increase mempool capacity to handle higher transaction volumes",
+		Impact:    "Better transaction buffering, reduced rejection rate",
+		Priority:  "MEDIUM",
 	})
 
 	recs = append(recs, TuningRecommendation{
-		Category:   "mempool",
-		Parameter:  "MaxTxsBytes",
-		Suggested:  104857600, // 100MB
-		Reason:     "Allow more transaction data in mempool",
-		Impact:     "Support larger batches, improved throughput",
-		Priority:   "MEDIUM",
+		Category:  "mempool",
+		Parameter: "MaxTxsBytes",
+		Suggested: 104857600, // 100MB
+		Reason:    "Allow more transaction data in mempool",
+		Impact:    "Support larger batches, improved throughput",
+		Priority:  "MEDIUM",
 	})
 
 	// Block size limits
 	recs = append(recs, TuningRecommendation{
-		Category:   "blocks",
-		Parameter:  "MaxBytes",
-		Suggested:  22020096, // 21MB
-		Reason:     "Increase max block size to include more transactions per block",
-		Impact:     "More transactions per block, higher TPS",
-		Priority:   "HIGH",
+		Category:  "blocks",
+		Parameter: "MaxBytes",
+		Suggested: 22020096, // 21MB
+		Reason:    "Increase max block size to include more transactions per block",
+		Impact:    "More transactions per block, higher TPS",
+		Priority:  "HIGH",
 	})
 
 	recs = append(recs, TuningRecommendation{
-		Category:   "blocks",
-		Parameter:  "MaxGas",
-		Suggested:  -1,
-		Reason:     "Remove gas limit to maximize transactions per block",
-		Impact:     "No artificial gas constraints on throughput",
-		Priority:   "MEDIUM",
+		Category:  "blocks",
+		Parameter: "MaxGas",
+		Suggested: -1,
+		Reason:    "Remove gas limit to maximize transactions per block",
+		Impact:    "No artificial gas constraints on throughput",
+		Priority:  "MEDIUM",
 	})
 
 	return recs
@@ -398,40 +398,40 @@ func generateLatencyRecommendations(report *PerformanceReport, bottleneck Bottle
 
 	// Database tuning
 	recs = append(recs, TuningRecommendation{
-		Category:   "database",
-		Parameter:  "NumMemtables",
-		Suggested:  3,
-		Reason:     "High latency may indicate database write bottleneck",
-		Impact:     "Faster write throughput, reduced P99 latency",
-		Priority:   "HIGH",
+		Category:  "database",
+		Parameter: "NumMemtables",
+		Suggested: 3,
+		Reason:    "High latency may indicate database write bottleneck",
+		Impact:    "Faster write throughput, reduced P99 latency",
+		Priority:  "HIGH",
 	})
 
 	recs = append(recs, TuningRecommendation{
-		Category:   "database",
-		Parameter:  "NumLevelZeroTables",
-		Suggested:  3,
-		Reason:     "Allow more L0 tables before compaction to reduce write stalls",
-		Impact:     "Smoother write performance, reduced latency spikes",
-		Priority:   "MEDIUM",
+		Category:  "database",
+		Parameter: "NumLevelZeroTables",
+		Suggested: 3,
+		Reason:    "Allow more L0 tables before compaction to reduce write stalls",
+		Impact:    "Smoother write performance, reduced latency spikes",
+		Priority:  "MEDIUM",
 	})
 
 	// Network tuning
 	recs = append(recs, TuningRecommendation{
-		Category:   "network",
-		Parameter:  "SendRate",
-		Suggested:  52428800, // 50MB/s
-		Reason:     "Increase network bandwidth to reduce message delays",
-		Impact:     "Faster message propagation, lower latency",
-		Priority:   "MEDIUM",
+		Category:  "network",
+		Parameter: "SendRate",
+		Suggested: 52428800, // 50MB/s
+		Reason:    "Increase network bandwidth to reduce message delays",
+		Impact:    "Faster message propagation, lower latency",
+		Priority:  "MEDIUM",
 	})
 
 	recs = append(recs, TuningRecommendation{
-		Category:   "network",
-		Parameter:  "RecvRate",
-		Suggested:  52428800, // 50MB/s
-		Reason:     "Match send rate for balanced network performance",
-		Impact:     "Better network utilization, reduced latency",
-		Priority:   "MEDIUM",
+		Category:  "network",
+		Parameter: "RecvRate",
+		Suggested: 52428800, // 50MB/s
+		Reason:    "Match send rate for balanced network performance",
+		Impact:    "Better network utilization, reduced latency",
+		Priority:  "MEDIUM",
 	})
 
 	return recs
@@ -441,15 +441,15 @@ func generateErrorRecommendations(report *PerformanceReport, bottleneck Bottlene
 	var recs []TuningRecommendation
 
 	// Analyze error types
-	if report.ErrorsByType != nil && len(report.ErrorsByType) > 0 {
+	if len(report.ErrorsByType) > 0 {
 		if txErrors, ok := report.ErrorsByType["tx_error"]; ok && txErrors > 0 {
 			recs = append(recs, TuningRecommendation{
-				Category:   "application",
-				Parameter:  "transaction_validation",
-				Suggested:  "review_validation_rules",
-				Reason:     fmt.Sprintf("High transaction error count (%d)", txErrors),
-				Impact:     "Reduced error rate, improved success rate",
-				Priority:   "HIGH",
+				Category:  "application",
+				Parameter: "transaction_validation",
+				Suggested: "review_validation_rules",
+				Reason:    fmt.Sprintf("High transaction error count (%d)", txErrors),
+				Impact:    "Reduced error rate, improved success rate",
+				Priority:  "HIGH",
 				Additional: map[string]interface{}{
 					"error_count": txErrors,
 				},
@@ -458,12 +458,12 @@ func generateErrorRecommendations(report *PerformanceReport, bottleneck Bottlene
 
 		if submitErrors, ok := report.ErrorsByType["submit"]; ok && submitErrors > 0 {
 			recs = append(recs, TuningRecommendation{
-				Category:   "network",
-				Parameter:  "MaxPacketMsgPayloadSize",
-				Suggested:  10240, // 10KB
-				Reason:     fmt.Sprintf("Submission errors detected (%d), may need larger packet size", submitErrors),
-				Impact:     "Reduced submission failures",
-				Priority:   "MEDIUM",
+				Category:  "network",
+				Parameter: "MaxPacketMsgPayloadSize",
+				Suggested: 10240, // 10KB
+				Reason:    fmt.Sprintf("Submission errors detected (%d), may need larger packet size", submitErrors),
+				Impact:    "Reduced submission failures",
+				Priority:  "MEDIUM",
 				Additional: map[string]interface{}{
 					"error_count": submitErrors,
 				},
@@ -473,12 +473,12 @@ func generateErrorRecommendations(report *PerformanceReport, bottleneck Bottlene
 
 	// Timeout recommendations
 	recs = append(recs, TuningRecommendation{
-		Category:   "consensus",
-		Parameter:  "TimeoutPrevote",
-		Suggested:  "2s",
-		Reason:     "Increase timeout to reduce timeout-related errors",
-		Impact:     "More reliable consensus, fewer timeout errors",
-		Priority:   "LOW",
+		Category:  "consensus",
+		Parameter: "TimeoutPrevote",
+		Suggested: "2s",
+		Reason:    "Increase timeout to reduce timeout-related errors",
+		Impact:    "More reliable consensus, fewer timeout errors",
+		Priority:  "LOW",
 	})
 
 	return recs
@@ -488,21 +488,21 @@ func generateBlockRecommendations(report *PerformanceReport, bottleneck Bottlene
 	var recs []TuningRecommendation
 
 	recs = append(recs, TuningRecommendation{
-		Category:   "consensus",
-		Parameter:  "TimeoutCommit",
-		Suggested:  "500ms",
-		Reason:     "Reduce block interval to increase block production rate",
-		Impact:     "More blocks per minute, better transaction throughput",
-		Priority:   "HIGH",
+		Category:  "consensus",
+		Parameter: "TimeoutCommit",
+		Suggested: "500ms",
+		Reason:    "Reduce block interval to increase block production rate",
+		Impact:    "More blocks per minute, better transaction throughput",
+		Priority:  "HIGH",
 	})
 
 	recs = append(recs, TuningRecommendation{
-		Category:   "consensus",
-		Parameter:  "CreateEmptyBlocks",
-		Suggested:  true,
-		Reason:     "Enable empty block creation for consistent block times",
-		Impact:     "More predictable block production",
-		Priority:   "LOW",
+		Category:  "consensus",
+		Parameter: "CreateEmptyBlocks",
+		Suggested: true,
+		Reason:    "Enable empty block creation for consistent block times",
+		Impact:    "More predictable block production",
+		Priority:  "LOW",
 	})
 
 	return recs
@@ -513,22 +513,22 @@ func generateOptimizationRecommendations(report *PerformanceReport) []TuningReco
 
 	// System is healthy, suggest fine-tuning
 	recs = append(recs, TuningRecommendation{
-		Category:   "optimization",
-		Parameter:  "general",
-		Suggested:  "fine_tune",
-		Reason:     "System is performing well, consider incremental optimizations",
-		Impact:     "Marginal improvements in efficiency",
-		Priority:   "LOW",
+		Category:  "optimization",
+		Parameter: "general",
+		Suggested: "fine_tune",
+		Reason:    "System is performing well, consider incremental optimizations",
+		Impact:    "Marginal improvements in efficiency",
+		Priority:  "LOW",
 	})
 
 	// Database compaction
 	recs = append(recs, TuningRecommendation{
-		Category:   "database",
-		Parameter:  "CompactionStrategy",
-		Suggested:  "leveled",
-		Reason:     "Leveled compaction provides consistent performance",
-		Impact:     "More predictable latency over time",
-		Priority:   "LOW",
+		Category:  "database",
+		Parameter: "CompactionStrategy",
+		Suggested: "leveled",
+		Reason:    "Leveled compaction provides consistent performance",
+		Impact:    "More predictable latency over time",
+		Priority:  "LOW",
 	})
 
 	return recs

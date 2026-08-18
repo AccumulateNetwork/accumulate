@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"os"
@@ -8,10 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cometbft/cometbft/p2p"
-	"github.com/cometbft/cometbft/privval"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -286,17 +287,25 @@ func generateNodeKeys(configDir string) error {
 	// Generate node_key.json
 	nodeKeyPath := filepath.Join(configDir, "node_key.json")
 	if _, err := os.Stat(nodeKeyPath); os.IsNotExist(err) {
-		// Use CometBFT's p2p package to load or generate node key
-		if _, err := p2p.LoadOrGenNodeKey(nodeKeyPath); err != nil {
+		_, sk, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
 			return fmt.Errorf("failed to generate node key: %w", err)
+		}
+		nk := &accumulated.NodeKey{PrivKey: sk}
+		if err := nk.SaveAs(nodeKeyPath); err != nil {
+			return fmt.Errorf("failed to save node key: %w", err)
 		}
 	}
 
 	// Generate priv_validator_key.json
 	privValKeyPath := filepath.Join(configDir, "priv_validator_key.json")
 	if _, err := os.Stat(privValKeyPath); os.IsNotExist(err) {
-		privValKey := privval.GenFilePV(privValKeyPath, filepath.Join(configDir, "priv_validator_state.json"))
-		privValKey.Save()
+		_, sk, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			return fmt.Errorf("failed to generate validator key: %w", err)
+		}
+		pv := accumulated.NewFilePV(sk, privValKeyPath, filepath.Join(configDir, "priv_validator_state.json"))
+		pv.Save()
 	}
 
 	return nil

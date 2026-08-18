@@ -108,8 +108,8 @@ func (s *Sequencer) captureProvableView(index uint64) {
 		batch.Discard()
 		return
 	}
-	anchor, ok := ledger.Anchor.(protocol.AnchorBody)
-	if !ok || anchor.GetPartitionAnchor().MinorBlockIndex != ledger.Index {
+	anchor := ledger.Anchor
+	if anchor == nil || anchor.GetPartitionAnchor().MinorBlockIndex != ledger.Index {
 		batch.Discard()
 		return
 	}
@@ -149,8 +149,8 @@ func (s *Sequencer) pinSnapshot() error {
 			batch.Discard()
 			return errors.NotReady.With("no anchor is pending — retry after the next block that prepares one")
 		}
-		anchor, ok := ledger.Anchor.(protocol.AnchorBody)
-		if !ok || anchor.GetPartitionAnchor().MinorBlockIndex != ledger.Index {
+		anchor := ledger.Anchor
+		if anchor == nil || anchor.GetPartitionAnchor().MinorBlockIndex != ledger.Index {
 			batch.Discard()
 			return errors.NotReady.With("the pending anchor is stale — retry after the next block that prepares one")
 		}

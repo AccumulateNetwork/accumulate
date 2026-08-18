@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -64,68 +64,68 @@ type PerformanceMetrics struct {
 	mu sync.Mutex
 
 	// TPS metrics
-	SubmittedCount   uint64
-	SuccessCount     uint64
-	ErrorCount       uint64
-	LastSubmitTime   time.Time
-	FirstSubmitTime  time.Time
+	SubmittedCount  uint64
+	SuccessCount    uint64
+	ErrorCount      uint64
+	LastSubmitTime  time.Time
+	FirstSubmitTime time.Time
 
 	// Latency tracking
-	Latencies        []time.Duration
-	LatencySum       time.Duration
+	Latencies  []time.Duration
+	LatencySum time.Duration
 
 	// Error tracking
-	ErrorsByType     map[string]uint64
+	ErrorsByType map[string]uint64
 
 	// Transaction tracking
-	PendingTxs       map[[32]byte]time.Time
-	CompletedTxs     uint64
+	PendingTxs   map[[32]byte]time.Time
+	CompletedTxs uint64
 
 	// Resource usage (sampled)
-	CPUSamples       []float64
-	MemorySamples    []uint64
+	CPUSamples    []float64
+	MemorySamples []uint64
 
 	// Block tracking
-	BlockCount       uint64
-	LastBlockTime    time.Time
-	BlockIntervals   []time.Duration
+	BlockCount     uint64
+	LastBlockTime  time.Time
+	BlockIntervals []time.Duration
 }
 
 // PerformanceReport contains aggregated metrics for reporting
 type PerformanceReport struct {
-	StartTime        time.Time         `json:"start_time"`
-	EndTime          time.Time         `json:"end_time"`
-	Duration         float64           `json:"duration_seconds"`
+	StartTime time.Time `json:"start_time"`
+	EndTime   time.Time `json:"end_time"`
+	Duration  float64   `json:"duration_seconds"`
 
 	// TPS metrics
-	TargetTPS        uint64            `json:"target_tps"`
-	AchievedTPS      float64           `json:"achieved_tps"`
-	SubmittedTotal   uint64            `json:"submitted_total"`
-	SuccessTotal     uint64            `json:"success_total"`
-	ErrorTotal       uint64            `json:"error_total"`
-	SuccessRate      float64           `json:"success_rate_percent"`
+	TargetTPS      uint64  `json:"target_tps"`
+	AchievedTPS    float64 `json:"achieved_tps"`
+	SubmittedTotal uint64  `json:"submitted_total"`
+	SuccessTotal   uint64  `json:"success_total"`
+	ErrorTotal     uint64  `json:"error_total"`
+	SuccessRate    float64 `json:"success_rate_percent"`
 
 	// Latency metrics
-	LatencyP50       float64           `json:"latency_p50_ms"`
-	LatencyP95       float64           `json:"latency_p95_ms"`
-	LatencyP99       float64           `json:"latency_p99_ms"`
-	LatencyMean      float64           `json:"latency_mean_ms"`
-	LatencyMin       float64           `json:"latency_min_ms"`
-	LatencyMax       float64           `json:"latency_max_ms"`
+	LatencyP50  float64 `json:"latency_p50_ms"`
+	LatencyP95  float64 `json:"latency_p95_ms"`
+	LatencyP99  float64 `json:"latency_p99_ms"`
+	LatencyMean float64 `json:"latency_mean_ms"`
+	LatencyMin  float64 `json:"latency_min_ms"`
+	LatencyMax  float64 `json:"latency_max_ms"`
 
 	// Error breakdown
-	ErrorsByType     map[string]uint64 `json:"errors_by_type"`
+	ErrorsByType map[string]uint64 `json:"errors_by_type"`
 
 	// Resource usage
-	AvgCPU           float64           `json:"avg_cpu_percent"`
-	MaxCPU           float64           `json:"max_cpu_percent"`
-	AvgMemory        uint64            `json:"avg_memory_bytes"`
-	MaxMemory        uint64            `json:"max_memory_bytes"`
+	AvgCPU    float64 `json:"avg_cpu_percent"`
+	MaxCPU    float64 `json:"max_cpu_percent"`
+	AvgMemory uint64  `json:"avg_memory_bytes"`
+	MaxMemory uint64  `json:"max_memory_bytes"`
 
 	// Block metrics
-	BlockCount       uint64            `json:"block_count"`
-	AvgBlockInterval float64           `json:"avg_block_interval_ms"`
-	BlockRate        float64           `json:"blocks_per_minute"`
+	BlockCount       uint64  `json:"block_count"`
+	AvgBlockInterval float64 `json:"avg_block_interval_ms"`
+	BlockRate        float64 `json:"blocks_per_minute"`
 }
 
 func perfMon(_ *cobra.Command, args []string) {

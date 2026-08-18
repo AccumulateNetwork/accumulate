@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -41,12 +41,12 @@ type Bottleneck struct {
 
 // PerformanceReport contains the analysis results
 type PerformanceReport struct {
-	Metrics      []PerformanceMetrics `json:"metrics"`
-	Bottlenecks  []Bottleneck         `json:"bottlenecks"`
-	Baseline     *PerformanceMetrics  `json:"baseline,omitempty"`
-	Regressions  []Regression         `json:"regressions,omitempty"`
-	Tuning       []TuningRecommendation `json:"tuning,omitempty"`
-	GeneratedAt  time.Time            `json:"generated_at"`
+	Metrics     []PerformanceMetrics   `json:"metrics"`
+	Bottlenecks []Bottleneck           `json:"bottlenecks"`
+	Baseline    *PerformanceMetrics    `json:"baseline,omitempty"`
+	Regressions []Regression           `json:"regressions,omitempty"`
+	Tuning      []TuningRecommendation `json:"tuning,omitempty"`
+	GeneratedAt time.Time              `json:"generated_at"`
 }
 
 // Regression represents a performance regression
@@ -66,16 +66,16 @@ type TuningRecommendation struct {
 }
 
 var (
-	metricsFile     = flag.String("metrics", "", "Path to metrics JSON file")
-	baselineFile    = flag.String("baseline", "", "Path to baseline metrics JSON file")
-	outputFile      = flag.String("output", "", "Output file for report (default: stdout)")
-	outputFormat    = flag.String("format", "text", "Output format: text, json")
-	cpuProfile      = flag.String("cpuprofile", "", "Write CPU profile to file")
-	memProfile      = flag.String("memprofile", "", "Write memory profile to file")
-	duration        = flag.Duration("duration", 10*time.Second, "Duration to collect metrics")
-	interval        = flag.Duration("interval", 1*time.Second, "Interval between metric collections")
-	generateSample  = flag.Bool("sample", false, "Generate sample metrics for testing")
-	analyzeOnly     = flag.Bool("analyze", false, "Analyze existing metrics without collecting new ones")
+	metricsFile    = flag.String("metrics", "", "Path to metrics JSON file")
+	baselineFile   = flag.String("baseline", "", "Path to baseline metrics JSON file")
+	outputFile     = flag.String("output", "", "Output file for report (default: stdout)")
+	outputFormat   = flag.String("format", "text", "Output format: text, json")
+	cpuProfile     = flag.String("cpuprofile", "", "Write CPU profile to file")
+	memProfile     = flag.String("memprofile", "", "Write memory profile to file")
+	duration       = flag.Duration("duration", 10*time.Second, "Duration to collect metrics")
+	interval       = flag.Duration("interval", 1*time.Second, "Interval between metric collections")
+	generateSample = flag.Bool("sample", false, "Generate sample metrics for testing")
+	analyzeOnly    = flag.Bool("analyze", false, "Analyze existing metrics without collecting new ones")
 )
 
 func main() {
@@ -531,7 +531,7 @@ func writeTextReport(w io.Writer, report *PerformanceReport) error {
 	// Bottlenecks
 	if len(report.Bottlenecks) > 0 {
 		fmt.Fprintf(w, "Bottlenecks Detected: %d\n", len(report.Bottlenecks))
-		fmt.Fprintf(w, divider)
+		fmt.Fprint(w, divider)
 		for i, bn := range report.Bottlenecks {
 			fmt.Fprintf(w, "%d. [%s] %s: %s\n", i+1, strings.ToUpper(bn.Severity), bn.Type, bn.Description)
 			fmt.Fprintf(w, "   Value: %.2f, Threshold: %.2f\n", bn.Value, bn.Threshold)
@@ -544,7 +544,7 @@ func writeTextReport(w io.Writer, report *PerformanceReport) error {
 	// Regressions
 	if len(report.Regressions) > 0 {
 		fmt.Fprintf(w, "Performance Regressions: %d\n", len(report.Regressions))
-		fmt.Fprintf(w, divider)
+		fmt.Fprint(w, divider)
 		for i, reg := range report.Regressions {
 			fmt.Fprintf(w, "%d. %s: %.2f%% degradation\n", i+1, reg.Metric, reg.Degradation)
 			fmt.Fprintf(w, "   Baseline: %.2f, Current: %.2f\n", reg.Baseline, reg.Current)
@@ -555,7 +555,7 @@ func writeTextReport(w io.Writer, report *PerformanceReport) error {
 	// Tuning recommendations
 	if len(report.Tuning) > 0 {
 		fmt.Fprintf(w, "Tuning Recommendations:\n")
-		fmt.Fprintf(w, divider)
+		fmt.Fprint(w, divider)
 		for i, rec := range report.Tuning {
 			fmt.Fprintf(w, "%d. [%s] %s\n", i+1, strings.ToUpper(rec.Priority), rec.Category)
 			fmt.Fprintf(w, "   %s\n", rec.Description)

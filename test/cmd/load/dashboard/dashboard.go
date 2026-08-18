@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -86,11 +86,8 @@ func (d *Dashboard) LoadMetrics() *LoadMetrics {
 
 // update collects metrics and refreshes display
 func (d *Dashboard) update() {
-	// Update system metrics
-	if err := d.systemMetrics.Update(); err != nil {
-		// Log error but continue
-		return
-	}
+	// Update system metrics — ignore errors and render anyway
+	_ = d.systemMetrics.Update()
 
 	// Render updated display
 	d.render()

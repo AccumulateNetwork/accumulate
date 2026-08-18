@@ -44,8 +44,8 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 	}
 
 	const numNodes = 7
-	const targetTPS = 500              // High sustained load
-	const minAcceptableTPS = 100       // Acceptance criteria: 100+ tx/sec
+	const targetTPS = 500                 // High sustained load
+	const minAcceptableTPS = 100          // Acceptance criteria: 100+ tx/sec
 	const testDuration = 60 * time.Second // Scaled down from 10+ minutes for CI
 	const blockInterval = 200 * time.Millisecond
 	const nodeToKill = 3 // Node to kill/restart during test
@@ -231,10 +231,10 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 
 	// Stall detection - track rounds and blocks to detect stalls
 	type progressSnapshot struct {
-		time       time.Time
-		blocks     []uint64
-		rounds     []types.Round
-		memoryMB   uint64
+		time     time.Time
+		blocks   []uint64
+		rounds   []types.Round
+		memoryMB uint64
 	}
 	progressHistory := make([]progressSnapshot, 0)
 	stallDetected := false

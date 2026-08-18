@@ -168,10 +168,10 @@ func TestDryRunMode(t *testing.T) {
 // TestSkipFlags tests the skip flags functionality.
 func TestSkipFlags(t *testing.T) {
 	tests := []struct {
-		name        string
-		skipLite    bool
+		name         string
+		skipLite     bool
 		skipADIToken bool
-		skipADIData bool
+		skipADIData  bool
 	}{
 		{"Skip lite", true, false, false},
 		{"Skip ADI token", false, true, false},
@@ -435,8 +435,8 @@ func TestBatchProcessing(t *testing.T) {
 	_, walletPath := createTestWallet(t, 25, 0, 0)
 
 	tests := []struct {
-		name      string
-		batchSize int
+		name        string
+		batchSize   int
 		wantBatches int
 	}{
 		{"Small batches", 5, 5},

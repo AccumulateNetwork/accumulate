@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
@@ -182,10 +181,6 @@ func (p *parser) parseKey(key any, typ protocol.SignatureType, private bool) add
 	case ed25519.PrivateKey:
 		return address.FromED25519PrivateKey(key)
 	case ed25519.PublicKey:
-		return address.FromED25519PublicKey(key)
-	case tmed25519.PrivKey:
-		return address.FromED25519PrivateKey(key)
-	case tmed25519.PubKey:
 		return address.FromED25519PublicKey(key)
 	case *rsa.PrivateKey:
 		return address.FromRSAPrivateKey(key)

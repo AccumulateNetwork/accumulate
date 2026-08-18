@@ -21,7 +21,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -544,18 +543,18 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 
 // Status returns the current status of the DAG-BFT service.
 type Status struct {
-	Running          bool
-	Partition        string
-	CurrentRound     types.Round
-	LastCommitRound  types.Round
-	LastBlockIndex   uint64
-	LastBlockTime    time.Time
-	ValidatorCount   int
-	TxSubmitted      uint64
-	CertsCommitted   uint64
+	Running         bool
+	Partition       string
+	CurrentRound    types.Round
+	LastCommitRound types.Round
+	LastBlockIndex  uint64
+	LastBlockTime   time.Time
+	ValidatorCount  int
+	TxSubmitted     uint64
+	CertsCommitted  uint64
 	// State verification status
-	StateHalted      bool
-	StateHaltReason  string
+	StateHalted     bool
+	StateHaltReason string
 }
 
 // Status returns the current status of the service.
@@ -564,11 +563,11 @@ func (s *Service) Status() Status {
 	defer s.mu.RUnlock()
 
 	status := Status{
-		Running:         s.running && !s.stopping,
-		Partition:       s.config.Partition.ID,
-		LastBlockIndex:  s.lastBlockIndex,
-		LastBlockTime:   s.lastBlockTime,
-		StateHalted:     s.halted,
+		Running:        s.running && !s.stopping,
+		Partition:      s.config.Partition.ID,
+		LastBlockIndex: s.lastBlockIndex,
+		LastBlockTime:  s.lastBlockTime,
+		StateHalted:    s.halted,
 	}
 
 	if s.haltReason != nil {
@@ -587,9 +586,6 @@ func (s *Service) Status() Status {
 
 	return status
 }
-
-// For genesis loading - use existing infrastructure
-var _ = genesis.DocProvider
 
 // onValidatorSetChange is called when the adapter detects a validator set
 // change (or a network definition version bump). It updates the consensus

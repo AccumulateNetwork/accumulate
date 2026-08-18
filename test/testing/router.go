@@ -7,12 +7,7 @@
 package testing
 
 import (
-	"context"
-
-	"github.com/cometbft/cometbft/rpc/client"
-	core "github.com/cometbft/cometbft/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
@@ -27,8 +22,4 @@ func (NullRouter) RouteAccount(*url.URL) (string, error) {
 
 func (NullRouter) Route(...*messaging.Envelope) (string, error) {
 	return "", nil
-}
-
-func (NullRouter) Query(ctx context.Context, partition string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
-	return nil, errors.NotFound
 }

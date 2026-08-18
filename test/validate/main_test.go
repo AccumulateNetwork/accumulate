@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -141,9 +140,9 @@ func TestValidateNetwork(t *testing.T) {
 		node, err := accumulated.Load(*validateNetwork, nil)
 		require.NoError(t, err)
 		network = node.Config.Accumulate.Network.Id
-		key, err := tmp2p.LoadNodeKey(node.Config.NodeKeyFile())
+		key, err := accumulated.LoadNodeKey(node.Config.NodeKeyFile())
 		require.NoError(t, err)
-		ed := ed25519.PrivateKey(key.PrivKey.Bytes())
+		ed := key.PrivKey
 		sk, _, err := crypto.KeyPairFromStdKey(&ed)
 		require.NoError(t, err)
 		id, err := peer.IDFromPrivateKey(sk)
@@ -195,10 +194,9 @@ func (s *ValidationTestSuite) SetupSuite() {
 
 func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator, api.Faucet) {
 	// Set up the simulator and harness
-	cometLogger := acctesting.NewTestLogger(t)
-	logger := logging.FromCometBFT(cometLogger)
+	logger := acctesting.NewTestLogger(t)
 	sim, err := simulator.New(
-		simulator.WithLogger(cometLogger),
+		simulator.WithLogger(logger),
 		simulator.WithNetwork(net),
 		simulator.Genesis(GenesisTime),
 
@@ -1070,7 +1068,7 @@ func (s *ValidationTestSuite) TestFaucets() {
 		Txn(st.TxID).Succeeds())
 
 	// Set up a new faucet
-	logger := logging.FromCometBFT(logging.ConsoleLoggerForTest(s.T(), "info"))
+	logger := logging.ConsoleLoggerForTest(s.T(), "info")
 	peg := pegnet.JoinPath("peg")
 	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
 		Logger:    logger,

@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -22,7 +22,7 @@ func TestCollectPerfMetrics(t *testing.T) {
 	metrics := collectPerfMetrics(duration, interval)
 
 	require.GreaterOrEqual(t, len(metrics), 2, "should collect at least 2 samples")
-	
+
 	for _, m := range metrics {
 		require.NotZero(t, m.Timestamp)
 		require.NotZero(t, m.MemoryUsage)
@@ -106,11 +106,11 @@ func TestDetectPerfBottlenecks(t *testing.T) {
 
 func TestGenerateSamplePerfReport(t *testing.T) {
 	report := generateSamplePerfReport()
-	
+
 	require.NotNil(t, report)
 	require.Greater(t, len(report.Metrics), 0)
 	require.NotZero(t, report.GeneratedAt)
-	
+
 	for _, m := range report.Metrics {
 		require.NotZero(t, m.MemoryUsage)
 		require.Positive(t, m.GoroutineCount)
@@ -119,7 +119,7 @@ func TestGenerateSamplePerfReport(t *testing.T) {
 
 func TestWritePerfReportJSON(t *testing.T) {
 	report := generateSamplePerfReport()
-	
+
 	tmpFile, err := os.CreateTemp("", "perf-report-*.json")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
@@ -140,7 +140,7 @@ func TestWritePerfReportJSON(t *testing.T) {
 
 func TestWritePerfReportText(t *testing.T) {
 	report := generateSamplePerfReport()
-	
+
 	tmpFile, err := os.CreateTemp("", "perf-report-*.txt")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
@@ -205,7 +205,7 @@ func TestGenerateTuningRecommendations_Debug(t *testing.T) {
 				require.NotEmpty(t, rec.Category)
 				require.NotEmpty(t, rec.Priority)
 				require.NotEmpty(t, rec.Description)
-				
+
 				if tt.verbose && len(tt.bottlenecks) > 0 {
 					require.NotEmpty(t, rec.Actions, "verbose mode should include actions")
 				}
@@ -330,7 +330,7 @@ func TestWriteTuningReportText(t *testing.T) {
 	data, err := os.ReadFile(tmpFile.Name())
 	require.NoError(t, err)
 	require.NotEmpty(t, data)
-	
+
 	content := string(data)
 	require.Contains(t, content, "Performance Tuning Recommendations")
 	require.Contains(t, content, "Memory Optimization")
@@ -343,7 +343,7 @@ func TestPerfMetricsAllocationRateCalculation(t *testing.T) {
 	interval := 500 * time.Millisecond
 
 	metrics := collectPerfMetrics(duration, interval)
-	
+
 	// First metric should have zero alloc rate (no previous sample)
 	// Subsequent metrics should have calculated alloc rate
 	if len(metrics) > 1 {
@@ -377,7 +377,7 @@ func TestBottleneckSeverityLevels(t *testing.T) {
 			}
 
 			bottlenecks := detectPerfBottlenecks(metrics)
-			
+
 			var memBottleneck *PerfBottleneck
 			for i := range bottlenecks {
 				if bottlenecks[i].Type == "memory" {

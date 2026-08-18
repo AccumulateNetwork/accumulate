@@ -6,6 +6,9 @@ golangci-lint
 consensus-testnet
 perfmon
 debug
+netsim
+parallel-loadtest
+test/docker/loadtest-bin
 !*/
 tools/cmd/gen-types/gen-types
 tools/cmd/gen-enum/gen-enum
@@ -22,6 +25,7 @@ go.work.sum
 *.test
 .testdata
 __debug_bin*
+__pycache__/
 tmp
 # Temp and log files
 *~
@@ -87,6 +91,15 @@ go.work.sum
 /snapshot-tool
 .archive/
 mcp/mcp-server
+# Large binaries
+/export-snapshot
+test/docker/loadtest
+# Claude Code
+.claude/
+# Generated docker test files
+test/docker/docker-compose-*.yml
+test/docker/docker-network-*.yml
+test/docker/performance-results/
 # Compiled test and tooling binaries
 /netsim
 /export-snapshot

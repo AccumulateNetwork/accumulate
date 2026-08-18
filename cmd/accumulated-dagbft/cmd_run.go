@@ -22,13 +22,13 @@ import (
 	"syscall"
 	"time"
 
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated-dagbft/devnet"
+	devnet "gitlab.com/accumulatenetwork/accumulate/cmd/accumulated-dagbft/netsim"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
@@ -356,8 +356,8 @@ func (r *devnetRunner) runBlockProduction(running *runningNode) {
 
 			// Prune batches
 			digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-			for d := range cert.Header.Payload {
-				digests = append(digests, d)
+			for _, e := range cert.Header.Payload {
+				digests = append(digests, e.Digest)
 			}
 			for _, w := range running.node.Workers() {
 				w.PruneBatches(digests)

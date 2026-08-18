@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
@@ -36,6 +35,7 @@ func TestState(t *testing.T) {
 	// Create lite token account directly (faucet only exists with testnet build tag)
 	batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
 	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, 1e9))
+	require.NoError(t, batch.UpdateBPT())
 	require.NoError(t, batch.Commit())
 
 	sim.ExecuteBlocks(10)
@@ -82,7 +82,7 @@ func TestState(t *testing.T) {
 
 func TestVersion(t *testing.T) {
 	logger := acctesting.NewTestLogger(t)
-	db := database.OpenInMemory(logging.FromCometBFT(logger))
+	db := database.OpenInMemory(logger)
 
 	foo := protocol.AccountUrl("foo")
 	get := func(batch *database.Batch) (a *protocol.UnknownSigner) {
@@ -113,15 +113,18 @@ func TestVersion(t *testing.T) {
 	require.NoError(t, sub.Commit())
 	require.NoError(t, batch.Commit())
 
-	// Unsafe
+	// Unsafe - conflicting concurrent writes should return an error
 	batch = root.Begin(true)
 	sub = batch.Begin(true)
 	a = get(batch)
 	b := get(sub)
 	set(batch, a, 5)
 	set(sub, b, 6)
-	require.NoError(t, sub.Commit())
-	require.NoError(t, batch.Commit())
+	err := sub.Commit()
+	if err == nil {
+		err = batch.Commit()
+	}
+	require.Error(t, err)
 }
 
 func TestNonLedgerEvents(t *testing.T) {

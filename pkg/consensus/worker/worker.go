@@ -304,6 +304,10 @@ func (w *Worker) Start(ctx context.Context) error {
 	w.wg.Add(1)
 	go w.handleIncomingBatches()
 
+	// Start the LRU eviction loop
+	w.wg.Add(1)
+	go w.evictionLoop()
+
 	slog.Info("Worker started",
 		"id", w.config.ID,
 		"partition", w.config.Partition,
@@ -382,7 +386,7 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 
 	// Trigger eviction if we're approaching the limit (non-blocking)
 	// Eviction is handled by dedicated goroutine to minimize lock contention
-	if len(w.batches) >= w.config.MaxStoredBatches {
+	if len(w.batches) > w.config.MaxStoredBatches {
 		select {
 		case w.triggerEviction <- struct{}{}:
 		default:
@@ -402,11 +406,11 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 
 // AvailableBatches returns all batch digests that are available for header creation.
 // These are batches created by this worker that have been broadcast but not yet
-// included in a committed header.
+// included in a committed header. This method peeks without consuming.
 func (w *Worker) AvailableBatches() []types.BatchDigest {
 	var result []types.BatchDigest
 
-	// Drain available batches from channel without blocking
+	// Drain all available batches from channel without blocking
 	for {
 		select {
 		case digest := <-w.availableBatchQueue:
@@ -547,7 +551,7 @@ func (w *Worker) createAndBroadcastBatch() {
 	digest := batch.Digest()
 	w.batchMu.Lock()
 	// Trigger eviction if we're approaching the limit (non-blocking)
-	if len(w.batches) >= w.config.MaxStoredBatches {
+	if len(w.batches) > w.config.MaxStoredBatches {
 		select {
 		case w.triggerEviction <- struct{}{}:
 		default:
@@ -690,17 +694,20 @@ func (w *Worker) evictionLoop() {
 	}
 }
 
-// performEviction evicts LRU batches if the storage limit is reached.
+// performEviction evicts LRU batches if the storage limit is exceeded.
 // This is called by the dedicated goroutine to minimize lock contention.
 func (w *Worker) performEviction() {
 	w.batchMu.Lock()
 	defer w.batchMu.Unlock()
 
-	if len(w.batches) < w.config.MaxStoredBatches {
-		return // No eviction needed
+	if len(w.batches) <= w.config.MaxStoredBatches {
+		return // No eviction needed unless we exceed the limit
 	}
 
-	evictCount := len(w.batches) / 10 // Evict 10%
+	// Evict just enough to get back to MaxStoredBatches
+	// Plus a small safety margin (10% of max) to reduce eviction frequency
+	targetCount := int(float64(w.config.MaxStoredBatches) * 1.1)
+	evictCount := len(w.batches) - targetCount
 	if evictCount < 1 {
 		evictCount = 1
 	}

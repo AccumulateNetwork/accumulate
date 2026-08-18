@@ -22,7 +22,6 @@ import (
 )
 
 var (
-	outputJSON        bool
 	healContinuous    bool
 	cachedScan        string
 	verbose           bool
@@ -87,11 +86,11 @@ func safeClose(c io.Closer) {
 
 // PerfMetrics represents a single performance measurement snapshot
 type PerfMetrics struct {
-	Timestamp      time.Time         `json:"timestamp"`
-	MemoryUsage    uint64            `json:"memory_usage"`
-	GoroutineCount int               `json:"goroutine_count"`
-	AllocRate      float64           `json:"alloc_rate"`
-	GCPauses       []time.Duration   `json:"gc_pauses"`
+	Timestamp      time.Time       `json:"timestamp"`
+	MemoryUsage    uint64          `json:"memory_usage"`
+	GoroutineCount int             `json:"goroutine_count"`
+	AllocRate      float64         `json:"alloc_rate"`
+	GCPauses       []time.Duration `json:"gc_pauses"`
 }
 
 // PerfBottleneck represents a detected performance issue
@@ -129,10 +128,10 @@ func collectPerfMetrics(duration, interval time.Duration) []PerfMetrics {
 		<-ticker.C
 
 		var m struct {
-			Alloc         uint64
-			NumGC         uint32
-			PauseNs       [256]uint64
-			NumGoroutine  int
+			Alloc        uint64
+			NumGC        uint32
+			PauseNs      [256]uint64
+			NumGoroutine int
 		}
 
 		// Simulate runtime.ReadMemStats and runtime.NumGoroutine

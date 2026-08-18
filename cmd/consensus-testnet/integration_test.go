@@ -575,9 +575,9 @@ func TestConsensusTestnet_Throughput(t *testing.T) {
 	}
 
 	const numNodes = 7
-	const targetTPS = 1000                 // Target for test environment
-	const testDuration = 30 * time.Second  // Shorter duration for CI
-	const minAcceptableTPS = 100           // Minimum to pass (low due to test overhead)
+	const targetTPS = 1000                // Target for test environment
+	const testDuration = 30 * time.Second // Shorter duration for CI
+	const minAcceptableTPS = 100          // Minimum to pass (low due to test overhead)
 	const blockInterval = 200 * time.Millisecond
 
 	ctx, cancel := context.WithTimeout(context.Background(), testDuration+30*time.Second)

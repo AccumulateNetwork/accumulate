@@ -589,7 +589,7 @@ func TestExecutor_InvalidBlockInterval(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, executor)
 	assert.Equal(t, 1*time.Second, executor.GetBlockInterval())
-	executor.Cleanup()
+	_ = executor.Cleanup()
 
 	// Test negative interval returns error
 	_, err = NewExecutor(ExecutorConfig{
@@ -609,5 +609,5 @@ func TestExecutor_InvalidBlockInterval(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, executor)
 	assert.Equal(t, 3*time.Second, executor.GetBlockInterval())
-	defer executor.Cleanup()
+	defer func() { _ = executor.Cleanup() }()
 }

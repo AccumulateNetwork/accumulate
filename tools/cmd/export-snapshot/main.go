@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,13 +9,13 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"os"
 	"path/filepath"
 	"sort"
 
 	"github.com/spf13/cobra"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"

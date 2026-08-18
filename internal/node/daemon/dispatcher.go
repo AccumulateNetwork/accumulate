@@ -10,7 +10,6 @@ import (
 	"context"
 	"sync"
 
-	"gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -101,15 +100,21 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 
 	errs := make(chan error)
 	check := func(err error) {
-		// CheckDispatchError returns nil for benign errors (e.g. "tx already
-		// in cache") and the error itself otherwise. This check used to be
-		// inverted — real dispatch failures were silently dropped and nil
-		// was reported as a failure ('Failed to dispatch ... error="<nil>"'),
-		// which hid every lost anchor (#4054).
-		err = tendermint.CheckDispatchError(err)
-		if err != nil {
-			errs <- err
+		if err == nil {
+			return
 		}
+
+		// Benign: the message was already delivered. CometBFT's "tx already in
+		// cache" variants went with CometBFT, but this one is ours and still
+		// happens, so it is still filtered here. Reporting it would recreate
+		// #4054's symptom from the other side — noise that buries the real
+		// dispatch failures the fix exists to surface.
+		var errObj *errors.Error
+		if errors.As(err, &errObj) && errObj.Code == errors.Delivered {
+			return
+		}
+
+		errs <- err
 	}
 
 	// Run asynchronously

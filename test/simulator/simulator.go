@@ -10,9 +10,9 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -26,7 +26,7 @@ import (
 type Simulator struct {
 	deterministic bool
 	networkId     string
-	logger        log.Logger
+	logger        logging.Logger
 	router        *Router
 	services      *services.Network
 	tasks         *taskQueue
@@ -40,7 +40,7 @@ func New(opts ...Option) (*Simulator, error) {
 	o := &simFactory{
 		network:  NewSimpleNetwork("Sim", 3, 3),
 		storeOpt: MemoryDbOpener,
-		snapshot: func(string, *accumulated.NetworkInit, log.Logger) (ioutil2.SectionReader, error) {
+		snapshot: func(string, *accumulated.NetworkInit, logging.Logger) (ioutil2.SectionReader, error) {
 			return new(ioutil2.Buffer), nil
 		},
 		abci: noABCI,

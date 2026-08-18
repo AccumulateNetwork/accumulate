@@ -242,16 +242,7 @@ func submissionV3(sub ...*api.Submission) *TxResponse {
 		return res
 	}
 
-	for i, r := range sub {
-		statusNil := r.Status == nil
-		// Log each submission's Status field value before the nil check
-		if statusNil {
-			// Log with more context about the nil Status
-			fmt.Printf("DEBUG submissionV3: submission[%d] has nil Status (Success=%v, Message=%q)\n", i, r.Success, r.Message)
-		} else {
-			fmt.Printf("DEBUG submissionV3: submission[%d] has non-nil Status (TxID=%v)\n", i, r.Status.TxID)
-		}
-
+	for _, r := range sub {
 		if !r.Success {
 			res.Code = 1
 			res.Message = r.Message + "; "

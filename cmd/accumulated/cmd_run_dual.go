@@ -7,16 +7,16 @@
 package main
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"path/filepath"
 	"time"
 
-	service2 "github.com/cometbft/cometbft/libs/service"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 var cmdRunDual = &cobra.Command{
@@ -108,12 +108,9 @@ func runDualNode(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	err := prog.Run()
-	if err != nil {
-		//if it is already stopped, that is ok.
-		if !errors.Is(err, service2.ErrAlreadyStopped) {
-			slog.Error("Service failed", "error", err)
-			return "", err
-		}
+	if err != nil && !errors.Is(err, accumulated.ErrAlreadyStopped) {
+		slog.Error("Service failed", "error", err)
+		return "", err
 	}
 	return "run complete", nil
 }

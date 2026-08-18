@@ -74,13 +74,14 @@ func (c *Committee) TotalStake() uint64 {
 }
 
 // QuorumThreshold returns the minimum stake required for a quorum (2f+1).
-// For n validators with total stake S, this is ceil(2*S/3) + 1.
+// For n validators with total stake S, this is ceil(2*S/3).
 // In BFT consensus, f = floor((n-1)/3), so 2f+1 ensures safety.
+// We require > 2/3 of total stake, achieved by (2*total)/3 without +1.
 func (c *Committee) QuorumThreshold() uint64 {
 	total := c.TotalStake()
-	// 2f+1 where f < n/3, so quorum needs > 2/3 of stake
-	// We use (2*total)/3 + 1 to get > 2/3
-	return (2*total)/3 + 1
+	// Need >= 2/3 of stake for BFT quorum. Use ceiling division:
+	// ceil(2*total/3) = (2*total + 2) / 3
+	return (2*total + 2) / 3
 }
 
 // ValidityThreshold returns the minimum stake for validity (f+1).

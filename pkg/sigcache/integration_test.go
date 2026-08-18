@@ -63,7 +63,7 @@ func TestVerifyED25519_InvalidSignature(t *testing.T) {
 
 	data := []byte("test message")
 	invalidSig := make([]byte, ed25519.SignatureSize)
-	rand.Read(invalidSig)
+	_, _ = rand.Read(invalidSig)
 
 	// Should cache invalid result
 	if VerifyED25519(cache, data, invalidSig, pub) {
@@ -119,7 +119,7 @@ func BenchmarkVerifyED25519_Comparison(b *testing.B) {
 	}
 
 	data := make([]byte, 32)
-	rand.Read(data)
+	_, _ = rand.Read(data)
 	sig := ed25519.Sign(priv, data)
 
 	cache := New(&Config{

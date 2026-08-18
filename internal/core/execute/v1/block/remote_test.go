@@ -12,7 +12,6 @@ import (
 	"math/big"
 	"testing"
 
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -34,8 +33,7 @@ var delivered = (*TransactionStatus).Delivered
 var pending = (*TransactionStatus).Pending
 
 func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice, bob, charlie ed25519.PrivateKey) {
-	aliceTm := tmed25519.PrivKey(alice)
-	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(aliceTm)
+	aliceAcmeUrl := acctesting.AcmeLiteAddressStdPriv(alice)
 	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 
@@ -46,7 +44,7 @@ func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice
 	// Create and fund a lite address
 	batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
 	defer batch.Discard()
-	require.NoError(sim.TB, acctesting.CreateLiteTokenAccountWithCredits(batch, aliceTm, 1e9, 1e9))
+	require.NoError(sim.TB, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, 1e9, 1e9))
 	require.NoError(sim.TB, batch.Commit())
 
 	// Create the ADIs
@@ -126,7 +124,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	sim.InitFromGenesisWith(&network.GlobalValues{ExecutorVersion: ExecutorVersionV1DoubleHashEntries})
 
 	alice := acctesting.GenerateKey(t.Name())
-	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceAcmeUrl := acctesting.AcmeLiteAddressStdPriv(alice)
 	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
@@ -174,7 +172,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	sim.InitFromGenesisWith(&network.GlobalValues{ExecutorVersion: ExecutorVersionV1DoubleHashEntries})
 
 	alice := acctesting.GenerateKey(t.Name())
-	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceAcmeUrl := acctesting.AcmeLiteAddressStdPriv(alice)
 	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
@@ -222,7 +220,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	sim.InitFromGenesisWith(&network.GlobalValues{ExecutorVersion: ExecutorVersionV1DoubleHashEntries})
 
 	alice := acctesting.GenerateKey(t.Name())
-	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceAcmeUrl := acctesting.AcmeLiteAddressStdPriv(alice)
 	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 	bobKey := acctesting.GenerateKey(t.Name(), bobUrl)
@@ -284,7 +282,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 	sim.InitFromGenesisWith(&network.GlobalValues{ExecutorVersion: ExecutorVersionV1DoubleHashEntries})
 
 	alice := acctesting.GenerateKey(t.Name())
-	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceAcmeUrl := acctesting.AcmeLiteAddressStdPriv(alice)
 	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()

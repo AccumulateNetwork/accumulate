@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -32,7 +31,7 @@ func TestMinorBlock_Expand(t *testing.T) {
 	lite := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(lite)
 	batch := sim.PartitionFor(liteUrl).Database.Begin(true)
-	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(lite), AcmeFaucetAmount, 1e9))
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, lite, AcmeFaucetAmount, 1e9))
 	require.NoError(t, batch.Commit())
 
 	alice := AccountUrl("alice")

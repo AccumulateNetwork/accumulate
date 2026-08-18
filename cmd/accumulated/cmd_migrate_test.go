@@ -272,6 +272,8 @@ func TestMigrateOld(t *testing.T) {
 	})
 
 	t.Run("Snapshots", func(t *testing.T) {
+		// SnapshotService has been removed from the schema, so old snapshot
+		// config is silently skipped during migration
 		testMigrateOld(t,
 			`network = "Fozzie"
 
@@ -292,14 +294,6 @@ func TestMigrateOld(t *testing.T) {
 			[p2p.key]
 			path = "bvnn/config/node_key.json"
 			type = "cometNodeKeyFile"
-
-			[[services]]
-			directory = "snapshots"
-			enable-indexing = false
-			partition = "Grizzly"
-			retain-count = 10
-			schedule = "0 */12 * * *"
-			type = "snapshot"
 			`,
 			applyOld(t, "bvnn",
 				`[api]

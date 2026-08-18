@@ -10,9 +10,9 @@ import (
 	"context"
 	"crypto/ed25519"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"github.com/multiformats/go-multiaddr"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"

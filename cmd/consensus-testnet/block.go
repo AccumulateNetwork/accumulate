@@ -16,12 +16,12 @@ import (
 
 // Block represents a block of ordered transactions.
 type Block struct {
-	Height     uint64    // Block number
-	PrevHash   [32]byte  // Hash of previous block
-	Timestamp  time.Time // When block was created
-	TxnCount   uint32    // Number of transactions in this block
-	TxnsHash   [32]byte  // Merkle root of transaction hashes
-	StateHash  [32]byte  // Cumulative state hash (all txns ever)
+	Height    uint64    // Block number
+	PrevHash  [32]byte  // Hash of previous block
+	Timestamp time.Time // When block was created
+	TxnCount  uint32    // Number of transactions in this block
+	TxnsHash  [32]byte  // Merkle root of transaction hashes
+	StateHash [32]byte  // Cumulative state hash (all txns ever)
 }
 
 // Hash computes the block hash.

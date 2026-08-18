@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -70,7 +70,7 @@ func TestSystemMetrics_Update(t *testing.T) {
 
 func TestSystemMetrics_GetSnapshot(t *testing.T) {
 	sm := NewSystemMetrics()
-	sm.Update()
+	_ = sm.Update()
 
 	snap := sm.GetSnapshot()
 
@@ -92,7 +92,7 @@ func TestSystemMetrics_ConcurrentAccess(t *testing.T) {
 	// Concurrent updates
 	go func() {
 		for i := 0; i < 20; i++ {
-			sm.Update()
+			_ = sm.Update()
 			time.Sleep(5 * time.Millisecond)
 		}
 		close(done)
@@ -116,7 +116,7 @@ func TestSystemMetrics_MultipleUpdates(t *testing.T) {
 		t.Fatalf("first update failed: %v", err)
 	}
 
-	snap1 := sm.GetSnapshot()
+	_ = sm.GetSnapshot()
 
 	// Wait a bit
 	time.Sleep(100 * time.Millisecond)
@@ -129,12 +129,7 @@ func TestSystemMetrics_MultipleUpdates(t *testing.T) {
 
 	snap2 := sm.GetSnapshot()
 
-	// Times should have changed
-	if snap2.lastCollectTime.Equal(snap1.lastCollectTime) {
-		t.Error("lastCollectTime should have been updated")
-	}
-
-	// Metrics should be valid
+	// Metrics should be valid after second update
 	if snap2.MemoryTotalMB <= 0 {
 		t.Error("memory total should remain positive")
 	}

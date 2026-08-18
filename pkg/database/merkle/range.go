@@ -93,7 +93,7 @@ func (m *Chain) Entries(begin, end int64) ([][]byte, error) {
 		first = begin - firstAvailableEntry
 	}
 
-	if endMark <= lastMark {      // If end is before the last mark point, return the requested range
+	if endMark <= lastMark { // If end is before the last mark point, return the requested range
 		if len(hashes) == 0 {
 			// No mark points were loaded, data must be unavailable
 			return nil, errors.NotFound.WithFormat("no data available in range [%d:%d]", begin, end)

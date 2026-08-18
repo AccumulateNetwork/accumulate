@@ -7,20 +7,18 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/types"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -55,10 +53,10 @@ func resetConsensus(_ *cobra.Command, args []string) {
 	daemon, err := accumulated.Load(args[0], nil)
 	checkf(err, "load node")
 
-	genDoc, err := types.GenesisDocFromFile(daemon.Config.GenesisFile())
+	genDoc, err := genesis.GenesisDocFromFile(daemon.Config.GenesisFile())
 	checkf(err, "load current genesis document")
 
-	db, err := coredb.Open(daemon.Config, logging.FromCometBFT(daemon.Logger))
+	db, err := coredb.Open(daemon.Config, daemon.Logger)
 	checkf(err, "open database")
 
 	batch := db.Begin(false)
@@ -81,16 +79,19 @@ func resetConsensus(_ *cobra.Command, args []string) {
 			continue
 		}
 
-		key := tmed25519.PubKey(validator.PublicKey)
+		// CometBFT address = SHA256(pubkey)[:20]
+		keyHash := sha256.Sum256(validator.PublicKey)
+		address := keyHash[:20]
+
 		name := fmt.Sprintf("Validator.%d", i+1)
 		if validator.Operator != nil {
 			name = validator.Operator.Authority
 		}
 
-		genDoc.Validators = append(genDoc.Validators, types.GenesisValidator{
+		genDoc.Validators = append(genDoc.Validators, genesis.GenesisValidatorJSON{
 			Name:    name,
-			Address: key.Address(),
-			PubKey:  key,
+			Address: address,
+			PubKey:  validator.PublicKey,
 			Power:   1,
 		})
 	}
@@ -98,7 +99,15 @@ func resetConsensus(_ *cobra.Command, args []string) {
 	// Rebuild the app state
 	genDoc.InitialHeight = int64(ledger.Index) + 1
 	genDoc.GenesisTime = ledger.Timestamp
-	genDoc.ConsensusParams.Version.App = abci.Version
+	if genDoc.ConsensusParams == nil {
+		// ConsensusParams is required to set the legacy ABCI app version.
+		// GenesisDocFromFile.ValidateAndComplete fills in defaults when the
+		// file omits [consensus_params], so reaching here implies a corrupt
+		// or hand-edited genesis. Fail loudly instead of silently producing
+		// a genesis with no app version.
+		fatalf("genesis document has no consensus_params; cannot set ABCI app version")
+	}
+	genDoc.ConsensusParams.Version.App = 0x2 // Legacy ABCI version
 
 	hash, err := batch.GetBptRootHash()
 	checkf(err, "get root hash")

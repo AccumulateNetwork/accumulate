@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -23,7 +23,7 @@ func TestCollectMetrics(t *testing.T) {
 
 	// Should collect at least a few samples
 	require.GreaterOrEqual(t, len(metrics), 3)
-	
+
 	// Verify each metric has required fields
 	for _, m := range metrics {
 		require.NotZero(t, m.Timestamp)
@@ -349,9 +349,9 @@ func TestWriteReportText(t *testing.T) {
 func TestBottleneckSeverityOrdering(t *testing.T) {
 	metrics := []PerformanceMetrics{
 		{
-			MemoryUsage:    5 * 1024 * 1024 * 1024, // Critical
-			GoroutineCount: 3000,                    // Medium
-			AllocRate:      200 * 1024 * 1024,       // Medium
+			MemoryUsage:    5 * 1024 * 1024 * 1024,                 // Critical
+			GoroutineCount: 3000,                                   // Medium
+			AllocRate:      200 * 1024 * 1024,                      // Medium
 			GCPauses:       []time.Duration{15 * time.Millisecond}, // Low
 		},
 	}

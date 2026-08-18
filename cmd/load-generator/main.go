@@ -34,15 +34,15 @@ import (
 
 // Config holds the load generator configuration.
 type Config struct {
-	Nodes        []string
-	TPS          int
-	Duration     time.Duration
-	NumAccounts  int
-	Setup        bool
-	FunderURL    string
-	FunderKey    ed25519.PrivateKey
-	UseLite      bool
-	LitePercent  int // percentage of accounts that are lite (0-100)
+	Nodes       []string
+	TPS         int
+	Duration    time.Duration
+	NumAccounts int
+	Setup       bool
+	FunderURL   string
+	FunderKey   ed25519.PrivateKey
+	UseLite     bool
+	LitePercent int // percentage of accounts that are lite (0-100)
 }
 
 // Account represents a test account for load generation.
@@ -56,14 +56,14 @@ type Account struct {
 
 // Metrics tracks load generation statistics.
 type Metrics struct {
-	Submitted  atomic.Uint64
-	Success    atomic.Uint64
-	Failure    atomic.Uint64
-	Latencies  []time.Duration
-	latencyMu  sync.Mutex
-	StartTime  time.Time
-	PerNode    map[string]*NodeMetrics
-	perNodeMu  sync.RWMutex
+	Submitted atomic.Uint64
+	Success   atomic.Uint64
+	Failure   atomic.Uint64
+	Latencies []time.Duration
+	latencyMu sync.Mutex
+	StartTime time.Time
+	PerNode   map[string]*NodeMetrics
+	perNodeMu sync.RWMutex
 }
 
 // NodeMetrics tracks per-node statistics.
@@ -212,7 +212,7 @@ func (lg *LoadGenerator) generateAccounts() {
 
 	for i := 0; i < lg.config.NumAccounts; i++ {
 		pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-		isLite := (i*100/lg.config.NumAccounts) < lg.config.LitePercent
+		isLite := (i * 100 / lg.config.NumAccounts) < lg.config.LitePercent
 
 		var acctURL *url.URL
 		if isLite {

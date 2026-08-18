@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -33,13 +33,13 @@ import (
 
 // Config holds load generator configuration
 type Config struct {
-	ServerURL      string            `json:"serverUrl"`
-	TargetTPS      int               `json:"targetTps"`
-	Duration       int               `json:"duration"`
-	OperationMix   map[string]int    `json:"operationMix"`
-	RampUpSeconds  int               `json:"rampUpSeconds"`
-	ConfigFile     string            `json:"-"`
-	ReloadInterval int               `json:"reloadInterval"`
+	ServerURL      string         `json:"serverUrl"`
+	TargetTPS      int            `json:"targetTps"`
+	Duration       int            `json:"duration"`
+	OperationMix   map[string]int `json:"operationMix"`
+	RampUpSeconds  int            `json:"rampUpSeconds"`
+	ConfigFile     string         `json:"-"`
+	ReloadInterval int            `json:"reloadInterval"`
 }
 
 // Metrics tracks load generator metrics
@@ -49,7 +49,6 @@ type Metrics struct {
 	TotalFailed      atomic.Uint64
 	OperationCounts  map[string]*atomic.Uint64
 	OperationLatency map[string]*LatencyTracker
-	mu               sync.RWMutex
 }
 
 // LatencyTracker tracks latency statistics

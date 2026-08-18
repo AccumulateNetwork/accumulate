@@ -286,7 +286,7 @@ func TestExtended_ThirtyMinuteIntegration(t *testing.T) {
 
 	// Check block heights
 	maxBlocks := uint64(0)
-	minBlocks := uint64(^uint64(0))
+	minBlocks := ^uint64(0)
 	for i := 0; i < numNodes; i++ {
 		blocks := executors[i].GetBlockCount()
 		t.Logf("Node %d blocks: %d", i, blocks)

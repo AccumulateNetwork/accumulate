@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,28 +13,28 @@ import (
 
 func TestCompareTestRuns(t *testing.T) {
 	baseRun := &TestRun{
-		ID:         1,
-		CommitHash: "abc123",
-		AverageTPS: 100.0,
-		PeakTPS:    150.0,
-		AvgLatency: 50.0,
-		P95Latency: 100.0,
-		P99Latency: 150.0,
-		ErrorRate:  1.0,
+		ID:          1,
+		CommitHash:  "abc123",
+		AverageTPS:  100.0,
+		PeakTPS:     150.0,
+		AvgLatency:  50.0,
+		P95Latency:  100.0,
+		P99Latency:  150.0,
+		ErrorRate:   1.0,
 		NodeCrashes: 0,
 	}
 
 	// Test regression case
 	t.Run("DetectTPSRegression", func(t *testing.T) {
 		compareRun := &TestRun{
-			ID:         2,
-			CommitHash: "def456",
-			AverageTPS: 85.0, // 15% decrease - should trigger regression
-			PeakTPS:    150.0,
-			AvgLatency: 50.0,
-			P95Latency: 100.0,
-			P99Latency: 150.0,
-			ErrorRate:  1.0,
+			ID:          2,
+			CommitHash:  "def456",
+			AverageTPS:  85.0, // 15% decrease - should trigger regression
+			PeakTPS:     150.0,
+			AvgLatency:  50.0,
+			P95Latency:  100.0,
+			P99Latency:  150.0,
+			ErrorRate:   1.0,
 			NodeCrashes: 0,
 		}
 
@@ -47,14 +47,14 @@ func TestCompareTestRuns(t *testing.T) {
 	// Test improvement case
 	t.Run("DetectLatencyImprovement", func(t *testing.T) {
 		compareRun := &TestRun{
-			ID:         2,
-			CommitHash: "def456",
-			AverageTPS: 100.0,
-			PeakTPS:    150.0,
-			AvgLatency: 40.0, // 20% decrease - should be improvement
-			P95Latency: 80.0,
-			P99Latency: 120.0,
-			ErrorRate:  1.0,
+			ID:          2,
+			CommitHash:  "def456",
+			AverageTPS:  100.0,
+			PeakTPS:     150.0,
+			AvgLatency:  40.0, // 20% decrease - should be improvement
+			P95Latency:  80.0,
+			P99Latency:  120.0,
+			ErrorRate:   1.0,
 			NodeCrashes: 0,
 		}
 
@@ -67,14 +67,14 @@ func TestCompareTestRuns(t *testing.T) {
 	// Test node crash regression
 	t.Run("DetectNodeCrashRegression", func(t *testing.T) {
 		compareRun := &TestRun{
-			ID:         2,
-			CommitHash: "def456",
-			AverageTPS: 100.0,
-			PeakTPS:    150.0,
-			AvgLatency: 50.0,
-			P95Latency: 100.0,
-			P99Latency: 150.0,
-			ErrorRate:  1.0,
+			ID:          2,
+			CommitHash:  "def456",
+			AverageTPS:  100.0,
+			PeakTPS:     150.0,
+			AvgLatency:  50.0,
+			P95Latency:  100.0,
+			P99Latency:  150.0,
+			ErrorRate:   1.0,
 			NodeCrashes: 2, // Crashes detected
 		}
 

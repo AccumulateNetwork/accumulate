@@ -71,8 +71,8 @@ func (r *BPTSyncRequest) Marshal() ([]byte, error) {
 	binary.BigEndian.PutUint32(data[offset:], uint32(len(r.Keys)))
 	offset += 4
 
-	for _, key := range r.Keys {
-		copy(data[offset:], key[:])
+	for i := range r.Keys {
+		copy(data[offset:], r.Keys[i][:])
 		offset += 32
 	}
 
@@ -177,8 +177,8 @@ func (r *BPTSyncResponse) Marshal() ([]byte, error) {
 	binary.BigEndian.PutUint32(data[offset:], uint32(len(r.Missing)))
 	offset += 4
 
-	for _, key := range r.Missing {
-		copy(data[offset:], key[:])
+	for i := range r.Missing {
+		copy(data[offset:], r.Missing[i][:])
 		offset += 32
 	}
 

@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
@@ -28,7 +27,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -59,7 +57,7 @@ type simFactory struct {
 	interceptDispatchedMessages DispatchInterceptor
 
 	// State
-	logger           log.Logger
+	logger           logging.Logger
 	taskQueue        *taskQueue
 	router           *Router
 	hub              consensus.Hub
@@ -78,7 +76,7 @@ type networkFactory struct {
 	nodes []*accumulated.NodeInit
 
 	// State
-	logger log.Logger
+	logger logging.Logger
 }
 
 type nodeFactory struct {
@@ -89,7 +87,7 @@ type nodeFactory struct {
 	network *accumulated.NodeInit
 
 	// State
-	logger     log.Logger
+	logger     logging.Logger
 	_nodeKey   []byte
 	peerID     peer.ID
 	store      keyvalue.Beginner
@@ -244,16 +242,16 @@ func (f *nodeFactory) initCollector(s *Simulator) {
 	})
 }
 
-func (f *simFactory) getLogger() log.Logger {
+func (f *simFactory) getLogger() logging.Logger {
 	if f.logger != nil {
 		return f.logger
 	}
 
-	f.logger = logging.CometBFTLogger((*logging.Slogger)(slog.Default()).With("module", "sim"))
+	f.logger = logging.NewSlogLogger(slog.Default().With("module", "sim"))
 	return f.logger
 }
 
-func (f *networkFactory) getLogger() log.Logger {
+func (f *networkFactory) getLogger() logging.Logger {
 	if f.logger != nil {
 		return f.logger
 	}
@@ -262,7 +260,7 @@ func (f *networkFactory) getLogger() log.Logger {
 	return f.logger
 }
 
-func (f *nodeFactory) getLogger() log.Logger {
+func (f *nodeFactory) getLogger() logging.Logger {
 	if f.logger != nil {
 		return f.logger
 	}
@@ -441,7 +439,7 @@ func (f *nodeFactory) getDatabase() *database.Database {
 		return f.database
 	}
 
-	f.database = database.New(f.getStore(), logging.FromCometBFT(f.getLogger()))
+	f.database = database.New(f.getStore(), f.getLogger())
 	return f.database
 }
 
@@ -450,7 +448,7 @@ func (f *nodeFactory) getEventBus() *events.Bus {
 		return f.eventBus
 	}
 
-	f.eventBus = events.NewBus(logging.FromCometBFT(f.getLogger()))
+	f.eventBus = events.NewBus(f.getLogger())
 	return f.eventBus
 }
 
@@ -486,24 +484,12 @@ func noABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreF
 	}
 }
 
-func withABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
-	a := abci.NewAccumulator(abci.AccumulatorOptions{
-		Partition: node.networkFactory.id,
-		Executor:  exec,
-		EventBus:  node.eventBus,
-		Logger:    node.logger,
-		Database:  node.getDatabase(),
-		Address:   node.network.PrivValKey,
-	})
-	return (*consensus.AbciApp)(a)
-}
-
 type appFunc = func(*nodeFactory) *consensus.Node
 
 func (f *nodeFactory) makeSummaryApp() *consensus.Node {
 	exec, err := bsn.NewExecutor(bsn.ExecutorOptions{
 		PartitionID: f.networkFactory.id,
-		Logger:      logging.FromCometBFT(f.getLogger()),
+		Logger:      f.getLogger(),
 		Store:       f.getStore(),
 		EventBus:    f.getEventBus(),
 	})
@@ -513,7 +499,7 @@ func (f *nodeFactory) makeSummaryApp() *consensus.Node {
 
 	// Create the app interface
 	abci := f.abci(f, exec, func(file ioutil.SectionReader) error {
-		return bsn.LoadSnapshot(file, f.getStore(), logging.FromCometBFT(f.getLogger()))
+		return bsn.LoadSnapshot(file, f.getStore(), f.getLogger())
 	})
 
 	// Create the consensus node
@@ -524,7 +510,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a querier service
 	f.registerSvc(api.ServiceTypeQuery, message.Querier{
 		Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{
-			Logger:    logging.FromCometBFT(f.getLogger().With("module", "acc-rpc")),
+			Logger:    f.getLogger().With("module", "acc-rpc"),
 			Database:  f.getDatabase(),
 			Partition: f.networkFactory.id,
 		}),
@@ -533,7 +519,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register an event service
 	f.registerSvc(api.ServiceTypeEvent, message.EventService{
 		EventService: apiimpl.NewEventService(apiimpl.EventServiceParams{
-			Logger:    logging.FromCometBFT(f.getLogger().With("module", "acc-rpc")),
+			Logger:    f.getLogger().With("module", "acc-rpc"),
 			Database:  f.getDatabase(),
 			Partition: f.networkFactory.id,
 			EventBus:  f.getEventBus(),
@@ -543,7 +529,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a network service
 	f.registerSvc(api.ServiceTypeNetwork, message.NetworkService{
 		NetworkService: apiimpl.NewNetworkService(apiimpl.NetworkServiceParams{
-			Logger:    logging.FromCometBFT(f.getLogger().With("module", "acc-rpc")),
+			Logger:    f.getLogger().With("module", "acc-rpc"),
 			Database:  f.getDatabase(),
 			Partition: f.networkFactory.id,
 			EventBus:  f.getEventBus(),
@@ -553,7 +539,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a sequencer service
 	f.registerSvc(private.ServiceTypeSequencer, &message.Sequencer{
 		Sequencer: apiimpl.NewSequencer(apiimpl.SequencerParams{
-			Logger:       logging.FromCometBFT(f.getLogger().With("module", "acc-rpc")),
+			Logger:       f.getLogger().With("module", "acc-rpc"),
 			Database:     f.getDatabase(),
 			EventBus:     f.getEventBus(),
 			Partition:    f.networkFactory.id,
@@ -563,7 +549,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 	// Set up the executor options
 	execOpts := block.ExecutorOptions{
-		Logger:        logging.FromCometBFT(f.getLogger()),
+		Logger:        f.getLogger(),
 		Database:      f.getDatabase(),
 		Key:           f.network.PrivValKey,
 		Router:        f.getRouter(),
@@ -620,7 +606,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 	// Create the app interface
 	abci := f.abci(f, exec, func(file ioutil.SectionReader) error {
-		return snapshot.FullRestore(execOpts.Database, file, logging.FromCometBFT(f.getLogger()), execOpts.Describe.PartitionUrl())
+		return snapshot.FullRestore(execOpts.Database, file, f.getLogger(), execOpts.Describe.PartitionUrl())
 	})
 
 	// Create the consensus node

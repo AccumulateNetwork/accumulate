@@ -13,12 +13,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -146,7 +146,7 @@ func TestWalkAndReplay(t *testing.T) {
 	sim.StepN(100)
 
 	// Restore snapshot into BSN database
-	logger := logging.FromCometBFT(acctesting.NewTestLogger(t))
+	logger := acctesting.NewTestLogger(t)
 	store := memory.New(nil)
 	bsndb := bsn.NewChangeSet(store, logger.With("module", "database"))
 	for _, part := range sim.Partitions() {

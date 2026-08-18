@@ -36,11 +36,9 @@ func TestWorker_LRUEviction(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Store 10 batches (fill to capacity)
-	var batches []*types.Batch
 	var digests []types.BatchDigest
 	for i := 0; i < 10; i++ {
 		batch := types.NewBatch([][]byte{[]byte(fmt.Sprintf("tx-%d", i))})
-		batches = append(batches, batch)
 		digests = append(digests, batch.Digest())
 		err := w.StoreBatch(batch)
 		require.NoError(t, err)

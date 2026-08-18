@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -850,7 +850,7 @@ func TestRunCompareInvalidCompareCommit(t *testing.T) {
 		TestConfig:    "{}",
 	}
 
-	db.InsertTestRun(run)
+	_, _ = db.InsertTestRun(run)
 
 	*baseID = 0
 	*compareID = 0
@@ -1035,7 +1035,7 @@ func TestRunTrendNullAnalysis(t *testing.T) {
 		NetworkConfig: "{}",
 		TestConfig:    "{}",
 	}
-	db.InsertTestRun(run)
+	_, _ = db.InsertTestRun(run)
 
 	*metric = "avg_tps"
 	*days = 30
@@ -1064,7 +1064,7 @@ func TestParseLoadTestDataGlobError(t *testing.T) {
 	run := &testresults.TestRun{}
 	// This should handle the case where glob finds files
 	tmpDir := t.TempDir()
-	
+
 	// Create a settlement file
 	dataFile := filepath.Join(tmpDir, "load_settlement_test.dat")
 	if err := os.WriteFile(dataFile, []byte("test data"), 0644); err != nil {
@@ -1113,7 +1113,7 @@ func TestRunTrendFilteredInsufficientData(t *testing.T) {
 			NetworkConfig: "{}",
 			TestConfig:    "{}",
 		}
-		db.InsertTestRun(run)
+		_, _ = db.InsertTestRun(run)
 	}
 
 	// Filter by commit that only has 1 run
@@ -1140,7 +1140,7 @@ func TestRunTrendDatabaseError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
-	
+
 	// Close the database to cause an error
 	db.Close()
 
@@ -1323,7 +1323,7 @@ func TestTrendAllMetrics(t *testing.T) {
 			NetworkConfig: "{}",
 			TestConfig:    "{}",
 		}
-		db.InsertTestRun(run)
+		_, _ = db.InsertTestRun(run)
 	}
 
 	metrics := []string{"avg_tps", "peak_tps", "avg_latency", "p95_latency", "p99_latency", "error_rate"}
@@ -1348,7 +1348,7 @@ func TestTrendAllMetrics(t *testing.T) {
 // Test error case in parseLoadTestData
 func TestParseLoadTestDataMultipleFiles(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Create multiple settlement files
 	for i := 0; i < 3; i++ {
 		dataFile := filepath.Join(tmpDir, fmt.Sprintf("load_settlement_%d.dat", i))
@@ -1359,12 +1359,12 @@ func TestParseLoadTestDataMultipleFiles(t *testing.T) {
 
 	run := &testresults.TestRun{}
 	err := parseLoadTestData(tmpDir, run)
-	
+
 	// Should get error because parsing is not implemented yet
 	if err == nil {
 		t.Error("Expected error from parseLoadTestData")
 	}
-	
+
 	// But it should have found the files
 	if !strings.Contains(err.Error(), "not yet implemented") {
 		t.Logf("Got expected error: %v", err)

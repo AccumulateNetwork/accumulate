@@ -82,7 +82,7 @@ func createCmd() {
 	numADIData := fs.Int("adi-data", 1000, "Number of ADI data accounts")
 	force := fs.Bool("force", false, "Overwrite existing wallet")
 
-	fs.Parse(os.Args[2:])
+	_ = fs.Parse(os.Args[2:])
 
 	// Check if wallet already exists
 	if !*force {

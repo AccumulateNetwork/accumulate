@@ -26,7 +26,7 @@ func TestCache_StoreAndCheck(t *testing.T) {
 	pubKey := []byte("public key")
 
 	// Cache miss initially
-	result, found := cache.Check(data, sig, pubKey)
+	_, found := cache.Check(data, sig, pubKey)
 	if found {
 		t.Error("expected cache miss")
 	}
@@ -35,7 +35,7 @@ func TestCache_StoreAndCheck(t *testing.T) {
 	cache.Store(data, sig, pubKey, true)
 
 	// Cache hit
-	result, found = cache.Check(data, sig, pubKey)
+	result, found := cache.Check(data, sig, pubKey)
 	if !found {
 		t.Error("expected cache hit")
 	}
@@ -357,7 +357,7 @@ func BenchmarkCache_Miss(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		data := make([]byte, 32)
 		for pb.Next() {
-			rand.Read(data)
+			_, _ = rand.Read(data)
 			cache.Check(data, data, data)
 		}
 	})
@@ -413,7 +413,7 @@ func BenchmarkCache_ED25519Verification(b *testing.B) {
 	}
 
 	data := make([]byte, 32)
-	rand.Read(data)
+	_, _ = rand.Read(data)
 	sig := ed25519.Sign(priv, data)
 
 	b.Run("Uncached", func(b *testing.B) {
