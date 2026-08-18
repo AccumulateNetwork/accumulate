@@ -43,6 +43,8 @@ import (
 // This test takes up to 90 seconds to run as it waits for real wall clock
 // time to reach the next major block boundary.
 func TestHaltDevNetIntegration(t *testing.T) {
+
+	basePort := freeDevnetBase(t, 1)
 	t.Skip("DAG-BFT does not yet fire DidCommitBlock with Major > 0 on a cron schedule")
 	if testing.Short() {
 		t.Skip("Skipping DevNet integration test in short mode")
@@ -76,7 +78,7 @@ func TestHaltDevNetIntegration(t *testing.T) {
 		},
 		Configurations: []Configuration{
 			&NetSimConfiguration{
-				Listen:     multiaddr.StringCast("/tcp/36656"), // Use non-standard port to avoid conflicts
+				Listen:     multiaddr.StringCast(fmt.Sprintf("/tcp/%d", basePort)),
 				Bvns:       1,
 				Validators: 1,
 				Globals:    globals,
@@ -97,7 +99,7 @@ func TestHaltDevNetIntegration(t *testing.T) {
 
 	// Find the HTTP port - it should be at the default offset from the listen port
 	// DevNet bootstrap node listens on port + 4 for HTTP
-	httpAddr := "http://127.0.0.1:36660"
+	httpAddr := fmt.Sprintf("http://127.0.0.1:%d", basePort+int(portAccAPI))
 
 	// Wait for HTTP server to be ready
 	t.Log("Waiting for HTTP server to be ready...")
@@ -175,6 +177,8 @@ func TestHaltDevNetCancel(t *testing.T) {
 		t.Skip("Skipping DevNet integration test in short mode")
 	}
 
+	basePort := freeDevnetBase(t, 1)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -200,7 +204,7 @@ func TestHaltDevNetCancel(t *testing.T) {
 		},
 		Configurations: []Configuration{
 			&NetSimConfiguration{
-				Listen:     multiaddr.StringCast("/tcp/37656"),
+				Listen:     multiaddr.StringCast(fmt.Sprintf("/tcp/%d", basePort)),
 				Bvns:       1,
 				Validators: 1,
 				Globals:    globals,
@@ -219,7 +223,7 @@ func TestHaltDevNetCancel(t *testing.T) {
 	require.NoError(t, err)
 	defer inst.Stop()
 
-	httpAddr := "http://127.0.0.1:37660"
+	httpAddr := fmt.Sprintf("http://127.0.0.1:%d", basePort+int(portAccAPI))
 
 	// Wait for HTTP server
 	var httpReady bool
@@ -279,6 +283,8 @@ func TestHaltDevNetAPIResponses(t *testing.T) {
 		t.Skip("Skipping DevNet integration test in short mode")
 	}
 
+	basePort := freeDevnetBase(t, 1)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -301,7 +307,7 @@ func TestHaltDevNetAPIResponses(t *testing.T) {
 		},
 		Configurations: []Configuration{
 			&NetSimConfiguration{
-				Listen:     multiaddr.StringCast("/tcp/38656"),
+				Listen:     multiaddr.StringCast(fmt.Sprintf("/tcp/%d", basePort)),
 				Bvns:       1,
 				Validators: 1,
 				Globals:    globals,
@@ -320,7 +326,7 @@ func TestHaltDevNetAPIResponses(t *testing.T) {
 	require.NoError(t, err)
 	defer inst.Stop()
 
-	httpAddr := "http://127.0.0.1:38660"
+	httpAddr := fmt.Sprintf("http://127.0.0.1:%d", basePort+int(portAccAPI))
 
 	// Wait for HTTP server
 	var httpReady bool
