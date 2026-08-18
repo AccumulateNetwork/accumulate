@@ -88,6 +88,10 @@ func (acct *LiteTokenAccount) GetTokenUrl() *url.URL {
 	return acct.TokenUrl
 }
 
+// Issue raises the issuer's Issued by amount and reports whether the
+// result still respects SupplyLimit. The symmetric inverse is
+// SyntheticBurnTokens.Execute, which subtracts the burnt amount from
+// Issued — burning returns ACME to the unissued supply.
 func (i *TokenIssuer) Issue(amount *big.Int) bool {
 	i.Issued.Add(&i.Issued, amount)
 	return i.SupplyLimit == nil || i.Issued.Cmp(i.SupplyLimit) <= 0
