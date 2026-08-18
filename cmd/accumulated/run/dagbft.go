@@ -122,6 +122,22 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		inst.shutdown()
 	})
 
+	// Create and register the halt controller for this partition.
+	//
+	// This registration lived in the CometBFT consensus path and was not
+	// carried over here, so `POST /admin/halt` was accepted and did nothing:
+	// RequestHaltAll iterates registered controllers, and there were none.
+	// The unit tests in halt_test.go construct a controller directly and so
+	// kept passing while the feature was unwired — which is how it stayed
+	// unnoticed (#4097).
+	haltController := NewHaltController(
+		s.Partition.ID,
+		inst.shutdown,
+		inst.logger.With("module", "halt", "partition", s.Partition.ID),
+	)
+	events.SubscribeSync(s.eventBus, haltController.OnDidCommitBlock)
+	inst.RegisterHaltController(haltController)
+
 	// Get the storage
 	store, err := dagbftNeedsStorage.Get(inst.services, s)
 	if err != nil {
