@@ -34,6 +34,7 @@ type action struct {
 // load looks like, but every structural transaction fires regularly.
 var menu = []action{
 	sendTokensLite, sendTokensADI, addCreditsLite, addCreditsPage,
+	sendTokensHashLock, releaseLocked,
 	writeDataADI, writeDataLite, burnTokens, burnTokensADI, burnCredits, transferCredits,
 	setThreshold, addPageKey, updatePageKey, removePageKey,
 	updateAccountAuth, lockAccount,
@@ -176,8 +177,36 @@ var addCreditsPage = action{
 		if s == nil || p == nil || len(a.tokens) == 0 {
 			return nil, errors.NotReady.With("no funded identity to buy credits")
 		}
+
+		// Pick a token account that can actually cover the purchase.
+		//
+		// This used to pay unconditionally from tokens[0]. An identity's ACME
+		// accounts are drained over a long run by send-tokens-adi and
+		// burn-tokens-adi, and once tokens[0] hits zero every subsequent
+		// attempt is REJECTED at validation — AddCredits checks the balance
+		// up front, unlike SendTokens which fails later. In the 8h v1.4.6.3
+		// soak this was the only rejecting action in the whole menu: 6 of
+		// 476, every one "insufficient tokens: have 0.00000000, want
+		// 0.00500000".
+		//
+		// A drained account is a normal state in a long run, not an error, so
+		// the right outcome is a skip.
+		cost := acmeUnitsForCredits(adiCreditGrant, e.oracle)
+		var payer *url.URL
+		start := e.u.intn(len(a.tokens)) // random start so it is not always tokens[0]
+		for n := 0; n < len(a.tokens); n++ {
+			u := a.tokens[(start+n)%len(a.tokens)]
+			if e.acmeUnits(ctx, u).Cmp(cost) >= 0 {
+				payer = u
+				break
+			}
+		}
+		if payer == nil {
+			return nil, errors.NotReady.With("no token account holds enough ACME to buy credits")
+		}
+
 		return e.sign(ctx, s.url, func() txBuilder {
-			return e.build(a.tokens[0]).
+			return e.build(payer).
 				AddCredits().WithOracle(e.oracle).Purchase(adiCreditGrant).To(p.url).
 				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
 		})

@@ -25,6 +25,25 @@
 //	# add partition and healing observations to the report
 //	loadgen -endpoint ... -tps 2 -duration 24h -report-partitions -report-heals
 //
+// # Two-phase actions
+//
+// Most actions are one transaction. HTLC is not: send-tokens-hashlock creates
+// a lock and release-locked claims it, and the claim cannot be built until the
+// SyntheticLockedDeposit the send produced exists and its ID is known. Locks
+// are parked in a queue by the send and drained by the release, so both halves
+// are exercised — the send covers locked-deposit production, and only the
+// release covers claim validation and preimage checking. See htlc.go.
+//
+// # Solvency
+//
+// Actions that spend must check they can pay. AddCredits validates the payer's
+// balance up front and is REJECTED when it is short, unlike SendTokens which
+// fails later; an identity's ACME accounts drain over a long run, so an action
+// that picks a payer blindly will eventually submit rejects. Use acmeUnits
+// (raw units) rather than acmeBalance (whole tokens, which reports 0 for any
+// balance under 1 ACME and cannot price a 0.005 ACME purchase), and return
+// errors.NotReady so the attempt is a skip rather than a rejection.
+//
 // Do not point this at mainnet.
 package main
 
@@ -74,6 +93,9 @@ type env struct {
 
 	treasury *liteAccount // funds everything else
 	oracle   float64
+	// locks holds HTLC locks between the send that creates them and the
+	// release that claims them (see htlc.go).
+	locks lockQueue
 
 	u     *universe
 	track *tracker
