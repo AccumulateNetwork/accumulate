@@ -311,7 +311,6 @@ func (d *Daemon) loadKeys() error {
 	return nil
 }
 
-
 func (d *Daemon) StartP2P() error {
 	if d.p2pnode != nil {
 		return nil
@@ -385,7 +384,6 @@ func (d *Daemon) startAPI() error {
 	return nil
 }
 
-
 func (d *Daemon) ConnectDirectly(e *Daemon) error {
 	if d.nodeKey.PrivKey.Equal(e.nodeKey.PrivKey) {
 		return errors.Conflict.With("cannot connect nodes directly as they have the same node key")
@@ -398,7 +396,6 @@ func (d *Daemon) ConnectDirectly(e *Daemon) error {
 
 	return e.p2pnode.ConnectDirectly(d.p2pnode)
 }
-
 
 // listenHttpUrl takes a string such as `http://localhost:123` and creates a TCP
 // listener.

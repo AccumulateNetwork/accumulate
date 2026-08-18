@@ -58,13 +58,13 @@ func DefaultDiscoveryConfig() DiscoveryConfig {
 
 // ActiveDiscovery performs active peer discovery for the bootstrap server
 type ActiveDiscovery struct {
-	host       host.Host
-	dht        *dht.IpfsDHT
-	tracker    *PartitionTracker
-	metrics    *MetricsCollector
-	config     DiscoveryConfig
-	stopCh     chan struct{}
-	wg         sync.WaitGroup
+	host    host.Host
+	dht     *dht.IpfsDHT
+	tracker *PartitionTracker
+	metrics *MetricsCollector
+	config  DiscoveryConfig
+	stopCh  chan struct{}
+	wg      sync.WaitGroup
 
 	// Known bootstrap peers to seed discovery
 	bootstrapPeers []peer.AddrInfo

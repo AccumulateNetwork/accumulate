@@ -350,8 +350,8 @@ func (b *bootstrap) createVoteScratchChain() error {
 	wd := new(protocol.WriteData)
 	// Empty CommitInfo matching CometBFT ABCI types.CommitInfo JSON format
 	lci := struct {
-		Round int32        `json:"round,omitempty"`
-		Votes []struct{}   `json:"votes"`
+		Round int32      `json:"round,omitempty"`
+		Votes []struct{} `json:"votes"`
 	}{}
 	data, err := json.Marshal(&lci)
 	if err != nil {

@@ -11,7 +11,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 )
 

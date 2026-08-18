@@ -117,8 +117,8 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.API.ConnectionLimit = 500
 	c.Accumulate.Storage.Type = BadgerStorage
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
-	c.Accumulate.BPT.Sharding.Enabled = false  // Disabled by default for backward compatibility
-	c.Accumulate.BPT.Sharding.Depth = 4        // 16 shards - optimal for 16-core systems
+	c.Accumulate.BPT.Sharding.Enabled = false // Disabled by default for backward compatibility
+	c.Accumulate.BPT.Sharding.Depth = 4       // 16 shards - optimal for 16-core systems
 	c.Accumulate.AnalysisLog.Directory = "analysis"
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second

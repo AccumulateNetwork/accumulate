@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -21,8 +22,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"encoding/json"
 
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"

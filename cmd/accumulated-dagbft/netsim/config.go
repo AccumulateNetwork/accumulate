@@ -147,15 +147,15 @@ func (c *DevnetConfig) GenerateNodeConfigs() error {
 		p2pKey := c.generateKey(nodeID, "p2p")
 
 		c.Nodes[i] = NodeConfig{
-			ID:             nodeID,
-			ValidatorADI:   validatorADI,
-			P2PPort:        c.BasePort + (i * 10),
-			APIPort:        c.BasePort + (i * 10) + 1,
-			DataDir:        filepath.Join(c.DataDir, nodeID),
-			ValidatorKey:   privKey,
-			P2PKey:         p2pKey,
-			NumWorkers:     c.NumWorkers,
-			DAGGCDepth:     c.DAGGCDepth,
+			ID:               nodeID,
+			ValidatorADI:     validatorADI,
+			P2PPort:          c.BasePort + (i * 10),
+			APIPort:          c.BasePort + (i * 10) + 1,
+			DataDir:          filepath.Join(c.DataDir, nodeID),
+			ValidatorKey:     privKey,
+			P2PKey:           p2pKey,
+			NumWorkers:       c.NumWorkers,
+			DAGGCDepth:       c.DAGGCDepth,
 			CommitBufferSize: c.CommitBufferSize,
 		}
 	}

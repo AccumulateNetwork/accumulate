@@ -9,13 +9,13 @@ package p2p
 import (
 	"context"
 	"crypto/ed25519"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"net"
 	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/config"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"

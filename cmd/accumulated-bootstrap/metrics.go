@@ -89,12 +89,12 @@ var (
 
 // MetricsCollector collects and updates metrics for the bootstrap server
 type MetricsCollector struct {
-	host        host.Host
-	mu          sync.RWMutex
-	seenPeers   map[peer.ID]struct{}
-	partitions  map[string]map[peer.ID]struct{}
-	stopCh      chan struct{}
-	updateTick  *time.Ticker
+	host       host.Host
+	mu         sync.RWMutex
+	seenPeers  map[peer.ID]struct{}
+	partitions map[string]map[peer.ID]struct{}
+	stopCh     chan struct{}
+	updateTick *time.Ticker
 }
 
 // NewMetricsCollector creates a new metrics collector

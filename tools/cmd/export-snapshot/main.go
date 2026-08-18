@@ -13,9 +13,9 @@ import (
 	"path/filepath"
 	"sort"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"github.com/spf13/cobra"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"

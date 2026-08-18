@@ -79,7 +79,6 @@ func (d *Daemon) startSummary() error {
 	return errors.NotAllowed.With("CometBFT consensus removed; use accumulated-dagbft")
 }
 
-
 type summaryRouter string
 
 func (r summaryRouter) RouteAccount(*url.URL) (string, error) {

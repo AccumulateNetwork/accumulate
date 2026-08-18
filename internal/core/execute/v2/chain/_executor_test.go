@@ -54,9 +54,9 @@ func BenchmarkHighTps(b *testing.B) {
 
 	kv := memory.New(nil)
 	bootstrap, err := genesis.Init(kv, genesis.InitOpts{
-		Network:     network,
-		GenesisTime: time.Now(),
-		Logger:      logger,
+		Network:      network,
+		GenesisTime:  time.Now(),
+		Logger:       logger,
 		OperatorKeys: [][]byte{nodeKey[32:]},
 	})
 	require.NoError(b, err)

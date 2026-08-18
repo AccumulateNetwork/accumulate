@@ -179,4 +179,3 @@ func (m *LoadMetrics) calculateLatencyStats() (avg, p95, p99 time.Duration) {
 
 	return avg, p95, p99
 }
-

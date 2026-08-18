@@ -1064,7 +1064,7 @@ func TestParseLoadTestDataGlobError(t *testing.T) {
 	run := &testresults.TestRun{}
 	// This should handle the case where glob finds files
 	tmpDir := t.TempDir()
-	
+
 	// Create a settlement file
 	dataFile := filepath.Join(tmpDir, "load_settlement_test.dat")
 	if err := os.WriteFile(dataFile, []byte("test data"), 0644); err != nil {
@@ -1140,7 +1140,7 @@ func TestRunTrendDatabaseError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
-	
+
 	// Close the database to cause an error
 	db.Close()
 
@@ -1348,7 +1348,7 @@ func TestTrendAllMetrics(t *testing.T) {
 // Test error case in parseLoadTestData
 func TestParseLoadTestDataMultipleFiles(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Create multiple settlement files
 	for i := 0; i < 3; i++ {
 		dataFile := filepath.Join(tmpDir, fmt.Sprintf("load_settlement_%d.dat", i))
@@ -1359,12 +1359,12 @@ func TestParseLoadTestDataMultipleFiles(t *testing.T) {
 
 	run := &testresults.TestRun{}
 	err := parseLoadTestData(tmpDir, run)
-	
+
 	// Should get error because parsing is not implemented yet
 	if err == nil {
 		t.Error("Expected error from parseLoadTestData")
 	}
-	
+
 	// But it should have found the files
 	if !strings.Contains(err.Error(), "not yet implemented") {
 		t.Logf("Got expected error: %v", err)

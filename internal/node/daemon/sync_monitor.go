@@ -198,4 +198,3 @@ func (m *SyncMonitor) Reset() {
 	m.lastHeight = 0
 	m.lastCheckTime = time.Time{}
 }
-

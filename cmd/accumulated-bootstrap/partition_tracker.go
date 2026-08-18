@@ -41,13 +41,13 @@ type PeerPartitionInfo struct {
 
 // PartitionTracker tracks peers by their partition membership
 type PartitionTracker struct {
-	host      host.Host
-	mu        sync.RWMutex
-	peers     map[peer.ID]*PeerPartitionInfo
+	host        host.Host
+	mu          sync.RWMutex
+	peers       map[peer.ID]*PeerPartitionInfo
 	byPartition map[string]map[peer.ID]struct{}
-	metrics   *MetricsCollector
-	stopCh    chan struct{}
-	probeTick *time.Ticker
+	metrics     *MetricsCollector
+	stopCh      chan struct{}
+	probeTick   *time.Ticker
 }
 
 // NewPartitionTracker creates a new partition tracker

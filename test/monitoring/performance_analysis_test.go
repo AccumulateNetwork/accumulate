@@ -30,12 +30,12 @@ import (
 // as specified in the acceptance criteria
 func TestPercentileCalculations(t *testing.T) {
 	testCases := []struct {
-		name           string
-		values         []float64
-		expectedP50    float64
-		expectedP95    float64
-		expectedP99    float64
-		tolerancePct   float64
+		name         string
+		values       []float64
+		expectedP50  float64
+		expectedP95  float64
+		expectedP99  float64
+		tolerancePct float64
 	}{
 		{
 			name:         "uniform_distribution",
@@ -322,11 +322,11 @@ func TestRealLoadWorkload(t *testing.T) {
 // TestThresholdAlerting validates that performance thresholds can be detected
 func TestThresholdAlerting(t *testing.T) {
 	testCases := []struct {
-		name              string
-		settlementTimes   []float64
-		thresholdP95      float64
-		shouldAlert       bool
-		description       string
+		name            string
+		settlementTimes []float64
+		thresholdP95    float64
+		shouldAlert     bool
+		description     string
 	}{
 		{
 			name:            "normal_performance",

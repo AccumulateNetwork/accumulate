@@ -64,9 +64,9 @@ func NewDataTx(from ed25519.PublicKey, data []byte, nonce uint64) *DataTx {
 	}
 }
 
-func (tx *DataTx) Type() TransactionType       { return TxTypeData }
-func (tx *DataTx) Sender() ed25519.PublicKey   { return tx.From }
-func (tx *DataTx) Timestamp() time.Time        { return tx.Time }
+func (tx *DataTx) Type() TransactionType     { return TxTypeData }
+func (tx *DataTx) Sender() ed25519.PublicKey { return tx.From }
+func (tx *DataTx) Timestamp() time.Time      { return tx.Time }
 
 func (tx *DataTx) Hash() [32]byte {
 	return sha256.Sum256(tx.marshalWithoutSig())
@@ -140,9 +140,9 @@ func NewSetBlockTimeTx(from ed25519.PublicKey, interval time.Duration, nonce uin
 	}
 }
 
-func (tx *SetBlockTimeTx) Type() TransactionType       { return TxTypeSetBlockTime }
-func (tx *SetBlockTimeTx) Sender() ed25519.PublicKey   { return tx.From }
-func (tx *SetBlockTimeTx) Timestamp() time.Time        { return tx.Time }
+func (tx *SetBlockTimeTx) Type() TransactionType     { return TxTypeSetBlockTime }
+func (tx *SetBlockTimeTx) Sender() ed25519.PublicKey { return tx.From }
+func (tx *SetBlockTimeTx) Timestamp() time.Time      { return tx.Time }
 
 func (tx *SetBlockTimeTx) Hash() [32]byte {
 	return sha256.Sum256(tx.marshalWithoutSig())
@@ -211,9 +211,9 @@ func NewSetTxRateTx(from ed25519.PublicKey, rate uint32, nonce uint64) *SetTxRat
 	}
 }
 
-func (tx *SetTxRateTx) Type() TransactionType       { return TxTypeSetTxRate }
-func (tx *SetTxRateTx) Sender() ed25519.PublicKey   { return tx.From }
-func (tx *SetTxRateTx) Timestamp() time.Time        { return tx.Time }
+func (tx *SetTxRateTx) Type() TransactionType     { return TxTypeSetTxRate }
+func (tx *SetTxRateTx) Sender() ed25519.PublicKey { return tx.From }
+func (tx *SetTxRateTx) Timestamp() time.Time      { return tx.Time }
 
 func (tx *SetTxRateTx) Hash() [32]byte {
 	return sha256.Sum256(tx.marshalWithoutSig())

@@ -8,12 +8,12 @@ package block_test
 
 import (
 	"bufio"
+	"crypto/ed25519"
 	"math/big"
 	"os"
 	"testing"
 	"time"
 
-	"crypto/ed25519"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"

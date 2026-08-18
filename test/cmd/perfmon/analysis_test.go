@@ -22,10 +22,10 @@ func TestBottleneckDetectionAccuracy(t *testing.T) {
 			memoryMB uint64
 			expected bool
 		}{
-			{500, false},   // Below 1GB threshold
-			{1024, false},  // Exactly at threshold - should not trigger (>)
-			{1025, true},   // Just above 1GB - should trigger
-			{2048, true},   // 2GB - should trigger with high severity
+			{500, false},  // Below 1GB threshold
+			{1024, false}, // Exactly at threshold - should not trigger (>)
+			{1025, true},  // Just above 1GB - should trigger
+			{2048, true},  // 2GB - should trigger with high severity
 		}
 
 		for _, tc := range testCases {
@@ -33,7 +33,7 @@ func TestBottleneckDetectionAccuracy(t *testing.T) {
 				{MemoryUsage: tc.memoryMB * 1024 * 1024, GoroutineCount: 10, AllocRate: 1000},
 			}
 			bottlenecks := detectBottlenecks(metrics)
-			
+
 			hasMemoryBottleneck := false
 			for _, bn := range bottlenecks {
 				if bn.Type == "memory" {
@@ -41,7 +41,7 @@ func TestBottleneckDetectionAccuracy(t *testing.T) {
 					break
 				}
 			}
-			
+
 			require.Equal(t, tc.expected, hasMemoryBottleneck,
 				"Memory %d MB: expected bottleneck=%v", tc.memoryMB, tc.expected)
 		}
@@ -63,7 +63,7 @@ func TestBottleneckDetectionAccuracy(t *testing.T) {
 				{MemoryUsage: 100 * 1024 * 1024, GoroutineCount: tc.count, AllocRate: 1000},
 			}
 			bottlenecks := detectBottlenecks(metrics)
-			
+
 			hasGoroutineBottleneck := false
 			for _, bn := range bottlenecks {
 				if bn.Type == "goroutine_leak" {
@@ -71,7 +71,7 @@ func TestBottleneckDetectionAccuracy(t *testing.T) {
 					break
 				}
 			}
-			
+
 			require.Equal(t, tc.expected, hasGoroutineBottleneck,
 				"Goroutines %d: expected bottleneck=%v", tc.count, tc.expected)
 		}
@@ -90,10 +90,10 @@ func TestRegressionDetectionThreshold(t *testing.T) {
 		currentMemoryMB uint64
 		expectedReg     bool
 	}{
-		{"5% increase", 1050, false},   // Below 10% threshold
-		{"10% increase", 1100, false},  // Exactly at threshold
-		{"11% increase", 1110, true},   // Above threshold
-		{"20% increase", 1200, true},   // Well above threshold
+		{"5% increase", 1050, false},  // Below 10% threshold
+		{"10% increase", 1100, false}, // Exactly at threshold
+		{"11% increase", 1110, true},  // Above threshold
+		{"20% increase", 1200, true},  // Well above threshold
 	}
 
 	for _, tc := range testCases {
@@ -156,7 +156,7 @@ func TestMetricsAveraging(t *testing.T) {
 	// Average memory is 1000MB (below threshold), so no memory bottleneck
 	// Average goroutines is 150 (below threshold), so no goroutine bottleneck
 	bottlenecks := detectBottlenecks(metrics)
-	
+
 	for _, bn := range bottlenecks {
 		require.NotEqual(t, "memory", bn.Type, "should not detect memory bottleneck with average below threshold")
 		require.NotEqual(t, "goroutine_leak", bn.Type, "should not detect goroutine bottleneck with average below threshold")
@@ -188,7 +188,7 @@ func TestGCPauseDetection(t *testing.T) {
 			}
 
 			bottlenecks := detectBottlenecks(metrics)
-			
+
 			var gcBottleneck *Bottleneck
 			for i := range bottlenecks {
 				if bottlenecks[i].Type == "gc_pause" {
@@ -234,7 +234,7 @@ func TestMultipleMetricsSamples(t *testing.T) {
 	}
 
 	bottlenecks := detectBottlenecks(metrics)
-	
+
 	// Should detect high memory (average is 5GB)
 	hasMemoryBottleneck := false
 	for _, bn := range bottlenecks {
@@ -256,13 +256,13 @@ func TestRegressionCalculation(t *testing.T) {
 	metrics := []PerformanceMetrics{
 		{
 			MemoryUsage:    1500 * 1024 * 1024, // 50% increase
-			GoroutineCount: 150,                 // 50% increase
-			AllocRate:      150 * 1024 * 1024,   // 50% increase
+			GoroutineCount: 150,                // 50% increase
+			AllocRate:      150 * 1024 * 1024,  // 50% increase
 		},
 	}
 
 	regressions := detectRegressions(metrics, baseline)
-	
+
 	// Should detect all three regressions
 	require.Len(t, regressions, 3)
 

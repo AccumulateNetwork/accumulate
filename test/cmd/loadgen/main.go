@@ -33,13 +33,13 @@ import (
 
 // Config holds load generator configuration
 type Config struct {
-	ServerURL      string            `json:"serverUrl"`
-	TargetTPS      int               `json:"targetTps"`
-	Duration       int               `json:"duration"`
-	OperationMix   map[string]int    `json:"operationMix"`
-	RampUpSeconds  int               `json:"rampUpSeconds"`
-	ConfigFile     string            `json:"-"`
-	ReloadInterval int               `json:"reloadInterval"`
+	ServerURL      string         `json:"serverUrl"`
+	TargetTPS      int            `json:"targetTps"`
+	Duration       int            `json:"duration"`
+	OperationMix   map[string]int `json:"operationMix"`
+	RampUpSeconds  int            `json:"rampUpSeconds"`
+	ConfigFile     string         `json:"-"`
+	ReloadInterval int            `json:"reloadInterval"`
 }
 
 // Metrics tracks load generator metrics

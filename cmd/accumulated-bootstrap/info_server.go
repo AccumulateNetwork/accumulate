@@ -846,11 +846,11 @@ func (s *InfoServer) handleDebugDHT(w http.ResponseWriter, r *http.Request) {
 		}
 
 		peerDetails = append(peerDetails, map[string]interface{}{
-			"peer_id":    peerID.String(),
-			"addresses":  multiaddrToStrings(addrs),
-			"protocols":  protocols,
-			"connected":  connected,
-			"direction":  connDirection,
+			"peer_id":   peerID.String(),
+			"addresses": multiaddrToStrings(addrs),
+			"protocols": protocols,
+			"connected": connected,
+			"direction": connDirection,
 		})
 	}
 

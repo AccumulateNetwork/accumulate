@@ -41,12 +41,12 @@ type Bottleneck struct {
 
 // PerformanceReport contains the analysis results
 type PerformanceReport struct {
-	Metrics      []PerformanceMetrics `json:"metrics"`
-	Bottlenecks  []Bottleneck         `json:"bottlenecks"`
-	Baseline     *PerformanceMetrics  `json:"baseline,omitempty"`
-	Regressions  []Regression         `json:"regressions,omitempty"`
-	Tuning       []TuningRecommendation `json:"tuning,omitempty"`
-	GeneratedAt  time.Time            `json:"generated_at"`
+	Metrics     []PerformanceMetrics   `json:"metrics"`
+	Bottlenecks []Bottleneck           `json:"bottlenecks"`
+	Baseline    *PerformanceMetrics    `json:"baseline,omitempty"`
+	Regressions []Regression           `json:"regressions,omitempty"`
+	Tuning      []TuningRecommendation `json:"tuning,omitempty"`
+	GeneratedAt time.Time              `json:"generated_at"`
 }
 
 // Regression represents a performance regression
@@ -66,16 +66,16 @@ type TuningRecommendation struct {
 }
 
 var (
-	metricsFile     = flag.String("metrics", "", "Path to metrics JSON file")
-	baselineFile    = flag.String("baseline", "", "Path to baseline metrics JSON file")
-	outputFile      = flag.String("output", "", "Output file for report (default: stdout)")
-	outputFormat    = flag.String("format", "text", "Output format: text, json")
-	cpuProfile      = flag.String("cpuprofile", "", "Write CPU profile to file")
-	memProfile      = flag.String("memprofile", "", "Write memory profile to file")
-	duration        = flag.Duration("duration", 10*time.Second, "Duration to collect metrics")
-	interval        = flag.Duration("interval", 1*time.Second, "Interval between metric collections")
-	generateSample  = flag.Bool("sample", false, "Generate sample metrics for testing")
-	analyzeOnly     = flag.Bool("analyze", false, "Analyze existing metrics without collecting new ones")
+	metricsFile    = flag.String("metrics", "", "Path to metrics JSON file")
+	baselineFile   = flag.String("baseline", "", "Path to baseline metrics JSON file")
+	outputFile     = flag.String("output", "", "Output file for report (default: stdout)")
+	outputFormat   = flag.String("format", "text", "Output format: text, json")
+	cpuProfile     = flag.String("cpuprofile", "", "Write CPU profile to file")
+	memProfile     = flag.String("memprofile", "", "Write memory profile to file")
+	duration       = flag.Duration("duration", 10*time.Second, "Duration to collect metrics")
+	interval       = flag.Duration("interval", 1*time.Second, "Interval between metric collections")
+	generateSample = flag.Bool("sample", false, "Generate sample metrics for testing")
+	analyzeOnly    = flag.Bool("analyze", false, "Analyze existing metrics without collecting new ones")
 )
 
 func main() {

@@ -331,15 +331,15 @@ func (cm *ConnectionManager) GetConnectionStats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"total":             len(conns),
-		"inbound":           inbound,
-		"outbound":          outbound,
-		"unique_peers":      len(cm.connCounts),
-		"multi_conn_peers":  multiConnPeers,
-		"high_watermark":    cm.config.HighWatermark,
-		"low_watermark":     cm.config.LowWatermark,
-		"max_connections":   cm.config.MaxConnections,
-		"near_limit":        len(conns) > cm.config.HighWatermark*90/100,
+		"total":            len(conns),
+		"inbound":          inbound,
+		"outbound":         outbound,
+		"unique_peers":     len(cm.connCounts),
+		"multi_conn_peers": multiConnPeers,
+		"high_watermark":   cm.config.HighWatermark,
+		"low_watermark":    cm.config.LowWatermark,
+		"max_connections":  cm.config.MaxConnections,
+		"near_limit":       len(conns) > cm.config.HighWatermark*90/100,
 	}
 }
 

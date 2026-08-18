@@ -50,25 +50,25 @@ type LoadGenConfig struct {
 
 // OperationMixConfig defines the percentage distribution of operations
 type OperationMixConfig struct {
-	LiteToLiteTransfer   int `json:"liteToLiteTransfer"`
-	LiteToADITransfer    int `json:"liteToADITransfer"`
-	ADIToADITransfer     int `json:"adiToAdiTransfer"`
-	KeyRotation          int `json:"keyRotation"`
-	AddKeyBook           int `json:"addKeyBook"`
-	AddKeyPage           int `json:"addKeyPage"`
-	WriteData            int `json:"writeData"`
-	CreateAccount        int `json:"createAccount"`
-	UpdateKeyWeight      int `json:"updateKeyWeight"`
+	LiteToLiteTransfer int `json:"liteToLiteTransfer"`
+	LiteToADITransfer  int `json:"liteToADITransfer"`
+	ADIToADITransfer   int `json:"adiToAdiTransfer"`
+	KeyRotation        int `json:"keyRotation"`
+	AddKeyBook         int `json:"addKeyBook"`
+	AddKeyPage         int `json:"addKeyPage"`
+	WriteData          int `json:"writeData"`
+	CreateAccount      int `json:"createAccount"`
+	UpdateKeyWeight    int `json:"updateKeyWeight"`
 }
 
 // Metrics tracks load generator performance
 type Metrics struct {
-	TotalSubmitted   atomic.Uint64
-	TotalSuccess     atomic.Uint64
-	TotalFailed      atomic.Uint64
-	LatencySum       atomic.Uint64
-	LatencyCount     atomic.Uint64
-	OperationCounts  map[string]*atomic.Uint64
+	TotalSubmitted  atomic.Uint64
+	TotalSuccess    atomic.Uint64
+	TotalFailed     atomic.Uint64
+	LatencySum      atomic.Uint64
+	LatencyCount    atomic.Uint64
+	OperationCounts map[string]*atomic.Uint64
 }
 
 func newMetrics() *Metrics {

@@ -319,4 +319,3 @@ func TestLoadMetrics_ErrorRate_AllFailed(t *testing.T) {
 		t.Errorf("expected 100%% error rate with all failures, got %.2f%%", snap.ErrorRate)
 	}
 }
-

@@ -26,13 +26,13 @@ const MaxChainIDLen = 50
 // GenesisDocJSON is a JSON-compatible genesis document matching CometBFT's
 // types.GenesisDoc format. Used for writing and reading genesis JSON files.
 type GenesisDocJSON struct {
-	GenesisTime     time.Time             `json:"genesis_time"`
-	ChainID         string                `json:"chain_id"`
-	InitialHeight   int64                 `json:"initial_height"`
-	ConsensusParams *ConsensusParamsJSON  `json:"consensus_params,omitempty"`
+	GenesisTime     time.Time              `json:"genesis_time"`
+	ChainID         string                 `json:"chain_id"`
+	InitialHeight   int64                  `json:"initial_height"`
+	ConsensusParams *ConsensusParamsJSON   `json:"consensus_params,omitempty"`
 	Validators      []GenesisValidatorJSON `json:"validators,omitempty"`
-	AppHash         hexBytes              `json:"app_hash"`
-	AppState        json.RawMessage       `json:"app_state,omitempty"`
+	AppHash         hexBytes               `json:"app_hash"`
+	AppState        json.RawMessage        `json:"app_state,omitempty"`
 }
 
 // GenesisValidatorJSON mirrors CometBFT's types.GenesisValidator JSON format.

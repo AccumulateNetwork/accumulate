@@ -102,20 +102,20 @@ func (m *Metrics) AddLatency(d time.Duration) {
 }
 
 type MetricsSnapshot struct {
-	actualTPS          float64
-	targetTPS          float64
-	blockTPS           float64
-	memUsed            uint64
-	memTotal           uint64
-	blockHeight        uint64
-	nodeStatus         string
-	lastUpdate         time.Time
-	latencyP50         time.Duration
-	latencyP95         time.Duration
-	latencyP99         time.Duration
-	diskUsed           uint64
-	diskTotal          uint64
-	cpuPercent         float64
+	actualTPS   float64
+	targetTPS   float64
+	blockTPS    float64
+	memUsed     uint64
+	memTotal    uint64
+	blockHeight uint64
+	nodeStatus  string
+	lastUpdate  time.Time
+	latencyP50  time.Duration
+	latencyP95  time.Duration
+	latencyP99  time.Duration
+	diskUsed    uint64
+	diskTotal   uint64
+	cpuPercent  float64
 }
 
 func (m *Metrics) GetSnapshot() MetricsSnapshot {

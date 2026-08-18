@@ -15,18 +15,18 @@ import (
 
 const (
 	// Thresholds for regression detection (percentage change)
-	RegressionThresholdTPSDecrease   = -10.0 // 10% decrease in TPS
-	RegressionThresholdLatencyIncrease = 15.0 // 15% increase in latency
-	RegressionThresholdErrorRateIncrease = 5.0 // 5% increase in error rate
+	RegressionThresholdTPSDecrease       = -10.0 // 10% decrease in TPS
+	RegressionThresholdLatencyIncrease   = 15.0  // 15% increase in latency
+	RegressionThresholdErrorRateIncrease = 5.0   // 5% increase in error rate
 )
 
 // CompareTestRuns compares two test runs and identifies regressions
 func CompareTestRuns(base, compare *TestRun) *ComparisonResult {
 	result := &ComparisonResult{
-		BaseRun:    base,
-		CompareRun: compare,
-		Metrics:    make(map[string]Comparison),
-		Regressions: []string{},
+		BaseRun:      base,
+		CompareRun:   compare,
+		Metrics:      make(map[string]Comparison),
+		Regressions:  []string{},
 		Improvements: []string{},
 	}
 
