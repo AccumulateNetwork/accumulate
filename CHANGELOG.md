@@ -2,14 +2,15 @@
 
 ## 1.4.6.3
 
-Fifty commits since 1.4.6.2, against two to five in each of the releases before
-it, and it defines a new executor version — which would normally argue for a
-minor bump. It stays in the 1.4.6.x series deliberately: this release is the one
-that gets proven in deployment first, and 1.4.7 is cut once it has.
+Fifty-six commits since 1.4.6.2, against two to five in each of the releases
+before it, and it defines a new executor version — which would normally argue
+for a minor bump. It stays in the 1.4.6.x series deliberately: this release is
+the one that gets proven in deployment first, and 1.4.7 is cut once it has.
 
-That is safe to do here precisely because `v2-kourou` is activated on no network.
-Everything below is either inert until a network activates it, or a fix to
-behaviour that is already live.
+`v2-kourou` is activated on no network, so everything gated behind it is inert
+until a network activates it, and the rest is a fix to behaviour already live —
+**with one exception you must read before deploying.** HTLC ships its two new
+transaction types with no activation height. See the HTLC entry below.
 
 - Cross-partition recovery (#4087, #4089, #4090)
   - **New executor version `v2-kourou` (9)**, gating collection proofs. It is
@@ -58,7 +59,41 @@ behaviour that is already live.
     not be acted on — unknown fields, and now multi-payload entries, whose
     fulfilments would be indistinguishable because they share an entry hash.
   - Key books, delegation and side keys documented and backed by executor tests.
-- Networking and deployment (#4091, #4092, #4078, #4081)
+- HTLC — hashed time-locked contracts (AIP-48, #3717)
+  - Funds lock against `H(secret)` and are claimable only by revealing a
+    preimage, with an automatic refund if nobody claims before expiry. This is
+    the primitive behind atomic swaps: claiming publishes the secret the
+    counterparty needs to claim their side.
+  - `SendTokens` gains an optional `HashLock`, which produces a
+    **`SyntheticLockedDeposit`** (`0x37`) instead of a normal deposit;
+    **`ReleaseLockedOperation`** (`0x18`) claims it with `LockedTxID` and
+    `Preimage`. SHA256, SHA256D and HASH160 — the set that makes it
+    interoperable with Bitcoin-style counterparties.
+  - **NOT version-gated, deliberately.** These are two consensus-visible
+    transaction types with no activation height, so they go live the moment a
+    node upgrades. On a multi-validator network that is a divergence risk: an
+    upgraded node accepts a `ReleaseLockedOperation` a lagging node rejects.
+    Accepted because the target network currently runs a single validator,
+    which cannot disagree with itself. **Revisit before a second validator
+    joins at a different version, or before this reaches a network that has
+    one.**
+  - Delivered by cherry-picking the five feature commits out of !1158 rather
+    than merging it: that branch is 1,485 files and +128,315 lines, almost all
+    of it re-adding an older tree, and its other genuine improvements are
+    already on main by other paths.
+- Networking and deployment (#4091, #4092, #4078, #4081, #4085)
+  - Ask the peer tracker what we already know before querying the DHT (#4085).
+    Every `RoundTrip` issued a provider lookup: 496 per second on an idle
+    six-node network, 331k failed DHT requests in three minutes. The dialer
+    already checked the tracker for known-good peers, but that check ran after
+    `Discover`, so the lookup was paid for and its result abandoned. The check
+    is hoisted above the query, and the tracker is consulted when it has any
+    known-good peer rather than four — a partition served by two nodes could
+    never reach four, so small networks queried the DHT on every dial forever.
+    Measured on the same network: 496/s → 223/s → 124/s. This is the source of
+    the kad-dht stream growth whose goroutine leak was fixed as #4089; the
+    OOM's remaining causes (no restart policy, mempool exhaustion) stay open
+    under #4085.
   - Stop advertising addresses a remote caller cannot dial.
   - Resolve bootstrap peers from the network's URL.
   - Devnet: followers are no longer voting validators; peers are built at the
