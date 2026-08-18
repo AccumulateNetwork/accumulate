@@ -5,7 +5,7 @@
 Fixes a wire-compatibility break in 1.4.6.3. **1.4.6.3 should not be
 deployed.**
 
-- Transaction header (#4093)
+- Transaction header (#4096)
   - `HashLock`, added by HTLC in 1.4.6.3, was inserted between `HoldUntil` and
     `Authorities`. Field numbers are positional, so `HashLock` took field 7 —
     the number `Authorities` has held since #3457 — and `Authorities` moved to
