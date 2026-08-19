@@ -16,6 +16,26 @@ A dashboard panel MUST show a value only if the instrument behind it exists
 and was read. An absent instrument MUST render as **`— not measured`**, never
 as `0`. Zero is a measurement; absence is not.
 
+## 1a. No impossible states, and bounds over blanks
+
+A panel MUST NOT display a value that another value on the same panel
+disproves. `received: 23, sent: 0` is not a missing measurement — it is an
+assertion of P and ¬P, and it teaches the reader to distrust the whole board.
+
+Where chain truth proves a bound, the display MUST show the bound rather than
+an absent instrument's zero: 23 received proves `sent ≥ 23`, so render
+`≥ 23 (inferred)`. An inconsistency between an instrument and an inference
+MUST itself be surfaced as an alarm — it means an instrument is broken, which
+is a finding, not a rendering choice.
+
+Self-streams (a partition's deliveries to itself) are real sequenced streams
+that carry real traffic and can wedge like any other — measured: BVN2→BVN2
+`produced=1 delivered=1` during the #4103 bisection. The flow matrix MUST
+display the diagonal, not delete it as "bookkeeping".
+
+"No stream entry yet", "zero traffic", and "instrument absent" are three
+different facts and MUST render distinguishably.
+
 ## 2. The chain is the source of truth
 
 Every claim about network behaviour MUST be derived from chain state or node
@@ -88,6 +108,7 @@ starts (implemented — `run-remote.sh`).
 | clause | state |
 |---|---|
 | 1 displayed=measured | **violated** — soakmon renders absent metrics as 0 (#4093) |
+| 1a no impossible states | **violated** — anchor flow shows `sent 0` beside `18/18 received`; diagonal deleted (#4093, #4095) |
 | 2 chain as truth | met by soak.sh/loadgen; violated by parallel-loadtest's recorded results |
 | 3 node exports | **6 of 8 families missing** (#4095); consensus-status fields missing on DI (#4075) |
 | 4 health=liveness | **violated** (#4108) |
