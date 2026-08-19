@@ -70,26 +70,31 @@ removal had already deleted from `go.mod`, so every image build on this branch
 failed. CI builds binaries and never builds the image, which is why the removal
 merged with this broken.
 
-### 3. Start the network
+### 3. Start the network — WITH the monitor, always
+
+**There is no supported way to run this network without the monitor.** This is
+a standing requirement, not a preference: an unobserved network burning CPU is
+not a test, and a failure during an unmonitored window is invisible — worse
+than no run. The first draft of this document omitted the rule and the
+diagnosis sessions that followed ran the network unmonitored five times; do
+not repeat that.
+
+`up.sh` brings the network and the monitor up as one action, builds before
+`up` (see the stale-image trap below), and tears the network back down if the
+monitor fails to start rather than running blind:
 
 ```bash
 ssh thelio-fast 'bash -lc "
   cd ~/go/src/gitlab.com/AccumulateNetwork/accumulate/test/docker
-  docker compose down -v --remove-orphans
-  docker compose up -d
+  ./up.sh
 "'
 ```
+
+For a soak, `soak/soak.sh` does the same and more. A bare `docker compose up`
+is for the compose file's own debugging only, and never for a run whose
+outcome anyone will read.
 
 13 containers: `acc-bootstrap` plus 12 validators, 4 per BVN across 3 BVNs.
-
-Wait for health with a loop rather than a fixed sleep:
-
-```bash
-ssh thelio-fast 'bash -lc "
-  until [ \$(docker ps --filter name=acc- --filter health=healthy -q | wc -l) -ge 13 ]; do sleep 5; done
-  docker ps --filter name=acc- --format \"{{.Names}} {{.Status}}\"
-"'
-```
 
 ### 4. Verify it is actually running — health is not enough
 
