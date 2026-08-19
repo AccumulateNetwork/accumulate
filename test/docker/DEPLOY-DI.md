@@ -72,12 +72,14 @@ merged with this broken.
 
 ### 3. Start the network — WITH the monitor, always
 
-**There is no supported way to run this network without the monitor.** This is
-a standing requirement, not a preference: an unobserved network burning CPU is
-not a test, and a failure during an unmonitored window is invisible — worse
-than no run. The first draft of this document omitted the rule and the
-diagnosis sessions that followed ran the network unmonitored five times; do
-not repeat that.
+**There is no supported way to run this network without the monitor, and the
+monitor means one the OPERATOR IS WATCHING — not a process on the server.**
+The standing requirement is that the dashboard is shown, live, before load
+starts. The order is fixed: open the tunnel first, verify the URL answers from
+the operator's machine, hand it over, and only then start the test. A run
+whose dashboard was only reachable after it ended fails the requirement just
+as completely as a run with no monitor at all — both have happened on this
+harness, and both are why this paragraph exists.
 
 `up.sh` brings the network and the monitor up as one action, builds before
 `up` (see the stale-image trap below), and tears the network back down if the
