@@ -108,3 +108,4 @@ test/docker/performance-results/
 /acc/acc
 /test/docker/loadtest-bin
 /cmd/accumulated/go_build*
+/loadgen
