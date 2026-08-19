@@ -596,6 +596,46 @@ func (e *env) awaitAccount(ctx context.Context, u *url.URL, limit time.Duration)
 	return errors.NotReady.WithFormat("timed out waiting for %v", u)
 }
 
+// acmeUnits reports an account's raw ACME balance in the smallest unit, or 0.
+//
+// acmeBalance below divides by AcmePrecision and so reports 0 for any balance
+// under one whole ACME. That is fine for reporting and useless as a guard: a
+// credit purchase costs ~0.005 ACME, so a caller checking acmeBalance sees 0
+// for an account that can comfortably pay, and 0 for one that cannot.
+func (e *env) acmeUnits(ctx context.Context, u *url.URL) *big.Int {
+	r, err := e.Q.QueryAccount(ctx, u, nil)
+	if err != nil {
+		return new(big.Int)
+	}
+	a, ok := r.Account.(interface{ TokenBalance() *big.Int })
+	if !ok || a.TokenBalance() == nil {
+		return new(big.Int)
+	}
+	return new(big.Int).Set(a.TokenBalance())
+}
+
+// acmeUnitsForCredits returns the ACME cost, in the smallest unit, of buying
+// the given number of credits at the given oracle — the same arithmetic
+// AddCreditsBuilder.Purchase performs, so a caller can check affordability
+// against the exact amount that will be submitted.
+func acmeUnitsForCredits(credits, oracle float64) *big.Int {
+	// WithOracle scales the float by AcmeOraclePrecision; do the same so the
+	// cost computed here is the cost the builder will submit.
+	o := int64(oracle * protocol.AcmeOraclePrecision)
+	if o == 0 {
+		return new(big.Int) // no oracle yet: caller cannot price the purchase
+	}
+	x := big.NewRat(int64(credits*protocol.CreditPrecision), protocol.CreditPrecision)
+	x.Quo(x, big.NewRat(o, protocol.AcmeOraclePrecision))
+	x.Quo(x, big.NewRat(protocol.CreditsPerDollar, 1))
+	x.Mul(x, big.NewRat(protocol.AcmePrecision, 1))
+	y := new(big.Int).Set(x.Num())
+	if !x.IsInt() {
+		y.Div(y, x.Denom())
+	}
+	return y
+}
+
 // acmeBalance reports an account's ACME balance in whole tokens, or 0.
 func (e *env) acmeBalance(ctx context.Context, u *url.URL) int64 {
 	r, err := e.Q.QueryAccount(ctx, u, nil)

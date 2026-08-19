@@ -1,5 +1,14 @@
 # Synthetic-healing docker test (#4064)
 
+> **Running a long soak?** Do it on the lab server, not a laptop — 13
+> containers will saturate one for as long as the run lasts. See
+> [DEPLOY-REMOTE.md](DEPLOY-REMOTE.md) for the SSH procedure and the four
+> traps that have bitten (Go invisible to non-interactive SSH, `pgrep -f`
+> self-matching, `-dirty` manifests, mixed UTC/local timestamps).
+>
+> **Before quoting any result**, read [soak/MONITOR-AUDIT.md](soak/MONITOR-AUDIT.md):
+> five dashboard panels read metrics no node exports and are permanently `0`.
+
 Reproduces a **wedged synthetic stream** on a real multi-container libp2p network
 and proves that **receiver-pull healing** recovers it.
 
