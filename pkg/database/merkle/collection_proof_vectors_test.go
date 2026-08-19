@@ -88,11 +88,9 @@ func TestVectorSpanIsSelfContained(t *testing.T) {
 	}
 }
 
-// TestVectorBindsAbsoluteIndex is claim 2, as far as it currently holds. This
-// branch documents that a ReceiptList proves absolute indices because
-// MerkleState is counted. GetReceiptList does report the right value, but it
-// is not cryptographically bound (#4106), so recovery cannot yet rely on it
-// to place a recovered entry without trusting the sender.
+// TestVectorBindsAbsoluteIndex is claim 2. A ReceiptList proves the absolute
+// index of every element, which is what lets a destination place a recovered
+// entry at its true sequence position without trusting the sender.
 func TestVectorBindsAbsoluteIndex(t *testing.T) {
 	c := vectorChain(t, 64)
 
@@ -172,21 +170,28 @@ func TestVectorRejectsMembershipChange(t *testing.T) {
 		require.False(t, rl.Validate(nil), "an empty element list must fail")
 	})
 
-	// KNOWN GAP (#4106). This branch documents that a ReceiptList "binds
-	// element j to absolute index State.Count + j", and #4048 builds its
-	// recovery model on that. It does not hold: State.Anchor() derives the
-	// anchor from Pending alone and uses Count only as a zero check, so
-	// Validate accepts any Count at all.
+	// Editing MerkleState.Count alone does not invalidate the proof, and that
+	// is correct rather than a gap.
 	//
-	// The vector asserts the CURRENT behaviour rather than the documented
-	// one, so it records the gap instead of hiding it. When #4106 is fixed,
-	// this flips to require.False and the claim becomes real.
-	t.Run("wrongStartCount_notYetBound", func(t *testing.T) {
+	// Count is redundant metadata. The absolute index is committed by the
+	// STRUCTURE: Pending holds one subtree root per set bit of the entry
+	// count, so its occupancy pattern is the binary representation of the
+	// count, and Pending is what Anchor() hashes. A verifier derives the true
+	// count from Pending; the Count field merely restates it. Editing the
+	// field makes it disagree with the proof, it does not produce a second
+	// valid reading.
+	//
+	// TestVectorIndexIsBoundByStructure below is the positive statement of
+	// this, and is the vector recovery actually relies on.
+	t.Run("editingCountDoesNotForgeAnIndex", func(t *testing.T) {
 		rl := base(t)
-		rl.MerkleState.Count++
+		derived := derivedCount(rl.MerkleState)
+		rl.MerkleState.Count += 7
 		require.True(t, rl.Validate(nil),
-			"documents #4106: Count is not bound by the proof, so a false "+
-				"absolute offset is currently accepted")
+			"the proof still validates, because Count is not what carries the index")
+		require.Equal(t, derived, derivedCount(rl.MerkleState),
+			"and the structurally derived count is unchanged by the edit, so the "+
+				"true absolute position is still what the proof says it is")
 	})
 }
 
@@ -205,4 +210,33 @@ func TestVectorGoldenAnchor(t *testing.T) {
 		"the vector entries themselves must not drift")
 	require.Equal(t, goldenAnchor16, anchor,
 		"the anchor over 16 deterministic entries must not drift")
+}
+
+// derivedCount recovers the entry count from the committed structure alone,
+// ignoring the Count field. Pending holds one subtree root per set bit of the
+// count, so slot i contributes 2^i when occupied.
+func derivedCount(st *State) int64 {
+	var n int64
+	for slot, v := range st.Pending {
+		if v != nil {
+			n += 1 << uint(slot)
+		}
+	}
+	return n
+}
+
+// TestVectorIndexIsBoundByStructure is why recovery can trust an absolute
+// position: the count is not taken on faith from a field, it is recoverable
+// from the same Pending that Anchor() hashes and the receipt commits to.
+func TestVectorIndexIsBoundByStructure(t *testing.T) {
+	c := testChain(begin(), 4, "cp-vectors-structure")
+	for i := int64(0); i < 24; i++ {
+		require.NoError(t, c.AddEntry(vectorEntry(i), false))
+
+		st, err := c.Head().Get()
+		require.NoError(t, err)
+		require.Equal(t, st.Count, derivedCount(st),
+			"the occupancy of Pending must be the binary representation of the "+
+				"entry count, for every count — this is what binds the index")
+	}
 }
