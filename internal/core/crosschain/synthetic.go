@@ -611,7 +611,9 @@ const reconcileGraceBlocks = 60
 // ledger, so this works even when we hold no entry at all for a source — which
 // is exactly the state a lost prefix leaves behind.
 func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database.Batch, blockIndex uint64) error {
+	slog.Info("RECON: entered", "module", "probe", "block", blockIndex)
 	if c.Sequencer == nil {
+		slog.Info("RECON: no sequencer", "module", "probe")
 		return nil
 	}
 
@@ -653,6 +655,7 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 		var remote *protocol.SyntheticLedger
 		_, err := c.Querier.QueryAccountAs(ctx, source.JoinPath(protocol.Synthetic), nil, &remote)
 		if err != nil {
+			slog.Info("RECON: peer query failed", "module", "probe", "peer", peer.ID, "error", err)
 			// An unreachable peer must never wedge a stream (#4067). Try again
 			// next window.
 			// Warn, not Debug: a reconcile that cannot reach its peer is the
@@ -673,6 +676,7 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 
 		have := received[source.AccountID32()]
 		c.pruneOverdue(source, have)
+		slog.Info("RECON: peer state", "module", "probe", "peer", peer.ID, "produced", produced, "have", have)
 		if produced <= have {
 			continue
 		}
@@ -685,6 +689,7 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 		// Availability is checked BEFORE claiming: claiming and then falling back
 		// would leave the per-message path suppressed by the claim the fast path
 		// just made, and the stream would sit unhealed until the window expired.
+		slog.Info("RECON: gap found", "module", "probe", "peer", peer.ID, "produced", produced, "have", have)
 		if held, ok := c.rangeProofAnchor(batch, source); ok {
 			overdue := have
 			for seq := have + 1; seq <= produced && overdue-have < syntheticHealBatch; seq++ {
