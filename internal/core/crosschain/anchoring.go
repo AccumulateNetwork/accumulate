@@ -458,6 +458,9 @@ func (c *Conductor) recoverAnchorsViaRange(ctx context.Context, batch *database.
 			return errors.UnknownError.WithFormat("submit recovered anchor %d: %w", r.Sequence.Number, err)
 		}
 		mHeals.WithLabelValues("anchor-range", c.Partition.ID, partitionLabel(source)).Inc()
+		if c.Heals != nil {
+			c.Heals.Anchor.Add(1)
+		}
 	}
 	return nil
 }

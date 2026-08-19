@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -33,6 +34,7 @@ type ConsensusAPIService struct {
 	partition     config.NetworkUrl
 	nodeKeyHash   [32]byte
 	valKeyHash    [32]byte
+	heals         *crosschain.HealCounters
 }
 
 var _ api.ConsensusService = (*ConsensusAPIService)(nil)
@@ -47,6 +49,10 @@ type ConsensusAPIServiceParams struct {
 	EventBus         *events.Bus
 	NodeKeyHash      [32]byte
 	ValidatorKeyHash [32]byte
+
+	// Heals is shared with the conductor so recoveries are reportable, not
+	// only loggable (#4075, #4105) — the soak monitor reads these fields.
+	Heals *crosschain.HealCounters
 }
 
 // NewConsensusAPIService creates a new ConsensusAPIService.
@@ -60,6 +66,7 @@ func NewConsensusAPIService(params ConsensusAPIServiceParams) *ConsensusAPIServi
 	s.partition.URL = protocol.PartitionUrl(params.PartitionID)
 	s.nodeKeyHash = params.NodeKeyHash
 	s.valKeyHash = params.ValidatorKeyHash
+	s.heals = params.Heals
 	return s
 }
 
@@ -71,6 +78,10 @@ func (s *ConsensusAPIService) ConsensusStatus(ctx context.Context, opts api.Cons
 	// Basic data
 	res := new(api.ConsensusStatus)
 	res.Ok = true
+	if s.heals != nil {
+		res.SyntheticHeals = s.heals.Synthetic.Load()
+		res.AnchorHeals = s.heals.Anchor.Load()
+	}
 	res.Version = accumulate.Version
 	res.Commit = accumulate.Commit
 	res.NodeKeyHash = s.nodeKeyHash

@@ -314,12 +314,43 @@ def collect_flows_api():
             for dst, c in row.items():
                 c["undeliv"] = max(0, c.get("sent", 0) - c.get("recv", 0))
 
-    # A partition's entry for itself is bookkeeping, not a cross-partition flow.
+    # Anchor "sent" from the source's anchor-sequence CHAIN height. The anchor
+    # ledger has no outbound `produced` writer on any lineage (checked 2026-08:
+    # no branch writes it), so reading it yields the impossible display
+    # "received 18 / sent 0" — received is PROOF of sent. The sequence chain is
+    # the actual bookkeeping: a BVN anchors only to the DN, and the DN sends
+    # the same sequence to every BVN, so the chain height IS the sent count.
+    for src in PARTITIONS:
+        r = curl_api("query", {"scope": "acc://%s.acme/anchors" % SCOPE[src],
+                               "query": {"queryType": "chain", "name": "anchor-sequence"}})
+        try:
+            h = int(r["result"]["total"])
+        except Exception:
+            continue
+        if h <= 0:
+            continue
+        dsts = ["Directory"] if src != "Directory" else [p for p in PARTITIONS if p != "Directory"]
+        for dst in dsts:
+            c = cell("anchor", src, dst)
+            c["sent"] = max(c["sent"], h)
+            anc_prod = max(anc_prod, h)
+
+    # No impossible states: delivery is proof of sending, so sent is bounded
+    # below by both received and delivered (REPORTING-SPEC.md 1a). If an
+    # instrument ever disagrees with that inference, the bound wins and the
+    # cell is marked inferred so the broken instrument is visible.
     for kind in flows:
-        for src in list(flows[kind]):
-            flows[kind][src].pop(src, None)
-            if not flows[kind][src]:
-                flows[kind].pop(src, None)
+        for src, row in flows[kind].items():
+            for dst, c in row.items():
+                floor = max(c.get("recv", 0), c.get("deliv", 0))
+                if c.get("sent", 0) < floor:
+                    c["sent"] = floor
+                    c["inferred"] = True
+
+    # Self-streams stay in the matrix. They are real sequenced streams that
+    # carry real traffic (measured: BVN2->BVN2 produced=1 delivered=1 in the
+    # #4103 bisection) and can wedge like any other; deleting the diagonal as
+    # "bookkeeping" made a whole class of wedge invisible (REPORTING-SPEC 1a).
     return flows, syn_prod, anc_prod
 
 

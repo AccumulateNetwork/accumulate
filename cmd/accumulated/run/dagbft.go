@@ -225,6 +225,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		return nil
 	})
 
+	// One HealCounters instance, shared by the conductor (which increments it)
+	// and the consensus API service (which reports it) — recoveries become
+	// visible to the soak monitor instead of only to grep (#4075, #4105).
+	healCounters := new(crosschain.HealCounters)
+
 	// Start conductor for cross-chain communication
 	conductor := &crosschain.Conductor{
 		Partition:    s.Partition,
@@ -233,6 +238,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
 		Sequencer:    client.Private(),
+		Heals:        healCounters,
 		RunTask:      execOpts.BackgroundTaskLauncher,
 		// Healing is the ONLY retry mechanism for anchors — the conductor's
 		// per-block dispatch is one-shot, and a single lost anchor freezes
@@ -381,7 +387,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 
 	// Register consensus API services
-	err = s.registerAPIServices(inst, store, validatorKey, globals)
+	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters)
 	if err != nil {
 		return err
 	}
@@ -391,12 +397,13 @@ func (s *DAGBFTService) start(inst *Instance) error {
 }
 
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters) error {
 	logger := logging.NewSlogLogger(inst.logger)
 	db := database.New(store, logger)
 
 	// Create consensus service
 	consensusSvc := dagbft.NewConsensusAPIService(dagbft.ConsensusAPIServiceParams{
+		Heals:            healCounters,
 		Logger:           logger.With("module", "api"),
 		Service:          s.service,
 		Database:         db,
