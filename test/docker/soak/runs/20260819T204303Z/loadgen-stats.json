@@ -1,59 +1,64 @@
 {
-  "updatedUnix": 1787172718,
+  "updatedUnix": 1787173474,
   "startUnix": 1787172595,
-  "elapsedSec": 123,
-  "phase": "generating",
+  "elapsedSec": 879,
+  "phase": "done",
   "target": 12000,
-  "generated": 1095,
-  "rejected": 0,
-  "skipped": 51,
-  "rate": 8.8995724887331,
+  "generated": 2063,
+  "rejected": 3052,
+  "skipped": 529,
+  "rate": 2.346780869314589,
   "targetTps": 10,
   "perType": {
     "add-credits-lite": {
-      "generated": 212,
-      "rejected": 0,
-      "skipped": 0
+      "generated": 333,
+      "rejected": 505,
+      "skipped": 220
     },
     "burn-tokens": {
-      "generated": 80,
-      "rejected": 0,
-      "skipped": 0
+      "generated": 128,
+      "rejected": 213,
+      "skipped": 74
     },
     "fail:overspend": {
-      "generated": 27,
-      "rejected": 0,
+      "generated": 70,
+      "rejected": 161,
       "skipped": 21
     },
     "fail:send-to-void": {
-      "generated": 26,
-      "rejected": 0,
+      "generated": 95,
+      "rejected": 144,
       "skipped": 25
     },
     "grow:add-credits": {
-      "generated": 1,
+      "generated": 2,
       "rejected": 0,
       "skipped": 0
     },
     "grow:create-identity": {
-      "generated": 5,
+      "generated": 9,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-account": {
+      "generated": 1,
       "rejected": 0,
       "skipped": 0
     },
     "lock-account": {
-      "generated": 20,
-      "rejected": 0,
+      "generated": 55,
+      "rejected": 81,
       "skipped": 5
     },
     "send-tokens-lite": {
-      "generated": 480,
-      "rejected": 0,
-      "skipped": 0
+      "generated": 1009,
+      "rejected": 1390,
+      "skipped": 4
     },
     "write-data-lite": {
-      "generated": 244,
-      "rejected": 0,
-      "skipped": 0
+      "generated": 361,
+      "rejected": 558,
+      "skipped": 180
     }
   },
   "accounts": {
@@ -61,6 +66,6 @@
     "keyBooks": 0,
     "keyPages": 0,
     "tokenIssuers": 0,
-    "accounts": 59
+    "accounts": 291
   }
 }
