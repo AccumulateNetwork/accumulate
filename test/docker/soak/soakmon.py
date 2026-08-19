@@ -324,12 +324,12 @@ def collect_flows_api():
         r = curl_api("query", {"scope": "acc://%s.acme/anchors" % SCOPE[src],
                                "query": {"queryType": "chain", "name": "anchor-sequence"}})
         try:
-            h = int(r["result"]["total"])
+            h = int(r["result"]["count"])
         except Exception:
             continue
         if h <= 0:
             continue
-        dsts = ["Directory"] if src != "Directory" else [p for p in PARTITIONS if p != "Directory"]
+        dsts = ["Directory"] if src != "Directory" else list(PARTITIONS)
         for dst in dsts:
             c = cell("anchor", src, dst)
             c["sent"] = max(c["sent"], h)
