@@ -232,6 +232,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Database:     execOpts.Database,
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
+		Sequencer:    client.Private(),
 		RunTask:      execOpts.BackgroundTaskLauncher,
 		// Healing is the ONLY retry mechanism for anchors — the conductor's
 		// per-block dispatch is one-shot, and a single lost anchor freezes

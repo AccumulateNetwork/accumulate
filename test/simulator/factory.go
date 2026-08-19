@@ -581,6 +581,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Database:            execOpts.Database,
 		Querier:             api.Querier2{Querier: f.getServices()},
 		Dispatcher:          execOpts.NewDispatcher(),
+		Sequencer:           f.getServices().Private(),
 		RunTask:             execOpts.BackgroundTaskLauncher,
 		DropInitialAnchor:   f.dropInitialAnchor,
 		EnableAnchorHealing: &enableAnchorHealing,

@@ -12,10 +12,12 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -37,6 +39,12 @@ type Conductor struct {
 	Database     database.Beginner
 	Querier      api.Querier2
 	Dispatcher   execute.Dispatcher
+
+	// Sequencer serves the ranges recovery pulls. Without it a stalled stream
+	// has no way back: dispatch is one-shot, so a message lost in transit is
+	// never resent, and the destination's delivered-sequence stops there
+	// permanently (#4105).
+	Sequencer private.Sequencer
 
 	// Ready can be used to pause the conductor, for example to stop it from
 	// sending anchors while the node is catching up.
@@ -71,6 +79,24 @@ type Conductor struct {
 	// lastHeal tracks the last healing scan per destination.
 	lastHealMu sync.Mutex
 	lastHeal   map[string]time.Time
+
+	// Heals counts successful recoveries, so a node can report what it has had
+	// to repair rather than only that it is currently healthy — the distinction
+	// #4103 showed matters, where every surface said healthy while nothing was
+	// being delivered.
+	Heals *HealCounters
+
+	// SyntheticHealWindow overrides the jitter/back-off window for synthetic
+	// recovery. Zero uses the default. Tests set a small value because
+	// simulator blocks are not wall-clock paced.
+	SyntheticHealWindow time.Duration
+
+	// Recovery state, mirroring the anchor side's lastHeal pacing (#4105).
+	synthHealMu    sync.Mutex
+	synthHealState map[string]*synthHealEntry
+	seqHealAt      map[string]time.Time // per-(source,seq) last heal submission
+	reconcileSeen  map[string]uint64    // per-(source,seq) block a gap was first seen
+	synthHeals     atomic.Uint64
 
 	// delivery tracks each destination's anchor-delivery progress across scans,
 	// so healing acts only when delivery is genuinely stalled rather than
@@ -223,6 +249,69 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 			}
 		})
 	}
+	// Destination-side recovery. This is the half healAnchors defers to when
+	// collection proofs are active: it retires the source-side push on the
+	// grounds that "the DESTINATION owns anchor recovery", and until now that
+	// owner did not exist on this branch — so under Kourou nothing retried at
+	// all and a single lost message wedged a stream permanently (#4103, #4105).
+	//
+	// Paced by the same shouldHeal window as the push it replaces, so the
+	// StallScans reasoning about DAG-BFT block rates still governs how often a
+	// destination asks.
+	// Request any missing inbound synthetic messages (receiver-pull on gap).
+	// Unconditional: a lost synthetic wedges the stream permanently, so recovery
+	// is not something an operator should be able to switch off.
+	if c.Sequencer != nil {
+		c.runTask(func() {
+			batch := c.Database.Begin(false)
+			defer batch.Discard()
+
+			err := c.requestMissingSynthetics(context.Background(), batch)
+			if err != nil {
+				slog.Error("Error while requesting missing synthetics", "error", err)
+			}
+		})
+	}
+
+	if c.Sequencer != nil {
+		for _, src := range c.Globals.Load().Network.Partitions {
+			if strings.EqualFold(src.ID, c.Partition.ID) {
+				continue
+			}
+			if !c.shouldHeal("recover:" + src.ID) {
+				continue
+			}
+			source := protocol.PartitionUrl(src.ID)
+			c.runTask(func() {
+				ctx, cancel := context.WithTimeout(context.Background(), def(c.HealTimeout, DefaultHealTimeout))
+				defer cancel()
+
+				batch := c.Database.Begin(false)
+				defer batch.Discard()
+
+				err := c.recoverAnchorsViaRange(ctx, batch, source)
+				if err != nil {
+					slog.Error("Error while recovering anchors by range", "source", src.ID, "error", err)
+				}
+			})
+		}
+
+		// The "anything new?" pull. A gap the destination can SEE is bounded by
+		// the entry that exposed it; a stream whose tail was lost shows no gap
+		// at all, and only asking the source what it has produced finds it.
+		if e.Index%reconcileInterval == 0 {
+			c.runTask(func() {
+				batch := c.Database.Begin(false)
+				defer batch.Discard()
+
+				err := c.reconcileInboundStreams(context.Background(), batch, e.Index)
+				if err != nil {
+					slog.Error("Error while reconciling inbound streams", "error", err)
+				}
+			})
+		}
+	}
+
 	if c.Partition.Type != protocol.PartitionTypeDirectory {
 		if c.shouldHeal(protocol.Directory) {
 			healOne(protocol.DnUrl())
@@ -348,4 +437,11 @@ func def[T any](value *T, def T) T {
 		return def
 	}
 	return *value
+}
+
+// HealCounters is shared with the consensus service so recoveries are visible
+// to operators rather than only in logs.
+type HealCounters struct {
+	Synthetic atomic.Uint64
+	Anchor    atomic.Uint64
 }
