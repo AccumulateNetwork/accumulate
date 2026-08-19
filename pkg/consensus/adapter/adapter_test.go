@@ -41,12 +41,19 @@ func (m *mockTransactionValidator) ValidateTransaction(tx []byte) error {
 
 // mockStateProvider implements StateProvider for testing.
 type mockStateProvider struct {
-	index uint64
-	hash  [32]byte
+	index      uint64
+	hash       [32]byte
+	majorIndex uint64
+	majorTime  time.Time
+	majorOK    bool
 }
 
 func (m *mockStateProvider) LastBlock() (uint64, [32]byte, error) {
 	return m.index, m.hash, nil
+}
+
+func (m *mockStateProvider) LastMajorBlock() (uint64, time.Time, bool) {
+	return m.majorIndex, m.majorTime, m.majorOK
 }
 
 func (m *mockStateProvider) StateHash() [32]byte {

@@ -44,7 +44,6 @@ import (
 // time to reach the next major block boundary.
 func TestHaltDevNetIntegration(t *testing.T) {
 
-	t.Skip("DAG-BFT does not yet fire DidCommitBlock with Major > 0 on a cron schedule")
 	if testing.Short() {
 		t.Skip("Skipping DevNet integration test in short mode")
 	}

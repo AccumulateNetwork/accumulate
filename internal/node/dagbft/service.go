@@ -520,12 +520,21 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 		w.PruneBatches(committedDigests)
 	}
 
-	// Emit block event
+	// Emit block event.
+	//
+	// Major must be carried: subscribers key on it to distinguish a major
+	// block from an ordinary one. HaltController.OnDidCommitBlock returns
+	// early unless Major is non-zero, so while this was omitted a halt
+	// requested through the API was recorded, reported as pending, and never
+	// acted on (#4097).
 	event := events.DidCommitBlock{
 		Index: blockIndex,
 		Time:  blockTime,
 		Round: uint64(cert.Header.Round),
 		Epoch: s.committee.Epoch,
+	}
+	if major, _, ok := s.adapter.LastMajorBlock(); ok {
+		event.Major = major
 	}
 	if err := s.eventBus.Publish(event); err != nil {
 		s.logger.Error("Failed to publish block event", "error", err)

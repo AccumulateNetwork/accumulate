@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -37,6 +38,9 @@ type ExecutorBridge struct {
 	mu                     sync.RWMutex
 	lastBlockIndex         uint64
 	lastBlockHash          [32]byte
+	lastMajorIndex         uint64
+	lastMajorTime          time.Time
+	lastMajorOK            bool
 	validators             []ValidatorInfo
 	validatorVersion       uint64
 	validatorChangeHandler func(validators []ValidatorInfo, version uint64)
@@ -268,10 +272,14 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		return [32]byte{}, fmt.Errorf("commit block: %w", err)
 	}
 
-	// Update our tracking
+	// Update our tracking. DidCompleteMajorBlock is recorded here because the
+	// closed block state is the only thing that knows, and it does not outlive
+	// this function.
+	majorIndex, majorTime, majorOK := state.DidCompleteMajorBlock()
 	b.mu.Lock()
 	b.lastBlockIndex = params.Index
 	b.lastBlockHash = hash
+	b.lastMajorIndex, b.lastMajorTime, b.lastMajorOK = majorIndex, majorTime, majorOK
 	b.mu.Unlock()
 
 	slog.Debug("Produced block",
@@ -317,6 +325,14 @@ func (b *ExecutorBridge) ValidateTransaction(tx []byte) error {
 }
 
 // LastBlock returns the last committed block index and hash.
+// LastMajorBlock reports the major block closed by the most recently produced
+// block, if it closed one.
+func (b *ExecutorBridge) LastMajorBlock() (uint64, time.Time, bool) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.lastMajorIndex, b.lastMajorTime, b.lastMajorOK
+}
+
 func (b *ExecutorBridge) LastBlock() (uint64, [32]byte, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
