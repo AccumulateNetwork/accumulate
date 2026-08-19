@@ -20,3 +20,20 @@
 | target TPS | 2 |
 
 Config as run is frozen in `config/`. Results appended below on exit.
+
+## Result
+
+| field | value |
+|---|---|
+| ended (UTC) | 2026-08-19T19:47:00Z |
+| elapsed | 0.25h |
+| driver exit | 0 (clean) |
+| dn height | 1932 -> 32513 |
+| heals | 8 -> 21 |
+| chaos events | 19 |
+| monitor samples | 53 |
+| seizure | none detected |
+| reconcile pulls (#4073) | 12 |
+| stalled channels at end | 0 |
+
+Raw: `soak.log`, `monitor.csv`, `chaos.log`, `loadgen-stats.json`.

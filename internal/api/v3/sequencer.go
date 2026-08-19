@@ -759,17 +759,19 @@ func (s *Sequencer) getAnchorRange(batch *database.Batch, globals *core.GlobalVa
 	// validated anchor from us can verify this range against something it
 	// already has — rather than waiting for the directory to catch up, which
 	// is precisely what it cannot do while a stream is stalled (#4105).
-	var continued *merkle.Receipt
-	if opts.ProveAgainstAnchor > 0 {
-		continued, err = s.getHeldAnchorContinuation(batch, anchorEntry.Anchor, opts.ProveAgainstAnchor)
-	} else {
-		continued, err = s.getRootContinuation(batch, anchorEntry)
+	// For anchors the source can infer the held anchor without being told:
+	// a gap is only visible to the destination because a LATER anchor arrived,
+	// so the entry immediately after the range is necessarily one it has.
+	// Falling back to a directory-continued proof here instead is the #4087
+	// deadlock — "the directory has not receipted the block yet" is exactly
+	// the state recovery runs in, and it wedged the live run this replaces.
+	proving := opts.ProveAgainstAnchor
+	if proving == 0 {
+		proving = end + 1
 	}
+	continued, err := s.getHeldAnchorContinuation(batch, anchorEntry.Anchor, proving)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
-	}
-	if continued == nil {
-		return nil, errors.NotReady.With("the directory has not receipted the block yet")
 	}
 
 	list, err := merkle.GetReceiptList(ledger.AnchorSequenceChain().Inner(), int64(start)-1, int64(anchorEntry.Source))
