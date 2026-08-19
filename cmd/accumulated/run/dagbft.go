@@ -37,6 +37,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -104,6 +105,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	setDefaultPtr(&s.NumWorkers, dagconfig.DefaultNumWorkers)
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
+	setDefaultPtr(&s.BlockInterval, encoding.Duration(dagconfig.DefaultBlockInterval))
 
 	// Get the logger
 	logger := logging.NewSlogLogger(inst.logger)
@@ -282,6 +284,14 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		NumWorkers:       int(*s.NumWorkers),
 		DAGGCDepth:       types.Round(*s.DAGGCDepth),
 		CommitBufferSize: int(*s.CommitBufferSize),
+
+		// Rounds pace at half the block interval: Bullshark commits a leader
+		// every other round, so blocks arrive at roughly 2x the round
+		// interval. Before this was wired, primary fell back to its 100ms
+		// default and the Directory ran at ~21 blocks/sec under load — and
+		// since every block emits an anchor, anchor traffic ran at block
+		// rate and drowned one-shot dispatch (#4098).
+		MinRoundInterval: time.Duration(*s.BlockInterval) / 2,
 	}
 
 	// Use the shared GossipSub for DAG-BFT certificate/batch dissemination.

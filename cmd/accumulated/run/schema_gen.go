@@ -441,6 +441,15 @@ func init() {
 				},
 			},
 			{
+				Name:        "BlockInterval",
+				Description: "target time between blocks; rounds are paced at half this, since Bullshark commits every other round. Defaults to 3s (#4098)",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[encoding.Duration](),
+				},
+			},
+			{
 				Name:     "EnableHealing",
 				Optional: true,
 				Type: &schema.PointerType{

@@ -70,6 +70,15 @@ type NodeConfig struct {
 	// CommitBufferSize is the size of the committed certificates channel.
 	// Defaults to DefaultCommitBufferSize.
 	CommitBufferSize int
+
+	// MinRoundInterval paces round advancement, and therefore block cadence:
+	// Bullshark commits a leader every other round, so blocks arrive at
+	// roughly twice this interval. Zero falls back to
+	// primary.DefaultMinRoundInterval (100ms) — which, unwired, is what ran
+	// the Directory at ~21 blocks/sec under load and flooded anchor delivery
+	// at block rate (#4098). Callers honouring config.Timing should set this
+	// to BlockInterval/2.
+	MinRoundInterval time.Duration
 }
 
 // applyDefaults fills in default values for unset configuration fields.
@@ -153,8 +162,9 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 
 	// Create primary
 	pcfg := primary.Config{
-		Partition: config.Partition,
-		KeyPair:   config.KeyPair,
+		Partition:        config.Partition,
+		KeyPair:          config.KeyPair,
+		MinRoundInterval: config.MinRoundInterval,
 	}
 	p := primary.New(pcfg, committee, g, d, workers)
 

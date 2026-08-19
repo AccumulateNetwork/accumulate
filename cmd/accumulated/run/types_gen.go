@@ -289,13 +289,15 @@ func (v *CoreValidatorMode) UnmarshalJSON(b []byte) error {
 }
 
 type DAGBFTService struct {
-	NodeDir              string
-	ValidatorKey         PrivateKey
-	Genesis              string
-	Partition            *protocol.PartitionInfo
-	NumWorkers           *int64
-	DAGGCDepth           *int64
-	CommitBufferSize     *int64
+	NodeDir          string
+	ValidatorKey     PrivateKey
+	Genesis          string
+	Partition        *protocol.PartitionInfo
+	NumWorkers       *int64
+	DAGGCDepth       *int64
+	CommitBufferSize *int64
+	// BlockInterval target time between blocks; rounds are paced at half this, since Bullshark commits every other round. Defaults to 3s (#4098).
+	BlockInterval        *encoding.Duration
 	EnableHealing        *bool
 	EnableDirectDispatch *bool
 	MaxEnvelopesPerBlock *uint64
