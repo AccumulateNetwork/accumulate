@@ -30,15 +30,22 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		return nil
 	}
 
-	// Once collection proofs are active the DESTINATION owns anchor recovery:
-	// its healing loop pulls missed runs with a range request and a single
-	// collection proof, which executes without a signature quorum (#4048,
-	// #4056). The source-side push below — every validator independently
-	// re-signing and re-submitting historical anchors — is then redundant and
-	// is the flooding-prone path, so retire it.
-	if c.Globals.Load().ExecutorVersion.V2KourouEnabled() {
-		return nil
-	}
+	// The source-side push is NOT retired under Kourou, and the attempt to do so
+	// is what left this branch unable to recover a lost anchor at all (#4103).
+	//
+	// The reasoning for retiring it was that the destination owns recovery once
+	// collection proofs are active (#4048, #4056). That is true only for gaps
+	// the destination can SEE: recoverAnchorsViaRange scans its pending window
+	// for holes, and a hole exists only because a later anchor arrived to expose
+	// it. An anchor dropped before anything followed it leaves no hole, no
+	// pending entry, and nothing for the destination to ask about —
+	// TestDropInitialAnchor is exactly that case, and it is why main keeps the
+	// push.
+	//
+	// So the two are complements rather than alternatives. The push covers what
+	// the destination cannot see; the pull covers runs cheaply once it can, and
+	// keeps the push from having to walk large gaps. Retiring either one leaves
+	// a class of loss permanent, because dispatch itself never retries.
 
 	// Load the source sequence chain
 	sequence := batch.Account(c.Url(protocol.AnchorPool)).AnchorSequenceChain()
