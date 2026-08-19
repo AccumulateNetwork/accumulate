@@ -148,6 +148,31 @@ done
 [ -n "$up" ] || { echo "network never came up" | tee -a "$log"; exit 1; }
 sleep 30
 
+# Observability FIRST, and it is a gate, not a hope. The monitor comes up
+# before any load exists, and if it does not come up the run DOES NOT HAPPEN —
+# the network is torn down and the script exits nonzero. The requirement is
+# that a test is watched; a warning that continues unmonitored is exactly the
+# behaviour that produced five unobserved runs during the #4103 diagnosis.
+if [ ! -x "$here/soakmon.py" ]; then
+  echo "soakmon.py missing or not executable — refusing to run unmonitored" | tee -a "$log"
+  $compose down -v --remove-orphans >/dev/null 2>&1
+  exit 1
+fi
+# RUN_DIR so the dashboard reads THIS run's loadgen stats and chaos log.
+nohup env RUN_DIR="$rd" "$here/soakmon.py" > "$rd/soakmon.log" 2>&1 &
+MON=$!
+for _ in $(seq 1 20); do
+  curl -sf -m3 http://127.0.0.1:8099/data >/dev/null 2>&1 && break
+  sleep 3
+done
+if ! curl -sf -m3 http://127.0.0.1:8099/data >/dev/null 2>&1; then
+  echo "soakmon did not come up — refusing to run unmonitored; tearing down" | tee -a "$log"
+  kill "$MON" 2>/dev/null
+  $compose down -v --remove-orphans >/dev/null 2>&1
+  exit 1
+fi
+echo "   soakmon: http://127.0.0.1:8099 (gate passed; load starts now)" | tee -a "$log"
+
 # Load generator (host): drives the full menu of user transaction types against
 # an ever-growing account set. -faucet-seed FAUCET matches init's genesis faucet.
 # Rotate across all 12 nodes so one chaos-disrupted node neither rejects traffic
@@ -159,23 +184,6 @@ nohup go run "$repo/tools/cmd/loadgen" -endpoints "$EPS" \
   -grace "$LG_GRACE" -max-stranded 20 -stats-file "$rd/loadgen-stats.json" >> "$log" 2>&1 &
 DRIVER=$!
 
-# Observability. Launch these WITH the run, never by hand afterwards — the
-# coarse monitor below only samples height/heals/CPU every 5 min and cannot see
-# a wedged stream, which is usually the thing being tested. soakmon serves the
-# per-stream gap/wedge/heal detail that seizewatch trips on; without it a
-# seizure is invisible until the loadgen strands transactions much later.
-if [ -x "$here/soakmon.py" ]; then
-  # RUN_DIR so the dashboard reads THIS run's loadgen stats and chaos log.
-  nohup env RUN_DIR="$rd" "$here/soakmon.py" > "$rd/soakmon.log" 2>&1 &
-  MON=$!
-  for _ in $(seq 1 20); do
-    curl -sf -m3 http://127.0.0.1:8099/data >/dev/null 2>&1 && break
-    sleep 3
-  done
-  curl -sf -m3 http://127.0.0.1:8099/data >/dev/null 2>&1 \
-    && echo "   soakmon: http://127.0.0.1:8099" | tee -a "$log" \
-    || echo "   WARNING: soakmon did not come up — no wedge detection this run" | tee -a "$log"
-fi
 if [ -x "$here/seizewatch.sh" ]; then
   nohup "$here/seizewatch.sh" > "$rd/seizewatch.out" 2>&1 &
   SEIZE=$!
