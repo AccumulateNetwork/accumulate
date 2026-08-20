@@ -484,7 +484,29 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 	// 3. No consensus stalls under load
 	assert.False(t, stallDetected, "No consensus stalls should occur under load")
 
-	// 4. All nodes stay synchronized (check state hashes)
+	// 4. All nodes stay synchronized (check state hashes). Quiesce first:
+	// the state hash chains the ordered transaction stream (17bb74164), so
+	// equality is only meaningful between nodes that have processed the same
+	// number of transactions; commits keep landing briefly after load stops,
+	// and CI runners reliably catch that window. Wait for the healthy nodes
+	// to settle at one processed count.
+	require.Eventually(t, func() bool {
+		var want uint64
+		first := true
+		for i := 0; i < numNodes; i++ {
+			if i == nodeToKill {
+				continue
+			}
+			n := executors[i].GetProcessedCount()
+			if first {
+				want, first = n, false
+			} else if n != want {
+				return false
+			}
+		}
+		return true
+	}, 20*time.Second, 100*time.Millisecond,
+		"healthy nodes never settled at the same processed-transaction count")
 	stateHashes := make([][32]byte, numNodes)
 	for i := 0; i < numNodes; i++ {
 		if i == nodeToKill {

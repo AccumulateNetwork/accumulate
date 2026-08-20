@@ -51,7 +51,11 @@ func TestDropInitialAnchor(t *testing.T) {
 			SendTokens(123, 0).To(bob, "tokens").
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
 
-	sim.StepUntil(
+	// Anchor healing fires on a jittered per-node schedule with back-off
+	// (claimSyntheticRequest), so recovery time varies run to run; the
+	// default 50-step budget lost the coin flip roughly one run in three —
+	// before AND after the 2026-08-20 healing changes (#4116).
+	sim.StepUntilN(250,
 		Sig(st[1].TxID).Completes(),
 		Txn(st[0].TxID).Completes())
 
