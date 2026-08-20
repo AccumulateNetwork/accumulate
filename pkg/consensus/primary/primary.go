@@ -551,8 +551,13 @@ func (p *Primary) rebroadcastPendingHeaders() {
 		// Voters accept rounds no older than their current round minus one, so
 		// a header two or more rounds behind can never gather votes — drop it
 		// here rather than spam the network with it (cleanupOldHeaders only
-		// runs when the round advances, which it may not during a stall)
+		// runs when the round advances, which it may not during a stall).
+		// Same rule as cleanupOldHeaders: a header that never certified still
+		// holds consumed batches — requeue them or their transactions are lost.
 		if header.Round+1 < currentRound {
+			if _, certified := p.ourCerts[header.Round]; !certified {
+				p.requeueHeaderBatches(header)
+			}
 			delete(p.ourHeaders, digest)
 			delete(p.pendingVotes, digest)
 			continue
