@@ -230,7 +230,12 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 		blockAnchor:        anchor,
 		signer:             signer,
 	}
-	if anchor.Signature != nil {
+	// With a collection proof the proof is the authorization; the signature
+	// rides along only because BlockAnchor.ID() derives identity from it. A
+	// signature that no longer verifies (a rotated key, a historical quorum)
+	// must not reject a proven anchor — once we have a collection proof no
+	// other signature is required.
+	if anchor.Signature != nil && anchor.Proof == nil {
 		err := x.checkSignature(ctx2)
 		if err != nil {
 			return nil, err

@@ -461,8 +461,12 @@ func (c *Conductor) buildSyntheticSubmission(r *api.MessageRecord[messaging.Mess
 	}
 
 	// Guard against submitting a message with a bad signature; the destination
-	// would reject it anyway.
-	if !keySig.Verify(nil, r.Sequence) {
+	// would reject it anyway. This applies only to per-message receipts: with
+	// a collection proof the proof is the authorization — the destination
+	// accepts the message on hash inclusion alone, and the signature rides
+	// along for identity. Refusing to submit a proven message over its
+	// signature would wedge recovery after validator churn.
+	if proof.ReceiptList == nil && !keySig.Verify(nil, r.Sequence) {
 		return nil, errors.UnknownError.With("sequencer response signature is not valid")
 	}
 

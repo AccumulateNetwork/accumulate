@@ -513,3 +513,55 @@ func TestBuildSyntheticSubmission_CollectionProofWins(t *testing.T) {
 	sm = env.Messages[0].(*messaging.SyntheticMessage)
 	require.Same(t, perMessage, sm.Proof.Receipt, "without a collection proof the per-message receipt is the proof")
 }
+
+// TestBuildSyntheticSubmission_BadSignatureDoesNotBlockProvenMessages: once
+// we have a collection proof no other signature is required — the proof binds
+// the message hash and hashes cannot be forged, so it does not matter where
+// the message came from. A bad signature must not block a proven message
+// (refusing would wedge recovery after validator churn); without a collection
+// proof the signature is still the authorization and a bad one is refused.
+func TestBuildSyntheticSubmission_BadSignatureDoesNotBlockProvenMessages(t *testing.T) {
+	self := protocol.PartitionUrl("BVN1")
+	source := protocol.PartitionUrl("BVN2")
+
+	c := &Conductor{Partition: &protocol.PartitionInfo{ID: "BVN1", Type: protocol.PartitionTypeBlockValidator}}
+	c.Globals.Store(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV2Kourou})
+
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = self.JoinPath("some", "account")
+	txn.Body = &protocol.SyntheticDepositCredits{}
+	seq := &messaging.SequencedMessage{
+		Message:     &messaging.TransactionMessage{Transaction: txn},
+		Source:      source,
+		Destination: self,
+		Number:      7,
+	}
+	badSig := &protocol.ED25519Signature{
+		PublicKey: make([]byte, 32),
+		Signature: []byte("garbage"),
+	}
+	record := &api.MessageRecord[messaging.Message]{
+		Sequence:      seq,
+		SourceReceipt: &merkle.Receipt{Start: []byte{1}, Anchor: []byte{2}},
+		Signatures: &api.RecordRange[*api.SignatureSetRecord]{
+			Records: []*api.SignatureSetRecord{{
+				Signatures: &api.RecordRange[*api.MessageRecord[messaging.Message]]{
+					Records: []*api.MessageRecord[messaging.Message]{{
+						Message: &messaging.SignatureMessage{Signature: badSig},
+					}},
+				},
+			}},
+		},
+	}
+
+	// With a collection proof the bad signature must not block submission.
+	collection := &protocol.AnnotatedReceipt{ReceiptList: &merkle.ReceiptList{}}
+	env, err := c.buildSyntheticSubmission(record, collection)
+	require.NoError(t, err, "a proven message must be submitted regardless of its signature")
+	require.NotNil(t, env)
+	require.Same(t, collection, env.Messages[0].(*messaging.SyntheticMessage).Proof)
+
+	// Without one, the per-message path still refuses to submit garbage.
+	_, err = c.buildSyntheticSubmission(record, nil)
+	require.ErrorContains(t, err, "signature is not valid")
+}

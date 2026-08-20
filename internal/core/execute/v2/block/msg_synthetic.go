@@ -105,26 +105,37 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		return nil, errors.BadRequest.With("a synthetic message must be sequenced")
 	}
 
-	// Verify the signature
+	// Verify the signature — but only when the proof is an individual receipt.
+	// A collection proof is the authorization by itself: it proves this exact
+	// message hash under an anchor the destination checks against its own
+	// directory root at delivery. Once we have a collection proof no other
+	// signature is required — the hashes cannot be forged, so it does not
+	// matter who served the message. The signature still rides along for
+	// identity and recording, but it must never be a reason to reject a
+	// proven message: requiring the signer to be a CURRENTLY active validator
+	// wedged recovery of historical ranges after validator churn, exactly the
+	// failure the anchor path documents (#4056).
 	h := syn.Message.Hash()
-	if !syn.Signature.Verify(nil, syn.Message) {
-		return nil, errors.BadRequest.With("invalid signature")
-	}
+	if syn.Proof.ReceiptList == nil {
+		if !syn.Signature.Verify(nil, syn.Message) {
+			return nil, errors.BadRequest.With("invalid signature")
+		}
 
-	// Verify the signer is a validator of this partition
-	partition, ok := protocol.ParsePartitionUrl(seq.Source)
-	if !ok {
-		return nil, errors.BadRequest.WithFormat("signature source is not a partition")
-	}
+		// Verify the signer is a validator of this partition
+		partition, ok := protocol.ParsePartitionUrl(seq.Source)
+		if !ok {
+			return nil, errors.BadRequest.WithFormat("signature source is not a partition")
+		}
 
-	// TODO: Consider checking the version. However this can get messy because
-	// it takes some time for changes to propagate, so we'd need an activation
-	// height or something.
+		// TODO: Consider checking the version. However this can get messy
+		// because it takes some time for changes to propagate, so we'd need an
+		// activation height or something.
 
-	signer := core.AnchorSigner(&ctx.Executor.globals.Active, partition)
-	_, _, ok = signer.EntryByKeyHash(syn.Signature.GetPublicKeyHash())
-	if !ok {
-		return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
+		signer := core.AnchorSigner(&ctx.Executor.globals.Active, partition)
+		_, _, ok = signer.EntryByKeyHash(syn.Signature.GetPublicKeyHash())
+		if !ok {
+			return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
+		}
 	}
 
 	// Verify the proof covers the transaction hash: an individual receipt must
