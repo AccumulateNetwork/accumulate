@@ -500,10 +500,12 @@ func (c *Conductor) sendAnchorForLastBlock(e execute.WillBeginBlock, batch *data
 
 func (c *Conductor) sendBlockAnchor(ctx context.Context, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
 	destination := protocol.PartitionUrl(destPart)
-	slog.DebugContext(ctx, "Sending an anchor", "module", "conductor",
+	// Info, not Debug, and with the sequence number: tracing one lost anchor
+	// signature (#4111) requires seeing every validator's send for a given seq.
+	slog.InfoContext(ctx, "Sending an anchor", "module", "conductor",
 		"block", anchor.GetPartitionAnchor().MinorBlockIndex,
 		"destination", destination,
-		"source-block", anchor.GetPartitionAnchor().MinorBlockIndex,
+		"seq", sequenceNumber,
 		"root", logging.AsHex(anchor.GetPartitionAnchor().RootChainAnchor).Slice(0, 4),
 		"bpt", logging.AsHex(anchor.GetPartitionAnchor().StateTreeAnchor).Slice(0, 4))
 

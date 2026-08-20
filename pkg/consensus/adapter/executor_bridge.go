@@ -241,12 +241,16 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 				continue
 			}
 
-			// Log any failed transactions
+			// Log any failed transactions. Warn, not Debug: a status error here
+			// is the ONLY trace a committed message leaves when the executor
+			// rejects it — at Debug an entire class of silent loss (#4111's
+			// vanishing anchor signatures) was invisible.
 			for _, status := range statuses {
 				if status.Error != nil {
-					slog.Debug("Transaction failed",
+					slog.Warn("Transaction failed",
 						"error", status.Error,
-						"code", status.Code)
+						"code", status.Code,
+						"txid", status.TxID)
 				}
 			}
 

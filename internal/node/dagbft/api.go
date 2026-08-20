@@ -10,6 +10,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
@@ -164,7 +165,14 @@ func (s *SubmitterService) Type() api.ServiceType { return api.ServiceTypeSubmit
 
 // Submit submits an envelope to the DAG-BFT consensus.
 func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
-	s.logger.Info("TRACE-SUBMIT: SubmitterService.Submit() called (DAG-BFT)")
+	// Identify what is being submitted: the contentless version of this trace
+	// made it impossible to follow a specific lost message (#4111) through
+	// accept → batch → commit → execute.
+	var msgIDs []string
+	for _, m := range envelope.Messages {
+		msgIDs = append(msgIDs, fmt.Sprintf("%v:%v", m.Type(), m.ID()))
+	}
+	s.logger.Info("TRACE-SUBMIT: SubmitterService.Submit() called (DAG-BFT)", "messages", strings.Join(msgIDs, ","))
 
 	// Verify the envelope is well-formed
 	if opts.Verify == nil || *opts.Verify {
