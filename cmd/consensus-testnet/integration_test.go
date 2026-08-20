@@ -267,6 +267,16 @@ func TestConsensusTestnet_TwoNodeCommunication(t *testing.T) {
 
 	// 3. Verify state hashes match (convergence)
 	t.Log("Checking state hash convergence...")
+	// Quiesce first: the state hash chains the ordered transaction stream
+	// (17bb74164), so equality is only meaningful once both nodes have
+	// processed the same number of transactions. Commits still land for a
+	// moment after load stops, and CI runners are slow enough to catch that
+	// window reliably — sampling mid-flight compares stream LENGTH, not
+	// consensus agreement.
+	require.Eventually(t, func() bool {
+		return executors[0].GetProcessedCount() == executors[1].GetProcessedCount()
+	}, 15*time.Second, 100*time.Millisecond,
+		"nodes never settled at the same processed-transaction count")
 	stateHashes := make([][32]byte, numNodes)
 	for i := 0; i < numNodes; i++ {
 		stateHashes[i] = executors[i].GetStateHash()
