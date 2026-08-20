@@ -342,6 +342,13 @@ func (c *Conductor) requestSyntheticFrom(ctx context.Context, source *url.URL, n
 		if err == nil {
 			break
 		}
+		// A NotFound ("reached the end of the chain") is a deterministic
+		// answer about the source's state, not a transport hiccup — retrying
+		// it milliseconds later tripled the pull storm for no possible gain
+		// (#4086, #4115).
+		if errors.Is(err, errors.NotFound) {
+			break
+		}
 		select {
 		case <-ctx.Done():
 			return errors.UnknownError.WithFormat("request synthetic %v→%v #%d: %w", source, c.Url(), num, ctx.Err())
@@ -662,6 +669,15 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 		}
 		source := protocol.PartitionUrl(peer.ID)
 
+		// Circuit breaker, same as every other pull path. The reconcile loop
+		// was the one healer left unwired, and it alone produced 157k failed
+		// pulls in the 17-minute 20260820T050616Z shakedown — ~13/s per node
+		// of retries against sources that kept answering "end of the chain"
+		// (#4086, #4115).
+		if !c.remoteAllowed(source.String()) {
+			continue
+		}
+
 		// Ask the source what it has produced for us. The answer is an unproven
 		// hint and does not need to be trusted: acting on it means issuing a
 		// pull, and the pulled message arrives proof-carrying and is verified
@@ -716,11 +732,13 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 				switch {
 				case err != nil:
 					mReconcile.WithLabelValues("failed").Inc()
+					c.remoteFailed(source.String())
 					slog.ErrorContext(ctx, "Reconcile: failed to recover synthetics by range",
 						"module", "synthetic", "source", source, "destination", me,
 						"start", have+1, "end", overdue, "error", err)
 				case done:
 					mReconcile.WithLabelValues("succeeded").Inc()
+					c.remoteOK(source.String())
 					slog.WarnContext(ctx, "Reconcile: pulled messages a gap scan cannot see",
 						"module", "synthetic", "source", source, "destination", me,
 						"received", have, "produced", produced, "requested", overdue-have)
@@ -753,12 +771,22 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 			err := c.requestSyntheticFrom(ctx, source, seq)
 			if err != nil {
 				mReconcile.WithLabelValues("failed").Inc()
+				c.remoteFailed(source.String())
 				slog.ErrorContext(ctx, "Reconcile: failed to request missing synthetic",
 					"module", "synthetic", "source", source, "destination", me,
 					"number", seq, "error", err)
+				// "Reached the end of the chain" is the source saying it
+				// cannot serve this sequence YET — its own anchoring has not
+				// caught up. Every higher sequence is past the same end, so
+				// walking the rest of the range converts one deterministic
+				// "not yet" into a batch of guaranteed failures (#4086).
+				if errors.Is(err, errors.NotFound) {
+					break
+				}
 				continue
 			}
 			mReconcile.WithLabelValues("succeeded").Inc()
+			c.remoteOK(source.String())
 			healed++
 		}
 		if healed > 0 {
