@@ -134,6 +134,21 @@ const (
 
 // remoteAllowed reports whether pull-healing may talk to the given remote, or
 // whether its circuit is open after repeated failures.
+// anchorRecoverySourceAllowed reports whether this conductor may recover
+// anchors from the given source partition. Anchors flow BVN<->DN only: a BVN
+// conductor "recovering" from another BVN pulls that BVN's ->dn anchors and
+// submits them into its OWN partition, where they execute as wrong-partition
+// noise (#4111 diagnostics, run 20260820T100912Z).
+func (c *Conductor) anchorRecoverySourceAllowed(srcID string) bool {
+	if strings.EqualFold(srcID, c.Partition.ID) {
+		return false
+	}
+	if c.Partition.Type == protocol.PartitionTypeDirectory {
+		return true
+	}
+	return strings.EqualFold(srcID, protocol.Directory)
+}
+
 func (c *Conductor) remoteAllowed(remote string) bool {
 	c.remoteMu.Lock()
 	defer c.remoteMu.Unlock()
@@ -389,12 +404,7 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 			if strings.EqualFold(src.ID, c.Partition.ID) {
 				continue
 			}
-			// Anchors flow BVN<->DN only. A BVN conductor "recovering" from
-			// another BVN pulls that BVN's ->dn anchors and submits them into
-			// its OWN partition, where they execute as wrong-partition noise
-			// (#4111 diagnostics, run 20260820T100912Z).
-			if c.Partition.Type != protocol.PartitionTypeDirectory &&
-				!strings.EqualFold(src.ID, protocol.Directory) {
+			if !c.anchorRecoverySourceAllowed(src.ID) {
 				continue
 			}
 			if !c.shouldHeal("recover:" + src.ID) {

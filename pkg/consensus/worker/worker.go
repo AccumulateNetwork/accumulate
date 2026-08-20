@@ -92,6 +92,12 @@ type Config struct {
 	// Defaults to DefaultMaxStoredBatches.
 	MaxStoredBatches int
 
+	// ReproposeAfter is how long an own batch may sit uncommitted before it
+	// is proposed again; ReproposeTick is how often the scan runs. Defaults
+	// to DefaultReproposeAfter / DefaultReproposeTick.
+	ReproposeAfter time.Duration
+	ReproposeTick  time.Duration
+
 	// MaxBatchQueueSize is the maximum number of batches in the available queue.
 	// When exceeded, batch creation will block until space is available.
 	// This provides backpressure when consensus cannot keep up.
@@ -125,6 +131,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MaxBatchQueueSize <= 0 {
 		c.MaxBatchQueueSize = DefaultMaxBatchQueueSize
+	}
+	if c.ReproposeAfter <= 0 {
+		c.ReproposeAfter = DefaultReproposeAfter
+	}
+	if c.ReproposeTick <= 0 {
+		c.ReproposeTick = DefaultReproposeTick
 	}
 }
 
@@ -713,10 +725,10 @@ func (w *Worker) handleIncomingBatches() {
 	}
 }
 
-// reproposeAfter is how long an own batch may sit uncommitted before it is
-// proposed again; reproposeTick is how often the scan runs.
-const reproposeAfter = 15 * time.Second
-const reproposeTick = 5 * time.Second
+// DefaultReproposeAfter is how long an own batch may sit uncommitted before
+// it is proposed again; DefaultReproposeTick is how often the scan runs.
+const DefaultReproposeAfter = 15 * time.Second
+const DefaultReproposeTick = 5 * time.Second
 
 // reproposeLoop re-queues own batches that were proposed but never committed.
 //
@@ -734,7 +746,7 @@ const reproposeTick = 5 * time.Second
 func (w *Worker) reproposeLoop() {
 	defer w.wg.Done()
 
-	ticker := time.NewTicker(reproposeTick)
+	ticker := time.NewTicker(w.config.ReproposeTick)
 	defer ticker.Stop()
 
 	for {
@@ -748,7 +760,7 @@ func (w *Worker) reproposeLoop() {
 		now := time.Now()
 		w.batchMu.Lock()
 		for digest, entry := range w.batches {
-			if entry.own && now.Sub(entry.lastQueued) > reproposeAfter {
+			if entry.own && now.Sub(entry.lastQueued) > w.config.ReproposeAfter {
 				stale = append(stale, digest)
 				entry.lastQueued = now
 			}
