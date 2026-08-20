@@ -492,7 +492,13 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 		} else {
 			stateHashes[i] = executors[i].GetStateHash()
 		}
-		t.Logf("Node %d state hash: %s", i, hex.EncodeToString(stateHashes[i][:8]))
+		var blocks uint64
+		if i == nodeToKill {
+			blocks = newExec.GetBlockCount()
+		} else {
+			blocks = executors[i].GetBlockCount()
+		}
+		t.Logf("Node %d state hash: %s (blocks=%d)", i, hex.EncodeToString(stateHashes[i][:8]), blocks)
 	}
 
 	// Count matching state hashes
