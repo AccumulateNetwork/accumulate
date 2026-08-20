@@ -441,32 +441,25 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 		return fmt.Errorf("consensus halted due to state divergence: %w", s.haltReason)
 	}
 
-	// Capture workers and state under lock, then release for I/O
-	workers := s.node.Workers()
+	// Capture state under lock, then release for I/O
 	blockIndex := s.lastBlockIndex + 1
 	s.mu.Unlock()
 
-	// Get batches from workers outside the lock - this involves I/O.
-	// The payload slice is in canonical order and batches are executed in
-	// payload order — identical on every validator (#4054).
-	batches := make([]*types.Batch, 0, len(cert.Header.Payload))
-	committedDigests := make([]types.BatchDigest, 0)
+	// Collect the certificate's batches, outside the lock. The payload slice
+	// is in canonical order and batches are executed in payload order —
+	// identical on every validator (#4054). This BLOCKS until every batch is
+	// available (fetching from peers when needed): executing a certificate
+	// without some of its batches silently diverges this node's state from
+	// every node that had them — six nodes at the same block index produced
+	// six different state hashes before this waited (#4116/#4119). The
+	// certificate is proof the data exists; waiting costs liveness only.
+	batches, err := s.node.CollectBatches(s.ctx, cert)
+	if err != nil {
+		return fmt.Errorf("collect batches: %w", err)
+	}
+	committedDigests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
 	for _, entry := range cert.Header.Payload {
-		var found bool
-		for _, w := range workers {
-			batch, err := w.GetBatch(entry.Digest)
-			if err == nil && batch != nil {
-				batches = append(batches, batch)
-				committedDigests = append(committedDigests, entry.Digest)
-				found = true
-				break
-			}
-		}
-		if !found {
-			s.logger.Error("Batch missing from all workers",
-				"digest", fmt.Sprintf("%x", entry.Digest[:]),
-				"round", cert.Header.Round)
-		}
+		committedDigests = append(committedDigests, entry.Digest)
 	}
 
 	// Check if this validator is the leader

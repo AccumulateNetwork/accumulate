@@ -147,8 +147,12 @@ type Primary struct {
 	newCertsMu sync.Mutex
 
 	// Lifecycle management
-	ctx    context.Context
-	cancel context.CancelFunc
+	// lifecycleMu guards ctx/cancel: Start runs in a goroutine spawned by
+	// Node.Start, so an early Stop raced the write (caught by -race once the
+	// root package finally ran under it, #4116).
+	lifecycleMu sync.Mutex
+	ctx         context.Context
+	cancel      context.CancelFunc
 	wg     sync.WaitGroup
 	closed atomic.Bool
 
@@ -207,7 +211,9 @@ func (p *Primary) Start(ctx context.Context) error {
 		return ErrPrimaryClosed
 	}
 
+	p.lifecycleMu.Lock()
 	p.ctx, p.cancel = context.WithCancel(ctx)
+	p.lifecycleMu.Unlock()
 
 	// Start CertSyncer if available
 	if p.certSyncer != nil {
@@ -305,8 +311,11 @@ func (p *Primary) Stop() {
 		p.certSyncer.Stop()
 	}
 
-	if p.cancel != nil {
-		p.cancel()
+	p.lifecycleMu.Lock()
+	cancel := p.cancel
+	p.lifecycleMu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 
 	// Wait for goroutines to finish

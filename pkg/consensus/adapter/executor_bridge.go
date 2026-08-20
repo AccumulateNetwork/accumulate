@@ -214,9 +214,12 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	txCount := 0
 	for _, batch := range params.Batches {
 		if batch == nil {
-			slog.Warn("Missing batch in certificate",
-				"round", params.LeaderRound)
-			continue
+			// CollectBatches guarantees a complete set before a block is
+			// produced. A nil here means that invariant broke upstream, and
+			// executing a certificate without one of its batches silently
+			// diverges this node's state from its peers (#4116/#4119) — fail
+			// the block instead.
+			return [32]byte{}, fmt.Errorf("block %d: missing batch in certificate for round %d", params.Index, params.LeaderRound)
 		}
 		digest := batch.Digest()
 

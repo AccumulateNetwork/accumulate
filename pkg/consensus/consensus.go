@@ -108,6 +108,7 @@ type Node struct {
 	workers   []*worker.Worker
 	primary   *primary.Primary
 	bullshark *bullshark.Bullshark
+	protocols *gossip.ProtocolHandler
 
 	// Committed certificates channel
 	committed chan *types.Certificate
@@ -178,7 +179,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 	// condition where batches are pruned before the consumer can read them, resulting
 	// in "Missing batch for certificate" errors.
 
-	return &Node{
+	n := &Node{
 		config:    config,
 		committee: committee,
 		host:      h,
@@ -189,7 +190,106 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		primary:   p,
 		bullshark: bs,
 		committed: make(chan *types.Certificate, config.CommitBufferSize),
-	}, nil
+	}
+
+	// The batch-fetch protocol backs CollectBatches: a committed certificate
+	// proves 2f+1 validators stored its batches, so a node that lacks one
+	// pulls it from a peer instead of executing without it.
+	if h != nil {
+		ph, err := gossip.NewProtocolHandler(h, multiWorkerBatchStore{workers}, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create protocol handler: %w", err)
+		}
+		n.protocols = ph
+	}
+
+	return n, nil
+}
+
+// multiWorkerBatchStore serves batch fetches from any of the node's workers.
+type multiWorkerBatchStore struct{ workers []*worker.Worker }
+
+func (s multiWorkerBatchStore) GetBatch(digest types.BatchDigest) (*types.Batch, error) {
+	for _, w := range s.workers {
+		if b, err := w.GetBatch(digest); err == nil && b != nil {
+			return b, nil
+		}
+	}
+	return nil, nil
+}
+
+func (s multiWorkerBatchStore) StoreBatch(batch *types.Batch) error {
+	if len(s.workers) == 0 {
+		return errors.New("no workers")
+	}
+	return s.workers[0].StoreBatch(batch)
+}
+
+// CollectBatches returns the batches named by the certificate's payload, in
+// canonical payload order. Local workers are consulted first; a batch this
+// node does not hold is fetched from connected peers, retrying until the
+// context expires. It never returns a partial set: executing a certificate
+// without some of its batches makes this node's state diverge from every
+// node that had them — six nodes at the same block index produced six
+// different state hashes in TestStress_MultiNodeNetworkUnderLoad before this
+// existed. Skipping is a safety violation; waiting is only a liveness cost,
+// and the certificate itself is proof the data exists.
+func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*types.Batch, error) {
+	batches := make([]*types.Batch, len(cert.Header.Payload))
+
+	retry := time.NewTicker(50 * time.Millisecond)
+	defer retry.Stop()
+
+	for {
+		missing := 0
+		for i, entry := range cert.Header.Payload {
+			if batches[i] != nil {
+				continue
+			}
+			// Local first — the common case.
+			for _, w := range n.workers {
+				if b, err := w.GetBatch(entry.Digest); err == nil && b != nil {
+					batches[i] = b
+					break
+				}
+			}
+			if batches[i] != nil {
+				continue
+			}
+			// Fetch from peers.
+			if n.protocols != nil && n.host != nil {
+				for _, peerID := range n.host.Network().Peers() {
+					fctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+					b, err := n.protocols.FetchBatch(fctx, peerID, entry.Digest)
+					cancel()
+					if err == nil && b != nil && b.Digest() == entry.Digest {
+						// Store it so pruning-on-commit finds it and so this
+						// node can serve it onward.
+						_ = n.workers[0].StoreBatch(b)
+						batches[i] = b
+						break
+					}
+				}
+			}
+			if batches[i] == nil {
+				missing++
+			}
+		}
+		if missing == 0 {
+			return batches, nil
+		}
+
+		slog.Warn("Waiting for batches of committed certificate",
+			"partition", n.config.Partition,
+			"round", cert.Header.Round,
+			"missing", missing)
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("collect batches for round %d: %d still missing: %w",
+				cert.Header.Round, missing, ctx.Err())
+		case <-retry.C:
+		}
+	}
 }
 
 // Start begins all node components and processes consensus.
@@ -244,6 +344,15 @@ func (n *Node) Start(ctx context.Context) error {
 	n.wg.Add(1)
 	go n.processBullshark()
 
+	// Serve batch fetches: CollectBatches on other nodes depends on peers
+	// answering, and a certificate is only as good as the availability of
+	// its batches.
+	if n.protocols != nil {
+		if err := n.protocols.RegisterHandlers(); err != nil {
+			return fmt.Errorf("register protocol handlers: %w", err)
+		}
+	}
+
 	slog.Info("Consensus node started")
 
 	return nil
@@ -272,6 +381,9 @@ func (n *Node) Stop() {
 
 	if n.gossip != nil {
 		_ = n.gossip.Close()
+	}
+	if n.protocols != nil {
+		n.protocols.UnregisterHandlers()
 	}
 
 	// Wait for goroutines to finish
