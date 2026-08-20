@@ -1,0 +1,13 @@
+# Run evidence is the record (soak-results provenance rule). The repo root
+# ignores *.log and *.txt globally, which silently drops chaos.log, soak.log,
+# streams-final.txt and friends from `git add runs/<id>` — an incomplete record
+# that still looks committed. Re-include everything here, except the raw
+# multi-gigabyte node-log capture, which stays local.
+!*.log
+!*.txt
+!*.csv
+!*.json
+!*.out
+node-logs.txt
+container-logs/
+# GitLab rejects blobs over 1 MiB — summarize anything bigger instead of committing it

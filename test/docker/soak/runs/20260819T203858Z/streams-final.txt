@@ -1,0 +1,5 @@
+  src -> dst                produced  received  delivered  UNDELIVERED
+  bvn-BVN2  -> bvn-BVN1   6         5         5          1  <<< STALLED
+  bvn-BVN2  -> bvn-BVN3   1         0         0          1  <<< STALLED
+
+stalled channels: 2 [('bvn-BVN2', 'bvn-BVN1', 1), ('bvn-BVN2', 'bvn-BVN3', 1)]

@@ -1,0 +1,66 @@
+{
+  "updatedUnix": 1787199953,
+  "startUnix": 1787183260,
+  "elapsedSec": 16692,
+  "phase": "generating",
+  "target": 432000,
+  "generated": 23397,
+  "rejected": 95850,
+  "skipped": 26369,
+  "rate": 1.4016236567823293,
+  "targetTps": 10,
+  "perType": {
+    "add-credits-lite": {
+      "generated": 5158,
+      "rejected": 11481,
+      "skipped": 11026
+    },
+    "burn-tokens": {
+      "generated": 1992,
+      "rejected": 4241,
+      "skipped": 4085
+    },
+    "fail:overspend": {
+      "generated": 914,
+      "rejected": 5874,
+      "skipped": 81
+    },
+    "fail:send-to-void": {
+      "generated": 908,
+      "rejected": 6037,
+      "skipped": 67
+    },
+    "grow:add-credits": {
+      "generated": 1,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-identity": {
+      "generated": 404,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "lock-account": {
+      "generated": 411,
+      "rejected": 3069,
+      "skipped": 33
+    },
+    "send-tokens-lite": {
+      "generated": 8467,
+      "rejected": 53686,
+      "skipped": 8
+    },
+    "write-data-lite": {
+      "generated": 5142,
+      "rejected": 11462,
+      "skipped": 11069
+    }
+  },
+  "accounts": {
+    "identities": 0,
+    "keyBooks": 0,
+    "keyPages": 0,
+    "tokenIssuers": 0,
+    "accounts": 7933
+  }
+}
