@@ -284,10 +284,6 @@ func (d *dialer) dialFromTracker(ctx context.Context, service *api.ServiceAddres
 // tryDial attempts to dial the peer in a goroutine. tryDial is used to maintain
 // the peer tracker, not to open a usable stream.
 func (d *dialer) tryDial(peer peer.ID, service *api.ServiceAddress, addr multiaddr.Multiaddr, wg *sync.WaitGroup) {
-	if wg != nil {
-		wg.Add(1)
-	}
-
 	type Attempt struct {
 		count atomic.Int32
 		time  atomic.Pointer[time.Time]
@@ -296,15 +292,27 @@ func (d *dialer) tryDial(peer peer.ID, service *api.ServiceAddress, addr multiad
 	// Has it been more than 1 minute since our last attempt?
 	v, didLoad := d.lastTry.LoadOrStore(peer, new(Attempt))
 	last := v.(*Attempt)
-	if didLoad && time.Since(*last.time.Load()) < backoffTime(last.count.Load()) {
-		// The last attempt was less than a minute ago
-		return
+	if didLoad {
+		// A concurrent tryDial can LoadOrStore this Attempt before its creator
+		// stores the first timestamp — time starts nil, and dereferencing it
+		// unconditionally killed conductor tasks on 9 of 12 nodes and crashed
+		// one outright (run 20260820T054217Z). A nil time means the other
+		// goroutine is attempting this peer right now, so this call is
+		// redundant either way.
+		t := last.time.Load()
+		if t == nil || time.Since(*t) < backoffTime(last.count.Load()) {
+			return
+		}
+	}
+	// Update the attempt time and count
+	t := time.Now()
+	last.count.Add(1)
+	last.time.Store(&t)
 
-	} else {
-		// Update the attempt time and count
-		t := time.Now()
-		last.count.Add(1)
-		last.time.Store(&t)
+	// Add only once the attempt is committed — the backoff return above must
+	// not leave the caller's Wait hanging on a Done that never comes.
+	if wg != nil {
+		wg.Add(1)
 	}
 
 	go func() {
