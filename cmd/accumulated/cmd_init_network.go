@@ -232,12 +232,22 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			// Set 100 workers per node for high throughput stress testing
 			cvc.NumWorkers = run.Ptr(int64(100))
 
+			// Every node serves Prometheus metrics on :26670. Without this no
+			// DI node had a /metrics endpoint at all — the CometBFT lineage
+			// served one by accident and DAG-BFT removed it without a
+			// replacement, so every metrics-fed soak panel (node RSS,
+			// goroutines, rcmgr scope usage, heals) read zero for a running
+			// network, and the 20260819 resource-exhaustion collapse had no
+			// instrument that could have shown it building (#4110, #4115).
+			promAddr, _ := multiaddr.NewMultiaddr("/ip4/0.0.0.0/tcp/26670/http")
+			cfg.Instrumentation = &run.Instrumentation{
+				HttpListener: run.HttpListener{Listen: []run.Multiaddr{promAddr}},
+			}
+
 			// Add pprof profiling to bvn1-1 for performance analysis
 			if i == 0 && j == 0 {
 				pprofAddr, _ := multiaddr.NewMultiaddr("/ip4/" + node.ListenAddress + "/tcp/6060")
-				cfg.Instrumentation = &run.Instrumentation{
-					PprofListen: pprofAddr,
-				}
+				cfg.Instrumentation.PprofListen = pprofAddr
 				fmt.Printf("  Pprof enabled on %s:6060\n", node.ListenAddress)
 			}
 
