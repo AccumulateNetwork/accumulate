@@ -186,48 +186,74 @@ func (p *Primary) processPendingForParent(parentDigest types.CertificateDigest) 
 
 // tryAdvanceRound attempts to advance to the next round if we have enough certificates.
 func (p *Primary) tryAdvanceRound() {
-	// Get current round and committee for quorum check
-	p.roundMu.Lock()
-	currentRound := p.currentRound
-	p.roundMu.Unlock()
-
-	p.committeeMu.RLock()
-	committee := p.committee
-	p.committeeMu.RUnlock()
-
-	// Can advance when we have 2f+1 certificates in current round
-	if !p.dag.HasQuorum(currentRound, committee) {
-		return
-	}
-
-	// Now take roundMu to update round state
-	p.roundMu.Lock()
-	// Re-check current round in case it changed
-	if p.currentRound != currentRound {
+	advanced := false
+	for {
+		// Get current round and committee for quorum check
+		p.roundMu.Lock()
+		currentRound := p.currentRound
 		p.roundMu.Unlock()
-		return
-	}
 
-	// Rate limit: don't advance faster than MinRoundInterval
-	now := time.Now()
-	if !p.lastRoundAdvance.IsZero() {
-		elapsed := now.Sub(p.lastRoundAdvance)
-		if elapsed < p.config.MinRoundInterval {
-			// Too soon, wait for the ticker to try again
+		p.committeeMu.RLock()
+		committee := p.committee
+		p.committeeMu.RUnlock()
+
+		// Can advance when we have 2f+1 certificates in current round
+		if !p.dag.HasQuorum(currentRound, committee) {
+			break
+		}
+
+		// Now take roundMu to update round state
+		p.roundMu.Lock()
+		// Re-check current round in case it changed
+		if p.currentRound != currentRound {
 			p.roundMu.Unlock()
 			return
 		}
+
+		// Rate limit: don't advance faster than MinRoundInterval — but only at
+		// the frontier. When the DAG already holds certificates PAST our round,
+		// the network has moved on without us, and pacing the catch-up is an
+		// absorbing state: we advance at exactly the same rate as the frontier,
+		// permanently offset, so every header we author is stale on arrival,
+		// nobody votes for it, and every transaction our workers batch is lost.
+		// Run 20260820T060039Z: 4 of 12 validators pinned ~4 rounds behind for
+		// the whole run — BVN2 lost anchor quorum (2-of-4 signers) and its
+		// entire outbound stream stalled. Catching up to certificates that
+		// already exist cannot accelerate the network; the frontier is paced by
+		// the quorum that formed it.
+		behind := p.dag.LatestRound() > currentRound
+		now := time.Now()
+		if !behind && !p.lastRoundAdvance.IsZero() {
+			elapsed := now.Sub(p.lastRoundAdvance)
+			if elapsed < p.config.MinRoundInterval {
+				// Too soon, wait for the ticker to try again
+				p.roundMu.Unlock()
+				break
+			}
+		}
+
+		oldRound := p.currentRound
+		p.currentRound++
+		p.lastRoundAdvance = now
+		p.roundMu.Unlock()
+		advanced = true
+
+		slog.Info("Advanced to new round",
+			"partition", p.config.Partition,
+			"oldRound", oldRound,
+			"newRound", oldRound+1,
+			"catchUp", behind)
+
+		// While behind, keep advancing — full rounds are already in the DAG.
+		// Skip authoring headers for the intermediate rounds: they would be
+		// stale on arrival, and a validator need not author every round.
+		if !behind {
+			break
+		}
 	}
-
-	oldRound := p.currentRound
-	p.currentRound++
-	p.lastRoundAdvance = now
-	p.roundMu.Unlock()
-
-	slog.Info("Advanced to new round",
-		"partition", p.config.Partition,
-		"oldRound", oldRound,
-		"newRound", oldRound+1)
+	if !advanced {
+		return
+	}
 
 	// Clean up old headers
 	p.wg.Add(1)
