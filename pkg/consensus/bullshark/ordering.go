@@ -34,9 +34,14 @@ func (b *Bullshark) commitLeaderChain(leader *types.Certificate) []ConsensusOutp
 		subdag := b.orderDag(l)
 
 		for _, cert := range subdag {
-			// Skip if already committed.
-			key := toAuthorKey(cert.Author())
-			if lastRound, ok := b.lastCommitted[key]; ok && cert.Round() <= lastRound {
+			// Skip if already committed. This must be a DIGEST check, not the
+			// old per-author round watermark: a certificate reaching the
+			// committed history later than a higher-round certificate from
+			// the same author (the normal case for a straggler rescued by a
+			// weak link) was skipped by the watermark as "already committed"
+			// when it never was — permanently, silently (#4111).
+			digest := cert.Digest()
+			if _, done := b.committed[digest]; done {
 				continue
 			}
 
@@ -45,12 +50,26 @@ func (b *Bullshark) commitLeaderChain(leader *types.Certificate) []ConsensusOutp
 			})
 			committedCerts = append(committedCerts, cert)
 
-			// Mark as committed.
-			b.lastCommitted[key] = cert.Round()
+			// Mark as committed. lastCommitted keeps the per-author maximum
+			// for state reporting; the digest set is the actual dedup.
+			b.committed[digest] = cert.Round()
+			key := toAuthorKey(cert.Author())
+			if lastRound, ok := b.lastCommitted[key]; !ok || cert.Round() > lastRound {
+				b.lastCommitted[key] = cert.Round()
+			}
 		}
 
 		// Update last commit round after processing each leader.
 		b.lastCommitRound = l.Round()
+	}
+
+	// Prune the digest dedup as the frontier advances. Anything older than
+	// the rescue window can never appear in another ancestor walk, so its
+	// entry is dead weight.
+	for d, r := range b.committed {
+		if r+rescueWindow+32 < b.lastCommitRound {
+			delete(b.committed, d)
+		}
 	}
 
 	// Capture callback before unlocking.
@@ -102,12 +121,22 @@ func (b *Bullshark) orderLeaders(leader *types.Certificate) []*types.Certificate
 	return leaders
 }
 
+// rescueWindow is how many rounds below lastCommitRound the ancestor walk
+// still looks for uncommitted certificates. A straggler rescued by a weak
+// link has a round BELOW the commit frontier by the time it becomes
+// reachable; the old lastCommitRound+1 floor excluded exactly the
+// certificates the weak links exist to save. The committed-digest set keeps
+// the wider walk from re-emitting anything.
+const rescueWindow = 32
+
 // orderDag flattens the sub-dag referenced by a leader.
-// Returns all certificates reachable from the leader down to lastCommitRound+1,
-// in deterministic order (by round ascending, then by author).
+// Returns all reachable, not-yet-committed certificates in deterministic
+// order (by round ascending, then by author).
 func (b *Bullshark) orderDag(leader *types.Certificate) []*types.Certificate {
-	// We want certificates from lastCommitRound+1 to leader's round.
-	minRound := b.lastCommitRound + 1
+	minRound := types.Round(1)
+	if b.lastCommitRound > rescueWindow {
+		minRound = b.lastCommitRound - rescueWindow
+	}
 
 	// Get all ancestors including the leader itself.
 	ancestors := b.dag.GetAncestors(leader, minRound)
@@ -115,11 +144,11 @@ func (b *Bullshark) orderDag(leader *types.Certificate) []*types.Certificate {
 		return nil
 	}
 
-	// Filter out already committed certificates.
+	// Filter out already committed certificates (by digest — see
+	// commitLeaderChain for why the author-round watermark was wrong).
 	var filtered []*types.Certificate
 	for _, cert := range ancestors {
-		key := toAuthorKey(cert.Author())
-		if lastRound, ok := b.lastCommitted[key]; ok && cert.Round() <= lastRound {
+		if _, done := b.committed[cert.Digest()]; done {
 			continue
 		}
 		filtered = append(filtered, cert)

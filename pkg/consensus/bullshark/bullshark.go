@@ -68,7 +68,15 @@ type Bullshark struct {
 	lastCommitRound types.Round
 	// lastCommitted tracks the last committed round for each author.
 	// Uses [32]byte key instead of hex string for memory efficiency.
+	// Kept for state reporting/persistence; it is NOT the commit dedup —
+	// a per-author round watermark silently discards any straggler
+	// certificate that commits after a higher-round one (#4111).
 	lastCommitted map[authorKey]types.Round
+	// committed is the digest-level commit dedup, pruned as the frontier
+	// advances (see pruneCommitted). After a restart it starts empty; an old
+	// certificate re-emitted once is harmless because execution skips
+	// already-delivered messages.
+	committed map[types.CertificateDigest]types.Round
 
 	// onCommit is called when certificates are committed.
 	// This callback is used to notify external components (e.g., workers)
@@ -82,6 +90,7 @@ func New(committee *types.Committee, d *dag.DAG) *Bullshark {
 		committee:     committee,
 		dag:           d,
 		lastCommitted: make(map[authorKey]types.Round),
+		committed:     make(map[types.CertificateDigest]types.Round),
 	}
 }
 
@@ -100,6 +109,7 @@ func NewWithState(committee *types.Committee, d *dag.DAG, lastCommitRound types.
 		dag:             d,
 		lastCommitRound: lastCommitRound,
 		lastCommitted:   committed,
+		committed:       make(map[types.CertificateDigest]types.Round),
 	}
 }
 
@@ -224,6 +234,8 @@ func (b *Bullshark) MarkCommitted(cert *types.Certificate) {
 	if lastRound, ok := b.lastCommitted[key]; !ok || cert.Round() > lastRound {
 		b.lastCommitted[key] = cert.Round()
 	}
+	// The digest set is the actual commit dedup.
+	b.committed[cert.Digest()] = cert.Round()
 }
 
 // SetLastCommittedForAuthor sets the last committed round for an author.
