@@ -389,6 +389,14 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 			if strings.EqualFold(src.ID, c.Partition.ID) {
 				continue
 			}
+			// Anchors flow BVN<->DN only. A BVN conductor "recovering" from
+			// another BVN pulls that BVN's ->dn anchors and submits them into
+			// its OWN partition, where they execute as wrong-partition noise
+			// (#4111 diagnostics, run 20260820T100912Z).
+			if c.Partition.Type != protocol.PartitionTypeDirectory &&
+				!strings.EqualFold(src.ID, protocol.Directory) {
+				continue
+			}
 			if !c.shouldHeal("recover:" + src.ID) {
 				continue
 			}

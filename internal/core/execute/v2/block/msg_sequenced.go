@@ -63,6 +63,15 @@ func (x SequencedMessage) check(batch *database.Batch, ctx *MessageContext) (*me
 	}
 
 	if !ctx.Executor.Describe.NodeUrl().Equal(seq.Destination) {
+		// Log loudly: a sequenced message landing on the wrong partition means
+		// something upstream submitted into the wrong DAG (#4111 diagnostics —
+		// dn-destined anchors were observed committing in a BVN's blocks). The
+		// rejection itself was previously invisible (inner status error).
+		ctx.Executor.logger.Info("Wrong-partition sequenced message rejected",
+			"expected", ctx.Executor.Describe.NodeUrl(),
+			"got", seq.Destination,
+			"source", seq.Source,
+			"seq", seq.Number)
 		return nil, errors.BadRequest.WithFormat("invalid destination: expected %v, got %v", ctx.Executor.Describe.NodeUrl(), seq.Destination)
 	}
 

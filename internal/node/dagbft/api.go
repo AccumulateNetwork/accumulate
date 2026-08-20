@@ -172,7 +172,9 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 	for _, m := range envelope.Messages {
 		msgIDs = append(msgIDs, fmt.Sprintf("%v:%v", m.Type(), m.ID()))
 	}
-	s.logger.Info("TRACE-SUBMIT: SubmitterService.Submit() called (DAG-BFT)", "messages", strings.Join(msgIDs, ","))
+	s.logger.Info("TRACE-SUBMIT: SubmitterService.Submit() called (DAG-BFT)",
+		"messages", strings.Join(msgIDs, ","),
+		"partition", s.service.config.Partition.ID)
 
 	// Verify the envelope is well-formed
 	if opts.Verify == nil || *opts.Verify {
