@@ -45,9 +45,17 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	// Now that we know parents exist, it's safe to consume batches.
 	// NewHeader sorts the payload into canonical (execution) order.
 	var payload []types.PayloadEntry
+	seen := make(map[types.BatchDigest]bool)
 	for _, w := range p.workers {
-		// Use ConsumeAvailableBatches to get and clear available batches
+		// Use ConsumeAvailableBatches to get and clear available batches.
+		// Dedup: the requeue (never-certified headers) and re-proposal
+		// (never-committed batches) paths can both re-enqueue a digest, and a
+		// header must not list the same batch twice.
 		for _, digest := range w.ConsumeAvailableBatches() {
+			if seen[digest] {
+				continue
+			}
+			seen[digest] = true
 			payload = append(payload, types.PayloadEntry{Digest: digest, Worker: w.ID()})
 		}
 	}

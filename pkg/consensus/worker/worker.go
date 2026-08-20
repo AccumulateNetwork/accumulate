@@ -143,6 +143,16 @@ type BatchStore interface {
 type lruEntry struct {
 	batch   *types.Batch
 	element *list.Element // pointer to element in lruList
+
+	// own marks batches this worker created (as opposed to copies received
+	// via gossip). Only own batches are re-proposed — the author is
+	// responsible for its batches reaching a committed certificate.
+	own bool
+	// lastQueued is when the digest was last placed on the availability
+	// queue. A batch still stored (= not pruned = not committed) long after
+	// it was last proposed has fallen out of the committed leaders' causal
+	// history and must be proposed again.
+	lastQueued time.Time
 }
 
 // Worker collects transactions and creates batches for the consensus layer.
@@ -308,6 +318,10 @@ func (w *Worker) Start(ctx context.Context) error {
 	w.wg.Add(1)
 	go w.evictionLoop()
 
+	// Start the re-proposal loop
+	w.wg.Add(1)
+	go w.reproposeLoop()
+
 	slog.Info("Worker started",
 		"id", w.config.ID,
 		"partition", w.config.Partition,
@@ -451,7 +465,10 @@ func (w *Worker) ConsumeAvailableBatches() []types.BatchDigest {
 func (w *Worker) RequeueBatches(digests []types.BatchDigest) {
 	for _, digest := range digests {
 		w.batchMu.Lock()
-		_, ok := w.batches[digest]
+		entry, ok := w.batches[digest]
+		if ok {
+			entry.lastQueued = time.Now()
+		}
 		w.batchMu.Unlock()
 		if !ok {
 			continue
@@ -585,8 +602,10 @@ func (w *Worker) createAndBroadcastBatch() {
 	// Add new batch to front of LRU list (most recently used)
 	element := w.lruList.PushFront(digest)
 	w.batches[digest] = &lruEntry{
-		batch:   batch,
-		element: element,
+		batch:      batch,
+		element:    element,
+		own:        true,
+		lastQueued: time.Now(),
 	}
 	w.batchMu.Unlock()
 
@@ -690,6 +709,68 @@ func (w *Worker) handleIncomingBatches() {
 						"txns", batch.Len())
 				}
 			}
+		}
+	}
+}
+
+// reproposeAfter is how long an own batch may sit uncommitted before it is
+// proposed again; reproposeTick is how often the scan runs.
+const reproposeAfter = 15 * time.Second
+const reproposeTick = 5 * time.Second
+
+// reproposeLoop re-queues own batches that were proposed but never committed.
+//
+// Consensus only executes certificates that land in a committed leader's
+// causal history. A header can certify and still fall outside every committed
+// leader's parent graph — in run 20260820T084028Z 46% of certificates
+// (5,343 of 9,900 committed) did, and every transaction in their batches
+// silently vanished; that loss is what starved anchor-signature thresholds
+// across partitions (#4111). Narwhal's delivery guarantee is at the BATCH
+// level: a batch must be proposed again until it commits. PruneBatches is the
+// commit signal — a batch still stored long after it was last queued has
+// fallen out of history and goes back on the availability queue. Execution is
+// idempotent (already-delivered messages are skipped), so the rare batch that
+// commits twice costs bytes, not correctness.
+func (w *Worker) reproposeLoop() {
+	defer w.wg.Done()
+
+	ticker := time.NewTicker(reproposeTick)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-w.ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		var stale []types.BatchDigest
+		now := time.Now()
+		w.batchMu.Lock()
+		for digest, entry := range w.batches {
+			if entry.own && now.Sub(entry.lastQueued) > reproposeAfter {
+				stale = append(stale, digest)
+				entry.lastQueued = now
+			}
+		}
+		w.batchMu.Unlock()
+
+		requeued := 0
+		for _, digest := range stale {
+			select {
+			case w.availableBatchQueue <- digest:
+				w.queueDepth.Add(1)
+				requeued++
+			default:
+				// Queue full — lastQueued is already stamped, so this batch
+				// waits a full reproposeAfter before the next attempt. With
+				// the queue this backed up there is plenty in flight already.
+			}
+		}
+		if requeued > 0 {
+			slog.Info("Re-proposed uncommitted batches",
+				"count", requeued, "worker", w.config.ID,
+				"partition", w.config.Partition)
 		}
 	}
 }
