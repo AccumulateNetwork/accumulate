@@ -157,7 +157,7 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 			if first, last, ok := firstMissingRun(part); ok {
 				done, err := c.recoverSyntheticsViaRange(ctx, part.Url, first, last, held)
 				if err != nil {
-					c.remoteFailed(part.Url.String())
+					c.classifyRemoteError(part.Url.String(), err)
 					slog.ErrorContext(ctx, "Failed to recover synthetics by range",
 						"source", part.Url, "destination", c.Url(), "start", first, "end", last, "error", err)
 				} else if done {
@@ -188,7 +188,7 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 				// a stream must never wedge because one pull failed (#4067).
 				// But feed the breaker: enough consecutive failures and the
 				// source is skipped for a backoff instead of hammered.
-				c.remoteFailed(part.Url.String())
+				c.classifyRemoteError(part.Url.String(), err)
 				slog.ErrorContext(ctx, "Failed to request missing synthetic",
 					"source", part.Url, "destination", c.Url(), "number", seq, "error", err)
 				if !c.remoteAllowed(part.Url.String()) {
@@ -206,7 +206,7 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 			// Delivered+1 may be missing without a pending entry
 			err := c.requestSyntheticFrom(ctx, part.Url, want)
 			if err != nil {
-				c.remoteFailed(part.Url.String())
+				c.classifyRemoteError(part.Url.String(), err)
 				slog.ErrorContext(ctx, "Failed to request missing synthetic",
 					"source", part.Url, "destination", c.Url(), "number", want, "error", err)
 				continue
@@ -732,7 +732,7 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 				switch {
 				case err != nil:
 					mReconcile.WithLabelValues("failed").Inc()
-					c.remoteFailed(source.String())
+					c.classifyRemoteError(source.String(), err)
 					slog.ErrorContext(ctx, "Reconcile: failed to recover synthetics by range",
 						"module", "synthetic", "source", source, "destination", me,
 						"start", have+1, "end", overdue, "error", err)
@@ -771,7 +771,7 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 			err := c.requestSyntheticFrom(ctx, source, seq)
 			if err != nil {
 				mReconcile.WithLabelValues("failed").Inc()
-				c.remoteFailed(source.String())
+				c.classifyRemoteError(source.String(), err)
 				slog.ErrorContext(ctx, "Reconcile: failed to request missing synthetic",
 					"module", "synthetic", "source", source, "destination", me,
 					"number", seq, "error", err)

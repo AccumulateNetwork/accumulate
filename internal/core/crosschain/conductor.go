@@ -150,6 +150,23 @@ func (c *Conductor) remoteOK(remote string) {
 	}
 }
 
+// classifyRemoteError feeds the circuit breaker only for errors that say
+// something about the REMOTE's health. A deterministic "cannot serve yet" —
+// notFound (the servable chain has not reached the requested entry, #4086) or
+// notReady (the covering anchor has not executed at the destination yet) — is
+// a healthy remote giving a correct answer, and counting it opened the shared
+// per-remote breaker, which then blocked ANCHOR healing to that remote even
+// though anchor recovery is self-contained and would have succeeded. Run
+// 20260820T073651Z: BVN1's anchor delivery trickled at ~2 per 20 minutes
+// because synthetic-heal notReady answers kept the breaker open.
+func (c *Conductor) classifyRemoteError(remote string, err error) {
+	if errors.Is(err, errors.NotFound) || errors.Is(err, errors.NotReady) {
+		c.remoteOK(remote)
+		return
+	}
+	c.remoteFailed(remote)
+}
+
 // remoteFailed records a failed interaction; after breakerThreshold
 // consecutive failures the remote's circuit opens with exponential backoff.
 func (c *Conductor) remoteFailed(remote string) {
@@ -333,7 +350,7 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 
 			err := c.healAnchors(ctx, batch, destination, e.Index)
 			if err != nil {
-				c.remoteFailed(destination.String())
+				c.classifyRemoteError(destination.String(), err)
 				slog.Error("Error while healing anchors", "destination", destination, "error", err)
 			} else {
 				c.remoteOK(destination.String())
@@ -388,7 +405,7 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 
 				err := c.recoverAnchorsViaRange(ctx, batch, source)
 				if err != nil {
-					c.remoteFailed(source.String())
+					c.classifyRemoteError(source.String(), err)
 					slog.Error("Error while recovering anchors by range", "source", src.ID, "error", err)
 				} else {
 					c.remoteOK(source.String())
