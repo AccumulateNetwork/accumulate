@@ -1049,9 +1049,18 @@ func TestRunTrendNullAnalysis(t *testing.T) {
 }
 
 func TestWriteOutputError(t *testing.T) {
-	// Test writing to invalid directory
-	invalidPath := "/invalid/path/that/does/not/exist/output.txt"
-	*outputFile = invalidPath
+	// Writing under a path whose parent is a regular FILE fails for every
+	// user. The old fixture ("/invalid/path/...") relied on lacking the
+	// privilege to create directories at the root — writeOutput calls
+	// MkdirAll, so running as root (as CI containers do) happily created
+	// /invalid and the expected error never came.
+	notADir := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(notADir, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	old := *outputFile
+	*outputFile = filepath.Join(notADir, "output.txt")
+	defer func() { *outputFile = old }()
 
 	err := writeOutput("test output")
 	if err == nil {
