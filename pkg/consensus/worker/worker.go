@@ -442,6 +442,30 @@ func (w *Worker) ConsumeAvailableBatches() []types.BatchDigest {
 	}
 }
 
+// RequeueBatches makes batch digests available for header creation again.
+// Used when a header is discarded without ever becoming a certificate: its
+// batches were consumed by the header and never committed, and without a
+// requeue every transaction inside them is silently lost. Digests whose batch
+// data is no longer stored (committed elsewhere and pruned, or LRU-evicted)
+// are skipped — there is nothing left to deliver.
+func (w *Worker) RequeueBatches(digests []types.BatchDigest) {
+	for _, digest := range digests {
+		w.batchMu.Lock()
+		_, ok := w.batches[digest]
+		w.batchMu.Unlock()
+		if !ok {
+			continue
+		}
+		select {
+		case w.availableBatchQueue <- digest:
+			w.queueDepth.Add(1)
+		default:
+			slog.Warn("Requeue dropped batch — availability queue full",
+				"digest", digest.String(), "worker", w.ID())
+		}
+	}
+}
+
 // PruneBatches removes batches that have been committed to consensus.
 // This should be called after batches are finalized to free memory.
 // Also removes entries from the LRU list.

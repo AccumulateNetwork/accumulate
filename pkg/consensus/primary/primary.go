@@ -470,9 +470,19 @@ func (p *Primary) cleanupOldHeaders() {
 	p.pendingMu.Lock()
 	defer p.pendingMu.Unlock()
 
-	// Clean pending headers and votes (short retention)
+	// Clean pending headers and votes (short retention). A header that never
+	// became a certificate carries batches that were consumed from the workers
+	// when it was built; discarding it without requeuing them silently loses
+	// every transaction inside. Run 20260820T063739Z: roughly half of all
+	// anchor-signature submissions vanished this way — the DN's pending-anchor
+	// backlog grew without bound and healing's bounded re-drive became the
+	// only working delivery path. ourCerts is retained five times longer than
+	// ourHeaders, so it is a reliable certified-or-not signal at this cutoff.
 	for digest, header := range p.ourHeaders {
 		if header.Round < headerCutoff {
+			if _, certified := p.ourCerts[header.Round]; !certified {
+				p.requeueHeaderBatches(header)
+			}
 			delete(p.ourHeaders, digest)
 			delete(p.pendingVotes, digest)
 		}
@@ -489,6 +499,19 @@ func (p *Primary) cleanupOldHeaders() {
 	for digest, round := range p.votedHeaders {
 		if round < certCutoff {
 			delete(p.votedHeaders, digest)
+		}
+	}
+}
+
+// requeueHeaderBatches returns a discarded header's batches to their workers
+// so the next header this node authors carries them again.
+func (p *Primary) requeueHeaderBatches(header *types.Header) {
+	for _, entry := range header.Payload {
+		for _, w := range p.workers {
+			if w.ID() == entry.Worker {
+				w.RequeueBatches([]types.BatchDigest{entry.Digest})
+				break
+			}
 		}
 	}
 }
