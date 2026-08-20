@@ -326,11 +326,19 @@ func (d *dialer) tryDial(peer peer.ID, service *api.ServiceAddress, addr multiad
 	}()
 }
 
-// backoffTime returns the smaller of 2ⁿ minutes  or 1 day.
+// backoffTime returns the smaller of 2ⁿ minutes or 15 minutes. The cap used to
+// be 24 hours, which turned the background retry — the only path by which a
+// known-bad peer is rediscovered without traffic — into a daily event. A peer
+// that is still down at 15-minute probes costs nearly nothing; a peer that
+// recovered and is probed a day later costs the network a partition (#4115).
 func backoffTime(attempts int32) time.Duration {
+	const max = 15 * time.Minute
+	if attempts >= 5 {
+		return max
+	}
 	d := time.Minute << time.Duration(attempts)
-	if d > 24*time.Hour {
-		d = 24 * time.Hour
+	if d > max {
+		d = max
 	}
 	return d
 }
@@ -349,8 +357,13 @@ func (d *dialer) dial(ctx context.Context, peer peer.ID, service *api.ServiceAdd
 		PeerID:  peer,
 	})
 	if err == nil {
-		// Mark the peer good
+		// Mark the peer good, and forget its retry-backoff history: the
+		// attempt counter only ever grew, so a peer that failed a handful of
+		// times during one outage was background-probed on an ever-doubling
+		// interval for the rest of the process's life — recovery decayed to
+		// once per day (#4115).
 		d.tracker.Mark(peer, addr, api.PeerStatusIsKnownGood)
+		d.lastTry.Delete(peer)
 		return stream
 	}
 
@@ -381,6 +394,18 @@ func classifyDialError(ctx context.Context, peer peer.ID, service *api.ServiceAd
 
 	// Request timed out, don't care
 	if errors.Is(err, context.DeadlineExceeded) {
+		return severityDontCare
+	}
+
+	// The local resource manager refused the stream. That is a statement about
+	// THIS node's budget, not about the peer — but it used to fall through to
+	// "unknown error, mark peer bad", so the moment a node exhausted its own
+	// transient stream scope it marked every remote peer known-bad for every
+	// service. The tracker emptied, every dial fell back to DHT lookups that
+	// needed streams on the same exhausted scope, and the whole node reported
+	// "no live peers" for everything until restart — 1.36M such errors in the
+	// 20260819T234054Z soak (#4115).
+	if errors.Is(err, network.ErrResourceLimitExceeded) {
 		return severityDontCare
 	}
 
