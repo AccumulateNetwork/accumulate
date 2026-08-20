@@ -140,6 +140,16 @@ $compose up -d >/dev/null 2>&1 || { echo "up failed" | tee -a "$log"; exit 1; }
 docker image inspect --format '{{.Id}} {{.RepoTags}}' "$soak_image" \
   > "$rd/config/image.txt" 2>/dev/null
 
+# Rotation-proof log capture, from the first block onward. The containers use
+# bounded logging, and the 20260819T234054Z post-mortem lost its first three
+# hours to rotation — the onset of the collapse was undatable because the only
+# capture ran once at teardown and inherited whatever rotation had left.
+# Streaming into the run dir preserves everything; the file is large under
+# failure storms (gigabytes) and is gitignored — summarize, don't commit it.
+nohup docker compose -f "$here/../docker-compose.yml" logs -f --no-color \
+  >> "$rd/node-logs-live.txt" 2>&1 &
+LOGCAP=$!
+
 up=""; for _ in $(seq 1 90); do
   curl -sf -X POST http://localhost:26660/v3 -H 'content-type: application/json' \
     -d '{"jsonrpc":"2.0","id":1,"method":"network-status","params":{"partition":"Directory"}}' >/dev/null 2>&1 && { up=1; break; }
@@ -223,8 +233,13 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
         done' 2>/dev/null | paste -sd+ - | bc 2>/dev/null)
       heals=$((heals + ${x:-0}))
     done
-    cpu=$(docker stats --no-stream --format '{{.CPUPerc}}' 2>/dev/null | tr -d '%' | awk '{s+=$1} END {printf "%.0f", s}')
-    echo "$(date -u +%FT%T),${h:-?},$heals,${cpu:-?}" >> "$mon"
+    # Per-container stats alongside the fleet sum: the fleet CPU column dated
+    # the 20260819 collapse, but WHICH nodes were burning had to be inferred.
+    stats=$(docker stats --no-stream --format '{{.Name}},{{.CPUPerc}},{{.MemUsage}}' 2>/dev/null)
+    ts=$(date -u +%FT%T)
+    echo "$stats" | sed "s/^/$ts,/" >> "$rd/stats.csv"
+    cpu=$(echo "$stats" | cut -d, -f2 | tr -d '%' | awk '{s+=$1} END {printf "%.0f", s}')
+    echo "$ts,${h:-?},$heals,${cpu:-?}" >> "$mon"
     sleep ${MON_INTERVAL:-$([ "$duration_seconds" -le 1800 ] && echo 20 || echo 300)}
   done ) &
 
@@ -240,7 +255,7 @@ if [ "${IDLE_AFTER:-0}" -gt 0 ]; then
   echo "== load finished; idling ${IDLE_AFTER}s so tail losses age past the grace ==" | tee -a "$log"
   sleep "$IDLE_AFTER"
 fi
-kill $CHAOS ${MON:-} ${SEIZE:-} 2>/dev/null
+kill $CHAOS ${MON:-} ${SEIZE:-} ${LOGCAP:-} 2>/dev/null
 ended=$(date -u +%FT%TZ)
 echo "== soak finished $(date -u) driver-exit=$rc ==" | tee -a "$log"
 
