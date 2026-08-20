@@ -153,8 +153,8 @@ type Primary struct {
 	lifecycleMu sync.Mutex
 	ctx         context.Context
 	cancel      context.CancelFunc
-	wg     sync.WaitGroup
-	closed atomic.Bool
+	wg          sync.WaitGroup
+	closed      atomic.Bool
 
 	// Metrics
 	headersCreated      atomic.Uint64

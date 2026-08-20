@@ -46,7 +46,7 @@ func TestCommitCompleteness_SlowAuthor(t *testing.T) {
 	var tracked []*types.Certificate // everything that must eventually commit
 	r0 := h.insertGenesis()
 
-	prevFast := r0                          // previous round's fast certs
+	prevFast := r0 // previous round's fast certs
 	slowByRound := map[types.Round]*types.Certificate{}
 	for r := types.Round(1); r <= lastRound; r++ {
 		// Fast validators reference the previous round's fast certs, plus the
