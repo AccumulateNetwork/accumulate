@@ -82,8 +82,16 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		return nil
 	}
 
-	// For each not-yet delivered anchor
-	for i := ledger2.Delivered + 1; i <= uint64(head.Count); i++ {
+	// For each not-yet delivered anchor — capped per scan. Delivery is
+	// sequential, so the stuck head is what matters; re-driving the entire
+	// backlog every scan is pure load with no delivery benefit, and with the
+	// backlog in the thousands it was one of the storm engines of the
+	// 20260819T234054Z collapse: each scan issued one didSign query plus one
+	// submission per missing anchor (#4115). The next scan continues from
+	// whatever the destination has delivered by then.
+	const healAnchorScanCap = 16
+	resubmitted := 0
+	for i := ledger2.Delivered + 1; i <= uint64(head.Count) && resubmitted < healAnchorScanCap; i++ {
 		// Load it
 		hash, err := sequence.Entry(int64(i) - 1)
 		if err != nil {
@@ -142,6 +150,7 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		if err != nil {
 			return err
 		}
+		resubmitted++
 	}
 
 	return nil

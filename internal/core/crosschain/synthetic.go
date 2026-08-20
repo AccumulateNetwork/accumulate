@@ -135,6 +135,12 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 		if part.Received <= part.Delivered {
 			continue
 		}
+		// Circuit breaker: a source that failed the last several pulls is down
+		// or drowning; pulling harder starves the transport for everyone
+		// (#4115). Skip it until its backoff expires.
+		if !c.remoteAllowed(part.Url.String()) {
+			continue
+		}
 		want := part.Delivered + 1
 
 		// Jittered check-then-fire: only one (or two) validators actually pull
@@ -151,9 +157,11 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 			if first, last, ok := firstMissingRun(part); ok {
 				done, err := c.recoverSyntheticsViaRange(ctx, part.Url, first, last, held)
 				if err != nil {
+					c.remoteFailed(part.Url.String())
 					slog.ErrorContext(ctx, "Failed to recover synthetics by range",
 						"source", part.Url, "destination", c.Url(), "start", first, "end", last, "error", err)
 				} else if done {
+					c.remoteOK(part.Url.String())
 					continue
 				}
 			}
@@ -178,23 +186,32 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 				// Never abandon the batch: delivery is ordered, so failing to
 				// pull the FIRST hole must not stop us pulling the rest — and
 				// a stream must never wedge because one pull failed (#4067).
+				// But feed the breaker: enough consecutive failures and the
+				// source is skipped for a backoff instead of hammered.
+				c.remoteFailed(part.Url.String())
 				slog.ErrorContext(ctx, "Failed to request missing synthetic",
 					"source", part.Url, "destination", c.Url(), "number", seq, "error", err)
+				if !c.remoteAllowed(part.Url.String()) {
+					break
+				}
 				continue
 			}
+			c.remoteOK(part.Url.String())
 			healed++
 			if healed >= syntheticHealBatch {
 				break
 			}
 		}
-		if healed == 0 {
+		if healed == 0 && c.remoteAllowed(part.Url.String()) {
 			// Delivered+1 may be missing without a pending entry
 			err := c.requestSyntheticFrom(ctx, part.Url, want)
 			if err != nil {
+				c.remoteFailed(part.Url.String())
 				slog.ErrorContext(ctx, "Failed to request missing synthetic",
 					"source", part.Url, "destination", c.Url(), "number", want, "error", err)
 				continue
 			}
+			c.remoteOK(part.Url.String())
 		}
 	}
 	return nil
