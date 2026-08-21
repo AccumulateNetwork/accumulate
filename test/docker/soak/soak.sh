@@ -54,6 +54,12 @@ ln -sfn "$rd" "$runs/latest"
 
 log="$rd/soak.log"; chaos="$rd/chaos.log"; mon="$rd/monitor.csv"
 manifest="$rd/manifest.md"; runjson="$rd/run.json"
+# This network shares a directory name ("docker") with the ASP mainnet fleet at
+# core/staking/deploy/docker, so Compose derives the SAME default project name
+# for both. Every `down --remove-orphans` below would then treat the running
+# asp-v00* mainnet containers as orphans and delete them. Pin the project so
+# teardown can only ever reach this network.
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-disoak}"
 compose="docker compose -f $here/../docker-compose.yml"
 
 # ---- provenance -------------------------------------------------------------

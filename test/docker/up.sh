@@ -11,6 +11,12 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 
+# This network shares a directory name ("docker") with the ASP mainnet fleet at
+# core/staking/deploy/docker, so Compose derives the SAME default project name
+# for both. The `down --remove-orphans` teardown below would then treat running
+# asp-v00* mainnet containers as orphans and delete them. Pin the project so
+# teardown can only ever reach this network.
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-disoak}"
 compose="docker compose -f $here/docker-compose.yml"
 
 # Build BEFORE up. `up -d` silently reuses a stale image, and every conclusion
