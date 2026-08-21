@@ -94,6 +94,17 @@ type Service struct {
 	lastBlockIndex uint64
 	lastBlockTime  time.Time
 
+	// Liveness watchdog. lastBlockAt is the local wall clock; lastBlockTime
+	// carries the certificate author's timestamp, which is executed state and
+	// is clamped to be strictly increasing, so it cannot be compared against
+	// the local clock to decide whether this node is still making progress.
+	// startedAt lets the watchdog fire for a partition that has never produced
+	// a block at all — the case the previous check silently skipped.
+	startedAt    time.Time
+	lastBlockAt  time.Time
+	stallSince   time.Time
+	lastStallLog time.Time
+
 	// Validator synchronization
 	validatorUpdateHeight uint64 // Height at which validator update was detected
 
@@ -138,6 +149,7 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	s.running = true
+	s.startedAt = time.Now()
 	s.mu.Unlock()
 
 	// Initialize committee from genesis
@@ -192,6 +204,14 @@ func (s *Service) Start(ctx context.Context) error {
 	// Start block production loop
 	s.wg.Add(1)
 	go s.blockProductionLoop()
+
+	// The watchdog runs on its own goroutine, NOT as another case in the block
+	// production select. Producing a block blocks until every batch named by
+	// the certificate has been collected, so a partition that wedges waiting
+	// for a batch wedges that whole loop — and a watchdog sharing it would go
+	// silent at exactly the moment it is supposed to speak up.
+	s.wg.Add(1)
+	go s.livenessLoop()
 
 	s.logger.Info("DAG-BFT service started",
 		"partition", s.config.Partition.ID,
@@ -386,13 +406,24 @@ func (s *Service) initializeGenesis() error {
 	return nil
 }
 
+// A partition is reported stalled once no block has been produced for
+// blockStallThreshold, and re-reported every blockStallRepeat while it stays
+// stalled. The report is an error, not an info line: a partition that stops
+// producing blocks is the failure operators are watching for, and the previous
+// check logged it at info level with a "WARNING:" string glued to the message,
+// which no level filter and no `grep -w ERROR` would ever surface. It also ran
+// on the loop's 100ms ticker with no rate limit, so a real stall emitted ten
+// identical lines per second and drowned the log it was supposed to flag.
+const (
+	blockStallThreshold = 10 * time.Second
+	blockStallRepeat    = 10 * time.Second
+)
+
 // blockProductionLoop processes committed certificates and produces blocks.
 func (s *Service) blockProductionLoop() {
 	defer s.wg.Done()
 
 	committed := s.node.Committed()
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
 
 	for {
 		select {
@@ -412,23 +443,101 @@ func (s *Service) blockProductionLoop() {
 					"error", err,
 					"round", cert.Header.Round)
 			}
-
-		case <-ticker.C:
-			// Liveness check - warn if no blocks produced recently
-			s.mu.RLock()
-			elapsed := time.Since(s.lastBlockTime)
-			lastBlock := s.lastBlockTime
-			s.mu.RUnlock()
-
-			// Only check if we've produced at least one block
-			if !lastBlock.IsZero() && elapsed > 30*time.Second {
-				s.logger.Info("WARNING: No blocks produced",
-					"elapsed", elapsed,
-					"lastBlockTime", lastBlock,
-					"round", s.CurrentRound())
-			}
 		}
 	}
+}
+
+// livenessLoop reports a stalled partition, independently of block production.
+func (s *Service) livenessLoop() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			s.checkBlockLiveness()
+		}
+	}
+}
+
+// noteBlockProduced records that a block landed and clears the stall watchdog.
+// Callers must hold s.mu.
+//
+// A stall that ended is worth one line. Without it the log shows a partition
+// going down and never coming back, and a reader cannot tell a blip that
+// recovered from an outage that is still open.
+func (s *Service) noteBlockProduced(blockIndex uint64, round types.Round) {
+	s.lastBlockAt = time.Now()
+	if s.stallSince.IsZero() {
+		return
+	}
+	s.logger.Error("Partition resumed producing blocks",
+		"partition", s.config.Partition.ID,
+		"stalledFor", time.Since(s.stallSince).Round(time.Millisecond),
+		"block", blockIndex,
+		"round", round)
+	s.stallSince = time.Time{}
+	s.lastStallLog = time.Time{}
+}
+
+// checkBlockLiveness reports this partition as stalled when no block has been
+// produced for blockStallThreshold.
+//
+// The reference point is the last block this node actually produced, or the
+// time the service started if it has produced none. Measuring only from the
+// last block means a partition that comes up and never commits anything looks
+// identical to one that is healthy, because the "last block" timestamp stays
+// zero and the check never arms — which is exactly how a Directory frozen at
+// its startup height ran unremarked while its BVNs advanced past block 63000.
+func (s *Service) checkBlockLiveness() {
+	now := time.Now()
+
+	s.mu.Lock()
+	since := s.lastBlockAt
+	produced := true
+	if since.IsZero() {
+		since, produced = s.startedAt, false
+	}
+	if since.IsZero() {
+		s.mu.Unlock()
+		return // not started yet
+	}
+
+	elapsed := now.Sub(since)
+	if elapsed < blockStallThreshold {
+		s.mu.Unlock()
+		return
+	}
+
+	// Rate-limit: one line when the stall opens, then one per blockStallRepeat.
+	if s.stallSince.IsZero() {
+		s.stallSince = since
+	} else if now.Sub(s.lastStallLog) < blockStallRepeat {
+		s.mu.Unlock()
+		return
+	}
+	s.lastStallLog = now
+	lastIndex := s.lastBlockIndex
+	s.mu.Unlock()
+
+	args := []interface{}{
+		"partition", s.config.Partition.ID,
+		"stalledFor", elapsed.Round(time.Millisecond),
+		"threshold", blockStallThreshold,
+		"lastBlock", lastIndex,
+		"round", s.CurrentRound(),
+	}
+	if !produced {
+		// Distinguish "stopped" from "never started": the round is the tell —
+		// a partition whose consensus rounds climb while its block height
+		// stays put is executing nothing, not partitioned away.
+		args = append(args, "everProducedBlock", false)
+	}
+	s.logger.Error("Partition stalled: no block produced", args...)
 }
 
 // processCommittedCertificate processes a committed certificate and produces a block.
@@ -502,6 +611,8 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	// Update state
 	s.lastBlockIndex = blockIndex
 	s.lastBlockTime = blockTime
+
+	s.noteBlockProduced(blockIndex, cert.Header.Round)
 
 	// Record state hash for consistency verification
 	stateHash := s.adapter.StateHash()
