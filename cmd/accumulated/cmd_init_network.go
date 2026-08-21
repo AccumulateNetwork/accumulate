@@ -244,12 +244,15 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				HttpListener: run.HttpListener{Listen: []run.Multiaddr{promAddr}},
 			}
 
-			// Add pprof profiling to bvn1-1 for performance analysis
-			if i == 0 && j == 0 {
-				pprofAddr, _ := multiaddr.NewMultiaddr("/ip4/" + node.ListenAddress + "/tcp/6060")
-				cfg.Instrumentation.PprofListen = pprofAddr
-				fmt.Printf("  Pprof enabled on %s:6060\n", node.ListenAddress)
-			}
+			// pprof on EVERY node, not just bvn1-1. On 2026-08-21 all four
+			// partitions stopped producing blocks while consensus stayed
+			// healthy (#4125); the one artifact that would have said in a
+			// single step whether the executor was parked in batch collection
+			// is a goroutine dump of a wedged node, and there was no way to
+			// take one from 12 of the 13. Bound to 0.0.0.0 so the soak's
+			// wedgewatch can reach it with `docker exec <node> curl`.
+			pprofAddr, _ := multiaddr.NewMultiaddr("/ip4/0.0.0.0/tcp/6060")
+			cfg.Instrumentation.PprofListen = pprofAddr
 
 			// Write the genesis documents
 			cvc.DnGenesis = "directory-genesis.snap"

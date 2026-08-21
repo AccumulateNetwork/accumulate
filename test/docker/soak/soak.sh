@@ -187,7 +187,31 @@ if ! curl -sf -m3 http://127.0.0.1:8099/data >/dev/null 2>&1; then
   $compose down -v --remove-orphans >/dev/null 2>&1
   exit 1
 fi
-echo "   soakmon: http://127.0.0.1:8099 (gate passed; load starts now)" | tee -a "$log"
+echo "   soakmon: http://127.0.0.1:8099 (gate passed)" | tee -a "$log"
+
+# SHOW the dashboard, do not merely print its URL. The requirement is that a
+# run is watched, and a localhost address in a log the operator has to notice,
+# copy and paste is not being watched — five unobserved runs during the #4103
+# diagnosis all had a printed URL. Best effort: a headless or remote invocation
+# has no browser and must still be able to run.
+if [ -z "${NO_OPEN:-}" ] && command -v xdg-open >/dev/null 2>&1; then
+  (xdg-open "http://127.0.0.1:8099" >/dev/null 2>&1 &) 
+  echo "   dashboard opened in the browser" | tee -a "$log"
+fi
+
+# Wedge watchdog. #4125 froze block production on all four partitions with
+# consensus healthy, and was torn down before anyone took a goroutine dump —
+# the single artifact that says whether the executor is parked in batch
+# collection. This dumps every node the moment soakmon reports a stalled
+# partition, and never touches the network itself.
+if [ -x "$here/wedgewatch.sh" ]; then
+  nohup env RUN_DIR="$rd" "$here/wedgewatch.sh" > "$rd/wedgewatch.log" 2>&1 &
+  WEDGE=$!
+  echo "   wedgewatch: armed (dump after ${WEDGE_SECS:-120}s stalled)" | tee -a "$log"
+else
+  echo "   wedgewatch: MISSING — a wedge will go undiagnosed again (#4125)" | tee -a "$log"
+fi
+echo "   load starts now" | tee -a "$log"
 
 # Load generator (host): drives the full menu of user transaction types against
 # an ever-growing account set. -faucet-seed FAUCET matches init's genesis faucet.
@@ -261,7 +285,7 @@ if [ "${IDLE_AFTER:-0}" -gt 0 ]; then
   echo "== load finished; idling ${IDLE_AFTER}s so tail losses age past the grace ==" | tee -a "$log"
   sleep "$IDLE_AFTER"
 fi
-kill $CHAOS ${MON:-} ${SEIZE:-} ${LOGCAP:-} 2>/dev/null
+kill $CHAOS ${MON:-} ${SEIZE:-} ${LOGCAP:-} ${WEDGE:-} 2>/dev/null
 ended=$(date -u +%FT%TZ)
 echo "== soak finished $(date -u) driver-exit=$rc ==" | tee -a "$log"
 
@@ -304,6 +328,9 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   echo "| seizure | $(grep -q SEIZED "$rd/seizewatch.out" 2>/dev/null && grep SEIZED "$rd/seizewatch.out" | tail -1 || echo 'none detected') |"
   echo "| reconcile pulls (#4073) | $reconcile_pulls |"
   echo "| stalled channels at end | $stalled_end |"
+  # A run that wedged and dumped is the most valuable kind of run there is;
+  # say so in the verdict rather than leaving the dirs to be stumbled upon.
+  echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
   echo
   echo "Raw: \`soak.log\`, \`monitor.csv\`, \`chaos.log\`, \`loadgen-stats.json\`."
 } >> "$manifest"
