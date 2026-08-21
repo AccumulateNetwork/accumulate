@@ -529,11 +529,16 @@ func (n *Node) processBullshark() {
 			// "Missing batch for certificate" errors.
 			for _, output := range outputs {
 				n.certificatesCommitted.Add(1)
+				// BLOCK, never drop: a dropped committed certificate means
+				// this node silently skips transactions its peers execute —
+				// permanent state divergence (#4122's shape). If the executor
+				// lags, backpressure here is the correct response; consensus
+				// certificates keep accumulating in the channel's buffer and
+				// the DAG regardless.
 				select {
 				case n.committed <- output.Certificate:
-				default:
-					slog.Warn("Committed channel full, dropping certificate",
-						"digest", output.Certificate.Digest().String())
+				case <-n.ctx.Done():
+					return
 				}
 			}
 

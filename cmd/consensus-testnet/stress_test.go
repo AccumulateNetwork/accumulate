@@ -173,16 +173,9 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 						continue
 					}
 					if cert != nil {
-						batches := make(map[types.BatchDigest]*types.Batch)
-						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for _, entry := range cert.Header.Payload {
-							digests = append(digests, entry.Digest)
-							for _, w := range workers {
-								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-									batches[entry.Digest] = batch
-									break
-								}
-							}
+						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
+						if !ok {
+							return
 						}
 						executors[i].ProcessCertificate(cert, batches)
 						for _, w := range workers {
@@ -398,16 +391,9 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 					return
 				}
 				if cert != nil {
-					batches := make(map[types.BatchDigest]*types.Batch)
-					digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-					for _, entry := range cert.Header.Payload {
-						digests = append(digests, entry.Digest)
-						for _, w := range workers {
-							if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-								batches[entry.Digest] = batch
-								break
-							}
-						}
+					batches, digests, ok := collectForCert(ctx, newNode, cert)
+					if !ok {
+						return
 					}
 					newExec.ProcessCertificate(cert, batches)
 					for _, w := range workers {
@@ -733,16 +719,9 @@ func TestStress_MemoryStability(t *testing.T) {
 						return
 					}
 					if cert != nil {
-						batches := make(map[types.BatchDigest]*types.Batch)
-						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for _, entry := range cert.Header.Payload {
-							digests = append(digests, entry.Digest)
-							for _, w := range workers {
-								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-									batches[entry.Digest] = batch
-									break
-								}
-							}
+						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
+						if !ok {
+							return
 						}
 						executors[i].ProcessCertificate(cert, batches)
 						for _, w := range workers {
@@ -1000,16 +979,9 @@ func TestStress_ConsensusStallDetection(t *testing.T) {
 						return
 					}
 					if cert != nil {
-						batches := make(map[types.BatchDigest]*types.Batch)
-						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for _, entry := range cert.Header.Payload {
-							digests = append(digests, entry.Digest)
-							for _, w := range workers {
-								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-									batches[entry.Digest] = batch
-									break
-								}
-							}
+						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
+						if !ok {
+							return
 						}
 						executors[i].ProcessCertificate(cert, batches)
 						for _, w := range workers {

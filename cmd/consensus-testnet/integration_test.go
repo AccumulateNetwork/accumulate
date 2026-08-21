@@ -173,16 +173,9 @@ func TestConsensusTestnet_TwoNodeCommunication(t *testing.T) {
 						// Track message exchange (certificate commits are GossipSub messages)
 						messagesExchanged.Add(1)
 
-						batches := make(map[types.BatchDigest]*types.Batch)
-						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for _, entry := range cert.Header.Payload {
-							digests = append(digests, entry.Digest)
-							for _, w := range workers {
-								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-									batches[entry.Digest] = batch
-									break
-								}
-							}
+						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
+						if !ok {
+							return
 						}
 						executors[i].ProcessCertificate(cert, batches)
 						for _, w := range workers {
@@ -466,16 +459,9 @@ func TestConsensusTestnet_BasicConsensus(t *testing.T) {
 						return
 					}
 					if cert != nil {
-						batches := make(map[types.BatchDigest]*types.Batch)
-						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for _, entry := range cert.Header.Payload {
-							digests = append(digests, entry.Digest)
-							for _, w := range workers {
-								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-									batches[entry.Digest] = batch
-									break
-								}
-							}
+						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
+						if !ok {
+							return
 						}
 						executors[i].ProcessCertificate(cert, batches)
 						for _, w := range workers {
@@ -702,16 +688,9 @@ func TestConsensusTestnet_Throughput(t *testing.T) {
 						return
 					}
 					if cert != nil {
-						batches := make(map[types.BatchDigest]*types.Batch)
-						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for _, entry := range cert.Header.Payload {
-							digests = append(digests, entry.Digest)
-							for _, w := range workers {
-								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-									batches[entry.Digest] = batch
-									break
-								}
-							}
+						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
+						if !ok {
+							return
 						}
 						executors[i].ProcessCertificate(cert, batches)
 						for _, w := range workers {
@@ -950,16 +929,9 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 						continue
 					}
 					if cert != nil {
-						batches := make(map[types.BatchDigest]*types.Batch)
-						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for _, entry := range cert.Header.Payload {
-							digests = append(digests, entry.Digest)
-							for _, w := range workers {
-								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-									batches[entry.Digest] = batch
-									break
-								}
-							}
+						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
+						if !ok {
+							return
 						}
 						executors[i].ProcessCertificate(cert, batches)
 						for _, w := range workers {
@@ -1111,16 +1083,9 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 					return
 				}
 				if cert != nil {
-					batches := make(map[types.BatchDigest]*types.Batch)
-					digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-					for _, entry := range cert.Header.Payload {
-						digests = append(digests, entry.Digest)
-						for _, w := range workers {
-							if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-								batches[entry.Digest] = batch
-								break
-							}
-						}
+					batches, digests, ok := collectForCert(ctx, newNode, cert)
+					if !ok {
+						return
 					}
 					newExec.ProcessCertificate(cert, batches)
 					for _, w := range workers {
