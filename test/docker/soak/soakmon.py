@@ -34,6 +34,9 @@ PORT = int(os.environ.get("PORT", "8099"))
 # Refresh cadences (seconds): cheap things often, docker-heavy things rarely.
 I_STATS, I_HEIGHT, I_WEDGE, I_HEAL, I_CHAOS, I_FLOW = 1, 1, 5, 5, 5, 1
 HIST_MAX = 600  # ~10 min of 1s ticks kept for the sparklines' recent window
+# A partition whose height has not moved for this long is stalled. Matches the
+# node-side watchdog so the dashboard and the logs agree on the word.
+STALL_SECS = 10
 
 STATE = {"ok": False, "started": int(time.time())}
 LOCK = threading.Lock()
@@ -105,6 +108,59 @@ def collect_heights():
         except Exception:
             heights[p] = None
     return heights
+
+
+# Per-partition record of the last height CHANGE. Liveness is progress over
+# time; a height that can be read says only that a node answers the phone.
+_PROGRESS = {}
+
+
+def assess_progress(heights, now):
+    """Classify each partition as live, stalled, or unknown.
+
+    A partition is live only if its height has changed within STALL_SECS. The
+    first reading starts the clock rather than declaring health, so a network
+    that was already dead when the monitor attached is reported stalled once
+    STALL_SECS have passed with no movement — it never gets a free pass.
+    """
+    out = {}
+    for part in PARTITIONS:
+        h = heights.get(part)
+        if h is None:
+            # Height unreadable. That is not health; say so rather than
+            # omitting the partition and letting a blank read as fine.
+            out[part] = {"height": None, "state": "unknown", "stalledFor": None}
+            continue
+        prev = _PROGRESS.get(part)
+        if prev is None or prev["height"] != h:
+            _PROGRESS[part] = {"height": h, "since": now}
+        stalled = now - _PROGRESS[part]["since"]
+        out[part] = {
+            "height": h,
+            "state": "stalled" if stalled >= STALL_SECS else "live",
+            "stalledFor": round(stalled, 1),
+        }
+    return out
+
+
+def overall_status(api_up, progress):
+    """The headline verdict, derived from progress rather than reachability.
+
+    The old indicator was `curl network-status is not None`, which reports that
+    the API process is listening. A wedged network answers that call happily,
+    which is how a dashboard showed "network up" over a Directory frozen at
+    block 121 with zero anchors, zero synthetics and zero tx/s.
+    """
+    if not api_up:
+        return "down"
+    states = [v["state"] for v in progress.values()]
+    if not states or all(st == "unknown" for st in states):
+        return "down"
+    if any(st == "stalled" for st in states):
+        return "stalled"
+    if any(st == "unknown" for st in states):
+        return "degraded"
+    return "up"
 
 
 # --- Prometheus scrape (authoritative source: node /metrics) -----------------
@@ -451,6 +507,9 @@ def collector():
         if now - last["height"] >= I_HEIGHT:
             upd["network"] = collect_height()
             upd["heights"] = collect_heights()
+            upd["progress"] = assess_progress(upd["heights"], now)
+            upd["status"] = overall_status(
+                upd["network"].get("api") == "up", upd["progress"])
             last["height"] = now
         # One authoritative scrape of every node's /metrics feeds heals, wedges
         # (drops), and the flow matrices — no log parsing, no ledger scraping.
@@ -702,10 +761,27 @@ async function tick(){
   matrix($('mxSyn'),(mx.flows||{}).synthetic,mx.parts&&parts);
   matrix($('mxAnc'),(mx.flows||{}).anchor,mx.parts&&parts);
   const hh=mx.heights||{};
-  $('heights').innerHTML=parts.map(p=>`<span class=n>${fmt(hh[p])}</span><span class=l>${shortP(p)}</span>`).join('')||'<span class=mut>—</span>';
+  // Height alone cannot distinguish a live partition from a frozen one, so
+  // each height carries how long it has sat unchanged.
+  const pg=s.progress||{};
+  $('heights').innerHTML=parts.map(p=>{
+    const g=pg[p]||{},st=g.state||'unknown';
+    const col=st==='live'?'':(st==='stalled'?'var(--red)':'var(--yel)');
+    const note=st==='live'?'':(st==='unknown'?' unreadable':` stalled ${Math.round(g.stalledFor||0)}s`);
+    return `<span class=n ${col?`style="color:${col}"`:''}>${fmt(hh[p])}</span>`+
+           `<span class=l ${col?`style="color:${col}"`:''}>${shortP(p)}${note}</span>`;
+  }).join('')||'<span class=mut>—</span>';
   // header
   const ph=lg.phase||'—';$('phase').textContent=ph;
-  const nu=nw.api==='up';$('net').className='badge '+(nu?'up':'down');$('net').innerHTML=`<span class=dot style="background:${nu?'var(--grn)':'var(--red)'}"></span>network ${nw.api||'?'}`;
+  // The badge reports progress, not reachability. "up" requires every
+  // partition to have advanced within the stall window; anything else is
+  // named for what it is, so a frozen network cannot show green.
+  const st=s.status||(nw.api==='up'?'up':'down');
+  const STC={up:['var(--grn)','network up'],stalled:['var(--red)','network STALLED'],
+             degraded:['var(--yel)','network degraded'],down:['var(--red)','network down']};
+  const [col,lbl]=STC[st]||['var(--red)','network ?'];
+  $('net').className='badge '+(st==='up'?'up':'down');
+  $('net').innerHTML=`<span class=dot style="background:${col}"></span>${lbl}`;
   const tgt=lg.target||0,gen=lg.generated||0;
   $('sub').textContent=`elapsed ${dur(lg.elapsedSec||0)} · ${(lg.rate||0).toFixed(2)} tx/s`+(lg.stale?' · loadgen stats stale':'');
   // cards
