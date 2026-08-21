@@ -411,6 +411,22 @@ func (d *Dispatcher) handleInbound(sub *pubsub.Subscription) {
 			continue
 		}
 
+		// Defense in depth (#4111): topic membership was the ONLY isolation,
+		// so anything published to this partition's dispatch topic reached its
+		// executor regardless of where the envelope actually routes — the
+		// wrong-DAG shape observed in run 20260820T100912Z, where dn-destined
+		// anchors committed inside a BVN's blocks. An envelope that does not
+		// route to THIS partition is dropped loudly here, before it can touch
+		// consensus.
+		if routed, err := d.router.Route(env); err != nil || !strings.EqualFold(routed, d.partition) {
+			slog.Warn("Dropping misrouted inbound envelope",
+				"source", source,
+				"partition", d.partition,
+				"routed", routed,
+				"error", err)
+			continue
+		}
+
 		// Queue for processing
 		select {
 		case d.inbound <- env:
