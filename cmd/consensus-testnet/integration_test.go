@@ -573,7 +573,13 @@ func TestConsensusTestnet_Throughput(t *testing.T) {
 	const numNodes = 7
 	const targetTPS = 1000                // Target for test environment
 	const testDuration = 30 * time.Second // Shorter duration for CI
-	const minAcceptableTPS = 100          // Minimum to pass (low due to test overhead)
+	// minAcceptableTPS is a LIVENESS floor, not a benchmark. A starved shared
+	// CI runner measured 72 TPS on a perfectly healthy run once the commit
+	// consumers stopped skipping unavailable batches (#4122) — an absolute
+	// throughput bar here measures the runner, not the code. The floor only
+	// has to distinguish a streaming commit path from a stalled or trickling
+	// one.
+	const minAcceptableTPS = 20
 	const blockInterval = 200 * time.Millisecond
 
 	ctx, cancel := context.WithTimeout(context.Background(), testDuration+30*time.Second)
@@ -786,20 +792,14 @@ func TestConsensusTestnet_Throughput(t *testing.T) {
 	submissionRate := float64(submitted.Load()) / elapsedTime.Seconds()
 	t.Logf("Transaction submission rate: %.2f TPS", submissionRate)
 
-	// In the test environment, the key metric is that the system handles transaction
-	// submission and block production. Certificate commits may not work due to
-	// gossip mesh timing issues in the test harness.
-	if actualTPS > 0 {
-		t.Logf("Actual processed TPS: %.2f", actualTPS)
-		assert.GreaterOrEqual(t, actualTPS, float64(minAcceptableTPS),
-			"Expected TPS >= %d, got %.2f", minAcceptableTPS, actualTPS)
-	} else {
-		// If no processing occurred due to consensus mesh issues, verify
-		// the system's capability through submission and block production
-		t.Log("Certificate commits did not complete in test environment (gossip mesh timing)")
-		assert.Greater(t, submissionRate, float64(500),
-			"Should achieve at least 500 TPS submission rate")
-	}
+	// Committed transactions must actually flow. The old form of this check
+	// tolerated actualTPS == 0 ("gossip mesh timing") and passed on submission
+	// rate alone — a run where consensus committed NOTHING passed while an
+	// honest slow run failed the benchmark floor. Zero processing is the one
+	// outcome this test exists to reject.
+	t.Logf("Actual processed TPS: %.2f", actualTPS)
+	assert.GreaterOrEqual(t, actualTPS, float64(minAcceptableTPS),
+		"Expected TPS >= %d, got %.2f", minAcceptableTPS, actualTPS)
 }
 
 // TestConsensusTestnet_NodeRestart tests that consensus continues after a node restart.
