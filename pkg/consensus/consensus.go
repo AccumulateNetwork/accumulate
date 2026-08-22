@@ -87,14 +87,14 @@ func (c *NodeConfig) applyDefaults() {
 	if c.NumWorkers <= 0 {
 		c.NumWorkers = DefaultNumWorkers
 	}
-	// Workers are shards. A power-of-two count lets the routing key be masked,
+	// A power-of-two worker count lets the routing key be masked,
 	// which is uniform and cheap; anything else falls back to modulo, which
-	// works but is not sharding and gives uneven buckets. This network was
+	// works but gives uneven buckets. This network was
 	// configured with 100 (#4133), which is neither a power of two nor a
 	// number anyone chose for a reason. Warn rather than refuse: a running
 	// deployment should not fail to start over it.
 	if !IsPowerOfTwo(c.NumWorkers) {
-		slog.Warn("Worker count is not a power of two — routing falls back to modulo, which is not sharding",
+		slog.Warn("Worker count is not a power of two — routing falls back to modulo and buckets are uneven",
 			"numWorkers", c.NumWorkers,
 			"suggestion", "use a power of two (e.g. 64 or 128)")
 	}

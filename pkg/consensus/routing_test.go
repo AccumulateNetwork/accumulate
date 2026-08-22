@@ -23,7 +23,7 @@ func TestIsPowerOfTwo(t *testing.T) {
 	}
 }
 
-// The property the whole fix rests on: one signer always lands on one worker.
+// The property the routing change rests on: one signer always lands on one worker.
 //
 // Without it a signer's transactions are batched independently and committed
 // in DAG order, and replay protection — which requires strictly increasing
@@ -40,7 +40,7 @@ func TestWorkerFor_SameKeyAlwaysSameWorker(t *testing.T) {
 	}
 }
 
-// Distinct signers must still spread, or sharding buys nothing.
+// Distinct signers must still spread, or the worker fan-out buys nothing.
 func TestWorkerFor_DistinctKeysSpread(t *testing.T) {
 	const n = 64
 	seen := map[int]int{}

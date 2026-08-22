@@ -81,7 +81,7 @@ func TestSubmitRouting_OneSignerLandsOnOneWorker(t *testing.T) {
 	}
 }
 
-// ...while distinct signers still spread, or the sharding buys nothing.
+// ...while distinct signers still spread, or the the worker fan-out buys nothing.
 func TestSubmitRouting_DistinctSignersSpreadAcrossWorkers(t *testing.T) {
 	node := nodeWithWorkers(t, 64)
 	seen := map[int]bool{}
