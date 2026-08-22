@@ -32,16 +32,40 @@ type SequencedInfo struct {
 // message). If the client's address is non-nil, the query will be sent to that
 // address. Otherwise, all of the source partition's nodes will be queried in
 // order until one responds.
+// sequencedAccount picks the account a sequenced message lives in. Anchors and
+// synthetics are held in different accounts, and querying the wrong one finds
+// nothing — healing then reports the message as unresolvable when it is simply
+// being looked for in the wrong place.
+func sequencedAccount(anchor bool) string {
+	if anchor {
+		return protocol.AnchorPool
+	}
+	return protocol.Synthetic
+}
+
+// peersForSource returns the peers that can answer for a source partition.
+//
+// The map is keyed by lower-case partition ID while callers pass IDs from a
+// scan, a config or an operator's command line, in whatever case those use. A
+// case mismatch here returns no peers, and healing then does nothing at all —
+// silently, because an empty peer list is indistinguishable from "tried
+// everyone and none had it".
+//
+// Nil-safe: healing runs against a scan that may have failed, and a nil
+// dereference in the recovery path takes the node down exactly when it is
+// trying to recover.
+func peersForSource(net *NetworkInfo, srcId string) PeerList {
+	if net == nil {
+		return nil
+	}
+	return net.Peers[strings.ToLower(srcId)]
+}
+
 func ResolveSequenced[T messaging.Message](ctx context.Context, client message.AddressedClient, net *NetworkInfo, srcId, dstId string, seqNum uint64, anchor bool) (*api.MessageRecord[T], error) {
 	srcUrl := protocol.PartitionUrl(srcId)
 	dstUrl := protocol.PartitionUrl(dstId)
 
-	var account string
-	if anchor {
-		account = protocol.AnchorPool
-	} else {
-		account = protocol.Synthetic
-	}
+	account := sequencedAccount(anchor)
 
 	// If the client has an address, use that
 	if client.Address != nil {
@@ -60,7 +84,7 @@ func ResolveSequenced[T messaging.Message](ctx context.Context, client message.A
 
 	// Otherwise try each node until one succeeds
 	slog.InfoContext(ctx, "Resolving the message ID", "source", srcId, "destination", dstId, "number", seqNum)
-	for peer := range net.Peers[strings.ToLower(srcId)] {
+	for peer := range peersForSource(net, srcId) {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
