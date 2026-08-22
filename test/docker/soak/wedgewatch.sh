@@ -117,15 +117,34 @@ while :; do
   d="$(curl -sf -m 8 "$MON" 2>/dev/null)" || continue
   # Which partitions are stalled, and for how long. "unknown" is NOT a wedge:
   # chaos pauses a node and the API it answers on goes with it.
-  read -r worst names <<< "$(printf '%s' "$d" | python3 -c '
+  read -r worst names blocks empties <<< "$(printf '%s' "$d" | python3 -c '
 import json,sys
 try: d=json.load(sys.stdin)
-except Exception: print("0 -"); raise SystemExit
+except Exception: print("0 - 0 0"); raise SystemExit
 p=d.get("progress") or {}
 s=[(v.get("stalledFor") or 0,k) for k,v in p.items() if v.get("state")=="stalled"]
-print("%d %s" % (max([x[0] for x in s]) if s else 0, ",".join(sorted(k for _,k in s)) or "-"))
+lf=d.get("life") or {}
+print("%d %s %d %d" % (max([x[0] for x in s]) if s else 0,
+                       ",".join(sorted(k for _,k in s)) or "-",
+                       lf.get("blocks") or 0, lf.get("blocksEmpty") or 0))
 ' 2>/dev/null)"
   [ -z "${worst:-}" ] && continue
+
+  # An idle network is not a wedge, and a capture taken during one is worse
+  # than useless: it spends one of MAX and opens a COOLDOWN that would blind
+  # this watchdog through exactly the window where the previous run actually
+  # wedged. Blocks still being produced, all of them empty, means the load
+  # generator is between phases — not that the executor is stuck.
+  if [ "${blocks:-0}" -gt "${prev_blocks:-0}" ]; then
+    made=$(( blocks - ${prev_blocks:-0} ))
+    made_empty=$(( empties - ${prev_empties:-0} ))
+    prev_blocks=$blocks; prev_empties=$empties
+    if [ "$made_empty" -ge "$made" ]; then
+      continue
+    fi
+  else
+    prev_blocks=$blocks; prev_empties=$empties
+  fi
 
   if [ "$worst" -ge "$WEDGE_SECS" ]; then
     now=$(date +%s)
