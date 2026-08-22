@@ -82,14 +82,29 @@ func (e *env) bootstrapSubTreasuries(ctx context.Context, n int) error {
 
 	funded, stuck := 0, 0
 	phaseA := time.Now()
+	// ONE deadline for the whole phase, not one per account.
+	//
+	// Reporting every straggler instead of failing on the first is the right
+	// behaviour, but with a 5-minute timeout EACH it turns 90 stuck deposits
+	// into seven hours of bootstrap. Past the deadline, still check each
+	// account — a quick look, so the count is accurate — but stop waiting.
+	phaseDeadline := phaseA.Add(5 * time.Minute)
 	for _, l := range lites {
-		if err := e.awaitAccount(ctx, l.acct, 5*time.Minute); err != nil {
+		wait := time.Until(phaseDeadline)
+		if wait < 2*time.Second {
+			wait = 2 * time.Second
+		}
+		if err := e.awaitAccount(ctx, l.acct, wait); err != nil {
 			stuck++
 			// Say what was actually seen: which transaction, and what the
 			// network says about it now.
-			log.Printf("bootstrap: sub-treasury %v never funded after %v: %v (deposit %v: %s)",
-				l.acct, time.Since(phaseA).Round(time.Second), err,
-				deposit[l.acct.String()], e.describeTx(ctx, deposit[l.acct.String()]))
+			// Explain the first one in full; after that just count, or the
+			// log becomes 90 copies of the same paragraph.
+			if stuck == 1 {
+				log.Printf("bootstrap: sub-treasury %v never funded after %v: %v (deposit %v: %s)",
+					l.acct, time.Since(phaseA).Round(time.Second), err,
+					deposit[l.acct.String()], e.describeTx(ctx, deposit[l.acct.String()]))
+			}
 			continue
 		}
 		funded++
