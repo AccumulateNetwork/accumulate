@@ -60,7 +60,14 @@ manifest="$rd/manifest.md"; runjson="$rd/run.json"
 # asp-v00* mainnet containers as orphans and delete them. Pin the project so
 # teardown can only ever reach this network.
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-disoak}"
-compose="docker compose -f $here/../docker-compose.yml"
+# One definition of where the compose file is. It used to be spelled
+# "$here/docker-compose.yml" for provenance and "$here/../docker-compose.yml"
+# for the commands — the script came from synth-heal, where it sat beside the
+# script. Every run therefore froze no compose file at all and reported the
+# healing flags and drop patterns as their fallbacks, so the manifest said
+# "no drops" whether or not drops were configured (#4126).
+compose_file="$here/../docker-compose.yml"
+compose="docker compose -f $compose_file"
 
 # ---- provenance -------------------------------------------------------------
 # Capture what is being tested BEFORE starting, because the tree will move on.
@@ -76,7 +83,7 @@ exec_ver=$(grep -E '^\s*executorVersion:' "$here/../docker-network.yml" | head -
 # "enable-synthetic-healing = true", and matching that made a v1.4.5 run — which
 # has no healing config at all — report the flag as set. A provenance record
 # that quietly reports the opposite of the truth is worse than none.
-heal_flags=$(sed 's/#.*//' "$here/docker-compose.yml" \
+heal_flags=$(sed 's/#.*//' "$compose_file" \
   | grep -oE 'enable-[a-z-]*healing = [a-z]+' | sort -u | paste -sd'; ' -)
 heal_flags="${heal_flags:-unconditional (DI conductor, #4105)}"
 # The compose declares these as "${DROP_SYN-<default>}", so the value that
@@ -86,7 +93,7 @@ heal_flags="${heal_flags:-unconditional (DI conductor, #4105)}"
 composed_default() { # $1=env var name, $2=compose key
   # Strip only the leading "KEY: " — a greedy .*: would eat into the value,
   # whose own patterns contain colons (e.g. "*:%499+3").
-  grep -oE "$2: *\"[^\"]*\"" "$here/docker-compose.yml" | head -1 \
+  grep -oE "$2: *\"[^\"]*\"" "$compose_file" | head -1 \
     | sed "s/^$2: *//; s/\"//g; s/^\${[A-Za-z_][A-Za-z0-9_]*-//; s/}$//"
 }
 drop_synth="${DROP_SYN:-$(composed_default DROP_SYN ACC_DEBUG_DROP_SYNTHETIC)}"
@@ -98,7 +105,7 @@ n_node=$(grep -cE '^\s*- listenAddress:' "$here/../docker-network.yml")
 
 # Freeze the exact config. A diff against these is the only reliable way to know
 # what changed between two runs.
-cp "$here/docker-compose.yml" "$here/../docker-network.yml" "$0" "$rd/config/" 2>/dev/null
+cp "$compose_file" "$here/../docker-network.yml" "$0" "$rd/config/" 2>/dev/null
 git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
 
 {

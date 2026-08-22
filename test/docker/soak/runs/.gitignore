@@ -13,3 +13,8 @@ node-logs-live.txt
 container-logs/
 # GitLab rejects blobs over 1 MiB — summarize anything bigger instead of committing it
 reconcile-pulls.txt
+# The convenience symlink to the newest run. Tracking it made soak.sh's own
+# `ln -sfn` a tracked modification, so `git describe --dirty` reported -dirty
+# for every run against an otherwise clean tree — which is precisely where the
+# dirty marker needed to mean something (#4126).
+latest
