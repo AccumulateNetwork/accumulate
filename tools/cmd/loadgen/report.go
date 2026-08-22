@@ -642,6 +642,40 @@ func (e *env) hasCredits(ctx context.Context, u *url.URL) bool {
 // In run 20260822T050137Z the deposit never arrived at all and add-credits-page
 // was rejected 151 times out of 151, "insufficient tokens: have 0.00000000"
 // (#4130).
+// describeTx says what the network currently thinks of a transaction, for use
+// in an error message.
+//
+// "Never funded" naming only the destination account is a dead end: it cannot
+// distinguish a transaction that was never executed from one that executed and
+// whose synthetic deposit was lost, and those are completely different bugs.
+// This turns the timeout into a lead.
+func (e *env) describeTx(ctx context.Context, id *url.TxID) string {
+	if id == nil {
+		return "no txid recorded"
+	}
+	r, err := e.Q.QueryMessage(ctx, id, nil)
+	if err != nil {
+		if errors.Is(err, errors.NotFound) {
+			return "not found — never executed, or executed where this node cannot see it"
+		}
+		return fmt.Sprintf("query failed: %v", err)
+	}
+	if r == nil {
+		return "no record"
+	}
+	out := fmt.Sprintf("delivered=%v", r.Status.Delivered())
+	if r.Error != nil {
+		out += fmt.Sprintf(" error=%v", r.Error.Message)
+	}
+	if r.Produced != nil {
+		out += fmt.Sprintf(" produced=%d", r.Produced.Total)
+		if r.Produced.Total == 0 {
+			out += " (no synthetic was emitted)"
+		}
+	}
+	return out
+}
+
 func (e *env) awaitBalance(ctx context.Context, u *url.URL, limit time.Duration) error {
 	deadline := time.Now().Add(limit)
 	for time.Now().Before(deadline) {

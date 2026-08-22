@@ -130,6 +130,13 @@ print("%d %s %d %d" % (max([x[0] for x in s]) if s else 0,
 ' 2>/dev/null)"
   [ -z "${worst:-}" ] && continue
 
+  # Say what is being seen once a minute, so a capture that did not happen can
+  # be explained after the fact instead of guessed at.
+  ticks=$(( ${ticks:-0} + 1 ))
+  if [ $(( ticks % 6 )) -eq 1 ]; then
+    log "watching: worstStall=${worst}s (${names}) threshold=${WEDGE_SECS}s blocks=${blocks} empty=${empties} captures=${n}/${MAX}"
+  fi
+
   # An idle network is not a wedge, and a capture taken during one is worse
   # than useless: it spends one of MAX and opens a COOLDOWN that would blind
   # this watchdog through exactly the window where the previous run actually

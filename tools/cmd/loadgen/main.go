@@ -403,6 +403,9 @@ func generate(ctx context.Context, e *env, total int, tps float64, limit time.Du
 	started := time.Now()
 	lastLog := time.Now()
 	var sent, failed, skipped int
+	// One logged reason per action type, so no failure mode goes unexplained.
+	seenFail := map[string]bool{}
+	seenSkip := map[string]bool{}
 	for i := 0; i < total; i++ {
 		if ctx.Err() != nil || (!deadline.IsZero() && time.Now().After(deadline)) {
 			break
@@ -423,10 +426,28 @@ func generate(ctx context.Context, e *env, total int, tps float64, limit time.Du
 			// especially early on; not a failure.
 			skipped++
 			e.track.skipped(act.name)
+			// Skips are expected early on, but a type that skips for the WHOLE
+			// run is a silent hole in coverage — issue-tokens and
+			// send-tokens-custom skipped every time in run 20260822T050137Z
+			// because no custom token ever existed, and nothing said so.
+			if !seenSkip[act.name] {
+				seenSkip[act.name] = true
+				log.Printf("%s: skipped (first time): %v", act.name, err)
+			}
 		case err != nil:
 			failed++
 			e.track.failed(act.name)
-			if failed <= 20 || failed%200 == 0 {
+			// Log the first failure of EVERY action type, not just the first
+			// twenty failures overall. A type that starts failing later —
+			// after some state has degraded — was previously silent, and the
+			// dashboard would show a rejection count with no reason anywhere.
+			// add-credits-page was rejected 151 times out of 151 in run
+			// 20260822T050137Z and only the first few lines said why.
+			first := !seenFail[act.name]
+			if first {
+				seenFail[act.name] = true
+			}
+			if first || failed <= 20 || failed%200 == 0 {
 				log.Printf("%s: %v", act.name, err)
 			}
 		default:

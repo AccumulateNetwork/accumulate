@@ -63,6 +63,38 @@ for _sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT):
 atexit.register(lambda: _log_exit("normal exit"))
 
 
+# Everything this process says must survive an abrupt death.
+#
+# soakmon died twice on 2026-08-22 leaving a ZERO-BYTE log, which read as "it
+# said nothing". It was not: stdout is block-buffered when redirected to a
+# file, so even the startup banner sat unflushed in a 4KB buffer and went down
+# with the process. We were reading an artefact of buffering as evidence of
+# silence, and it cost two runs. Line-buffer both streams and write diagnostics
+# to stderr, which is never block-buffered.
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except Exception:
+    pass
+
+
+def log(msg):
+    """Timestamped diagnostic. Goes to stderr so it is flushed as written."""
+    try:
+        sys.stderr.write("%s %s\n" % (
+            time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), msg))
+    except Exception:
+        pass
+
+
+# Subprocess health. sh() swallowed every exception, and it runs a `docker
+# exec` per node per second — so a timeout storm, a docker daemon hiccup or
+# fork failure was completely invisible. Count them and surface the last error
+# on the heartbeat rather than logging each one, which would be its own flood.
+_SHFAIL = {"n": 0, "last": "", "calls": 0}
+
+
+
 # Refresh cadences (seconds): cheap things often, docker-heavy things rarely.
 I_STATS, I_HEIGHT, I_WEDGE, I_HEAL, I_CHAOS, I_FLOW = 1, 1, 5, 5, 5, 1
 HIST_MAX = 600  # ~10 min of 1s ticks kept for the sparklines' recent window
@@ -76,9 +108,12 @@ _peerid = {}  # container -> peerID (stable per node identity; cached)
 
 
 def sh(args, timeout=25):
+    _SHFAIL["calls"] += 1
     try:
         return subprocess.run(args, capture_output=True, text=True, timeout=timeout).stdout
-    except Exception:
+    except Exception as e:
+        _SHFAIL["n"] += 1
+        _SHFAIL["last"] = "%s: %s" % (type(e).__name__, str(e)[:160])
         return ""
 
 
@@ -586,10 +621,61 @@ def collect_chaos():
     return {"counts": counts, "recent": list(reversed(recent))}
 
 
+def _self_stats():
+    """Resource picture of this process, for the heartbeat."""
+    out = {"threads": threading.active_count(), "fds": -1, "rssMiB": -1}
+    try:
+        out["fds"] = len(os.listdir("/proc/self/fd"))
+    except Exception:
+        pass
+    try:
+        with open("/proc/self/statm") as f:
+            out["rssMiB"] = round(int(f.read().split()[1]) * 4096 / 1048576)
+    except Exception:
+        pass
+    return out
+
+
+def heartbeat(started):
+    """One line a minute proving the monitor is alive, and showing whether it
+    is accumulating threads, file descriptors or subprocess failures.
+
+    soakmon died twice mid-run with nothing to attribute it to. If it is
+    leaking — it runs a `docker exec` per node per second — this is where that
+    becomes visible, hours before it becomes fatal."""
+    while True:
+        time.sleep(60)
+        st = _self_stats()
+        up = int(time.time() - started)
+        msg = ("heartbeat up=%dh%02dm threads=%d fds=%d rss=%dMiB "
+               "shcalls=%d shfails=%d" % (
+                   up // 3600, (up % 3600) // 60, st["threads"], st["fds"],
+                   st["rssMiB"], _SHFAIL["calls"], _SHFAIL["n"]))
+        if _SHFAIL["last"]:
+            msg += " lastShErr=%s" % _SHFAIL["last"]
+        log(msg)
+
+
 def collector():
     last = {"height": 0, "metrics": 0, "chaos": 0}
     hist = []
+    fails = 0
     while True:
+        try:
+            _collect_once(last, hist)
+            fails = 0
+        except Exception as e:
+            # A collector that dies leaves the dashboard serving stale data
+            # forever, which is worse than saying so — the page looked healthy
+            # while nothing was being read. Log and carry on.
+            fails += 1
+            log("collector error (%d in a row): %s: %s" % (
+                fails, type(e).__name__, str(e)[:200]))
+            time.sleep(1)
+
+
+def _collect_once(last, hist):
+    if True:
         now = time.time()
         upd = {}
         upd["loadgen"] = read_stats()
@@ -984,13 +1070,29 @@ tick();setInterval(tick,1000);
 
 
 def main():
+    started = time.time()
+    log("soakmon starting pid=%d port=%d runDir=%s python=%s" % (
+        os.getpid(), PORT, os.environ.get("RUN_DIR", "(unset)"),
+        sys.version.split()[0]))
     threading.Thread(target=collector, daemon=True).start()
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"soak monitor on http://127.0.0.1:{PORT}  (Ctrl-C to stop)")
+    threading.Thread(target=heartbeat, args=(started,), daemon=True).start()
+    try:
+        srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    except OSError as e:
+        # Almost always "address already in use" — a previous soakmon still
+        # holding the port. Say so: this exits before serving anything, and
+        # a silent failure here looks identical to a mid-run death.
+        log("cannot bind port %d: %s" % (PORT, e))
+        raise
+    log("serving on http://127.0.0.1:%d" % PORT)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        log("serve_forever failed: %s: %s" % (type(e).__name__, str(e)[:200]))
+        raise
+    log("serve_forever returned")
 
 
 if __name__ == "__main__":

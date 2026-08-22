@@ -133,6 +133,14 @@ print("%d %s %d %d" % (max([x[0] for x in s]) if s else 0,
 ' 2>/dev/null)"
   [ -z "${worst:-}" ] && continue
 
+  # A watchdog that only speaks when it acts cannot be second-guessed
+  # afterwards. Once a minute, say what it is seeing and therefore why it is
+  # not acting — the run record should show the decision, not just the verdict.
+  ticks=$(( ${ticks:-0} + 1 ))
+  if [ $(( ticks % 6 )) -eq 1 ]; then
+    log "watching: worstStall=${worst}s (${names}) threshold=${KILL_SECS}s blocks=${blocks} empty=${empties} blindPolls=${blind}"
+  fi
+
   # An IDLE network is not a wedged one, and the monitor cannot tell them
   # apart: it measures the ledger index, which only moves when a block has
   # content. While the load generator sits in its bootstrap wait the network

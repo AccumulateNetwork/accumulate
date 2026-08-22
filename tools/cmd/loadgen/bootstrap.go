@@ -12,6 +12,8 @@ import (
 	"log"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -58,20 +60,44 @@ func (e *env) bootstrapSubTreasuries(ctx context.Context, n int) error {
 	// Phase A — fund each from the treasury. Treasury-signed, so they serialize
 	// on the treasury's signer (monotonic timestamps) but pipeline into the
 	// mempool; the barrier waits for all deposits to land once, not one-by-one.
+	// Keep the txid of each deposit. When one never lands, the useful question
+	// is what happened to THAT transaction — and until now the timeout said
+	// only "never funded", naming the account and nothing else. Every run of
+	// the past week has hit this and none of them could say why.
+	deposit := make(map[string]*url.TxID, len(lites))
 	for _, l := range lites {
 		l := l
-		if _, err := e.submitAsTreasury(ctx, func() txBuilder {
+		ids, err := e.submitAsTreasury(ctx, func() txBuilder {
 			return e.build(e.treasury).
 				SendTokens(subTreasuryAcme, protocol.AcmePrecisionPower).To(l.acct).
 				SignWith(e.treasury.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(e.treasury.key)
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("fund sub-treasury %v: %w", l.acct, err)
 		}
+		if len(ids) > 0 {
+			deposit[l.acct.String()] = ids[0]
+		}
 	}
+
+	funded, stuck := 0, 0
+	phaseA := time.Now()
 	for _, l := range lites {
 		if err := e.awaitAccount(ctx, l.acct, 5*time.Minute); err != nil {
-			return fmt.Errorf("sub-treasury %v never funded: %w", l.acct, err)
+			stuck++
+			// Say what was actually seen: which transaction, and what the
+			// network says about it now.
+			log.Printf("bootstrap: sub-treasury %v never funded after %v: %v (deposit %v: %s)",
+				l.acct, time.Since(phaseA).Round(time.Second), err,
+				deposit[l.acct.String()], e.describeTx(ctx, deposit[l.acct.String()]))
+			continue
 		}
+		funded++
+	}
+	log.Printf("bootstrap: phase A complete in %v — %d/%d sub-treasuries funded, %d never landed",
+		time.Since(phaseA).Round(time.Second), funded, len(lites), stuck)
+	if funded == 0 {
+		return fmt.Errorf("no sub-treasury was funded (%d attempted)", len(lites))
 	}
 
 	// Phase B — buy credits for each so it can sign. A brand-new lite cannot pay
