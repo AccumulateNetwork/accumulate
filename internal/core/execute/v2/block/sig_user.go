@@ -7,6 +7,7 @@
 package block
 
 import (
+	"log/slog"
 	"math/big"
 	"strings"
 
@@ -262,6 +263,22 @@ func (UserSignature) verifySigner(batch *database.Batch, ctx *userSigContext) er
 	// Timestamps must be strictly increasing per key to prevent signature replay
 	// See docs/timestamp-requirements.md for operator guidance on NTP requirements
 	if ctx.keySig.GetTimestamp() != 0 && ctx.keyEntry.GetLastUsedOn() >= ctx.keySig.GetTimestamp() {
+		// Say so. This rejection is invisible everywhere else: it does not
+		// reach the statuses block.Process returns, so the block reports a
+		// clean execution and the transaction simply never appears on any
+		// chain. In run 20260822T062523Z the treasury submitted 100
+		// transactions, all of which were accepted, batched, committed and
+		// "executed" with zero reported failures — and eight signatures were
+		// recorded (#4132).
+		//
+		// Replay protection is correct. What breaks it is a signer whose
+		// transactions execute out of order, which is what happens when they
+		// are spread across workers and committed in DAG order.
+		slog.Info("Signature rejected: timestamp not increasing",
+			"signer", ctx.signer.GetUrl(),
+			"lastUsedOn", ctx.keyEntry.GetLastUsedOn(),
+			"got", ctx.keySig.GetTimestamp(),
+			"txid", ctx.transaction.ID())
 		return errors.BadTimestamp.WithFormat("invalid timestamp: have %d, got %d", ctx.keyEntry.GetLastUsedOn(), ctx.keySig.GetTimestamp())
 	}
 
