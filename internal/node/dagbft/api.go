@@ -163,6 +163,32 @@ func NewSubmitterService(params SubmitterServiceParams) *SubmitterService {
 // Type returns the service type.
 func (s *SubmitterService) Type() api.ServiceType { return api.ServiceTypeSubmit }
 
+// signerOf returns a stable routing key for an envelope: the URL of the signer
+// of its first signature.
+//
+// Everything signed by one key must be handled by one worker, or it is batched
+// in parallel, committed out of order, and rejected by replay protection —
+// which requires a signer's timestamps to be strictly increasing in EXECUTION
+// order (#4132).
+//
+// Falls back to the legacy Signatures field, then to empty (round-robin) if
+// there is nothing to key on.
+func signerOf(envelope *messaging.Envelope) string {
+	for _, m := range envelope.Messages {
+		if sm, ok := m.(*messaging.SignatureMessage); ok && sm.Signature != nil {
+			if u := sm.Signature.GetSigner(); u != nil {
+				return u.String()
+			}
+		}
+	}
+	for _, sig := range envelope.Signatures {
+		if u := sig.GetSigner(); u != nil {
+			return u.String()
+		}
+	}
+	return ""
+}
+
 // Submit submits an envelope to the DAG-BFT consensus.
 func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	// Identify what is being submitted: the contentless version of this trace
@@ -195,12 +221,11 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 	// Route by signer. Everything signed by one key must be handled by one
 	// worker, or it is batched in parallel, committed out of order, and
 	// rejected by replay protection (#4132).
-	routeKey := ""
-	if len(envelope.Signatures) > 0 {
-		if signer := envelope.Signatures[0].GetSigner(); signer != nil {
-			routeKey = signer.String()
-		}
-	}
+	// Signatures travel as MESSAGES here; envelope.Signatures is the legacy
+	// field and is empty in practice — the first version of this read it and
+	// routed every transaction with an empty key, which is round-robin, which
+	// is the bug. The verification run caught it because the key was logged.
+	routeKey := signerOf(envelope)
 
 	s.logger.Info("TRACE-SUBMIT: submitting to DAG-BFT service.SubmitTransaction",
 		"routeKey", routeKey)
