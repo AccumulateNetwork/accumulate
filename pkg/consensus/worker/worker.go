@@ -112,6 +112,14 @@ type Config struct {
 	// a batch a certificate cannot find can still say why it is gone.
 	// Defaults to DefaultMaxTombstones. Negative disables the record.
 	MaxTombstones int
+
+	// RetainCommittedFor is how long a committed batch stays fetchable for
+	// peers that fell behind, and MaxRetainedBatches caps how many are held.
+	// Defaults to DefaultRetainCommittedFor / DefaultMaxRetainedBatches.
+	// Negative disables retention, restoring the old delete-on-commit
+	// behaviour — which strands any node that misses the commit (#4128).
+	RetainCommittedFor time.Duration
+	MaxRetainedBatches int
 }
 
 // applyDefaults fills in default values for unset configuration fields.
@@ -145,6 +153,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MaxTombstones == 0 {
 		c.MaxTombstones = DefaultMaxTombstones
+	}
+	if c.RetainCommittedFor == 0 {
+		c.RetainCommittedFor = DefaultRetainCommittedFor
+	}
+	if c.MaxRetainedBatches == 0 {
+		c.MaxRetainedBatches = DefaultMaxRetainedBatches
 	}
 }
 
@@ -200,6 +214,15 @@ type Worker struct {
 	goneOrder     []types.BatchDigest
 	maxTombstones int
 
+	// Committed batches kept fetchable for peers that fell behind (#4128).
+	// Separate from `batches` on purpose: `batches` is what this node still
+	// owes consensus, `retained` is what it can still serve. Guarded by
+	// batchMu.
+	retained      map[types.BatchDigest]*retainedBatch
+	retainedOrder []types.BatchDigest
+	maxRetained   int
+	retainFor     time.Duration
+
 	// Available batch digests (for header creation) - bounded queue with backpressure
 	availableBatchQueue chan types.BatchDigest
 	queueDepth          atomic.Int64
@@ -240,6 +263,9 @@ func New(config Config, g *gossip.GossipLayer) *Worker {
 		lruList:             list.New(),
 		gone:                make(map[types.BatchDigest]BatchGone),
 		maxTombstones:       config.MaxTombstones,
+		retained:            make(map[types.BatchDigest]*retainedBatch),
+		maxRetained:         config.MaxRetainedBatches,
+		retainFor:           config.RetainCommittedFor,
 		availableBatchQueue: make(chan types.BatchDigest, config.MaxBatchQueueSize),
 		triggerBatch:        make(chan struct{}, 1),
 		triggerEviction:     make(chan struct{}, 1),
@@ -400,6 +426,11 @@ func (w *Worker) GetBatch(digest types.BatchDigest) (*types.Batch, error) {
 
 	entry, ok := w.batches[digest]
 	if !ok {
+		// Committed and no longer active, but possibly still retained for
+		// peers catching up. Retention has no LRU position to update.
+		if b := w.getRetained(digest); b != nil {
+			return b, nil
+		}
 		return nil, nil // Not found, not an error
 	}
 
@@ -517,14 +548,28 @@ func (w *Worker) RequeueBatches(digests []types.BatchDigest) {
 // This should be called after batches are finalized to free memory.
 // Also removes entries from the LRU list.
 func (w *Worker) PruneBatches(committed []types.BatchDigest) {
-	w.PruneBatchesAt(committed, "")
+	w.PruneCommitted(committed, CommitInfo{})
 }
 
-// PruneBatchesAt is PruneBatches with a note of what committed them — a block
-// index, say. The note lands in the tombstone, so when a LATER certificate
-// cannot find one of these batches the log names the block whose execution
-// deleted it, which is the whole question in #4125.
+// PruneBatchesAt is PruneCommitted with only a human-readable detail.
 func (w *Worker) PruneBatchesAt(committed []types.BatchDigest, detail string) {
+	w.PruneCommitted(committed, CommitInfo{Detail: detail})
+}
+
+// CommitInfo identifies the commit that retired a set of batches.
+type CommitInfo struct {
+	// Cert is the committing certificate's digest. Recorded so that a later
+	// delivery of the SAME certificate can be recognised as a re-delivery
+	// rather than waited on forever (#4125).
+	Cert string
+	// Detail is for humans: block, round, author.
+	Detail string
+}
+
+// PruneCommitted retires batches that a certificate committed. They leave the
+// active store — so they stop being re-proposed — and enter the retention
+// window, where they stay fetchable for peers that have not caught up yet.
+func (w *Worker) PruneCommitted(committed []types.BatchDigest, info CommitInfo) {
 	w.batchMu.Lock()
 	defer w.batchMu.Unlock()
 
@@ -533,7 +578,11 @@ func (w *Worker) PruneBatchesAt(committed []types.BatchDigest, detail string) {
 		if entry, ok := w.batches[digest]; ok {
 			w.lruList.Remove(entry.element)
 			delete(w.batches, digest)
-			w.noteGone(digest, GonePruned, detail)
+			// Committed, so it leaves the active store and stops being
+			// re-proposed — but keep it fetchable for a while, because a peer
+			// that missed this commit has nowhere else to get it (#4128).
+			w.retain(digest, entry.batch, info.Detail, info.Cert)
+			w.noteGone(digest, GonePruned, info.Detail, info.Cert)
 			pruned++
 		}
 	}
@@ -541,7 +590,7 @@ func (w *Worker) PruneBatchesAt(committed []types.BatchDigest, detail string) {
 	slog.Debug("Pruned committed batches",
 		"count", len(committed),
 		"pruned", pruned,
-		"detail", detail,
+		"detail", info.Detail,
 		"remaining", len(w.batches))
 }
 
@@ -835,6 +884,7 @@ func (w *Worker) evictionLoop() {
 
 		case <-ticker.C:
 			w.performEviction()
+			w.sweepRetained()
 
 		case <-w.triggerEviction:
 			w.performEviction()
@@ -871,7 +921,7 @@ func (w *Worker) performEviction() {
 		w.lruList.Remove(back)
 		delete(w.batches, lruDigest)
 		w.noteGone(lruDigest, GoneEvicted,
-			fmt.Sprintf("store over limit %d", w.config.MaxStoredBatches))
+			fmt.Sprintf("store over limit %d", w.config.MaxStoredBatches), "")
 		evicted++
 	}
 

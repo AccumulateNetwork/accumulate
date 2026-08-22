@@ -29,7 +29,9 @@ func batchOf(s string) *types.Batch {
 // on a batch that was absent from all twelve validators, and the log could not
 // say whether it had been pruned, evicted, or never stored.
 func TestPruneRecordsWhyTheBatchIsGone(t *testing.T) {
-	w := worker.New(worker.Config{ID: 0, Partition: "test"}, nil)
+	// Retention off: this test is about the tombstone, not about what stays
+	// servable afterwards.
+	w := worker.New(worker.Config{ID: 0, Partition: "test", MaxRetainedBatches: -1}, nil)
 
 	b := batchOf("tx-1")
 	require.NoError(t, w.StoreBatch(b))
@@ -93,32 +95,58 @@ func TestNeverStoredHasNoTombstone(t *testing.T) {
 	assert.Equal(t, 0, w.TombstoneCount())
 }
 
-// The wedge shape from #4125, in miniature: one digest reaches two
-// certificates, the first one to execute prunes it, and the second can never
-// be collected. The point of the test is not that this sequence is legal — it
-// is that when it happens the executor can say WHY, instead of repeating
-// "missing=1" until someone takes a goroutine dump.
-func TestSameBatchInTwoCertificates_SecondCannotCollectAndSaysWhy(t *testing.T) {
+// The wedge shape from #4125, in miniature — and why it is no longer fatal.
+//
+// One digest reaches two certificates; the first to execute retires it. Before
+// retention that deleted it outright and the second certificate could never be
+// collected, on any node, forever. Now the batch leaves the ACTIVE store (so it
+// stops being re-proposed) but stays fetchable, so the second certificate is
+// served and the partition keeps moving.
+func TestSameBatchInTwoCertificates_RetentionKeepsItServable(t *testing.T) {
 	w := worker.New(worker.Config{ID: 0, Partition: "Directory"}, nil)
 
 	shared := batchOf("payment-1")
 	digest := shared.Digest()
 	require.NoError(t, w.StoreBatch(shared))
 
-	// Certificate at round 240 commits and the executor prunes its payload.
-	w.PruneBatchesAt([]types.BatchDigest{digest}, "block 2951 round 240")
+	// Certificate at round 240 commits and the executor retires its payload.
+	w.PruneCommitted([]types.BatchDigest{digest},
+		worker.CommitInfo{Cert: "cert-240", Detail: "block 2951 round 240"})
 
-	// Certificate at round 246 names the same digest. Collection fails.
+	// It is out of the active store, so it will not be re-proposed...
+	assert.False(t, w.HasBatch(digest), "a committed batch leaves the active store")
+	// ...but a certificate that still names it can be served.
 	got, err := w.GetBatch(digest)
 	require.NoError(t, err)
-	require.Nil(t, got, "the second certificate cannot find its batch")
+	require.NotNil(t, got, "a committed batch stays fetchable inside the window")
+	assert.Equal(t, digest, got.Digest())
+	assert.True(t, w.HasRetained(digest))
+}
 
-	// And the reason is available, naming the earlier block.
+// With retention off, the old behaviour is exactly what halted the Directory:
+// the batch is gone the moment it commits, and all the store can offer is an
+// explanation.
+func TestSameBatchInTwoCertificates_WithoutRetentionItIsGone(t *testing.T) {
+	w := worker.New(worker.Config{
+		ID: 0, Partition: "Directory", MaxRetainedBatches: -1,
+	}, nil)
+
+	shared := batchOf("payment-1")
+	digest := shared.Digest()
+	require.NoError(t, w.StoreBatch(shared))
+	w.PruneCommitted([]types.BatchDigest{digest},
+		worker.CommitInfo{Cert: "cert-240", Detail: "block 2951 round 240"})
+
+	got, err := w.GetBatch(digest)
+	require.NoError(t, err)
+	require.Nil(t, got, "without retention the second certificate finds nothing")
+
 	gone, ok := w.BatchGone(digest)
 	require.True(t, ok)
 	assert.Equal(t, worker.GonePruned, gone.Reason)
-	assert.Contains(t, gone.Detail, "round 240",
-		"the tombstone must name the commit that deleted it, not the one that wanted it")
+	assert.Equal(t, "cert-240", gone.Cert,
+		"the tombstone names the committing certificate, so a re-delivery is recognisable")
+	assert.Contains(t, gone.Detail, "round 240")
 }
 
 // The tombstone ring is bounded, so a long run cannot turn diagnostics into a

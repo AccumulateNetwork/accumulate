@@ -53,6 +53,11 @@ type BatchGone struct {
 	Reason string
 	When   time.Time
 	Detail string
+	// Cert is the certificate whose execution committed this batch, for
+	// GonePruned. It is what makes a re-delivery recognisable: if the
+	// certificate now asking for the batch is the one that already committed
+	// it, this node has executed it before and must not wait for it (#4125).
+	Cert string
 }
 
 // String renders a tombstone for a log line.
@@ -69,7 +74,7 @@ func (g BatchGone) String() string {
 // Re-recording a digest refreshes it rather than adding a second ring entry, so
 // a batch that is stored and removed repeatedly cannot crowd out every other
 // tombstone.
-func (w *Worker) noteGone(digest types.BatchDigest, reason, detail string) {
+func (w *Worker) noteGone(digest types.BatchDigest, reason, detail, cert string) {
 	if w.maxTombstones <= 0 {
 		return
 	}
@@ -85,7 +90,9 @@ func (w *Worker) noteGone(digest types.BatchDigest, reason, detail string) {
 			delete(w.gone, oldest)
 		}
 	}
-	w.gone[digest] = BatchGone{Digest: digest, Reason: reason, When: time.Now(), Detail: detail}
+	w.gone[digest] = BatchGone{
+		Digest: digest, Reason: reason, When: time.Now(), Detail: detail, Cert: cert,
+	}
 }
 
 // BatchGone reports why a digest is absent, if this worker knows.

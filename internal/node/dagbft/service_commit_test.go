@@ -119,16 +119,25 @@ func TestProcessCommittedCertificate_PrunesExactlyTheCommittedBatches(t *testing
 	require.Equal(t, committed1.Digest(), got[1].Digest())
 	require.Equal(t, uint64(1), ca.blocks[0].Index, "first block after index 0")
 
-	// (b) Committed batches are pruned from the workers...
-	b, _ := w0.GetBatch(committed0.Digest())
-	require.Nil(t, b, "a committed batch must be pruned — or re-proposal re-commits it forever")
-	b, _ = w1.GetBatch(committed1.Digest())
-	require.Nil(t, b)
+	// (b) Committed batches leave the ACTIVE store, which is what stops
+	// re-proposal re-committing them forever...
+	require.False(t, w0.HasBatch(committed0.Digest()),
+		"a committed batch must leave the active store — or re-proposal re-commits it forever")
+	require.False(t, w1.HasBatch(committed1.Digest()))
 
-	// ...and only the committed ones: the survivor stays, awaiting its own
-	// certificate.
-	b, _ = w0.GetBatch(survivor.Digest())
-	require.NotNil(t, b, "a batch outside the certificate must NOT be pruned — its transactions would be lost")
+	// ...but stay fetchable, so a peer that missed this commit still has a
+	// source. Deleting them outright stranded any node that fell behind and
+	// halted the Directory permanently (#4125, #4128).
+	require.True(t, w0.HasRetained(committed0.Digest()),
+		"a committed batch must remain servable to peers catching up")
+	b, _ := w0.GetBatch(committed0.Digest())
+	require.NotNil(t, b, "retention must answer a fetch for a committed batch")
+
+	// ...and only the committed ones: the survivor stays active, awaiting its
+	// own certificate.
+	require.True(t, w0.HasBatch(survivor.Digest()),
+		"a batch outside the certificate must NOT be retired — its transactions would be lost")
+	require.False(t, w0.HasRetained(survivor.Digest()))
 
 	// State hash was stamped onto the certificate for cross-node comparison.
 	// (The tracker records it; a diverging remote hash for the same round is

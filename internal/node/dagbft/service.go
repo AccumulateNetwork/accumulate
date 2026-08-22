@@ -11,6 +11,7 @@ package dagbft
 import (
 	"context"
 	"crypto/ed25519"
+	stderrors "errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -439,6 +441,17 @@ func (s *Service) blockProductionLoop() {
 			}
 
 			if err := s.processCommittedCertificate(cert); err != nil {
+				// A certificate delivered twice is not a failure: this node
+				// executed it already and its batches were retired on
+				// purpose. Note it and move on, rather than logging an error
+				// and — worse, before #4125 — blocking forever inside
+				// collection waiting for a batch that will never come back.
+				if stderrors.Is(err, consensus.ErrAlreadyExecuted) {
+					slog.Info("Ignoring re-delivered certificate",
+						"round", cert.Header.Round,
+						"partition", s.config.Partition.ID)
+					continue
+				}
 				slog.Error("Failed to process committed certificate",
 					"error", err,
 					"round", cert.Header.Round)
@@ -633,8 +646,9 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	prunedBy := fmt.Sprintf("block %d round %d cert %s author %x",
 		blockIndex, cert.Header.Round, cert.Digest().String()[:16],
 		cert.Header.Author[:4])
+	commit := worker.CommitInfo{Cert: cert.Digest().String(), Detail: prunedBy}
 	for _, w := range s.node.Workers() {
-		w.PruneBatchesAt(committedDigests, prunedBy)
+		w.PruneCommitted(committedDigests, commit)
 	}
 
 	// Emit block event.

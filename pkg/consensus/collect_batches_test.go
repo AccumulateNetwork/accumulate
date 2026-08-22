@@ -73,14 +73,19 @@ func captureLogs(t *testing.T) *captureHandler {
 }
 
 func testNode(t *testing.T, partition string) *consensus.Node {
+	return testNodeCfg(t, partition, worker.Config{})
+}
+
+func testNodeCfg(t *testing.T, partition string, wc worker.Config) *consensus.Node {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
 	committee := types.NewCommittee([]types.ValidatorInfo{{PublicKey: pub, Stake: 100}}, 1)
 	node, err := consensus.NewNode(consensus.NodeConfig{
-		Partition: partition,
-		KeyPair:   priv,
+		Partition:    partition,
+		KeyPair:      priv,
+		WorkerConfig: wc,
 	}, committee, nil, nil)
 	require.NoError(t, err)
 	return node
@@ -137,37 +142,79 @@ func TestCollectBatches_ReturnsStoredBatches(t *testing.T) {
 	assert.Equal(t, b.Digest(), batches[0].Digest())
 }
 
-// The wedge from #4125, end to end at the node level: a batch pruned by an
-// earlier commit is named by a later certificate. The executor cannot proceed
-// — that part is by design — but its log must say the batch was pruned and by
-// which block, rather than repeating "missing=1".
-func TestCollectBatches_ReportsThatTheBatchWasPruned(t *testing.T) {
-	logs := captureLogs(t)
+// Retention turns the #4125 halt into a non-event at the node level: a
+// certificate that names a batch an EARLIER commit retired is still served,
+// because the batch is kept fetchable for a while after it commits.
+func TestCollectBatches_RetentionServesALaterCertificate(t *testing.T) {
+	captureLogs(t)
 	node := testNode(t, "Directory")
 	w := node.Workers()[0]
 
 	shared := types.NewBatch([][]byte{[]byte("payment-1")})
 	require.NoError(t, w.StoreBatch(shared))
+	w.PruneCommitted([]types.BatchDigest{shared.Digest()},
+		worker.CommitInfo{Cert: "an-earlier-certificate", Detail: "block 2951 round 240"})
 
-	// An earlier certificate committed and the executor pruned its payload.
-	w.PruneBatchesAt([]types.BatchDigest{shared.Digest()}, "block 2951 round 240")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 
-	// A later certificate names the same digest.
+	batches, err := node.CollectBatches(ctx, certFor(t, 246, shared.Digest()))
+	require.NoError(t, err, "retention should keep this collectable")
+	require.Len(t, batches, 1)
+	assert.Equal(t, shared.Digest(), batches[0].Digest())
+}
+
+// The second half of the fix, for when retention has already expired: a
+// certificate whose missing batch was retired by THAT SAME certificate has
+// already been executed here. Waiting would be a permanent halt, so it is
+// reported as a re-delivery instead.
+func TestCollectBatches_SkipsCertificateItAlreadyExecuted(t *testing.T) {
+	logs := captureLogs(t)
+	// Retention off, so the batch is genuinely gone and only the tombstone is
+	// left to reason from — the state the Directory was actually in.
+	node := testNodeCfg(t, "Directory", worker.Config{MaxRetainedBatches: -1})
+	w := node.Workers()[0]
+
+	b := types.NewBatch([][]byte{[]byte("payment-1")})
+	require.NoError(t, w.StoreBatch(b))
+
+	cert := certFor(t, 260, b.Digest())
+	w.PruneCommitted([]types.BatchDigest{b.Digest()},
+		worker.CommitInfo{Cert: cert.Digest().String(), Detail: "block 3114 round 260"})
+
+	// The same certificate is delivered a second time.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	start := time.Now()
+	_, err := node.CollectBatches(ctx, cert)
+
+	require.ErrorIs(t, err, consensus.ErrAlreadyExecuted)
+	assert.Less(t, time.Since(start), time.Second,
+		"it must return at once, not wait out the context")
+	require.NotEmpty(t, logs.matching("already executed"))
+}
+
+// The skip is narrow on purpose. A batch missing for any OTHER reason must
+// still be waited for: skipping there would execute a certificate without its
+// transactions and diverge this node from every peer that had them.
+func TestCollectBatches_DoesNotSkipWhenADifferentCertificateCommittedTheBatch(t *testing.T) {
+	captureLogs(t)
+	node := testNodeCfg(t, "Directory", worker.Config{MaxRetainedBatches: -1})
+	w := node.Workers()[0]
+
+	b := types.NewBatch([][]byte{[]byte("payment-1")})
+	require.NoError(t, w.StoreBatch(b))
+	w.PruneCommitted([]types.BatchDigest{b.Digest()},
+		worker.CommitInfo{Cert: "a-different-certificate", Detail: "block 3114 round 240"})
+
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
-	_, err := node.CollectBatches(ctx, certFor(t, 246, shared.Digest()))
+	_, err := node.CollectBatches(ctx, certFor(t, 260, b.Digest()))
+
 	require.Error(t, err)
-
-	waits := logs.matching("Waiting for batches")
-	require.NotEmpty(t, waits, "a stalled collection must report itself")
-
-	at := attrsOf(waits[0])
-	assert.Equal(t, shared.Digest().String(), at["digest"], "the missing batch must be named")
-	assert.Contains(t, at["absence"], worker.GonePruned,
-		"the report must say the batch was pruned, not merely that it is missing")
-	assert.Contains(t, at["absence"], "block 2951 round 240",
-		"and name the commit that deleted it")
-	assert.Equal(t, "246", at["round"])
+	assert.NotErrorIs(t, err, consensus.ErrAlreadyExecuted,
+		"a batch committed by someone else is not proof this certificate ran")
+	assert.Contains(t, err.Error(), "still missing")
 }
 
 // A batch that was never stored here reports as such, so it is not mistaken
@@ -220,12 +267,15 @@ func TestCollectBatches_DoesNotFloodTheLog(t *testing.T) {
 // its author, not just the round.
 func TestCollectBatches_NamesTheCertificateNotJustTheRound(t *testing.T) {
 	logs := captureLogs(t)
-	node := testNode(t, "Directory")
+	node := testNodeCfg(t, "Directory", worker.Config{MaxRetainedBatches: -1})
 
 	shared := types.NewBatch([][]byte{[]byte("payment-1")})
 	require.NoError(t, node.Workers()[0].StoreBatch(shared))
-	node.Workers()[0].PruneBatchesAt([]types.BatchDigest{shared.Digest()},
-		"block 3114 round 260 cert aaaaaaaaaaaaaaaa author deadbeef")
+	node.Workers()[0].PruneCommitted([]types.BatchDigest{shared.Digest()},
+		worker.CommitInfo{
+			Cert:   "a-different-certificate",
+			Detail: "block 3114 round 260 cert aaaaaaaaaaaaaaaa author deadbeef",
+		})
 
 	// A DIFFERENT certificate, same round, different author.
 	other := certFor(t, 260, shared.Digest())

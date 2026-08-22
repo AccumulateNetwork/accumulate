@@ -225,6 +225,39 @@ func (s multiWorkerBatchStore) StoreBatch(batch *types.Batch) error {
 	return s.workers[0].StoreBatch(batch)
 }
 
+// ErrAlreadyExecuted reports that a committed certificate has already been
+// executed by this node, so there is nothing left to collect.
+//
+// It is returned when a batch the certificate names is missing AND this node's
+// tombstone says that same certificate is what committed it. That combination
+// can only mean one thing: this node executed the certificate, retired its
+// batches, and is being handed it a second time. Waiting is then not a
+// liveness cost but a permanent halt — the Directory died exactly this way in
+// run 20260822T015342Z, spinning at 5,500 peer requests a minute for a batch
+// its own commit had retired (#4125).
+//
+// Skipping is safe ONLY in this exact case, because the work was already done.
+// A batch missing for any other reason is still waited on: skipping there
+// would execute a certificate without its transactions and diverge this node
+// from every peer that had them.
+var ErrAlreadyExecuted = errors.New("certificate already executed by this node")
+
+// executedBefore reports whether a missing batch proves this certificate has
+// already been executed here.
+func (n *Node) executedBefore(digest types.BatchDigest, cert *types.Certificate) bool {
+	certDigest := cert.Digest().String()
+	for _, w := range n.workers {
+		g, ok := w.BatchGone(digest)
+		if !ok {
+			continue
+		}
+		if g.Reason == worker.GonePruned && g.Cert != "" && g.Cert == certDigest {
+			return true
+		}
+	}
+	return false
+}
+
 // batchAbsence explains, as far as this node can tell, why it does not hold a
 // batch. Every removal from a worker's store leaves a tombstone, so the answer
 // is usually "pruned after block N" or "evicted": the difference matters, since
@@ -306,6 +339,17 @@ func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*
 				}
 			}
 			if batches[i] == nil {
+				// A batch this certificate itself committed means the
+				// certificate is being delivered twice. Say so instead of
+				// waiting for something this node deliberately retired.
+				if n.executedBefore(entry.Digest, cert) {
+					slog.Info("Skipping re-delivered certificate: already executed here",
+						"partition", n.config.Partition,
+						"round", cert.Header.Round,
+						"cert", cert.Digest().String()[:16],
+						"digest", entry.Digest.String()[:16])
+					return nil, ErrAlreadyExecuted
+				}
 				if missing == 0 {
 					firstMissing = entry.Digest
 				}
