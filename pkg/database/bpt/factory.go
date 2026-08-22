@@ -55,8 +55,20 @@ type Config struct {
 }
 
 // DefaultConfig returns a Config with sensible defaults:
-// - Sharding disabled for backward compatibility
+// - Sharding disabled
 // - Shard depth of 6 (64 shards) when enabled
+//
+// Sharding does not change the root. The BPT routes on bits of the key hash,
+// so its shape is a function of the key set; splitting at a bit boundary and
+// recombining is the same hash computation reassociated. A sharded and an
+// unsharded tree over the same data are identical, which is why enabling it is
+// a configuration choice and not a protocol change.
+//
+// It is off because ShardedBPT cannot yet serve production: it implements
+// Insert, Get, Delete and GetRootHash, while the database also needs
+// GetReceipt, Iterate and Index. Nothing outside tests calls this factory —
+// internal/database builds a concrete *bpt.BPT directly. Turning this on
+// without that work would change nothing; with it, this is the switch.
 func DefaultConfig() Config {
 	return Config{
 		ShardingEnabled: false,
