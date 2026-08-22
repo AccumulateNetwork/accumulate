@@ -45,10 +45,12 @@ type Config struct {
 
 	// ShardDepth specifies the number of bits for shard routing (1-8)
 	// Only used if ShardingEnabled is true
-	// Recommended values:
-	//   - 4 = 16 shards (optimal for 16-core systems)
-	//   - 5 = 32 shards (for 32-core systems)
-	//   - 6 = 64 shards (diminishing returns beyond this)
+	//
+	// Work lands on shards by hash, so it does not spread evenly: with as many
+	// shards as cores, collisions leave cores idle. Use more shards than cores
+	// — two to four times — and expect diminishing returns past 64.
+	//   - 5 = 32 shards
+	//   - 6 = 64 shards
 	ShardDepth int
 }
 
