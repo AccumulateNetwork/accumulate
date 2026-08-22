@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -75,6 +76,7 @@ func (w *Worker) retain(digest types.BatchDigest, b *types.Batch, detail, cert s
 		w.retainedOrder = append(w.retainedOrder, digest)
 	}
 	w.retained[digest] = &retainedBatch{batch: b, at: time.Now(), detail: detail, cert: cert}
+	metrics.BatchesRetained.Set(float64(len(w.retained)))
 
 	// Oldest first, so the cap cannot be exceeded even in a burst.
 	for len(w.retainedOrder) > w.maxRetained {
@@ -83,6 +85,7 @@ func (w *Worker) retain(digest types.BatchDigest, b *types.Batch, detail, cert s
 		if r, ok := w.retained[oldest]; ok {
 			delete(w.retained, oldest)
 			w.noteGone(oldest, GoneRetentionExpired, r.detail, r.cert)
+			metrics.BatchesRetentionExpiredTotal.Inc()
 		}
 	}
 }
@@ -93,6 +96,8 @@ func (w *Worker) getRetained(digest types.BatchDigest) *types.Batch {
 	if !ok {
 		return nil
 	}
+	// A hit here is a peer that would otherwise have been stranded (#4128).
+	metrics.BatchRetentionHitsTotal.Inc()
 	return r.batch
 }
 
@@ -121,8 +126,10 @@ func (w *Worker) sweepRetained() {
 		w.retainedOrder = w.retainedOrder[1:]
 		delete(w.retained, d)
 		w.noteGone(d, GoneRetentionExpired, r.detail, r.cert)
+		metrics.BatchesRetentionExpiredTotal.Inc()
 		dropped++
 	}
+	metrics.BatchesRetained.Set(float64(len(w.retained)))
 	if dropped > 0 {
 		slog.Debug("Retention window closed for committed batches",
 			"dropped", dropped, "retained", len(w.retained),

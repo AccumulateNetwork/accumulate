@@ -88,3 +88,71 @@ class ProgressTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BatchLifecycleTest(unittest.TestCase):
+    """The numbers that separate an idle network from a wedged one, and that
+    keep the #4125 re-delivery skip from hiding the bug it works around."""
+
+    def test_counters_sum_across_the_fleet(self):
+        per = {
+            "acc-bvn1-val1": [
+                ("accumulate_dagbft_blocks_produced_total", "", 100),
+                ("accumulate_dagbft_certificates_redelivered_total", "", 1),
+            ],
+            "acc-bvn1-val2": [
+                ("accumulate_dagbft_blocks_produced_total", "", 98),
+                ("accumulate_dagbft_certificates_redelivered_total", "", 2),
+            ],
+        }
+        life = soakmon.life_from(per)
+        self.assertEqual(198, life["blocks"])
+        self.assertEqual(3, life["redelivered"],
+                         "a re-delivery on any node is worth seeing")
+
+    def test_idle_network_is_visible_as_empty_blocks(self):
+        """The reading that cost three misdiagnoses in one night: block
+        production never stopped, the ledger index never moved."""
+        per = {"n": [
+            ("accumulate_dagbft_blocks_produced_total", "", 2000),
+            ("accumulate_dagbft_blocks_empty_total", "", 2000),
+        ]}
+        life = soakmon.life_from(per)
+        self.assertEqual(life["blocks"], life["blocksEmpty"],
+                         "every block empty means idle, not wedged")
+
+    def test_waits_are_broken_down_by_reason(self):
+        per = {"n": [
+            ("accumulate_dagbft_batch_waits_total", 'reason="pruned"', 4),
+            ("accumulate_dagbft_batch_waits_total", 'reason="no_record"', 7),
+        ], "m": [
+            ("accumulate_dagbft_batch_waits_total", 'reason="pruned"', 1),
+        ]}
+        life = soakmon.life_from(per)
+        self.assertEqual({"pruned": 5, "no_record": 7}, life["waitsByReason"],
+                         "pruned and no-record are different bugs (#4125 vs #4128)")
+
+    def test_retention_hits_and_expiries_are_both_reported(self):
+        """Sizing needs both: hits without expiries means the window is never
+        tested, expiries without hits means it is too generous."""
+        per = {"n": [
+            ("accumulate_dagbft_batch_retention_hits_total", "", 12),
+            ("accumulate_dagbft_batches_retention_expired_total", "", 400),
+            ("accumulate_dagbft_batches_retained", "", 88),
+        ]}
+        life = soakmon.life_from(per)
+        self.assertEqual(12, life["retentionHits"])
+        self.assertEqual(400, life["retentionExpired"])
+        self.assertEqual(88, life["retained"])
+
+    def test_garbage_values_do_not_break_the_dashboard(self):
+        per = {"n": [
+            ("accumulate_dagbft_blocks_produced_total", "", "NaN-ish"),
+            ("accumulate_dagbft_blocks_produced_total", "", 5),
+            ("unrelated_metric", "", 1),
+        ]}
+        self.assertEqual(5, soakmon.life_from(per)["blocks"])
+
+    def test_no_scrape_is_zero_not_an_error(self):
+        self.assertEqual(0, soakmon.life_from({})["blocks"])
+        self.assertEqual({}, soakmon.life_from(None)["waitsByReason"])

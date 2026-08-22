@@ -192,6 +192,53 @@ def _scrape_one(c, out, lock):
         out[c] = rows
 
 
+# Batch lifecycle totals across the fleet. Pure, so it can be tested without a
+# running network — each of these answers a question that previously took a
+# grep over gigabytes of container log.
+#
+#   redelivered  keeps the #4125 skip honest. Skipping a re-delivered
+#                certificate is correct, but a nonzero rate means commit dedup
+#                is still wrong upstream and the fix is hiding it. Expect 0.
+#   retention*   whether the #4128 window is sized right: hits mean it saved a
+#                lagging peer, expiries without hits mean it is too generous.
+#   blocks/empty an idle network commits empty rounds forever, which reads as a
+#                stall to anything watching the ledger index and as health to
+#                anything watching block production. Neither says "idle".
+LIFE_METRICS = {
+    "accumulate_dagbft_certificates_redelivered_total": "redelivered",
+    "accumulate_dagbft_batch_retention_hits_total": "retentionHits",
+    "accumulate_dagbft_batches_retention_expired_total": "retentionExpired",
+    "accumulate_dagbft_batches_retained": "retained",
+    "accumulate_dagbft_blocks_produced_total": "blocks",
+    "accumulate_dagbft_blocks_empty_total": "blocksEmpty",
+}
+
+_REASON = re.compile(r'reason="([^"]+)"')
+
+
+def life_from(per):
+    """Sum the batch-lifecycle metrics over every node's scrape."""
+    life = {"redelivered": 0, "retentionHits": 0, "retentionExpired": 0,
+            "retained": 0, "blocks": 0, "blocksEmpty": 0, "waitsByReason": {}}
+    for rows in (per or {}).values():
+        for name, lab, v in rows or ():
+            try:
+                n = int(float(v))
+            except (TypeError, ValueError):
+                continue
+            key = LIFE_METRICS.get(name)
+            if key:
+                # Counters are per-node; the fleet total is what says whether
+                # this is happening at all.
+                life[key] += n
+            elif name == "accumulate_dagbft_batch_waits_total":
+                m = _REASON.search(lab or "")
+                if m:
+                    life["waitsByReason"][m.group(1)] = \
+                        life["waitsByReason"].get(m.group(1), 0) + n
+    return life
+
+
 def collect_metrics():
     # Scrape every node's /metrics and aggregate. Counters (heals/drops) sum
     # across a partition's validators; gauges (sequence) take the max, since all
@@ -260,6 +307,16 @@ def collect_metrics():
     nodes = {"count": 0, "rssMinMiB": 0, "rssAvgMiB": 0, "rssMaxMiB": 0, "rssMaxNode": "",
              "grMin": 0, "grAvg": 0, "grMax": 0, "grMaxNode": "", "byNode": {}}
     rss, gor = {}, {}
+    # Batch lifecycle, added after the 20260822 night. Each answers a question
+    # that previously needed a grep over gigabytes of container log.
+    #   redelivered — keeps the #4125 skip honest: skipping a re-delivered
+    #     certificate is correct, but a nonzero rate means commit dedup is
+    #     still wrong upstream and the fix is hiding it. Should be 0.
+    #   retention hits/expired/held — whether the #4128 window is sized right.
+    #   blocks vs empty — an idle network commits empty rounds forever, which
+    #     reads as a stall to anything watching the ledger index and as health
+    #     to anything watching block production. Neither says "idle".
+    life = life_from(per)
     for c, rows in per.items():
         for name, lab, v in rows:
             if name == "process_resident_memory_bytes":
@@ -308,7 +365,7 @@ def collect_metrics():
         if af["synthetic"] or af["anchor"]:
             flows, syn_prod, anc_prod = af, asp, aap
 
-    return {"heals": heals, "wedges": drops, "flows": flows,
+    return {"heals": heals, "wedges": drops, "flows": flows, "life": life,
             "synProduced": syn_prod, "ancProduced": anc_prod, "nodeStats": nodes,
             "nodes": len(cs), "scraped": sum(1 for r in per.values() if r)}
 
@@ -519,6 +576,7 @@ def collector():
             upd["wedges"] = m["wedges"]
             upd["synProduced"] = m["synProduced"]
             upd["ancProduced"] = m["ancProduced"]
+            upd["life"] = m.get("life", {})
             upd["scrape"] = {"nodes": m["nodes"], "scraped": m["scraped"]}
             upd["nodeStats"] = m.get("nodeStats", {})
             with LOCK:
@@ -661,6 +719,20 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       <span class=sl id=ngrnode></span>
     </div>
     <div class=sgrp><span class=sh>heights</span><span id=heights></span></div>
+    <div class=sgrp><span class=sh>blocks</span>
+      <b id=lblocks>—</b><span class=sl>produced</span>
+      <b id=lempty>—</b><span class=sl>empty</span>
+      <span class=sl id=lidle></span>
+    </div>
+    <div class=sgrp><span class=sh>retention</span>
+      <b id=lheld>—</b><span class=sl>held</span>
+      <b id=lhits>—</b><span class=sl>hits</span>
+      <span class=mut id=lexp>—</span><span class=sl>expired</span>
+    </div>
+    <div class=sgrp><span class=sh>re-delivered</span>
+      <b id=lredel>—</b><span class=sl id=lredelnote></span>
+    </div>
+    <div class=sgrp><span class=sh>batch waits</span><span id=lwaits>—</span></div>
   </div>
 </div>
 <div class=two>
@@ -851,6 +923,28 @@ async function tick(){
     .map(([l,n])=>`<div class=pill><div class=n>${fmt(n||0)}</div><div class=l>${l}</div></div>`).join('');
   $('chaoslog').innerHTML=(ch.recent||[]).map(x=>x.replace(/</g,'&lt;')).join('<br>')||'<span class=mut>no chaos yet</span>';
   const age=s.now?(Math.round(Date.now()/1000)-s.now):0;
+  // Batch lifecycle. `empty` next to `produced` is what separates an idle
+  // network from a wedged one — both look like a frozen ledger index.
+  const lf=s.life||{};
+  $('lblocks').textContent=(lf.blocks??0).toLocaleString();
+  $('lempty').textContent=(lf.blocksEmpty??0).toLocaleString();
+  const bp=lf.blocks||0, be=lf.blocksEmpty||0;
+  $('lidle').textContent = bp? (be/bp>0.98? 'IDLE — committing empty rounds' : ''):'';
+  $('lidle').style.color='var(--yel)';
+  $('lheld').textContent=(lf.retained??0).toLocaleString();
+  $('lhits').textContent=(lf.retentionHits??0).toLocaleString();
+  $('lexp').textContent=(lf.retentionExpired??0).toLocaleString();
+  const rd=lf.redelivered||0;
+  $('lredel').textContent=rd.toLocaleString();
+  $('lredel').style.color = rd>0? 'var(--red)':'';
+  // Zero is the only healthy value: a re-delivery is skipped safely, but it
+  // means commit dedup is still wrong upstream (#4125).
+  $('lredelnote').textContent = rd>0? 'commit dedup is still wrong upstream (#4125)':'';
+  const wr=lf.waitsByReason||{};
+  const wk=Object.keys(wr);
+  $('lwaits').innerHTML = wk.length? wk.sort().map(k=>`${k}=<b>${wr[k]}</b>`).join(' · ')
+    : '<span class=mut>none</span>';
+
   $('foot').textContent=`updated ${age}s ago · flow+wedges+heals refresh ~1s · monitor read-only`;
 }
 tick();setInterval(tick,1000);

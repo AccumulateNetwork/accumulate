@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -626,6 +627,14 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	s.lastBlockTime = blockTime
 
 	s.noteBlockProduced(blockIndex, cert.Header.Round)
+	// Separate "producing blocks" from "producing blocks with something in
+	// them": an idle network commits empty rounds forever, which reads as a
+	// stall to anything watching the ledger index and as health to anything
+	// watching block production.
+	metrics.BlocksProducedTotal.Inc()
+	if len(cert.Header.Payload) == 0 {
+		metrics.BlocksEmptyTotal.Inc()
+	}
 
 	// Record state hash for consistency verification
 	stateHash := s.adapter.StateHash()

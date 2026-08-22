@@ -43,15 +43,42 @@ while :; do
 
   d="$(curl -sf -m 8 "$MON" 2>/dev/null)" || continue
 
-  read -r worst names <<< "$(printf '%s' "$d" | python3 -c '
+  read -r worst names blocks empties <<< "$(printf '%s' "$d" | python3 -c '
 import json,sys
 try: d=json.load(sys.stdin)
-except Exception: print("0 -"); raise SystemExit
+except Exception: print("0 - 0 0"); raise SystemExit
 p=d.get("progress") or {}
 s=[(v.get("stalledFor") or 0,k) for k,v in p.items() if v.get("state")=="stalled"]
-print("%d %s" % (max([x[0] for x in s]) if s else 0, ",".join(sorted(k for _,k in s)) or "-"))
+lf=d.get("life") or {}
+print("%d %s %d %d" % (max([x[0] for x in s]) if s else 0,
+                       ",".join(sorted(k for _,k in s)) or "-",
+                       lf.get("blocks") or 0, lf.get("blocksEmpty") or 0))
 ' 2>/dev/null)"
   [ -z "${worst:-}" ] && continue
+
+  # An IDLE network is not a wedged one, and the monitor cannot tell them
+  # apart: it measures the ledger index, which only moves when a block has
+  # content. While the load generator sits in its five-minute bootstrap wait
+  # the network commits empty rounds, the index does not move, and every
+  # height reads as stalled. This watchdog killed a perfectly healthy run that
+  # way four minutes in.
+  #
+  # Block production is the discriminator. Idle: blocks keep being produced and
+  # every one of them is empty. Wedged: no blocks at all, because the executor
+  # is stuck collecting a certificate's batches.
+  if [ "${blocks:-0}" -gt "${prev_blocks:-0}" ]; then
+    made=$(( blocks - ${prev_blocks:-0} ))
+    made_empty=$(( empties - ${prev_empties:-0} ))
+    if [ "$made_empty" -ge "$made" ]; then
+      [ -n "${idle_noted:-}" ] || log "idle, not stalled: $made blocks produced since the last check, all empty — not counting this against the threshold"
+      idle_noted=1
+      prev_blocks=$blocks; prev_empties=$empties
+      continue
+    fi
+  fi
+  idle_noted=""
+  prev_blocks=$blocks; prev_empties=$empties
+
   [ "$worst" -lt "$KILL_SECS" ] && continue
 
   reason="stalled ${worst}s: $names"

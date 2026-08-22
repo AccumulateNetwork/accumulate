@@ -487,3 +487,91 @@ func (m *Metrics) SetPeersBannedCurrent(count int) {
 		PeersBannedCurrent.Set(float64(count))
 	}
 }
+
+// Batch lifecycle and delivery metrics.
+//
+// Added after run 20260822T015342Z, where three separate diagnoses were slowed
+// or misled for want of exactly these numbers. Each one answers a question
+// that cost hours to answer by grepping gigabytes of log.
+var (
+	// CertificatesRedeliveredTotal counts certificates the executor skipped
+	// because it had already executed them.
+	//
+	// This is the number that keeps the #4125 fix honest. Skipping a
+	// re-delivery turns a permanent partition halt into a no-op, which is
+	// correct — but if certificates are being delivered twice at any rate,
+	// something upstream in commit dedup is wrong, and the fix would quietly
+	// paper over it. A healthy network should sit at zero. Watch it, do not
+	// merely tolerate it.
+	CertificatesRedeliveredTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "certificates_redelivered_total",
+		Help:      "Committed certificates delivered again after already being executed (should be 0)",
+	})
+
+	// BatchesRetained is how many committed batches are currently held for
+	// peers that have not caught up.
+	BatchesRetained = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "batches_retained",
+		Help:      "Committed batches currently kept fetchable for lagging peers",
+	})
+
+	// BatchRetentionHitsTotal counts fetches answered from retention — the
+	// number that says whether the retention window is doing its job. If this
+	// is zero while nodes are stalling on missing batches, the window is too
+	// short or too small.
+	BatchRetentionHitsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "batch_retention_hits_total",
+		Help:      "Batch fetches served from the post-commit retention window",
+	})
+
+	// BatchesRetentionExpiredTotal counts batches dropped when their window
+	// closed. Paired with the hit counter it says whether retention is sized
+	// right: many expiries and few hits means it is too generous, expiries
+	// alongside stalls means it is too tight.
+	BatchesRetentionExpiredTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "batches_retention_expired_total",
+		Help:      "Committed batches dropped when the retention window closed",
+	})
+
+	// BatchWaitsTotal counts how often the executor had to wait for a batch
+	// of a committed certificate, by reason. Labels: pruned, evicted,
+	// retention_expired, no_record.
+	BatchWaitsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "batch_waits_total",
+		Help:      "Stalled batch collections, labelled by why the batch was absent",
+	}, []string{"reason"})
+
+	// BlocksProducedTotal and BlocksEmptyTotal separate "producing blocks" from
+	// "producing blocks that contain something".
+	//
+	// This distinction cost three separate misdiagnoses in one night. An idle
+	// network commits empty rounds forever: block production never stops, so
+	// the in-node liveness check stays silent, while the ledger index does not
+	// move, so the soak monitor calls it stalled. Neither says "idle". With
+	// both counters the answer is immediate — blocks climbing and empties
+	// climbing with them is an idle network, not a wedged one.
+	BlocksProducedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "blocks_produced_total",
+		Help:      "Blocks produced from committed certificates",
+	})
+
+	// BlocksEmptyTotal counts blocks whose certificate carried no batches.
+	BlocksEmptyTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "blocks_empty_total",
+		Help:      "Blocks produced from a certificate with an empty payload (an idle network)",
+	})
+)

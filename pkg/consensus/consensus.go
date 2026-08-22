@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
@@ -265,6 +266,24 @@ func (n *Node) executedBefore(digest types.BatchDigest, cert *types.Certificate)
 // certificates, while an eviction means the store was simply too small. When no
 // worker has a tombstone the batch was never stored here at all, and the
 // question is why the author never delivered it.
+// absenceReason is batchAbsence reduced to a metric label.
+func (n *Node) absenceReason(digest types.BatchDigest) string {
+	for _, w := range n.workers {
+		if g, ok := w.BatchGone(digest); ok {
+			switch g.Reason {
+			case worker.GonePruned:
+				return "pruned"
+			case worker.GoneEvicted:
+				return "evicted"
+			case worker.GoneRetentionExpired:
+				return "retention_expired"
+			}
+			return "other"
+		}
+	}
+	return "no_record"
+}
+
 func (n *Node) batchAbsence(digest types.BatchDigest) string {
 	for _, w := range n.workers {
 		if g, ok := w.BatchGone(digest); ok {
@@ -343,6 +362,7 @@ func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*
 				// certificate is being delivered twice. Say so instead of
 				// waiting for something this node deliberately retired.
 				if n.executedBefore(entry.Digest, cert) {
+					metrics.CertificatesRedeliveredTotal.Inc()
 					slog.Info("Skipping re-delivered certificate: already executed here",
 						"partition", n.config.Partition,
 						"round", cert.Header.Round,
@@ -361,6 +381,9 @@ func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*
 		}
 
 		waited++
+		if waited == 1 {
+			metrics.BatchWaitsTotal.WithLabelValues(n.absenceReason(firstMissing)).Inc()
+		}
 		if now := time.Now(); lastLogged.IsZero() || now.Sub(lastLogged) >= stallLogEvery {
 			lastLogged = now
 			slog.Warn("Waiting for batches of committed certificate",
