@@ -56,11 +56,11 @@ type Config struct {
 
 // DefaultConfig returns a Config with sensible defaults:
 // - Sharding disabled for backward compatibility
-// - Shard depth of 4 (16 shards) when enabled
+// - Shard depth of 6 (64 shards) when enabled
 func DefaultConfig() Config {
 	return Config{
 		ShardingEnabled: false,
-		ShardDepth:      4,
+		ShardDepth:      6,
 	}
 }
 
@@ -72,7 +72,7 @@ func DefaultConfig() Config {
 //
 //	config := bpt.Config{
 //	    ShardingEnabled: true,
-//	    ShardDepth:      4,  // 16 shards
+//	    ShardDepth:      6,  // 64 shards
 //	}
 //	tree, err := bpt.NewFromConfig(config, store, key)
 //	if err != nil {

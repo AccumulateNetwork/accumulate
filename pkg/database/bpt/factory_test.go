@@ -21,7 +21,7 @@ func TestDefaultConfig(t *testing.T) {
 
 	// Verify defaults
 	require.False(t, cfg.ShardingEnabled, "sharding should be disabled by default")
-	require.Equal(t, 4, cfg.ShardDepth, "default shard depth should be 4")
+	require.Equal(t, 6, cfg.ShardDepth, "default shard depth should be 6 (64 shards)")
 }
 
 func TestNewFromConfig_NonSharded(t *testing.T) {
