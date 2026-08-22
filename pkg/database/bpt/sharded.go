@@ -79,7 +79,11 @@ type ShardedBPT struct {
 // That is an implementation defect, not a property of sharding. Receipts, for
 // instance, are perfectly possible either way: the sibling hashes above a
 // shard are derivable from the 64 shard roots, which are always in hand. They
-// are simply not implemented here. See #4135.
+// are simply not implemented here.
+//
+// The fix is small and is specified in full in #4135: a shard root is
+// addressable as nodeKeyAt(depth, prefix) in the one tree, so ShardedBPT
+// should hold one *BPT and treat a shard as a cursor rather than a tree.
 func NewShardedBPT(store database.Store, key *record.Key, depth int) (*ShardedBPT, error) {
 	if depth < 1 || depth > 8 {
 		return nil, errors.BadRequest.WithFormat("shard depth must be between 1 and 8, got %d", depth)
