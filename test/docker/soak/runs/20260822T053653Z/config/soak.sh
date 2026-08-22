@@ -182,19 +182,7 @@ if [ ! -x "$here/soakmon.py" ]; then
   exit 1
 fi
 # RUN_DIR so the dashboard reads THIS run's loadgen stats and chaos log.
-#
-# Supervised, not launched-and-hoped-for. soakmon died mid-run twice on
-# 2026-08-22 (runs 20260822T052535Z and 20260822T053653Z) and the gate below
-# could not help: it is a STARTUP check, so the first run carried on generating
-# load unobserved for eight minutes. stallkill now stops a blind run, but that
-# costs the whole run for what may be a momentary loss. Restart it instead, and
-# record every exit in the log so a repeating death is visible rather than
-# silently papered over.
-( while kill -0 $$ 2>/dev/null; do
-    env RUN_DIR="$rd" "$here/soakmon.py" >> "$rd/soakmon.log" 2>&1
-    echo "$(date -u +%FT%TZ) soakmon exited rc=$? — restarting" >> "$rd/soakmon.log"
-    sleep 2
-  done ) &
+nohup env RUN_DIR="$rd" "$here/soakmon.py" > "$rd/soakmon.log" 2>&1 &
 MON=$!
 for _ in $(seq 1 20); do
   curl -sf -m3 http://127.0.0.1:8099/data >/dev/null 2>&1 && break
@@ -202,7 +190,7 @@ for _ in $(seq 1 20); do
 done
 if ! curl -sf -m3 http://127.0.0.1:8099/data >/dev/null 2>&1; then
   echo "soakmon did not come up — refusing to run unmonitored; tearing down" | tee -a "$log"
-  pkill -P "$MON" 2>/dev/null; kill "$MON" 2>/dev/null
+  kill "$MON" 2>/dev/null
   $compose down -v --remove-orphans >/dev/null 2>&1
   exit 1
 fi
@@ -320,9 +308,6 @@ fi
 # NOT stallkill: when it is the one ending the run it waits for this script to
 # finish recording and then takes the network down, so killing it here would
 # leave the containers up. It exits on its own once this script is gone.
-# MON is the supervisor; kill its current soakmon child too, by PID, or the
-# restart loop's last child outlives the run.
-[ -n "${MON:-}" ] && pkill -P "$MON" 2>/dev/null
 kill $CHAOS ${MON:-} ${SEIZE:-} ${LOGCAP:-} ${WEDGE:-} 2>/dev/null
 ended=$(date -u +%FT%TZ)
 echo "== soak finished $(date -u) driver-exit=$rc ==" | tee -a "$log"

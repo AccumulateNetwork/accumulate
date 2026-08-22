@@ -15,7 +15,8 @@
 #
 #   ./soakmon.py                 # then open http://127.0.0.1:8099
 #   PORT=9000 ./soakmon.py
-import json, os, re, subprocess, threading, time
+import atexit
+import json, os, re, signal, subprocess, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -30,6 +31,37 @@ STATS = os.path.join(RUN_DIR, "loadgen-stats.json")
 CHAOS = os.path.join(RUN_DIR, "chaos.log")
 API = "http://localhost:26660/v3"
 PORT = int(os.environ.get("PORT", "8099"))
+
+# Say something on the way out.
+#
+# soakmon has now died twice mid-run leaving a ZERO-BYTE log: no traceback, no
+# message, nothing to attribute it to. A silent death is the worst kind,
+# because the run carries on generating load against a network nobody is
+# watching (runs 20260822T052535Z and 20260822T053653Z). Whatever ends this
+# process, it should leave a line saying so.
+def _log_exit(why):
+    try:
+        sys.stderr.write("%s soakmon exiting: %s\n" % (
+            time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), why))
+        sys.stderr.flush()
+    except Exception:
+        pass
+
+
+def _on_signal(sig, _frame):
+    _log_exit("signal %s (%s)" % (sig, signal.Signals(sig).name
+                                  if hasattr(signal, "Signals") else sig))
+    os._exit(128 + sig)
+
+
+for _sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT):
+    try:
+        signal.signal(_sig, _on_signal)
+    except (ValueError, OSError):
+        pass
+
+atexit.register(lambda: _log_exit("normal exit"))
+
 
 # Refresh cadences (seconds): cheap things often, docker-heavy things rarely.
 I_STATS, I_HEIGHT, I_WEDGE, I_HEAL, I_CHAOS, I_FLOW = 1, 1, 5, 5, 5, 1
