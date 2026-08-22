@@ -58,11 +58,13 @@ type Config struct {
 // - Sharding disabled
 // - Shard depth of 6 (64 shards) when enabled
 //
-// Sharding does not change the root. The BPT routes on bits of the key hash,
-// so its shape is a function of the key set; splitting at a bit boundary and
-// recombining is the same hash computation reassociated. A sharded and an
-// unsharded tree over the same data are identical, which is why enabling it is
-// a configuration choice and not a protocol change.
+// Sharding does not change the root, and this is not an empirical claim. The
+// BPT routes on bits of the key hash, so its shape is a function of the key
+// set; splitting at a bit boundary and recombining is the same hash
+// computation reassociated. A sharded and an unsharded tree over the same data
+// are necessarily identical, which is why enabling this is a configuration
+// choice and not a protocol change. The equivalence tests exist to check the
+// implementation honours that, not to establish it.
 //
 // It is off because ShardedBPT cannot yet serve production: it implements
 // Insert, Get, Delete and GetRootHash, while the database also needs

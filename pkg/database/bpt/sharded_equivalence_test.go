@@ -18,13 +18,24 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
-// Sharded and unsharded BPTs must produce identical root hashes.
+// These tests do not prove that a Merkle tree can be split and recombined.
+// That is irrefutable and needs no test: the BPT routes on bits of the key
+// hash, so its shape is a function of the key set alone, and splitting at a
+// bit boundary is the same hash computation reassociated —
+// H(H(a,b), H(c,d)) whichever goroutine computed which half. Were that not so,
+// a root would not identify the contents and Merkle trees would be useless
+// cryptographically.
 //
-// This is the property that makes sharding a configuration choice rather than
-// a state change: the root is part of consensus, so if the two paths disagreed,
-// turning sharding on would fork the network. TestRootHashEquivalence covers
-// the happy path at depths 2, 4 and 5; these cover what it does not — the
-// default depth, the ends of the valid range, mutation, and orderings.
+// What these tests check is that OUR IMPLEMENTATION follows the math. The risk
+// is not arithmetic, it is convention: sharded.go warns that BPT routing
+// inverts bits, so combining adjacent shards must be hash(i+1, i) and not
+// hash(i, i+1), and "any change to this logic will break correctness". A
+// mutation test confirms it — swapping that pairing fails every depth. Empty
+// shards, delete-collapse and iteration order are the same kind of hazard.
+//
+// So: the math is assumed, the code is tested. TestRootHashEquivalence covers
+// depths 2, 4 and 5 with sequential inserts; these cover what it does not —
+// the default depth, both ends of the valid range, mutation, and orderings.
 
 // bothPaths builds a sharded and an unsharded BPT over independent stores.
 func bothPaths(t *testing.T, depth int) (*ShardedBPT, *BPT) {
