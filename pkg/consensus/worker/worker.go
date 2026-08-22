@@ -107,6 +107,11 @@ type Config struct {
 	// Validator validates transactions before they are added to a batch.
 	// If nil, no validation is performed (not recommended for production).
 	Validator TransactionValidator
+
+	// MaxTombstones is how many batch removals the worker remembers, so that
+	// a batch a certificate cannot find can still say why it is gone.
+	// Defaults to DefaultMaxTombstones. Negative disables the record.
+	MaxTombstones int
 }
 
 // applyDefaults fills in default values for unset configuration fields.
@@ -137,6 +142,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.ReproposeTick <= 0 {
 		c.ReproposeTick = DefaultReproposeTick
+	}
+	if c.MaxTombstones == 0 {
+		c.MaxTombstones = DefaultMaxTombstones
 	}
 }
 
@@ -184,6 +192,14 @@ type Worker struct {
 	batches map[types.BatchDigest]*lruEntry
 	lruList *list.List // LRU tracking: front = most recent, back = least recent
 
+	// Tombstones: why a batch left the store. A committed certificate whose
+	// batch is absent everywhere halts the partition permanently (#4125), and
+	// without this the log cannot say whether it was pruned, evicted, or never
+	// held. Bounded by maxTombstones. Guarded by batchMu.
+	gone          map[types.BatchDigest]BatchGone
+	goneOrder     []types.BatchDigest
+	maxTombstones int
+
 	// Available batch digests (for header creation) - bounded queue with backpressure
 	availableBatchQueue chan types.BatchDigest
 	queueDepth          atomic.Int64
@@ -222,6 +238,8 @@ func New(config Config, g *gossip.GossipLayer) *Worker {
 		pending:             make([][]byte, 0, config.BatchSize),
 		batches:             make(map[types.BatchDigest]*lruEntry),
 		lruList:             list.New(),
+		gone:                make(map[types.BatchDigest]BatchGone),
+		maxTombstones:       config.MaxTombstones,
 		availableBatchQueue: make(chan types.BatchDigest, config.MaxBatchQueueSize),
 		triggerBatch:        make(chan struct{}, 1),
 		triggerEviction:     make(chan struct{}, 1),
@@ -499,18 +517,31 @@ func (w *Worker) RequeueBatches(digests []types.BatchDigest) {
 // This should be called after batches are finalized to free memory.
 // Also removes entries from the LRU list.
 func (w *Worker) PruneBatches(committed []types.BatchDigest) {
+	w.PruneBatchesAt(committed, "")
+}
+
+// PruneBatchesAt is PruneBatches with a note of what committed them — a block
+// index, say. The note lands in the tombstone, so when a LATER certificate
+// cannot find one of these batches the log names the block whose execution
+// deleted it, which is the whole question in #4125.
+func (w *Worker) PruneBatchesAt(committed []types.BatchDigest, detail string) {
 	w.batchMu.Lock()
 	defer w.batchMu.Unlock()
 
+	pruned := 0
 	for _, digest := range committed {
 		if entry, ok := w.batches[digest]; ok {
 			w.lruList.Remove(entry.element)
 			delete(w.batches, digest)
+			w.noteGone(digest, GonePruned, detail)
+			pruned++
 		}
 	}
 
 	slog.Debug("Pruned committed batches",
 		"count", len(committed),
+		"pruned", pruned,
+		"detail", detail,
 		"remaining", len(w.batches))
 }
 
@@ -839,6 +870,8 @@ func (w *Worker) performEviction() {
 		lruDigest := back.Value.(types.BatchDigest)
 		w.lruList.Remove(back)
 		delete(w.batches, lruDigest)
+		w.noteGone(lruDigest, GoneEvicted,
+			fmt.Sprintf("store over limit %d", w.config.MaxStoredBatches))
 		evicted++
 	}
 

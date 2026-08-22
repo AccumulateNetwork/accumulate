@@ -225,6 +225,22 @@ func (s multiWorkerBatchStore) StoreBatch(batch *types.Batch) error {
 	return s.workers[0].StoreBatch(batch)
 }
 
+// batchAbsence explains, as far as this node can tell, why it does not hold a
+// batch. Every removal from a worker's store leaves a tombstone, so the answer
+// is usually "pruned after block N" or "evicted": the difference matters, since
+// a batch pruned by an EARLIER commit means the same digest reached two
+// certificates, while an eviction means the store was simply too small. When no
+// worker has a tombstone the batch was never stored here at all, and the
+// question is why the author never delivered it.
+func (n *Node) batchAbsence(digest types.BatchDigest) string {
+	for _, w := range n.workers {
+		if g, ok := w.BatchGone(digest); ok {
+			return g.String()
+		}
+	}
+	return worker.GoneUnknown
+}
+
 // CollectBatches returns the batches named by the certificate's payload, in
 // canonical payload order. Local workers are consulted first; a batch this
 // node does not hold is fetched from connected peers, retrying until the
@@ -240,8 +256,24 @@ func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*
 	retry := time.NewTicker(50 * time.Millisecond)
 	defer retry.Stop()
 
+	// Diagnostics for a wait that does not end. The 2026-08-21 Directory halt
+	// (#4125) produced 190,500 identical "missing=1" lines in twelve minutes,
+	// naming neither the batch nor a reason — the log drowned the very fact it
+	// was meant to flag, the same defect #4123 fixed for the stall report. Log
+	// the first pass immediately and then at most one line per stallLogEvery,
+	// carrying the digest, why this node thinks the batch is gone, and how the
+	// peers answered.
+	const stallLogEvery = 10 * time.Second
+	var (
+		waited     int
+		lastLogged time.Time
+		peerAsks   int
+		peerHits   int
+	)
+
 	for {
 		missing := 0
+		var firstMissing types.BatchDigest
 		for i, entry := range cert.Header.Payload {
 			if batches[i] != nil {
 				continue
@@ -260,9 +292,11 @@ func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*
 			if n.protocols != nil && n.host != nil {
 				for _, peerID := range n.host.Network().Peers() {
 					fctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+					peerAsks++
 					b, err := n.protocols.FetchBatch(fctx, peerID, entry.Digest)
 					cancel()
 					if err == nil && b != nil && b.Digest() == entry.Digest {
+						peerHits++
 						// Store it so pruning-on-commit finds it and so this
 						// node can serve it onward.
 						_ = n.workers[0].StoreBatch(b)
@@ -272,6 +306,9 @@ func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*
 				}
 			}
 			if batches[i] == nil {
+				if missing == 0 {
+					firstMissing = entry.Digest
+				}
 				missing++
 			}
 		}
@@ -279,10 +316,20 @@ func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*
 			return batches, nil
 		}
 
-		slog.Warn("Waiting for batches of committed certificate",
-			"partition", n.config.Partition,
-			"round", cert.Header.Round,
-			"missing", missing)
+		waited++
+		if now := time.Now(); lastLogged.IsZero() || now.Sub(lastLogged) >= stallLogEvery {
+			lastLogged = now
+			slog.Warn("Waiting for batches of committed certificate",
+				"partition", n.config.Partition,
+				"round", cert.Header.Round,
+				"missing", missing,
+				"payload", len(cert.Header.Payload),
+				"digest", firstMissing.String(),
+				"absence", n.batchAbsence(firstMissing),
+				"peerAsks", peerAsks,
+				"peerHits", peerHits,
+				"attempts", waited)
+		}
 		select {
 		case <-ctx.Done():
 			return nil, fmt.Errorf("collect batches for round %d: %d still missing: %w",

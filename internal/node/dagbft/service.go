@@ -619,9 +619,15 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	cert.SetStateHash(types.StateHash(stateHash))
 	s.RecordStateHash(cert.Header.Round, blockIndex, types.StateHash(stateHash))
 
-	// Prune batches from workers now that they've been processed
+	// Prune batches from workers now that they've been processed.
+	//
+	// Record which block did the pruning. If a later certificate names one of
+	// these digests, the executor's wait diagnostic reports "pruned after
+	// block N" instead of an unattributable "missing=1" — that is the
+	// difference between naming the #4125 halt and guessing at it.
+	prunedBy := fmt.Sprintf("block %d round %d", blockIndex, cert.Header.Round)
 	for _, w := range s.node.Workers() {
-		w.PruneBatches(committedDigests)
+		w.PruneBatchesAt(committedDigests, prunedBy)
 	}
 
 	// Emit block event.
