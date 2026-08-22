@@ -229,8 +229,17 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			addr = address.FromED25519PrivateKey(node.PrivValKey)
 			cvc.ValidatorKey = &run.RawPrivateKey{Address: addr.String()}
 
-			// Set 100 workers per node for high throughput stress testing
-			cvc.NumWorkers = run.Ptr(int64(100))
+			// Workers are shards, so the count is a power of two: the routing
+			// key is masked rather than divided, which gives uniform buckets
+			// and a cheap stable mapping. 100 was neither a power of two nor a
+			// number chosen for a reason, and `% 100` on a hash is not
+			// sharding (#4133).
+			//
+			// Whether 64 in-process workers buys anything over a handful is a
+			// separate question worth measuring — a Narwhal worker is meant to
+			// be a separate machine contributing its own bandwidth, not 64
+			// goroutine-sets sharing one NIC and one disk.
+			cvc.NumWorkers = run.Ptr(int64(64))
 
 			// Every node serves Prometheus metrics on :26670. Without this no
 			// DI node had a /metrics endpoint at all — the CometBFT lineage
