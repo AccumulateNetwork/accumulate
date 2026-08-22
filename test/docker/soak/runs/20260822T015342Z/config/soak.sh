@@ -218,19 +218,6 @@ if [ -x "$here/wedgewatch.sh" ]; then
 else
   echo "   wedgewatch: MISSING — a wedge will go undiagnosed again (#4125)" | tee -a "$log"
 fi
-# Stop the run once a stall outlives its usefulness. Run 20260822T015342Z spent
-# two hours with a dead Directory and three unrecoverable validators after it
-# had already produced every piece of evidence it was going to; the remaining
-# hours would only have written the same warning at 137MB/hour. Evidence is
-# captured before it stops, and it stops the run the clean way — signal the
-# loadgen, let this script write its verdict, then take the network down.
-# STALL_KILL_SECS=0 disables it for a run that is meant to sit in a stall.
-if [ -x "$here/stallkill.sh" ] && [ "${STALL_KILL_SECS:-60}" != "0" ]; then
-  nohup env RUN_DIR="$rd" STALL_KILL_SECS="${STALL_KILL_SECS:-60}" \
-    "$here/stallkill.sh" > "$rd/stallkill.log" 2>&1 &
-  STALLKILL=$!
-  echo "   stallkill: armed (stop the run after ${STALL_KILL_SECS:-60}s stalled)" | tee -a "$log"
-fi
 echo "   load starts now" | tee -a "$log"
 
 # Load generator (host): drives the full menu of user transaction types against
@@ -305,9 +292,6 @@ if [ "${IDLE_AFTER:-0}" -gt 0 ]; then
   echo "== load finished; idling ${IDLE_AFTER}s so tail losses age past the grace ==" | tee -a "$log"
   sleep "$IDLE_AFTER"
 fi
-# NOT stallkill: when it is the one ending the run it waits for this script to
-# finish recording and then takes the network down, so killing it here would
-# leave the containers up. It exits on its own once this script is gone.
 kill $CHAOS ${MON:-} ${SEIZE:-} ${LOGCAP:-} ${WEDGE:-} 2>/dev/null
 ended=$(date -u +%FT%TZ)
 echo "== soak finished $(date -u) driver-exit=$rc ==" | tee -a "$log"

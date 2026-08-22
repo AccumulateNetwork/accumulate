@@ -625,7 +625,14 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	// these digests, the executor's wait diagnostic reports "pruned after
 	// block N" instead of an unattributable "missing=1" — that is the
 	// difference between naming the #4125 halt and guessing at it.
-	prunedBy := fmt.Sprintf("block %d round %d", blockIndex, cert.Header.Round)
+	// Name the certificate, not just its round. A round is not unique — every
+	// validator authors a header per round — so "pruned at round 260" cannot
+	// distinguish the same certificate arriving twice from two certificates of
+	// the same round sharing a batch. Those want different fixes, and the
+	// round-260 halt could not be told apart without this (#4125).
+	prunedBy := fmt.Sprintf("block %d round %d cert %s author %x",
+		blockIndex, cert.Header.Round, cert.Digest().String()[:16],
+		cert.Header.Author[:4])
 	for _, w := range s.node.Workers() {
 		w.PruneBatchesAt(committedDigests, prunedBy)
 	}

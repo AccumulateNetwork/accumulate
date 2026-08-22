@@ -210,3 +210,44 @@ func TestCollectBatches_DoesNotFloodTheLog(t *testing.T) {
 	attempts := attrsOf(waits[0])["attempts"]
 	assert.Equal(t, "1", attempts, "the first line reports the first attempt")
 }
+
+// A round does not identify a certificate: every validator authors a header
+// per round, so several certificates can share round 260. The 2026-08-21 halt
+// was read as "the same certificate delivered twice" purely because the
+// pruning certificate and the waiting one were both round 260 — a reading the
+// log could not distinguish from two certificates of that round sharing a
+// batch. Those want different fixes, so the report names the certificate and
+// its author, not just the round.
+func TestCollectBatches_NamesTheCertificateNotJustTheRound(t *testing.T) {
+	logs := captureLogs(t)
+	node := testNode(t, "Directory")
+
+	shared := types.NewBatch([][]byte{[]byte("payment-1")})
+	require.NoError(t, node.Workers()[0].StoreBatch(shared))
+	node.Workers()[0].PruneBatchesAt([]types.BatchDigest{shared.Digest()},
+		"block 3114 round 260 cert aaaaaaaaaaaaaaaa author deadbeef")
+
+	// A DIFFERENT certificate, same round, different author.
+	other := certFor(t, 260, shared.Digest())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	_, err := node.CollectBatches(ctx, other)
+	require.Error(t, err)
+
+	waits := logs.matching("Waiting for batches")
+	require.NotEmpty(t, waits)
+	at := attrsOf(waits[0])
+
+	require.NotEmpty(t, at["cert"], "the waiting certificate must be identified")
+	require.NotEmpty(t, at["author"], "and its author named")
+	assert.Equal(t, other.Digest().String()[:16], at["cert"])
+
+	// The decisive comparison: the certificate that pruned the batch is named
+	// in the absence string, and it is NOT this one. Same round, different
+	// certificate — which is the distinction the round alone cannot express.
+	assert.Contains(t, at["absence"], "cert aaaaaaaaaaaaaaaa")
+	assert.NotContains(t, at["absence"], at["cert"],
+		"pruner and waiter are different certificates of the same round")
+	assert.Equal(t, "260", at["round"])
+}

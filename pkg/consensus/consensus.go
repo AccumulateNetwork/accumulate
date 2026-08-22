@@ -322,6 +322,8 @@ func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*
 			slog.Warn("Waiting for batches of committed certificate",
 				"partition", n.config.Partition,
 				"round", cert.Header.Round,
+				"cert", cert.Digest().String()[:16],
+				"author", fmt.Sprintf("%x", cert.Header.Author[:4]),
 				"missing", missing,
 				"payload", len(cert.Header.Payload),
 				"digest", firstMissing.String(),
