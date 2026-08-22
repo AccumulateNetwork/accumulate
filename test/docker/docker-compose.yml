@@ -18,6 +18,15 @@ x-logging: &bounded-logging
     max-size: "200m"
     max-file: "2"
 
+# Per-run diagnostics, off unless the launcher sets them.
+#
+# ACC_TX_TRACE=1 logs every transaction at each hand-off — accepted by a
+# worker, placed in a batch, executed in a block — which is how a transaction
+# that is accepted and then never executed gets located (#4132). It is several
+# lines per transaction per node, so it is a switch, not a default.
+x-node-env: &node-env
+  ACC_TX_TRACE: "${ACC_TX_TRACE-}"
+
 services:
   # CRITICAL: Bootstrap server is REQUIRED for peer discovery
   # All validators need this to find each other on the network
@@ -28,6 +37,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bootstrap
     logging: *bounded-logging
+    environment: *node-env
     mem_limit: 4g
     ports:
       # Host port 16653 (not 16593) - accman-managed follower nodes use the
@@ -61,6 +71,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-init
     logging: *bounded-logging
+    environment: *node-env
     volumes:
       - network-config:/root/.accumulate
       - ../..:/workspace
@@ -82,6 +93,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn1-val1
     logging: *bounded-logging
+    environment: *node-env
     mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
@@ -102,6 +114,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn1-val2
     logging: *bounded-logging
+    environment: *node-env
     mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
@@ -122,6 +135,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn1-val3
     logging: *bounded-logging
+    environment: *node-env
     mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
@@ -142,6 +156,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn1-val4
     logging: *bounded-logging
+    environment: *node-env
     mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
@@ -163,6 +178,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn2-val1
     logging: *bounded-logging
+    environment: *node-env
     mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
@@ -183,6 +199,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn2-val2
     logging: *bounded-logging
+    environment: *node-env
     mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
@@ -203,6 +220,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn2-val3
     logging: *bounded-logging
+    environment: *node-env
     mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
@@ -223,6 +241,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn2-val4
     logging: *bounded-logging
+    environment: *node-env
     mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
@@ -244,6 +263,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn3-val1
     logging: *bounded-logging
+    environment: *node-env
     mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
@@ -264,6 +284,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn3-val2
     logging: *bounded-logging
+    environment: *node-env
     mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
@@ -284,6 +305,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn3-val3
     logging: *bounded-logging
+    environment: *node-env
     mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
@@ -304,6 +326,7 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn3-val4
     logging: *bounded-logging
+    environment: *node-env
     mem_limit: 4g
     volumes:
       - network-config:/root/.accumulate
