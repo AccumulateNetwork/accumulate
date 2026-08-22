@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 )
+
+// txTraceEnabled mirrors the worker package's ACC_TX_TRACE switch. Read here
+// rather than imported, to keep the executor bridge independent of the worker
+// package — the two sit on opposite sides of the consensus/execution boundary,
+// which is precisely the boundary this trace exists to measure across (#4132).
+var txTraceEnabled = func() bool {
+	v := strings.ToLower(os.Getenv("ACC_TX_TRACE"))
+	return v == "1" || v == "true" || v == "yes"
+}()
 
 // isNotFoundError checks if an error indicates a not-found condition.
 func isNotFoundError(err error) bool {
@@ -211,6 +221,15 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	// certificate's canonical payload order and MUST be executed in that
 	// order — executing in any node-local order (this used to iterate a map)
 	// diverges chain entries and BPT roots across validators (#4054).
+	// Account for every transaction that arrives in a batch.
+	//
+	// 95 of 100 submitted transactions vanished between acceptance and
+	// execution in run 20260822T061030Z, with not one log line anywhere
+	// (#4132). This is the leg where consensus hands over to execution, so it
+	// is where the two candidate explanations separate: if the missing
+	// transactions never appear in `arrived`, they were lost in consensus; if
+	// they arrive and do not execute, they were lost here.
+	var arrived, unmarshalFailed, processFailed, statusFailed int
 	txCount := 0
 	for _, batch := range params.Batches {
 		if batch == nil {
@@ -222,25 +241,40 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 			return [32]byte{}, fmt.Errorf("block %d: missing batch in certificate for round %d", params.Index, params.LeaderRound)
 		}
 		digest := batch.Digest()
+		if txTraceEnabled {
+			slog.Info("TX executing", "batch", digest.String()[:12],
+				"block", params.Index, "round", params.LeaderRound,
+				"txs", len(batch.Transactions))
+		}
 
 		for i, txBytes := range batch.Transactions {
+			arrived++
 			// Unmarshal transaction to envelope
 			envelope := new(messaging.Envelope)
 			if err := envelope.UnmarshalBinary(txBytes); err != nil {
-				slog.Debug("Failed to unmarshal transaction",
+				// Warn, not Debug. A committed transaction that cannot be
+				// parsed is data loss, and at Debug it was invisible — the
+				// same mistake the status-error log below was already fixed
+				// for. Whatever put it in a batch thought it was valid.
+				unmarshalFailed++
+				slog.Warn("Committed transaction could not be unmarshalled — dropping",
 					"error", err,
 					"batch", digest.String(),
-					"index", i)
+					"index", i,
+					"bytes", len(txBytes),
+					"block", params.Index)
 				continue
 			}
 
 			// Process the envelope
 			statuses, err := block.Process(envelope)
 			if err != nil {
+				processFailed++
 				slog.Warn("Failed to process transaction",
 					"error", err,
 					"batch", digest.String(),
-					"index", i)
+					"index", i,
+					"block", params.Index)
 				continue
 			}
 
@@ -250,15 +284,32 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 			// vanishing anchor signatures) was invisible.
 			for _, status := range statuses {
 				if status.Error != nil {
+					statusFailed++
 					slog.Warn("Transaction failed",
 						"error", status.Error,
 						"code", status.Code,
-						"txid", status.TxID)
+						"txid", status.TxID,
+						"block", params.Index)
 				}
 			}
 
 			txCount++
 		}
+	}
+
+	// One line per block that carried anything, so "what reached execution"
+	// can be compared against "what was submitted" without grepping. Silent
+	// when a block is empty, which is most of them on an idle network.
+	if arrived > 0 {
+		slog.Info("Block execution accounting",
+			"block", params.Index,
+			"round", params.LeaderRound,
+			"batches", len(params.Batches),
+			"arrived", arrived,
+			"executed", txCount,
+			"unmarshalFailed", unmarshalFailed,
+			"processFailed", processFailed,
+			"statusFailed", statusFailed)
 	}
 
 	// Close block

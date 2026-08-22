@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -305,6 +306,11 @@ func (w *Worker) Submit(tx []byte) error {
 	w.batchMu.RUnlock()
 	if batchCount >= w.config.MaxStoredBatches {
 		return ErrBackpressure
+	}
+
+	if txTraceEnabled {
+		slog.Info("TX accepted", "tx", txID(tx), "worker", w.config.ID,
+			"partition", w.config.Partition, "bytes", len(tx))
 	}
 
 	w.mu.Lock()
@@ -705,6 +711,12 @@ func (w *Worker) createAndBroadcastBatch() {
 	// This must happen before enqueueing to ensure metrics are updated even if shutdown occurs
 	w.batchesCreated.Add(1)
 	w.txnsProcessed.Add(uint64(batch.Len()))
+
+	if txTraceEnabled {
+		slog.Info("TX batched", "batch", digest.String()[:12],
+			"worker", w.config.ID, "partition", w.config.Partition,
+			"txs", batch.Len(), "ids", strings.Join(txIDs(batch.Transactions), ","))
+	}
 
 	// Add to available batch queue (blocking backpressure if full)
 	queueDepth := w.queueDepth.Add(1)
