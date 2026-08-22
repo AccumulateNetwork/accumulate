@@ -192,10 +192,21 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		return nil, errors.EncodingError.WithFormat("marshal: %w", err)
 	}
 
-	s.logger.Info("TRACE-SUBMIT: submitting to DAG-BFT service.SubmitTransaction")
+	// Route by signer. Everything signed by one key must be handled by one
+	// worker, or it is batched in parallel, committed out of order, and
+	// rejected by replay protection (#4132).
+	routeKey := ""
+	if len(envelope.Signatures) > 0 {
+		if signer := envelope.Signatures[0].GetSigner(); signer != nil {
+			routeKey = signer.String()
+		}
+	}
+
+	s.logger.Info("TRACE-SUBMIT: submitting to DAG-BFT service.SubmitTransaction",
+		"routeKey", routeKey)
 
 	// Submit to consensus (includes pre-batch validation)
-	if err := s.service.SubmitTransaction(b); err != nil {
+	if err := s.service.SubmitTransactionFor(routeKey, b); err != nil {
 		// Check if this is a validation error
 		if stderrors.Is(err, worker.ErrValidationFailed) {
 			s.logger.Error("TRACE-SUBMIT: validation failed, returning error submission", "error", err)

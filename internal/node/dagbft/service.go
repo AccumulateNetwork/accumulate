@@ -300,13 +300,21 @@ func (s *Service) LastCommitRound() types.Round {
 
 // SubmitTransaction submits a transaction to the consensus node.
 func (s *Service) SubmitTransaction(tx []byte) error {
+	return s.SubmitTransactionFor("", tx)
+}
+
+// SubmitTransactionFor submits on behalf of a named sender, so everything from
+// one signer is handled by one worker and keeps its execution order. Without
+// it, replay protection rejects all but an increasing subsequence of a
+// signer's transactions — 96 of 100, silently (#4132).
+func (s *Service) SubmitTransactionFor(key string, tx []byte) error {
 	s.mu.RLock()
 	node := s.node
 	s.mu.RUnlock()
 	if node == nil {
 		return errors.BadRequest.With("node not started")
 	}
-	return node.SubmitTransaction(tx)
+	return node.SubmitTransactionFor(key, tx)
 }
 
 // initializeCommittee creates the initial committee from genesis.

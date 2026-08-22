@@ -87,6 +87,17 @@ func (c *NodeConfig) applyDefaults() {
 	if c.NumWorkers <= 0 {
 		c.NumWorkers = DefaultNumWorkers
 	}
+	// Workers are shards. A power-of-two count lets the routing key be masked,
+	// which is uniform and cheap; anything else falls back to modulo, which
+	// works but is not sharding and gives uneven buckets. This network was
+	// configured with 100 (#4133), which is neither a power of two nor a
+	// number anyone chose for a reason. Warn rather than refuse: a running
+	// deployment should not fail to start over it.
+	if !IsPowerOfTwo(c.NumWorkers) {
+		slog.Warn("Worker count is not a power of two — routing falls back to modulo, which is not sharding",
+			"numWorkers", c.NumWorkers,
+			"suggestion", "use a power of two (e.g. 64 or 128)")
+	}
 	if c.DAGGCDepth == 0 {
 		c.DAGGCDepth = DefaultDAGGCDepth
 	}
@@ -223,7 +234,15 @@ func (s multiWorkerBatchStore) StoreBatch(batch *types.Batch) error {
 	if len(s.workers) == 0 {
 		return errors.New("no workers")
 	}
-	return s.workers[0].StoreBatch(batch)
+	// Spread by digest rather than always worker 0.
+	//
+	// Both intake paths — gossip and peer fetch — used to store every batch
+	// this node did not create into worker 0, while MaxStoredBatches is
+	// enforced PER worker. With many workers that made worker 0 fill and evict
+	// far sooner than any other, and what it evicts is exactly the batches
+	// peers come asking for, which is the failure #4128 is about (#4133).
+	d := batch.Digest()
+	return s.workers[workerFor(d[:], len(s.workers))].StoreBatch(batch)
 }
 
 // ErrAlreadyExecuted reports that a committed certificate has already been
@@ -350,8 +369,10 @@ func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*
 					if err == nil && b != nil && b.Digest() == entry.Digest {
 						peerHits++
 						// Store it so pruning-on-commit finds it and so this
-						// node can serve it onward.
-						_ = n.workers[0].StoreBatch(b)
+						// node can serve it onward. Same worker the gossip
+						// path would have chosen, so a fetched batch and a
+						// gossiped one land in the same place (#4133).
+						_ = n.workers[workerFor(entry.Digest[:], len(n.workers))].StoreBatch(b)
 						batches[i] = b
 						break
 					}
@@ -532,9 +553,47 @@ func (n *Node) SubmitTransaction(tx []byte) error {
 		return errors.New("no workers available")
 	}
 
-	// Round-robin to workers
+	// No routing key: fall back to round-robin. This spreads a single sender's
+	// transactions across workers, which destroys their execution order and
+	// gets all but an increasing subsequence rejected by replay protection
+	// (#4132). Callers that know the sender must use SubmitTransactionFor.
 	idx := int(n.transactionsSubmitted.Add(1)-1) % len(n.workers)
 	return n.workers[idx].Submit(tx)
+}
+
+// SubmitTransactionFor submits a transaction on behalf of a named sender.
+//
+// The key decides the worker, so everything from one sender is batched by one
+// worker and keeps its order, while distinct senders still spread across
+// workers — which is the parallelism worth having. Pass the signer's URL.
+//
+// An empty key routes to a worker deterministically rather than round-robin:
+// unattributable traffic should still be stable, not deliberately scattered.
+func (n *Node) SubmitTransactionFor(key string, tx []byte) error {
+	if n.closed.Load() {
+		return ErrNodeClosed
+	}
+
+	n.mu.RLock()
+	started := n.ctx != nil
+	n.mu.RUnlock()
+	if !started {
+		return ErrNodeNotStarted
+	}
+
+	if len(n.workers) == 0 {
+		return errors.New("no workers available")
+	}
+
+	n.transactionsSubmitted.Add(1)
+	idx := workerFor(routingKeyBytes(key), len(n.workers))
+	return n.workers[idx].Submit(tx)
+}
+
+// WorkerFor reports which worker a key routes to. Exported for tests and for
+// operators diagnosing where a sender's traffic lands.
+func (n *Node) WorkerFor(key string) int {
+	return workerFor(routingKeyBytes(key), len(n.workers))
 }
 
 // Committed returns a channel that receives committed certificates.
@@ -559,6 +618,13 @@ func (n *Node) Gossip() *gossip.GossipLayer {
 }
 
 // Workers returns the workers.
+// BatchStore returns the store that receives batches from other nodes, so a
+// test can verify that intake spreads across workers instead of piling into
+// one (#4133).
+func (n *Node) BatchStore() worker.BatchStore {
+	return multiWorkerBatchStore{n.workers}
+}
+
 func (n *Node) Workers() []*worker.Worker {
 	return n.workers
 }
