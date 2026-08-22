@@ -225,11 +225,11 @@ fi
 # captured before it stops, and it stops the run the clean way — signal the
 # loadgen, let this script write its verdict, then take the network down.
 # STALL_KILL_SECS=0 disables it for a run that is meant to sit in a stall.
-if [ -x "$here/stallkill.sh" ] && [ "${STALL_KILL_SECS:-60}" != "0" ]; then
-  nohup env RUN_DIR="$rd" STALL_KILL_SECS="${STALL_KILL_SECS:-60}" \
+if [ -x "$here/stallkill.sh" ] && [ "${STALL_KILL_SECS:-240}" != "0" ]; then
+  nohup env RUN_DIR="$rd" STALL_KILL_SECS="${STALL_KILL_SECS:-240}" \
     "$here/stallkill.sh" > "$rd/stallkill.log" 2>&1 &
   STALLKILL=$!
-  echo "   stallkill: armed (stop the run after ${STALL_KILL_SECS:-60}s stalled)" | tee -a "$log"
+  echo "   stallkill: armed (stop the run after ${STALL_KILL_SECS:-240}s stalled)" | tee -a "$log"
 fi
 echo "   load starts now" | tee -a "$log"
 

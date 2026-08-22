@@ -633,6 +633,34 @@ func (e *env) hasCredits(ctx context.Context, u *url.URL) bool {
 	return ok && a.GetCreditBalance() > 0
 }
 
+// awaitBalance waits for an account to actually hold ACME.
+//
+// Existence is not solvency. createIdentity used to add a new token account to
+// the identity's usable set as soon as awaitAccount saw it exist, then submit
+// the funding transfer fire-and-forget — so every action that reached for
+// a.tokens[0] could spend an account that had only been ASKED to be funded.
+// In run 20260822T050137Z the deposit never arrived at all and add-credits-page
+// was rejected 151 times out of 151, "insufficient tokens: have 0.00000000"
+// (#4130).
+func (e *env) awaitBalance(ctx context.Context, u *url.URL, limit time.Duration) error {
+	deadline := time.Now().Add(limit)
+	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		r, err := e.Q.QueryAccount(ctx, u, nil)
+		if err == nil {
+			if a, ok := r.Account.(interface{ GetBalance() *big.Int }); ok {
+				if b := a.GetBalance(); b != nil && b.Sign() > 0 {
+					return nil
+				}
+			}
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return errors.NotReady.WithFormat("timed out waiting for %v to hold tokens", u)
+}
+
 func (e *env) awaitCredits(ctx context.Context, u *url.URL, limit time.Duration) error {
 	deadline := time.Now().Add(limit)
 	for time.Now().Before(deadline) {

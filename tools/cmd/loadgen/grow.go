@@ -195,8 +195,16 @@ func (e *env) growIdentity(ctx context.Context) error {
 	if err := e.awaitAccount(ctx, tokens, 3*time.Minute); err != nil {
 		return err
 	}
-	adi.tokens = append(adi.tokens, tokens)
 
+	// Fund it BEFORE advertising it, and wait for the money to land.
+	//
+	// This used to append to adi.tokens as soon as the account existed and
+	// then submit the transfer fire-and-forget — the one step here that did
+	// not await anything. Existence is not solvency: every action that reaches
+	// for a.tokens[0] (add-credits-page, burn-tokens-adi, send-tokens-adi,
+	// fail:overspend) would then spend an account holding nothing. In run
+	// 20260822T050137Z the deposit never arrived and add-credits-page was
+	// rejected 151 times out of 151 (#4130).
 	if _, err := e.sign(ctx, t.id, func() txBuilder {
 		return e.build(t).
 			SendTokens(fundTokenAccount, protocol.AcmePrecisionPower).To(tokens).
@@ -204,6 +212,10 @@ func (e *env) growIdentity(ctx context.Context) error {
 	}); err != nil {
 		return errors.UnknownError.WithFormat("fund token account: %w", err)
 	}
+	if err := e.awaitBalance(ctx, tokens, 3*time.Minute); err != nil {
+		return errors.UnknownError.WithFormat("fund token account %v: %w", tokens, err)
+	}
+	adi.tokens = append(adi.tokens, tokens)
 
 	// A data account.
 	data := adiURL.JoinPath("data")
@@ -443,6 +455,24 @@ func (e *env) growAccount(ctx context.Context, adi *identity) error {
 		if err := e.awaitAccount(ctx, u, 3*time.Minute); err != nil {
 			return err
 		}
+
+		// Fund it. This account used to be advertised the moment it existed
+		// and never funded at all — createIdentity at least submitted a
+		// transfer. Every action that reached for it found nothing: in run
+		// 20260822T050137Z, 129 executor failures on .../tokens2 alone,
+		// "insufficient balance: have 0, want 10000" (#4130).
+		t := e.treasury
+		if _, err := e.sign(ctx, t.id, func() txBuilder {
+			return e.build(t).
+				SendTokens(fundTokenAccount, protocol.AcmePrecisionPower).To(u).
+				SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key)
+		}); err != nil {
+			return errors.UnknownError.WithFormat("fund token account: %w", err)
+		}
+		if err := e.awaitBalance(ctx, u, 3*time.Minute); err != nil {
+			return errors.UnknownError.WithFormat("fund token account %v: %w", u, err)
+		}
+
 		e.u.mu.Lock()
 		adi.tokens = append(adi.tokens, u)
 		e.u.mu.Unlock()

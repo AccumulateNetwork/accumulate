@@ -528,6 +528,11 @@ var burnTokensCustom = action{
 var lockAccount = action{
 	name: "lock-account", weight: 1,
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
+		// A lock is until a MAJOR block, and on a network that produces none
+		// it never expires — the account is destroyed, not delayed (#4129).
+		if !e.majorBlocksExist(ctx) {
+			return nil, errors.NotReady.With("no major blocks yet — a lock would never expire")
+		}
 		l := e.u.randReadyLite()
 		if l == nil {
 			return nil, errors.NotReady.With("no confirmed lite account")

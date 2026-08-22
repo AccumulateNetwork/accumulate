@@ -75,6 +75,13 @@ type env struct {
 	treasury *liteAccount // funds everything else
 	oracle   float64
 
+	// Cached answer to "does this network produce major blocks?". LockAccount
+	// takes a major block height, and a network that never produces one turns
+	// every lock into a permanent brick — see majorBlocksExist.
+	majorMu      sync.Mutex
+	majorSeen    bool
+	majorChecked time.Time
+
 	u     *universe
 	track *tracker
 
@@ -106,6 +113,44 @@ type env struct {
 // canPay reports whether the treasury can cover a fee, in credit-units. A
 // signer that cannot pay does not fail cleanly — the signature is rejected and
 // the transaction is stranded pending forever — so it is better to skip.
+// majorBlocksExist reports whether this network has ever produced a major
+// block, cached and re-checked periodically.
+//
+// LockAccount takes a MAJOR block height, not an ordinary one. DI produces no
+// major blocks at all — in run 20260822T050137Z the DN reached block 6,607
+// with no majorBlockIndex on its ledger and not one log line about producing
+// one — so `LockAccount(1)` locks an account until a moment that never comes.
+// The generator bricked a dozen lite accounts that way, 884 failures of
+// "account is locked until major block 1 (currently at 0)", progressively
+// poisoning its own pool and breaking the funding chains that depend on it.
+//
+// So: only lock when a major block has actually been seen. This is not a
+// workaround for #4129 — that issue asks the real question, whether DI ought
+// to be producing major blocks — it just stops the load generator destroying
+// accounts while the answer is unknown. If major blocks appear, locking
+// resumes on its own.
+func (e *env) majorBlocksExist(ctx context.Context) bool {
+	e.majorMu.Lock()
+	defer e.majorMu.Unlock()
+	if e.majorSeen {
+		return true // once true, always true
+	}
+	if time.Since(e.majorChecked) < time.Minute {
+		return false
+	}
+	e.majorChecked = time.Now()
+
+	u := protocol.DnUrl().JoinPath(protocol.Ledger)
+	r, err := e.Q.QueryAccount(ctx, u, nil)
+	if err != nil {
+		return false
+	}
+	if l, ok := r.Account.(interface{ GetMajorBlockIndex() uint64 }); ok && l.GetMajorBlockIndex() > 0 {
+		e.majorSeen = true
+	}
+	return e.majorSeen
+}
+
 func (e *env) canPay(units uint64) bool {
 	return e.treasuryCredits.Load() >= units
 }
