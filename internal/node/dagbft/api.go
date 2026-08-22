@@ -221,17 +221,23 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 	// Route by signer. Everything signed by one key must be handled by one
 	// worker, or it is batched in parallel, committed out of order, and
 	// rejected by replay protection (#4132).
-	// Signatures travel as MESSAGES here; envelope.Signatures is the legacy
-	// field and is empty in practice — the first version of this read it and
-	// routed every transaction with an empty key, which is round-robin, which
-	// is the bug. The verification run caught it because the key was logged.
+	// Routing key, for diagnostics only — it is NOT used to pick a worker.
+	//
+	// Keying the shard on the signer was tried and reverted. It serialises a
+	// hot signer onto one worker, which is the opposite of what sharding is
+	// for, and it does not even work: in run 20260822T071949Z all 100 of the
+	// treasury's transactions landed in worker 12 exactly as designed, that
+	// worker produced SIX batches, and 81 of the 100 were still rejected —
+	// because batches commit in DAG order, so order survives inside a batch
+	// and is lost across batches. The ordering constraint lives in the
+	// executor's replay protection; it cannot be fixed by routing (#4132).
 	routeKey := signerOf(envelope)
 
 	s.logger.Info("TRACE-SUBMIT: submitting to DAG-BFT service.SubmitTransaction",
 		"routeKey", routeKey)
 
 	// Submit to consensus (includes pre-batch validation)
-	if err := s.service.SubmitTransactionFor(routeKey, b); err != nil {
+	if err := s.service.SubmitTransaction(b); err != nil {
 		// Check if this is a validation error
 		if stderrors.Is(err, worker.ErrValidationFailed) {
 			s.logger.Error("TRACE-SUBMIT: validation failed, returning error submission", "error", err)
