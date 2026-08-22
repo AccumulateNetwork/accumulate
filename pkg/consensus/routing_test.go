@@ -73,7 +73,7 @@ func TestWorkerFor_PowerOfTwoUsesTheFullRange(t *testing.T) {
 }
 
 // A count that is not a power of two still has to work — a deployment is not
-// refused service over it — but it is not sharding, and config validation is
+// refused service over it — but it loses the mask, and config validation is
 // where it should be complained about.
 func TestWorkerFor_NonPowerOfTwoStillRoutesInRange(t *testing.T) {
 	for _, n := range []int{3, 5, 7, 100, 1000} {
@@ -121,7 +121,7 @@ func TestWorkerFor_CountChangeRemaps(t *testing.T) {
 			moved++
 		}
 	}
-	assert.Greater(t, moved, 0, "a different shard count must remap at least some keys")
+	assert.Greater(t, moved, 0, "a different worker count must remap at least some keys")
 	_ = a
 	_ = b
 }
