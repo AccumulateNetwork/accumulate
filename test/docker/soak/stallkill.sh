@@ -9,6 +9,7 @@
 # target were only ever going to write 137MB/hour of the same warning.
 #
 #   RUN_DIR=runs/<id> ./stallkill.sh          # watch, and stop the run on a stall
+#   STALL_KILL_SECS=600 RUN_DIR=... ./stallkill.sh   # more patience
 #
 # Evidence first, then stop: this takes a final capture before it touches
 # anything, and it stops the run the way a clean finish does — signal the load
@@ -20,7 +21,12 @@ here="$(cd "$(dirname "$0")" && pwd)"
 RUN_DIR="${RUN_DIR:-$here/runs/latest}"
 MON="${MON_URL:-http://127.0.0.1:8099/data}"
 POLL="${STALL_POLL:-10}"
-KILL_SECS="${STALL_KILL_SECS:-60}"
+# Four minutes, not one. The load generator's bootstrap wait alone freezes
+# every height for about five minutes, and while the idle guard below now
+# recognises that, a threshold this side of a minute leaves no room for any
+# other legitimate quiet stretch — a chaos pause, a slow catch-up, a heal
+# storm. A run is expensive to restart and cheap to let breathe.
+KILL_SECS="${STALL_KILL_SECS:-240}"
 # Never reach past this network. The ASP mainnet fleet shares a compose
 # directory name, so an unpinned `down` would treat those containers as
 # orphans and delete them (#4124).
