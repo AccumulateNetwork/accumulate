@@ -312,3 +312,62 @@ func TestWorker_LRUMassiveEviction(t *testing.T) {
 	assert.Greater(t, recentlyAccessedSurvivors, oldBatchSurvivors,
 		"recently accessed batches should have higher survival rate than old batches")
 }
+
+// TestWorker_LRUDoesNotEvictOwnUncommittedBatches pins the #4159 fix: a worker
+// must never LRU-evict a batch it AUTHORED but has not yet seen committed.
+// Bullshark commits leaders in causal order, so an early leader can be
+// committed thousands of rounds late; if the author evicted its own batch
+// first, CollectBatches finds it nowhere (absence=no-record, peerHits=0) and
+// the partition wedges permanently. Own batches leave the store only via
+// PruneCommitted.
+//
+// The production trigger: gossiped batches flood in from peers via StoreBatch
+// (which does not backpressure), pushing the store over the limit; eviction
+// then reaches the older OWN batches. Submit backpressures at MaxStoredBatches,
+// so own batches can only be a minority — exactly the ones eviction would take.
+func TestWorker_LRUDoesNotEvictOwnUncommittedBatches(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const limit = 10
+	w := worker.New(worker.Config{
+		ID:                0,
+		Partition:         "test",
+		MaxStoredBatches:  limit,
+		BatchSize:         1, // one txn per batch → one own batch per Submit
+		BatchTimeout:      5 * time.Millisecond,
+		MaxPendingCount:   100000,
+		MaxPendingSize:    64 << 20,
+		MaxBatchQueueSize: 100000,
+	}, nil)
+	go func() { _ = w.Start(ctx) }()
+	defer w.Close()
+	time.Sleep(50 * time.Millisecond)
+
+	// Author a few own batches (kept under the limit so Submit doesn't
+	// backpressure), then record their digests — these are the batches the
+	// author must never lose.
+	const ownBatches = 3
+	for i := 0; i < ownBatches; i++ {
+		require.NoError(t, w.Submit([]byte(fmt.Sprintf("own-tx-%d", i))))
+		time.Sleep(15 * time.Millisecond)
+	}
+	time.Sleep(100 * time.Millisecond)
+	ownDigests := w.BatchDigests()
+	require.Len(t, ownDigests, ownBatches, "the only batches so far are our own")
+
+	// Flood the store with gossiped (not-own) batches, far over the limit.
+	for i := 0; i < 40; i++ {
+		require.NoError(t, w.StoreBatch(types.NewBatch([][]byte{[]byte(fmt.Sprintf("gossip-%d", i))})))
+	}
+	time.Sleep(600 * time.Millisecond) // let eviction run
+
+	// Eviction ran (the store is back near the limit)...
+	assert.LessOrEqual(t, w.BatchCount(), int(float64(limit)*1.1)+1,
+		"eviction must bring the store back toward the limit; got %d", w.BatchCount())
+	// ...but every own uncommitted batch survived it.
+	for i, d := range ownDigests {
+		assert.True(t, w.HasBatch(d),
+			"own uncommitted batch %d must survive gossip-driven eviction (#4159)", i)
+	}
+}

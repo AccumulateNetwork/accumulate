@@ -938,25 +938,49 @@ func (w *Worker) performEviction() {
 		evictCount = 1
 	}
 
-	evicted := 0
-	for i := 0; i < evictCount; i++ {
-		// Remove from back of list (least recently used)
-		back := w.lruList.Back()
-		if back == nil {
-			break
+	// Never evict a batch this worker AUTHORED and has not yet seen committed.
+	// Bullshark commits leaders in causal order, so an early leader can be
+	// committed thousands of rounds late; if the author has already
+	// LRU-evicted that leader's batch, CollectBatches finds it nowhere
+	// (absence=no-record, peerHits=0) and the partition wedges permanently
+	// (#4159). Gossiped copies are just cache and stay evictable — the author
+	// is the source of truth and must retain its own batches until PruneCommitted
+	// moves them to `retained`. Walk from the LRU back (least-recently-used)
+	// toward the front, skipping own entries.
+	evicted, skippedOwn := 0, 0
+	for e := w.lruList.Back(); e != nil && evicted < evictCount; {
+		prev := e.Prev()
+		lruDigest := e.Value.(types.BatchDigest)
+		if entry, ok := w.batches[lruDigest]; ok && entry.own {
+			skippedOwn++
+			e = prev
+			continue
 		}
-		lruDigest := back.Value.(types.BatchDigest)
-		w.lruList.Remove(back)
+		w.lruList.Remove(e)
 		delete(w.batches, lruDigest)
 		w.noteGone(lruDigest, GoneEvicted,
 			fmt.Sprintf("store over limit %d", w.config.MaxStoredBatches), "")
 		evicted++
+		e = prev
 	}
 
 	if evicted > 0 {
 		slog.Warn("Evicted batches due to storage limit (LRU)",
 			"evicted", evicted,
 			"remaining", len(w.batches),
+			"skippedOwnUncommitted", skippedOwn,
+			"workerID", w.config.ID)
+	}
+	// Could not reach the target because our own uncommitted batches are not
+	// evictable: the store is growing because OUR batches are not committing.
+	// That is the pressure that #4159 turned into a permanent wedge when these
+	// batches were silently dropped; surface it rather than lose data a late
+	// commit will need.
+	if evicted < evictCount && skippedOwn > 0 {
+		slog.Warn("Batch store over limit with un-evictable own uncommitted batches (commit is lagging)",
+			"stored", len(w.batches),
+			"limit", w.config.MaxStoredBatches,
+			"ownUncommitted", skippedOwn,
 			"workerID", w.config.ID)
 	}
 }
