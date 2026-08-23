@@ -103,7 +103,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// fat-fingered count must be refused at startup, not at block time
 	// (#4151).
 	setDefaultPtr(&s.ExecutionShards, 1)
-	if *s.ExecutionShards > 1024 {
+	if *s.ExecutionShards < 0 || *s.ExecutionShards > 1024 {
 		return errors.BadRequest.WithFormat("execution-shards %d is out of range [0, 1024]", *s.ExecutionShards)
 	}
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
