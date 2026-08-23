@@ -301,3 +301,36 @@ func TestCollectBatches_NamesTheCertificateNotJustTheRound(t *testing.T) {
 		"pruner and waiter are different certificates of the same round")
 	assert.Equal(t, "260", at["round"])
 }
+
+// #4159: CollectBatches must not wait forever for batches that are gone from
+// the whole network. When the bounded timeout elapses AND no peer ever served
+// a missing batch (peerHits==0), it returns ErrBatchesUnrecoverable — never a
+// partial set — so the caller halts cleanly and recovers by state-sync.
+func TestCollectBatches_UnrecoverableAfterTimeout(t *testing.T) {
+	captureLogs(t)
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	committee := types.NewCommittee([]types.ValidatorInfo{{PublicKey: pub, Stake: 100}}, 1)
+	node, err := consensus.NewNode(consensus.NodeConfig{
+		Partition:           "Directory",
+		KeyPair:             priv,
+		BatchCollectTimeout: 150 * time.Millisecond, // bound the wait for the test
+	}, committee, nil, nil) // nil host → no peer fetch → peerHits stays 0
+	require.NoError(t, err)
+
+	missing := types.NewBatch([][]byte{[]byte("gone-from-every-node")})
+	cert := certFor(t, 4, missing.Digest())
+
+	// Generous context so the bounded TIMEOUT, not ctx, ends the wait.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	batches, err := node.CollectBatches(ctx, cert)
+	require.Error(t, err)
+	assert.Nil(t, batches, "never a partial set")
+	assert.ErrorIs(t, err, consensus.ErrBatchesUnrecoverable)
+	assert.Less(t, time.Since(start), 5*time.Second,
+		"must give up at the bounded timeout, not wait for the context")
+}

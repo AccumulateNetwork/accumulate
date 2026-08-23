@@ -80,10 +80,35 @@ type NodeConfig struct {
 	// at block rate (#4098). Callers honouring config.Timing should set this
 	// to BlockInterval/2.
 	MinRoundInterval time.Duration
+
+	// BatchCollectTimeout bounds how long CollectBatches waits for a committed
+	// certificate's batches before declaring them unrecoverable (#4159).
+	// CollectBatches never returns a partial set — executing without a batch
+	// diverges state — so historically it waited forever, on the premise that
+	// the certificate proves the data exists. LRU eviction broke that premise
+	// (every holder can evict a not-yet-committed batch); worker.performEviction
+	// no longer evicts a worker's OWN uncommitted batches, which restores it for
+	// the common case, but if the sole holder is gone the wait is still endless.
+	// After this timeout WITH no batch ever fetched from any peer, CollectBatches
+	// returns ErrBatchesUnrecoverable so the node can halt cleanly (state-sync to
+	// recover) instead of spinning silently. Generous by default so transient
+	// absences and peer catch-up self-heal. Zero uses the default; negative
+	// restores the old wait-forever behaviour.
+	BatchCollectTimeout time.Duration
 }
+
+// DefaultBatchCollectTimeout is how long CollectBatches waits for a committed
+// certificate's batches, with zero peer hits, before declaring them
+// unrecoverable (#4159). Long enough that no healthy fetch or catch-up is cut
+// short; short enough that a genuinely stranded partition stops in minutes
+// instead of never.
+const DefaultBatchCollectTimeout = 10 * time.Minute
 
 // applyDefaults fills in default values for unset configuration fields.
 func (c *NodeConfig) applyDefaults() {
+	if c.BatchCollectTimeout == 0 {
+		c.BatchCollectTimeout = DefaultBatchCollectTimeout
+	}
 	if c.NumWorkers <= 0 {
 		c.NumWorkers = DefaultNumWorkers
 	}
@@ -262,6 +287,13 @@ func (s multiWorkerBatchStore) StoreBatch(batch *types.Batch) error {
 // from every peer that had them.
 var ErrAlreadyExecuted = errors.New("certificate already executed by this node")
 
+// ErrBatchesUnrecoverable reports that a committed certificate's batches could
+// not be collected within BatchCollectTimeout and no peer ever served one, so
+// they are gone from the network (#4159). CollectBatches never returns a
+// partial set — executing without a batch diverges state — so the caller must
+// treat this as a clean HALT (state-sync to recover), never as a skip.
+var ErrBatchesUnrecoverable = errors.New("committed certificate's batches are unrecoverable")
+
 // executedBefore reports whether a missing batch proves this certificate has
 // already been executed here.
 func (n *Node) executedBefore(digest types.BatchDigest, cert *types.Certificate) bool {
@@ -340,6 +372,7 @@ func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*
 		lastLogged time.Time
 		peerAsks   int
 		peerHits   int
+		started    = time.Now()
 	)
 
 	for {
@@ -420,6 +453,24 @@ func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*
 				"peerHits", peerHits,
 				"attempts", waited)
 		}
+
+		// Bound the wait (#4159). The old contract — wait forever, the
+		// certificate proves the data exists — held only while some node
+		// retained the batch; LRU eviction could delete it everywhere. Fix 1
+		// (workers keep their own uncommitted batches) restores that for the
+		// common case, so a healthy fetch always makes progress. But if the
+		// sole holder is gone the wait never ends. Give up ONLY when both are
+		// true: the timeout elapsed, AND not a single missing batch was ever
+		// fetched from a peer (peerHits==0) — i.e. no holder answered at all.
+		// A run with any peer hits is making progress and keeps waiting. This
+		// never returns a partial set; the caller halts cleanly so the node
+		// can state-sync instead of spinning silently.
+		if to := n.config.BatchCollectTimeout; to > 0 && peerHits == 0 && time.Since(started) > to {
+			return nil, fmt.Errorf("%w: round %d cert %s: %d batch(es) still missing after %s (firstMissing=%s absence=%s peerAsks=%d peerHits=%d)",
+				ErrBatchesUnrecoverable, cert.Header.Round, cert.Digest().String()[:16],
+				missing, to, firstMissing.String(), n.batchAbsence(firstMissing), peerAsks, peerHits)
+		}
+
 		select {
 		case <-ctx.Done():
 			return nil, fmt.Errorf("collect batches for round %d: %d still missing: %w",

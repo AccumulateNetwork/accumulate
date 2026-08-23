@@ -461,6 +461,17 @@ func (s *Service) blockProductionLoop() {
 						"partition", s.config.Partition.ID)
 					continue
 				}
+				// A committed certificate whose batches are gone from the whole
+				// network (#4159) cannot be executed and MUST NOT be skipped —
+				// skipping diverges this node's state. Halt cleanly so the node
+				// stops here and can recover by state-sync, rather than the loop
+				// logging an error and moving to the next certificate (which
+				// would execute it out of order against missing predecessor
+				// state).
+				if stderrors.Is(err, consensus.ErrBatchesUnrecoverable) {
+					s.haltForUnrecoverableBatches(cert, err)
+					return
+				}
 				slog.Error("Failed to process committed certificate",
 					"error", err,
 					"round", cert.Header.Round)
@@ -859,6 +870,28 @@ func (s *Service) onStateDivergence(err *types.StateDivergenceError) {
 			s.logger.Error("Failed to publish state divergence event", "error", pubErr)
 		}
 	}
+}
+
+// haltForUnrecoverableBatches halts the partition when a committed
+// certificate's batches are gone from the whole network (#4159). Like state
+// divergence, this is a safety stop: the certificate cannot be executed and
+// must not be skipped, so the node stops cleanly here and recovers by
+// state-sync rather than spinning forever inside batch collection.
+func (s *Service) haltForUnrecoverableBatches(cert *types.Certificate, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.halted {
+		return
+	}
+	s.halted = true
+	s.haltReason = err
+
+	slog.Error("UNRECOVERABLE BATCHES - HALTING PARTITION (state-sync to recover)",
+		"partition", s.config.Partition.ID,
+		"round", cert.Header.Round,
+		"cert", cert.Digest().String()[:16],
+		"error", err)
 }
 
 // IsHalted returns whether the service has been halted due to state divergence.
