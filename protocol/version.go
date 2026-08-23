@@ -58,6 +58,15 @@ func (v ExecutorVersion) V2JiuquanEnabled() bool {
 	return v >= ExecutorVersionV2Jiuquan
 }
 
+// V2TanegashimaEnabled checks if the version is at least V2 Tanegashima.
+// Tanegashima's number is claimed here (#4139) so the two development lines
+// agree; the features it gates (lite account delegation, transaction
+// whitelists) live on the DAG-BFT line, and whether main's ungated
+// SetLiteAccountDelegate adopts the gate is decided in #4148.
+func (v ExecutorVersion) V2TanegashimaEnabled() bool {
+	return v >= ExecutorVersionV2Tanegashima
+}
+
 // V2KourouEnabled checks if the version is at least V2 Kourou. Kourou enables
 // collection proofs: a single proof covering a contiguous range of messages,
 // instead of one proof per message and — for anchors — one signature quorum per

@@ -30,13 +30,18 @@ ExecutorVersion:
     label: v2-jiuquan
     description: enables the Jiuquan release
 
-  V2Kourou:
+  V2Tanegashima:
     value: 9
+    label: v2-tanegashima
+    description: enables lite account delegation and transaction whitelists
+
+  V2Kourou:
+    value: 10
     label: v2-kourou
     description: enables collection proofs for cross-partition messaging
 
   VNext:
-    value: 10
+    value: 11
     description: is a placeholder for testing. DO NOT USE
 
 PartitionType:
