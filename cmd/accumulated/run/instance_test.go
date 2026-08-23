@@ -26,9 +26,9 @@ func TestCoreValidatorConfig(t *testing.T) {
 		Network: "MainNet",
 		Configurations: []Configuration{
 			&CoreValidatorConfiguration{
-				Listen:        multiaddr.StringCast("/tcp/16591"),
-				BVN:           "Apollo",
-				StorageType:   Ptr(StorageTypeBadger),
+				Listen:      multiaddr.StringCast("/tcp/16591"),
+				BVN:         "Apollo",
+				StorageType: Ptr(StorageTypeBadger),
 			},
 		},
 	}

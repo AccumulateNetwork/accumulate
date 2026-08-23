@@ -96,6 +96,10 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	setDefaultPtr(&s.EnableDirectDispatch, true)
 	setDefaultPtr(&s.MaxEnvelopesPerBlock, uint64(100))
 	setDefaultPtr(&s.NumWorkers, dagconfig.DefaultNumWorkers)
+	// Execution sharding (#4145) defaults to serial; shard count is a local
+	// parallelism choice that cannot change the result, so operators can
+	// raise it per node.
+	setDefaultPtr(&s.ExecutionShards, 1)
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
 	setDefaultPtr(&s.BlockInterval, encoding.Duration(dagconfig.DefaultBlockInterval))
@@ -190,6 +194,8 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		EventBus:  s.eventBus,
 		Sequencer: client.Private(),
 		Querier:   client,
+		// Shard user-transaction execution by identity (#4145).
+		ExecutionShards: int(*s.ExecutionShards),
 		Describe: multiexec.DescribeShim{
 			NetworkType: s.Partition.Type,
 			PartitionId: s.Partition.ID,

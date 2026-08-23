@@ -69,6 +69,12 @@ type Options struct {
 	NewDispatcher          func() Dispatcher  // Synthetic transaction dispatcher factory
 	Sequencer              private.Sequencer  // Synthetic and anchor sequence API service
 	Querier                api.Querier        // Query API service
+
+	// ExecutionShards is the number of shards user transactions are executed
+	// across, by identity (#4145). Zero or one selects the serial path.
+	// Shard count is a local parallelism choice that cannot change the
+	// result — it is configuration, not consensus.
+	ExecutionShards int
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.
@@ -103,6 +109,22 @@ type Block interface {
 
 	// Close closes the block and returns the end state of the block.
 	Close() (BlockState, error)
+}
+
+// ProcessResult is the outcome of processing one envelope of a set — see
+// ParallelBlock. Each envelope's outcome is independent, so callers keep
+// their own error policy.
+type ProcessResult struct {
+	Statuses []*protocol.TransactionStatus
+	Error    error
+}
+
+// A ParallelBlock is a Block that can process a set of envelopes as a whole,
+// sharding execution by identity when shards are configured (#4145). With
+// one shard (or zero) ProcessAll is exactly a loop over Process.
+type ParallelBlock interface {
+	Block
+	ProcessAll(envelopes []*messaging.Envelope) []*ProcessResult
 }
 
 // BlockState is the state of a completed block.

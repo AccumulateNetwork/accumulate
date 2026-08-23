@@ -34,6 +34,14 @@ type MessageContext struct {
 
 	// produced is other messages produced while processing the message.
 	produced []*ProducedMessage
+
+	// syntheticCount distinguishes otherwise-identical messages produced by
+	// THIS message. It was a block-scoped counter, which stamped delivery-
+	// order-dependent content into synthetic transaction bodies — under
+	// sharded execution (#4145) that order is a scheduling accident, so the
+	// index is now scoped to the producer: (producer, index) is exactly the
+	// key deferred sequencing (#4144) already sorts by.
+	syntheticCount uint64
 }
 
 func (m *MessageContext) Type() messaging.MessageType { return m.message.Type() }

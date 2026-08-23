@@ -53,6 +53,8 @@ type simFactory struct {
 	ignoreCommitResults         bool
 	deterministic               bool
 	dropInitialAnchor           bool
+	executionShards             int
+	executionShardsPerNode      []int
 	disableAnchorHealing        bool
 	interceptDispatchedMessages DispatchInterceptor
 
@@ -558,6 +560,13 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Sequencer:     f.getServices().Private(),
 		Querier:       f.getServices(),
 		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
+
+		// Shard user-transaction execution by identity (#4145). Zero is the
+		// serial path; tests opt in via simulator.ExecutionShards, or give
+		// each node a DIFFERENT count via ExecutionShardsPerNode — the
+		// consensus result comparison then asserts shard-count equivalence
+		// on every block of every test.
+		ExecutionShards: f.shardCount(),
 	}
 
 	// Add background tasks to the block's error group. The simulator must call
@@ -627,4 +636,12 @@ func (node *nodeFactory) makeConsensusNode(app consensus.App) *consensus.Node {
 	cn.IgnoreDeliverResults = node.ignoreDeliverResults
 	cn.IgnoreCommitResults = node.ignoreCommitResults
 	return cn
+}
+
+// shardCount returns the execution shard count for this node (#4145).
+func (f *nodeFactory) shardCount() int {
+	if n := len(f.executionShardsPerNode); n > 0 {
+		return f.executionShardsPerNode[f.id%n]
+	}
+	return f.executionShards
 }

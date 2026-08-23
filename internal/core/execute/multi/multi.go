@@ -155,6 +155,21 @@ type multiBlock struct {
 	Block
 }
 
+// ProcessAll implements [execute.ParallelBlock]. If the underlying block
+// supports sharded execution (#4145) it is used; otherwise this is a plain
+// serial loop over Process.
+func (b *multiBlock) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessResult {
+	if pb, ok := b.Block.(execute.ParallelBlock); ok {
+		return pb.ProcessAll(envelopes)
+	}
+	results := make([]*execute.ProcessResult, len(envelopes))
+	for i, env := range envelopes {
+		s, err := b.Process(env)
+		results[i] = &execute.ProcessResult{Statuses: s, Error: err}
+	}
+	return results
+}
+
 func (b *multiBlock) Close() (BlockState, error) {
 	s, err := b.Block.Close()
 	if err != nil {

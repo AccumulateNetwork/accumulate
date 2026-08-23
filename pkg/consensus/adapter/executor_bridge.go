@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // txTraceEnabled mirrors the worker package's ACC_TX_TRACE switch. Read here
@@ -231,6 +232,12 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	// they arrive and do not execute, they were lost here.
 	var arrived, unmarshalFailed, processFailed, statusFailed int
 	txCount := 0
+	var envelopes []*messaging.Envelope
+	type origin struct {
+		batch string
+		index int
+	}
+	var origins []origin
 	for _, batch := range params.Batches {
 		if batch == nil {
 			// CollectBatches guarantees a complete set before a block is
@@ -265,35 +272,50 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 					"block", params.Index)
 				continue
 			}
+			envelopes = append(envelopes, envelope)
+			origins = append(origins, origin{digest.String(), i})
+		}
+	}
 
-			// Process the envelope
-			statuses, err := block.Process(envelope)
-			if err != nil {
-				processFailed++
-				slog.Warn("Failed to process transaction",
-					"error", err,
-					"batch", digest.String(),
-					"index", i,
+	// Process the envelopes — sharded by identity when the executor supports
+	// it and shards are configured (#4145), a plain serial loop otherwise.
+	// Either way each envelope's outcome is independent: one bad envelope is
+	// logged and dropped, not the block.
+	processOne := func(j int, statuses []*protocol.TransactionStatus, err error) {
+		if err != nil {
+			processFailed++
+			slog.Warn("Failed to process transaction",
+				"error", err,
+				"batch", origins[j].batch,
+				"index", origins[j].index,
+				"block", params.Index)
+			return
+		}
+
+		// Log any failed transactions. Warn, not Debug: a status error here
+		// is the ONLY trace a committed message leaves when the executor
+		// rejects it — at Debug an entire class of silent loss (#4111's
+		// vanishing anchor signatures) was invisible.
+		for _, status := range statuses {
+			if status.Error != nil {
+				statusFailed++
+				slog.Warn("Transaction failed",
+					"error", status.Error,
+					"code", status.Code,
+					"txid", status.TxID,
 					"block", params.Index)
-				continue
 			}
-
-			// Log any failed transactions. Warn, not Debug: a status error here
-			// is the ONLY trace a committed message leaves when the executor
-			// rejects it — at Debug an entire class of silent loss (#4111's
-			// vanishing anchor signatures) was invisible.
-			for _, status := range statuses {
-				if status.Error != nil {
-					statusFailed++
-					slog.Warn("Transaction failed",
-						"error", status.Error,
-						"code", status.Code,
-						"txid", status.TxID,
-						"block", params.Index)
-				}
-			}
-
-			txCount++
+		}
+		txCount++
+	}
+	if pb, ok := block.(execute.ParallelBlock); ok {
+		for j, r := range pb.ProcessAll(envelopes) {
+			processOne(j, r.Statuses, r.Error)
+		}
+	} else {
+		for j, envelope := range envelopes {
+			statuses, err := block.Process(envelope)
+			processOne(j, statuses, err)
 		}
 	}
 

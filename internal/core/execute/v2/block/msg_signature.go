@@ -111,8 +111,10 @@ func (x SignatureMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 		return status, err
 	}
 
-	// Make sure the block is recorded
-	ctx.Block.State.MergeSignature(&ProcessSignatureState{})
+	// Make sure the block is recorded. Counted on the bundle and merged into
+	// block state serially — under parallel execution (#4145) nothing may
+	// touch Block.State mid-execution.
+	ctx.bundle.signed++
 
 	// Process the message
 	ctx2, err := x.check(batch, ctx)

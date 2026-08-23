@@ -574,9 +574,12 @@ func (b *Block) processEvents() error {
 		}
 
 		// Claim we're on pass 1 so that internal messages are allowed
-		_, err = b.processMessages(msgs, 1)
+		_, bundles, err := b.processMessages(b.Batch, msgs, 1)
 		if err != nil {
 			return errors.UnknownError.WithFormat("process messages (1): %w", err)
+		}
+		for _, d := range bundles {
+			d.mergeIntoBlock()
 		}
 	}
 
@@ -623,9 +626,12 @@ func (b *Block) processEvents() error {
 	}
 
 	// Claim we're on pass 1 so that internal messages are allowed
-	_, err = b.processMessages(msgs, 1)
+	_, bundles, err := b.processMessages(b.Batch, msgs, 1)
 	if err != nil {
 		return errors.UnknownError.WithFormat("process messages (2): %w", err)
+	}
+	for _, d := range bundles {
+		d.mergeIntoBlock()
 	}
 	return nil
 }

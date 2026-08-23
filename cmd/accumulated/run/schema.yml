@@ -237,6 +237,10 @@ Configuration:
         - name: NumWorkers
           type: '*int'
           optional: true
+        - name: ExecutionShards
+          description: is the number of identity shards user transactions execute across; zero or one is serial (#4145)
+          type: '*int'
+          optional: true
         - name: DagGcDepth
           type: '*int'
           optional: true
@@ -359,6 +363,10 @@ Service:
         - name: Partition
           type: '*protocol.PartitionInfo'
         - name: NumWorkers
+          type: '*int'
+          optional: true
+        - name: ExecutionShards
+          description: is the number of identity shards user transactions execute across; zero or one is serial (#4145)
           type: '*int'
           optional: true
         - name: DAGGCDepth

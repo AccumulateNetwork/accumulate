@@ -352,6 +352,15 @@ func init() {
 				},
 			},
 			{
+				Name:        "ExecutionShards",
+				Description: "is the number of identity shards user transactions execute across; zero or one is serial (#4145)",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
 				Name:     "DagGcDepth",
 				Optional: true,
 				Type: &schema.PointerType{
@@ -411,6 +420,15 @@ func init() {
 			{
 				Name:     "NumWorkers",
 				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
+				Name:        "ExecutionShards",
+				Description: "is the number of identity shards user transactions execute across; zero or one is serial (#4145)",
+				Optional:    true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
 					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},

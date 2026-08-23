@@ -22,8 +22,6 @@ type Block struct {
 	Batch    *database.Batch
 	Executor *Executor
 
-	syntheticCount uint64
-
 	// produced accumulates every delivery's produced messages so they can be
 	// sequenced in ONE sorted pass at block end (#4144). Sequencing inline —
 	// destLedger.Produced++ per message as each delivery executes — was the
