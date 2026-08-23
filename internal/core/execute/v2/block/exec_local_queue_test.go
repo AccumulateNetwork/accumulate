@@ -69,3 +69,61 @@ func TestLocalQueue_RoutingChangeMidQueuePromotesTheMessage(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, queued)
 }
+
+// A body of exactly 64 bytes is padded before it is stored and queued
+// (#4154), the same adjustment buildSynthTxn applies on the remote path. The
+// drain-side executor rejects 64-byte bodies outright — before any chain
+// executor runs, so no refund — and the queue entry is already cleared: a
+// deposit destroyed silently, while the source-side debit stands.
+func TestLocalQueue_64ByteBodyIsPaddedBeforeQueueing(t *testing.T) {
+	x := new(Executor)
+	x.Describe = execute.DescribeShim{NetworkType: protocol.PartitionTypeBlockValidator, PartitionId: "BVN0"}
+	x.Router = routeEverythingTo("BVN0")
+
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	t.Cleanup(batch.Discard)
+	b := &Block{Batch: batch, Executor: x}
+
+	// Construct a transaction body of exactly 64 bytes (the Test64ByteBody
+	// trick: an unknown trailing field pads BurnTokens to the boundary).
+	raw, err := new(protocol.BurnTokens).MarshalBinary()
+	require.NoError(t, err)
+	raw = append(raw, 2)
+	c := make([]byte, 64-len(raw))
+	c[0] = byte(len(c) - 1)
+	for i := range c[1:] {
+		c[i+1] = byte(i) + 1
+	}
+	raw = append(raw, c...)
+	body := new(protocol.BurnTokens)
+	require.NoError(t, body.UnmarshalBinary(raw))
+	raw, err = body.MarshalBinary()
+	require.NoError(t, err)
+	require.Len(t, raw, 64, "fixture: the body must be exactly 64 bytes")
+
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = protocol.AccountUrl("bob", "tokens")
+	txn.Body = body
+	require.True(t, txn.BodyIs64Bytes(), "fixture: the executor would reject this")
+
+	remote, err := b.splitLocalDeliveries([]*ProducedMessage{{
+		Producer:    protocol.AccountUrl("alice", "tokens").WithTxID([32]byte{1}),
+		Destination: txn.Header.Principal,
+		Message:     &messaging.TransactionMessage{Transaction: txn},
+	}})
+	require.NoError(t, err)
+	require.Empty(t, remote)
+
+	// What was queued and stored is the PADDED message — hash-consistent
+	// between queue entry and store, and no longer 64 bytes.
+	queued, err := batch.Account(x.Describe.Synthetic()).LocalDeliveryQueue().Get()
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+	stored, err := batch.Message(queued[0].Hash()).Main().Get()
+	require.NoError(t, err, "the queue entry's hash must load the stored message")
+	storedTxn, ok := stored.(*messaging.TransactionMessage)
+	require.True(t, ok)
+	assert.False(t, storedTxn.Transaction.BodyIs64Bytes(),
+		"the stored message must be padded past the executor's 64-byte refusal")
+}

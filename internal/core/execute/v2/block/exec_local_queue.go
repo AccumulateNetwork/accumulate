@@ -59,11 +59,21 @@ func (b *Block) splitLocalDeliveries(produced []*ProducedMessage) ([]*ProducedMe
 			continue
 		}
 
+		// The remote path pads exactly-64-byte bodies and headers in
+		// buildSynthTxn (adjust64). A local delivery skips buildSynthTxn, so
+		// pad HERE, before the hash is used for the store and the queue —
+		// otherwise the drain rejects the message (BodyIs64Bytes) with no
+		// refund, after the source-side debit already stood (#4154).
+		err := adjust64(p)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("adjust local delivery: %w", err)
+		}
+
 		// Store the message so the drain can load it. It takes no sequence
 		// number and no position on the synthetic main chain — the audit
 		// trail is the producer's Produced() index (written by didProduce)
 		// and the destination's main chain when it executes.
-		err := b.Batch.Message(p.Message.Hash()).Main().Put(p.Message)
+		err = b.Batch.Message(p.Message.Hash()).Main().Put(p.Message)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("store local delivery: %w", err)
 		}
@@ -139,12 +149,22 @@ func (b *Block) drainDeliveryQueues() error {
 
 	// Pass 1: queued messages are effects of already-committed work, and
 	// internal message types are only admitted past pass zero.
-	_, bundles, err := b.processMessages(b.Batch, msgs, 1)
+	statuses, bundles, err := b.processMessages(b.Batch, msgs, 1)
 	if err != nil {
 		return errors.UnknownError.WithFormat("drain delivery queues: %w", err)
 	}
 	for _, d := range bundles {
 		d.mergeIntoBlock()
+	}
+
+	// A drained message was never in any mempool and has no submitter to
+	// notice a failure — a silent error status here is a deposit that
+	// vanished without a trace (#4154). The status is its only witness.
+	for _, st := range statuses {
+		if st.Error != nil {
+			b.Executor.logger.Error("Local delivery failed",
+				"id", st.TxID, "error", st.Error, "block", b.Index)
+		}
 	}
 	return nil
 }
