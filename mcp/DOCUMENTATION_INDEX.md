@@ -84,7 +84,7 @@ Complete exploration of the Accumulate SDK v1.4.2 for MCP server implementation.
 - Basic setup information
 
 ### 6. Snapshot Restore Documentation
-**Files**: `snapshot_restore_readme.md`, `snapshot_restore_implementation_status.md`
+**Files**: `snapshot_restore_readme.md`
 **Purpose**: Snapshot-based follower deployment
 **Content**:
 - Architecture for rapid follower deployment

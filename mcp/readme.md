@@ -215,8 +215,6 @@ All client code has been rewritten to properly integrate with the Accumulate SDK
 - Proper transaction signing with protocol types
 - Correct lite account derivation using SDK functions
 
-See `SDK_REWRITE_SUMMARY.md` for complete details of what changed.
-
 ## Features
 
 - **Full Transaction Signing**: ED25519 signature support using protocol types

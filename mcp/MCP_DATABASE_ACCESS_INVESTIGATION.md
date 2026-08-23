@@ -457,7 +457,6 @@ Queries specific account:
 - `/home/paul/go/src/gitlab.com/AccumulateNetwork/accumulate/pkg/database/keyvalue/badger/compat.go` - Version compatibility
 - `/home/paul/go/src/gitlab.com/AccumulateNetwork/accumulate/pkg/database/keyvalue/badger/versions.go` - BadgerDB v1-v4 wrappers
 - `/home/paul/go/src/gitlab.com/AccumulateNetwork/accumulate/pkg/database/keyvalue/badger/slogger.go` - Custom logger
-- `/home/paul/go/src/gitlab.com/AccumulateNetwork/accumulate/mcp/database_health_report.md` - Health report output
 - `/home/paul/go/src/gitlab.com/AccumulateNetwork/accumulate/BADGER_VALIDATION_INVESTIGATION.md` - Previous failed attempts
 
 ---
