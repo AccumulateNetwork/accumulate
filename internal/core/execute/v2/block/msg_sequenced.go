@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -206,7 +207,7 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 	// pool.
 	next, ok := ledger.Get(seq.Number + 1)
 	if ok {
-		if next.Account().RootIdentity().Equal(seq.Message.ID().Account().RootIdentity()) {
+		if x.nextTargetsSameIdentity(batch, next, seq) {
 			ctx.queueAdditional(&internal.MessageIsReady{TxID: next})
 		} else {
 			err = batch.Account(ctx.Executor.Describe.Synthetic()).CascadeDeliveryQueue().Add(next)
@@ -217,6 +218,35 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 	}
 
 	return true, nil
+}
+
+// nextTargetsSameIdentity reports whether the NEXT pending message's inner
+// principal shares the current message's identity — the test that decides
+// inline delivery vs the next-block cascade queue.
+//
+// next comes from the pending ledger, whose IDs are Destination.WithTxID —
+// the LOCAL PARTITION url, not the principal. Comparing that account against
+// the principal compared partition to principal and never matched for user
+// synthetics (#4153): the inline branch was dead, and a pending tail drained
+// at ONE message per stream per block, which cannot converge under inflow.
+// The identity equality it does establish is the anchor case — every
+// anchor's principal is the local anchor pool, under the partition identity
+// — which stays the fast path. For everything else the real principal lives
+// in the stored message.
+func (x SequencedMessage) nextTargetsSameIdentity(batch *database.Batch, next *url.TxID, seq *messaging.SequencedMessage) bool {
+	if next.Account().RootIdentity().Equal(seq.Message.ID().Account().RootIdentity()) {
+		return true // the anchor fast path
+	}
+
+	msg, err := batch.Message(next.Hash()).Main().Get()
+	if err != nil {
+		return false // unknown → the cascade queue, the conservative lane
+	}
+	nextSeq, ok := msg.(*messaging.SequencedMessage)
+	if !ok {
+		return false
+	}
+	return nextSeq.Message.ID().Account().RootIdentity().Equal(seq.Message.ID().Account().RootIdentity())
 }
 
 func (x SequencedMessage) isReady(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, error) {
