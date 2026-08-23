@@ -36,7 +36,6 @@ func (p partOpts) apply(cfg *Config) error {
 				ID:   p.ID,
 				Type: p.Type,
 			},
-			EnableHealing:        p.EnableHealing,
 			EnableDirectDispatch: p.EnableDirectDispatch,
 			MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
 			NumWorkers:           p.NumWorkers,

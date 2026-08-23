@@ -223,7 +223,6 @@ type CoreValidatorConfiguration struct {
 	BvnGenesis           string
 	DnBootstrapPeers     []Multiaddr
 	BvnBootstrapPeers    []Multiaddr
-	EnableHealing        *bool
 	EnableDirectDispatch *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType
@@ -298,7 +297,6 @@ type DAGBFTService struct {
 	CommitBufferSize *int64
 	// BlockInterval target time between blocks; rounds are paced at half this, since Bullshark commits every other round. Defaults to 3s (#4098).
 	BlockInterval        *encoding.Duration
-	EnableHealing        *bool
 	EnableDirectDispatch *bool
 	MaxEnvelopesPerBlock *uint64
 	service              *dagbft.Service
@@ -415,7 +413,6 @@ type FollowerConfiguration struct {
 	BvnGenesis           string
 	DnBootstrapPeers     []Multiaddr
 	BvnBootstrapPeers    []Multiaddr
-	EnableHealing        *bool
 	EnableDirectDispatch *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType

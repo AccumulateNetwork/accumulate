@@ -320,14 +320,6 @@ func init() {
 					ResolveElemTo(&deferredTypes, "Multiaddr"),
 			},
 			{
-				Name:     "EnableHealing",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
 				Name:     "EnableDirectDispatch",
 				Optional: true,
 				Type: &schema.PointerType{
@@ -450,14 +442,6 @@ func init() {
 				},
 			},
 			{
-				Name:     "EnableHealing",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
 				Name:     "EnableDirectDispatch",
 				Optional: true,
 				Type: &schema.PointerType{
@@ -577,14 +561,6 @@ func init() {
 					TypeBase: schema.TypeBase{},
 				}).
 					ResolveElemTo(&deferredTypes, "Multiaddr"),
-			},
-			{
-				Name:     "EnableHealing",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
 			},
 			{
 				Name:     "EnableDirectDispatch",

@@ -43,7 +43,6 @@ func TestSyntheticHealing(t *testing.T) {
 	//
 	// Fails with: "expected synthetic healing to fire" — the heal count stays
 	// at zero, so synthetic healing never engages in this scenario.
-	t.Skip("ported from main; fails on the DAG-BFT branch — see #4134")
 
 	var timestamp uint64
 
@@ -179,7 +178,6 @@ func TestSyntheticHealingSignatureRequest(t *testing.T) {
 	//
 	// Fails with: "check messages: message bundle is missing a transaction" —
 	// this branch composes the bundle differently from main.
-	t.Skip("ported from main; fails on the DAG-BFT branch — see #4134")
 
 	var timestamp uint64
 	alice := AccountUrl("alice")

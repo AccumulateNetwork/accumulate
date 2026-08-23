@@ -225,9 +225,6 @@ Configuration:
           type: '[]Multiaddr'
         - name: BvnBootstrapPeers
           type: '[]Multiaddr'
-        - name: EnableHealing
-          type: '*bool'
-          optional: true
         - name: EnableDirectDispatch
           type: '*bool'
           optional: true
@@ -288,9 +285,6 @@ Configuration:
           type: '[]Multiaddr'
         - name: BvnBootstrapPeers
           type: '[]Multiaddr'
-        - name: EnableHealing
-          type: '*bool'
-          optional: true
         - name: EnableDirectDispatch
           type: '*bool'
           optional: true
@@ -376,9 +370,6 @@ Service:
         - name: BlockInterval
           description: target time between blocks; rounds are paced at half this, since Bullshark commits every other round. Defaults to 3s (#4098)
           type: '*encoding.Duration'
-          optional: true
-        - name: EnableHealing
-          type: '*bool'
           optional: true
         - name: EnableDirectDispatch
           type: '*bool'

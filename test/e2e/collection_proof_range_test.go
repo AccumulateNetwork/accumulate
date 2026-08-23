@@ -27,10 +27,18 @@ import (
 )
 
 // TestRangeRecovery drops a run of consecutive synthetic deposits between two
-// partitions and verifies the destination recovers the whole run with a
-// single SequenceRange call carrying ONE shared collection proof (#4048).
-// Pre-activation (before VNext) the same scenario must recover through the
-// per-message healing path, without any collection proofs on the wire.
+// partitions and verifies the destination recovers the whole run.
+//
+// The deposits are BVN→BVN, and for that stream the range path is correctly
+// UNUSABLE today: partitions hold no anchors from each other, so the
+// destination has no root to verify a collection proof against, and
+// rangeProofAnchor refuses rather than asking the source to prove against a
+// directory continuation — the #4086 failure the executor's deleted in-block
+// path reproduced (#4138). Recovery therefore goes through the per-message
+// pull, with no collection proofs on the wire, at every version. When #4140
+// gives synthetics a receiver-side replica of the source's root, the range
+// path becomes usable BVN→BVN and the activated case must flip back to
+// expecting `recovered >= drops`.
 func TestRangeRecovery(t *testing.T) {
 	Run(t, map[string]ExecutorVersion{
 		"activated": ExecutorVersionLatest,
@@ -126,16 +134,15 @@ func TestRangeRecovery(t *testing.T) {
 		lta := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(bobUrl), bobUrl)
 		require.Equal(t, transfers*int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
 
-		if version.V2KourouEnabled() {
-			// The dropped run must have been recovered via the range path:
-			// each resubmitted message carries the shared collection proof.
-			require.GreaterOrEqual(t, int(recovered.Load()), drops,
-				"expected the dropped run to be recovered with collection proofs")
-		} else {
-			// Pre-activation there must be no collection proofs on the wire.
-			require.Zero(t, recovered.Load(),
-				"collection proofs must not be used before activation")
-		}
+		// No collection proofs on the wire in either case: pre-activation they
+		// do not exist, and post-activation the BVN→BVN range path correctly
+		// refuses because no anchor from the source is held — recovery falls
+		// back to per-message pulls rather than asking for a proof the
+		// destination could not check (#4138). #4140 changes this: once the
+		// receiver holds a replica of the source's root, the activated case
+		// must expect `recovered >= drops` again.
+		require.Zero(t, recovered.Load(),
+			"BVN→BVN recovery must not put collection proofs on the wire until #4140 lands")
 	})
 }
 

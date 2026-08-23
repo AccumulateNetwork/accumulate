@@ -28,7 +28,6 @@ func TestCoreValidatorConfig(t *testing.T) {
 			&CoreValidatorConfiguration{
 				Listen:        multiaddr.StringCast("/tcp/16591"),
 				BVN:           "Apollo",
-				EnableHealing: Ptr(true),
 				StorageType:   Ptr(StorageTypeBadger),
 			},
 		},
@@ -126,7 +125,6 @@ func TestRun(t *testing.T) {
 					ID:   protocol.Directory,
 					Type: protocol.PartitionTypeDirectory,
 				},
-				EnableHealing: Ptr(true),
 			},
 			&DAGBFTService{
 				NodeDir: "node-1/bvnn",
@@ -135,7 +133,6 @@ func TestRun(t *testing.T) {
 					ID:   "BVN1",
 					Type: protocol.PartitionTypeBlockValidator,
 				},
-				EnableHealing: Ptr(true),
 			},
 			&StorageService{
 				Name: "directory",

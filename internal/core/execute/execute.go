@@ -69,8 +69,6 @@ type Options struct {
 	NewDispatcher          func() Dispatcher  // Synthetic transaction dispatcher factory
 	Sequencer              private.Sequencer  // Synthetic and anchor sequence API service
 	Querier                api.Querier        // Query API service
-	EnableHealing          bool               //
-	HealInterval           time.Duration      // minimum interval between healing scans; zero means the default
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.
