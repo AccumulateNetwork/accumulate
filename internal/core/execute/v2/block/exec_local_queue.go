@@ -85,6 +85,10 @@ func (b *Block) splitLocalDeliveries(produced []*ProducedMessage) ([]*ProducedMe
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("queue local deliveries: %w", err)
 		}
+		// The queue write must survive even if nothing else happened this
+		// block — an "empty" discard would re-produce the same messages
+		// forever (#4155).
+		b.State.LocalDeliveries += len(queued)
 	}
 	return remote, nil
 }
@@ -146,6 +150,11 @@ func (b *Block) drainDeliveryQueues() error {
 	if len(msgs) == 0 {
 		return nil
 	}
+
+	// The queue CLEAR must survive even if every drained message fails
+	// statelessly — an "empty" discard would drain the same entries every
+	// block (#4155).
+	b.State.LocalDeliveries += len(msgs)
 
 	// Pass 1: queued messages are effects of already-committed work, and
 	// internal message types are only admitted past pass zero.

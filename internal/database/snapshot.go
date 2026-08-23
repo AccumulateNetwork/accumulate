@@ -776,6 +776,31 @@ func readBptSnapshot(snap *snapshot.Reader, opts *RestoreOptions) (map[[32]byte]
 }
 
 func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOptions) error {
+	// #4146 local deliveries live on NO chain — that is their design — but
+	// their bodies must still travel in the snapshot: the queues are account
+	// state and a restored node drains them at its next Begin. A snapshot
+	// holding queue entries without bodies bricks that node — Begin fails on
+	// the missing message, every block, with no eviction and no healing
+	// (#4155).
+	for _, q := range []struct {
+		name string
+		get  func() ([]*url.TxID, error)
+	}{
+		{"local-delivery-queue", a.LocalDeliveryQueue().Get},
+		{"cascade-delivery-queue", a.CascadeDeliveryQueue().Get},
+	} {
+		ids, err := q.get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load %s: %w", q.name, err)
+		}
+		for _, id := range ids {
+			err = collectMessageHash(a, q.name, hashes, opts, id.Hash())
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+		}
+	}
+
 	chains, err := a.Chains().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load chains index: %w", err)
@@ -822,7 +847,7 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 			return nil
 		}
 		for _, h := range head.HashList {
-			err = collectMessageHash(a, c, hashes, opts, *(*[32]byte)(h))
+			err = collectMessageHash(a, c.Name()+" chain", hashes, opts, *(*[32]byte)(h))
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -848,7 +873,7 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 				continue
 			}
 			for _, h := range s.HashList {
-				err = collectMessageHash(a, c, hashes, opts, *(*[32]byte)(h))
+				err = collectMessageHash(a, c.Name()+" chain", hashes, opts, *(*[32]byte)(h))
 				if err != nil {
 					return errors.UnknownError.Wrap(err)
 				}
@@ -859,7 +884,7 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 	return errors.UnknownError.Wrap(err)
 }
 
-func collectMessageHash(a *Account, c *Chain2, hashes *indexing.Bucket, opts *CollectOptions, h [32]byte) error {
+func collectMessageHash(a *Account, source string, hashes *indexing.Bucket, opts *CollectOptions, h [32]byte) error {
 	// If we're not following signatures, just
 	if opts.SkipMessageRefs {
 		if opts.Metrics != nil {
@@ -867,14 +892,14 @@ func collectMessageHash(a *Account, c *Chain2, hashes *indexing.Bucket, opts *Co
 		}
 		err := hashes.Write(h, nil)
 		if err != nil {
-			return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
+			return errors.UnknownError.WithFormat("record %s entry: %w", source, err)
 		}
 		return nil
 	}
 
 	msg, err := a.parent.newMessage(messageKey{h}).Main().Get()
 	if err != nil {
-		slog.Error("Failed to collect message", "account", a.Url(), "chain", c.Name(), "hash", logging.AsHex(h), "error", err)
+		slog.Error("Failed to collect message", "account", a.Url(), "source", source, "hash", logging.AsHex(h), "error", err)
 		return nil
 	}
 
@@ -893,7 +918,7 @@ func collectMessageHash(a *Account, c *Chain2, hashes *indexing.Bucket, opts *Co
 	}
 	err = hashes.Write(h, nil)
 	if err != nil {
-		return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
+		return errors.UnknownError.WithFormat("record %s entry: %w", source, err)
 	}
 
 	forTxn, ok := msg.(messaging.MessageForTransaction)
@@ -901,7 +926,7 @@ func collectMessageHash(a *Account, c *Chain2, hashes *indexing.Bucket, opts *Co
 		return nil
 	}
 
-	return collectMessageHash(a, c, hashes, opts, forTxn.GetTxID().Hash())
+	return collectMessageHash(a, source, hashes, opts, forTxn.GetTxID().Hash())
 }
 
 func writeSnapshotIndex(w *snapshot.Writer, index *indexing.Bucket, opts *CollectOptions) error {
