@@ -46,10 +46,29 @@ import (
 // envelopeIdentity returns the single identity the envelope's messages
 // belong to, or (nil, false) if the envelope must execute serially: any
 // non-user message, any signature that is not a user key signature, any
-// system or partition identity, or messages spanning more than one identity.
-func (b *Block) envelopeIdentity(messages []messaging.Message) (*url.URL, bool) {
+// system or partition identity, any transaction that cannot be resolved to
+// its real content, any held (HoldUntil) transaction, or messages spanning
+// more than one identity.
+//
+// Classification must never trust a submitter's CLAIM about a transaction.
+// A remote stub's principal and a signature's TxID account are claims: the
+// executor loads the real transaction by HASH and writes ITS principal's
+// records, so classifying by the claim would let a crafted envelope execute
+// another identity's writes on the wrong shard (#4149). Claims are resolved
+// to the real transaction — from this envelope or from the store — and
+// anything unresolvable is serial.
+func (b *Block) envelopeIdentity(batch *database.Batch, messages []messaging.Message) (*url.URL, bool) {
 	var identity *url.URL
 	add := func(u *url.URL) bool {
+		// Network accounts (dn.acme/*, bvn-*.acme/*) are user-writable but
+		// mutate shared executor state (pending globals), and ACME is
+		// written by system production — all serial. Applied to every
+		// identity, signers included: an operator page signature writes
+		// partition accounts.
+		if _, isPart := protocol.ParsePartitionUrl(u); isPart ||
+			protocol.AcmeUrl().LocalTo(u) {
+			return false
+		}
 		id := u.RootIdentity()
 		switch {
 		case identity == nil:
@@ -62,24 +81,68 @@ func (b *Block) envelopeIdentity(messages []messaging.Message) (*url.URL, bool) 
 		}
 	}
 
+	// Full transactions travelling in this envelope, by hash. A full
+	// transaction cannot lie about its principal — the hash covers the
+	// header — so it is an authoritative source when a signature or a
+	// remote stub refers to it.
+	var local map[[32]byte]*protocol.Transaction
+	for _, msg := range messages {
+		txm, ok := msg.(*messaging.TransactionMessage)
+		if !ok || txm.Transaction.Body.Type() == protocol.TransactionTypeRemote {
+			continue
+		}
+		if local == nil {
+			local = map[[32]byte]*protocol.Transaction{}
+		}
+		local[txm.Transaction.ID().Hash()] = txm.Transaction
+	}
+
+	// resolve returns the REAL transaction for a hash, or nil (→ serial).
+	resolve := func(hash [32]byte) *protocol.Transaction {
+		if txn, ok := local[hash]; ok {
+			return txn
+		}
+		msg, err := batch.Message(hash).Main().Get()
+		if err != nil {
+			return nil
+		}
+		txm, ok := msg.(*messaging.TransactionMessage)
+		if !ok || txm.Transaction.Body.Type() == protocol.TransactionTypeRemote {
+			return nil
+		}
+		return txm.Transaction
+	}
+
+	addTxn := func(txn *protocol.Transaction) bool {
+		if !txn.Body.Type().IsUser() {
+			return false // hazard (i)
+		}
+		// A held transaction's signatures write the partition ledger's
+		// event records — a system account — from whichever shard the
+		// envelope lands on (#4149). Serial until that write moves into
+		// block state.
+		if txn.Header.HoldUntil != nil {
+			return false
+		}
+		if txn.Header.Principal == nil {
+			return false
+		}
+		return add(txn.Header.Principal)
+	}
+
 	for _, msg := range messages {
 		switch msg := msg.(type) {
 		case *messaging.TransactionMessage:
-			if !msg.Transaction.Body.Type().IsUser() {
-				return nil, false // hazard (i)
+			txn := msg.Transaction
+			if txn.Body.Type() == protocol.TransactionTypeRemote {
+				// Processing a remote stub means loading — and possibly
+				// executing — the real transaction. Classify by that.
+				txn = resolve(msg.Hash())
+				if txn == nil {
+					return nil, false
+				}
 			}
-			principal := msg.Transaction.Header.Principal
-			if principal == nil {
-				return nil, false
-			}
-			// Network accounts (dn.acme/*, bvn-*.acme/*) are user-writable
-			// but mutate shared executor state (pending globals), and ACME is
-			// written by system production — all serial.
-			if _, isPart := protocol.ParsePartitionUrl(principal); isPart ||
-				protocol.AcmeUrl().LocalTo(principal) {
-				return nil, false
-			}
-			if !add(principal) {
+			if !addTxn(txn) {
 				return nil, false
 			}
 
@@ -92,11 +155,16 @@ func (b *Block) envelopeIdentity(messages []messaging.Message) (*url.URL, bool) 
 			if signer == nil || msg.TxID == nil {
 				return nil, false
 			}
-			// The signature writes the signer's identity and refers to a
-			// transaction on its principal's identity. The common self-signed
-			// case is one identity and stays parallel; cross-identity signing
-			// (delegation, multisig across ADIs) goes serial (hazard ii).
-			if !add(signer) || !add(msg.TxID.Account()) {
+			// The signature writes the signer's identity and executes
+			// against the transaction with this HASH. The common self-signed
+			// case is one identity and stays parallel; cross-identity
+			// signing (delegation, multisig across ADIs) goes serial
+			// (hazard ii).
+			if !add(signer) {
+				return nil, false
+			}
+			txn := resolve(msg.TxID.Hash())
+			if txn == nil || !addTxn(txn) {
 				return nil, false
 			}
 
@@ -148,21 +216,29 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 
 		// One mutex serializes every touch of the shared parent batch
 		// (hazard iv) — each shard's child memoizes what it pulls through,
-		// so the lock is paid once per record per shard.
+		// so the lock is paid once per record per shard. The children are
+		// created HERE, before the goroutines: BeginConcurrent mutates the
+		// parent (the child id counter) outside the mutex, so calling it
+		// from the shards is a data race (#4149).
 		var mu sync.Mutex
-		var wg sync.WaitGroup
 		for s := range pending {
 			if len(pending[s]) == 0 {
+				continue
+			}
+			out[s].batch = b.Batch.BeginConcurrent(&mu, true)
+		}
+
+		var wg sync.WaitGroup
+		for s := range pending {
+			if out[s].batch == nil {
 				continue
 			}
 			wg.Add(1)
 			go func(s int) {
 				defer wg.Done()
-				batch := b.Batch.BeginConcurrent(&mu, true)
-				out[s].batch = batch
 				out[s].bundles = make([][]*bundle, len(pending[s]))
 				for i, it := range pending[s] {
-					statuses, bundles, err := b.processEnvelope(batch, it.messages)
+					statuses, bundles, err := b.processEnvelope(out[s].batch, it.messages)
 					results[it.index] = &execute.ProcessResult{Statuses: statuses, Error: err}
 					out[s].bundles[i] = bundles
 				}
@@ -176,13 +252,27 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 			if out[s].batch == nil {
 				continue
 			}
+			if b.fatal != nil {
+				// The parent batch may already hold a partial commit —
+				// nothing more may be committed on top of it.
+				out[s].batch.Discard()
+				for _, it := range pending[s] {
+					results[it.index] = &execute.ProcessResult{Error: b.fatal}
+				}
+				continue
+			}
 			err := out[s].batch.Commit()
 			if err != nil {
-				// A commit failure would corrupt the block — report it on
-				// every envelope of the shard rather than committing a
-				// partial run.
+				// Commit writes value by value and stops at the first
+				// error, so a failure here may have already written a
+				// PREFIX of the child's state into the parent. The block
+				// is corrupt: poison it so Close refuses to produce a
+				// state hash from it (#4149). Degrading per-shard would
+				// silently commit the corruption.
+				b.fatal = errors.FatalError.WithFormat("commit shard %d: %w", s, err)
+				out[s].batch.Discard()
 				for _, it := range pending[s] {
-					results[it.index] = &execute.ProcessResult{Error: errors.UnknownError.WithFormat("commit shard %d: %w", s, err)}
+					results[it.index] = &execute.ProcessResult{Error: b.fatal}
 				}
 				continue
 			}
@@ -198,6 +288,12 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 	}
 
 	for i, env := range envelopes {
+		if b.fatal != nil {
+			// A shard commit failure poisoned the block — stop executing.
+			results[i] = &execute.ProcessResult{Error: b.fatal}
+			continue
+		}
+
 		messages, err := env.Normalize()
 		if err != nil {
 			// A malformed envelope is its own outcome; it does not interrupt
@@ -206,11 +302,15 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 			continue
 		}
 
-		identity, ok := b.envelopeIdentity(messages)
+		identity, ok := b.envelopeIdentity(b.Batch, messages)
 		if !ok {
 			// Barrier: finish the parallel run, then execute serially in
 			// place (hazards i and ii).
 			flush()
+			if b.fatal != nil {
+				results[i] = &execute.ProcessResult{Error: b.fatal}
+				continue
+			}
 			statuses, bundles, err := b.processEnvelope(b.Batch, messages)
 			if err == nil {
 				for _, d := range bundles {

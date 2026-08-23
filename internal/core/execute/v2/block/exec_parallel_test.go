@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -34,10 +35,25 @@ func userSig(signer *url.URL, txid *url.TxID) *messaging.SignatureMessage {
 	}
 }
 
+// classify runs envelopeIdentity against an empty store — resolution can
+// only find transactions travelling in the envelope itself.
 func classify(t *testing.T, messages ...messaging.Message) (*url.URL, bool) {
 	t.Helper()
+	return classifyWith(t, nil, messages...)
+}
+
+// classifyWith seeds the message store first — the multisig shape, where the
+// transaction landed in an earlier block and only the signature travels now.
+func classifyWith(t *testing.T, stored []messaging.Message, messages ...messaging.Message) (*url.URL, bool) {
+	t.Helper()
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	t.Cleanup(batch.Discard)
+	for _, msg := range stored {
+		require.NoError(t, batch.Message(msg.Hash()).Main().Put(msg))
+	}
 	b := new(Block)
-	return b.envelopeIdentity(messages)
+	return b.envelopeIdentity(batch, messages)
 }
 
 func TestShardAssignment_SameIdentityDifferentPathsSameShard(t *testing.T) {
@@ -137,6 +153,94 @@ func TestClassify_SystemAndAnchorAndSyntheticGoSerial(t *testing.T) {
 	acme := userTxn(protocol.AcmeUrl())
 	_, ok = classify(t, acme)
 	assert.False(t, ok, "ACME is written by system production — serial")
+}
+
+// #4149: classification never trusts a submitter's claims.
+
+func remoteStub(claimedPrincipal *url.URL, hash [32]byte) *messaging.TransactionMessage {
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = claimedPrincipal
+	txn.Body = &protocol.RemoteTransaction{Hash: hash}
+	return &messaging.TransactionMessage{Transaction: txn}
+}
+
+// The attack from #4149: bob's transaction is pending; a crafted envelope
+// claims alice everywhere the classifier used to look. Classification must
+// resolve the REAL transaction and go serial (signer alice + principal bob =
+// multi-identity), never shard to alice.
+func TestClassify_LyingSignatureTxIDResolvesTheRealPrincipal(t *testing.T) {
+	bobTxn := userTxn(protocol.AccountUrl("bob", "tokens"))
+	h := bobTxn.Transaction.ID().Hash()
+
+	lyingSig := userSig(protocol.AccountUrl("alice", "book", "1"),
+		protocol.AccountUrl("alice", "x").WithTxID(h))
+	lyingStub := remoteStub(protocol.AccountUrl("alice", "x"), h)
+
+	_, ok := classifyWith(t, []messaging.Message{bobTxn}, lyingSig, lyingStub)
+	assert.False(t, ok,
+		"a signature claiming alice for bob's transaction must not shard to alice")
+}
+
+// A remote stub's claimed principal is ignored outright: the envelope
+// classifies by the REAL transaction's identity, so its writes happen on the
+// right shard no matter what the stub says.
+func TestClassify_RemoteStubClaimedPrincipalIsIgnored(t *testing.T) {
+	bobTxn := userTxn(protocol.AccountUrl("bob", "tokens"))
+	h := bobTxn.Transaction.ID().Hash()
+
+	id, ok := classifyWith(t, []messaging.Message{bobTxn},
+		remoteStub(protocol.AccountUrl("alice", "x"), h))
+	require.True(t, ok)
+	assert.True(t, id.Equal(protocol.AccountUrl("bob")),
+		"the real transaction's identity wins, not the stub's claim")
+}
+
+// A signature whose transaction is nowhere to be found cannot be classified
+// — the executor would load it by hash, so an unresolvable hash is serial.
+func TestClassify_UnresolvableSignatureGoesSerial(t *testing.T) {
+	sig := userSig(protocol.AccountUrl("alice", "book", "1"),
+		protocol.AccountUrl("alice", "x").WithTxID([32]byte{1, 2, 3}))
+	_, ok := classify(t, sig)
+	assert.False(t, ok, "an unresolvable transaction reference is a serial barrier")
+
+	_, ok = classify(t, remoteStub(protocol.AccountUrl("alice", "x"), [32]byte{4, 5, 6}))
+	assert.False(t, ok, "an unresolvable remote stub is a serial barrier")
+}
+
+// The multisig shape: the transaction landed in an earlier block, only the
+// signature travels now. Resolution finds it in the store and the envelope
+// shards by the REAL principal's identity.
+func TestClassify_LaterSignatureResolvesFromTheStore(t *testing.T) {
+	txn := userTxn(protocol.AccountUrl("alice", "tokens"))
+	sig := userSig(protocol.AccountUrl("alice", "book", "1"), txn.Transaction.ID())
+
+	id, ok := classifyWith(t, []messaging.Message{txn}, sig)
+	require.True(t, ok)
+	assert.True(t, id.Equal(protocol.AccountUrl("alice")))
+}
+
+// A held transaction's signatures write the partition ledger's event
+// records — a system account — so HoldUntil is a serial barrier (#4149).
+func TestClassify_HoldUntilGoesSerial(t *testing.T) {
+	txn := userTxn(protocol.AccountUrl("alice", "tokens"))
+	txn.Transaction.Header.HoldUntil = &protocol.HoldUntilOptions{MinorBlock: 10}
+	sig := userSig(protocol.AccountUrl("alice", "book", "1"), txn.Transaction.ID())
+
+	_, ok := classify(t, txn)
+	assert.False(t, ok, "a held transaction is serial")
+
+	_, ok = classifyWith(t, []messaging.Message{txn}, sig)
+	assert.False(t, ok, "a signature for a held transaction is serial")
+}
+
+// The partition/ACME guard applies to signers too — an operator page
+// signature writes partition accounts.
+func TestClassify_PartitionSignerGoesSerial(t *testing.T) {
+	txn := userTxn(protocol.AccountUrl("alice", "tokens"))
+	sig := userSig(protocol.DnUrl().JoinPath(protocol.Operators, "1"), txn.Transaction.ID())
+
+	_, ok := classifyWith(t, []messaging.Message{txn}, sig)
+	assert.False(t, ok, "a partition-account signer is the serial lane")
 }
 
 // Shard count one takes the plain serial path — no goroutines, no child

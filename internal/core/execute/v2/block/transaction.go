@@ -548,7 +548,7 @@ func (x *TransactionContext) recordPendingTransaction(net execute.DescribeShim, 
 }
 
 func (x *TransactionContext) recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTransactionState, delivery *chain.Delivery, result protocol.TransactionResult) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
-	x.State.MarkTransactionDelivered(delivery.Transaction.ID())
+	x.markTransactionDelivered(delivery.Transaction.ID())
 
 	// Record the transaction
 	status, err := recordTransaction(batch, delivery, state, func(status *protocol.TransactionStatus) {
@@ -599,7 +599,7 @@ func selectTargetChain(account *database.Account, body protocol.TransactionBody)
 }
 
 func (x *TransactionContext) recordFailedTransaction(batch *database.Batch, delivery *chain.Delivery, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
-	x.State.MarkTransactionDelivered(delivery.Transaction.ID())
+	x.markTransactionDelivered(delivery.Transaction.ID())
 
 	// Record the transaction
 	state := new(chain.ProcessTransactionState)

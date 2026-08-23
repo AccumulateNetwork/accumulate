@@ -124,6 +124,6 @@ func (CreditPayment) process(batch *database.Batch, ctx *MessageContext, pay *me
 		txn.Body = &protocol.RemoteTransaction{Hash: pay.TxID.Hash()}
 	}
 
-	ctx.State.MarkTransactionPending(txn)
+	ctx.markTransactionPending(txn)
 	return nil
 }

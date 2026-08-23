@@ -48,6 +48,26 @@ type bundle struct {
 	// used to increment Block.State directly; under parallel execution every
 	// touch of shared block state is deferred to mergeIntoBlock.
 	signed int
+
+	// stateOps defers the pending/delivered marks the same way (#4149):
+	// execution may be running in a shard goroutine, and a direct write to
+	// Block.State's maps is a data race. Ops apply in execution order at
+	// merge, and the (shard, arrival) merge order keeps the result
+	// serial-equivalent — bundles that mark the same transaction share its
+	// identity and therefore its shard.
+	stateOps []func(*BlockState)
+}
+
+func (d *bundle) markTransactionPending(txn *protocol.Transaction) {
+	d.stateOps = append(d.stateOps, func(s *BlockState) { s.MarkTransactionPending(txn) })
+}
+
+func (d *bundle) markTransactionDelivered(id *url.TxID) {
+	d.stateOps = append(d.stateOps, func(s *BlockState) { s.MarkTransactionDelivered(id) })
+}
+
+func (d *bundle) markSignaturePending(txn *protocol.Transaction, auth *url.URL) {
+	d.stateOps = append(d.stateOps, func(s *BlockState) { s.MarkSignaturePending(txn, auth) })
 }
 
 // Process processes a message bundle.
@@ -282,6 +302,12 @@ func (d *bundle) mergeIntoBlock() {
 
 	for i := 0; i < d.signed; i++ {
 		b.State.MergeSignature(&ProcessSignatureState{})
+	}
+
+	// Pending/delivered marks, deferred from execution (#4149), in
+	// execution order.
+	for _, op := range d.stateOps {
+		op(&b.State)
 	}
 }
 

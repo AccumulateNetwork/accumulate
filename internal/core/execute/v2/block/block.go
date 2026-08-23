@@ -29,6 +29,11 @@ type Block struct {
 	// sequence numbers to delivery order, which becomes shard-scheduling-
 	// dependent under parallel execution (#4145).
 	produced []*ProducedMessage
+
+	// fatal poisons the block: a shard child-batch commit failed after
+	// possibly writing a prefix of its state into the parent (#4149). No
+	// further envelopes execute and Close refuses to produce a state hash.
+	fatal error
 }
 
 func (b *Block) Params() execute.BlockParams { return b.BlockParams }

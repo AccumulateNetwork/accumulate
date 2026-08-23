@@ -271,7 +271,7 @@ func addSignature(batch *database.Batch, ctx *SignatureContext, signer protocol.
 
 	// Mark the signature set for expiration if this is the first signature
 	if wasEmpty && ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
-		ctx.State.MarkSignaturePending(ctx.transaction, auth)
+		ctx.markSignaturePending(ctx.transaction, auth)
 	}
 
 	return nil

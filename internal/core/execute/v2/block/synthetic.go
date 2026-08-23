@@ -31,7 +31,13 @@ func compareProduced(a, b *ProducedMessage) int {
 	switch {
 	case a.Producer == nil && b.Producer == nil:
 		ah, bh := a.Message.Hash(), b.Message.Hash()
-		return bytes.Compare(ah[:], bh[:])
+		if c := bytes.Compare(ah[:], bh[:]); c != 0 {
+			return c
+		}
+		// DISTINCT system productions can share a hash — MakeMajorBlock is
+		// byte-identical for every BVN — and insertion order must not be
+		// load-bearing (#4149). Destination breaks the tie.
+		return a.Destination.Compare(b.Destination)
 	case a.Producer == nil:
 		return +1 // system-produced messages order after attributed ones
 	case b.Producer == nil:

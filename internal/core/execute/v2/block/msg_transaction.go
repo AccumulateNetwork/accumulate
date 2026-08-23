@@ -697,7 +697,9 @@ func (x ExpiredTransaction) expireTransaction(batch *database.Batch, ctx *Messag
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	ctx.State.MergeTransaction(state)
+	// Through the bundle's state, merged serially at bundle end — never
+	// directly into the shared Block.State mid-execution (#4149).
+	ctx.state.Set(txn.Transaction.ID().Hash(), state)
 
 	err = TransactionMessage{}.postProcess(batch, ctx2, state, true)
 	return errors.UnknownError.Wrap(err)

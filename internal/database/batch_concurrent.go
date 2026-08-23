@@ -39,6 +39,16 @@ func (s syncStore) PutValue(key *record.Key, value database.Value) error {
 	return s.inner.PutValue(key, value)
 }
 
+// Unwrap returns the parent batch's record layer, so the BPT's
+// commitUpdatesDirect pushes a concurrent child's pending BPT updates into
+// the parent — exactly as a plain child batch does — instead of refusing
+// ("cannot determine how the BPT should be committed") and killing the
+// block. Only Commit reaches this, and BeginConcurrent's contract serializes
+// commits, so no shard goroutine is running when the parent is touched here.
+func (s syncStore) Unwrap() database.Record {
+	return s.inner.(values.RecordStore).Record
+}
+
 // BeginConcurrent starts a child batch whose access to THIS batch is
 // serialized by mu. Children created with the same mutex may execute
 // concurrently with each other; the parent must not be used directly (by
@@ -51,10 +61,15 @@ func (b *Batch) BeginConcurrent(mu *sync.Mutex, writable bool) *Batch {
 		b.logger.Info("Attempted to create a writable batch from a read-only batch")
 	}
 
+	// Under mu: creating a child MUTATES the parent, and concurrent
+	// creation was a real data race (#4149).
+	mu.Lock()
 	b.nextChildId++
+	id := b.nextChildId
+	mu.Unlock()
 
 	c := new(Batch)
-	c.id = fmt.Sprintf("%s.%d", b.id, b.nextChildId)
+	c.id = fmt.Sprintf("%s.%d", b.id, id)
 	c.observer = b.observer
 	c.writable = b.writable && writable
 	c.parent = b

@@ -26,6 +26,12 @@ import (
 
 // Close ends the block and returns the block state.
 func (block *Block) Close() (execute.BlockState, error) {
+	if block.fatal != nil {
+		// A shard commit failure may have left a partial write in the
+		// block batch (#4149) — refuse to hash or commit it.
+		return nil, errors.FatalError.Wrap(block.fatal)
+	}
+
 	m := block.Executor
 	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
 	ledger := block.Batch.Account(ledgerUrl)
