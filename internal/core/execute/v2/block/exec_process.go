@@ -283,8 +283,6 @@ func (d *bundle) mergeIntoBlock() {
 	for i := 0; i < d.signed; i++ {
 		b.State.MergeSignature(&ProcessSignatureState{})
 	}
-
-	b.State.Produced += len(d.produced)
 }
 
 // checkForUnsignedTransactions returns an error if the message bundle includes

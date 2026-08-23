@@ -197,10 +197,23 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 		return false, nil
 	}
 
-	// Queue the next transaction in the sequence
+	// Queue the next transaction in the sequence. Same identity: inline, into
+	// the running bundle, as always. A DIFFERENT identity defers to the next
+	// block's cascade queue (#4146): the cascade is a stream property, not an
+	// identity one, and under sharded execution (#4145 hazard iii) it must
+	// not widen a bundle's identity set mid-execution. Anchor streams always
+	// take the inline path — every anchor's principal is the local anchor
+	// pool.
 	next, ok := ledger.Get(seq.Number + 1)
 	if ok {
-		ctx.queueAdditional(&internal.MessageIsReady{TxID: next})
+		if next.Account().RootIdentity().Equal(seq.Message.ID().Account().RootIdentity()) {
+			ctx.queueAdditional(&internal.MessageIsReady{TxID: next})
+		} else {
+			err = batch.Account(ctx.Executor.Describe.Synthetic()).CascadeDeliveryQueue().Add(next)
+			if err != nil {
+				return false, errors.UnknownError.WithFormat("queue cascade delivery: %w", err)
+			}
+		}
 	}
 
 	return true, nil

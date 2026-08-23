@@ -62,9 +62,9 @@ type realBridge struct {
 	time   time.Time
 }
 
-// newRealBridge builds an ExecutorBridge over a real executor on a fresh
-// genesis of the given deterministic network, with a funded lite account.
-func newRealBridge(t *testing.T, shards int, liteKeys ...[]byte) *realBridge {
+// newRealBridgeDB genesises a fresh single-BVN database with funded lite
+// accounts, returning the database and the genesis validator key.
+func newRealBridgeDB(t *testing.T, liteKeys ...[]byte) (*database.Database, []byte) {
 	t.Helper()
 	netInit := simulator.NewSimpleNetwork("RealBridge", 1, 1)
 	genesisTime := time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
@@ -94,13 +94,19 @@ func newRealBridge(t *testing.T, shards int, liteKeys ...[]byte) *realBridge {
 		}
 		return nil
 	}))
+	return db, netInit.Bvns[0].Nodes[0].PrivValKey
+}
 
+// newBridgeOver builds an ExecutorBridge over an existing database —
+// "restarting the node" is calling this a second time on the same database.
+func newBridgeOver(t *testing.T, db *database.Database, valKey []byte, shards int) *realBridge {
+	t.Helper()
 	bus := events.NewBus(nil)
 	router := routing.NewRouter(routing.RouterOptions{Events: bus})
 
 	exec, err := multiexec.NewExecutor(multiexec.Options{
 		Database:        db,
-		Key:             netInit.Bvns[0].Nodes[0].PrivValKey,
+		Key:             valKey,
 		Router:          router,
 		EventBus:        bus,
 		NewDispatcher:   func() multiexec.Dispatcher { return nullDispatcher{} },
@@ -121,7 +127,15 @@ func newRealBridge(t *testing.T, shards int, liteKeys ...[]byte) *realBridge {
 	bridge, err := NewExecutorBridge(ExecutorBridgeConfig{Executor: exec, PartitionID: "BVN0", EventBus: bus})
 	require.NoError(t, err)
 
-	return &realBridge{bridge: bridge, db: db, index: params.Index, time: genesisTime}
+	return &realBridge{bridge: bridge, db: db, index: params.Index, time: time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC).Add(time.Duration(params.Index) * time.Second)}
+}
+
+// newRealBridge builds an ExecutorBridge over a real executor on a fresh
+// genesis of the given deterministic network, with funded lite accounts.
+func newRealBridge(t *testing.T, shards int, liteKeys ...[]byte) *realBridge {
+	t.Helper()
+	db, valKey := newRealBridgeDB(t, liteKeys...)
+	return newBridgeOver(t, db, valKey, shards)
 }
 
 // produce delivers one certificate (a list of batches) as the next block.

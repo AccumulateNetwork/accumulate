@@ -59,15 +59,18 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Should we send an anchor?
-	if block.shouldSendAnchor() {
-		block.State.Anchor = &BlockAnchorState{}
-	}
-
-	// Send messages produced by the block. Depends on shouldPrepareAnchor.
+	// Settle the block's produced messages — sequence what leaves the
+	// partition, queue what stays (#4146). This must run before the anchor
+	// decision: whether an anchor is needed depends on whether anything was
+	// SEQUENCED, which is only known after the local/remote split.
 	err = block.produceBlockMessages()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("produce block messages: %w", err)
+	}
+
+	// Should we send an anchor?
+	if block.shouldSendAnchor() {
+		block.State.Anchor = &BlockAnchorState{}
 	}
 
 	// Do nothing if the block is empty
@@ -629,19 +632,6 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 }
 
 func (b *Block) produceBlockMessages() error {
-	// Sequence the messages the block's deliveries produced, in ONE sorted
-	// pass (#4144). The sort key is derived from the produced set alone —
-	// (producer transaction ID, emission index) — so the numbers no longer
-	// depend on delivery order, which under parallel execution (#4145) is a
-	// shard-scheduling accident. System-produced messages below get the
-	// numbers after these, exactly as they did when sequencing was inline.
-	sortProduced(b.produced)
-	err := b.Executor.produceSynthetic(b.Batch, b.produced, b.Index)
-	if err != nil {
-		return errors.UnknownError.WithFormat("sequence produced messages: %w", err)
-	}
-	b.produced = nil
-
 	// This is likely unnecessarily cautious, but better safe than sorry. This
 	// will prevent any variation in order from causing a consensus failure.
 	bvns := b.Executor.globals.Active.BvnNames()
@@ -660,15 +650,10 @@ func (b *Block) produceBlockMessages() error {
 		msg := new(messaging.TransactionMessage)
 		msg.Transaction = txn
 
-		b.State.Produced++
-
-		err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+		b.produced = append(b.produced, &ProducedMessage{
 			Destination: protocol.AcmeUrl(),
 			Message:     msg,
-		}}, b.Index)
-		if err != nil {
-			return errors.UnknownError.WithFormat("queue ACME burn: %w", err)
-		}
+		})
 	}
 
 	/* ***** Network account updates (DN) ***** */
@@ -679,16 +664,12 @@ func (b *Block) produceBlockMessages() error {
 		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory &&
 		len(b.State.NetworkUpdate) > 0 {
 		for _, bvn := range bvns {
-			b.State.Produced++
-			err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+			b.produced = append(b.produced, &ProducedMessage{
 				Destination: protocol.PartitionUrl(bvn),
 				Message: &messaging.NetworkUpdate{
 					Accounts: b.State.NetworkUpdate,
 				},
-			}}, b.Index)
-			if err != nil {
-				return errors.UnknownError.WithFormat("queue network update: %w", err)
-			}
+			})
 		}
 	}
 
@@ -700,18 +681,14 @@ func (b *Block) produceBlockMessages() error {
 		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory &&
 		b.State.MajorBlock != nil {
 		for _, bvn := range bvns {
-			b.State.Produced++
-			err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+			b.produced = append(b.produced, &ProducedMessage{
 				Destination: protocol.PartitionUrl(bvn),
 				Message: &messaging.MakeMajorBlock{
 					MajorBlockIndex: b.State.MajorBlock.Index,
 					MajorBlockTime:  b.State.MajorBlock.Time,
 					MinorBlockIndex: b.Index,
 				},
-			}}, b.Index)
-			if err != nil {
-				return errors.UnknownError.WithFormat("queue network update: %w", err)
-			}
+			})
 		}
 	}
 
@@ -722,18 +699,39 @@ func (b *Block) produceBlockMessages() error {
 	if b.Executor.globals.Pending.ExecutorVersion.V2VandenbergEnabled() &&
 		b.Executor.Describe.NetworkType != protocol.PartitionTypeDirectory &&
 		b.Executor.globals.Pending.ExecutorVersion != b.Executor.globals.Active.ExecutorVersion {
-		b.State.Produced++
-		err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+		b.produced = append(b.produced, &ProducedMessage{
 			Destination: protocol.DnUrl(),
 			Message: &messaging.DidUpdateExecutorVersion{
 				Partition: b.Executor.Describe.PartitionId,
 				Version:   b.Executor.globals.Pending.ExecutorVersion,
 			},
-		}}, b.Index)
-		if err != nil {
-			return errors.UnknownError.WithFormat("queue update notification: %w", err)
-		}
+		})
 	}
+
+	// Settle the block's produced messages — the deliveries' and the system's
+	// alike — in ONE sorted pass (#4144). The sort key is derived from the
+	// produced set alone — (producer transaction ID, emission index), with
+	// producer-less system messages after — so nothing depends on delivery
+	// order, which under parallel execution (#4145) is a shard-scheduling
+	// accident.
+	//
+	// Locally routed messages go on the next-block queue instead of being
+	// sequenced (#4146): no sequence number, no synthetic main chain
+	// position — so they consume no collection-proof span — no dispatch, and
+	// no anchoring dependency. Only what actually leaves the partition is
+	// counted as produced, so the synthetic chain is anchored only when it
+	// grew.
+	sortProduced(b.produced)
+	remote, err := b.splitLocalDeliveries(b.produced)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	err = b.Executor.produceSynthetic(b.Batch, remote, b.Index)
+	if err != nil {
+		return errors.UnknownError.WithFormat("sequence produced messages: %w", err)
+	}
+	b.State.Produced += len(remote)
+	b.produced = nil
 
 	return nil
 }

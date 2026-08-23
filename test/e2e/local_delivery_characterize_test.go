@@ -77,12 +77,14 @@ func TestCharacterize_SameIdentityDeliveryConsumesNoSequenceNumber(t *testing.T)
 		"a same-identity deposit is inlined as a PseudoSynthetic — it must not consume a sequence number on any stream")
 }
 
-// A produced message to a DIFFERENT identity is sequenced and dispatched even
-// when both identities live on the same partition: the partition opens a
-// synthetic stream to ITSELF and the deposit pays for a sequence number, a
-// proof, and a dispatch round-trip. This is the cost #4146 exists to remove;
-// pinned here so the removal shows up as a diff in expectations.
-func TestCharacterize_SamePartitionDifferentIdentityConsumesASequenceNumber(t *testing.T) {
+// A produced message to a DIFFERENT identity on the SAME partition used to
+// be sequenced and dispatched — the partition opened a synthetic stream to
+// ITSELF and the deposit paid for a sequence number, a proof, and a dispatch
+// round-trip. #4146 removed that: it is delivered through the local queue at
+// the start of the next block, and no stream ever opens. This test carried
+// the old expectation as characterization until the removal landed; the flip
+// below IS the removal, visible as a diff.
+func TestCharacterize_SamePartitionDifferentIdentityConsumesNoSequenceNumber(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
@@ -97,7 +99,6 @@ func TestCharacterize_SamePartitionDifferentIdentityConsumesASequenceNumber(t *t
 	MakeIdentity(t, sim.DatabaseFor(bob), bob, acctesting.GenerateKey(bob)[32:])
 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
-	self := PartitionUrl("BVN0").ShortString()
 	before := producedTotals(t, sim.Database("BVN0"), "BVN0")
 
 	st := sim.BuildAndSubmitTxnSuccessfully(
@@ -110,6 +111,6 @@ func TestCharacterize_SamePartitionDifferentIdentityConsumesASequenceNumber(t *t
 		GetAccount[*TokenAccount](t, sim.DatabaseFor(bob), bob.JoinPath("tokens")).Balance.Int64())
 
 	after := producedTotals(t, sim.Database("BVN0"), "BVN0")
-	assert.Equal(t, before[self]+1, after[self],
-		"today a same-partition, different-identity deposit opens a synthetic stream from the partition to itself and consumes a sequence number — the waste #4146 removes")
+	assert.Equal(t, before, after,
+		"a same-partition deposit is delivered through the local queue (#4146) — no stream, no sequence number, on any stream")
 }
