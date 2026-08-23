@@ -79,13 +79,19 @@ func TestMissingSynthTxn(t *testing.T) {
 		bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
 		MakeLiteTokenAccount(t, sim.DatabaseFor(aliceUrl), alice[32:], AcmeUrl())
 
-		// Execute
+		// Execute. Step between submissions so each block produces ONE
+		// deposit: packaged dispatch (#4141) bundles a block's deposits for a
+		// destination into a single envelope, and this test is about ONE
+		// missing message whose gap is exposed by later arrivals — dropping a
+		// whole package would instead leave a lost tail with nothing behind
+		// it (TestRangeRecovery's territory).
 		st := make([]*protocol.TransactionStatus, 5)
 		for i := range st {
 			st[i] = sim.SubmitTxnSuccessfully(MustBuild(t,
 				build.Transaction().For(aliceUrl).
 					SendTokens(1, protocol.AcmePrecisionPower).To(bobUrl).
 					SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
+			sim.StepN(2)
 		}
 		sim.StepUntil(True(func(*Harness) bool { return didDrop }))
 

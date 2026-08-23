@@ -75,6 +75,12 @@ type Options struct {
 	// Shard count is a local parallelism choice that cannot change the
 	// result — it is configuration, not consensus.
 	ExecutionShards int
+
+	// MaxEnvelopeSize is the consensus transport's per-transaction size
+	// limit — for DAG-BFT, the worker's MaxBatchBytes. The synthetic package
+	// budget (#4141) is DERIVED from it, because a package is one envelope
+	// and an envelope must fit in one batch. Zero uses the DAG-BFT default.
+	MaxEnvelopeSize int
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.

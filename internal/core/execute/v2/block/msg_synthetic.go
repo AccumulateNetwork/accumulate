@@ -37,6 +37,30 @@ func (x SyntheticMessage) Validate(batch *database.Batch, ctx *MessageContext) (
 	return nil, errors.UnknownError.Wrap(err)
 }
 
+// findProofInBundle returns the collection proof carried alongside this message
+// in the same envelope, if one covers the message's hash — the package form of
+// #4090, where one SyntheticProof proves every synthetic message it travels
+// with.
+func findProofInBundle(ctx *MessageContext, h [32]byte) *protocol.AnnotatedReceipt {
+	for _, msg := range ctx.messages {
+		p, ok := msg.(*messaging.SyntheticProof)
+		if !ok || p.Proof == nil || p.Proof.ReceiptList == nil {
+			continue
+		}
+		// Bound before hashing: Included walks the list, and an unbounded list
+		// from an untrusted envelope is an invitation to burn CPU. The executor
+		// for the proof rejects these too, but a sibling must not depend on
+		// having been reached first.
+		if len(p.Proof.ReceiptList.Elements) > protocol.MaxReceiptListElements {
+			continue
+		}
+		if p.Proof.ReceiptList.Included(h[:]) {
+			return p.Proof
+		}
+	}
+	return nil
+}
+
 func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SynthFields, error) {
 	// Using messaging.SynthFields is safer than converting one message type
 	// into the other because that could lead to issues with the different Hash
@@ -68,6 +92,22 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	seq, ok := syn.Message.(*messaging.SequencedMessage)
 	if !ok {
 		return nil, errors.BadRequest.With("a synthetic message must be sequenced")
+	}
+
+	// A synthetic message may omit its own proof when a SyntheticProof travels
+	// with it in the same envelope (#4090). One proof then covers every message
+	// in the package, instead of each message carrying its own receipt plus a
+	// duplicate of the shared continuation.
+	//
+	// Resolution is confined to THIS bundle — one envelope, delivered atomically.
+	// A proof from another envelope is not consulted even if it would verify,
+	// because that would make a message's acceptance depend on what else arrived
+	// and in what order, which is the coupling collection proofs exist to remove.
+	//
+	// syn is a copy (SyntheticMessage.Data builds a fresh SynthFields), so
+	// filling it in here does not mutate the message or its hash.
+	if syn.Proof == nil && ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
+		syn.Proof = findProofInBundle(ctx, syn.Message.Hash())
 	}
 
 	// A message the destination's replica already contains needs no proof and

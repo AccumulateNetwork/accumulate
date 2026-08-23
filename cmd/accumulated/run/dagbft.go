@@ -185,6 +185,13 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 	_ = genesisLoaded // May be used in the future for initialization logic
 
+	// Build DAG-BFT configuration. Built before the executor options because
+	// the executor's package budget derives from the batching limit (#4141).
+	dagCfg := dagconfig.DefaultConfig()
+	dagCfg.Consensus.NumWorkers = int(*s.NumWorkers)
+	dagCfg.Consensus.DAGGCDepth = int(*s.DAGGCDepth)
+	dagCfg.Consensus.CommitBufferSize = int(*s.CommitBufferSize)
+
 	// Create executor options
 	execOpts := multiexec.Options{
 		Logger:    logger.With("module", "executor"),
@@ -196,6 +203,8 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Querier:   client,
 		// Shard user-transaction execution by identity (#4145).
 		ExecutionShards: int(*s.ExecutionShards),
+		// A synthetic package must fit in one worker batch (#4141).
+		MaxEnvelopeSize: dagCfg.Batching.MaxBatchBytes,
 		Describe: multiexec.DescribeShim{
 			NetworkType: s.Partition.Type,
 			PartitionId: s.Partition.ID,
@@ -268,12 +277,6 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("create executor bridge: %w", err)
 	}
-
-	// Build DAG-BFT configuration
-	dagCfg := dagconfig.DefaultConfig()
-	dagCfg.Consensus.NumWorkers = int(*s.NumWorkers)
-	dagCfg.Consensus.DAGGCDepth = int(*s.DAGGCDepth)
-	dagCfg.Consensus.CommitBufferSize = int(*s.CommitBufferSize)
 
 	// Create the DAG-BFT node configuration
 	nodeConfig := consensus.NodeConfig{

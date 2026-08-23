@@ -66,7 +66,12 @@ type realBridge struct {
 // accounts, returning the database and the genesis validator key.
 func newRealBridgeDB(t *testing.T, liteKeys ...[]byte) (*database.Database, []byte) {
 	t.Helper()
-	netInit := simulator.NewSimpleNetwork("RealBridge", 1, 1)
+	return newRealBridgeDBN(t, 1, liteKeys...)
+}
+
+func newRealBridgeDBN(t *testing.T, bvns int, liteKeys ...[]byte) (*database.Database, []byte) {
+	t.Helper()
+	netInit := simulator.NewSimpleNetwork("RealBridge", bvns, 1)
 	genesisTime := time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 	values := new(core.GlobalValues)
 	values.ExecutorVersion = protocol.ExecutorVersionLatest
@@ -97,20 +102,37 @@ func newRealBridgeDB(t *testing.T, liteKeys ...[]byte) (*database.Database, []by
 	return db, netInit.Bvns[0].Nodes[0].PrivValKey
 }
 
+// bridgeOpts tunes the harness.
+type bridgeOpts struct {
+	shards     int
+	maxEnv     int                  // MaxEnvelopeSize; zero uses the default
+	dispatcher multiexec.Dispatcher // captures outbound; nil drops
+}
+
 // newBridgeOver builds an ExecutorBridge over an existing database —
 // "restarting the node" is calling this a second time on the same database.
 func newBridgeOver(t *testing.T, db *database.Database, valKey []byte, shards int) *realBridge {
 	t.Helper()
+	return newBridgeWith(t, db, valKey, bridgeOpts{shards: shards})
+}
+
+func newBridgeWith(t *testing.T, db *database.Database, valKey []byte, opts bridgeOpts) *realBridge {
+	t.Helper()
 	bus := events.NewBus(nil)
 	router := routing.NewRouter(routing.RouterOptions{Events: bus})
 
+	dispatcher := opts.dispatcher
+	if dispatcher == nil {
+		dispatcher = nullDispatcher{}
+	}
 	exec, err := multiexec.NewExecutor(multiexec.Options{
 		Database:        db,
 		Key:             valKey,
 		Router:          router,
 		EventBus:        bus,
-		NewDispatcher:   func() multiexec.Dispatcher { return nullDispatcher{} },
-		ExecutionShards: shards,
+		NewDispatcher:   func() multiexec.Dispatcher { return dispatcher },
+		ExecutionShards: opts.shards,
+		MaxEnvelopeSize: opts.maxEnv,
 		Describe: multiexec.DescribeShim{
 			NetworkType: protocol.PartitionTypeBlockValidator,
 			PartitionId: "BVN0",
@@ -144,9 +166,10 @@ func (r *realBridge) produce(t *testing.T, batches ...*types.Batch) ([32]byte, e
 	r.index++
 	r.time = r.time.Add(time.Second)
 	return r.bridge.ProduceBlock(context.Background(), BlockParams{
-		Index:   r.index,
-		Time:    r.time,
-		Batches: batches,
+		Index:    r.index,
+		Time:     r.time,
+		IsLeader: true, // outbound synthetic dispatch is leader-only
+		Batches:  batches,
 	})
 }
 

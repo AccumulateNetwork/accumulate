@@ -43,6 +43,12 @@ var ErrWorkerClosed = errors.New("worker is closed")
 // due to memory limits being reached (pending queue full or too many uncommitted batches).
 var ErrBackpressure = errors.New("worker backpressure: pending transactions exceed limit")
 
+// ErrTransactionTooLarge is returned when a single transaction exceeds the
+// batch byte limit. A distinct error, not backpressure: backpressure clears
+// on retry, this never will — the transaction cannot fit in any batch, and
+// accepting it quietly distorted batching instead of refusing it (#4141).
+var ErrTransactionTooLarge = errors.New("transaction exceeds the batch size limit")
+
 // ErrValidationFailed is returned when a transaction fails pre-batch validation.
 var ErrValidationFailed = errors.New("transaction validation failed")
 
@@ -284,6 +290,12 @@ func (w *Worker) Submit(tx []byte) error {
 
 	if len(tx) == 0 {
 		return errors.New("transaction is empty")
+	}
+
+	// A transaction that cannot fit in ANY batch is refused up front, visibly
+	// (#4141). Backpressure below is retryable; this is not.
+	if len(tx) > w.config.MaxBatchBytes {
+		return fmt.Errorf("%w: %d bytes, limit %d", ErrTransactionTooLarge, len(tx), w.config.MaxBatchBytes)
 	}
 
 	w.txnsReceived.Add(1)
