@@ -541,7 +541,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			}
 			continue
 		}
-		err = x.sendSynthPackages(group, record.MainChain(), rootReceipt, blockReceipt, int64(to))
+		err = x.sendSynthPackages(batch, group, synthMainChain, record.MainChain(), rootReceipt, blockReceipt, int64(to))
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -626,9 +626,26 @@ func (x *Executor) sendSynthWithOwnProof(batch *database.Batch, o *synthOutbound
 // receipts use. Packages may therefore be delivered in any order, and losing one
 // does not block another — the property that would be given up by sending the
 // proof once and referring back to it from later packages.
-func (x *Executor) sendSynthPackages(group []*synthOutbound, synthChain2 *database.Chain2, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64) error {
+func (x *Executor) sendSynthPackages(batch *database.Batch, group []*synthOutbound, synthMainChain *database.Chain, synthChain2 *database.Chain2, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64) error {
 	budget := x.synthPackageBudget()
 	for len(group) > 0 {
+		// The receiver refuses a ReceiptList longer than
+		// MaxReceiptListElements, and a package's list spans from its FIRST
+		// member to the block's last synthetic element (#4150) — so a
+		// message whose own span exceeds the cap can never lead a package.
+		// It ships with an individual receipt instead of wedging into a
+		// package every validator must reject. The group is ordered by chain
+		// index, so members taken after the first only shrink the distance:
+		// one check per package bounds the whole list.
+		if !packageSpanFits(group[0].index, to) {
+			err := x.sendSynthWithOwnProof(batch, group[0], synthMainChain, rootReceipt, blockReceipt, to)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			group = group[1:]
+			continue
+		}
+
 		// Pack greedily up to the budget, always taking at least one message so
 		// an oversized message cannot wedge the loop — it goes alone and the
 		// transport rejects it visibly rather than us silently dropping it.
@@ -689,6 +706,16 @@ func pkg0index(pkg []*synthOutbound, o *synthOutbound) int64 {
 		return o.index
 	}
 	return pkg[0].index
+}
+
+// packageSpanFits reports whether a package whose FIRST member sits at chain
+// index first, in a block whose last synthetic element is at index to,
+// builds a ReceiptList the receiver will accept — the list has to-first+1
+// elements, and the receiver refuses more than MaxReceiptListElements
+// (#4150). The sender must apply the receiver's bound or it manufactures
+// packages every validator rejects.
+func packageSpanFits(first, to int64) bool {
+	return int(to-first)+1 <= protocol.MaxReceiptListElements
 }
 
 // buildSynthPackageProof builds the collection proof for one package: a receipt

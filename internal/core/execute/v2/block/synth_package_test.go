@@ -171,3 +171,27 @@ func TestPackageMember_AcceptedViaBundleProof(t *testing.T) {
 	_, err = SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d2, message: member})
 	require.ErrorContains(t, err, "missing proof")
 }
+
+// #4150: the sender must apply the receiver's element bound. A package's
+// list spans from its first member to the block's LAST synthetic element, so
+// the eligibility check is on that whole distance — not the member count.
+func TestSynthPackage_SpanBoundMatchesTheReceiver(t *testing.T) {
+	max := int64(protocol.MaxReceiptListElements)
+
+	assert.True(t, packageSpanFits(0, max-1), "exactly max elements is accepted")
+	assert.False(t, packageSpanFits(0, max), "one more element must fall back to individual receipts")
+	assert.True(t, packageSpanFits(1, max), "the same block is fine one index later")
+	assert.True(t, packageSpanFits(7, 7), "a single-element span always fits")
+
+	// The receiver's bound (msg_synthetic.go, msg_synthetic_proof.go,
+	// findProofInBundle) is len(Elements) > MaxReceiptListElements — strictly
+	// greater — and the sender's list has to-first+1 elements. The equality
+	// case must agree on both sides or a boundary package is refused.
+	list := testList(t)
+	for i := int64(0); i < max; i++ {
+		h := sha256.Sum256([]byte{byte(i), byte(i >> 8)})
+		list.Elements = append(list.Elements, h[:])
+	}
+	assert.False(t, len(list.Elements) > protocol.MaxReceiptListElements,
+		"a max-span list passes the receiver's bound")
+}
