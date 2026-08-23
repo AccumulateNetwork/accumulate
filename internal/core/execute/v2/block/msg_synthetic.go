@@ -63,6 +63,29 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	if syn.Message == nil {
 		return nil, errors.BadRequest.With("missing message")
 	}
+
+	// A synthetic message must be sequenced (may change in the future)
+	seq, ok := syn.Message.(*messaging.SequencedMessage)
+	if !ok {
+		return nil, errors.BadRequest.With("a synthetic message must be sequenced")
+	}
+
+	// A message the destination's replica already contains needs no proof and
+	// no signature of its own (#4140): the replica was seeded from a proof
+	// this partition already accepted and anchored, and hashes cannot be
+	// forged. Skip straight to the type check.
+	if syn.Proof == nil && syn.Signature == nil {
+		h := syn.Message.Hash()
+		if !ctx.Executor.replicaIncludes(batch, seq.Source, h[:]) {
+			return nil, errors.BadRequest.With("missing proof")
+		}
+		err := checkSyntheticInnerType(seq)
+		if err != nil {
+			return nil, err
+		}
+		return syn, nil
+	}
+
 	if syn.Signature == nil {
 		return nil, errors.BadRequest.With("missing signature")
 	}
@@ -97,12 +120,6 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		}
 	default:
 		return nil, errors.BadRequest.With("missing proof receipt")
-	}
-
-	// A synthetic message must be sequenced (may change in the future)
-	seq, ok := syn.Message.(*messaging.SequencedMessage)
-	if !ok {
-		return nil, errors.BadRequest.With("a synthetic message must be sequenced")
 	}
 
 	// Verify the signature — but only when the proof is an individual receipt.
@@ -158,6 +175,17 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	// anchor before it processes the synthetic message.
 
 	// Verify the message within the sequenced message is an allowed type
+	err := checkSyntheticInnerType(seq)
+	if err != nil {
+		return nil, err
+	}
+
+	return syn, nil
+}
+
+// checkSyntheticInnerType verifies the message within the sequenced message
+// is a type a synthetic message may carry.
+func checkSyntheticInnerType(seq *messaging.SequencedMessage) error {
 	switch seq.Message.Type() {
 	case messaging.MessageTypeTransaction,
 		messaging.MessageTypeSignature,
@@ -166,13 +194,11 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		messaging.MessageTypeNetworkUpdate,
 		messaging.MessageTypeMakeMajorBlock,
 		messaging.MessageTypeDidUpdateExecutorVersion:
-		// Allowed
+		return nil
 
 	default:
-		return nil, errors.BadRequest.WithFormat("a synthetic message cannot carry a %v message", seq.Message.Type())
+		return errors.BadRequest.WithFormat("a synthetic message cannot carry a %v message", seq.Message.Type())
 	}
-
-	return syn, nil
 }
 
 func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (_ *protocol.TransactionStatus, err error) {
@@ -217,6 +243,14 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// A replica-accepted message (#4140) carries no proof of its own — its
+	// proof was checked, anchored, and absorbed into the replica when it
+	// first arrived.
+	if syn.Proof == nil {
+		_, err = ctx.callMessageExecutor(batch, syn.Message)
+		return errors.UnknownError.Wrap(err)
+	}
+
 	// Verify the proof ends with a DN anchor. Individual and collection proofs
 	// terminate at the same trust root, so one check covers either form.
 	anchor := syn.Proof.TerminalAnchor()
@@ -240,6 +274,19 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 		return errors.UnknownError.WithFormat("search for directory anchor %x: %w", anchor, err)
 	}
 
+	// Absorb an accepted collection proof into the stream's replica (#4140):
+	// the proof is valid (checked above) and anchored (just verified), so the
+	// replica now answers for every element it covers — a later message under
+	// this proof needs no proof of its own.
+	if syn.Proof.ReceiptList != nil {
+		if seq, ok := syn.Message.(*messaging.SequencedMessage); ok {
+			err = ctx.Executor.seedSyntheticReplica(batch, seq.Source, syn.Proof.ReceiptList)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+		}
+	}
+
 	// Execute the inner message
 	_, err = ctx.callMessageExecutor(batch, syn.Message)
 	if err != nil {
@@ -247,6 +294,9 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 	}
 
 	// Record the signature (must not fail)
+	if syn.Signature == nil {
+		return nil // Replica-accepted messages carry no signature (#4140)
+	}
 	err = batch.Account(syn.Signature.GetSigner()).
 		Transaction(syn.Message.Hash()).
 		ValidatorSignatures().

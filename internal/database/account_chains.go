@@ -48,7 +48,8 @@ func newChain2(parent record.Record, _ logging.Logger, _ record.Store, key *reco
 		"SignatureChain",
 		"ScratchChain",
 		"AnchorSequenceChain",
-		"SyntheticSequenceChain": // Bug, this is actually an index chain
+		"SyntheticSequenceChain", // Bug, this is actually an index chain
+		"SyntheticReplica":       // The destination's replica of a source's synthetic main chain (#4140)
 		typ = merkle.ChainTypeTransaction
 	case "RootChain",
 		"BptChain",
@@ -281,6 +282,9 @@ func (a *Account) chainByName(name string) *Chain2 {
 
 	case "synthetic-sequence":
 		return a.SyntheticSequenceChain(arg)
+
+	case "synthetic-replica":
+		return a.SyntheticReplica(arg)
 	}
 
 	return nil
