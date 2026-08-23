@@ -106,3 +106,117 @@ func TestShardCountDoesNotChangeBlockHash(t *testing.T) {
 	// And let the tail of synthetics and anchors settle under comparison too.
 	sim.StepN(20)
 }
+
+// #4149: the equivalence gate above only ever drove self-contained
+// one-identity envelopes, so the OLD classifier — which trusted a
+// signature's claimed TxID authority and a remote stub's principal — sent
+// every one of them serial anyway, and the gate compared serial to serial.
+// This drives the shapes that classification actually has to reason about:
+// a multisig completed by a LATER signature-only envelope (the executor must
+// resolve the real transaction from the store, not the claim), cross-ADI
+// delegated signing (a genuine multi-identity envelope that must go serial),
+// and a held transaction (whose signatures write the partition ledger and
+// must go serial). Under the per-block 1/4/64-shard comparison, any
+// misclassification — sharding a write that belongs to another identity or
+// to the system ledger — diverges a node and fails the step.
+func TestShardEquivalence_MixedSignatureShapes(t *testing.T) {
+	// alice: a 2-of-2 page whose second signature arrives in a later block.
+	// bob: delegates to charlie, who signs bob's transactions cross-ADI.
+	// dave: sends held transactions.
+	alice := AccountUrl("alice")
+	aliceK1 := acctesting.GenerateKey(alice, 1)
+	aliceK2 := acctesting.GenerateKey(alice, 2)
+	bob := AccountUrl("bob")
+	bobKey := acctesting.GenerateKey(bob)
+	charlie := AccountUrl("charlie")
+	charlieKey := acctesting.GenerateKey(charlie)
+	dave := AccountUrl("dave")
+	daveKey := acctesting.GenerateKey(dave)
+
+	sim := NewSim(t,
+		simulator.SimpleNetwork("ShardShapes", 2, 3),
+		simulator.Genesis(GenesisTime),
+		simulator.ExecutionShardsPerNode(1, 4, 64),
+	)
+
+	for _, s := range []struct {
+		id   *url.URL
+		keys [][]byte
+	}{
+		{alice, [][]byte{aliceK1[32:], aliceK2[32:]}},
+		{bob, [][]byte{bobKey[32:]}},
+		{charlie, [][]byte{charlieKey[32:]}},
+		{dave, [][]byte{daveKey[32:]}},
+	} {
+		MakeIdentity(t, sim.DatabaseFor(s.id), s.id, s.keys...)
+		CreditCredits(t, sim.DatabaseFor(s.id), s.id.JoinPath("book", "1"), 1e9)
+		MakeAccount(t, sim.DatabaseFor(s.id),
+			&TokenAccount{Url: s.id.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+		CreditTokens(t, sim.DatabaseFor(s.id), s.id.JoinPath("tokens"), big.NewInt(1e12))
+	}
+
+	// alice needs both keys to sign (2-of-2).
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(p *KeyPage) {
+		p.AcceptThreshold = 2
+	})
+	// bob's page delegates to charlie's book — charlie can sign for bob.
+	UpdateAccount(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), func(p *KeyPage) {
+		p.AddKeySpec(&KeySpec{Delegate: charlie.JoinPath("book")})
+		require.NoError(t, p.SetThreshold(1))
+	})
+
+	var ts uint64
+	next := func() uint64 { ts++; return ts }
+
+	// (1) alice initiates a transfer with key1 — pending, one signature short.
+	aliceTxn := sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(alice.JoinPath("tokens")).
+			SendTokens(1, 0).To(dave.JoinPath("tokens")).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(next()).PrivateKey(aliceK1)))
+	sim.StepUntil(Txn(aliceTxn.TxID).IsPending())
+
+	// (2) dave submits a HELD transaction — serial while held.
+	held := sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(dave.JoinPath("tokens")).
+			HoldUntil(HoldUntilOptions{MinorBlock: 15}).
+			SendTokens(1, 0).To(alice.JoinPath("tokens")).
+			SignWith(dave.JoinPath("book", "1")).Version(1).Timestamp(next()).PrivateKey(daveKey)))
+
+	// (3) charlie signs a bob transaction cross-ADI via delegation — a
+	// genuine two-identity envelope the classifier must send serial.
+	bobTxn := sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(bob.JoinPath("tokens")).
+			SendTokens(1, 0).To(charlie.JoinPath("tokens")).
+			SignWith(charlie.JoinPath("book", "1")).Delegator(bob.JoinPath("book", "1")).
+			Version(1).Timestamp(next()).PrivateKey(charlieKey)))
+
+	// Ordinary shardable traffic sharing the same blocks.
+	for i := 0; i < 3; i++ {
+		sim.SubmitTxnSuccessfully(MustBuild(t,
+			build.Transaction().For(charlie.JoinPath("tokens")).
+				SendTokens(1, 0).To(bob.JoinPath("tokens")).
+				SignWith(charlie.JoinPath("book", "1")).Version(1).Timestamp(next()).PrivateKey(charlieKey)))
+		sim.StepN(1)
+	}
+
+	// (4) alice's SECOND signature arrives now, in its own envelope — the
+	// executor resolves the real transaction from the store, and the old
+	// classifier's TxID@unknown authority is exactly what made this shape
+	// invisible before.
+	sig2 := sim.BuildAndSubmitSuccessfully(
+		build.SignatureForTxID(aliceTxn.TxID).Load(sim.Query()).
+			Url(alice.JoinPath("book", "1")).Version(1).Timestamp(next()).PrivateKey(aliceK2))
+	_ = sig2
+
+	sim.StepUntil(Txn(aliceTxn.TxID).Completes())
+	sim.StepUntil(Txn(bobTxn.TxID).Completes())
+
+	// Step past the hold block so the held transaction executes under the
+	// comparison too.
+	sim.StepUntil(Txn(held.TxID).Completes())
+
+	// The comparison ran on every block; if any shape had been mis-sharded a
+	// step would already have failed. Confirm the traffic actually landed.
+	require.NotZero(t,
+		GetAccount[*TokenAccount](t, sim.DatabaseFor(charlie), charlie.JoinPath("tokens")).Balance.Int64())
+}

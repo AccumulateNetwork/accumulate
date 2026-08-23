@@ -420,3 +420,92 @@ func TestBridge_OversizedSingleMessageGoesAloneRatherThanWedgingTheLoop(t *testi
 	}
 	assert.Equal(t, 3, pkgs, "every message exceeds the budget — each goes alone")
 }
+
+// twoDestBurns builds one block of transfers split across BVN0 and BVN1, one
+// per key, so the source's synthetic main chain grows by len(keys) entries in
+// a single block. bvn0-bound/bvn1-bound route to the two partitions via the
+// stub router.
+func twoDestBurns(t *testing.T, keys [][]byte, ts uint64) *types.Batch {
+	t.Helper()
+	var txs [][]byte
+	for i, key := range keys {
+		from := protocol.LiteAuthorityForKey(key[32:], protocol.SignatureTypeED25519)
+		dest := "bvn0-bound.acme"
+		if i%2 == 1 {
+			dest = "bvn1-bound.acme"
+		}
+		env, err := build.Transaction().For(from.JoinPath("ACME")).
+			SendTokens(uint64(i+1), 0).To(protocol.AccountUrl(dest, from.Hostname())).
+			SignWith(from).Version(1).Timestamp(ts).PrivateKey(key).
+			Done()
+		require.NoError(t, err)
+		b, err := env.MarshalBinary()
+		require.NoError(t, err)
+		txs = append(txs, b)
+	}
+	return types.NewBatch(txs)
+}
+
+// #4150: a package's collection proof spans from its first member to the
+// block's LAST synthetic element, so a block emitting more than
+// MaxReceiptListElements synthetics builds spans past the receiver's hard
+// bound. Before the clamp, the leader shipped those packages and every
+// validator rejected them at CheckTx, stranding the block on healing — the
+// exact high-volume case packaging exists for. Every dispatched envelope must
+// now be acceptable: any package's ReceiptList within the bound and valid,
+// and the leading over-span messages fall back to individual receipts.
+func TestBridge_BlockOverMaxReceiptListElementsStaysAcceptable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("drives >4096 transfers through one block")
+	}
+
+	// Comfortably past the 4096-element bound, split across two destinations.
+	n := protocol.MaxReceiptListElements + 128
+	keys := make([][]byte, n)
+	for i := range keys {
+		keys[i] = acctesting.GenerateKey("span", i)
+	}
+	r := newDnBridge(t, 2, 0, keys...)
+
+	_, err := r.produce(t, twoDestBurns(t, keys, 1))
+	require.NoError(t, err)
+	sent := r.deliverOwnAnchorAndCollect(t)
+
+	var members, packages, singles, overBound int
+	for _, s := range sent {
+		if _, ok := s.env.Messages[0].(*messaging.BlockAnchor); ok {
+			continue // the DN's own anchor dispatch
+		}
+		if proof, ok := s.env.Messages[0].(*messaging.SyntheticProof); ok {
+			packages++
+			list := proof.Proof.ReceiptList
+			require.NotNil(t, list)
+			if len(list.Elements) > protocol.MaxReceiptListElements {
+				overBound++
+			}
+			assert.True(t, list.Validate(nil), "every dispatched package's proof must be valid")
+			for _, m := range s.env.Messages[1:] {
+				syn, ok := m.(*messaging.SyntheticMessage)
+				if !ok {
+					continue
+				}
+				members++
+				h := syn.Message.Hash()
+				assert.True(t, list.Included(h[:]), "a member must be covered by its package's proof")
+			}
+			continue
+		}
+		// A fallback individual-receipt dispatch.
+		syn, ok := s.env.Messages[0].(*messaging.SyntheticMessage)
+		require.True(t, ok, "a non-anchor, non-package dispatch is an individual synthetic")
+		require.NotNil(t, syn.Proof.Receipt, "the fallback carries its own receipt")
+		require.Nil(t, syn.Proof.ReceiptList)
+		assert.True(t, syn.Proof.Receipt.Validate(nil), "the fallback receipt must be valid")
+		members++
+		singles++
+	}
+
+	assert.Zero(t, overBound, "no dispatched package may exceed the receiver's element bound")
+	assert.Positive(t, singles, "the over-span leaders must fall back to individual receipts")
+	assert.Equal(t, n, members, "every synthetic is dispatched exactly once — nothing stranded")
+}
