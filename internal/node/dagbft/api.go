@@ -254,6 +254,12 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 			s.logger.Error("TRACE-SUBMIT: backpressure error", "error", err)
 			return nil, errors.TooManyRequests.WithFormat("submit: %w", err)
 		}
+		// An oversized transaction is the CALLER's fault, permanently — no
+		// batch will ever fit it. BadRequest, not InternalError, so the
+		// submitter stops rather than retrying or blaming the node (#4151).
+		if stderrors.Is(err, worker.ErrTransactionTooLarge) {
+			return nil, errors.BadRequest.WithFormat("submit: %w", err)
+		}
 		s.logger.Error("TRACE-SUBMIT: internal error", "error", err)
 		return nil, errors.InternalError.WithFormat("submit: %w", err)
 	}

@@ -32,6 +32,7 @@ import (
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	dagconfig "gitlab.com/accumulatenetwork/accumulate/pkg/consensus/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -98,8 +99,13 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	setDefaultPtr(&s.NumWorkers, dagconfig.DefaultNumWorkers)
 	// Execution sharding (#4145) defaults to serial; shard count is a local
 	// parallelism choice that cannot change the result, so operators can
-	// raise it per node.
+	// raise it per node. Bounded: the executor allocates per shard, so a
+	// fat-fingered count must be refused at startup, not at block time
+	// (#4151).
 	setDefaultPtr(&s.ExecutionShards, 1)
+	if *s.ExecutionShards > 1024 {
+		return errors.BadRequest.WithFormat("execution-shards %d is out of range [0, 1024]", *s.ExecutionShards)
+	}
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
 	setDefaultPtr(&s.BlockInterval, encoding.Duration(dagconfig.DefaultBlockInterval))
@@ -187,10 +193,10 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 	// Build DAG-BFT configuration. Built before the executor options because
 	// the executor's package budget derives from the batching limit (#4141).
+	// This one value must ALSO drive the worker's refusal — nodeConfig below
+	// sets WorkerConfig.MaxBatchBytes from it — or budget and enforcement
+	// are two coincident constants that drift apart silently (#4151).
 	dagCfg := dagconfig.DefaultConfig()
-	dagCfg.Consensus.NumWorkers = int(*s.NumWorkers)
-	dagCfg.Consensus.DAGGCDepth = int(*s.DAGGCDepth)
-	dagCfg.Consensus.CommitBufferSize = int(*s.CommitBufferSize)
 
 	// Create executor options
 	execOpts := multiexec.Options{
@@ -285,6 +291,12 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		NumWorkers:       int(*s.NumWorkers),
 		DAGGCDepth:       types.Round(*s.DAGGCDepth),
 		CommitBufferSize: int(*s.CommitBufferSize),
+
+		// The same limit the executor's package budget derives from
+		// (#4151) — never let the two diverge.
+		WorkerConfig: worker.Config{
+			MaxBatchBytes: dagCfg.Batching.MaxBatchBytes,
+		},
 
 		// Rounds pace at half the block interval: Bullshark commits a leader
 		// every other round, so blocks arrive at roughly 2x the round

@@ -71,7 +71,6 @@ func DropDispatchedMessages() Option {
 	})
 }
 
-// DropInitialAnchor drops anchors when they are initially submitted.
 // ExecutionShards sets the number of identity shards user transactions are
 // executed across (#4145). Zero or one is the serial path. Shard count is a
 // local parallelism choice that cannot change the result — which is exactly
@@ -96,6 +95,7 @@ func ExecutionShardsPerNode(counts ...int) Option {
 	})
 }
 
+// DropInitialAnchor drops anchors when they are initially submitted.
 func DropInitialAnchor() Option {
 	return optionFunc(func(opts *simFactory) error {
 		opts.dropInitialAnchor = true

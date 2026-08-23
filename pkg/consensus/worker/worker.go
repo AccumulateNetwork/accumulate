@@ -293,8 +293,12 @@ func (w *Worker) Submit(tx []byte) error {
 	}
 
 	// A transaction that cannot fit in ANY batch is refused up front, visibly
-	// (#4141). Backpressure below is retryable; this is not.
+	// (#4141). Backpressure below is retryable; this is not. The refusal
+	// counts in the metrics — an invisible refusal reads as traffic that
+	// never arrived (#4151).
 	if len(tx) > w.config.MaxBatchBytes {
+		w.txnsReceived.Add(1)
+		w.txnsRejected.Add(1)
 		return fmt.Errorf("%w: %d bytes, limit %d", ErrTransactionTooLarge, len(tx), w.config.MaxBatchBytes)
 	}
 
