@@ -144,10 +144,37 @@ echo "   image:   $soak_image ($image_id)" | tee -a "$log"
 echo "   version: $exec_ver | healing: $heal_flags" | tee -a "$log"
 
 $compose down -v --remove-orphans >/dev/null 2>&1
+
+# Preflight the host ports the compose publishes. A single stray process on one
+# of them makes `up` fail on ONLY that node — the rest come up, so the failure
+# looked like a random "up failed" and left a partial network behind (#4158).
+# A leaked `accumulated run devnet` squatting on 26660 cost an afternoon; name
+# the holder so the next person spends a second, not an afternoon.
+mapfile -t want_ports < <(grep -oE '"\s*[0-9]+\s*:\s*[0-9]+"|- [0-9]+:[0-9]+' "$compose_file" \
+  | grep -oE '[0-9]+:' | tr -d ':' | sort -un)
+port_conflict=0
+for p in "${want_ports[@]}"; do
+  holder=$(ss -ltnHp "sport = :$p" 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
+  if [ -n "$holder" ]; then
+    echo "port $p is already held by pid $holder ($(ps -o args= -p "$holder" 2>/dev/null | cut -c1-80))" | tee -a "$log"
+    port_conflict=1
+  fi
+done
+[ "$port_conflict" -eq 0 ] || { echo "refusing to start: free the port(s) above and retry (#4158)" | tee -a "$log"; exit 1; }
+
 # Build BEFORE up. `up -d` reuses an existing image silently, and every
 # conclusion drawn from such a run is about the wrong build (#4103).
 $compose build >/dev/null 2>&1 || { echo "compose build failed" | tee -a "$log"; exit 1; }
-$compose up -d >/dev/null 2>&1 || { echo "up failed" | tee -a "$log"; exit 1; }
+# Surface the up error (a swallowed one hid the port conflict of #4158), and
+# on ANY failure tear the project down before exiting — a failed `up` leaves
+# the containers it already started running, i.e. an UNMONITORED network, which
+# is exactly what must never linger. The project is pinned to $COMPOSE_PROJECT_NAME
+# so this teardown can only ever reach this soak, never the asp-* mainnet fleet.
+if ! $compose up -d >>"$log" 2>&1; then
+  echo "up failed — see the error above; tearing down so nothing runs unmonitored" | tee -a "$log"
+  $compose down -v --remove-orphans >/dev/null 2>&1
+  exit 1
+fi
 
 # Record the image actually running, so a rebuild later cannot be confused for this run.
 docker image inspect --format '{{.Id}} {{.RepoTags}}' "$soak_image" \
