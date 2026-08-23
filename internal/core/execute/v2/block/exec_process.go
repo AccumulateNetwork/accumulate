@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -49,6 +50,13 @@ type bundle struct {
 	// touch of shared block state is deferred to mergeIntoBlock.
 	signed int
 
+	// validatedLists memoizes ReceiptList validation per envelope (#4152). A
+	// package's members share ONE proof, and re-validating — rehashing every
+	// element — once per member made an envelope cost O(members × elements)
+	// SHA-256 at CheckTx. Keyed by pointer: sharing requires being the same
+	// object in the same envelope, so the memo can never cross envelopes.
+	validatedLists map[*merkle.ReceiptList]bool
+
 	// stateOps defers the pending/delivered marks the same way (#4149):
 	// execution may be running in a shard goroutine, and a direct write to
 	// Block.State's maps is a data race. Ops apply in execution order at
@@ -56,6 +64,20 @@ type bundle struct {
 	// serial-equivalent — bundles that mark the same transaction share its
 	// identity and therefore its shard.
 	stateOps []func(*BlockState)
+}
+
+// listIsValid validates a ReceiptList once per envelope (#4152) — see
+// validatedLists.
+func (d *bundle) listIsValid(list *merkle.ReceiptList) bool {
+	if v, ok := d.validatedLists[list]; ok {
+		return v
+	}
+	v := list.Validate(nil)
+	if d.validatedLists == nil {
+		d.validatedLists = map[*merkle.ReceiptList]bool{}
+	}
+	d.validatedLists[list] = v
+	return v
 }
 
 func (d *bundle) markTransactionPending(txn *protocol.Transaction) {

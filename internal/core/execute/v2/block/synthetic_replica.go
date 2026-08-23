@@ -34,6 +34,12 @@ import (
 // not trusted on its own (#4106) — a state whose count disagrees with its
 // structure is rejected rather than seeded.
 func countFromPending(s *merkle.State) int64 {
+	// A real chain needs fewer than 63 levels for 2^62 entries; more is a
+	// crafted state, and 1<<63 would go negative (#4152). Refuse rather
+	// than rely on downstream comparisons happening to no-op.
+	if len(s.Pending) > 62 {
+		return -1
+	}
 	var count int64
 	for i, v := range s.Pending {
 		if len(v) > 0 {
@@ -60,9 +66,11 @@ func (x *Executor) seedSyntheticReplica(batch *database.Batch, source *url.URL, 
 		return errors.BadRequest.WithFormat("%v is not a partition", source)
 	}
 
-	// The state's count must agree with its structure (#4106).
+	// The state's count must agree with its structure (#4106), and both
+	// must be sane — a negative count could only come from a crafted state
+	// (#4152).
 	start := countFromPending(list.MerkleState)
-	if start != list.MerkleState.Count {
+	if start < 0 || start != list.MerkleState.Count {
 		return errors.BadRequest.WithFormat("collection proof state is inconsistent: count is %d but the structure holds %d", list.MerkleState.Count, start)
 	}
 	end := start + int64(len(list.Elements))

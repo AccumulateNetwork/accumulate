@@ -94,6 +94,24 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		return nil, errors.BadRequest.With("a synthetic message must be sequenced")
 	}
 
+	// A message the destination's replica already contains needs no proof and
+	// no signature of its own (#4140): the replica was seeded from a proof
+	// this partition already accepted and anchored, and hashes cannot be
+	// forged. Skip straight to the type check. Tried BEFORE bundle
+	// resolution (#4152): a replica-covered, signature-less message must be
+	// accepted no matter what else its envelope carries — resolving a
+	// sibling proof first sent it to the missing-signature refusal below.
+	if syn.Proof == nil && syn.Signature == nil {
+		h := syn.Message.Hash()
+		if ctx.Executor.replicaIncludes(batch, seq.Source, h[:]) {
+			err := checkSyntheticInnerType(seq)
+			if err != nil {
+				return nil, err
+			}
+			return syn, nil
+		}
+	}
+
 	// A synthetic message may omit its own proof when a SyntheticProof travels
 	// with it in the same envelope (#4090). One proof then covers every message
 	// in the package, instead of each message carrying its own receipt plus a
@@ -110,20 +128,8 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		syn.Proof = findProofInBundle(ctx, syn.Message.Hash())
 	}
 
-	// A message the destination's replica already contains needs no proof and
-	// no signature of its own (#4140): the replica was seeded from a proof
-	// this partition already accepted and anchored, and hashes cannot be
-	// forged. Skip straight to the type check.
 	if syn.Proof == nil && syn.Signature == nil {
-		h := syn.Message.Hash()
-		if !ctx.Executor.replicaIncludes(batch, seq.Source, h[:]) {
-			return nil, errors.BadRequest.With("missing proof")
-		}
-		err := checkSyntheticInnerType(seq)
-		if err != nil {
-			return nil, err
-		}
-		return syn, nil
+		return nil, errors.BadRequest.With("missing proof")
 	}
 
 	if syn.Signature == nil {
@@ -151,7 +157,9 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		if len(syn.Proof.ReceiptList.Elements) > protocol.MaxReceiptListElements {
 			return nil, errors.BadRequest.WithFormat("collection proof exceeds %d elements", protocol.MaxReceiptListElements)
 		}
-		if !syn.Proof.ReceiptList.Validate(nil) {
+		// Validated once per envelope (#4152) — a package's members share
+		// ONE proof, and rehashing it per member is a CheckTx DoS.
+		if !ctx.bundle.listIsValid(syn.Proof.ReceiptList) {
 			return nil, errors.BadRequest.With("proof is invalid")
 		}
 	case syn.Proof.Receipt != nil:

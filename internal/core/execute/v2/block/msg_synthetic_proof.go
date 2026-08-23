@@ -63,7 +63,9 @@ func (x SyntheticProof) check(ctx *MessageContext) (*messaging.SyntheticProof, e
 		return nil, errors.BadRequest.WithFormat("collection proof carries %d elements, limit is %d",
 			len(msg.Proof.ReceiptList.Elements), protocol.MaxReceiptListElements)
 	}
-	if !msg.Proof.ReceiptList.Validate(nil) {
+	// Validated once per envelope (#4152) — the package's members resolve
+	// this same list, and each validation rehashes every element.
+	if !ctx.bundle.listIsValid(msg.Proof.ReceiptList) {
 		return nil, errors.BadRequest.With("proof is invalid")
 	}
 	return msg, nil

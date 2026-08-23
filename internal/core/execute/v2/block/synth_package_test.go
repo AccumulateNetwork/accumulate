@@ -195,3 +195,38 @@ func TestSynthPackage_SpanBoundMatchesTheReceiver(t *testing.T) {
 	assert.False(t, len(list.Elements) > protocol.MaxReceiptListElements,
 		"a max-span list passes the receiver's bound")
 }
+
+// #4152 ordering: a replica-covered, signature-less message is accepted no
+// matter what else its envelope carries. Before the reorder, resolving a
+// sibling proof first sent it to the missing-signature refusal.
+func TestReplicaMember_AcceptedEvenWhenTheEnvelopeCarriesAProof(t *testing.T) {
+	f := newReplicaFixture(t, 0)
+	f.x.globals = &Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest}}
+
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = protocol.AccountUrl("alice", "tokens")
+	txn.Body = &protocol.SyntheticDepositCredits{Amount: 7}
+	seq := &messaging.SequencedMessage{
+		Message:     &messaging.TransactionMessage{Transaction: txn},
+		Source:      protocol.PartitionUrl("BVN1"),
+		Destination: protocol.PartitionUrl("BVN0"),
+		Number:      1,
+	}
+	h := seq.Hash()
+	require.NoError(t, f.chain.AddEntry(h[:], false))
+	f.seed(t, 0, 0) // the replica vouches for the message
+
+	// The envelope also carries a proof covering the same hash.
+	proofMsg := &messaging.SyntheticProof{Proof: &protocol.AnnotatedReceipt{
+		ReceiptList: f.proof(t, 0, 0),
+		Anchor:      &protocol.AnchorMetadata{Account: protocol.DnUrl()},
+	}}
+	member := &messaging.SyntheticMessage{Message: seq} // NO signature
+
+	d := &bundle{Block: &Block{Executor: f.x, Batch: f.batch}, batch: f.batch,
+		messages: []messaging.Message{proofMsg, member}}
+	syn, err := SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d, message: member})
+	require.NoError(t, err, "the replica path must win for signature-less messages")
+	require.NotNil(t, syn)
+	assert.Nil(t, syn.Proof, "accepted via the replica, not the bundle proof")
+}
