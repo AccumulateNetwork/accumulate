@@ -629,6 +629,19 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 }
 
 func (b *Block) produceBlockMessages() error {
+	// Sequence the messages the block's deliveries produced, in ONE sorted
+	// pass (#4144). The sort key is derived from the produced set alone —
+	// (producer transaction ID, emission index) — so the numbers no longer
+	// depend on delivery order, which under parallel execution (#4145) is a
+	// shard-scheduling accident. System-produced messages below get the
+	// numbers after these, exactly as they did when sequencing was inline.
+	sortProduced(b.produced)
+	err := b.Executor.produceSynthetic(b.Batch, b.produced, b.Index)
+	if err != nil {
+		return errors.UnknownError.WithFormat("sequence produced messages: %w", err)
+	}
+	b.produced = nil
+
 	// This is likely unnecessarily cautious, but better safe than sorry. This
 	// will prevent any variation in order from causing a consensus failure.
 	bvns := b.Executor.globals.Active.BvnNames()

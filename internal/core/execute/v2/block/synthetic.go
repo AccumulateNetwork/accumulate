@@ -7,7 +7,9 @@
 package block
 
 import (
+	"bytes"
 	"fmt"
+	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -16,6 +18,37 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// compareProduced is the canonical order for sequencing produced messages
+// (#4144): by producer transaction ID, with producer-less (system-produced)
+// messages after every attributed one, keyed among themselves by message
+// hash. The key is derivable from the produced set alone — never from
+// delivery order, which becomes shard-scheduling-dependent under parallel
+// execution (#4145). Ties (same producer) return 0 so that a STABLE sort
+// preserves the producer's emission order; that order is the second half of
+// the (producer, index-within-producer) key.
+func compareProduced(a, b *ProducedMessage) int {
+	switch {
+	case a.Producer == nil && b.Producer == nil:
+		ah, bh := a.Message.Hash(), b.Message.Hash()
+		return bytes.Compare(ah[:], bh[:])
+	case a.Producer == nil:
+		return +1 // system-produced messages order after attributed ones
+	case b.Producer == nil:
+		return -1
+	default:
+		return a.Producer.Compare(b.Producer)
+	}
+}
+
+// sortProduced sorts produced messages into the canonical sequencing order.
+// The sort must be stable: compareProduced deliberately reports equality for
+// messages of the same producer, so their emitted order survives.
+func sortProduced(produced []*ProducedMessage) {
+	sort.SliceStable(produced, func(i, j int) bool {
+		return compareProduced(produced[i], produced[j]) < 0
+	})
+}
 
 func (x *Executor) produceSynthetic(batch *database.Batch, produced []*ProducedMessage, block uint64) error {
 	if len(produced) == 0 {
