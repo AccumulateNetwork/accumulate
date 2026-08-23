@@ -1,0 +1,20 @@
+{
+  "updatedUnix": 1787384506,
+  "startUnix": 1787384506,
+  "elapsedSec": 0,
+  "phase": "done",
+  "target": 12000,
+  "generated": 0,
+  "rejected": 0,
+  "skipped": 0,
+  "rate": 0,
+  "targetTps": 10,
+  "perType": {},
+  "accounts": {
+    "identities": 0,
+    "keyBooks": 0,
+    "keyPages": 0,
+    "tokenIssuers": 0,
+    "accounts": 0
+  }
+}
