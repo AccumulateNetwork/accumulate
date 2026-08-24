@@ -309,6 +309,7 @@ func main() {
 	reportHeals := flag.Bool("report-heals", false, "also report each validator's heal counters")
 	statsFile := flag.String("stats-file", "", "if set, write a live JSON snapshot of the run (per-type mix, totals, account counts) here every few seconds")
 	control := flag.String("control", "", "if set, serve the runtime control API on this address (e.g. 127.0.0.1:8091): GET/POST /control adjusts tps and the transaction mix live")
+	submitters := flag.Int("submitters", 16, "concurrent submission workers; the pacer hands each tick to a free worker, so the achieved rate is not capped by one submit round-trip at a time")
 	flag.Parse()
 
 	// -duration selects a timed run; otherwise -count transactions are sent at
@@ -424,13 +425,12 @@ func main() {
 		go e.writeStatsLoop(ctx, *statsFile, start, total)
 	}
 
-
 	log.Printf("== generating %d transactions ==", total)
 	limit := time.Duration(0)
 	if timed {
 		limit = *duration
 	}
-	generate(ctx, e, total, limit, *trackMax)
+	generate(ctx, e, total, limit, *trackMax, *submitters)
 
 	// Account creation runs in the background; let anything in flight finish so
 	// its transactions are counted rather than abandoned.
@@ -463,9 +463,12 @@ func main() {
 	}
 }
 
-// generate runs the main loop: pick an action, submit it, occasionally kick off
-// an account-creation sequence in the background.
-func generate(ctx context.Context, e *env, total int, limit time.Duration, trackMax int) {
+// generate runs the main loop. A single PACER owns the rate — one tick per
+// 1/tps interval, re-read every tick so the control API takes effect live —
+// and hands each tick to a pool of submitter workers. One worker per
+// round-trip was the ceiling the 100 tps probe hit at ~84/s: build+sign+
+// submit is mostly waiting on the node, so the pacer must never wait on it.
+func generate(ctx context.Context, e *env, total int, limit time.Duration, trackMax, submitters int) {
 	// A zero limit means "no wall-clock limit, stop after total transactions".
 	// With a limit, the wall clock is the ONLY stop: the rate is adjustable at
 	// runtime (control API), so a transaction count computed from the launch
@@ -479,79 +482,103 @@ func generate(ctx context.Context, e *env, total int, limit time.Duration, track
 	if trackMax > 0 && total > trackMax {
 		trackEvery = total / trackMax
 	}
+	if submitters < 1 {
+		submitters = 1
+	}
 
 	started := time.Now()
-	lastLog := time.Now()
-	var sent, failed, skipped int
-	// One logged reason per action type, so no failure mode goes unexplained.
+	var mu sync.Mutex // guards the counters and first-failure maps below
+	var sent, failed, skipped, lagged int
 	seenFail := map[string]bool{}
 	seenSkip := map[string]bool{}
+
+	work := make(chan int, submitters)
+	var wg sync.WaitGroup
+	for w := 0; w < submitters; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range work {
+				act := e.pick()
+				ids, err := act.run(ctx, e)
+				mu.Lock()
+				switch {
+				case errors.Is(err, errors.NotReady):
+					skipped++
+					e.track.skipped(act.name)
+					if !seenSkip[act.name] {
+						seenSkip[act.name] = true
+						log.Printf("%s: skipped (first time): %v", act.name, err)
+					}
+				case err != nil:
+					failed++
+					e.track.failed(act.name)
+					first := !seenFail[act.name]
+					if first {
+						seenFail[act.name] = true
+					}
+					if first || failed <= 20 || failed%200 == 0 {
+						log.Printf("%s: %v", act.name, err)
+					}
+				default:
+					sent++
+					e.track.generated(act.name)
+					if !act.expectFail && (trackEvery <= 1 || i%trackEvery == 0) {
+						e.track.follow(act.name, ids)
+					}
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+
+	lastLog := time.Now()
 	for i := 0; deadline.IsZero() && i < total || !deadline.IsZero(); i++ {
 		if ctx.Err() != nil || (!deadline.IsZero() && time.Now().After(deadline)) {
 			break
 		}
 
 		// Growing the account set happens off the hot path so that creating an
-		// ADI — which is a multi-transaction sequence with ordering
-		// constraints — never stalls the generation rate.
+		// ADI — a multi-transaction sequence with ordering constraints — never
+		// stalls the generation rate.
 		if e.u.shouldGrow(e.cfg.growth, e.cfg.growthScale) {
 			e.growAsync(ctx)
 		}
 
-		act := e.pick()
-		ids, err := act.run(ctx, e)
-		switch {
-		case errors.Is(err, errors.NotReady):
-			// The action needs state that does not exist yet. Expected,
-			// especially early on; not a failure.
-			skipped++
-			e.track.skipped(act.name)
-			// Skips are expected early on, but a type that skips for the WHOLE
-			// run is a silent hole in coverage — issue-tokens and
-			// send-tokens-custom skipped every time in run 20260822T050137Z
-			// because no custom token ever existed, and nothing said so.
-			if !seenSkip[act.name] {
-				seenSkip[act.name] = true
-				log.Printf("%s: skipped (first time): %v", act.name, err)
-			}
-		case err != nil:
-			failed++
-			e.track.failed(act.name)
-			// Log the first failure of EVERY action type, not just the first
-			// twenty failures overall. A type that starts failing later —
-			// after some state has degraded — was previously silent, and the
-			// dashboard would show a rejection count with no reason anywhere.
-			// add-credits-page was rejected 151 times out of 151 in run
-			// 20260822T050137Z and only the first few lines said why.
-			first := !seenFail[act.name]
-			if first {
-				seenFail[act.name] = true
-			}
-			if first || failed <= 20 || failed%200 == 0 {
-				log.Printf("%s: %v", act.name, err)
-			}
+		// Hand the tick to a worker. If every worker is busy AND the buffer is
+		// full, the generator is submit-bound: count it rather than silently
+		// running slow, then block — honest backpressure beats a lie about
+		// the achieved rate.
+		select {
+		case work <- i:
 		default:
-			sent++
-			e.track.generated(act.name)
-			// expectFail actions are meant not to deliver — count them, but do
-			// not follow them, or they would count toward -max-stranded.
-			if !act.expectFail && (trackEvery <= 1 || i%trackEvery == 0) {
-				e.track.follow(act.name, ids)
+			mu.Lock()
+			lagged++
+			mu.Unlock()
+			select {
+			case work <- i:
+			case <-ctx.Done():
 			}
 		}
 
+		mu.Lock()
 		if time.Since(lastLog) > time.Minute {
 			e.logProgress(sent, failed, skipped, total, started)
+			if lagged > 0 {
+				log.Printf("pacer: %d ticks waited for a free submitter (submit-bound; raise -submitters)", lagged)
+			}
 			lastLog = time.Now()
 		}
+		mu.Unlock()
+
 		// Re-read the rate every iteration so a control-API change takes
 		// effect within one interval.
 		if tps := e.currentTPS(); tps > 0 {
 			time.Sleep(time.Duration(float64(time.Second) / tps))
 		}
 	}
-
-	e.logProgress(sent, failed, skipped, total, started)
+	close(work)
+	wg.Wait()
 }
 
 func (e *env) logProgress(sent, failed, skipped, total int, started time.Time) {
