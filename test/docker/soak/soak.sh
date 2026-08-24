@@ -297,10 +297,19 @@ fi
 
 # Chaos: every ~10 min disturb ONE random node (quorum 3/4 preserved).
 # Full ISO dates — time-of-day alone cannot be attributed to a run.
+#
+# Say so the moment it arms. An armed-but-sleeping chaos loop produced no
+# file and no events for its whole first interval, which is indistinguishable
+# from a broken one — and was reported as broken (run 20260824T051249Z, first
+# interval 672s). Silence must never look like breakage.
+echo "$(date -u +%FT%TZ) armed: one disturbance every ${CHAOS_MIN}s + 0-${CHAOS_JITTER}s jitter" >> "$chaos"
+echo "   chaos: armed (every ~${CHAOS_MIN}s + jitter; first event follows the first interval)" | tee -a "$log"
 ( end=$(( $(date +%s) + duration_seconds ))
   nodes=$(docker ps --filter name=acc-bvn --format '{{.Names}}')
   while [ "$(date +%s)" -lt "$end" ]; do
-    sleep $(( CHAOS_MIN + RANDOM % CHAOS_JITTER ))
+    w=$(( CHAOS_MIN + RANDOM % CHAOS_JITTER ))
+    echo "$(date -u +%FT%TZ) sleeping ${w}s until the next disturbance" >> "$chaos"
+    sleep "$w"
     n=$(echo "$nodes" | shuf -n1); r=$((RANDOM % 10))
     if [ "$r" -lt 4 ]; then
       echo "$(date -u +%FT%TZ) restart $n" >> "$chaos"; docker restart "$n" >/dev/null 2>&1
