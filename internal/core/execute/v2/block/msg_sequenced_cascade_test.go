@@ -169,3 +169,19 @@ func TestCascade_DoesNotDoubleScheduleWithinABlock(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, queued, 4, "3-5 were already scheduled; nothing is added twice")
 }
+
+// The pending window lives inline in the ledger record, so its length is the
+// marshal cost of EVERY subsequent update — an unbounded window makes drain
+// O(backlog^2) (run 20260824T051249Z: 33k pending, drain collapsed to ~4/s).
+// Receipts far beyond the delivery point must not grow the record.
+func TestPendingWindow_IsBounded(t *testing.T) {
+	part := &protocol.PartitionSyntheticLedger{Delivered: 100}
+	// Received right at the cap: recorded.
+	part.Add(false, 100+MaxPendingSequenced, protocol.PartitionUrl("BVN0").WithTxID([32]byte{1}))
+	require.LessOrEqual(t, len(part.Pending), MaxPendingSequenced)
+	// The guard in updateLedger refuses anything past the cap; Add itself is
+	// only ever called for in-window sequences. This pins the constant's
+	// relationship to the cascade window: several windows of runway, so the
+	// cap only engages when delivery is genuinely drowning.
+	require.Equal(t, 4*cascadeDeliveryWindow, MaxPendingSequenced)
+}

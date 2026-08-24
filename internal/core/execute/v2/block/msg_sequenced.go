@@ -230,6 +230,15 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 	return true, nil
 }
 
+// MaxPendingSequenced bounds how far past the delivery point a received
+// sequenced message may be RECORDED in the pending window. The window lives
+// inline in the ledger record, so its length is the marshal cost of every
+// subsequent update; 4096 keeps the worst-case record ~300KB and the drain
+// linear, while leaving four cascade windows of runway. Receipts beyond it
+// are refused (deterministically) and heal later as a produced>received
+// tail.
+const MaxPendingSequenced = 4 * cascadeDeliveryWindow
+
 // cascadeDeliveryWindow bounds how many contiguous pending successors one
 // delivery schedules into the next block's cascade queue. It caps the extra
 // bundles a block can inherit per stream while still letting a backlog drain
@@ -357,6 +366,24 @@ func (x SequencedMessage) updateLedger(batch *database.Batch, ctx *MessageContex
 			msg = "anchors"
 		}
 		return nil, errors.FatalError.WithFormat("%s processed out of order: delivered %d, processed %d", msg, partLedger.Delivered, seq.Number)
+	}
+
+	// Bound the pending window. Every Add rewrites the WHOLE ledger record,
+	// Pending array included, so per-message cost is O(backlog) and a big
+	// backlog drains in O(backlog^2) — run 20260824T051249Z's 33,000-message
+	// backlog collapsed the drain to ~4/s (below even the cascade window's
+	// allowance) purely on re-marshaling cost: the serial search Paul called.
+	// Refusing to RECORD a receipt far beyond the delivery point is
+	// deterministic (same rule, same state on every validator) and converts
+	// unbounded receipt-state growth into a produced>received tail at the
+	// source, which the reconcile machinery already heals once delivery
+	// catches up. The real O(1)-per-message fix (pending entries as keyed
+	// sub-records) is tracked on #4164.
+	if pending && seq.Number > partLedger.Delivered+MaxPendingSequenced {
+		ctx.Executor.logger.Debug("Refusing to record far-future sequenced message",
+			"seq", seq.Number, "delivered", partLedger.Delivered,
+			"window", MaxPendingSequenced, "source", seq.Source)
+		return partLedger, nil
 	}
 
 	// The ledger's Delivered number needs to be updated if the transaction
