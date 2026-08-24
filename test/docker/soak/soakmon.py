@@ -180,6 +180,7 @@ def collect_heights():
 # Per-partition record of the last height CHANGE. Liveness is progress over
 # time; a height that can be read says only that a node answers the phone.
 _PROGRESS = {}
+_RATE = {}  # part -> [(t, height)] rolling window for the block-rate display
 
 
 def assess_progress(heights, now):
@@ -202,10 +203,28 @@ def assess_progress(heights, now):
         if prev is None or prev["height"] != h:
             _PROGRESS[part] = {"height": h, "since": now}
         stalled = now - _PROGRESS[part]["since"]
+
+        # Rolling block rate over the last ~5 minutes. A block is one
+        # committed leader group (#4164), so the design target is one per
+        # BlockInterval (3s); showing the average time per block is what
+        # distinguishes "paced by design" from "dragging" — a slow-ticking
+        # height with no rate context was read as the latter.
+        win = _RATE.setdefault(part, [])
+        win.append((now, h))
+        while win and now - win[0][0] > 300:
+            win.pop(0)
+        sec_per_block = None
+        if len(win) >= 2:
+            dh = win[-1][1] - win[0][1]
+            dt = win[-1][0] - win[0][0]
+            if dh > 0 and dt > 0:
+                sec_per_block = round(dt / dh, 1)
+
         out[part] = {
             "height": h,
             "state": "stalled" if stalled >= STALL_SECS else "live",
             "stalledFor": round(stalled, 1),
+            "secPerBlock": sec_per_block,
         }
     return out
 
@@ -957,7 +976,11 @@ async function tick(){
   $('heights').innerHTML=parts.map(p=>{
     const g=pg[p]||{},st=g.state||'unknown';
     const col=st==='live'?'':(st==='stalled'?'var(--red)':'var(--yel)');
-    const note=st==='live'?'':(st==='unknown'?' unreadable':` stalled ${Math.round(g.stalledFor||0)}s`);
+    // Average time per block (rolling 5 min). A block is one committed
+    // leader group, targeted at one per 3s — the rate is what separates
+    // "paced by design" from "dragging".
+    const spb=(st==='live'&&g.secPerBlock)?` ${g.secPerBlock}s/blk`:'';
+    const note=st==='live'?spb:(st==='unknown'?' unreadable':` stalled ${Math.round(g.stalledFor||0)}s`);
     return `<span class=n ${col?`style="color:${col}"`:''}>${fmt(hh[p])}</span>`+
            `<span class=l ${col?`style="color:${col}"`:''}>${shortP(p)}${note}</span>`;
   }).join('')||'<span class=mut>—</span>';
