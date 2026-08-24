@@ -334,8 +334,8 @@ func (s *Sim) load(ctx context.Context, part string) {
 
 // snapshot is one node's pipeline gauges at an instant.
 type snapshot struct {
-	height, txs                     uint64
-	round, lastCommit               types.Round
+	height, txs                       uint64
+	round, lastCommit                 types.Round
 	headers, certs, votesIn, votesOut uint64
 }
 
@@ -347,6 +347,30 @@ func (sn *simNode) snap() snapshot {
 		round:      sn.node.CurrentRound(),
 		lastCommit: sn.node.LastCommitRound(),
 		headers:    h, certs: c, votesIn: vi, votesOut: vo,
+	}
+}
+
+// gauges, in pipeline order. The ONSET ORDER of their freezes is the
+// diagnosis: the earliest-frozen gauge is closest to the broken assumption.
+var gaugeNames = []string{"round", "headers", "votesOut", "votesIn", "certs", "commit", "height"}
+
+func (s snapshot) gauges() []uint64 {
+	return []uint64{uint64(s.round), s.headers, s.votesOut, s.votesIn, s.certs, uint64(s.lastCommit), s.height}
+}
+
+// lastMoved tracks, per node, when each gauge last changed.
+type lastMoved struct {
+	vals [7]uint64
+	at   [7]time.Time
+}
+
+func (l *lastMoved) update(now time.Time, s snapshot) {
+	g := s.gauges()
+	for i, v := range g {
+		if v != l.vals[i] || l.at[i].IsZero() {
+			l.vals[i] = v
+			l.at[i] = now
+		}
 	}
 }
 
@@ -380,6 +404,10 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 	}
 
 	prev := map[*simNode]snapshot{}
+	moved := map[*simNode]*lastMoved{}
+	for _, sn := range s.nodes {
+		moved[sn] = &lastMoved{}
+	}
 	lastProgress := map[string]time.Time{}
 	lastHeight := map[string]uint64{}
 	for _, p := range s.parts {
@@ -424,15 +452,18 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 
 			if time.Since(lastProgress[part]) > s.cfg.StallAfter {
 				logf("STALL on %s: no executed-height progress for %s", part, s.cfg.StallAfter)
-				s.diagnose(logf, prev)
+				s.diagnose(logf, prev, moved)
 				return s.finish(start, false, fmt.Sprintf("stalled: %s frozen at height %d", part, maxH)),
 					fmt.Errorf("%w: %s at height %d", ErrStalled, part, maxH)
 			}
 		}
 		logf("%8s  %s", time.Since(start).Truncate(time.Second), strings.Join(line, " | "))
 
+		now := time.Now()
 		for _, sn := range s.nodes {
-			prev[sn] = sn.snap()
+			snap := sn.snap()
+			prev[sn] = snap
+			moved[sn].update(now, snap)
 		}
 
 		if allAtTarget {
@@ -441,33 +472,38 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 	}
 }
 
-// diagnose prints, for every node, which pipeline stage moved in the last
-// second and which did not — the payoff: a stall names its stage.
-func (s *Sim) diagnose(logf func(string, ...any), prev map[*simNode]snapshot) {
-	logf("stage diagnosis (Δ over the last tick; the FIRST all-zero column from the left is where the pipeline stopped):")
-	logf("%-10s %-4s | %6s %8s %7s %8s %8s %7s %7s %5s | fatal", "part", "val",
-		"Δround", "Δheaders", "ΔvotesOut", "ΔvotesIn", "Δcerts", "Δcommit", "Δheight", "hdrQ")
+// diagnose prints, for every node, when each pipeline gauge LAST MOVED
+// (seconds ago). The onset order across gauges and nodes is the payoff: the
+// earliest freeze is nearest the broken assumption, and comparing nodes says
+// whether one validator died first and starved the rest or all stopped
+// together.
+func (s *Sim) diagnose(logf func(string, ...any), prev map[*simNode]snapshot, moved map[*simNode]*lastMoved) {
+	now := time.Now()
+	logf("stage freeze ages in seconds (bigger = stopped earlier; pipeline order %v):", gaugeNames)
+	logf("%-10s %-3s | %6s %8s %9s %8s %6s %7s %7s | %6s %7s %5s | fatal", "part", "val",
+		"round", "headers", "votesOut", "votesIn", "certs", "commit", "height", "atRnd", "atCmt", "hdrQ")
 	for _, part := range s.parts {
 		for _, sn := range s.byPart[part] {
+			lm := moved[sn]
 			cur := sn.snap()
-			p, ok := prev[sn]
-			if !ok {
-				p = snapshot{}
+			ages := make([]string, 7)
+			for i := range ages {
+				if lm.at[i].IsZero() {
+					ages[i] = "-"
+				} else {
+					ages[i] = fmt.Sprintf("%d", int(now.Sub(lm.at[i]).Seconds()))
+				}
 			}
-			// Certificates present in the node's current and previous round —
-			// is the DAG still filling where the node currently is?
 			r := cur.round
 			inRound := len(sn.node.DAG().GetRound(r)) + len(sn.node.DAG().GetRound(r-1))
 			var fatal string
 			if v := sn.fatal.Load(); v != nil {
 				fatal = fmt.Sprint(v)
 			}
-			logf("%-10s %-4d | %6d %8d %7d %8d %8d %7d %7d %5d | %s",
+			logf("%-10s %-3d | %6s %8s %9s %8s %6s %7s %7s | %6d %7d %5d | %s",
 				part, sn.val,
-				int64(cur.round-p.round), int64(cur.headers-p.headers),
-				int64(cur.votesOut-p.votesOut), int64(cur.votesIn-p.votesIn),
-				int64(cur.certs-p.certs), int64(cur.lastCommit-p.lastCommit),
-				int64(cur.height-p.height), inRound, fatal)
+				ages[0], ages[1], ages[2], ages[3], ages[4], ages[5], ages[6],
+				cur.round, cur.lastCommit, inRound, fatal)
 		}
 	}
 }
