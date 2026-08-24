@@ -26,6 +26,11 @@ LiteIdentity:
       type: uvarint
     - name: LastUsedOn
       type: uvarint
+    - name: PriorUsedOn
+      description: retains recently used timestamps below LastUsedOn so replay protection tolerates out-of-order execution (#4132)
+      type: uvarint
+      repeatable: true
+      optional: true
 
 LiteTokenAccount:
   union: { type: account, value: LiteTokenAccount }

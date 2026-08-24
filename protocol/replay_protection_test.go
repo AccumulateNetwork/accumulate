@@ -153,10 +153,112 @@ func TestReplayProtection_IsPerKeyNotGlobal(t *testing.T) {
 	assert.False(t, accepts(&alice, 50), "alice's own watermark still applies")
 }
 
+// ---------------------------------------------------------------------------
+// The real rule, as now implemented by KeyEntry.CanUseTimestamp/UseTimestamp
+// (keys.go). Everything above tests the OLD strict rule as a model, kept to
+// document what #4132 was; everything below tests the shipped code.
+// ---------------------------------------------------------------------------
+
+// A full burst of ReplayWindowSize transactions survives arbitrary
+// reordering. This is the property the strict rule lacked: the production
+// loadgen's 100-transaction treasury burst kept 4.
+func TestKeyEntry_ShuffledBurstFullySurvives(t *testing.T) {
+	for _, seed := range []int64{1, 7, 42, 1234, 99999} {
+		ts := make([]uint64, 100)
+		for i := range ts {
+			ts[i] = uint64(i + 1)
+		}
+		rand.New(rand.NewSource(seed)).Shuffle(len(ts), func(i, j int) { ts[i], ts[j] = ts[j], ts[i] })
+
+		li := new(LiteIdentity)
+		for _, v := range ts {
+			require.NoError(t, li.CanUseTimestamp(v), "seed %d: timestamp %d must be accepted", seed, v)
+			li.UseTimestamp(v)
+		}
+		assert.Equal(t, uint64(100), li.LastUsedOn, "LastUsedOn is the highest spent timestamp")
+	}
+}
+
+// Every spent timestamp is a replay, whether it is the watermark or deep in
+// the retained window — this is the property replay protection exists for,
+// and the window must not weaken it.
+func TestKeyEntry_EverySpentTimestampIsRejected(t *testing.T) {
+	li := new(LiteIdentity)
+	spent := []uint64{50, 10, 30, 20, 40} // deliberately out of order
+	for _, v := range spent {
+		require.NoError(t, li.CanUseTimestamp(v))
+		li.UseTimestamp(v)
+	}
+	for _, v := range spent {
+		assert.Error(t, li.CanUseTimestamp(v), "spent timestamp %d must be rejected", v)
+	}
+	assert.NoError(t, li.CanUseTimestamp(25), "an unspent timestamp inside the window is fine")
+	assert.NoError(t, li.CanUseTimestamp(60), "a new high timestamp is fine")
+}
+
+// Once the window is full, anything below the oldest retained entry is
+// rejected — the entry can no longer prove it is not a replay.
+func TestKeyEntry_WindowFloorRejectsTheTooOld(t *testing.T) {
+	li := new(LiteIdentity)
+	// Spend 1000 timestamps in order; the window retains the last
+	// ReplayWindowSize of them.
+	for ts := uint64(1); ts <= 1000; ts++ {
+		require.NoError(t, li.CanUseTimestamp(ts))
+		li.UseTimestamp(ts)
+	}
+	assert.Equal(t, uint64(1000), li.LastUsedOn)
+	assert.Len(t, li.PriorUsedOn, ReplayWindowSize-1, "retention is bounded")
+	floor := li.PriorUsedOn[0]
+	assert.Equal(t, uint64(1000-ReplayWindowSize+1), floor)
+
+	assert.Error(t, li.CanUseTimestamp(floor-1), "below the floor is unverifiable, rejected")
+	assert.Error(t, li.CanUseTimestamp(floor), "the floor itself was spent")
+	assert.NoError(t, li.CanUseTimestamp(1001), "the future is always open")
+}
+
+// KeySpec (key page entries) enforces the same rule as LiteIdentity.
+func TestKeyEntry_KeySpecUsesTheSameRule(t *testing.T) {
+	ks := new(KeySpec)
+	require.NoError(t, ks.CanUseTimestamp(10))
+	ks.UseTimestamp(10)
+	require.NoError(t, ks.CanUseTimestamp(5), "out of order but unspent is accepted")
+	ks.UseTimestamp(5)
+	assert.Error(t, ks.CanUseTimestamp(10), "replay rejected")
+	assert.Error(t, ks.CanUseTimestamp(5), "replay rejected")
+	assert.Equal(t, uint64(10), ks.LastUsedOn)
+	assert.Equal(t, []uint64{5}, ks.PriorUsedOn)
+}
+
+// Timestamp zero still opts out entirely: accepted, and no state is touched.
+func TestKeyEntry_ZeroTimestampOptsOut(t *testing.T) {
+	li := new(LiteIdentity)
+	require.NoError(t, li.CanUseTimestamp(10))
+	li.UseTimestamp(10)
+	for i := 0; i < 3; i++ {
+		assert.NoError(t, li.CanUseTimestamp(0))
+		li.UseTimestamp(0)
+	}
+	assert.Equal(t, uint64(10), li.LastUsedOn)
+	assert.Empty(t, li.PriorUsedOn, "exempt signatures leave no trace")
+}
+
+// UseTimestamp keeps PriorUsedOn sorted and deduplicated regardless of the
+// order timestamps are spent in — the binary searches in CanUseTimestamp
+// depend on it.
+func TestKeyEntry_PriorUsedOnStaysSorted(t *testing.T) {
+	li := new(LiteIdentity)
+	for _, v := range []uint64{7, 3, 9, 1, 8, 2} {
+		require.NoError(t, li.CanUseTimestamp(v))
+		li.UseTimestamp(v)
+	}
+	assert.Equal(t, uint64(9), li.LastUsedOn)
+	assert.Equal(t, []uint64{1, 2, 3, 7, 8}, li.PriorUsedOn)
+}
+
 // The property a fix has to provide, stated as a test: a bounded reordering
-// window should be tolerated. This documents the requirement — it is not
-// satisfied by the current rule, which is why the test asserts what the
-// CURRENT rule does and names what is wanted.
+// window should be tolerated. This documented the requirement before the fix
+// existed; the windowed rule is now implemented for real by
+// KeyEntry.CanUseTimestamp/UseTimestamp and tested above.
 func TestReplayProtection_WindowedRuleWouldTolerateReordering(t *testing.T) {
 	// A windowed rule: accept anything strictly newer than (high - window),
 	// remembering what has been seen inside the window.
