@@ -533,32 +533,48 @@ func generate(ctx context.Context, e *env, total int, limit time.Duration, track
 	}
 
 	lastLog := time.Now()
-	for i := 0; deadline.IsZero() && i < total || !deadline.IsZero(); i++ {
+	for i := 0; deadline.IsZero() && i < total || !deadline.IsZero(); {
 		if ctx.Err() != nil || (!deadline.IsZero() && time.Now().After(deadline)) {
 			break
 		}
 
-		// Growing the account set happens off the hot path so that creating an
-		// ADI — a multi-transaction sequence with ordering constraints — never
-		// stalls the generation rate.
-		if e.u.shouldGrow(e.cfg.growth, e.cfg.growthScale) {
-			e.growAsync(ctx)
+		// Sleep granularity caps a one-tick-per-sleep pacer near 200/s: the
+		// scheduler overshoots multi-millisecond sleeps by ~1-2ms, measured
+		// as a hard ~206/s ceiling whatever the target. Emit a BATCH of
+		// ticks per sleep so each sleep covers batch/tps and stays >=5ms.
+		tps := e.currentTPS()
+		batch := 1
+		if tps > 200 {
+			batch = int(tps/200) + 1
 		}
+		for j := 0; j < batch; j++ {
+			if deadline.IsZero() && i >= total {
+				break
+			}
 
-		// Hand the tick to a worker. If every worker is busy AND the buffer is
-		// full, the generator is submit-bound: count it rather than silently
-		// running slow, then block — honest backpressure beats a lie about
-		// the achieved rate.
-		select {
-		case work <- i:
-		default:
-			mu.Lock()
-			lagged++
-			mu.Unlock()
+			// Growing the account set happens off the hot path so that
+			// creating an ADI — a multi-transaction sequence with ordering
+			// constraints — never stalls the generation rate.
+			if e.u.shouldGrow(e.cfg.growth, e.cfg.growthScale) {
+				e.growAsync(ctx)
+			}
+
+			// Hand the tick to a worker. If every worker is busy AND the
+			// buffer is full, the generator is submit-bound: count it rather
+			// than silently running slow, then block — honest backpressure
+			// beats a lie about the achieved rate.
 			select {
 			case work <- i:
-			case <-ctx.Done():
+			default:
+				mu.Lock()
+				lagged++
+				mu.Unlock()
+				select {
+				case work <- i:
+				case <-ctx.Done():
+				}
 			}
+			i++
 		}
 
 		mu.Lock()
@@ -571,10 +587,8 @@ func generate(ctx context.Context, e *env, total int, limit time.Duration, track
 		}
 		mu.Unlock()
 
-		// Re-read the rate every iteration so a control-API change takes
-		// effect within one interval.
-		if tps := e.currentTPS(); tps > 0 {
-			time.Sleep(time.Duration(float64(time.Second) / tps))
+		if tps > 0 {
+			time.Sleep(time.Duration(float64(batch) * float64(time.Second) / tps))
 		}
 	}
 	close(work)

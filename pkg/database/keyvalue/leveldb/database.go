@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/filter"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
@@ -38,7 +40,20 @@ func Open(filepath string, o ...Option) (*Database, error) {
 		return nil, errors.UnknownError.WithFormat("create %q: %w", filepath, err)
 	}
 
-	db, err := leveldb.OpenFile(filepath, nil)
+	// Non-default options, measured under load (#4164). With `nil` options —
+	// no bloom filter, 8MB block cache, 4MB write buffer — the storage
+	// engine owned HALF the CPU profile at 183 tx/s: 24% in reads, every
+	// miss walking each level's candidate tables (version.walkOverlapping),
+	// and 27% in compaction churned by tiny write buffers. Bloom filters
+	// turn the level walk into a bitmap check; a real block cache keeps hot
+	// state in RAM; bigger write buffers mean fewer, larger L0 flushes and
+	// proportionally less compaction.
+	db, err := leveldb.OpenFile(filepath, &opt.Options{
+		Filter:                 filter.NewBloomFilter(10),
+		BlockCacheCapacity:     128 * opt.MiB,
+		WriteBuffer:            64 * opt.MiB,
+		OpenFilesCacheCapacity: 1024,
+	})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("open %q: %w", filepath, err)
 	}
