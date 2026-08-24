@@ -149,19 +149,49 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 			continue
 		}
 
-		// One range request under one collection proof beats N per-message pulls,
-		// and unlike them it does not need the directory to have caught up
-		// (#4087). Falls through to the per-message path when unavailable — a
-		// stream must never wedge because the fast path was not usable.
+		// Range requests under collection proofs beat N per-message pulls,
+		// and unlike them they do not need the directory to have caught up
+		// (#4087). Every missing run is pulled under the SAME held anchor —
+		// it postdates the newest hole, so it proves all of them — oldest
+		// first, so in-order delivery unblocks as each run lands. Falls
+		// through to the per-message path when unavailable or when any run
+		// could not be pulled — a stream must never wedge because the fast
+		// path was not usable.
 		if held, ok := c.rangeProofAnchor(batch, part.Url); ok {
-			if first, last, ok := firstMissingRun(part); ok {
-				done, err := c.recoverSyntheticsViaRange(ctx, part.Url, first, last, held)
-				if err != nil {
-					c.classifyRemoteError(part.Url.String(), err)
-					slog.ErrorContext(ctx, "Failed to recover synthetics by range",
-						"source", part.Url, "destination", c.Url(), "start", first, "end", last, "error", err)
-				} else if done {
-					c.remoteOK(part.Url.String())
+			if runs := missingRuns(part); len(runs) > 0 {
+				budget := uint64(syntheticHealBatch)
+				allDone := true
+				for _, r := range runs {
+					if budget == 0 {
+						allDone = false
+						break
+					}
+					first, last := r[0], r[1]
+					if last-first+1 > budget {
+						last = first + budget - 1
+						allDone = false
+					}
+					done, err := c.recoverSyntheticsViaRange(ctx, part.Url, first, last, held)
+					switch {
+					case err != nil:
+						allDone = false
+						c.classifyRemoteError(part.Url.String(), err)
+						slog.ErrorContext(ctx, "Failed to recover synthetics by range",
+							"source", part.Url, "destination", c.Url(), "start", first, "end", last, "error", err)
+					case done:
+						c.remoteOK(part.Url.String())
+						budget -= last - first + 1
+					default:
+						allDone = false
+					}
+					// A source whose circuit just opened is down or drowning;
+					// stop hammering it with the remaining runs.
+					if !c.remoteAllowed(part.Url.String()) {
+						allDone = false
+						break
+					}
+				}
+				if allDone {
 					continue
 				}
 			}
@@ -247,26 +277,47 @@ func (c *Conductor) rangeProofAnchor(batch *database.Batch, source *url.URL) (ui
 	return held, held > 0
 }
 
-// firstMissingRun returns the first contiguous run of holes in a partition's
-// pending window. Contiguous because that is what a single collection proof
-// covers: the proof is a merkle range, so it proves a run of adjacent entries,
-// not an arbitrary selection.
-func firstMissingRun(part *protocol.PartitionSyntheticLedger) (uint64, uint64, bool) {
-	first, last := uint64(0), uint64(0)
+// missingRuns returns every contiguous run of holes in a partition's pending
+// window, oldest first. Each run is what one range request covers: a
+// collection proof is a merkle range, so it proves a run of adjacent entries,
+// not an arbitrary selection. But ONE held anchor proves ALL of them — the
+// anchor postdates the newest hole (holes are by definition below Received,
+// and anchors keep arriving), and an anchor proves everything produced before
+// it by replay. So a scan can pull every run under the same anchor in one
+// pass; there is no reason to heal one run per window. Oldest first because
+// delivery is in-order: the stream advances the moment the oldest run fills,
+// and keeps advancing as each next run lands.
+//
+// Observed need: the 20260824T024122Z wedge left 63 holes scattered across
+// ~20 runs (498-506, 514, 518, 539-542, ...). One run per heal window would
+// have taken ~20 windows to converge; one scan covers them all.
+func missingRuns(part *protocol.PartitionSyntheticLedger) [][2]uint64 {
+	var runs [][2]uint64
+	open := false
 	for i, txid := range part.Pending {
 		seq := part.Delivered + uint64(i) + 1
 		if txid == nil {
-			if first == 0 {
-				first = seq
+			if open {
+				runs[len(runs)-1][1] = seq
+			} else {
+				runs = append(runs, [2]uint64{seq, seq})
+				open = true
 			}
-			last = seq
 			continue
 		}
-		if first != 0 {
-			break
-		}
+		open = false
 	}
-	return first, last, first != 0
+	return runs
+}
+
+// firstMissingRun returns the first contiguous run of holes in a partition's
+// pending window.
+func firstMissingRun(part *protocol.PartitionSyntheticLedger) (uint64, uint64, bool) {
+	runs := missingRuns(part)
+	if len(runs) == 0 {
+		return 0, 0, false
+	}
+	return runs[0][0], runs[0][1], true
 }
 
 // claimSyntheticRequest returns true if this node should request source→self
