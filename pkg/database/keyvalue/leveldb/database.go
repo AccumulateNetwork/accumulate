@@ -46,13 +46,25 @@ func Open(filepath string, o ...Option) (*Database, error) {
 	// miss walking each level's candidate tables (version.walkOverlapping),
 	// and 27% in compaction churned by tiny write buffers. Bloom filters
 	// turn the level walk into a bitmap check; a real block cache keeps hot
-	// state in RAM; bigger write buffers mean fewer, larger L0 flushes and
-	// proportionally less compaction.
+	// state in RAM.
+	//
+	// SIZED FOR TWO ENGINES PER CGROUP. A dual validator opens one of these
+	// per partition (dnn + bvnn), so every number here is doubled in a 4GiB
+	// container. The first sizing (128MB cache, 64MB write buffer, pooled
+	// compaction buffers) OOM-killed seven containers in run
+	// 20260824T065208Z: ~1GB of engine memory per container plus the
+	// BufferPool — which grows toward the largest compaction it ever served
+	// and never shrinks (measured 178MB and climbing) — plus GC headroom hit
+	// the cgroup limit hours after load DROPPED, because compaction of the
+	// high-rate era's debt kept feeding the pool. DisableBufferPool makes
+	// compaction buffers ordinary allocations the GC can actually reclaim;
+	// the budget is ~150MB per engine.
 	db, err := leveldb.OpenFile(filepath, &opt.Options{
 		Filter:                 filter.NewBloomFilter(10),
-		BlockCacheCapacity:     128 * opt.MiB,
-		WriteBuffer:            64 * opt.MiB,
-		OpenFilesCacheCapacity: 1024,
+		BlockCacheCapacity:     64 * opt.MiB,
+		WriteBuffer:            16 * opt.MiB,
+		OpenFilesCacheCapacity: 512,
+		DisableBufferPool:      true,
 	})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("open %q: %w", filepath, err)
