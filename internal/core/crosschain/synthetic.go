@@ -715,9 +715,14 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 		}
 
 		// Prefer one range request under one collection proof (#4087). Only the
-		// OVERDUE prefix is pulled: sequence have+1 is the oldest missing, and a
-		// higher sequence is never sighted earlier than a lower one, so the
-		// overdue entries form a prefix. Anything past it is merely in flight.
+		// OVERDUE tail is pulled, starting at have+1 where have is the ledger's
+		// Received HIGH-WATER mark. Under DAG-BFT that mark advances past
+		// interior holes (messages arrive out of order), so have+1 is NOT
+		// necessarily the oldest missing sequence — the holes below it live as
+		// nil entries in the pending window and belong to
+		// requestMissingSynthetics, which scans them directly. Reconcile's job
+		// is only the tail the destination cannot see: sequences the source has
+		// produced that have never been sighted here at all.
 		//
 		// Availability is checked BEFORE claiming: claiming and then falling back
 		// would leave the per-message path suppressed by the claim the fast path

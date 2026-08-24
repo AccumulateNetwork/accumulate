@@ -389,10 +389,23 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 		// interval a scan over many gapped streams outlives the block. Copies
 		// used to stack without bound (#4115).
 		c.runExclusive("requestMissingSynthetics", func() {
+			// Bounded, like every other network call in this loop. The p2p
+			// transport closes the stream when the context is canceled
+			// (p2p.go: "Close the stream when the context is canceled") — but
+			// only if the context CAN be canceled. With context.Background()
+			// a peer that dies mid-request (a chaos restart) leaves the read
+			// blocked forever, this exclusive slot held forever, and the one
+			// healer that can see interior sequence holes dead on this
+			// validator from that moment on. Observed live in run
+			// 20260824T024122Z: recoverSyntheticsViaRange(498, 506) parked in
+			// ReadUvarint while BVN2→DN delivery sat wedged at 497.
+			ctx, cancel := context.WithTimeout(context.Background(), def(c.HealTimeout, DefaultHealTimeout))
+			defer cancel()
+
 			batch := c.Database.Begin(false)
 			defer batch.Discard()
 
-			err := c.requestMissingSynthetics(context.Background(), batch)
+			err := c.requestMissingSynthetics(ctx, batch)
 			if err != nil {
 				slog.Error("Error while requesting missing synthetics", "error", err)
 			}
@@ -436,10 +449,21 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 		// at all, and only asking the source what it has produced finds it.
 		if e.Index%reconcileInterval == 0 {
 			c.runTask(func() {
+				// Bounded for the same reason as requestMissingSynthetics
+				// above: an unanswerable read must time out, not park the
+				// task forever. Reconcile queries every peer partition, so it
+				// gets one heal-timeout per partition rather than one total.
+				n := len(c.Globals.Load().Network.Partitions)
+				if n < 1 {
+					n = 1
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), time.Duration(n)*def(c.HealTimeout, DefaultHealTimeout))
+				defer cancel()
+
 				batch := c.Database.Begin(false)
 				defer batch.Discard()
 
-				err := c.reconcileInboundStreams(context.Background(), batch, e.Index)
+				err := c.reconcileInboundStreams(ctx, batch, e.Index)
 				if err != nil {
 					slog.Error("Error while reconciling inbound streams", "error", err)
 				}
