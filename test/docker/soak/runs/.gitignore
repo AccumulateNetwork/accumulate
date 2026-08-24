@@ -1,29 +1,23 @@
 # Run evidence is the record (soak-results provenance rule). The repo root
 # ignores *.log and *.txt globally, which silently drops chaos.log, soak.log,
 # streams-final.txt and friends from `git add runs/<id>` — an incomplete record
-# that still looks committed. Re-include everything here, except the raw
-# multi-gigabyte node-log capture, which stays local.
-!*.log
+# that still looks committed. Re-include the small text evidence, but NOT
+# logs, profiles, or dumps: those grow without bound, trip GitLab's 1 MiB
+# blob cap, and their conclusions belong in manifest.md / stats.csv anyway.
 !*.txt
 !*.csv
 !*.json
 !*.out
-node-logs.txt
-node-logs-live.txt
-container-logs/
-# GitLab rejects blobs over 1 MiB — summarize anything bigger instead of committing it
-reconcile-pulls.txt
+# Logs stay local (the root *.log ignore applies here — no negation).
 # Heap/CPU profiles captured by wedgewatch/probe: ~1-7 MiB each, and binary.
 # Analyze locally (go tool pprof), record the conclusion in the manifest.
 *.pb.gz
-# These two runs' monitor logs grew past the 1 MiB blob limit; their stats.csv
-# and manifest.md carry the record.
-20260823T214040Z/soakmon.log
-20260824T002315Z/soakmon.log
-# Goroutine dumps from the manual wedge capture that crossed 1 MiB.
-20260823T194028Z/wedge-manual/acc-bvn2-val1.goroutines.txt
-20260823T194028Z/wedge-manual/acc-bvn2-val2.goroutines.txt
-20260823T194028Z/wedge-manual/acc-bvn2-val4.goroutines.txt
+# Goroutine dumps: same story, multi-MiB text.
+*.goroutines.txt
+node-logs.txt
+node-logs-live.txt
+container-logs/
+reconcile-pulls.txt
 # The convenience symlink to the newest run. Tracking it made soak.sh's own
 # `ln -sfn` a tracked modification, so `git describe --dirty` reported -dirty
 # for every run against an otherwise clean tree — which is precisely where the
