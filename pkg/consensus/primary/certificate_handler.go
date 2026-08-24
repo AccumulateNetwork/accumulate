@@ -7,10 +7,12 @@
 package primary
 
 import (
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -80,6 +82,20 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) {
 			return
 		}
 
+		// EQUIVOCATION FIRST: a different certificate for the same author
+		// and round is a dual-signer or a serious bug, and it must be LOUD.
+		// This used to be classified by matching "already exists" in the
+		// message — a substring the equivocation error itself contains — so
+		// the tripwire was silently downgraded to the duplicate-Debug below
+		// and never fired.
+		if errors.Is(err, dag.ErrEquivocation) {
+			slog.Error("EQUIVOCATION detected — conflicting certificate rejected",
+				"error", err,
+				"round", cert.Round(),
+				"author", hexEncode(cert.Author()),
+				"digest", cert.Digest().String())
+			return
+		}
 		// Duplicates are routine — during round sync every broadcast response
 		// reaches every node, so most certificates have already been inserted
 		if strings.Contains(err.Error(), "already exists") {
