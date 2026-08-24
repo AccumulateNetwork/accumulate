@@ -154,6 +154,12 @@ type Primary struct {
 	missingBatchAsked map[types.BatchDigest]time.Time
 	onMissingBatch    func(types.BatchDigest)
 
+	// lastAuthoredRound is the highest round this primary has EVER authored
+	// a header for (guarded by pendingMu). An author must never author one
+	// round twice: the resulting second certificate is self-equivocation,
+	// which splits the network on which version is real (#4159 stall #3).
+	lastAuthoredRound types.Round
+
 	// Lifecycle management
 	// lifecycleMu guards ctx/cancel: Start runs in a goroutine spawned by
 	// Node.Start, so an early Stop raced the write (caught by -race once the
@@ -389,7 +395,21 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	// Check pending state and create header (needs pendingMu)
 	p.pendingMu.Lock()
 
-	// Check if we already have a header for this round
+	// NEVER author the same round twice (#4159 stall #3). The old guard
+	// scanned ourHeaders only — but certification DELETES the header, so a
+	// second round-advance goroutine racing through here after the first
+	// header certified re-authored the SAME round. The second certificate is
+	// self-equivocation: peers keep whichever version arrived first, each
+	// side permanently rejects the other, and every later certificate
+	// referencing the losing version can never insert on the other side —
+	// certificate dissemination deadlocks and the round freezes network-wide
+	// (observed as 10 equivocation rejections and a total freeze at round
+	// ~206 / DN 529). A monotone watermark makes re-authoring structurally
+	// impossible; the ourHeaders scan stays as the pre-certification check.
+	if currentRound <= p.lastAuthoredRound {
+		p.pendingMu.Unlock()
+		return
+	}
 	for _, h := range p.ourHeaders {
 		if h.Round == currentRound {
 			p.pendingMu.Unlock()
@@ -412,6 +432,7 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	digest := header.Digest()
 	p.ourHeaders[digest] = header
 	p.pendingVotes[digest] = nil
+	p.lastAuthoredRound = currentRound
 
 	p.headersCreated.Add(1)
 

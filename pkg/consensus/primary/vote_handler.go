@@ -185,9 +185,24 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 			err = p.dag.Insert(cert)
 		}
 		if err != nil {
-			slog.Warn("Failed to insert certificate into DAG",
+			// Our OWN certificate failed to insert. Without cleanup this
+			// node believed it certified the round (ourCerts set, header and
+			// votes already deleted) while the network never saw the
+			// certificate — and the header's batches were stranded with no
+			// requeue (#4159 review A13a). Un-claim the round and put the
+			// batches back so they ride the next header.
+			slog.Error("Failed to insert OWN certificate into DAG — un-claiming the round and requeuing its batches",
 				"error", err,
+				"round", cert.Round(),
 				"digest", cert.Digest().String())
+			p.pendingMu.Lock()
+			if c, ok := p.ourCerts[cert.Round()]; ok && c == cert {
+				delete(p.ourCerts, cert.Round())
+			}
+			p.pendingMu.Unlock()
+			if cert.Header != nil {
+				p.requeueHeaderBatches(cert.Header)
+			}
 			return
 		}
 

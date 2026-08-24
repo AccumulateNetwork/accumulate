@@ -1136,3 +1136,65 @@ func TestOnHeaderReceived_VotesWhenBatchIsRetained(t *testing.T) {
 	p.pendingMu.Unlock()
 	require.True(t, voted, "a retained batch counts as held — no deferral")
 }
+
+// TestNoSelfEquivocation_NeverAuthorTheSameRoundTwice pins the #4159 stall-3
+// fix. The one-header-per-round guard scanned ourHeaders only — but
+// certification DELETES the header, so a second round-advance racing through
+// after the first header certified re-authored the SAME round. The second
+// certificate is self-equivocation: peers keep whichever version arrived
+// first, each side permanently rejects the other, and certificate
+// dissemination deadlocks network-wide (observed: 10 equivocation rejections,
+// total freeze at round ~206 / DN 529). The monotone lastAuthoredRound
+// watermark makes re-authoring structurally impossible.
+func TestNoSelfEquivocation_NeverAuthorTheSameRoundTwice(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+	genesisCerts := createGenesisCertificates(t, validators, committee, d)
+	_ = genesisCerts
+
+	w := worker.New(worker.Config{ID: 0, Partition: "test"}, nil)
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, d, []*worker.Worker{w})
+	p.SetRound(1)
+
+	// First authoring for round 1 succeeds.
+	p.tryCreateAndBroadcastHeader()
+	h1, _, _, _ := p.Metrics()
+	require.EqualValues(t, 1, h1, "first header for round 1 is authored")
+
+	// Simulate certification: the header reaches quorum and is deleted from
+	// ourHeaders (exactly what tryCreateCertificateLocked does).
+	p.pendingMu.Lock()
+	for digest, h := range p.ourHeaders {
+		if h.Round == 1 {
+			p.ourCerts[h.Round] = nil // placeholder; the map entry is what mattered pre-fix
+			delete(p.ourHeaders, digest)
+			delete(p.pendingVotes, digest)
+		}
+	}
+	p.pendingMu.Unlock()
+
+	// The racing second authoring for the SAME round must be refused — the
+	// old guard saw an empty ourHeaders and re-authored (self-equivocation).
+	p.tryCreateAndBroadcastHeader()
+	h2, _, _, _ := p.Metrics()
+	require.EqualValues(t, 1, h2, "the same round must never be authored twice (#4159)")
+
+	// The next round authors normally — give round 2 its parents first.
+	gparents := make([]types.CertificateDigest, len(genesisCerts))
+	for i, c := range genesisCerts {
+		gparents[i] = c.Digest()
+	}
+	for i := 1; i < 4; i++ {
+		hdr := types.NewHeader(validators[i].pub, 1, 1, nil, gparents)
+		require.NoError(t, hdr.Sign(validators[i].priv))
+		require.NoError(t, d.Insert(types.NewCertificate(hdr, nil, nil)))
+	}
+	p.SetRound(2)
+	p.tryCreateAndBroadcastHeader()
+	h3, _, _, _ := p.Metrics()
+	require.EqualValues(t, 2, h3, "a NEW round still authors")
+}
