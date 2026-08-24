@@ -7,6 +7,7 @@
 package leveldb
 
 import (
+	"container/list"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -26,6 +27,99 @@ type Database struct {
 	leveldb *leveldb.DB
 	closing atomic.Bool
 	open    *sync.WaitGroup
+
+	// records is a write-through cache of latest-committed record values,
+	// consulted ONLY by writable batches. Record keys are hashes, so reads
+	// have no locality and the block cache cannot hold a working set — at
+	// ~250 tx/s, 45% of validator CPU became random sstable walks (#4164).
+	// The executor re-reads the same hot records (system ledger, anchor
+	// pools, signers) every block; serving them from memory removes that
+	// entire read class.
+	//
+	// SAFETY: exactly one writable batch exists at a time (the executor
+	// produces blocks sequentially), and commit() updates the cache before
+	// returning, so a writable batch always sees latest-committed state —
+	// which is exactly what its snapshot would show. Read-only batches
+	// (queries, healers) NEVER touch the cache: they keep pure snapshot
+	// semantics.
+	records recordCache
+}
+
+// recordCache is a byte-conscious LRU of committed record values.
+type recordCache struct {
+	mu    sync.Mutex
+	items map[[32]byte]*list.Element
+	order *list.List // front = most recent
+	bytes int
+}
+
+const (
+	// recordCacheMaxBytes bounds the cache; recordCacheMaxValue skips
+	// oversized values so one giant record cannot evict the working set.
+	recordCacheMaxBytes = 64 << 20
+	recordCacheMaxValue = 8 << 10
+)
+
+type recordCacheEntry struct {
+	key     [32]byte
+	value   []byte // nil = known-deleted (negative entry)
+	deleted bool
+}
+
+func (c *recordCache) get(key [32]byte) (v []byte, deleted, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.items[key]
+	if !ok {
+		return nil, false, false
+	}
+	c.order.MoveToFront(e)
+	ent := e.Value.(*recordCacheEntry)
+	return ent.value, ent.deleted, true
+}
+
+func (c *recordCache) put(key [32]byte, value []byte, deleted bool) {
+	if len(value) > recordCacheMaxValue {
+		c.drop(key) // a big value replaces whatever was cached
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.items == nil {
+		c.items = make(map[[32]byte]*list.Element)
+		c.order = list.New()
+	}
+	if e, ok := c.items[key]; ok {
+		ent := e.Value.(*recordCacheEntry)
+		c.bytes += len(value) - len(ent.value)
+		ent.value, ent.deleted = value, deleted
+		c.order.MoveToFront(e)
+	} else {
+		e := c.order.PushFront(&recordCacheEntry{key: key, value: value, deleted: deleted})
+		c.items[key] = e
+		c.bytes += len(value) + 64
+	}
+	for c.bytes > recordCacheMaxBytes {
+		back := c.order.Back()
+		if back == nil {
+			break
+		}
+		ent := back.Value.(*recordCacheEntry)
+		c.order.Remove(back)
+		delete(c.items, ent.key)
+		c.bytes -= len(ent.value) + 64
+	}
+}
+
+func (c *recordCache) drop(key [32]byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e, ok := c.items[key]; ok {
+		ent := e.Value.(*recordCacheEntry)
+		c.order.Remove(e)
+		delete(c.items, key)
+		c.bytes -= len(ent.value) + 64
+	}
 }
 
 type opts struct {
@@ -112,9 +206,40 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 		snap, err = d.leveldb.GetSnapshot()
 	}
 
-	// Read from the transaction
+	// Read from the transaction. Writable batches read through the record
+	// cache (latest-committed == their snapshot, by the single-writer
+	// discipline documented on Database.records); read-only batches go
+	// straight to their snapshot.
 	get := func(key *record.Key) ([]byte, error) {
 		return d.get(snap, err, key)
+	}
+	if writable {
+		get = func(key *record.Key) ([]byte, error) {
+			kh := key.Hash()
+			if v, deleted, ok := d.records.get(kh); ok {
+				if deleted {
+					return nil, (*database.NotFoundError)(key)
+				}
+				u := make([]byte, len(v))
+				copy(u, v)
+				return u, nil
+			}
+			v, err := d.get(snap, err, key)
+			switch err.(type) {
+			case nil:
+				d.records.put(kh, v, false)
+				// The cache holds its own reference; hand the caller a copy
+				// so a caller mutation cannot poison the cache.
+				u := make([]byte, len(v))
+				copy(u, v)
+				return u, nil
+			case *database.NotFoundError:
+				d.records.put(kh, nil, true)
+				return nil, err
+			default:
+				return nil, err
+			}
+		}
 	}
 
 	// Commit to the write batch
@@ -159,7 +284,21 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 		}
 	}
 
-	return d.leveldb.Write(batch, nil)
+	err := d.leveldb.Write(batch, nil)
+	if err != nil {
+		return err
+	}
+
+	// Write-through AFTER the write succeeds: the next writable batch (the
+	// single writer proceeds sequentially) sees exactly what leveldb holds.
+	for kh, e := range entries {
+		if e.Delete {
+			d.records.put(kh, nil, true)
+		} else {
+			d.records.put(kh, e.Value, false)
+		}
+	}
+	return nil
 }
 
 func (d *Database) get(snap *leveldb.Snapshot, err error, key *record.Key) ([]byte, error) {

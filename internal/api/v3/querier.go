@@ -79,6 +79,14 @@ func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (a
 		fixRange(query.EntryRange)
 	}
 
+	// Admission control BEFORE the database is touched — see gate.go. An
+	// ungated query path let pollers drive 45% of validator CPU into state
+	// reads and collapse the network (#4164).
+	if err := queryGate.enter(ctx); err != nil {
+		return nil, err
+	}
+	defer queryGate.exit()
+
 	// Start a batch. If the ABCI were updated to commit in the middle of a
 	// block, this would no longer be safe.
 	var r api.Record

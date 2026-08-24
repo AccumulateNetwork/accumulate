@@ -118,6 +118,14 @@ func (s *Sequencer) commitRoundFor(block uint64) (blockCommit, bool) {
 func (s *Sequencer) Type() api.ServiceType { return private.ServiceTypeSequencer }
 
 func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64, _ private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	// Admission control — proof building is the most expensive query this
+	// node serves, and heal storms poll it hardest exactly when the node is
+	// slowest (#4164). See gate.go.
+	if err := sequenceGate.enter(ctx); err != nil {
+		return nil, err
+	}
+	defer sequenceGate.exit()
+
 	if src == nil {
 		return nil, errors.BadRequest.With("missing source")
 	}
@@ -483,6 +491,12 @@ func (s *Sequencer) getRootContinuation(batch *database.Batch, mainAnchorEntry *
 // destination, with a single collection proof (#4048) covering the whole
 // range, set as SourceReceiptList on the last record.
 func (s *Sequencer) SequenceRange(ctx context.Context, src, dst *url.URL, start, end uint64, opts private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
+	// Admission control — see gate.go and the note on Sequence.
+	if err := sequenceGate.enter(ctx); err != nil {
+		return nil, err
+	}
+	defer sequenceGate.exit()
+
 	if src == nil {
 		return nil, errors.BadRequest.With("missing source")
 	}
