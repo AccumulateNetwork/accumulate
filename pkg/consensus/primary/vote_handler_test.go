@@ -1198,3 +1198,40 @@ func TestNoSelfEquivocation_NeverAuthorTheSameRoundTwice(t *testing.T) {
 	h3, _, _, _ := p.Metrics()
 	require.EqualValues(t, 2, h3, "a NEW round still authors")
 }
+
+// TestWatermark_Round0GenesisAuthoringStillWorks pins the regression the
+// first watermark version caused: production bootstraps by AUTHORING round-0
+// headers (the genesis flow), and a zero-initialized watermark vetoed the
+// very first header — every partition wedged at round 0 with
+// everProducedBlock=false. Round 0 must author exactly once: allowed the
+// first time, refused the second.
+func TestWatermark_Round0GenesisAuthoringStillWorks(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+
+	w := worker.New(worker.Config{ID: 0, Partition: "test"}, nil)
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, d, []*worker.Worker{w})
+	// currentRound stays 0 — the production genesis position.
+
+	p.tryCreateAndBroadcastHeader()
+	h1, _, _, _ := p.Metrics()
+	require.EqualValues(t, 1, h1, "the round-0 genesis header MUST author — a zero watermark must not veto it")
+
+	// Simulate certification deleting the header; round still 0.
+	p.pendingMu.Lock()
+	for digest, h := range p.ourHeaders {
+		if h.Round == 0 {
+			delete(p.ourHeaders, digest)
+			delete(p.pendingVotes, digest)
+		}
+	}
+	p.pendingMu.Unlock()
+
+	p.tryCreateAndBroadcastHeader()
+	h2, _, _, _ := p.Metrics()
+	require.EqualValues(t, 1, h2, "round 0 must never author twice (self-equivocation)")
+}

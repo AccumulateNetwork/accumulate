@@ -155,9 +155,15 @@ type Primary struct {
 	onMissingBatch    func(types.BatchDigest)
 
 	// lastAuthoredRound is the highest round this primary has EVER authored
-	// a header for (guarded by pendingMu). An author must never author one
-	// round twice: the resulting second certificate is self-equivocation,
-	// which splits the network on which version is real (#4159 stall #3).
+	// a header for, valid only when hasAuthored is true (guarded by
+	// pendingMu). An author must never author one round twice: the resulting
+	// second certificate is self-equivocation, which splits the network on
+	// which version is real (#4159 stall #3). hasAuthored exists because
+	// round 0 is a REAL authored round in the production genesis flow —
+	// initializing the watermark to zero silently vetoed the very first
+	// header and wedged fresh networks at round 0 (consim missed it: its
+	// genesis pre-seeds certificates instead of authoring them).
+	hasAuthored       bool
 	lastAuthoredRound types.Round
 
 	// Lifecycle management
@@ -406,7 +412,7 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	// (observed as 10 equivocation rejections and a total freeze at round
 	// ~206 / DN 529). A monotone watermark makes re-authoring structurally
 	// impossible; the ourHeaders scan stays as the pre-certification check.
-	if currentRound <= p.lastAuthoredRound {
+	if p.hasAuthored && currentRound <= p.lastAuthoredRound {
 		p.pendingMu.Unlock()
 		return
 	}
@@ -432,6 +438,7 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	digest := header.Digest()
 	p.ourHeaders[digest] = header
 	p.pendingVotes[digest] = nil
+	p.hasAuthored = true
 	p.lastAuthoredRound = currentRound
 
 	p.headersCreated.Add(1)
