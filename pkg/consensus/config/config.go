@@ -18,7 +18,7 @@ const (
 	DefaultNumWorkers = 1
 	// DefaultDAGGCDepth is also the round catch-up window (#4057) — see
 	// consensus.DefaultDAGGCDepth. Keep the two in sync.
-	DefaultDAGGCDepth       = 10_000
+	DefaultDAGGCDepth       = 2_000
 	DefaultCommitBufferSize = 5000
 
 	// Batching defaults

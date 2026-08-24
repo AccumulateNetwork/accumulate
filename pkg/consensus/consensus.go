@@ -36,11 +36,16 @@ const (
 	// DefaultDAGGCDepth is how many rounds of DAG history are retained past
 	// the last commit. This is also the round catch-up window (#4057): a
 	// node that falls further behind than this cannot recover round-by-round
-	// because its peers have pruned the certificates it needs. At ~10
-	// rounds/second the old value of 50 retained FIVE SECONDS of history —
-	// any outage longer than that wedged the node permanently. 10,000
-	// rounds is ~16 minutes at that rate and costs roughly 25 MB.
-	DefaultDAGGCDepth       = 10_000
+	// because its peers have pruned the certificates it needs. The old value
+	// of 50 retained seconds of history and wedged nodes; 10,000 was sized
+	// by a 25MB estimate that measured ~700MB in practice (#4164: ~72KB per
+	// round of headers+certificates across a 12-validator dual topology) —
+	// the DAG drifted upward for the first hours of EVERY run and was a
+	// third of the OOM stack. At the current round cadence (>=500ms), 2,000
+	// rounds is a 16+ minute catch-up window — far beyond any transient, and
+	// a node further behind than that needs state-sync regardless — for
+	// ~140MB.
+	DefaultDAGGCDepth       = 2_000
 	DefaultCommitBufferSize = 5000 // Increased from 1000 for high throughput
 )
 
