@@ -277,11 +277,18 @@ echo "   load starts now" | tee -a "$log"
 # Rotate across all 12 nodes so one chaos-disrupted node neither rejects traffic
 # nor carries the whole load.
 EPS=$(for p in $(seq 26660 26671); do printf "http://localhost:%d," "$p"; done | sed 's/,$//')
+# The control API steers the running generator — rate and mix — without a
+# restart (a restart re-bootstraps the account universe):
+#   curl http://127.0.0.1:${LG_CONTROL_PORT:-8091}/control
+#   curl -X POST -d '{"tps": 10}' http://127.0.0.1:${LG_CONTROL_PORT:-8091}/control
+#   curl -X POST -d '{"mix": {"burn-tokens": 0}}' ...  (weight 0 disables)
+LG_CONTROL_PORT="${LG_CONTROL_PORT:-8091}"
 nohup go run "$repo/tools/cmd/loadgen" -endpoints "$EPS" \
   -faucet-seed FAUCET -tps "$TPS" -duration "$DURATION" -timeout "$LG_TIMEOUT" \
-  -bootstrap "$LG_BOOTSTRAP" \
+  -bootstrap "$LG_BOOTSTRAP" -control "127.0.0.1:$LG_CONTROL_PORT" \
   -grace "$LG_GRACE" -max-stranded 20 -stats-file "$rd/loadgen-stats.json" >> "$log" 2>&1 &
 DRIVER=$!
+echo "   loadgen control API: http://127.0.0.1:$LG_CONTROL_PORT/control (POST {\"tps\": N} / {\"mix\": {...}})" | tee -a "$log"
 
 if [ -x "$here/seizewatch.sh" ]; then
   nohup "$here/seizewatch.sh" > "$rd/seizewatch.out" 2>&1 &

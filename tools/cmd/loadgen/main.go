@@ -34,6 +34,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"os"
 	"strings"
@@ -106,8 +107,76 @@ type env struct {
 	// 0 generating, 1 settling (waiting for delivery), 2 done.
 	statsPhase atomic.Int32
 
-	// targetTps is the configured -tps, reported in the stats file.
-	targetTps float64
+	// rateBits is the LIVE generation rate (float64 bits), initialized from
+	// -tps and adjustable at runtime through the control API. The generate
+	// loop re-reads it every iteration, so a change takes effect within one
+	// transaction interval.
+	rateBits atomic.Uint64
+
+	// mixOverride maps action name -> weight for actions whose weight has
+	// been changed at runtime through the control API. Nil entries never
+	// exist; an absent name means "use the compiled-in weight"; a weight of 0
+	// disables the action. Replaced wholesale (copy-on-write) so pick() can
+	// read it without locks.
+	mixOverride atomic.Pointer[map[string]int]
+}
+
+// currentTPS returns the live generation rate.
+func (e *env) currentTPS() float64 { return math.Float64frombits(e.rateBits.Load()) }
+
+// setTPS changes the live generation rate.
+func (e *env) setTPS(tps float64) error {
+	if tps <= 0 || math.IsNaN(tps) || math.IsInf(tps, 0) {
+		return fmt.Errorf("tps must be a positive number, got %v", tps)
+	}
+	if tps > 10000 {
+		return fmt.Errorf("tps %v is above the sanity cap of 10000", tps)
+	}
+	e.rateBits.Store(math.Float64bits(tps))
+	return nil
+}
+
+// weightOf returns an action's effective weight: the runtime override if one
+// is set, the compiled-in weight otherwise.
+func (e *env) weightOf(a action) int {
+	if m := e.mixOverride.Load(); m != nil {
+		if w, ok := (*m)[a.name]; ok {
+			return w
+		}
+	}
+	return a.weight
+}
+
+// setMix merges weight overrides into the live mix. Unknown action names are
+// rejected wholesale (nothing is applied) so a typo cannot silently leave the
+// intended action untouched. A weight of 0 disables an action.
+func (e *env) setMix(weights map[string]int) error {
+	if err := validateMix(weights); err != nil {
+		return err
+	}
+	// Copy-on-write merge.
+	next := map[string]int{}
+	if m := e.mixOverride.Load(); m != nil {
+		for k, v := range *m {
+			next[k] = v
+		}
+	}
+	for k, v := range weights {
+		next[k] = v
+	}
+	e.mixOverride.Store(&next)
+	return nil
+}
+
+// clearMix drops every runtime weight override.
+func (e *env) clearMix() { e.mixOverride.Store(nil) }
+
+func actionNames() []string {
+	names := make([]string, len(menu))
+	for i, a := range menu {
+		names[i] = a.name
+	}
+	return names
 }
 
 // canPay reports whether the treasury can cover a fee, in credit-units. A
@@ -239,6 +308,7 @@ func main() {
 	reportParts := flag.Bool("report-partitions", false, "also report how accounts and traffic landed across partitions")
 	reportHeals := flag.Bool("report-heals", false, "also report each validator's heal counters")
 	statsFile := flag.String("stats-file", "", "if set, write a live JSON snapshot of the run (per-type mix, totals, account counts) here every few seconds")
+	control := flag.String("control", "", "if set, serve the runtime control API on this address (e.g. 127.0.0.1:8091): GET/POST /control adjusts tps and the transaction mix live")
 	flag.Parse()
 
 	// -duration selects a timed run; otherwise -count transactions are sent at
@@ -297,7 +367,9 @@ func main() {
 	e.led = newLedger(e.fees)
 	e.nonce.v.Store(uint64(time.Now().UTC().UnixMilli()))
 	e.track = newTracker(e.Q)
-	e.targetTps = *tps
+	// Direct store, not setTPS: -tps 0 is legal at launch (count mode, no
+	// pacing); the control API's setTPS is stricter.
+	e.rateBits.Store(math.Float64bits(*tps))
 
 	log.Printf("== funding the treasury ==")
 	e.treasury, err = e.openTreasury(ctx, *faucetSeed)
@@ -344,12 +416,18 @@ func main() {
 		go e.writeStatsLoop(ctx, *statsFile, start, total)
 	}
 
+	// The control API adjusts the rate and mix without a restart (a restart
+	// re-bootstraps the whole account universe).
+	if *control != "" {
+		go serveControl(ctx, e, *control)
+	}
+
 	log.Printf("== generating %d transactions ==", total)
 	limit := time.Duration(0)
 	if timed {
 		limit = *duration
 	}
-	generate(ctx, e, total, *tps, limit, *trackMax)
+	generate(ctx, e, total, limit, *trackMax)
 
 	// Account creation runs in the background; let anything in flight finish so
 	// its transactions are counted rather than abandoned.
@@ -384,13 +462,12 @@ func main() {
 
 // generate runs the main loop: pick an action, submit it, occasionally kick off
 // an account-creation sequence in the background.
-func generate(ctx context.Context, e *env, total int, tps float64, limit time.Duration, trackMax int) {
-	var interval time.Duration
-	var deadline time.Time
-	if tps > 0 {
-		interval = time.Duration(float64(time.Second) / tps)
-	}
+func generate(ctx context.Context, e *env, total int, limit time.Duration, trackMax int) {
 	// A zero limit means "no wall-clock limit, stop after total transactions".
+	// With a limit, the wall clock is the ONLY stop: the rate is adjustable at
+	// runtime (control API), so a transaction count computed from the launch
+	// rate would end a bumped-up run early.
+	var deadline time.Time
 	if limit > 0 {
 		deadline = time.Now().Add(limit)
 	}
@@ -406,7 +483,7 @@ func generate(ctx context.Context, e *env, total int, tps float64, limit time.Du
 	// One logged reason per action type, so no failure mode goes unexplained.
 	seenFail := map[string]bool{}
 	seenSkip := map[string]bool{}
-	for i := 0; i < total; i++ {
+	for i := 0; deadline.IsZero() && i < total || !deadline.IsZero(); i++ {
 		if ctx.Err() != nil || (!deadline.IsZero() && time.Now().After(deadline)) {
 			break
 		}
@@ -464,8 +541,10 @@ func generate(ctx context.Context, e *env, total int, tps float64, limit time.Du
 			e.logProgress(sent, failed, skipped, total, started)
 			lastLog = time.Now()
 		}
-		if interval > 0 {
-			time.Sleep(interval)
+		// Re-read the rate every iteration so a control-API change takes
+		// effect within one interval.
+		if tps := e.currentTPS(); tps > 0 {
+			time.Sleep(time.Duration(float64(time.Second) / tps))
 		}
 	}
 
@@ -586,7 +665,7 @@ func (e *env) writeStats(path string, start time.Time, total int) {
 		Rejected:    rej,
 		Skipped:     skip,
 		Rate:        rate,
-		TargetTps:   e.targetTps,
+		TargetTps:   e.currentTPS(),
 		PerType:     perType,
 	}
 	adis, books, pages, accts, issuers := e.u.counts()

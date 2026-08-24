@@ -44,7 +44,9 @@ var menu = []action{
 	createSubAdiOnVoid, writeDataToVoid,
 }
 
-// pick chooses the next action, skipping any that cannot run yet.
+// pick chooses the next action, skipping any that cannot run yet. Weights come
+// through weightOf so runtime overrides from the control API apply; a weight of
+// 0 removes an action from the draw entirely.
 func (e *env) pick() action {
 	haveIdentity := e.u.randIdentity() != nil
 
@@ -53,7 +55,7 @@ func (e *env) pick() action {
 		if a.needsIdentity && !haveIdentity {
 			continue
 		}
-		total += a.weight
+		total += e.weightOf(a)
 	}
 	if total == 0 {
 		return sendTokensLite
@@ -64,10 +66,11 @@ func (e *env) pick() action {
 		if a.needsIdentity && !haveIdentity {
 			continue
 		}
-		if n < a.weight {
+		w := e.weightOf(a)
+		if n < w {
 			return a
 		}
-		n -= a.weight
+		n -= w
 	}
 	return sendTokensLite
 }
