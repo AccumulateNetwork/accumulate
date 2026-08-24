@@ -36,8 +36,14 @@ const (
 	// in-flight gap on every channel at 3s blocks (run 20260824T110727Z —
 	// every channel drained at its arrival rate; the gap was pure latency).
 	// Block-per-commit (#4164) made per-block overhead small enough that 1s
-	// blocks are affordable, which brings settlement to ~7s.
-	DefaultBlockInterval    = 1 * time.Second
+	// blocks are affordable at MODERATE load — but per-second overheads
+	// (dispatch, anchors, block boundaries) scale with 1/interval, and at
+	// 700 tx/s on 1s blocks the network saturated: BVN blocks stretched to
+	// 2s+, dispatch losses opened sequence holes faster than healing filled
+	// them (126k heals in 20 min), count-capped queues ballooned, and the
+	// run collapsed (20260824T114552Z). 2s is the balance point: settlement
+	// ~22s, per-second overhead 1.5x the proven-stable 3s configuration.
+	DefaultBlockInterval    = 2 * time.Second
 	DefaultMinRoundInterval = 100 * time.Millisecond
 	DefaultWarmupPeriod     = 8 * time.Second
 

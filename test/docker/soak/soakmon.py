@@ -542,47 +542,79 @@ def collect_flows_api():
             for dst, c in row.items():
                 c["undeliv"] = max(0, c.get("sent", 0) - c.get("recv", 0))
 
-    # Channel lag IN SECONDS. A busy channel legitimately holds rate x
-    # pipeline-latency messages in flight, so a raw sent-recv gap reads as
-    # "hundreds behind" the moment throughput rises (measured: a uniform
-    # ~21s on every channel at 3s blocks, fast and slow alike, all draining
-    # at their arrival rate). The honest health signal is the gap divided by
-    # the receive rate, judged against the EXPECTED pipeline latency
-    # (~7 block intervals for the source->anchor->DN->anchor->destination
-    # proof path): caught up when under it, warning at 2x, red at 4x.
+    # Channel lag IN SECONDS, and channel STATE. Two distinct failure modes
+    # must not share a color (learned live, run 20260824T114552Z):
+    #
+    #  - sent-but-not-received is pipeline depth: gap / receive rate, judged
+    #    against the EXPECTED latency. Expected is a fixed floor plus a
+    #    per-block term — dispatch ticks, gossip hops and anchor cadence do
+    #    NOT shrink with the block interval, so a pure 7x-block-time model
+    #    called healthy 12-20s pipes red the moment blocks went to 1s.
+    #
+    #  - received-but-undelivered is messages parked IN ORDER behind holes.
+    #    While delivery advances and healing fills holes, that is repair in
+    #    progress (amber at worst); RED is reserved for delivery actually
+    #    stopped (rate ~0 with a standing backlog) — the executor-wedge
+    #    signature.
     now_t = time.time()
     with LOCK:
         spbs = [v.get("secPerBlock") for v in (STATE.get("progress") or {}).values()
                 if v.get("secPerBlock")]
     spb = sorted(spbs)[len(spbs)//2] if spbs else 1.0
-    expected = 7.0 * spb
+    expected = 8.0 + 7.0 * spb
     for kind in flows:
         for src, row in flows[kind].items():
             for dst, c in row.items():
                 key = (kind, src, dst)
                 hist = _FLOW_HIST.setdefault(key, [])
-                hist.append((now_t, c.get("sent", 0), c.get("recv", 0)))
+                hist.append((now_t, c.get("sent", 0), c.get("recv", 0), c.get("deliv", 0)))
                 while hist and now_t - hist[0][0] > 90:
                     hist.pop(0)
                 gap = c.get("sent", 0) - c.get("recv", 0)
-                lag_s = None
+                pending = max(0, c.get("recv", 0) - c.get("deliv", 0))
+                recv_rate = deliv_rate = 0.0
                 if len(hist) >= 2:
                     dt = hist[-1][0] - hist[0][0]
-                    drecv = hist[-1][2] - hist[0][2]
-                    if drecv > 0 and dt > 0:
-                        lag_s = gap / (drecv / dt)
+                    if dt > 0:
+                        recv_rate = (hist[-1][2] - hist[0][2]) / dt
+                        deliv_rate = (hist[-1][3] - hist[0][3]) / dt
+                lag_s = None
+                if len(hist) >= 2:
+                    if recv_rate > 0:
+                        lag_s = gap / recv_rate
                     elif gap > 0:
-                        lag_s = float("inf")  # gap and nothing arriving
+                        lag_s = float("inf")
                     else:
                         lag_s = 0.0
-                state = "ok"
+
+                state, note = "ok", ""
+                if lag_s is not None and lag_s > 0:
+                    note = "~%ds in flight" % min(lag_s, 999999)
                 if lag_s is not None:
                     if lag_s >= 4 * expected:
                         state = "red"
+                        note = "lag %s (exp %ds)" % ("∞" if lag_s == float("inf") else "%ds" % lag_s, expected)
                     elif lag_s >= 2 * expected:
                         state = "warn"
+                        note = "lag %ds (exp %ds)" % (lag_s, expected)
+                if pending > 0:
+                    if deliv_rate <= max(0.2, 0.02 * recv_rate):
+                        state = "red"
+                        note = "%d undelivered, delivery STALLED" % pending
+                    else:
+                        drain_s = pending / deliv_rate
+                        if drain_s >= 4 * expected:
+                            state = "red"
+                            note = "%d undelivered (~%ds behind)" % (pending, drain_s)
+                        else:
+                            if state == "ok":
+                                state = "warn" if drain_s >= 2 * expected else "ok"
+                            note = "%d healing, draining" % pending if state == "ok" else "%d undelivered (~%ds behind)" % (pending, drain_s)
+                if not note and lag_s == 0:
+                    note = "caught up"
                 c["lagS"] = None if lag_s is None else (999999 if lag_s == float("inf") else round(lag_s, 1))
                 c["state"] = state
+                c["note"] = note
                 c["expLagS"] = round(expected, 1)
 
     # Anchor "sent" from the source's anchor-sequence CHAIN height. The anchor
@@ -967,7 +999,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
   <div class=panel>
     <h2>Synthetic flow &nbsp;·&nbsp; src&nbsp;▸&nbsp;dst</h2>
     <div style="overflow-x:auto"><table class=mx id=mxSyn></table></div>
-    <div class=legend>cell = received / <b>delivered</b>, sent + lag below. Lag = in-flight gap &divide; receive rate, judged against the expected proof-path latency (~7 block intervals): <b>caught up</b> under 2&times;, <b style="color:var(--yel)">warning</b> at 2&times;, <b style="color:var(--red)">red</b> at 4&times; or received-but-undelivered (executor wedge).</div>
+    <div class=legend>cell = received / <b>delivered</b>, sent + status below. In-flight lag is judged against the expected proof-path latency (8s + 7 block intervals): <b>caught up</b> under 2&times;, <b style="color:var(--yel)">warning</b> at 2&times;, <b style="color:var(--red)">red</b> at 4&times;. Undelivered messages draining behind holes show as <b style="color:var(--yel)">healing</b>; <b style="color:var(--red)">red</b> undelivered means delivery has actually stalled.</div>
   </div>
   <div class=panel>
     <h2>Anchor flow &nbsp;·&nbsp; src&nbsp;▸&nbsp;dst</h2>
@@ -1042,16 +1074,13 @@ function matrix(el,mat,parts){
       const c=(mat[s]&&mat[s][d])||{};
       const sent=c.sent||0,recv=c.recv||0,deliv=c.deliv||0;
       if(!sent&&!recv&&!deliv){h+='<td class=cell style="color:var(--bd)">·</td>';continue;}
-      const dgap=recv-deliv;
-      // Latency-judged health: in-flight gap / receive rate vs the expected
-      // pipeline latency. caught up < 2x expected; warning >= 2x; red >= 4x
-      // (or received-but-undelivered, which is an executor wedge whatever
-      // the latency).
-      let bg='rgba(63,185,80,.10)',note='caught up';
-      if(dgap>0){const f=Math.min(1,dgap/Math.max(recv,1));bg=`rgba(248,81,73,${(0.14+0.5*f).toFixed(2)})`;note=`${fmt(dgap)} undelivered`;}
-      else if(c.state==='red'){bg='rgba(248,81,73,.45)';note=`lag ${c.lagS>=999999?'∞':Math.round(c.lagS)+'s'} (exp ${Math.round(c.expLagS)}s)`;}
-      else if(c.state==='warn'){bg='rgba(210,153,34,.30)';note=`lag ${Math.round(c.lagS)}s (exp ${Math.round(c.expLagS)}s)`;}
-      else if(c.lagS!=null&&c.lagS>0){note=`~${Math.round(c.lagS)}s in flight`;}
+      // State and note are computed server-side (soakmon judges lag against
+      // the expected proof-path latency and separates healing-in-progress
+      // from a stalled executor).
+      let bg='rgba(63,185,80,.10)';
+      if(c.state==='red')bg='rgba(248,81,73,.40)';
+      else if(c.state==='warn')bg='rgba(210,153,34,.28)';
+      const note=c.note||'caught up';
       h+=`<td class=cell style="background:${bg}"><div class=rd>${fmt(recv)}/<b>${fmt(deliv)}</b></div><div class=st>sent ${fmt(sent)} · ${note}</div></td>`;
     }
     h+='</tr>';
