@@ -355,6 +355,29 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		}
 	}
 
+	// Data availability: only vote once we hold every batch this header names
+	// (#4159). A certificate must be a proof that 2f+1 validators HAVE the
+	// data — that is the premise the whole commit path relies on ("the
+	// certificate is proof the data exists"). Voting without the batches
+	// breaks it: a header can be certified when only the author holds a batch,
+	// and if that batch never propagates to a quorum, Bullshark can commit the
+	// leader rounds later and CollectBatches finds the batch nowhere
+	// (absence=no-record, peerHits=0 on every node) — a permanent wedge, with
+	// zero LRU evictions, exactly as observed at DN 553 / 4152. Missing
+	// batches arrive via gossip and the author rebroadcasts the header until
+	// it reaches quorum, so we vote on a later rebroadcast once we have them —
+	// the same defer-until-available shape as the missing-parent gate above.
+	for _, entry := range header.Payload {
+		if !p.haveBatch(entry.Digest) {
+			slog.Info("Missing batch for header — deferring vote until it arrives",
+				"partition", p.config.Partition,
+				"headerDigest", headerDigest.String(),
+				"batch", entry.Digest.String(),
+				"round", header.Round)
+			return // missing batch — do not certify data we do not have
+		}
+	}
+
 	// Create and send vote
 	vote := types.NewVote(headerDigest, header.Round, header.Epoch, pubKey)
 	if err := vote.Sign(p.config.KeyPair); err != nil {
@@ -380,6 +403,19 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 
 	// Broadcast vote
 	p.broadcastVoteAsync(vote, headerDigest)
+}
+
+// haveBatch reports whether any of this node's workers holds the batch. A
+// gossiped batch is routed to one local worker by digest (not the author's
+// worker id carried in the payload entry), so availability must be checked
+// across all workers — the same way CollectBatches looks one up (#4159).
+func (p *Primary) haveBatch(d types.BatchDigest) bool {
+	for _, w := range p.workers {
+		if w.HasBatch(d) {
+			return true
+		}
+	}
+	return false
 }
 
 // broadcastVoteAsync broadcasts a vote in the background.

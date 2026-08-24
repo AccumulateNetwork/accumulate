@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 )
 
 func TestOnVoteReceivedValid(t *testing.T) {
@@ -1001,4 +1002,48 @@ func TestMaxVotesPerHeaderEdgeCaseSingleValidator(t *testing.T) {
 	// Certificate should be created and votes cleaned up
 	require.True(t, p.HasCertificateForRound(0))
 	require.Equal(t, 0, p.PendingVoteCount(digest))
+}
+
+// TestOnHeaderReceived_DefersVoteUntilBatchAvailable pins the #4159 fix: a
+// validator must not vote for a header whose payload batches it does not hold,
+// because a certificate is supposed to prove 2f+1 validators HAVE the data.
+// Voting blind let a batch that lived only on the author be certified and then,
+// when the leader committed rounds later, be found nowhere — a permanent wedge.
+func TestOnHeaderReceived_DefersVoteUntilBatchAvailable(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+	genesisCerts := createGenesisCertificates(t, validators, committee, d)
+	parents := make([]types.CertificateDigest, len(genesisCerts))
+	for i, c := range genesisCerts {
+		parents[i] = c.Digest()
+	}
+
+	w := worker.New(worker.Config{ID: 0, Partition: "test"}, nil)
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, d, []*worker.Worker{w})
+	p.SetRound(1)
+
+	batch := types.NewBatch([][]byte{[]byte("the-only-copy")})
+	header := types.NewHeader(validators[1].pub, 1, 1,
+		[]types.PayloadEntry{{Digest: batch.Digest(), Worker: 0}}, parents)
+	require.NoError(t, header.Sign(validators[1].priv))
+
+	voted := func() bool {
+		p.pendingMu.Lock()
+		defer p.pendingMu.Unlock()
+		_, ok := p.votedHeaders[header.Digest()]
+		return ok
+	}
+
+	// We do not hold the batch — must NOT vote (would certify data we lack).
+	p.OnHeaderReceived(header)
+	require.False(t, voted(), "must not vote for a header whose batch we do not hold (#4159)")
+
+	// The batch arrives via gossip; the author rebroadcasts the header; now we vote.
+	require.NoError(t, w.StoreBatch(batch))
+	p.OnHeaderReceived(header)
+	require.True(t, voted(), "must vote once the header's batch is available")
 }
