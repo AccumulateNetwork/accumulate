@@ -198,6 +198,7 @@ def collect_heights():
 # time; a height that can be read says only that a node answers the phone.
 _PROGRESS = {}
 _RATE = {}  # part -> [(t, height)] rolling window for the block-rate display
+_RSS_ALARM = {}  # last RSS-alarm time, rate-limited to one per 5 min
 
 
 def assess_progress(heights, now):
@@ -745,6 +746,23 @@ def _collect_once(last, hist):
             upd["life"] = m.get("life", {})
             upd["scrape"] = {"nodes": m["nodes"], "scraped": m["scraped"]}
             upd["nodeStats"] = m.get("nodeStats", {})
+            # OOM early warning. Run 20260824T065208Z grew from 146MiB to the
+            # 4GiB cgroup limit and SEVEN containers were OOM-killed (exit
+            # 137) before anything said a word — the death was reconstructed
+            # from artifacts. Say it while there is still time to act, and
+            # say it in soak.log where the session watchers look.
+            try:
+                ns = upd["nodeStats"]
+                if ns.get("rssMaxMiB", 0) > 3072 and time.time() - _RSS_ALARM.get("t", 0) > 300:
+                    _RSS_ALARM["t"] = time.time()
+                    line = "%s RSS ALARM: %s at %dMiB of 4GiB — OOM kill approaching\n" % (
+                        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        ns.get("rssMaxNode"), ns.get("rssMaxMiB", 0))
+                    log(line.strip())
+                    with open(os.path.join(RUN_DIR, "soak.log"), "a") as f:
+                        f.write(line)
+            except Exception:
+                pass
             with LOCK:
                 heights = STATE.get("heights") or {}
             upd["matrix"] = {"flows": m["flows"], "heights": heights, "parts": PARTITIONS}

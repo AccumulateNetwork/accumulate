@@ -67,6 +67,11 @@ capture() {
       docker exec "$c" curl -s -m 15 \
         "http://localhost:$PPROF_PORT/debug/pprof/goroutine" \
         > "$out/$c.goroutine.pb.gz" 2>/dev/null
+      # Heap too: run 20260824T065208Z died of OOM (7 containers, exit 137)
+      # with only goroutine dumps in hand — the leak was invisible.
+      docker exec "$c" curl -s -m 15 \
+        "http://localhost:$PPROF_PORT/debug/pprof/heap" \
+        > "$out/$c.heap.pb.gz" 2>/dev/null
       # A wedged executor holding a lock shows up here and nowhere else.
       docker exec "$c" curl -s -m 15 \
         "http://localhost:$PPROF_PORT/debug/pprof/block?debug=1" \
