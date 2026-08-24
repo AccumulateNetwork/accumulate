@@ -286,6 +286,7 @@ LG_CONTROL_PORT="${LG_CONTROL_PORT:-8091}"
 nohup go run "$repo/tools/cmd/loadgen" -endpoints "$EPS" \
   -faucet-seed FAUCET -tps "$TPS" -duration "$DURATION" -timeout "$LG_TIMEOUT" \
   -bootstrap "$LG_BOOTSTRAP" -control "127.0.0.1:$LG_CONTROL_PORT" \
+  -submitters "${LG_SUBMITTERS:-64}" \
   -grace "$LG_GRACE" -max-stranded 20 -stats-file "$rd/loadgen-stats.json" >> "$log" 2>&1 &
 DRIVER=$!
 echo "   loadgen control API: http://127.0.0.1:$LG_CONTROL_PORT/control (POST {\"tps\": N} / {\"mix\": {...}})" | tee -a "$log"
