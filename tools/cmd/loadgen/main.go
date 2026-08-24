@@ -371,6 +371,14 @@ func main() {
 	// pacing); the control API's setTPS is stricter.
 	e.rateBits.Store(math.Float64bits(*tps))
 
+	// The control API adjusts the rate and mix without a restart (a restart
+	// re-bootstraps the whole account universe). Started before the treasury
+	// and bootstrap phases so the API answers from launch, not only once
+	// generation begins.
+	if *control != "" {
+		go serveControl(ctx, e, *control)
+	}
+
 	log.Printf("== funding the treasury ==")
 	e.treasury, err = e.openTreasury(ctx, *faucetSeed)
 	fatalIf(err, "fund treasury")
@@ -416,11 +424,6 @@ func main() {
 		go e.writeStatsLoop(ctx, *statsFile, start, total)
 	}
 
-	// The control API adjusts the rate and mix without a restart (a restart
-	// re-bootstraps the whole account universe).
-	if *control != "" {
-		go serveControl(ctx, e, *control)
-	}
 
 	log.Printf("== generating %d transactions ==", total)
 	limit := time.Duration(0)
