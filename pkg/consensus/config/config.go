@@ -41,9 +41,15 @@ const (
 	// 700 tx/s on 1s blocks the network saturated: BVN blocks stretched to
 	// 2s+, dispatch losses opened sequence holes faster than healing filled
 	// them (126k heals in 20 min), count-capped queues ballooned, and the
-	// run collapsed (20260824T114552Z). 2s is the balance point: settlement
-	// ~22s, per-second overhead 1.5x the proven-stable 3s configuration.
-	DefaultBlockInterval    = 2 * time.Second
+	// run collapsed (20260824T114552Z). 2s was tried as the balance point
+	// and five consecutive runs at 250-400 tps died between t+15 and t+40 —
+	// each fix (byte caps, GOMEMLIMIT, 256MB caches, capped universe, query
+	// gates, record cache) moved the clock later but never past it. 3s is
+	// the ONLY interval that has run clean for 40+ minutes at real load
+	// (728 tx/s, run 20260824T065208Z — channels clean throughout; it died
+	// of memory bugs that are all fixed now). Settlement ~29s; latency
+	// improvements come back after a 12h pass exists.
+	DefaultBlockInterval    = 3 * time.Second
 	DefaultMinRoundInterval = 100 * time.Millisecond
 	DefaultWarmupPeriod     = 8 * time.Second
 
