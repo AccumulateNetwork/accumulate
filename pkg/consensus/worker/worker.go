@@ -865,15 +865,36 @@ func (w *Worker) reproposeLoop() {
 		}
 
 		var stale []types.BatchDigest
+		var staleBatches []*types.Batch
 		now := time.Now()
 		w.batchMu.Lock()
 		for digest, entry := range w.batches {
 			if entry.own && now.Sub(entry.lastQueued) > w.config.ReproposeAfter {
 				stale = append(stale, digest)
+				staleBatches = append(staleBatches, entry.batch)
 				entry.lastQueued = now
 			}
 		}
 		w.batchMu.Unlock()
+
+		// Re-BROADCAST the batch bytes, not just the digest (#4159). A batch
+		// is broadcast exactly once at creation; if that publish was lost
+		// (forming mesh, receiver channel full), NOTHING else ever re-sent
+		// the bytes — headers rebroadcast, votes resend, certificates sync,
+		// but batches had no retry. A batch still here after ReproposeAfter
+		// is a batch the network did not commit, and "peers never got it" is
+		// one of the two reasons why; re-sending the bytes costs one publish
+		// and un-poisons every header that names the digest. Voters defer
+		// their vote until they HOLD the batch, so a lost batch otherwise
+		// blocks its author's headers from quorum forever.
+		if w.gossip != nil {
+			for _, b := range staleBatches {
+				if err := w.gossip.BroadcastBatch(w.ctx, b); err != nil {
+					slog.Debug("Re-broadcast of stale batch failed",
+						"error", err, "worker", w.config.ID)
+				}
+			}
+		}
 
 		requeued := 0
 		for _, digest := range stale {
@@ -991,6 +1012,23 @@ func (w *Worker) HasBatch(digest types.BatchDigest) bool {
 	w.batchMu.RLock()
 	defer w.batchMu.RUnlock()
 	_, ok := w.batches[digest]
+	return ok
+}
+
+// CanServeBatch reports whether this worker HOLDS the batch in any form —
+// active store or retained (committed-and-kept-fetchable). The vote-time
+// availability gate (#4159) asks THIS question, not HasBatch: a validator
+// that already executed a batch obviously has it, and answering no made it
+// refuse to vote for any header re-proposing that digest — including every
+// fresh batch riding in the same header. HasBatch stays active-store-only:
+// pruning and re-proposal logic depend on that meaning.
+func (w *Worker) CanServeBatch(digest types.BatchDigest) bool {
+	w.batchMu.RLock()
+	defer w.batchMu.RUnlock()
+	if _, ok := w.batches[digest]; ok {
+		return true
+	}
+	_, ok := w.retained[digest]
 	return ok
 }
 

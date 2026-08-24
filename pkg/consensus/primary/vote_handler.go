@@ -369,11 +369,19 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	// the same defer-until-available shape as the missing-parent gate above.
 	for _, entry := range header.Payload {
 		if !p.haveBatch(entry.Digest) {
-			slog.Info("Missing batch for header — deferring vote until it arrives",
+			slog.Info("Missing batch for header — deferring vote and fetching",
 				"partition", p.config.Partition,
 				"headerDigest", headerDigest.String(),
 				"batch", entry.Digest.String(),
 				"round", header.Round)
+			// Deferring alone is not enough: batch bytes are broadcast once
+			// at creation and (before #4159) NOTHING re-sent them — the
+			// author's 1s header rebroadcast re-tests a condition that
+			// could never become true, and the header could never reach
+			// quorum. Actively pull the batch (the author certainly holds
+			// it — own batches are un-evictable); the next rebroadcast
+			// then finds it present and the vote goes out.
+			p.requestMissingBatch(entry.Digest)
 			return // missing batch — do not certify data we do not have
 		}
 	}
@@ -411,11 +419,54 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 // across all workers — the same way CollectBatches looks one up (#4159).
 func (p *Primary) haveBatch(d types.BatchDigest) bool {
 	for _, w := range p.workers {
-		if w.HasBatch(d) {
+		if w.CanServeBatch(d) {
 			return true
 		}
 	}
 	return false
+}
+
+// SetMissingBatchHandler installs the callback the vote gate uses to pull a
+// batch it does not hold (#4159). The Node wires this to a peer fetch; the
+// handler must not block.
+func (p *Primary) SetMissingBatchHandler(fn func(types.BatchDigest)) {
+	p.missingBatchMu.Lock()
+	defer p.missingBatchMu.Unlock()
+	p.onMissingBatch = fn
+}
+
+// requestMissingBatch invokes the missing-batch handler at most once per
+// batchFetchRetry per digest — the vote gate re-fires on every 1s header
+// rebroadcast, and each fetch already tries every connected peer.
+func (p *Primary) requestMissingBatch(d types.BatchDigest) {
+	const batchFetchRetry = 5 * time.Second
+	p.missingBatchMu.Lock()
+	fn := p.onMissingBatch
+	if fn == nil {
+		p.missingBatchMu.Unlock()
+		return
+	}
+	now := time.Now()
+	if last, ok := p.missingBatchAsked[d]; ok && now.Sub(last) < batchFetchRetry {
+		p.missingBatchMu.Unlock()
+		return
+	}
+	if p.missingBatchAsked == nil {
+		p.missingBatchAsked = map[types.BatchDigest]time.Time{}
+	}
+	// Bound the in-flight map: entries older than the retry window are
+	// re-askable anyway, so drop them opportunistically.
+	if len(p.missingBatchAsked) > 4096 {
+		for k, t := range p.missingBatchAsked {
+			if now.Sub(t) >= batchFetchRetry {
+				delete(p.missingBatchAsked, k)
+			}
+		}
+	}
+	p.missingBatchAsked[d] = now
+	p.missingBatchMu.Unlock()
+
+	fn(d)
 }
 
 // broadcastVoteAsync broadcasts a vote in the background.

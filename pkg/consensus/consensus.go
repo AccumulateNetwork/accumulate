@@ -229,16 +229,48 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		committed: make(chan *types.Certificate, config.CommitBufferSize),
 	}
 
-	// The batch-fetch protocol backs CollectBatches: a committed certificate
-	// proves 2f+1 validators stored its batches, so a node that lacks one
-	// pulls it from a peer instead of executing without it.
+	// The batch-fetch protocol backs CollectBatches and the vote gate's
+	// missing-batch pull: a committed certificate proves 2f+1 validators
+	// stored its batches, so a node that lacks one pulls it from a peer
+	// instead of executing without it. Partition-scoped: several partitions'
+	// Nodes share one host, and an unscoped handler ID meant the last-started
+	// partition served every fetch (#4159).
 	if h != nil {
-		ph, err := gossip.NewProtocolHandler(h, multiWorkerBatchStore{workers}, nil)
+		ph, err := gossip.NewProtocolHandler(h, config.Partition, multiWorkerBatchStore{workers}, nil)
 		if err != nil {
 			return nil, fmt.Errorf("create protocol handler: %w", err)
 		}
 		n.protocols = ph
 	}
+
+	// The vote gate defers voting on a header until this node holds its
+	// batches (#4159). Deferring alone would wedge — batch bytes are
+	// broadcast once and the author's header rebroadcast does not re-send
+	// them — so a deferring voter actively pulls the batch from peers (the
+	// author certainly holds it: own batches are un-evictable). Async and
+	// deduplicated by the primary; the next header rebroadcast finds the
+	// batch present and the vote goes out.
+	p.SetMissingBatchHandler(func(d types.BatchDigest) {
+		go func() {
+			if n.closed.Load() || n.protocols == nil || n.host == nil {
+				return
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			for _, peerID := range n.host.Network().Peers() {
+				fctx, fcancel := context.WithTimeout(ctx, 2*time.Second)
+				b, err := n.protocols.FetchBatch(fctx, peerID, d)
+				fcancel()
+				if err == nil && b != nil && b.Digest() == d {
+					_ = n.workers[workerFor(d[:], len(n.workers))].StoreBatch(b)
+					return
+				}
+				if ctx.Err() != nil {
+					return
+				}
+			}
+		}()
+	})
 
 	return n, nil
 }

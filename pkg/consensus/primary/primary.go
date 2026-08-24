@@ -146,6 +146,14 @@ type Primary struct {
 	newCerts   chan *types.Certificate
 	newCertsMu sync.Mutex
 
+	// Missing-batch pull for the vote-time availability gate (#4159): the
+	// Node wires onMissingBatch to a peer fetch; missingBatchAsked
+	// deduplicates asks per digest so the 1s header rebroadcast does not
+	// re-fetch on every re-receipt.
+	missingBatchMu    sync.Mutex
+	missingBatchAsked map[types.BatchDigest]time.Time
+	onMissingBatch    func(types.BatchDigest)
+
 	// Lifecycle management
 	// lifecycleMu guards ctx/cancel: Start runs in a goroutine spawned by
 	// Node.Start, so an early Stop raced the write (caught by -race once the

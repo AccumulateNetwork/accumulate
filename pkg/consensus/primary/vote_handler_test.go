@@ -1047,3 +1047,92 @@ func TestOnHeaderReceived_DefersVoteUntilBatchAvailable(t *testing.T) {
 	p.OnHeaderReceived(header)
 	require.True(t, voted(), "must vote once the header's batch is available")
 }
+
+// TestOnHeaderReceived_MissingBatchTriggersFetch pins the #4159 repair: a
+// deferring voter must actively PULL the batch it lacks — batch bytes are
+// broadcast once at creation and the author's header rebroadcast does not
+// re-send them, so defer-without-fetch wedged cert formation forever (the
+// frozen soak's 1,833 "Missing batch" deferrals). The ask is deduplicated:
+// the 1s rebroadcast re-fires the gate, but each digest is fetched at most
+// once per retry window.
+func TestOnHeaderReceived_MissingBatchTriggersFetch(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+	genesisCerts := createGenesisCertificates(t, validators, committee, d)
+	parents := make([]types.CertificateDigest, len(genesisCerts))
+	for i, c := range genesisCerts {
+		parents[i] = c.Digest()
+	}
+
+	w := worker.New(worker.Config{ID: 0, Partition: "test"}, nil)
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, d, []*worker.Worker{w})
+	p.SetRound(1)
+
+	var asked []types.BatchDigest
+	p.SetMissingBatchHandler(func(dg types.BatchDigest) { asked = append(asked, dg) })
+
+	batch := types.NewBatch([][]byte{[]byte("lost-in-gossip")})
+	header := types.NewHeader(validators[1].pub, 1, 1,
+		[]types.PayloadEntry{{Digest: batch.Digest(), Worker: 0}}, parents)
+	require.NoError(t, header.Sign(validators[1].priv))
+
+	// First receipt: defer AND ask.
+	p.OnHeaderReceived(header)
+	require.Len(t, asked, 1, "a deferring voter must pull the missing batch")
+	require.Equal(t, batch.Digest(), asked[0])
+
+	// Rebroadcast within the retry window: defer again, but do NOT re-ask.
+	p.OnHeaderReceived(header)
+	require.Len(t, asked, 1, "asks are deduplicated per digest per retry window")
+
+	// The fetch lands (peer served it); the next rebroadcast votes.
+	require.NoError(t, w.StoreBatch(batch))
+	p.OnHeaderReceived(header)
+	p.pendingMu.Lock()
+	_, voted := p.votedHeaders[header.Digest()]
+	p.pendingMu.Unlock()
+	require.True(t, voted, "once the fetched batch is stored, the vote goes out")
+}
+
+// TestOnHeaderReceived_VotesWhenBatchIsRetained pins the CanServeBatch fix:
+// a validator that already EXECUTED a batch (pruned to the retained store)
+// HAS it, and must vote for a header re-proposing that digest rather than
+// deferring — deferring blocked every fresh batch riding in the same header.
+func TestOnHeaderReceived_VotesWhenBatchIsRetained(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+	genesisCerts := createGenesisCertificates(t, validators, committee, d)
+	parents := make([]types.CertificateDigest, len(genesisCerts))
+	for i, c := range genesisCerts {
+		parents[i] = c.Digest()
+	}
+
+	w := worker.New(worker.Config{ID: 0, Partition: "test"}, nil)
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, d, []*worker.Worker{w})
+	p.SetRound(1)
+
+	batch := types.NewBatch([][]byte{[]byte("already-executed")})
+	require.NoError(t, w.StoreBatch(batch))
+	// Execute-and-prune moves it from the active store to retained.
+	w.PruneCommitted([]types.BatchDigest{batch.Digest()}, worker.CommitInfo{Detail: "block 1"})
+	require.False(t, w.HasBatch(batch.Digest()), "pruned from the active store")
+	require.True(t, w.CanServeBatch(batch.Digest()), "still held via retention")
+
+	header := types.NewHeader(validators[1].pub, 1, 1,
+		[]types.PayloadEntry{{Digest: batch.Digest(), Worker: 0}}, parents)
+	require.NoError(t, header.Sign(validators[1].priv))
+
+	p.OnHeaderReceived(header)
+	p.pendingMu.Lock()
+	_, voted := p.votedHeaders[header.Digest()]
+	p.pendingMu.Unlock()
+	require.True(t, voted, "a retained batch counts as held — no deferral")
+}
