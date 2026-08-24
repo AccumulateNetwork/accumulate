@@ -20,3 +20,21 @@
 | target TPS | 2 |
 
 Config as run is frozen in `config/`. Results appended below on exit.
+
+## Result
+
+| field | value |
+|---|---|
+| ended (UTC) | 2026-08-24T01:52:47Z |
+| elapsed | ?h |
+| driver exit | 143 (FAILED) |
+| dn height | 121 -> 529 |
+| heals | 0 -> 0 |
+| chaos events | 33 |
+| monitor samples | 74 |
+| seizure | none detected |
+| reconcile pulls (#4073) | 0 |
+| stalled channels at end | 0 |
+| wedge captures (#4125) | 4 wedge-20260823T195040Z,wedge-20260823T200925Z wedge-20260823T215121Z,wedge-manual |
+
+Raw: `soak.log`, `monitor.csv`, `chaos.log`, `loadgen-stats.json`.

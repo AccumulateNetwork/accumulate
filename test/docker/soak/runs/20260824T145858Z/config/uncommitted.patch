@@ -1,0 +1,717 @@
+diff --git a/test/docker/soak/runs/20260822T062523Z/seizewatch.out b/test/docker/soak/runs/20260822T062523Z/seizewatch.out
+index f9169156b..e724c5bc8 100644
+--- a/test/docker/soak/runs/20260822T062523Z/seizewatch.out
++++ b/test/docker/soak/runs/20260822T062523Z/seizewatch.out
+@@ -1898,3 +1898,104 @@
+ 2026-08-23T06:15:11 NODATA
+ 2026-08-23T06:15:56 NODATA
+ 2026-08-23T06:16:41 NODATA
++2026-08-23T06:17:26 NODATA
++2026-08-23T06:18:11 NODATA
++2026-08-23T06:18:56 NODATA
++2026-08-23T06:19:41 NODATA
++2026-08-23T06:20:26 NODATA
++2026-08-23T06:21:11 NODATA
++2026-08-23T06:21:56 NODATA
++2026-08-23T06:22:41 NODATA
++2026-08-23T06:23:26 NODATA
++2026-08-23T06:24:11 NODATA
++2026-08-23T06:24:56 NODATA
++2026-08-23T06:25:41 NODATA
++2026-08-23T06:26:27 NODATA
++2026-08-23T06:27:12 NODATA
++2026-08-23T06:27:57 NODATA
++2026-08-23T06:28:42 NODATA
++2026-08-23T06:29:27 NODATA
++2026-08-23T06:30:12 NODATA
++2026-08-23T06:30:57 NODATA
++2026-08-23T06:31:42 NODATA
++2026-08-23T06:32:27 NODATA
++2026-08-23T06:33:12 NODATA
++2026-08-23T06:33:57 NODATA
++2026-08-23T06:34:42 NODATA
++2026-08-23T06:35:27 NODATA
++2026-08-23T06:36:12 NODATA
++2026-08-23T06:36:57 NODATA
++2026-08-23T06:37:42 NODATA
++2026-08-23T06:38:27 NODATA
++2026-08-23T06:39:12 NODATA
++2026-08-23T06:39:57 NODATA
++2026-08-23T06:40:42 NODATA
++2026-08-23T06:41:27 NODATA
++2026-08-23T06:42:12 NODATA
++2026-08-23T06:42:57 NODATA
++2026-08-23T06:43:42 NODATA
++2026-08-23T06:44:27 NODATA
++2026-08-23T06:45:12 NODATA
++2026-08-23T06:45:57 NODATA
++2026-08-23T06:46:42 NODATA
++2026-08-23T06:47:27 NODATA
++2026-08-23T06:48:12 NODATA
++2026-08-23T06:48:57 NODATA
++2026-08-23T06:49:42 NODATA
++2026-08-23T06:50:27 NODATA
++2026-08-23T06:51:12 NODATA
++2026-08-23T06:51:57 NODATA
++2026-08-23T06:52:42 NODATA
++2026-08-23T06:53:27 NODATA
++2026-08-23T06:54:12 NODATA
++2026-08-23T06:54:57 NODATA
++2026-08-23T06:55:42 NODATA
++2026-08-23T06:56:27 NODATA
++2026-08-23T06:57:12 NODATA
++2026-08-23T06:57:57 NODATA
++2026-08-23T06:58:43 NODATA
++2026-08-23T06:59:28 NODATA
++2026-08-23T07:00:13 NODATA
++2026-08-23T07:00:58 NODATA
++2026-08-23T07:01:43 NODATA
++2026-08-23T07:02:28 NODATA
++2026-08-23T07:03:13 NODATA
++2026-08-23T07:03:58 NODATA
++2026-08-23T07:04:43 NODATA
++2026-08-23T07:05:28 NODATA
++2026-08-23T07:06:13 NODATA
++2026-08-23T07:06:58 NODATA
++2026-08-23T07:07:43 NODATA
++2026-08-23T07:08:28 NODATA
++2026-08-23T07:09:13 NODATA
++2026-08-23T07:09:58 NODATA
++2026-08-23T07:10:43 NODATA
++2026-08-23T07:11:28 NODATA
++2026-08-23T07:12:13 NODATA
++2026-08-23T07:12:58 NODATA
++2026-08-23T07:13:43 NODATA
++2026-08-23T07:14:28 NODATA
++2026-08-23T07:15:13 NODATA
++2026-08-23T07:15:58 NODATA
++2026-08-23T07:16:43 NODATA
++2026-08-23T07:17:28 NODATA
++2026-08-23T07:18:13 NODATA
++2026-08-23T07:18:58 NODATA
++2026-08-23T07:19:43 NODATA
++2026-08-23T07:20:28 NODATA
++2026-08-23T07:21:13 NODATA
++2026-08-23T07:21:58 NODATA
++2026-08-23T07:22:43 NODATA
++2026-08-23T07:23:28 NODATA
++2026-08-23T07:24:13 NODATA
++2026-08-23T07:24:58 NODATA
++2026-08-23T07:25:43 NODATA
++2026-08-23T07:26:28 NODATA
++2026-08-23T07:27:13 NODATA
++2026-08-23T07:27:58 NODATA
++2026-08-23T07:28:44 NODATA
++2026-08-23T07:29:29 NODATA
++2026-08-23T07:30:14 NODATA
++2026-08-23T07:30:59 NODATA
++2026-08-23T07:31:44 NODATA
++watch window elapsed with no seizure
+diff --git a/test/docker/soak/runs/20260822T071302Z/seizewatch.out b/test/docker/soak/runs/20260822T071302Z/seizewatch.out
+index a9968e03f..82bcd2c09 100644
+--- a/test/docker/soak/runs/20260822T071302Z/seizewatch.out
++++ b/test/docker/soak/runs/20260822T071302Z/seizewatch.out
+@@ -1835,3 +1835,167 @@
+ 2026-08-23T06:15:11 NODATA
+ 2026-08-23T06:15:56 NODATA
+ 2026-08-23T06:16:41 NODATA
++2026-08-23T06:17:26 NODATA
++2026-08-23T06:18:11 NODATA
++2026-08-23T06:18:56 NODATA
++2026-08-23T06:19:41 NODATA
++2026-08-23T06:20:26 NODATA
++2026-08-23T06:21:11 NODATA
++2026-08-23T06:21:56 NODATA
++2026-08-23T06:22:41 NODATA
++2026-08-23T06:23:26 NODATA
++2026-08-23T06:24:11 NODATA
++2026-08-23T06:24:56 NODATA
++2026-08-23T06:25:41 NODATA
++2026-08-23T06:26:27 NODATA
++2026-08-23T06:27:12 NODATA
++2026-08-23T06:27:57 NODATA
++2026-08-23T06:28:42 NODATA
++2026-08-23T06:29:27 NODATA
++2026-08-23T06:30:12 NODATA
++2026-08-23T06:30:57 NODATA
++2026-08-23T06:31:42 NODATA
++2026-08-23T06:32:27 NODATA
++2026-08-23T06:33:12 NODATA
++2026-08-23T06:33:57 NODATA
++2026-08-23T06:34:42 NODATA
++2026-08-23T06:35:27 NODATA
++2026-08-23T06:36:12 NODATA
++2026-08-23T06:36:57 NODATA
++2026-08-23T06:37:42 NODATA
++2026-08-23T06:38:27 NODATA
++2026-08-23T06:39:12 NODATA
++2026-08-23T06:39:57 NODATA
++2026-08-23T06:40:42 NODATA
++2026-08-23T06:41:27 NODATA
++2026-08-23T06:42:12 NODATA
++2026-08-23T06:42:57 NODATA
++2026-08-23T06:43:42 NODATA
++2026-08-23T06:44:27 NODATA
++2026-08-23T06:45:12 NODATA
++2026-08-23T06:45:57 NODATA
++2026-08-23T06:46:42 NODATA
++2026-08-23T06:47:27 NODATA
++2026-08-23T06:48:12 NODATA
++2026-08-23T06:48:57 NODATA
++2026-08-23T06:49:42 NODATA
++2026-08-23T06:50:27 NODATA
++2026-08-23T06:51:12 NODATA
++2026-08-23T06:51:57 NODATA
++2026-08-23T06:52:42 NODATA
++2026-08-23T06:53:27 NODATA
++2026-08-23T06:54:12 NODATA
++2026-08-23T06:54:57 NODATA
++2026-08-23T06:55:42 NODATA
++2026-08-23T06:56:27 NODATA
++2026-08-23T06:57:12 NODATA
++2026-08-23T06:57:57 NODATA
++2026-08-23T06:58:43 NODATA
++2026-08-23T06:59:28 NODATA
++2026-08-23T07:00:13 NODATA
++2026-08-23T07:00:58 NODATA
++2026-08-23T07:01:43 NODATA
++2026-08-23T07:02:28 NODATA
++2026-08-23T07:03:13 NODATA
++2026-08-23T07:03:58 NODATA
++2026-08-23T07:04:43 NODATA
++2026-08-23T07:05:28 NODATA
++2026-08-23T07:06:13 NODATA
++2026-08-23T07:06:58 NODATA
++2026-08-23T07:07:43 NODATA
++2026-08-23T07:08:28 NODATA
++2026-08-23T07:09:13 NODATA
++2026-08-23T07:09:58 NODATA
++2026-08-23T07:10:43 NODATA
++2026-08-23T07:11:28 NODATA
++2026-08-23T07:12:13 NODATA
++2026-08-23T07:12:58 NODATA
++2026-08-23T07:13:43 NODATA
++2026-08-23T07:14:28 NODATA
++2026-08-23T07:15:13 NODATA
++2026-08-23T07:15:58 NODATA
++2026-08-23T07:16:43 NODATA
++2026-08-23T07:17:28 NODATA
++2026-08-23T07:18:13 NODATA
++2026-08-23T07:18:58 NODATA
++2026-08-23T07:19:43 NODATA
++2026-08-23T07:20:28 NODATA
++2026-08-23T07:21:13 NODATA
++2026-08-23T07:21:58 NODATA
++2026-08-23T07:22:43 NODATA
++2026-08-23T07:23:28 NODATA
++2026-08-23T07:24:13 NODATA
++2026-08-23T07:24:58 NODATA
++2026-08-23T07:25:43 NODATA
++2026-08-23T07:26:28 NODATA
++2026-08-23T07:27:13 NODATA
++2026-08-23T07:27:58 NODATA
++2026-08-23T07:28:44 NODATA
++2026-08-23T07:29:29 NODATA
++2026-08-23T07:30:14 NODATA
++2026-08-23T07:30:59 NODATA
++2026-08-23T07:31:44 NODATA
++2026-08-23T07:32:29 NODATA
++2026-08-23T07:33:14 NODATA
++2026-08-23T07:33:59 NODATA
++2026-08-23T07:34:44 NODATA
++2026-08-23T07:35:29 NODATA
++2026-08-23T07:36:14 NODATA
++2026-08-23T07:36:59 NODATA
++2026-08-23T07:37:44 NODATA
++2026-08-23T07:38:29 NODATA
++2026-08-23T07:39:14 NODATA
++2026-08-23T07:39:59 NODATA
++2026-08-23T07:40:44 NODATA
++2026-08-23T07:41:29 NODATA
++2026-08-23T07:42:14 NODATA
++2026-08-23T07:42:59 NODATA
++2026-08-23T07:43:44 NODATA
++2026-08-23T07:44:29 NODATA
++2026-08-23T07:45:14 NODATA
++2026-08-23T07:45:59 NODATA
++2026-08-23T07:46:44 NODATA
++2026-08-23T07:47:29 NODATA
++2026-08-23T07:48:14 NODATA
++2026-08-23T07:48:59 NODATA
++2026-08-23T07:49:44 NODATA
++2026-08-23T07:50:29 NODATA
++2026-08-23T07:51:14 NODATA
++2026-08-23T07:51:59 NODATA
++2026-08-23T07:52:44 NODATA
++2026-08-23T07:53:29 NODATA
++2026-08-23T07:54:14 NODATA
++2026-08-23T07:54:59 NODATA
++2026-08-23T07:55:44 NODATA
++2026-08-23T07:56:29 NODATA
++2026-08-23T07:57:14 NODATA
++2026-08-23T07:57:59 NODATA
++2026-08-23T07:58:44 NODATA
++2026-08-23T07:59:30 NODATA
++2026-08-23T08:00:15 NODATA
++2026-08-23T08:01:00 NODATA
++2026-08-23T08:01:45 NODATA
++2026-08-23T08:02:30 NODATA
++2026-08-23T08:03:15 NODATA
++2026-08-23T08:04:00 NODATA
++2026-08-23T08:04:45 NODATA
++2026-08-23T08:05:30 NODATA
++2026-08-23T08:06:15 NODATA
++2026-08-23T08:07:00 NODATA
++2026-08-23T08:07:45 NODATA
++2026-08-23T08:08:30 NODATA
++2026-08-23T08:09:15 NODATA
++2026-08-23T08:10:00 NODATA
++2026-08-23T08:10:45 NODATA
++2026-08-23T08:11:30 NODATA
++2026-08-23T08:12:15 NODATA
++2026-08-23T08:13:00 NODATA
++2026-08-23T08:13:45 NODATA
++2026-08-23T08:14:30 NODATA
++2026-08-23T08:15:15 NODATA
++2026-08-23T08:16:00 NODATA
++2026-08-23T08:16:45 NODATA
++2026-08-23T08:17:30 NODATA
++2026-08-23T08:18:15 NODATA
++2026-08-23T08:19:00 NODATA
++watch window elapsed with no seizure
+diff --git a/test/docker/soak/runs/20260823T194028Z/chaos.log b/test/docker/soak/runs/20260823T194028Z/chaos.log
+index 5e2f5aa10..22a234a94 100644
+--- a/test/docker/soak/runs/20260823T194028Z/chaos.log
++++ b/test/docker/soak/runs/20260823T194028Z/chaos.log
+@@ -30,3 +30,4 @@
+ 2026-08-24T01:19:36Z skip
+ 2026-08-24T01:31:02Z restart acc-bvn2-val4
+ 2026-08-24T01:40:08Z pause acc-bvn3-val2 99s
++2026-08-24T01:50:03Z pause acc-bvn3-val2 138s
+diff --git a/test/docker/soak/runs/20260823T194028Z/manifest.md b/test/docker/soak/runs/20260823T194028Z/manifest.md
+index 2c75cca59..1f94726fc 100644
+--- a/test/docker/soak/runs/20260823T194028Z/manifest.md
++++ b/test/docker/soak/runs/20260823T194028Z/manifest.md
+@@ -20,3 +20,21 @@
+ | target TPS | 2 |
+ 
+ Config as run is frozen in `config/`. Results appended below on exit.
++
++## Result
++
++| field | value |
++|---|---|
++| ended (UTC) | 2026-08-24T01:52:47Z |
++| elapsed | ?h |
++| driver exit | 143 (FAILED) |
++| dn height | 121 -> 529 |
++| heals | 0 -> 0 |
++| chaos events | 33 |
++| monitor samples | 74 |
++| seizure | none detected |
++| reconcile pulls (#4073) | 0 |
++| stalled channels at end | 0 |
++| wedge captures (#4125) | 4 wedge-20260823T195040Z,wedge-20260823T200925Z wedge-20260823T215121Z,wedge-manual |
++
++Raw: `soak.log`, `monitor.csv`, `chaos.log`, `loadgen-stats.json`.
+diff --git a/test/docker/soak/runs/20260823T194028Z/monitor.csv b/test/docker/soak/runs/20260823T194028Z/monitor.csv
+index 9b2460b7e..96538f95c 100644
+--- a/test/docker/soak/runs/20260823T194028Z/monitor.csv
++++ b/test/docker/soak/runs/20260823T194028Z/monitor.csv
+@@ -71,3 +71,5 @@ time,dnHeight,heals,cpuPct
+ 2026-08-24T01:31:10,?,0,29
+ 2026-08-24T01:36:12,?,0,43
+ 2026-08-24T01:41:14,?,0,42
++2026-08-24T01:46:16,?,0,14
++2026-08-24T01:51:19,529,0,102
+diff --git a/test/docker/soak/runs/20260823T194028Z/seizewatch.out b/test/docker/soak/runs/20260823T194028Z/seizewatch.out
+index 74bf5ee28..d9ce2d894 100644
+--- a/test/docker/soak/runs/20260823T194028Z/seizewatch.out
++++ b/test/docker/soak/runs/20260823T194028Z/seizewatch.out
+@@ -480,3 +480,14 @@
+ 2026-08-24T01:42:37 stuck=0 stuckStream= worst=none undeliv=none
+ 2026-08-24T01:43:22 stuck=0 stuckStream= worst=none undeliv=none
+ 2026-08-24T01:44:07 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:44:52 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:45:38 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:46:23 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:47:08 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:47:53 stuck=0 stuckStream= worst=none undeliv=anchor Directory->BVN1 undeliv=3
++2026-08-24T01:48:38 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=anchor BVN1->Directory undeliv=1
++2026-08-24T01:49:23 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:50:08 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:50:53 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:51:38 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:52:23 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
+diff --git a/test/docker/soak/runs/20260823T194028Z/soak.log b/test/docker/soak/runs/20260823T194028Z/soak.log
+index cdd041e4f..2e824f7e3 100644
+--- a/test/docker/soak/runs/20260823T194028Z/soak.log
++++ b/test/docker/soak/runs/20260823T194028Z/soak.log
+@@ -169,3 +169,6 @@
+ 2026/08/23 20:31:23 bootstrap: sub-treasury acc://c28443ad0815cd6338b42b016d7f8c27ff70bd4874c49d88 not ready (timed out waiting for acc://c28443ad0815cd6338b42b016d7f8c27ff70bd4874c49d88 to hold credits) — skipping
+ 2026/08/23 20:36:24 bootstrap: sub-treasury acc://3c403d0e47e0367816f4c2befe9d534dcbdc05c9a2e2f008 not ready (timed out waiting for acc://3c403d0e47e0367816f4c2befe9d534dcbdc05c9a2e2f008 to hold credits) — skipping
+ 2026/08/23 20:41:24 bootstrap: sub-treasury acc://b43cf02836a1cad088506692c97a4766210a228ab2697b3c not ready (timed out waiting for acc://b43cf02836a1cad088506692c97a4766210a228ab2697b3c to hold credits) — skipping
++2026/08/23 20:46:25 bootstrap: sub-treasury acc://c3a1407da6a4a84cc8c6a4108f27151b3efb576f44a2c48b not ready (timed out waiting for acc://c3a1407da6a4a84cc8c6a4108f27151b3efb576f44a2c48b to hold credits) — skipping
++2026/08/23 20:51:38 bootstrap: sub-treasury acc://c7995edfb1e5a5fbec8f5511d3fafe6fbd957be41b1f333f not ready (timed out waiting for acc://c7995edfb1e5a5fbec8f5511d3fafe6fbd957be41b1f333f to hold credits) — skipping
++== soak finished Mon Aug 24 01:52:47 AM UTC 2026 driver-exit=143 ==
+diff --git a/test/docker/soak/runs/20260823T194028Z/soakmon.log b/test/docker/soak/runs/20260823T194028Z/soakmon.log
+index 2d8ede5e8..0b381989e 100644
+--- a/test/docker/soak/runs/20260823T194028Z/soakmon.log
++++ b/test/docker/soak/runs/20260823T194028Z/soakmon.log
+@@ -9068,3 +9068,13 @@
+ 2026-08-24T01:41:32Z heartbeat up=5h58m threads=3 fds=5 rss=34MiB shcalls=395077 shfails=1 lastShErr=TimeoutExpired: Command '['docker', 'exec', 'acc-bvn3-val3', 'sh', '-c', 'curl -s -m5 http://localhost:26670/metrics']' timed out after 20 seconds
+ 2026-08-24T01:42:32Z heartbeat up=5h59m threads=3 fds=5 rss=34MiB shcalls=396141 shfails=1 lastShErr=TimeoutExpired: Command '['docker', 'exec', 'acc-bvn3-val3', 'sh', '-c', 'curl -s -m5 http://localhost:26670/metrics']' timed out after 20 seconds
+ 2026-08-24T01:43:32Z heartbeat up=6h00m threads=3 fds=7 rss=34MiB shcalls=397217 shfails=1 lastShErr=TimeoutExpired: Command '['docker', 'exec', 'acc-bvn3-val3', 'sh', '-c', 'curl -s -m5 http://localhost:26670/metrics']' timed out after 20 seconds
++2026-08-24T01:44:32Z heartbeat up=6h01m threads=3 fds=5 rss=34MiB shcalls=398288 shfails=1 lastShErr=TimeoutExpired: Command '['docker', 'exec', 'acc-bvn3-val3', 'sh', '-c', 'curl -s -m5 http://localhost:26670/metrics']' timed out after 20 seconds
++2026-08-24T01:45:32Z heartbeat up=6h02m threads=3 fds=5 rss=34MiB shcalls=399352 shfails=1 lastShErr=TimeoutExpired: Command '['docker', 'exec', 'acc-bvn3-val3', 'sh', '-c', 'curl -s -m5 http://localhost:26670/metrics']' timed out after 20 seconds
++2026-08-24T01:46:32Z heartbeat up=6h03m threads=3 fds=5 rss=34MiB shcalls=400416 shfails=1 lastShErr=TimeoutExpired: Command '['docker', 'exec', 'acc-bvn3-val3', 'sh', '-c', 'curl -s -m5 http://localhost:26670/metrics']' timed out after 20 seconds
++2026-08-24T01:47:32Z heartbeat up=6h04m threads=3 fds=5 rss=34MiB shcalls=401480 shfails=1 lastShErr=TimeoutExpired: Command '['docker', 'exec', 'acc-bvn3-val3', 'sh', '-c', 'curl -s -m5 http://localhost:26670/metrics']' timed out after 20 seconds
++2026-08-24T01:48:32Z heartbeat up=6h05m threads=3 fds=5 rss=33MiB shcalls=403049 shfails=1 lastShErr=TimeoutExpired: Command '['docker', 'exec', 'acc-bvn3-val3', 'sh', '-c', 'curl -s -m5 http://localhost:26670/metrics']' timed out after 20 seconds
++2026-08-24T01:49:32Z heartbeat up=6h06m threads=3 fds=5 rss=33MiB shcalls=404599 shfails=1 lastShErr=TimeoutExpired: Command '['docker', 'exec', 'acc-bvn3-val3', 'sh', '-c', 'curl -s -m5 http://localhost:26670/metrics']' timed out after 20 seconds
++2026-08-24T01:50:32Z heartbeat up=6h07m threads=3 fds=5 rss=33MiB shcalls=405746 shfails=1 lastShErr=TimeoutExpired: Command '['docker', 'exec', 'acc-bvn3-val3', 'sh', '-c', 'curl -s -m5 http://localhost:26670/metrics']' timed out after 20 seconds
++2026-08-24T01:51:32Z heartbeat up=6h08m threads=3 fds=5 rss=33MiB shcalls=407327 shfails=1 lastShErr=TimeoutExpired: Command '['docker', 'exec', 'acc-bvn3-val3', 'sh', '-c', 'curl -s -m5 http://localhost:26670/metrics']' timed out after 20 seconds
++2026-08-24T01:52:33Z heartbeat up=6h09m threads=3 fds=7 rss=33MiB shcalls=408884 shfails=1 lastShErr=TimeoutExpired: Command '['docker', 'exec', 'acc-bvn3-val3', 'sh', '-c', 'curl -s -m5 http://localhost:26670/metrics']' timed out after 20 seconds
++2026-08-24T01:52:47Z soakmon exiting: signal 15 (SIGTERM)
+diff --git a/test/docker/soak/runs/20260823T194028Z/stats.csv b/test/docker/soak/runs/20260823T194028Z/stats.csv
+index 0098267da..af5650db1 100644
+--- a/test/docker/soak/runs/20260823T194028Z/stats.csv
++++ b/test/docker/soak/runs/20260823T194028Z/stats.csv
+@@ -1087,3 +1087,30 @@
+ 2026-08-24T01:41:14,asp-v006,1.97%,26.63MiB / 62.23GiB
+ 2026-08-24T01:41:14,asp-v005,0.89%,26.84MiB / 62.23GiB
+ 2026-08-24T01:41:14,asp-v004,14.27%,28.46MiB / 62.23GiB
++2026-08-24T01:46:16,asp-v007,1.36%,28.21MiB / 62.23GiB
++2026-08-24T01:46:16,asp-v003,3.21%,26.89MiB / 62.23GiB
++2026-08-24T01:46:16,asp-v002,1.77%,26.51MiB / 62.23GiB
++2026-08-24T01:46:16,asp-v001,5.02%,27.47MiB / 62.23GiB
++2026-08-24T01:46:16,asp-v006,1.47%,27.07MiB / 62.23GiB
++2026-08-24T01:46:16,asp-v005,0.45%,25.95MiB / 62.23GiB
++2026-08-24T01:46:16,asp-v004,0.69%,26.09MiB / 62.23GiB
++2026-08-24T01:51:19,acc-bvn3-val1,7.27%,82.31MiB / 4GiB
++2026-08-24T01:51:19,acc-bvn1-val1,9.17%,90.36MiB / 4GiB
++2026-08-24T01:51:19,acc-bvn2-val3,4.98%,88.99MiB / 4GiB
++2026-08-24T01:51:19,acc-bvn3-val2,0.00%,83.36MiB / 4GiB
++2026-08-24T01:51:19,acc-bvn3-val4,6.97%,77.74MiB / 4GiB
++2026-08-24T01:51:19,acc-bvn1-val4,5.25%,87.14MiB / 4GiB
++2026-08-24T01:51:19,acc-bvn2-val1,5.85%,79.08MiB / 4GiB
++2026-08-24T01:51:19,acc-bvn2-val4,5.31%,85.64MiB / 4GiB
++2026-08-24T01:51:19,acc-bvn1-val2,5.71%,85.33MiB / 4GiB
++2026-08-24T01:51:19,acc-bvn2-val2,6.06%,89.23MiB / 4GiB
++2026-08-24T01:51:19,acc-bvn3-val3,12.18%,80.98MiB / 4GiB
++2026-08-24T01:51:19,acc-bvn1-val3,5.25%,84.98MiB / 4GiB
++2026-08-24T01:51:19,acc-bootstrap,0.02%,13.53MiB / 4GiB
++2026-08-24T01:51:19,asp-v007,4.64%,27.34MiB / 62.23GiB
++2026-08-24T01:51:19,asp-v003,0.28%,25.86MiB / 62.23GiB
++2026-08-24T01:51:19,asp-v002,2.92%,25.88MiB / 62.23GiB
++2026-08-24T01:51:19,asp-v001,4.82%,27.38MiB / 62.23GiB
++2026-08-24T01:51:19,asp-v006,0.42%,26.07MiB / 62.23GiB
++2026-08-24T01:51:19,asp-v005,6.05%,25.94MiB / 62.23GiB
++2026-08-24T01:51:19,asp-v004,8.59%,26.58MiB / 62.23GiB
+diff --git a/test/docker/soak/runs/20260823T214040Z/chaos.log b/test/docker/soak/runs/20260823T214040Z/chaos.log
+index 0e7e38691..d633b687f 100644
+--- a/test/docker/soak/runs/20260823T214040Z/chaos.log
++++ b/test/docker/soak/runs/20260823T214040Z/chaos.log
+@@ -21,3 +21,4 @@
+ 2026-08-24T01:20:02Z pause acc-bvn1-val2 108s
+ 2026-08-24T01:33:34Z skip
+ 2026-08-24T01:43:59Z skip
++2026-08-24T01:52:42Z restart acc-bvn3-val2
+diff --git a/test/docker/soak/runs/20260823T214040Z/manifest.md b/test/docker/soak/runs/20260823T214040Z/manifest.md
+index 5baf7b19a..970ff218b 100644
+--- a/test/docker/soak/runs/20260823T214040Z/manifest.md
++++ b/test/docker/soak/runs/20260823T214040Z/manifest.md
+@@ -20,3 +20,21 @@
+ | target TPS | 2 |
+ 
+ Config as run is frozen in `config/`. Results appended below on exit.
++
++## Result
++
++| field | value |
++|---|---|
++| ended (UTC) | 2026-08-24T01:52:47Z |
++| elapsed | ?h |
++| driver exit | 143 (FAILED) |
++| dn height | 121 -> 529 |
++| heals | 0 -> 0 |
++| chaos events | 24 |
++| monitor samples | 50 |
++| seizure | none detected |
++| reconcile pulls (#4073) | 0 |
++| stalled channels at end | 0 |
++| wedge captures (#4125) | 5 wedge-20260823T215118Z,wedge-20260823T220623Z wedge-20260823T222127Z,wedge-manual-4152 wedge-manual-477 |
++
++Raw: `soak.log`, `monitor.csv`, `chaos.log`, `loadgen-stats.json`.
+diff --git a/test/docker/soak/runs/20260823T214040Z/monitor.csv b/test/docker/soak/runs/20260823T214040Z/monitor.csv
+index 68de54f5f..4dc2a1b5e 100644
+--- a/test/docker/soak/runs/20260823T214040Z/monitor.csv
++++ b/test/docker/soak/runs/20260823T214040Z/monitor.csv
+@@ -47,3 +47,5 @@ time,dnHeight,heals,cpuPct
+ 2026-08-24T01:30:36,?,0,32
+ 2026-08-24T01:35:38,?,0,12
+ 2026-08-24T01:40:40,?,0,49
++2026-08-24T01:45:42,?,0,39
++2026-08-24T01:50:45,529,0,184
+diff --git a/test/docker/soak/runs/20260823T214040Z/seizewatch.out b/test/docker/soak/runs/20260823T214040Z/seizewatch.out
+index c11b8a5b2..fc0cf0bc7 100644
+--- a/test/docker/soak/runs/20260823T214040Z/seizewatch.out
++++ b/test/docker/soak/runs/20260823T214040Z/seizewatch.out
+@@ -319,3 +319,15 @@
+ 2026-08-24T01:42:16 stuck=0 stuckStream= worst=none undeliv=none
+ 2026-08-24T01:43:01 stuck=0 stuckStream= worst=none undeliv=none
+ 2026-08-24T01:43:46 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:44:31 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:45:16 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:46:01 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:46:46 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:47:31 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:48:16 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:49:01 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:49:46 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:50:31 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:51:16 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:52:01 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:52:46 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
+diff --git a/test/docker/soak/runs/20260823T214040Z/soak.log b/test/docker/soak/runs/20260823T214040Z/soak.log
+index dc6823816..7a5cd31f4 100644
+--- a/test/docker/soak/runs/20260823T214040Z/soak.log
++++ b/test/docker/soak/runs/20260823T214040Z/soak.log
+@@ -145,3 +145,6 @@
+ 2026/08/23 20:32:27 bootstrap: sub-treasury acc://9115c9c6940027e5f12691c4025d6f129ae98d9aca27a016 not ready (timed out waiting for acc://9115c9c6940027e5f12691c4025d6f129ae98d9aca27a016 to hold credits) — skipping
+ 2026/08/23 20:37:28 bootstrap: sub-treasury acc://93d07e4f97e57364d0788c6206f07b1c30bcc66d68795b9e not ready (timed out waiting for acc://93d07e4f97e57364d0788c6206f07b1c30bcc66d68795b9e to hold credits) — skipping
+ 2026/08/23 20:42:28 bootstrap: sub-treasury acc://18c0920aa5d6936cf34e3af547b4d95056be180a713c817f not ready (timed out waiting for acc://18c0920aa5d6936cf34e3af547b4d95056be180a713c817f to hold credits) — skipping
++2026/08/23 20:47:29 bootstrap: sub-treasury acc://ca6b294dbd2794777b227d2710602568b3dfc6974b8c4c5b not ready (timed out waiting for acc://ca6b294dbd2794777b227d2710602568b3dfc6974b8c4c5b to hold credits) — skipping
++2026/08/23 20:52:31 bootstrap: sub-treasury acc://fee2eb7737eb22d4ca8e8b03045b972bbc585dc2aab67350 not ready (timed out waiting for acc://fee2eb7737eb22d4ca8e8b03045b972bbc585dc2aab67350 to hold credits) — skipping
++== soak finished Mon Aug 24 01:52:47 AM UTC 2026 driver-exit=143 ==
+diff --git a/test/docker/soak/runs/20260823T214040Z/stats.csv b/test/docker/soak/runs/20260823T214040Z/stats.csv
+index b090210a7..9c0aadd39 100644
+--- a/test/docker/soak/runs/20260823T214040Z/stats.csv
++++ b/test/docker/soak/runs/20260823T214040Z/stats.csv
+@@ -711,3 +711,30 @@
+ 2026-08-24T01:40:40,asp-v006,3.69%,27.67MiB / 62.23GiB
+ 2026-08-24T01:40:40,asp-v005,6.75%,28.13MiB / 62.23GiB
+ 2026-08-24T01:40:40,asp-v004,8.84%,27.55MiB / 62.23GiB
++2026-08-24T01:45:42,asp-v007,8.86%,28.09MiB / 62.23GiB
++2026-08-24T01:45:42,asp-v003,7.47%,26.5MiB / 62.23GiB
++2026-08-24T01:45:42,asp-v002,5.27%,27.71MiB / 62.23GiB
++2026-08-24T01:45:42,asp-v001,2.57%,27.14MiB / 62.23GiB
++2026-08-24T01:45:42,asp-v006,4.17%,27.49MiB / 62.23GiB
++2026-08-24T01:45:42,asp-v005,5.08%,27.03MiB / 62.23GiB
++2026-08-24T01:45:42,asp-v004,5.50%,27.67MiB / 62.23GiB
++2026-08-24T01:50:45,acc-bvn3-val1,12.09%,80.36MiB / 4GiB
++2026-08-24T01:50:45,acc-bvn1-val1,16.61%,84.48MiB / 4GiB
++2026-08-24T01:50:45,acc-bvn2-val3,12.41%,86.18MiB / 4GiB
++2026-08-24T01:50:45,acc-bvn3-val2,0.00%,82.68MiB / 4GiB
++2026-08-24T01:50:45,acc-bvn3-val4,11.65%,81.05MiB / 4GiB
++2026-08-24T01:50:45,acc-bvn1-val4,11.39%,83.5MiB / 4GiB
++2026-08-24T01:50:45,acc-bvn2-val1,13.51%,81.91MiB / 4GiB
++2026-08-24T01:50:45,acc-bvn2-val4,12.28%,83.62MiB / 4GiB
++2026-08-24T01:50:45,acc-bvn1-val2,10.37%,77.28MiB / 4GiB
++2026-08-24T01:50:45,acc-bvn2-val2,10.99%,83.9MiB / 4GiB
++2026-08-24T01:50:45,acc-bvn3-val3,10.91%,80.26MiB / 4GiB
++2026-08-24T01:50:45,acc-bvn1-val3,13.22%,84.39MiB / 4GiB
++2026-08-24T01:50:45,acc-bootstrap,0.02%,13.34MiB / 4GiB
++2026-08-24T01:50:45,asp-v007,10.12%,27.32MiB / 62.23GiB
++2026-08-24T01:50:45,asp-v003,3.36%,25.95MiB / 62.23GiB
++2026-08-24T01:50:45,asp-v002,7.81%,26.31MiB / 62.23GiB
++2026-08-24T01:50:45,asp-v001,9.33%,27.18MiB / 62.23GiB
++2026-08-24T01:50:45,asp-v006,6.82%,26.5MiB / 62.23GiB
++2026-08-24T01:50:45,asp-v005,5.28%,26.77MiB / 62.23GiB
++2026-08-24T01:50:45,asp-v004,6.08%,26.7MiB / 62.23GiB
+diff --git a/test/docker/soak/runs/20260824T002315Z/chaos.log b/test/docker/soak/runs/20260824T002315Z/chaos.log
+index d413d0b8a..1c8bf3170 100644
+--- a/test/docker/soak/runs/20260824T002315Z/chaos.log
++++ b/test/docker/soak/runs/20260824T002315Z/chaos.log
+@@ -5,3 +5,4 @@
+ 2026-08-24T01:22:27Z restart acc-bvn3-val1
+ 2026-08-24T01:31:25Z pause acc-bvn1-val4 127s
+ 2026-08-24T01:42:03Z restart acc-bvn3-val4
++2026-08-24T01:51:19Z skip
+diff --git a/test/docker/soak/runs/20260824T002315Z/manifest.md b/test/docker/soak/runs/20260824T002315Z/manifest.md
+index 1e3fb8788..093725629 100644
+--- a/test/docker/soak/runs/20260824T002315Z/manifest.md
++++ b/test/docker/soak/runs/20260824T002315Z/manifest.md
+@@ -20,3 +20,29 @@
+ | target TPS | 2 |
+ 
+ Config as run is frozen in `config/`. Results appended below on exit.
++
++## Result
++
++| field | value |
++|---|---|
++| ended (UTC) | 2026-08-24T01:52:47Z |
++| elapsed | ?h |
++| driver exit | 143 (FAILED) |
++| dn height | 121 -> 529 |
++| heals | 0 -> 0 |
++| chaos events | 8 |
++| monitor samples | 18 |
++| seizure | none detected |
++| reconcile pulls (#4073) | 0 |
++| stalled channels at end | 0 |
++| wedge captures (#4125) | 2 wedge-20260824T015054Z,wedge-manual-529 |
++
++Raw: `soak.log`, `monitor.csv`, `chaos.log`, `loadgen-stats.json`.
++
++## Stopped early by stallkill
++
++- stopped (UTC): 2026-08-24T01:54:45Z
++- reason: monitor unreachable for 120s
++
++Evidence was captured before stopping; see the probe-* directory
++written at that moment.
+diff --git a/test/docker/soak/runs/20260824T002315Z/monitor.csv b/test/docker/soak/runs/20260824T002315Z/monitor.csv
+index 45f372fbf..68a3e4259 100644
+--- a/test/docker/soak/runs/20260824T002315Z/monitor.csv
++++ b/test/docker/soak/runs/20260824T002315Z/monitor.csv
+@@ -15,3 +15,5 @@ time,dnHeight,heals,cpuPct
+ 2026-08-24T01:31:58,?,0,22
+ 2026-08-24T01:37:00,?,0,39
+ 2026-08-24T01:42:02,?,0,29
++2026-08-24T01:47:04,?,0,20
++2026-08-24T01:52:07,529,0,212
+diff --git a/test/docker/soak/runs/20260824T002315Z/seizewatch.out b/test/docker/soak/runs/20260824T002315Z/seizewatch.out
+index c8d9a1c76..c244b6240 100644
+--- a/test/docker/soak/runs/20260824T002315Z/seizewatch.out
++++ b/test/docker/soak/runs/20260824T002315Z/seizewatch.out
+@@ -102,3 +102,15 @@
+ 2026-08-24T01:42:11 stuck=0 stuckStream= worst=none undeliv=none
+ 2026-08-24T01:42:56 stuck=0 stuckStream= worst=none undeliv=none
+ 2026-08-24T01:43:41 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:44:26 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:45:11 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:45:56 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:46:41 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:47:26 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:48:11 stuck=0 stuckStream= worst=none undeliv=none
++2026-08-24T01:48:56 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:49:41 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:50:26 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:51:11 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:51:57 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
++2026-08-24T01:52:42 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=14 undeliv=none
+diff --git a/test/docker/soak/runs/20260824T002315Z/soak.log b/test/docker/soak/runs/20260824T002315Z/soak.log
+index c361e71ea..754016dc1 100644
+--- a/test/docker/soak/runs/20260824T002315Z/soak.log
++++ b/test/docker/soak/runs/20260824T002315Z/soak.log
+@@ -112,3 +112,6 @@
+ 2026/08/23 20:29:32 bootstrap: sub-treasury acc://fbaf2a5acc81ec345ac069d38066b03db9a0ad1e8f2cc33b not ready (timed out waiting for acc://fbaf2a5acc81ec345ac069d38066b03db9a0ad1e8f2cc33b to hold credits) — skipping
+ 2026/08/23 20:34:32 bootstrap: sub-treasury acc://fc08888e0713b5396d0ecf1709ab2302476488eff541fee2 not ready (timed out waiting for acc://fc08888e0713b5396d0ecf1709ab2302476488eff541fee2 to hold credits) — skipping
+ 2026/08/23 20:39:33 bootstrap: sub-treasury acc://ea7a9e19546d5e76aa978cd655140896f2cbc5b6f224d39c not ready (timed out waiting for acc://ea7a9e19546d5e76aa978cd655140896f2cbc5b6f224d39c to hold credits) — skipping
++2026/08/23 20:44:33 bootstrap: sub-treasury acc://a6fc15c3a0fc3bf9ba0e3b9fc772a8806a9768ad426ecead not ready (timed out waiting for acc://a6fc15c3a0fc3bf9ba0e3b9fc772a8806a9768ad426ecead to hold credits) — skipping
++2026/08/23 20:49:34 bootstrap: sub-treasury acc://e44946152486a178ce6a7860179a2a5965d1efdd2d95193d not ready (timed out waiting for acc://e44946152486a178ce6a7860179a2a5965d1efdd2d95193d to hold credits) — skipping
++== soak finished Mon Aug 24 01:52:47 AM UTC 2026 driver-exit=143 ==
+diff --git a/test/docker/soak/runs/20260824T002315Z/stallkill.log b/test/docker/soak/runs/20260824T002315Z/stallkill.log
+index d80b19e4e..3205aebad 100644
+--- a/test/docker/soak/runs/20260824T002315Z/stallkill.log
++++ b/test/docker/soak/runs/20260824T002315Z/stallkill.log
+@@ -78,3 +78,24 @@
+ 2026-08-24T01:41:50Z watching: worstStall=0s (-) threshold=240s blocks=0 empty=0 blindPolls=0
+ 2026-08-24T01:42:50Z watching: worstStall=0s (-) threshold=240s blocks=0 empty=0 blindPolls=0
+ 2026-08-24T01:43:51Z watching: worstStall=0s (-) threshold=240s blocks=0 empty=0 blindPolls=0
++2026-08-24T01:44:51Z watching: worstStall=0s (-) threshold=240s blocks=0 empty=0 blindPolls=0
++2026-08-24T01:45:51Z watching: worstStall=0s (-) threshold=240s blocks=0 empty=0 blindPolls=0
++2026-08-24T01:46:51Z watching: worstStall=0s (-) threshold=240s blocks=0 empty=0 blindPolls=0
++2026-08-24T01:47:41Z idle, not stalled: 156 blocks produced since the last check, all empty — not counting this against the threshold
++2026-08-24T01:47:51Z watching: worstStall=0s (-) threshold=240s blocks=1272 empty=964 blindPolls=0
++2026-08-24T01:48:11Z idle, not stalled: 1184 blocks produced since the last check, all empty — not counting this against the threshold
++2026-08-24T01:48:52Z watching: worstStall=0s (-) threshold=240s blocks=8952 empty=7880 blindPolls=0
++2026-08-24T01:49:02Z idle, not stalled: 1152 blocks produced since the last check, all empty — not counting this against the threshold
++2026-08-24T01:49:52Z watching: worstStall=67s (BVN1,BVN2,BVN3,Directory) threshold=240s blocks=16632 empty=15560 blindPolls=0
++2026-08-24T01:50:52Z watching: worstStall=127s (BVN1,BVN2,BVN3,Directory) threshold=240s blocks=21866 empty=20883 blindPolls=0
++2026-08-24T01:51:52Z watching: worstStall=187s (BVN1,BVN2,BVN3,Directory) threshold=240s blocks=28328 empty=27345 blindPolls=0
++2026-08-24T01:52:32Z idle, not stalled: 1914 blocks produced since the last check, all empty — not counting this against the threshold
++2026-08-24T01:54:43Z STOPPING: monitor unreachable for 120s — refusing to keep running unobserved
++  2026-08-24T01:54:43Z CAPTURE[probe]: manual capture (--now) — network state not asserted — capturing to /home/paul/repos/gitlab.com/accumulatenetwork/di/test/docker/soak/runs/20260824T002315Z/probe-20260824T015443Z
++  2026-08-24T01:54:45Z CAPTURE[probe]: goroutine dumps from 0 of 0 nodes
++  2026-08-24T01:54:45Z CAPTURE[probe]: no node answered pprof on :6060 — is the image older than the every-node-pprof change?
++  # processCommittedCertificate / batch-collection frames per node
++  2026-08-24T01:54:45Z CAPTURE[probe]: complete — network left UP on purpose
++2026-08-24T01:54:45Z no loadgen found; soak.sh may already be finishing
++2026-08-24T01:54:45Z tearing down (project disoak)
++2026-08-24T01:54:45Z stallkill: run stopped
+diff --git a/test/docker/soak/runs/20260824T002315Z/stats.csv b/test/docker/soak/runs/20260824T002315Z/stats.csv
+index 6d863e743..5e6bdd833 100644
+--- a/test/docker/soak/runs/20260824T002315Z/stats.csv
++++ b/test/docker/soak/runs/20260824T002315Z/stats.csv
+@@ -201,3 +201,30 @@
+ 2026-08-24T01:42:02,asp-v006,5.81%,27.66MiB / 62.23GiB
+ 2026-08-24T01:42:02,asp-v005,9.58%,27.43MiB / 62.23GiB
+ 2026-08-24T01:42:02,asp-v004,0.36%,26.6MiB / 62.23GiB
++2026-08-24T01:47:04,asp-v007,0.59%,27.49MiB / 62.23GiB
++2026-08-24T01:47:04,asp-v003,4.40%,25.93MiB / 62.23GiB
++2026-08-24T01:47:04,asp-v002,4.46%,26.04MiB / 62.23GiB
++2026-08-24T01:47:04,asp-v001,7.36%,28.38MiB / 62.23GiB
++2026-08-24T01:47:04,asp-v006,0.67%,25.84MiB / 62.23GiB
++2026-08-24T01:47:04,asp-v005,0.50%,26.82MiB / 62.23GiB
++2026-08-24T01:47:04,asp-v004,2.10%,25.7MiB / 62.23GiB
++2026-08-24T01:52:07,acc-bvn3-val1,18.38%,87.29MiB / 4GiB
++2026-08-24T01:52:07,acc-bvn1-val1,16.02%,90.82MiB / 4GiB
++2026-08-24T01:52:07,acc-bvn2-val3,15.10%,85.9MiB / 4GiB
++2026-08-24T01:52:07,acc-bvn3-val2,0.00%,83.36MiB / 4GiB
++2026-08-24T01:52:07,acc-bvn3-val4,17.41%,92.52MiB / 4GiB
++2026-08-24T01:52:07,acc-bvn1-val4,16.72%,91.95MiB / 4GiB
++2026-08-24T01:52:07,acc-bvn2-val1,14.50%,87.93MiB / 4GiB
++2026-08-24T01:52:07,acc-bvn2-val4,15.71%,88.21MiB / 4GiB
++2026-08-24T01:52:07,acc-bvn1-val2,14.95%,86.21MiB / 4GiB
++2026-08-24T01:52:07,acc-bvn2-val2,13.28%,90.1MiB / 4GiB
++2026-08-24T01:52:07,acc-bvn3-val3,17.44%,85.14MiB / 4GiB
++2026-08-24T01:52:07,acc-bvn1-val3,14.98%,96.5MiB / 4GiB
++2026-08-24T01:52:07,acc-bootstrap,0.01%,12.82MiB / 4GiB
++2026-08-24T01:52:07,asp-v007,0.93%,26.99MiB / 62.23GiB
++2026-08-24T01:52:07,asp-v003,10.50%,26.46MiB / 62.23GiB
++2026-08-24T01:52:07,asp-v002,8.69%,26.97MiB / 62.23GiB
++2026-08-24T01:52:07,asp-v001,0.91%,27.14MiB / 62.23GiB
++2026-08-24T01:52:07,asp-v006,1.89%,26MiB / 62.23GiB
++2026-08-24T01:52:07,asp-v005,7.79%,26.15MiB / 62.23GiB
++2026-08-24T01:52:07,asp-v004,7.16%,26.34MiB / 62.23GiB
+diff --git a/test/docker/soak/runs/20260824T002315Z/wedgewatch.log b/test/docker/soak/runs/20260824T002315Z/wedgewatch.log
+index 6d5463ffc..9f89a1130 100644
+--- a/test/docker/soak/runs/20260824T002315Z/wedgewatch.log
++++ b/test/docker/soak/runs/20260824T002315Z/wedgewatch.log
+@@ -77,3 +77,27 @@
+ 2026-08-24T01:41:43Z watching: worstStall=0s (-) threshold=120s blocks=0 empty=0 captures=0/3
+ 2026-08-24T01:42:43Z watching: worstStall=0s (-) threshold=120s blocks=0 empty=0 captures=0/3
+ 2026-08-24T01:43:44Z watching: worstStall=0s (-) threshold=120s blocks=0 empty=0 captures=0/3
++2026-08-24T01:44:44Z watching: worstStall=0s (-) threshold=120s blocks=0 empty=0 captures=0/3
++2026-08-24T01:45:44Z watching: worstStall=0s (-) threshold=120s blocks=0 empty=0 captures=0/3
++2026-08-24T01:46:44Z watching: worstStall=0s (-) threshold=120s blocks=0 empty=0 captures=0/3
++2026-08-24T01:47:44Z watching: worstStall=0s (-) threshold=120s blocks=504 empty=472 captures=0/3
++2026-08-24T01:48:44Z watching: worstStall=0s (-) threshold=120s blocks=8184 empty=7244 captures=0/3
++2026-08-24T01:49:44Z watching: worstStall=59s (BVN1,BVN2,BVN3,Directory) threshold=120s blocks=15480 empty=14408 captures=0/3
++2026-08-24T01:50:44Z watching: worstStall=119s (BVN1,BVN2,BVN3,Directory) threshold=120s blocks=20894 empty=19911 captures=0/3
++2026-08-24T01:50:54Z CAPTURE[wedge]: partitions stalled 130s: BVN1,BVN2,BVN3,Directory — capturing to /home/paul/repos/gitlab.com/accumulatenetwork/di/test/docker/soak/runs/20260824T002315Z/wedge-20260824T015054Z
++2026-08-24T01:50:57Z CAPTURE[wedge]: goroutine dumps from 11 of 13 nodes
++# processCommittedCertificate / batch-collection frames per node
++acc-bvn1-val1            0 frame(s); 927 goroutines
++acc-bvn1-val2            0 frame(s); 918 goroutines
++acc-bvn1-val3            0 frame(s); 919 goroutines
++acc-bvn1-val4            0 frame(s); 918 goroutines
++acc-bvn2-val1            0 frame(s); 922 goroutines
++acc-bvn2-val2            0 frame(s); 922 goroutines
++acc-bvn2-val3            0 frame(s); 920 goroutines
++acc-bvn2-val4            0 frame(s); 918 goroutines
++acc-bvn3-val1            0 frame(s); 918 goroutines
++acc-bvn3-val3            0 frame(s); 918 goroutines
++acc-bvn3-val4            0 frame(s); 918 goroutines
++2026-08-24T01:50:57Z CAPTURE[wedge]: complete — network left UP on purpose
++2026-08-24T01:51:47Z watching: worstStall=182s (BVN1,BVN2,BVN3,Directory) threshold=120s blocks=27662 empty=26679 captures=1/3
++2026-08-24T01:52:47Z watching: worstStall=241s (BVN1,BVN2,BVN3,Directory) threshold=120s blocks=34259 empty=33276 captures=1/3
+diff --git a/test/docker/soak/runs/INDEX.md b/test/docker/soak/runs/INDEX.md
+index e59234e53..4f16152bf 100644
+--- a/test/docker/soak/runs/INDEX.md
++++ b/test/docker/soak/runs/INDEX.md
+@@ -22,3 +22,12 @@ Every run appends one row. Details in `<runId>/manifest.md`.
+ | [20260822T061030Z](20260822T061030Z/manifest.md) | `10k-tps-427-ga9ea422c1-dirty` | v2-kourou | unconditional (DI conductor, #4105) | ?h | 143 | 169→553 | 4→8 | 12h chaos soak on a9ea422c1. Consensus: #4125 retention + re-delivery skip, #4128 committed batches stay fetchable. Loadgen: #4130 fund-before-advertise, #4129 lock guard, bootstrap phase bounded by one deadline with a funded/stuck summary. Harness: soakmon supervised + line-buffered + heartbeat + names its killing signal; watchdogs log decisions; first failure and first skip of every action type logged. Open question this run should answer: why only a handful of the 100 bootstrap deposits execute (DN stops at 553 every run) — note #4131, DI submit returns TxID nil so nothing can be followed by id. |
+ | [20260822T063539Z](20260822T063539Z/manifest.md) | `10k-tps-430-ga5e002cde-dirty` | v2-kourou | unconditional (DI conductor, #4105) | 0.0h | 0 | 121→6016 | 0→81 | DIAGNOSTIC 2 for #4132: signature timestamp rejections are now logged at their source. Question: does the bootstrap burst of 100 produce ~92 BadTimestamp rejections against the treasury key? That closes the chain from 100 submitted to 8 signatures recorded. num-workers is 100 on this network (default is 1, netsim uses 4) which is what scatters a signers transactions across workers and destroys their execution order. |
+ | [20260822T071949Z](20260822T071949Z/manifest.md) | `10k-tps-433-g9adf63f96-dirty` | v2-kourou | unconditional (DI conductor, #4105) | 0.0h | 0 | 121→8975 | 0→44 | VERIFICATION 2 for #4132 on 9adf63f96: the routing fix was inert last run because the signer was read from the legacy envelope.Signatures field, which is always empty — signatures travel as messages. Now read from messages. THE TEST: routeKey must be non-empty in TRACE-SUBMIT, timestamp-not-increasing rejections should go to zero, and phase A should report 100/100 sub-treasuries funded. |
++| [20260824T002315Z](20260824T002315Z/manifest.md) | `10k-tps-481-g5e335dfb7-dirty` | v2-kourou | unconditional (DI conductor, #4105) | ?h | 143 | 121→529 | 0→0 | validate #4159 REAL fix (data-availability enforced at vote time, 5e335dfb7) + fixed watchdogs; must run clean well past DN 553 and 4152; branch 4138-conductor-owns-recovery @ 5e335dfb7 |
++| [20260823T214040Z](20260823T214040Z/manifest.md) | `10k-tps-479-g7ef5b28de-dirty` | v2-kourou | unconditional (DI conductor, #4105) | ?h | 143 | 121→529 | 0→0 | validate #4159 fix (own-batch retention + bounded CollectBatches) — must advance PAST DN 553, the prior deterministic stall; branch 4138-conductor-owns-recovery @ 7ef5b28de, serial exec, fresh v2-kourou genesis |
++| [20260823T194028Z](20260823T194028Z/manifest.md) | `10k-tps-477-g79e71e990-dirty` | v2-kourou | unconditional (DI conductor, #4105) | ?h | 143 | 121→529 | 0→0 | first soak of the #4137 stack on real nodes (packaging #4141, local delivery #4146, synthetic replica #4140, conductor recovery #4138, deferred sequencing #4144); serial execution, fresh v2-kourou genesis; branch 4138-conductor-owns-recovery @ 79e71e990; watching replica growth vs OOM history |
++| [20260824T014438Z](20260824T014438Z/manifest.md) | `10k-tps-486-gb85031273-dirty` | v2-kourou | unconditional (DI conductor, #4105) | ?h | 143 | 121→121 | 0→0 | validate the #4159 batch-recovery fixes on real nodes (partition-scoped fetch protocol, fetch-on-deferral, rebroadcast-on-repropose, CanServeBatch; consim: 8/8 passes vs 1/6 baseline); must run far past DN 553; branch 4138-conductor-owns-recovery @ b85031273 |
++| [20260824T021103Z](20260824T021103Z/manifest.md) | `10k-tps-487-g2f36fe66b-dirty` | v2-kourou | unconditional (DI conductor, #4105) | ?h | 143 | 1→1 | 0→0 | validate #4159 stall-3 fix (lastAuthoredRound watermark kills self-equivocation) on real nodes; batch fixes already verified in prior run; consim 6/6; branch @ 2f36fe66b |
++| [20260824T023027Z](20260824T023027Z/manifest.md) | `10k-tps-488-g98bfcfb5f-dirty` | v2-kourou | unconditional (DI conductor, #4105) | ?h | 143 | 121→553 | 0→0 | validate #4159 stall-3 fix v2 (watermark with round-0 genesis exception, 98bfcfb5f); prior attempt wedged at round 0 from the v1 watermark — caught by liveness tripwires in 4 min |
++| [20260824T065208Z](20260824T065208Z/manifest.md) | `10k-tps-503-g6e6bddc6c-dirty` | v2-kourou | unconditional (DI conductor, #4105) | 2.68h | 143 | 8→? | 0→15188 | throughput probe 4: 64 submitters, 800 tps target, leveldb bloom+caches. Rate ladder tonight: 9.7 -> 84 -> 212 -> 436. Chaos OFF until defect 7 |
++| [20260824T125506Z](20260824T125506Z/manifest.md) | `10k-tps-512-g5283060ca-dirty` | v2-kourou | unconditional (DI conductor, #4105) | 0.34h | 143 | 20→503 | 24→53913 | 12h pass attempt #2 on 5283060ca: GOMEMLIMIT 2GiB (1250MiB throttled the GC into a collapse), DAG GC 2k, byte caps, 2s blocks, 400 tps |
++| [20260824T141031Z](20260824T141031Z/manifest.md) | `10k-tps-514-g363a3b3b0-dirty` | v2-kourou | unconditional (DI conductor, #4105) | 0.71h | 143 | 20→1121 | 24→68576 | 12h pass attempt #4 on 363a3b3b0: state-scaling package (256MB caches, 25k account cap, GOMEMLIMIT 2750MiB) + 2s blocks, 250 tps. The state-size death clock is now bounded: working set fits the cache by construction |

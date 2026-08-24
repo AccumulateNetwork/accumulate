@@ -13,6 +13,17 @@ node-logs-live.txt
 container-logs/
 # GitLab rejects blobs over 1 MiB — summarize anything bigger instead of committing it
 reconcile-pulls.txt
+# Heap/CPU profiles captured by wedgewatch/probe: ~1-7 MiB each, and binary.
+# Analyze locally (go tool pprof), record the conclusion in the manifest.
+*.pb.gz
+# These two runs' monitor logs grew past the 1 MiB blob limit; their stats.csv
+# and manifest.md carry the record.
+20260823T214040Z/soakmon.log
+20260824T002315Z/soakmon.log
+# Goroutine dumps from the manual wedge capture that crossed 1 MiB.
+20260823T194028Z/wedge-manual/acc-bvn2-val1.goroutines.txt
+20260823T194028Z/wedge-manual/acc-bvn2-val2.goroutines.txt
+20260823T194028Z/wedge-manual/acc-bvn2-val4.goroutines.txt
 # The convenience symlink to the newest run. Tracking it made soak.sh's own
 # `ln -sfn` a tracked modification, so `git describe --dirty` reported -dirty
 # for every run against an otherwise clean tree — which is precisely where the
