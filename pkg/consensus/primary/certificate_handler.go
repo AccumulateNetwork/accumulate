@@ -254,7 +254,7 @@ func (p *Primary) tryAdvanceRound() {
 		p.roundMu.Unlock()
 		advanced = true
 
-		slog.Info("Advanced to new round",
+		slog.Debug("Advanced to new round",
 			"partition", p.config.Partition,
 			"oldRound", oldRound,
 			"newRound", oldRound+1,

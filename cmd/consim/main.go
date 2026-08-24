@@ -9,7 +9,7 @@
 // soak half an hour to reach happens in seconds, and a stall names the
 // pipeline stage that stopped. See pkg/consensus/consim.
 //
-//	go run ./cmd/consim -bvns 3 -vals 4 -tps 20 -height 1200
+//	go run ./cmd/consim -bvns 3 -vals 4 -tps 20 -height 200
 //
 // Exit codes: 0 = reached the target/duration; 2 = a partition stalled.
 package main
@@ -35,7 +35,7 @@ func main() {
 	flag.DurationVar(&cfg.MinRoundInterval, "round", 5*time.Millisecond, "round pacing (soak runs 500ms)")
 	flag.DurationVar(&cfg.BatchTimeout, "batch-timeout", 10*time.Millisecond, "worker batch cut interval")
 	flag.IntVar(&cfg.BatchSize, "batch-size", 20, "transactions per batch")
-	targetHeight := flag.Uint64("height", 1200, "stop with success once every partition executes this height (0 = run to -duration)")
+	targetHeight := flag.Uint64("height", 200, "stop with success once every partition executes this height (0 = run to -duration); a height is one committed leader GROUP (#4164), ~one per two rounds")
 	flag.DurationVar(&cfg.Duration, "duration", 10*time.Minute, "hard cap")
 	flag.DurationVar(&cfg.StallAfter, "stall-after", 20*time.Second, "no height progress for this long = stall")
 	flag.DurationVar(&cfg.BatchCollect, "batch-collect", 30*time.Second, "CollectBatches bound")

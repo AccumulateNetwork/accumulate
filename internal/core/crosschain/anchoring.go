@@ -59,7 +59,7 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 	// querying the destination: if the destination is unreachable the query
 	// blocks until the scan deadline, and a scan that never logs is
 	// indistinguishable from healing being broken (#4056).
-	slog.Info("Anchor heal scan", "module", "conductor",
+	slog.Debug("Anchor heal scan", "module", "conductor",
 		"source", c.Url(),
 		"destination", destination,
 		"produced", head.Count,

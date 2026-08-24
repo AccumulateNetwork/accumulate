@@ -47,6 +47,16 @@ func authorKeyFromHex(hexStr string) (authorKey, error) {
 type ConsensusOutput struct {
 	// Certificate is the certificate that should be committed.
 	Certificate *types.Certificate
+
+	// Leader is the round of the committed LEADER whose sub-DAG this
+	// certificate belongs to. The leader sequence is deterministic across
+	// validators regardless of certificate arrival timing — a node that
+	// commits two leaders in one ProcessCertificate call and a node that
+	// commits them in two produce identical (Leader, Certificate) sequences —
+	// so it is the only safe boundary for grouping certificates into executor
+	// blocks (#4164: one block per certificate multiplied end-of-block cost
+	// by the committee size).
+	Leader types.Round
 }
 
 // Bullshark implements the Bullshark consensus ordering algorithm.
@@ -157,7 +167,7 @@ func (b *Bullshark) ProcessCertificate(cert *types.Certificate) []ConsensusOutpu
 	leader := b.electLeader(leaderRound)
 	if leader == nil {
 		// No leader certificate exists for this round.
-		slog.Info("Bullshark: no leader certificate",
+		slog.Debug("Bullshark: no leader certificate",
 			"partition", b.partition,
 			"leaderRound", leaderRound,
 			"dagCertsInRound", len(b.dag.GetRound(leaderRound)))
@@ -166,7 +176,7 @@ func (b *Bullshark) ProcessCertificate(cert *types.Certificate) []ConsensusOutpu
 
 	// Check if leader has f+1 support from round+1 certificates.
 	if !b.hasSupport(leader, round) {
-		slog.Info("Bullshark: leader lacks support",
+		slog.Debug("Bullshark: leader lacks support",
 			"partition", b.partition,
 			"leaderRound", leaderRound,
 			"votingRound", round,
@@ -176,7 +186,7 @@ func (b *Bullshark) ProcessCertificate(cert *types.Certificate) []ConsensusOutpu
 
 	// Leader has support! Commit the leader chain.
 	outputs := b.commitLeaderChain(leader)
-	slog.Info("Bullshark: committing leader chain",
+	slog.Debug("Bullshark: committing leader chain",
 		"partition", b.partition,
 		"leaderRound", leaderRound,
 		"outputs", len(outputs))

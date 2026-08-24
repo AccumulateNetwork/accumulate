@@ -20,6 +20,11 @@ import (
 // #4159). Before the batch-recovery fixes (61af72d1d) this stalled in 5 of 6
 // runs; with them it passes in ~45-60s. A stall fails the test and prints the
 // per-node stage-freeze diagnosis, naming the pipeline stage that stopped.
+//
+// Height counts BLOCKS, and a block is one committed leader group (#4164) —
+// roughly one per two rounds — not one per certificate as before, so the
+// target is ~12x lower than the old per-certificate 2000 for the same length
+// of consensus history.
 func TestSoakTopologyLiveness(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the full 24-node consensus stack for ~a minute")
@@ -32,7 +37,7 @@ func TestSoakTopologyLiveness(t *testing.T) {
 		MinRoundInterval: 5 * time.Millisecond,
 		BatchTimeout:     10 * time.Millisecond,
 		BatchSize:        20,
-		TargetHeight:     2000,
+		TargetHeight:     300,
 		Duration:         3 * time.Minute,
 		StallAfter:       20 * time.Second,
 		Out:              os.Stdout,

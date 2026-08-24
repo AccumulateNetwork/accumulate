@@ -271,33 +271,41 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 		select {
 		case <-ctx.Done():
 			return
-		case cert, ok := <-sn.node.Committed():
+		case group, ok := <-sn.node.Committed():
 			if !ok {
 				return
 			}
-			if cert == nil {
+			if len(group) == 0 {
 				continue
 			}
-			batches, err := sn.node.CollectBatches(ctx, cert)
-			if errors.Is(err, consensus.ErrAlreadyExecuted) {
-				continue
-			}
-			if err != nil {
-				if ctx.Err() == nil {
-					sn.fatal.Store(err)
+			// One committed leader group = one block, mirroring the real
+			// service (#4164).
+			executedAny := false
+			for _, cert := range group {
+				batches, err := sn.node.CollectBatches(ctx, cert)
+				if errors.Is(err, consensus.ErrAlreadyExecuted) {
+					continue
 				}
-				return
+				if err != nil {
+					if ctx.Err() == nil {
+						sn.fatal.Store(err)
+					}
+					return
+				}
+				executedAny = true
+				digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
+				for _, e := range cert.Header.Payload {
+					digests = append(digests, e.Digest)
+				}
+				for _, b := range batches {
+					sn.txs.Add(uint64(len(b.Transactions)))
+				}
+				for _, w := range sn.node.Workers() {
+					w.PruneCommitted(digests, worker.CommitInfo{Detail: fmt.Sprintf("block %d", sn.height.Load()+1), Cert: cert.Digest().String()})
+				}
 			}
-			digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-			for _, e := range cert.Header.Payload {
-				digests = append(digests, e.Digest)
-			}
-			h := sn.height.Add(1)
-			for _, b := range batches {
-				sn.txs.Add(uint64(len(b.Transactions)))
-			}
-			for _, w := range sn.node.Workers() {
-				w.PruneCommitted(digests, worker.CommitInfo{Detail: fmt.Sprintf("block %d", h), Cert: cert.Digest().String()})
+			if executedAny {
+				sn.height.Add(1)
 			}
 		}
 	}

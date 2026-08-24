@@ -441,40 +441,29 @@ func (s *Service) blockProductionLoop() {
 		case <-s.ctx.Done():
 			return
 
-		case cert, ok := <-committed:
+		case group, ok := <-committed:
 			if !ok {
 				return
 			}
-			if cert == nil {
+			if len(group) == 0 {
 				continue
 			}
 
-			if err := s.processCommittedCertificate(cert); err != nil {
-				// A certificate delivered twice is not a failure: this node
-				// executed it already and its batches were retired on
-				// purpose. Note it and move on, rather than logging an error
-				// and — worse, before #4125 — blocking forever inside
-				// collection waiting for a batch that will never come back.
-				if stderrors.Is(err, consensus.ErrAlreadyExecuted) {
-					slog.Info("Ignoring re-delivered certificate",
-						"round", cert.Header.Round,
-						"partition", s.config.Partition.ID)
-					continue
-				}
+			if cert, err := s.processCommittedGroup(group); err != nil {
 				// A committed certificate whose batches are gone from the whole
 				// network (#4159) cannot be executed and MUST NOT be skipped —
 				// skipping diverges this node's state. Halt cleanly so the node
 				// stops here and can recover by state-sync, rather than the loop
-				// logging an error and moving to the next certificate (which
-				// would execute it out of order against missing predecessor
-				// state).
+				// logging an error and moving to the next group (which would
+				// execute it out of order against missing predecessor state).
 				if stderrors.Is(err, consensus.ErrBatchesUnrecoverable) {
 					s.haltForUnrecoverableBatches(cert, err)
 					return
 				}
-				slog.Error("Failed to process committed certificate",
+				slog.Error("Failed to process committed group",
 					"error", err,
-					"round", cert.Header.Round)
+					"leaderRound", group[len(group)-1].Header.Round,
+					"certs", len(group))
 			}
 		}
 	}
@@ -573,53 +562,94 @@ func (s *Service) checkBlockLiveness() {
 	s.logger.Error("Partition stalled: no block produced", args...)
 }
 
-// processCommittedCertificate processes a committed certificate and produces a block.
-func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
+// processCommittedGroup executes one committed LEADER's sub-DAG as ONE block.
+//
+// One block per certificate multiplied end-of-block cost — BPT recompute,
+// leveldb commit, anchor — by the committee size: ~12 executor blocks per
+// consensus round, 7.4 blocks/s at 10 tps, with leveldb compaction and anchor
+// processing eating half the profile (#4164). The leader is the deterministic
+// unit of commitment, so it is the block boundary; the group arrives in
+// canonical order (round ascending, author ascending, leader last) and every
+// validator sees identical groups.
+//
+// Returns the certificate to blame when the error is ErrBatchesUnrecoverable.
+func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Certificate, error) {
 	s.mu.Lock()
 
 	// Check if halted due to state divergence
 	if s.halted {
 		s.mu.Unlock()
-		return fmt.Errorf("consensus halted due to state divergence: %w", s.haltReason)
+		return nil, fmt.Errorf("consensus halted due to state divergence: %w", s.haltReason)
 	}
 
 	// Capture state under lock, then release for I/O
 	blockIndex := s.lastBlockIndex + 1
 	s.mu.Unlock()
 
-	// Collect the certificate's batches, outside the lock. The payload slice
-	// is in canonical order and batches are executed in payload order —
+	// The leader is last in canonical order: it is the unique maximum round
+	// of its own ancestor set.
+	leader := group[len(group)-1]
+
+	// Collect every certificate's batches, outside the lock. Each payload
+	// slice is in canonical order and batches are executed in payload order —
 	// identical on every validator (#4054). This BLOCKS until every batch is
 	// available (fetching from peers when needed): executing a certificate
 	// without some of its batches silently diverges this node's state from
 	// every node that had them — six nodes at the same block index produced
 	// six different state hashes before this waited (#4116/#4119). The
 	// certificate is proof the data exists; waiting costs liveness only.
-	batches, err := s.node.CollectBatches(s.ctx, cert)
-	if err != nil {
-		return fmt.Errorf("collect batches: %w", err)
+	//
+	// A certificate delivered twice is not a failure: this node executed it
+	// already and its batches were retired on purpose (#4125). Skip it and
+	// execute the rest of the group.
+	type executed struct {
+		cert    *types.Certificate
+		digests []types.BatchDigest
 	}
-	committedDigests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-	for _, entry := range cert.Header.Payload {
-		committedDigests = append(committedDigests, entry.Digest)
+	var executedCerts []executed
+	var batches []*types.Batch
+	payloadEntries := 0
+	for _, cert := range group {
+		certBatches, err := s.node.CollectBatches(s.ctx, cert)
+		if err != nil {
+			if stderrors.Is(err, consensus.ErrAlreadyExecuted) {
+				slog.Info("Ignoring re-delivered certificate",
+					"round", cert.Header.Round,
+					"partition", s.config.Partition.ID)
+				continue
+			}
+			return cert, fmt.Errorf("collect batches: %w", err)
+		}
+		batches = append(batches, certBatches...)
+		payloadEntries += len(cert.Header.Payload)
+		digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
+		for _, entry := range cert.Header.Payload {
+			digests = append(digests, entry.Digest)
+		}
+		executedCerts = append(executedCerts, executed{cert: cert, digests: digests})
+	}
+	if len(executedCerts) == 0 {
+		// The whole group was executed before (a redelivery after restart);
+		// its block already exists.
+		return nil, nil
 	}
 
-	// Check if this validator is the leader
+	// Check if this validator is the leader of this commit
 	pubKey := s.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey)
-	isLeader := types.ValidatorsEqual(cert.Header.Author, pubKey)
+	isLeader := types.ValidatorsEqual(leader.Header.Author, pubKey)
 
 	// Produce block. The block time MUST be derived from the certificate,
 	// not the local clock: block time is part of executed state, so if each
 	// validator stamps its own wall clock the state trees diverge on the
 	// very first block and cross-partition anchors never gather a signature
 	// quorum — each validator signs a different version of the "same" anchor
-	// (#4054). The header timestamp is the author's clock, covered by the
-	// header signature; clamp it to be strictly increasing so a bad clock
-	// cannot move time backwards.
+	// (#4054). The LEADER's header timestamp is the same on every validator,
+	// covered by the header signature; clamp it to be strictly increasing so
+	// a bad clock cannot move time backwards.
 	s.mu.RLock()
 	lastTime := s.lastBlockTime
 	s.mu.RUnlock()
-	blockTime := time.Unix(0, cert.Header.Timestamp).UTC()
+	blockTime := time.Unix(0, leader.Header.Timestamp).UTC()
 	if !blockTime.After(lastTime) {
 		blockTime = lastTime.Add(time.Millisecond)
 	}
@@ -628,14 +658,14 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 		Index:       blockIndex,
 		Time:        blockTime,
 		IsLeader:    isLeader,
-		LeaderRound: cert.Header.Round,
-		Certificate: cert,
+		LeaderRound: leader.Header.Round,
+		Certificate: leader,
 		Batches:     batches,
 	}
 
 	hash, err := s.adapter.ProduceBlock(s.ctx, params)
 	if err != nil {
-		return fmt.Errorf("produce block: %w", err)
+		return leader, fmt.Errorf("produce block: %w", err)
 	}
 
 	s.mu.Lock()
@@ -645,20 +675,23 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	s.lastBlockIndex = blockIndex
 	s.lastBlockTime = blockTime
 
-	s.noteBlockProduced(blockIndex, cert.Header.Round)
+	s.noteBlockProduced(blockIndex, leader.Header.Round)
 	// Separate "producing blocks" from "producing blocks with something in
 	// them": an idle network commits empty rounds forever, which reads as a
 	// stall to anything watching the ledger index and as health to anything
 	// watching block production.
 	metrics.BlocksProducedTotal.Inc()
-	if len(cert.Header.Payload) == 0 {
+	if payloadEntries == 0 {
 		metrics.BlocksEmptyTotal.Inc()
 	}
 
-	// Record state hash for consistency verification
+	// Record state hash for consistency verification. Every certificate in
+	// the group carries the block's resulting hash — the group IS the block.
 	stateHash := s.adapter.StateHash()
-	cert.SetStateHash(types.StateHash(stateHash))
-	s.RecordStateHash(cert.Header.Round, blockIndex, types.StateHash(stateHash))
+	for _, e := range executedCerts {
+		e.cert.SetStateHash(types.StateHash(stateHash))
+	}
+	s.RecordStateHash(leader.Header.Round, blockIndex, types.StateHash(stateHash))
 
 	// Prune batches from workers now that they've been processed.
 	//
@@ -671,12 +704,17 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	// distinguish the same certificate arriving twice from two certificates of
 	// the same round sharing a batch. Those want different fixes, and the
 	// round-260 halt could not be told apart without this (#4125).
-	prunedBy := fmt.Sprintf("block %d round %d cert %s author %x",
-		blockIndex, cert.Header.Round, cert.Digest().String()[:16],
-		cert.Header.Author[:4])
-	commit := worker.CommitInfo{Cert: cert.Digest().String(), Detail: prunedBy}
-	for _, w := range s.node.Workers() {
-		w.PruneCommitted(committedDigests, commit)
+	for _, e := range executedCerts {
+		if len(e.digests) == 0 {
+			continue
+		}
+		prunedBy := fmt.Sprintf("block %d round %d cert %s author %x",
+			blockIndex, e.cert.Header.Round, e.cert.Digest().String()[:16],
+			e.cert.Header.Author[:4])
+		commit := worker.CommitInfo{Cert: e.cert.Digest().String(), Detail: prunedBy}
+		for _, w := range s.node.Workers() {
+			w.PruneCommitted(e.digests, commit)
+		}
 	}
 
 	// Emit block event.
@@ -689,7 +727,7 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 	event := events.DidCommitBlock{
 		Index: blockIndex,
 		Time:  blockTime,
-		Round: uint64(cert.Header.Round),
+		Round: uint64(leader.Header.Round),
 		Epoch: s.committee.Epoch,
 	}
 	if major, _, ok := s.adapter.LastMajorBlock(); ok {
@@ -701,12 +739,13 @@ func (s *Service) processCommittedCertificate(cert *types.Certificate) error {
 
 	s.logger.Debug("Produced block",
 		"index", blockIndex,
-		"round", cert.Header.Round,
+		"leaderRound", leader.Header.Round,
+		"certs", len(executedCerts),
 		"hash", fmt.Sprintf("%x", hash[:8]),
 		"stateHash", fmt.Sprintf("%x", stateHash[:8]),
 		"batches", len(batches))
 
-	return nil
+	return nil, nil
 }
 
 // Status returns the current status of the DAG-BFT service.

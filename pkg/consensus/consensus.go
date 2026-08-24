@@ -148,7 +148,7 @@ type Node struct {
 	protocols *gossip.ProtocolHandler
 
 	// Committed certificates channel
-	committed chan *types.Certificate
+	committed chan []*types.Certificate
 
 	// Lifecycle management
 	ctx    context.Context
@@ -226,7 +226,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		workers:   workers,
 		primary:   p,
 		bullshark: bs,
-		committed: make(chan *types.Certificate, config.CommitBufferSize),
+		committed: make(chan []*types.Certificate, config.CommitBufferSize),
 	}
 
 	// The batch-fetch protocol backs CollectBatches and the vote gate's
@@ -679,9 +679,13 @@ func (n *Node) WorkerFor(key string) int {
 	return workerFor(routingKeyBytes(key), len(n.workers))
 }
 
-// Committed returns a channel that receives committed certificates.
-// The certificates are ordered according to Bullshark consensus.
-func (n *Node) Committed() <-chan *types.Certificate {
+// Committed returns a channel that receives committed certificate groups.
+// Each group is one committed LEADER's sub-DAG in canonical order (leader
+// last) — the deterministic unit of commitment, and therefore the unit the
+// executor turns into ONE block. Grouping any other way (per certificate, per
+// ProcessCertificate trigger) either multiplies end-of-block cost by the
+// committee size (#4164) or depends on per-node arrival timing and diverges.
+func (n *Node) Committed() <-chan []*types.Certificate {
 	return n.committed
 }
 
@@ -787,13 +791,21 @@ func (n *Node) processBullshark() {
 			// Process certificate through Bullshark
 			outputs := n.bullshark.ProcessCertificate(cert)
 
-			// Send committed certificates to the executor
+			// Send committed certificates to the executor, grouped by the
+			// LEADER that committed them: one group = one leader's sub-DAG in
+			// canonical order = one executor block. The leader boundary is
+			// deterministic across validators whatever order certificates
+			// arrived in; the trigger boundary (this loop iteration) is not.
 			// NOTE: Batch pruning is handled by the executor (main.go) after reading
 			// batches from workers. We must NOT prune here because the committed
 			// channel is buffered - pruning before the executor reads would cause
 			// "Missing batch for certificate" errors.
-			for _, output := range outputs {
-				n.certificatesCommitted.Add(1)
+			var group []*types.Certificate
+			var groupLeader types.Round
+			flush := func() bool {
+				if len(group) == 0 {
+					return true
+				}
 				// BLOCK, never drop: a dropped committed certificate means
 				// this node silently skips transactions its peers execute —
 				// permanent state divergence (#4122's shape). If the executor
@@ -801,10 +813,25 @@ func (n *Node) processBullshark() {
 				// certificates keep accumulating in the channel's buffer and
 				// the DAG regardless.
 				select {
-				case n.committed <- output.Certificate:
+				case n.committed <- group:
+					group = nil
+					return true
 				case <-n.ctx.Done():
-					return
+					return false
 				}
+			}
+			for _, output := range outputs {
+				if len(group) > 0 && output.Leader != groupLeader {
+					if !flush() {
+						return
+					}
+				}
+				groupLeader = output.Leader
+				group = append(group, output.Certificate)
+				n.certificatesCommitted.Add(1)
+			}
+			if !flush() {
+				return
 			}
 
 			// Garbage collect old rounds

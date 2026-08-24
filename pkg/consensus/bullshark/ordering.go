@@ -47,6 +47,7 @@ func (b *Bullshark) commitLeaderChain(leader *types.Certificate) []ConsensusOutp
 
 			outputs = append(outputs, ConsensusOutput{
 				Certificate: cert,
+				Leader:      l.Round(),
 			})
 			committedCerts = append(committedCerts, cert)
 

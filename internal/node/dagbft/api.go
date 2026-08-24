@@ -198,7 +198,7 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 	for _, m := range envelope.Messages {
 		msgIDs = append(msgIDs, fmt.Sprintf("%v:%v", m.Type(), m.ID()))
 	}
-	s.logger.Info("TRACE-SUBMIT: SubmitterService.Submit() called (DAG-BFT)",
+	s.logger.Debug("TRACE-SUBMIT: SubmitterService.Submit() called (DAG-BFT)",
 		"messages", strings.Join(msgIDs, ","),
 		"partition", s.service.config.Partition.ID)
 
@@ -233,7 +233,7 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 	// executor's replay protection; it cannot be fixed by routing (#4132).
 	routeKey := signerOf(envelope)
 
-	s.logger.Info("TRACE-SUBMIT: submitting to DAG-BFT service.SubmitTransaction",
+	s.logger.Debug("TRACE-SUBMIT: submitting to DAG-BFT service.SubmitTransaction",
 		"routeKey", routeKey)
 
 	// Submit to consensus (includes pre-batch validation)
@@ -264,7 +264,7 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		return nil, errors.InternalError.WithFormat("submit: %w", err)
 	}
 
-	s.logger.Info("TRACE-SUBMIT: submission successful, creating result WITHOUT Status field (BUG!)")
+	s.logger.Debug("TRACE-SUBMIT: submission successful, creating result WITHOUT Status field (BUG!)")
 
 	// Return success - DAG-BFT doesn't have synchronous result like CometBFT
 	result := []*api.Submission{{
@@ -276,7 +276,7 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		},
 	}}
 
-	s.logger.Info("TRACE-SUBMIT: returning result", "submission_count", len(result), "status_is_nil", result[0].Status == nil)
+	s.logger.Debug("TRACE-SUBMIT: returning result", "submission_count", len(result), "status_is_nil", result[0].Status == nil)
 
 	return result, nil
 }

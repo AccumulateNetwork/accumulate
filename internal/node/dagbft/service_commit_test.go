@@ -87,6 +87,9 @@ func commitCert(author ed25519.PublicKey, round types.Round, ts time.Time, paylo
 	return &types.Certificate{Header: header}
 }
 
+// group wraps certificates as one committed-leader group.
+func group(certs ...*types.Certificate) []*types.Certificate { return certs }
+
 // TestProcessCommittedCertificate_PrunesExactlyTheCommittedBatches is the
 // commit↔re-proposal contract: batches named by the committed certificate are
 // (a) handed to the executor in canonical payload order and (b) pruned from
@@ -108,7 +111,7 @@ func TestProcessCommittedCertificate_PrunesExactlyTheCommittedBatches(t *testing
 		{Digest: committed1.Digest(), Worker: w1.ID()},
 	}
 
-	err := svc.processCommittedCertificate(commitCert(author, 4, time.Unix(100, 0), payload))
+	_, err := svc.processCommittedGroup(group(commitCert(author, 4, time.Unix(100, 0), payload)))
 	require.NoError(t, err)
 
 	// (a) The executor got the batches, in canonical payload order.
@@ -158,8 +161,9 @@ func TestProcessCommittedCertificate_BlockTimeFromCertificate(t *testing.T) {
 	b1 := mk(1)
 	require.NoError(t, w.StoreBatch(b1))
 	t1 := time.Unix(0, 1_700_000_000_000_000_000)
-	require.NoError(t, svc.processCommittedCertificate(commitCert(author, 2, t1,
+	_, err := svc.processCommittedGroup(group(commitCert(author, 2, t1,
 		[]types.PayloadEntry{{Digest: b1.Digest(), Worker: w.ID()}})))
+	require.NoError(t, err)
 	require.True(t, ca.blocks[0].Time.Equal(t1.UTC()),
 		"block time must come from the certificate header, not the local clock")
 
@@ -168,8 +172,9 @@ func TestProcessCommittedCertificate_BlockTimeFromCertificate(t *testing.T) {
 	b2 := mk(2)
 	require.NoError(t, w.StoreBatch(b2))
 	t2 := t1.Add(-time.Hour)
-	require.NoError(t, svc.processCommittedCertificate(commitCert(author, 4, t2,
+	_, err = svc.processCommittedGroup(group(commitCert(author, 4, t2,
 		[]types.PayloadEntry{{Digest: b2.Digest(), Worker: w.ID()}})))
+	require.NoError(t, err)
 	require.True(t, ca.blocks[1].Time.After(ca.blocks[0].Time),
 		"a backwards author clock must not move block time backwards")
 }
@@ -189,8 +194,8 @@ func TestProcessCommittedCertificate_HaltedRefusesToExecute(t *testing.T) {
 	svc.haltReason = &types.StateDivergenceError{Round: 2}
 	svc.mu.Unlock()
 
-	err := svc.processCommittedCertificate(commitCert(author, 2, time.Unix(100, 0),
-		[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}}))
+	_, err := svc.processCommittedGroup(group(commitCert(author, 2, time.Unix(100, 0),
+		[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
 	require.Error(t, err, "a halted service must refuse to execute further commits")
 	require.Empty(t, ca.blocks, "no block may be produced while halted")
 
@@ -275,14 +280,62 @@ func TestProcessCommittedCertificate_UnavailableBatchBlocksExecution(t *testing.
 	defer cancel()
 	svc.ctx = ctx
 
-	err := svc.processCommittedCertificate(commitCert(author, 4, time.Unix(100, 0),
+	_, err := svc.processCommittedGroup(group(commitCert(author, 4, time.Unix(100, 0),
 		[]types.PayloadEntry{
 			{Digest: held.Digest(), Worker: w.ID()},
 			{Digest: missing.Digest(), Worker: w.ID()},
-		}))
+		})))
 	require.Error(t, err, "a certificate with an unavailable batch must not execute")
 	require.Empty(t, ca.blocks, "no partial block may be produced")
 
 	b, _ := w.GetBatch(held.Digest())
 	require.NotNil(t, b, "nothing may be pruned when the commit did not happen")
+}
+
+// #4164: one committed LEADER group = ONE executor block. Per-certificate
+// blocks multiplied end-of-block cost (BPT recompute, leveldb commit, anchor)
+// by the committee size — ~12 blocks per round, 7.4 blocks/s at 10 tps.
+func TestProcessCommittedGroup_OneBlockPerLeaderGroup(t *testing.T) {
+	svc, ca, author := newCommitService(t, 2)
+	w0, w1 := svc.node.Workers()[0], svc.node.Workers()[1]
+
+	bA := types.NewBatch([][]byte{[]byte("cert-A")})
+	bB := types.NewBatch([][]byte{[]byte("cert-B")})
+	bL := types.NewBatch([][]byte{[]byte("leader")})
+	require.NoError(t, w0.StoreBatch(bA))
+	require.NoError(t, w1.StoreBatch(bB))
+	require.NoError(t, w0.StoreBatch(bL))
+
+	tA, tL := time.Unix(0, 1_700_000_000_000_000_000), time.Unix(0, 1_700_000_001_000_000_000)
+	certA := commitCert(author, 3, tA, []types.PayloadEntry{{Digest: bA.Digest(), Worker: w0.ID()}})
+	certB := commitCert(author, 3, tA, []types.PayloadEntry{{Digest: bB.Digest(), Worker: w1.ID()}})
+	leader := commitCert(author, 4, tL, []types.PayloadEntry{{Digest: bL.Digest(), Worker: w0.ID()}})
+
+	_, err := svc.processCommittedGroup(group(certA, certB, leader))
+	require.NoError(t, err)
+
+	// ONE block, all three certificates' batches, in group (canonical) order.
+	require.Len(t, ca.blocks, 1, "one leader group must produce exactly one block")
+	got := ca.blocks[0].Batches
+	require.Len(t, got, 3)
+	require.Equal(t, bA.Digest(), got[0].Digest())
+	require.Equal(t, bB.Digest(), got[1].Digest())
+	require.Equal(t, bL.Digest(), got[2].Digest())
+	require.Equal(t, uint64(1), ca.blocks[0].Index)
+	require.Equal(t, types.Round(4), ca.blocks[0].LeaderRound, "the leader is last in the group")
+	require.True(t, ca.blocks[0].Time.Equal(tL.UTC()), "block time comes from the LEADER's header")
+
+	// Every certificate's batches were pruned from the active stores.
+	for _, d := range []types.BatchDigest{bA.Digest(), bB.Digest(), bL.Digest()} {
+		require.False(t, w0.HasBatch(d) || w1.HasBatch(d), "committed batch %x must leave the active store", d[:4])
+	}
+
+	// A second group advances the index by exactly one.
+	bN := types.NewBatch([][]byte{[]byte("next")})
+	require.NoError(t, w0.StoreBatch(bN))
+	_, err = svc.processCommittedGroup(group(commitCert(author, 6, tL.Add(time.Second),
+		[]types.PayloadEntry{{Digest: bN.Digest(), Worker: w0.ID()}})))
+	require.NoError(t, err)
+	require.Len(t, ca.blocks, 2)
+	require.Equal(t, uint64(2), ca.blocks[1].Index)
 }

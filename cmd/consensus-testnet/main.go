@@ -322,8 +322,8 @@ func main() {
 			select {
 			case <-ctx.Done():
 				return
-			case cert := <-committed:
-				if cert != nil {
+			case group := <-committed:
+				for _, cert := range group {
 					// Collect the certificate's batches, blocking (and
 					// fetching from peers) until every one is available.
 					// Executing a certificate without some of its batches

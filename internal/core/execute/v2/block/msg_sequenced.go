@@ -316,7 +316,7 @@ func (x SequencedMessage) isReady(batch *database.Batch, ctx *MessageContext, se
 
 	// If the transaction is out of sequence, mark it pending
 	if partitionLedger.Delivered+1 != seq.Number {
-		ctx.Executor.logger.Info("Out of sequence message",
+		ctx.Executor.logger.Debug("Out of sequence message",
 			"hash", logging.AsHex(seq.Message.Hash()).Slice(0, 4),
 			"seq-got", seq.Number,
 			"seq-want", partitionLedger.Delivered+1,

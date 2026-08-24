@@ -235,11 +235,15 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			// number chosen for a reason, and `% 100` on a hash is not
 			// sharding (#4133).
 			//
-			// Whether 64 in-process workers buys anything over a handful is a
-			// separate question worth measuring — a Narwhal worker is meant to
+			// Measured (#4164): keyed worker routing is unwired (#4133), so
+			// every submission lands on ONE worker regardless of the count —
+			// the remaining 63 (×2 nodes per container) were idle batch-timer
+			// loops burning wakeups for nothing. A Narwhal worker is meant to
 			// be a separate machine contributing its own bandwidth, not 64
-			// goroutine-sets sharing one NIC and one disk.
-			cvc.NumWorkers = run.Ptr(int64(64))
+			// goroutine-sets sharing one NIC and one disk. Four keeps the
+			// power-of-two sharding shape and real parallelism headroom for
+			// when #4133 wires the routing key.
+			cvc.NumWorkers = run.Ptr(int64(4))
 
 			// Every node serves Prometheus metrics on :26670. Without this no
 			// DI node had a /metrics endpoint at all — the CometBFT lineage
