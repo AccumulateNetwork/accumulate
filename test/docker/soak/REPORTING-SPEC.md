@@ -103,6 +103,16 @@ abort if it is not (implemented — the soakmon gate in `soak.sh`). The
 dashboard MUST be visible to the operator, opened for them, before load
 starts (implemented — `run-remote.sh`).
 
+## 8. Summaries in, raw data out
+
+Test results are reported as summaries — in the issue the run served, and in
+the run's `manifest.md` / `runs/INDEX.md`. Raw test data MUST NOT be
+committed: no logs (`*.log`), no heap/CPU profiles (`*.pb.gz`), no goroutine
+dumps, no node-log captures. They stay on the machine that ran the test
+(enforced — `runs/.gitignore`); anything a reader needs from them goes into
+the summary. On 2026-08-24 the full history of every branch and release tag
+was rewritten to purge previously committed raw data — do not reintroduce it.
+
 ## Current compliance
 
 | clause | state |
