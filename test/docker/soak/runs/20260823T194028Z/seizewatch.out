@@ -1,0 +1,482 @@
+2026-08-23T19:43:09 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T19:43:54 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=16 undeliv=none
+2026-08-23T19:44:39 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=16 undeliv=none
+2026-08-23T19:45:25 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=16 undeliv=none
+2026-08-23T19:46:10 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=16 undeliv=none
+2026-08-23T19:46:55 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=16 undeliv=none
+2026-08-23T19:47:40 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=16 undeliv=none
+2026-08-23T19:48:25 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=16 undeliv=none
+2026-08-23T19:49:10 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=16 undeliv=none
+2026-08-23T19:49:55 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=16 undeliv=none
+2026-08-23T19:50:40 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=16 undeliv=synthetic BVN2->BVN1 undeliv=10
+2026-08-23T19:51:25 stuck=0 stuckStream= worst=BVN2->Directory gap=0 deliv=3 undeliv=synthetic BVN1->Directory undeliv=1
+2026-08-23T19:52:10 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T19:52:55 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T19:53:40 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T19:54:25 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T19:55:10 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T19:55:55 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T19:56:40 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T19:57:25 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T19:58:10 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T19:58:55 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T19:59:40 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:00:25 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:01:10 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:01:55 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:02:40 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:03:25 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:04:10 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:04:55 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:05:40 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:06:25 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:07:10 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:07:55 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:08:40 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:09:25 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:10:10 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:10:55 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:11:40 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:12:25 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:13:11 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:13:56 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:14:41 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:15:26 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T20:16:11 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:16:56 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:17:41 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:18:26 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:19:11 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:19:56 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:20:41 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:21:26 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:22:11 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:22:56 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:23:41 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:24:26 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:25:11 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:25:56 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:26:41 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:27:26 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:28:11 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:28:56 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:29:41 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:30:26 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:31:11 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:31:56 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:32:41 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:33:26 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:34:11 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:34:56 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:35:41 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:36:26 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:37:11 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:37:56 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:38:41 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:39:26 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:40:11 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:40:56 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:41:42 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:42:27 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:43:12 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:43:57 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:44:42 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:45:27 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:46:12 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:46:57 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:47:42 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:48:27 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:49:12 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:49:57 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:50:42 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:51:27 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:52:12 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:52:57 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:53:42 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:54:27 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:55:12 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:55:57 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:56:42 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:57:27 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:58:12 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:58:57 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T20:59:42 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:00:27 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:01:12 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:01:57 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:02:42 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:03:27 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:04:12 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:04:57 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:05:42 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:06:27 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:07:12 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:07:57 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:08:43 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:09:28 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:10:13 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:10:58 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:11:43 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:12:28 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:13:13 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:13:58 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:14:43 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:15:28 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:16:13 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:16:58 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:17:43 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:18:28 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:19:13 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:19:58 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:20:43 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:21:28 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:22:13 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:22:58 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:23:43 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:24:28 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:25:13 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:25:58 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:26:43 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:27:28 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:28:13 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:28:58 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:29:43 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:30:28 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:31:13 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:31:58 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:32:43 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:33:28 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:34:13 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:34:58 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:35:43 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:36:28 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:37:13 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:37:59 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:38:44 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:39:29 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:40:14 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:40:59 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:41:44 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:42:29 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T21:43:14 stuck=0 stuckStream= worst=none undeliv=anchor BVN1->Directory undeliv=1
+2026-08-23T21:43:59 stuck=0 stuckStream= worst=BVN1->BVN2 gap=0 deliv=0 undeliv=synthetic BVN2->BVN1 undeliv=10
+2026-08-23T21:44:44 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=10 undeliv=none
+2026-08-23T21:45:29 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=10 undeliv=none
+2026-08-23T21:46:14 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=10 undeliv=none
+2026-08-23T21:46:59 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=10 undeliv=none
+2026-08-23T21:47:44 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=10 undeliv=none
+2026-08-23T21:48:29 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=10 undeliv=none
+2026-08-23T21:49:14 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=10 undeliv=none
+2026-08-23T21:49:59 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=10 undeliv=none
+2026-08-23T21:50:44 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=10 undeliv=none
+2026-08-23T21:51:29 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=10 undeliv=synthetic BVN2->BVN1 undeliv=11
+2026-08-23T21:52:14 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T21:52:59 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T21:53:44 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T21:54:29 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T21:55:14 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T21:55:59 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T21:56:44 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T21:57:29 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T21:58:14 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T21:58:59 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T21:59:44 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:00:29 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:01:14 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:01:59 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:02:44 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:03:29 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:04:14 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:04:59 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:05:44 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:06:30 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:07:15 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:08:00 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:08:45 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:09:30 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:10:15 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:11:00 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:11:45 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:12:30 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:13:15 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:14:00 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:14:45 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:15:30 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:16:15 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:17:00 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:17:45 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:18:30 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:19:15 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:20:00 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:20:45 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:21:30 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:22:15 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:23:00 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:23:45 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:24:30 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:25:15 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:26:00 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:26:45 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:27:30 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:28:15 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:29:00 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:29:45 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:30:30 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:31:15 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:32:00 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:32:45 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:33:30 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:34:15 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:35:01 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:35:46 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:36:31 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:37:16 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:38:01 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:38:46 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:39:31 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:40:16 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:41:01 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:41:46 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:42:31 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:43:16 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:44:01 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:44:46 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:45:31 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:46:16 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:47:01 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:47:46 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:48:31 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:49:16 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:50:01 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:50:46 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:51:31 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:52:16 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:53:01 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:53:46 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:54:31 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:55:16 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:56:01 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:56:46 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:57:31 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:58:16 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:59:01 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T22:59:46 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:00:31 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:01:16 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:02:01 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:02:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:03:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:04:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:05:02 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:05:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:06:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:07:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:08:02 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:08:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:09:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:10:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:11:02 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:11:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:12:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:13:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:14:02 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:14:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:15:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:16:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:17:02 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:17:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:18:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:19:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:20:02 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:20:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:21:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:22:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:23:02 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:23:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:24:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:25:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:26:02 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:26:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:27:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:28:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:29:02 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:29:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:30:33 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:31:18 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=none
+2026-08-23T23:32:03 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:32:48 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:33:33 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:34:18 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:35:03 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:35:48 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:36:33 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:37:18 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:38:03 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:38:48 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:39:33 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:40:18 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:41:03 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:41:48 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:42:33 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:43:18 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:44:03 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:44:48 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:45:33 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:46:18 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:47:03 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:47:48 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:48:33 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:49:18 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:50:03 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:50:48 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:51:33 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:52:18 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:53:03 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:53:48 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:54:33 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:55:18 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:56:03 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:56:48 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:57:33 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:58:19 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:59:04 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-23T23:59:49 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:00:34 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:01:19 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:02:04 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:02:49 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:03:34 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:04:19 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:05:04 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:05:49 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:06:34 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:07:19 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:08:04 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:08:49 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:09:34 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:10:19 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:11:04 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:11:49 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:12:34 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:13:19 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:14:04 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:14:49 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:15:34 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:16:19 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:17:04 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:17:49 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:18:34 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:19:19 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:20:04 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:20:49 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:21:34 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:22:19 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:23:04 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:23:49 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:24:34 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:25:19 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T00:26:04 stuck=0 stuckStream= worst=none undeliv=anchor Directory->Directory undeliv=3
+2026-08-24T00:26:50 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=anchor BVN1->Directory undeliv=1
+2026-08-24T00:27:35 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:28:20 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:29:05 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:29:50 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:30:35 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:31:20 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:32:05 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:32:50 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:33:35 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:34:20 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:35:05 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:35:50 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:36:35 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:37:20 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:38:05 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:38:50 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:39:35 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:40:20 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:41:05 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:41:50 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:42:35 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:43:20 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:44:05 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:44:50 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:45:35 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:46:20 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:47:05 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:47:50 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:48:35 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:49:20 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:50:05 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:50:50 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:51:35 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:52:20 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:53:05 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:53:50 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:54:36 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:55:21 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:56:06 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:56:51 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:57:36 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:58:21 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:59:06 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T00:59:51 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T01:00:36 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=4 undeliv=none
+2026-08-24T01:01:21 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:02:06 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:02:51 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:03:36 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:04:21 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:05:06 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:05:51 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:06:36 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:07:21 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:08:06 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:08:51 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:09:36 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:10:21 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:11:06 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:11:51 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:12:36 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:13:21 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:14:06 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:14:51 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:15:36 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:16:21 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:17:06 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:17:51 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:18:36 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:19:22 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:20:07 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:20:52 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:21:37 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:22:22 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:23:07 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:23:52 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:24:37 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:25:22 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:26:07 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:26:52 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:27:37 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:28:22 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:29:07 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:29:52 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:30:37 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:31:22 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:32:07 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:32:52 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:33:37 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:34:22 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:35:07 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:35:52 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:36:37 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:37:22 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:38:07 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:38:52 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:39:37 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:40:22 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:41:07 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:41:52 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:42:37 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:43:22 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T01:44:07 stuck=0 stuckStream= worst=none undeliv=none
