@@ -29,7 +29,15 @@ const (
 	DefaultMaxStoredBatches = 10000
 
 	// Timing defaults
-	DefaultBlockInterval    = 3 * time.Second
+	//
+	// Cross-partition settlement latency is priced in block intervals: the
+	// proof path (source block -> source anchor -> DN block -> DN anchor ->
+	// destination block) is ~6-7 intervals, measured as a uniform ~21s of
+	// in-flight gap on every channel at 3s blocks (run 20260824T110727Z —
+	// every channel drained at its arrival rate; the gap was pure latency).
+	// Block-per-commit (#4164) made per-block overhead small enough that 1s
+	// blocks are affordable, which brings settlement to ~7s.
+	DefaultBlockInterval    = 1 * time.Second
 	DefaultMinRoundInterval = 100 * time.Millisecond
 	DefaultWarmupPeriod     = 8 * time.Second
 

@@ -199,6 +199,7 @@ def collect_heights():
 _PROGRESS = {}
 _RATE = {}  # part -> [(t, height)] rolling window for the block-rate display
 _RSS_ALARM = {}  # last RSS-alarm time, rate-limited to one per 5 min
+_FLOW_HIST = {}  # (kind,src,dst) -> [(t, sent, recv)] for channel-lag rates
 
 
 def assess_progress(heights, now):
@@ -540,6 +541,49 @@ def collect_flows_api():
         for src, row in flows[kind].items():
             for dst, c in row.items():
                 c["undeliv"] = max(0, c.get("sent", 0) - c.get("recv", 0))
+
+    # Channel lag IN SECONDS. A busy channel legitimately holds rate x
+    # pipeline-latency messages in flight, so a raw sent-recv gap reads as
+    # "hundreds behind" the moment throughput rises (measured: a uniform
+    # ~21s on every channel at 3s blocks, fast and slow alike, all draining
+    # at their arrival rate). The honest health signal is the gap divided by
+    # the receive rate, judged against the EXPECTED pipeline latency
+    # (~7 block intervals for the source->anchor->DN->anchor->destination
+    # proof path): caught up when under it, warning at 2x, red at 4x.
+    now_t = time.time()
+    with LOCK:
+        spbs = [v.get("secPerBlock") for v in (STATE.get("progress") or {}).values()
+                if v.get("secPerBlock")]
+    spb = sorted(spbs)[len(spbs)//2] if spbs else 1.0
+    expected = 7.0 * spb
+    for kind in flows:
+        for src, row in flows[kind].items():
+            for dst, c in row.items():
+                key = (kind, src, dst)
+                hist = _FLOW_HIST.setdefault(key, [])
+                hist.append((now_t, c.get("sent", 0), c.get("recv", 0)))
+                while hist and now_t - hist[0][0] > 90:
+                    hist.pop(0)
+                gap = c.get("sent", 0) - c.get("recv", 0)
+                lag_s = None
+                if len(hist) >= 2:
+                    dt = hist[-1][0] - hist[0][0]
+                    drecv = hist[-1][2] - hist[0][2]
+                    if drecv > 0 and dt > 0:
+                        lag_s = gap / (drecv / dt)
+                    elif gap > 0:
+                        lag_s = float("inf")  # gap and nothing arriving
+                    else:
+                        lag_s = 0.0
+                state = "ok"
+                if lag_s is not None:
+                    if lag_s >= 4 * expected:
+                        state = "red"
+                    elif lag_s >= 2 * expected:
+                        state = "warn"
+                c["lagS"] = None if lag_s is None else (999999 if lag_s == float("inf") else round(lag_s, 1))
+                c["state"] = state
+                c["expLagS"] = round(expected, 1)
 
     # Anchor "sent" from the source's anchor-sequence CHAIN height. The anchor
     # ledger has no outbound `produced` writer on any lineage (checked 2026-08:
@@ -923,7 +967,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
   <div class=panel>
     <h2>Synthetic flow &nbsp;·&nbsp; src&nbsp;▸&nbsp;dst</h2>
     <div style="overflow-x:auto"><table class=mx id=mxSyn></table></div>
-    <div class=legend>cell = received / <b>delivered</b>, and <span class=mut>sent</span> below. <b style="color:var(--red)">Red</b> = received but not delivered (wedge). <b style="color:var(--yel)">Amber</b> = sent but not received (in transit / lost).</div>
+    <div class=legend>cell = received / <b>delivered</b>, sent + lag below. Lag = in-flight gap &divide; receive rate, judged against the expected proof-path latency (~7 block intervals): <b>caught up</b> under 2&times;, <b style="color:var(--yel)">warning</b> at 2&times;, <b style="color:var(--red)">red</b> at 4&times; or received-but-undelivered (executor wedge).</div>
   </div>
   <div class=panel>
     <h2>Anchor flow &nbsp;·&nbsp; src&nbsp;▸&nbsp;dst</h2>
@@ -998,11 +1042,17 @@ function matrix(el,mat,parts){
       const c=(mat[s]&&mat[s][d])||{};
       const sent=c.sent||0,recv=c.recv||0,deliv=c.deliv||0;
       if(!sent&&!recv&&!deliv){h+='<td class=cell style="color:var(--bd)">·</td>';continue;}
-      const dgap=recv-deliv,tgap=sent-recv;
-      let bg='rgba(63,185,80,.10)';
-      if(dgap>0){const f=Math.min(1,dgap/Math.max(recv,1));bg=`rgba(248,81,73,${(0.14+0.5*f).toFixed(2)})`;}
-      else if(tgap>0){const f=Math.min(1,tgap/Math.max(sent,1));bg=`rgba(210,153,34,${(0.14+0.4*f).toFixed(2)})`;}
-      h+=`<td class=cell style="background:${bg}"><div class=rd>${fmt(recv)}/<b>${fmt(deliv)}</b></div><div class=st>sent ${fmt(sent)}</div></td>`;
+      const dgap=recv-deliv;
+      // Latency-judged health: in-flight gap / receive rate vs the expected
+      // pipeline latency. caught up < 2x expected; warning >= 2x; red >= 4x
+      // (or received-but-undelivered, which is an executor wedge whatever
+      // the latency).
+      let bg='rgba(63,185,80,.10)',note='caught up';
+      if(dgap>0){const f=Math.min(1,dgap/Math.max(recv,1));bg=`rgba(248,81,73,${(0.14+0.5*f).toFixed(2)})`;note=`${fmt(dgap)} undelivered`;}
+      else if(c.state==='red'){bg='rgba(248,81,73,.45)';note=`lag ${c.lagS>=999999?'∞':Math.round(c.lagS)+'s'} (exp ${Math.round(c.expLagS)}s)`;}
+      else if(c.state==='warn'){bg='rgba(210,153,34,.30)';note=`lag ${Math.round(c.lagS)}s (exp ${Math.round(c.expLagS)}s)`;}
+      else if(c.lagS!=null&&c.lagS>0){note=`~${Math.round(c.lagS)}s in flight`;}
+      h+=`<td class=cell style="background:${bg}"><div class=rd>${fmt(recv)}/<b>${fmt(deliv)}</b></div><div class=st>sent ${fmt(sent)} · ${note}</div></td>`;
     }
     h+='</tr>';
   }
