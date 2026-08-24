@@ -48,6 +48,14 @@ func Open(filepath string, o ...Option) (*Database, error) {
 	// turn the level walk into a bitmap check; a real block cache keeps hot
 	// state in RAM.
 	//
+	// The block cache is the STATE-SCALING knob: at ~20k accounts the hot
+	// working set outgrew 64MB and 47% of node CPU became positive lookups
+	// walking sstables (version.walkOverlapping -> Reader.find, mostly under
+	// the API query handler serving healers and trackers) — rounds
+	// stretched, heals stormed, runs collapsed on a state-size clock, not a
+	// rate clock (bloom filters only short-circuit NEGATIVE lookups). 256MB
+	// holds the working set of a ~100k-account universe.
+	//
 	// SIZED FOR TWO ENGINES PER CGROUP. A dual validator opens one of these
 	// per partition (dnn + bvnn), so every number here is doubled in a 4GiB
 	// container. The first sizing (128MB cache, 64MB write buffer, pooled
@@ -60,7 +68,7 @@ func Open(filepath string, o ...Option) (*Database, error) {
 	// engine.
 	db, err := leveldb.OpenFile(filepath, &opt.Options{
 		Filter:                 filter.NewBloomFilter(10),
-		BlockCacheCapacity:     64 * opt.MiB,
+		BlockCacheCapacity:     256 * opt.MiB,
 		WriteBuffer:            16 * opt.MiB,
 		OpenFilesCacheCapacity: 512,
 		// The buffer pool stays ENABLED. Disabling it fixed the pool's

@@ -310,6 +310,7 @@ func main() {
 	statsFile := flag.String("stats-file", "", "if set, write a live JSON snapshot of the run (per-type mix, totals, account counts) here every few seconds")
 	control := flag.String("control", "", "if set, serve the runtime control API on this address (e.g. 127.0.0.1:8091): GET/POST /control adjusts tps and the transaction mix live")
 	submitters := flag.Int("submitters", 16, "concurrent submission workers; the pacer hands each tick to a free worker, so the achieved rate is not capped by one submit round-trip at a time")
+	maxAccounts := flag.Int("max-accounts", 25000, "cap the lite-account population; past it, sends reuse existing accounts. An unbounded universe outgrows any state cache and turns long runs into state-size death clocks (0 = unlimited)")
 	flag.Parse()
 
 	// -duration selects a timed run; otherwise -count transactions are sent at
@@ -366,6 +367,7 @@ func main() {
 	}
 	e.Q = api.Querier2{Querier: &poolQuerier{clients: clients, idx: &e.subIdx}}
 	e.led = newLedger(e.fees)
+	e.u.maxLites = *maxAccounts
 	e.nonce.v.Store(uint64(time.Now().UTC().UnixMilli()))
 	e.track = newTracker(e.Q)
 	// Direct store, not setTPS: -tps 0 is legal at launch (count mode, no

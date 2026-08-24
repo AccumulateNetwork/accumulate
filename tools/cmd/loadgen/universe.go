@@ -25,8 +25,23 @@ type universe struct {
 	mu  sync.Mutex
 	rng *mrand.Rand
 
+	// maxLites caps the lite-account population. The generator's
+	// ever-expanding universe is what it exists for — but an unbounded
+	// universe outgrows any state cache, and every long run died on a
+	// STATE-SIZE clock: ~20k accounts blew past the 64MB block cache and
+	// 47% of node CPU became sstable walks serving queries (#4164). Zero
+	// means unlimited.
+	maxLites int
+
 	lites []*liteAccount
 	adis  []*identity
+}
+
+// atLiteCap reports whether the lite population has reached its cap.
+func (u *universe) atLiteCap() bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.maxLites > 0 && len(u.lites) >= u.maxLites
 }
 
 // liteAccount is a lite token account and the identity that signs for it.

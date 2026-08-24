@@ -86,7 +86,7 @@ var sendTokensLite = action{
 	name: "send-tokens-lite", weight: 18,
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
 		to := e.u.randLite()
-		if to == nil || e.u.intn(8) == 0 {
+		if to == nil || (e.u.intn(8) == 0 && !e.u.atLiteCap()) {
 			to = newLiteAccount(e.u.rng)
 			e.u.addLite(to)
 		}

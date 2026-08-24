@@ -32,8 +32,10 @@ x-node-env: &node-env
   # GC ran continuously, blocks stretched to 3s and the run collapsed in 15
   # minutes (20260824T123427Z). 2GiB caps the old 2x headroom while leaving
   # the working set room to breathe; with ~1GB of reclaimable page cache the
-  # container sits ~3GB of its 4GiB limit.
-  GOMEMLIMIT: "${GOMEMLIMIT-2GiB}"
+  # container sits ~3GB of its 4GiB limit. Raised to 2750MiB with the 256MB
+  # block caches (2x on-heap engines) — the caches are the state-scaling fix
+  # and must not fight the GC for room.
+  GOMEMLIMIT: "${GOMEMLIMIT-2750MiB}"
 
 services:
   # CRITICAL: Bootstrap server is REQUIRED for peer discovery
