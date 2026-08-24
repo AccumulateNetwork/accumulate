@@ -167,13 +167,30 @@ def _plabel(u):
 
 
 def collect_heights():
+    """Read each partition's ledger index from SEVERAL nodes and keep the max.
+
+    A single routed query is a single point of stale truth: in run
+    20260824T051249Z a chaos-restarted node halted its executor at block 240
+    but kept answering queries from its frozen state, the router pinned to
+    it, and the dashboard reported a perfectly healthy network (block 792,
+    all validators in sync) as stalled for half an hour. A halted node can
+    only under-report, so the max across routes is the honest reading.
+    """
     heights = {}
     for p in PARTITIONS:
-        r = curl_api("query", {"scope": "acc://%s.acme/ledger" % SCOPE[p]})
-        try:
-            heights[p] = int(r["result"]["account"]["index"])
-        except Exception:
-            heights[p] = None
+        best = None
+        for port in (26660, 26663, 26665, 26668, 26670):
+            body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "query",
+                               "params": {"scope": "acc://%s.acme/ledger" % SCOPE[p]}})
+            out = sh(["curl", "-s", "-m", "4", "-X", "POST",
+                      "http://localhost:%d/v3" % port,
+                      "-H", "content-type: application/json", "-d", body], timeout=6)
+            try:
+                v = int(json.loads(out)["result"]["account"]["index"])
+            except Exception:
+                continue
+            best = v if best is None else max(best, v)
+        heights[p] = best
     return heights
 
 
@@ -318,10 +335,20 @@ def life_from(per):
                 # this is happening at all.
                 life[key] += n
             elif name == "accumulate_dagbft_batch_waits_total":
-                m = _REASON.search(lab or "")
-                if m:
-                    life["waitsByReason"][m.group(1)] = \
-                        life["waitsByReason"].get(m.group(1), 0) + n
+                # Labels arrive as a parsed dict since the scrape refactor;
+                # the regex path is kept for raw-string rows. This crashed
+                # the whole collector the FIRST time a batch wait ever
+                # occurred (dict is truthy, search(dict) is a TypeError) —
+                # the dashboard froze at the exact moment it became
+                # interesting (run 20260824T051249Z).
+                if isinstance(lab, dict):
+                    reason = lab.get("reason")
+                else:
+                    m = _REASON.search(lab or "")
+                    reason = m.group(1) if m else None
+                if reason:
+                    life["waitsByReason"][reason] = \
+                        life["waitsByReason"].get(reason, 0) + n
     return life
 
 
@@ -688,6 +715,8 @@ def collector():
             # forever, which is worse than saying so — the page looked healthy
             # while nothing was being read. Log and carry on.
             fails += 1
+            import traceback
+            log(traceback.format_exc().strip().replace("\n", " | "))
             log("collector error (%d in a row): %s: %s" % (
                 fails, type(e).__name__, str(e)[:200]))
             time.sleep(1)
