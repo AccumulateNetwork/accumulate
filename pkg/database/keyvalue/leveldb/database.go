@@ -89,6 +89,10 @@ func (c *recordCache) put(key [32]byte, value []byte, deleted bool) {
 		c.items = make(map[[32]byte]*list.Element)
 		c.order = list.New()
 	}
+	// Per-entry overhead is ~160B measured (map bucket + list element +
+	// entry struct + key) — the first estimate of 64 let the cache hold
+	// nearly 2x its budget in small entries.
+	const entryOverhead = 160
 	if e, ok := c.items[key]; ok {
 		ent := e.Value.(*recordCacheEntry)
 		c.bytes += len(value) - len(ent.value)
@@ -97,7 +101,7 @@ func (c *recordCache) put(key [32]byte, value []byte, deleted bool) {
 	} else {
 		e := c.order.PushFront(&recordCacheEntry{key: key, value: value, deleted: deleted})
 		c.items[key] = e
-		c.bytes += len(value) + 64
+		c.bytes += len(value) + entryOverhead
 	}
 	for c.bytes > recordCacheMaxBytes {
 		back := c.order.Back()
@@ -107,7 +111,7 @@ func (c *recordCache) put(key [32]byte, value []byte, deleted bool) {
 		ent := back.Value.(*recordCacheEntry)
 		c.order.Remove(back)
 		delete(c.items, ent.key)
-		c.bytes -= len(ent.value) + 64
+		c.bytes -= len(ent.value) + entryOverhead
 	}
 }
 
@@ -118,7 +122,7 @@ func (c *recordCache) drop(key [32]byte) {
 		ent := e.Value.(*recordCacheEntry)
 		c.order.Remove(e)
 		delete(c.items, key)
-		c.bytes -= len(ent.value) + 64
+		c.bytes -= len(ent.value) + 160
 	}
 }
 
@@ -165,12 +169,17 @@ func Open(filepath string, o ...Option) (*Database, error) {
 		BlockCacheCapacity:     256 * opt.MiB,
 		WriteBuffer:            16 * opt.MiB,
 		OpenFilesCacheCapacity: 512,
-		// The buffer pool stays ENABLED. Disabling it fixed the pool's
-		// grow-forever retention when write buffers were 64MB, but converted
-		// every compaction/read buffer into a fresh allocation — 68GB of
-		// churn (21% of all allocation) in 30 minutes at 400-700 tx/s. With
-		// 16MB write buffers the pool's natural size is tens of MB: bounded
-		// retention AND no churn.
+		// The buffer pool is DISABLED — final answer after being burned in
+		// both directions. Enabled, it grows toward the largest buffers any
+		// path ever needed and never shrinks; the "16MB write buffers keep
+		// it small" theory was wrong because the pool also serves TABLE READ
+		// buffers, and under read-heavy load it held 887MB (40% of heap) on
+		// the sinking node in run 20260824T170628Z. Disabled, compaction and
+		// read buffers are ordinary allocations — a churn tax (was 21% of
+		// allocation) the GC can afford, especially now that the write-path
+		// record cache keeps most hot reads out of leveldb entirely. Bounded
+		// memory beats cheap allocation.
+		DisableBufferPool: true,
 	})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("open %q: %w", filepath, err)
