@@ -100,3 +100,72 @@ func TestCascade_AnchorFastPathStaysInline(t *testing.T) {
 	// Deliberately not stored: the fast path must not need the body.
 	assert.True(t, SequencedMessage{}.nextTargetsSameIdentity(batch, next.ID(), cur))
 }
+
+// #4163: one delivery schedules the whole contiguous received run (bounded),
+// not just the immediate successor. One-per-block was a real ceiling — a
+// ~600-message backlog at 10 tps drained at 1.04/block, barely above its own
+// refill rate.
+
+func cascadeLedger(delivered uint64, received ...uint64) *protocol.PartitionSyntheticLedger {
+	l := new(protocol.PartitionSyntheticLedger)
+	l.Url = protocol.PartitionUrl("BVN1")
+	l.Delivered = delivered
+	for _, n := range received {
+		l.Add(false, n, protocol.PartitionUrl("BVN0").WithTxID([32]byte{byte(n), byte(n >> 8)}))
+	}
+	return l
+}
+
+func TestCascade_SchedulesTheWholeContiguousRun(t *testing.T) {
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	t.Cleanup(batch.Discard)
+	queue := batch.Account(protocol.PartitionUrl("BVN0").JoinPath(protocol.Synthetic)).CascadeDeliveryQueue()
+
+	// Received: 2-6 contiguous, hole at 7, 8 received.
+	ledger := cascadeLedger(1, 2, 3, 4, 5, 6, 8)
+	require.NoError(t, scheduleCascadeRun(queue, ledger, 1))
+
+	queued, err := queue.Get()
+	require.NoError(t, err)
+	require.Len(t, queued, 5, "2-6 scheduled; the hole at 7 ends the run — 8 must NOT be scheduled ahead of order")
+	for i, n := range []uint64{2, 3, 4, 5, 6} {
+		id, _ := ledger.Get(n)
+		assert.True(t, queued[i].Equal(id), "queue[%d] is seq %d", i, n)
+	}
+}
+
+func TestCascade_WindowBoundsTheRun(t *testing.T) {
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	t.Cleanup(batch.Discard)
+	queue := batch.Account(protocol.PartitionUrl("BVN0").JoinPath(protocol.Synthetic)).CascadeDeliveryQueue()
+
+	seqs := make([]uint64, 100)
+	for i := range seqs {
+		seqs[i] = uint64(i + 2)
+	}
+	require.NoError(t, scheduleCascadeRun(queue, cascadeLedger(1, seqs...), 1))
+
+	queued, err := queue.Get()
+	require.NoError(t, err)
+	assert.Len(t, queued, cascadeDeliveryWindow, "a long backlog is scheduled window-at-a-time")
+}
+
+func TestCascade_DoesNotDoubleScheduleWithinABlock(t *testing.T) {
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	t.Cleanup(batch.Discard)
+	queue := batch.Account(protocol.PartitionUrl("BVN0").JoinPath(protocol.Synthetic)).CascadeDeliveryQueue()
+
+	ledger := cascadeLedger(1, 2, 3, 4, 5)
+	require.NoError(t, scheduleCascadeRun(queue, ledger, 1))
+	// A later delivery in the same block (seq 2 delivered by the queue's own
+	// bundle NEXT block would restart at 2; here simulate seq 2's delivery
+	// scheduling from 3 while 3-5 are already queued).
+	require.NoError(t, scheduleCascadeRun(queue, ledger, 2))
+
+	queued, err := queue.Get()
+	require.NoError(t, err)
+	assert.Len(t, queued, 4, "3-5 were already scheduled; nothing is added twice")
+}

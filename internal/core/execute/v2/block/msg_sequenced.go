@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -198,26 +199,73 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 		return false, nil
 	}
 
-	// Queue the next transaction in the sequence. Same identity: inline, into
-	// the running bundle, as always. A DIFFERENT identity defers to the next
-	// block's cascade queue (#4146): the cascade is a stream property, not an
-	// identity one, and under sharded execution (#4145 hazard iii) it must
-	// not widen a bundle's identity set mid-execution. Anchor streams always
-	// take the inline path — every anchor's principal is the local anchor
-	// pool.
+	// Queue the pending tail behind this message. Same identity: inline, into
+	// the running bundle, as always — the inline delivery's own process()
+	// then walks the rest of the tail recursively. A DIFFERENT identity
+	// defers to the next block's cascade queue (#4146): the cascade is a
+	// stream property, not an identity one, and under sharded execution
+	// (#4145 hazard iii) it must not widen a bundle's identity set
+	// mid-execution. Anchor streams always take the inline path — every
+	// anchor's principal is the local anchor pool.
+	//
+	// The cascade schedules the whole CONTIGUOUS received run (bounded), not
+	// just the immediate successor. Each queued message becomes its own
+	// bundle next block — exactly as safe as the same messages arriving
+	// fresh in that block — so a backlog drains cascadeDeliveryWindow per
+	// block instead of one per block. One per block was a real ceiling: in
+	// run 20260824T041626Z at 10 tps, a ~600-message BVN2→BVN1 backlog
+	// behind a chaos pause drained at 1.04 per block, barely above its own
+	// refill rate, with delivery capped at the block rate (#4163).
 	next, ok := ledger.Get(seq.Number + 1)
-	if ok {
-		if x.nextTargetsSameIdentity(batch, next, seq) {
-			ctx.queueAdditional(&internal.MessageIsReady{TxID: next})
-		} else {
-			err = batch.Account(ctx.Executor.Describe.Synthetic()).CascadeDeliveryQueue().Add(next)
-			if err != nil {
-				return false, errors.UnknownError.WithFormat("queue cascade delivery: %w", err)
-			}
+	if ok && x.nextTargetsSameIdentity(batch, next, seq) {
+		ctx.queueAdditional(&internal.MessageIsReady{TxID: next})
+	} else if ok {
+		queue := batch.Account(ctx.Executor.Describe.Synthetic()).CascadeDeliveryQueue()
+		err = scheduleCascadeRun(queue, ledger, seq.Number)
+		if err != nil {
+			return false, errors.UnknownError.WithFormat("queue cascade delivery: %w", err)
 		}
 	}
 
 	return true, nil
+}
+
+// cascadeDeliveryWindow bounds how many contiguous pending successors one
+// delivery schedules into the next block's cascade queue. It caps the extra
+// bundles a block can inherit per stream while still letting a backlog drain
+// at window-rate rather than one per block.
+const cascadeDeliveryWindow = 32
+
+// scheduleCascadeRun adds the contiguous received run after `after` to the
+// cascade queue, up to cascadeDeliveryWindow entries, stopping at the first
+// entry already queued (an earlier delivery this block scheduled the rest).
+func scheduleCascadeRun(queue values.List[*url.TxID], ledger *protocol.PartitionSyntheticLedger, after uint64) error {
+	queued, err := queue.Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load cascade queue: %w", err)
+	}
+	inQueue := func(id *url.TxID) bool {
+		for _, q := range queued {
+			if q.Equal(id) {
+				return true
+			}
+		}
+		return false
+	}
+	for n := after + 1; n <= after+cascadeDeliveryWindow; n++ {
+		id, ok := ledger.Get(n)
+		if !ok {
+			return nil // the contiguous received run ends here
+		}
+		if inQueue(id) {
+			return nil // an earlier delivery this block already scheduled the rest
+		}
+		err = queue.Add(id)
+		if err != nil {
+			return errors.UnknownError.WithFormat("queue cascade delivery: %w", err)
+		}
+	}
+	return nil
 }
 
 // nextTargetsSameIdentity reports whether the NEXT pending message's inner
