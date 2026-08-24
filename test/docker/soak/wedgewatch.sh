@@ -137,21 +137,15 @@ print("%d %s %d %d" % (max([x[0] for x in s]) if s else 0,
     log "watching: worstStall=${worst}s (${names}) threshold=${WEDGE_SECS}s blocks=${blocks} empty=${empties} captures=${n}/${MAX}"
   fi
 
-  # An idle network is not a wedge, and a capture taken during one is worse
-  # than useless: it spends one of MAX and opens a COOLDOWN that would blind
-  # this watchdog through exactly the window where the previous run actually
-  # wedged. Blocks still being produced, all of them empty, means the load
-  # generator is between phases — not that the executor is stuck.
-  if [ "${blocks:-0}" -gt "${prev_blocks:-0}" ]; then
-    made=$(( blocks - ${prev_blocks:-0} ))
-    made_empty=$(( empties - ${prev_empties:-0} ))
-    prev_blocks=$blocks; prev_empties=$empties
-    if [ "$made_empty" -ge "$made" ]; then
-      continue
-    fi
-  else
-    prev_blocks=$blocks; prev_empties=$empties
-  fi
+  # Track block production for the log line only. Do NOT use "empty blocks are
+  # being produced" to suppress a capture (#4160): a wedged network — height
+  # frozen, a committed certificate's batches unavailable network-wide (#4159)
+  # — still churns empty DAG rounds indefinitely, so this heuristic silenced
+  # the dump through exactly the wedge it exists to catch (captures=0/3 while
+  # worstStall climbed to 399s). `worst` is already derived ONLY from partitions
+  # soakmon classifies as "stalled" (idle/unknown are excluded), so a worstStall
+  # past the threshold is a genuine wedge regardless of empty-round churn.
+  prev_blocks=$blocks; prev_empties=$empties
 
   if [ "$worst" -ge "$WEDGE_SECS" ]; then
     now=$(date +%s)

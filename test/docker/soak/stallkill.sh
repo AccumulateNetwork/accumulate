@@ -102,8 +102,14 @@ while :; do
 
   # The run ended on its own. soak.sh does not kill this watchdog (it would
   # leave the containers up when we are the ones ending the run), so leave
-  # under our own power.
-  if ! pgrep -f 'bash \./soak\.sh' >/dev/null 2>&1; then
+  # under our own power. Match soak.sh however it was invoked — as `bash
+  # ./soak.sh`, `./test/docker/soak/soak.sh`, or an absolute path. The old
+  # pattern `bash \./soak\.sh` only matched the first form, so a soak started
+  # by path (e.g. via sg/a wrapper) looked "ended" 10s in and this watchdog
+  # stood down for the whole run (#4160 sibling — the DN-4159 validation run
+  # had no stall guard as a result). The [s] class keeps pgrep from matching
+  # its own argument.
+  if ! pgrep -f '[s]oak\.sh' >/dev/null 2>&1; then
     log "stallkill: the run has ended; standing down without touching anything"
     exit 0
   fi
