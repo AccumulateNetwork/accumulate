@@ -56,15 +56,19 @@ func Open(filepath string, o ...Option) (*Database, error) {
 	// BufferPool — which grows toward the largest compaction it ever served
 	// and never shrinks (measured 178MB and climbing) — plus GC headroom hit
 	// the cgroup limit hours after load DROPPED, because compaction of the
-	// high-rate era's debt kept feeding the pool. DisableBufferPool makes
-	// compaction buffers ordinary allocations the GC can actually reclaim;
-	// the budget is ~150MB per engine.
+	// high-rate era's debt kept feeding the pool. The budget is ~150MB per
+	// engine.
 	db, err := leveldb.OpenFile(filepath, &opt.Options{
 		Filter:                 filter.NewBloomFilter(10),
 		BlockCacheCapacity:     64 * opt.MiB,
 		WriteBuffer:            16 * opt.MiB,
 		OpenFilesCacheCapacity: 512,
-		DisableBufferPool:      true,
+		// The buffer pool stays ENABLED. Disabling it fixed the pool's
+		// grow-forever retention when write buffers were 64MB, but converted
+		// every compaction/read buffer into a fresh allocation — 68GB of
+		// churn (21% of all allocation) in 30 minutes at 400-700 tx/s. With
+		// 16MB write buffers the pool's natural size is tens of MB: bounded
+		// retention AND no churn.
 	})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("open %q: %w", filepath, err)

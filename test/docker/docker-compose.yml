@@ -26,6 +26,12 @@ x-logging: &bounded-logging
 # lines per transaction per node, so it is a switch, not a default.
 x-node-env: &node-env
   ACC_TX_TRACE: "${ACC_TX_TRACE-}"
+  # Footprint ceiling: without it Go's GC lets RSS run to ~2x live heap
+  # (~1GB/container at 400 tx/s, questioned against the Comet lineage's
+  # 300-400MB). The limit makes the GC hold near the ceiling instead, for a
+  # few percent CPU. Container limit is 4GiB; this leaves generous slack for
+  # the two leveldb engines' off-heap use.
+  GOMEMLIMIT: "${GOMEMLIMIT-1250MiB}"
 
 services:
   # CRITICAL: Bootstrap server is REQUIRED for peer discovery
