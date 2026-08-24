@@ -109,7 +109,9 @@ func (b *Batch) Marshal() ([]byte, error) {
 	return b.marshalForDigest()
 }
 
-// UnmarshalBatch deserializes a batch from bytes.
+// UnmarshalBatch decodes a batch from its wire encoding. It takes OWNERSHIP
+// of data: the returned batch's transactions alias the buffer, so the caller
+// must not reuse or mutate it afterward.
 func UnmarshalBatch(data []byte) (*Batch, error) {
 	if len(data) < 4 {
 		return nil, errors.New("batch data too short")
@@ -137,8 +139,16 @@ func UnmarshalBatch(data []byte) (*Batch, error) {
 			return nil, errors.New("batch data truncated: missing transaction data")
 		}
 
-		tx := make([]byte, txLen)
-		copy(tx, data[offset:offset+int(txLen)])
+		// Zero-copy: sub-slice the wire buffer instead of copying every
+		// transaction out of it. UnmarshalBatch takes OWNERSHIP of data —
+		// both callers (pubsub batch messages, fetch-batch responses) hand
+		// over per-message buffers that are never reused — so aliasing is
+		// safe, and it removes one allocation + copy per transaction from
+		// the hottest decode path in the system (#4164: batch decode was the
+		// top allocator at 400-700 tx/s). The full-slice expression pins
+		// capacity so appends by a caller cannot bleed into the next
+		// transaction.
+		tx := data[offset : offset+int(txLen) : offset+int(txLen)]
 		offset += int(txLen)
 
 		transactions = append(transactions, tx)
