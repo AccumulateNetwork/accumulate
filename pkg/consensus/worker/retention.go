@@ -72,18 +72,24 @@ func (w *Worker) retain(digest types.BatchDigest, b *types.Batch, detail, cert s
 	if w.retained == nil {
 		w.retained = make(map[types.BatchDigest]*retainedBatch)
 	}
-	if _, exists := w.retained[digest]; !exists {
+	if prev, exists := w.retained[digest]; !exists {
 		w.retainedOrder = append(w.retainedOrder, digest)
+	} else {
+		w.retainedBytes -= batchBytes(prev.batch)
 	}
 	w.retained[digest] = &retainedBatch{batch: b, at: time.Now(), detail: detail, cert: cert}
+	w.retainedBytes += batchBytes(b)
 	metrics.BatchesRetained.Set(float64(len(w.retained)))
 
-	// Oldest first, so the cap cannot be exceeded even in a burst.
-	for len(w.retainedOrder) > w.maxRetained {
+	// Oldest first, so neither cap can be exceeded even in a burst. The byte
+	// cap is what actually bounds memory (#4164).
+	for len(w.retainedOrder) > 0 &&
+		(len(w.retainedOrder) > w.maxRetained || w.retainedBytes > w.maxRetainedBytes) {
 		oldest := w.retainedOrder[0]
 		w.retainedOrder = w.retainedOrder[1:]
 		if r, ok := w.retained[oldest]; ok {
 			delete(w.retained, oldest)
+			w.retainedBytes -= batchBytes(r.batch)
 			w.noteGone(oldest, GoneRetentionExpired, r.detail, r.cert)
 			metrics.BatchesRetentionExpiredTotal.Inc()
 		}
@@ -125,6 +131,7 @@ func (w *Worker) sweepRetained() {
 		}
 		w.retainedOrder = w.retainedOrder[1:]
 		delete(w.retained, d)
+		w.retainedBytes -= batchBytes(r.batch)
 		w.noteGone(d, GoneRetentionExpired, r.detail, r.cert)
 		metrics.BatchesRetentionExpiredTotal.Inc()
 		dropped++

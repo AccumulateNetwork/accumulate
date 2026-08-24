@@ -82,7 +82,7 @@ func TestEvictionRecordsADifferentCause(t *testing.T) {
 	gone, ok := w.BatchGone(first)
 	require.True(t, ok, "an evicted batch must leave a tombstone")
 	assert.Equal(t, worker.GoneEvicted, gone.Reason)
-	assert.Contains(t, gone.Detail, "over limit 4")
+	assert.Contains(t, gone.Detail, "over limit (4 batches")
 }
 
 // A batch this node simply never held is a third case, and reports as such

@@ -27,13 +27,20 @@ import (
 
 // Default configuration values.
 const (
-	DefaultBatchSize         = 500                    // max transactions per batch
-	DefaultBatchTimeout      = 100 * time.Millisecond // max time to wait for full batch
-	DefaultMaxBatchBytes     = 500 * 1024             // 500KB max batch size
-	DefaultMaxPendingSize    = 10 * 1024 * 1024       // 10MB max pending transactions
-	DefaultMaxPendingCount   = 10000                  // max pending transaction count
-	DefaultMaxStoredBatches  = 1000                   // max batches stored before eviction (reduced for memory safety)
-	DefaultMaxBatchQueueSize = 1000                   // max batches in available queue before blocking
+	DefaultBatchSize        = 500                    // max transactions per batch
+	DefaultBatchTimeout     = 100 * time.Millisecond // max time to wait for full batch
+	DefaultMaxBatchBytes    = 500 * 1024             // 500KB max batch size
+	DefaultMaxPendingSize   = 10 * 1024 * 1024       // 10MB max pending transactions
+	DefaultMaxPendingCount  = 10000                  // max pending transaction count
+	DefaultMaxStoredBatches = 1000                   // max batches stored before eviction (reduced for memory safety)
+	// Byte caps. Batch COUNT caps do not bound memory: at 700 tx/s the
+	// gossip store filled to its count cap holding 728MB of batch bytes per
+	// node instance — two instances per 4GiB cgroup — and the fleet was
+	// OOM-killed (#4164, runs 20260824T065208Z and 20260824T112437Z). The
+	// governor has to be measured in bytes.
+	DefaultMaxStoredBatchBytes   = 32 << 20 // active store: 32MB per worker
+	DefaultMaxRetainedBatchBytes = 32 << 20 // retention window: 32MB per worker
+	DefaultMaxBatchQueueSize     = 1000     // max batches in available queue before blocking
 )
 
 // ErrWorkerClosed is returned when operations are attempted on a closed worker.
@@ -93,6 +100,15 @@ type Config struct {
 	// Defaults to DefaultMaxPendingCount.
 	MaxPendingCount int
 
+	// MaxStoredBatchBytes bounds the active store in BYTES; the count cap
+	// alone let 728MB of batches accumulate (#4164). Defaults to
+	// DefaultMaxStoredBatchBytes.
+	MaxStoredBatchBytes int
+
+	// MaxRetainedBatchBytes bounds the retention window in bytes. Defaults
+	// to DefaultMaxRetainedBatchBytes.
+	MaxRetainedBatchBytes int
+
 	// MaxStoredBatches is the maximum number of batches to store.
 	// When exceeded, random batches are evicted to make room.
 	// This prevents unbounded memory growth from gossip batches.
@@ -149,6 +165,12 @@ func (c *Config) applyDefaults() {
 	if c.MaxStoredBatches <= 0 {
 		c.MaxStoredBatches = DefaultMaxStoredBatches
 	}
+	if c.MaxStoredBatchBytes <= 0 {
+		c.MaxStoredBatchBytes = DefaultMaxStoredBatchBytes
+	}
+	if c.MaxRetainedBatchBytes <= 0 {
+		c.MaxRetainedBatchBytes = DefaultMaxRetainedBatchBytes
+	}
 	if c.MaxBatchQueueSize <= 0 {
 		c.MaxBatchQueueSize = DefaultMaxBatchQueueSize
 	}
@@ -178,6 +200,19 @@ type BatchStore interface {
 
 	// StoreBatch stores a batch.
 	StoreBatch(batch *types.Batch) error
+}
+
+// batchBytes approximates a batch's memory footprint: transaction payloads
+// plus per-slice overhead. Exactness does not matter; monotonicity does.
+func batchBytes(b *types.Batch) int {
+	if b == nil {
+		return 0
+	}
+	n := 128
+	for _, tx := range b.Transactions {
+		n += len(tx) + 24
+	}
+	return n
 }
 
 // lruEntry wraps a batch with its position in the LRU list.
@@ -229,6 +264,12 @@ type Worker struct {
 	retainedOrder []types.BatchDigest
 	maxRetained   int
 	retainFor     time.Duration
+	// storedBytes/retainedBytes track the byte size of the active and
+	// retention stores; guarded by batchMu.
+	storedBytes      int
+	retainedBytes    int
+	maxStoredBytes   int
+	maxRetainedBytes int
 
 	// Available batch digests (for header creation) - bounded queue with backpressure
 	availableBatchQueue chan types.BatchDigest
@@ -273,6 +314,8 @@ func New(config Config, g *gossip.GossipLayer) *Worker {
 		retained:            make(map[types.BatchDigest]*retainedBatch),
 		maxRetained:         config.MaxRetainedBatches,
 		retainFor:           config.RetainCommittedFor,
+		maxStoredBytes:      config.MaxStoredBatchBytes,
+		maxRetainedBytes:    config.MaxRetainedBatchBytes,
 		availableBatchQueue: make(chan types.BatchDigest, config.MaxBatchQueueSize),
 		triggerBatch:        make(chan struct{}, 1),
 		triggerEviction:     make(chan struct{}, 1),
@@ -483,7 +526,7 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 
 	// Trigger eviction if we're approaching the limit (non-blocking)
 	// Eviction is handled by dedicated goroutine to minimize lock contention
-	if len(w.batches) > w.config.MaxStoredBatches {
+	if len(w.batches) > w.config.MaxStoredBatches || w.storedBytes > w.maxStoredBytes {
 		select {
 		case w.triggerEviction <- struct{}{}:
 		default:
@@ -497,6 +540,7 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 		batch:   batch,
 		element: element,
 	}
+	w.storedBytes += batchBytes(batch)
 
 	return nil
 }
@@ -600,6 +644,7 @@ func (w *Worker) PruneCommitted(committed []types.BatchDigest, info CommitInfo) 
 		if entry, ok := w.batches[digest]; ok {
 			w.lruList.Remove(entry.element)
 			delete(w.batches, digest)
+			w.storedBytes -= batchBytes(entry.batch)
 			// Committed, so it leaves the active store and stops being
 			// re-proposed — but keep it fetchable for a while, because a peer
 			// that missed this commit has nowhere else to get it (#4128).
@@ -706,7 +751,7 @@ func (w *Worker) createAndBroadcastBatch() {
 	digest := batch.Digest()
 	w.batchMu.Lock()
 	// Trigger eviction if we're approaching the limit (non-blocking)
-	if len(w.batches) > w.config.MaxStoredBatches {
+	if len(w.batches) > w.config.MaxStoredBatches || w.storedBytes > w.maxStoredBytes {
 		select {
 		case w.triggerEviction <- struct{}{}:
 		default:
@@ -721,6 +766,7 @@ func (w *Worker) createAndBroadcastBatch() {
 		own:        true,
 		lastQueued: time.Now(),
 	}
+	w.storedBytes += batchBytes(batch)
 	w.batchMu.Unlock()
 
 	// Update metrics immediately after creating the batch
@@ -947,17 +993,16 @@ func (w *Worker) performEviction() {
 	w.batchMu.Lock()
 	defer w.batchMu.Unlock()
 
-	if len(w.batches) <= w.config.MaxStoredBatches {
-		return // No eviction needed unless we exceed the limit
+	if len(w.batches) <= w.config.MaxStoredBatches && w.storedBytes <= w.maxStoredBytes {
+		return // No eviction needed unless we exceed a limit
 	}
 
-	// Evict just enough to get back to MaxStoredBatches
-	// Plus a small safety margin (10% of max) to reduce eviction frequency
-	targetCount := int(float64(w.config.MaxStoredBatches) * 1.1)
-	evictCount := len(w.batches) - targetCount
-	if evictCount < 1 {
-		evictCount = 1
-	}
+	// Evict down to 90% of BOTH caps: the count cap and the byte cap. The
+	// byte cap is the one that actually bounds memory (#4164); the old
+	// count-only target also evicted to 110% of the cap, which parked the
+	// store permanently above its own limit.
+	targetCount := int(float64(w.config.MaxStoredBatches) * 0.9)
+	targetBytes := int(float64(w.maxStoredBytes) * 0.9)
 
 	// Never evict a batch this worker AUTHORED and has not yet seen committed.
 	// Bullshark commits leaders in causal order, so an early leader can be
@@ -969,18 +1014,22 @@ func (w *Worker) performEviction() {
 	// moves them to `retained`. Walk from the LRU back (least-recently-used)
 	// toward the front, skipping own entries.
 	evicted, skippedOwn := 0, 0
-	for e := w.lruList.Back(); e != nil && evicted < evictCount; {
+	for e := w.lruList.Back(); e != nil && (len(w.batches) > targetCount || w.storedBytes > targetBytes); {
 		prev := e.Prev()
 		lruDigest := e.Value.(types.BatchDigest)
-		if entry, ok := w.batches[lruDigest]; ok && entry.own {
+		entry, ok := w.batches[lruDigest]
+		if ok && entry.own {
 			skippedOwn++
 			e = prev
 			continue
 		}
 		w.lruList.Remove(e)
 		delete(w.batches, lruDigest)
+		if ok {
+			w.storedBytes -= batchBytes(entry.batch)
+		}
 		w.noteGone(lruDigest, GoneEvicted,
-			fmt.Sprintf("store over limit %d", w.config.MaxStoredBatches), "")
+			fmt.Sprintf("store over limit (%d batches / %d bytes)", w.config.MaxStoredBatches, w.maxStoredBytes), "")
 		evicted++
 		e = prev
 	}
@@ -997,10 +1046,12 @@ func (w *Worker) performEviction() {
 	// That is the pressure that #4159 turned into a permanent wedge when these
 	// batches were silently dropped; surface it rather than lose data a late
 	// commit will need.
-	if evicted < evictCount && skippedOwn > 0 {
+	if (len(w.batches) > targetCount || w.storedBytes > targetBytes) && skippedOwn > 0 {
 		slog.Warn("Batch store over limit with un-evictable own uncommitted batches (commit is lagging)",
 			"stored", len(w.batches),
+			"storedBytes", w.storedBytes,
 			"limit", w.config.MaxStoredBatches,
+			"limitBytes", w.maxStoredBytes,
 			"ownUncommitted", skippedOwn,
 			"workerID", w.config.ID)
 	}
