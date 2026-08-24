@@ -31,12 +31,12 @@ type BlockState struct {
 	// content is queue movement must still COMMIT (#4155): discarding it as
 	// empty would re-execute the same work every block until unrelated
 	// traffic forces a commit.
-	LocalDeliveries    int
-	ChainUpdates       chain.ChainUpdates
-	ReceivedAnchors    []*chain.ReceivedAnchor
-	PreviousStateHash  [32]byte
-	AcmeBurnt          big.Int
-	NetworkUpdate      []*protocol.NetworkAccountUpdate
+	LocalDeliveries   int
+	ChainUpdates      chain.ChainUpdates
+	ReceivedAnchors   []*chain.ReceivedAnchor
+	PreviousStateHash [32]byte
+	AcmeBurnt         big.Int
+	NetworkUpdate     []*protocol.NetworkAccountUpdate
 
 	Anchor     *BlockAnchorState
 	MajorBlock *MajorBlockState

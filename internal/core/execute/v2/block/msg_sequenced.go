@@ -234,7 +234,18 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 // delivery schedules into the next block's cascade queue. It caps the extra
 // bundles a block can inherit per stream while still letting a backlog drain
 // at window-rate rather than one per block.
-const cascadeDeliveryWindow = 32
+//
+// The window is a PER-BLOCK quantum, so the drain ceiling in messages/second
+// is window ÷ block interval — it shrank 8x when blocks went from one per
+// certificate to one per committed leader group (#4164). At 32 per block and
+// 3s blocks the ceiling was ~10/s, and one overloaded stream (a stale-read
+// retry storm feeding ~27/s, #4163 defect 7) buried BVN2→BVN1 under a
+// 33,000-message backlog that could never drain. 1024 per block ≈ 340/s at
+// the 3s interval — above any sustainable per-stream arrival rate, while
+// still bounding the bundles a single block can inherit.
+// TestNoLaggingChannels pins the property: a backlogged channel drains at
+// backlog scale per block, not a small fixed quantum.
+const cascadeDeliveryWindow = 1024
 
 // scheduleCascadeRun adds the contiguous received run after `after` to the
 // cascade queue, up to cascadeDeliveryWindow entries, stopping at the first

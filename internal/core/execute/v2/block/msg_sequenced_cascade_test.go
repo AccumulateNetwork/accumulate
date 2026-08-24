@@ -141,7 +141,7 @@ func TestCascade_WindowBoundsTheRun(t *testing.T) {
 	t.Cleanup(batch.Discard)
 	queue := batch.Account(protocol.PartitionUrl("BVN0").JoinPath(protocol.Synthetic)).CascadeDeliveryQueue()
 
-	seqs := make([]uint64, 100)
+	seqs := make([]uint64, cascadeDeliveryWindow+50)
 	for i := range seqs {
 		seqs[i] = uint64(i + 2)
 	}
