@@ -67,6 +67,14 @@ print("%d %d %d %d" % (d.get("generated", 0), d.get("updatedUnix", 0),
 }
 
 # Network verdict and the worst node RSS, straight from the monitor.
+#
+# The RSS lives under "nodeStats". It is NOT under "scrape", whose "nodes" is a
+# COUNT — reading it there raised AttributeError on an int, the traceback went
+# to /dev/null, and the fallback reported "unknown" health with 0 MiB for every
+# rung. That is the dangerous kind of broken: the ladder would have kept
+# climbing past a stalled network, because "unknown" is not "stalled", and
+# recorded a footprint column of zeros for the run whose whole purpose is
+# measuring footprint. Assert the shape instead of hoping for it.
 health() {
   curl -sf -m 8 "$MONITOR" 2>/dev/null | python3 -c '
 import json, sys
@@ -74,9 +82,12 @@ try:
     d = json.load(sys.stdin)
 except Exception:
     print("unknown 0 -"); sys.exit(0)
-ns = (d.get("scrape") or {}).get("nodes") or {}
+ns = d.get("nodeStats")
+if not isinstance(ns, dict):
+    # Say the shape changed rather than reporting a plausible zero.
+    print("%s NA schema-changed" % (d.get("status") or "unknown")); sys.exit(0)
 print("%s %s %s" % (d.get("status") or "unknown",
-                    ns.get("rssMaxMiB") or 0,
+                    ns.get("rssMaxMiB", 0),
                     ns.get("rssMaxNode") or "-"))
 ' 2>/dev/null || echo "unknown 0 -"
 }
@@ -150,6 +161,7 @@ for target in $STEPS; do
   [ "$ok" = no ] && verdict="short"
   case "$status" in
     stalled|down) verdict="unhealthy" ;;
+    unknown)      verdict="${verdict}?unreadable-health" ;;
   esac
 
   echo "$started,$ended,$target,$achieved,$((g1-g0)),$((r1-r0)),$((s1-s0)),$status,$rss,$rssnode,$verdict" >> "$csv"
