@@ -96,21 +96,45 @@ measured, and it is the one that tolerated a 32 MB cache.
 
 ## Budget for a 1 GB container
 
-Configured, resident, per dual DN+BVN container (2 engines):
+Configured, resident, per dual DN+BVN container (2 engines), as landed:
 
-| consumer | today | proposed |
+| consumer | before | now |
 |---|---|---|
-| LevelDB block cache (2x) | 512 MB | **64 MB** (2x32) |
-| LevelDB write buffers (2x, mem+frozen) | 64–96 MB | 64 MB |
-| recordCache (2x64 MB nominal, ~165 MB actual) | ~165 MB | ~80 MB (2x32) |
+| LevelDB block cache (2x) | 512 MB | **128 MB** (2x64) |
+| LevelDB write buffers (2x, mem+frozen) | 64–96 MB | 64–96 MB |
+| recordCache (2x64 MB nominal, ~165 MB actual) | ~165 MB | ~165 MB (kept) |
 | DAG, 2000 rounds | ~140 MB | ~140 MB |
-| Worker batch stores, active + retained (2x) | 128 MB | 128 MB |
+| Worker batch stores, active + retained | 128 MB **x num-workers** | **128 MB** (per partition) |
 | Worker pending queues (2x) | 20 MB | 20 MB |
-| **configured subtotal** | **~1030 MB** | **~496 MB** |
+| Inbound gossip batch queue (2x) | 0…1000 MB (count-capped) | **64 MB** (2x32, byte-capped) |
+| **configured subtotal** | **~1030 MB, +worker multiplier** | **~680 MB** |
 
-The configured caches alone already exceed 1 GB today. No amount of GC tuning
-reaches the target without cutting them; the sweep says cutting them is close to
-free.
+The configured caches alone exceeded 1 GB before any traffic, and two entries
+were not really bounded at all: the worker stores multiplied by `num-workers`
+(4 workers = 512 MB on a dual validator) and the inbound batch queue was capped
+by count, not bytes.
+
+The record cache is deliberately NOT cut. It is what makes the smaller block
+cache safe — it serves the hot records the executor re-reads every block, which
+is exactly the traffic the block cache handles worst (hash keys, no locality).
+
+## Status
+
+Items 1–5 are **done** (commits `5af7c24d5`, `0b67fa055`, `2898bb613`). The
+configured budget is ~680 MB, under the target by construction. Item 6, the
+hybrid store, is **deliberately not started**: the target is reachable without
+it, and it is a storage-format change that should follow a monitored soak
+rather than ride along unvalidated with five other changes.
+
+One correction to the original analysis: **item 5 blamed the wrong subsystem.**
+The 319 MB attributed to `pb.(*Message).Unmarshal` is not gossipsub's message
+cache — it is the worker batch stores, which alias the pubsub wire buffer
+(`types.UnmarshalBatch` takes ownership of `msg.Data`), so retained batches are
+charged to the allocation site. The fix was the per-partition worker budget,
+not gossipsub tuning. Lowering pubsub's max message size, as originally
+proposed, would have been actively wrong: batches cap at 500 KiB but
+certificates are allowed 1 MiB, so a 500 KiB ceiling could have dropped
+certificates.
 
 ## Ordered actions
 
@@ -118,36 +142,45 @@ free.
    cgroup — the soft limit could never engage, so the OOM killer was the only
    backstop. Fixed to 1200 MiB (commit `5af7c24d5`). *Nothing else in this list
    is enforceable until this holds.*
-2. **Block cache 256 MB → 32 MB per engine.** Measured: −500 MB RSS per engine,
-   no read-latency cost at 64 MB and a small one at 32 MB.
+2. **Block cache 256 MB → 64 MB per engine.** DONE (`2898bb613`). Measured:
+   RSS 762 → 257 MB with read latency improving. 64, not 32: 32 fit the budget
+   but cost 29% on reads. `ACC_LEVELDB_CACHE_MB` overrides it for sweeps.
 3. **`sentVotes` unbounded map.** Written with `votedHeaders`, read only behind
    a `votedHeaders` hit, never deleted — grew with uptime x round rate, per
    partition. Fixed with a regression test (commit `0b67fa055`). A candidate
    explanation for the "drifts upward for the first hours of every run" symptom.
-4. **Byte-cap the gossip batch channel.** `gossip.go:131` is
-   `make(chan *types.Batch, 1000)` — a *count* cap on a variable-size item at up
-   to 500 KiB each, i.e. ~500 MB per partition, ~1 GB per container, unbounded
-   in bytes. Same bug class as the batch-store OOM that `5909219dc` fixed by
-   byte-capping the store; the queue in front of it was never converted.
-5. **Cap gossipsub.** One shared router with stock defaults
-   (`p2p/discovery.go:123`): 1 MiB max message, 5-heartbeat message cache
-   holding full bodies (~5000 messages resident at 1000 msg/s), 32-RPC outbound
-   queue per peer, and `WithFloodPublish(true)` sending to every peer rather
-   than the mesh degree. `pb.(*Message).Unmarshal` held 319 MB (16.7%) in the
-   production profile. Set `WithMaxMessageSize` to the 500 KiB batch cap and
-   shrink `GossipSubHistoryLength`.
+4. **Byte-cap the gossip batch channel.** DONE (`2898bb613`). It was
+   `make(chan *types.Batch, 1000)` — a *count* cap on items of up to 500 KiB,
+   ~500 MB per partition and unbounded in bytes. Same bug class as the
+   batch-store OOM that `5909219dc` fixed by byte-capping the store; the queue
+   in front of it was never converted. Now a 32 MB byte-bounded FIFO
+   (`batch_queue.go`) draining into a 2-deep channel.
+5. **Per-partition worker batch budgets.** DONE (`2898bb613`) — this, not
+   gossipsub, is where the 319 MB lived (see Status). The active and retention
+   stores were 32 MB *per worker*, so `num-workers 4` permitted 512 MB on a
+   dual validator. They are now a per-partition budget divided among workers,
+   with a two-batch floor. Gossipsub itself is left at defaults: its remaining
+   levers (`GossipSubHistoryLength`, peer outbound queue) are consensus-critical
+   recovery paths and should be changed alone, against a soak, not bundled.
 6. **Then the hybrid store**, as the structural change: immutable entries to
    block files, BPT staying in LevelDB. It is worth doing for the write-stall
    collapse (12 s → 35 ms) as much as for memory.
 
 Items 1–5 are configuration and bug fixes and get the configured budget to
-~496 MB. Item 6 is the design change and is what makes a small cache safe under
-load.
+~680 MB. Item 6 is the design change; it is not required to reach the target
+and is what would make an even smaller cache safe under load.
 
 ## What is NOT yet proven
 
-- No 12-hour run at 1000 TPS with these settings. Every number here is from a
-  33-minute-equivalent simulation, not the node.
+- **No 12-hour run at 1000 TPS with these settings.** Every number here is from
+  a 33-minute-equivalent simulation, not the node. The budget above is what the
+  code now *permits*, not what a validator was *observed* to use. The next
+  monitored soak is what turns this from a budget into a result — and it is the
+  gate for item 6.
+- Unit and integration suites are green (`pkg/consensus/...`,
+  `pkg/database/...`, `internal/node/...`, `internal/core/execute/...`) and
+  consim `TestSoakTopologyLiveness` passed 4/4, but consim exercises consensus
+  liveness, not memory under sustained load.
 - The block store's scale behaviour was measured to 751/2000 blocks, not to
   completion.
 - The simulation writes identical payload bytes, so snappy compresses LevelDB's
