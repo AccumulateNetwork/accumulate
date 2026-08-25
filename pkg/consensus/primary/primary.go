@@ -540,10 +540,14 @@ func (p *Primary) cleanupOldHeaders() {
 		}
 	}
 
-	// Clean old voted headers by round (longer retention)
+	// Clean old voted headers by round (longer retention). sentVotes is
+	// written with votedHeaders and only ever read behind a votedHeaders hit
+	// (vote_handler.go), so it must be dropped here too — otherwise it is an
+	// unbounded map that grows with uptime x round rate, per partition.
 	for digest, round := range p.votedHeaders {
 		if round < certCutoff {
 			delete(p.votedHeaders, digest)
+			delete(p.sentVotes, digest)
 		}
 	}
 }
