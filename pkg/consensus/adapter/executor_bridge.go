@@ -281,6 +281,13 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	// it and shards are configured (#4145), a plain serial loop otherwise.
 	// Either way each envelope's outcome is independent: one bad envelope is
 	// logged and dropped, not the block.
+	// Shard accounting (#4145). A run that shows no throughput gain from
+	// sharding must be able to say which of the two reasons it was: nothing
+	// was shardable, or execution was not the bottleneck. shardsUsed counts
+	// DISTINCT shards, because N shardable envelopes that all hash to one
+	// identity give exactly as much parallelism as serial execution.
+	shardedCount, serialCount := 0, 0
+	shardSeen := map[int]bool{}
 	processOne := func(j int, statuses []*protocol.TransactionStatus, err error) {
 		if err != nil {
 			processFailed++
@@ -310,11 +317,19 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	}
 	if pb, ok := block.(execute.ParallelBlock); ok {
 		for j, r := range pb.ProcessAll(envelopes) {
+			if r.Shard >= 0 {
+				shardedCount++
+				shardSeen[r.Shard] = true
+			} else {
+				serialCount++
+			}
 			processOne(j, r.Statuses, r.Error)
 		}
 	} else {
+		// No parallel path at all — every envelope is serial by construction.
 		for j, envelope := range envelopes {
 			statuses, err := block.Process(envelope)
+			serialCount++
 			processOne(j, statuses, err)
 		}
 	}
@@ -331,7 +346,10 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 			"executed", txCount,
 			"unmarshalFailed", unmarshalFailed,
 			"processFailed", processFailed,
-			"statusFailed", statusFailed)
+			"statusFailed", statusFailed,
+			"sharded", shardedCount,
+			"serial", serialCount,
+			"shardsUsed", len(shardSeen))
 	}
 
 	// Close block

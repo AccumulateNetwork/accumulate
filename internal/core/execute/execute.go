@@ -123,6 +123,14 @@ type Block interface {
 type ProcessResult struct {
 	Statuses []*protocol.TransactionStatus
 	Error    error
+
+	// Shard is the execution shard this envelope ran on, or -1 if it ran in
+	// the serial lane (#4145). Reported so a run can say WHY sharding did or
+	// did not help: only user transactions shard, and a workload whose
+	// envelopes all classify serial gets no benefit from any shard count.
+	// Without this a null result is unattributable — indistinguishable from
+	// "execution was never the bottleneck".
+	Shard int
 }
 
 // A ParallelBlock is a Block that can process a set of envelopes as a whole,

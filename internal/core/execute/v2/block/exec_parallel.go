@@ -188,7 +188,7 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 		// The serial path, verbatim.
 		for i, env := range envelopes {
 			s, err := b.Process(env)
-			results[i] = &execute.ProcessResult{Statuses: s, Error: err}
+			results[i] = &execute.ProcessResult{Statuses: s, Error: err, Shard: -1}
 		}
 		return results
 	}
@@ -239,7 +239,7 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 				out[s].bundles = make([][]*bundle, len(pending[s]))
 				for i, it := range pending[s] {
 					statuses, bundles, err := b.processEnvelope(out[s].batch, it.messages)
-					results[it.index] = &execute.ProcessResult{Statuses: statuses, Error: err}
+					results[it.index] = &execute.ProcessResult{Statuses: statuses, Error: err, Shard: s}
 					out[s].bundles[i] = bundles
 				}
 			}(s)
@@ -257,7 +257,7 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 				// nothing more may be committed on top of it.
 				out[s].batch.Discard()
 				for _, it := range pending[s] {
-					results[it.index] = &execute.ProcessResult{Error: b.fatal}
+					results[it.index] = &execute.ProcessResult{Error: b.fatal, Shard: -1}
 				}
 				continue
 			}
@@ -272,7 +272,7 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 				b.fatal = errors.FatalError.WithFormat("commit shard %d: %w", s, err)
 				out[s].batch.Discard()
 				for _, it := range pending[s] {
-					results[it.index] = &execute.ProcessResult{Error: b.fatal}
+					results[it.index] = &execute.ProcessResult{Error: b.fatal, Shard: -1}
 				}
 				continue
 			}
@@ -290,7 +290,7 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 	for i, env := range envelopes {
 		if b.fatal != nil {
 			// A shard commit failure poisoned the block — stop executing.
-			results[i] = &execute.ProcessResult{Error: b.fatal}
+			results[i] = &execute.ProcessResult{Error: b.fatal, Shard: -1}
 			continue
 		}
 
@@ -298,7 +298,7 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 		if err != nil {
 			// A malformed envelope is its own outcome; it does not interrupt
 			// the run.
-			results[i] = &execute.ProcessResult{Error: errors.UnknownError.Wrap(err)}
+			results[i] = &execute.ProcessResult{Error: errors.UnknownError.Wrap(err), Shard: -1}
 			continue
 		}
 
@@ -308,7 +308,7 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 			// place (hazards i and ii).
 			flush()
 			if b.fatal != nil {
-				results[i] = &execute.ProcessResult{Error: b.fatal}
+				results[i] = &execute.ProcessResult{Error: b.fatal, Shard: -1}
 				continue
 			}
 			statuses, bundles, err := b.processEnvelope(b.Batch, messages)
@@ -317,7 +317,7 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 					d.mergeIntoBlock()
 				}
 			}
-			results[i] = &execute.ProcessResult{Statuses: statuses, Error: err}
+			results[i] = &execute.ProcessResult{Statuses: statuses, Error: err, Shard: -1}
 			continue
 		}
 

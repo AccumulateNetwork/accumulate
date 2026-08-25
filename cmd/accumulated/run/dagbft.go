@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/fatih/color"
@@ -103,6 +104,20 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// fat-fingered count must be refused at startup, not at block time
 	// (#4151).
 	setDefaultPtr(&s.ExecutionShards, 1)
+	// ACC_EXECUTION_SHARDS overrides the configured count, so a shard sweep
+	// does not need a regenerated config (and therefore a new genesis) per
+	// data point. Same idiom as ACC_LEVELDB_CACHE_MB. An invalid value is
+	// REFUSED, not ignored: silently falling back to the configured count
+	// would make a sweep report the serial number under a parallel label,
+	// which is the one way this measurement can lie.
+	if v, ok := os.LookupEnv("ACC_EXECUTION_SHARDS"); ok {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return errors.BadRequest.WithFormat("ACC_EXECUTION_SHARDS %q is not a number", v)
+		}
+		s.ExecutionShards = Ptr(int64(n))
+		slog.Info("Execution shards overridden", "shards", n, "module", "dagbft")
+	}
 	if *s.ExecutionShards < 0 || *s.ExecutionShards > 1024 {
 		return errors.BadRequest.WithFormat("execution-shards %d is out of range [0, 1024]", *s.ExecutionShards)
 	}
