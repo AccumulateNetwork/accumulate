@@ -102,8 +102,23 @@ composed_default() { # $1=env var name, $2=compose key
 }
 drop_synth="${DROP_SYN:-$(composed_default DROP_SYN ACC_DEBUG_DROP_SYNTHETIC)}"
 drop_anchor="${DROP_ANC:-$(composed_default DROP_ANC ACC_DEBUG_DROP_ANCHOR)}"
-soak_image="${SOAK_IMAGE:-docker-bvn1-val1}"
+# Compose names built images "<project>-<service>", and the project is pinned to
+# $COMPOSE_PROJECT_NAME above. This default was "docker-bvn1-val1", the name
+# from BEFORE the project was pinned (#4124) — so from that commit onward every
+# manifest recorded the id of a stale leftover image while the network ran the
+# freshly built one. The 2026-08-24 runs all reported an image built 2026-08-20.
+# That is the #4103 failure in its purest form: provenance that names the wrong
+# build makes every conclusion drawn from the run unattributable.
+soak_image="${SOAK_IMAGE:-${COMPOSE_PROJECT_NAME}-bvn1-val1}"
 image_id=$(docker image inspect --format '{{.Id}}' "$soak_image" 2>/dev/null || echo unknown)
+if [ "$image_id" = unknown ]; then
+  # Do not record "unknown" and carry on: an unidentifiable build is a run
+  # nobody can reproduce or attribute, which is the one thing this file exists
+  # to prevent. Named here, it costs a second; found later, it costs the run.
+  echo "cannot identify the image \"$soak_image\" — refusing to run unattributable." | tee -a "$log"
+  echo "  (compose builds <project>-<service>; project is \"$COMPOSE_PROJECT_NAME\". Set SOAK_IMAGE to override.)" | tee -a "$log"
+  exit 1
+fi
 n_bvn=$(grep -cE '^\s*- id: "BVN' "$here/../docker-network.yml")
 n_node=$(grep -cE '^\s*- listenAddress:' "$here/../docker-network.yml")
 
