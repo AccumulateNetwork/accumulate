@@ -38,8 +38,14 @@ const (
 	// node instance — two instances per 4GiB cgroup — and the fleet was
 	// OOM-killed (#4164, runs 20260824T065208Z and 20260824T112437Z). The
 	// governor has to be measured in bytes.
-	DefaultMaxStoredBatchBytes   = 32 << 20 // active store: 32MB per worker
-	DefaultMaxRetainedBatchBytes = 32 << 20 // retention window: 32MB per worker
+	//
+	// These are PER-PARTITION budgets. consensus.NewNode divides them among
+	// the workers before constructing each one (see perWorkerBytes), so
+	// raising num-workers scales parallelism without scaling memory. Read as
+	// per-worker they were multiplied by the worker count: 4 workers meant
+	// 256MB per partition and 512MB on a dual validator.
+	DefaultMaxStoredBatchBytes   = 32 << 20 // active store: 32MB per partition
+	DefaultMaxRetainedBatchBytes = 32 << 20 // retention window: 32MB per partition
 	DefaultMaxBatchQueueSize     = 1000     // max batches in available queue before blocking
 )
 

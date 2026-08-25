@@ -194,12 +194,31 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		}
 	}
 
-	// Create workers
+	// Create workers.
+	//
+	// The batch-store byte budgets are PER PARTITION and divided among the
+	// workers, not applied to each one. They used to be per-worker, so
+	// num-workers silently multiplied resident memory: at 4 workers the two
+	// stores permitted 4 x (32MB + 32MB) = 256MB per partition, 512MB on a
+	// dual validator — the single largest consumer after the block cache, and
+	// the bytes behind the pubsub Message.Unmarshal line in heap profiles
+	// (stored batches alias the wire buffer). Scaling workers is a
+	// parallelism decision; it should not be a memory decision.
+	//
+	// Each worker keeps a floor of a few batches so that a high worker count
+	// cannot starve any single worker below what one round needs.
+	storedPerWorker := perWorkerBytes(config.WorkerConfig.MaxStoredBatchBytes,
+		worker.DefaultMaxStoredBatchBytes, config.NumWorkers, config.WorkerConfig.MaxBatchBytes)
+	retainedPerWorker := perWorkerBytes(config.WorkerConfig.MaxRetainedBatchBytes,
+		worker.DefaultMaxRetainedBatchBytes, config.NumWorkers, config.WorkerConfig.MaxBatchBytes)
+
 	workers := make([]*worker.Worker, config.NumWorkers)
 	for i := 0; i < config.NumWorkers; i++ {
 		wcfg := config.WorkerConfig
 		wcfg.ID = types.WorkerID(i)
 		wcfg.Partition = config.Partition
+		wcfg.MaxStoredBatchBytes = storedPerWorker
+		wcfg.MaxRetainedBatchBytes = retainedPerWorker
 		workers[i] = worker.New(wcfg, g)
 	}
 
@@ -981,4 +1000,29 @@ func (n *Node) UpdateCommittee(committee *types.Committee) {
 
 	// Update Bullshark's committee
 	n.bullshark.UpdateCommittee(committee)
+}
+
+// perWorkerBytes splits a per-partition byte budget across workers.
+//
+// budget is the configured value (0 means use def). maxBatchBytes sets the
+// floor: a worker that cannot hold at least two batches would evict what it
+// just stored, so the floor wins over the split when there are many workers —
+// deliberately trading the exactness of the partition budget for a store that
+// still functions.
+func perWorkerBytes(budget, def, numWorkers, maxBatchBytes int) int {
+	if budget <= 0 {
+		budget = def
+	}
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
+	if maxBatchBytes <= 0 {
+		maxBatchBytes = worker.DefaultMaxBatchBytes
+	}
+
+	share := budget / numWorkers
+	if floor := 2 * maxBatchBytes; share < floor {
+		return floor
+	}
+	return share
 }

@@ -8,7 +8,9 @@ package leveldb
 
 import (
 	"container/list"
+	"log/slog"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -56,9 +58,39 @@ type recordCache struct {
 const (
 	// recordCacheMaxBytes bounds the cache; recordCacheMaxValue skips
 	// oversized values so one giant record cannot evict the working set.
+	//
+	// This stays at 64MB even though the block cache dropped to 64MB: it is
+	// what makes the smaller block cache safe. It serves the hot records the
+	// executor re-reads every block, which is exactly the traffic the block
+	// cache is bad at (hash keys, no locality).
 	recordCacheMaxBytes = 64 << 20
 	recordCacheMaxValue = 8 << 10
 )
+
+// defaultBlockCacheBytes is the per-engine leveldb block cache. Two engines
+// per dual validator, so the container pays this twice.
+const defaultBlockCacheBytes = 64 * opt.MiB
+
+// blockCacheBytes returns the block cache size, allowing ACC_LEVELDB_CACHE_MB
+// to override it. The override exists so a soak run can sweep this knob
+// without a rebuild — it is the single largest configured consumer in the
+// footprint budget, and its correct value depends on the state size a run
+// reaches. An unparseable or non-positive value falls back to the default.
+func blockCacheBytes() int {
+	s, ok := os.LookupEnv("ACC_LEVELDB_CACHE_MB")
+	if !ok {
+		return defaultBlockCacheBytes
+	}
+	mb, err := strconv.Atoi(s)
+	if err != nil || mb <= 0 {
+		slog.Warn("Ignoring invalid ACC_LEVELDB_CACHE_MB",
+			"value", s, "using", defaultBlockCacheBytes/opt.MiB, "module", "database")
+		return defaultBlockCacheBytes
+	}
+	slog.Info("LevelDB block cache overridden",
+		"mb", mb, "module", "database")
+	return mb * opt.MiB
+}
 
 type recordCacheEntry struct {
 	key     [32]byte
@@ -146,27 +178,34 @@ func Open(filepath string, o ...Option) (*Database, error) {
 	// turn the level walk into a bitmap check; a real block cache keeps hot
 	// state in RAM.
 	//
-	// The block cache is the STATE-SCALING knob: at ~20k accounts the hot
+	// The block cache WAS the state-scaling knob: at ~20k accounts the hot
 	// working set outgrew 64MB and 47% of node CPU became positive lookups
 	// walking sstables (version.walkOverlapping -> Reader.find, mostly under
-	// the API query handler serving healers and trackers) — rounds
-	// stretched, heals stormed, runs collapsed on a state-size clock, not a
-	// rate clock (bloom filters only short-circuit NEGATIVE lookups). 256MB
-	// holds the working set of a ~100k-account universe.
+	// the API query handler serving healers and trackers), so it was raised
+	// to 256MB (faed9a3dd).
+	//
+	// It is back to 64MB, because the two changes that landed AFTER that
+	// bump removed the thing it was compensating for: the query gates
+	// (e523d01d6) bound the pollers that amplified lag into the level walk,
+	// and the write-path record cache (same commit) keeps hot reads out of
+	// leveldb entirely. Measured on the 1000 TPS-shaped workload in
+	// exp/blockfile-sim: 256MB -> 64MB cut RSS from 762MB to 257MB and read
+	// latency IMPROVED (15.0 -> 14.3 microseconds). 64MB, not 32MB — 32
+	// still fit the budget but cost 29% on reads (18.5us), and this knob has
+	// a collapse in its history. See docs/plans/sub-1gb-footprint.md.
 	//
 	// SIZED FOR TWO ENGINES PER CGROUP. A dual validator opens one of these
-	// per partition (dnn + bvnn), so every number here is doubled in a 4GiB
-	// container. The first sizing (128MB cache, 64MB write buffer, pooled
-	// compaction buffers) OOM-killed seven containers in run
-	// 20260824T065208Z: ~1GB of engine memory per container plus the
-	// BufferPool — which grows toward the largest compaction it ever served
-	// and never shrinks (measured 178MB and climbing) — plus GC headroom hit
-	// the cgroup limit hours after load DROPPED, because compaction of the
-	// high-rate era's debt kept feeding the pool. The budget is ~150MB per
-	// engine.
+	// per partition (dnn + bvnn), so every number here is doubled. The first
+	// sizing (128MB cache, 64MB write buffer, pooled compaction buffers)
+	// OOM-killed seven containers in run 20260824T065208Z: ~1GB of engine
+	// memory per container plus the BufferPool — which grows toward the
+	// largest compaction it ever served and never shrinks (measured 178MB
+	// and climbing) — plus GC headroom hit the cgroup limit hours after load
+	// DROPPED, because compaction of the high-rate era's debt kept feeding
+	// the pool.
 	db, err := leveldb.OpenFile(filepath, &opt.Options{
 		Filter:                 filter.NewBloomFilter(10),
-		BlockCacheCapacity:     256 * opt.MiB,
+		BlockCacheCapacity:     blockCacheBytes(),
 		WriteBuffer:            16 * opt.MiB,
 		OpenFilesCacheCapacity: 512,
 		// The buffer pool is DISABLED — final answer after being burned in
