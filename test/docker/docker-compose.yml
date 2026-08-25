@@ -30,12 +30,18 @@ x-node-env: &node-env
   # The ceiling must cap WASTE, not squeeze the working set: at 1250MiB the
   # 400 tx/s live set (~1.1GB of heap + DAG + caches) left no headroom, the
   # GC ran continuously, blocks stretched to 3s and the run collapsed in 15
-  # minutes (20260824T123427Z). 2GiB caps the old 2x headroom while leaving
-  # the working set room to breathe; with ~1GB of reclaimable page cache the
-  # container sits ~3GB of its 4GiB limit. Raised to 2750MiB with the 256MB
-  # block caches (2x on-heap engines) — the caches are the state-scaling fix
-  # and must not fight the GC for room.
-  GOMEMLIMIT: "${GOMEMLIMIT-2750MiB}"
+  # minutes (20260824T123427Z). It was then raised to 2750MiB to stop the
+  # 256MB block caches fighting the GC.
+  #
+  # MUST STAY BELOW mem_limit. 2750MiB against a 1536m container is not a
+  # ceiling at all — the soft limit can never engage, so the kernel OOM
+  # killer is the only thing that stops growth, which is a kill instead of a
+  # collection. 1200MiB leaves ~336MiB of the cgroup for stacks, mmap, and
+  # non-Go allocations. If a run collapses into continuous GC at this
+  # ceiling, the fix is to cut the configured caches (the block cache is
+  # 512MiB across the two engines), NOT to raise the ceiling above the
+  # container limit again.
+  GOMEMLIMIT: "${GOMEMLIMIT-1200MiB}"
 
 services:
   # CRITICAL: Bootstrap server is REQUIRED for peer discovery
