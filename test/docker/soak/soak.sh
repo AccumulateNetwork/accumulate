@@ -44,6 +44,10 @@ fi
 # stall (#4073) needs channels that actually go quiet, so allow it to be turned
 # off. Default keeps the realistic funding spread.
 LG_BOOTSTRAP=${LG_BOOTSTRAP:-100}
+# CHAOS=off turns disturbance off entirely, for runs that are measuring
+# throughput or footprint rather than resilience. Default is on: a soak that
+# never disturbs anything is not a soak.
+CHAOS_ENABLED="${CHAOS:-on}"
 NOTE="${1:-}"
 
 runs="$here/runs"
@@ -103,6 +107,28 @@ image_id=$(docker image inspect --format '{{.Id}}' "$soak_image" 2>/dev/null || 
 n_bvn=$(grep -cE '^\s*- id: "BVN' "$here/../docker-network.yml")
 n_node=$(grep -cE '^\s*- listenAddress:' "$here/../docker-network.yml")
 
+# The partition list, derived once from docker-network.yml and reused by the
+# monitor loop below. Everything that needs to know the shape of this network
+# reads that one file (see ../topology.py); nothing restates it.
+PARTS=$(python3 -c '
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import topology
+print(" ".join(topology.partitions()))' "$here/.." 2>/dev/null)
+# And verify the two files that jointly define the topology still agree: the
+# host ports are a convention of docker-compose.yml derived from the node order
+# in docker-network.yml, and a convention that has drifted is a monitor and a
+# loadgen quietly pointed at ports nothing serves. Fail here, not at hour six.
+topo_problem=$(python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import topology
+print(topology.check_ports_against_compose() or "")' "$here/.." 2>&1)
+if [ -z "$PARTS" ] || [ -n "$topo_problem" ]; then
+  echo "topology preflight failed: ${topo_problem:-cannot read docker-network.yml}" | tee -a "$log"
+  exit 1
+fi
+
 # Freeze the exact config. A diff against these is the only reliable way to know
 # what changed between two runs.
 cp "$compose_file" "$here/../docker-network.yml" "$0" "$rd/config/" 2>/dev/null
@@ -126,16 +152,18 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "| synthetic drops | \`$drop_synth\` |"
   echo "| anchor drops | \`${drop_anchor:-none}\` |"
   echo "| topology | $n_bvn BVNs, $n_node nodes + bootstrap |"
+  echo "| partitions | $PARTS |"
+  echo "| chaos | $CHAOS_ENABLED |"
   echo "| target duration | $DURATION |"
   echo "| target TPS | $TPS |"
   echo
   echo "Config as run is frozen in \`config/\`. Results appended below on exit."
 } > "$manifest"
 
-printf '{"runId":"%s","startedUtc":"%s","image":"%s","imageId":"%s","commit":"%s","describe":"%s","branch":"%s","uncommittedFiles":%s,"executorVersion":"%s","healing":"%s","dropSynthetic":"%s","dropAnchor":"%s","bvns":%s,"nodes":%s,"duration":"%s","tps":"%s","note":"%s"}\n' \
+printf '{"runId":"%s","startedUtc":"%s","image":"%s","imageId":"%s","commit":"%s","describe":"%s","branch":"%s","uncommittedFiles":%s,"executorVersion":"%s","healing":"%s","dropSynthetic":"%s","dropAnchor":"%s","bvns":%s,"nodes":%s,"partitions":"%s","chaos":"%s","duration":"%s","tps":"%s","note":"%s"}\n' \
   "$run_id" "$(date -u +%FT%TZ)" "$soak_image" "$image_id" "$git_head" "$git_desc" "$git_branch" "$git_dirty" \
   "$exec_ver" "$heal_flags" "$drop_synth" "${drop_anchor:-none}" "$n_bvn" "$n_node" \
-  "$DURATION" "$TPS" "$NOTE" > "$runjson"
+  "$PARTS" "$CHAOS_ENABLED" "$DURATION" "$TPS" "$NOTE" > "$runjson"
 
 echo "== soak start $(date -u) duration=$DURATION tps=$TPS ==" | tee "$log"
 echo "   run dir: $rd" | tee -a "$log"
@@ -276,7 +304,23 @@ echo "   load starts now" | tee -a "$log"
 # an ever-growing account set. -faucet-seed FAUCET matches init's genesis faucet.
 # Rotate across all 12 nodes so one chaos-disrupted node neither rejects traffic
 # nor carries the whole load.
-EPS=$(for p in $(seq 26660 26671); do printf "http://localhost:%d," "$p"; done | sed 's/,$//')
+# Endpoints come from the topology, not a literal port range. `seq 26660 26671`
+# was correct for exactly one network shape; after the cut to 2 BVNs it would
+# have handed the loadgen four endpoints nothing is listening on. The generator
+# does not fail on those — it rotates onto them and the submissions time out,
+# so the only symptom is a third of the target rate going missing, which is
+# indistinguishable from the network being unable to keep up. That is the exact
+# question these runs exist to answer, so it must not be corrupted here.
+EPS=$(python3 -c '
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import topology
+print(",".join("http://localhost:%d" % p for p in topology.node_ports()))' "$here/.." 2>/dev/null)
+if [ -z "$EPS" ]; then
+  echo "cannot derive loadgen endpoints from the topology — refusing to run blind" | tee -a "$log"
+  $compose down -v --remove-orphans >/dev/null 2>&1
+  exit 1
+fi
 # The control API steers the running generator — rate and mix — without a
 # restart (a restart re-bootstraps the account universe):
 #   curl http://127.0.0.1:${LG_CONTROL_PORT:-8091}/control
@@ -303,6 +347,17 @@ fi
 # file and no events for its whole first interval, which is indistinguishable
 # from a broken one — and was reported as broken (run 20260824T051249Z, first
 # interval 672s). Silence must never look like breakage.
+if [ "$CHAOS_ENABLED" = off ]; then
+  # A throughput measurement and a resilience measurement are different runs.
+  # Chaos restarts and pauses move the achieved rate by more than the effects
+  # being measured when the question is "where is the rate knee", so it gets a
+  # real switch. Earlier probes did this by setting CHAOS_MIN=86400, which left
+  # the log saying "armed: one disturbance every 86400s" — technically true,
+  # and read by the next person as chaos having been on.
+  echo "$(date -u +%FT%TZ) DISABLED for this run (CHAOS=off)" >> "$chaos"
+  echo "   chaos: DISABLED (CHAOS=off) — this is a throughput run, not a resilience run" | tee -a "$log"
+  CHAOS=""
+else
 echo "$(date -u +%FT%TZ) armed: one disturbance every ${CHAOS_MIN}s + 0-${CHAOS_JITTER}s jitter" >> "$chaos"
 echo "   chaos: armed (every ~${CHAOS_MIN}s + jitter; first event follows the first interval)" | tee -a "$log"
 ( end=$(( $(date +%s) + duration_seconds ))
@@ -323,6 +378,7 @@ echo "   chaos: armed (every ~${CHAOS_MIN}s + jitter; first event follows the fi
     fi
   done ) &
 CHAOS=$!
+fi
 
 # Monitor: heights + total heals every 5 min
 echo "time,dnHeight,heals,cpuPct" > "$mon"
@@ -332,9 +388,9 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
       | grep -oE '"index":[0-9]+' | head -1 | cut -d: -f2)
     heals=0
     for c in $(docker ps --filter name=acc-bvn --format '{{.Names}}'); do
-      x=$(docker exec "$c" sh -c '
+      x=$(docker exec -e PARTS="$PARTS" "$c" sh -c '
         nid=$(curl -s -X POST http://localhost:26660/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"node-info\",\"params\":{}}" | grep -oE "\"peerID\":\"[^\"]+\"" | cut -d"\"" -f4)
-        for part in Directory BVN1 BVN2 BVN3; do
+        for part in $PARTS; do
           curl -s -X POST http://localhost:26660/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"consensus-status\",\"params\":{\"partition\":\"$part\",\"nodeID\":\"$nid\"}}" | grep -oE "\"(syntheticHeals|anchorHeals)\":[0-9]+" | cut -d: -f2
         done' 2>/dev/null | paste -sd+ - | bc 2>/dev/null)
       heals=$((heals + ${x:-0}))

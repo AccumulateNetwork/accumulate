@@ -25,11 +25,18 @@ Usage:
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
 
-DEFAULT_PARTS = ["Directory", "BVN1", "BVN2", "BVN3"]
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import topology
+
+# Read the topology rather than restating it: a hardcoded partition list that
+# outlives the network it described reports a partition that does not exist as
+# permanently at height 0, i.e. as a stall (see topology.py).
+DEFAULT_PARTS = topology.partitions()
 SCOPE = {"Directory": "dn"}
 
 

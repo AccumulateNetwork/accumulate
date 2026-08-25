@@ -68,29 +68,3 @@ bvns:
         basePort: 26656
         dnnType: "validator"
         bvnnType: "validator"
-  - id: "BVN3"
-    nodes:
-      - listenAddress: "0.0.0.0"
-        peerAddress: "acc-bvn3-val1"
-        advertizeAddress: "acc-bvn3-val1"
-        basePort: 26656
-        dnnType: "validator"
-        bvnnType: "validator"
-      - listenAddress: "0.0.0.0"
-        peerAddress: "acc-bvn3-val2"
-        advertizeAddress: "acc-bvn3-val2"
-        basePort: 26656
-        dnnType: "validator"
-        bvnnType: "validator"
-      - listenAddress: "0.0.0.0"
-        peerAddress: "acc-bvn3-val3"
-        advertizeAddress: "acc-bvn3-val3"
-        basePort: 26656
-        dnnType: "validator"
-        bvnnType: "validator"
-      - listenAddress: "0.0.0.0"
-        peerAddress: "acc-bvn3-val4"
-        advertizeAddress: "acc-bvn3-val4"
-        basePort: 26656
-        dnnType: "validator"
-        bvnnType: "validator"

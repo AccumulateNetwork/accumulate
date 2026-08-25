@@ -9,11 +9,11 @@ services:
   bvn1-val2: { environment: { GOLOG_LOG_LEVEL: warn } }
   bvn1-val3: { environment: { GOLOG_LOG_LEVEL: warn } }
   bvn1-val4: { environment: { GOLOG_LOG_LEVEL: warn } }
-  bvn2-val1: { environment: { GOLOG_LOG_LEVEL: warn } }
+  # One node carries verbose pubsub; the rest stay at warn so the storm is
+  # readable. This was bvn3-val1 (first node of the last BVN) before the cut
+  # to 2 BVNs — bvn2-val1 is the same position in the smaller network, and
+  # deliberately not bvn1-val1, which the loadgen and monitor both hammer.
+  bvn2-val1: { environment: { GOLOG_LOG_LEVEL: "error,pubsub=debug" } }
   bvn2-val2: { environment: { GOLOG_LOG_LEVEL: warn } }
   bvn2-val3: { environment: { GOLOG_LOG_LEVEL: warn } }
   bvn2-val4: { environment: { GOLOG_LOG_LEVEL: warn } }
-  bvn3-val1: { environment: { GOLOG_LOG_LEVEL: "error,pubsub=debug" } }
-  bvn3-val2: { environment: { GOLOG_LOG_LEVEL: warn } }
-  bvn3-val3: { environment: { GOLOG_LOG_LEVEL: warn } }
-  bvn3-val4: { environment: { GOLOG_LOG_LEVEL: warn } }

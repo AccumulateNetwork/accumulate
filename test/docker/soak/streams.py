@@ -3,8 +3,13 @@
 received at destination. Names are normalised on BOTH sides — comparing a
 lowercased key against a mixed-case one silently reports 0 received and
 fabricates a stall."""
-import json, subprocess, sys
-PARTS = ["dn", "bvn-BVN1", "bvn-BVN2", "bvn-BVN3"]
+import json, os, subprocess, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+import topology
+# Read from docker-network.yml, never hardcoded: a stale partition here prints
+# a row of zeros for a partition that no longer exists, which reads as a
+# stalled channel and would fail the run's final check for nothing.
+PARTS = [topology.scopes()[p] for p in topology.partitions()]
 def q(scope):
     out = subprocess.run(["curl","-s","-m","8","-X","POST","http://localhost:26660/v3",
         "-H","content-type: application/json",

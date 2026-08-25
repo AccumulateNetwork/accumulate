@@ -12,11 +12,13 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-NODES = [
-    "acc-bvn1-val1", "acc-bvn1-val2", "acc-bvn1-val3", "acc-bvn1-val4",
-    "acc-bvn2-val1", "acc-bvn2-val2", "acc-bvn2-val3", "acc-bvn2-val4",
-    "acc-bvn3-val1", "acc-bvn3-val2", "acc-bvn3-val3", "acc-bvn3-val4",
-]
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import topology
+
+# Derived from docker-network.yml. A hand-listed roster goes stale the first
+# time the topology changes, and a dead container name reports as a node using
+# 0 MB — which silently drags the fleet memory average down.
+NODES = topology.containers()
 
 def parse_size(size_str):
     """Convert size string (e.g., '1.5GiB', '512MiB') to MB"""

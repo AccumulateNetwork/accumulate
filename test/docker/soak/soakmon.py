@@ -19,6 +19,11 @@ import atexit
 import json, os, re, signal, subprocess, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+# topology.py sits beside docker-compose.yml, one level up: it describes that
+# network, and the ad-hoc tools up there read it too.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+import topology
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 COMPOSE = os.path.join(HERE, "docker-compose.yml")
 
@@ -157,8 +162,13 @@ def collect_height():
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
-PARTITIONS = ["Directory", "BVN1", "BVN2", "BVN3"]
-SCOPE = {"Directory": "dn", "BVN1": "bvn-BVN1", "BVN2": "bvn-BVN2", "BVN3": "bvn-BVN3"}
+# Read the topology, never assume it. These were a hardcoded 3-BVN list; when
+# the network was cut to 2 BVNs the monitor kept polling a partition that no
+# longer existed and reported it "unknown" forever, which the dashboard renders
+# as a permanently degraded network. See topology.py.
+PARTITIONS = topology.partitions()
+SCOPE = topology.scopes()
+PROBE_PORTS = topology.probe_ports()
 
 
 def _plabel(u):
@@ -179,7 +189,7 @@ def collect_heights():
     heights = {}
     for p in PARTITIONS:
         best = None
-        for port in (26660, 26663, 26665, 26668, 26670):
+        for port in PROBE_PORTS:
             body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "query",
                                "params": {"scope": "acc://%s.acme/ledger" % SCOPE[p]}})
             out = sh(["curl", "-s", "-m", "4", "-X", "POST",
@@ -211,7 +221,11 @@ def assess_progress(heights, now):
     STALL_SECS have passed with no movement — it never gets a free pass.
     """
     out = {}
-    for part in PARTITIONS:
+    # Driven by the reading, not by a module-level topology list: the verdict
+    # is about the partitions actually sampled. collect_heights always returns
+    # a key per partition (None when unreadable), so this covers the same set
+    # in production while letting a test state its own topology.
+    for part in heights:
         h = heights.get(part)
         if h is None:
             # Height unreadable. That is not health; say so rather than
@@ -684,14 +698,17 @@ def collect_wedges():
             "byDest": by_dest, "byNode": by_node}
 
 
+# The partition list is spliced in from the topology, not spelled out: asking a
+# node for the heal counters of a partition it does not host returns nothing,
+# and the missing rows read as "no healing happened" rather than "never asked".
 HEAL_SNIPPET = r'''
 nid=$(curl -s -m5 -X POST http://localhost:26660/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"node-info\",\"params\":{}}" | grep -oE "\"peerID\":\"[^\"]+\"" | cut -d"\"" -f4)
-for part in Directory BVN1 BVN2 BVN3; do
+for part in __PARTITIONS__; do
   r=$(curl -s -m5 -X POST http://localhost:26660/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"consensus-status\",\"params\":{\"partition\":\"$part\",\"nodeID\":\"$nid\"}}")
   s=$(echo "$r" | grep -oE "\"syntheticHeals\":[0-9]+" | cut -d: -f2); a=$(echo "$r" | grep -oE "\"anchorHeals\":[0-9]+" | cut -d: -f2)
   echo "$part ${s:-0} ${a:-0}"
 done
-'''
+'''.replace("__PARTITIONS__", " ".join(PARTITIONS))
 
 
 def _heal_one(c, out_map, lock):
@@ -1092,7 +1109,7 @@ async function tick(){
   if(!s.ok){$('foot').textContent='waiting for first sample…';return;}
   const lg=s.loadgen||{},nw=s.network||{},w=s.wedges||{},h=s.heals||{},ch=s.chaos||{},mx=s.matrix||{};
   // flow matrices + heights
-  const parts=mx.parts||['Directory','BVN1','BVN2','BVN3'];
+  const parts=mx.parts||[];  // the server always sends the real topology
   matrix($('mxSyn'),(mx.flows||{}).synthetic,mx.parts&&parts);
   matrix($('mxAnc'),(mx.flows||{}).anchor,mx.parts&&parts);
   const hh=mx.heights||{};
