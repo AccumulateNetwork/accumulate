@@ -110,7 +110,12 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// REFUSED, not ignored: silently falling back to the configured count
 	// would make a sweep report the serial number under a parallel label,
 	// which is the one way this measurement can lie.
-	if v, ok := os.LookupEnv("ACC_EXECUTION_SHARDS"); ok {
+	// An EMPTY value means "not set", not "invalid". Compose renders an unset
+	// variable as the empty string ("${ACC_EXECUTION_SHARDS-}"), so refusing
+	// it would refuse to start every node on every network that never set it
+	// — the default case. A non-empty value that is not a number is still a
+	// hard error.
+	if v, ok := os.LookupEnv("ACC_EXECUTION_SHARDS"); ok && v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
 			return errors.BadRequest.WithFormat("ACC_EXECUTION_SHARDS %q is not a number", v)

@@ -48,6 +48,11 @@ x-node-env: &node-env
   # 512MiB across the two engines), NOT to raise the ceiling above the
   # container limit again.
   GOMEMLIMIT: "${GOMEMLIMIT-1200MiB}"
+  # Execution sharding (#4145). Defaults to 1 = serial, which is what every
+  # generated network has silently run since the feature landed — the config
+  # plumbing is complete but cmd_init_network never sets it. Set
+  # ACC_EXECUTION_SHARDS to sweep it without regenerating genesis.
+  ACC_EXECUTION_SHARDS: "${ACC_EXECUTION_SHARDS-}"
 
 services:
   # CRITICAL: Bootstrap server is REQUIRED for peer discovery
