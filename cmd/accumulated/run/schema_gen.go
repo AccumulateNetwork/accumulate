@@ -23,6 +23,7 @@ import (
 
 var (
 	sBadgerStorage              schema.Methods[*BadgerStorage, *BadgerStorage, *schema.CompositeType]
+	sBlockchainDBStorage        schema.Methods[*BlockchainDBStorage, *BlockchainDBStorage, *schema.CompositeType]
 	sBoltStorage                schema.Methods[*BoltStorage, *BoltStorage, *schema.CompositeType]
 	sCometNodeKeyFile           schema.Methods[*CometNodeKeyFile, *CometNodeKeyFile, *schema.CompositeType]
 	sCometPrivValFile           schema.Methods[*CometPrivValFile, *CometPrivValFile, *schema.CompositeType]
@@ -88,6 +89,18 @@ func init() {
 			{
 				Name: "Version",
 				Type: &schema.SimpleType{Type: schema.SimpleTypeInt},
+			},
+		},
+	}).SetGoType()
+
+	sBlockchainDBStorage = schema.WithMethods[*BlockchainDBStorage, *BlockchainDBStorage](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "BlockchainDBStorage",
+		},
+		Fields: []*schema.Field{
+			{
+				Name: "Path",
+				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
 			},
 		},
 	}).SetGoType()
@@ -1476,6 +1489,13 @@ func init() {
 					}).
 						ResolveElemTo(&deferredTypes, "ExpBlockDBStorage"),
 				},
+				{
+					Discriminator: "blockchainDB",
+					Type: (&schema.PointerType{
+						TypeBase: schema.TypeBase{},
+					}).
+						ResolveElemTo(&deferredTypes, "BlockchainDBStorage"),
+				},
 			},
 		}).SetGoType()
 
@@ -1505,6 +1525,10 @@ func init() {
 				"Badger": {
 					Name:  "Badger",
 					Value: 2,
+				},
+				"BlockchainDB": {
+					Name:  "BlockchainDB",
+					Value: 1002,
 				},
 				"Bolt": {
 					Name:  "Bolt",
@@ -1630,6 +1654,7 @@ func init() {
 
 	s, err := schema.New(
 		sBadgerStorage.Type,
+		sBlockchainDBStorage.Type,
 		sBoltStorage.Type,
 		sCometNodeKeyFile.Type,
 		sCometPrivValFile.Type,

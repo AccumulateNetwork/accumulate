@@ -251,6 +251,7 @@ require (
 
 require (
 	4d63.com/gochecknoglobals v0.2.1 // indirect
+	github.com/AccumulateNetwork/BlockchainDB v0.0.0
 	github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96 // indirect
 	github.com/Antonboom/errname v1.0.0 // indirect
 	github.com/Antonboom/nilnil v1.0.1 // indirect
@@ -397,3 +398,5 @@ require (
 	mvdan.cc/gofumpt v0.7.0 // indirect
 	mvdan.cc/unparam v0.0.0-20240528143540-8a5130ca722f // indirect
 )
+
+replace github.com/AccumulateNetwork/BlockchainDB => /home/paul/repos/github.com/AccumulateNetwork/BlockchainDB

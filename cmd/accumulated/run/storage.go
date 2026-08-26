@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/block"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bolt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/leveldb"
@@ -79,11 +80,12 @@ func (s *StorageService) start(inst *Instance) error {
 	return storageProvides.Register(inst.services, s, store)
 }
 
-func (s *BadgerStorage) setPath(path string)     { s.Path = path }
-func (s *BoltStorage) setPath(path string)       { s.Path = path }
-func (s *ExpBlockDBStorage) setPath(path string) { s.Path = path }
-func (s *LevelDBStorage) setPath(path string)    { s.Path = path }
-func (s *MemoryStorage) setPath(path string)     {}
+func (s *BadgerStorage) setPath(path string)       { s.Path = path }
+func (s *BoltStorage) setPath(path string)         { s.Path = path }
+func (s *BlockchainDBStorage) setPath(path string) { s.Path = path }
+func (s *ExpBlockDBStorage) setPath(path string)   { s.Path = path }
+func (s *LevelDBStorage) setPath(path string)      { s.Path = path }
+func (s *MemoryStorage) setPath(path string)       {}
 
 type StorageOrRef baseRef[Storage]
 
@@ -171,6 +173,16 @@ func (s *LevelDBStorage) open(inst *Instance) (keyvalue.Beginner, error) {
 	}
 
 	db, err := leveldb.Open(inst.path(s.Path))
+	if err != nil {
+		return nil, err
+	}
+
+	inst.cleanup("storage", func(context.Context) error { return db.Close() })
+	return db, nil
+}
+
+func (s *BlockchainDBStorage) open(inst *Instance) (keyvalue.Beginner, error) {
+	db, err := bcdb.Open(inst.path(s.Path))
 	if err != nil {
 		return nil, err
 	}
