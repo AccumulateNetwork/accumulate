@@ -32,33 +32,45 @@ import (
 // SequencedMessage.process. Moving the write is the next step; moving the
 // DECISION is what makes the write safe to move.
 //
-// A message the pass never reached keeps no entry and the executor falls back to
-// the live check — cascade messages (#4146) are generated during execution and
-// cannot be seen from here.
+// A message the pass leaves no entry for falls back to the live check. That is
+// the whole of the fallback contract, and two things land in it: cascade
+// messages (#4146), generated during execution and invisible from here, and
+// messages on an UNDETERMINED stream — see below.
 //
-// NOT YET AUTHORITATIVE. Cross-checked against the live verdict over the whole
-// e2e suite: 891 agreements, 4 disagreements, and — the property that matters —
-// ZERO in the unsafe direction. The pass never wrongly ADMITS a message; every
-// disagreement is a conservative `false` where the live check says ready, which
-// falls through and changes nothing.
-//
-// The cause of those 4 is NOT pinned. They are syntheticDepositTokens whose
-// stream advanced further than the envelope set alone explains, which points at
-// cascade-driven delivery the pass cannot model — but that is a hypothesis, not
-// a measurement. Moving the ledger WRITE onto this verdict requires closing
-// them first: a conservative `false` is harmless while the live check still
-// runs, and becomes a lost delivery the moment it does not.
+// Cross-checked against the live verdict over the whole e2e suite: agreement
+// on every message the pass decides, in both directions. The pass never
+// wrongly admits, and no longer emits a conservative `false` either.
 func (b *Block) decideSequencedReadiness(envelopes []*messaging.Envelope) {
-	// Local watermark per (ledger account, source), seeded lazily from the
-	// stored ledger. Keyed by the ledger URL rather than a bool, because
-	// anchors and synthetics keep SEPARATE ledgers (anchor pool vs synthetic)
-	// and a shared watermark would let an anchor's sequence number gate a
-	// synthetic's — different streams entirely.
+	// Per-stream state, keyed by (ledger account, source). Keyed by the ledger
+	// URL rather than a bool, because anchors and synthetics keep SEPARATE
+	// ledgers (anchor pool vs synthetic) and a shared watermark would let an
+	// anchor's sequence number gate a synthetic's — different streams
+	// entirely.
 	type streamKey struct {
 		ledger string
 		source string
 	}
-	delivered := map[streamKey]uint64{}
+	type streamState struct {
+		// have is the local watermark: how far the stream has advanced,
+		// seeded from the stored ledger and moved forward as the pass admits.
+		have uint64
+
+		// start is the partition ledger as of the beginning of the block. Its
+		// pending window is what makes a stream undetermined.
+		start *protocol.PartitionSyntheticLedger
+
+		// held maps each of this stream's numbers the pass refused to that
+		// message's hash. The executor RECORDS a refused message as pending,
+		// so it joins the pending window during the block and can be drained
+		// by a later delivery exactly like the ones already in it — which
+		// means its verdict may have to be taken back.
+		held map[uint64][32]byte
+
+		// undetermined stops the pass from speaking for this stream. See
+		// the comment at the point it is set.
+		undetermined bool
+	}
+	streams := map[streamKey]*streamState{}
 
 	for _, env := range envelopes {
 		messages, err := env.Normalize()
@@ -79,8 +91,7 @@ func (b *Block) decideSequencedReadiness(envelopes []*messaging.Envelope) {
 			}
 
 			key := streamKey{ledgerUrl.String(), seq.Source.String()}
-
-			have, seeded := delivered[key]
+			st, seeded := streams[key]
 			if !seeded {
 				var ledger protocol.SequenceLedger
 				err := b.Batch.Account(ledgerUrl).Main().GetAs(&ledger)
@@ -89,8 +100,13 @@ func (b *Block) decideSequencedReadiness(envelopes []*messaging.Envelope) {
 					// let the executor's own load report the error.
 					continue
 				}
-				have = ledger.Partition(seq.Source).Delivered
-				delivered[key] = have
+				partition := ledger.Partition(seq.Source)
+				st = &streamState{have: partition.Delivered, start: partition, held: map[uint64][32]byte{}}
+				streams[key] = st
+			}
+
+			if st.undetermined {
+				continue
 			}
 
 			// Key on the SEQUENCED message's hash, not the envelope
@@ -110,14 +126,76 @@ func (b *Block) decideSequencedReadiness(envelopes []*messaging.Envelope) {
 			if _, seen := b.seqReady[h]; seen {
 				continue
 			}
-			if seq.Number == have+1 {
-				b.setSeqReady(h, true)
-				delivered[key] = seq.Number
-			} else {
+
+			if seq.Number != st.have+1 {
 				// Already delivered, or a gap. Either way not next, and the
 				// watermark does not move — a later message in this block
-				// cannot jump the gap.
+				// cannot jump the gap. A refused message above the watermark
+				// is one the executor records as pending, which puts it in
+				// the window a later delivery can drain from.
 				b.setSeqReady(h, false)
+				if seq.Number > st.have {
+					st.held[seq.Number] = h
+				}
+				continue
+			}
+
+			b.setSeqReady(h, true)
+			st.have = seq.Number
+
+			// A stream does not advance by one per delivery. When a message
+			// delivers, SequencedMessage.process cascades: if its successor
+			// is ALREADY RECEIVED — sitting undelivered in the ledger's
+			// pending window — that successor is delivered too, inline, and
+			// its own delivery cascades again. The stream can therefore run
+			// far past what this block's envelopes contain, and where it
+			// stops is decided by nextTargetsSameIdentity, which reads the
+			// stored successor to compare principals.
+			//
+			// This pass cannot follow that without reimplementing the cascade
+			// — a second copy of the rule, which is the exact failure the
+			// pre-pass exists to avoid. Nor may it GUESS the drain: guessing
+			// it happens is a wrong ADMIT, the one direction that corrupts a
+			// watermark.
+			//
+			// So it stops speaking for the stream instead. Every later
+			// message of this stream gets no entry and is decided live,
+			// exactly as a cascade message is. Verdicts already recorded
+			// stand: execution follows arrival order, so each of them was
+			// evaluated at the same point in the stream the executor will
+			// evaluate it at, before any of this drain could have happened.
+			//
+			// Measured: this is what the pre-pass and the live check used to
+			// disagree about, and the only thing. Delivered=0 with #2 and #3
+			// already received, envelopes carrying #1 and #4: the pass
+			// admitted #1, the tail drained to 3 behind it, and #4 — which
+			// the pass had called a gap against a watermark of 1 — was next
+			// by the time it ran.
+			_, pendingNext := st.start.Get(seq.Number + 1)
+			_, heldNext := st.held[seq.Number+1]
+			if pendingNext || heldNext {
+				st.undetermined = true
+
+				// Take back every refusal on this stream. A refused message
+				// is recorded pending, and the drain reaches into exactly
+				// that window — it re-enters the executor as a cascade
+				// delivery, with the same hash, and finds a verdict decided
+				// against a watermark the drain has since moved past.
+				//
+				// Admissions stand. A message the pass admitted delivers at
+				// its arrival attempt, before any of this; a later sighting
+				// of it is a repeat, which Process settles from the recorded
+				// status without ever asking again.
+				//
+				// Measured: leaving the refusals in place was the one
+				// remaining disagreement — envelopes arriving [#4, #1, #2,
+				// #3] on an empty stream. #4 was refused against a watermark
+				// of 0, correctly, and was still refused when #3's delivery
+				// drained the tail into it.
+				for _, held := range st.held {
+					delete(b.seqReady, held)
+				}
+				clear(st.held)
 			}
 		}
 	}
