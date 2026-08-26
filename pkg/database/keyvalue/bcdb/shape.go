@@ -60,9 +60,21 @@ func shapeOf(v any) string {
 	}
 }
 
-// shapeCount is what happened to the writes of one shape
-type shapeCount struct {
-	New       uint64 `json:"new"`
-	Duplicate uint64 `json:"duplicate"`
-	Rewritten uint64 `json:"rewritten"`
+// ShapeCount is what happened to the writes of one shape
+type ShapeCount struct {
+	// Layer is where isWriteOnce sends this shape: "perm" or "dyna".
+	// Reading it beside Rewritten is the check -- a perm shape with a
+	// non-zero Rewritten is a classification that is wrong.
+	Layer string `json:"layer"`
+
+	New       uint64 `json:"new"`       // The key had not been written before
+	Duplicate uint64 `json:"duplicate"` // Written again with the same bytes
+	Rewritten uint64 `json:"rewritten"` // Written again with different bytes
+
+	// Misrouted counts the writes the permanent layer refused, which
+	// is the same event as Rewritten seen from the store's side.  They
+	// can differ: the tally sees a rewrite the first time a key is
+	// written twice in one process, the store sees it across restarts
+	// too, having the previous value on disk.
+	Misrouted uint64 `json:"misrouted"`
 }
