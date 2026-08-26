@@ -171,6 +171,14 @@ var ReadyReturnedPending atomic.Int64
 // invariant and watching the test still pass.
 var SequencedReadyExecuted atomic.Int64
 
+// SequencedSyntheticExecuted is the non-anchor subset of the above. Anchors are
+// sequenced too and vastly outnumber synthetics on an idle network, so a
+// coverage assertion on the total can be satisfied entirely by anchor traffic
+// while no synthetic is ever delivered. Classified from the transaction body
+// type, which is free — deliberately NOT by calling isAnchor, which would add a
+// ledger load to the hot path for the benefit of a test.
+var SequencedSyntheticExecuted atomic.Int64
+
 func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, error) {
 	// Check if the message is ready to process
 	ready, err := x.isReady(batch, ctx, seq)
@@ -227,6 +235,10 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 	// did not actually deliver, and the sharded design would be unsound.
 	if ready {
 		SequencedReadyExecuted.Add(1)
+		if tm, ok := seq.Message.(*messaging.TransactionMessage); ok &&
+			!tm.Transaction.Body.Type().IsAnchor() {
+			SequencedSyntheticExecuted.Add(1)
+		}
 	}
 	if ready && st.Pending() {
 		ReadyReturnedPending.Add(1)
