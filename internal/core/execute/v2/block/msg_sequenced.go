@@ -8,6 +8,7 @@ package block
 
 import (
 	"strings"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -154,6 +155,22 @@ func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 	return status, nil
 }
 
+// ReadyReturnedPending counts violations of the invariant asserted in
+// SequencedMessage.process: a READY sequenced message must never come back
+// pending. It is a counter rather than a panic because a false positive must
+// not take down a validator, and a counter rather than only a log line because
+// the sharded-delivery design rests on this being zero — a test has to be able
+// to assert it, not grep for it.
+var ReadyReturnedPending atomic.Int64
+
+// SequencedReadyExecuted counts sequenced messages that passed the readiness
+// gate and therefore executed. It exists so a test asserting
+// ReadyReturnedPending == 0 can also prove it EXERCISED the path: a workload
+// that drains between sends produces no pending sequenced messages at all, and
+// the assertion passes without having tested anything. Caught by inverting the
+// invariant and watching the test still pass.
+var SequencedReadyExecuted atomic.Int64
+
 func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, error) {
 	// Check if the message is ready to process
 	ready, err := x.isReady(batch, ctx, seq)
@@ -187,6 +204,37 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 	if st == nil {
 		err = batch.Commit()
 		return false, errors.UnknownError.Wrap(err)
+	}
+
+	// INVARIANT (#4145 sharded delivery): a message that was READY and therefore
+	// executed never comes back pending — `st.Pending()` is true only for the
+	// !ready branch, which runs recordPending and executes nothing.
+	//
+	// This matters beyond tidiness. Sharding synthetic delivery requires the
+	// ledger owner to decide pending-vs-delivered BEFORE dispatching the
+	// transaction to its destination shard, which is only possible if the
+	// answer is `!ready` — derivable from the ledger alone — rather than a
+	// property of the execution result. Measured across the e2e suite: 376
+	// pending messages, every one of them ready=false, none ready=true.
+	//
+	// It holds because the proof anchor is verified in SyntheticMessage.process
+	// BEFORE this executor runs; an unanchored message returns errors.Pending
+	// there and never reaches here. So by this point a message is either
+	// in-sequence and executable, or out of sequence.
+	//
+	// Absence over one suite is evidence, not proof. Say so loudly if it ever
+	// breaks: a violation means the watermark advanced on a transaction that
+	// did not actually deliver, and the sharded design would be unsound.
+	if ready {
+		SequencedReadyExecuted.Add(1)
+	}
+	if ready && st.Pending() {
+		ReadyReturnedPending.Add(1)
+		ctx.Executor.logger.Error(
+			"INVARIANT VIOLATED: a ready sequenced message returned pending",
+			"source", seq.Source, "seq", seq.Number,
+			"hash", logging.AsHex(seq.Message.Hash()).Slice(0, 4),
+			"module", "synthetic")
 	}
 
 	// Update the ledger
