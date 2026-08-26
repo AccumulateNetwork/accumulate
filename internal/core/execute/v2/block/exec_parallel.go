@@ -183,6 +183,13 @@ func (b *Block) envelopeIdentity(batch *database.Batch, messages []messaging.Mes
 func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessResult {
 	results := make([]*execute.ProcessResult, len(envelopes))
 
+	// Settle stream readiness before anything executes, so the answer cannot
+	// depend on which shard ran first (#4145). Runs at every shard count,
+	// including the serial path, so both produce identical verdicts — a
+	// pre-pass that only ran under sharding would be a second implementation
+	// of the rule, and the two would drift.
+	b.decideSequencedReadiness(envelopes)
+
 	shards := b.Executor.ExecutionShards
 	if shards <= 1 {
 		// The serial path, verbatim.
