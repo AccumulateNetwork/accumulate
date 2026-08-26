@@ -76,47 +76,43 @@ the front of a synthetic-heavy block. That is the same fixed cost as any
 owner-based scheme, paid at the cheap stage (a watermark update) rather than
 the expensive one (execution).
 
-## MEASURED: the assumption is FALSE, and it sinks phase 1 as designed
+## MEASURED: the assumption HOLDS
 
-Phase 1 above decides pending-vs-delivered before execution. That is only sound
-if the inner transaction's status cannot itself be `Pending` — the flag comes
-from `st.Pending()`, i.e. AFTER `callMessageExecutor`.
+Phase 1 decides pending-vs-delivered before execution. That is sound only if a
+message that actually EXECUTED cannot come back `Pending` — the flag comes from
+`st.Pending()` after `callMessageExecutor`.
 
-Reading suggested it held. A probe at the exact call site, run over the whole
-e2e suite, says otherwise:
+A first probe appeared to refute this (376 hits). It was placed wrong: it sat
+after BOTH branches of
 
-    214  isAnchor=false  body=syntheticDepositTokens
-    144  isAnchor=true   body=directoryAnchor
-     18  isAnchor=true   body=blockValidatorAnchor
+    if ready { st, err = ctx.callMessageExecutor(batch, msg) }
+    else     { st, err = ctx.childWith(seq.Message).recordPending(batch) }
 
-The anchors are unsurprising — an anchor waits on a validator signature
-threshold. The 214 are not: **ordinary synthetic deposits go Pending after
-execution.** So the ledger update genuinely depends on the execution result and
-phase 1 cannot finalise it.
+so every out-of-sequence message that never ran counted as "pending after
+execution". Re-probed with the branch recorded, over the whole e2e suite:
 
-### Why a third phase does not rescue it
+    214  ready=false  isAnchor=false  syntheticDepositTokens
+    144  ready=false  isAnchor=true   directoryAnchor
+     18  ready=false  isAnchor=true   blockValidatorAnchor
 
-owner -> shards -> owner would let phase 3 apply delivery marks in stream
-order. But `isReady` gates on `Delivered+1 == seq.Number`, so message N+1 of a
-stream cannot be dispatched until N's mark lands in phase 3 — one message per
-stream per block. That is #4163's ceiling again, which is the thing this design
-was supposed to preserve.
+**Zero with `ready=true`.** Every Pending is the not-ready branch, and
+not-ready is precisely what `isReady` determines from the ledger — knowable in
+phase 1, before any execution.
 
-### What that leaves
+This is consistent with the proof ordering: the anchor proof is verified in
+`SyntheticMessage.process` BEFORE the sequenced executor runs, and an unanchored
+message returns `errors.Pending` there, short-circuiting so `SequencedMessage`
+never executes. Proofs and their signatures settle first; by the time a message
+reaches the ledger it is either in-sequence and executable, or out of sequence.
 
-The readiness gate makes each SOURCE STREAM an inherently serial chain: N+1's
-eligibility depends on N's outcome. So the available parallelism is ACROSS
-streams, not within one.
+So phase 1 can finalise the ledger, and the two-phase design stands.
 
-Sharding by `seq.Source` would give each stream one owner, keep the ledger
-consistent with no lost update, and let different sources run concurrently. The
-cost is that the inner transaction then executes on the STREAM's shard rather
-than the destination's, so a synthetic and a user transaction touching the same
-account could land on different shards — trading this collision for a worse
-one.
+### Encode the invariant
 
-Resolving that tension is the open design question. It is not a small one, and
-this plan should not be implemented until it is answered.
+The design depends on it, so it should be asserted rather than assumed: a
+message with `ready=true` whose status comes back `Pending` must fail loudly,
+not silently corrupt the watermark. Absence over one suite is evidence, not
+proof — e2e may not cover a synthetic to an account that requires authority.
 
 ## Other shared writes on the path, for completeness
 
