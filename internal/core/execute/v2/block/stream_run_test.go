@@ -136,3 +136,89 @@ func TestBuildRun_StagedOrderIsDeterministic(t *testing.T) {
 		require.Equal(t, []uint64{3, 5, 7, 9}, stagedNumbers(stage))
 	}
 }
+
+// A run must be exactly the consecutive numbers from where the stream stands.
+// Not "sorted", not "increasing" — consecutive, with no hole, starting at
+// delivered+1. Everything downstream reads it as an order to execute in, so a
+// hole in the middle would apply a message out of sequence, and a wrong start
+// would apply one twice or skip one entirely.
+func TestBuildRun_RunIsConsecutiveFromNext(t *testing.T) {
+	cases := []struct {
+		name string
+		pos  *streamPosition
+		arr  map[uint64]*arrival
+	}{
+		{"all arriving", runPos(0, 0), arr(1, 2, 3, 4)},
+		{"all staged", runPos(0, 3, 1, 2, 3), nil},
+		{"mixed", runPos(5, 8, 7, 8), arr(6)},
+		{"arrivals ahead of staged", runPos(10, 12, 11, 12), arr(13, 14)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			run, _ := buildRun(c.pos, c.arr, noLimit)
+			require.NotEmpty(t, run)
+			assert.Equal(t, c.pos.next(), run[0].number, "a run starts where the stream stands")
+			for i := 1; i < len(run); i++ {
+				assert.Equalf(t, run[i-1].number+1, run[i].number,
+					"entry %d must follow %d with no hole", i, i-1)
+			}
+		})
+	}
+}
+
+// Exactly one source per entry. An entry with neither has nothing to execute;
+// an entry with both is ambiguous about which the executor should use.
+func TestBuildRun_EveryEntryHasExactlyOneSource(t *testing.T) {
+	run, _ := buildRun(runPos(0, 3, 2, 3), arr(1), noLimit)
+	require.Len(t, run, 3)
+	for _, e := range run {
+		hasBundle := e.bundle != nil
+		hasStaged := e.staged != nil
+		assert.Truef(t, hasBundle != hasStaged,
+			"entry %d must have a bundle or a staged ID, never both and never neither", e.number)
+		if hasStaged {
+			assert.Equal(t, -1, e.envIdx, "a staged entry belongs to no envelope of this block")
+		} else {
+			assert.GreaterOrEqual(t, e.envIdx, 0, "an arrival remembers its envelope")
+		}
+	}
+}
+
+// #4169 assumption 7.4: a staged entry carries no admissibility flag because
+// anything in the staged window passed its proof check when it was recorded —
+// an unproven message returns Pending before ever reaching the sequence check,
+// so it never enters the window. This pins the CONSEQUENCE of that claim: an
+// inadmissible arrival stops a run, and a staged entry never does, whatever
+// the arrivals around it say.
+func TestBuildRun_StagedEntriesAreNotGatedOnAdmissibility(t *testing.T) {
+	// #1 arrives and is inadmissible; the run cannot start at all.
+	a := arr(1)
+	a[1].admissible = false
+	run, _ := buildRun(runPos(0, 3, 2, 3), a, noLimit)
+	assert.Empty(t, run, "an unproven message at the head stops the stream dead")
+
+	// #1 arrives admissible; the staged tail behind it runs without any
+	// admissibility question being asked of it.
+	run, _ = buildRun(runPos(0, 3, 2, 3), arr(1), noLimit)
+	assert.Equal(t, []uint64{1, 2, 3}, runNumbers(run))
+}
+
+// The limit bounds the run, not the stream: what is cut stays available and
+// the NEXT block resumes exactly where this one stopped.
+func TestBuildRun_LimitCutsTheRunNotTheStream(t *testing.T) {
+	pos := runPos(0, 6, 1, 2, 3, 4, 5, 6)
+	run, _ := buildRun(pos, nil, 2)
+	assert.Equal(t, []uint64{1, 2}, runNumbers(run))
+
+	// Next block, the stream stands two further on; the rest is still there.
+	run, _ = buildRun(runPos(2, 6, 3, 4, 5, 6), nil, 2)
+	assert.Equal(t, []uint64{3, 4}, runNumbers(run), "the remainder is not lost, only deferred")
+}
+
+// A zero limit must produce nothing rather than everything — an off-by-one
+// here would turn "bounded" into "unbounded" silently.
+func TestBuildRun_ZeroLimitRunsNothing(t *testing.T) {
+	run, stage := buildRun(runPos(0, 0), arr(1, 2, 3), 0)
+	assert.Empty(t, run)
+	assert.Equal(t, []uint64{1, 2, 3}, stagedNumbers(stage), "and nothing is lost")
+}

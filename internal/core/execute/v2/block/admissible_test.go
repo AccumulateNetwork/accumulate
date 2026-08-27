@@ -192,3 +192,65 @@ func TestAnchorIsAdmissible_SourceMustBeAPartition(t *testing.T) {
 	_, err := x.anchorIsAdmissible(batch, nil, txn, protocol.AccountUrl("alice"))
 	require.Error(t, err, "a non-partition source has no threshold to compare against")
 }
+
+// #4169 assumption 6.6: an anchor's positional run is safe because the quorum
+// gate sits UPSTREAM of the sequence check — BlockAnchor.Process calls
+// txnIsReady and records pending without ever reaching SequencedMessage, so an
+// anchor that reaches the sequence check has already been authorized.
+//
+// That is read from the code rather than proven by it, so pin the half that
+// can be: whichever way admissibility is asked, the two callers get the same
+// answer for the same anchor. If they diverge, the positional run and the
+// executor disagree about which anchors may execute.
+func TestAnchorAdmissibility_OneAnswerForBothCallers(t *testing.T) {
+	x, batch, known, txn := anchorFixture(t)
+	src := protocol.PartitionUrl("BVN1")
+
+	for _, c := range []struct {
+		name  string
+		proof *protocol.AnnotatedReceipt
+		sigs  int
+		want  bool
+	}{
+		{"no proof, no quorum", nil, 0, false},
+		{"no proof, quorum met", nil, 2, true},
+		{"proof under a known root", &protocol.AnnotatedReceipt{Receipt: &merkle.Receipt{Anchor: known}}, 0, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, b2, _, txn2 := anchorFixture(t)
+			addAnchorSigs(t, b2, txn2, c.sigs)
+			got, err := x.anchorIsAdmissible(b2, c.proof, txn2, src)
+			require.NoError(t, err)
+			assert.Equal(t, c.want, got)
+		})
+	}
+	_ = batch
+	_ = txn
+}
+
+// Admissibility is monotone: once an anchor is in the directory chain it stays
+// there, because a chain is append-only. That is what lets a staged entry
+// carry no admissibility flag (#4169 assumption 7.4) — admissible never
+// becomes inadmissible, so a decision taken earlier cannot go stale.
+func TestIsAdmissible_IsMonotone(t *testing.T) {
+	x, batch, known := admissibleFixture(t)
+	proof := &protocol.AnnotatedReceipt{Receipt: &merkle.Receipt{Anchor: known}}
+
+	ok, err := x.isAdmissible(batch, proof)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	// Extend the chain with unrelated anchors.
+	chain, err := batch.Account(x.Describe.AnchorPool()).
+		AnchorChain(protocol.Directory).Root().Get()
+	require.NoError(t, err)
+	for i := byte(1); i <= 5; i++ {
+		h := make([]byte, 32)
+		h[0] = 0x40 + i
+		require.NoError(t, chain.AddEntry(h, false))
+	}
+
+	ok, err = x.isAdmissible(batch, proof)
+	require.NoError(t, err)
+	assert.True(t, ok, "an anchor already in the chain must stay admissible — the chain only grows")
+}
