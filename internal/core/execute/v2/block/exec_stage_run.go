@@ -85,7 +85,7 @@ func (b *Block) executeRuns(runs []streamRun, results []*execute.ProcessResult, 
 			}
 
 			// Did the stream actually move? Ask it.
-			b.positions = nil
+			b.invalidatePositions()
 			pos, perr := b.positionOf(sr.stream)
 			if err != nil || perr != nil || pos.delivered < entry.number {
 				break // this stream stops here; the rest stays for a later block

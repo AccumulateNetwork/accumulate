@@ -214,7 +214,7 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 	// dropped first: the block has moved since the last round, and a cached
 	// position would decide this round against last round's state.
 	drain := func() (int, error) {
-		b.positions = nil
+		b.invalidatePositions()
 		n := 0
 		for _, kind := range []streamKind{streamAnchor, streamSynthetic} {
 			runs, err := b.stageRuns(c, kind)

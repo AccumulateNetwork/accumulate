@@ -67,11 +67,29 @@ func (p *streamPosition) has(n uint64) bool {
 }
 
 // positionOf returns where a stream stands, loading it at most once per block.
+//
+// Guarded, because a cache MISS writes the map. Every caller today is in the
+// block's serial phase, so nothing races right now — but "safe because no
+// caller is concurrent yet" is a property of the callers, not of this code,
+// and #4169 step 9 routes components to shards. A shard needing a position
+// would have corrupted the map with no symptom until a block hash diverged.
+// TestStreamPosition_ConcurrentReadsAreSafe fails under -race without this.
+//
+// The lock makes the CACHE safe, not the load behind it: a miss reads
+// b.Batch, and the parent batch is only safe to touch from the serial phase
+// (exec_parallel.go, hazard iv). So a shard may read a position that is
+// already cached; it must not be the first to ask for one. Prefetching every
+// stream's position while classifying would close that too, and is the right
+// move if step 9 ever needs it.
 func (b *Block) positionOf(s stream) (*streamPosition, error) {
 	if !s.ok() {
 		return nil, errors.InternalError.With("not a stream")
 	}
 	key := s.ledger.String() + "|" + s.source.String()
+
+	b.positionsMu.Lock()
+	defer b.positionsMu.Unlock()
+
 	if p, ok := b.positions[key]; ok {
 		return p, nil
 	}
@@ -94,4 +112,16 @@ func (b *Block) positionOf(s stream) (*streamPosition, error) {
 	}
 	b.positions[key] = p
 	return p, nil
+}
+
+// invalidatePositions drops the cache so the next ask re-reads. Used between
+// drain rounds: the block has moved since the last round, and a cached
+// position would decide this round against last round's state.
+//
+// Takes the same lock as positionOf. Assigning the map directly — which is
+// what this replaced — writes it without one.
+func (b *Block) invalidatePositions() {
+	b.positionsMu.Lock()
+	defer b.positionsMu.Unlock()
+	b.positions = nil
 }

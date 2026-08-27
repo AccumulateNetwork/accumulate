@@ -7,6 +7,7 @@
 package block
 
 import (
+	"sync"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -37,8 +38,10 @@ type Block struct {
 
 	// positions caches where each stream stands at the start of the block,
 	// keyed by ledger and source, so the ledger is read once per stream per
-	// block rather than once per message (#4169 step 2).
-	positions map[string]*streamPosition
+	// block rather than once per message (#4169 step 2). Guarded, because a
+	// cache miss WRITES it — see positionOf.
+	positionsMu sync.Mutex
+	positions   map[string]*streamPosition
 
 	// staged is the execution order staging settled for this block (#4169
 	// step 5). Shadow only: nothing consults it to decide anything.
