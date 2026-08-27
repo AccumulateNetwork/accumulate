@@ -35,6 +35,11 @@ type Block struct {
 	// further envelopes execute and Close refuses to produce a state hash.
 	fatal error
 
+	// positions caches where each stream stands at the start of the block,
+	// keyed by ledger and source, so the ledger is read once per stream per
+	// block rather than once per message (#4169 step 2).
+	positions map[string]*streamPosition
+
 	// seqReady memoizes the readiness verdict for each sequenced message in
 	// this block, keyed by the sequenced message's hash, decided by a serial
 	// pre-pass before any shard runs (see decideSequencedReadiness).

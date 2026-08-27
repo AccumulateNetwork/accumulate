@@ -8,7 +8,6 @@ package block
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // decideSequencedReadiness settles, before any shard runs, which sequenced
@@ -41,36 +40,29 @@ import (
 // on every message the pass decides, in both directions. The pass never
 // wrongly admits, and no longer emits a conservative `false` either.
 func (b *Block) decideSequencedReadiness(envelopes []*messaging.Envelope) {
-	// Per-stream state, keyed by (ledger account, source). Keyed by the ledger
-	// URL rather than a bool, because anchors and synthetics keep SEPARATE
-	// ledgers (anchor pool vs synthetic) and a shared watermark would let an
-	// anchor's sequence number gate a synthetic's — different streams
-	// entirely.
-	type streamKey struct {
-		ledger string
-		source string
-	}
+	// Per-stream working state for this pass. Where the stream STANDS is
+	// streamPosition, read once per block by positionOf (#4169 step 2); this
+	// is only what the pass itself learns as it walks the envelopes.
 	type streamState struct {
-		// have is the local watermark: how far the stream has advanced,
-		// seeded from the stored ledger and moved forward as the pass admits.
+		// pos is where the stream stood at the start of the block.
+		pos *streamPosition
+
+		// have is the local watermark: seeded from pos and moved forward as the
+		// pass admits.
 		have uint64
 
-		// start is the partition ledger as of the beginning of the block. Its
-		// pending window is what makes a stream undetermined.
-		start *protocol.PartitionSyntheticLedger
-
 		// held maps each of this stream's numbers the pass refused to that
-		// message's hash. The executor RECORDS a refused message as pending,
-		// so it joins the pending window during the block and can be drained
-		// by a later delivery exactly like the ones already in it — which
-		// means its verdict may have to be taken back.
+		// message's hash. The executor RECORDS a refused message as pending, so
+		// it joins the staged window during the block and can be drained by a
+		// later delivery exactly like the ones already in it — which means its
+		// verdict may have to be taken back.
 		held map[uint64][32]byte
 
-		// undetermined stops the pass from speaking for this stream. See
-		// the comment at the point it is set.
+		// undetermined stops the pass from speaking for this stream. See the
+		// comment at the point it is set.
 		undetermined bool
 	}
-	streams := map[streamKey]*streamState{}
+	streams := map[string]*streamState{}
 
 	for _, env := range envelopes {
 		messages, err := env.Normalize()
@@ -88,20 +80,16 @@ func (b *Block) decideSequencedReadiness(envelopes []*messaging.Envelope) {
 			if err != nil || !str.ok() {
 				continue // not a stream message, or its body cannot be read
 			}
-			ledgerUrl := str.ledger
-
-			key := streamKey{ledgerUrl.String(), str.source.String()}
+			key := str.ledger.String() + "|" + str.source.String()
 			st, seeded := streams[key]
 			if !seeded {
-				var ledger protocol.SequenceLedger
-				err := b.Batch.Account(ledgerUrl).Main().GetAs(&ledger)
+				pos, err := b.positionOf(str)
 				if err != nil {
 					// Unreadable ledger is not a verdict. Leave no entry and
 					// let the executor's own load report the error.
 					continue
 				}
-				partition := ledger.Partition(seq.Source)
-				st = &streamState{have: partition.Delivered, start: partition, held: map[uint64][32]byte{}}
+				st = &streamState{pos: pos, have: pos.delivered, held: map[uint64][32]byte{}}
 				streams[key] = st
 			}
 
@@ -169,7 +157,7 @@ func (b *Block) decideSequencedReadiness(envelopes []*messaging.Envelope) {
 			// admitted #1, the tail drained to 3 behind it, and #4 — which
 			// the pass had called a gap against a watermark of 1 — was next
 			// by the time it ran.
-			_, pendingNext := st.start.Get(seq.Number + 1)
+			pendingNext := st.pos.has(seq.Number + 1)
 			_, heldNext := st.held[seq.Number+1]
 			if pendingNext || heldNext {
 				st.undetermined = true
