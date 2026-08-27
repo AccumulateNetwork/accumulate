@@ -179,31 +179,31 @@ func TestLessStream_CanonicalOrder(t *testing.T) {
 	}
 }
 
-// #4169 assumption 6.4, FALSIFIED and pinned here so it cannot quietly come
-// back. anyPending is what executeRuns uses to decide whether a run entry
-// delivered — and it cannot see an ERROR status. MessageIsReady turns a
-// missing message into protocol.NewErrorStatus, which is neither an error
-// return nor a pending status, so a run entry that achieved nothing is
-// counted as progress. Measured: drain rounds reported 80 deliveries each and
-// ran to the round bound while the ledger did not move at all.
+// #4169 assumption 6.4, FALSIFIED. executeRuns used to decide whether a run
+// entry delivered by reading its statuses — no error, nothing pending. This
+// pins WHY that cannot work, so nobody reaches for it again: a status carrying
+// an outright failure reports neither.
 //
-// The fix is to measure progress from the LEDGER, not from statuses. Until
-// then this test states exactly what the signal is worth.
-func TestAnyPending_CannotSeeAnErrorStatus(t *testing.T) {
-	pending := new(protocol.TransactionStatus)
-	pending.Code = errors.Pending
-	assert.True(t, anyPending([]*protocol.TransactionStatus{pending}))
-
-	delivered := new(protocol.TransactionStatus)
-	delivered.Code = errors.Delivered
-	assert.False(t, anyPending([]*protocol.TransactionStatus{delivered}))
-
-	assert.False(t, anyPending(nil),
-		"no statuses reads as success — a run entry that returns nothing is indistinguishable from one that delivered")
-
+// MessageIsReady turns a missing message into exactly such a status. Measured
+// before the fix: drain rounds reported 80 deliveries each and ran to the
+// round bound while the watermark did not move at all. Progress is now read
+// from the stream's own watermark, which cannot be fooled this way.
+func TestAnErrorStatusLooksLikeSuccess(t *testing.T) {
 	failed := protocol.NewErrorStatus(
 		protocol.AccountUrl("alice").WithTxID([32]byte{1}),
 		errors.NotFound.With("message not found"))
-	assert.False(t, anyPending([]*protocol.TransactionStatus{failed}),
-		"THE DEFECT: an error status is not pending, so a run entry that failed outright counts as delivered")
+
+	assert.False(t, failed.Pending(),
+		"an outright failure is not 'pending' — so a pending check does not see it")
+	assert.True(t, failed.Failed(),
+		"it is a failure, and only a caller that asks about failure finds out")
+
+	pending := new(protocol.TransactionStatus)
+	pending.Code = errors.Pending
+	assert.True(t, pending.Pending())
+
+	delivered := new(protocol.TransactionStatus)
+	delivered.Code = errors.Delivered
+	assert.False(t, delivered.Pending())
+	assert.False(t, delivered.Failed())
 }
