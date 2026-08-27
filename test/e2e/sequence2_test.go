@@ -9,6 +9,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -109,6 +110,9 @@ func TestMissingSynthTxn(t *testing.T) {
 
 func TestMissingDirectoryAnchorTxn(t *testing.T) {
 	// Drop the next directory anchor
+	// The hook runs on every node's goroutine; the counter it reads and
+	// increments is shared (#4171).
+	var anchorsMu sync.Mutex
 	var anchors int
 
 	// Initialize
@@ -118,6 +122,8 @@ func TestMissingDirectoryAnchorTxn(t *testing.T) {
 		simulator.Genesis(GenesisTime),
 
 		simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+			anchorsMu.Lock()
+			defer anchorsMu.Unlock()
 			if anchors >= valCount*bvnCount {
 				return true, nil
 			}
@@ -185,9 +191,13 @@ func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
 	faucet := acctesting.AcmeLiteAddressStdPriv(faucetKey)
 	MakeLiteTokenAccount(t, sim.DatabaseFor(faucet), faucetKey[32:], AcmeUrl())
 
-	// Drop the next block validator anchor
+	// Drop the next block validator anchor. The block hook is called per
+	// node, so both the counter and the envelopes it edits are shared (#4171).
+	var anchorsMu sync.Mutex
 	var anchors int
 	sim.SetBlockHook(Directory, func(_ execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
+		anchorsMu.Lock()
+		defer anchorsMu.Unlock()
 		for _, env := range envelopes {
 			for i := len(env.Messages) - 1; i >= 0; i-- {
 				anchor, ok := env.Messages[i].(*messaging.BlockAnchor)
