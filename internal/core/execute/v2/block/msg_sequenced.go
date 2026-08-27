@@ -444,17 +444,32 @@ func (x SequencedMessage) updateLedger(batch *database.Batch, ctx *MessageContex
 		return nil, errors.FatalError.WithFormat("%s processed out of order: delivered %d, processed %d", msg, partLedger.Delivered, seq.Number)
 	}
 
-	// Bound the pending window. Every Add rewrites the WHOLE ledger record,
-	// Pending array included, so per-message cost is O(backlog) and a big
+	// Bound the pending window. Per-message cost is O(total backlog), so a big
 	// backlog drains in O(backlog^2) — run 20260824T051249Z's 33,000-message
-	// backlog collapsed the drain to ~4/s (below even the cascade window's
-	// allowance) purely on re-marshaling cost: the serial search Paul called.
-	// Refusing to RECORD a receipt far beyond the delivery point is
-	// deterministic (same rule, same state on every validator) and converts
+	// backlog collapsed the drain to ~4/s, below even the cascade window's
+	// allowance: the serial search Paul called.
+	//
+	// The cost is the READ, not the write. This function reads the ledger with
+	// GetAs inside the message's own child batch, and a child does not share
+	// its parent's value — the read deep copies the whole SyntheticLedger,
+	// every stream and every pending entry. Writes are pointer assignments
+	// into the parent record and marshal once at the block's commit.
+	// TestSequenceLedgerCostIsPerRead pins it: across backlogs of 100 to
+	// 16,000, `put` and `commit` stay flat at ~0.2us and ~1.5us while the read
+	// runs 1.1us to 78.6us.
+	//
+	// Which decides the fix, and rules out the obvious one. Splitting the
+	// ledger into one record per stream does NOT help: a stream's own backlog
+	// is still copied on every one of its messages. Reading the ledger ONCE
+	// PER BLOCK does, and needs no layout change — measured at a 16,000
+	// backlog, 80.8us per message becomes 0.32us. That is what #4169's decide
+	// pass does, and it supersedes #4164's keyed-sub-record plan.
+	//
+	// Until then, refusing to RECORD a receipt far beyond the delivery point
+	// is deterministic (same rule, same state on every validator) and converts
 	// unbounded receipt-state growth into a produced>received tail at the
 	// source, which the reconcile machinery already heals once delivery
-	// catches up. The real O(1)-per-message fix (pending entries as keyed
-	// sub-records) is tracked on #4164.
+	// catches up.
 	if pending && seq.Number > partLedger.Delivered+MaxPendingSequenced {
 		ctx.Executor.logger.Debug("Refusing to record far-future sequenced message",
 			"seq", seq.Number, "delivered", partLedger.Delivered,
