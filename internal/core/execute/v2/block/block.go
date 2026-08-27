@@ -43,23 +43,6 @@ type Block struct {
 	// staged is the execution order staging settled for this block (#4169
 	// step 5). Shadow only: nothing consults it to decide anything.
 	staged *executionOrder
-
-	// seqReady memoizes the readiness verdict for each sequenced message in
-	// this block, keyed by the sequenced message's hash, decided by a serial
-	// pre-pass before any shard runs (see decideSequencedReadiness).
-	//
-	// Readiness is `partitionLedger.Delivered+1 == seq.Number`, so it depends
-	// on how far the stream has advanced. Deciding it inside execution makes
-	// it depend on WHEN a shard happens to run: two messages of one stream
-	// arriving in the same block on different shards would disagree about
-	// whether the second is next, and nodes at different shard counts would
-	// diverge on a state hash. Deciding it once, serially, in arrival order,
-	// removes the scheduling from the answer.
-	//
-	// A message with no entry here falls back to the live check — cascade
-	// messages (#4146) are generated during execution and were never seen by
-	// the pre-pass, and their behaviour is unchanged.
-	seqReady map[[32]byte]bool
 }
 
 func (b *Block) Params() execute.BlockParams { return b.BlockParams }

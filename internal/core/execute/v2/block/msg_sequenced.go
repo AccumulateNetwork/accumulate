@@ -378,22 +378,6 @@ func (x SequencedMessage) nextTargetsSameIdentity(batch *database.Batch, next *u
 }
 
 func (x SequencedMessage) isReady(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, error) {
-	// Prefer the verdict the block settled before execution began (#4145).
-	// Deciding readiness here would make it depend on when this shard ran; the
-	// pre-pass decided it once, serially, in arrival order.
-	//
-	// A message with no entry falls through to the live check below, exactly
-	// as before. Two things land there: a cascade message (#4146), generated
-	// during execution and invisible to a pass that runs before it, and a
-	// message on a stream the pre-pass stopped speaking for because a drain
-	// it cannot model may move the stream past it.
-	//
-	// The "already delivered" case still has to be answered from the ledger,
-	// because its caller distinguishes it by ERROR, not by the bool.
-	if ready, ok := ctx.Block.seqReadyFor(ctx.message.Hash()); ok && ready {
-		return true, nil
-	}
-
 	// Load the ledger
 	isAnchor, ledger, err := x.loadLedger(batch, ctx, seq)
 	if err != nil {

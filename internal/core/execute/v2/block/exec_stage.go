@@ -53,6 +53,17 @@ type executionOrder struct {
 // NOT YET AUTHORITATIVE (#4169 step 5). Computed and discarded; the executor
 // still decides everything itself.
 //
+// A RUN IS AN ORDER, NOT A SET OF READINESS VERDICTS, and the difference is
+// load-bearing. It is tempting to read "N is in the run" as "N is ready" and
+// short-circuit the live check with it. That is wrong while something else
+// controls execution order. A stream's staged tail drains only when a delivery
+// cascades into it, so a block whose envelopes carry #240 while the stream
+// sits at #1 drains nothing — yet the run correctly contains 2..240, because
+// each member becomes next as the run executes. Treat membership as readiness
+// and #240's envelope executes alone, out of order. Membership becomes a
+// readiness verdict only once staging drives execution order too (#4169 step
+// 10), which is why those two steps cannot be separated.
+//
 // LIMITATION, and the reason anchors are not final here: this decides both
 // groups against the anchor chain as it stands BEFORE anything executes. Once
 // this is authoritative the anchor group has to be decided, executed, and only
