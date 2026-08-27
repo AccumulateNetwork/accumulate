@@ -113,3 +113,10 @@ test/docker/performance-results/
 # pprof profile dumps
 *.prof
 *.pprof
+
+# Build output. `go build -o bin/ ./cmd/...` puts tool binaries here instead of
+# the repo root, which is why the list of individually-ignored root binaries
+# above exists. New tools should build here; the entries above stay only so
+# existing habits do not start failing pushes (GitLab rejects blobs over 1MiB,
+# so a stray 46MB binary blocks a push rather than merely wasting space).
+/bin/
