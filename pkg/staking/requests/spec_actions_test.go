@@ -119,3 +119,31 @@ func TestMarkerlessRegistrationStillWorks(t *testing.T) {
 		t.Errorf("stake = %q", r.Stake)
 	}
 }
+
+// TestUnfulfillableKindsCannotBeEncoded: Parse is generous, Encode is
+// strict. A recognised-but-unfulfilled action must be readable and
+// UNWRITABLE — the chain accepts and bills any entry, so an encoder that
+// emits one nobody acts on is the exact harm Encode exists to prevent.
+// Before this, the switch fell through and produced
+// {"actionType":"changeType"} with no account and no type.
+func TestUnfulfillableKindsCannotBeEncoded(t *testing.T) {
+	for _, k := range []Kind{
+		KindChangeType, KindChangePayout, KindChangeDelegate,
+		KindChangeDelegatorPayout, KindRejectDelegates, KindCancelRequest,
+		KindRegisterIdentity, KindUnstake, KindTransfer,
+	} {
+		r := &Request{Kind: k, Account: "acc://a.acme/stake", Stake: "acc://a.acme/stake", Type: "pure"}
+		out, err := r.Encode()
+		if err == nil {
+			t.Errorf("%s encoded to %s — the fleet does not fulfil it, so it must not be writable", k, out)
+		}
+	}
+	// The two the fleet does fulfil still encode.
+	reg, err := Register("acc://a.acme/stake", "pure", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.Encode(); err != nil {
+		t.Errorf("register must still encode: %v", err)
+	}
+}

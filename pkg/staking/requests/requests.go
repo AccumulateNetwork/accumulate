@@ -391,6 +391,19 @@ func (r *Request) Encode() ([][]byte, error) {
 		e.Account, e.Destination, e.Amount = r.Account, r.Destination, r.Amount
 	case KindRegister:
 		e.Type, e.Stake, e.Rewards, e.Delegate = r.Type, r.Stake, r.Rewards, r.Delegate
+	default:
+		// A kind the fleet does not fulfil has no contract encoding, and
+		// must not get a half-one. Without this the switch simply fell
+		// through and emitted {"actionType":"changeType"} — no account, no
+		// type — an entry the chain accepts, bills, and nobody acts on.
+		// That is precisely what Encode exists to make impossible.
+		//
+		// To change a type, payout or delegate, re-register: see Register,
+		// which REPLACES the whole record.
+		return nil, fmt.Errorf(
+			"%q is a recognised action (spec §3.1) but the validator fleet does not fulfil it, "+
+				"so writing one would be billed and never acted on; to change a registration, "+
+				"re-register with Register (it replaces the whole record)", r.Kind)
 	}
 
 	b, err := json.Marshal(e)
