@@ -53,16 +53,16 @@ func (b *Block) executeRuns(runs []streamRun, results []*execute.ProcessResult, 
 			} else {
 				// Already staged, so the message is in the database rather
 				// than in hand, and MessageIsReady loads and executes it —
-				// the same path the cascade used, reached from the run
-				// instead of from a delivery's side effect.
+				// the same path the old mechanism used, reached from the
+				// stage's run rather than from a delivery's side effect.
 				//
 				// NOT the first pass. callMessageExecutor refuses an internal
 				// message at pass 0, deliberately: internal types cannot be
 				// marshalled, so one arriving in a submitted envelope would
-				// have to be forged. The cascade never met that guard because
-				// queueAdditional hands its message to a LATER pass of the
-				// running bundle. A run entry is internally generated in
-				// exactly the same sense, so it enters at the same pass.
+				// have to be forged. The old mechanism never met that guard,
+				// because queueAdditional hands its message to a LATER pass
+				// of the running bundle. A run entry is internally generated
+				// in exactly the same sense, so it enters at the same pass.
 				//
 				// Getting this wrong is silent. The guard returns an error
 				// STATUS rather than an error, so the entry looked like it
@@ -95,6 +95,12 @@ func (b *Block) executeRuns(runs []streamRun, results []*execute.ProcessResult, 
 	}
 	return delivered
 }
+
+// maxRunPerBlock bounds how far one stage may carry a stream in a single
+// block, so no block inherits an unbounded run. Same value the old mechanism
+// used, named for what it actually bounds: a stage's run, not a chain of
+// deliveries setting each other off.
+const maxRunPerBlock = 1024
 
 // maxDrainRounds bounds how many times a block re-stages what its own
 // execution revealed. Two is normally enough — envelopes are processed once,

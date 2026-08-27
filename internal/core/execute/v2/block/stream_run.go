@@ -61,9 +61,10 @@ type runEntry struct {
 // The run starts where the stream stands and walks forward, taking each number
 // from whichever side holds it — this block's arrivals or the staged window —
 // and stops at the first number that is missing, inadmissible, or past the
-// limit. That single walk is what replaces the cascade: draining the staged
-// tail behind an arrival is not a separate mechanism, it is just the walk
-// continuing.
+// limit. Draining the staged tail behind an arrival is not a second mechanism
+// firing — it is this walk continuing. That is the whole reason a stage can be
+// decided in advance: its extent is a property of the stream's state, not of
+// what each delivery happens to set off.
 //
 // It stops for THREE reasons, and conflating them is how this goes wrong:
 //

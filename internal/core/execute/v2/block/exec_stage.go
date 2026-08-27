@@ -56,9 +56,10 @@ type executionOrder struct {
 // A RUN IS AN ORDER, NOT A SET OF READINESS VERDICTS, and the difference is
 // load-bearing. It is tempting to read "N is in the run" as "N is ready" and
 // short-circuit the live check with it. That is wrong while something else
-// controls execution order. A stream's staged tail drains only when a delivery
-// cascades into it, so a block whose envelopes carry #240 while the stream
-// sits at #1 drains nothing — yet the run correctly contains 2..240, because
+// controls execution order: under the mechanism this replaces, a staged tail
+// moved only when a delivery reached into it, so a block whose envelopes carry
+// #240 while the stream sits at #1 moved nothing — yet the run correctly
+// contains 2..240, because
 // each member becomes next as the run executes. Treat membership as readiness
 // and #240's envelope executes alone, out of order. Membership becomes a
 // readiness verdict only once staging drives execution order too (#4169 step
@@ -132,9 +133,9 @@ func (b *Block) classify(envelopes []*messaging.Envelope) *classified {
 // The second one is not theoretical. Measured on TestNoLaggingChannels with
 // runs decided once per block: delivery settled into exact lockstep with
 // arrival — 40 in, 40 out, every block — leaving one block's arrivals of lag
-// that never closed. Baseline drains those because the cascade re-reads the
-// ledger after every delivery. This is the same re-read, once per round rather
-// than once per message, which is where the cascade's O(n^2) came from.
+// that never closed. The mechanism this replaces got there by re-reading the
+// ledger after every single delivery, which is also where its O(n^2) came
+// from; a stage re-reads once per round instead.
 func (b *Block) stageRuns(c *classified, kind streamKind) ([]streamRun, error) {
 	keys := make([]string, 0, len(c.streams))
 	for k, str := range c.streams {
@@ -179,7 +180,7 @@ func (b *Block) stageRuns(c *classified, kind streamKind) ([]streamRun, error) {
 			arriving[n] = a
 		}
 
-		run, stage := buildRun(pos, arriving, cascadeDeliveryWindow)
+		run, stage := buildRun(pos, arriving, maxRunPerBlock)
 		runs = append(runs, streamRun{stream: str, run: run, stage: stage})
 	}
 	return runs, nil
