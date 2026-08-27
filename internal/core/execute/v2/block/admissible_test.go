@@ -95,3 +95,100 @@ func TestIsAdmissible_CollectionProof(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ok, "when the list is continued, the CONTINUED receipt's anchor is the terminal one")
 }
+
+// An anchor's gate is a validator signature quorum, with a collection proof as
+// a shortcut (#4169 step 3b). Staging needs one answer per message whichever
+// kind of stream carries it, because an anchor that is not authorized never
+// reaches the sequence check — so its stream must not advance over it.
+
+// anchorFixture returns an executor whose BVN1 threshold is 2, a batch, a
+// known directory anchor, and the anchor transaction.
+func anchorFixture(t *testing.T) (*Executor, *database.Batch, []byte, *protocol.Transaction) {
+	t.Helper()
+	x, batch, known := admissibleFixture(t)
+
+	// Three validators on BVN1 at a 2/3 accept threshold puts the quorum at 2.
+	x.globals.Active.Globals = &protocol.NetworkGlobals{
+		ValidatorAcceptThreshold: protocol.Rational{Numerator: 2, Denominator: 3},
+	}
+	x.globals.Active.Network = &protocol.NetworkDefinition{
+		Validators: []*protocol.ValidatorInfo{
+			{PublicKey: []byte{1}, Partitions: []*protocol.ValidatorPartitionInfo{{ID: "BVN1", Active: true}}},
+			{PublicKey: []byte{2}, Partitions: []*protocol.ValidatorPartitionInfo{{ID: "BVN1", Active: true}}},
+			{PublicKey: []byte{3}, Partitions: []*protocol.ValidatorPartitionInfo{{ID: "BVN1", Active: true}}},
+		},
+	}
+	require.Equal(t, uint64(2), x.globals.Active.ValidatorThreshold("BVN1"), "fixture precondition")
+
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = x.Describe.AnchorPool()
+	txn.Body = new(protocol.BlockValidatorAnchor)
+	return x, batch, known, txn
+}
+
+func addAnchorSigs(t *testing.T, batch *database.Batch, txn *protocol.Transaction, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		require.NoError(t, batch.Account(txn.Header.Principal).
+			Transaction(txn.ID().Hash()).
+			ValidatorSignatures().
+			Add(&protocol.ED25519Signature{PublicKey: []byte{byte(i + 1)}, Signer: txn.Header.Principal}))
+	}
+}
+
+func TestAnchorIsAdmissible_SignatureQuorum(t *testing.T) {
+	x, batch, _, txn := anchorFixture(t)
+	src := protocol.PartitionUrl("BVN1")
+
+	ok, err := x.anchorIsAdmissible(batch, nil, txn, src)
+	require.NoError(t, err)
+	assert.False(t, ok, "no signatures at all is below the threshold")
+
+	addAnchorSigs(t, batch, txn, 1)
+	ok, err = x.anchorIsAdmissible(batch, nil, txn, src)
+	require.NoError(t, err)
+	assert.False(t, ok, "one of two is still below")
+
+	addAnchorSigs(t, batch, txn, 2)
+	ok, err = x.anchorIsAdmissible(batch, nil, txn, src)
+	require.NoError(t, err)
+	assert.True(t, ok, "at the threshold the anchor is authorized")
+}
+
+// A collection proof under a known directory root authorizes the anchor by
+// itself (#4056) — no quorum needed.
+func TestAnchorIsAdmissible_CollectionProofAuthorizesAlone(t *testing.T) {
+	x, batch, known, txn := anchorFixture(t)
+
+	ok, err := x.anchorIsAdmissible(batch, &protocol.AnnotatedReceipt{
+		Receipt: &merkle.Receipt{Anchor: known},
+	}, txn, protocol.PartitionUrl("BVN1"))
+	require.NoError(t, err)
+	assert.True(t, ok, "a proof under a known root stands in for the quorum, with zero signatures present")
+}
+
+// A proof whose anchor has NOT arrived must not reject the anchor — it falls
+// through to the quorum, because healing resubmits until a current anchor
+// extends our directory-root knowledge past the proven range.
+func TestAnchorIsAdmissible_UnarrivedProofFallsThroughToTheQuorum(t *testing.T) {
+	x, batch, _, txn := anchorFixture(t)
+	src := protocol.PartitionUrl("BVN1")
+	unknown := make([]byte, 32)
+	unknown[0] = 0x77
+	proof := &protocol.AnnotatedReceipt{Receipt: &merkle.Receipt{Anchor: unknown}}
+
+	ok, err := x.anchorIsAdmissible(batch, proof, txn, src)
+	require.NoError(t, err)
+	assert.False(t, ok, "not authorized yet — but by the quorum, not by rejecting the proof")
+
+	addAnchorSigs(t, batch, txn, 2)
+	ok, err = x.anchorIsAdmissible(batch, proof, txn, src)
+	require.NoError(t, err)
+	assert.True(t, ok, "the quorum still authorizes it despite the unarrived proof")
+}
+
+func TestAnchorIsAdmissible_SourceMustBeAPartition(t *testing.T) {
+	x, batch, _, txn := anchorFixture(t)
+	_, err := x.anchorIsAdmissible(batch, nil, txn, protocol.AccountUrl("alice"))
+	require.Error(t, err, "a non-partition source has no threshold to compare against")
+}

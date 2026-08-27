@@ -9,6 +9,7 @@ package block
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -47,4 +48,46 @@ func (x *Executor) isAdmissible(batch *database.Batch, proof *protocol.Annotated
 	default:
 		return false, errors.UnknownError.WithFormat("search for directory anchor %x: %w", anchor, err)
 	}
+}
+
+// anchorIsAdmissible reports whether an anchor is authorized to execute.
+//
+// An anchor's gate is not a proof-to-a-DN-root like a synthetic's — it is a
+// validator signature quorum, with one shortcut. Extracted alongside
+// isAdmissible (#4169 step 3b) because staging needs ONE answer per message
+// regardless of which kind of stream carries it, and because an anchor that is
+// not authorized never reaches the sequence check: it records pending, so its
+// stream does not advance. Staging must not advance over it either.
+//
+// The shortcut first: a collection proof under a known directory root
+// authorizes the anchor by itself (#4056), and that is the same terminal-anchor
+// test a synthetic's proof gets, so it is the same function. If the proof's
+// anchor has not arrived the anchor is not rejected — it falls through to the
+// quorum, because the healing loop resubmits until a current anchor extends
+// the destination's directory-root knowledge past the proven range.
+func (x *Executor) anchorIsAdmissible(batch *database.Batch, proof *protocol.AnnotatedReceipt, txn *protocol.Transaction, source *url.URL) (bool, error) {
+	if proof != nil {
+		ok, err := x.isAdmissible(batch, proof)
+		if err != nil {
+			return false, errors.UnknownError.Wrap(err)
+		}
+		if ok {
+			return true, nil
+		}
+		// Not yet anchored — fall through to the signature quorum.
+	}
+
+	sigs, err := batch.Account(txn.Header.Principal).
+		Transaction(txn.ID().Hash()).
+		ValidatorSignatures().
+		Get()
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("load anchor signatures: %w", err)
+	}
+
+	partition, ok := protocol.ParsePartitionUrl(source)
+	if !ok {
+		return false, errors.BadRequest.WithFormat("source %v is not a partition", source)
+	}
+	return uint64(len(sigs)) >= x.globals.Active.ValidatorThreshold(partition), nil
 }

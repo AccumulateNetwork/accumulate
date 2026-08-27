@@ -273,43 +273,6 @@ func (x BlockAnchor) checkSignature(ctx *blockAnchorContext) error {
 }
 
 func (x BlockAnchor) txnIsReady(batch *database.Batch, ctx *blockAnchorContext) (bool, error) {
-	// A collection proof under a known directory root authorizes the anchor
-	// by itself — no signature quorum is required (#4056). If the proof's
-	// terminal anchor has not been received yet the message stays pending;
-	// the healing loop resubmits until a current anchor extends the
-	// destination's directory root knowledge past the proven range.
-	if ctx.blockAnchor.Proof != nil {
-		anchor := ctx.blockAnchor.Proof.TerminalAnchor()
-		_, err := batch.Account(ctx.Executor.Describe.AnchorPool()).
-			AnchorChain(protocol.Directory).
-			Root().
-			IndexOf(anchor)
-		switch {
-		case err == nil:
-			return true, nil
-		case errors.Is(err, errors.NotFound):
-			// Fall through to the signature-quorum check
-		default:
-			return false, errors.UnknownError.WithFormat("search for directory anchor %x: %w", anchor, err)
-		}
-	}
-
-	sigs, err := batch.Account(ctx.transaction.Header.Principal).
-		Transaction(ctx.transaction.ID().Hash()).
-		ValidatorSignatures().
-		Get()
-	if err != nil {
-		return false, errors.UnknownError.WithFormat("load anchor signatures: %w", err)
-	}
-
-	// Have we received enough signatures?
-	partition, ok := protocol.ParsePartitionUrl(ctx.sequenced.Source)
-	if !ok {
-		return false, errors.BadRequest.WithFormat("source %v is not a partition", ctx.sequenced.Source)
-	}
-	if uint64(len(sigs)) < ctx.Executor.globals.Active.ValidatorThreshold(partition) {
-		return false, nil
-	}
-
-	return true, nil
+	// One statement of the rule, shared with staging (#4169 step 3b).
+	return ctx.Executor.anchorIsAdmissible(batch, ctx.blockAnchor.Proof, ctx.transaction, ctx.sequenced.Source)
 }
