@@ -15,8 +15,18 @@ import (
 
 // arrival is one of this stream's messages that turned up in this block.
 type arrival struct {
-	number  uint64
-	message messaging.Message
+	number uint64
+
+	// bundle is the WHOLE envelope's normalized messages, not just the one
+	// that classified as a stream message. An envelope's messages are
+	// processed together — a transaction and the signatures for it — and
+	// executing one alone fails checkForUnsignedTransactions with "message
+	// bundle is missing a transaction".
+	bundle []messaging.Message
+
+	// envIdx is the envelope this arrived in, so its outcome can be reported
+	// against the right entry of ProcessAll's results.
+	envIdx int
 
 	// admissible is whether the message is proven to have come from its
 	// source (see Executor.isAdmissible). Only ARRIVING messages carry this:
@@ -31,9 +41,13 @@ type arrival struct {
 // of message and staged is set: message for something that arrived this block,
 // staged for something already held, which the caller loads by ID.
 type runEntry struct {
-	number  uint64
-	message messaging.Message
-	staged  *url.TxID
+	number uint64
+	bundle []messaging.Message
+	staged *url.TxID
+
+	// envIdx is the envelope this arrived in, or -1 for a staged entry, which
+	// belongs to no envelope of this block.
+	envIdx int
 }
 
 // buildRun returns the contiguous run of a stream that this block can execute,
@@ -69,7 +83,7 @@ func buildRun(pos *streamPosition, arriving map[uint64]*arrival, limit uint64) (
 			goto done
 
 		case ok:
-			run = append(run, runEntry{number: n, message: a.message})
+			run = append(run, runEntry{number: n, bundle: a.bundle, envIdx: a.envIdx})
 			taken[n] = true
 
 		default:
@@ -78,7 +92,7 @@ func buildRun(pos *streamPosition, arriving map[uint64]*arrival, limit uint64) (
 			if !held {
 				goto done
 			}
-			run = append(run, runEntry{number: n, staged: id})
+			run = append(run, runEntry{number: n, staged: id, envIdx: -1})
 		}
 	}
 

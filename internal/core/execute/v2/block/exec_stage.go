@@ -90,12 +90,31 @@ func (b *Block) stageBlock(envelopes []*messaging.Envelope) (*executionOrder, er
 			}
 			isUser = false
 
-			ok, err := b.admissibilityOf(str, msg, seq)
-			if err != nil {
-				// Cannot answer the precondition, so cannot place the message.
-				// Leaving it out means the stream stops at it, which is the
-				// conservative direction.
-				continue
+			// ANCHORS ARE ORDERED HERE, NOT ADMITTED HERE. An anchor's gate
+			// is a validator signature quorum, and the quorum is assembled
+			// from THIS BLOCK'S OWN MESSAGES — each BlockAnchor carries one
+			// signature, which the executor records as it processes it.
+			// Staging runs first and sees an empty signature set for every
+			// anchor: measured across the e2e suite, sigsAtStaging=0 against
+			// thresholds of 2, 4 and 6, every time.
+			//
+			// Counting the block's signatures here would mean deduping by key
+			// and checking validator membership — a second implementation of
+			// signature validation, which is the failure this restructure
+			// exists to remove — and over-counting would admit an
+			// unauthorized anchor. So the positional run is built here and
+			// each entry's quorum is decided as it executes, with the run
+			// stopping at the first entry that does not deliver.
+			ok := true
+			if str.kind != streamAnchor {
+				var err error
+				ok, err = b.admissibilityOf(str, msg, seq)
+				if err != nil {
+					// Cannot answer the precondition, so cannot place the
+					// message. Leaving it out stops the stream at it, which is
+					// the conservative direction.
+					continue
+				}
 			}
 
 			key := str.ledger.String() + "|" + str.source.String()
@@ -106,7 +125,7 @@ func (b *Block) stageBlock(envelopes []*messaging.Envelope) (*executionOrder, er
 			// FIRST SIGHTING WINS. The same message can appear twice in one
 			// block; it applies at most once (requirement 4).
 			if _, dup := arrivals[key][seq.Number]; !dup {
-				arrivals[key][seq.Number] = &arrival{number: seq.Number, message: msg, admissible: ok}
+				arrivals[key][seq.Number] = &arrival{number: seq.Number, bundle: messages, admissible: ok, envIdx: i}
 			}
 		}
 

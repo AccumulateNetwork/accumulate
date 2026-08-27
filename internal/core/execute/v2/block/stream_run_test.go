@@ -39,7 +39,7 @@ func runPos(delivered, received uint64, hold ...uint64) *streamPosition {
 func arr(numbers ...uint64) map[uint64]*arrival {
 	m := map[uint64]*arrival{}
 	for _, n := range numbers {
-		m[n] = &arrival{number: n, message: &messaging.SequencedMessage{Number: n}, admissible: true}
+		m[n] = &arrival{number: n, bundle: []messaging.Message{&messaging.SequencedMessage{Number: n}}, admissible: true}
 	}
 	return m
 }
@@ -80,7 +80,7 @@ func TestBuildRun_StagedTailDrainsBehindAnArrival(t *testing.T) {
 	assert.Equal(t, []uint64{1, 2, 3}, runNumbers(run),
 		"the staged tail drains behind the arrival — one walk, not a cascade")
 	assert.Empty(t, stage)
-	assert.Nil(t, run[0].staged, "#1 arrived this block, so its message is in hand")
+	assert.NotNil(t, run[0].bundle, "#1 arrived this block, so its envelope is in hand")
 	assert.NotNil(t, run[1].staged, "#2 was already held, so the caller loads it by ID")
 }
 

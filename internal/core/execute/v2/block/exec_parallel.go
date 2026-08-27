@@ -183,17 +183,53 @@ func (b *Block) envelopeIdentity(batch *database.Batch, messages []messaging.Mes
 func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessResult {
 	results := make([]*execute.ProcessResult, len(envelopes))
 
-	// Staging, in shadow (#4169 step 5). Computed and discarded — the
-	// executor still decides everything itself. Built here so the
-	// cross-check sees exactly the envelope set execution sees.
-	if order, err := b.stageBlock(envelopes); err == nil {
-		b.staged = order
+	// Staging decides the block's order before anything runs (#4169 step 6).
+	// Three phases:
+	//
+	//   1. Anchor streams. First, because an anchor extends the directory root
+	//      that admits synthetics — so a synthetic can use an anchor that
+	//      arrived in this same block instead of waiting one.
+	//   2. Synthetic streams, decided against the chain the anchors just
+	//      extended.
+	//   3. User envelopes, on the sharded path below. Last, so a deposit lands
+	//      before a transaction spends: a send that would fail on a stale
+	//      balance succeeds instead.
+	//
+	// Sequenced messages never reached the sharded path anyway — envelopeIdentity
+	// classified them serial — so moving them here takes work OUT of the loop
+	// below rather than changing where it runs.
+	order, err := b.stageBlock(envelopes)
+	if err != nil {
+		for i := range results {
+			results[i] = &execute.ProcessResult{Error: err, Shard: -1}
+		}
+		return results
+	}
+	b.staged = order
+	b.executeRuns(order.anchors, results)
+	b.executeRuns(order.synthetic, results)
+
+	// Everything staging placed in a run has now run. What is left for the
+	// loop below is the user envelopes, which staging listed but does not
+	// order beyond arrival.
+	staged := map[int]bool{}
+	for _, group := range [][]streamRun{order.anchors, order.synthetic} {
+		for _, sr := range group {
+			for _, e := range sr.run {
+				if e.envIdx >= 0 {
+					staged[e.envIdx] = true
+				}
+			}
+		}
 	}
 
 	shards := b.Executor.ExecutionShards
 	if shards <= 1 {
 		// The serial path, verbatim.
 		for i, env := range envelopes {
+			if staged[i] {
+				continue // already executed, in staging's order
+			}
 			s, err := b.Process(env)
 			results[i] = &execute.ProcessResult{Statuses: s, Error: err, Shard: -1}
 		}
@@ -299,6 +335,10 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 			// A shard commit failure poisoned the block — stop executing.
 			results[i] = &execute.ProcessResult{Error: b.fatal, Shard: -1}
 			continue
+		}
+
+		if staged[i] {
+			continue // already executed, in staging's order
 		}
 
 		messages, err := env.Normalize()
