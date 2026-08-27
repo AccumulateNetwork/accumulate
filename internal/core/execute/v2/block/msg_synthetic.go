@@ -300,26 +300,23 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 	}
 
 	// Verify the proof ends with a DN anchor. Individual and collection proofs
-	// terminate at the same trust root, so one check covers either form.
-	anchor := syn.Proof.TerminalAnchor()
-	_, err = batch.Account(ctx.Executor.Describe.AnchorPool()).
-		AnchorChain(protocol.Directory).
-		Root().
-		IndexOf(anchor)
-	switch {
-	case err == nil:
-		// Ok
-	case errors.Is(err, errors.NotFound):
+	// terminate at the same trust root, so one check covers either form. The
+	// check itself is isAdmissible (#4169 step 3), shared with staging; what a
+	// negative MEANS is decided here.
+	ok, err := ctx.Executor.isAdmissible(batch, syn.Proof)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if !ok {
 		// If the anchor simply hasn't arrived yet, failing the message
 		// terminally wedges recovery: the same message can never be
 		// re-applied once the anchor shows up. Once collection proofs are
 		// active, record it as pending instead so it can be retried (#4048).
+		anchor := syn.Proof.TerminalAnchor()
 		if ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
 			return errors.Pending.WithFormat("proof anchor %x has not been received", anchor)
 		}
 		return errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", anchor)
-	default:
-		return errors.UnknownError.WithFormat("search for directory anchor %x: %w", anchor, err)
 	}
 
 	// Absorb an accepted collection proof into the stream's replica (#4140):
