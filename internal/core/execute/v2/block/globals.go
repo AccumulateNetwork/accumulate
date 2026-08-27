@@ -31,8 +31,10 @@ func (x *Executor) loadGlobals(view func(func(batch *database.Batch) error) erro
 	}
 
 	// Publish an update
+	// A snapshot, not a pointer into the executor's state — see the note at
+	// the block-end publish (#4170).
 	err = x.EventBus.Publish(events.WillChangeGlobals{
-		New: &x.globals.Active,
+		New: x.globals.Active.Copy(),
 	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("publish globals update: %w", err)

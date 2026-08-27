@@ -261,9 +261,17 @@ func (block *Block) Close() (execute.BlockState, error) {
 	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
 		valUp = execute.DiffValidators(&m.globals.Active, &m.globals.Pending, m.Describe.PartitionId)
 
+		// Publish a SNAPSHOT, never a pointer into the executor's own state.
+		// Subscribers KEEP what they are handed — the conductor does
+		// c.Globals.Store(e.New) — so handing over &globals.Active makes
+		// every later in-place update a write to memory they are still
+		// reading. That is #4170: Block.Close's `globals.Active = *Pending
+		// .Copy()` raced with the conductor's anchoring path, the validation
+		// path and AnchorSigner, and a torn read there decides whether a code
+		// path is enabled and who may sign.
 		err = m.EventBus.Publish(events.WillChangeGlobals{
-			New: &m.globals.Pending,
-			Old: &m.globals.Active,
+			New: m.globals.Pending.Copy(),
+			Old: m.globals.Active.Copy(),
 		})
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("publish globals update: %w", err)
