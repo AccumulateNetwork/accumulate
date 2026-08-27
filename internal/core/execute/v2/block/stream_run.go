@@ -28,6 +28,11 @@ type arrival struct {
 	// against the right entry of ProcessAll's results.
 	envIdx int
 
+	// classifier and seq let admissibility be answered later, when this
+	// stream's group takes its turn, rather than while sorting.
+	classifier messaging.Message
+	seq        *messaging.SequencedMessage
+
 	// admissible is whether the message is proven to have come from its
 	// source (see Executor.isAdmissible). Only ARRIVING messages carry this:
 	// anything already staged passed the proof check when it was recorded,

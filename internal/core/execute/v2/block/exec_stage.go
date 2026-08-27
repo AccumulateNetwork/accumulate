@@ -71,10 +71,18 @@ type executionOrder struct {
 // anchor is in this same block is judged against a chain that does not yet
 // contain it, and waits a block for nothing. Shadow mode cannot tell the
 // difference because it executes nothing; step 6 has to.
-func (b *Block) stageBlock(envelopes []*messaging.Envelope) (*executionOrder, error) {
-	order := new(executionOrder)
-	arrivals := map[string]map[uint64]*arrival{}
-	streams := map[string]stream{}
+// classified is a block's messages sorted into streams, with nothing decided.
+// Sorting happens once; deciding happens once per group per round, because
+// both the anchor chain and the streams themselves move during the block.
+type classified struct {
+	streams  map[string]stream
+	arrivals map[string]map[uint64]*arrival
+	user     []int
+}
+
+func (b *Block) classify(envelopes []*messaging.Envelope) *classified {
+	c := &classified{streams: map[string]stream{}, arrivals: map[string]map[uint64]*arrival{}}
+	arrivals, streams := c.arrivals, c.streams
 
 	for i, env := range envelopes {
 		messages, err := env.Normalize()
@@ -90,33 +98,6 @@ func (b *Block) stageBlock(envelopes []*messaging.Envelope) (*executionOrder, er
 			}
 			isUser = false
 
-			// ANCHORS ARE ORDERED HERE, NOT ADMITTED HERE. An anchor's gate
-			// is a validator signature quorum, and the quorum is assembled
-			// from THIS BLOCK'S OWN MESSAGES — each BlockAnchor carries one
-			// signature, which the executor records as it processes it.
-			// Staging runs first and sees an empty signature set for every
-			// anchor: measured across the e2e suite, sigsAtStaging=0 against
-			// thresholds of 2, 4 and 6, every time.
-			//
-			// Counting the block's signatures here would mean deduping by key
-			// and checking validator membership — a second implementation of
-			// signature validation, which is the failure this restructure
-			// exists to remove — and over-counting would admit an
-			// unauthorized anchor. So the positional run is built here and
-			// each entry's quorum is decided as it executes, with the run
-			// stopping at the first entry that does not deliver.
-			ok := true
-			if str.kind != streamAnchor {
-				var err error
-				ok, err = b.admissibilityOf(str, msg, seq)
-				if err != nil {
-					// Cannot answer the precondition, so cannot place the
-					// message. Leaving it out stops the stream at it, which is
-					// the conservative direction.
-					continue
-				}
-			}
-
 			key := str.ledger.String() + "|" + str.source.String()
 			if _, seen := streams[key]; !seen {
 				streams[key] = str
@@ -125,39 +106,83 @@ func (b *Block) stageBlock(envelopes []*messaging.Envelope) (*executionOrder, er
 			// FIRST SIGHTING WINS. The same message can appear twice in one
 			// block; it applies at most once (requirement 4).
 			if _, dup := arrivals[key][seq.Number]; !dup {
-				arrivals[key][seq.Number] = &arrival{number: seq.Number, bundle: messages, admissible: ok, envIdx: i}
+				arrivals[key][seq.Number] = &arrival{number: seq.Number, bundle: messages, envIdx: i, classifier: msg, seq: seq}
 			}
 		}
 
 		if isUser {
-			order.user = append(order.user, i)
+			c.user = append(c.user, i)
 		}
 	}
+	return c
+}
 
-	keys := make([]string, 0, len(streams))
-	for k := range streams {
-		keys = append(keys, k)
+// stageRuns decides one kind of stream's runs AT THE MOMENT IT IS CALLED, and
+// is meant to be called more than once per block.
+//
+// Twice over, the answer depends on when it is asked:
+//
+//   - A synthetic's admissibility is read from the directory anchor chain, and
+//     the anchor group EXTENDS that chain. Deciding synthetics before anchors
+//     run judges them against a chain missing this block's anchors.
+//   - A stream's position moves as the block executes, and a message recorded
+//     pending by an envelope processed this block becomes drainable within
+//     this block. A run fixed before any of that cannot see it.
+//
+// The second one is not theoretical. Measured on TestNoLaggingChannels with
+// runs decided once per block: delivery settled into exact lockstep with
+// arrival — 40 in, 40 out, every block — leaving one block's arrivals of lag
+// that never closed. Baseline drains those because the cascade re-reads the
+// ledger after every delivery. This is the same re-read, once per round rather
+// than once per message, which is where the cascade's O(n^2) came from.
+func (b *Block) stageRuns(c *classified, kind streamKind) ([]streamRun, error) {
+	keys := make([]string, 0, len(c.streams))
+	for k, str := range c.streams {
+		if str.kind == kind {
+			keys = append(keys, k)
+		}
 	}
 	sort.Slice(keys, func(i, j int) bool {
-		return lessStream(streams[keys[i]], streams[keys[j]])
+		return lessStream(c.streams[keys[i]], c.streams[keys[j]])
 	})
 
+	var runs []streamRun
 	for _, k := range keys {
-		str := streams[k]
+		str := c.streams[k]
 		pos, err := b.positionOf(str)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
-		run, stage := buildRun(pos, arrivals[k], cascadeDeliveryWindow)
-		sr := streamRun{stream: str, run: run, stage: stage}
-		if str.kind == streamAnchor {
-			order.anchors = append(order.anchors, sr)
-		} else {
-			order.synthetic = append(order.synthetic, sr)
-		}
-	}
 
-	return order, nil
+		arriving := map[uint64]*arrival{}
+		for n, a := range c.arrivals[k] {
+			ok := true
+			if kind != streamAnchor {
+				// ANCHORS ARE ORDERED HERE, NOT ADMITTED HERE. An anchor's
+				// gate is a validator signature quorum assembled from THIS
+				// BLOCK'S OWN MESSAGES — each BlockAnchor carries one
+				// signature, recorded as the executor processes it. Staging
+				// sees an empty signature set for every anchor: measured
+				// across the e2e suite, sigsAtStaging=0 against thresholds of
+				// 2, 4 and 6, every time. Counting the block's signatures here
+				// would mean deduping by key and checking validator
+				// membership — a second implementation of signature
+				// validation — and over-counting would admit an unauthorized
+				// anchor. So the run is positional and each entry's quorum is
+				// decided as it executes.
+				ok, err = b.admissibilityOf(str, a.classifier, a.seq)
+				if err != nil {
+					continue
+				}
+			}
+			a.admissible = ok
+			arriving[n] = a
+		}
+
+		run, stage := buildRun(pos, arriving, cascadeDeliveryWindow)
+		runs = append(runs, streamRun{stream: str, run: run, stage: stage})
+	}
+	return runs, nil
 }
 
 // admissibilityOf answers the precondition for one arriving message, whichever

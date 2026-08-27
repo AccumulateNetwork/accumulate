@@ -184,44 +184,52 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 	results := make([]*execute.ProcessResult, len(envelopes))
 
 	// Staging decides the block's order before anything runs (#4169 step 6).
-	// Three phases:
 	//
-	//   1. Anchor streams. First, because an anchor extends the directory root
+	//   1. Anchor streams, first, because an anchor extends the directory root
 	//      that admits synthetics — so a synthetic can use an anchor that
 	//      arrived in this same block instead of waiting one.
 	//   2. Synthetic streams, decided against the chain the anchors just
 	//      extended.
-	//   3. User envelopes, on the sharded path below. Last, so a deposit lands
-	//      before a transaction spends: a send that would fail on a stale
-	//      balance succeeds instead.
+	//   3. The envelope loop below: user envelopes, and anything staging did
+	//      not place in a run. Last, so a deposit lands before a transaction
+	//      spends.
+	//   4. Drain again, because step 3 REVEALS WORK TO THE BLOCK. An envelope
+	//      that arrives out of sequence is recorded pending, and that makes it
+	//      drainable now, not next block.
 	//
-	// Sequenced messages never reached the sharded path anyway — envelopeIdentity
-	// classified them serial — so moving them here takes work OUT of the loop
-	// below rather than changing where it runs.
-	order, err := b.stageBlock(envelopes)
-	if err != nil {
+	// Sequenced messages never reached the sharded path anyway —
+	// envelopeIdentity classified them serial — so moving them here takes work
+	// out of the loop below rather than changing where it runs.
+	c := b.classify(envelopes)
+	ran := map[int]bool{}
+
+	fail := func(err error) []*execute.ProcessResult {
 		for i := range results {
 			results[i] = &execute.ProcessResult{Error: err, Shard: -1}
 		}
 		return results
 	}
-	b.staged = order
-	b.executeRuns(order.anchors, results)
-	b.executeRuns(order.synthetic, results)
 
-	// Everything staging placed in a run has now run. What is left for the
-	// loop below is the user envelopes, which staging listed but does not
-	// order beyond arrival.
-	staged := map[int]bool{}
-	for _, group := range [][]streamRun{order.anchors, order.synthetic} {
-		for _, sr := range group {
-			for _, e := range sr.run {
-				if e.envIdx >= 0 {
-					staged[e.envIdx] = true
-				}
+	// drain decides and runs every stream once, in group order. Positions are
+	// dropped first: the block has moved since the last round, and a cached
+	// position would decide this round against last round's state.
+	drain := func() (int, error) {
+		b.positions = nil
+		n := 0
+		for _, kind := range []streamKind{streamAnchor, streamSynthetic} {
+			runs, err := b.stageRuns(c, kind)
+			if err != nil {
+				return n, err
 			}
+			n += b.executeRuns(runs, results, ran)
 		}
+		return n, nil
 	}
+
+	if _, err := drain(); err != nil {
+		return fail(err)
+	}
+	staged := ran
 
 	shards := b.Executor.ExecutionShards
 	if shards <= 1 {
@@ -233,6 +241,7 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 			s, err := b.Process(env)
 			results[i] = &execute.ProcessResult{Statuses: s, Error: err, Shard: -1}
 		}
+		b.drainRevealed(drain)
 		return results
 	}
 
@@ -373,6 +382,7 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 		pendingCount++
 	}
 	flush()
+	b.drainRevealed(drain)
 
 	return results
 }

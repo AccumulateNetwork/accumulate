@@ -24,11 +24,14 @@ import (
 // here, and everything behind it in that stream must wait.
 //
 // Streams are independent: one stopping does not stop another.
-func (b *Block) executeRuns(runs []streamRun, results []*execute.ProcessResult) {
+// executeRuns returns how many entries DELIVERED, so a caller can tell whether
+// another round is worth running.
+func (b *Block) executeRuns(runs []streamRun, results []*execute.ProcessResult, ran map[int]bool) int {
+	delivered := 0
 	for _, sr := range runs {
 		for _, entry := range sr.run {
 			if b.fatal != nil {
-				return
+				return delivered
 			}
 
 			bundle := entry.bundle
@@ -48,13 +51,16 @@ func (b *Block) executeRuns(runs []streamRun, results []*execute.ProcessResult) 
 			}
 			if entry.envIdx >= 0 {
 				results[entry.envIdx] = &execute.ProcessResult{Statuses: statuses, Error: err, Shard: -1}
+				ran[entry.envIdx] = true
 			}
 
 			if err != nil || anyPending(statuses) {
 				break // this stream stops here; the rest stays for a later block
 			}
+			delivered++
 		}
 	}
+	return delivered
 }
 
 // anyPending reports whether a message came back pending, which for a run
@@ -66,4 +72,23 @@ func anyPending(statuses []*protocol.TransactionStatus) bool {
 		}
 	}
 	return false
+}
+
+// maxDrainRounds bounds how many times a block re-stages what its own
+// execution revealed. Two is normally enough — envelopes are processed once,
+// so there is one wave of newly recorded messages — but a delivery can record
+// further messages of its own, so the loop runs until a round delivers nothing
+// and stops either way. A bound rather than a bare loop because a round that
+// somehow always reports progress must not hang a block.
+const maxDrainRounds = 8
+
+// drainRevealed keeps draining while the block's own execution keeps making
+// more of a stream drainable. See ProcessAll.
+func (b *Block) drainRevealed(drain func() (int, error)) {
+	for i := 0; i < maxDrainRounds; i++ {
+		n, err := drain()
+		if err != nil || n == 0 {
+			return
+		}
+	}
 }
