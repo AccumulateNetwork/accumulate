@@ -40,6 +40,10 @@ type Block struct {
 	// block rather than once per message (#4169 step 2).
 	positions map[string]*streamPosition
 
+	// staged is the execution order staging settled for this block (#4169
+	// step 5). Shadow only: nothing consults it to decide anything.
+	staged *executionOrder
+
 	// seqReady memoizes the readiness verdict for each sequenced message in
 	// this block, keyed by the sequenced message's hash, decided by a serial
 	// pre-pass before any shard runs (see decideSequencedReadiness).

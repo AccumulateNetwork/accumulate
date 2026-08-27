@@ -190,6 +190,13 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 	// of the rule, and the two would drift.
 	b.decideSequencedReadiness(envelopes)
 
+	// Staging, in shadow (#4169 step 5). Computed and discarded — the
+	// executor still decides everything itself. Built here so the
+	// cross-check sees exactly the envelope set execution sees.
+	if order, err := b.stageBlock(envelopes); err == nil {
+		b.staged = order
+	}
+
 	shards := b.Executor.ExecutionShards
 	if shards <= 1 {
 		// The serial path, verbatim.
