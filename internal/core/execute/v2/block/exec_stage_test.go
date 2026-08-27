@@ -207,3 +207,113 @@ func TestAnErrorStatusLooksLikeSuccess(t *testing.T) {
 	assert.False(t, delivered.Pending())
 	assert.False(t, delivered.Failed())
 }
+
+// lessStream feeds sort.Slice. A comparator that is not a strict weak ordering
+// is undefined behaviour there — sort may produce any permutation, and every
+// node could produce a DIFFERENT one from the same block. Antisymmetry alone
+// does not establish that; transitivity is the property that does, and it is
+// the one nobody checks by eye.
+func TestLessStream_IsAStrictWeakOrdering(t *testing.T) {
+	var all []stream
+	for _, k := range []streamKind{streamAnchor, streamSynthetic} {
+		for _, src := range []*url.URL{
+			protocol.DnUrl(),
+			protocol.PartitionUrl("BVN0"),
+			protocol.PartitionUrl("BVN1"),
+			protocol.PartitionUrl("BVN2"),
+		} {
+			all = append(all, stream{kind: k, ledger: protocol.PartitionUrl("BVN0"), source: src})
+		}
+	}
+
+	for _, a := range all {
+		assert.False(t, lessStream(a, a), "irreflexive: nothing precedes itself")
+	}
+	for _, a := range all {
+		for _, b := range all {
+			if lessStream(a, b) {
+				assert.False(t, lessStream(b, a), "asymmetric")
+			}
+		}
+	}
+	for _, a := range all {
+		for _, b := range all {
+			for _, c := range all {
+				if lessStream(a, b) && lessStream(b, c) {
+					assert.Truef(t, lessStream(a, c),
+						"transitive: %v<%v and %v<%v implies %v<%v", a.source, b.source, b.source, c.source, a.source, c.source)
+				}
+			}
+		}
+	}
+}
+
+// The order stageRuns emits comes out of a MAP. Sorting is what makes it
+// deterministic, so the property to pin is the whole pipeline's output, not
+// the comparator alone.
+func TestStageRuns_StreamOrderIsStableAcrossMapOrders(t *testing.T) {
+	alice := protocol.AccountUrl("alice", "tokens")
+	var want []string
+
+	for attempt := 0; attempt < 12; attempt++ {
+		b := stageTestBlock(t)
+		// Seed the ledger so every stream has a position to read.
+		ledger := new(protocol.SyntheticLedger)
+		ledger.Url = b.Executor.Describe.Synthetic()
+		for _, p := range []string{"BVN1", "BVN2", "BVN3"} {
+			ledger.Partition(protocol.PartitionUrl(p))
+		}
+		ledger.Partition(protocol.DnUrl())
+		require.NoError(t, b.Batch.Account(ledger.Url).Main().Put(ledger))
+
+		var envs []*messaging.Envelope
+		for _, src := range []string{"BVN3", "BVN1", "BVN2"} {
+			e := synthEnv(1, alice)
+			e.Messages[0].(*messaging.SyntheticMessage).Message.(*messaging.SequencedMessage).Source = protocol.PartitionUrl(src)
+			envs = append(envs, e)
+		}
+		e := synthEnv(1, alice)
+		e.Messages[0].(*messaging.SyntheticMessage).Message.(*messaging.SequencedMessage).Source = protocol.DnUrl()
+		envs = append(envs, e)
+
+		c := b.classify(envs)
+		runs, err := b.stageRuns(c, streamSynthetic)
+		require.NoError(t, err)
+
+		var got []string
+		for _, r := range runs {
+			got = append(got, r.stream.source.String())
+		}
+		if attempt == 0 {
+			want = got
+			assert.Equal(t, protocol.DnUrl().String(), got[0], "the directory leads")
+		}
+		require.Equalf(t, want, got, "attempt %d produced a different stream order from identical input", attempt)
+	}
+}
+
+// streamOf is called on whatever a block contains. It must classify or decline,
+// never panic, including on messages that are structurally wrong.
+func TestStreamOf_HandlesMalformedMessagesWithoutPanicking(t *testing.T) {
+	x := streamTestExec(t)
+
+	for _, c := range []struct {
+		name string
+		msg  messaging.Message
+	}{
+		{"synthetic wrapping nothing", &messaging.SyntheticMessage{}},
+		{"block anchor wrapping nothing", &messaging.BlockAnchor{}},
+		{"synthetic wrapping a bare transaction", &messaging.SyntheticMessage{
+			Message: &messaging.TransactionMessage{Transaction: new(protocol.Transaction)}}},
+		{"sequenced wrapping nothing", &messaging.SequencedMessage{Source: protocol.PartitionUrl("BVN1")}},
+		{"sequenced wrapping a sequenced", &messaging.SequencedMessage{
+			Source:  protocol.PartitionUrl("BVN1"),
+			Message: &messaging.SequencedMessage{Source: protocol.PartitionUrl("BVN2")}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			require.NotPanics(t, func() {
+				_, _, _ = x.streamOf(c.msg, nil)
+			})
+		})
+	}
+}
