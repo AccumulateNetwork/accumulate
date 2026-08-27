@@ -152,7 +152,10 @@ func TestNotARequest(t *testing.T) {
 		{"empty entry", [][]byte{}},
 		{"empty payload", [][]byte{[]byte("")}},
 		{"a test entry that leads with nothing recognisable", [][]byte{[]byte("test"), []byte("foo=bar")}},
-		{"JSON with an unknown actionType", [][]byte{[]byte(`{"actionType":"transferTokens","account":"acc://a.acme/s"}`)}},
+		// transferTokens used to be this case's example of "unknown". It is
+		// not unknown — spec §3.1 defines it — and treating it so was part
+		// of the defect fixed 2026-08-27. A genuinely undefined action:
+		{"JSON with an unknown actionType", [][]byte{[]byte(`{"actionType":"frobnicate","account":"acc://a.acme/s"}`)}},
 		{"fields but no action and no type or delegate", [][]byte{[]byte("account=acc://a.acme/s")}},
 		{"withdraw notice with no amount", [][]byte{[]byte("withdrawTokens"), []byte("account=acc://a.acme/s")}},
 	}

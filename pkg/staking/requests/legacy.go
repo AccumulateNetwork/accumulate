@@ -32,13 +32,11 @@ var (
 	aliasAction    = []string{"actiontype", "action"}
 )
 
-// legacyMarkers maps a bare action marker to the kind it meant. The oldest era
-// wrote "withdraw" for what later became "withdrawTokens".
-var legacyMarkers = map[string]Kind{
-	"addaccount":     KindRegister,
-	"withdrawtokens": KindWithdraw,
-	"withdraw":       KindWithdraw,
-}
+// legacyMarkers resolves a bare action marker. It defers to allKinds — the
+// one table spec §3.1's actions live in — so a marker cannot be known to
+// the contract parser and unknown here. The oldest era wrote "withdraw" for
+// what later became "withdrawTokens"; both are in that table.
+func legacyMarker(m string) (Kind, bool) { return KindOf(m) }
 
 // parseLegacy reads the pre-contract encoding. The bool reports whether the
 // entry is a request at all.
@@ -59,10 +57,18 @@ func parseLegacy(parts [][]byte) (*Request, bool) {
 	kind, ok := legacyKind(get(aliasAction...), markers)
 	account := get(aliasAccount...)
 
-	// The oldest registrations carry no action marker at all — just identity,
-	// type, stake, rewards and delegate. A stake plus a type or a delegate is a
-	// registration.
-	if !ok && account != "" && (get("type") != "" || get(aliasDelegate...) != "") {
+	// The oldest registrations carry no action marker AT ALL — just
+	// identity, type, stake, rewards and delegate. A stake plus a type or a
+	// delegate is a registration.
+	//
+	// len(markers) == 0 is the load-bearing half of that sentence. Without
+	// it the guess fires on any entry whose marker merely went
+	// unrecognised, and an explicit action is overwritten by an inference
+	// drawn from its own fields: a real changeType carrying
+	// account= and type= was read as a registration to that type
+	// (acc://saisne.acme/stake, 2026-08-27). An entry that STATES its
+	// action is never a marker-less entry, whatever we make of the action.
+	if !ok && len(markers) == 0 && account != "" && (get("type") != "" || get(aliasDelegate...) != "") {
 		kind, ok = KindRegister, true
 	}
 	if !ok || account == "" {
@@ -98,7 +104,23 @@ func parseLegacy(parts [][]byte) (*Request, bool) {
 			Era:         EraLegacy,
 		}, true
 	}
-	return nil, false
+
+	// Every other action spec §3.1 names. Read faithfully — the account it
+	// names and whichever change fields it carries — so the entry can be
+	// reported as the action it IS. The fleet does not fulfil these
+	// (Kind.ActsOn), and reading them is what stops the old code from
+	// guessing them into registrations.
+	return &Request{
+		Kind:      kind,
+		Account:   account,
+		Stake:     account,
+		Type:      canonicalOrRaw(get("type")),
+		Rewards:   get(aliasPayout...),
+		Delegate:  get(aliasDelegate...),
+		Identity:  get("identity"),
+		RequestTx: get(aliasRequestTx...),
+		Era:       EraLegacy,
+	}, true
 }
 
 // splitLegacy divides an entry's parts into key=value fields and bare markers.
@@ -139,7 +161,7 @@ func legacyKind(action string, markers []string) (Kind, bool) {
 		}
 	}
 	for _, m := range markers {
-		if k, ok := legacyMarkers[strings.ToLower(m)]; ok {
+		if k, ok := legacyMarker(m); ok {
 			return k, true
 		}
 	}

@@ -74,14 +74,77 @@ import (
 	"strings"
 )
 
-// Kind is what a request asks the staking system to do. These are the only two
-// the validator fleet acts on.
+// Kind is what a request asks the staking system to do — the actions spec
+// §3.1 defines for acc://staking.acme/requests.
+//
+// Until 2026-08-27 only withdraw and register existed here, and the parser
+// did not merely ignore the rest: an entry whose marker it did not know
+// fell through to the "ancient registration" heuristic below and was read
+// as a REGISTRATION. A real changeType on acc://saisne.acme/stake parsed as
+// a re-registration to stakingValidator; changePayout, changeDelegate and
+// cancelRequest did the same. Silently wrong, not silently ignored.
+//
+// Every action in the spec's table is now a Kind, so an entry the fleet
+// does not act on is still READ correctly and can be shown for what it is.
+// Acting on them is a separate matter — see ActsOn.
 type Kind string
 
 const (
+	// The two the validator fleet fulfils.
 	KindWithdraw Kind = "withdraw"
 	KindRegister Kind = "register"
+
+	// Account lifecycle (spec §3.1). Recognised and reported; the fleet
+	// does not yet fulfil them.
+	KindUnstake  Kind = "unstakeAccount"
+	KindTransfer Kind = "transferTokens"
+
+	// Account changes (spec §3.1). Signer must be the account's authority.
+	KindChangePayout          Kind = "changePayout"
+	KindChangeDelegate        Kind = "changeDelegate"
+	KindChangeType            Kind = "changeType"
+	KindChangeDelegatorPayout Kind = "changeDelegatorPayout"
+	KindRejectDelegates       Kind = "rejectDelegates"
+	KindCancelRequest         Kind = "cancelRequest"
+	KindRegisterIdentity      Kind = "registerIdentity"
 )
+
+// allKinds is every action spec §3.1 names, keyed by its lower-cased
+// canonical spelling. One table drives contract parsing, legacy markers and
+// display, so a kind cannot be recognised in one path and unknown in
+// another — which is exactly how changeType came to be misread.
+var allKinds = map[string]Kind{
+	"withdraw":              KindWithdraw,
+	"withdrawtokens":        KindWithdraw,
+	"register":              KindRegister,
+	"addaccount":            KindRegister,
+	"unstakeaccount":        KindUnstake,
+	"transfertokens":        KindTransfer,
+	"changepayout":          KindChangePayout,
+	"changedelegate":        KindChangeDelegate,
+	"changetype":            KindChangeType,
+	"changedelegatorpayout": KindChangeDelegatorPayout,
+	"rejectdelegates":       KindRejectDelegates,
+	"cancelrequest":         KindCancelRequest,
+	"registeridentity":      KindRegisterIdentity,
+}
+
+// KindOf resolves a spelling to its Kind. The bool reports recognition.
+func KindOf(s string) (Kind, bool) {
+	k, ok := allKinds[strings.ToLower(strings.TrimSpace(s))]
+	return k, ok
+}
+
+// ActsOn reports whether the validator fleet FULFILS this kind today.
+//
+// Stated explicitly rather than left implicit, because "the parser knows
+// it" and "the fleet does it" are different claims and conflating them is
+// what makes an unimplemented action look implemented. A recognised kind
+// the fleet does not act on is reported to the operator and applied to
+// nothing.
+func (k Kind) ActsOn() bool {
+	return k == KindWithdraw || k == KindRegister
+}
 
 // Era is the encoding an entry was written in.
 type Era int
@@ -398,8 +461,8 @@ func parseOneContract(part []byte) (*Request, bool) {
 	if err := json.Unmarshal(part, &e); err != nil {
 		return nil, false
 	}
-	kind := Kind(strings.ToLower(strings.TrimSpace(e.ActionType)))
-	if kind != KindWithdraw && kind != KindRegister {
+	kind, known := KindOf(e.ActionType)
+	if !known {
 		return nil, false
 	}
 	// Collect keys the contract does not define. json.Unmarshal ignores
