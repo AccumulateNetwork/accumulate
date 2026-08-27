@@ -78,19 +78,19 @@ func (b *Block) decideSequencedReadiness(envelopes []*messaging.Envelope) {
 			continue // a malformed envelope is its own outcome, later
 		}
 		for _, msg := range messages {
-			seq, ok := unwrapSequenced(msg)
-			if !ok || seq.Source == nil {
-				continue
+			// Which stream governs this message — decided by streamOf, the
+			// single statement of the rule (#4169 step 1). This pass used to
+			// carry its own copy that never opened a BlockAnchor and never
+			// resolved a remote stub, so it could classify as synthetic what
+			// the executor classified as an anchor and gate it by the wrong
+			// ledger.
+			str, seq, err := b.Executor.streamOf(msg, resolveFromBatch(b.Batch))
+			if err != nil || !str.ok() {
+				continue // not a stream message, or its body cannot be read
 			}
+			ledgerUrl := str.ledger
 
-			// Which ledger governs this stream: anchors keep theirs in the
-			// anchor pool, synthetics in the synthetic account.
-			ledgerUrl := b.Executor.Describe.Synthetic()
-			if isAnchorBody(seq.Message) {
-				ledgerUrl = b.Executor.Describe.AnchorPool()
-			}
-
-			key := streamKey{ledgerUrl.String(), seq.Source.String()}
+			key := streamKey{ledgerUrl.String(), str.source.String()}
 			st, seeded := streams[key]
 			if !seeded {
 				var ledger protocol.SequenceLedger
@@ -160,10 +160,8 @@ func (b *Block) decideSequencedReadiness(envelopes []*messaging.Envelope) {
 			//
 			// So it stops speaking for the stream instead. Every later
 			// message of this stream gets no entry and is decided live,
-			// exactly as a cascade message is. Verdicts already recorded
-			// stand: execution follows arrival order, so each of them was
-			// evaluated at the same point in the stream the executor will
-			// evaluate it at, before any of this drain could have happened.
+			// exactly as a cascade message is — and the refusals it already
+			// made are taken back, for the reason given below.
 			//
 			// Measured: this is what the pre-pass and the live check used to
 			// disagree about, and the only thing. Delivered=0 with #2 and #3
@@ -216,30 +214,4 @@ func (b *Block) seqReadyFor(hash [32]byte) (ready, ok bool) {
 	}
 	ready, ok = b.seqReady[hash]
 	return ready, ok
-}
-
-// unwrapSequenced finds the sequenced message inside an envelope's message,
-// whether it travels bare or wrapped in a synthetic (the usual case:
-// SyntheticMessage{ SequencedMessage{ TransactionMessage } }).
-func unwrapSequenced(msg messaging.Message) (*messaging.SequencedMessage, bool) {
-	switch m := msg.(type) {
-	case *messaging.SequencedMessage:
-		return m, true
-	case *messaging.SyntheticMessage:
-		if seq, ok := m.Message.(*messaging.SequencedMessage); ok {
-			return seq, true
-		}
-	case *messaging.BadSyntheticMessage:
-		if seq, ok := m.Message.(*messaging.SequencedMessage); ok {
-			return seq, true
-		}
-	}
-	return nil, false
-}
-
-// isAnchorBody reports whether a sequenced message carries an anchor, which
-// decides WHICH ledger governs its stream.
-func isAnchorBody(msg messaging.Message) bool {
-	tm, ok := msg.(*messaging.TransactionMessage)
-	return ok && tm.Transaction.Body.Type().IsAnchor()
 }

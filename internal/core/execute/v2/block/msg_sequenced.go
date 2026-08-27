@@ -490,12 +490,16 @@ func (x SequencedMessage) updateLedger(batch *database.Batch, ctx *MessageContex
 }
 
 func (x SequencedMessage) loadLedger(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, protocol.SequenceLedger, error) {
-	var isAnchor bool
-	u := ctx.Executor.Describe.Synthetic()
-	isAnchor, err := x.isAnchor(batch, ctx, seq)
+	// One rule, stated in streamOf (#4169 step 1). The executor's lookup
+	// searches the bundle before the database, which is why it is passed in
+	// rather than assumed.
+	isAnchor, err := ctx.Executor.sequencedIsAnchor(seq, func(hash [32]byte) (*protocol.Transaction, error) {
+		return ctx.getTransaction(batch, hash)
+	})
 	if err != nil {
 		return false, nil, errors.UnknownError.Wrap(err)
 	}
+	u := ctx.Executor.Describe.Synthetic()
 	if isAnchor {
 		u = ctx.Executor.Describe.AnchorPool()
 	}

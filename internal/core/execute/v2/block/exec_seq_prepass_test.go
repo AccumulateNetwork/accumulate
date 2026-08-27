@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -52,8 +51,11 @@ func prepassSeq(t *testing.T, principal *url.URL, n uint64) *messaging.Sequenced
 // they would after arriving out of order in an earlier block.
 func prepassBlock(t *testing.T, delivered, received uint64, pending ...uint64) *Block {
 	t.Helper()
-	x := new(Executor)
-	x.Describe = execute.DescribeShim{NetworkType: protocol.PartitionTypeBlockValidator, PartitionId: "BVN0"}
+	// A real executor always has globals; streamOf consults the executor
+	// version to decide whether a remote stub may be resolved. The earlier
+	// version of this helper left them nil, which only worked because the
+	// pre-pass carried its own classification rule that asked nothing.
+	x := streamTestExec(t)
 
 	db := database.OpenInMemory(nil)
 	batch := db.Begin(true)
