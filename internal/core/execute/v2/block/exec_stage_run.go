@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // executeRuns runs each stream's run, in the order staging settled, and
@@ -44,16 +45,35 @@ func (b *Block) executeRuns(runs []streamRun, results []*execute.ProcessResult, 
 				return delivered
 			}
 
-			bundle := entry.bundle
-			if bundle == nil {
+			var statuses []*protocol.TransactionStatus
+			var bundles []*bundle
+			var err error
+			if entry.bundle != nil {
+				statuses, bundles, err = b.processEnvelope(b.Batch, entry.bundle)
+			} else {
 				// Already staged, so the message is in the database rather
-				// than in hand. MessageIsReady loads and executes it — the
-				// same path the cascade used, reached from the run instead of
-				// from a delivery's side effect.
-				bundle = []messaging.Message{&internal.MessageIsReady{TxID: entry.staged}}
+				// than in hand, and MessageIsReady loads and executes it —
+				// the same path the cascade used, reached from the run
+				// instead of from a delivery's side effect.
+				//
+				// NOT the first pass. callMessageExecutor refuses an internal
+				// message at pass 0, deliberately: internal types cannot be
+				// marshalled, so one arriving in a submitted envelope would
+				// have to be forged. The cascade never met that guard because
+				// queueAdditional hands its message to a LATER pass of the
+				// running bundle. A run entry is internally generated in
+				// exactly the same sense, so it enters at the same pass.
+				//
+				// Getting this wrong is silent. The guard returns an error
+				// STATUS rather than an error, so the entry looked like it
+				// ran: every staged entry failed, every run stopped at its
+				// first one, and only freshly arrived messages were ever
+				// delivered — 40 per block against 40 arriving, a backlog
+				// that could not close. Found by asking the ledger whether it
+				// had moved instead of asking the statuses.
+				statuses, bundles, err = b.processMessages(b.Batch,
+					[]messaging.Message{&internal.MessageIsReady{TxID: entry.staged}}, 1)
 			}
-
-			statuses, bundles, err := b.processEnvelope(b.Batch, bundle)
 			if err == nil {
 				for _, d := range bundles {
 					d.mergeIntoBlock()
