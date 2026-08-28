@@ -81,7 +81,7 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(x.Describe, &x.globals.Active, t, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+	st := chain.NewStateManager(x.Describe, &x.globals().Active, t, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	defer st.Discard()
 
 	// Execute the transaction
@@ -644,7 +644,7 @@ func (x *TransactionContext) recordFailedTransaction(batch *database.Batch, deli
 	}
 
 	// But only if the paid paid is larger than the max failure paid
-	paid, err := x.Executor.globals.Active.Globals.FeeSchedule.ComputeTransactionFee(delivery.Transaction)
+	paid, err := x.Executor.globals().Active.Globals.FeeSchedule.ComputeTransactionFee(delivery.Transaction)
 	if err != nil {
 		return nil, nil, fmt.Errorf("compute fee: %w", err)
 	}

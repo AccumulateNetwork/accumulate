@@ -31,6 +31,7 @@ import (
 // Begin constructs a [Block] and calls [Executor.BeginBlock].
 func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error) {
 	block := new(Block)
+	block.positions = new(positionCache)
 	block.BlockParams = params
 	block.Executor = x
 	block.Batch = x.Database.Begin(true)
@@ -145,7 +146,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	}
 
 	wd := protocol.SystemWriteData{}
-	if x.globals.Active.ExecutorVersion.DoubleHashEntriesEnabled() {
+	if x.globals().Active.ExecutorVersion.DoubleHashEntriesEnabled() {
 		wd.Entry = &protocol.DoubleHashDataEntry{Data: [][]byte{data}}
 	} else {
 		wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
@@ -218,7 +219,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	// Note that recording the anchor and dispatching the last block's
 	// synthetic messages are INDEPENDENT duties of this function — skipping
 	// the anchor must not skip the synthetics.
-	if x.globals.Active.ExecutorVersion.V2KourouEnabled() {
+	if x.globals().Active.ExecutorVersion.V2KourouEnabled() {
 		if ledger.Anchor != nil {
 			last, err := x.lastAnchoredBlock(block.Batch)
 			if err != nil {
@@ -332,7 +333,7 @@ func (x *Executor) recordAnchor(block *Block, ledger *protocol.SystemLedger) err
 		return errors.UnknownError.Wrap(err)
 	}
 
-	if x.Describe.NetworkType == protocol.PartitionTypeDirectory && !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+	if x.Describe.NetworkType == protocol.PartitionTypeDirectory && !x.globals().Active.ExecutorVersion.V2VandenbergEnabled() {
 		// As far as I know, the only thing this achieves (besides logging) is
 		// ensuring the block is not discarded. The only other reference to
 		// OpenedMajorBlock is (*BlockState).Empty. This is not necessary after
@@ -532,7 +533,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		// pays forward — the destination absorbs it and later messages ride
 		// free — so this threshold is now a heuristic, not a hard rule. Left at
 		// 2 until the replica's effect is measured.
-		if len(group) < synthBundleMin || !x.globals.Active.ExecutorVersion.V2KourouEnabled() {
+		if len(group) < synthBundleMin || !x.globals().Active.ExecutorVersion.V2KourouEnabled() {
 			for _, o := range group {
 				err = x.sendSynthWithOwnProof(batch, o, synthMainChain, rootReceipt, blockReceipt, int64(to))
 				if err != nil {
@@ -770,7 +771,7 @@ func (x *Executor) wrapSynthetic(seq *messaging.SequencedMessage, receipt *proto
 		return nil, errors.UnknownError.WithFormat("sign message: %w", err)
 	}
 
-	if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+	if x.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 		return &messaging.SyntheticMessage{Message: seq, Proof: receipt, Signature: keySig}, nil
 	}
 	return &messaging.BadSyntheticMessage{Message: seq, Proof: receipt, Signature: keySig}, nil
@@ -785,7 +786,7 @@ func (x *Executor) signTransaction(hash []byte) (protocol.KeySignature, error) {
 		SetType(protocol.SignatureTypeED25519).
 		SetPrivateKey(x.Key).
 		SetUrl(protocol.DnUrl().JoinPath(protocol.Network)).
-		SetVersion(x.globals.Active.Network.Version).
+		SetVersion(x.globals().Active.Network.Version).
 		SetTimestamp(1).
 		Sign(hash)
 	if err != nil {

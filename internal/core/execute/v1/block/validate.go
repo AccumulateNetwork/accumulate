@@ -26,7 +26,7 @@ import (
 // ValidateEnvelope should not modify anything. Right now it updates signer
 // timestamps and credits, but that will be moved to ProcessSignature.
 func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Delivery) (protocol.TransactionResult, error) {
-	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() && delivery.Transaction.Body == nil {
+	if x.globals().Active.ExecutorVersion.SignatureAnchoringEnabled() && delivery.Transaction.Body == nil {
 		return nil, errors.BadRequest.WithFormat("missing body")
 	}
 
@@ -46,7 +46,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Reject the transaction if the body is exactly 64 bytes long
-	if x.globals.Active.ExecutorVersion.DoubleHashEntriesEnabled() && delivery.Transaction.BodyIs64Bytes() {
+	if x.globals().Active.ExecutorVersion.DoubleHashEntriesEnabled() && delivery.Transaction.BodyIs64Bytes() {
 		return nil, errors.BadRequest.WithFormat("cannot process transaction: body is 64 bytes long")
 	}
 
@@ -56,7 +56,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
+	if x.globals().Active.ExecutorVersion.SignatureAnchoringEnabled() {
 		if delivery.Transaction.Header.Principal == nil {
 			return nil, errors.BadRequest.WithFormat("missing principal")
 		}
@@ -154,7 +154,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(x.Describe, &x.globals.Active, batch.Begin(false), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
+	st := chain.NewStateManager(x.Describe, &x.globals().Active, batch.Begin(false), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
 	defer st.Discard()
 	st.Pretend = true
 
@@ -207,11 +207,11 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 			status.SequenceNumber = signature.SequenceNumber
 		}
 
-		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
+		signer = core.AnchorSigner(&x.globals().Active, x.Describe.PartitionId)
 		err = verifyPartitionSignature(x.Describe, batch, delivery.Transaction, signature, md)
 
 	case *protocol.ReceiptSignature:
-		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
+		signer = core.AnchorSigner(&x.globals().Active, x.Describe.PartitionId)
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)
 
 	case *protocol.RemoteSignature:

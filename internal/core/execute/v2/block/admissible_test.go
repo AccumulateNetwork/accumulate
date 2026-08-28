@@ -108,17 +108,17 @@ func anchorFixture(t *testing.T) (*Executor, *database.Batch, []byte, *protocol.
 	x, batch, known := admissibleFixture(t)
 
 	// Three validators on BVN1 at a 2/3 accept threshold puts the quorum at 2.
-	x.globals.Active.Globals = &protocol.NetworkGlobals{
+	x.globals().Active.Globals = &protocol.NetworkGlobals{
 		ValidatorAcceptThreshold: protocol.Rational{Numerator: 2, Denominator: 3},
 	}
-	x.globals.Active.Network = &protocol.NetworkDefinition{
+	x.globals().Active.Network = &protocol.NetworkDefinition{
 		Validators: []*protocol.ValidatorInfo{
 			{PublicKey: []byte{1}, Partitions: []*protocol.ValidatorPartitionInfo{{ID: "BVN1", Active: true}}},
 			{PublicKey: []byte{2}, Partitions: []*protocol.ValidatorPartitionInfo{{ID: "BVN1", Active: true}}},
 			{PublicKey: []byte{3}, Partitions: []*protocol.ValidatorPartitionInfo{{ID: "BVN1", Active: true}}},
 		},
 	}
-	require.Equal(t, uint64(2), x.globals.Active.ValidatorThreshold("BVN1"), "fixture precondition")
+	require.Equal(t, uint64(2), x.globals().Active.ValidatorThreshold("BVN1"), "fixture precondition")
 
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = x.Describe.AnchorPool()

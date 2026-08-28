@@ -30,7 +30,7 @@ func TestLocalQueue_RoutingChangeMidQueuePromotesTheMessage(t *testing.T) {
 	db := database.OpenInMemory(nil)
 	batch := db.Begin(true)
 	t.Cleanup(batch.Discard)
-	b := &Block{Batch: batch, Executor: x}
+	b := &Block{positions: new(positionCache), Batch: batch, Executor: x}
 
 	// Produce a local message while bob routes to BVN0.
 	txn := new(protocol.Transaction)
@@ -83,7 +83,7 @@ func TestLocalQueue_64ByteBodyIsPaddedBeforeQueueing(t *testing.T) {
 	db := database.OpenInMemory(nil)
 	batch := db.Begin(true)
 	t.Cleanup(batch.Discard)
-	b := &Block{Batch: batch, Executor: x}
+	b := &Block{positions: new(positionCache), Batch: batch, Executor: x}
 
 	// Construct a transaction body of exactly 64 bytes (the Test64ByteBody
 	// trick: an unknown trailing field pads BurnTokens to the boundary).

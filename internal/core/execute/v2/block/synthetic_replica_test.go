@@ -213,7 +213,7 @@ func TestReplica_AddingTheChainChangesTheAccountHash(t *testing.T) {
 // arrived. A message the replica does not contain is still refused.
 func TestReplica_MessageUnderTheReplicaNeedsNoProofAndNoSignature(t *testing.T) {
 	f := newReplicaFixture(t, 0)
-	f.x.globals = &Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest}}
+	f.x.globalsPtr.Store(&Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest}})
 
 	mkSeq := func(n byte) *messaging.SequencedMessage {
 		txn := new(protocol.Transaction)
@@ -236,7 +236,7 @@ func TestReplica_MessageUnderTheReplicaNeedsNoProofAndNoSignature(t *testing.T) 
 	f.seed(t, 0, 0) // absorb only the first
 
 	ctx := &MessageContext{
-		bundle:  &bundle{Block: &Block{Executor: f.x, Batch: f.batch}, batch: f.batch},
+		bundle:  &bundle{Block: &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}, batch: f.batch},
 		message: &messaging.SyntheticMessage{Message: proven},
 	}
 	syn, err := SyntheticMessage{}.check(f.batch, ctx)
@@ -244,7 +244,7 @@ func TestReplica_MessageUnderTheReplicaNeedsNoProofAndNoSignature(t *testing.T) 
 	require.NotNil(t, syn)
 
 	ctx = &MessageContext{
-		bundle:  &bundle{Block: &Block{Executor: f.x, Batch: f.batch}, batch: f.batch},
+		bundle:  &bundle{Block: &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}, batch: f.batch},
 		message: &messaging.SyntheticMessage{Message: unproven},
 	}
 	_, err = SyntheticMessage{}.check(f.batch, ctx)

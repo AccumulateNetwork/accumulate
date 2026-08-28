@@ -89,7 +89,7 @@ func (x *Executor) sequencedIsAnchor(seq *messaging.SequencedMessage, resolve re
 		return true, nil
 
 	case !ok,
-		!x.globals.Active.ExecutorVersion.V2BaikonurEnabled(),
+		!x.globals().Active.ExecutorVersion.V2BaikonurEnabled(),
 		msg.Transaction.Body.Type() != protocol.TransactionTypeRemote:
 		return false, nil
 	}

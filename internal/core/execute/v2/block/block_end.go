@@ -85,7 +85,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 	}
 
 	// Record the previous block's state hash it on the BPT chain
-	if block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+	if block.Executor.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 		err := ledger.BptChain().Inner().AddEntry(block.State.PreviousStateHash[:], false)
 		if err != nil {
 			return nil, err
@@ -163,7 +163,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 	}
 
 	// Record the block entries
-	if block.Executor.globals.Active.ExecutorVersion.V2JiuquanEnabled() {
+	if block.Executor.globals().Active.ExecutorVersion.V2JiuquanEnabled() {
 		bl := new(database.BlockLedger)
 		bl.Index = block.Index
 		bl.Time = block.Time
@@ -258,8 +258,8 @@ func (block *Block) Close() (execute.BlockState, error) {
 	// Update active globals, after everything else is done (don't change logic
 	// in the middle of a block)
 	var valUp []*execute.ValidatorUpdate
-	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
-		valUp = execute.DiffValidators(&m.globals.Active, &m.globals.Pending, m.Describe.PartitionId)
+	if !m.isGenesis && !m.globals().Active.Equal(&m.globals().Pending) {
+		valUp = execute.DiffValidators(&m.globals().Active, &m.globals().Pending, m.Describe.PartitionId)
 
 		// Publish a SNAPSHOT, never a pointer into the executor's own state.
 		// Subscribers KEEP what they are handed — the conductor does
@@ -270,13 +270,19 @@ func (block *Block) Close() (execute.BlockState, error) {
 		// path and AnchorSigner, and a torn read there decides whether a code
 		// path is enabled and who may sign.
 		err = m.EventBus.Publish(events.WillChangeGlobals{
-			New: m.globals.Pending.Copy(),
-			Old: m.globals.Active.Copy(),
+			New: m.globals().Pending.Copy(),
+			Old: m.globals().Active.Copy(),
 		})
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("publish globals update: %w", err)
 		}
-		m.globals.Active = *m.globals.Pending.Copy()
+		// REPLACE, do not mutate. Anyone already holding the previous
+		// snapshot keeps reading it, unchanged and complete, for as long as
+		// they hold it — which is what makes readers outside block execution
+		// safe without a lock (#4170).
+		next := *m.globals()
+		next.Active = *next.Pending.Copy()
+		m.globalsPtr.Store(&next)
 	}
 
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
@@ -284,8 +290,8 @@ func (block *Block) Close() (execute.BlockState, error) {
 }
 
 func (b *Block) executePostUpdateActions() error {
-	version := b.Executor.globals.Pending.ExecutorVersion
-	if b.Executor.globals.Active.ExecutorVersion == version {
+	version := b.Executor.globals().Pending.ExecutorVersion
+	if b.Executor.globals().Active.ExecutorVersion == version {
 		return nil
 	}
 
@@ -342,15 +348,15 @@ func (block *Block) recordTransactionExpiration() error {
 
 	// Set the expiration height
 	var max uint64
-	if block.Executor.globals.Active.Globals.Limits.PendingMajorBlocks == 0 {
+	if block.Executor.globals().Active.Globals.Limits.PendingMajorBlocks == 0 {
 		max = 14 // default to 2 weeks
 	} else {
-		max = block.Executor.globals.Active.Globals.Limits.PendingMajorBlocks
+		max = block.Executor.globals().Active.Globals.Limits.PendingMajorBlocks
 	}
 
 	// Parse the schedule
-	schedule, err := core.Cron.Parse(block.Executor.globals.Active.Globals.MajorBlockSchedule)
-	if err != nil && block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+	schedule, err := core.Cron.Parse(block.Executor.globals().Active.Globals.MajorBlockSchedule)
+	if err != nil && block.Executor.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 		return errors.UnknownError.Wrap(err)
 	}
 
@@ -358,7 +364,7 @@ func (block *Block) recordTransactionExpiration() error {
 	shouldExpireOn := func(txn *protocol.Transaction) uint64 {
 		var count uint64
 		switch {
-		case !block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled():
+		case !block.Executor.globals().Active.ExecutorVersion.V2BaikonurEnabled():
 			// Old logic
 			count = max
 
@@ -507,7 +513,7 @@ func (b *Block) shouldSendAnchor() bool {
 	}
 
 	// Send an anchor if a directory anchor was received and the flag is set
-	return didAnchorDirectory && b.Executor.globals.Active.Globals.AnchorEmptyBlocks
+	return didAnchorDirectory && b.Executor.globals().Active.Globals.AnchorEmptyBlocks
 }
 
 func (x *Executor) prepareAnchor(block *Block) error {
@@ -526,12 +532,12 @@ func (x *Executor) prepareAnchor(block *Block) error {
 		ledger.MajorBlockIndex = block.State.MajorBlock.Index
 		ledger.MajorBlockTime = block.State.MajorBlock.Time
 
-		if x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		if x.globals().Active.ExecutorVersion.V2VandenbergEnabled() {
 			return nil
 		}
 
-		bvns := x.globals.Active.BvnNames()
-		if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		bvns := x.globals().Active.BvnNames()
+		if x.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 			// From Baikonur forward, sort this list so changes in the
 			// implementation of BvnNames don't break it
 			sort.Strings(bvns)
@@ -540,7 +546,7 @@ func (x *Executor) prepareAnchor(block *Block) error {
 			// Use the ordering of routes to sort the BVN list since that preserves
 			// the order used prior to 1.3
 			routes := map[string]int{}
-			for i, r := range x.globals.Active.Routing.Routes {
+			for i, r := range x.globals().Active.Routing.Routes {
 				id := strings.ToLower(r.Partition)
 				if _, ok := routes[id]; ok {
 					continue
@@ -588,11 +594,11 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 
-	if !x.globals.Active.BvnExecutorVersion().V2VandenbergEnabled() {
+	if !x.globals().Active.BvnExecutorVersion().V2VandenbergEnabled() {
 		anchor.Updates = systemLedger.PendingUpdates
 	}
 
-	if block.State.MajorBlock != nil && !x.globals.Active.BvnExecutorVersion().V2VandenbergEnabled() {
+	if block.State.MajorBlock != nil && !x.globals().Active.BvnExecutorVersion().V2VandenbergEnabled() {
 		anchor.MakeMajorBlock = anchorLedger.MajorBlockIndex
 		anchor.MakeMajorBlockTime = anchorLedger.MajorBlockTime
 	}
@@ -648,13 +654,13 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 func (b *Block) produceBlockMessages() error {
 	// This is likely unnecessarily cautious, but better safe than sorry. This
 	// will prevent any variation in order from causing a consensus failure.
-	bvns := b.Executor.globals.Active.BvnNames()
+	bvns := b.Executor.globals().Active.BvnNames()
 	sort.Strings(bvns)
 
 	/* ***** ACME burn (for credits) ***** */
 
 	// If the active version is Vandenberg and ACME has been burnt
-	if b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() &&
+	if b.Executor.globals().Active.ExecutorVersion.V2VandenbergEnabled() &&
 		b.State.AcmeBurnt.Sign() > 0 {
 		body := new(protocol.SyntheticBurnTokens)
 		body.Amount = b.State.AcmeBurnt
@@ -674,7 +680,7 @@ func (b *Block) produceBlockMessages() error {
 
 	// If the active version is Vandenberg, we're on the DN, and there's a
 	// network update
-	if b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() &&
+	if b.Executor.globals().Active.ExecutorVersion.V2VandenbergEnabled() &&
 		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory &&
 		len(b.State.NetworkUpdate) > 0 {
 		for _, bvn := range bvns {
@@ -691,7 +697,7 @@ func (b *Block) produceBlockMessages() error {
 
 	// If the active version is Vandenberg, we're on the DN, and there's a major
 	// block
-	if b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() &&
+	if b.Executor.globals().Active.ExecutorVersion.V2VandenbergEnabled() &&
 		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory &&
 		b.State.MajorBlock != nil {
 		for _, bvn := range bvns {
@@ -710,14 +716,14 @@ func (b *Block) produceBlockMessages() error {
 
 	// If the **pending** version is Vandenberg, we're on a BVN, and the version
 	// is changing
-	if b.Executor.globals.Pending.ExecutorVersion.V2VandenbergEnabled() &&
+	if b.Executor.globals().Pending.ExecutorVersion.V2VandenbergEnabled() &&
 		b.Executor.Describe.NetworkType != protocol.PartitionTypeDirectory &&
-		b.Executor.globals.Pending.ExecutorVersion != b.Executor.globals.Active.ExecutorVersion {
+		b.Executor.globals().Pending.ExecutorVersion != b.Executor.globals().Active.ExecutorVersion {
 		b.produced = append(b.produced, &ProducedMessage{
 			Destination: protocol.DnUrl(),
 			Message: &messaging.DidUpdateExecutorVersion{
 				Partition: b.Executor.Describe.PartitionId,
-				Version:   b.Executor.globals.Pending.ExecutorVersion,
+				Version:   b.Executor.globals().Pending.ExecutorVersion,
 			},
 		})
 	}
@@ -759,7 +765,7 @@ func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLed
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 
-	if !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+	if !x.globals().Active.ExecutorVersion.V2VandenbergEnabled() {
 		anchor.AcmeBurnt = ledger.AcmeBurnt
 	}
 

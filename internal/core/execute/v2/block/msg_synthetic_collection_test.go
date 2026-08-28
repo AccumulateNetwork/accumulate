@@ -88,9 +88,8 @@ func TestSyntheticCollectionProof(t *testing.T) {
 				}},
 			}},
 		}
-		return &Block{
+		b := &Block{positions: new(positionCache),
 			Executor: &Executor{
-				globals: globals,
 				messageExecutors: map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]{
 					messaging.MessageTypeSequenced: func(*MessageContext) (ExecutorFor[messaging.MessageType, *MessageContext], bool) {
 						return fakeExecutor{}, true
@@ -98,6 +97,8 @@ func TestSyntheticCollectionProof(t *testing.T) {
 				},
 			},
 		}
+		b.Executor.globalsPtr.Store(globals)
+		return b
 	}
 
 	run := func(t *testing.T, block *Block, msg messaging.Message, anchor bool, method func(SyntheticMessage, *database.Batch, *MessageContext) (*protocol.TransactionStatus, error)) (*protocol.TransactionStatus, error) {

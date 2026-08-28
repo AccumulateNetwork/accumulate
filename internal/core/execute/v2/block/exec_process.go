@@ -340,7 +340,7 @@ func (x *Executor) checkForUnsignedTransactions(messages []messaging.Message) er
 	haveSigFor := map[[32]byte]bool{}
 	haveTxn := map[[32]byte]bool{}
 	for _, msg := range messages {
-		if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		if x.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 			if _, ok := msg.(*messaging.BlockAnchor); ok {
 				continue
 			}
@@ -369,7 +369,7 @@ func (x *Executor) checkForUnsignedTransactions(messages []messaging.Message) er
 
 	// If an authority signature or other synthetic message-for-transaction is
 	// sent without its transaction, reject the bundle
-	if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+	if x.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 		for txn, isUserSig := range haveSigFor {
 			isRemote, has := haveTxn[txn]
 			if !isUserSig && (!has || isRemote) {

@@ -91,7 +91,7 @@ func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Tran
 	}
 
 	// Set the refund amount for each output
-	refund, err := x.globals.Active.Globals.FeeSchedule.ComputeSyntheticRefund(from, len(swos))
+	refund, err := x.globals().Active.Globals.FeeSchedule.ComputeSyntheticRefund(from, len(swos))
 	if err != nil {
 		return errors.InternalError.WithFormat("compute refund: %w", err)
 	}
@@ -112,7 +112,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	// make sure they get processed.
 
 	// Add padding if the body is 64 bytes
-	if m.globals.Active.ExecutorVersion.DoubleHashEntriesEnabled() {
+	if m.globals().Active.ExecutorVersion.DoubleHashEntriesEnabled() {
 		if b, err := body.MarshalBinary(); err != nil {
 			return nil, errors.BadRequest.WithFormat("pad synthetic transaction (1): %w", err)
 		} else if len(b) == 64 {

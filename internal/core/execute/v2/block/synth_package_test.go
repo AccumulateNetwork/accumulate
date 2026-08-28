@@ -60,7 +60,7 @@ func TestSynthPackage_ProofAloneIsAccountedFor(t *testing.T) {
 // packageCtx builds a message context whose bundle carries the given
 // messages — the shape findProofInBundle sees.
 func packageCtx(msgs ...messaging.Message) *MessageContext {
-	d := &bundle{Block: &Block{Executor: new(Executor)}, messages: msgs}
+	d := &bundle{Block: &Block{positions: new(positionCache), Executor: new(Executor)}, messages: msgs}
 	return &MessageContext{bundle: d, message: msgs[len(msgs)-1]}
 }
 
@@ -130,7 +130,7 @@ func TestFindProofInBundle_PicksTheCoveringProofWhenAnEnvelopeCarriesSeveral(t *
 // present, the bundle proof path is used, not the replica's.
 func TestPackageMember_AcceptedViaBundleProof(t *testing.T) {
 	f := newReplicaFixture(t, 0)
-	f.x.globals = &Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest}}
+	f.x.globalsPtr.Store(&Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest}})
 
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = protocol.AccountUrl("alice", "tokens")
@@ -154,7 +154,7 @@ func TestPackageMember_AcceptedViaBundleProof(t *testing.T) {
 		Signature: &protocol.ED25519Signature{PublicKey: make([]byte, 32), Signer: protocol.DnUrl().JoinPath(protocol.Network)},
 	}
 
-	d := &bundle{Block: &Block{Executor: f.x, Batch: f.batch}, batch: f.batch,
+	d := &bundle{Block: &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}, batch: f.batch,
 		messages: []messaging.Message{proofMsg, member}}
 	ctx := &MessageContext{bundle: d, message: member}
 
@@ -166,7 +166,7 @@ func TestPackageMember_AcceptedViaBundleProof(t *testing.T) {
 	// Alone — outside its package — the same signed member is refused: the
 	// replica does not vouch for it (nothing was absorbed), and proofs are
 	// never borrowed across envelopes.
-	d2 := &bundle{Block: &Block{Executor: f.x, Batch: f.batch}, batch: f.batch,
+	d2 := &bundle{Block: &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}, batch: f.batch,
 		messages: []messaging.Message{member}}
 	_, err = SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d2, message: member})
 	require.ErrorContains(t, err, "missing proof")
@@ -201,7 +201,7 @@ func TestSynthPackage_SpanBoundMatchesTheReceiver(t *testing.T) {
 // sibling proof first sent it to the missing-signature refusal.
 func TestReplicaMember_AcceptedEvenWhenTheEnvelopeCarriesAProof(t *testing.T) {
 	f := newReplicaFixture(t, 0)
-	f.x.globals = &Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest}}
+	f.x.globalsPtr.Store(&Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest}})
 
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = protocol.AccountUrl("alice", "tokens")
@@ -223,7 +223,7 @@ func TestReplicaMember_AcceptedEvenWhenTheEnvelopeCarriesAProof(t *testing.T) {
 	}}
 	member := &messaging.SyntheticMessage{Message: seq} // NO signature
 
-	d := &bundle{Block: &Block{Executor: f.x, Batch: f.batch}, batch: f.batch,
+	d := &bundle{Block: &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}, batch: f.batch,
 		messages: []messaging.Message{proofMsg, member}}
 	syn, err := SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d, message: member})
 	require.NoError(t, err, "the replica path must win for signature-less messages")

@@ -113,7 +113,7 @@ func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Tran
 	}
 
 	// Set the refund amount for each output
-	refund, err := x.globals.Active.Globals.FeeSchedule.ComputeSyntheticRefund(from, len(produced))
+	refund, err := x.globals().Active.Globals.FeeSchedule.ComputeSyntheticRefund(from, len(produced))
 	if err != nil {
 		return errors.InternalError.WithFormat("compute refund: %w", err)
 	}

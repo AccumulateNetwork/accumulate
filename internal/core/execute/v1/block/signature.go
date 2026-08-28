@@ -51,21 +51,21 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	var err error
 	switch signature := signature.(type) {
 	case *protocol.PartitionSignature:
-		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
+		signer = core.AnchorSigner(&x.globals().Active, x.Describe.PartitionId)
 		err = verifyPartitionSignature(x.Describe, batch, delivery.Transaction, signature, md)
 		if err != nil {
 			return nil, err
 		}
 
 	case *protocol.ReceiptSignature:
-		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
+		signer = core.AnchorSigner(&x.globals().Active, x.Describe.PartitionId)
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)
 		if err != nil {
 			return nil, err
 		}
 
 	case *protocol.InternalSignature:
-		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
+		signer = core.AnchorSigner(&x.globals().Active, x.Describe.PartitionId)
 		err = verifyInternalSignature(delivery, signature, md)
 		if err != nil {
 			return nil, err
@@ -242,7 +242,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			return nil, errors.UnknownError.Wrap(err)
 		}
 		if !ready {
-			if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
+			if x.globals().Active.ExecutorVersion.SignatureAnchoringEnabled() {
 				delegatedNotReady = true
 				break
 			}
@@ -267,7 +267,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	// Record the initiator (but only if we're at the final destination)
 	shouldRecordInit := md.IsInitiator
-	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() &&
+	if x.globals().Active.ExecutorVersion.SignatureAnchoringEnabled() &&
 		delivery.Transaction.Body.Type().IsUser() &&
 		!delivery.WasProducedByPushedUpdate() {
 		if md.Delegated {
@@ -281,7 +281,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		if signature.Type().IsSystem() {
 			initUrl = signer.GetUrl()
 		} else {
-			if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
+			if x.globals().Active.ExecutorVersion.SignatureAnchoringEnabled() {
 				initUrl = signer.GetUrl()
 			} else {
 				initUrl = signature.GetSigner()
@@ -617,7 +617,7 @@ func (x *Executor) computeSignerFee(transaction *protocol.Transaction, signature
 	}
 
 	// Compute the signature fee
-	fee, err := x.globals.Active.Globals.FeeSchedule.ComputeSignatureFee(signature)
+	fee, err := x.globals().Active.Globals.FeeSchedule.ComputeSignatureFee(signature)
 	if err != nil {
 		return 0, errors.UnknownError.Wrap(err)
 	}
@@ -628,7 +628,7 @@ func (x *Executor) computeSignerFee(transaction *protocol.Transaction, signature
 	}
 
 	// Add the transaction fee for the initial signature
-	txnFee, err := x.globals.Active.Globals.FeeSchedule.ComputeTransactionFee(transaction)
+	txnFee, err := x.globals().Active.Globals.FeeSchedule.ComputeTransactionFee(transaction)
 	if err != nil {
 		return 0, errors.UnknownError.Wrap(err)
 	}
@@ -813,7 +813,7 @@ func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, t
 		return nil, errors.BadRequest.WithFormat("partition signature source is not a partition")
 	}
 
-	signer := core.AnchorSigner(&x.globals.Active, partition)
+	signer := core.AnchorSigner(&x.globals().Active, partition)
 
 	// TODO: Consider checking the version. However this can get messy because
 	// it takes some time for changes to propagate, so we'd need an activation

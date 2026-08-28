@@ -89,5 +89,5 @@ func (x *Executor) anchorIsAdmissible(batch *database.Batch, proof *protocol.Ann
 	if !ok {
 		return false, errors.BadRequest.WithFormat("source %v is not a partition", source)
 	}
-	return uint64(len(sigs)) >= x.globals.Active.ValidatorThreshold(partition), nil
+	return uint64(len(sigs)) >= x.globals().Active.ValidatorThreshold(partition), nil
 }

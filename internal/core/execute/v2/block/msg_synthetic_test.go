@@ -86,9 +86,8 @@ func TestSyntheticAnchor(t *testing.T) {
 		}},
 	}
 
-	block := &Block{
+	block := &Block{positions: new(positionCache),
 		Executor: &Executor{
-			globals: globals,
 			messageExecutors: map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]{
 				messaging.MessageTypeSequenced: func(*MessageContext) (ExecutorFor[messaging.MessageType, *MessageContext], bool) {
 					return fakeExecutor{}, true
@@ -96,6 +95,7 @@ func TestSyntheticAnchor(t *testing.T) {
 			},
 		},
 	}
+	block.Executor.globalsPtr.Store(globals)
 
 	// Run the tests
 	errMsg := fmt.Sprintf("invalid proof anchor: %x is not a known directory anchor", syn.Proof.Receipt.Anchor)

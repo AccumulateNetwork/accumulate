@@ -7,6 +7,8 @@
 package block
 
 import (
+	"sync"
+
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -66,6 +68,13 @@ func (p *streamPosition) has(n uint64) bool {
 	return ok
 }
 
+// positionCache holds the block's stream positions. Its mutex is why it lives
+// behind a pointer on Block — see the field's comment.
+type positionCache struct {
+	mu sync.Mutex
+	m  map[string]*streamPosition
+}
+
 // positionOf returns where a stream stands, loading it at most once per block.
 //
 // Guarded, because a cache MISS writes the map. Every caller today is in the
@@ -87,10 +96,10 @@ func (b *Block) positionOf(s stream) (*streamPosition, error) {
 	}
 	key := s.ledger.String() + "|" + s.source.String()
 
-	b.positionsMu.Lock()
-	defer b.positionsMu.Unlock()
+	b.positions.mu.Lock()
+	defer b.positions.mu.Unlock()
 
-	if p, ok := b.positions[key]; ok {
+	if p, ok := b.positions.m[key]; ok {
 		return p, nil
 	}
 
@@ -107,10 +116,10 @@ func (b *Block) positionOf(s stream) (*streamPosition, error) {
 		received:  part.Received,
 		staged:    part.Pending,
 	}
-	if b.positions == nil {
-		b.positions = map[string]*streamPosition{}
+	if b.positions.m == nil {
+		b.positions.m = map[string]*streamPosition{}
 	}
-	b.positions[key] = p
+	b.positions.m[key] = p
 	return p, nil
 }
 
@@ -121,7 +130,7 @@ func (b *Block) positionOf(s stream) (*streamPosition, error) {
 // Takes the same lock as positionOf. Assigning the map directly — which is
 // what this replaced — writes it without one.
 func (b *Block) invalidatePositions() {
-	b.positionsMu.Lock()
-	defer b.positionsMu.Unlock()
-	b.positions = nil
+	b.positions.mu.Lock()
+	defer b.positions.mu.Unlock()
+	b.positions.m = nil
 }

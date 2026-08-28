@@ -196,7 +196,7 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		// because it takes some time for changes to propagate, so we'd need an
 		// activation height or something.
 
-		signer := core.AnchorSigner(&ctx.Executor.globals.Active, partition)
+		signer := core.AnchorSigner(&ctx.Executor.globals().Active, partition)
 		_, _, ok = signer.EntryByKeyHash(syn.Signature.GetPublicKeyHash())
 		if !ok {
 			return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)

@@ -502,7 +502,7 @@ func getBlocksWithEvents(record values.Set[uint64], height uint64) ([]uint64, er
 }
 
 func (b *Block) expirePendingTransactions(batch *database.Batch, blocks []uint64) ([]messaging.Message, error) {
-	limit := b.Executor.globals.Active.Globals.Limits.EventsPerBlock
+	limit := b.Executor.globals().Active.Globals.Limits.EventsPerBlock
 	if limit == 0 {
 		limit = 100
 	}
@@ -559,7 +559,7 @@ func (b *Block) expirePendingTransactions(batch *database.Batch, blocks []uint64
 }
 
 func (b *Block) processEvents() error {
-	if majorBlockIndex, _, ok := b.didOpenMajorBlock(); ok && b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+	if majorBlockIndex, _, ok := b.didOpenMajorBlock(); ok && b.Executor.globals().Active.ExecutorVersion.V2VandenbergEnabled() {
 		// Process major block events
 		events := b.Batch.Account(b.Executor.Describe.Ledger()).Events()
 		blocks, err := getBlocksWithEvents(events.Major().Blocks(), majorBlockIndex)
@@ -583,7 +583,7 @@ func (b *Block) processEvents() error {
 		}
 	}
 
-	n := int(b.Executor.globals.Active.Globals.Limits.EventsPerBlock)
+	n := int(b.Executor.globals().Active.Globals.Limits.EventsPerBlock)
 	if n == 0 {
 		n = 100
 	}

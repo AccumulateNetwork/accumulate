@@ -8,6 +8,7 @@ package block
 
 import (
 	"crypto/ed25519"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -28,7 +29,15 @@ type Executor struct {
 	ExecutorOptions
 	BlockTimers TimerSet
 
-	globals            *Globals
+	// globalsPtr holds the network's global configuration. It is REPLACED,
+	// never mutated: each value is a block-boundary snapshot, valid for a
+	// definite range of blocks and unchanging within one — which is what the
+	// note at the block-end update has always said ("don't change logic in
+	// the middle of a block"). Storing that in a mutable field is what made
+	// #4170: readers outside block execution — ValidateEnvelope, AnchorSigner,
+	// the conductor — hold a value being overwritten under them, and a torn
+	// read decides whether a code path is enabled and who may sign.
+	globalsPtr         atomic.Pointer[Globals]
 	executors          map[protocol.TransactionType]chain.TransactionExecutor
 	messageExecutors   map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]
 	signatureExecutors map[protocol.SignatureType]ExecutorFactory2[protocol.SignatureType, *SignatureContext]
@@ -163,7 +172,7 @@ func (m *Executor) StoreBlockTimers(ds *logging.DataSet) {
 }
 
 func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
-	return &m.globals.Active
+	return &m.globals().Active
 }
 
 func (x *Executor) SetExecutor_TESTONLY(y chain.TransactionExecutor) {
@@ -230,7 +239,7 @@ func (x *Executor) Init(validators []*execute.ValidatorUpdate) (additional []*ex
 	}
 
 	// Capture any validators missing from the initial set
-	for _, val := range x.globals.Active.Network.Validators {
+	for _, val := range x.globals().Active.Network.Validators {
 		if !val.IsActiveOn(x.Describe.PartitionId) {
 			continue
 		}
@@ -253,3 +262,7 @@ func (x *Executor) Init(validators []*execute.ValidatorUpdate) (additional []*ex
 
 	return additional, nil
 }
+
+// globals returns the current snapshot. Callers may hold what they get for as
+// long as they like: it is never written again.
+func (x *Executor) globals() *Globals { return x.globalsPtr.Load() }

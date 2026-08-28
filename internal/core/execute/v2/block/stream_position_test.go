@@ -35,7 +35,7 @@ func positionBlock(t *testing.T, delivered, received uint64, hold ...uint64) (*B
 	}
 	require.NoError(t, batch.Account(ledger.Url).Main().Put(ledger))
 
-	return &Block{Batch: batch, Executor: x},
+	return &Block{positions: new(positionCache), Batch: batch, Executor: x},
 		stream{kind: streamSynthetic, ledger: ledger.Url, source: protocol.PartitionUrl("BVN1")}
 }
 
@@ -134,7 +134,7 @@ func TestStreamPosition_ClearedCacheSeesACommittedAdvance(t *testing.T) {
 	require.Equal(t, uint64(1), p2.next())
 
 	// Cleared: the next round must see what this block committed.
-	b.positions = nil
+	b.invalidatePositions()
 	p3, err := b.positionOf(s)
 	require.NoError(t, err)
 	require.NotSame(t, p1, p3, "clearing must force a re-read")
@@ -159,7 +159,7 @@ func TestStreamPosition_ClearedCacheSeesAMessageRecordedThisBlock(t *testing.T) 
 	require.NoError(t, child.Account(s.ledger).Main().Put(ledger))
 	require.NoError(t, child.Commit())
 
-	b.positions = nil
+	b.invalidatePositions()
 	p2, err := b.positionOf(s)
 	require.NoError(t, err)
 	assert.True(t, p2.has(2),

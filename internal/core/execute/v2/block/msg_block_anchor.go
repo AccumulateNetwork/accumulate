@@ -203,7 +203,7 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 	// it takes some time for changes to propagate, so we'd need an activation
 	// height or something.
 
-	signer := core.AnchorSigner(&ctx.Executor.globals.Active, partition)
+	signer := core.AnchorSigner(&ctx.Executor.globals().Active, partition)
 	if anchor.Signature != nil {
 		_, _, ok = signer.EntryByKeyHash(anchor.Signature.GetPublicKeyHash())
 		if !ok {

@@ -248,7 +248,7 @@ func TestClassify_PartitionSignerGoesSerial(t *testing.T) {
 func TestShardCountOfOneIsTheSerialPath(t *testing.T) {
 	x := new(Executor)
 	x.ExecutionShards = 1
-	b := &Block{Executor: x}
+	b := &Block{positions: new(positionCache), Executor: x}
 
 	// With no batch and no state, Process would panic on any real message —
 	// an empty envelope exercises exactly the dispatch path and proves it

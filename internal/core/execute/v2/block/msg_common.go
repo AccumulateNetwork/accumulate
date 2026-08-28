@@ -47,7 +47,7 @@ type MessageContext struct {
 func (m *MessageContext) Type() messaging.MessageType { return m.message.Type() }
 
 func (m *MessageContext) GetActiveGlobals() *core.GlobalValues {
-	return &m.Executor.globals.Active
+	return &m.Executor.globals().Active
 }
 
 func (*MessageContext) TransactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error) {
@@ -225,7 +225,7 @@ func (b *bundle) getTransaction(batch *database.Batch, hash [32]byte) (*protocol
 	// Look in the bundle
 	for _, msg := range b.messages {
 		// Look inside block anchors
-		if blk, ok := msg.(*messaging.BlockAnchor); ok && b.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		if blk, ok := msg.(*messaging.BlockAnchor); ok && b.Executor.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 			msg = blk.Anchor
 		}
 

@@ -28,7 +28,7 @@ func stageTestBlock(t *testing.T) *Block {
 	db := database.OpenInMemory(nil)
 	batch := db.Begin(true)
 	t.Cleanup(batch.Discard)
-	return &Block{Batch: batch, Executor: x}
+	return &Block{positions: new(positionCache), Batch: batch, Executor: x}
 }
 
 func synthEnv(n uint64, principal *url.URL) *messaging.Envelope {

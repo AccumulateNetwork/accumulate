@@ -62,11 +62,11 @@ func seedPreJiuquanHistory(t *testing.T, db *database.Database, shim execute.Des
 func jiuquanTransitionBlock(batch *database.Batch, shim execute.DescribeShim) *Block {
 	x := new(Executor)
 	x.Describe = shim
-	x.globals = &Globals{
+	x.globalsPtr.Store(&Globals{
 		Active:  core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV2Vandenberg},
 		Pending: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV2Jiuquan},
-	}
-	return &Block{Batch: batch, Executor: x}
+	})
+	return &Block{positions: new(positionCache), Batch: batch, Executor: x}
 }
 
 func bvn0Shim() execute.DescribeShim {
@@ -229,11 +229,11 @@ func TestBlockLedgerMigration_SecondRunFailsLoudlyAndCorruptsNothing(t *testing.
 func TestBlockLedgerMigration_FiresOnlyOnTheVersionTransition(t *testing.T) {
 	x := new(Executor)
 	x.Describe = bvn0Shim()
-	x.globals = &Globals{
+	x.globalsPtr.Store(&Globals{
 		Active:  core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV2Jiuquan},
 		Pending: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV2Jiuquan},
-	}
-	b := &Block{Batch: nil, Executor: x}
+	})
+	b := &Block{positions: new(positionCache), Batch: nil, Executor: x}
 
 	require.NotPanics(t, func() {
 		require.NoError(t, b.executePostUpdateActions())
@@ -256,11 +256,11 @@ func TestBlockLedgerMigration_DoesNotFireWhenJiuquanIsSkippedOver(t *testing.T) 
 	defer batch.Discard()
 	x := new(Executor)
 	x.Describe = shim
-	x.globals = &Globals{
+	x.globalsPtr.Store(&Globals{
 		Active:  core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV2Vandenberg},
 		Pending: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV2Tanegashima},
-	}
-	require.NoError(t, (&Block{Batch: batch, Executor: x}).executePostUpdateActions())
+	})
+	require.NoError(t, (&Block{positions: new(positionCache), Batch: batch, Executor: x}).executePostUpdateActions())
 	require.NoError(t, batch.Commit())
 
 	batch = db.Begin(false)

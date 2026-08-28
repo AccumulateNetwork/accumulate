@@ -27,8 +27,8 @@ func streamTestExec(t *testing.T) *Executor {
 	t.Helper()
 	x := new(Executor)
 	x.Describe = execute.DescribeShim{NetworkType: protocol.PartitionTypeBlockValidator, PartitionId: "BVN0"}
-	x.globals = new(Globals)
-	x.globals.Active = core.GlobalValues{
+	x.globalsPtr.Store(new(Globals))
+	x.globals().Active = core.GlobalValues{
 		ExecutorVersion: protocol.ExecutorVersionLatest,
 	}
 	return x
