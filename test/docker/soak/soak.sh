@@ -455,7 +455,11 @@ reconcile_pulls=$(wc -l < "$rd/reconcile-pulls.txt" 2>/dev/null || echo 0)
 mkdir -p "$rd/storage-stats"
 for c in $(docker ps --format '{{.Names}}' | grep -E '^acc-(dn|bvn)'); do
   for f in $(docker exec "$c" sh -c 'find /root/.accumulate -name stats.json 2>/dev/null'); do
-    docker exec "$c" cat "$f" > "$rd/storage-stats/${c#acc-}-$(basename "$(dirname "$f")").json" 2>/dev/null
+    # Every node runs TWO databases (dnn/ and bvnn/), both named accumulate.db —
+    # name the copy by the path under the node's directory or the second
+    # overwrites the first.
+    rel=$(printf '%s' "$f" | sed -E 's#^/root/.accumulate/[^/]+/##; s#/stats.json$##; s#/#-#g')
+    docker exec "$c" cat "$f" > "$rd/storage-stats/${c#acc-}-$rel.json" 2>/dev/null
   done
 done
 rmdir "$rd/storage-stats" 2>/dev/null || true
