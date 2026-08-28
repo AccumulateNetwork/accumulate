@@ -9,6 +9,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -67,16 +68,34 @@ func TestNoLaggingChannels(t *testing.T) {
 		blocks   = 10 // total backlog = perBlock*blocks = 400
 	)
 
-	// Drop exactly the FIRST cross-partition deposit, once. Everything after
-	// piles up pending behind the hole.
-	var didDrop bool
+	// HOLD the first cross-partition deposit, then release it. Everything
+	// after piles up pending behind the hole while it is held.
+	//
+	// It used to be dropped once and left to healing to re-deliver, and the
+	// backlog was assumed to survive the settle window. That only held while
+	// delivery was slow: with the backlog draining at run scale (#4169), a
+	// single drop is healed and the whole queue drains before the measurement
+	// starts, and the test failed on its own precondition with a lag of zero.
+	//
+	// So the hole is now held open until the test says otherwise. The backlog
+	// is built deterministically instead of racing healing, and what is
+	// measured — the drain once delivery resumes — is unchanged and is now
+	// actually reached.
+	//
+	// The hook runs on every node's goroutine, so its state is guarded
+	// (#4171).
+	var holdMu sync.Mutex
+	var held *url.TxID
+	var released bool
 	globals := new(core.GlobalValues)
 	globals.ExecutorVersion = ExecutorVersionLatest
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.GenesisWith(GenesisTime, globals),
 		simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (bool, error) {
-			if didDrop {
+			holdMu.Lock()
+			defer holdMu.Unlock()
+			if released {
 				return true, nil
 			}
 			messages, err := env.Normalize()
@@ -90,8 +109,16 @@ func TestNoLaggingChannels(t *testing.T) {
 					msg = m.Unwrap()
 					goto again
 				case messaging.MessageWithTransaction:
-					if m.GetTransaction().Body.Type() == TransactionTypeSyntheticDepositTokens {
-						didDrop = true
+					if m.GetTransaction().Body.Type() != TransactionTypeSyntheticDepositTokens {
+						continue
+					}
+					id := m.GetTransaction().ID()
+					if held == nil {
+						held = id
+					}
+					if held.Equal(id) {
+						// Keep dropping THIS one, however often healing
+						// resubmits it, until the test releases it.
 						return false, nil
 					}
 				}
@@ -143,12 +170,20 @@ func TestNoLaggingChannels(t *testing.T) {
 			env.SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
 		sim.StepN(1)
 	}
-	require.True(t, didDrop, "the head deposit must have been dropped")
-	sim.StepN(6) // let in-flight dispatches land
+	holdMu.Lock()
+	require.NotNil(t, held, "the head deposit must have been held back")
+	holdMu.Unlock()
+	sim.StepN(6) // let in-flight dispatches land and the backlog build
 
 	recv, deliv := streamLag(t, sim, dstUrl, srcUrl)
 	require.Greater(t, recv-deliv, uint64(2*perBlock),
 		"precondition: a large pending backlog must exist behind the hole")
+
+	// Release the hole. Healing re-delivers the held deposit, and everything
+	// behind it becomes deliverable.
+	holdMu.Lock()
+	released = true
+	holdMu.Unlock()
 
 	// Healing fills the hole after some blocks — not under the test's
 	// control. What IS the protocol's contract: once delivery starts moving,
