@@ -35,6 +35,11 @@ type MessageContext struct {
 	// produced is other messages produced while processing the message.
 	produced []*ProducedMessage
 
+	// advance, if set, moves the message's stream once the message has
+	// been recorded and its batch is about to commit (#4169 step 7). Set by
+	// SequencedMessage.process, applied by SequencedMessage.Process.
+	advance func() error
+
 	// syntheticCount distinguishes otherwise-identical messages produced by
 	// THIS message. It was a block-scoped counter, which stamped delivery-
 	// order-dependent content into synthetic transaction bodies — under

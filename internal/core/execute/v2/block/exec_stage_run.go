@@ -84,8 +84,10 @@ func (b *Block) executeRuns(runs []streamRun, results []*execute.ProcessResult, 
 				ran[entry.envIdx] = true
 			}
 
-			// Did the stream actually move? Ask it.
-			b.invalidatePositions()
+			// Did the stream actually move? Ask it. The position IS the
+			// block's state of the stream (#4169 step 7), so this is the
+			// same object staging decided against, advanced by whatever the
+			// entry did.
 			pos, perr := b.positionOf(sr.stream)
 			if err != nil || perr != nil || pos.delivered < entry.number {
 				break // this stream stops here; the rest stays for a later block

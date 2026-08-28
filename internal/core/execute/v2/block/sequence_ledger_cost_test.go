@@ -19,14 +19,18 @@ import (
 
 // The sequence ledger's cost model, pinned (#4164).
 //
-// updateLedger reads the ledger with GetAs inside each message's own child
-// batch. A child batch does not share its parent's value: the read runs
-// copyValue, which DEEP COPIES the whole SyntheticLedger — every stream, and
-// every entry of every stream's pending window. So the per-message cost is
-// O(total backlog), and draining a backlog of n costs O(n^2).
+// The executor used to read the ledger with GetAs inside each message's own
+// child batch (updateLedger, deleted in #4169 step 7). A child batch does not
+// share its parent's value: the read runs copyValue, which DEEP COPIES the
+// whole SyntheticLedger — every stream, and every entry of every stream's
+// pending window. So the per-message cost was O(total backlog), and draining
+// a backlog of n cost O(n^2). This test models both access patterns directly
+// so the cost model stays pinned whatever the executor does;
+// TestStreamAdvance_CostDoesNotScaleWithBacklog is the same claim made
+// against the live advance path.
 //
-// This is NOT re-marshaling, which is what the comment in updateLedger used to
-// say. Measured by timing the three steps separately: `put` and `commit` are
+// This is NOT re-marshaling, which is what the old comment used to say.
+// Measured by timing the three steps separately: `put` and `commit` are
 // flat at ~0.2us and ~1.5us regardless of backlog, while `get` runs
 // 1.1us -> 78.6us across backlogs of 100 -> 16,000. Writes are pointer
 // assignments into the parent record and marshal once at the block's commit;

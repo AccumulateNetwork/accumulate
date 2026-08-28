@@ -150,6 +150,16 @@ func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Move the stream, last: everything this message records is in the batch
+	// and about to commit. An advance is block state, not batch state, so it
+	// cannot ride the discard — it is only applied once nothing left can fail.
+	if ctx.advance != nil {
+		err = ctx.advance()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
 	return status, nil
 }
 
@@ -179,7 +189,7 @@ var SequencedSyntheticExecuted atomic.Int64
 
 func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, error) {
 	// Check if the message is ready to process
-	ready, err := x.isReady(batch, ctx, seq)
+	str, ready, err := x.isReady(batch, ctx, seq)
 	if err != nil {
 		return false, errors.UnknownError.Wrap(err)
 	}
@@ -247,10 +257,14 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 			"module", "synthetic")
 	}
 
-	// Update the ledger
-	_, err = x.updateLedger(batch, ctx, seq, st.Pending())
-	if err != nil {
-		return false, errors.UnknownError.Wrap(err)
+	// Advance the stream — delivered if the transaction succeeded OR failed,
+	// pending otherwise. The ledger record itself is written once per stream
+	// when the block closes (#4169 step 7); this moves the block's position so
+	// the next ask sees it. Deferred to Process, so it lands only once
+	// everything this message records has, and not on a path that discards.
+	delivered := !st.Pending()
+	ctx.advance = func() error {
+		return ctx.Block.advanceStream(str, delivered, seq.Number, seq.ID())
 	}
 
 	if !st.Delivered() {
@@ -268,132 +282,53 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 
 // MaxPendingSequenced bounds how far past the delivery point a received
 // sequenced message may be RECORDED in the pending window. The window lives
-// inline in the ledger record, so its length is the marshal cost of every
-// subsequent update; 4096 keeps the worst-case record ~300KB and the drain
-// linear, while leaving four block-runs of runway. Receipts beyond it
-// are refused (deterministically) and heal later as a produced>received
-// tail.
+// inline in the ledger record, so its length is the size of the record and of
+// the block's one copy of it; 4096 keeps the worst case ~300KB while leaving
+// four block-runs of runway. Receipts beyond it are refused (deterministically)
+// and heal later as a produced>received tail.
 const MaxPendingSequenced = 4 * maxRunPerBlock
 
-func (x SequencedMessage) isReady(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, error) {
-	// Load the ledger
-	isAnchor, ledger, err := x.loadLedger(batch, ctx, seq)
-	if err != nil {
-		return false, errors.UnknownError.Wrap(err)
-	}
-	partitionLedger := ledger.Partition(seq.Source)
-
-	// If the sequence number is old, mark it already delivered
-	typ := "synthetic message"
-	if isAnchor {
-		typ = "anchor"
-	}
-	if seq.Number <= partitionLedger.Delivered {
-		return false, errors.Delivered.WithFormat("%s has been delivered", typ)
-	}
-
-	// If the transaction is out of sequence, mark it pending
-	if partitionLedger.Delivered+1 != seq.Number {
-		ctx.Executor.logger.Debug("Out of sequence message",
-			"hash", logging.AsHex(seq.Message.Hash()).Slice(0, 4),
-			"seq-got", seq.Number,
-			"seq-want", partitionLedger.Delivered+1,
-			"source", seq.Source,
-			"destination", seq.Destination,
-			"type", typ,
-			"hash", logging.AsHex(seq.Message.Hash()).Slice(0, 4),
-		)
-		return false, nil
-	}
-
-	return true, nil
-}
-
-func (x SequencedMessage) updateLedger(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage, pending bool) (*protocol.PartitionSyntheticLedger, error) {
-	// Load the ledger
-	isAnchor, ledger, err := x.loadLedger(batch, ctx, seq)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	partLedger := ledger.Partition(seq.Source)
-
-	// This should never happen, but if it does Add will panic
-	if pending && seq.Number <= partLedger.Delivered {
-		msg := "synthetic messages"
-		if isAnchor {
-			msg = "anchors"
-		}
-		return nil, errors.FatalError.WithFormat("%s processed out of order: delivered %d, processed %d", msg, partLedger.Delivered, seq.Number)
-	}
-
-	// Bound the pending window. Per-message cost is O(total backlog), so a big
-	// backlog drains in O(backlog^2) — run 20260824T051249Z's 33,000-message
-	// backlog collapsed the drain to ~4/s: the serial search Paul called.
-	//
-	// The cost is the READ, not the write. This function reads the ledger with
-	// GetAs inside the message's own child batch, and a child does not share
-	// its parent's value — the read deep copies the whole SyntheticLedger,
-	// every stream and every pending entry. Writes are pointer assignments
-	// into the parent record and marshal once at the block's commit.
-	// TestSequenceLedgerCostIsPerRead pins it: across backlogs of 100 to
-	// 16,000, `put` and `commit` stay flat at ~0.2us and ~1.5us while the read
-	// runs 1.1us to 78.6us.
-	//
-	// Which decides the fix, and rules out the obvious one. Splitting the
-	// ledger into one record per stream does NOT help: a stream's own backlog
-	// is still copied on every one of its messages. Reading the ledger ONCE
-	// PER BLOCK does, and needs no layout change — measured at a 16,000
-	// backlog, 80.8us per message becomes 0.32us. That is what #4169's decide
-	// pass does, and it supersedes #4164's keyed-sub-record plan.
-	//
-	// Until then, refusing to RECORD a receipt far beyond the delivery point
-	// is deterministic (same rule, same state on every validator) and converts
-	// unbounded receipt-state growth into a produced>received tail at the
-	// source, which the reconcile machinery already heals once delivery
-	// catches up.
-	if pending && seq.Number > partLedger.Delivered+MaxPendingSequenced {
-		ctx.Executor.logger.Debug("Refusing to record far-future sequenced message",
-			"seq", seq.Number, "delivered", partLedger.Delivered,
-			"window", MaxPendingSequenced, "source", seq.Source)
-		return partLedger, nil
-	}
-
-	// The ledger's Delivered number needs to be updated if the transaction
-	// succeeds or fails
-	if partLedger.Add(!pending, seq.Number, seq.ID()) {
-		err = batch.Account(ledger.GetUrl()).Main().Put(ledger)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("store synthetic transaction ledger: %w", err)
-		}
-	}
-
-	return partLedger, nil
-}
-
-func (x SequencedMessage) loadLedger(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, protocol.SequenceLedger, error) {
+// isReady reports which stream governs the message and whether it is next on
+// it. It asks the block's position, never the ledger: the position is read
+// once per stream per block and advanced as the block executes, which is
+// where the per-message ledger read — and the O(n^2) drain — went (#4169
+// step 7).
+func (x SequencedMessage) isReady(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (stream, bool, error) {
 	// One rule, stated in streamOf (#4169 step 1). The executor's lookup
 	// searches the bundle before the database, which is why it is passed in
 	// rather than assumed.
-	isAnchor, err := ctx.Executor.sequencedIsAnchor(seq, func(hash [32]byte) (*protocol.Transaction, error) {
+	str, err := ctx.Executor.streamFor(seq, func(hash [32]byte) (*protocol.Transaction, error) {
 		return ctx.getTransaction(batch, hash)
 	})
 	if err != nil {
-		return false, nil, errors.UnknownError.Wrap(err)
+		return stream{}, false, errors.UnknownError.Wrap(err)
 	}
-	u := ctx.Executor.Describe.Synthetic()
-	if isAnchor {
-		u = ctx.Executor.Describe.AnchorPool()
-	}
-
-	var ledger protocol.SequenceLedger
-	err = batch.Account(u).Main().GetAs(&ledger)
+	pos, err := ctx.Block.positionOf(str)
 	if err != nil {
-		msg := "synthetic"
-		if isAnchor {
-			msg = "anchor"
-		}
-		return false, nil, errors.UnknownError.WithFormat("load %s ledger: %w", msg, err)
+		return stream{}, false, errors.UnknownError.Wrap(err)
 	}
 
-	return isAnchor, ledger, nil
+	// If the sequence number is old, mark it already delivered
+	typ := "synthetic message"
+	if str.kind == streamAnchor {
+		typ = "anchor"
+	}
+	if seq.Number <= pos.delivered {
+		return str, false, errors.Delivered.WithFormat("%s has been delivered", typ)
+	}
+
+	// If the transaction is out of sequence, mark it pending
+	if pos.next() != seq.Number {
+		ctx.Executor.logger.Debug("Out of sequence message",
+			"hash", logging.AsHex(seq.Message.Hash()).Slice(0, 4),
+			"seq-got", seq.Number,
+			"seq-want", pos.next(),
+			"source", seq.Source,
+			"destination", seq.Destination,
+			"type", typ,
+		)
+		return str, false, nil
+	}
+
+	return str, true, nil
 }

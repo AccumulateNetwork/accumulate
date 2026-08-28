@@ -35,9 +35,9 @@ type Block struct {
 	// further envelopes execute and Close refuses to produce a state hash.
 	fatal error
 
-	// positions caches where each stream stands at the start of the block,
-	// keyed by ledger and source, so the ledger is read once per stream per
-	// block rather than once per message (#4169 step 2).
+	// positions holds where each stream stands, keyed by ledger and source:
+	// the block's working copy of each stream's ledger entry, read once,
+	// advanced as the block executes, written back at Close (#4169 step 7).
 	//
 	// Behind a POINTER because Block is copied by value into closedBlock, and
 	// the cache carries a mutex — a cache miss writes it (see positionOf).

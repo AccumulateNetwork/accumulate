@@ -210,11 +210,11 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 		return results
 	}
 
-	// drain decides and runs every stream once, in group order. Positions are
-	// dropped first: the block has moved since the last round, and a cached
-	// position would decide this round against last round's state.
+	// drain decides and runs every stream once, in group order. Each round
+	// decides against the positions as the previous round left them — the
+	// position is the block's live state of the stream (#4169 step 7), so
+	// nothing needs re-reading.
 	drain := func() (int, error) {
-		b.invalidatePositions()
 		n := 0
 		for _, kind := range []streamKind{streamAnchor, streamSynthetic} {
 			runs, err := b.stageRuns(c, kind)

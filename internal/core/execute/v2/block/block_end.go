@@ -39,8 +39,16 @@ func (block *Block) Close() (execute.BlockState, error) {
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
 
+	// Write each stream's advances to its ledger, once per stream (#4169 step
+	// 7). Before anything else reads or writes those records: production
+	// bumps Produced on the same ledger below.
+	err := block.flushStreams()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("flush streams: %w", err)
+	}
+
 	// Is it time for a major block?
-	err := block.shouldOpenMajorBlock()
+	err = block.shouldOpenMajorBlock()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

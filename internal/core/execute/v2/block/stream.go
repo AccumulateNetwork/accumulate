@@ -65,17 +65,20 @@ func (x *Executor) streamOf(msg messaging.Message, resolve resolveTxn) (stream, 
 	if !ok || seq.Source == nil {
 		return stream{}, nil, nil
 	}
+	s, err := x.streamFor(seq, resolve)
+	return s, seq, err
+}
 
+// streamFor is streamOf for a caller that already holds the sequenced message.
+func (x *Executor) streamFor(seq *messaging.SequencedMessage, resolve resolveTxn) (stream, error) {
 	isAnchor, err := x.sequencedIsAnchor(seq, resolve)
 	if err != nil {
-		return stream{}, nil, errors.UnknownError.Wrap(err)
+		return stream{}, errors.UnknownError.Wrap(err)
 	}
-
-	s := stream{kind: streamSynthetic, ledger: x.Describe.Synthetic(), source: seq.Source}
 	if isAnchor {
-		s = stream{kind: streamAnchor, ledger: x.Describe.AnchorPool(), source: seq.Source}
+		return stream{kind: streamAnchor, ledger: x.Describe.AnchorPool(), source: seq.Source}, nil
 	}
-	return s, seq, nil
+	return stream{kind: streamSynthetic, ledger: x.Describe.Synthetic(), source: seq.Source}, nil
 }
 
 // sequencedIsAnchor reports whether a sequenced message carries an anchor.
