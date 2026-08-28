@@ -61,9 +61,23 @@ func (c *chainElemIndexer) Apply(batch *ChangeSet, ctx *SummaryContext, r record
 		return errors.UnknownError.WithFormat("load new chain entries: %w", err)
 	}
 
-	// Index the new entries
+	// Index the new entries. A hash already indexed keeps its first
+	// position, as the node's own AddEntry does (pkg/database/merkle/
+	// chain.go): chains that admit duplicates would otherwise have the
+	// index rewritten with a later position -- a different value under
+	// the same key, which a write-once storage layer refuses (#4174).
 	for i, hash := range hashes {
-		err = chain.Inner().ElementIndex(hash).Put(c.oldHeight + uint64(i))
+		index := chain.Inner().ElementIndex(hash)
+		_, err = index.Get()
+		switch {
+		case err == nil:
+			continue // Already indexed
+		case errors.Is(err, errors.NotFound):
+			// Not yet
+		default:
+			return errors.UnknownError.WithFormat("load index for chain entry: %w", err)
+		}
+		err = index.Put(c.oldHeight + uint64(i))
 		if err != nil {
 			return errors.UnknownError.WithFormat("store index for new chain entry: %w", err)
 		}

@@ -62,8 +62,8 @@ import (
 //	<chain>.ElementIndex(H)           BPT nodes and BPT.Root
 //	<chain>.States(I)                 every set and counted collection
 //	Account(U).Data.Entry(I)          Account(U).Data.Entry (the count)
-//	Account(U).Data.Transaction(H)    Events, BlockLedger, Log blocks
-//	SystemData(P).SyntheticIndexIndex(B)
+//	SystemData(P).SyntheticIndexIndex(B)   Account(U).Data.Transaction(H)
+//	Summary(H).Main (BSN)             Events, BlockLedger, Log blocks
 //
 // Anything not named here is treated as mutable, which is the direction
 // that fails quietly rather than loudly.
@@ -79,20 +79,26 @@ func isWriteOnce(k *record.Key) bool {
 		return trailing == 1
 
 	case "Main":
-		// A message and a transaction are named by the hash of their
-		// own content; an account is named by its URL and its main
-		// state is what changes.
-		return trailing == 0 && (prev == "Message" || prev == "Transaction")
+		// A message, a transaction and a block summary (BSN) are named
+		// by the hash of their own content; an account is named by its
+		// URL and its main state is what changes.
+		return trailing == 0 && (prev == "Message" || prev == "Transaction" || prev == "Summary")
 
 	case "Url":
 		// An account's URL is the URL the account is keyed by.
 		return trailing == 0 && prev == "Account"
 
-	case "Entry", "Transaction":
+	case "Entry":
 		// Data.Entry is a counted collection: Entry(I) is the I'th
 		// entry of a data account and Entry alone is the count, which
-		// changes with every entry.  Data.Transaction(H) records which
-		// transaction wrote entry H.
+		// changes with every entry.
+		//
+		// Data.Transaction(H) -- which transaction wrote entry H -- is
+		// NOT here, though it looks the same.  The index is written
+		// unconditionally (internal/database/indexing/account.go), and
+		// nothing stops the same entry being written to the same
+		// account by a second transaction, which rewrites H with that
+		// transaction's hash (#4174).
 		return trailing == 1 && prev == "Data"
 
 	case "SyntheticIndexIndex":

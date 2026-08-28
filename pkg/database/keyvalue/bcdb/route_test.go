@@ -73,7 +73,9 @@ func TestClassification(t *testing.T) {
 		// and the count changes with every element
 		{true, "data entry", record.NewKey("Account", alice, "Data", "Entry", uint64(3))},
 		{false, "the count of them", record.NewKey("Account", alice, "Data", "Entry")},
-		{true, "which txn wrote an entry", record.NewKey("Account", alice, "Data", "Transaction", hash)},
+		// ... but which transaction wrote an entry is rewritten when a
+		// second transaction writes the same entry (#4174)
+		{false, "which txn wrote an entry", record.NewKey("Account", alice, "Data", "Transaction", hash)},
 
 		// The BPT is a hash tree over mutable state, so its nodes are
 		// mutable however they are keyed
@@ -89,6 +91,11 @@ func TestClassification(t *testing.T) {
 
 		// Which synthetic index entry covers a block does not change
 		{true, "block to synth index", record.NewKey("SystemData", "BVN1", "SyntheticIndexIndex", uint64(9))},
+
+		// The BSN's block summary is named by its hash and recorded
+		// once; its signature set grows
+		{true, "a summary is its hash", record.NewKey("Summary", hash, "Main")},
+		{false, "summary signatures", record.NewKey("Summary", hash, "Signatures")},
 
 		// A record the classification has never heard of is mutable,
 		// which is the direction that fails quietly
