@@ -298,6 +298,8 @@ type Account struct {
 	main                   values.Value[protocol.Account]
 	pending                values.Set[*url.TxID]
 	syntheticForAnchor     map[accountSyntheticForAnchorMapKey]values.Set[*url.TxID]
+	localDeliveryQueue     values.List[*url.TxID]
+	cascadeDeliveryQueue   values.List[*url.TxID]
 	directory              values.Set[*url.URL]
 	events                 *AccountEvents
 	blockLedger            *indexing.Log[*BlockLedger]
@@ -310,6 +312,7 @@ type Account struct {
 	anchorSequenceChain    *Chain2
 	majorBlockChain        *Chain2
 	syntheticSequenceChain map[accountSyntheticSequenceChainMapKey]*Chain2
+	syntheticReplica       map[accountSyntheticReplicaMapKey]*Chain2
 	anchorChain            map[accountAnchorChainMapKey]*AccountAnchorChain
 	chains                 values.Set[*protocol.ChainMetadata]
 	syntheticAnchors       values.Set[[32]byte]
@@ -355,6 +358,18 @@ func (k accountSyntheticSequenceChainKey) ForMap() accountSyntheticSequenceChain
 	return accountSyntheticSequenceChainMapKey{k.Partition}
 }
 
+type accountSyntheticReplicaKey struct {
+	Stream string
+}
+
+type accountSyntheticReplicaMapKey struct {
+	Stream string
+}
+
+func (k accountSyntheticReplicaKey) ForMap() accountSyntheticReplicaMapKey {
+	return accountSyntheticReplicaMapKey{k.Stream}
+}
+
 type accountAnchorChainKey struct {
 	Partition string
 }
@@ -397,6 +412,22 @@ func (c *Account) SyntheticForAnchor(anchor [32]byte) values.Set[*url.TxID] {
 
 func (c *Account) newSyntheticForAnchor(k accountSyntheticForAnchorKey) values.Set[*url.TxID] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("SyntheticForAnchor", k.Anchor), values.Wrapped(values.TxidWrapper), values.CompareTxid)
+}
+
+func (c *Account) LocalDeliveryQueue() values.List[*url.TxID] {
+	return values.GetOrCreate(c, &c.localDeliveryQueue, (*Account).newLocalDeliveryQueue)
+}
+
+func (c *Account) newLocalDeliveryQueue() values.List[*url.TxID] {
+	return values.NewList(c.logger.L, c.store, c.key.Append("LocalDeliveryQueue"), values.Wrapped(values.TxidWrapper))
+}
+
+func (c *Account) CascadeDeliveryQueue() values.List[*url.TxID] {
+	return values.GetOrCreate(c, &c.cascadeDeliveryQueue, (*Account).newCascadeDeliveryQueue)
+}
+
+func (c *Account) newCascadeDeliveryQueue() values.List[*url.TxID] {
+	return values.NewList(c.logger.L, c.store, c.key.Append("CascadeDeliveryQueue"), values.Wrapped(values.TxidWrapper))
 }
 
 func (c *Account) Directory() values.Set[*url.URL] {
@@ -505,6 +536,14 @@ func (c *Account) newSyntheticSequenceChain(k accountSyntheticSequenceChainKey) 
 	return newChain2(c, c.logger.L, c.store, c.key.Append("SyntheticSequenceChain", k.Partition), "synthetic-sequence(%[4]v)")
 }
 
+func (c *Account) getSyntheticReplica(stream string) *Chain2 {
+	return values.GetOrCreateMap(c, &c.syntheticReplica, accountSyntheticReplicaKey{stream}, (*Account).newSyntheticReplica)
+}
+
+func (c *Account) newSyntheticReplica(k accountSyntheticReplicaKey) *Chain2 {
+	return newChain2(c, c.logger.L, c.store, c.key.Append("SyntheticReplica", k.Stream), "synthetic-replica(%[4]v)")
+}
+
 func (c *Account) getAnchorChain(partition string) *AccountAnchorChain {
 	return values.GetOrCreateMap(c, &c.anchorChain, accountAnchorChainKey{partition}, (*Account).newAnchorChain)
 }
@@ -577,6 +616,10 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		}
 		v := c.SyntheticForAnchor(anchor)
 		return v, key.SliceI(2), nil
+	case "LocalDeliveryQueue":
+		return c.LocalDeliveryQueue(), key.SliceI(1), nil
+	case "CascadeDeliveryQueue":
+		return c.CascadeDeliveryQueue(), key.SliceI(1), nil
 	case "Directory":
 		return c.Directory(), key.SliceI(1), nil
 	case "Events":
@@ -617,13 +660,23 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		}
 		v := c.getSyntheticSequenceChain(partition)
 		return v, key.SliceI(2), nil
-	case "AnchorChain":
+	case "SyntheticReplica":
 		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (8)")
 		}
+		stream, okStream := key.Get(1).(string)
+		if !okStream {
+			return nil, nil, errors.InternalError.With("bad key for account (9)")
+		}
+		v := c.getSyntheticReplica(stream)
+		return v, key.SliceI(2), nil
+	case "AnchorChain":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (10)")
+		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account (9)")
+			return nil, nil, errors.InternalError.With("bad key for account (11)")
 		}
 		v := c.getAnchorChain(partition)
 		return v, key.SliceI(2), nil
@@ -636,7 +689,7 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Data":
 		return c.Data(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for account (10)")
+		return nil, nil, errors.InternalError.With("bad key for account (12)")
 	}
 }
 
@@ -658,6 +711,12 @@ func (c *Account) IsDirty() bool {
 		if v.IsDirty() {
 			return true
 		}
+	}
+	if values.IsDirty(c.localDeliveryQueue) {
+		return true
+	}
+	if values.IsDirty(c.cascadeDeliveryQueue) {
+		return true
 	}
 	if values.IsDirty(c.directory) {
 		return true
@@ -695,6 +754,11 @@ func (c *Account) IsDirty() bool {
 		return true
 	}
 	for _, v := range c.syntheticSequenceChain {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.syntheticReplica {
 		if v.IsDirty() {
 			return true
 		}
@@ -737,6 +801,9 @@ func (c *Account) dirtyChains() []*MerkleManager {
 	for _, v := range c.syntheticSequenceChain {
 		chains = append(chains, v.dirtyChains()...)
 	}
+	for _, v := range c.syntheticReplica {
+		chains = append(chains, v.dirtyChains()...)
+	}
 	for _, v := range c.anchorChain {
 		chains = append(chains, v.dirtyChains()...)
 	}
@@ -757,6 +824,8 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.main, c.newMain, opts, fn)
 	values.WalkField(&err, c.pending, c.newPending, opts, fn)
 	values.WalkMap(&err, c.syntheticForAnchor, c.newSyntheticForAnchor, nil, opts, fn)
+	values.WalkField(&err, c.localDeliveryQueue, c.newLocalDeliveryQueue, opts, fn)
+	values.WalkField(&err, c.cascadeDeliveryQueue, c.newCascadeDeliveryQueue, opts, fn)
 	values.WalkField(&err, c.directory, c.newDirectory, opts, fn)
 	values.WalkField(&err, c.events, c.newEvents, opts, fn)
 	values.WalkField(&err, c.blockLedger, c.newBlockLedger, opts, fn)
@@ -769,6 +838,7 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.anchorSequenceChain, c.newAnchorSequenceChain, opts, fn)
 	values.WalkField(&err, c.majorBlockChain, c.newMajorBlockChain, opts, fn)
 	values.WalkMap(&err, c.syntheticSequenceChain, c.newSyntheticSequenceChain, c.getSyntheticSequenceKeys, opts, fn)
+	values.WalkMap(&err, c.syntheticReplica, c.newSyntheticReplica, c.getSyntheticReplicaKeys, opts, fn)
 	values.WalkMap(&err, c.anchorChain, c.newAnchorChain, c.getAnchorKeys, opts, fn)
 	values.WalkField(&err, c.chains, c.newChains, opts, fn)
 	if !opts.IgnoreIndices {
@@ -793,6 +863,8 @@ func (c *Account) baseCommit() error {
 	for _, v := range c.syntheticForAnchor {
 		values.Commit(&err, v)
 	}
+	values.Commit(&err, c.localDeliveryQueue)
+	values.Commit(&err, c.cascadeDeliveryQueue)
 	values.Commit(&err, c.directory)
 	values.Commit(&err, c.events)
 	values.Commit(&err, c.blockLedger)
@@ -807,6 +879,9 @@ func (c *Account) baseCommit() error {
 	values.Commit(&err, c.anchorSequenceChain)
 	values.Commit(&err, c.majorBlockChain)
 	for _, v := range c.syntheticSequenceChain {
+		values.Commit(&err, v)
+	}
+	for _, v := range c.syntheticReplica {
 		values.Commit(&err, v)
 	}
 	for _, v := range c.anchorChain {

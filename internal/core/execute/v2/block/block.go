@@ -22,7 +22,38 @@ type Block struct {
 	Batch    *database.Batch
 	Executor *Executor
 
-	syntheticCount uint64
+	// produced accumulates every delivery's produced messages so they can be
+	// sequenced in ONE sorted pass at block end (#4144). Sequencing inline —
+	// destLedger.Produced++ per message as each delivery executes — was the
+	// only cross-transaction dependency in the execution path, and it bound
+	// sequence numbers to delivery order, which becomes shard-scheduling-
+	// dependent under parallel execution (#4145).
+	produced []*ProducedMessage
+
+	// fatal poisons the block: a shard child-batch commit failed after
+	// possibly writing a prefix of its state into the parent (#4149). No
+	// further envelopes execute and Close refuses to produce a state hash.
+	fatal error
+
+	// positions holds where each stream stands, keyed by ledger and source:
+	// the block's working copy of each stream's ledger entry, read once,
+	// advanced as the block executes, written back at Close (#4169 step 7).
+	//
+	// Behind a POINTER because Block is copied by value into closedBlock, and
+	// the cache carries a mutex — a cache miss writes it (see positionOf).
+	// Copying a mutex is a bug vet reports, and it would also give the copy a
+	// second, unrelated lock.
+	positions *positionCache
+
+	// staged is the execution order staging settled for this block (#4169
+	// step 5). Shadow only: nothing consults it to decide anything.
+	staged *executionOrder
+
+	// dnAnchorsAtStart is the directory anchor chain's height when the block
+	// began. A synthetic whose proving anchor sits at or past it was admitted
+	// by an anchor applied in THIS block (#4169 step 0c) — the case two-round
+	// staging exists for, and the count that says whether it is worth having.
+	dnAnchorsAtStart int64
 }
 
 func (b *Block) Params() execute.BlockParams { return b.BlockParams }

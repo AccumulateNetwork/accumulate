@@ -157,6 +157,12 @@ type SyntheticMessage struct {
 	extraData []byte
 }
 
+type SyntheticProof struct {
+	fieldsSet []bool
+	Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	extraData []byte
+}
+
 type TransactionMessage struct {
 	fieldsSet   []bool
 	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
@@ -184,6 +190,8 @@ func (*SignatureMessage) Type() MessageType { return MessageTypeSignature }
 func (*SignatureRequest) Type() MessageType { return MessageTypeSignatureRequest }
 
 func (*SyntheticMessage) Type() MessageType { return MessageTypeSynthetic }
+
+func (*SyntheticProof) Type() MessageType { return MessageTypeSyntheticProof }
 
 func (*TransactionMessage) Type() MessageType { return MessageTypeTransaction }
 
@@ -510,6 +518,22 @@ func (v *SyntheticMessage) Copy() *SyntheticMessage {
 
 func (v *SyntheticMessage) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *SyntheticProof) Copy() *SyntheticProof {
+	u := new(SyntheticProof)
+
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SyntheticProof) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *TransactionMessage) Copy() *TransactionMessage {
 	u := new(TransactionMessage)
 
@@ -832,6 +856,19 @@ func (v *SyntheticMessage) Equal(u *SyntheticMessage) bool {
 	if !(protocol.EqualKeySignature(v.Signature, u.Signature)) {
 		return false
 	}
+	switch {
+	case v.Proof == u.Proof:
+		// equal
+	case v.Proof == nil || u.Proof == nil:
+		return false
+	case !((v.Proof).Equal(u.Proof)):
+		return false
+	}
+
+	return true
+}
+
+func (v *SyntheticProof) Equal(u *SyntheticProof) bool {
 	switch {
 	case v.Proof == u.Proof:
 		// equal
@@ -1836,6 +1873,60 @@ func (v *SyntheticMessage) IsValid() error {
 	}
 }
 
+var fieldNames_SyntheticProof = []string{
+	1: "Type",
+	2: "Proof",
+}
+
+func (v *SyntheticProof) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Proof == nil) {
+		writer.WriteValue(2, v.Proof.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SyntheticProof)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *SyntheticProof) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Proof is missing")
+	} else if v.Proof == nil {
+		errs = append(errs, "field Proof is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_TransactionMessage = []string{
 	1: "Type",
 	2: "Transaction",
@@ -2497,6 +2588,41 @@ func (v *SyntheticMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *SyntheticProof) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SyntheticProof) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SyntheticProof) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Proof = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SyntheticProof)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *TransactionMessage) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2635,6 +2761,11 @@ func init() {
 		encoding.NewTypeField("signature", "protocol.KeySignature"),
 		encoding.NewTypeField("proof", "protocol.AnnotatedReceipt"),
 	}, "SyntheticMessage", "syntheticMessage")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("proof", "protocol.AnnotatedReceipt"),
+	}, "SyntheticProof", "syntheticProof")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -2960,6 +3091,20 @@ func (v *SyntheticMessage) MarshalJSON() ([]byte, error) {
 	if !(protocol.EqualKeySignature(v.Signature, nil)) {
 		u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	}
+	if !(v.Proof == nil) {
+		u.Proof = v.Proof
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *SyntheticProof) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      MessageType                `json:"type"`
+		Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty"`
+		ExtraData *string                    `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
 	if !(v.Proof == nil) {
 		u.Proof = v.Proof
 	}
@@ -3442,6 +3587,29 @@ func (v *SyntheticMessage) UnmarshalJSON(data []byte) error {
 		v.Signature = u.Signature.Value
 	}
 
+	v.Proof = u.Proof
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *SyntheticProof) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      MessageType                `json:"type"`
+		Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty"`
+		ExtraData *string                    `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Proof = v.Proof
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Proof = u.Proof
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {

@@ -10,14 +10,26 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// txTraceEnabled mirrors the worker package's ACC_TX_TRACE switch. Read here
+// rather than imported, to keep the executor bridge independent of the worker
+// package — the two sit on opposite sides of the consensus/execution boundary,
+// which is precisely the boundary this trace exists to measure across (#4132).
+var txTraceEnabled = func() bool {
+	v := strings.ToLower(os.Getenv("ACC_TX_TRACE"))
+	return v == "1" || v == "true" || v == "yes"
+}()
 
 // isNotFoundError checks if an error indicates a not-found condition.
 func isNotFoundError(err error) bool {
@@ -37,6 +49,9 @@ type ExecutorBridge struct {
 	mu                     sync.RWMutex
 	lastBlockIndex         uint64
 	lastBlockHash          [32]byte
+	lastMajorIndex         uint64
+	lastMajorTime          time.Time
+	lastMajorOK            bool
 	validators             []ValidatorInfo
 	validatorVersion       uint64
 	validatorChangeHandler func(validators []ValidatorInfo, version uint64)
@@ -207,47 +222,134 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	// certificate's canonical payload order and MUST be executed in that
 	// order — executing in any node-local order (this used to iterate a map)
 	// diverges chain entries and BPT roots across validators (#4054).
+	// Account for every transaction that arrives in a batch.
+	//
+	// 95 of 100 submitted transactions vanished between acceptance and
+	// execution in run 20260822T061030Z, with not one log line anywhere
+	// (#4132). This is the leg where consensus hands over to execution, so it
+	// is where the two candidate explanations separate: if the missing
+	// transactions never appear in `arrived`, they were lost in consensus; if
+	// they arrive and do not execute, they were lost here.
+	var arrived, unmarshalFailed, processFailed, statusFailed int
 	txCount := 0
+	var envelopes []*messaging.Envelope
+	type origin struct {
+		batch string
+		index int
+	}
+	var origins []origin
 	for _, batch := range params.Batches {
 		if batch == nil {
-			slog.Warn("Missing batch in certificate",
-				"round", params.LeaderRound)
-			continue
+			// CollectBatches guarantees a complete set before a block is
+			// produced. A nil here means that invariant broke upstream, and
+			// executing a certificate without one of its batches silently
+			// diverges this node's state from its peers (#4116/#4119) — fail
+			// the block instead.
+			return [32]byte{}, fmt.Errorf("block %d: missing batch in certificate for round %d", params.Index, params.LeaderRound)
 		}
 		digest := batch.Digest()
+		if txTraceEnabled {
+			slog.Info("TX executing", "batch", digest.String()[:12],
+				"block", params.Index, "round", params.LeaderRound,
+				"txs", len(batch.Transactions))
+		}
 
 		for i, txBytes := range batch.Transactions {
+			arrived++
 			// Unmarshal transaction to envelope
 			envelope := new(messaging.Envelope)
 			if err := envelope.UnmarshalBinary(txBytes); err != nil {
-				slog.Debug("Failed to unmarshal transaction",
+				// Warn, not Debug. A committed transaction that cannot be
+				// parsed is data loss, and at Debug it was invisible — the
+				// same mistake the status-error log below was already fixed
+				// for. Whatever put it in a batch thought it was valid.
+				unmarshalFailed++
+				slog.Warn("Committed transaction could not be unmarshalled — dropping",
 					"error", err,
 					"batch", digest.String(),
-					"index", i)
+					"index", i,
+					"bytes", len(txBytes),
+					"block", params.Index)
 				continue
 			}
-
-			// Process the envelope
-			statuses, err := block.Process(envelope)
-			if err != nil {
-				slog.Warn("Failed to process transaction",
-					"error", err,
-					"batch", digest.String(),
-					"index", i)
-				continue
-			}
-
-			// Log any failed transactions
-			for _, status := range statuses {
-				if status.Error != nil {
-					slog.Debug("Transaction failed",
-						"error", status.Error,
-						"code", status.Code)
-				}
-			}
-
-			txCount++
+			envelopes = append(envelopes, envelope)
+			origins = append(origins, origin{digest.String(), i})
 		}
+	}
+
+	// Process the envelopes — sharded by identity when the executor supports
+	// it and shards are configured (#4145), a plain serial loop otherwise.
+	// Either way each envelope's outcome is independent: one bad envelope is
+	// logged and dropped, not the block.
+	// Shard accounting (#4145). A run that shows no throughput gain from
+	// sharding must be able to say which of the two reasons it was: nothing
+	// was shardable, or execution was not the bottleneck. shardsUsed counts
+	// DISTINCT shards, because N shardable envelopes that all hash to one
+	// identity give exactly as much parallelism as serial execution.
+	shardedCount, serialCount := 0, 0
+	shardSeen := map[int]bool{}
+	processOne := func(j int, statuses []*protocol.TransactionStatus, err error) {
+		if err != nil {
+			processFailed++
+			slog.Warn("Failed to process transaction",
+				"error", err,
+				"batch", origins[j].batch,
+				"index", origins[j].index,
+				"block", params.Index)
+			return
+		}
+
+		// Log any failed transactions. Warn, not Debug: a status error here
+		// is the ONLY trace a committed message leaves when the executor
+		// rejects it — at Debug an entire class of silent loss (#4111's
+		// vanishing anchor signatures) was invisible.
+		for _, status := range statuses {
+			if status.Error != nil {
+				statusFailed++
+				slog.Warn("Transaction failed",
+					"error", status.Error,
+					"code", status.Code,
+					"txid", status.TxID,
+					"block", params.Index)
+			}
+		}
+		txCount++
+	}
+	if pb, ok := block.(execute.ParallelBlock); ok {
+		for j, r := range pb.ProcessAll(envelopes) {
+			if r.Shard >= 0 {
+				shardedCount++
+				shardSeen[r.Shard] = true
+			} else {
+				serialCount++
+			}
+			processOne(j, r.Statuses, r.Error)
+		}
+	} else {
+		// No parallel path at all — every envelope is serial by construction.
+		for j, envelope := range envelopes {
+			statuses, err := block.Process(envelope)
+			serialCount++
+			processOne(j, statuses, err)
+		}
+	}
+
+	// One line per block that carried anything, so "what reached execution"
+	// can be compared against "what was submitted" without grepping. Silent
+	// when a block is empty, which is most of them on an idle network.
+	if arrived > 0 {
+		slog.Info("Block execution accounting",
+			"block", params.Index,
+			"round", params.LeaderRound,
+			"batches", len(params.Batches),
+			"arrived", arrived,
+			"executed", txCount,
+			"unmarshalFailed", unmarshalFailed,
+			"processFailed", processFailed,
+			"statusFailed", statusFailed,
+			"sharded", shardedCount,
+			"serial", serialCount,
+			"shardsUsed", len(shardSeen))
 	}
 
 	// Close block
@@ -268,10 +370,14 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		return [32]byte{}, fmt.Errorf("commit block: %w", err)
 	}
 
-	// Update our tracking
+	// Update our tracking. DidCompleteMajorBlock is recorded here because the
+	// closed block state is the only thing that knows, and it does not outlive
+	// this function.
+	majorIndex, majorTime, majorOK := state.DidCompleteMajorBlock()
 	b.mu.Lock()
 	b.lastBlockIndex = params.Index
 	b.lastBlockHash = hash
+	b.lastMajorIndex, b.lastMajorTime, b.lastMajorOK = majorIndex, majorTime, majorOK
 	b.mu.Unlock()
 
 	slog.Debug("Produced block",
@@ -317,6 +423,14 @@ func (b *ExecutorBridge) ValidateTransaction(tx []byte) error {
 }
 
 // LastBlock returns the last committed block index and hash.
+// LastMajorBlock reports the major block closed by the most recently produced
+// block, if it closed one.
+func (b *ExecutorBridge) LastMajorBlock() (uint64, time.Time, bool) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.lastMajorIndex, b.lastMajorTime, b.lastMajorOK
+}
+
 func (b *ExecutorBridge) LastBlock() (uint64, [32]byte, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()

@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -22,6 +23,11 @@ import (
 // bundle is a bundle of messages to be processed.
 type bundle struct {
 	*Block
+
+	// batch is the batch the bundle executes against — the block's batch on
+	// the serial path, a shard's child batch under parallel execution
+	// (#4145).
+	batch *database.Batch
 
 	// pass indicates that the bundle's Nth pass is currently being processed.
 	pass int
@@ -38,6 +44,52 @@ type bundle struct {
 
 	// produced is other messages produced while processing the bundle.
 	produced []*ProducedMessage
+
+	// signed counts signatures processed by the bundle. Signature executors
+	// used to increment Block.State directly; under parallel execution every
+	// touch of shared block state is deferred to mergeIntoBlock.
+	signed int
+
+	// validatedLists memoizes ReceiptList validation per envelope (#4152). A
+	// package's members share ONE proof, and re-validating — rehashing every
+	// element — once per member made an envelope cost O(members × elements)
+	// SHA-256 at CheckTx. Keyed by pointer: sharing requires being the same
+	// object in the same envelope, so the memo can never cross envelopes.
+	validatedLists map[*merkle.ReceiptList]bool
+
+	// stateOps defers the pending/delivered marks the same way (#4149):
+	// execution may be running in a shard goroutine, and a direct write to
+	// Block.State's maps is a data race. Ops apply in execution order at
+	// merge, and the (shard, arrival) merge order keeps the result
+	// serial-equivalent — bundles that mark the same transaction share its
+	// identity and therefore its shard.
+	stateOps []func(*BlockState)
+}
+
+// listIsValid validates a ReceiptList once per envelope (#4152) — see
+// validatedLists.
+func (d *bundle) listIsValid(list *merkle.ReceiptList) bool {
+	if v, ok := d.validatedLists[list]; ok {
+		return v
+	}
+	v := list.Validate(nil)
+	if d.validatedLists == nil {
+		d.validatedLists = map[*merkle.ReceiptList]bool{}
+	}
+	d.validatedLists[list] = v
+	return v
+}
+
+func (d *bundle) markTransactionPending(txn *protocol.Transaction) {
+	d.stateOps = append(d.stateOps, func(s *BlockState) { s.MarkTransactionPending(txn) })
+}
+
+func (d *bundle) markTransactionDelivered(id *url.TxID) {
+	d.stateOps = append(d.stateOps, func(s *BlockState) { s.MarkTransactionDelivered(id) })
+}
+
+func (d *bundle) markSignaturePending(txn *protocol.Transaction, auth *url.URL) {
+	d.stateOps = append(d.stateOps, func(s *BlockState) { s.MarkSignaturePending(txn, auth) })
 }
 
 // Process processes a message bundle.
@@ -46,17 +98,30 @@ func (b *Block) Process(envelope *messaging.Envelope) ([]*protocol.TransactionSt
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-
-	// Make sure every transaction is signed
-	err = b.Executor.checkForUnsignedTransactions(messages)
+	statuses, bundles, err := b.processEnvelope(b.Batch, messages)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+	for _, d := range bundles {
+		d.mergeIntoBlock()
+	}
+	return statuses, nil
+}
+
+// processEnvelope executes an envelope's (already normalized) messages
+// against the given batch, returning cleaned statuses and the executed
+// bundles for the caller to merge.
+func (b *Block) processEnvelope(batch *database.Batch, messages []messaging.Message) ([]*protocol.TransactionStatus, []*bundle, error) {
+	// Make sure every transaction is signed
+	err := b.Executor.checkForUnsignedTransactions(messages)
+	if err != nil {
+		return nil, nil, errors.UnknownError.Wrap(err)
+	}
 
 	// Process the messages
-	results, err := b.processMessages(messages, 0)
+	results, bundles, err := b.processMessages(batch, messages, 0)
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return nil, nil, errors.UnknownError.Wrap(err)
 	}
 
 	// These results are only visible through Tendermint. The recommended way to
@@ -87,11 +152,17 @@ func (b *Block) Process(envelope *messaging.Envelope) ([]*protocol.TransactionSt
 			cleaned[i].Code = errors.UnknownError // Replace error codes with a generic code
 		}
 	}
-	return cleaned, nil
+	return cleaned, bundles, nil
 }
 
-func (b *Block) processMessages(messages []messaging.Message, pass int) ([]*protocol.TransactionStatus, error) {
+// processMessages executes the messages (and every pass of additional
+// messages they cascade into) against the given batch. It returns the
+// executed bundles WITHOUT merging them into the block state — the caller
+// merges, so that under parallel execution (#4145) every touch of shared
+// block state happens serially, in a deterministic order.
+func (b *Block) processMessages(batch *database.Batch, messages []messaging.Message, pass int) ([]*protocol.TransactionStatus, []*bundle, error) {
 	var statuses []*protocol.TransactionStatus
+	var bundles []*bundle
 
 	// Do not check for unsigned transactions when processing additional
 	// messages
@@ -99,22 +170,24 @@ func (b *Block) processMessages(messages []messaging.Message, pass int) ([]*prot
 		// Set up the bundle
 		d := new(bundle)
 		d.Block = b
+		d.batch = batch
 		d.pass = pass
 		d.messages = messages
 		d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
 
 		s, err := d.process()
 		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
+			return nil, nil, errors.UnknownError.Wrap(err)
 		}
 		statuses = append(statuses, s...)
+		bundles = append(bundles, d)
 
 		// Process additional transactions. It would be simpler to do this
 		// recursively, but it's possible that could cause a stack overflow.
 		messages = d.additional
 	}
 
-	return statuses, nil
+	return statuses, bundles, nil
 }
 
 func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
@@ -182,7 +255,7 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 	// Process each message
 	for _, msg := range d.messages {
 		ctx := &MessageContext{bundle: d, message: msg}
-		st, err := d.callMessageExecutor(b.Batch, ctx)
+		st, err := d.callMessageExecutor(d.batch, ctx)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -227,11 +300,21 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 		i--
 	}
 
-	// Process synthetic transactions generated by the validator
-	err := b.Executor.produceSynthetic(b.Batch, d.produced, b.Index)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
+	return statuses, nil
+}
+
+// mergeIntoBlock merges the executed bundle's results into shared block
+// state. NOT safe for concurrent use: the caller invokes it serially, in a
+// deterministic order — arrival order on the serial path, shard order then
+// arrival order under parallel execution (#4145 hazard v).
+func (d *bundle) mergeIntoBlock() {
+	b := d.Block
+
+	// Defer sequencing to the sorted pass at block end (#4144). Sequence
+	// numbers must be derivable from the produced set alone, never from
+	// delivery order — appending here preserves each producer's emission
+	// order, and the block-end sort supplies the cross-producer order.
+	b.produced = append(b.produced, d.produced...)
 
 	// Update the block state (MUST BE ORDERED)
 	_ = d.state.For(func(_ [32]byte, state *chain.ProcessTransactionState) error {
@@ -239,8 +322,15 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 		return nil
 	})
 
-	b.State.Produced += len(d.produced)
-	return statuses, nil
+	for i := 0; i < d.signed; i++ {
+		b.State.MergeSignature(&ProcessSignatureState{})
+	}
+
+	// Pending/delivered marks, deferred from execution (#4149), in
+	// execution order.
+	for _, op := range d.stateOps {
+		op(&b.State)
+	}
 }
 
 // checkForUnsignedTransactions returns an error if the message bundle includes
@@ -250,7 +340,7 @@ func (x *Executor) checkForUnsignedTransactions(messages []messaging.Message) er
 	haveSigFor := map[[32]byte]bool{}
 	haveTxn := map[[32]byte]bool{}
 	for _, msg := range messages {
-		if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		if x.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 			if _, ok := msg.(*messaging.BlockAnchor); ok {
 				continue
 			}
@@ -279,7 +369,7 @@ func (x *Executor) checkForUnsignedTransactions(messages []messaging.Message) er
 
 	// If an authority signature or other synthetic message-for-transaction is
 	// sent without its transaction, reject the bundle
-	if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+	if x.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 		for txn, isUserSig := range haveSigFor {
 			isRemote, has := haveTxn[txn]
 			if !isUserSig && (!has || isRemote) {

@@ -12,6 +12,18 @@ SequenceOptions:
       type: p2p.PeerID
       marshal-as: union
       zero-value: '""'
+    # The sequence number of an anchor from the source that the REQUESTER
+    # already holds and has already validated. The source roots its collection
+    # proof at the state that anchor commits to, so the answer is verifiable
+    # against something the requester has, rather than against anything the
+    # directory has caught up to. That is what makes recovery work while the
+    # network is behind, which is the only time it is needed (#4087, #4105).
+    #
+    # Zero means "you choose", which is what the anchor path does: a gap in the
+    # anchor stream is bounded by the entry that exposed it, so the source can
+    # infer the held anchor without being told.
+    - name: ProveAgainstAnchor
+      type: uint
 
 # MajorHeaderRecord is one entry of a MajorHeaderRange response (#4058): a
 # major block's index entry plus the quorum-signed anchor of the minor block

@@ -7,21 +7,16 @@
 package block
 
 import (
-	"context"
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -31,15 +26,30 @@ import (
 
 // Close ends the block and returns the block state.
 func (block *Block) Close() (execute.BlockState, error) {
+	if block.fatal != nil {
+		// A shard commit failure may have left a partial write in the
+		// block batch (#4149) — refuse to hash or commit it.
+		return nil, errors.FatalError.Wrap(block.fatal)
+	}
+
 	m := block.Executor
 	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
 	ledger := block.Batch.Account(ledgerUrl)
 
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
+	mExecBlocks.Inc()
+
+	// Write each stream's advances to its ledger, once per stream (#4169 step
+	// 7). Before anything else reads or writes those records: production
+	// bumps Produced on the same ledger below.
+	err := block.flushStreams()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("flush streams: %w", err)
+	}
 
 	// Is it time for a major block?
-	err := block.shouldOpenMajorBlock()
+	err = block.shouldOpenMajorBlock()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -51,31 +61,11 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.WithFormat("process event backlog: %w", err)
 	}
 
-	// Check for missing synthetic transactions. Load the ledger synchronously,
-	// request transactions asynchronously.
-	var synthLedger *protocol.SyntheticLedger
-	err = block.Batch.Account(m.Describe.Synthetic()).Main().GetAs(&synthLedger)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
-	}
-	var anchorLedger *protocol.AnchorLedger
-	err = block.Batch.Account(m.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
-	}
-
-	// Heal only when a gap is actually present. A gap is a nil (unknown) entry
-	// in a pending window: a message with a higher sequence number arrived, so
-	// we know this one exists, but it never reached us and every later message
-	// is blocked behind it. On a healthy node no such entry exists and the scan
-	// never launches — which matters under DAG-BFT, where blocks commit dozens
-	// of times per second and an unconditional scan would flood the source with
-	// range requests (the feedback that saturated a partition in the #4058
-	// rejoin test). The time-pace is a second guard so that while a gap
-	// persists a fresh scan does not launch every block on top of the last.
-	if m.EnableHealing && healNeeded(synthLedger, anchorLedger) && m.shouldAttemptHealing() {
-		m.BackgroundTaskLauncher(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
-	}
+	// Cross-partition recovery is the Conductor's job
+	// (internal/core/crosschain). The executor used to launch its own in-block
+	// scan here; it fired first (every block, on every validator) and rooted
+	// its range proofs at a directory continuation, reproducing #4086 exactly
+	// when anchoring lagged — which is when recovery is needed (#4138).
 
 	// List all of the chains that have been modified. shouldPrepareAnchor
 	// relies on this list so this must be done first.
@@ -84,15 +74,18 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Should we send an anchor?
-	if block.shouldSendAnchor() {
-		block.State.Anchor = &BlockAnchorState{}
-	}
-
-	// Send messages produced by the block. Depends on shouldPrepareAnchor.
+	// Settle the block's produced messages — sequence what leaves the
+	// partition, queue what stays (#4146). This must run before the anchor
+	// decision: whether an anchor is needed depends on whether anything was
+	// SEQUENCED, which is only known after the local/remote split.
 	err = block.produceBlockMessages()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("produce block messages: %w", err)
+	}
+
+	// Should we send an anchor?
+	if block.shouldSendAnchor() {
+		block.State.Anchor = &BlockAnchorState{}
 	}
 
 	// Do nothing if the block is empty
@@ -101,7 +94,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 	}
 
 	// Record the previous block's state hash it on the BPT chain
-	if block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+	if block.Executor.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 		err := ledger.BptChain().Inner().AddEntry(block.State.PreviousStateHash[:], false)
 		if err != nil {
 			return nil, err
@@ -179,7 +172,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 	}
 
 	// Record the block entries
-	if block.Executor.globals.Active.ExecutorVersion.V2JiuquanEnabled() {
+	if block.Executor.globals().Active.ExecutorVersion.V2JiuquanEnabled() {
 		bl := new(database.BlockLedger)
 		bl.Index = block.Index
 		bl.Time = block.Time
@@ -274,17 +267,31 @@ func (block *Block) Close() (execute.BlockState, error) {
 	// Update active globals, after everything else is done (don't change logic
 	// in the middle of a block)
 	var valUp []*execute.ValidatorUpdate
-	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
-		valUp = execute.DiffValidators(&m.globals.Active, &m.globals.Pending, m.Describe.PartitionId)
+	if !m.isGenesis && !m.globals().Active.Equal(&m.globals().Pending) {
+		valUp = execute.DiffValidators(&m.globals().Active, &m.globals().Pending, m.Describe.PartitionId)
 
+		// Publish a SNAPSHOT, never a pointer into the executor's own state.
+		// Subscribers KEEP what they are handed — the conductor does
+		// c.Globals.Store(e.New) — so handing over &globals.Active makes
+		// every later in-place update a write to memory they are still
+		// reading. That is #4170: Block.Close's `globals.Active = *Pending
+		// .Copy()` raced with the conductor's anchoring path, the validation
+		// path and AnchorSigner, and a torn read there decides whether a code
+		// path is enabled and who may sign.
 		err = m.EventBus.Publish(events.WillChangeGlobals{
-			New: &m.globals.Pending,
-			Old: &m.globals.Active,
+			New: m.globals().Pending.Copy(),
+			Old: m.globals().Active.Copy(),
 		})
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("publish globals update: %w", err)
 		}
-		m.globals.Active = *m.globals.Pending.Copy()
+		// REPLACE, do not mutate. Anyone already holding the previous
+		// snapshot keeps reading it, unchanged and complete, for as long as
+		// they hold it — which is what makes readers outside block execution
+		// safe without a lock (#4170).
+		next := *m.globals()
+		next.Active = *next.Pending.Copy()
+		m.globalsPtr.Store(&next)
 	}
 
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
@@ -292,8 +299,8 @@ func (block *Block) Close() (execute.BlockState, error) {
 }
 
 func (b *Block) executePostUpdateActions() error {
-	version := b.Executor.globals.Pending.ExecutorVersion
-	if b.Executor.globals.Active.ExecutorVersion == version {
+	version := b.Executor.globals().Pending.ExecutorVersion
+	if b.Executor.globals().Active.ExecutorVersion == version {
 		return nil
 	}
 
@@ -350,15 +357,15 @@ func (block *Block) recordTransactionExpiration() error {
 
 	// Set the expiration height
 	var max uint64
-	if block.Executor.globals.Active.Globals.Limits.PendingMajorBlocks == 0 {
+	if block.Executor.globals().Active.Globals.Limits.PendingMajorBlocks == 0 {
 		max = 14 // default to 2 weeks
 	} else {
-		max = block.Executor.globals.Active.Globals.Limits.PendingMajorBlocks
+		max = block.Executor.globals().Active.Globals.Limits.PendingMajorBlocks
 	}
 
 	// Parse the schedule
-	schedule, err := core.Cron.Parse(block.Executor.globals.Active.Globals.MajorBlockSchedule)
-	if err != nil && block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+	schedule, err := core.Cron.Parse(block.Executor.globals().Active.Globals.MajorBlockSchedule)
+	if err != nil && block.Executor.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 		return errors.UnknownError.Wrap(err)
 	}
 
@@ -366,7 +373,7 @@ func (block *Block) recordTransactionExpiration() error {
 	shouldExpireOn := func(txn *protocol.Transaction) uint64 {
 		var count uint64
 		switch {
-		case !block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled():
+		case !block.Executor.globals().Active.ExecutorVersion.V2BaikonurEnabled():
 			// Old logic
 			count = max
 
@@ -464,335 +471,6 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 	return indexIndex, nil
 }
 
-// healNeeded reports whether either ledger has a gap the background heal scan
-// must act on. For synthetic messages only nil (unknown) pending entries count:
-// a later message arrived so we know this one exists, but it never reached us
-// and everything after it is blocked behind it — known synthetic messages
-// deliver on their own once their predecessors arrive. Anchors are different:
-// ANY pending anchor counts, known or not, because a known anchor can be stuck
-// gathering a signature quorum that after validator churn may never complete,
-// and a proof-authorized resubmission executes immediately (#4056) — this is
-// what lets the receiver-side range recovery own anchor healing instead of the
-// source-side conductor's per-validator re-signing. The scan itself is
-// rate-limited by shouldAttemptHealing, so an anchor legitimately gathering
-// its quorum for a block or two does not trigger redundant work. It reads only
-// the already-loaded ledgers, so the common healthy case costs one slice walk
-// and no I/O.
-func healNeeded(synthLedger *protocol.SyntheticLedger, anchorLedger *protocol.AnchorLedger) bool {
-	for _, p := range synthLedger.Sequence {
-		for _, txid := range p.Pending {
-			if txid == nil {
-				return true
-			}
-		}
-	}
-	for _, p := range anchorLedger.Sequence {
-		if len(p.Pending) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// shouldAttemptHealing rate-limits the healing scan to one attempt per
-// interval, so that a gap which takes several blocks to close does not launch
-// a fresh scan every block while the first is still fetching.
-func (x *Executor) shouldAttemptHealing() bool {
-	interval := x.HealInterval
-	if interval == 0 {
-		interval = 10 * time.Second
-	}
-	now := time.Now().UnixNano()
-	last := x.lastHealAttempt.Load()
-	return now-last >= int64(interval) && x.lastHealAttempt.CompareAndSwap(last, now)
-}
-
-func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthLedger *protocol.SyntheticLedger, anchorLedger *protocol.AnchorLedger) {
-	batch := x.Database.Begin(false)
-	defer batch.Discard()
-
-	// Setup
-	dispatcher := x.NewDispatcher()
-	defer dispatcher.Close()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// For each partition
-	for _, partition := range synthLedger.Sequence {
-		x.requestMissingTransactionsFromPartition(ctx, dispatcher, partition, false)
-	}
-	for _, partition := range anchorLedger.Sequence {
-		x.requestMissingTransactionsFromPartition(ctx, dispatcher, partition, true)
-	}
-
-	for err := range dispatcher.Send(ctx) {
-		switch err := err.(type) {
-		case protocol.TransactionStatusError:
-			x.logger.Error("Failed to dispatch transactions", "block", blockIndex, "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
-		default:
-			x.logger.Error("Failed to dispatch transactions", "block", blockIndex, "error", err, "stack", fmt.Sprintf("%+v\n", err))
-		}
-	}
-}
-
-func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, dispatcher Dispatcher, partition *protocol.PartitionSyntheticLedger, anchor bool) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// Once collection proofs are active, recover a run of missing synthetic
-	// messages or anchors with a single range request and one shared
-	// collection proof (#4048, #4056) instead of a per-message query. Falls
-	// back to the per-message path if the source does not serve ranges.
-	if x.globals.Active.ExecutorVersion.V2KourouEnabled() {
-		if ranger, ok := x.Sequencer.(private.SequenceRanger); ok {
-			if x.requestMissingViaRange(ctx, dispatcher, ranger, partition, anchor) {
-				return
-			}
-		}
-	}
-
-	// For each pending synthetic transaction
-	dest := x.Describe.NodeUrl()
-	for i, txid := range partition.Pending {
-		// If we know the ID we must have a local copy (so we don't need to
-		// fetch it)
-		if txid != nil {
-			continue
-		}
-
-		seqNum := partition.Delivered + uint64(i) + 1
-		message := "Missing synthetic transaction"
-		src := partition.Url.JoinPath(protocol.Synthetic)
-		if anchor {
-			message = "Missing anchor transaction"
-			src = partition.Url.JoinPath(protocol.AnchorPool)
-		}
-		x.logger.Info(message, "seq-num", seqNum, "source", partition.Url)
-
-		// Request the transaction by sequence number
-		resp, err := x.Sequencer.Sequence(ctx, src, dest, seqNum, private.SequenceOptions{})
-		if err != nil {
-			x.logger.Error("Failed to request sequenced transaction", "error", err, "from", src, "seq-num", seqNum)
-			continue
-		}
-
-		// Sanity check: the response includes a transaction
-		if resp.Message == nil {
-			x.logger.Error("Response to query-synth is missing the transaction", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
-			continue
-		}
-		if resp.Sequence == nil || resp.Sequence.Source == nil {
-			x.logger.Error("Response to query-synth is missing the source", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
-			continue
-		}
-		if resp.Signatures == nil {
-			x.logger.Error("Response to query-synth is missing the signatures", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
-			continue
-		}
-		if !anchor {
-			if resp.SourceReceipt == nil {
-				x.logger.Error("Response to query-synth is missing the proof", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
-				continue
-			}
-		}
-
-		seq := &messaging.SequencedMessage{
-			Message:     resp.Message,
-			Source:      resp.Sequence.Source,
-			Destination: resp.Sequence.Destination,
-			Number:      resp.Sequence.Number,
-		}
-
-		keySig, bad := x.getKeySignature(resp, partition, seq, anchor)
-		if keySig == nil {
-			x.logger.Error("Invalid anchor transaction", "error", "missing key signature", "hash", logging.AsHex(resp.Message.Hash()).Slice(0, 4))
-			bad = true
-		}
-		if bad {
-			continue
-		}
-
-		var msg messaging.Message
-		if anchor {
-			msg = &messaging.BlockAnchor{
-				Anchor:    seq,
-				Signature: keySig,
-			}
-		} else if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
-			msg = &messaging.SyntheticMessage{
-				Message:   seq,
-				Signature: keySig,
-				Proof: &protocol.AnnotatedReceipt{
-					Receipt: resp.SourceReceipt,
-					Anchor: &protocol.AnchorMetadata{
-						Account: protocol.DnUrl(),
-					},
-				},
-			}
-		} else {
-			msg = &messaging.BadSyntheticMessage{
-				Message:   seq,
-				Signature: keySig,
-				Proof: &protocol.AnnotatedReceipt{
-					Receipt: resp.SourceReceipt,
-					Anchor: &protocol.AnchorMetadata{
-						Account: protocol.DnUrl(),
-					},
-				},
-			}
-		}
-
-		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: []messaging.Message{msg}})
-		if err != nil {
-			x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url)
-			continue
-		}
-	}
-}
-
-func (x *Executor) getKeySignature(r *api.MessageRecord[messaging.Message], partition *protocol.PartitionSyntheticLedger, seq *messaging.SequencedMessage, anchor bool) (_ protocol.KeySignature, bad bool) {
-	for _, set := range r.Signatures.Records {
-		if set.Signatures == nil {
-			x.logger.Error("Response to query-synth is missing the signatures", "from", partition.Url, "seq-num", seq.Number, "is-anchor", anchor)
-			continue
-		}
-
-		for _, r := range set.Signatures.Records {
-			msg, ok := r.Message.(*messaging.SignatureMessage)
-			if !ok {
-				continue
-			}
-			sig, ok := msg.Signature.(protocol.KeySignature)
-			if !ok {
-				x.logger.Error("Invalid signature in response to query-synth", "errors", errors.Conflict.WithFormat("expected key signature, got %T", msg.Signature), "from", partition.Url, "seq-num", seq.Number, "is-anchor", anchor, "hash", logging.AsHex(msg.Signature.Hash()), "signature", msg.Signature)
-				return nil, true
-			}
-			return sig, false
-		}
-	}
-	return nil, false
-}
-
-// requestMissingViaRange recovers the missing synthetic messages or anchors
-// of partition with a single range request. The source returns the run of
-// messages with one collection proof (a ReceiptList covering every message),
-// which each re-submitted message carries. Returns false if recovery was not
-// possible, in which case the caller falls back to per-message requests.
-func (x *Executor) requestMissingViaRange(ctx context.Context, dispatcher Dispatcher, ranger private.SequenceRanger, partition *protocol.PartitionSyntheticLedger, anchor bool) bool {
-	// Find the run of undelivered messages. For synthetic messages only
-	// UNKNOWN entries need recovery — known entries execute on their own
-	// once their predecessors arrive. Anchors are different: a known anchor
-	// can still be stuck waiting for a signature quorum that may take
-	// minutes (or, after validator churn, forever) to re-gather, and a
-	// proof-authorized resubmission executes immediately (#4056) — so for
-	// anchors, when nothing is unknown, the known-but-stuck run is
-	// recovered. When unknown entries DO exist the range stays bounded by
-	// them: extending it moves the collection proof's anchor point to a
-	// newer directory root, which a destination that is far behind may not
-	// know yet.
-	first, last := uint64(0), uint64(0)
-	firstKnown, lastKnown := uint64(0), uint64(0)
-	for i, txid := range partition.Pending {
-		seqNum := partition.Delivered + uint64(i) + 1
-		if txid != nil {
-			if firstKnown == 0 {
-				firstKnown = seqNum
-			}
-			lastKnown = seqNum
-			continue
-		}
-		if first == 0 {
-			first = seqNum
-		}
-		last = seqNum
-	}
-	if first == 0 && anchor {
-		first, last = firstKnown, lastKnown
-	}
-	if first == 0 {
-		return true // Nothing to do
-	}
-
-	src := partition.Url.JoinPath(protocol.Synthetic)
-	kind := "synthetic transactions"
-	if anchor {
-		src = partition.Url.JoinPath(protocol.AnchorPool)
-		kind = "anchors"
-	}
-	dest := x.Describe.NodeUrl()
-	x.logger.Info("Recovering missing "+kind, "source", partition.Url, "start", first, "end", last)
-
-	records, err := ranger.SequenceRange(ctx, src, dest, first, last, private.SequenceOptions{})
-	if err != nil {
-		x.logger.Error("Failed to request sequenced transaction range", "error", err, "from", src, "start", first, "end", last)
-		return false
-	}
-	if len(records) == 0 {
-		return false
-	}
-
-	// The collection proof is set on the last record and covers the whole run
-	list := records[len(records)-1].SourceReceiptList
-	if list == nil {
-		x.logger.Error("Response to range request is missing the collection proof", "from", partition.Url, "start", first, "end", last)
-		return false
-	}
-	proof := &protocol.AnnotatedReceipt{
-		ReceiptList: list,
-		Anchor: &protocol.AnchorMetadata{
-			Account: protocol.DnUrl(),
-		},
-	}
-
-	for _, resp := range records {
-		// Sanity check: the response includes a transaction
-		if resp.Message == nil || resp.Sequence == nil || resp.Sequence.Source == nil || resp.Signatures == nil {
-			x.logger.Error("Response to range request is missing required fields", "from", partition.Url)
-			return false
-		}
-
-		seq := &messaging.SequencedMessage{
-			Message:     resp.Message,
-			Source:      resp.Sequence.Source,
-			Destination: resp.Sequence.Destination,
-			Number:      resp.Sequence.Number,
-		}
-
-		keySig, bad := x.getKeySignature(resp, partition, seq, anchor)
-
-		var msg messaging.Message
-		if anchor {
-			// The collection proof authorizes the anchor by itself (#4056);
-			// the serving node's signature is included opportunistically.
-			if bad {
-				keySig = nil
-			}
-			msg = &messaging.BlockAnchor{
-				Anchor:    seq,
-				Signature: keySig,
-				Proof:     proof,
-			}
-		} else {
-			if keySig == nil || bad {
-				x.logger.Error("Invalid message in range response", "error", "missing key signature", "hash", logging.AsHex(resp.Message.Hash()).Slice(0, 4))
-				return false
-			}
-			msg = &messaging.SyntheticMessage{
-				Message:   seq,
-				Signature: keySig,
-				Proof:     proof,
-			}
-		}
-
-		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: []messaging.Message{msg}})
-		if err != nil {
-			x.logger.Error("Failed to dispatch recovered transaction", "error", err, "from", partition.Url)
-			return false
-		}
-	}
-	return true
-}
-
 func (b *Block) shouldSendAnchor() bool {
 	// Did we make a major block?
 	if b.State.MakeMajorBlock > 0 || b.State.MajorBlock != nil {
@@ -844,7 +522,7 @@ func (b *Block) shouldSendAnchor() bool {
 	}
 
 	// Send an anchor if a directory anchor was received and the flag is set
-	return didAnchorDirectory && b.Executor.globals.Active.Globals.AnchorEmptyBlocks
+	return didAnchorDirectory && b.Executor.globals().Active.Globals.AnchorEmptyBlocks
 }
 
 func (x *Executor) prepareAnchor(block *Block) error {
@@ -863,12 +541,12 @@ func (x *Executor) prepareAnchor(block *Block) error {
 		ledger.MajorBlockIndex = block.State.MajorBlock.Index
 		ledger.MajorBlockTime = block.State.MajorBlock.Time
 
-		if x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		if x.globals().Active.ExecutorVersion.V2VandenbergEnabled() {
 			return nil
 		}
 
-		bvns := x.globals.Active.BvnNames()
-		if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		bvns := x.globals().Active.BvnNames()
+		if x.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 			// From Baikonur forward, sort this list so changes in the
 			// implementation of BvnNames don't break it
 			sort.Strings(bvns)
@@ -877,7 +555,7 @@ func (x *Executor) prepareAnchor(block *Block) error {
 			// Use the ordering of routes to sort the BVN list since that preserves
 			// the order used prior to 1.3
 			routes := map[string]int{}
-			for i, r := range x.globals.Active.Routing.Routes {
+			for i, r := range x.globals().Active.Routing.Routes {
 				id := strings.ToLower(r.Partition)
 				if _, ok := routes[id]; ok {
 					continue
@@ -925,11 +603,11 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 
-	if !x.globals.Active.BvnExecutorVersion().V2VandenbergEnabled() {
+	if !x.globals().Active.BvnExecutorVersion().V2VandenbergEnabled() {
 		anchor.Updates = systemLedger.PendingUpdates
 	}
 
-	if block.State.MajorBlock != nil && !x.globals.Active.BvnExecutorVersion().V2VandenbergEnabled() {
+	if block.State.MajorBlock != nil && !x.globals().Active.BvnExecutorVersion().V2VandenbergEnabled() {
 		anchor.MakeMajorBlock = anchorLedger.MajorBlockIndex
 		anchor.MakeMajorBlockTime = anchorLedger.MajorBlockTime
 	}
@@ -985,13 +663,13 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 func (b *Block) produceBlockMessages() error {
 	// This is likely unnecessarily cautious, but better safe than sorry. This
 	// will prevent any variation in order from causing a consensus failure.
-	bvns := b.Executor.globals.Active.BvnNames()
+	bvns := b.Executor.globals().Active.BvnNames()
 	sort.Strings(bvns)
 
 	/* ***** ACME burn (for credits) ***** */
 
 	// If the active version is Vandenberg and ACME has been burnt
-	if b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() &&
+	if b.Executor.globals().Active.ExecutorVersion.V2VandenbergEnabled() &&
 		b.State.AcmeBurnt.Sign() > 0 {
 		body := new(protocol.SyntheticBurnTokens)
 		body.Amount = b.State.AcmeBurnt
@@ -1001,35 +679,26 @@ func (b *Block) produceBlockMessages() error {
 		msg := new(messaging.TransactionMessage)
 		msg.Transaction = txn
 
-		b.State.Produced++
-
-		err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+		b.produced = append(b.produced, &ProducedMessage{
 			Destination: protocol.AcmeUrl(),
 			Message:     msg,
-		}}, b.Index)
-		if err != nil {
-			return errors.UnknownError.WithFormat("queue ACME burn: %w", err)
-		}
+		})
 	}
 
 	/* ***** Network account updates (DN) ***** */
 
 	// If the active version is Vandenberg, we're on the DN, and there's a
 	// network update
-	if b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() &&
+	if b.Executor.globals().Active.ExecutorVersion.V2VandenbergEnabled() &&
 		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory &&
 		len(b.State.NetworkUpdate) > 0 {
 		for _, bvn := range bvns {
-			b.State.Produced++
-			err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+			b.produced = append(b.produced, &ProducedMessage{
 				Destination: protocol.PartitionUrl(bvn),
 				Message: &messaging.NetworkUpdate{
 					Accounts: b.State.NetworkUpdate,
 				},
-			}}, b.Index)
-			if err != nil {
-				return errors.UnknownError.WithFormat("queue network update: %w", err)
-			}
+			})
 		}
 	}
 
@@ -1037,22 +706,18 @@ func (b *Block) produceBlockMessages() error {
 
 	// If the active version is Vandenberg, we're on the DN, and there's a major
 	// block
-	if b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() &&
+	if b.Executor.globals().Active.ExecutorVersion.V2VandenbergEnabled() &&
 		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory &&
 		b.State.MajorBlock != nil {
 		for _, bvn := range bvns {
-			b.State.Produced++
-			err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+			b.produced = append(b.produced, &ProducedMessage{
 				Destination: protocol.PartitionUrl(bvn),
 				Message: &messaging.MakeMajorBlock{
 					MajorBlockIndex: b.State.MajorBlock.Index,
 					MajorBlockTime:  b.State.MajorBlock.Time,
 					MinorBlockIndex: b.Index,
 				},
-			}}, b.Index)
-			if err != nil {
-				return errors.UnknownError.WithFormat("queue network update: %w", err)
-			}
+			})
 		}
 	}
 
@@ -1060,21 +725,42 @@ func (b *Block) produceBlockMessages() error {
 
 	// If the **pending** version is Vandenberg, we're on a BVN, and the version
 	// is changing
-	if b.Executor.globals.Pending.ExecutorVersion.V2VandenbergEnabled() &&
+	if b.Executor.globals().Pending.ExecutorVersion.V2VandenbergEnabled() &&
 		b.Executor.Describe.NetworkType != protocol.PartitionTypeDirectory &&
-		b.Executor.globals.Pending.ExecutorVersion != b.Executor.globals.Active.ExecutorVersion {
-		b.State.Produced++
-		err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+		b.Executor.globals().Pending.ExecutorVersion != b.Executor.globals().Active.ExecutorVersion {
+		b.produced = append(b.produced, &ProducedMessage{
 			Destination: protocol.DnUrl(),
 			Message: &messaging.DidUpdateExecutorVersion{
 				Partition: b.Executor.Describe.PartitionId,
-				Version:   b.Executor.globals.Pending.ExecutorVersion,
+				Version:   b.Executor.globals().Pending.ExecutorVersion,
 			},
-		}}, b.Index)
-		if err != nil {
-			return errors.UnknownError.WithFormat("queue update notification: %w", err)
-		}
+		})
 	}
+
+	// Settle the block's produced messages — the deliveries' and the system's
+	// alike — in ONE sorted pass (#4144). The sort key is derived from the
+	// produced set alone — (producer transaction ID, emission index), with
+	// producer-less system messages after — so nothing depends on delivery
+	// order, which under parallel execution (#4145) is a shard-scheduling
+	// accident.
+	//
+	// Locally routed messages go on the next-block queue instead of being
+	// sequenced (#4146): no sequence number, no synthetic main chain
+	// position — so they consume no collection-proof span — no dispatch, and
+	// no anchoring dependency. Only what actually leaves the partition is
+	// counted as produced, so the synthetic chain is anchored only when it
+	// grew.
+	sortProduced(b.produced)
+	remote, err := b.splitLocalDeliveries(b.produced)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	err = b.Executor.produceSynthetic(b.Batch, remote, b.Index)
+	if err != nil {
+		return errors.UnknownError.WithFormat("sequence produced messages: %w", err)
+	}
+	b.State.Produced += len(remote)
+	b.produced = nil
 
 	return nil
 }
@@ -1088,7 +774,7 @@ func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLed
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 
-	if !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+	if !x.globals().Active.ExecutorVersion.V2VandenbergEnabled() {
 		anchor.AcmeBurnt = ledger.AcmeBurnt
 	}
 

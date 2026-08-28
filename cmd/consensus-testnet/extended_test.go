@@ -38,6 +38,13 @@ func TestExtended_ThirtyMinuteIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping extended test in short mode")
 	}
+	// A thirty-minute test is opt-in by nature. CI does not run -short, so
+	// the Short gate alone left this to die against go test's ten-minute
+	// package timeout on every pipeline — the branch was red on this for
+	// days before anyone looked (#4116's log-line audit found it).
+	if os.Getenv("EXTENDED_TEST") == "" {
+		t.Skip("skipping extended test; set EXTENDED_TEST=1 (and optionally EXTENDED_TEST_DURATION) to run")
+	}
 
 	const numNodes = 7
 	const targetTPS = 1000 // Target 1000 TPS

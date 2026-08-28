@@ -10,8 +10,10 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -33,6 +35,7 @@ type ConsensusAPIService struct {
 	partition     config.NetworkUrl
 	nodeKeyHash   [32]byte
 	valKeyHash    [32]byte
+	heals         *crosschain.HealCounters
 }
 
 var _ api.ConsensusService = (*ConsensusAPIService)(nil)
@@ -47,6 +50,10 @@ type ConsensusAPIServiceParams struct {
 	EventBus         *events.Bus
 	NodeKeyHash      [32]byte
 	ValidatorKeyHash [32]byte
+
+	// Heals is shared with the conductor so recoveries are reportable, not
+	// only loggable (#4075, #4105) — the soak monitor reads these fields.
+	Heals *crosschain.HealCounters
 }
 
 // NewConsensusAPIService creates a new ConsensusAPIService.
@@ -60,6 +67,7 @@ func NewConsensusAPIService(params ConsensusAPIServiceParams) *ConsensusAPIServi
 	s.partition.URL = protocol.PartitionUrl(params.PartitionID)
 	s.nodeKeyHash = params.NodeKeyHash
 	s.valKeyHash = params.ValidatorKeyHash
+	s.heals = params.Heals
 	return s
 }
 
@@ -71,6 +79,10 @@ func (s *ConsensusAPIService) ConsensusStatus(ctx context.Context, opts api.Cons
 	// Basic data
 	res := new(api.ConsensusStatus)
 	res.Ok = true
+	if s.heals != nil {
+		res.SyntheticHeals = s.heals.Synthetic.Load()
+		res.AnchorHeals = s.heals.Anchor.Load()
+	}
 	res.Version = accumulate.Version
 	res.Commit = accumulate.Commit
 	res.NodeKeyHash = s.nodeKeyHash
@@ -151,9 +163,44 @@ func NewSubmitterService(params SubmitterServiceParams) *SubmitterService {
 // Type returns the service type.
 func (s *SubmitterService) Type() api.ServiceType { return api.ServiceTypeSubmit }
 
+// signerOf returns a stable routing key for an envelope: the URL of the signer
+// of its first signature.
+//
+// Everything signed by one key must be handled by one worker, or it is batched
+// in parallel, committed out of order, and rejected by replay protection —
+// which requires a signer's timestamps to be strictly increasing in EXECUTION
+// order (#4132).
+//
+// Falls back to the legacy Signatures field, then to empty (round-robin) if
+// there is nothing to key on.
+func signerOf(envelope *messaging.Envelope) string {
+	for _, m := range envelope.Messages {
+		if sm, ok := m.(*messaging.SignatureMessage); ok && sm.Signature != nil {
+			if u := sm.Signature.GetSigner(); u != nil {
+				return u.String()
+			}
+		}
+	}
+	for _, sig := range envelope.Signatures {
+		if u := sig.GetSigner(); u != nil {
+			return u.String()
+		}
+	}
+	return ""
+}
+
 // Submit submits an envelope to the DAG-BFT consensus.
 func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
-	s.logger.Info("TRACE-SUBMIT: SubmitterService.Submit() called (DAG-BFT)")
+	// Identify what is being submitted: the contentless version of this trace
+	// made it impossible to follow a specific lost message (#4111) through
+	// accept → batch → commit → execute.
+	var msgIDs []string
+	for _, m := range envelope.Messages {
+		msgIDs = append(msgIDs, fmt.Sprintf("%v:%v", m.Type(), m.ID()))
+	}
+	s.logger.Debug("TRACE-SUBMIT: SubmitterService.Submit() called (DAG-BFT)",
+		"messages", strings.Join(msgIDs, ","),
+		"partition", s.service.config.Partition.ID)
 
 	// Verify the envelope is well-formed
 	if opts.Verify == nil || *opts.Verify {
@@ -171,7 +218,23 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		return nil, errors.EncodingError.WithFormat("marshal: %w", err)
 	}
 
-	s.logger.Info("TRACE-SUBMIT: submitting to DAG-BFT service.SubmitTransaction")
+	// Route by signer. Everything signed by one key must be handled by one
+	// worker, or it is batched in parallel, committed out of order, and
+	// rejected by replay protection (#4132).
+	// Routing key, for diagnostics only — it is NOT used to pick a worker.
+	//
+	// Keying the shard on the signer was tried and reverted. It serialises a
+	// hot signer onto one worker, which is the opposite of what sharding is
+	// for, and it does not even work: in run 20260822T071949Z all 100 of the
+	// treasury's transactions landed in worker 12 exactly as designed, that
+	// worker produced SIX batches, and 81 of the 100 were still rejected —
+	// because batches commit in DAG order, so order survives inside a batch
+	// and is lost across batches. The ordering constraint lives in the
+	// executor's replay protection; it cannot be fixed by routing (#4132).
+	routeKey := signerOf(envelope)
+
+	s.logger.Debug("TRACE-SUBMIT: submitting to DAG-BFT service.SubmitTransaction",
+		"routeKey", routeKey)
 
 	// Submit to consensus (includes pre-batch validation)
 	if err := s.service.SubmitTransaction(b); err != nil {
@@ -191,11 +254,17 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 			s.logger.Error("TRACE-SUBMIT: backpressure error", "error", err)
 			return nil, errors.TooManyRequests.WithFormat("submit: %w", err)
 		}
+		// An oversized transaction is the CALLER's fault, permanently — no
+		// batch will ever fit it. BadRequest, not InternalError, so the
+		// submitter stops rather than retrying or blaming the node (#4151).
+		if stderrors.Is(err, worker.ErrTransactionTooLarge) {
+			return nil, errors.BadRequest.WithFormat("submit: %w", err)
+		}
 		s.logger.Error("TRACE-SUBMIT: internal error", "error", err)
 		return nil, errors.InternalError.WithFormat("submit: %w", err)
 	}
 
-	s.logger.Info("TRACE-SUBMIT: submission successful, creating result WITHOUT Status field (BUG!)")
+	s.logger.Debug("TRACE-SUBMIT: submission successful, creating result WITHOUT Status field (BUG!)")
 
 	// Return success - DAG-BFT doesn't have synchronous result like CometBFT
 	result := []*api.Submission{{
@@ -207,7 +276,7 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		},
 	}}
 
-	s.logger.Info("TRACE-SUBMIT: returning result", "submission_count", len(result), "status_is_nil", result[0].Status == nil)
+	s.logger.Debug("TRACE-SUBMIT: returning result", "submission_count", len(result), "status_is_nil", result[0].Status == nil)
 
 	return result, nil
 }

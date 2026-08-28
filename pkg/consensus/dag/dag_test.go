@@ -444,3 +444,42 @@ func TestDAG_InsertAtCommitFloor(t *testing.T) {
 	next := createTestCert(t, committee, privKeys, 1, 9284, []types.CertificateDigest{atFloor.Digest()})
 	require.NoError(t, d.Insert(next))
 }
+
+// TestDAG_EquivocationIsASentinel pins the #4159-review fix: an identical
+// re-insert is idempotent (nil), but a DIFFERENT certificate for the same
+// author and round returns ErrEquivocation as a matchable sentinel. The
+// caller used to classify the error by matching "already exists" in the
+// message — a substring the equivocation text itself contains — so the loud
+// tripwire the DAG promises was silently downgraded to a routine
+// duplicate-Debug and never fired.
+func TestDAG_EquivocationIsASentinel(t *testing.T) {
+	committee, privKeys := makeTestCommittee(t, 4)
+	d := dag.NewDAG(10)
+
+	genesis := make([]types.CertificateDigest, 4)
+	for i := 0; i < 4; i++ {
+		cert := createTestCert(t, committee, privKeys, i, 0, nil)
+		require.NoError(t, d.InsertGenesis(cert))
+		genesis[i] = cert.Digest()
+	}
+
+	certA := createTestCert(t, committee, privKeys, 0, 1, genesis)
+	require.NoError(t, d.Insert(certA))
+
+	// The SAME certificate again: idempotent, no error, no equivocation.
+	require.NoError(t, d.Insert(certA), "identical re-insert is idempotent")
+
+	// A DIFFERENT certificate, same author, same round: equivocation, and it
+	// must be the sentinel — not a bare string the caller has to substring.
+	pub := committee.Validators[0].PublicKey
+	header := types.NewHeader(pub, 1, 0,
+		[]types.PayloadEntry{{Digest: types.NewBatch([][]byte{[]byte("conflicting")}).Digest(), Worker: 0}},
+		genesis)
+	require.NoError(t, header.Sign(privKeys[0]))
+	certB := types.NewCertificate(header, nil, nil)
+	require.NotEqual(t, certA.Digest(), certB.Digest(), "fixture: the two certs must differ")
+
+	err := d.Insert(certB)
+	require.Error(t, err)
+	require.ErrorIs(t, err, dag.ErrEquivocation)
+}

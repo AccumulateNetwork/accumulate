@@ -249,12 +249,13 @@ type CoreValidatorConfiguration struct {
 	BvnGenesis           string
 	DnBootstrapPeers     []Multiaddr
 	BvnBootstrapPeers    []Multiaddr
-	EnableHealing        *bool
 	EnableDirectDispatch *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType
 	NumWorkers           *int64
-	DagGcDepth           *int64
+	// ExecutionShards is the number of identity shards user transactions execute across; zero or one is serial (#4145).
+	ExecutionShards *int64
+	DagGcDepth      *int64
 }
 
 func (CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }
@@ -315,14 +316,17 @@ func (v *CoreValidatorMode) UnmarshalJSON(b []byte) error {
 }
 
 type DAGBFTService struct {
-	NodeDir              string
-	ValidatorKey         PrivateKey
-	Genesis              string
-	Partition            *protocol.PartitionInfo
-	NumWorkers           *int64
-	DAGGCDepth           *int64
-	CommitBufferSize     *int64
-	EnableHealing        *bool
+	NodeDir      string
+	ValidatorKey PrivateKey
+	Genesis      string
+	Partition    *protocol.PartitionInfo
+	NumWorkers   *int64
+	// ExecutionShards is the number of identity shards user transactions execute across; zero or one is serial (#4145).
+	ExecutionShards  *int64
+	DAGGCDepth       *int64
+	CommitBufferSize *int64
+	// BlockInterval target time between blocks; rounds are paced at half this, since Bullshark commits every other round. Defaults to 3s (#4098).
+	BlockInterval        *encoding.Duration
 	EnableDirectDispatch *bool
 	MaxEnvelopesPerBlock *uint64
 	service              *dagbft.Service
@@ -439,7 +443,6 @@ type FollowerConfiguration struct {
 	BvnGenesis           string
 	DnBootstrapPeers     []Multiaddr
 	BvnBootstrapPeers    []Multiaddr
-	EnableHealing        *bool
 	EnableDirectDispatch *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType

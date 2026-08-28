@@ -452,12 +452,12 @@ func (tn *TestNetwork) collectCommits(n *TestNode) {
 		select {
 		case <-tn.ctx.Done():
 			return
-		case cert, ok := <-n.Node.Committed():
+		case group, ok := <-n.Node.Committed():
 			if !ok {
 				return
 			}
 			n.mu.Lock()
-			n.Commits = append(n.Commits, cert)
+			n.Commits = append(n.Commits, group...)
 			n.mu.Unlock()
 		}
 	}

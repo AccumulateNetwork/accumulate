@@ -187,7 +187,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 	}
 
 	// Reload the transaction status to get changes made by processing signatures
-	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
+	if x.globals().Active.ExecutorVersion.SignatureAnchoringEnabled() {
 		status, err = block.Batch.Transaction(delivery.Transaction.GetHash()).Status().Get()
 		if err != nil {
 			return nil, nil, errors.UnknownError.WithFormat("load status: %w", err)

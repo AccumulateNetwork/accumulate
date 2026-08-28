@@ -102,6 +102,24 @@ func New(opts Options) (_ *Node, err error) {
 		libp2p.EnableHolePunching(),
 	}
 
+	// Resource manager with validator-sized limits and metrics. The stock
+	// limits are tuned for a lightweight peer: the transient scope — streams
+	// that are open but not yet through protocol negotiation — allows 256
+	// outbound at base scale. A validator's healers alone open ~33 streams/s,
+	// and when a peer answers slowly each open holds a transient slot for the
+	// full 10s negotiation timeout: 33/s x 10s ≈ 330 held slots, and the scope
+	// saturates. Every subsequent open on the host — API, DHT, gossipsub, and
+	// DAG-BFT consensus, which shares this host — then fails with "resource
+	// limit exceeded": 1.36M such failures in the 20260819T234054Z soak, two
+	// Directory freezes included (#4115). The limits below give a validator
+	// real headroom, and the trace reporter exports per-scope usage as
+	// Prometheus metrics so the next saturation is a graph, not a post-mortem.
+	mgr, err := newResourceManager()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("create resource manager: %w", err)
+	}
+	options = append(options, libp2p.ResourceManager(mgr))
+
 	// If an external address is specified, replace external IPs with that address
 	if opts.External != nil {
 		options = append(options, libp2p.AddrsFactory(func(addrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {

@@ -27,7 +27,7 @@ func (b *Block) shouldOpenMajorBlock() error {
 
 	// The addition of a second here is kept for backwards compatibility
 	blockTimeUTC := b.Time.Add(time.Second).UTC()
-	nextBlockTime := b.Executor.globals.Active.MajorBlockSchedule().Next(anchor.MajorBlockTime)
+	nextBlockTime := b.Executor.globals().Active.MajorBlockSchedule().Next(anchor.MajorBlockTime)
 	if blockTimeUTC.IsZero() || blockTimeUTC.Before(nextBlockTime) {
 		return nil
 	}
@@ -40,7 +40,7 @@ func (b *Block) shouldOpenMajorBlock() error {
 }
 
 func (b *Block) didOpenMajorBlock() (uint64, time.Time, bool) {
-	if b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() &&
+	if b.Executor.globals().Active.ExecutorVersion.V2VandenbergEnabled() &&
 		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory {
 
 		// On the DN, we opened a major block iff block.State.MajorBlock is set

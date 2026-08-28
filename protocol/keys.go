@@ -11,11 +11,95 @@ import (
 	"fmt"
 
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type KeyEntry interface {
 	GetLastUsedOn() uint64
 	SetLastUsedOn(uint64)
+
+	// CanUseTimestamp reports whether a signature timestamp passes replay
+	// protection, and UseTimestamp records it as spent. Together they
+	// implement a bounded reordering window (#4132): DAG-BFT commits batches
+	// in DAG order, not submission order, so a signer's transactions reach
+	// the executor shuffled. The strict lastUsedOn >= timestamp rule
+	// silently discarded everything but an increasing subsequence — 4 of a
+	// 100-transaction burst in production.
+	CanUseTimestamp(timestamp uint64) error
+	UseTimestamp(timestamp uint64)
+}
+
+// ReplayWindowSize is how many spent timestamps a key entry retains:
+// LastUsedOn plus up to ReplayWindowSize-1 prior entries. A burst of up to
+// ReplayWindowSize transactions from one signer survives arbitrary
+// reordering; a timestamp below the oldest retained entry once the window is
+// full is rejected as too old, because the entry can no longer prove it is
+// not a replay. The state cost is bounded at ReplayWindowSize uvarints per
+// key entry — every spent timestamp inside the window must be retained,
+// because accepting an unseen timestamp below LastUsedOn is only safe if
+// spent and unspent can be told apart.
+const ReplayWindowSize = 128
+
+// canUseTimestamp is the windowed replay rule. The spent set is
+// prior ∪ {last}; prior is sorted ascending and every element is < last.
+func canUseTimestamp(last uint64, prior []uint64, timestamp uint64) error {
+	switch {
+	case timestamp == 0:
+		// Zero opts out of replay protection entirely
+		return nil
+	case timestamp > last:
+		return nil
+	case timestamp == last:
+		return errors.BadTimestamp.WithFormat("timestamp %d has already been used", timestamp)
+	}
+	if _, found := sortutil.Search(prior, func(v uint64) int {
+		switch {
+		case v < timestamp:
+			return -1
+		case v > timestamp:
+			return +1
+		}
+		return 0
+	}); found {
+		return errors.BadTimestamp.WithFormat("timestamp %d has already been used", timestamp)
+	}
+	if len(prior) >= ReplayWindowSize-1 && timestamp < prior[0] {
+		return errors.BadTimestamp.WithFormat("timestamp %d is below the replay window floor %d", timestamp, prior[0])
+	}
+	return nil
+}
+
+// useTimestamp records a timestamp as spent, keeping last = max(spent) and
+// pruning the retained set to ReplayWindowSize from the low end.
+func useTimestamp(last *uint64, prior *[]uint64, timestamp uint64) {
+	if timestamp == 0 {
+		return
+	}
+	insert := func(v uint64) {
+		ptr, added := sortutil.BinaryInsert(prior, func(entry uint64) int {
+			switch {
+			case entry < v:
+				return -1
+			case entry > v:
+				return +1
+			}
+			return 0
+		})
+		if added {
+			*ptr = v
+		}
+	}
+	if timestamp > *last {
+		if *last != 0 {
+			insert(*last)
+		}
+		*last = timestamp
+	} else {
+		insert(timestamp)
+	}
+	if n := len(*prior); n > ReplayWindowSize-1 {
+		*prior = (*prior)[n-(ReplayWindowSize-1):]
+	}
 }
 
 // GetLastUsedOn returns LastUsedOn.
@@ -24,11 +108,31 @@ func (li *LiteIdentity) GetLastUsedOn() uint64 { return li.LastUsedOn }
 // SetLastUsedOn sets LastUsedOn.
 func (li *LiteIdentity) SetLastUsedOn(timestamp uint64) { li.LastUsedOn = timestamp }
 
+// CanUseTimestamp implements the windowed replay rule for a lite identity.
+func (li *LiteIdentity) CanUseTimestamp(timestamp uint64) error {
+	return canUseTimestamp(li.LastUsedOn, li.PriorUsedOn, timestamp)
+}
+
+// UseTimestamp records a spent timestamp on a lite identity.
+func (li *LiteIdentity) UseTimestamp(timestamp uint64) {
+	useTimestamp(&li.LastUsedOn, &li.PriorUsedOn, timestamp)
+}
+
 // GetLastUsedOn returns LastUsedOn.
 func (k *KeySpec) GetLastUsedOn() uint64 { return k.LastUsedOn }
 
 // SetLastUsedOn sets LastUsedOn.
 func (k *KeySpec) SetLastUsedOn(timestamp uint64) { k.LastUsedOn = timestamp }
+
+// CanUseTimestamp implements the windowed replay rule for a key page entry.
+func (k *KeySpec) CanUseTimestamp(timestamp uint64) error {
+	return canUseTimestamp(k.LastUsedOn, k.PriorUsedOn, timestamp)
+}
+
+// UseTimestamp records a spent timestamp on a key page entry.
+func (k *KeySpec) UseTimestamp(timestamp uint64) {
+	useTimestamp(&k.LastUsedOn, &k.PriorUsedOn, timestamp)
+}
 
 func (k *KeySpecParams) IsEmpty() bool {
 	return len(k.KeyHash) == 0 && k.Delegate == nil

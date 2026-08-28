@@ -34,12 +34,25 @@ type MessageContext struct {
 
 	// produced is other messages produced while processing the message.
 	produced []*ProducedMessage
+
+	// advance, if set, moves the message's stream once the message has
+	// been recorded and its batch is about to commit (#4169 step 7). Set by
+	// SequencedMessage.process, applied by SequencedMessage.Process.
+	advance func() error
+
+	// syntheticCount distinguishes otherwise-identical messages produced by
+	// THIS message. It was a block-scoped counter, which stamped delivery-
+	// order-dependent content into synthetic transaction bodies — under
+	// sharded execution (#4145) that order is a scheduling accident, so the
+	// index is now scoped to the producer: (producer, index) is exactly the
+	// key deferred sequencing (#4144) already sorts by.
+	syntheticCount uint64
 }
 
 func (m *MessageContext) Type() messaging.MessageType { return m.message.Type() }
 
 func (m *MessageContext) GetActiveGlobals() *core.GlobalValues {
-	return &m.Executor.globals.Active
+	return &m.Executor.globals().Active
 }
 
 func (*MessageContext) TransactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error) {
@@ -73,8 +86,15 @@ func (m *MessageContext) txnWith(txn *protocol.Transaction) *TransactionContext 
 	return t
 }
 
-// isWithin returns true if the given message type appears somewhere in the
-// message chain.
+// isWithin returns true if any of the given message types appears somewhere in
+// the message chain.
+//
+// MessageTypeSynthetic is special: asking for it matches EITHER synthetic
+// wrapper, because which one is used depends on the executor version. That
+// special case used to be written as switch arms that never looked at `typ`,
+// so isWithin(anything) returned true for every message inside a synthetic
+// wrapper — the argument list was decoration (#4168). Callers that wanted the
+// synthetic behaviour got it by accident; the ones that did not got it anyway.
 func (m *MessageContext) isWithin(typ ...messaging.MessageType) bool {
 	newSynth := m.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled()
 	for {
@@ -83,18 +103,16 @@ func (m *MessageContext) isWithin(typ ...messaging.MessageType) bool {
 		}
 		m = m.parent
 		for _, typ := range typ {
-			switch {
-			case typ != messaging.MessageTypeSynthetic && m.message.Type() == typ:
-				// Check for the given message type
-				return true
-
-			case !newSynth && m.message.Type() == messaging.MessageTypeBadSynthetic:
-				// Check for the old synthetic message type
-				return true
-
-			case newSynth && m.message.Type() == messaging.MessageTypeBadSynthetic,
-				newSynth && m.message.Type() == messaging.MessageTypeSynthetic:
-				// Check for either synthetic message type
+			if typ == messaging.MessageTypeSynthetic {
+				// Either wrapper counts. Before V2Baikonur only the old one
+				// exists; after it, both do.
+				if m.message.Type() == messaging.MessageTypeBadSynthetic ||
+					(newSynth && m.message.Type() == messaging.MessageTypeSynthetic) {
+					return true
+				}
+				continue
+			}
+			if m.message.Type() == typ {
 				return true
 			}
 		}
@@ -217,7 +235,7 @@ func (b *bundle) getTransaction(batch *database.Batch, hash [32]byte) (*protocol
 	// Look in the bundle
 	for _, msg := range b.messages {
 		// Look inside block anchors
-		if blk, ok := msg.(*messaging.BlockAnchor); ok && b.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		if blk, ok := msg.(*messaging.BlockAnchor); ok && b.Executor.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 			msg = blk.Anchor
 		}
 

@@ -322,19 +322,24 @@ func main() {
 			select {
 			case <-ctx.Done():
 				return
-			case cert := <-committed:
-				if cert != nil {
-					// Get batches for this certificate from workers
-					batches := make(map[types.BatchDigest]*types.Batch)
+			case group := <-committed:
+				for _, cert := range group {
+					// Collect the certificate's batches, blocking (and
+					// fetching from peers) until every one is available.
+					// Executing a certificate without some of its batches
+					// silently diverges this node's state from every node
+					// that had them (#4116/#4119).
+					collected, err := node.CollectBatches(ctx, cert)
+					if err != nil {
+						slog.Error("Failed to collect batches for committed certificate",
+							"round", cert.Header.Round, "error", err)
+						continue
+					}
+					batches := make(map[types.BatchDigest]*types.Batch, len(collected))
 					digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-					for _, entry := range cert.Header.Payload {
+					for i, entry := range cert.Header.Payload {
 						digests = append(digests, entry.Digest)
-						for _, w := range workers {
-							if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-								batches[entry.Digest] = batch
-								break
-							}
-						}
+						batches[entry.Digest] = collected[i]
 					}
 					executor.ProcessCertificate(cert, batches)
 

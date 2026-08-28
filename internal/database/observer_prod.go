@@ -56,6 +56,26 @@ func (a *observedAccount) hashSecondaryState() (hash.Hasher, error) {
 		}
 	}
 
+	// Add the delivery queues (#4146). They are consensus state — they
+	// decide what executes at the next block's Begin — so the account hash
+	// must commit to them (#4155). Skipped when empty, so every account
+	// without queues (and all pre-queue history) hashes as before.
+	if _, ok := protocol.ParsePartitionUrl(u); ok && u.PathEqual(protocol.Synthetic) {
+		var qHasher hash.Hasher
+		n := 0
+		for _, id := range loadState(&err, false, a.LocalDeliveryQueue().Get) {
+			qHasher.AddUrl(id.AsUrl())
+			n++
+		}
+		for _, id := range loadState(&err, false, a.CascadeDeliveryQueue().Get) {
+			qHasher.AddUrl(id.AsUrl())
+			n++
+		}
+		if n > 0 {
+			hasher.AddValue(qHasher)
+		}
+	}
+
 	return hasher, err
 }
 

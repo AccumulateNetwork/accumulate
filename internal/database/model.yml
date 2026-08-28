@@ -64,6 +64,20 @@
       emptyIfMissing: true
       pointer: true
       collection: set
+    - name: LocalDeliveryQueue
+      description: is the ordered list of locally produced messages to execute at the start of the next block. Used only on the synthetic ledger (#4146)
+      type: state
+      dataType: txid
+      emptyIfMissing: true
+      pointer: true
+      collection: list
+    - name: CascadeDeliveryQueue
+      description: is the ordered list of ready sequenced messages whose execution was deferred to the next block. Used only on the synthetic ledger (#4146)
+      type: state
+      dataType: txid
+      emptyIfMissing: true
+      pointer: true
+      collection: list
     - name: Directory
       type: state
       collection: set
@@ -222,6 +236,17 @@
       index: getSyntheticSequenceKeys
       parameters: # Indexed by chains
       - name: Partition
+        type: string
+    - name: SyntheticReplica
+      description: is the destination's replica of a source's synthetic sequence, keyed on stream identity (#4140)
+      type: other
+      dataType: Chain2
+      hasChains: true
+      pointer: true
+      private: true
+      index: getSyntheticReplicaKeys
+      parameters: # Indexed by chains
+      - name: Stream
         type: string
     - name: AnchorChain
       type: entity

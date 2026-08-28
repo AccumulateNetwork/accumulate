@@ -142,13 +142,13 @@ func TestProtocolHandler_NewProtocolHandler(t *testing.T) {
 	ptn := newProtocolTestNetwork(t, ctx, 1)
 
 	t.Run("success", func(t *testing.T) {
-		ph, err := gossip.NewProtocolHandler(ptn.hosts[0], nil, nil)
+		ph, err := gossip.NewProtocolHandler(ptn.hosts[0], "test", nil, nil)
 		require.NoError(t, err)
 		assert.NotNil(t, ph)
 	})
 
 	t.Run("nil host", func(t *testing.T) {
-		_, err := gossip.NewProtocolHandler(nil, nil, nil)
+		_, err := gossip.NewProtocolHandler(nil, "test", nil, nil)
 		assert.Error(t, err)
 	})
 }
@@ -161,13 +161,13 @@ func TestProtocolHandler_BatchFetch(t *testing.T) {
 
 	// Set up server with batch store
 	batchStore := newMockBatchStore()
-	server, err := gossip.NewProtocolHandler(ptn.hosts[0], batchStore, nil)
+	server, err := gossip.NewProtocolHandler(ptn.hosts[0], "test", batchStore, nil)
 	require.NoError(t, err)
 	err = server.RegisterHandlers()
 	require.NoError(t, err)
 
 	// Set up client
-	client, err := gossip.NewProtocolHandler(ptn.hosts[1], nil, nil)
+	client, err := gossip.NewProtocolHandler(ptn.hosts[1], "test", nil, nil)
 	require.NoError(t, err)
 
 	// Store a batch on the server
@@ -206,13 +206,13 @@ func TestProtocolHandler_CertFetch(t *testing.T) {
 
 	// Set up server with DAG store
 	dagStore := newMockDAGStore()
-	server, err := gossip.NewProtocolHandler(ptn.hosts[0], nil, dagStore)
+	server, err := gossip.NewProtocolHandler(ptn.hosts[0], "test", nil, dagStore)
 	require.NoError(t, err)
 	err = server.RegisterHandlers()
 	require.NoError(t, err)
 
 	// Set up client
-	client, err := gossip.NewProtocolHandler(ptn.hosts[1], nil, nil)
+	client, err := gossip.NewProtocolHandler(ptn.hosts[1], "test", nil, nil)
 	require.NoError(t, err)
 
 	// Create and store a certificate
@@ -255,13 +255,13 @@ func TestProtocolHandler_DAGSync(t *testing.T) {
 
 	// Set up server with DAG store
 	dagStore := newMockDAGStore()
-	server, err := gossip.NewProtocolHandler(ptn.hosts[0], nil, dagStore)
+	server, err := gossip.NewProtocolHandler(ptn.hosts[0], "test", nil, dagStore)
 	require.NoError(t, err)
 	err = server.RegisterHandlers()
 	require.NoError(t, err)
 
 	// Set up client
-	client, err := gossip.NewProtocolHandler(ptn.hosts[1], nil, nil)
+	client, err := gossip.NewProtocolHandler(ptn.hosts[1], "test", nil, nil)
 	require.NoError(t, err)
 
 	// Create and store multiple certificates across rounds
@@ -391,7 +391,7 @@ func TestProtocolHandler_ConcurrentRequests(t *testing.T) {
 
 	// Set up server
 	batchStore := newMockBatchStore()
-	server, err := gossip.NewProtocolHandler(ptn.hosts[0], batchStore, nil)
+	server, err := gossip.NewProtocolHandler(ptn.hosts[0], "test", batchStore, nil)
 	require.NoError(t, err)
 	err = server.RegisterHandlers()
 	require.NoError(t, err)
@@ -406,7 +406,7 @@ func TestProtocolHandler_ConcurrentRequests(t *testing.T) {
 	}
 
 	// Set up client
-	client, err := gossip.NewProtocolHandler(ptn.hosts[1], nil, nil)
+	client, err := gossip.NewProtocolHandler(ptn.hosts[1], "test", nil, nil)
 	require.NoError(t, err)
 
 	// Fetch all batches concurrently

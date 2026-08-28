@@ -112,6 +112,6 @@ func (DidUpdateExecutorVersion) process(batch *database.Batch, ctx *MessageConte
 	}
 
 	// Update globals
-	ctx.Executor.globals.Pending.BvnExecutorVersions = ledger.BvnExecutorVersions
+	ctx.Executor.globals().Pending.BvnExecutorVersions = ledger.BvnExecutorVersions
 	return nil
 }

@@ -7,6 +7,7 @@
 package block
 
 import (
+	"log/slog"
 	"math/big"
 	"strings"
 
@@ -106,7 +107,7 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 	}
 
 	verifySignature := protocol.VerifyUserSignature
-	if !ctx.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+	if !ctx.Executor.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
 		//if ethereum RSV based verification is not enabled, then revert to old methods
 		verifySignature = protocol.VerifyUserSignatureV1
 	}
@@ -258,11 +259,27 @@ func (UserSignature) verifySigner(batch *database.Batch, ctx *userSigContext) er
 		return errors.Unauthorized.With("key does not belong to signer")
 	}
 
-	// Check the timestamp for replay protection
-	// Timestamps must be strictly increasing per key to prevent signature replay
+	// Check the timestamp for replay protection. The rule is a bounded
+	// reordering window (protocol.KeyEntry.CanUseTimestamp), not strict
+	// monotonicity: DAG-BFT commits batches in DAG order, so a signer's
+	// transactions reach the executor shuffled, and the strict rule silently
+	// discarded all but an increasing subsequence — 4 of the treasury's
+	// 100-transaction burst in run 20260822T062523Z (#4132). A duplicate
+	// timestamp, or one below the window floor, is still rejected — that is
+	// the replay this protection exists to stop.
 	// See docs/timestamp-requirements.md for operator guidance on NTP requirements
-	if ctx.keySig.GetTimestamp() != 0 && ctx.keyEntry.GetLastUsedOn() >= ctx.keySig.GetTimestamp() {
-		return errors.BadTimestamp.WithFormat("invalid timestamp: have %d, got %d", ctx.keyEntry.GetLastUsedOn(), ctx.keySig.GetTimestamp())
+	if err := ctx.keyEntry.CanUseTimestamp(ctx.keySig.GetTimestamp()); err != nil {
+		// Say so loudly. This rejection is invisible everywhere else: it
+		// does not reach the statuses block.Process returns, so the block
+		// reports a clean execution and the transaction simply never appears
+		// on any chain (#4132).
+		slog.Info("Signature rejected: timestamp replay check failed",
+			"signer", ctx.signer.GetUrl(),
+			"lastUsedOn", ctx.keyEntry.GetLastUsedOn(),
+			"got", ctx.keySig.GetTimestamp(),
+			"txid", ctx.transaction.ID(),
+			"error", err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	return nil
@@ -425,10 +442,8 @@ func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 			protocol.FormatAmount(ctx.fee.AsUInt64(), protocol.CreditPrecisionPower))
 	}
 
-	// Update the timestamp
-	if ctx.keySig.GetTimestamp() != 0 {
-		ctx.keyEntry.SetLastUsedOn(ctx.keySig.GetTimestamp())
-	}
+	// Record the timestamp as spent (windowed replay protection, #4132)
+	ctx.keyEntry.UseTimestamp(ctx.keySig.GetTimestamp())
 
 	// Store changes to the signer
 	err := batch.Account(ctx.signer.GetUrl()).Main().Put(ctx.signer)

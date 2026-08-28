@@ -34,6 +34,7 @@ func NewStateManager(net execute.DescribeShim, globals *core.GlobalValues, authD
 	m.OriginUrl = transaction.Header.Principal
 	m.Origin = principal
 	m.stateCache = *newStateCache(net, globals, transaction.Body.Type(), txid, batch)
+	m.stateCache.principal = transaction.Header.Principal
 	m.logger.L = logger
 	return m
 }

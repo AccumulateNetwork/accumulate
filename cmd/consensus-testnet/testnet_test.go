@@ -552,9 +552,15 @@ done:
 		"Memory growth should be less than %d bytes, got %d bytes",
 		memoryGrowthThreshold, memoryGrowth)
 
-	// Verify the system was actually doing work
-	assert.Greater(t, executor.GetBlockCount(), uint64(100),
-		"Should have produced significant number of blocks")
+	// Verify the system was actually doing work. The bound is deliberately
+	// modest: block cadence is paced by MinRoundInterval (#4098), so a 30s
+	// run produces on the order of 30 blocks, not the hundreds this test
+	// expected when rounds free-ran at CPU speed. This is a memory-stability
+	// test; the block count only proves liveness. (Pre-existing failure
+	// surfaced by #4116's CI repair — it failed identically before the 2026-
+	// 08-20 consensus changes.)
+	assert.Greater(t, executor.GetBlockCount(), uint64(10),
+		"Should have produced blocks continuously")
 	assert.Greater(t, executor.GetProcessedCount(), uint64(100),
 		"Should have processed significant number of transactions")
 }

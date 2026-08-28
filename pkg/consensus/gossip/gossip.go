@@ -23,6 +23,10 @@ import (
 // Default channel buffer sizes for message channels.
 // Sized for high throughput (~30k+ TPS) to avoid dropped messages.
 const (
+	// DefaultBatchChannelSize is retained for API compatibility but no
+	// longer sizes the batch channel: inbound batches are bounded by BYTES
+	// (DefaultMaxInboundBatchBytes) because a count cap says nothing about
+	// memory when each item can carry MaxBatchBytes.
 	DefaultBatchChannelSize       = 1000
 	DefaultHeaderChannelSize      = 500 // Increased from 100 for high throughput
 	DefaultVoteChannelSize        = 1000
@@ -38,6 +42,10 @@ type GossipLayer struct {
 	pubsub    *pubsub.PubSub
 	topics    *TopicManager
 	partition string
+
+	// batchQ byte-bounds inbound batches; a pump drains it into the batches
+	// channel, which is kept shallow on purpose.
+	batchQ *batchQueue
 
 	// Channels for received messages
 	batches       chan *types.Batch
@@ -79,6 +87,11 @@ type GossipLayerOptions struct {
 	// CertSyncChannelSize is the buffer size for the cert sync channels.
 	// Defaults to DefaultCertSyncChannelSize.
 	CertSyncChannelSize int
+
+	// MaxInboundBatchBytes bounds queued inbound batches in bytes.
+	// Defaults to DefaultMaxInboundBatchBytes. This, not BatchChannelSize,
+	// is what bounds inbound batch memory.
+	MaxInboundBatchBytes int
 }
 
 // NewGossipLayer creates a new GossipLayer for the given partition.
@@ -124,11 +137,16 @@ func NewGossipLayerWithOptions(h host.Host, ps *pubsub.PubSub, partition string,
 	rateLimiter := NewPeerRateLimiter(RateLimitConfig{})
 
 	return &GossipLayer{
-		host:          h,
-		pubsub:        ps,
-		topics:        tm,
-		partition:     partition,
-		batches:       make(chan *types.Batch, opts.BatchChannelSize),
+		host:      h,
+		pubsub:    ps,
+		topics:    tm,
+		partition: partition,
+		batchQ:    newBatchQueue(opts.MaxInboundBatchBytes),
+		// Inbound batches are buffered by BYTES in batchQ, not here. This
+		// channel is deliberately shallow so that the bytes in flight are
+		// (batchQ budget + at most a couple of batches) rather than
+		// (count cap x MaxBatchBytes). See batch_queue.go.
+		batches:       make(chan *types.Batch, 2),
 		headers:       make(chan *types.Header, opts.HeaderChannelSize),
 		votes:         make(chan *types.Vote, opts.VoteChannelSize),
 		certs:         make(chan *types.Certificate, opts.CertificateChannelSize),
@@ -160,7 +178,7 @@ func (g *GossipLayer) Start(ctx context.Context) error {
 
 	// Start message handlers BEFORE waiting for mesh formation.
 	// This ensures we can receive messages while waiting for peers.
-	g.wg.Add(7)
+	g.wg.Add(8)
 	go g.handleSubscription(TopicBatches, g.handleBatchMessage)
 	go g.handleSubscription(TopicHeaders, g.handleHeaderMessage)
 	go g.handleVoteSubscription()
@@ -168,6 +186,7 @@ func (g *GossipLayer) Start(ctx context.Context) error {
 	go g.handleSubscription(TopicCertSync, g.handleCertSyncMessage)
 	go g.rateLimiterCleanup()
 	go g.meshMonitor()
+	go g.pumpBatches()
 
 	// Wait for GossipSub mesh to form before signaling ready.
 	// This ensures peers are connected before the Primary starts broadcasting.
@@ -191,6 +210,10 @@ func (g *GossipLayer) Close() error {
 		g.cancel()
 	}
 	g.mu.Unlock()
+
+	// Close the queue before waiting: the pump blocks in pop() and cancelling
+	// the context alone would not wake it.
+	g.batchQ.close()
 
 	// Wait for handlers to stop
 	g.wg.Wait()
@@ -330,11 +353,29 @@ func (g *GossipLayer) handleBatchMessage(data []byte) {
 		return
 	}
 
-	select {
-	case g.batches <- batch:
-	default:
-		slog.Warn("Batch channel full, dropping message",
-			"partition", g.partition)
+	if !g.batchQ.push(batch) {
+		queued, dropped := g.batchQ.stats()
+		slog.Warn("Inbound batch queue full, dropping batch",
+			"partition", g.partition,
+			"batchBytes", batch.Size(),
+			"queuedBytes", queued,
+			"droppedTotal", dropped)
+	}
+}
+
+// pumpBatches moves byte-bounded queued batches onto the subscriber channel.
+func (g *GossipLayer) pumpBatches() {
+	defer g.wg.Done()
+	for {
+		batch, ok := g.batchQ.pop()
+		if !ok {
+			return // queue closed
+		}
+		select {
+		case g.batches <- batch:
+		case <-g.ctx.Done():
+			return
+		}
 	}
 }
 

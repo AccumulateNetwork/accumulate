@@ -48,7 +48,7 @@ func (b *BPT) commitUpdatesDirect() (bool, error) {
 		return false, nil
 
 	default:
-		return false, errors.InternalError.WithFormat("cannot determine how the BPT should be committed")
+		return false, errors.InternalError.WithFormat("cannot determine how the BPT should be committed (key %v, store %T, pending %d)", b.key, b.store, len(b.pending))
 	}
 
 	var err error

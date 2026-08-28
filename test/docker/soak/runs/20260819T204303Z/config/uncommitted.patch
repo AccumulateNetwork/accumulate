@@ -1,0 +1,87 @@
+diff --git a/test/docker/soak/runs/20260819T192510Z/manifest.md b/test/docker/soak/runs/20260819T192510Z/manifest.md
+index 620f75b0a..cae006c94 100644
+--- a/test/docker/soak/runs/20260819T192510Z/manifest.md
++++ b/test/docker/soak/runs/20260819T192510Z/manifest.md
+@@ -20,3 +20,20 @@
+ | target TPS | 2 |
+ 
+ Config as run is frozen in `config/`. Results appended below on exit.
++
++## Result
++
++| field | value |
++|---|---|
++| ended (UTC) | 2026-08-19T19:47:00Z |
++| elapsed | 0.25h |
++| driver exit | 0 (clean) |
++| dn height | 1932 -> 32513 |
++| heals | 8 -> 21 |
++| chaos events | 19 |
++| monitor samples | 53 |
++| seizure | none detected |
++| reconcile pulls (#4073) | 12 |
++| stalled channels at end | 0 |
++
++Raw: `soak.log`, `monitor.csv`, `chaos.log`, `loadgen-stats.json`.
+diff --git a/test/docker/soak/runs/20260819T192510Z/monitor.csv b/test/docker/soak/runs/20260819T192510Z/monitor.csv
+index 9c38b61fc..03ceefcce 100644
+--- a/test/docker/soak/runs/20260819T192510Z/monitor.csv
++++ b/test/docker/soak/runs/20260819T192510Z/monitor.csv
+@@ -7,3 +7,48 @@ time,dnHeight,heals,cpuPct
+ 2026-08-19T19:28:56,6827,21,836
+ 2026-08-19T19:29:19,9585,21,574
+ 2026-08-19T19:29:42,9585,21,528
++2026-08-19T19:30:05,9585,21,605
++2026-08-19T19:30:28,9585,21,701
++2026-08-19T19:30:50,9585,21,550
++2026-08-19T19:31:13,9585,21,379
++2026-08-19T19:31:36,9585,21,283
++2026-08-19T19:31:59,9585,21,383
++2026-08-19T19:32:22,9585,21,490
++2026-08-19T19:32:44,9585,21,507
++2026-08-19T19:33:07,9585,21,499
++2026-08-19T19:33:30,9585,21,450
++2026-08-19T19:33:53,9585,21,246
++2026-08-19T19:34:16,9585,21,476
++2026-08-19T19:34:38,19283,21,496
++2026-08-19T19:35:01,20175,21,490
++2026-08-19T19:35:24,21110,21,485
++2026-08-19T19:35:47,21986,21,587
++2026-08-19T19:36:10,22609,21,465
++2026-08-19T19:36:33,23186,21,284
++2026-08-19T19:36:55,23280,21,598
++2026-08-19T19:37:18,24149,21,762
++2026-08-19T19:37:41,24614,21,506
++2026-08-19T19:38:04,25391,21,684
++2026-08-19T19:38:27,26834,21,235
++2026-08-19T19:38:50,26834,21,312
++2026-08-19T19:39:13,26934,21,465
++2026-08-19T19:39:35,26934,21,448
++2026-08-19T19:39:58,26934,21,462
++2026-08-19T19:40:21,29204,21,452
++2026-08-19T19:40:44,30018,21,615
++2026-08-19T19:41:07,30839,21,476
++2026-08-19T19:41:30,30839,21,611
++2026-08-19T19:41:52,32513,21,343
++2026-08-19T19:42:15,32513,21,309
++2026-08-19T19:42:38,32513,21,312
++2026-08-19T19:43:01,32513,21,402
++2026-08-19T19:43:24,32513,21,517
++2026-08-19T19:43:47,32513,21,369
++2026-08-19T19:44:09,32513,21,382
++2026-08-19T19:44:32,32513,21,394
++2026-08-19T19:44:55,32513,21,410
++2026-08-19T19:45:18,32513,21,349
++2026-08-19T19:45:40,32513,21,337
++2026-08-19T19:46:03,32513,21,420
++2026-08-19T19:46:26,32513,21,355
++2026-08-19T19:46:49,32513,21,327
+diff --git a/test/docker/soak/runs/latest b/test/docker/soak/runs/latest
+index 873083b1e..142dcc4fa 120000
+--- a/test/docker/soak/runs/latest
++++ b/test/docker/soak/runs/latest
+@@ -1 +1 @@
+-/tmp/claude-1000/-home-paul-repos-gitlab-com-accumulatenetwork-accumulate/4acc22dc-f8c2-4b51-9ec6-c98e3ae039bf/scratchpad/di/test/docker/soak/runs/20260819T192510Z
+\ No newline at end of file
++/tmp/claude-1000/-home-paul-repos-gitlab-com-accumulatenetwork-accumulate/4acc22dc-f8c2-4b51-9ec6-c98e3ae039bf/scratchpad/di/test/docker/soak/runs/20260819T204303Z
+\ No newline at end of file

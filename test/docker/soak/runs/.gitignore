@@ -1,0 +1,25 @@
+# Run evidence is the record (soak-results provenance rule). The repo root
+# ignores *.log and *.txt globally, which silently drops chaos.log, soak.log,
+# streams-final.txt and friends from `git add runs/<id>` — an incomplete record
+# that still looks committed. Re-include the small text evidence, but NOT
+# logs, profiles, or dumps: those grow without bound, trip GitLab's 1 MiB
+# blob cap, and their conclusions belong in manifest.md / stats.csv anyway.
+!*.txt
+!*.csv
+!*.json
+!*.out
+# Logs stay local (the root *.log ignore applies here — no negation).
+# Heap/CPU profiles captured by wedgewatch/probe: ~1-7 MiB each, and binary.
+# Analyze locally (go tool pprof), record the conclusion in the manifest.
+*.pb.gz
+# Goroutine dumps: same story, multi-MiB text.
+*.goroutines.txt
+node-logs.txt
+node-logs-live.txt
+container-logs/
+reconcile-pulls.txt
+# The convenience symlink to the newest run. Tracking it made soak.sh's own
+# `ln -sfn` a tracked modification, so `git describe --dirty` reported -dirty
+# for every run against an otherwise clean tree — which is precisely where the
+# dirty marker needed to mean something (#4126).
+latest

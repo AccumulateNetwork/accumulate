@@ -8,6 +8,7 @@ package e2e
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,8 +38,15 @@ func TestAnchorThreshold(t *testing.T) {
 	}
 
 	// Capture the BVN's anchors and verify they're the same
+	// The hook runs on EVERY node's goroutine, so everything it captures is
+	// shared. Two goroutines appending to `anchors` can lose an entry
+	// outright, and the test then fails on a count for reasons unrelated to
+	// what it is testing (#4171).
+	var anchorsMu sync.Mutex
 	var anchors []*messaging.BlockAnchor
 	opts = append(opts, simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+		anchorsMu.Lock()
+		defer anchorsMu.Unlock()
 		for _, m := range env.Messages {
 			blk, ok := m.(*messaging.BlockAnchor)
 			if !ok {

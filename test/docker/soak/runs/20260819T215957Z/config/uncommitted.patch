@@ -1,0 +1,218 @@
+diff --git a/test/docker/soak/runs/20260819T203858Z/loadgen-stats.json b/test/docker/soak/runs/20260819T203858Z/loadgen-stats.json
+index 866038b23..c5aebca71 100644
+--- a/test/docker/soak/runs/20260819T203858Z/loadgen-stats.json
++++ b/test/docker/soak/runs/20260819T203858Z/loadgen-stats.json
+@@ -1,49 +1,49 @@
+ {
+-  "updatedUnix": 1787172717,
++  "updatedUnix": 1787173233,
+   "startUnix": 1787172161,
+-  "elapsedSec": 555,
+-  "phase": "generating",
++  "elapsedSec": 1071,
++  "phase": "done",
+   "target": 2400,
+-  "generated": 315,
+-  "rejected": 250,
+-  "skipped": 165,
+-  "rate": 0.5669176130700053,
++  "generated": 354,
++  "rejected": 838,
++  "skipped": 285,
++  "rate": 0.3303479150048048,
+   "targetTps": 2,
+   "perType": {
+     "add-credits-lite": {
+       "generated": 14,
+-      "rejected": 105,
+-      "skipped": 38
++      "rejected": 210,
++      "skipped": 83
+     },
+     "burn-tokens": {
+       "generated": 2,
+-      "rejected": 36,
+-      "skipped": 8
++      "rejected": 75,
++      "skipped": 35
+     },
+     "fail:overspend": {
+-      "generated": 21,
+-      "rejected": 0,
+-      "skipped": 15
++      "generated": 27,
++      "rejected": 33,
++      "skipped": 18
+     },
+     "fail:send-to-void": {
+-      "generated": 24,
+-      "rejected": 0,
++      "generated": 28,
++      "rejected": 29,
+       "skipped": 7
+     },
+     "lock-account": {
+-      "generated": 8,
+-      "rejected": 0,
++      "generated": 9,
++      "rejected": 14,
+       "skipped": 6
+     },
+     "send-tokens-lite": {
+-      "generated": 234,
+-      "rejected": 9,
+-      "skipped": 62
++      "generated": 262,
++      "rejected": 270,
++      "skipped": 63
+     },
+     "write-data-lite": {
+       "generated": 12,
+-      "rejected": 100,
+-      "skipped": 29
++      "rejected": 207,
++      "skipped": 73
+     }
+   },
+   "accounts": {
+@@ -51,6 +51,6 @@
+     "keyBooks": 0,
+     "keyPages": 0,
+     "tokenIssuers": 0,
+-    "accounts": 39
++    "accounts": 63
+   }
+ }
+\ No newline at end of file
+diff --git a/test/docker/soak/runs/20260819T204303Z/loadgen-stats.json b/test/docker/soak/runs/20260819T204303Z/loadgen-stats.json
+index b801fd669..c4c2af9ea 100644
+--- a/test/docker/soak/runs/20260819T204303Z/loadgen-stats.json
++++ b/test/docker/soak/runs/20260819T204303Z/loadgen-stats.json
+@@ -1,59 +1,64 @@
+ {
+-  "updatedUnix": 1787172718,
++  "updatedUnix": 1787173474,
+   "startUnix": 1787172595,
+-  "elapsedSec": 123,
+-  "phase": "generating",
++  "elapsedSec": 879,
++  "phase": "done",
+   "target": 12000,
+-  "generated": 1095,
+-  "rejected": 0,
+-  "skipped": 51,
+-  "rate": 8.8995724887331,
++  "generated": 2063,
++  "rejected": 3052,
++  "skipped": 529,
++  "rate": 2.346780869314589,
+   "targetTps": 10,
+   "perType": {
+     "add-credits-lite": {
+-      "generated": 212,
+-      "rejected": 0,
+-      "skipped": 0
++      "generated": 333,
++      "rejected": 505,
++      "skipped": 220
+     },
+     "burn-tokens": {
+-      "generated": 80,
+-      "rejected": 0,
+-      "skipped": 0
++      "generated": 128,
++      "rejected": 213,
++      "skipped": 74
+     },
+     "fail:overspend": {
+-      "generated": 27,
+-      "rejected": 0,
++      "generated": 70,
++      "rejected": 161,
+       "skipped": 21
+     },
+     "fail:send-to-void": {
+-      "generated": 26,
+-      "rejected": 0,
++      "generated": 95,
++      "rejected": 144,
+       "skipped": 25
+     },
+     "grow:add-credits": {
+-      "generated": 1,
++      "generated": 2,
+       "rejected": 0,
+       "skipped": 0
+     },
+     "grow:create-identity": {
+-      "generated": 5,
++      "generated": 9,
+       "rejected": 0,
+       "skipped": 0
+     },
+-    "lock-account": {
+-      "generated": 20,
++    "grow:create-token-account": {
++      "generated": 1,
+       "rejected": 0,
++      "skipped": 0
++    },
++    "lock-account": {
++      "generated": 55,
++      "rejected": 81,
+       "skipped": 5
+     },
+     "send-tokens-lite": {
+-      "generated": 480,
+-      "rejected": 0,
+-      "skipped": 0
++      "generated": 1009,
++      "rejected": 1390,
++      "skipped": 4
+     },
+     "write-data-lite": {
+-      "generated": 244,
+-      "rejected": 0,
+-      "skipped": 0
++      "generated": 361,
++      "rejected": 558,
++      "skipped": 180
+     }
+   },
+   "accounts": {
+@@ -61,6 +66,6 @@
+     "keyBooks": 0,
+     "keyPages": 0,
+     "tokenIssuers": 0,
+-    "accounts": 59
++    "accounts": 291
+   }
+ }
+\ No newline at end of file
+diff --git a/test/docker/soak/runs/20260819T204303Z/monitor.csv b/test/docker/soak/runs/20260819T204303Z/monitor.csv
+index f7e06e656..3f05a2759 100644
+--- a/test/docker/soak/runs/20260819T204303Z/monitor.csv
++++ b/test/docker/soak/runs/20260819T204303Z/monitor.csv
+@@ -14,3 +14,4 @@ time,dnHeight,heals,cpuPct
+ 2026-08-19T20:50:51,15758,1144,1142
+ 2026-08-19T20:51:14,16801,1221,377
+ 2026-08-19T20:51:39,17808,1456,2011
++2026-08-19T20:52:03,19231,1669,1962
+diff --git a/test/docker/soak/runs/INDEX.md b/test/docker/soak/runs/INDEX.md
+index 718497562..65c6fb546 100644
+--- a/test/docker/soak/runs/INDEX.md
++++ b/test/docker/soak/runs/INDEX.md
+@@ -6,3 +6,4 @@ Every run appends one row. Details in `<runId>/manifest.md`.
+ |---|---|---|---|---|---|---|---|---|
+ | [20260819T192510Z](20260819T192510Z/manifest.md) | `10k-tps-358-g12cd7a723` | v2-kourou | unconditional (DI conductor, #4105) | 0.25h | 0 | 1932→32513 | 8→21 | local 3BVNx4val: verify reporting fixes — heals visible, anchor sent real, diagonal shown (#4075 #4093 #4095) |
+ | [20260819T203858Z](20260819T203858Z/manifest.md) | `10k-tps-359-g2ebce8422-dirty` | v2-kourou | unconditional (DI conductor, #4105) | ?h | 143 | 1783→1783 | 16→16 | local rerun: 3BVNx4val, 2 TPS, chaos |
++| [20260819T205323Z](20260819T205323Z/manifest.md) | `10k-tps-360-g67b287682-dirty` | v2-kourou | unconditional (DI conductor, #4105) | 0.25h | 0 | 2023→27414 | 224→13117 | local 10 TPS with the end+1 recovery fix (67b287682) — cadence + heal-under-chaos |
+diff --git a/test/docker/soak/runs/latest b/test/docker/soak/runs/latest
+index 142dcc4fa..864cb3fe6 120000
+--- a/test/docker/soak/runs/latest
++++ b/test/docker/soak/runs/latest
+@@ -1 +1 @@
+-/tmp/claude-1000/-home-paul-repos-gitlab-com-accumulatenetwork-accumulate/4acc22dc-f8c2-4b51-9ec6-c98e3ae039bf/scratchpad/di/test/docker/soak/runs/20260819T204303Z
+\ No newline at end of file
++/tmp/claude-1000/-home-paul-repos-gitlab-com-accumulatenetwork-accumulate/4acc22dc-f8c2-4b51-9ec6-c98e3ae039bf/scratchpad/di/test/docker/soak/runs/20260819T215957Z
+\ No newline at end of file

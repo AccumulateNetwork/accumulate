@@ -14,12 +14,24 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"sync"
+	"sync/atomic"
 )
 
 type Router struct {
-	tree      *routing.RouteTree
-	logger    logging.OptionalLogger
-	overrides map[[32]byte]string
+	// tree is REPLACED on a globals change, never mutated, and read while
+	// routing on other goroutines. An atomic store is also what gives the
+	// reader a happens-before edge to the tree's construction — without it a
+	// reader could observe a partly-built tree, which is what the
+	// RouteTree.Route vs NewRouteTree race reports were (#4170).
+	tree atomic.Pointer[routing.RouteTree]
+
+	logger logging.OptionalLogger
+
+	// overrides is written by SetRoute from the test's goroutine and read
+	// while routing on the nodes'.
+	overridesMu sync.RWMutex
+	overrides   map[[32]byte]string
 }
 
 // ResponseSubmit is the response from a call to Submit.
@@ -45,11 +57,13 @@ func (r *Router) willChangeGlobals(e events.WillChangeGlobals) error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	r.tree = tree
+	r.tree.Store(tree)
 	return nil
 }
 
 func (r *Router) SetRoute(account *url.URL, partition string) {
+	r.overridesMu.Lock()
+	defer r.overridesMu.Unlock()
 	if partition == "" {
 		delete(r.overrides, account.IdentityAccountID32())
 	} else {
@@ -58,16 +72,20 @@ func (r *Router) SetRoute(account *url.URL, partition string) {
 }
 
 func (r *Router) RouteAccount(account *url.URL) (string, error) {
-	if part, ok := r.overrides[account.IdentityAccountID32()]; ok {
+	r.overridesMu.RLock()
+	part, ok := r.overrides[account.IdentityAccountID32()]
+	r.overridesMu.RUnlock()
+	if ok {
 		return part, nil
 	}
-	if r.tree == nil {
+	tree := r.tree.Load()
+	if tree == nil {
 		return "", errors.InternalError.With("the routing table has not been initialized")
 	}
 	if protocol.IsUnknown(account) {
 		return "", errors.BadRequest.With("URL is unknown, cannot route")
 	}
-	return r.tree.Route(account)
+	return tree.Route(account)
 }
 
 func (r *Router) Route(envs ...*messaging.Envelope) (string, error) {

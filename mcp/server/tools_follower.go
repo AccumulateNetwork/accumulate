@@ -509,7 +509,6 @@ func createFollowerConfig(path, network, bvnName string, dnPeers, bvnPeers []int
   bvn = %q
   listen = "/ip4/0.0.0.0/tcp/16591"
   storage-type = "badger"
-  enable-healing = false
   enable-snapshots = false
 
   dn-bootstrap-peers = [

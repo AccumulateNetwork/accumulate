@@ -8,6 +8,7 @@ package block
 
 import (
 	"crypto/ed25519"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -26,7 +27,11 @@ type Executor struct {
 	ExecutorOptions
 	BlockTimers TimerSet
 
-	globals        *Globals
+	// globalsPtr holds the network's global configuration. REPLACED, never
+	// mutated — see the v2 executor's field for the reasoning (#4170). Same
+	// defect here: EndBlock overwrote this while ValidateEnvelope and
+	// AnchorSigner read it on other goroutines.
+	globalsPtr     atomic.Pointer[Globals]
 	executors      map[protocol.TransactionType]chain.TransactionExecutor
 	logger         logging.OptionalLogger
 	db             database.Beginner
@@ -115,9 +120,10 @@ func NewGenesisExecutor(db *database.Database, logger logging.Logger, network *c
 	if err != nil {
 		return nil, err
 	}
-	exec.globals = new(Globals)
-	exec.globals.Pending = *globals
-	exec.globals.Active = *globals
+	g := new(Globals)
+	g.Pending = *globals
+	g.Active = *globals
+	exec.globalsPtr.Store(g)
 	return exec, nil
 }
 
@@ -193,7 +199,7 @@ func (m *Executor) StoreBlockTimers(ds *logging.DataSet) {
 }
 
 func (m *Executor) ActiveGlobals() *core.GlobalValues {
-	return &m.globals.Active
+	return &m.globals().Active
 }
 
 func (x *Executor) SetExecutor_TESTONLY(y chain.TransactionExecutor) {
@@ -273,7 +279,7 @@ func (x *Executor) InitChainValidators(initVal []*execute.ValidatorUpdate) (addi
 	}
 
 	// Capture any validators missing from the initial set
-	for _, val := range x.globals.Active.Network.Validators {
+	for _, val := range x.globals().Active.Network.Validators {
 		if !val.IsActiveOn(x.Describe.PartitionId) {
 			continue
 		}
@@ -296,3 +302,7 @@ func (x *Executor) InitChainValidators(initVal []*execute.ValidatorUpdate) (addi
 
 	return additional, nil
 }
+
+// globals returns the current snapshot. Callers may hold what they get: it is
+// never written again.
+func (x *Executor) globals() *Globals { return x.globalsPtr.Load() }

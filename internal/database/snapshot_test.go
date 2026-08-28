@@ -290,3 +290,45 @@ func TestPreservationOfOldTransactions(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, txn.Equal(txn2.Transaction))
 }
+
+// #4155: a #4146 local delivery lives on NO chain — that is its design — so
+// nothing but the queue itself references its body. The snapshot must carry
+// those bodies anyway: a restored node drains the queue at its next Begin,
+// and a queue entry whose body is missing fails Begin forever, with no
+// eviction path and no healing (locals are invisible to healing).
+func TestSnapshot_PreservesQueuedLocalDeliveryBodies(t *testing.T) {
+	synthetic := PartitionUrl("BVN0").JoinPath(Synthetic)
+
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = AccountUrl("bob", "tokens")
+	txn.Body = &SyntheticDepositCredits{Amount: 1}
+	msg := &messaging.TransactionMessage{Transaction: txn}
+
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	defer batch.Discard()
+
+	// Exactly what splitLocalDeliveries writes: the body in the message
+	// store, on no chain, and the queue entry pointing at it.
+	require.NoError(t, batch.Message(msg.Hash()).Main().Put(msg))
+	require.NoError(t, batch.Account(synthetic).LocalDeliveryQueue().
+		Add(txn.Header.Principal.WithTxID(msg.Hash())))
+	require.NoError(t, batch.UpdateBPT())
+	require.NoError(t, batch.Commit())
+
+	buf := new(ioutil.Buffer)
+	_, err := db.Collect(buf, nil, nil)
+	require.NoError(t, err)
+
+	db = database.OpenInMemory(nil)
+	require.NoError(t, database.Restore(db, buf, nil))
+
+	batch = db.Begin(false)
+	defer batch.Discard()
+	ids, err := batch.Account(synthetic).LocalDeliveryQueue().Get()
+	require.NoError(t, err)
+	require.Len(t, ids, 1, "the queue is account state and must survive")
+	_, err = batch.Message(ids[0].Hash()).Main().Get()
+	require.NoError(t, err,
+		"the queued BODY must survive — without it the restored node's next Begin fails forever")
+}

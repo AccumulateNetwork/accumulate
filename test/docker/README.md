@@ -2,6 +2,11 @@
 
 Docker Compose configurations for running Accumulate load testing networks.
 
+> **Running this on the lab server?** See **[DEPLOY-DI.md](DEPLOY-DI.md)** — the
+> CometBFT-free deployment path, the traps that have actually bitten on that
+> host, and the current honest state of the network (it starts and forms
+> consensus; it stops writing blocks under load, #4103).
+
 ## Overview
 
 This directory contains two deployment options:

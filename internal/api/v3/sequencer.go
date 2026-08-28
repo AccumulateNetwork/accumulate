@@ -118,6 +118,14 @@ func (s *Sequencer) commitRoundFor(block uint64) (blockCommit, bool) {
 func (s *Sequencer) Type() api.ServiceType { return private.ServiceTypeSequencer }
 
 func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64, _ private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	// Admission control — proof building is the most expensive query this
+	// node serves, and heal storms poll it hardest exactly when the node is
+	// slowest (#4164). See gate.go.
+	if err := sequenceGate.enter(ctx); err != nil {
+		return nil, err
+	}
+	defer sequenceGate.exit()
+
 	if src == nil {
 		return nil, errors.BadRequest.With("missing source")
 	}
@@ -482,7 +490,13 @@ func (s *Sequencer) getRootContinuation(batch *database.Batch, mainAnchorEntry *
 // synthetic messages start through end (inclusive, 1-based) for the given
 // destination, with a single collection proof (#4048) covering the whole
 // range, set as SourceReceiptList on the last record.
-func (s *Sequencer) SequenceRange(ctx context.Context, src, dst *url.URL, start, end uint64, _ private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
+func (s *Sequencer) SequenceRange(ctx context.Context, src, dst *url.URL, start, end uint64, opts private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
+	// Admission control — see gate.go and the note on Sequence.
+	if err := sequenceGate.enter(ctx); err != nil {
+		return nil, err
+	}
+	defer sequenceGate.exit()
+
 	if src == nil {
 		return nil, errors.BadRequest.With("missing source")
 	}
@@ -512,12 +526,12 @@ func (s *Sequencer) SequenceRange(ctx context.Context, src, dst *url.URL, start,
 	switch {
 	case s.partition.Synthetic().Equal(src):
 		return r, s.db.View(func(batch *database.Batch) error {
-			r, err = s.getSynthRange(batch, globals, dst, start, end)
+			r, err = s.getSynthRange(batch, globals, dst, start, end, opts)
 			return err
 		})
 	case s.partition.AnchorPool().Equal(src):
 		return r, s.db.View(func(batch *database.Batch) error {
-			r, err = s.getAnchorRange(batch, globals, dst, start, end)
+			r, err = s.getAnchorRange(batch, globals, dst, start, end, opts)
 			return err
 		})
 	default:
@@ -525,7 +539,7 @@ func (s *Sequencer) SequenceRange(ctx context.Context, src, dst *url.URL, start,
 	}
 }
 
-func (s *Sequencer) getSynthRange(batch *database.Batch, globals *core.GlobalValues, dst *url.URL, start, end uint64) ([]*api.MessageRecord[messaging.Message], error) {
+func (s *Sequencer) getSynthRange(batch *database.Batch, globals *core.GlobalValues, dst *url.URL, start, end uint64, opts private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
 	partition, ok := protocol.ParsePartitionUrl(dst)
 	if !ok {
 		return nil, errors.UnknownError.WithFormat("destination is not a partition")
@@ -617,7 +631,21 @@ func (s *Sequencer) getSynthRange(batch *database.Batch, globals *core.GlobalVal
 		return nil, errors.UnknownError.WithFormat("locate index entry for synthetic chain entry %d: %w", indices[len(indices)-1], err)
 	}
 
-	continued, err := s.getRootContinuation(batch, mainAnchorEntry)
+	// Prefer a continuation to our own root chain, under an anchor the
+	// requester already holds, and fall back to the directory-continued proof
+	// when none is named.
+	//
+	// An anchor we sent commits to our root chain, which commits to our
+	// synthetic and anchor chains below it, so a destination holding a
+	// validated anchor from us can verify this range against something it
+	// already has — rather than waiting for the directory to catch up, which
+	// is precisely what it cannot do while a stream is stalled (#4105).
+	var continued *merkle.Receipt
+	if opts.ProveAgainstAnchor > 0 {
+		continued, err = s.getHeldAnchorContinuation(batch, mainAnchorEntry.Anchor, opts.ProveAgainstAnchor)
+	} else {
+		continued, err = s.getRootContinuation(batch, mainAnchorEntry)
+	}
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -645,7 +673,7 @@ func (s *Sequencer) getSynthRange(batch *database.Batch, globals *core.GlobalVal
 // form (no principal). Unlike synthetic messages, anchor sequence numbers map
 // directly to chain indices — sequence n is entry n-1 — and the same run
 // serves every destination.
-func (s *Sequencer) getAnchorRange(batch *database.Batch, globals *core.GlobalValues, dst *url.URL, start, end uint64) ([]*api.MessageRecord[messaging.Message], error) {
+func (s *Sequencer) getAnchorRange(batch *database.Batch, globals *core.GlobalValues, dst *url.URL, start, end uint64, opts private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
 	ledger := batch.Account(s.partition.AnchorPool())
 	sequenceChain, err := ledger.AnchorSequenceChain().Get()
 	if err != nil {
@@ -736,12 +764,28 @@ func (s *Sequencer) getAnchorRange(batch *database.Batch, globals *core.GlobalVa
 		return nil, errors.UnknownError.WithFormat("locate index entry for anchor sequence chain entry %d: %w", end-1, err)
 	}
 
-	continued, err := s.getRootContinuation(batch, anchorEntry)
+	// Prefer a continuation to our own root chain, under an anchor the
+	// requester already holds, and fall back to the directory-continued proof
+	// when none is named.
+	//
+	// An anchor we sent commits to our root chain, which commits to our
+	// synthetic and anchor chains below it, so a destination holding a
+	// validated anchor from us can verify this range against something it
+	// already has — rather than waiting for the directory to catch up, which
+	// is precisely what it cannot do while a stream is stalled (#4105).
+	// For anchors the source can infer the held anchor without being told:
+	// a gap is only visible to the destination because a LATER anchor arrived,
+	// so the entry immediately after the range is necessarily one it has.
+	// Falling back to a directory-continued proof here instead is the #4087
+	// deadlock — "the directory has not receipted the block yet" is exactly
+	// the state recovery runs in, and it wedged the live run this replaces.
+	proving := opts.ProveAgainstAnchor
+	if proving == 0 {
+		proving = end + 1
+	}
+	continued, err := s.getHeldAnchorContinuation(batch, anchorEntry.Anchor, proving)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
-	}
-	if continued == nil {
-		return nil, errors.NotReady.With("the directory has not receipted the block yet")
 	}
 
 	list, err := merkle.GetReceiptList(ledger.AnchorSequenceChain().Inner(), int64(start)-1, int64(anchorEntry.Source))
@@ -852,4 +896,63 @@ func (s *Sequencer) getDirectoryReceiptForBlock(batch *database.Batch, block uin
 		}
 	}
 	return nil, nil
+}
+
+// getHeldAnchorContinuation continues a collection proof from fromRootIndex up
+// to this partition's own root chain, at the point committed by anchor number
+// heldAnchor — an anchor the requester already holds and has already validated.
+//
+// This is what replaces a directory continuation, and it rests on a property of
+// merkle chains rather than anything about anchors: holding a validated state of
+// a chain proves every entry added before it. An anchor we sent commits to our
+// root chain, which commits to every chain of ours below it — so one anchor the
+// requester already has proves any earlier run of our messages by replay. We are
+// never asked to prove anything; we return data and the state to replay it onto.
+//
+// Rooting at a directory-receipted root instead is a deadlock for exactly the
+// case recovery exists to handle: proving anchor N requires N's own block to
+// have been anchored to the DN, and the anchor that would have carried it there
+// is the one that went missing. A proof that only looks backward from something
+// the requester already holds cannot be blocked by how far behind the directory
+// is (#4087, #4105).
+func (s *Sequencer) getHeldAnchorContinuation(batch *database.Batch, fromRootIndex, heldAnchor uint64) (*merkle.Receipt, error) {
+	if heldAnchor == 0 {
+		return nil, errors.BadRequest.With("missing the anchor to prove against")
+	}
+
+	sequenceChain, err := batch.Account(s.partition.AnchorPool()).AnchorSequenceChain().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load anchor sequence chain: %w", err)
+	}
+	if heldAnchor > uint64(sequenceChain.Height()) {
+		return nil, errors.NotReady.WithFormat("anchor %d has not been produced; a range is only provable under an anchor the destination already holds", heldAnchor)
+	}
+
+	hash, err := sequenceChain.Entry(int64(heldAnchor) - 1)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load anchor sequence chain entry %d: %w", heldAnchor-1, err)
+	}
+	var msg messaging.MessageWithTransaction
+	err = batch.Message2(hash).Main().GetAs(&msg)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load anchor %d: %w", heldAnchor, err)
+	}
+	body, ok := msg.GetTransaction().Body.(protocol.AnchorBody)
+	if !ok {
+		return nil, errors.InternalError.WithFormat("anchor %d is a %v", heldAnchor, msg.GetTransaction().Body.Type())
+	}
+
+	// An anchor can only prove what existed when it was produced. If the
+	// requester's anchor predates the messages it is asking for, it has to wait
+	// for a newer one — which costs nothing, because anchors keep coming.
+	toRootIndex := body.GetPartitionAnchor().RootChainIndex
+	if toRootIndex < fromRootIndex {
+		return nil, errors.NotReady.WithFormat("anchor %d commits to root chain entry %d, which is below %d", heldAnchor, toRootIndex, fromRootIndex)
+	}
+
+	receipt, err := s.getRootReceipt(batch, fromRootIndex, toRootIndex)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return receipt, nil
 }

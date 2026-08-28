@@ -573,3 +573,43 @@ func TestConcurrentCertificateProcessing(t *testing.T) {
 	certs := d.GetRound(0)
 	require.Len(t, certs, 4)
 }
+
+// TestCleanupPrunesSentVotes pins that sentVotes cannot outlive votedHeaders.
+// The two are written together in handleHeader and sentVotes is only ever read
+// behind a votedHeaders hit, so an entry left here after its votedHeaders
+// entry is gone is unreachable memory that grows with uptime x round rate.
+func TestCleanupPrunesSentVotes(t *testing.T) {
+	v := newTestValidator(t)
+	committee := newTestCommittee([]*testValidator{v}, 1)
+	p := New(Config{Partition: "test", KeyPair: v.priv}, committee, nil, newTestDAG(), nil)
+
+	for r := types.Round(0); r < 20; r++ {
+		header := types.NewHeader(v.pub, r, 1, nil, nil)
+		require.NoError(t, header.Sign(v.priv))
+		d := header.Digest()
+
+		vote := types.NewVote(d, r, 1, v.pub)
+		require.NoError(t, vote.Sign(v.priv))
+
+		p.pendingMu.Lock()
+		p.votedHeaders[d] = r
+		p.sentVotes[d] = vote
+		p.pendingMu.Unlock()
+	}
+
+	p.SetRound(20)
+	p.cleanupOldHeaders()
+
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
+
+	// Whatever survives must be reachable: every sentVotes entry needs a
+	// matching votedHeaders entry, and neither may predate the 10-round cutoff.
+	require.Equal(t, len(p.votedHeaders), len(p.sentVotes),
+		"sentVotes must be pruned in lockstep with votedHeaders")
+	for d := range p.sentVotes {
+		round, ok := p.votedHeaders[d]
+		require.True(t, ok, "sentVotes entry %v has no votedHeaders entry", d)
+		require.GreaterOrEqual(t, round, types.Round(10))
+	}
+}

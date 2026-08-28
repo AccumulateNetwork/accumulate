@@ -146,11 +146,35 @@ type Primary struct {
 	newCerts   chan *types.Certificate
 	newCertsMu sync.Mutex
 
+	// Missing-batch pull for the vote-time availability gate (#4159): the
+	// Node wires onMissingBatch to a peer fetch; missingBatchAsked
+	// deduplicates asks per digest so the 1s header rebroadcast does not
+	// re-fetch on every re-receipt.
+	missingBatchMu    sync.Mutex
+	missingBatchAsked map[types.BatchDigest]time.Time
+	onMissingBatch    func(types.BatchDigest)
+
+	// lastAuthoredRound is the highest round this primary has EVER authored
+	// a header for, valid only when hasAuthored is true (guarded by
+	// pendingMu). An author must never author one round twice: the resulting
+	// second certificate is self-equivocation, which splits the network on
+	// which version is real (#4159 stall #3). hasAuthored exists because
+	// round 0 is a REAL authored round in the production genesis flow —
+	// initializing the watermark to zero silently vetoed the very first
+	// header and wedged fresh networks at round 0 (consim missed it: its
+	// genesis pre-seeds certificates instead of authoring them).
+	hasAuthored       bool
+	lastAuthoredRound types.Round
+
 	// Lifecycle management
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
-	closed atomic.Bool
+	// lifecycleMu guards ctx/cancel: Start runs in a goroutine spawned by
+	// Node.Start, so an early Stop raced the write (caught by -race once the
+	// root package finally ran under it, #4116).
+	lifecycleMu sync.Mutex
+	ctx         context.Context
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
+	closed      atomic.Bool
 
 	// Metrics
 	headersCreated      atomic.Uint64
@@ -207,7 +231,9 @@ func (p *Primary) Start(ctx context.Context) error {
 		return ErrPrimaryClosed
 	}
 
+	p.lifecycleMu.Lock()
 	p.ctx, p.cancel = context.WithCancel(ctx)
+	p.lifecycleMu.Unlock()
 
 	// Start CertSyncer if available
 	if p.certSyncer != nil {
@@ -305,8 +331,11 @@ func (p *Primary) Stop() {
 		p.certSyncer.Stop()
 	}
 
-	if p.cancel != nil {
-		p.cancel()
+	p.lifecycleMu.Lock()
+	cancel := p.cancel
+	p.lifecycleMu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 
 	// Wait for goroutines to finish
@@ -372,7 +401,21 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	// Check pending state and create header (needs pendingMu)
 	p.pendingMu.Lock()
 
-	// Check if we already have a header for this round
+	// NEVER author the same round twice (#4159 stall #3). The old guard
+	// scanned ourHeaders only — but certification DELETES the header, so a
+	// second round-advance goroutine racing through here after the first
+	// header certified re-authored the SAME round. The second certificate is
+	// self-equivocation: peers keep whichever version arrived first, each
+	// side permanently rejects the other, and every later certificate
+	// referencing the losing version can never insert on the other side —
+	// certificate dissemination deadlocks and the round freezes network-wide
+	// (observed as 10 equivocation rejections and a total freeze at round
+	// ~206 / DN 529). A monotone watermark makes re-authoring structurally
+	// impossible; the ourHeaders scan stays as the pre-certification check.
+	if p.hasAuthored && currentRound <= p.lastAuthoredRound {
+		p.pendingMu.Unlock()
+		return
+	}
 	for _, h := range p.ourHeaders {
 		if h.Round == currentRound {
 			p.pendingMu.Unlock()
@@ -395,6 +438,8 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	digest := header.Digest()
 	p.ourHeaders[digest] = header
 	p.pendingVotes[digest] = nil
+	p.hasAuthored = true
+	p.lastAuthoredRound = currentRound
 
 	p.headersCreated.Add(1)
 
@@ -470,9 +515,19 @@ func (p *Primary) cleanupOldHeaders() {
 	p.pendingMu.Lock()
 	defer p.pendingMu.Unlock()
 
-	// Clean pending headers and votes (short retention)
+	// Clean pending headers and votes (short retention). A header that never
+	// became a certificate carries batches that were consumed from the workers
+	// when it was built; discarding it without requeuing them silently loses
+	// every transaction inside. Run 20260820T063739Z: roughly half of all
+	// anchor-signature submissions vanished this way — the DN's pending-anchor
+	// backlog grew without bound and healing's bounded re-drive became the
+	// only working delivery path. ourCerts is retained five times longer than
+	// ourHeaders, so it is a reliable certified-or-not signal at this cutoff.
 	for digest, header := range p.ourHeaders {
 		if header.Round < headerCutoff {
+			if _, certified := p.ourCerts[header.Round]; !certified {
+				p.requeueHeaderBatches(header)
+			}
 			delete(p.ourHeaders, digest)
 			delete(p.pendingVotes, digest)
 		}
@@ -485,10 +540,27 @@ func (p *Primary) cleanupOldHeaders() {
 		}
 	}
 
-	// Clean old voted headers by round (longer retention)
+	// Clean old voted headers by round (longer retention). sentVotes is
+	// written with votedHeaders and only ever read behind a votedHeaders hit
+	// (vote_handler.go), so it must be dropped here too — otherwise it is an
+	// unbounded map that grows with uptime x round rate, per partition.
 	for digest, round := range p.votedHeaders {
 		if round < certCutoff {
 			delete(p.votedHeaders, digest)
+			delete(p.sentVotes, digest)
+		}
+	}
+}
+
+// requeueHeaderBatches returns a discarded header's batches to their workers
+// so the next header this node authors carries them again.
+func (p *Primary) requeueHeaderBatches(header *types.Header) {
+	for _, entry := range header.Payload {
+		for _, w := range p.workers {
+			if w.ID() == entry.Worker {
+				w.RequeueBatches([]types.BatchDigest{entry.Digest})
+				break
+			}
 		}
 	}
 }
@@ -528,8 +600,13 @@ func (p *Primary) rebroadcastPendingHeaders() {
 		// Voters accept rounds no older than their current round minus one, so
 		// a header two or more rounds behind can never gather votes — drop it
 		// here rather than spam the network with it (cleanupOldHeaders only
-		// runs when the round advances, which it may not during a stall)
+		// runs when the round advances, which it may not during a stall).
+		// Same rule as cleanupOldHeaders: a header that never certified still
+		// holds consumed batches — requeue them or their transactions are lost.
 		if header.Round+1 < currentRound {
+			if _, certified := p.ourCerts[header.Round]; !certified {
+				p.requeueHeaderBatches(header)
+			}
 			delete(p.ourHeaders, digest)
 			delete(p.pendingVotes, digest)
 			continue

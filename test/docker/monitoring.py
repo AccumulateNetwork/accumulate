@@ -7,27 +7,22 @@ Collects CPU, memory, and database metrics from running containers.
 import csv
 import json
 import os
+import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 from datetime import datetime
 
-# Validator container names (must match docker-compose.yml)
-VALIDATORS = [
-    "acc-bvn1-val1", "acc-bvn1-val2", "acc-bvn1-val3", "acc-bvn1-val4",
-    "acc-bvn2-val1", "acc-bvn2-val2", "acc-bvn2-val3", "acc-bvn2-val4",
-    "acc-bvn3-val1", "acc-bvn3-val2", "acc-bvn3-val3", "acc-bvn3-val4",
-]
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import topology
 
-# Data directory mapping (container_name -> bvn-N path)
-CONTAINER_TO_PATH = {
-    "acc-bvn1-val1": "bvn1-1", "acc-bvn1-val2": "bvn1-2",
-    "acc-bvn1-val3": "bvn1-3", "acc-bvn1-val4": "bvn1-4",
-    "acc-bvn2-val1": "bvn2-1", "acc-bvn2-val2": "bvn2-2",
-    "acc-bvn2-val3": "bvn2-3", "acc-bvn2-val4": "bvn2-4",
-    "acc-bvn3-val1": "bvn3-1", "acc-bvn3-val2": "bvn3-2",
-    "acc-bvn3-val3": "bvn3-3", "acc-bvn3-val4": "bvn3-4",
-}
+# Validator container names and their data directories, derived from
+# docker-network.yml rather than restated here — see topology.py. The listed
+# form was a 12-name roster that survived the cut to 8 nodes, and four names
+# that resolve to nothing report as four nodes using 0 MB.
+VALIDATORS = topology.containers()
+CONTAINER_TO_PATH = topology.container_paths()
 
 def get_docker_stats():
     """Get CPU and memory stats for all validators using docker stats."""

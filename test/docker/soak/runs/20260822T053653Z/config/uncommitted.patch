@@ -1,0 +1,9 @@
+diff --git a/test/docker/soak/runs/20260822T045407Z/stallkill.log b/test/docker/soak/runs/20260822T045407Z/stallkill.log
+index 77d71956f..cb6db265e 100644
+--- a/test/docker/soak/runs/20260822T045407Z/stallkill.log
++++ b/test/docker/soak/runs/20260822T045407Z/stallkill.log
+@@ -17,3 +17,4 @@
+   acc-bvn3-val4            0 frame(s); 1282 goroutines
+   2026-08-22T04:57:52Z CAPTURE[probe]: complete — network left UP on purpose
+ 2026-08-22T04:57:52Z signalling loadgen: 3794392 3794824 
++2026-08-22T05:01:13Z tearing down (project disoak)

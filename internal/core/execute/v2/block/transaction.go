@@ -28,7 +28,7 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 	x := t.Executor
 	delivery := &chain.Delivery{
 		Transaction: t.transaction,
-		Internal:    t.isWithin(internal.MessageTypeNetworkUpdate),
+		Internal:    t.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeNetworkUpdate),
 	}
 
 	r := x.BlockTimers.Start(BlockTimerTypeProcessTransaction)
@@ -81,7 +81,7 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(x.Describe, &x.globals.Active, t, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+	st := chain.NewStateManager(x.Describe, &x.globals().Active, t, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	defer st.Discard()
 
 	// Execute the transaction
@@ -548,7 +548,7 @@ func (x *TransactionContext) recordPendingTransaction(net execute.DescribeShim, 
 }
 
 func (x *TransactionContext) recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTransactionState, delivery *chain.Delivery, result protocol.TransactionResult) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
-	x.State.MarkTransactionDelivered(delivery.Transaction.ID())
+	x.markTransactionDelivered(delivery.Transaction.ID())
 
 	// Record the transaction
 	status, err := recordTransaction(batch, delivery, state, func(status *protocol.TransactionStatus) {
@@ -599,7 +599,7 @@ func selectTargetChain(account *database.Account, body protocol.TransactionBody)
 }
 
 func (x *TransactionContext) recordFailedTransaction(batch *database.Batch, delivery *chain.Delivery, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
-	x.State.MarkTransactionDelivered(delivery.Transaction.ID())
+	x.markTransactionDelivered(delivery.Transaction.ID())
 
 	// Record the transaction
 	state := new(chain.ProcessTransactionState)
@@ -644,7 +644,7 @@ func (x *TransactionContext) recordFailedTransaction(batch *database.Batch, deli
 	}
 
 	// But only if the paid paid is larger than the max failure paid
-	paid, err := x.Executor.globals.Active.Globals.FeeSchedule.ComputeTransactionFee(delivery.Transaction)
+	paid, err := x.Executor.globals().Active.Globals.FeeSchedule.ComputeTransactionFee(delivery.Transaction)
 	if err != nil {
 		return nil, nil, fmt.Errorf("compute fee: %w", err)
 	}

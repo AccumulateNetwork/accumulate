@@ -1,0 +1,9 @@
+diff --git a/test/docker/soak/runs/latest b/test/docker/soak/runs/latest
+index 864cb3fe6..25eb3b112 120000
+--- a/test/docker/soak/runs/latest
++++ b/test/docker/soak/runs/latest
+@@ -1 +1 @@
+-/tmp/claude-1000/-home-paul-repos-gitlab-com-accumulatenetwork-accumulate/4acc22dc-f8c2-4b51-9ec6-c98e3ae039bf/scratchpad/di/test/docker/soak/runs/20260819T215957Z
+\ No newline at end of file
++/home/paul/repos/gitlab.com/accumulatenetwork/di/test/docker/soak/runs/20260819T234054Z
+\ No newline at end of file

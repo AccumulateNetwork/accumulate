@@ -215,7 +215,14 @@ func (e *Executor) produceBlock() *Block {
 	prevHash := e.latestBlock.Hash()
 
 	txnsHash := ComputeTxnsHash(e.pendingHashes)
-	newStateHash := UpdateStateHash(e.stateHash, e.pendingHashes)
+	// The state hash is chained PER TRANSACTION as transactions are
+	// processed, not per block: blocks are cut by a wall-clock timer, so
+	// their boundaries are local to each node. Hashing per chunk made the
+	// state hash depend on timer phase — identical transaction streams
+	// produced different "states" on every node once free-running round
+	// catch-up jittered commit timing (#4116/#4119). The block records the
+	// stream hash at its cut point.
+	newStateHash := e.stateHash
 
 	block := &Block{
 		Height:    e.latestBlock.Height + 1,
@@ -340,6 +347,7 @@ func (e *Executor) processAccumulateEnvelope(data []byte) error {
 		// Add to pending for block inclusion
 		// We use the transaction hash as-is
 		e.pendingHashes = append(e.pendingHashes, txnHash)
+		e.stateHash = UpdateStateHash(e.stateHash, [][32]byte{txnHash})
 		e.processedCount++
 		e.accumulateTxCount++
 
@@ -415,6 +423,7 @@ func (e *Executor) processLegacyTransaction(data []byte) error {
 		seen[t.Nonce] = true
 		e.pendingTxns = append(e.pendingTxns, tx)
 		e.pendingHashes = append(e.pendingHashes, tx.Hash())
+		e.stateHash = UpdateStateHash(e.stateHash, [][32]byte{tx.Hash()})
 		e.processedCount++
 		e.legacyTxCount++
 
@@ -446,6 +455,7 @@ func (e *Executor) processLegacyTransaction(data []byte) error {
 		// Also add to pending txns for inclusion in block
 		e.pendingTxns = append(e.pendingTxns, tx)
 		e.pendingHashes = append(e.pendingHashes, tx.Hash())
+		e.stateHash = UpdateStateHash(e.stateHash, [][32]byte{tx.Hash()})
 		e.processedCount++
 		e.legacyTxCount++
 
@@ -474,6 +484,7 @@ func (e *Executor) processLegacyTransaction(data []byte) error {
 
 		e.pendingTxns = append(e.pendingTxns, tx)
 		e.pendingHashes = append(e.pendingHashes, tx.Hash())
+		e.stateHash = UpdateStateHash(e.stateHash, [][32]byte{tx.Hash()})
 		e.processedCount++
 		e.legacyTxCount++
 	}

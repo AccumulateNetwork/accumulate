@@ -7,11 +7,16 @@
 package leveldb
 
 import (
+	"container/list"
+	"log/slog"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/filter"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
@@ -24,6 +29,133 @@ type Database struct {
 	leveldb *leveldb.DB
 	closing atomic.Bool
 	open    *sync.WaitGroup
+
+	// records is a write-through cache of latest-committed record values,
+	// consulted ONLY by writable batches. Record keys are hashes, so reads
+	// have no locality and the block cache cannot hold a working set — at
+	// ~250 tx/s, 45% of validator CPU became random sstable walks (#4164).
+	// The executor re-reads the same hot records (system ledger, anchor
+	// pools, signers) every block; serving them from memory removes that
+	// entire read class.
+	//
+	// SAFETY: exactly one writable batch exists at a time (the executor
+	// produces blocks sequentially), and commit() updates the cache before
+	// returning, so a writable batch always sees latest-committed state —
+	// which is exactly what its snapshot would show. Read-only batches
+	// (queries, healers) NEVER touch the cache: they keep pure snapshot
+	// semantics.
+	records recordCache
+}
+
+// recordCache is a byte-conscious LRU of committed record values.
+type recordCache struct {
+	mu    sync.Mutex
+	items map[[32]byte]*list.Element
+	order *list.List // front = most recent
+	bytes int
+}
+
+const (
+	// recordCacheMaxBytes bounds the cache; recordCacheMaxValue skips
+	// oversized values so one giant record cannot evict the working set.
+	//
+	// This stays at 64MB even though the block cache dropped to 64MB: it is
+	// what makes the smaller block cache safe. It serves the hot records the
+	// executor re-reads every block, which is exactly the traffic the block
+	// cache is bad at (hash keys, no locality).
+	recordCacheMaxBytes = 64 << 20
+	recordCacheMaxValue = 8 << 10
+)
+
+// defaultBlockCacheBytes is the per-engine leveldb block cache. Two engines
+// per dual validator, so the container pays this twice.
+const defaultBlockCacheBytes = 64 * opt.MiB
+
+// blockCacheBytes returns the block cache size, allowing ACC_LEVELDB_CACHE_MB
+// to override it. The override exists so a soak run can sweep this knob
+// without a rebuild — it is the single largest configured consumer in the
+// footprint budget, and its correct value depends on the state size a run
+// reaches. An unparseable or non-positive value falls back to the default.
+func blockCacheBytes() int {
+	s, ok := os.LookupEnv("ACC_LEVELDB_CACHE_MB")
+	if !ok {
+		return defaultBlockCacheBytes
+	}
+	mb, err := strconv.Atoi(s)
+	if err != nil || mb <= 0 {
+		slog.Warn("Ignoring invalid ACC_LEVELDB_CACHE_MB",
+			"value", s, "using", defaultBlockCacheBytes/opt.MiB, "module", "database")
+		return defaultBlockCacheBytes
+	}
+	slog.Info("LevelDB block cache overridden",
+		"mb", mb, "module", "database")
+	return mb * opt.MiB
+}
+
+type recordCacheEntry struct {
+	key     [32]byte
+	value   []byte // nil = known-deleted (negative entry)
+	deleted bool
+}
+
+func (c *recordCache) get(key [32]byte) (v []byte, deleted, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.items[key]
+	if !ok {
+		return nil, false, false
+	}
+	c.order.MoveToFront(e)
+	ent := e.Value.(*recordCacheEntry)
+	return ent.value, ent.deleted, true
+}
+
+func (c *recordCache) put(key [32]byte, value []byte, deleted bool) {
+	if len(value) > recordCacheMaxValue {
+		c.drop(key) // a big value replaces whatever was cached
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.items == nil {
+		c.items = make(map[[32]byte]*list.Element)
+		c.order = list.New()
+	}
+	// Per-entry overhead is ~160B measured (map bucket + list element +
+	// entry struct + key) — the first estimate of 64 let the cache hold
+	// nearly 2x its budget in small entries.
+	const entryOverhead = 160
+	if e, ok := c.items[key]; ok {
+		ent := e.Value.(*recordCacheEntry)
+		c.bytes += len(value) - len(ent.value)
+		ent.value, ent.deleted = value, deleted
+		c.order.MoveToFront(e)
+	} else {
+		e := c.order.PushFront(&recordCacheEntry{key: key, value: value, deleted: deleted})
+		c.items[key] = e
+		c.bytes += len(value) + entryOverhead
+	}
+	for c.bytes > recordCacheMaxBytes {
+		back := c.order.Back()
+		if back == nil {
+			break
+		}
+		ent := back.Value.(*recordCacheEntry)
+		c.order.Remove(back)
+		delete(c.items, ent.key)
+		c.bytes -= len(ent.value) + entryOverhead
+	}
+}
+
+func (c *recordCache) drop(key [32]byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e, ok := c.items[key]; ok {
+		ent := e.Value.(*recordCacheEntry)
+		c.order.Remove(e)
+		delete(c.items, key)
+		c.bytes -= len(ent.value) + 160
+	}
 }
 
 type opts struct {
@@ -38,7 +170,56 @@ func Open(filepath string, o ...Option) (*Database, error) {
 		return nil, errors.UnknownError.WithFormat("create %q: %w", filepath, err)
 	}
 
-	db, err := leveldb.OpenFile(filepath, nil)
+	// Non-default options, measured under load (#4164). With `nil` options —
+	// no bloom filter, 8MB block cache, 4MB write buffer — the storage
+	// engine owned HALF the CPU profile at 183 tx/s: 24% in reads, every
+	// miss walking each level's candidate tables (version.walkOverlapping),
+	// and 27% in compaction churned by tiny write buffers. Bloom filters
+	// turn the level walk into a bitmap check; a real block cache keeps hot
+	// state in RAM.
+	//
+	// The block cache WAS the state-scaling knob: at ~20k accounts the hot
+	// working set outgrew 64MB and 47% of node CPU became positive lookups
+	// walking sstables (version.walkOverlapping -> Reader.find, mostly under
+	// the API query handler serving healers and trackers), so it was raised
+	// to 256MB (faed9a3dd).
+	//
+	// It is back to 64MB, because the two changes that landed AFTER that
+	// bump removed the thing it was compensating for: the query gates
+	// (e523d01d6) bound the pollers that amplified lag into the level walk,
+	// and the write-path record cache (same commit) keeps hot reads out of
+	// leveldb entirely. Measured on the 1000 TPS-shaped workload in
+	// exp/blockfile-sim: 256MB -> 64MB cut RSS from 762MB to 257MB and read
+	// latency IMPROVED (15.0 -> 14.3 microseconds). 64MB, not 32MB — 32
+	// still fit the budget but cost 29% on reads (18.5us), and this knob has
+	// a collapse in its history. See docs/plans/sub-1gb-footprint.md.
+	//
+	// SIZED FOR TWO ENGINES PER CGROUP. A dual validator opens one of these
+	// per partition (dnn + bvnn), so every number here is doubled. The first
+	// sizing (128MB cache, 64MB write buffer, pooled compaction buffers)
+	// OOM-killed seven containers in run 20260824T065208Z: ~1GB of engine
+	// memory per container plus the BufferPool — which grows toward the
+	// largest compaction it ever served and never shrinks (measured 178MB
+	// and climbing) — plus GC headroom hit the cgroup limit hours after load
+	// DROPPED, because compaction of the high-rate era's debt kept feeding
+	// the pool.
+	db, err := leveldb.OpenFile(filepath, &opt.Options{
+		Filter:                 filter.NewBloomFilter(10),
+		BlockCacheCapacity:     blockCacheBytes(),
+		WriteBuffer:            16 * opt.MiB,
+		OpenFilesCacheCapacity: 512,
+		// The buffer pool is DISABLED — final answer after being burned in
+		// both directions. Enabled, it grows toward the largest buffers any
+		// path ever needed and never shrinks; the "16MB write buffers keep
+		// it small" theory was wrong because the pool also serves TABLE READ
+		// buffers, and under read-heavy load it held 887MB (40% of heap) on
+		// the sinking node in run 20260824T170628Z. Disabled, compaction and
+		// read buffers are ordinary allocations — a churn tax (was 21% of
+		// allocation) the GC can afford, especially now that the write-path
+		// record cache keeps most hot reads out of leveldb entirely. Bounded
+		// memory beats cheap allocation.
+		DisableBufferPool: true,
+	})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("open %q: %w", filepath, err)
 	}
@@ -73,9 +254,40 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 		snap, err = d.leveldb.GetSnapshot()
 	}
 
-	// Read from the transaction
+	// Read from the transaction. Writable batches read through the record
+	// cache (latest-committed == their snapshot, by the single-writer
+	// discipline documented on Database.records); read-only batches go
+	// straight to their snapshot.
 	get := func(key *record.Key) ([]byte, error) {
 		return d.get(snap, err, key)
+	}
+	if writable {
+		get = func(key *record.Key) ([]byte, error) {
+			kh := key.Hash()
+			if v, deleted, ok := d.records.get(kh); ok {
+				if deleted {
+					return nil, (*database.NotFoundError)(key)
+				}
+				u := make([]byte, len(v))
+				copy(u, v)
+				return u, nil
+			}
+			v, err := d.get(snap, err, key)
+			switch err.(type) {
+			case nil:
+				d.records.put(kh, v, false)
+				// The cache holds its own reference; hand the caller a copy
+				// so a caller mutation cannot poison the cache.
+				u := make([]byte, len(v))
+				copy(u, v)
+				return u, nil
+			case *database.NotFoundError:
+				d.records.put(kh, nil, true)
+				return nil, err
+			default:
+				return nil, err
+			}
+		}
 	}
 
 	// Commit to the write batch
@@ -120,7 +332,21 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 		}
 	}
 
-	return d.leveldb.Write(batch, nil)
+	err := d.leveldb.Write(batch, nil)
+	if err != nil {
+		return err
+	}
+
+	// Write-through AFTER the write succeeds: the next writable batch (the
+	// single writer proceeds sequentially) sees exactly what leveldb holds.
+	for kh, e := range entries {
+		if e.Delete {
+			d.records.put(kh, nil, true)
+		} else {
+			d.records.put(kh, e.Value, false)
+		}
+	}
+	return nil
 }
 
 func (d *Database) get(snap *leveldb.Snapshot, err error, key *record.Key) ([]byte, error) {

@@ -185,9 +185,24 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 			err = p.dag.Insert(cert)
 		}
 		if err != nil {
-			slog.Warn("Failed to insert certificate into DAG",
+			// Our OWN certificate failed to insert. Without cleanup this
+			// node believed it certified the round (ourCerts set, header and
+			// votes already deleted) while the network never saw the
+			// certificate — and the header's batches were stranded with no
+			// requeue (#4159 review A13a). Un-claim the round and put the
+			// batches back so they ride the next header.
+			slog.Error("Failed to insert OWN certificate into DAG — un-claiming the round and requeuing its batches",
 				"error", err,
+				"round", cert.Round(),
 				"digest", cert.Digest().String())
+			p.pendingMu.Lock()
+			if c, ok := p.ourCerts[cert.Round()]; ok && c == cert {
+				delete(p.ourCerts, cert.Round())
+			}
+			p.pendingMu.Unlock()
+			if cert.Header != nil {
+				p.requeueHeaderBatches(cert.Header)
+			}
 			return
 		}
 
@@ -355,6 +370,37 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		}
 	}
 
+	// Data availability: only vote once we hold every batch this header names
+	// (#4159). A certificate must be a proof that 2f+1 validators HAVE the
+	// data — that is the premise the whole commit path relies on ("the
+	// certificate is proof the data exists"). Voting without the batches
+	// breaks it: a header can be certified when only the author holds a batch,
+	// and if that batch never propagates to a quorum, Bullshark can commit the
+	// leader rounds later and CollectBatches finds the batch nowhere
+	// (absence=no-record, peerHits=0 on every node) — a permanent wedge, with
+	// zero LRU evictions, exactly as observed at DN 553 / 4152. Missing
+	// batches arrive via gossip and the author rebroadcasts the header until
+	// it reaches quorum, so we vote on a later rebroadcast once we have them —
+	// the same defer-until-available shape as the missing-parent gate above.
+	for _, entry := range header.Payload {
+		if !p.haveBatch(entry.Digest) {
+			slog.Info("Missing batch for header — deferring vote and fetching",
+				"partition", p.config.Partition,
+				"headerDigest", headerDigest.String(),
+				"batch", entry.Digest.String(),
+				"round", header.Round)
+			// Deferring alone is not enough: batch bytes are broadcast once
+			// at creation and (before #4159) NOTHING re-sent them — the
+			// author's 1s header rebroadcast re-tests a condition that
+			// could never become true, and the header could never reach
+			// quorum. Actively pull the batch (the author certainly holds
+			// it — own batches are un-evictable); the next rebroadcast
+			// then finds it present and the vote goes out.
+			p.requestMissingBatch(entry.Digest)
+			return // missing batch — do not certify data we do not have
+		}
+	}
+
 	// Create and send vote
 	vote := types.NewVote(headerDigest, header.Round, header.Epoch, pubKey)
 	if err := vote.Sign(p.config.KeyPair); err != nil {
@@ -380,6 +426,62 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 
 	// Broadcast vote
 	p.broadcastVoteAsync(vote, headerDigest)
+}
+
+// haveBatch reports whether any of this node's workers holds the batch. A
+// gossiped batch is routed to one local worker by digest (not the author's
+// worker id carried in the payload entry), so availability must be checked
+// across all workers — the same way CollectBatches looks one up (#4159).
+func (p *Primary) haveBatch(d types.BatchDigest) bool {
+	for _, w := range p.workers {
+		if w.CanServeBatch(d) {
+			return true
+		}
+	}
+	return false
+}
+
+// SetMissingBatchHandler installs the callback the vote gate uses to pull a
+// batch it does not hold (#4159). The Node wires this to a peer fetch; the
+// handler must not block.
+func (p *Primary) SetMissingBatchHandler(fn func(types.BatchDigest)) {
+	p.missingBatchMu.Lock()
+	defer p.missingBatchMu.Unlock()
+	p.onMissingBatch = fn
+}
+
+// requestMissingBatch invokes the missing-batch handler at most once per
+// batchFetchRetry per digest — the vote gate re-fires on every 1s header
+// rebroadcast, and each fetch already tries every connected peer.
+func (p *Primary) requestMissingBatch(d types.BatchDigest) {
+	const batchFetchRetry = 5 * time.Second
+	p.missingBatchMu.Lock()
+	fn := p.onMissingBatch
+	if fn == nil {
+		p.missingBatchMu.Unlock()
+		return
+	}
+	now := time.Now()
+	if last, ok := p.missingBatchAsked[d]; ok && now.Sub(last) < batchFetchRetry {
+		p.missingBatchMu.Unlock()
+		return
+	}
+	if p.missingBatchAsked == nil {
+		p.missingBatchAsked = map[types.BatchDigest]time.Time{}
+	}
+	// Bound the in-flight map: entries older than the retry window are
+	// re-askable anyway, so drop them opportunistically.
+	if len(p.missingBatchAsked) > 4096 {
+		for k, t := range p.missingBatchAsked {
+			if now.Sub(t) >= batchFetchRetry {
+				delete(p.missingBatchAsked, k)
+			}
+		}
+	}
+	p.missingBatchAsked[d] = now
+	p.missingBatchMu.Unlock()
+
+	fn(d)
 }
 
 // broadcastVoteAsync broadcasts a vote in the background.

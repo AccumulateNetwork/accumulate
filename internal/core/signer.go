@@ -49,5 +49,7 @@ func (g *globalSigner) EntryByKeyHash(keyHash []byte) (int, protocol.KeyEntry, b
 
 type noopEntry struct{}
 
-func (noopEntry) GetLastUsedOn() uint64 { return 0 }
-func (noopEntry) SetLastUsedOn(uint64)  {}
+func (noopEntry) GetLastUsedOn() uint64        { return 0 }
+func (noopEntry) SetLastUsedOn(uint64)         {}
+func (noopEntry) CanUseTimestamp(uint64) error { return nil }
+func (noopEntry) UseTimestamp(uint64)          {}

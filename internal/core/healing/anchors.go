@@ -36,12 +36,32 @@ type HealAnchorArgs struct {
 	Wait    bool
 }
 
+// useAnchorHealingV2 decides which healing protocol an anchor needs: version 2
+// applies only to a Vandenberg network healing a DN->BVN anchor.
+//
+// Separated from HealAnchor so the decision can be tested. It is a three-way
+// condition on an executor version and a direction, it selects between two
+// entirely different recovery paths, and picking the wrong one means an anchor
+// is never healed — and until now nothing exercised it at all.
+//
+// A nil status is treated as not-Vandenberg: healing runs against a scan that
+// may have failed, and guessing "newest protocol" from missing information is
+// the wrong default.
+func useAnchorHealingV2(status *api.NetworkStatus, source, destination string) bool {
+	if status == nil {
+		return false
+	}
+	return status.ExecutorVersion.V2VandenbergEnabled() &&
+		strings.EqualFold(source, protocol.Directory) &&
+		!strings.EqualFold(destination, protocol.Directory)
+}
+
 func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) error {
-	// If the network is running Vandenberg and the anchor is from the DN to a
-	// BVN, use version 2
-	if args.NetInfo.Status.ExecutorVersion.V2VandenbergEnabled() &&
-		strings.EqualFold(si.Source, protocol.Directory) &&
-		!strings.EqualFold(si.Destination, protocol.Directory) {
+	var status *api.NetworkStatus
+	if args.NetInfo != nil {
+		status = args.NetInfo.Status
+	}
+	if useAnchorHealingV2(status, si.Source, si.Destination) {
 		return healDnAnchorV2(ctx, args, si)
 	}
 	return healAnchorV1(ctx, args, si)

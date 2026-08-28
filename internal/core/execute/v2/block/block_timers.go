@@ -8,6 +8,7 @@ package block
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
@@ -34,6 +35,10 @@ type TimerRecord struct {
 }
 
 type TimerSet struct {
+	// mu makes Start/Stop safe from concurrent execution shards (#4145).
+	// Contention is negligible — the lock covers a map lookup — and per-key
+	// timings under parallelism are approximate by nature.
+	mu      sync.Mutex
 	enable  bool
 	timeRec map[uint64]*TimerRecord
 	order   []uint64
@@ -106,6 +111,8 @@ func (t *TimerSet) Reset() {
 }
 
 func (t *TimerSet) Start(record any) *TimerRecord {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.enable {
 		var key uint64
 		switch v := record.(type) {
@@ -128,6 +135,8 @@ func (t *TimerSet) Start(record any) *TimerRecord {
 }
 
 func (t *TimerSet) Stop(r *TimerRecord) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if r != nil {
 		r.txct++
 		r.elapsed += time.Since(r.timer).Seconds()

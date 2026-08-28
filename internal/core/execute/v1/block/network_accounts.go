@@ -42,7 +42,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 	}
 
 	// Do not forward synthetic transactions
-	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() && delivery.Transaction.Body.Type().IsSynthetic() {
+	if x.globals().Active.ExecutorVersion.SignatureAnchoringEnabled() && delivery.Transaction.Body.Type().IsSynthetic() {
 		return nil
 	}
 
@@ -50,7 +50,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 	switch body := delivery.Transaction.Body.(type) {
 	case *protocol.ActivateProtocolVersion:
 		// Add the version change to the pending globals
-		x.globals.Pending.ExecutorVersion = body.Version
+		x.globals().Pending.ExecutorVersion = body.Version
 
 	case *protocol.UpdateKeyPage:
 		switch targetName {
@@ -64,7 +64,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 			}
 
 			// Reject the transaction if the threshold is not set correctly according to the ratio
-			expectedThreshold := x.globals.Active.Globals.OperatorAcceptThreshold.Threshold(len(page.Keys))
+			expectedThreshold := x.globals().Active.Globals.OperatorAcceptThreshold.Threshold(len(page.Keys))
 			if page.AcceptThreshold != expectedThreshold {
 				return errors.BadRequest.WithFormat("invalid %v update: incorrect accept threshold: want %d, got %d", principal.GetUrl(), expectedThreshold, page.AcceptThreshold)
 			}
@@ -72,7 +72,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 
 	case *protocol.UpdateAccountAuth:
 		// Prevent authority changes (prior to v1+signatureAnchoring)
-		if !x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
+		if !x.globals().Active.ExecutorVersion.SignatureAnchoringEnabled() {
 			return errors.BadRequest.WithFormat("the authority set of a network account cannot be updated")
 		}
 
@@ -81,19 +81,19 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 		switch targetName {
 		case protocol.Oracle:
 			// Validate entry and update variable
-			err = x.globals.Pending.ParseOracle(body.Entry)
+			err = x.globals().Pending.ParseOracle(body.Entry)
 
 		case protocol.Globals:
 			// Validate entry and update variable
-			err = x.globals.Pending.ParseGlobals(body.Entry)
+			err = x.globals().Pending.ParseGlobals(body.Entry)
 
 		case protocol.Network:
 			// Validate entry and update variable
-			err = x.globals.Pending.ParseNetwork(body.Entry)
+			err = x.globals().Pending.ParseNetwork(body.Entry)
 
 		case protocol.Routing:
 			// Validate entry and update variable
-			err = x.globals.Pending.ParseRouting(body.Entry)
+			err = x.globals().Pending.ParseRouting(body.Entry)
 
 		case protocol.Votes,
 			protocol.Evidence:
