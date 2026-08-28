@@ -34,8 +34,12 @@ var storageProvides = ioc.Provides[keyvalue.Beginner](func(c *StorageService) st
 
 // detectStorageDir inspects an existing database directory and reports which
 // backend created it. Badger creates KEYREGISTRY (v2+) and *.vlog files;
-// LevelDB creates CURRENT. Neither creates the other's markers.
+// LevelDB creates CURRENT; BlockchainDB creates its permanent layer's segment
+// manifest. None creates another's markers.
 func detectStorageDir(path string) (StorageType, bool) {
+	if _, err := os.Stat(filepath.Join(path, "perm", "segments.json")); err == nil {
+		return StorageTypeBlockchainDB, true
+	}
 	if _, err := os.Stat(filepath.Join(path, "KEYREGISTRY")); err == nil {
 		return StorageTypeBadger, true
 	}

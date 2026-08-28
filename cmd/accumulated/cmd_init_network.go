@@ -110,6 +110,15 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		networkReset()
 	}
 
+	// The storage backend every generated node is pinned to. Resolved once,
+	// up front, so a typo fails before any directory is written.
+	storageType := run.DefaultStorageType
+	if flagInitNetwork.Database != "" {
+		if !storageType.SetByName(flagInitNetwork.Database) {
+			fatalf("--database: %q is not a valid storage type", flagInitNetwork.Database)
+		}
+	}
+
 	for _, bvn := range network.Bvns {
 		for _, node := range bvn.Nodes {
 			if node.PrivValKey == nil {
@@ -215,7 +224,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			// an existing node must never depend on the running binary's
 			// default - that could reboot a node into a different (empty)
 			// database.
-			cvc.StorageType = run.Ptr(run.DefaultStorageType)
+			cvc.StorageType = run.Ptr(storageType)
 			// Use Directory().AccumulateP2P() for all bootstrap peers to match the actual P2P listen port
 			// (CoreValidatorConfiguration derives P2P listen from cvc.Listen + portDir + portAccP2P = base + 0 + 2)
 			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr()

@@ -112,6 +112,7 @@ services:
           exit 0
         fi
         accumulated init network test/docker/docker-network.yml --reset --faucet-seed=FAUCET \
+          --database=${ACC_STORAGE-leveldb} \
           && touch /root/.accumulate/init-done
 
   # BVN1 Validators

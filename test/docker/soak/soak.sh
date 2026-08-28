@@ -171,6 +171,7 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "| chaos | $CHAOS_ENABLED |"
   echo "| target duration | $DURATION |"
   echo "| target TPS | $TPS |"
+  echo "| storage | ${ACC_STORAGE:-leveldb} |"
   echo
   echo "Config as run is frozen in \`config/\`. Results appended below on exit."
 } > "$manifest"
@@ -448,6 +449,16 @@ echo "== soak finished $(date -u) driver-exit=$rc ==" | tee -a "$log"
 $compose logs --no-color > "$rd/node-logs.txt" 2>/dev/null
 grep "Reconcile: pulled messages" "$rd/node-logs.txt" > "$rd/reconcile-pulls.txt" 2>/dev/null
 reconcile_pulls=$(wc -l < "$rd/reconcile-pulls.txt" 2>/dev/null || echo 0)
+# Storage-backend counters (#4165). BlockchainDB writes stats.json beside each
+# database — permanent-layer duplicates and conflicts, per record shape — and
+# it dies with the volume. One file per (node, database).
+mkdir -p "$rd/storage-stats"
+for c in $(docker ps --format '{{.Names}}' | grep -E '^acc-(dn|bvn)'); do
+  for f in $(docker exec "$c" sh -c 'find /root/.accumulate -name stats.json 2>/dev/null'); do
+    docker exec "$c" cat "$f" > "$rd/storage-stats/${c#acc-}-$(basename "$(dirname "$f")").json" 2>/dev/null
+  done
+done
+rmdir "$rd/storage-stats" 2>/dev/null || true
 # Final produced-vs-received across every channel, the check that sees a stall.
 if [ -x "$here/streams.py" ]; then
   "$here/streams.py" > "$rd/streams-final.txt" 2>&1

@@ -93,11 +93,13 @@ var flagInitDualNode struct {
 var flagInitNetwork struct {
 	GenesisDoc     string
 	FactomBalances string
+	Database       string
 }
 
 func initInitFlags() {
 	cmdInitNetwork.ResetFlags()
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
+	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.Database, "database", "", "Storage backend to pin in every generated node configuration (default: the binary's default)")
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.FactomBalances, "factom-balances", "", "Factom addresses and balances file path for writing onto the genesis block")
 
 	cmdInit.ResetFlags()
