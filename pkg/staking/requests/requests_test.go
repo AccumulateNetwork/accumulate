@@ -8,6 +8,7 @@ package requests
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -29,33 +30,33 @@ func TestEncodeGoldenVectors(t *testing.T) {
 			build: func() (*Request, error) {
 				return Withdraw("acc://myadi.acme/staking", "acc://someone.acme/tokens", "12.5")
 			},
-			want: `{"actionType":"withdraw","account":"acc://myadi.acme/staking","destination":"acc://someone.acme/tokens","amount":"12.5"}`,
+			want: "withdrawTokens|account=acc://myadi.acme/staking|amount=12.5|recipient=acc://someone.acme/tokens",
 		},
 		{
 			name: "withdraw to another staking account",
 			build: func() (*Request, error) {
 				return Withdraw("acc://myadi.acme/staking", "acc://validator.acme/staking", "1000")
 			},
-			want: `{"actionType":"withdraw","account":"acc://myadi.acme/staking","destination":"acc://validator.acme/staking","amount":"1000"}`,
+			want: "withdrawTokens|account=acc://myadi.acme/staking|amount=1000|recipient=acc://validator.acme/staking",
 		},
 		{
 			name:  "register pure",
 			build: func() (*Request, error) { return Register("acc://myadi.acme/staking", "pure", "", "") },
-			want:  `{"actionType":"register","type":"pure","stake":"acc://myadi.acme/staking"}`,
+			want:  "addAccount|account=acc://myadi.acme/staking|type=pure",
 		},
 		{
 			name: "register with a payout destination",
 			build: func() (*Request, error) {
 				return Register("acc://myadi.acme/staking", "pure", "acc://myadi.acme/rewards", "")
 			},
-			want: `{"actionType":"register","type":"pure","stake":"acc://myadi.acme/staking","rewards":"acc://myadi.acme/rewards"}`,
+			want: "addAccount|account=acc://myadi.acme/staking|payout=acc://myadi.acme/rewards|type=pure",
 		},
 		{
 			name: "register delegated",
 			build: func() (*Request, error) {
 				return Register("acc://myadi.acme/staking", "delegated", "", "acc://validator.acme/staking")
 			},
-			want: `{"actionType":"register","type":"delegated","stake":"acc://myadi.acme/staking","delegate":"acc://validator.acme/staking"}`,
+			want: "addAccount|account=acc://myadi.acme/staking|delegate=acc://validator.acme/staking|type=delegated",
 		},
 		{
 			// The hyphenated form a user types is canonicalised on the way out;
@@ -63,7 +64,7 @@ func TestEncodeGoldenVectors(t *testing.T) {
 			// the way the spec spells it.
 			name:  "register core-validator canonicalises",
 			build: func() (*Request, error) { return Register("acc://myadi.acme/staking", "core-validator", "", "") },
-			want:  `{"actionType":"register","type":"coreValidator","stake":"acc://myadi.acme/staking"}`,
+			want:  "addAccount|account=acc://myadi.acme/staking|type=coreValidator",
 		},
 	}
 
@@ -74,12 +75,20 @@ func TestEncodeGoldenVectors(t *testing.T) {
 
 			parts, err := r.Encode()
 			require.NoError(t, err)
-			require.Len(t, parts, 1, "one entry, one request")
-			require.Equal(t, tt.want, string(parts[0]))
+
+			// The wallet's encoding: a bare action marker followed by the
+			// action's fields as sorted key=value parts. ONE REQUEST still
+			// occupies one entry — it simply spans several parts, which is
+			// what core/wallet internal/staking.FormatActions writes and
+			// therefore what this package must write.
+			got := make([]string, len(parts))
+			for i, p := range parts {
+				got[i] = string(p)
+			}
+			require.Equal(t, tt.want, strings.Join(got, "|"))
 
 			back, err := Parse(parts)
 			require.NoError(t, err)
-			require.Equal(t, EraContract, back.Era)
 			require.Equal(t, r.Kind, back.Kind)
 			require.Equal(t, r.Subject(), back.Subject())
 		})

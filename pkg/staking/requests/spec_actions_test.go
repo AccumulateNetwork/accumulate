@@ -15,7 +15,10 @@ package requests
 // Silently wrong is worse than silently ignored: the operator sees a
 // registration nobody requested, and the request they did make disappears.
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // The real mainnet entry, block 34555747, 2026-08-27T08:30:36Z.
 var saisneChangeType = [][]byte{
@@ -120,30 +123,60 @@ func TestMarkerlessRegistrationStillWorks(t *testing.T) {
 	}
 }
 
-// TestUnfulfillableKindsCannotBeEncoded: Parse is generous, Encode is
-// strict. A recognised-but-unfulfilled action must be readable and
-// UNWRITABLE — the chain accepts and bills any entry, so an encoder that
-// emits one nobody acts on is the exact harm Encode exists to prevent.
-// Before this, the switch fell through and produced
-// {"actionType":"changeType"} with no account and no type.
-func TestUnfulfillableKindsCannotBeEncoded(t *testing.T) {
-	for _, k := range []Kind{
-		KindChangeType, KindChangePayout, KindChangeDelegate,
-		KindChangeDelegatorPayout, KindRejectDelegates, KindCancelRequest,
-		KindRegisterIdentity, KindUnstake, KindTransfer,
+// TestRecognisedKindsAreWritable: every action the WALLET defines must be
+// writable by this package.
+//
+// This test previously asserted the opposite — that kinds the fleet does
+// not fulfil must be unwritable — on the reasoning that writing an entry
+// nobody acts on wastes credits. That reasoning inverted the dependency:
+// core/wallet writes all eleven actions today, so a package that refuses
+// to write them is not the definitive encoder, it is a second dialect.
+// Whether the FLEET acts on a request (Kind.ActsOn) is a separate
+// question from whether the request is well formed and writable.
+func TestRecognisedKindsAreWritable(t *testing.T) {
+	for _, tc := range []struct {
+		r    *Request
+		want string
+	}{
+		{&Request{Kind: KindChangeType, Account: "acc://a.acme/stake", Type: "pure"},
+			"changeType|account=acc://a.acme/stake|type=pure"},
+		{&Request{Kind: KindUnstake, Account: "acc://a.acme/stake"},
+			"unstakeAccount|account=acc://a.acme/stake"},
+		{&Request{Kind: KindRejectDelegates, Identity: "acc://a.acme"},
+			"rejectDelegates|identity=acc://a.acme"},
+		{&Request{Kind: KindRegisterIdentity, Identity: "acc://a.acme"},
+			"registerIdentity|identity=acc://a.acme"},
+		{&Request{Kind: KindChangeDelegatorPayout, Identity: "acc://a.acme", Destination: "acc://a.acme/rewards"},
+			"changeDelegatorPayout|destination=acc://a.acme/rewards|identity=acc://a.acme"},
+		{&Request{Kind: KindCancelRequest, RequestTx: "acc://abc@a.acme/x"},
+			"cancelRequest|request=acc://abc@a.acme/x"},
 	} {
-		r := &Request{Kind: k, Account: "acc://a.acme/stake", Stake: "acc://a.acme/stake", Type: "pure"}
-		out, err := r.Encode()
-		if err == nil {
-			t.Errorf("%s encoded to %s — the fleet does not fulfil it, so it must not be writable", k, out)
+		out, err := tc.r.Encode()
+		if err != nil {
+			t.Errorf("%s: the wallet writes this and we refuse to: %v", tc.r.Kind, err)
+			continue
+		}
+		got := make([]string, len(out))
+		for i, p := range out {
+			got[i] = string(p)
+		}
+		if j := strings.Join(got, "|"); j != tc.want {
+			t.Errorf("%s encoded to %q, want %q", tc.r.Kind, j, tc.want)
 		}
 	}
-	// The two the fleet does fulfil still encode.
-	reg, err := Register("acc://a.acme/stake", "pure", "", "")
-	if err != nil {
-		t.Fatal(err)
+}
+
+// TestActsOnIsAboutFulfilmentNotValidity: the fleet fulfils two actions.
+// That is a statement about the FLEET, and must not leak into whether an
+// entry can be read or written — conflating them is what made nine of the
+// wallet's actions unreadable and then unwritable.
+func TestActsOnIsAboutFulfilmentNotValidity(t *testing.T) {
+	if !KindWithdraw.ActsOn() || !KindRegister.ActsOn() {
+		t.Error("the fleet fulfils withdraw and register")
 	}
-	if _, err := reg.Encode(); err != nil {
-		t.Errorf("register must still encode: %v", err)
+	for _, k := range []Kind{KindChangeType, KindUnstake, KindTransfer, KindCancelRequest} {
+		if k.ActsOn() {
+			t.Errorf("%s reports as fulfilled by the fleet; it is not (yet)", k)
+		}
 	}
 }

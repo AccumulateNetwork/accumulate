@@ -129,6 +129,21 @@ var allKinds = map[string]Kind{
 	"registeridentity":      KindRegisterIdentity,
 }
 
+// Marker is the wallet's spelling of this action — the bare marker it
+// writes as the entry's first part. Kind values for the nine account and
+// lifecycle actions already ARE the wallet's spelling; the two the fleet
+// fulfils carry historical Go names and map back here.
+func (k Kind) Marker() string {
+	switch k {
+	case KindRegister:
+		return "addAccount"
+	case KindWithdraw:
+		return "withdrawTokens"
+	default:
+		return string(k)
+	}
+}
+
 // KindOf resolves a spelling to its Kind. The bool reports recognition.
 func KindOf(s string) (Kind, bool) {
 	k, ok := allKinds[strings.ToLower(strings.TrimSpace(s))]
@@ -350,9 +365,72 @@ func (r *Request) Validate() error {
 		}
 		return nil
 
+	// The wallet's other actions. Each is judged on its OWN required
+	// fields — the subject it names and the value it changes.
+	//
+	// This used to be a blanket refusal: "not a staking request; the fleet
+	// acts on withdraw and register only". That described the FULFILMENT
+	// set and applied it to validity, so every other action the wallet can
+	// write was declared invalid. Whether the fleet acts on a request is
+	// Kind.ActsOn; whether the request is well formed is this method.
+
+	case KindTransfer:
+		if r.Account == "" || r.Destination == "" {
+			return fmt.Errorf("a transfer request needs an account and a recipient")
+		}
+		if !amountPattern.MatchString(r.Amount) {
+			return fmt.Errorf("amount %q must be a plain decimal such as 12.5", r.Amount)
+		}
+		return nil
+
+	case KindUnstake:
+		if r.Account == "" {
+			return fmt.Errorf("an unstake request needs an account")
+		}
+		return nil
+
+	case KindChangeType:
+		if r.Account == "" || r.Type == "" {
+			return fmt.Errorf("a changeType request needs an account and a type")
+		}
+		if _, ok := CanonicalClass(r.Type); !ok {
+			return fmt.Errorf("%q is not a staking class — use one of %s",
+				r.Type, strings.Join(Classes, ", "))
+		}
+		return nil
+
+	case KindChangePayout:
+		if r.Account == "" || r.Destination == "" {
+			return fmt.Errorf("a changePayout request needs an account and a destination")
+		}
+		return nil
+
+	case KindChangeDelegate:
+		if r.Account == "" || r.Delegate == "" {
+			return fmt.Errorf("a changeDelegate request needs an account and a delegate")
+		}
+		return nil
+
+	case KindChangeDelegatorPayout:
+		if r.Identity == "" || r.Destination == "" {
+			return fmt.Errorf("a changeDelegatorPayout request needs an identity and a destination")
+		}
+		return nil
+
+	case KindRejectDelegates, KindRegisterIdentity:
+		if r.Identity == "" {
+			return fmt.Errorf("a %s request needs an identity", r.Kind)
+		}
+		return nil
+
+	case KindCancelRequest:
+		if r.RequestTx == "" {
+			return fmt.Errorf("a cancelRequest needs the request txid it revokes")
+		}
+		return nil
+
 	default:
-		return fmt.Errorf("%q is not a staking request; the fleet acts on %q and %q only",
-			r.Kind, KindWithdraw, KindRegister)
+		return fmt.Errorf("%q is not an action the wallet defines", r.Kind)
 	}
 }
 
@@ -385,35 +463,74 @@ func (r *Request) Encode() ([][]byte, error) {
 		return nil, err
 	}
 
-	e := contractEntry{ActionType: string(r.Kind)}
+	// The WALLET's encoding, because the wallet is what writes requests:
+	// a bare action marker followed by its fields as sorted key=value
+	// parts (core/wallet internal/staking.FormatActions). Its
+	// action_test.go golden vectors are the byte-level contract and are
+	// mirrored in wallet_vectors_test.go here.
+	//
+	// This used to emit a JSON object — {"actionType":"register",...} — a
+	// dialect nothing else spoke. Round-tripping a wallet entry through
+	// Parse then Encode produced bytes the wallet could not read, which is
+	// the fork this package exists to prevent.
+	fields := map[string]string{}
+	put := func(k, v string) {
+		if v != "" {
+			fields[k] = v
+		}
+	}
 	switch r.Kind {
-	case KindWithdraw:
-		e.Account, e.Destination, e.Amount = r.Account, r.Destination, r.Amount
 	case KindRegister:
-		e.Type, e.Stake, e.Rewards, e.Delegate = r.Type, r.Stake, r.Rewards, r.Delegate
+		put("account", r.subjectAccount())
+		put("type", r.Type)
+		put("payout", r.Rewards)
+		put("delegate", r.Delegate)
+	case KindWithdraw, KindTransfer:
+		put("account", r.Account)
+		put("recipient", r.Destination)
+		put("amount", r.Amount)
+	case KindUnstake:
+		put("account", r.Account)
+	case KindChangePayout:
+		put("account", r.Account)
+		put("destination", r.Destination)
+	case KindChangeDelegate:
+		put("account", r.Account)
+		put("delegate", r.Delegate)
+	case KindChangeType:
+		put("account", r.Account)
+		put("type", r.Type)
+	case KindChangeDelegatorPayout:
+		put("identity", r.Identity)
+		put("destination", r.Destination)
+	case KindRejectDelegates, KindRegisterIdentity:
+		put("identity", r.Identity)
+	case KindCancelRequest:
+		put("request", r.RequestTx)
 	default:
-		// A kind the fleet does not fulfil has no contract encoding, and
-		// must not get a half-one. Without this the switch simply fell
-		// through and emitted {"actionType":"changeType"} — no account, no
-		// type — an entry the chain accepts, bills, and nobody acts on.
-		// That is precisely what Encode exists to make impossible.
-		//
-		// To change a type, payout or delegate, re-register: see Register,
-		// which REPLACES the whole record.
-		return nil, fmt.Errorf(
-			"%q is a recognised action (spec §3.1) but the validator fleet does not fulfil it, "+
-				"so writing one would be billed and never acted on; to change a registration, "+
-				"re-register with Register (it replaces the whole record)", r.Kind)
+		return nil, fmt.Errorf("cannot encode %q: not an action the wallet defines", r.Kind)
 	}
 
-	b, err := json.Marshal(e)
-	if err != nil {
-		return nil, fmt.Errorf("encode staking request: %w", err)
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
 	}
-	// One entry, one request. Two payloads would share an entry hash and so a
-	// fulfillment memo, making their fulfillments indistinguishable — the fleet
-	// refuses such an entry whole.
-	return [][]byte{b}, nil
+	sort.Strings(keys)
+
+	parts := [][]byte{[]byte(r.Kind.Marker())}
+	for _, k := range keys {
+		parts = append(parts, []byte(k+"="+fields[k]))
+	}
+	return parts, nil
+}
+
+// subjectAccount is the account a registration names. Legacy entries put
+// it in Stake, the wallet in Account; either is the same account.
+func (r *Request) subjectAccount() string {
+	if r.Stake != "" {
+		return r.Stake
+	}
+	return r.Account
 }
 
 // Parse decodes an entry of the requests account in any era.

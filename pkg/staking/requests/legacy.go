@@ -56,6 +56,7 @@ func parseLegacy(parts [][]byte) (*Request, bool) {
 
 	kind, ok := legacyKind(get(aliasAction...), markers)
 	account := get(aliasAccount...)
+	identity := get("identity")
 
 	// The oldest registrations carry no action marker AT ALL — just
 	// identity, type, stake, rewards and delegate. A stake plus a type or a
@@ -71,7 +72,13 @@ func parseLegacy(parts [][]byte) (*Request, bool) {
 	if !ok && len(markers) == 0 && account != "" && (get("type") != "" || get(aliasDelegate...) != "") {
 		kind, ok = KindRegister, true
 	}
-	if !ok || account == "" {
+	// A request needs a SUBJECT, and for four of the wallet's actions that
+	// subject is an identity, not an account: registerIdentity,
+	// rejectDelegates and changeDelegatorPayout name only `identity=`, and
+	// cancelRequest names only the `request=` txid it revokes. Requiring
+	// an account rejected all four outright — "not a staking request" for
+	// entries the wallet writes.
+	if !ok || (account == "" && identity == "" && get("request") == "") {
 		return nil, false
 	}
 
@@ -105,21 +112,29 @@ func parseLegacy(parts [][]byte) (*Request, bool) {
 		}, true
 	}
 
-	// Every other action spec §3.1 names. Read faithfully — the account it
-	// names and whichever change fields it carries — so the entry can be
-	// reported as the action it IS. The fleet does not fulfil these
-	// (Kind.ActsOn), and reading them is what stops the old code from
-	// guessing them into registrations.
+	// Every other action the wallet writes. Read faithfully — the subject
+	// it names and whichever fields it carries — so the entry is reported
+	// as the action it IS.
+	//
+	// Destination is the wallet's `destination=` (changePayout,
+	// changeDelegatorPayout); Amount and Recipient belong to
+	// transferTokens. RequestTx carries cancelRequest's `request=` txid.
+	req := get(aliasRequestTx...)
+	if req == "" {
+		req = get("request")
+	}
 	return &Request{
-		Kind:      kind,
-		Account:   account,
-		Stake:     account,
-		Type:      canonicalOrRaw(get("type")),
-		Rewards:   get(aliasPayout...),
-		Delegate:  get(aliasDelegate...),
-		Identity:  get("identity"),
-		RequestTx: get(aliasRequestTx...),
-		Era:       EraLegacy,
+		Kind:        kind,
+		Account:     account,
+		Stake:       account,
+		Type:        canonicalOrRaw(get("type")),
+		Rewards:     get(aliasPayout...),
+		Delegate:    get(aliasDelegate...),
+		Destination: get(aliasRecipient...),
+		Amount:      NormalizeAmount(get("amount")),
+		Identity:    identity,
+		RequestTx:   req,
+		Era:         EraLegacy,
 	}, true
 }
 

@@ -158,7 +158,7 @@ func TestErasNormaliseToTheSameRequest(t *testing.T) {
 // Re-encoding a legacy request migrates it to the contract. This is one-way by
 // design and worth pinning, so nobody builds on an assumption of byte-identical
 // round-tripping.
-func TestLegacyReEncodesAsContract(t *testing.T) {
+func TestLegacyReEncodesToTheWalletForm(t *testing.T) {
 	r, err := Parse(parts("addAccount",
 		"identity=acc://alice.acme", "account=acc://alice.acme/staking", "type=pure", "request_txid=abc123"))
 	require.NoError(t, err)
@@ -167,11 +167,26 @@ func TestLegacyReEncodesAsContract(t *testing.T) {
 
 	out, err := r.Encode()
 	require.NoError(t, err)
-	require.Len(t, out, 1)
 
-	// Identity and the transaction cross-reference have no place in the
-	// contract — the fleet derives the identity from the stake.
-	require.JSONEq(t, `{"actionType":"register","type":"pure","stake":"acc://alice.acme/staking"}`, string(out[0]))
+	// Re-encoding normalises to the WALLET's form: the action marker plus
+	// its defined fields, sorted. Identity and the transaction
+	// cross-reference are dropped — neither is a field of addAccount
+	// (core/wallet requests_types.yml), and the fleet derives the identity
+	// from the account.
+	//
+	// This test formerly asserted a single JSON payload. That was the
+	// contract-era encoding, which nothing writes: the wallet has no JSON
+	// encoder, so a request re-encoded that way could not be read by the
+	// tool that authored it.
+	got := make([]string, len(out))
+	for i, p := range out {
+		got[i] = string(p)
+	}
+	require.Equal(t, []string{
+		"addAccount",
+		"account=acc://alice.acme/staking",
+		"type=pure",
+	}, got)
 }
 
 func TestNormalizeAmount(t *testing.T) {
