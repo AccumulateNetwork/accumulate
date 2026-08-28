@@ -38,12 +38,14 @@
 package bcdb
 
 import (
-	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	stderrors "errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 
 	bcdb "github.com/AccumulateNetwork/BlockchainDB/database"
@@ -88,16 +90,37 @@ type Database struct {
 
 	// shapes tallies writes by key shape.  Classifying a rewrite means
 	// knowing what the key held before, and asking the store would
-	// perturb the very counters being measured, so the last value
-	// written for each key is remembered here instead.
-	shapes map[string]*shapeCount
-	last   map[[32]byte][]byte
+	// perturb the very counters being measured, so a digest of the
+	// last value written for each key is remembered here instead --
+	// a digest and not the value, because remembering the values is
+	// keeping a second copy of the database in memory.
+	shapes map[string]*ShapeCount
+	last   map[[32]byte][32]byte
+
+	// dyna holds the keys that must go to the dynamic layer whatever
+	// their classification says: keys that have been deleted, and keys
+	// the permanent layer refused.  Both leave a value in the dynamic
+	// layer, and the dynamic layer is read first, so a later write to
+	// the permanent layer would be shadowed by what is already there.
+	//
+	// This is only ever the exceptions.  A correctly classified
+	// database never adds to it.
+	dyna map[[32]byte]bool
 }
 
 // staged is one committed batch that has not reached the store yet
 type staged struct {
 	version uint64
-	entries map[[32]byte][]byte // A zero-length value is a deletion
+	entries map[[32]byte]entry
+}
+
+// entry is one staged write, and where its key says it belongs.  The
+// layer is decided at commit, while the key path is still in hand: by
+// write-through the key is a hash and nothing can be told from it.
+type entry struct {
+	value []byte // A zero-length value is a deletion
+	perm  bool   // Write-once: goes to the permanent layer
+	shape string // The key's shape, so a refusal can be attributed
 }
 
 var _ keyvalue.Beginner = (*Database)(nil)
@@ -141,8 +164,9 @@ func Open(path string) (*Database, error) {
 	return &Database{
 		kv:            kv,
 		views:         map[uint64]int{},
-		shapes:        map[string]*shapeCount{},
-		last:          map[[32]byte][]byte{},
+		shapes:        map[string]*ShapeCount{},
+		last:          map[[32]byte][32]byte{},
+		dyna:          map[[32]byte]bool{},
 		statsPath:     filepath.Join(path, "stats.json"),
 		CompressEvery: 128,
 		StatsEvery:    50,
@@ -220,8 +244,8 @@ func (d *Database) flush() error {
 // writeThrough puts a staged batch into the store and seals it.  The
 // caller must hold the lock.
 func (d *Database) writeThrough(s *staged) error {
-	for key, value := range s.entries {
-		if _, err := d.kv.Put(key, value); err != nil {
+	for key, e := range s.entries {
+		if err := d.putRouted(key, e); err != nil {
 			return errors.UnknownError.WithFormat("put: %w", err)
 		}
 	}
@@ -248,7 +272,7 @@ func (d *Database) Close() error {
 		return nil
 	}
 	d.closed = true
-	d.StatsEvery, d.version = 1, d.version // Force a final tally
+	d.StatsEvery = 1 // Force a final tally
 	d.reportStats()
 
 	// Everything staged is now unreachable by any reader
@@ -268,6 +292,20 @@ func (d *Database) Stats() (perm, dyna bcdb.StoreStats) {
 	return d.kv.PermKV.Stats(), d.kv.DynaKV.Stats()
 }
 
+// Shapes reports the per-shape tally: for every shape of key the
+// database has been asked to write, which layer it was routed to and
+// what happened to those writes.  The map is a copy, so a caller can
+// read it while the database goes on running.
+func (d *Database) Shapes() map[string]ShapeCount {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	shapes := make(map[string]ShapeCount, len(d.shapes))
+	for shape, c := range d.shapes {
+		shapes[shape] = *c
+	}
+	return shapes
+}
+
 // getAt reads a key as of a version: the newest staged write no later
 // than that version, and otherwise the store, which by construction
 // holds nothing newer.
@@ -282,11 +320,11 @@ func (d *Database) getAt(at uint64, key *record.Key) ([]byte, error) {
 		if d.staged[i].version > at {
 			continue // Committed after this batch began
 		}
-		if value, ok := d.staged[i].entries[h]; ok {
-			if len(value) == 0 {
+		if e, ok := d.staged[i].entries[h]; ok {
+			if len(e.value) == 0 {
 				return nil, (*database.NotFoundError)(key)
 			}
-			return value, nil
+			return e.value, nil
 		}
 	}
 
@@ -306,7 +344,7 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 		return d.flushErr
 	}
 
-	staged := &staged{version: d.version + 1, entries: make(map[[32]byte][]byte, len(entries))}
+	staged := &staged{version: d.version + 1, entries: make(map[[32]byte]entry, len(entries))}
 	for _, e := range entries {
 		key := d.prefix.AppendKey(e.Key)
 		h := key.Hash()
@@ -314,8 +352,20 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 		if e.Delete {
 			value = []byte{} // Tombstone
 		}
-		staged.entries[h] = value
-		d.tally(e.Key, h, value)
+
+		// A deletion is a mutation whatever the record is, and a key
+		// the dynamic layer already holds has to stay there: it is
+		// read first, so a later write to the permanent layer would be
+		// shadowed by what the dynamic layer already has -- by a
+		// tombstone, that means reading as deleted while holding a
+		// value.
+		if len(value) == 0 {
+			d.dyna[h] = true
+		}
+		perm := len(value) > 0 && !d.dyna[h] && isWriteOnce(key)
+
+		shape := d.tally(key, h, value, perm)
+		staged.entries[h] = entry{value: value, perm: perm, shape: shape}
 	}
 	d.version = staged.version
 	d.staged = append(d.staged, staged)
@@ -330,24 +380,86 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 // key, a rewrite with the same bytes, or a rewrite with different
 // bytes.  Only the third kind is data actually changing, and grouping
 // it by shape says which records change -- rather than leaving it to be
-// inferred from a total.  The caller must hold the lock.
-func (d *Database) tally(key *record.Key, h [32]byte, value []byte) {
+// inferred from a total.  It returns the shape, which the write path
+// carries so that a refusal by the permanent layer can be attributed
+// to it.  The caller must hold the lock.
+func (d *Database) tally(key *record.Key, h [32]byte, value []byte, perm bool) string {
 	shape := keyShape(key)
 	c := d.shapes[shape]
 	if c == nil {
-		c = new(shapeCount)
+		c = new(ShapeCount)
+		c.Layer = "dyna"
+		if perm {
+			c.Layer = "perm"
+		}
 		d.shapes[shape] = c
 	}
+	digest := sha256.Sum256(value)
 	prev, seen := d.last[h]
 	switch {
 	case !seen:
 		c.New++
-	case bytes.Equal(prev, value):
+	case prev == digest:
 		c.Duplicate++
 	default:
 		c.Rewritten++
 	}
-	d.last[h] = value
+	d.last[h] = digest
+	return shape
+}
+
+// putRouted writes an entry to the layer its key was classified into,
+// and treats the permanent layer's refusal as a finding rather than as
+// a failure.
+//
+// The permanent layer refuses to overwrite a key with a different
+// value, and that refusal is precisely the evidence that a record
+// classified write-once is not.  Failing the commit would take a node
+// down over a misclassification and would surface exactly one of them
+// per run, when what is wanted is the list.  So the write goes to the
+// dynamic layer -- where it belonged -- the key is remembered so its
+// later writes go there too, and the shape it came from is counted so
+// the report names it.
+//
+// Only the refusal is handled this way.  Any other error is a failure
+// of the store and is returned.
+//
+// The caller must hold the lock.
+func (d *Database) putRouted(key [32]byte, e entry) error {
+	if !e.perm {
+		_, err := d.kv.PutDyna(key, e.value)
+		return err
+	}
+
+	_, err := d.kv.PutPerm(key, e.value)
+	switch {
+	case err == nil:
+		return nil
+	case !isRefusal(err):
+		return err
+	}
+
+	// The store says this record is not write-once
+	d.dyna[key] = true
+	if c := d.shapes[e.shape]; c != nil {
+		c.Misrouted++
+	}
+	_, err = d.kv.PutDyna(key, e.value)
+	return err
+}
+
+// isRefusal reports whether err is the permanent layer declining to
+// overwrite a key, rather than the store failing.
+//
+// It matches on the message because BlockchainDB builds that error
+// fresh at the point of refusal, so there is nothing to compare
+// against -- see AccumulateNetwork/BlockchainDB#28, which asks for a
+// sentinel.  Until then this is a string match, and the direction it
+// fails in is the safe one: if the message changes, a refusal is
+// reported as a store failure and the commit fails loudly, rather than
+// a real failure being quietly counted as a misclassification.
+func isRefusal(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "cannot overwrite immutable value")
 }
 
 // reportStats writes what the two layers have been asked to do to
@@ -356,11 +468,21 @@ func (d *Database) tally(key *record.Key, h [32]byte, value []byte) {
 // the node's logging rules decide what survives and a measurement
 // should not depend on that.
 //
-// PutDuplicate over PutTotal on the permanent layer is the number this
-// is here for: the layer pays for a lookup on every write, and the only
-// thing that lookup can discover is that the key is already present
-// with the same value.  If that is rare, the lookup is a tax on every
-// write to catch a case that does not happen.
+// Two numbers are what this is for.
+//
+// PutDuplicate over PutTotal on the permanent layer: now that writes
+// are routed by classification rather than discovered, that ratio
+// finally means what it says -- how often genuinely write-once data is
+// written twice.  The layer pays for a lookup on every write and the
+// only thing that lookup can find is such a duplicate, so if the ratio
+// is small the lookup is a tax on every write to catch a case that
+// does not happen, and the layer can become a pure append with
+// duplicates reconciled at merge time.
+//
+// Misrouted, per shape: the writes the permanent layer refused.  Each
+// one is a record isWriteOnce calls write-once and that Accumulate
+// rewrites, named by its shape rather than left to be inferred from an
+// aggregate.  On a correct classification this list is empty.
 //
 // The caller must hold the lock.
 func (d *Database) reportStats() {
@@ -375,8 +497,18 @@ func (d *Database) reportStats() {
 		DuplicatePct float64                `json:"permDuplicatePct"`
 		ConflictPct  float64                `json:"permConflictPct"`
 		WalkPct      float64                `json:"permWalkPct"`
-		Shapes       map[string]*shapeCount `json:"shapes"`
+		Misrouted    []string               `json:"misroutedShapes"`
+		Shapes       map[string]*ShapeCount `json:"shapes"`
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes}
+
+	// Lifted out of the shape table so a run can be checked by looking
+	// at one field
+	for shape, c := range d.shapes {
+		if c.Misrouted > 0 {
+			report.Misrouted = append(report.Misrouted, shape)
+		}
+	}
+	sort.Strings(report.Misrouted)
 
 	pct := func(n, of uint64) float64 {
 		if of == 0 {
@@ -405,15 +537,15 @@ func (d *Database) forEach(fn func(*record.Key, []byte) error) error {
 
 	seen := map[[32]byte]bool{}
 	for i := len(d.staged) - 1; i >= 0; i-- {
-		for key, value := range d.staged[i].entries {
+		for key, e := range d.staged[i].entries {
 			if seen[key] {
 				continue
 			}
 			seen[key] = true
-			if len(value) == 0 {
+			if len(e.value) == 0 {
 				continue // Deleted
 			}
-			if err := fn(record.KeyFromHash(key), value); err != nil {
+			if err := fn(record.KeyFromHash(key), e.value); err != nil {
 				return err
 			}
 		}
