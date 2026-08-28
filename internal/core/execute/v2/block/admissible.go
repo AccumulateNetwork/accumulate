@@ -31,22 +31,31 @@ import (
 // anchor arrives, and staging turns it into the end of the run. Reporting it
 // as an error here would force both callers to unpick the same error.
 func (x *Executor) isAdmissible(batch *database.Batch, proof *protocol.AnnotatedReceipt) (bool, error) {
+	_, ok, err := x.provingAnchorIndex(batch, proof)
+	return ok, err
+}
+
+// provingAnchorIndex is isAdmissible with the evidence: where in the directory
+// anchor chain the proof's terminal anchor sits, if it does. Staging uses the
+// index to tell an anchor applied THIS block from one applied earlier (#4169
+// step 0c). A nil proof is admissible and has no anchor; the index is -1.
+func (x *Executor) provingAnchorIndex(batch *database.Batch, proof *protocol.AnnotatedReceipt) (int64, bool, error) {
 	if proof == nil {
-		return true, nil
+		return -1, true, nil
 	}
 
 	anchor := proof.TerminalAnchor()
-	_, err := batch.Account(x.Describe.AnchorPool()).
+	i, err := batch.Account(x.Describe.AnchorPool()).
 		AnchorChain(protocol.Directory).
 		Root().
 		IndexOf(anchor)
 	switch {
 	case err == nil:
-		return true, nil
+		return i, true, nil
 	case errors.Is(err, errors.NotFound):
-		return false, nil
+		return -1, false, nil
 	default:
-		return false, errors.UnknownError.WithFormat("search for directory anchor %x: %w", anchor, err)
+		return -1, false, errors.UnknownError.WithFormat("search for directory anchor %x: %w", anchor, err)
 	}
 }
 

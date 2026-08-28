@@ -38,6 +38,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
+	mExecBlocks.Inc()
 
 	// Write each stream's advances to its ledger, once per stream (#4169 step
 	// 7). Before anything else reads or writes those records: production

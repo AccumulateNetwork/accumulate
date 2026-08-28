@@ -156,3 +156,41 @@ class BatchLifecycleTest(unittest.TestCase):
     def test_no_scrape_is_zero_not_an_error(self):
         self.assertEqual(0, soakmon.life_from({})["blocks"])
         self.assertEqual({}, soakmon.life_from(None)["waitsByReason"])
+
+
+class ExecBaselineTests(unittest.TestCase):
+    """#4169 step 0: the gates for sharded execution and two-round staging
+    are ratios of node counters summed over the fleet."""
+
+    def test_sums_counters_across_nodes(self):
+        per = {
+            "acc-bvn1-val1": [
+                ("accumulate_exec_phase_seconds_total", {"phase": "serial"}, 3.0),
+                ("accumulate_exec_phase_seconds_total", {"phase": "parallel"}, 1.0),
+                ("accumulate_exec_blocks_total", {}, 10),
+                ("accumulate_exec_flushes_total", {}, 25),
+                ("accumulate_exec_synthetic_anchor_total", {"applied": "this_block"}, 2),
+                ("accumulate_exec_synthetic_anchor_total", {"applied": "earlier"}, 40),
+            ],
+            "acc-bvn1-val2": [
+                ("accumulate_exec_phase_seconds_total", {"phase": "serial"}, 1.0),
+                ("accumulate_exec_phase_seconds_total", {"phase": "parallel"}, 3.0),
+                ("accumulate_exec_blocks_total", {}, 10),
+                ("accumulate_exec_flushes_total", {}, 5),
+                ("accumulate_exec_synthetic_anchor_total", {"applied": "missing"}, 8),
+            ],
+        }
+        ex = soakmon.exec_from(per)
+        self.assertEqual(4.0, ex["serialSec"])
+        self.assertEqual(4.0, ex["parallelSec"])
+        self.assertEqual(20, ex["blocks"])
+        self.assertEqual(30, ex["flushes"])
+        self.assertEqual((2, 40, 8), (ex["anchorThisBlock"], ex["anchorEarlier"], ex["anchorMissing"]))
+
+    def test_absent_metrics_are_zero_not_a_crash(self):
+        """An older node exports none of these; the collector must not die
+        (#4093 — soakmon rendered absent metrics as 0 and froze once)."""
+        self.assertEqual(0, soakmon.exec_from({})["blocks"])
+        self.assertEqual(0.0, soakmon.exec_from(None)["serialSec"])
+        per = {"n": [("accumulate_exec_phase_seconds_total", "raw-string-label", "nan?")]}
+        self.assertEqual(0.0, soakmon.exec_from(per)["serialSec"])

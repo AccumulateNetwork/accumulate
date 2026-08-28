@@ -199,10 +199,10 @@ func (b *Block) admissibilityOf(str stream, outer messaging.Message, seq *messag
 		return b.Executor.anchorIsAdmissible(b.Batch, m.Proof, txn.Transaction, seq.Source)
 
 	case *messaging.SyntheticMessage:
-		return b.Executor.isAdmissible(b.Batch, m.Proof)
+		return b.syntheticIsAdmissible(m.Proof)
 
 	case *messaging.BadSyntheticMessage:
-		return b.Executor.isAdmissible(b.Batch, m.Proof)
+		return b.syntheticIsAdmissible(m.Proof)
 
 	default:
 		// A bare sequenced message carries no proof of its own. For a
@@ -218,6 +218,26 @@ func (b *Block) admissibilityOf(str stream, outer messaging.Message, seq *messag
 		}
 		return b.Executor.isAdmissible(b.Batch, nil)
 	}
+}
+
+// syntheticIsAdmissible is the executor's proof check, counted by when the
+// proving anchor was applied (#4169 step 0c). Staging judges synthetics after
+// the block's anchors have executed, so an anchor applied this block is
+// already in the chain — this is what says how often that round pays.
+func (b *Block) syntheticIsAdmissible(proof *protocol.AnnotatedReceipt) (bool, error) {
+	i, ok, err := b.Executor.provingAnchorIndex(b.Batch, proof)
+	if err != nil || proof == nil {
+		return ok, err
+	}
+	switch {
+	case !ok:
+		mExecSyntheticAnchor.WithLabelValues("missing").Inc()
+	case i >= b.dnAnchorsAtStart:
+		mExecSyntheticAnchor.WithLabelValues("this_block").Inc()
+	default:
+		mExecSyntheticAnchor.WithLabelValues("earlier").Inc()
+	}
+	return ok, nil
 }
 
 // lessStream is the canonical stream order: anchors before synthetics, the

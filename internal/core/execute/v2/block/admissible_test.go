@@ -7,6 +7,7 @@
 package block
 
 import (
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -253,4 +254,44 @@ func TestIsAdmissible_IsMonotone(t *testing.T) {
 	ok, err = x.isAdmissible(batch, proof)
 	require.NoError(t, err)
 	assert.True(t, ok, "an anchor already in the chain must stay admissible — the chain only grows")
+}
+
+// #4169 step 0c: staging counts, per synthetic, whether its proving anchor
+// was applied in THIS block or earlier. The classifier is the chain index
+// against the chain height at block start; off by one here would report every
+// block's last anchor on the wrong side and quietly bias the gate.
+func TestSyntheticIsAdmissible_CountsWhenTheAnchorLanded(t *testing.T) {
+	x, batch, earlier := admissibleFixture(t) // chain: [earlier]
+	thisBlock := make([]byte, 32)
+	thisBlock[0] = 0xCD
+	chain, err := batch.Account(x.Describe.AnchorPool()).AnchorChain(protocol.Directory).Root().Get()
+	require.NoError(t, err)
+	require.NoError(t, chain.AddEntry(thisBlock, false)) // chain: [earlier, thisBlock]
+
+	b := &Block{positions: new(positionCache), Batch: batch, Executor: x, dnAnchorsAtStart: 1}
+	count := func(applied string) float64 {
+		return testutil.ToFloat64(mExecSyntheticAnchor.WithLabelValues(applied))
+	}
+	e0, t0, m0 := count("earlier"), count("this_block"), count("missing")
+
+	ok, err := b.syntheticIsAdmissible(&protocol.AnnotatedReceipt{Receipt: &merkle.Receipt{Anchor: earlier}})
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, e0+1, count("earlier"), "index 0 is below the start height of 1")
+
+	ok, err = b.syntheticIsAdmissible(&protocol.AnnotatedReceipt{Receipt: &merkle.Receipt{Anchor: thisBlock}})
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, t0+1, count("this_block"), "index 1 is at the start height: applied this block")
+
+	ok, err = b.syntheticIsAdmissible(&protocol.AnnotatedReceipt{Receipt: &merkle.Receipt{Anchor: make([]byte, 32)}})
+	require.NoError(t, err)
+	assert.False(t, ok)
+	assert.Equal(t, m0+1, count("missing"))
+
+	ok, err = b.syntheticIsAdmissible(nil)
+	require.NoError(t, err)
+	assert.True(t, ok, "replica-accepted")
+	assert.Equal(t, e0+1, count("earlier"), "no proof, nothing to classify")
+	assert.Equal(t, t0+1, count("this_block"))
 }

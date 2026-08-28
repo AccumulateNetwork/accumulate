@@ -48,6 +48,12 @@ type Block struct {
 	// staged is the execution order staging settled for this block (#4169
 	// step 5). Shadow only: nothing consults it to decide anything.
 	staged *executionOrder
+
+	// dnAnchorsAtStart is the directory anchor chain's height when the block
+	// began. A synthetic whose proving anchor sits at or past it was admitted
+	// by an anchor applied in THIS block (#4169 step 0c) — the case two-round
+	// staging exists for, and the count that says whether it is worth having.
+	dnAnchorsAtStart int64
 }
 
 func (b *Block) Params() execute.BlockParams { return b.BlockParams }

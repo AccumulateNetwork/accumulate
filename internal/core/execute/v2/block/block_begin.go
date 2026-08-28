@@ -61,6 +61,13 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 		return nil, err
 	}
 
+	// Where the directory anchor chain stands before this block applies any
+	// anchors (#4169 step 0c). A chain that does not exist yet stands at 0.
+	head, err := block.Batch.Account(x.Describe.AnchorPool()).AnchorChain(protocol.Directory).Root().Head().Get()
+	if err == nil {
+		block.dnAnchorsAtStart = head.Count
+	}
+
 	// Finalize the previous block
 	err = x.finalizeBlock(block)
 	if err != nil {

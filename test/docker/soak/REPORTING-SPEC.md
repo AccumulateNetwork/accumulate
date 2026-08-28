@@ -64,6 +64,10 @@ This is the contract the soak monitor is written against:
 | `crosschain_heal_stuck_tries` | gauge | partition, remote | consecutive failed tries on the stuck head |
 | `crosschain_sequence` | gauge | partition, remote, kind={synthetic,anchor}, dir={produced,received,delivered} | per-stream sequence state — the flow matrix |
 | `debug_dropped_total` | counter | kind, partition | envelopes deliberately dropped by fault injection |
+| `exec_phase_seconds_total` | counter | phase={serial,parallel} | ProcessAll wall time by lane (#4169 step 0a) |
+| `exec_blocks_total` | counter | — | blocks closed by the executor (#4169 step 0b denominator) |
+| `exec_flushes_total` | counter | — | parallel runs flushed (#4169 step 0b) |
+| `exec_synthetic_anchor_total` | counter | applied={this_block,earlier,missing} | synthetics judged by staging, by when their proving anchor landed (#4169 step 0c) |
 
 Exported: the first two, on both branches. **Missing: the remaining six — which
 is why the flow matrix and wedge panels have never shown a true value** (#4095).

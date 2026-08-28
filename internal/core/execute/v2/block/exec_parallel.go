@@ -8,6 +8,7 @@ package block
 
 import (
 	"sync"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -183,6 +184,16 @@ func (b *Block) envelopeIdentity(batch *database.Batch, messages []messaging.Mes
 func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessResult {
 	results := make([]*execute.ProcessResult, len(envelopes))
 
+	// #4169 step 0a/0b: everything in here is serial except the flushes, and
+	// each flush books its own wall time; the remainder is the serial share.
+	start := time.Now()
+	var inFlush time.Duration
+	defer func() {
+		total := time.Since(start)
+		mExecPhaseSeconds.WithLabelValues("serial").Add((total - inFlush).Seconds())
+		mExecPhaseSeconds.WithLabelValues("parallel").Add(inFlush.Seconds())
+	}()
+
 	// Staging decides the block's order before anything runs (#4169 step 6).
 	//
 	//   1. Anchor streams, first, because an anchor extends the directory root
@@ -259,6 +270,9 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 			return
 		}
 		pendingCount = 0
+		mExecFlushes.Inc()
+		flushStart := time.Now()
+		defer func() { inFlush += time.Since(flushStart) }()
 
 		type shardOut struct {
 			batch   *database.Batch

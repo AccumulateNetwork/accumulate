@@ -334,6 +334,52 @@ LIFE_METRICS = {
 
 _REASON = re.compile(r'reason="([^"]+)"')
 
+# #4169 step 0 — the baseline that gates sharded execution (group 4) and the
+# anchors-then-synthetics staging round. Three ratios, each from node counters
+# summed over the fleet, so the answer comes off a 12h run:
+#   serial share   = serial / (serial + parallel) wall time in ProcessAll.
+#                    Below 25% there is nothing for sharding to win.
+#   flushes/block  = parallel runs formed per block. ~1 means the block was
+#                    serial with extra steps.
+#   co-arrival     = synthetics whose proving anchor was applied in the SAME
+#                    block, over all synthetics judged. Below 5% the extra
+#                    staging round costs more than it saves.
+EXEC_METRICS = {
+    "accumulate_exec_blocks_total": "blocks",
+    "accumulate_exec_flushes_total": "flushes",
+}
+
+
+def exec_from(per):
+    """Sum the #4169 step-0 baseline counters over every node's scrape."""
+    ex = {"serialSec": 0.0, "parallelSec": 0.0, "blocks": 0, "flushes": 0,
+          "anchorThisBlock": 0, "anchorEarlier": 0, "anchorMissing": 0}
+    for rows in (per or {}).values():
+        for name, lab, v in rows or ():
+            try:
+                f = float(v)
+            except (TypeError, ValueError):
+                continue
+            lab = lab if isinstance(lab, dict) else {}
+            key = EXEC_METRICS.get(name)
+            if key:
+                ex[key] += int(f)
+            elif name == "accumulate_exec_phase_seconds_total":
+                ph = lab.get("phase")
+                if ph == "serial":
+                    ex["serialSec"] += f
+                elif ph == "parallel":
+                    ex["parallelSec"] += f
+            elif name == "accumulate_exec_synthetic_anchor_total":
+                a = lab.get("applied")
+                if a == "this_block":
+                    ex["anchorThisBlock"] += int(f)
+                elif a == "earlier":
+                    ex["anchorEarlier"] += int(f)
+                elif a == "missing":
+                    ex["anchorMissing"] += int(f)
+    return ex
+
 
 def life_from(per):
     """Sum the batch-lifecycle metrics over every node's scrape."""
@@ -494,7 +540,7 @@ def collect_metrics():
         if af["synthetic"] or af["anchor"]:
             flows, syn_prod, anc_prod = af, asp, aap
 
-    return {"heals": heals, "wedges": drops, "flows": flows, "life": life,
+    return {"heals": heals, "wedges": drops, "flows": flows, "life": life, "exec": exec_from(per),
             "synProduced": syn_prod, "ancProduced": anc_prod, "nodeStats": nodes,
             "nodes": len(cs), "scraped": sum(1 for r in per.values() if r)}
 
@@ -837,6 +883,7 @@ def _collect_once(last, hist):
             upd["synProduced"] = m["synProduced"]
             upd["ancProduced"] = m["ancProduced"]
             upd["life"] = m.get("life", {})
+            upd["exec"] = m.get("exec", {})
             upd["scrape"] = {"nodes": m["nodes"], "scraped": m["scraped"]}
             upd["nodeStats"] = m.get("nodeStats", {})
             # OOM early warning. Run 20260824T065208Z grew from 146MiB to the
@@ -1010,6 +1057,12 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       <b id=lredel>—</b><span class=sl id=lredelnote></span>
     </div>
     <div class=sgrp><span class=sh>batch waits</span><span id=lwaits>—</span></div>
+    <div class=sgrp><span class=sh>step 0 (#4169)</span>
+      <b id=x0a>—</b><span class=sl>serial share</span>
+      <b id=x0b>—</b><span class=sl>flushes/block</span>
+      <b id=x0c>—</b><span class=sl>anchor co-arrival</span>
+      <span class=sl id=x0note></span>
+    </div>
   </div>
 </div>
 <div class=two>
@@ -1224,6 +1277,20 @@ async function tick(){
   // Zero is the only healthy value: a re-delivery is skipped safely, but it
   // means commit dedup is still wrong upstream (#4125).
   $('lredelnote').textContent = rd>0? 'commit dedup is still wrong upstream (#4125)':'';
+  // #4169 step 0. Gates, not health: serial share <25% means sharded
+  // execution has nothing to win; co-arrival <5% means the anchors-first
+  // staging round is not paying for itself. Absent metrics show as —, not 0.
+  const ex=s.exec||{};
+  const tot=(ex.serialSec||0)+(ex.parallelSec||0);
+  const share= tot>0? ex.serialSec/tot : null;
+  $('x0a').textContent = share==null? '—' : (share*100).toFixed(1)+'%';
+  $('x0b').textContent = ex.blocks? (ex.flushes/ex.blocks).toFixed(2) : '—';
+  const judged=(ex.anchorThisBlock||0)+(ex.anchorEarlier||0)+(ex.anchorMissing||0);
+  $('x0c').textContent = judged? ((ex.anchorThisBlock||0)/judged*100).toFixed(1)+'%' : '—';
+  const notes=[];
+  if(share!=null && share<0.25) notes.push('serial <25%: group 4 has nothing to win');
+  if(judged && ex.anchorThisBlock/judged<0.05) notes.push('co-arrival <5%: two-round staging not worth it');
+  $('x0note').textContent=notes.join(' · ');
   const wr=lf.waitsByReason||{};
   const wk=Object.keys(wr);
   $('lwaits').innerHTML = wk.length? wk.sort().map(k=>`${k}=<b>${wr[k]}</b>`).join(' · ')
