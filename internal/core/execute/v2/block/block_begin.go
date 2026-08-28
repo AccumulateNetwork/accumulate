@@ -126,7 +126,7 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	}
 
 	// Deliver everything the previous block queued — local synthetics and
-	// deferred cascades — before any of this block's own messages (#4146).
+	// locally produced messages — before any of this block's own (#4146).
 	err = block.drainDeliveryQueues()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("drain delivery queues: %w", err)

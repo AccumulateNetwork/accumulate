@@ -35,7 +35,8 @@ import (
 //     block-end split below. Each entry is destination.WithTxID(msgHash), so
 //     the drain can re-check routing without re-deriving the destination
 //     from the message type.
-//   - CascadeDeliveryQueue holds ready sequenced messages whose execution
+//   - (removed) CascadeDeliveryQueue held ready sequenced messages whose
+//     execution
 //     the MessageIsReady cascade deferred because they belong to a different
 //     identity (#4145 hazard iii). Entries are the pending txids the ledger
 //     already tracks.
@@ -93,39 +94,33 @@ func (b *Block) splitLocalDeliveries(produced []*ProducedMessage) ([]*ProducedMe
 	return remote, nil
 }
 
-// drainDeliveryQueues executes everything queued for this block, before any
-// of the block's own envelopes. Cascade entries first — they continue
-// inbound streams that were already flowing — then local deliveries, each in
-// written order. The queues are cleared before execution, so anything a
-// drained message produces or cascades lands in the NEXT block's queues.
+// drainDeliveryQueues executes the local deliveries queued for this block,
+// before any of the block's own envelopes. The queue is cleared before
+// execution, so anything a drained message produces lands in the NEXT block's
+// queue.
+//
+// There is no cascade half any more (#4169). Continuing an inbound stream is
+// not a queue of work one delivery hands to the next — it is a stage, decided
+// in full before anything runs. Local deliveries stay because they are a
+// different thing: messages we produced for ourselves, carrying no position in
+// any stream, which no stage has a place for.
 func (b *Block) drainDeliveryQueues() error {
 	synth := b.Batch.Account(b.Executor.Describe.Synthetic())
 
-	cascade, err := synth.CascadeDeliveryQueue().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load cascade queue: %w", err)
-	}
 	locals, err := synth.LocalDeliveryQueue().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load local delivery queue: %w", err)
 	}
-	if len(cascade) == 0 && len(locals) == 0 {
+	if len(locals) == 0 {
 		return nil
 	}
 
-	err = synth.CascadeDeliveryQueue().Put(nil)
-	if err != nil {
-		return errors.UnknownError.WithFormat("clear cascade queue: %w", err)
-	}
 	err = synth.LocalDeliveryQueue().Put(nil)
 	if err != nil {
 		return errors.UnknownError.WithFormat("clear local delivery queue: %w", err)
 	}
 
 	var msgs []messaging.Message
-	for _, id := range cascade {
-		msgs = append(msgs, &internal.MessageIsReady{TxID: id})
-	}
 	for _, id := range locals {
 		msg, err := b.Batch.Message(id.Hash()).Main().Get()
 		if err != nil {

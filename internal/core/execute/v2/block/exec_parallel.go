@@ -29,9 +29,9 @@ import (
 //   (i)   system, anchor, synthetic and sequenced messages execute serially,
 //         outside the parallel phase; system accounts are read-only within it
 //   (ii)  an envelope whose messages span identities executes serially
-//   (iii) the MessageIsReady cascade runs only in the serial lane, because
+//   (iii) staged deliveries run only in the serial lane, because
 //         every synthetic delivery is serial — a later phase moves
-//         cross-identity cascades onto the next-block queue (#4146)
+//         a stage may span identities and must not widen a bundle's
 //   (iv)  each shard executes against its own child batch; every touch of
 //         the shared parent is serialized through one mutex, and commits
 //         happen serially in shard order

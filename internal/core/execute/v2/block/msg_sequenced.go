@@ -13,10 +13,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -250,7 +248,7 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 	}
 
 	// Update the ledger
-	ledger, err := x.updateLedger(batch, ctx, seq, st.Pending())
+	_, err = x.updateLedger(batch, ctx, seq, st.Pending())
 	if err != nil {
 		return false, errors.UnknownError.Wrap(err)
 	}
@@ -259,34 +257,12 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 		return false, nil
 	}
 
-	// Queue the pending tail behind this message. Same identity: inline, into
-	// the running bundle, as always — the inline delivery's own process()
-	// then walks the rest of the tail recursively. A DIFFERENT identity
-	// defers to the next block's cascade queue (#4146): the cascade is a
-	// stream property, not an identity one, and under sharded execution
-	// (#4145 hazard iii) it must not widen a bundle's identity set
-	// mid-execution. Anchor streams always take the inline path — every
-	// anchor's principal is the local anchor pool.
-	//
-	// The cascade schedules the whole CONTIGUOUS received run (bounded), not
-	// just the immediate successor. Each queued message becomes its own
-	// bundle next block — exactly as safe as the same messages arriving
-	// fresh in that block — so a backlog drains cascadeDeliveryWindow per
-	// block instead of one per block. One per block was a real ceiling: in
-	// run 20260824T041626Z at 10 tps, a ~600-message BVN2→BVN1 backlog
-	// behind a chaos pause drained at 1.04 per block, barely above its own
-	// refill rate, with delivery capped at the block rate (#4163).
-	next, ok := ledger.Get(seq.Number + 1)
-	if ok && x.nextTargetsSameIdentity(batch, next, seq) {
-		ctx.queueAdditional(&internal.MessageIsReady{TxID: next})
-	} else if ok {
-		queue := batch.Account(ctx.Executor.Describe.Synthetic()).CascadeDeliveryQueue()
-		err = scheduleCascadeRun(queue, ledger, seq.Number)
-		if err != nil {
-			return false, errors.UnknownError.WithFormat("queue cascade delivery: %w", err)
-		}
-	}
-
+	// Nothing is scheduled here. The stage that ran this message already
+	// contains the whole contiguous run behind it (#4169) — draining a staged
+	// tail is that stage's walk continuing, not a consequence of this
+	// delivery. What used to live here decided, per delivery, whether the
+	// successor could run inline or had to wait for the next block; a stage
+	// decides that once, for the whole run, before anything executes.
 	return true, nil
 }
 
@@ -294,88 +270,10 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 // sequenced message may be RECORDED in the pending window. The window lives
 // inline in the ledger record, so its length is the marshal cost of every
 // subsequent update; 4096 keeps the worst-case record ~300KB and the drain
-// linear, while leaving four cascade windows of runway. Receipts beyond it
+// linear, while leaving four block-runs of runway. Receipts beyond it
 // are refused (deterministically) and heal later as a produced>received
 // tail.
-const MaxPendingSequenced = 4 * cascadeDeliveryWindow
-
-// cascadeDeliveryWindow bounds how many contiguous pending successors one
-// delivery schedules into the next block's cascade queue. It caps the extra
-// bundles a block can inherit per stream while still letting a backlog drain
-// at window-rate rather than one per block.
-//
-// The window is a PER-BLOCK quantum, so the drain ceiling in messages/second
-// is window ÷ block interval — it shrank 8x when blocks went from one per
-// certificate to one per committed leader group (#4164). At 32 per block and
-// 3s blocks the ceiling was ~10/s, and one overloaded stream (a stale-read
-// retry storm feeding ~27/s, #4163 defect 7) buried BVN2→BVN1 under a
-// 33,000-message backlog that could never drain. 1024 per block ≈ 340/s at
-// the 3s interval — above any sustainable per-stream arrival rate, while
-// still bounding the bundles a single block can inherit.
-// TestNoLaggingChannels pins the property: a backlogged channel drains at
-// backlog scale per block, not a small fixed quantum.
-const cascadeDeliveryWindow = 1024
-
-// scheduleCascadeRun adds the contiguous received run after `after` to the
-// cascade queue, up to cascadeDeliveryWindow entries, stopping at the first
-// entry already queued (an earlier delivery this block scheduled the rest).
-func scheduleCascadeRun(queue values.List[*url.TxID], ledger *protocol.PartitionSyntheticLedger, after uint64) error {
-	queued, err := queue.Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load cascade queue: %w", err)
-	}
-	inQueue := func(id *url.TxID) bool {
-		for _, q := range queued {
-			if q.Equal(id) {
-				return true
-			}
-		}
-		return false
-	}
-	for n := after + 1; n <= after+cascadeDeliveryWindow; n++ {
-		id, ok := ledger.Get(n)
-		if !ok {
-			return nil // the contiguous received run ends here
-		}
-		if inQueue(id) {
-			return nil // an earlier delivery this block already scheduled the rest
-		}
-		err = queue.Add(id)
-		if err != nil {
-			return errors.UnknownError.WithFormat("queue cascade delivery: %w", err)
-		}
-	}
-	return nil
-}
-
-// nextTargetsSameIdentity reports whether the NEXT pending message's inner
-// principal shares the current message's identity — the test that decides
-// inline delivery vs the next-block cascade queue.
-//
-// next comes from the pending ledger, whose IDs are Destination.WithTxID —
-// the LOCAL PARTITION url, not the principal. Comparing that account against
-// the principal compared partition to principal and never matched for user
-// synthetics (#4153): the inline branch was dead, and a pending tail drained
-// at ONE message per stream per block, which cannot converge under inflow.
-// The identity equality it does establish is the anchor case — every
-// anchor's principal is the local anchor pool, under the partition identity
-// — which stays the fast path. For everything else the real principal lives
-// in the stored message.
-func (x SequencedMessage) nextTargetsSameIdentity(batch *database.Batch, next *url.TxID, seq *messaging.SequencedMessage) bool {
-	if next.Account().RootIdentity().Equal(seq.Message.ID().Account().RootIdentity()) {
-		return true // the anchor fast path
-	}
-
-	msg, err := batch.Message(next.Hash()).Main().Get()
-	if err != nil {
-		return false // unknown → the cascade queue, the conservative lane
-	}
-	nextSeq, ok := msg.(*messaging.SequencedMessage)
-	if !ok {
-		return false
-	}
-	return nextSeq.Message.ID().Account().RootIdentity().Equal(seq.Message.ID().Account().RootIdentity())
-}
+const MaxPendingSequenced = 4 * maxRunPerBlock
 
 func (x SequencedMessage) isReady(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, error) {
 	// Load the ledger
@@ -430,8 +328,7 @@ func (x SequencedMessage) updateLedger(batch *database.Batch, ctx *MessageContex
 
 	// Bound the pending window. Per-message cost is O(total backlog), so a big
 	// backlog drains in O(backlog^2) — run 20260824T051249Z's 33,000-message
-	// backlog collapsed the drain to ~4/s, below even the cascade window's
-	// allowance: the serial search Paul called.
+	// backlog collapsed the drain to ~4/s: the serial search Paul called.
 	//
 	// The cost is the READ, not the write. This function reads the ledger with
 	// GetAs inside the message's own child batch, and a child does not share
