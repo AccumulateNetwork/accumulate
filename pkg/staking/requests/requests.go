@@ -424,10 +424,22 @@ func (r *Request) Validate() error {
 		return nil
 
 	case KindCancelRequest:
-		if r.RequestTx == "" {
-			return fmt.Errorf("a cancelRequest needs the request txid it revokes")
+		// Two ways to name the target (spec §3.1): the transaction, or a
+		// description of it — account + amount + destination — which
+		// revokes the LAST matching request that has not executed. The
+		// description form exists for the case it is named after: a
+		// request filed twice and meant once.
+		if r.RequestTx != "" {
+			return nil
 		}
-		return nil
+		if r.Account != "" && r.Amount != "" && r.Destination != "" {
+			if !amountPattern.MatchString(r.Amount) {
+				return fmt.Errorf("amount %q must be a plain decimal such as 12.5", r.Amount)
+			}
+			return nil
+		}
+		return fmt.Errorf("a cancelRequest names its target either by request=<txid> " +
+			"or by account, amount and destination together")
 
 	default:
 		return fmt.Errorf("%q is not an action the wallet defines", r.Kind)
@@ -506,7 +518,12 @@ func (r *Request) Encode() ([][]byte, error) {
 	case KindRejectDelegates, KindRegisterIdentity:
 		put("identity", r.Identity)
 	case KindCancelRequest:
+		// Whichever form the caller supplied; Validate has already
+		// established that one of them is complete.
 		put("request", r.RequestTx)
+		put("account", r.Account)
+		put("amount", r.Amount)
+		put("destination", r.Destination)
 	default:
 		return nil, fmt.Errorf("cannot encode %q: not an action the wallet defines", r.Kind)
 	}

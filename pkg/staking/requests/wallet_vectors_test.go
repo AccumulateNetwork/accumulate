@@ -149,3 +149,47 @@ func bytesToStrings(b [][]byte) []string {
 	}
 	return s
 }
+
+// TestCancelRequestBothForms: a cancellation names its target either by
+// transaction or by description (spec §3.1, Paul 2026-08-27).
+//
+// The description form — account + amount + destination — revokes the LAST
+// matching request that has not executed, so a request filed twice is
+// withdrawn once and the original stands. Selecting which request that is
+// belongs to the fulfilment path, which reads the chain; this package's
+// job is only to carry the fields faithfully.
+func TestCancelRequestBothForms(t *testing.T) {
+	byTx := []string{"cancelRequest", "request=acc://abcd@myadi.acme/staking"}
+	byDesc := []string{"cancelRequest",
+		"account=acc://myadi.acme/staking",
+		"amount=12.5",
+		"destination=acc://myadi.acme/rewards"}
+
+	for _, v := range [][]string{byTx, byDesc} {
+		r, err := Parse(rawOf(v))
+		if err != nil {
+			t.Fatalf("%v: %v", v, err)
+		}
+		if r.Kind != KindCancelRequest {
+			t.Errorf("kind = %q, want cancelRequest", r.Kind)
+		}
+		if err := r.Validate(); err != nil {
+			t.Errorf("%v: valid form rejected: %v", v, err)
+		}
+		out, err := r.Encode()
+		if err != nil {
+			t.Fatalf("%v: encode: %v", v, err)
+		}
+		got := bytesToStrings(out)
+		if len(got) != len(v) {
+			t.Errorf("round trip changed the part count: %q vs %q", got, v)
+		}
+	}
+
+	// Neither form complete: a bare marker names nothing to cancel, and
+	// guessing a target would revoke a request nobody pointed at.
+	partial := &Request{Kind: KindCancelRequest, Account: "acc://myadi.acme/staking"}
+	if err := partial.Validate(); err == nil {
+		t.Error("a cancelRequest with only an account must be refused — it identifies no target")
+	}
+}
