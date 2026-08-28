@@ -58,7 +58,7 @@ import (
 
 // Database is a key-value store backed by a BlockchainDB KV2.
 type Database struct {
-	mu     sync.Mutex
+	mu     sync.RWMutex
 	kv     *bcdb.KV2
 	prefix *record.Key
 	closed bool
@@ -95,6 +95,12 @@ type Database struct {
 	// keeping a second copy of the database in memory.
 	shapes map[string]*ShapeCount
 	last   map[[32]byte][32]byte
+
+	// TallyKeys bounds last.  Beyond it new keys are still counted but
+	// not remembered, so their later rewrites cannot be classified --
+	// the report says so (tallyCapped).  Unbounded, the tally was ~120
+	// bytes per key ever written for the life of the process (#4175).
+	TallyKeys int
 
 	// dyna holds the keys that must go to the dynamic layer whatever
 	// their classification says: keys that have been deleted, and keys
@@ -140,6 +146,10 @@ var _ keyvalue.Beginner = (*Database)(nil)
 // only bounds a layer that fills between commits.
 const SealLimit = 100_000
 
+// DefaultTallyKeys is how many keys the per-shape tally remembers a
+// digest for: about 128 MB at the default.
+const DefaultTallyKeys = 1 << 20
+
 // permManifest is the file whose presence means a database is already
 // here: the permanent layer's segment manifest.
 var permManifest = filepath.Join("perm", "segments.json")
@@ -181,6 +191,7 @@ func Open(path string) (*Database, error) {
 		exceptionsPath: filepath.Join(path, "dyna-exceptions"),
 		CompressEvery:  128,
 		StatsEvery:     50,
+		TallyKeys:      DefaultTallyKeys,
 	}
 
 	// A commit seals the permanent layer at its version, and the store
@@ -303,7 +314,7 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 		// The batch has finished reading by the time it commits, so its
 		// view is not needed.
 		Commit:  func(e map[[32]byte]memory.Entry) error { release(); return d.commit(e) },
-		ForEach: d.forEach,
+		ForEach: func(fn func(*record.Key, []byte) error) error { return d.forEachAt(at, fn) },
 		Discard: release,
 	})
 }
@@ -439,8 +450,11 @@ func (d *Database) getAt(at uint64, key *record.Key) ([]byte, error) {
 	key = d.prefix.AppendKey(key)
 	h := key.Hash()
 
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	// A read lock: readers only look at staged, and the store has its
+	// own lock.  One exclusive mutex here put every API query behind
+	// every commit (#4175).
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 
 	for i := len(d.staged) - 1; i >= 0; i-- {
 		if d.staged[i].version > at {
@@ -522,6 +536,9 @@ func (d *Database) tally(key *record.Key, h [32]byte, value []byte, perm bool) s
 	switch {
 	case !seen:
 		c.New++
+		if len(d.last) >= d.TallyKeys {
+			return shape // Counted, not remembered
+		}
 	case prev == digest:
 		c.Duplicate++
 	default:
@@ -622,7 +639,15 @@ func (d *Database) reportStats() {
 		WalkPct      float64                `json:"permWalkPct"`
 		Misrouted    []string               `json:"misroutedShapes"`
 		Shapes       map[string]*ShapeCount `json:"shapes"`
-	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes}
+
+		// Staged is how many commits are waiting on an open reader
+		// before they can reach the store.  Growing without bound means
+		// a batch was never closed -- and nothing staged is on disk.
+		Staged      int  `json:"stagedCommits"`
+		TallyKeys   int  `json:"tallyKeys"`
+		TallyCapped bool `json:"tallyCapped"`
+	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
+		Staged: len(d.staged), TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys}
 
 	// Lifted out of the shape table so a run can be checked by looking
 	// at one field
@@ -654,12 +679,28 @@ func (d *Database) reportStats() {
 	}
 }
 
-func (d *Database) forEach(fn func(*record.Key, []byte) error) error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
+// forEachAt visits every key as of a version: staged writes no later
+// than it, then the store, which holds nothing newer than the oldest
+// open view -- and the caller's own view is at least that old.
+//
+// The lock is not held across the callback (#4175).  Staged entries
+// are snapshotted under a read lock and visited after it is released,
+// so a callback may read the database and does not stall commits.  The
+// store's own ForEach does hold the store's mutex across the callback,
+// so a callback must not read the STORE (a staged hit is fine, a store
+// read deadlocks) -- BlockchainDB#31.
+func (d *Database) forEachAt(at uint64, fn func(*record.Key, []byte) error) error {
+	type kv struct {
+		key   [32]byte
+		value []byte
+	}
+	d.mu.RLock()
 	seen := map[[32]byte]bool{}
+	var snapshot []kv
 	for i := len(d.staged) - 1; i >= 0; i-- {
+		if d.staged[i].version > at {
+			continue // Committed after this batch began
+		}
 		for key, e := range d.staged[i].entries {
 			if seen[key] {
 				continue
@@ -668,9 +709,14 @@ func (d *Database) forEach(fn func(*record.Key, []byte) error) error {
 			if len(e.value) == 0 {
 				continue // Deleted
 			}
-			if err := fn(record.KeyFromHash(key), e.value); err != nil {
-				return err
-			}
+			snapshot = append(snapshot, kv{key, e.value})
+		}
+	}
+	d.mu.RUnlock()
+
+	for _, e := range snapshot {
+		if err := fn(record.KeyFromHash(e.key), e.value); err != nil {
+			return err
 		}
 	}
 	return d.kv.ForEach(func(key [32]byte, value []byte) error {
