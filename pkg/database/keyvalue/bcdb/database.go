@@ -58,11 +58,10 @@ import (
 
 // Database is a key-value store backed by a BlockchainDB KV2.
 type Database struct {
-	mu       sync.Mutex
-	kv       *bcdb.KV2
-	prefix   *record.Key
-	closed   bool
-	flushErr error // A write-through that failed with no caller to tell
+	mu     sync.Mutex
+	kv     *bcdb.KV2
+	prefix *record.Key
+	closed bool
 
 	// version counts commits.  A batch records the version it began at
 	// and reads as of that version; a commit produces the next one.
@@ -105,7 +104,18 @@ type Database struct {
 	//
 	// This is only ever the exceptions.  A correctly classified
 	// database never adds to it.
-	dyna map[[32]byte]bool
+	//
+	// It is persisted (#4173): the shadowing it guards against is a
+	// property of the store, so forgetting it across a restart brings
+	// the shadowing back -- a deleted key rewritten after a restart
+	// would go to the permanent layer and read as deleted.  Each new
+	// exception is appended to exceptionsPath before the batch that
+	// introduced it is written through, so the file can name a key the
+	// store never got (harmless: that key merely stays dynamic) but
+	// never the reverse.
+	dyna           map[[32]byte]bool
+	exceptionsPath string
+	pendingDyna    [][32]byte // Exceptions not yet appended to the file
 }
 
 // staged is one committed batch that has not reached the store yet
@@ -161,16 +171,112 @@ func Open(path string) (*Database, error) {
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("open BlockchainDB at %s: %w", path, err)
 	}
-	return &Database{
-		kv:            kv,
-		views:         map[uint64]int{},
-		shapes:        map[string]*ShapeCount{},
-		last:          map[[32]byte][32]byte{},
-		dyna:          map[[32]byte]bool{},
-		statsPath:     filepath.Join(path, "stats.json"),
-		CompressEvery: 128,
-		StatsEvery:    50,
-	}, nil
+	d := &Database{
+		kv:             kv,
+		views:          map[uint64]int{},
+		shapes:         map[string]*ShapeCount{},
+		last:           map[[32]byte][32]byte{},
+		dyna:           map[[32]byte]bool{},
+		statsPath:      filepath.Join(path, "stats.json"),
+		exceptionsPath: filepath.Join(path, "dyna-exceptions"),
+		CompressEvery:  128,
+		StatsEvery:     50,
+	}
+
+	// A commit seals the permanent layer at its version, and the store
+	// refuses to seal a block it has already closed -- so the version
+	// must resume where the store stands, not at zero (#4173).  The
+	// manifest records the block currently being accumulated, which is
+	// one past the last version sealed.
+	d.version, err = sealedVersion(filepath.Join(path, permManifest))
+	if err != nil {
+		_ = kv.Close()
+		return nil, errors.UnknownError.WithFormat("read %s: %w", permManifest, err)
+	}
+	err = d.loadExceptions()
+	if err != nil {
+		_ = kv.Close()
+		return nil, errors.UnknownError.WithFormat("read %s: %w", d.exceptionsPath, err)
+	}
+	return d, nil
+}
+
+// sealedVersion reads the version the permanent layer was last sealed
+// at.  A store that has never sealed reports zero, as does one that has
+// no manifest yet.
+func sealedVersion(manifest string) (uint64, error) {
+	b, err := os.ReadFile(manifest)
+	switch {
+	case stderrors.Is(err, fs.ErrNotExist):
+		return 0, nil
+	case err != nil:
+		return 0, err
+	}
+	var m bcdb.StoreManifest
+	if err := json.Unmarshal(b, &m); err != nil {
+		return 0, err
+	}
+	if m.BlockHeight == 0 {
+		return 0, nil
+	}
+	return m.BlockHeight - 1, nil
+}
+
+// loadExceptions restores the dynamic-layer exception set.  The file is
+// a sequence of 32-byte key hashes; a partial trailing record -- a crash
+// mid-append -- is ignored, which errs towards the store's own state.
+func (d *Database) loadExceptions() error {
+	b, err := os.ReadFile(d.exceptionsPath)
+	switch {
+	case stderrors.Is(err, fs.ErrNotExist):
+		return nil
+	case err != nil:
+		return err
+	}
+	for ; len(b) >= 32; b = b[32:] {
+		var h [32]byte
+		copy(h[:], b)
+		d.dyna[h] = true
+	}
+	return nil
+}
+
+// persistExceptions appends the exceptions recorded since the last
+// write-through and syncs them, so a restart cannot forget them.  The
+// caller must hold the lock.
+func (d *Database) persistExceptions() error {
+	if len(d.pendingDyna) == 0 {
+		return nil
+	}
+	f, err := os.OpenFile(d.exceptionsPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		return err
+	}
+	for _, h := range d.pendingDyna {
+		if _, err := f.Write(h[:]); err != nil {
+			_ = f.Close()
+			return err
+		}
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	d.pendingDyna = d.pendingDyna[:0]
+	return nil
+}
+
+// except marks a key as belonging to the dynamic layer from now on.  The
+// caller must hold the lock.
+func (d *Database) except(h [32]byte) {
+	if d.dyna[h] {
+		return
+	}
+	d.dyna[h] = true
+	d.pendingDyna = append(d.pendingDyna, h)
 }
 
 // Begin begins a change set that reads the database as it stands now,
@@ -186,9 +292,17 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 	release := func() { once.Do(func() { d.closeView(at) }) }
 
 	return memory.NewChangeSet(memory.ChangeSetOptions{
-		Prefix:  prefix,
-		Get:     func(key *record.Key) ([]byte, error) { return d.getAt(at, key) },
-		Commit:  func(e map[[32]byte]memory.Entry) error { defer release(); return d.commit(e) },
+		Prefix: prefix,
+		Get:    func(key *record.Key) ([]byte, error) { return d.getAt(at, key) },
+		// The view is released BEFORE the commit, not after (#4173).
+		// While a batch still pins its version, flush stops short of
+		// its own commit; it was written through by the deferred
+		// release instead, where an error had nowhere to go but the
+		// next Commit -- so the executor saw a block committed that had
+		// not reached the store, and the error named the wrong block.
+		// The batch has finished reading by the time it commits, so its
+		// view is not needed.
+		Commit:  func(e map[[32]byte]memory.Entry) error { release(); return d.commit(e) },
 		ForEach: d.forEach,
 		Discard: release,
 	})
@@ -204,11 +318,10 @@ func (d *Database) closeView(at uint64) {
 	} else {
 		d.views[at] = n - 1
 	}
-	if err := d.flush(); err != nil {
-		// Nothing to return an error to: the caller is discarding a
-		// batch.  The data is still staged and the next flush retries.
-		d.flushErr = err
-	}
+	// Nothing to return an error to: the caller is discarding a batch.
+	// If the write-through fails the data stays staged, and the next
+	// commit retries it and reports the outcome to its caller.
+	_ = d.flush()
 }
 
 // oldestView is the earliest version any open batch is reading at, and
@@ -244,10 +357,23 @@ func (d *Database) flush() error {
 // writeThrough puts a staged batch into the store and seals it.  The
 // caller must hold the lock.
 func (d *Database) writeThrough(s *staged) error {
+	// Exceptions first: a key named here that the store never received
+	// is harmless, a key the store received that is forgotten here is
+	// the #4173 shadowing bug.
+	if err := d.persistExceptions(); err != nil {
+		return errors.UnknownError.WithFormat("persist exceptions: %w", err)
+	}
 	for key, e := range s.entries {
 		if err := d.putRouted(key, e); err != nil {
 			return errors.UnknownError.WithFormat("put: %w", err)
 		}
+	}
+
+	// And again after: a refusal discovered by the puts above added an
+	// exception that must be on disk before the seal says this version
+	// is durable.
+	if err := d.persistExceptions(); err != nil {
+		return errors.UnknownError.WithFormat("persist exceptions: %w", err)
 	}
 
 	// A commit is the durability point, so it is what seals -- and
@@ -340,9 +466,6 @@ func (d *Database) getAt(at uint64, key *record.Key) ([]byte, error) {
 func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.flushErr != nil {
-		return d.flushErr
-	}
 
 	staged := &staged{version: d.version + 1, entries: make(map[[32]byte]entry, len(entries))}
 	for _, e := range entries {
@@ -360,7 +483,7 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 		// tombstone, that means reading as deleted while holding a
 		// value.
 		if len(value) == 0 {
-			d.dyna[h] = true
+			d.except(h)
 		}
 		perm := len(value) > 0 && !d.dyna[h] && isWriteOnce(key)
 
@@ -440,7 +563,7 @@ func (d *Database) putRouted(key [32]byte, e entry) error {
 	}
 
 	// The store says this record is not write-once
-	d.dyna[key] = true
+	d.except(key)
 	if c := d.shapes[e.shape]; c != nil {
 		c.Misrouted++
 	}
