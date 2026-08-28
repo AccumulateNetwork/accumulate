@@ -86,3 +86,10 @@ flush's serial commit). Needs the 12h run to be called.
 **Next run:** same everything, GOMEMLIMIT=2GiB — one factor. If it dies the
 same way with RSS well under 2 GiB, memory is exonerated and the 32 MB
 per-partition batch store is the next suspect.
+
+**Correction (17:58Z):** "GOMEMLIMIT=2GiB" alone is wrong — docker-compose.yml
+caps every node at `mem_limit: 1536m` and documents that GOMEMLIMIT MUST stay
+below it, or the soft limit never engages and the kernel OOM-killer replaces
+the GC (that was the 2750MiB mistake). The one-factor rerun is the memory
+BUDGET: `mem_limit` 2560m and `GOMEMLIMIT=2GiB` together, everything else
+identical.
