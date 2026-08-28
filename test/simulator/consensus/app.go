@@ -143,15 +143,31 @@ func (a *ExecutorApp) Execute(req *ExecuteRequest) (*ExecuteResponse, error) {
 		return nil, errors.UnknownError.WithFormat("begin block: %w", err)
 	}
 
-	var results []*protocol.TransactionStatus
-	for _, envelope := range req.Envelopes {
-		// Copy to avoid interference between nodes
-		s, err := block.Process(envelope.Copy())
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
-		}
+	// Copy to avoid interference between nodes
+	envelopes := make([]*messaging.Envelope, len(req.Envelopes))
+	for i, envelope := range req.Envelopes {
+		envelopes[i] = envelope.Copy()
+	}
 
-		results = append(results, s...)
+	// Process the block's envelopes as a set, so execution sharding (#4145)
+	// is exercised under the simulator exactly as it is under DAG-BFT. With
+	// shard count <= 1 this is identical to a loop over Process.
+	var results []*protocol.TransactionStatus
+	if pb, ok := block.(execute.ParallelBlock); ok {
+		for _, r := range pb.ProcessAll(envelopes) {
+			if r.Error != nil {
+				return nil, errors.UnknownError.WithFormat("deliver envelope: %w", r.Error)
+			}
+			results = append(results, r.Statuses...)
+		}
+	} else {
+		for _, envelope := range envelopes {
+			s, err := block.Process(envelope)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
+			}
+			results = append(results, s...)
+		}
 	}
 
 	state, err := block.Close()

@@ -22,11 +22,18 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
-// Protocol IDs for request/response protocols.
+// Protocol ID suffixes for request/response protocols. The full ID is
+// PARTITION-SCOPED — "/acc/consensus/<partition>/batch/1.0.0" — because a
+// production validator runs several partitions' Nodes on ONE shared libp2p
+// host, and libp2p SetStreamHandler on a shared ID overwrites: the
+// last-started partition's handler (backed by ITS batch store) served every
+// fetch on the host, so peer batch-fetch was structurally dead for all other
+// partitions — peerAsks in the hundreds of thousands, peerHits=0 (#4159,
+// #4125's signature). Scoping by partition gives each Node its own handler.
 const (
-	ProtocolBatchFetch = "/acc/consensus/batch/1.0.0"
-	ProtocolCertFetch  = "/acc/consensus/cert/1.0.0"
-	ProtocolDAGSync    = "/acc/consensus/sync/1.0.0"
+	protocolBatchFetchSuffix = "/batch/1.0.0"
+	protocolCertFetchSuffix  = "/cert/1.0.0"
+	protocolDAGSyncSuffix    = "/sync/1.0.0"
 )
 
 // Default timeouts for protocol operations.
@@ -138,45 +145,59 @@ func UnmarshalDAGSyncRequest(data []byte) (*DAGSyncRequest, error) {
 // ProtocolHandler manages request/response protocols for consensus data.
 type ProtocolHandler struct {
 	host       host.Host
+	partition  string
 	batchStore BatchStore
 	dagStore   DAGStore
 }
 
-// NewProtocolHandler creates a new ProtocolHandler.
-func NewProtocolHandler(h host.Host, bs BatchStore, ds DAGStore) (*ProtocolHandler, error) {
+// NewProtocolHandler creates a new ProtocolHandler for one partition's Node.
+// The partition scopes the wire protocol IDs — see the suffix constants.
+func NewProtocolHandler(h host.Host, partition string, bs BatchStore, ds DAGStore) (*ProtocolHandler, error) {
 	if h == nil {
 		return nil, errors.New("host is nil")
 	}
+	if partition == "" {
+		return nil, errors.New("partition is empty")
+	}
 	return &ProtocolHandler{
 		host:       h,
+		partition:  partition,
 		batchStore: bs,
 		dagStore:   ds,
 	}, nil
+}
+
+// pid returns the partition-scoped protocol ID for a suffix. Requester and
+// responder both derive it from their own Node's partition, so they agree —
+// and different partitions on one host no longer clobber each other's
+// handlers.
+func (p *ProtocolHandler) pid(suffix string) protocol.ID {
+	return protocol.ID("/acc/consensus/" + p.partition + suffix)
 }
 
 // RegisterHandlers registers stream handlers for all protocols.
 // The handler will respond to incoming requests using the configured stores.
 func (p *ProtocolHandler) RegisterHandlers() error {
 	if p.batchStore != nil {
-		p.host.SetStreamHandler(protocol.ID(ProtocolBatchFetch), p.handleBatchFetch)
+		p.host.SetStreamHandler(p.pid(protocolBatchFetchSuffix), p.handleBatchFetch)
 	}
 	if p.dagStore != nil {
-		p.host.SetStreamHandler(protocol.ID(ProtocolCertFetch), p.handleCertFetch)
-		p.host.SetStreamHandler(protocol.ID(ProtocolDAGSync), p.handleDAGSync)
+		p.host.SetStreamHandler(p.pid(protocolCertFetchSuffix), p.handleCertFetch)
+		p.host.SetStreamHandler(p.pid(protocolDAGSyncSuffix), p.handleDAGSync)
 	}
 	return nil
 }
 
 // UnregisterHandlers removes all protocol handlers.
 func (p *ProtocolHandler) UnregisterHandlers() {
-	p.host.RemoveStreamHandler(protocol.ID(ProtocolBatchFetch))
-	p.host.RemoveStreamHandler(protocol.ID(ProtocolCertFetch))
-	p.host.RemoveStreamHandler(protocol.ID(ProtocolDAGSync))
+	p.host.RemoveStreamHandler(p.pid(protocolBatchFetchSuffix))
+	p.host.RemoveStreamHandler(p.pid(protocolCertFetchSuffix))
+	p.host.RemoveStreamHandler(p.pid(protocolDAGSyncSuffix))
 }
 
 // FetchBatch requests a batch from a peer by digest.
 func (p *ProtocolHandler) FetchBatch(ctx context.Context, peerID peer.ID, digest types.BatchDigest) (*types.Batch, error) {
-	stream, err := p.host.NewStream(ctx, peerID, protocol.ID(ProtocolBatchFetch))
+	stream, err := p.host.NewStream(ctx, peerID, p.pid(protocolBatchFetchSuffix))
 	if err != nil {
 		return nil, fmt.Errorf("open stream: %w", err)
 	}
@@ -214,7 +235,7 @@ func (p *ProtocolHandler) FetchBatch(ctx context.Context, peerID peer.ID, digest
 
 // FetchCertificate requests a certificate from a peer by round and author.
 func (p *ProtocolHandler) FetchCertificate(ctx context.Context, peerID peer.ID, round types.Round, author []byte) (*types.Certificate, error) {
-	stream, err := p.host.NewStream(ctx, peerID, protocol.ID(ProtocolCertFetch))
+	stream, err := p.host.NewStream(ctx, peerID, p.pid(protocolCertFetchSuffix))
 	if err != nil {
 		return nil, fmt.Errorf("open stream: %w", err)
 	}
@@ -252,7 +273,7 @@ func (p *ProtocolHandler) FetchCertificate(ctx context.Context, peerID peer.ID, 
 
 // SyncDAG requests all certificates for a range of rounds from a peer.
 func (p *ProtocolHandler) SyncDAG(ctx context.Context, peerID peer.ID, fromRound, toRound types.Round) ([]*types.Certificate, error) {
-	stream, err := p.host.NewStream(ctx, peerID, protocol.ID(ProtocolDAGSync))
+	stream, err := p.host.NewStream(ctx, peerID, p.pid(protocolDAGSyncSuffix))
 	if err != nil {
 		return nil, fmt.Errorf("open stream: %w", err)
 	}

@@ -48,7 +48,8 @@ func newChain2(parent record.Record, _ logging.Logger, _ record.Store, key *reco
 		"SignatureChain",
 		"ScratchChain",
 		"AnchorSequenceChain",
-		"SyntheticSequenceChain": // Bug, this is actually an index chain
+		"SyntheticSequenceChain", // Bug, this is actually an index chain
+		"SyntheticReplica":       // The destination's replica of a source's synthetic main chain (#4140)
 		typ = merkle.ChainTypeTransaction
 	case "RootChain",
 		"BptChain",
@@ -281,6 +282,9 @@ func (a *Account) chainByName(name string) *Chain2 {
 
 	case "synthetic-sequence":
 		return a.SyntheticSequenceChain(arg)
+
+	case "synthetic-replica":
+		return a.SyntheticReplica(arg)
 	}
 
 	return nil
@@ -302,6 +306,37 @@ func (c *Account) SyntheticSequenceChain(partition string) *Chain2 {
 
 func (c *Account) AnchorChain(partition string) *AccountAnchorChain {
 	return c.getAnchorChain(strings.ToLower(partition))
+}
+
+// SyntheticReplica returns the destination's replica of the source stream's
+// synthetic sequence (#4140). The stream identity is a string — a partition
+// ID today, possibly (partition, worker) later — so the key survives that
+// change without a state migration.
+func (c *Account) SyntheticReplica(stream string) *Chain2 {
+	return c.getSyntheticReplica(strings.ToLower(stream))
+}
+
+func (c *Account) getSyntheticReplicaKeys() ([]accountSyntheticReplicaKey, error) {
+	// List all of the account's chains
+	chains, err := c.Chains().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Find chains matching the pattern `synthetic-replica(:id)`
+	keys := make([]accountSyntheticReplicaKey, 0, len(chains))
+	seen := map[string]bool{}
+	for _, c := range chains {
+		first, arg, _, ok := splitChainName(strings.ToLower(c.Name))
+		if !ok || first != "synthetic-replica" || seen[arg] {
+			continue
+		}
+		seen[arg] = true
+		keys = append(keys, accountSyntheticReplicaKey{arg})
+	}
+
+	// Return the stream IDs
+	return keys, nil
 }
 
 func (c *Account) getSyntheticSequenceKeys() ([]accountSyntheticSequenceChainKey, error) {

@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
@@ -35,11 +36,16 @@ const (
 	// DefaultDAGGCDepth is how many rounds of DAG history are retained past
 	// the last commit. This is also the round catch-up window (#4057): a
 	// node that falls further behind than this cannot recover round-by-round
-	// because its peers have pruned the certificates it needs. At ~10
-	// rounds/second the old value of 50 retained FIVE SECONDS of history —
-	// any outage longer than that wedged the node permanently. 10,000
-	// rounds is ~16 minutes at that rate and costs roughly 25 MB.
-	DefaultDAGGCDepth       = 10_000
+	// because its peers have pruned the certificates it needs. The old value
+	// of 50 retained seconds of history and wedged nodes; 10,000 was sized
+	// by a 25MB estimate that measured ~700MB in practice (#4164: ~72KB per
+	// round of headers+certificates across a 12-validator dual topology) —
+	// the DAG drifted upward for the first hours of EVERY run and was a
+	// third of the OOM stack. At the current round cadence (>=500ms), 2,000
+	// rounds is a 16+ minute catch-up window — far beyond any transient, and
+	// a node further behind than that needs state-sync regardless — for
+	// ~140MB.
+	DefaultDAGGCDepth       = 2_000
 	DefaultCommitBufferSize = 5000 // Increased from 1000 for high throughput
 )
 
@@ -70,12 +76,57 @@ type NodeConfig struct {
 	// CommitBufferSize is the size of the committed certificates channel.
 	// Defaults to DefaultCommitBufferSize.
 	CommitBufferSize int
+
+	// MinRoundInterval paces round advancement, and therefore block cadence:
+	// Bullshark commits a leader every other round, so blocks arrive at
+	// roughly twice this interval. Zero falls back to
+	// primary.DefaultMinRoundInterval (100ms) — which, unwired, is what ran
+	// the Directory at ~21 blocks/sec under load and flooded anchor delivery
+	// at block rate (#4098). Callers honouring config.Timing should set this
+	// to BlockInterval/2.
+	MinRoundInterval time.Duration
+
+	// BatchCollectTimeout bounds how long CollectBatches waits for a committed
+	// certificate's batches before declaring them unrecoverable (#4159).
+	// CollectBatches never returns a partial set — executing without a batch
+	// diverges state — so historically it waited forever, on the premise that
+	// the certificate proves the data exists. LRU eviction broke that premise
+	// (every holder can evict a not-yet-committed batch); worker.performEviction
+	// no longer evicts a worker's OWN uncommitted batches, which restores it for
+	// the common case, but if the sole holder is gone the wait is still endless.
+	// After this timeout WITH no batch ever fetched from any peer, CollectBatches
+	// returns ErrBatchesUnrecoverable so the node can halt cleanly (state-sync to
+	// recover) instead of spinning silently. Generous by default so transient
+	// absences and peer catch-up self-heal. Zero uses the default; negative
+	// restores the old wait-forever behaviour.
+	BatchCollectTimeout time.Duration
 }
+
+// DefaultBatchCollectTimeout is how long CollectBatches waits for a committed
+// certificate's batches, with zero peer hits, before declaring them
+// unrecoverable (#4159). Long enough that no healthy fetch or catch-up is cut
+// short; short enough that a genuinely stranded partition stops in minutes
+// instead of never.
+const DefaultBatchCollectTimeout = 10 * time.Minute
 
 // applyDefaults fills in default values for unset configuration fields.
 func (c *NodeConfig) applyDefaults() {
+	if c.BatchCollectTimeout == 0 {
+		c.BatchCollectTimeout = DefaultBatchCollectTimeout
+	}
 	if c.NumWorkers <= 0 {
 		c.NumWorkers = DefaultNumWorkers
+	}
+	// A power-of-two worker count lets the routing key be masked,
+	// which is uniform and cheap; anything else falls back to modulo, which
+	// works but gives uneven buckets. This network was
+	// configured with 100 (#4133), which is neither a power of two nor a
+	// number anyone chose for a reason. Warn rather than refuse: a running
+	// deployment should not fail to start over it.
+	if !IsPowerOfTwo(c.NumWorkers) {
+		slog.Warn("Worker count is not a power of two — routing falls back to modulo and buckets are uneven",
+			"numWorkers", c.NumWorkers,
+			"suggestion", "use a power of two (e.g. 64 or 128)")
 	}
 	if c.DAGGCDepth == 0 {
 		c.DAGGCDepth = DefaultDAGGCDepth
@@ -99,9 +150,10 @@ type Node struct {
 	workers   []*worker.Worker
 	primary   *primary.Primary
 	bullshark *bullshark.Bullshark
+	protocols *gossip.ProtocolHandler
 
 	// Committed certificates channel
-	committed chan *types.Certificate
+	committed chan []*types.Certificate
 
 	// Lifecycle management
 	ctx    context.Context
@@ -142,19 +194,39 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		}
 	}
 
-	// Create workers
+	// Create workers.
+	//
+	// The batch-store byte budgets are PER PARTITION and divided among the
+	// workers, not applied to each one. They used to be per-worker, so
+	// num-workers silently multiplied resident memory: at 4 workers the two
+	// stores permitted 4 x (32MB + 32MB) = 256MB per partition, 512MB on a
+	// dual validator — the single largest consumer after the block cache, and
+	// the bytes behind the pubsub Message.Unmarshal line in heap profiles
+	// (stored batches alias the wire buffer). Scaling workers is a
+	// parallelism decision; it should not be a memory decision.
+	//
+	// Each worker keeps a floor of a few batches so that a high worker count
+	// cannot starve any single worker below what one round needs.
+	storedPerWorker := perWorkerBytes(config.WorkerConfig.MaxStoredBatchBytes,
+		worker.DefaultMaxStoredBatchBytes, config.NumWorkers, config.WorkerConfig.MaxBatchBytes)
+	retainedPerWorker := perWorkerBytes(config.WorkerConfig.MaxRetainedBatchBytes,
+		worker.DefaultMaxRetainedBatchBytes, config.NumWorkers, config.WorkerConfig.MaxBatchBytes)
+
 	workers := make([]*worker.Worker, config.NumWorkers)
 	for i := 0; i < config.NumWorkers; i++ {
 		wcfg := config.WorkerConfig
 		wcfg.ID = types.WorkerID(i)
 		wcfg.Partition = config.Partition
+		wcfg.MaxStoredBatchBytes = storedPerWorker
+		wcfg.MaxRetainedBatchBytes = retainedPerWorker
 		workers[i] = worker.New(wcfg, g)
 	}
 
 	// Create primary
 	pcfg := primary.Config{
-		Partition: config.Partition,
-		KeyPair:   config.KeyPair,
+		Partition:        config.Partition,
+		KeyPair:          config.KeyPair,
+		MinRoundInterval: config.MinRoundInterval,
 	}
 	p := primary.New(pcfg, committee, g, d, workers)
 
@@ -168,7 +240,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 	// condition where batches are pruned before the consumer can read them, resulting
 	// in "Missing batch for certificate" errors.
 
-	return &Node{
+	n := &Node{
 		config:    config,
 		committee: committee,
 		host:      h,
@@ -178,8 +250,290 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		workers:   workers,
 		primary:   p,
 		bullshark: bs,
-		committed: make(chan *types.Certificate, config.CommitBufferSize),
-	}, nil
+		committed: make(chan []*types.Certificate, config.CommitBufferSize),
+	}
+
+	// The batch-fetch protocol backs CollectBatches and the vote gate's
+	// missing-batch pull: a committed certificate proves 2f+1 validators
+	// stored its batches, so a node that lacks one pulls it from a peer
+	// instead of executing without it. Partition-scoped: several partitions'
+	// Nodes share one host, and an unscoped handler ID meant the last-started
+	// partition served every fetch (#4159).
+	if h != nil {
+		ph, err := gossip.NewProtocolHandler(h, config.Partition, multiWorkerBatchStore{workers}, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create protocol handler: %w", err)
+		}
+		n.protocols = ph
+	}
+
+	// The vote gate defers voting on a header until this node holds its
+	// batches (#4159). Deferring alone would wedge — batch bytes are
+	// broadcast once and the author's header rebroadcast does not re-send
+	// them — so a deferring voter actively pulls the batch from peers (the
+	// author certainly holds it: own batches are un-evictable). Async and
+	// deduplicated by the primary; the next header rebroadcast finds the
+	// batch present and the vote goes out.
+	p.SetMissingBatchHandler(func(d types.BatchDigest) {
+		go func() {
+			if n.closed.Load() || n.protocols == nil || n.host == nil {
+				return
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			for _, peerID := range n.host.Network().Peers() {
+				fctx, fcancel := context.WithTimeout(ctx, 2*time.Second)
+				b, err := n.protocols.FetchBatch(fctx, peerID, d)
+				fcancel()
+				if err == nil && b != nil && b.Digest() == d {
+					_ = n.workers[workerFor(d[:], len(n.workers))].StoreBatch(b)
+					return
+				}
+				if ctx.Err() != nil {
+					return
+				}
+			}
+		}()
+	})
+
+	return n, nil
+}
+
+// multiWorkerBatchStore serves batch fetches from any of the node's workers.
+type multiWorkerBatchStore struct{ workers []*worker.Worker }
+
+func (s multiWorkerBatchStore) GetBatch(digest types.BatchDigest) (*types.Batch, error) {
+	for _, w := range s.workers {
+		if b, err := w.GetBatch(digest); err == nil && b != nil {
+			return b, nil
+		}
+	}
+	return nil, nil
+}
+
+func (s multiWorkerBatchStore) StoreBatch(batch *types.Batch) error {
+	if len(s.workers) == 0 {
+		return errors.New("no workers")
+	}
+	// Spread by digest rather than always worker 0.
+	//
+	// Both intake paths — gossip and peer fetch — used to store every batch
+	// this node did not create into worker 0, while MaxStoredBatches is
+	// enforced PER worker. With many workers that made worker 0 fill and evict
+	// far sooner than any other, and what it evicts is exactly the batches
+	// peers come asking for, which is the failure #4128 is about (#4133).
+	d := batch.Digest()
+	return s.workers[workerFor(d[:], len(s.workers))].StoreBatch(batch)
+}
+
+// ErrAlreadyExecuted reports that a committed certificate has already been
+// executed by this node, so there is nothing left to collect.
+//
+// It is returned when a batch the certificate names is missing AND this node's
+// tombstone says that same certificate is what committed it. That combination
+// can only mean one thing: this node executed the certificate, retired its
+// batches, and is being handed it a second time. Waiting is then not a
+// liveness cost but a permanent halt — the Directory died exactly this way in
+// run 20260822T015342Z, spinning at 5,500 peer requests a minute for a batch
+// its own commit had retired (#4125).
+//
+// Skipping is safe ONLY in this exact case, because the work was already done.
+// A batch missing for any other reason is still waited on: skipping there
+// would execute a certificate without its transactions and diverge this node
+// from every peer that had them.
+var ErrAlreadyExecuted = errors.New("certificate already executed by this node")
+
+// ErrBatchesUnrecoverable reports that a committed certificate's batches could
+// not be collected within BatchCollectTimeout and no peer ever served one, so
+// they are gone from the network (#4159). CollectBatches never returns a
+// partial set — executing without a batch diverges state — so the caller must
+// treat this as a clean HALT (state-sync to recover), never as a skip.
+var ErrBatchesUnrecoverable = errors.New("committed certificate's batches are unrecoverable")
+
+// executedBefore reports whether a missing batch proves this certificate has
+// already been executed here.
+func (n *Node) executedBefore(digest types.BatchDigest, cert *types.Certificate) bool {
+	certDigest := cert.Digest().String()
+	for _, w := range n.workers {
+		g, ok := w.BatchGone(digest)
+		if !ok {
+			continue
+		}
+		if g.Reason == worker.GonePruned && g.Cert != "" && g.Cert == certDigest {
+			return true
+		}
+	}
+	return false
+}
+
+// batchAbsence explains, as far as this node can tell, why it does not hold a
+// batch. Every removal from a worker's store leaves a tombstone, so the answer
+// is usually "pruned after block N" or "evicted": the difference matters, since
+// a batch pruned by an EARLIER commit means the same digest reached two
+// certificates, while an eviction means the store was simply too small. When no
+// worker has a tombstone the batch was never stored here at all, and the
+// question is why the author never delivered it.
+// absenceReason is batchAbsence reduced to a metric label.
+func (n *Node) absenceReason(digest types.BatchDigest) string {
+	for _, w := range n.workers {
+		if g, ok := w.BatchGone(digest); ok {
+			switch g.Reason {
+			case worker.GonePruned:
+				return "pruned"
+			case worker.GoneEvicted:
+				return "evicted"
+			case worker.GoneRetentionExpired:
+				return "retention_expired"
+			}
+			return "other"
+		}
+	}
+	return "no_record"
+}
+
+func (n *Node) batchAbsence(digest types.BatchDigest) string {
+	for _, w := range n.workers {
+		if g, ok := w.BatchGone(digest); ok {
+			return g.String()
+		}
+	}
+	return worker.GoneUnknown
+}
+
+// CollectBatches returns the batches named by the certificate's payload, in
+// canonical payload order. Local workers are consulted first; a batch this
+// node does not hold is fetched from connected peers, retrying until the
+// context expires. It never returns a partial set: executing a certificate
+// without some of its batches makes this node's state diverge from every
+// node that had them — six nodes at the same block index produced six
+// different state hashes in TestStress_MultiNodeNetworkUnderLoad before this
+// existed. Skipping is a safety violation; waiting is only a liveness cost,
+// and the certificate itself is proof the data exists.
+func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*types.Batch, error) {
+	batches := make([]*types.Batch, len(cert.Header.Payload))
+
+	retry := time.NewTicker(50 * time.Millisecond)
+	defer retry.Stop()
+
+	// Diagnostics for a wait that does not end. The 2026-08-21 Directory halt
+	// (#4125) produced 190,500 identical "missing=1" lines in twelve minutes,
+	// naming neither the batch nor a reason — the log drowned the very fact it
+	// was meant to flag, the same defect #4123 fixed for the stall report. Log
+	// the first pass immediately and then at most one line per stallLogEvery,
+	// carrying the digest, why this node thinks the batch is gone, and how the
+	// peers answered.
+	const stallLogEvery = 10 * time.Second
+	var (
+		waited     int
+		lastLogged time.Time
+		peerAsks   int
+		peerHits   int
+		started    = time.Now()
+	)
+
+	for {
+		missing := 0
+		var firstMissing types.BatchDigest
+		for i, entry := range cert.Header.Payload {
+			if batches[i] != nil {
+				continue
+			}
+			// Local first — the common case.
+			for _, w := range n.workers {
+				if b, err := w.GetBatch(entry.Digest); err == nil && b != nil {
+					batches[i] = b
+					break
+				}
+			}
+			if batches[i] != nil {
+				continue
+			}
+			// Fetch from peers.
+			if n.protocols != nil && n.host != nil {
+				for _, peerID := range n.host.Network().Peers() {
+					fctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+					peerAsks++
+					b, err := n.protocols.FetchBatch(fctx, peerID, entry.Digest)
+					cancel()
+					if err == nil && b != nil && b.Digest() == entry.Digest {
+						peerHits++
+						// Store it so pruning-on-commit finds it and so this
+						// node can serve it onward. Same worker the gossip
+						// path would have chosen, so a fetched batch and a
+						// gossiped one land in the same place (#4133).
+						_ = n.workers[workerFor(entry.Digest[:], len(n.workers))].StoreBatch(b)
+						batches[i] = b
+						break
+					}
+				}
+			}
+			if batches[i] == nil {
+				// A batch this certificate itself committed means the
+				// certificate is being delivered twice. Say so instead of
+				// waiting for something this node deliberately retired.
+				if n.executedBefore(entry.Digest, cert) {
+					metrics.CertificatesRedeliveredTotal.Inc()
+					slog.Info("Skipping re-delivered certificate: already executed here",
+						"partition", n.config.Partition,
+						"round", cert.Header.Round,
+						"cert", cert.Digest().String()[:16],
+						"digest", entry.Digest.String()[:16])
+					return nil, ErrAlreadyExecuted
+				}
+				if missing == 0 {
+					firstMissing = entry.Digest
+				}
+				missing++
+			}
+		}
+		if missing == 0 {
+			return batches, nil
+		}
+
+		waited++
+		if waited == 1 {
+			metrics.BatchWaitsTotal.WithLabelValues(n.absenceReason(firstMissing)).Inc()
+		}
+		if now := time.Now(); lastLogged.IsZero() || now.Sub(lastLogged) >= stallLogEvery {
+			lastLogged = now
+			slog.Warn("Waiting for batches of committed certificate",
+				"partition", n.config.Partition,
+				"round", cert.Header.Round,
+				"cert", cert.Digest().String()[:16],
+				"author", fmt.Sprintf("%x", cert.Header.Author[:4]),
+				"missing", missing,
+				"payload", len(cert.Header.Payload),
+				"digest", firstMissing.String(),
+				"absence", n.batchAbsence(firstMissing),
+				"peerAsks", peerAsks,
+				"peerHits", peerHits,
+				"attempts", waited)
+		}
+
+		// Bound the wait (#4159). The old contract — wait forever, the
+		// certificate proves the data exists — held only while some node
+		// retained the batch; LRU eviction could delete it everywhere. Fix 1
+		// (workers keep their own uncommitted batches) restores that for the
+		// common case, so a healthy fetch always makes progress. But if the
+		// sole holder is gone the wait never ends. Give up ONLY when both are
+		// true: the timeout elapsed, AND not a single missing batch was ever
+		// fetched from a peer (peerHits==0) — i.e. no holder answered at all.
+		// A run with any peer hits is making progress and keeps waiting. This
+		// never returns a partial set; the caller halts cleanly so the node
+		// can state-sync instead of spinning silently.
+		if to := n.config.BatchCollectTimeout; to > 0 && peerHits == 0 && time.Since(started) > to {
+			return nil, fmt.Errorf("%w: round %d cert %s: %d batch(es) still missing after %s (firstMissing=%s absence=%s peerAsks=%d peerHits=%d)",
+				ErrBatchesUnrecoverable, cert.Header.Round, cert.Digest().String()[:16],
+				missing, to, firstMissing.String(), n.batchAbsence(firstMissing), peerAsks, peerHits)
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("collect batches for round %d: %d still missing: %w",
+				cert.Header.Round, missing, ctx.Err())
+		case <-retry.C:
+		}
+	}
 }
 
 // Start begins all node components and processes consensus.
@@ -234,6 +588,15 @@ func (n *Node) Start(ctx context.Context) error {
 	n.wg.Add(1)
 	go n.processBullshark()
 
+	// Serve batch fetches: CollectBatches on other nodes depends on peers
+	// answering, and a certificate is only as good as the availability of
+	// its batches.
+	if n.protocols != nil {
+		if err := n.protocols.RegisterHandlers(); err != nil {
+			return fmt.Errorf("register protocol handlers: %w", err)
+		}
+	}
+
 	slog.Info("Consensus node started")
 
 	return nil
@@ -262,6 +625,9 @@ func (n *Node) Stop() {
 
 	if n.gossip != nil {
 		_ = n.gossip.Close()
+	}
+	if n.protocols != nil {
+		n.protocols.UnregisterHandlers()
 	}
 
 	// Wait for goroutines to finish
@@ -294,14 +660,56 @@ func (n *Node) SubmitTransaction(tx []byte) error {
 		return errors.New("no workers available")
 	}
 
-	// Round-robin to workers
+	// No routing key: fall back to round-robin. This spreads a single sender's
+	// transactions across workers, which destroys their execution order and
+	// gets all but an increasing subsequence rejected by replay protection
+	// (#4132). Callers that know the sender must use SubmitTransactionFor.
 	idx := int(n.transactionsSubmitted.Add(1)-1) % len(n.workers)
 	return n.workers[idx].Submit(tx)
 }
 
-// Committed returns a channel that receives committed certificates.
-// The certificates are ordered according to Bullshark consensus.
-func (n *Node) Committed() <-chan *types.Certificate {
+// SubmitTransactionFor submits a transaction on behalf of a named sender.
+//
+// The key decides the worker, so everything from one sender is batched by one
+// worker and keeps its order, while distinct senders still spread across
+// workers — which is the parallelism worth having. Pass the signer's URL.
+//
+// An empty key routes to a worker deterministically rather than round-robin:
+// unattributable traffic should still be stable, not deliberately scattered.
+func (n *Node) SubmitTransactionFor(key string, tx []byte) error {
+	if n.closed.Load() {
+		return ErrNodeClosed
+	}
+
+	n.mu.RLock()
+	started := n.ctx != nil
+	n.mu.RUnlock()
+	if !started {
+		return ErrNodeNotStarted
+	}
+
+	if len(n.workers) == 0 {
+		return errors.New("no workers available")
+	}
+
+	n.transactionsSubmitted.Add(1)
+	idx := workerFor(routingKeyBytes(key), len(n.workers))
+	return n.workers[idx].Submit(tx)
+}
+
+// WorkerFor reports which worker a key routes to. Exported for tests and for
+// operators diagnosing where a sender's traffic lands.
+func (n *Node) WorkerFor(key string) int {
+	return workerFor(routingKeyBytes(key), len(n.workers))
+}
+
+// Committed returns a channel that receives committed certificate groups.
+// Each group is one committed LEADER's sub-DAG in canonical order (leader
+// last) — the deterministic unit of commitment, and therefore the unit the
+// executor turns into ONE block. Grouping any other way (per certificate, per
+// ProcessCertificate trigger) either multiplies end-of-block cost by the
+// committee size (#4164) or depends on per-node arrival timing and diverges.
+func (n *Node) Committed() <-chan []*types.Certificate {
 	return n.committed
 }
 
@@ -321,6 +729,13 @@ func (n *Node) Gossip() *gossip.GossipLayer {
 }
 
 // Workers returns the workers.
+// BatchStore returns the store that receives batches from other nodes, so a
+// test can verify that intake spreads across workers instead of piling into
+// one (#4133).
+func (n *Node) BatchStore() worker.BatchStore {
+	return multiWorkerBatchStore{n.workers}
+}
+
 func (n *Node) Workers() []*worker.Worker {
 	return n.workers
 }
@@ -400,19 +815,47 @@ func (n *Node) processBullshark() {
 			// Process certificate through Bullshark
 			outputs := n.bullshark.ProcessCertificate(cert)
 
-			// Send committed certificates to the executor
+			// Send committed certificates to the executor, grouped by the
+			// LEADER that committed them: one group = one leader's sub-DAG in
+			// canonical order = one executor block. The leader boundary is
+			// deterministic across validators whatever order certificates
+			// arrived in; the trigger boundary (this loop iteration) is not.
 			// NOTE: Batch pruning is handled by the executor (main.go) after reading
 			// batches from workers. We must NOT prune here because the committed
 			// channel is buffered - pruning before the executor reads would cause
 			// "Missing batch for certificate" errors.
-			for _, output := range outputs {
-				n.certificatesCommitted.Add(1)
-				select {
-				case n.committed <- output.Certificate:
-				default:
-					slog.Warn("Committed channel full, dropping certificate",
-						"digest", output.Certificate.Digest().String())
+			var group []*types.Certificate
+			var groupLeader types.Round
+			flush := func() bool {
+				if len(group) == 0 {
+					return true
 				}
+				// BLOCK, never drop: a dropped committed certificate means
+				// this node silently skips transactions its peers execute —
+				// permanent state divergence (#4122's shape). If the executor
+				// lags, backpressure here is the correct response; consensus
+				// certificates keep accumulating in the channel's buffer and
+				// the DAG regardless.
+				select {
+				case n.committed <- group:
+					group = nil
+					return true
+				case <-n.ctx.Done():
+					return false
+				}
+			}
+			for _, output := range outputs {
+				if len(group) > 0 && output.Leader != groupLeader {
+					if !flush() {
+						return
+					}
+				}
+				groupLeader = output.Leader
+				group = append(group, output.Certificate)
+				n.certificatesCommitted.Add(1)
+			}
+			if !flush() {
+				return
 			}
 
 			// Garbage collect old rounds
@@ -557,4 +1000,29 @@ func (n *Node) UpdateCommittee(committee *types.Committee) {
 
 	// Update Bullshark's committee
 	n.bullshark.UpdateCommittee(committee)
+}
+
+// perWorkerBytes splits a per-partition byte budget across workers.
+//
+// budget is the configured value (0 means use def). maxBatchBytes sets the
+// floor: a worker that cannot hold at least two batches would evict what it
+// just stored, so the floor wins over the split when there are many workers —
+// deliberately trading the exactness of the partition budget for a store that
+// still functions.
+func perWorkerBytes(budget, def, numWorkers, maxBatchBytes int) int {
+	if budget <= 0 {
+		budget = def
+	}
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
+	if maxBatchBytes <= 0 {
+		maxBatchBytes = worker.DefaultMaxBatchBytes
+	}
+
+	share := budget / numWorkers
+	if floor := 2 * maxBatchBytes; share < floor {
+		return floor
+	}
+	return share
 }

@@ -225,9 +225,6 @@ Configuration:
           type: '[]Multiaddr'
         - name: BvnBootstrapPeers
           type: '[]Multiaddr'
-        - name: EnableHealing
-          type: '*bool'
-          optional: true
         - name: EnableDirectDispatch
           type: '*bool'
           optional: true
@@ -238,6 +235,10 @@ Configuration:
           type: '*StorageType'
           optional: true
         - name: NumWorkers
+          type: '*int'
+          optional: true
+        - name: ExecutionShards
+          description: is the number of identity shards user transactions execute across; zero or one is serial (#4145)
           type: '*int'
           optional: true
         - name: DagGcDepth
@@ -288,9 +289,6 @@ Configuration:
           type: '[]Multiaddr'
         - name: BvnBootstrapPeers
           type: '[]Multiaddr'
-        - name: EnableHealing
-          type: '*bool'
-          optional: true
         - name: EnableDirectDispatch
           type: '*bool'
           optional: true
@@ -367,14 +365,19 @@ Service:
         - name: NumWorkers
           type: '*int'
           optional: true
+        - name: ExecutionShards
+          description: is the number of identity shards user transactions execute across; zero or one is serial (#4145)
+          type: '*int'
+          optional: true
         - name: DAGGCDepth
           type: '*int'
           optional: true
         - name: CommitBufferSize
           type: '*int'
           optional: true
-        - name: EnableHealing
-          type: '*bool'
+        - name: BlockInterval
+          description: target time between blocks; rounds are paced at half this, since Bullshark commits every other round. Defaults to 3s (#4098)
+          type: '*encoding.Duration'
           optional: true
         - name: EnableDirectDispatch
           type: '*bool'

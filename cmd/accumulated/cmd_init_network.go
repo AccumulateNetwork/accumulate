@@ -229,17 +229,43 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			addr = address.FromED25519PrivateKey(node.PrivValKey)
 			cvc.ValidatorKey = &run.RawPrivateKey{Address: addr.String()}
 
-			// Set 100 workers per node for high throughput stress testing
-			cvc.NumWorkers = run.Ptr(int64(100))
+			// Workers are shards, so the count is a power of two: the routing
+			// key is masked rather than divided, which gives uniform buckets
+			// and a cheap stable mapping. 100 was neither a power of two nor a
+			// number chosen for a reason, and `% 100` on a hash is not
+			// sharding (#4133).
+			//
+			// Measured (#4164): keyed worker routing is unwired (#4133), so
+			// every submission lands on ONE worker regardless of the count —
+			// the remaining 63 (×2 nodes per container) were idle batch-timer
+			// loops burning wakeups for nothing. A Narwhal worker is meant to
+			// be a separate machine contributing its own bandwidth, not 64
+			// goroutine-sets sharing one NIC and one disk. Four keeps the
+			// power-of-two sharding shape and real parallelism headroom for
+			// when #4133 wires the routing key.
+			cvc.NumWorkers = run.Ptr(int64(4))
 
-			// Add pprof profiling to bvn1-1 for performance analysis
-			if i == 0 && j == 0 {
-				pprofAddr, _ := multiaddr.NewMultiaddr("/ip4/" + node.ListenAddress + "/tcp/6060")
-				cfg.Instrumentation = &run.Instrumentation{
-					PprofListen: pprofAddr,
-				}
-				fmt.Printf("  Pprof enabled on %s:6060\n", node.ListenAddress)
+			// Every node serves Prometheus metrics on :26670. Without this no
+			// DI node had a /metrics endpoint at all — the CometBFT lineage
+			// served one by accident and DAG-BFT removed it without a
+			// replacement, so every metrics-fed soak panel (node RSS,
+			// goroutines, rcmgr scope usage, heals) read zero for a running
+			// network, and the 20260819 resource-exhaustion collapse had no
+			// instrument that could have shown it building (#4110, #4115).
+			promAddr, _ := multiaddr.NewMultiaddr("/ip4/0.0.0.0/tcp/26670/http")
+			cfg.Instrumentation = &run.Instrumentation{
+				HttpListener: run.HttpListener{Listen: []run.Multiaddr{promAddr}},
 			}
+
+			// pprof on EVERY node, not just bvn1-1. On 2026-08-21 all four
+			// partitions stopped producing blocks while consensus stayed
+			// healthy (#4125); the one artifact that would have said in a
+			// single step whether the executor was parked in batch collection
+			// is a goroutine dump of a wedged node, and there was no way to
+			// take one from 12 of the 13. Bound to 0.0.0.0 so the soak's
+			// wedgewatch can reach it with `docker exec <node> curl`.
+			pprofAddr, _ := multiaddr.NewMultiaddr("/ip4/0.0.0.0/tcp/6060")
+			cfg.Instrumentation.PprofListen = pprofAddr
 
 			// Write the genesis documents
 			cvc.DnGenesis = "directory-genesis.snap"

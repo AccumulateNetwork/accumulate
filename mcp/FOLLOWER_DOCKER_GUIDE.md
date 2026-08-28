@@ -252,7 +252,6 @@ network = "MainNet"
   bvn = "Cyclops"
   listen = "/ip4/0.0.0.0/tcp/16591"
   storage-type = "badger"
-  enable-healing = false
   enable-snapshots = false
 
   dn-bootstrap-peers = [

@@ -8,6 +8,7 @@ package accumulated
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
@@ -32,7 +33,17 @@ type dispatcher struct {
 	// over it (observed mid-replay during a fast-sync rejoin, #4058).
 	mu       sync.Mutex
 	messages []message.Message
+	retries  map[message.Message]int
 }
+
+// backpressureRetryLimit bounds how many Send cycles a backpressured message is
+// requeued for before its failure is reported. Backpressure is transient by
+// definition — the receiver's queue is full, not broken — so dropping the
+// envelope on first refusal turned every load spike into lost anchors: 213k+
+// dispatch failures in the 20260819T234054Z soak were this, and dispatch never
+// retries (#4115). Ten cycles is tens of seconds of patience; past that the
+// destination is genuinely stuck and the healers own the recovery.
+const backpressureRetryLimit = 10
 
 var _ execute.Dispatcher = (*dispatcher)(nil)
 
@@ -99,6 +110,35 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 	d.mu.Unlock()
 
 	errs := make(chan error)
+
+	// isBackpressure matches the worker's queue-full refusal. The error
+	// crosses the wire as an encoded message, so identity matching
+	// (errors.Is) does not survive; the text does.
+	isBackpressure := func(err error) bool {
+		return err != nil && strings.Contains(err.Error(), "worker backpressure")
+	}
+	// retryLater requeues the request for the next Send cycle, up to
+	// backpressureRetryLimit attempts. Returns false once patience is spent.
+	retryLater := func(req message.Message) bool {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		if d.retries == nil {
+			d.retries = make(map[message.Message]int)
+		}
+		if d.retries[req] >= backpressureRetryLimit {
+			delete(d.retries, req)
+			return false
+		}
+		d.retries[req]++
+		d.messages = append(d.messages, req)
+		return true
+	}
+	settle := func(req message.Message) {
+		d.mu.Lock()
+		delete(d.retries, req)
+		d.mu.Unlock()
+	}
+
 	check := func(err error) {
 		if err == nil {
 			return
@@ -134,7 +174,12 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 
 			switch res := res.(type) {
 			case *message.ErrorResponse:
-				// Handle error
+				// A queue-full refusal is transient: requeue for the next
+				// block instead of dropping the envelope (#4115).
+				if isBackpressure(res.Error) && retryLater(req) {
+					return nil
+				}
+				settle(req)
 				check(res.Error)
 				return nil
 
@@ -142,9 +187,14 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 				// Check for failed submissions
 				for _, sub := range res.Value {
 					if sub.Status != nil {
-						check(sub.Status.AsError())
+						err := sub.Status.AsError()
+						if isBackpressure(err) && retryLater(req) {
+							return nil
+						}
+						check(err)
 					}
 				}
+				settle(req)
 				return nil
 
 			default:

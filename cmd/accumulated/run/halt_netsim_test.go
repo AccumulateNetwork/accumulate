@@ -44,11 +44,11 @@ import (
 // time to reach the next major block boundary.
 func TestHaltDevNetIntegration(t *testing.T) {
 
-	basePort := freeDevnetBase(t, 1)
-	t.Skip("DAG-BFT does not yet fire DidCommitBlock with Major > 0 on a cron schedule")
 	if testing.Short() {
 		t.Skip("Skipping DevNet integration test in short mode")
 	}
+
+	basePort := freeDevnetBase(t, 1)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

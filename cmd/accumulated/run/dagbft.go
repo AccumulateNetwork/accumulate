@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/fatih/color"
@@ -35,8 +36,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	dagconfig "gitlab.com/accumulatenetwork/accumulate/pkg/consensus/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -92,18 +95,40 @@ func (s *DAGBFTService) prestart(inst *Instance) error {
 // start initializes and starts the DAG-BFT service.
 func (s *DAGBFTService) start(inst *Instance) error {
 	// Apply defaults
-	// Healing recovers lost synthetic messages and anchors via range
-	// requests (#4048/#4056). Without it a gap is PERMANENT: delivery is
-	// strictly sequential, so one lost message wedges everything after it —
-	// observed as a BVN that never delivered a single synthetic transaction
-	// (seq-want=1, seq-got=388) and therefore never produced an anchor. The
-	// per-block scan is paced inside the executor.
-	setDefaultPtr(&s.EnableHealing, true)
 	setDefaultPtr(&s.EnableDirectDispatch, true)
 	setDefaultPtr(&s.MaxEnvelopesPerBlock, uint64(100))
 	setDefaultPtr(&s.NumWorkers, dagconfig.DefaultNumWorkers)
+	// Execution sharding (#4145) defaults to serial; shard count is a local
+	// parallelism choice that cannot change the result, so operators can
+	// raise it per node. Bounded: the executor allocates per shard, so a
+	// fat-fingered count must be refused at startup, not at block time
+	// (#4151).
+	setDefaultPtr(&s.ExecutionShards, 1)
+	// ACC_EXECUTION_SHARDS overrides the configured count, so a shard sweep
+	// does not need a regenerated config (and therefore a new genesis) per
+	// data point. Same idiom as ACC_LEVELDB_CACHE_MB. An invalid value is
+	// REFUSED, not ignored: silently falling back to the configured count
+	// would make a sweep report the serial number under a parallel label,
+	// which is the one way this measurement can lie.
+	// An EMPTY value means "not set", not "invalid". Compose renders an unset
+	// variable as the empty string ("${ACC_EXECUTION_SHARDS-}"), so refusing
+	// it would refuse to start every node on every network that never set it
+	// — the default case. A non-empty value that is not a number is still a
+	// hard error.
+	if v, ok := os.LookupEnv("ACC_EXECUTION_SHARDS"); ok && v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return errors.BadRequest.WithFormat("ACC_EXECUTION_SHARDS %q is not a number", v)
+		}
+		s.ExecutionShards = Ptr(int64(n))
+		slog.Info("Execution shards overridden", "shards", n, "module", "dagbft")
+	}
+	if *s.ExecutionShards < 0 || *s.ExecutionShards > 1024 {
+		return errors.BadRequest.WithFormat("execution-shards %d is out of range [0, 1024]", *s.ExecutionShards)
+	}
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
+	setDefaultPtr(&s.BlockInterval, encoding.Duration(dagconfig.DefaultBlockInterval))
 
 	// Get the logger
 	logger := logging.NewSlogLogger(inst.logger)
@@ -121,6 +146,22 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		slog.ErrorContext(inst.context, "Shutting down due to a fatal error", "error", e.Err)
 		inst.shutdown()
 	})
+
+	// Create and register the halt controller for this partition.
+	//
+	// This registration lived in the CometBFT consensus path and was not
+	// carried over here, so `POST /admin/halt` was accepted and did nothing:
+	// RequestHaltAll iterates registered controllers, and there were none.
+	// The unit tests in halt_test.go construct a controller directly and so
+	// kept passing while the feature was unwired — which is how it stayed
+	// unnoticed (#4097).
+	haltController := NewHaltController(
+		s.Partition.ID,
+		inst.shutdown,
+		inst.logger.With("module", "halt", "partition", s.Partition.ID),
+	)
+	events.SubscribeSync(s.eventBus, haltController.OnDidCommitBlock)
+	inst.RegisterHaltController(haltController)
 
 	// Get the storage
 	store, err := dagbftNeedsStorage.Get(inst.services, s)
@@ -170,16 +211,26 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 	_ = genesisLoaded // May be used in the future for initialization logic
 
+	// Build DAG-BFT configuration. Built before the executor options because
+	// the executor's package budget derives from the batching limit (#4141).
+	// This one value must ALSO drive the worker's refusal — nodeConfig below
+	// sets WorkerConfig.MaxBatchBytes from it — or budget and enforcement
+	// are two coincident constants that drift apart silently (#4151).
+	dagCfg := dagconfig.DefaultConfig()
+
 	// Create executor options
 	execOpts := multiexec.Options{
-		Logger:        logger.With("module", "executor"),
-		Database:      db,
-		Key:           validatorKey,
-		Router:        router,
-		EventBus:      s.eventBus,
-		Sequencer:     client.Private(),
-		Querier:       client,
-		EnableHealing: *s.EnableHealing,
+		Logger:    logger.With("module", "executor"),
+		Database:  db,
+		Key:       validatorKey,
+		Router:    router,
+		EventBus:  s.eventBus,
+		Sequencer: client.Private(),
+		Querier:   client,
+		// Shard user-transaction execution by identity (#4145).
+		ExecutionShards: int(*s.ExecutionShards),
+		// A synthetic package must fit in one worker batch (#4141).
+		MaxEnvelopeSize: dagCfg.Batching.MaxBatchBytes,
 		Describe: multiexec.DescribeShim{
 			NetworkType: s.Partition.Type,
 			PartitionId: s.Partition.ID,
@@ -209,6 +260,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		return nil
 	})
 
+	// One HealCounters instance, shared by the conductor (which increments it)
+	// and the consensus API service (which reports it) — recoveries become
+	// visible to the soak monitor instead of only to grep (#4075, #4105).
+	healCounters := new(crosschain.HealCounters)
+
 	// Start conductor for cross-chain communication
 	conductor := &crosschain.Conductor{
 		Partition:    s.Partition,
@@ -216,6 +272,8 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Database:     execOpts.Database,
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
+		Sequencer:    client.Private(),
+		Heals:        healCounters,
 		RunTask:      execOpts.BackgroundTaskLauncher,
 		// Healing is the ONLY retry mechanism for anchors — the conductor's
 		// per-block dispatch is one-shot, and a single lost anchor freezes
@@ -246,12 +304,6 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("create executor bridge: %w", err)
 	}
 
-	// Build DAG-BFT configuration
-	dagCfg := dagconfig.DefaultConfig()
-	dagCfg.Consensus.NumWorkers = int(*s.NumWorkers)
-	dagCfg.Consensus.DAGGCDepth = int(*s.DAGGCDepth)
-	dagCfg.Consensus.CommitBufferSize = int(*s.CommitBufferSize)
-
 	// Create the DAG-BFT node configuration
 	nodeConfig := consensus.NodeConfig{
 		Partition:        s.Partition.ID,
@@ -259,6 +311,20 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		NumWorkers:       int(*s.NumWorkers),
 		DAGGCDepth:       types.Round(*s.DAGGCDepth),
 		CommitBufferSize: int(*s.CommitBufferSize),
+
+		// The same limit the executor's package budget derives from
+		// (#4151) — never let the two diverge.
+		WorkerConfig: worker.Config{
+			MaxBatchBytes: dagCfg.Batching.MaxBatchBytes,
+		},
+
+		// Rounds pace at half the block interval: Bullshark commits a leader
+		// every other round, so blocks arrive at roughly 2x the round
+		// interval. Before this was wired, primary fell back to its 100ms
+		// default and the Directory ran at ~21 blocks/sec under load — and
+		// since every block emits an anchor, anchor traffic ran at block
+		// rate and drowned one-shot dispatch (#4098).
+		MinRoundInterval: time.Duration(*s.BlockInterval) / 2,
 	}
 
 	// Use the shared GossipSub for DAG-BFT certificate/batch dissemination.
@@ -364,7 +430,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 
 	// Register consensus API services
-	err = s.registerAPIServices(inst, store, validatorKey, globals)
+	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters)
 	if err != nil {
 		return err
 	}
@@ -374,12 +440,13 @@ func (s *DAGBFTService) start(inst *Instance) error {
 }
 
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters) error {
 	logger := logging.NewSlogLogger(inst.logger)
 	db := database.New(store, logger)
 
 	// Create consensus service
 	consensusSvc := dagbft.NewConsensusAPIService(dagbft.ConsensusAPIServiceParams{
+		Heals:            healCounters,
 		Logger:           logger.With("module", "api"),
 		Service:          s.service,
 		Database:         db,

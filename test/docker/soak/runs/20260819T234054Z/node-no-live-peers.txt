@@ -1,0 +1,12 @@
+ 101370 no live peers for query:bvn2
+  69949 no live peers for query:bvn3
+  68704 no live peers for query:bvn1
+  27120 acc-bvn3-val2  
+  22506 acc-bvn3-val3  
+  22409 acc-bvn1-val4  
+  21953 acc-bvn1-val3  
+  21673 acc-bvn1-val2  
+  16284 acc-bvn3-val1  
+  11835 acc-bvn1-val1  
+   7885 acc-bvn3-val4  
+   5708 acc-bvn2-val4  

@@ -21,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	dagconfig "gitlab.com/accumulatenetwork/accumulate/pkg/consensus/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -30,6 +31,7 @@ import (
 // Begin constructs a [Block] and calls [Executor.BeginBlock].
 func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error) {
 	block := new(Block)
+	block.positions = new(positionCache)
 	block.BlockParams = params
 	block.Executor = x
 	block.Batch = x.Database.Begin(true)
@@ -57,6 +59,13 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	block.State.PreviousStateHash, err = block.Batch.GetBptRootHash()
 	if err != nil {
 		return nil, err
+	}
+
+	// Where the directory anchor chain stands before this block applies any
+	// anchors (#4169 step 0c). A chain that does not exist yet stands at 0.
+	head, err := block.Batch.Account(x.Describe.AnchorPool()).AnchorChain(protocol.Directory).Root().Head().Get()
+	if err == nil {
+		block.dnAnchorsAtStart = head.Count
 	}
 
 	// Finalize the previous block
@@ -123,6 +132,13 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 		}
 	}
 
+	// Deliver everything the previous block queued — local synthetics and
+	// locally produced messages — before any of this block's own (#4146).
+	err = block.drainDeliveryQueues()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("drain delivery queues: %w", err)
+	}
+
 	return block, nil
 }
 
@@ -137,7 +153,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	}
 
 	wd := protocol.SystemWriteData{}
-	if x.globals.Active.ExecutorVersion.DoubleHashEntriesEnabled() {
+	if x.globals().Active.ExecutorVersion.DoubleHashEntriesEnabled() {
 		wd.Entry = &protocol.DoubleHashDataEntry{Data: [][]byte{data}}
 	} else {
 		wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
@@ -210,7 +226,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	// Note that recording the anchor and dispatching the last block's
 	// synthetic messages are INDEPENDENT duties of this function — skipping
 	// the anchor must not skip the synthetics.
-	if x.globals.Active.ExecutorVersion.V2KourouEnabled() {
+	if x.globals().Active.ExecutorVersion.V2KourouEnabled() {
 		if ledger.Anchor != nil {
 			last, err := x.lastAnchoredBlock(block.Batch)
 			if err != nil {
@@ -324,7 +340,7 @@ func (x *Executor) recordAnchor(block *Block, ledger *protocol.SystemLedger) err
 		return errors.UnknownError.Wrap(err)
 	}
 
-	if x.Describe.NetworkType == protocol.PartitionTypeDirectory && !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+	if x.Describe.NetworkType == protocol.PartitionTypeDirectory && !x.globals().Active.ExecutorVersion.V2VandenbergEnabled() {
 		// As far as I know, the only thing this achieves (besides logging) is
 		// ensuring the block is not discarded. The only other reference to
 		// OpenedMajorBlock is (*BlockState).Empty. This is not necessary after
@@ -466,9 +482,11 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		return errors.InternalError.WithFormat("load synthetic main chain entries %d to %d: %w", from, to, err)
 	}
 
-	// For each synthetic transaction from the last block
+	// Load every synthetic message of the block, keeping its absolute position on
+	// the synthetic main chain. The position is what a collection proof is built
+	// from, and it is also what makes the packages below contiguous.
+	outbound := make([]*synthOutbound, 0, len(entries))
 	for i, hash := range entries {
-		// Load it
 		var seq *messaging.SequencedMessage
 		err := batch.Message2(hash).Main().GetAs(&seq)
 		if err != nil {
@@ -478,46 +496,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			return errors.InternalError.WithFormat("synthetic message stored as %X hashes to %X", hash[:4], h[:4])
 		}
 
-		// Get the synthetic main chain receipt
-		synthReceipt, err := synthMainChain.Receipt(int64(from)+int64(i), int64(to))
-		if err != nil {
-			return errors.UnknownError.WithFormat("get synthetic main chain receipt from %d to %d: %w", from, to, err)
-		}
-
-		receipt := new(protocol.AnnotatedReceipt)
-		receipt.Anchor = new(protocol.AnchorMetadata)
-		receipt.Anchor.Account = protocol.DnUrl()
-		if blockReceipt == nil {
-			receipt.Receipt, err = synthReceipt.Combine(rootReceipt)
-		} else {
-			receipt.Receipt, err = synthReceipt.Combine(rootReceipt, blockReceipt.RootChainReceipt)
-		}
-		if err != nil {
-			return errors.UnknownError.WithFormat("combine receipts: %w", err)
-		}
-
-		h := seq.Hash()
-		keySig, err := x.signTransaction(h[:])
-		if err != nil {
-			return errors.UnknownError.WithFormat("sign message: %w", err)
-		}
-
-		messages := []messaging.Message{
-			&messaging.BadSyntheticMessage{
-				Message:   seq,
-				Proof:     receipt,
-				Signature: keySig,
-			},
-		}
-		if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
-			messages = []messaging.Message{
-				&messaging.SyntheticMessage{
-					Message:   seq,
-					Proof:     receipt,
-					Signature: keySig,
-				},
-			}
-		}
+		o := &synthOutbound{index: int64(from) + int64(i), seq: seq}
 
 		// Send the transaction along with the signature request/authority
 		// signature
@@ -530,20 +509,279 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			if err != nil {
 				return errors.UnknownError.WithFormat("load transaction for synthetic message: %w", err)
 			}
-			messages = append(messages, txn)
+			o.companion = txn
 		}
+		outbound = append(outbound, o)
+	}
 
-		// Only send synthetic transactions from the leader
-		if isLeader {
-			env := &messaging.Envelope{Messages: messages}
-			err = x.mainDispatcher.Submit(context.Background(), seq.Destination, env)
-			if err != nil {
-				return errors.UnknownError.WithFormat("send synthetic transaction %X: %w", hash[:4], err)
+	if !isLeader {
+		return nil // Only send synthetic transactions from the leader
+	}
+
+	// Group by destination. One package can only share a proof among messages
+	// going to the same place, because a package is one envelope.
+	byDest := map[string][]*synthOutbound{}
+	order := []string{}
+	for _, o := range outbound {
+		k := o.seq.Destination.String()
+		if _, ok := byDest[k]; !ok {
+			order = append(order, k)
+		}
+		byDest[k] = append(byDest[k], o)
+	}
+
+	for _, k := range order {
+		group := byDest[k]
+		// One proof per message is what a single-message package amounts to, and
+		// a list of one element is slightly LARGER than the receipt it replaces —
+		// so do not pretend. Below the threshold, keep the old form.
+		//
+		// NOTE: with the receiver-side replica (#4140), even a one-element list
+		// pays forward — the destination absorbs it and later messages ride
+		// free — so this threshold is now a heuristic, not a hard rule. Left at
+		// 2 until the replica's effect is measured.
+		if len(group) < synthBundleMin || !x.globals().Active.ExecutorVersion.V2KourouEnabled() {
+			for _, o := range group {
+				err = x.sendSynthWithOwnProof(batch, o, synthMainChain, rootReceipt, blockReceipt, int64(to))
+				if err != nil {
+					return errors.UnknownError.Wrap(err)
+				}
 			}
+			continue
+		}
+		err = x.sendSynthPackages(batch, group, synthMainChain, record.MainChain(), rootReceipt, blockReceipt, int64(to))
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 
 	return nil
+}
+
+// synthOutbound is one synthetic message awaiting dispatch, with the position on
+// the synthetic main chain that a proof is built from.
+type synthOutbound struct {
+	index     int64
+	seq       *messaging.SequencedMessage
+	companion messaging.Message // the transaction it refers to, when it has one
+}
+
+// synthBundleMin is the smallest group worth bundling. A collection proof over a
+// single element carries that element's hash plus an anchoring path, which is no
+// smaller than the individual receipt it would replace — so one message keeps the
+// old form and pays nothing for machinery it cannot benefit from.
+const synthBundleMin = 2
+
+// synthPackageBudget bounds one package's serialized size. An envelope is one
+// consensus transaction, and the DAG-BFT worker caps a BATCH at MaxBatchBytes —
+// so the budget is DERIVED from that limit, never hard-coded: main's 3 MiB
+// constant came from CometBFT's max_tx_bytes and was six times this transport's
+// entire batch limit (#4141). A quarter is reserved for what is not known until
+// the package is closed: the proof's merkle state and continuation, the
+// signatures, and the envelope framing. The per-element hashes are charged
+// per-message in the packing loop.
+func (x *Executor) synthPackageBudget() int {
+	limit := x.MaxEnvelopeSize
+	if limit <= 0 {
+		limit = dagconfig.DefaultMaxBatchBytes
+	}
+	return limit - limit/4
+}
+
+// sendSynthWithOwnProof dispatches one synthetic message carrying its own
+// individual receipt — the pre-#4090 form, kept for single-message groups.
+func (x *Executor) sendSynthWithOwnProof(batch *database.Batch, o *synthOutbound, synthMainChain *database.Chain, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64) error {
+	synthReceipt, err := synthMainChain.Receipt(o.index, to)
+	if err != nil {
+		return errors.UnknownError.WithFormat("get synthetic main chain receipt from %d to %d: %w", o.index, to, err)
+	}
+
+	receipt := new(protocol.AnnotatedReceipt)
+	receipt.Anchor = new(protocol.AnchorMetadata)
+	receipt.Anchor.Account = protocol.DnUrl()
+	if blockReceipt == nil {
+		receipt.Receipt, err = synthReceipt.Combine(rootReceipt)
+	} else {
+		receipt.Receipt, err = synthReceipt.Combine(rootReceipt, blockReceipt.RootChainReceipt)
+	}
+	if err != nil {
+		return errors.UnknownError.WithFormat("combine receipts: %w", err)
+	}
+
+	msg, err := x.wrapSynthetic(o.seq, receipt)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	messages := []messaging.Message{msg}
+	if o.companion != nil {
+		messages = append(messages, o.companion)
+	}
+	env := &messaging.Envelope{Messages: messages}
+	err = x.mainDispatcher.Submit(context.Background(), o.seq.Destination, env)
+	if err != nil {
+		h := o.seq.Hash()
+		return errors.UnknownError.WithFormat("send synthetic transaction %X: %w", h[:4], err)
+	}
+	return nil
+}
+
+// sendSynthPackages dispatches a destination's messages as one or more packages,
+// each carrying ONE collection proof covering exactly the messages in it (#4090).
+//
+// Each package is self-verifying and independent: its proof spans its own
+// messages and is continued from there to the same block anchor the individual
+// receipts use. Packages may therefore be delivered in any order, and losing one
+// does not block another — the property that would be given up by sending the
+// proof once and referring back to it from later packages.
+func (x *Executor) sendSynthPackages(batch *database.Batch, group []*synthOutbound, synthMainChain *database.Chain, synthChain2 *database.Chain2, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64) error {
+	budget := x.synthPackageBudget()
+	for len(group) > 0 {
+		// The receiver refuses a ReceiptList longer than
+		// MaxReceiptListElements, and a package's list spans from its FIRST
+		// member to the block's last synthetic element (#4150) — so a
+		// message whose own span exceeds the cap can never lead a package.
+		// It ships with an individual receipt instead of wedging into a
+		// package every validator must reject. The group is ordered by chain
+		// index, so members taken after the first only shrink the distance:
+		// one check per package bounds the whole list.
+		if !packageSpanFits(group[0].index, to) {
+			err := x.sendSynthWithOwnProof(batch, group[0], synthMainChain, rootReceipt, blockReceipt, to)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			group = group[1:]
+			continue
+		}
+
+		// Pack greedily up to the budget, always taking at least one message so
+		// an oversized message cannot wedge the loop — it goes alone and the
+		// transport rejects it visibly rather than us silently dropping it.
+		var pkg []*synthOutbound
+		var msgs []messaging.Message
+		size := 0
+		for len(group) > 0 {
+			o := group[0]
+			m, err := x.wrapSynthetic(o.seq, nil)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			add := []messaging.Message{m}
+			if o.companion != nil {
+				add = append(add, o.companion)
+			}
+			n := 0
+			for _, mm := range add {
+				b, err := mm.MarshalBinary()
+				if err != nil {
+					return errors.UnknownError.WithFormat("marshal synthetic message: %w", err)
+				}
+				n += len(b)
+			}
+			// The span grows with every message taken, and the proof carries one
+			// hash per element in it, so charge for that too.
+			span := int(to-pkg0index(pkg, o)) + 1
+			if len(pkg) > 0 && size+n+span*32 > budget {
+				break
+			}
+			size += n
+			pkg = append(pkg, o)
+			msgs = append(msgs, add...)
+			group = group[1:]
+		}
+
+		proof, err := x.buildSynthPackageProof(pkg, synthChain2, rootReceipt, blockReceipt, to)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+
+		// The proof leads, so a reader sees it before the messages that need it.
+		env := &messaging.Envelope{Messages: append([]messaging.Message{
+			&messaging.SyntheticProof{Proof: proof},
+		}, msgs...)}
+		err = x.mainDispatcher.Submit(context.Background(), pkg[0].seq.Destination, env)
+		if err != nil {
+			return errors.UnknownError.WithFormat("send synthetic package of %d to %v: %w", len(pkg), pkg[0].seq.Destination, err)
+		}
+	}
+	return nil
+}
+
+// pkg0index returns the first index of the package being packed, or o's own
+// index when the package is still empty.
+func pkg0index(pkg []*synthOutbound, o *synthOutbound) int64 {
+	if len(pkg) == 0 {
+		return o.index
+	}
+	return pkg[0].index
+}
+
+// packageSpanFits reports whether a package whose FIRST member sits at chain
+// index first, in a block whose last synthetic element is at index to,
+// builds a ReceiptList the receiver will accept — the list has to-first+1
+// elements, and the receiver refuses more than MaxReceiptListElements
+// (#4150). The sender must apply the receiver's bound or it manufactures
+// packages every validator rejects.
+func packageSpanFits(first, to int64) bool {
+	return int(to-first)+1 <= protocol.MaxReceiptListElements
+}
+
+// buildSynthPackageProof builds the collection proof for one package: a receipt
+// list over the package's span, continued to the block's anchor.
+//
+// The span runs from the first to the last message of the package. It may cover
+// elements belonging to OTHER destinations, because the synthetic main chain
+// interleaves them — harmless, since extra elements are proven hashes and
+// nothing more, and it is what lets the span stay contiguous.
+func (x *Executor) buildSynthPackageProof(pkg []*synthOutbound, synthChain2 *database.Chain2, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64) (*protocol.AnnotatedReceipt, error) {
+	first := pkg[0].index
+
+	// The span runs to the block's LAST synthetic element, not to the package's
+	// last message. A receipt list anchors at the end of its span, and the
+	// continuation has to start from that anchor — the block anchor is the only
+	// point the root receipt is built from, so the list must reach it. Ending the
+	// span early leaves an anchor nothing continues from, which Validate rejects
+	// outright ("built an invalid receipt list").
+	list, err := merkle.GetReceiptList(synthChain2.Inner(), first, to)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("build receipt list %d to %d: %w", first, to, err)
+	}
+
+	// Continue to the same place the individual receipts terminate, so the
+	// destination's trust check is unchanged.
+	cont := rootReceipt
+	if blockReceipt != nil {
+		cont, err = rootReceipt.Combine(blockReceipt.RootChainReceipt)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("combine receipts: %w", err)
+		}
+	}
+	list.ContinuedReceipt = cont
+
+	if !list.Validate(nil) {
+		return nil, errors.InternalError.With("built an invalid receipt list")
+	}
+
+	return &protocol.AnnotatedReceipt{
+		ReceiptList: list,
+		Anchor:      &protocol.AnchorMetadata{Account: protocol.DnUrl()},
+	}, nil
+}
+
+// wrapSynthetic wraps a sequenced message for dispatch, signed by this node. A
+// nil receipt produces a message with no proof of its own, for a package whose
+// proof travels separately (#4090).
+func (x *Executor) wrapSynthetic(seq *messaging.SequencedMessage, receipt *protocol.AnnotatedReceipt) (messaging.Message, error) {
+	h := seq.Hash()
+	keySig, err := x.signTransaction(h[:])
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("sign message: %w", err)
+	}
+
+	if x.globals().Active.ExecutorVersion.V2BaikonurEnabled() {
+		return &messaging.SyntheticMessage{Message: seq, Proof: receipt, Signature: keySig}, nil
+	}
+	return &messaging.BadSyntheticMessage{Message: seq, Proof: receipt, Signature: keySig}, nil
 }
 
 func (x *Executor) signTransaction(hash []byte) (protocol.KeySignature, error) {
@@ -555,7 +793,7 @@ func (x *Executor) signTransaction(hash []byte) (protocol.KeySignature, error) {
 		SetType(protocol.SignatureTypeED25519).
 		SetPrivateKey(x.Key).
 		SetUrl(protocol.DnUrl().JoinPath(protocol.Network)).
-		SetVersion(x.globals.Active.Network.Version).
+		SetVersion(x.globals().Active.Network.Version).
 		SetTimestamp(1).
 		Sign(hash)
 	if err != nil {

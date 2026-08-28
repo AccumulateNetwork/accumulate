@@ -8,6 +8,7 @@ package e2e
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -51,7 +52,11 @@ func TestDropInitialAnchor(t *testing.T) {
 			SendTokens(123, 0).To(bob, "tokens").
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
 
-	sim.StepUntil(
+	// Anchor healing fires on a jittered per-node schedule with back-off
+	// (claimSyntheticRequest), so recovery time varies run to run; the
+	// default 50-step budget lost the coin flip roughly one run in three —
+	// before AND after the 2026-08-20 healing changes (#4116).
+	sim.StepUntilN(250,
 		Sig(st[1].TxID).Completes(),
 		Txn(st[0].TxID).Completes())
 
@@ -67,9 +72,17 @@ func TestReuseDirectoryAnchorSignatures(t *testing.T) {
 	const numVal, numNode = 3, 1
 
 	var trapBlock uint64
+	// anchorTrap runs on every node's goroutine, so both captures are shared:
+	// the append can lose a signature and the toBVN assignment can be lost or
+	// torn. The StepUntil condition below reads them from the test's own
+	// goroutine while the trap is still firing, so the reads are guarded too
+	// (#4171).
+	var trapMu sync.Mutex
 	var dnSigs []KeySignature
 	var toBVN *messaging.SequencedMessage
 	anchorTrap := func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+		trapMu.Lock()
+		defer trapMu.Unlock()
 		if trapBlock == 0 || len(env.Messages) != 1 {
 			return true, nil
 		}
@@ -127,6 +140,8 @@ func TestReuseDirectoryAnchorSignatures(t *testing.T) {
 	trapBlock = sim.S.BlockIndex(Directory)
 	sim.StepUntil(
 		True(func(*Harness) bool {
+			trapMu.Lock()
+			defer trapMu.Unlock()
 			return toBVN != nil && len(dnSigs) == numVal*numNode
 		}))
 

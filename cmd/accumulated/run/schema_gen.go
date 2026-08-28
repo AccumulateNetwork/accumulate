@@ -320,14 +320,6 @@ func init() {
 					ResolveElemTo(&deferredTypes, "Multiaddr"),
 			},
 			{
-				Name:     "EnableHealing",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
-			},
-			{
 				Name:     "EnableDirectDispatch",
 				Optional: true,
 				Type: &schema.PointerType{
@@ -354,6 +346,15 @@ func init() {
 			{
 				Name:     "NumWorkers",
 				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
+				Name:        "ExecutionShards",
+				Description: "is the number of identity shards user transactions execute across; zero or one is serial (#4145)",
+				Optional:    true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
 					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
@@ -425,6 +426,15 @@ func init() {
 				},
 			},
 			{
+				Name:        "ExecutionShards",
+				Description: "is the number of identity shards user transactions execute across; zero or one is serial (#4145)",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
 				Name:     "DAGGCDepth",
 				Optional: true,
 				Type: &schema.PointerType{
@@ -441,11 +451,12 @@ func init() {
 				},
 			},
 			{
-				Name:     "EnableHealing",
-				Optional: true,
+				Name:        "BlockInterval",
+				Description: "target time between blocks; rounds are paced at half this, since Bullshark commits every other round. Defaults to 3s (#4098)",
+				Optional:    true,
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+					Elem:     schema.TypeReferenceFor[encoding.Duration](),
 				},
 			},
 			{
@@ -568,14 +579,6 @@ func init() {
 					TypeBase: schema.TypeBase{},
 				}).
 					ResolveElemTo(&deferredTypes, "Multiaddr"),
-			},
-			{
-				Name:     "EnableHealing",
-				Optional: true,
-				Type: &schema.PointerType{
-					TypeBase: schema.TypeBase{},
-					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
-				},
 			},
 			{
 				Name:     "EnableDirectDispatch",

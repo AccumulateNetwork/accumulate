@@ -203,7 +203,7 @@ func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, re
 }
 
 func (TransactionMessage) checkWrapper(ctx *MessageContext, txn *protocol.Transaction) error {
-	if ctx.isWithin(internal.MessageTypeMessageIsReady) {
+	if ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
 		return nil
 	}
 
@@ -214,7 +214,7 @@ func (TransactionMessage) checkWrapper(ctx *MessageContext, txn *protocol.Transa
 		if !txn.Body.Type().IsSynthetic() {
 			return errors.BadRequest.WithFormat("a synthetic message cannot carry a %v transaction", txn.Body.Type())
 		}
-	} else if ctx.isWithin(messaging.MessageTypeBlockAnchor) {
+	} else if ctx.isWithin(messaging.MessageTypeSynthetic, messaging.MessageTypeBlockAnchor) {
 		if !txn.Body.Type().IsAnchor() {
 			return errors.BadRequest.WithFormat("a block anchor cannot carry a %v transaction", txn.Body.Type())
 		}
@@ -502,7 +502,7 @@ func getBlocksWithEvents(record values.Set[uint64], height uint64) ([]uint64, er
 }
 
 func (b *Block) expirePendingTransactions(batch *database.Batch, blocks []uint64) ([]messaging.Message, error) {
-	limit := b.Executor.globals.Active.Globals.Limits.EventsPerBlock
+	limit := b.Executor.globals().Active.Globals.Limits.EventsPerBlock
 	if limit == 0 {
 		limit = 100
 	}
@@ -559,7 +559,7 @@ func (b *Block) expirePendingTransactions(batch *database.Batch, blocks []uint64
 }
 
 func (b *Block) processEvents() error {
-	if majorBlockIndex, _, ok := b.didOpenMajorBlock(); ok && b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+	if majorBlockIndex, _, ok := b.didOpenMajorBlock(); ok && b.Executor.globals().Active.ExecutorVersion.V2VandenbergEnabled() {
 		// Process major block events
 		events := b.Batch.Account(b.Executor.Describe.Ledger()).Events()
 		blocks, err := getBlocksWithEvents(events.Major().Blocks(), majorBlockIndex)
@@ -574,13 +574,16 @@ func (b *Block) processEvents() error {
 		}
 
 		// Claim we're on pass 1 so that internal messages are allowed
-		_, err = b.processMessages(msgs, 1)
+		_, bundles, err := b.processMessages(b.Batch, msgs, 1)
 		if err != nil {
 			return errors.UnknownError.WithFormat("process messages (1): %w", err)
 		}
+		for _, d := range bundles {
+			d.mergeIntoBlock()
+		}
 	}
 
-	n := int(b.Executor.globals.Active.Globals.Limits.EventsPerBlock)
+	n := int(b.Executor.globals().Active.Globals.Limits.EventsPerBlock)
 	if n == 0 {
 		n = 100
 	}
@@ -623,9 +626,12 @@ func (b *Block) processEvents() error {
 	}
 
 	// Claim we're on pass 1 so that internal messages are allowed
-	_, err = b.processMessages(msgs, 1)
+	_, bundles, err := b.processMessages(b.Batch, msgs, 1)
 	if err != nil {
 		return errors.UnknownError.WithFormat("process messages (2): %w", err)
+	}
+	for _, d := range bundles {
+		d.mergeIntoBlock()
 	}
 	return nil
 }
@@ -691,7 +697,9 @@ func (x ExpiredTransaction) expireTransaction(batch *database.Batch, ctx *Messag
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	ctx.State.MergeTransaction(state)
+	// Through the bundle's state, merged serially at bundle end — never
+	// directly into the shared Block.State mid-execution (#4149).
+	ctx.state.Set(txn.Transaction.ID().Hash(), state)
 
 	err = TransactionMessage{}.postProcess(batch, ctx2, state, true)
 	return errors.UnknownError.Wrap(err)

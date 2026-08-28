@@ -29,6 +29,10 @@ type stateCache struct {
 	txType protocol.TransactionType
 	txHash [32]byte
 
+	// principal is the transaction's principal, for the identity-boundary
+	// assertion (#4143). Set by NewStateManager.
+	principal *url.URL
+
 	Globals    *core.GlobalValues
 	State      ProcessTransactionState
 	batch      *database.Batch
@@ -150,7 +154,15 @@ func (st *stateCache) Update(accounts ...protocol.Account) error {
 func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account) error {
 	isCreate := !isUpdate
 	for _, account := range accounts {
-		err := protocol.IsValidAccountPath(account.GetUrl().Path)
+		// Every write belongs to the principal's identity (#4143). Checked
+		// before anything is put, so a violation fails the transaction with
+		// nothing committed.
+		err := st.checkIdentityBoundary(account)
+		if err != nil {
+			return err
+		}
+
+		err = protocol.IsValidAccountPath(account.GetUrl().Path)
 		if err != nil {
 			return errors.BadRequest.WithFormat("invalid account path: %w", err)
 		}

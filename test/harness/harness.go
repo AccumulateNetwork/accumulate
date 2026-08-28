@@ -9,6 +9,7 @@ package harness
 import (
 	"context"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,9 +21,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// noColorOnce guards a write to a package global in a constructor that
+// parallel tests call concurrently. Harmless in effect, but it is a real race
+// and it is reported on every -race run, which buries the ones that matter.
+var noColorOnce sync.Once
+
 // New returns a new Harness with the given services and stepper.
 func New(tb testing.TB, services Services, stepper Stepper) *Harness {
-	color.NoColor = false
+	noColorOnce.Do(func() { color.NoColor = false })
 	h := new(Harness)
 	h.TB = tb
 	h.services = services

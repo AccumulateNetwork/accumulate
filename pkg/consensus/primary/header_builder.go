@@ -45,9 +45,17 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	// Now that we know parents exist, it's safe to consume batches.
 	// NewHeader sorts the payload into canonical (execution) order.
 	var payload []types.PayloadEntry
+	seen := make(map[types.BatchDigest]bool)
 	for _, w := range p.workers {
-		// Use ConsumeAvailableBatches to get and clear available batches
+		// Use ConsumeAvailableBatches to get and clear available batches.
+		// Dedup: the requeue (never-certified headers) and re-proposal
+		// (never-committed batches) paths can both re-enqueue a digest, and a
+		// header must not list the same batch twice.
 		for _, digest := range w.ConsumeAvailableBatches() {
+			if seen[digest] {
+				continue
+			}
+			seen[digest] = true
 			payload = append(payload, types.PayloadEntry{Digest: digest, Worker: w.ID()})
 		}
 	}
@@ -105,8 +113,32 @@ func (p *Primary) getParentCertsForRound(round types.Round) ([]types.Certificate
 	// Collect digests from ALL available certificates
 	// This ensures late-arriving certificates are included as parents
 	digests := make([]types.CertificateDigest, 0, len(certs))
+	seen := make(map[types.CertificateDigest]bool, len(certs))
 	for _, cert := range certs {
 		digests = append(digests, cert.Digest())
+		seen[cert.Digest()] = true
+	}
+
+	// Weak links: also reference certificates from recent OLDER rounds. The
+	// 80ms parent wait means a consistently slow validator's certificate
+	// misses every builder's round-1 window, and a certificate no header ever
+	// references can never enter a committed leader's causal history — its
+	// batches are lost with it (46% of all certificates in run
+	// 20260820T090939Z). Referencing recent older certificates gives every
+	// straggler a later ride into the committed DAG; duplicates across
+	// headers are harmless (ancestry walks and the commit path dedup by
+	// digest).
+	const weakLinkWindow = 8
+	if round >= 3 {
+		for r := round - 2; r >= 1 && r+weakLinkWindow >= round; r-- {
+			for _, cert := range p.dag.GetRound(r) {
+				d := cert.Digest()
+				if !seen[d] {
+					seen[d] = true
+					digests = append(digests, d)
+				}
+			}
+		}
 	}
 
 	return digests, nil

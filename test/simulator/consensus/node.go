@@ -121,6 +121,11 @@ func (n *Node) check(ctx context.Context, env *messaging.Envelope) ([]*protocol.
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	// Copy before touching: the hub fans one submission out to every node in
+	// its own goroutine, and Normalize (and everything after it) memoizes
+	// hashes on the shared messages — a data race between nodes.
+	env = env.Copy()
+
 	messages, err := env.Normalize()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)

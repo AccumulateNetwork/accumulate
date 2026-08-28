@@ -23,6 +23,7 @@ type partOpts struct {
 	BootstrapPeers   []multiaddr.Multiaddr
 	MetricsNamespace string
 	NumWorkers       *int64
+	ExecutionShards  *int64
 }
 
 func (p partOpts) apply(cfg *Config) error {
@@ -36,10 +37,10 @@ func (p partOpts) apply(cfg *Config) error {
 				ID:   p.ID,
 				Type: p.Type,
 			},
-			EnableHealing:        p.EnableHealing,
 			EnableDirectDispatch: p.EnableDirectDispatch,
 			MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
 			NumWorkers:           p.NumWorkers,
+			ExecutionShards:      p.ExecutionShards,
 			DAGGCDepth:           p.DagGcDepth,
 		},
 		func(s *DAGBFTService) string { return s.Partition.ID })

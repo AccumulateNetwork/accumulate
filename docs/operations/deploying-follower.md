@@ -122,7 +122,6 @@ network = "MainNet"
   storage-type = "badger"
 
   # Disable these for followers
-  enable-healing = false
   enable-snapshots = false
 
   # Bootstrap peers for Directory Network

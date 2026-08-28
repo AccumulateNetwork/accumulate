@@ -62,7 +62,6 @@ network = "MainNet"
   bvn-genesis = "cyclops-genesis.snap"
   dn-bootstrap-peers = []
   dn-genesis = "directory-genesis.snap"
-  enable-healing = false
   enable-snapshots = false
   listen = "/ip4/0.0.0.0/tcp/16591"
   storage-type = "levelDB"

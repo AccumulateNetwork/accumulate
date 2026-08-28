@@ -45,20 +45,36 @@ type Config struct {
 
 	// ShardDepth specifies the number of bits for shard routing (1-8)
 	// Only used if ShardingEnabled is true
-	// Recommended values:
-	//   - 4 = 16 shards (optimal for 16-core systems)
-	//   - 5 = 32 shards (for 32-core systems)
-	//   - 6 = 64 shards (diminishing returns beyond this)
+	//
+	// Work lands on shards by hash, so it does not spread evenly: with as many
+	// shards as cores, collisions leave cores idle. Use more shards than cores
+	// — two to four times — and expect diminishing returns past 64.
+	//   - 5 = 32 shards
+	//   - 6 = 64 shards
 	ShardDepth int
 }
 
 // DefaultConfig returns a Config with sensible defaults:
-// - Sharding disabled for backward compatibility
-// - Shard depth of 4 (16 shards) when enabled
+// - Sharding disabled
+// - Shard depth of 6 (64 shards) when enabled
+//
+// Sharding does not change the root, and this is not an empirical claim. The
+// BPT routes on bits of the key hash, so its shape is a function of the key
+// set; splitting at a bit boundary and recombining is the same hash
+// computation reassociated. A sharded and an unsharded tree over the same data
+// are necessarily identical, which is why enabling this is a configuration
+// choice and not a protocol change. The equivalence tests exist to check the
+// implementation honours that, not to establish it.
+//
+// It is off because ShardedBPT cannot yet serve production: it implements
+// Insert, Get, Delete and GetRootHash, while the database also needs
+// GetReceipt, Iterate and Index. Nothing outside tests calls this factory —
+// internal/database builds a concrete *bpt.BPT directly. Turning this on
+// without that work would change nothing; with it, this is the switch.
 func DefaultConfig() Config {
 	return Config{
 		ShardingEnabled: false,
-		ShardDepth:      4,
+		ShardDepth:      6,
 	}
 }
 
@@ -70,7 +86,7 @@ func DefaultConfig() Config {
 //
 //	config := bpt.Config{
 //	    ShardingEnabled: true,
-//	    ShardDepth:      4,  // 16 shards
+//	    ShardDepth:      6,  // 64 shards
 //	}
 //	tree, err := bpt.NewFromConfig(config, store, key)
 //	if err != nil {

@@ -26,11 +26,17 @@ type BlockState struct {
 	Delivered          uint64
 	Signed             uint64
 	Produced           int
-	ChainUpdates       chain.ChainUpdates
-	ReceivedAnchors    []*chain.ReceivedAnchor
-	PreviousStateHash  [32]byte
-	AcmeBurnt          big.Int
-	NetworkUpdate      []*protocol.NetworkAccountUpdate
+	// LocalDeliveries counts queue traffic — messages enqueued for or
+	// drained from the #4146 delivery queues this block. A block whose only
+	// content is queue movement must still COMMIT (#4155): discarding it as
+	// empty would re-execute the same work every block until unrelated
+	// traffic forces a commit.
+	LocalDeliveries   int
+	ChainUpdates      chain.ChainUpdates
+	ReceivedAnchors   []*chain.ReceivedAnchor
+	PreviousStateHash [32]byte
+	AcmeBurnt         big.Int
+	NetworkUpdate     []*protocol.NetworkAccountUpdate
 
 	Anchor     *BlockAnchorState
 	MajorBlock *MajorBlockState
@@ -74,6 +80,7 @@ func (s *BlockState) Empty() bool {
 		s.Delivered == 0 &&
 		s.Signed == 0 &&
 		s.Produced == 0 &&
+		s.LocalDeliveries == 0 &&
 		len(s.ChainUpdates.Entries) == 0
 }
 

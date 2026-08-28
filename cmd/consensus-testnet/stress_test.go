@@ -173,16 +173,9 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 						continue
 					}
 					if cert != nil {
-						batches := make(map[types.BatchDigest]*types.Batch)
-						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for _, entry := range cert.Header.Payload {
-							digests = append(digests, entry.Digest)
-							for _, w := range workers {
-								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-									batches[entry.Digest] = batch
-									break
-								}
-							}
+						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
+						if !ok {
+							return
 						}
 						executors[i].ProcessCertificate(cert, batches)
 						for _, w := range workers {
@@ -398,16 +391,9 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 					return
 				}
 				if cert != nil {
-					batches := make(map[types.BatchDigest]*types.Batch)
-					digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-					for _, entry := range cert.Header.Payload {
-						digests = append(digests, entry.Digest)
-						for _, w := range workers {
-							if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-								batches[entry.Digest] = batch
-								break
-							}
-						}
+					batches, digests, ok := collectForCert(ctx, newNode, cert)
+					if !ok {
+						return
 					}
 					newExec.ProcessCertificate(cert, batches)
 					for _, w := range workers {
@@ -484,7 +470,41 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 	// 3. No consensus stalls under load
 	assert.False(t, stallDetected, "No consensus stalls should occur under load")
 
-	// 4. All nodes stay synchronized (check state hashes)
+	// 4. All nodes stay synchronized (check state hashes). Quiesce first:
+	// the state hash chains the ordered transaction stream (17bb74164), so
+	// equality is only meaningful between nodes that have processed the same
+	// number of transactions; commits keep landing briefly after load stops,
+	// and CI runners reliably catch that window. Wait for the healthy nodes
+	// to settle at one processed count.
+	// Soft wait with diagnostics: if the counts do settle, hash equality is
+	// exact; if they do not, log them — the majority-hash assertion below is
+	// the actual gate either way, and the counts distinguish "slow drain"
+	// from genuinely divergent committed streams.
+	quiesce := time.Now().Add(45 * time.Second)
+	for {
+		counts := make([]uint64, 0, numNodes-1)
+		for i := 0; i < numNodes; i++ {
+			if i == nodeToKill {
+				continue
+			}
+			counts = append(counts, executors[i].GetProcessedCount())
+		}
+		settled := true
+		for _, c := range counts {
+			if c != counts[0] {
+				settled = false
+				break
+			}
+		}
+		if settled {
+			break
+		}
+		if time.Now().After(quiesce) {
+			t.Logf("WARNING: healthy nodes never settled at one processed count: %v", counts)
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	stateHashes := make([][32]byte, numNodes)
 	for i := 0; i < numNodes; i++ {
 		if i == nodeToKill {
@@ -492,7 +512,13 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 		} else {
 			stateHashes[i] = executors[i].GetStateHash()
 		}
-		t.Logf("Node %d state hash: %s", i, hex.EncodeToString(stateHashes[i][:8]))
+		var blocks uint64
+		if i == nodeToKill {
+			blocks = newExec.GetBlockCount()
+		} else {
+			blocks = executors[i].GetBlockCount()
+		}
+		t.Logf("Node %d state hash: %s (blocks=%d)", i, hex.EncodeToString(stateHashes[i][:8]), blocks)
 	}
 
 	// Count matching state hashes
@@ -693,16 +719,9 @@ func TestStress_MemoryStability(t *testing.T) {
 						return
 					}
 					if cert != nil {
-						batches := make(map[types.BatchDigest]*types.Batch)
-						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for _, entry := range cert.Header.Payload {
-							digests = append(digests, entry.Digest)
-							for _, w := range workers {
-								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-									batches[entry.Digest] = batch
-									break
-								}
-							}
+						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
+						if !ok {
+							return
 						}
 						executors[i].ProcessCertificate(cert, batches)
 						for _, w := range workers {
@@ -960,16 +979,9 @@ func TestStress_ConsensusStallDetection(t *testing.T) {
 						return
 					}
 					if cert != nil {
-						batches := make(map[types.BatchDigest]*types.Batch)
-						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for _, entry := range cert.Header.Payload {
-							digests = append(digests, entry.Digest)
-							for _, w := range workers {
-								if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-									batches[entry.Digest] = batch
-									break
-								}
-							}
+						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
+						if !ok {
+							return
 						}
 						executors[i].ProcessCertificate(cert, batches)
 						for _, w := range workers {

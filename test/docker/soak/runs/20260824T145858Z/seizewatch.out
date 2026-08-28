@@ -1,0 +1,22 @@
+2026-08-24T15:03:12 stuck=0 stuckStream= worst=none undeliv=none
+2026-08-24T15:03:57 stuck=0 stuckStream= worst=BVN2->Directory gap=0 deliv=2 undeliv=synthetic BVN2->BVN1 undeliv=36
+2026-08-24T15:04:42 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=8 undeliv=synthetic BVN2->BVN1 undeliv=1421
+2026-08-24T15:05:27 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=26 undeliv=synthetic BVN2->BVN1 undeliv=1183
+2026-08-24T15:06:12 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=44 undeliv=synthetic BVN2->BVN1 undeliv=1340
+2026-08-24T15:06:57 stuck=0 stuckStream= worst=BVN1->BVN2 gap=16 deliv=2104 undeliv=synthetic BVN2->BVN1 undeliv=1149
+2026-08-24T15:07:42 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=81 undeliv=synthetic BVN2->BVN1 undeliv=1100
+2026-08-24T15:08:27 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=102 undeliv=synthetic BVN2->BVN1 undeliv=1070
+2026-08-24T15:09:12 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=124 undeliv=synthetic BVN2->BVN1 undeliv=1055
+2026-08-24T15:09:57 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=147 undeliv=synthetic BVN2->BVN1 undeliv=1090
+2026-08-24T15:10:42 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=169 undeliv=synthetic BVN2->BVN1 undeliv=976
+2026-08-24T15:11:27 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=191 undeliv=synthetic BVN2->BVN1 undeliv=1068
+2026-08-24T15:12:12 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=214 undeliv=synthetic BVN2->BVN1 undeliv=1010
+2026-08-24T15:12:57 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=236 undeliv=synthetic BVN2->BVN1 undeliv=896
+2026-08-24T15:13:42 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=258 undeliv=synthetic BVN2->BVN1 undeliv=854
+2026-08-24T15:14:27 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=281 undeliv=synthetic BVN2->BVN1 undeliv=1054
+2026-08-24T15:15:12 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=301 undeliv=synthetic BVN2->BVN1 undeliv=856
+2026-08-24T15:15:57 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=324 undeliv=synthetic BVN2->BVN1 undeliv=904
+2026-08-24T15:16:42 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=347 undeliv=synthetic BVN2->BVN1 undeliv=992
+2026-08-24T15:17:27 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=369 undeliv=synthetic BVN2->BVN1 undeliv=830
+2026-08-24T15:18:12 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=389 undeliv=synthetic BVN2->BVN1 undeliv=874
+SEIZED at 2026-08-24T15:18:12 :: stalled stream, undelivered for 20 polls :: stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=389 undeliv=synthetic BVN2->BVN1 undeliv=874

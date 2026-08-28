@@ -532,7 +532,9 @@ type KeySpec struct {
 	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
 	Delegate      *url.URL `json:"delegate,omitempty" form:"delegate" query:"delegate" validate:"required"`
-	extraData     []byte
+	// PriorUsedOn retains recently used timestamps below LastUsedOn so replay protection tolerates out-of-order execution (#4132).
+	PriorUsedOn []uint64 `json:"priorUsedOn,omitempty" form:"priorUsedOn" query:"priorUsedOn"`
+	extraData   []byte
 }
 
 type KeySpecParams struct {
@@ -565,7 +567,9 @@ type LiteIdentity struct {
 	Url           *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	CreditBalance uint64   `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
 	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
-	extraData     []byte
+	// PriorUsedOn retains recently used timestamps below LastUsedOn so replay protection tolerates out-of-order execution (#4132).
+	PriorUsedOn []uint64 `json:"priorUsedOn,omitempty" form:"priorUsedOn" query:"priorUsedOn"`
+	extraData   []byte
 }
 
 type LiteTokenAccount struct {
@@ -2482,6 +2486,11 @@ func (v *KeySpec) Copy() *KeySpec {
 	if v.Delegate != nil {
 		u.Delegate = v.Delegate
 	}
+	u.PriorUsedOn = make([]uint64, len(v.PriorUsedOn))
+	for i, v := range v.PriorUsedOn {
+		v := v
+		u.PriorUsedOn[i] = v
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2555,6 +2564,11 @@ func (v *LiteIdentity) Copy() *LiteIdentity {
 	}
 	u.CreditBalance = v.CreditBalance
 	u.LastUsedOn = v.LastUsedOn
+	u.PriorUsedOn = make([]uint64, len(v.PriorUsedOn))
+	for i, v := range v.PriorUsedOn {
+		v := v
+		u.PriorUsedOn[i] = v
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -5069,6 +5083,14 @@ func (v *KeySpec) Equal(u *KeySpec) bool {
 	case !((v.Delegate).Equal(u.Delegate)):
 		return false
 	}
+	if len(v.PriorUsedOn) != len(u.PriorUsedOn) {
+		return false
+	}
+	for i := range v.PriorUsedOn {
+		if !(v.PriorUsedOn[i] == u.PriorUsedOn[i]) {
+			return false
+		}
+	}
 
 	return true
 }
@@ -5147,6 +5169,14 @@ func (v *LiteIdentity) Equal(u *LiteIdentity) bool {
 	}
 	if !(v.LastUsedOn == u.LastUsedOn) {
 		return false
+	}
+	if len(v.PriorUsedOn) != len(u.PriorUsedOn) {
+		return false
+	}
+	for i := range v.PriorUsedOn {
+		if !(v.PriorUsedOn[i] == u.PriorUsedOn[i]) {
+			return false
+		}
 	}
 
 	return true
@@ -10208,6 +10238,7 @@ var fieldNames_KeySpec = []string{
 	1: "PublicKeyHash",
 	2: "LastUsedOn",
 	3: "Delegate",
+	4: "PriorUsedOn",
 }
 
 func (v *KeySpec) MarshalBinary() ([]byte, error) {
@@ -10228,6 +10259,11 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Delegate == nil) {
 		writer.WriteUrl(3, v.Delegate)
+	}
+	if !(len(v.PriorUsedOn) == 0) {
+		for _, v := range v.PriorUsedOn {
+			writer.WriteUint(4, v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeySpec)
@@ -10481,6 +10517,7 @@ var fieldNames_LiteIdentity = []string{
 	2: "Url",
 	3: "CreditBalance",
 	4: "LastUsedOn",
+	5: "PriorUsedOn",
 }
 
 func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
@@ -10502,6 +10539,11 @@ func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.LastUsedOn == 0) {
 		writer.WriteUint(4, v.LastUsedOn)
+	}
+	if !(len(v.PriorUsedOn) == 0) {
+		for _, v := range v.PriorUsedOn {
+			writer.WriteUint(5, v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_LiteIdentity)
@@ -17370,6 +17412,13 @@ func (v *KeySpec) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Delegate = x
 	}
+	for {
+		if x, ok := reader.ReadUint(4); ok {
+			v.PriorUsedOn = append(v.PriorUsedOn, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_KeySpec)
 	if err != nil {
@@ -17524,6 +17573,13 @@ func (v *LiteIdentity) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 	if x, ok := reader.ReadUint(4); ok {
 		v.LastUsedOn = x
+	}
+	for {
+		if x, ok := reader.ReadUint(5); ok {
+			v.PriorUsedOn = append(v.PriorUsedOn, x)
+		} else {
+			break
+		}
 	}
 
 	seen, err := reader.Reset(fieldNames_LiteIdentity)
@@ -20608,6 +20664,7 @@ func init() {
 		encoding.NewTypeField("publicKeyHash", "bytes"),
 		encoding.NewTypeField("lastUsedOn", "uint64"),
 		encoding.NewTypeField("delegate", "string"),
+		encoding.NewTypeField("priorUsedOn", "uint64[]"),
 	}, "KeySpec", "keySpec")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -20636,6 +20693,7 @@ func init() {
 		encoding.NewTypeField("url", "string"),
 		encoding.NewTypeField("creditBalance", "uint64"),
 		encoding.NewTypeField("lastUsedOn", "uint64"),
+		encoding.NewTypeField("priorUsedOn", "uint64[]"),
 	}, "LiteIdentity", "liteIdentity")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -22257,11 +22315,12 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *KeySpec) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PublicKeyHash *string  `json:"publicKeyHash,omitempty"`
-		PublicKey     *string  `json:"publicKey,omitempty"`
-		LastUsedOn    uint64   `json:"lastUsedOn,omitempty"`
-		Delegate      *url.URL `json:"delegate,omitempty"`
-		ExtraData     *string  `json:"$epilogue,omitempty"`
+		PublicKeyHash *string                   `json:"publicKeyHash,omitempty"`
+		PublicKey     *string                   `json:"publicKey,omitempty"`
+		LastUsedOn    uint64                    `json:"lastUsedOn,omitempty"`
+		Delegate      *url.URL                  `json:"delegate,omitempty"`
+		PriorUsedOn   encoding.JsonList[uint64] `json:"priorUsedOn,omitempty"`
+		ExtraData     *string                   `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.PublicKeyHash) == 0) {
 		u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
@@ -22272,6 +22331,9 @@ func (v *KeySpec) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Delegate == nil) {
 		u.Delegate = v.Delegate
+	}
+	if !(len(v.PriorUsedOn) == 0) {
+		u.PriorUsedOn = v.PriorUsedOn
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -22347,11 +22409,12 @@ func (v *LiteDataAccount) MarshalJSON() ([]byte, error) {
 
 func (v *LiteIdentity) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type          AccountType `json:"type"`
-		Url           *url.URL    `json:"url,omitempty"`
-		CreditBalance uint64      `json:"creditBalance,omitempty"`
-		LastUsedOn    uint64      `json:"lastUsedOn,omitempty"`
-		ExtraData     *string     `json:"$epilogue,omitempty"`
+		Type          AccountType               `json:"type"`
+		Url           *url.URL                  `json:"url,omitempty"`
+		CreditBalance uint64                    `json:"creditBalance,omitempty"`
+		LastUsedOn    uint64                    `json:"lastUsedOn,omitempty"`
+		PriorUsedOn   encoding.JsonList[uint64] `json:"priorUsedOn,omitempty"`
+		ExtraData     *string                   `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Url == nil) {
@@ -22362,6 +22425,9 @@ func (v *LiteIdentity) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.LastUsedOn == 0) {
 		u.LastUsedOn = v.LastUsedOn
+	}
+	if !(len(v.PriorUsedOn) == 0) {
+		u.PriorUsedOn = v.PriorUsedOn
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -25330,16 +25396,18 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PublicKeyHash *string  `json:"publicKeyHash,omitempty"`
-		PublicKey     *string  `json:"publicKey,omitempty"`
-		LastUsedOn    uint64   `json:"lastUsedOn,omitempty"`
-		Delegate      *url.URL `json:"delegate,omitempty"`
-		ExtraData     *string  `json:"$epilogue,omitempty"`
+		PublicKeyHash *string                   `json:"publicKeyHash,omitempty"`
+		PublicKey     *string                   `json:"publicKey,omitempty"`
+		LastUsedOn    uint64                    `json:"lastUsedOn,omitempty"`
+		Delegate      *url.URL                  `json:"delegate,omitempty"`
+		PriorUsedOn   encoding.JsonList[uint64] `json:"priorUsedOn,omitempty"`
+		ExtraData     *string                   `json:"$epilogue,omitempty"`
 	}{}
 	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
 	u.PublicKey = encoding.BytesToJSON(v.PublicKeyHash)
 	u.LastUsedOn = v.LastUsedOn
 	u.Delegate = v.Delegate
+	u.PriorUsedOn = v.PriorUsedOn
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -25359,6 +25427,7 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	}
 	v.LastUsedOn = u.LastUsedOn
 	v.Delegate = u.Delegate
+	v.PriorUsedOn = u.PriorUsedOn
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -25469,16 +25538,18 @@ func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
 
 func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type          AccountType `json:"type"`
-		Url           *url.URL    `json:"url,omitempty"`
-		CreditBalance uint64      `json:"creditBalance,omitempty"`
-		LastUsedOn    uint64      `json:"lastUsedOn,omitempty"`
-		ExtraData     *string     `json:"$epilogue,omitempty"`
+		Type          AccountType               `json:"type"`
+		Url           *url.URL                  `json:"url,omitempty"`
+		CreditBalance uint64                    `json:"creditBalance,omitempty"`
+		LastUsedOn    uint64                    `json:"lastUsedOn,omitempty"`
+		PriorUsedOn   encoding.JsonList[uint64] `json:"priorUsedOn,omitempty"`
+		ExtraData     *string                   `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.CreditBalance = v.CreditBalance
 	u.LastUsedOn = v.LastUsedOn
+	u.PriorUsedOn = v.PriorUsedOn
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -25489,6 +25560,7 @@ func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 	v.Url = u.Url
 	v.CreditBalance = u.CreditBalance
 	v.LastUsedOn = u.LastUsedOn
+	v.PriorUsedOn = u.PriorUsedOn
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

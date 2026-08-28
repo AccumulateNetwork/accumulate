@@ -169,7 +169,9 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 	cfg.P2P.Listen = addAddrs(cfg.P2P.Listen, old.Accumulate.P2P.Listen)
 	cfg.P2P.BootstrapPeers = addAddrs(cfg.P2P.BootstrapPeers, old.Accumulate.P2P.BootstrapPeers)
 	cfg.P2P.Key = &run.CometNodeKeyFile{Path: filepath.Join(dir, old.NodeKey)}
-	cvc.EnableHealing = &old.Accumulate.Healing.Enable
+	// old.Accumulate.Healing.Enable is deliberately dropped: healing is
+	// unconditional now — recovery is not something an operator can switch
+	// off (#4138).
 
 	var offset int
 	if old.Accumulate.NetworkType == protocol.PartitionTypeBlockValidator {

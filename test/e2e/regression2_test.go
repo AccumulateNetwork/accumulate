@@ -1105,12 +1105,13 @@ func TestChainUpdateAnchor(t *testing.T) {
 	ledger := GetAccount[*SystemLedger](t, sim.DatabaseFor(bob), PartitionUrl("BVN0").JoinPath(Ledger))
 	require.Equal(t, ledger.Index, r1.Receipt.LocalBlock)
 
-	// Verify that nothing happened except the credit payment and signature
-	// request, and verify the second signature request produced by the initial
-	// signature request was executed locally (i.e. did not produce a synthetic
-	// message). This is fragile but necessary to ensure the validity of this
-	// test.
-	require.ElementsMatch(t, []string{
+	// Verify the credit payment and signature request happened, and verify
+	// the second signature request produced by the initial signature request
+	// was executed locally — i.e. did not produce a synthetic message, which
+	// would show up as a synthetic main chain update. Since local delivery
+	// (#4146) shifted block cadence, an anchor can share the block, so this
+	// asserts what MUST and MUST NOT be present rather than the exact set.
+	require.Subset(t, chains, []string{
 		// The credit payment and initial signature request are added to the
 		// principal's signature chain
 		"Account.acc://bob.acme/tokens.SignatureChain",
@@ -1121,12 +1122,12 @@ func TestChainUpdateAnchor(t *testing.T) {
 
 		// Those chains are anchored into the root chain
 		"Account.acc://bvn-BVN0.acme/ledger.RootChain",
-
-		// System chains
-		"Account.acc://bvn-BVN0.acme/ledger.BptChain",
-
-		// No other chains are modified
-	}, chains)
+	})
+	require.NotContains(t, chains, "Account.acc://bvn-BVN0.acme/synthetic.MainChain",
+		"the secondary signature request must execute locally, not as a synthetic message")
+	for _, c := range chains {
+		require.NotContains(t, c, "alice", "nothing of alice's may change in this block")
+	}
 
 	// Verify an anchor was produced
 	require.NotNil(t, ledger.Anchor)
@@ -1183,12 +1184,17 @@ func TestAuthoritySignatureWithoutTransaction(t *testing.T) {
 				return true, nil
 			}
 
-			// Initialize
+			// Initialize. Two BVNs with alice and bob on different partitions:
+			// a same-partition authority signature no longer travels at all —
+			// it is delivered through the local queue (#4146) — so capturing
+			// a dispatched signature requires the destination to be remote.
 			sim := NewSim(t,
-				simulator.SimpleNetwork(t.Name(), 1, 1),
+				simulator.SimpleNetwork(t.Name(), 2, 1),
 				simulator.GenesisWithVersion(GenesisTime, c.Version),
 				simulator.CaptureDispatchedMessages(capFn),
 			)
+			sim.SetRoute(alice, "BVN0")
+			sim.SetRoute(url.MustParse("bob.acme"), "BVN1")
 
 			MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 			CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)

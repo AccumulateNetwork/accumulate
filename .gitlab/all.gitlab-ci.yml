@@ -33,12 +33,21 @@ go test 1/2:
   variables:
     GOMODCACHE: ''
     GOLANGCI_LINT_CACHE: ''
+    # Identity-boundary assertion (#4143): every account a transaction
+    # writes must share the principal's identity. A violation anywhere in
+    # the transaction executors fails the suite here instead of breaking a
+    # multi-BVN deployment later.
+    ACC_ASSERT_IDENTITY_BOUNDARY: '1'
   artifacts:
     paths:
       - failures/*
   script:
   - export RECORD_FAILURE="${PWD}/failures"
-  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./...
+  # -timeout 30m: go's default is 10m PER TEST BINARY, and the consensus
+  # integration packages (cmd/consensus-testnet) hold many individually
+  # bounded multi-node tests whose sum exceeds it — the package failed on
+  # every pipeline while each test inside it was fine.
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 30m -tags testnet ./...
 
 go test 2/2:
   # No-mmap indexer test

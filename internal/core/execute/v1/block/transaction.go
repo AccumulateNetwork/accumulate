@@ -75,9 +75,9 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	// Set up the state manager
 	var st *chain.StateManager
 	if x.isGenesis {
-		st = chain.NewStateManager(x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+		st = chain.NewStateManager(x.Describe, &x.globals().Active, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	} else {
-		st, err = chain.LoadStateManager(x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
+		st, err = chain.LoadStateManager(x.Describe, &x.globals().Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
 		if err != nil {
 			return x.recordFailedTransaction(batch, delivery, err)
 		}
@@ -339,7 +339,7 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 	if !ok {
 		return false, errors.BadRequest.WithFormat("source %v is not a partition", status.SourceNetwork)
 	}
-	if uint64(len(status.AnchorSigners)) < x.globals.Active.ValidatorThreshold(partition) {
+	if uint64(len(status.AnchorSigners)) < x.globals().Active.ValidatorThreshold(partition) {
 		return false, nil
 	}
 
@@ -578,7 +578,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	// But only if the paid paid is larger than the max failure paid
-	paid, err := x.globals.Active.Globals.FeeSchedule.ComputeTransactionFee(delivery.Transaction)
+	paid, err := x.globals().Active.Globals.FeeSchedule.ComputeTransactionFee(delivery.Transaction)
 	if err != nil {
 		return nil, nil, fmt.Errorf("compute fee: %w", err)
 	}

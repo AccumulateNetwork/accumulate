@@ -1,0 +1,5 @@
+  src -> dst                produced  received  delivered  UNDELIVERED
+  bvn-BVN2  -> bvn-BVN1   1         1         1          0
+  bvn-BVN2  -> bvn-BVN3   2         2         2          0
+
+stalled channels: 0 

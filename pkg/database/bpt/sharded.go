@@ -62,6 +62,28 @@ type ShardedBPT struct {
 //
 // The baseKey parameter is the storage location prefix for all shard data.
 // Each shard will store its data under baseKey/shard-N where N is the shard index.
+// Sharding does not change the BPT. At depth 6 the nodes six levels into the
+// tree ARE the shards: a shard is the subtree under one level-6 node. Entries
+// under distinct level-6 nodes occupy disjoint key prefixes, so they cannot
+// conflict and can be resolved in parallel without locking — that is the whole
+// point. Resolve the 64 subtrees, then resolve levels 0-5 from their roots.
+// Sharding changes where a search starts, not what is stored.
+//
+// This implementation deviates: it gives each shard its own BPT under its own
+// record key (BPT/shard-0, BPT/shard-1, ...), so nodes land at different
+// record keys than an unsharded tree would use. The roots still agree — a
+// shard's keys share their leading bits, so its own upper levels collapse
+// through hashBranch and its root equals the level-6 subtree hash — but the
+// bytes on disk differ, which they should not.
+//
+// That is an implementation defect, not a property of sharding. Receipts, for
+// instance, are perfectly possible either way: the sibling hashes above a
+// shard are derivable from the 64 shard roots, which are always in hand. They
+// are simply not implemented here.
+//
+// The fix is small and is specified in full in #4135: a shard root is
+// addressable as nodeKeyAt(depth, prefix) in the one tree, so ShardedBPT
+// should hold one *BPT and treat a shard as a cursor rather than a tree.
 func NewShardedBPT(store database.Store, key *record.Key, depth int) (*ShardedBPT, error) {
 	if depth < 1 || depth > 8 {
 		return nil, errors.BadRequest.WithFormat("shard depth must be between 1 and 8, got %d", depth)

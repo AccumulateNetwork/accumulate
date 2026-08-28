@@ -69,8 +69,18 @@ type Options struct {
 	NewDispatcher          func() Dispatcher  // Synthetic transaction dispatcher factory
 	Sequencer              private.Sequencer  // Synthetic and anchor sequence API service
 	Querier                api.Querier        // Query API service
-	EnableHealing          bool               //
-	HealInterval           time.Duration      // minimum interval between healing scans; zero means the default
+
+	// ExecutionShards is the number of shards user transactions are executed
+	// across, by identity (#4145). Zero or one selects the serial path.
+	// Shard count is a local parallelism choice that cannot change the
+	// result — it is configuration, not consensus.
+	ExecutionShards int
+
+	// MaxEnvelopeSize is the consensus transport's per-transaction size
+	// limit — for DAG-BFT, the worker's MaxBatchBytes. The synthetic package
+	// budget (#4141) is DERIVED from it, because a package is one envelope
+	// and an envelope must fit in one batch. Zero uses the DAG-BFT default.
+	MaxEnvelopeSize int
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.
@@ -105,6 +115,30 @@ type Block interface {
 
 	// Close closes the block and returns the end state of the block.
 	Close() (BlockState, error)
+}
+
+// ProcessResult is the outcome of processing one envelope of a set — see
+// ParallelBlock. Each envelope's outcome is independent, so callers keep
+// their own error policy.
+type ProcessResult struct {
+	Statuses []*protocol.TransactionStatus
+	Error    error
+
+	// Shard is the execution shard this envelope ran on, or -1 if it ran in
+	// the serial lane (#4145). Reported so a run can say WHY sharding did or
+	// did not help: only user transactions shard, and a workload whose
+	// envelopes all classify serial gets no benefit from any shard count.
+	// Without this a null result is unattributable — indistinguishable from
+	// "execution was never the bottleneck".
+	Shard int
+}
+
+// A ParallelBlock is a Block that can process a set of envelopes as a whole,
+// sharding execution by identity when shards are configured (#4145). With
+// one shard (or zero) ProcessAll is exactly a loop over Process.
+type ParallelBlock interface {
+	Block
+	ProcessAll(envelopes []*messaging.Envelope) []*ProcessResult
 }
 
 // BlockState is the state of a completed block.

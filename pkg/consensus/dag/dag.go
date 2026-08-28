@@ -11,10 +11,19 @@ package dag
 import (
 	"crypto/ed25519"
 	"errors"
+	"fmt"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
+
+// ErrEquivocation reports that a DIFFERENT certificate already exists for
+// the same author and round — a dual-signing validator or a serious bug. A
+// sentinel, not a bare string: the caller used to classify it by matching
+// "already exists" in the message, which this error's own text contains, so
+// the loud tripwire the DAG promises was silently downgraded to a routine
+// duplicate-Debug and never fired (#4159 review).
+var ErrEquivocation = errors.New("equivocation: a different certificate already exists for this author and round")
 
 // authorKey is a fixed-size array for author public key map keys.
 // Using [32]byte instead of string saves 32 bytes per entry.
@@ -71,10 +80,19 @@ func (d *DAG) Insert(cert *types.Certificate) error {
 	round := cert.Round()
 	key := toAuthorKey(cert.Author())
 
-	// Check if certificate already exists
+	// Check if certificate already exists. Re-delivery of the SAME
+	// certificate is normal (gossip, cert-sync, rebroadcast) and idempotent;
+	// a DIFFERENT certificate for the same author and round is equivocation,
+	// and because insertion was first-arrival-wins, which one a node kept
+	// depended on arrival order — a divergence engine (#4122). Keeping the
+	// incumbent deterministically is safe only because honest validators
+	// author one header per round; the loud error is the tripwire.
 	if roundMap, ok := d.rounds[round]; ok {
-		if _, exists := roundMap[key]; exists {
-			return errors.New("certificate already exists for this author and round")
+		if existing, exists := roundMap[key]; exists {
+			if existing.Digest() == cert.Digest() {
+				return nil // idempotent re-insert
+			}
+			return fmt.Errorf("%w: author %x round %d", ErrEquivocation, key[:4], round)
 		}
 	}
 

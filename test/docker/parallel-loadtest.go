@@ -410,11 +410,18 @@ func runWorker(ctx context.Context, workerID int, nodeURL string, totalWorkers i
 			}
 		}
 
-		tpsPerWorker := tps / int64(totalWorkers)
-		if tpsPerWorker < 1 {
-			tpsPerWorker = 1
-		}
-		targetInterval := time.Second / time.Duration(tpsPerWorker)
+		// Derive each worker's interval from the AGGREGATE rate, in one step.
+		//
+		// This used to compute tps/totalWorkers in integer arithmetic and then
+		// clamp the result up to a minimum of 1 tx/sec per worker. With 48
+		// workers, every target below 48 truncated to 0, was clamped to 1, and
+		// produced 48 TPS regardless: asking for 10 gave 48, and asking for 1
+		// gave 48. The requested rate was unreachable and the log cheerfully
+		// reported `target=10` beside `tps_total=48`.
+		//
+		// Dividing durations instead of rates keeps low targets exact: at 1 TPS
+		// across 48 workers each worker submits once every 48 seconds.
+		targetInterval := time.Duration(int64(time.Second) * int64(totalWorkers) / tps)
 
 		// Decide whether to create new account or reuse existing
 		var destURL *url.URL

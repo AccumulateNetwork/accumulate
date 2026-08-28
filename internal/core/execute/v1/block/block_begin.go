@@ -27,8 +27,8 @@ import (
 
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
-	if x.globals.Active.ExecutorVersion.V2Enabled() {
-		return errors.Conflict.WithFormat("executor v1 is incompatible with version %v", x.globals.Active.ExecutorVersion)
+	if x.globals().Active.ExecutorVersion.V2Enabled() {
+		return errors.Conflict.WithFormat("executor v1 is incompatible with version %v", x.globals().Active.ExecutorVersion)
 	}
 
 	//clear the timers
@@ -117,7 +117,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	}
 
 	wd := protocol.SystemWriteData{}
-	if x.globals.Active.ExecutorVersion.DoubleHashEntriesEnabled() {
+	if x.globals().Active.ExecutorVersion.DoubleHashEntriesEnabled() {
 		wd.Entry = &protocol.DoubleHashDataEntry{Data: [][]byte{data}}
 	} else {
 		wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
@@ -136,7 +136,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	txn.Body = &wd
 	txn.Header.Initiator = signerUrl.AccountID32()
 
-	st := chain.NewStateManager(x.Describe, &x.globals.Active, batch.Begin(true), nil, txn, x.logger)
+	st := chain.NewStateManager(x.Describe, &x.globals().Active, batch.Begin(true), nil, txn, x.logger)
 	defer st.Discard()
 
 	var da *protocol.DataAccount
@@ -257,7 +257,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		}
 
 		// DN -> BVN
-		for _, bvn := range x.globals.Active.BvnNames() {
+		for _, bvn := range x.globals().Active.BvnNames() {
 			err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, bvn)
 			if err != nil {
 				return errors.UnknownError.WithFormat("send anchor for block %d: %w", ledger.Index, err)
@@ -458,7 +458,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			signatures = append(signatures, dnReceipt)
 		}
 
-		keySig, err := shared.SignTransaction(x.globals.Active.Network, x.Key, txn, status.DestinationNetwork)
+		keySig, err := shared.SignTransaction(x.globals().Active.Network, x.Key, txn, status.DestinationNetwork)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -479,7 +479,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 
 func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
 	destPartUrl := protocol.PartitionUrl(destPart)
-	env, err := shared.PrepareBlockAnchor(x.Describe.NodeUrl(), x.globals.Active.Network, x.Key, anchor, sequenceNumber, destPartUrl)
+	env, err := shared.PrepareBlockAnchor(x.Describe.NodeUrl(), x.globals().Active.Network, x.Key, anchor, sequenceNumber, destPartUrl)
 	if err != nil {
 		return errors.InternalError.Wrap(err)
 	}

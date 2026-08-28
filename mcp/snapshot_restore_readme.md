@@ -23,21 +23,7 @@ This directory contains documentation for implementing snapshot-based follower d
 
 **Audience**: Developers implementing the MCP tool and accman integration
 
-### 2. Implementation Clarity Assessment (This Repository)
-
-**File**: `mcp/implementation_clarity_assessment.md`
-**Status**: Ready for development
-
-**Contents**:
-- Detailed analysis of what's clear vs unclear
-- Implementation readiness score (9/10)
-- Risk assessment and mitigation
-- 1-2 week implementation plan
-- Decision log and recommendations
-
-**Audience**: Project managers, developers starting implementation
-
-### 3. Accman Review Feedback (This Repository)
+### 2. Accman Review Feedback (This Repository)
 
 **File**: `mcp/accman_snapshot_restore_review.md`
 **Status**: Review complete
@@ -168,7 +154,6 @@ User Snapshots → MCP Tool (restore) → Node Directories → Accman (Docker) �
 
 ### In This Repository (accumulate/mcp/)
 
-- `implementation_clarity_assessment.md` - Implementation readiness analysis
 - `accman_snapshot_restore_review.md` - Accman team feedback
 - `FOLLOWER_SETUP_GUIDE.md` - General follower setup (legacy)
 - `FOLLOWER_DOCKER_GUIDE.md` - Docker deployment patterns

@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	devnet "gitlab.com/accumulatenetwork/accumulate/cmd/accumulated-dagbft/netsim"
 )
 
 // cmdInit returns the init command for initializing a single node.

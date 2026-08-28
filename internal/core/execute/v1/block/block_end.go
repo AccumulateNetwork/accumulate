@@ -43,7 +43,7 @@ func (m *Executor) EndBlock(block *Block) ([]*execute.ValidatorUpdate, error) {
 	// This cannot be done in a single pass because the accounts returned by the
 	// iterator are transient - the batch does not retain a reference to the
 	// account and thus does not commit the account.
-	if a, b := m.globals.Active, m.globals.Pending; b.ExecutorVersion > a.ExecutorVersion && b.ExecutorVersion == protocol.ExecutorVersionV1Halt {
+	if a, b := m.globals().Active, m.globals().Pending; b.ExecutorVersion > a.ExecutorVersion && b.ExecutorVersion == protocol.ExecutorVersionV1Halt {
 		var hasPending []*url.URL
 		it := block.Batch.IterateAccounts()
 		for it.Next() {
@@ -85,16 +85,27 @@ func (m *Executor) EndBlock(block *Block) ([]*execute.ValidatorUpdate, error) {
 
 	// Update active globals
 	var valUp []*execute.ValidatorUpdate
-	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
-		valUp = execute.DiffValidators(&m.globals.Active, &m.globals.Pending, m.Describe.PartitionId)
+	if !m.isGenesis && !m.globals().Active.Equal(&m.globals().Pending) {
+		valUp = execute.DiffValidators(&m.globals().Active, &m.globals().Pending, m.Describe.PartitionId)
+		// Publish a SNAPSHOT, never a pointer into the executor's own state.
+		// Subscribers KEEP what they are handed — the conductor does
+		// c.Globals.Store(e.New) — so handing over &globals.Active makes
+		// every later in-place update a write to memory they are still
+		// reading. That is #4170: Block.Close's `globals.Active = *Pending
+		// .Copy()` raced with the conductor's anchoring path, the validation
+		// path and AnchorSigner, and a torn read there decides whether a code
+		// path is enabled and who may sign.
 		err = m.EventBus.Publish(events.WillChangeGlobals{
-			New: &m.globals.Pending,
-			Old: &m.globals.Active,
+			New: m.globals().Pending.Copy(),
+			Old: m.globals().Active.Copy(),
 		})
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("publish globals update: %w", err)
 		}
-		m.globals.Active = *m.globals.Pending.Copy()
+		// REPLACE, do not mutate — see v2 (#4170).
+		next := *m.globals()
+		next.Active = *next.Pending.Copy()
+		m.globalsPtr.Store(&next)
 	}
 
 	// Determine if an anchor should be sent
@@ -132,7 +143,7 @@ func (m *Executor) EndBlock(block *Block) ([]*execute.ValidatorUpdate, error) {
 		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
 	}
 
-	if m.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
+	if m.globals().Active.ExecutorVersion.SignatureAnchoringEnabled() {
 		// Overwrite the state's chain update list with one derived directly
 		// from the database
 		block.State.ChainUpdates.Entries = nil
@@ -663,7 +674,7 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (bool, time.Time, error) {
 
 	// The addition of a second here is kept for backwards compatibility
 	blockTimeUTC := block.Time.Add(time.Second).UTC()
-	nextBlockTime := x.globals.Active.MajorBlockSchedule().Next(anchor.MajorBlockTime)
+	nextBlockTime := x.globals().Active.MajorBlockSchedule().Next(anchor.MajorBlockTime)
 	if blockTimeUTC.IsZero() || blockTimeUTC.Before(nextBlockTime) {
 		return false, time.Time{}, nil
 	}
@@ -722,7 +733,7 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 	}
 
 	// Send an anchor if a directory anchor was received and the flag is set
-	return didAnchorDirectory && x.globals.Active.Globals.AnchorEmptyBlocks
+	return didAnchorDirectory && x.globals().Active.Globals.AnchorEmptyBlocks
 }
 
 func (x *Executor) prepareAnchor(block *Block) error {
@@ -738,7 +749,7 @@ func (x *Executor) prepareAnchor(block *Block) error {
 			return nil
 		}
 
-		bvns := x.globals.Active.BvnNames()
+		bvns := x.globals().Active.BvnNames()
 		ledger.MajorBlockIndex++
 		ledger.MajorBlockTime = block.State.Anchor.OpenMajorBlockTime
 		ledger.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))

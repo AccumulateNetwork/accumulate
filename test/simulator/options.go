@@ -71,6 +71,30 @@ func DropDispatchedMessages() Option {
 	})
 }
 
+// ExecutionShards sets the number of identity shards user transactions are
+// executed across (#4145). Zero or one is the serial path. Shard count is a
+// local parallelism choice that cannot change the result — which is exactly
+// what tests use this option to prove.
+func ExecutionShards(n int) Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.executionShards = n
+		return nil
+	})
+}
+
+// ExecutionShardsPerNode gives each node of every partition its own
+// execution shard count, by node index (#4145). Because the simulator
+// compares every node's deliver and commit results on every block, a network
+// whose nodes disagree only on shard count turns the whole test suite into a
+// continuous shard-equivalence check: if shard count could change any
+// result, consensus fails on the block where it does.
+func ExecutionShardsPerNode(counts ...int) Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.executionShardsPerNode = counts
+		return nil
+	})
+}
+
 // DropInitialAnchor drops anchors when they are initially submitted.
 func DropInitialAnchor() Option {
 	return optionFunc(func(opts *simFactory) error {

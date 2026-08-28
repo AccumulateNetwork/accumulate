@@ -53,6 +53,8 @@ type simFactory struct {
 	ignoreCommitResults         bool
 	deterministic               bool
 	dropInitialAnchor           bool
+	executionShards             int
+	executionShardsPerNode      []int
 	disableAnchorHealing        bool
 	interceptDispatchedMessages DispatchInterceptor
 
@@ -557,9 +559,14 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		NewDispatcher: f.getDispatcherFunc(),
 		Sequencer:     f.getServices().Private(),
 		Querier:       f.getServices(),
-		EnableHealing: true,
-		HealInterval:  time.Nanosecond, // the simulator steps far faster than wall time
 		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
+
+		// Shard user-transaction execution by identity (#4145). Zero is the
+		// serial path; tests opt in via simulator.ExecutionShards, or give
+		// each node a DIFFERENT count via ExecutionShardsPerNode — the
+		// consensus result comparison then asserts shard-count equivalence
+		// on every block of every test.
+		ExecutionShards: f.shardCount(),
 	}
 
 	// Add background tasks to the block's error group. The simulator must call
@@ -581,14 +588,22 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Database:            execOpts.Database,
 		Querier:             api.Querier2{Querier: f.getServices()},
 		Dispatcher:          execOpts.NewDispatcher(),
+		Sequencer:           f.getServices().Private(),
 		RunTask:             execOpts.BackgroundTaskLauncher,
 		DropInitialAnchor:   f.dropInitialAnchor,
 		EnableAnchorHealing: &enableAnchorHealing,
 
 		// Healing is paced by wall-clock time, but the simulator executes
 		// dozens of blocks per second — tests that rely on healing (e.g.
-		// TestDropInitialAnchor) would starve under the default pacing.
-		HealInterval: time.Nanosecond,
+		// TestDropInitialAnchor) would starve under the default pacing. The
+		// same goes for the synthetic gap scan: its jitter/back-off window
+		// defaults to 10s of wall clock, which never elapses within a
+		// StepUntil, so a wedged stream would sit scheduled-but-never-fired
+		// for the whole test (#4138). Not nanoseconds, though: the window
+		// doubles as the pull's RPC deadline, and a deadline of zero fails
+		// every pull before it starts.
+		HealInterval:        time.Nanosecond,
+		SyntheticHealWindow: 10 * time.Millisecond,
 
 		// Setting Intercept is not necessary because the dispatcher will
 		// intercept messages
@@ -621,4 +636,12 @@ func (node *nodeFactory) makeConsensusNode(app consensus.App) *consensus.Node {
 	cn.IgnoreDeliverResults = node.ignoreDeliverResults
 	cn.IgnoreCommitResults = node.ignoreCommitResults
 	return cn
+}
+
+// shardCount returns the execution shard count for this node (#4145).
+func (f *nodeFactory) shardCount() int {
+	if n := len(f.executionShardsPerNode); n > 0 {
+		return f.executionShardsPerNode[f.id%n]
+	}
+	return f.executionShards
 }

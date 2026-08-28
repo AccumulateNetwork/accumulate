@@ -56,12 +56,13 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 		err := partOpts{
 			CoreValidatorConfiguration: c,
 
-			ID:             protocol.Directory,
-			Type:           protocol.PartitionTypeDirectory,
-			Genesis:        c.DnGenesis,
-			BootstrapPeers: c.DnBootstrapPeers,
-			Dir:            "dnn",
-			NumWorkers:     c.NumWorkers,
+			ID:              protocol.Directory,
+			Type:            protocol.PartitionTypeDirectory,
+			Genesis:         c.DnGenesis,
+			BootstrapPeers:  c.DnBootstrapPeers,
+			Dir:             "dnn",
+			NumWorkers:      c.NumWorkers,
+			ExecutionShards: c.ExecutionShards,
 		}.apply(cfg)
 		if err != nil {
 			return err
@@ -73,12 +74,13 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 		err := partOpts{
 			CoreValidatorConfiguration: c,
 
-			ID:             c.BVN,
-			Type:           protocol.PartitionTypeBlockValidator,
-			Genesis:        c.BvnGenesis,
-			BootstrapPeers: c.BvnBootstrapPeers,
-			Dir:            "bvnn",
-			NumWorkers:     c.NumWorkers,
+			ID:              c.BVN,
+			Type:            protocol.PartitionTypeBlockValidator,
+			Genesis:         c.BvnGenesis,
+			BootstrapPeers:  c.BvnBootstrapPeers,
+			Dir:             "bvnn",
+			NumWorkers:      c.NumWorkers,
+			ExecutionShards: c.ExecutionShards,
 		}.apply(cfg)
 		if err != nil {
 			return err

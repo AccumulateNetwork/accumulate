@@ -88,9 +88,8 @@ func TestSyntheticCollectionProof(t *testing.T) {
 				}},
 			}},
 		}
-		return &Block{
+		b := &Block{positions: new(positionCache),
 			Executor: &Executor{
-				globals: globals,
 				messageExecutors: map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]{
 					messaging.MessageTypeSequenced: func(*MessageContext) (ExecutorFor[messaging.MessageType, *MessageContext], bool) {
 						return fakeExecutor{}, true
@@ -98,6 +97,8 @@ func TestSyntheticCollectionProof(t *testing.T) {
 				},
 			},
 		}
+		b.Executor.globalsPtr.Store(globals)
+		return b
 	}
 
 	run := func(t *testing.T, block *Block, msg messaging.Message, anchor bool, method func(SyntheticMessage, *database.Batch, *MessageContext) (*protocol.TransactionStatus, error)) (*protocol.TransactionStatus, error) {
@@ -146,6 +147,48 @@ func TestSyntheticCollectionProof(t *testing.T) {
 		block := newBlock(protocol.ExecutorVersionV2Kourou)
 		_, err := run(t, block, newMsg(collectionProof), false, SyntheticMessage.Validate)
 		require.NoError(t, err)
+	})
+
+	t.Run("a proven message needs no valid signature", func(t *testing.T) {
+		// Once we have a collection proof no other signatures are required:
+		// the proof binds the message hash under an anchor the destination
+		// checks itself, and hashes cannot be forged — it does not matter
+		// where the message came from. The signature rides along for identity
+		// only, so a garbage signature must not reject a proven message.
+		block := newBlock(protocol.ExecutorVersionV2Kourou)
+		msg := newMsg(collectionProof)
+		msg.Signature.(*protocol.ED25519Signature).Signature = []byte("garbage")
+		_, err := run(t, block, msg, false, SyntheticMessage.Validate)
+		require.NoError(t, err, "a collection proof authorizes the message regardless of the signature")
+	})
+
+	t.Run("a proven message from a rotated-out validator is accepted", func(t *testing.T) {
+		// Requiring the signer to be a CURRENTLY active validator wedged
+		// recovery of historical ranges after validator churn: the proof only
+		// depends on the directory root, which every synced node has.
+		block := newBlock(protocol.ExecutorVersionV2Kourou)
+		strangerSeed := sha256.Sum256([]byte("rotated-out"))
+		stranger := ed25519.NewKeyFromSeed(strangerSeed[:])
+		msg := newMsg(collectionProof)
+		sig := msg.Signature.(*protocol.ED25519Signature)
+		sig.PublicKey = stranger[32:]
+		protocol.SignED25519(sig, stranger, nil, hash[:])
+		_, err := run(t, block, msg, false, SyntheticMessage.Validate)
+		require.NoError(t, err, "the proof, not validator membership, authorizes the message")
+	})
+
+	t.Run("per-message receipts still require a valid signature", func(t *testing.T) {
+		// Without a collection proof the signature remains the authorization
+		// and a bad one is rejected.
+		block := newBlock(protocol.ExecutorVersionV2Kourou)
+		individual := &protocol.AnnotatedReceipt{
+			Anchor:  &protocol.AnchorMetadata{Account: protocol.UnknownUrl()},
+			Receipt: &dbmerkle.Receipt{Start: hash[:], Anchor: hash[:]},
+		}
+		msg := newMsg(individual)
+		msg.Signature.(*protocol.ED25519Signature).Signature = []byte("garbage")
+		_, err := run(t, block, msg, false, SyntheticMessage.Validate)
+		require.ErrorContains(t, err, "invalid signature")
 	})
 
 	t.Run("processes with a known anchor", func(t *testing.T) {

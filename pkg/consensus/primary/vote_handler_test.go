@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 )
 
 func TestOnVoteReceivedValid(t *testing.T) {
@@ -1001,4 +1002,236 @@ func TestMaxVotesPerHeaderEdgeCaseSingleValidator(t *testing.T) {
 	// Certificate should be created and votes cleaned up
 	require.True(t, p.HasCertificateForRound(0))
 	require.Equal(t, 0, p.PendingVoteCount(digest))
+}
+
+// TestOnHeaderReceived_DefersVoteUntilBatchAvailable pins the #4159 fix: a
+// validator must not vote for a header whose payload batches it does not hold,
+// because a certificate is supposed to prove 2f+1 validators HAVE the data.
+// Voting blind let a batch that lived only on the author be certified and then,
+// when the leader committed rounds later, be found nowhere — a permanent wedge.
+func TestOnHeaderReceived_DefersVoteUntilBatchAvailable(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+	genesisCerts := createGenesisCertificates(t, validators, committee, d)
+	parents := make([]types.CertificateDigest, len(genesisCerts))
+	for i, c := range genesisCerts {
+		parents[i] = c.Digest()
+	}
+
+	w := worker.New(worker.Config{ID: 0, Partition: "test"}, nil)
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, d, []*worker.Worker{w})
+	p.SetRound(1)
+
+	batch := types.NewBatch([][]byte{[]byte("the-only-copy")})
+	header := types.NewHeader(validators[1].pub, 1, 1,
+		[]types.PayloadEntry{{Digest: batch.Digest(), Worker: 0}}, parents)
+	require.NoError(t, header.Sign(validators[1].priv))
+
+	voted := func() bool {
+		p.pendingMu.Lock()
+		defer p.pendingMu.Unlock()
+		_, ok := p.votedHeaders[header.Digest()]
+		return ok
+	}
+
+	// We do not hold the batch — must NOT vote (would certify data we lack).
+	p.OnHeaderReceived(header)
+	require.False(t, voted(), "must not vote for a header whose batch we do not hold (#4159)")
+
+	// The batch arrives via gossip; the author rebroadcasts the header; now we vote.
+	require.NoError(t, w.StoreBatch(batch))
+	p.OnHeaderReceived(header)
+	require.True(t, voted(), "must vote once the header's batch is available")
+}
+
+// TestOnHeaderReceived_MissingBatchTriggersFetch pins the #4159 repair: a
+// deferring voter must actively PULL the batch it lacks — batch bytes are
+// broadcast once at creation and the author's header rebroadcast does not
+// re-send them, so defer-without-fetch wedged cert formation forever (the
+// frozen soak's 1,833 "Missing batch" deferrals). The ask is deduplicated:
+// the 1s rebroadcast re-fires the gate, but each digest is fetched at most
+// once per retry window.
+func TestOnHeaderReceived_MissingBatchTriggersFetch(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+	genesisCerts := createGenesisCertificates(t, validators, committee, d)
+	parents := make([]types.CertificateDigest, len(genesisCerts))
+	for i, c := range genesisCerts {
+		parents[i] = c.Digest()
+	}
+
+	w := worker.New(worker.Config{ID: 0, Partition: "test"}, nil)
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, d, []*worker.Worker{w})
+	p.SetRound(1)
+
+	var asked []types.BatchDigest
+	p.SetMissingBatchHandler(func(dg types.BatchDigest) { asked = append(asked, dg) })
+
+	batch := types.NewBatch([][]byte{[]byte("lost-in-gossip")})
+	header := types.NewHeader(validators[1].pub, 1, 1,
+		[]types.PayloadEntry{{Digest: batch.Digest(), Worker: 0}}, parents)
+	require.NoError(t, header.Sign(validators[1].priv))
+
+	// First receipt: defer AND ask.
+	p.OnHeaderReceived(header)
+	require.Len(t, asked, 1, "a deferring voter must pull the missing batch")
+	require.Equal(t, batch.Digest(), asked[0])
+
+	// Rebroadcast within the retry window: defer again, but do NOT re-ask.
+	p.OnHeaderReceived(header)
+	require.Len(t, asked, 1, "asks are deduplicated per digest per retry window")
+
+	// The fetch lands (peer served it); the next rebroadcast votes.
+	require.NoError(t, w.StoreBatch(batch))
+	p.OnHeaderReceived(header)
+	p.pendingMu.Lock()
+	_, voted := p.votedHeaders[header.Digest()]
+	p.pendingMu.Unlock()
+	require.True(t, voted, "once the fetched batch is stored, the vote goes out")
+}
+
+// TestOnHeaderReceived_VotesWhenBatchIsRetained pins the CanServeBatch fix:
+// a validator that already EXECUTED a batch (pruned to the retained store)
+// HAS it, and must vote for a header re-proposing that digest rather than
+// deferring — deferring blocked every fresh batch riding in the same header.
+func TestOnHeaderReceived_VotesWhenBatchIsRetained(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+	genesisCerts := createGenesisCertificates(t, validators, committee, d)
+	parents := make([]types.CertificateDigest, len(genesisCerts))
+	for i, c := range genesisCerts {
+		parents[i] = c.Digest()
+	}
+
+	w := worker.New(worker.Config{ID: 0, Partition: "test"}, nil)
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, d, []*worker.Worker{w})
+	p.SetRound(1)
+
+	batch := types.NewBatch([][]byte{[]byte("already-executed")})
+	require.NoError(t, w.StoreBatch(batch))
+	// Execute-and-prune moves it from the active store to retained.
+	w.PruneCommitted([]types.BatchDigest{batch.Digest()}, worker.CommitInfo{Detail: "block 1"})
+	require.False(t, w.HasBatch(batch.Digest()), "pruned from the active store")
+	require.True(t, w.CanServeBatch(batch.Digest()), "still held via retention")
+
+	header := types.NewHeader(validators[1].pub, 1, 1,
+		[]types.PayloadEntry{{Digest: batch.Digest(), Worker: 0}}, parents)
+	require.NoError(t, header.Sign(validators[1].priv))
+
+	p.OnHeaderReceived(header)
+	p.pendingMu.Lock()
+	_, voted := p.votedHeaders[header.Digest()]
+	p.pendingMu.Unlock()
+	require.True(t, voted, "a retained batch counts as held — no deferral")
+}
+
+// TestNoSelfEquivocation_NeverAuthorTheSameRoundTwice pins the #4159 stall-3
+// fix. The one-header-per-round guard scanned ourHeaders only — but
+// certification DELETES the header, so a second round-advance racing through
+// after the first header certified re-authored the SAME round. The second
+// certificate is self-equivocation: peers keep whichever version arrived
+// first, each side permanently rejects the other, and certificate
+// dissemination deadlocks network-wide (observed: 10 equivocation rejections,
+// total freeze at round ~206 / DN 529). The monotone lastAuthoredRound
+// watermark makes re-authoring structurally impossible.
+func TestNoSelfEquivocation_NeverAuthorTheSameRoundTwice(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+	genesisCerts := createGenesisCertificates(t, validators, committee, d)
+	_ = genesisCerts
+
+	w := worker.New(worker.Config{ID: 0, Partition: "test"}, nil)
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, d, []*worker.Worker{w})
+	p.SetRound(1)
+
+	// First authoring for round 1 succeeds.
+	p.tryCreateAndBroadcastHeader()
+	h1, _, _, _ := p.Metrics()
+	require.EqualValues(t, 1, h1, "first header for round 1 is authored")
+
+	// Simulate certification: the header reaches quorum and is deleted from
+	// ourHeaders (exactly what tryCreateCertificateLocked does).
+	p.pendingMu.Lock()
+	for digest, h := range p.ourHeaders {
+		if h.Round == 1 {
+			p.ourCerts[h.Round] = nil // placeholder; the map entry is what mattered pre-fix
+			delete(p.ourHeaders, digest)
+			delete(p.pendingVotes, digest)
+		}
+	}
+	p.pendingMu.Unlock()
+
+	// The racing second authoring for the SAME round must be refused — the
+	// old guard saw an empty ourHeaders and re-authored (self-equivocation).
+	p.tryCreateAndBroadcastHeader()
+	h2, _, _, _ := p.Metrics()
+	require.EqualValues(t, 1, h2, "the same round must never be authored twice (#4159)")
+
+	// The next round authors normally — give round 2 its parents first.
+	gparents := make([]types.CertificateDigest, len(genesisCerts))
+	for i, c := range genesisCerts {
+		gparents[i] = c.Digest()
+	}
+	for i := 1; i < 4; i++ {
+		hdr := types.NewHeader(validators[i].pub, 1, 1, nil, gparents)
+		require.NoError(t, hdr.Sign(validators[i].priv))
+		require.NoError(t, d.Insert(types.NewCertificate(hdr, nil, nil)))
+	}
+	p.SetRound(2)
+	p.tryCreateAndBroadcastHeader()
+	h3, _, _, _ := p.Metrics()
+	require.EqualValues(t, 2, h3, "a NEW round still authors")
+}
+
+// TestWatermark_Round0GenesisAuthoringStillWorks pins the regression the
+// first watermark version caused: production bootstraps by AUTHORING round-0
+// headers (the genesis flow), and a zero-initialized watermark vetoed the
+// very first header — every partition wedged at round 0 with
+// everProducedBlock=false. Round 0 must author exactly once: allowed the
+// first time, refused the second.
+func TestWatermark_Round0GenesisAuthoringStillWorks(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+
+	w := worker.New(worker.Config{ID: 0, Partition: "test"}, nil)
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, d, []*worker.Worker{w})
+	// currentRound stays 0 — the production genesis position.
+
+	p.tryCreateAndBroadcastHeader()
+	h1, _, _, _ := p.Metrics()
+	require.EqualValues(t, 1, h1, "the round-0 genesis header MUST author — a zero watermark must not veto it")
+
+	// Simulate certification deleting the header; round still 0.
+	p.pendingMu.Lock()
+	for digest, h := range p.ourHeaders {
+		if h.Round == 0 {
+			delete(p.ourHeaders, digest)
+			delete(p.pendingVotes, digest)
+		}
+	}
+	p.pendingMu.Unlock()
+
+	p.tryCreateAndBroadcastHeader()
+	h2, _, _, _ := p.Metrics()
+	require.EqualValues(t, 1, h2, "round 0 must never author twice (self-equivocation)")
 }

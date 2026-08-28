@@ -27,10 +27,26 @@ import (
 )
 
 // TestRangeRecovery drops a run of consecutive synthetic deposits between two
-// partitions and verifies the destination recovers the whole run with a
-// single SequenceRange call carrying ONE shared collection proof (#4048).
-// Pre-activation (before VNext) the same scenario must recover through the
-// per-message healing path, without any collection proofs on the wire.
+// partitions and verifies the destination recovers the whole run.
+//
+// The deposits are BVN→BVN, and for that stream the range path is correctly
+// UNUSABLE today: partitions hold no anchors from each other, so the
+// destination has no root to verify a collection proof against, and
+// rangeProofAnchor refuses rather than asking the source to prove against a
+// directory continuation — the #4086 failure the executor's deleted in-block
+// path reproduced (#4138). Recovery therefore goes through the per-message
+// pull, with no collection proofs on the wire as RECOVERY, at every version.
+// #4140's receiver-side replica makes the range path verifiable BVN→BVN, but
+// the sequencer's rangeProofAnchor has not been taught to lean on it yet —
+// when it is, the activated case must flip to expecting `recovered >= drops`.
+//
+// Note on dispatch shape: with #4141, normal (non-recovery) dispatch packages
+// a run of deposits into ONE envelope led by a SyntheticProof message, whose
+// members are proof-less SyntheticMessages. The recovered counter below only
+// counts a ReceiptList attached to a SyntheticMessage itself — the range-
+// recovery signature — so packaged dispatch does not trip it, and the drop
+// hook must count deposits, not envelopes, because one envelope can carry the
+// whole run.
 func TestRangeRecovery(t *testing.T) {
 	Run(t, map[string]ExecutorVersion{
 		"activated": ExecutorVersionLatest,
@@ -69,6 +85,9 @@ func TestRangeRecovery(t *testing.T) {
 				if dropped.Load() >= drops {
 					return true, nil
 				}
+				// Count the DEPOSITS lost, not the envelopes: packaged
+				// dispatch (#4141) can carry the whole run in one envelope.
+				var deposits int32
 				for _, msg := range messages {
 				again:
 					switch m := msg.(type) {
@@ -77,10 +96,13 @@ func TestRangeRecovery(t *testing.T) {
 						goto again
 					case messaging.MessageWithTransaction:
 						if m.GetTransaction().Body.Type() == TransactionTypeSyntheticDepositTokens {
-							dropped.Add(1)
-							return false, nil
+							deposits++
 						}
 					}
+				}
+				if deposits > 0 {
+					dropped.Add(deposits)
+					return false, nil
 				}
 				return true, nil
 			}),
@@ -126,16 +148,15 @@ func TestRangeRecovery(t *testing.T) {
 		lta := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(bobUrl), bobUrl)
 		require.Equal(t, transfers*int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
 
-		if version.V2KourouEnabled() {
-			// The dropped run must have been recovered via the range path:
-			// each resubmitted message carries the shared collection proof.
-			require.GreaterOrEqual(t, int(recovered.Load()), drops,
-				"expected the dropped run to be recovered with collection proofs")
-		} else {
-			// Pre-activation there must be no collection proofs on the wire.
-			require.Zero(t, recovered.Load(),
-				"collection proofs must not be used before activation")
-		}
+		// No collection proofs on the wire as RECOVERY in either case:
+		// pre-activation they do not exist, and post-activation the BVN→BVN
+		// range-heal path still refuses because rangeProofAnchor requires the
+		// destination to hold an anchor from the source — recovery falls back
+		// to per-message pulls (#4138). #4140's replica makes the range path
+		// verifiable at the destination; once rangeProofAnchor is taught to
+		// use it, the activated case must expect `recovered >= drops`.
+		require.Zero(t, recovered.Load(),
+			"BVN→BVN recovery must not attach collection proofs to synthetic messages until the range-heal path uses the #4140 replica")
 	})
 }
 

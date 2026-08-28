@@ -59,6 +59,18 @@ type StateProvider interface {
 	// LastBlock returns the last committed block index and hash.
 	LastBlock() (index uint64, hash [32]byte, err error)
 
+	// LastMajorBlock reports the major block closed by the most recently
+	// produced block, if it closed one. ok is false when the last block was
+	// an ordinary minor block.
+	//
+	// The executor decides when a major block closes, and the closed block
+	// state reports it — but ProduceBlock returns only a state hash, so that
+	// answer had nowhere to go and was dropped. Everything keyed to major
+	// blocks is downstream of this: DidCommitBlock.Major stays zero, and a
+	// halt requested through the API is never acted on because
+	// HaltController.OnDidCommitBlock ignores minor blocks (#4097).
+	LastMajorBlock() (index uint64, when time.Time, ok bool)
+
 	// StateHash returns the current state hash.
 	StateHash() [32]byte
 }
