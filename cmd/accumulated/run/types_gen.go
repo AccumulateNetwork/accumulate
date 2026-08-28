@@ -46,6 +46,32 @@ func (v *BadgerStorage) UnmarshalJSON(b []byte) error {
 	return sBadgerStorage.UnmarshalJSON(b, v)
 }
 
+type BlockchainDBStorage struct {
+	Path string
+}
+
+func (BlockchainDBStorage) Type() StorageType { return StorageTypeBlockchainDB }
+
+// Copy returns a copy of the BlockchainDBStorage.
+func (v *BlockchainDBStorage) Copy() *BlockchainDBStorage {
+	return sBlockchainDBStorage.Copy(v)
+}
+
+// EqualBlockchainDBStorage returns true if V is equal to U.
+func (v *BlockchainDBStorage) Equal(u *BlockchainDBStorage) bool {
+	return sBlockchainDBStorage.Equal(v, u)
+}
+
+// MarshalBinary marshals the BlockchainDBStorage to JSON.
+func (v *BlockchainDBStorage) MarshalJSON() ([]byte, error) {
+	return sBlockchainDBStorage.MarshalJSON(v)
+}
+
+// UnmarshalJSON unmarshals the BlockchainDBStorage from JSON.
+func (v *BlockchainDBStorage) UnmarshalJSON(b []byte) error {
+	return sBlockchainDBStorage.UnmarshalJSON(b, v)
+}
+
 type BoltStorage struct {
 	Path string
 }
@@ -1226,11 +1252,12 @@ func (v *StorageService) UnmarshalJSON(b []byte) error {
 type StorageType int64
 
 const (
-	StorageTypeBadger     StorageType = 2
-	StorageTypeBolt       StorageType = 3
-	StorageTypeExpBlockDB StorageType = 1001
-	StorageTypeLevelDB    StorageType = 4
-	StorageTypeMemory     StorageType = 1
+	StorageTypeBadger       StorageType = 2
+	StorageTypeBlockchainDB StorageType = 1002
+	StorageTypeBolt         StorageType = 3
+	StorageTypeExpBlockDB   StorageType = 1001
+	StorageTypeLevelDB      StorageType = 4
+	StorageTypeMemory       StorageType = 1
 )
 
 // SetByName looks up a StorageType by name.

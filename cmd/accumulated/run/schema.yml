@@ -564,6 +564,8 @@ Storage:
 
         ExpBlockDB:
           value: 1001
+        BlockchainDB:
+          value: 1002
 
   members:
     - name: MemoryStorage
@@ -595,6 +597,13 @@ Storage:
           type: string
 
     - name: ExpBlockDBStorage
+      class: composite
+      pointer: true
+      fields:
+        - name: Path
+          type: string
+
+    - name: BlockchainDBStorage
       class: composite
       pointer: true
       fields:
