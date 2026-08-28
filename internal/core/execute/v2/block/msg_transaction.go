@@ -203,7 +203,7 @@ func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, re
 }
 
 func (TransactionMessage) checkWrapper(ctx *MessageContext, txn *protocol.Transaction) error {
-	if ctx.isWithin(internal.MessageTypeMessageIsReady) {
+	if ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
 		return nil
 	}
 
@@ -214,7 +214,7 @@ func (TransactionMessage) checkWrapper(ctx *MessageContext, txn *protocol.Transa
 		if !txn.Body.Type().IsSynthetic() {
 			return errors.BadRequest.WithFormat("a synthetic message cannot carry a %v transaction", txn.Body.Type())
 		}
-	} else if ctx.isWithin(messaging.MessageTypeBlockAnchor) {
+	} else if ctx.isWithin(messaging.MessageTypeSynthetic, messaging.MessageTypeBlockAnchor) {
 		if !txn.Body.Type().IsAnchor() {
 			return errors.BadRequest.WithFormat("a block anchor cannot carry a %v transaction", txn.Body.Type())
 		}

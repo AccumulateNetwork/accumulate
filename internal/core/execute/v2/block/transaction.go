@@ -28,7 +28,7 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 	x := t.Executor
 	delivery := &chain.Delivery{
 		Transaction: t.transaction,
-		Internal:    t.isWithin(internal.MessageTypeNetworkUpdate),
+		Internal:    t.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeNetworkUpdate),
 	}
 
 	r := x.BlockTimers.Start(BlockTimerTypeProcessTransaction)

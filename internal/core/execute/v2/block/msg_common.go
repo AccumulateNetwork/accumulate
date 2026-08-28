@@ -81,8 +81,15 @@ func (m *MessageContext) txnWith(txn *protocol.Transaction) *TransactionContext 
 	return t
 }
 
-// isWithin returns true if the given message type appears somewhere in the
-// message chain.
+// isWithin returns true if any of the given message types appears somewhere in
+// the message chain.
+//
+// MessageTypeSynthetic is special: asking for it matches EITHER synthetic
+// wrapper, because which one is used depends on the executor version. That
+// special case used to be written as switch arms that never looked at `typ`,
+// so isWithin(anything) returned true for every message inside a synthetic
+// wrapper — the argument list was decoration (#4168). Callers that wanted the
+// synthetic behaviour got it by accident; the ones that did not got it anyway.
 func (m *MessageContext) isWithin(typ ...messaging.MessageType) bool {
 	newSynth := m.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled()
 	for {
@@ -91,18 +98,16 @@ func (m *MessageContext) isWithin(typ ...messaging.MessageType) bool {
 		}
 		m = m.parent
 		for _, typ := range typ {
-			switch {
-			case typ != messaging.MessageTypeSynthetic && m.message.Type() == typ:
-				// Check for the given message type
-				return true
-
-			case !newSynth && m.message.Type() == messaging.MessageTypeBadSynthetic:
-				// Check for the old synthetic message type
-				return true
-
-			case newSynth && m.message.Type() == messaging.MessageTypeBadSynthetic,
-				newSynth && m.message.Type() == messaging.MessageTypeSynthetic:
-				// Check for either synthetic message type
+			if typ == messaging.MessageTypeSynthetic {
+				// Either wrapper counts. Before V2Baikonur only the old one
+				// exists; after it, both do.
+				if m.message.Type() == messaging.MessageTypeBadSynthetic ||
+					(newSynth && m.message.Type() == messaging.MessageTypeSynthetic) {
+					return true
+				}
+				continue
+			}
+			if m.message.Type() == typ {
 				return true
 			}
 		}
