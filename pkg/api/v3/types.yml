@@ -8,6 +8,10 @@ Receipt:
       type: time
     - name: MajorBlock
       type: uint
+    - name: ForHeight
+      description: is the minor block height this receipt was produced against; zero means the current state
+      type: uint
+      optional: true
 
 LastBlock:
   fields:

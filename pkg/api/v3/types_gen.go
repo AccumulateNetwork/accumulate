@@ -387,7 +387,9 @@ type Receipt struct {
 	LocalBlock     uint64    `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
 	LocalBlockTime time.Time `json:"localBlockTime,omitempty" form:"localBlockTime" query:"localBlockTime" validate:"required"`
 	MajorBlock     uint64    `json:"majorBlock,omitempty" form:"majorBlock" query:"majorBlock" validate:"required"`
-	extraData      []byte
+	// ForHeight is the minor block height this receipt was produced against; zero means the current state.
+	ForHeight uint64 `json:"forHeight,omitempty" form:"forHeight" query:"forHeight"`
+	extraData []byte
 }
 
 type ReceiptOptions struct {
@@ -1410,6 +1412,7 @@ func (v *Receipt) Copy() *Receipt {
 	u.LocalBlock = v.LocalBlock
 	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
+	u.ForHeight = v.ForHeight
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2590,6 +2593,9 @@ func (v *Receipt) Equal(u *Receipt) bool {
 		return false
 	}
 	if !(v.MajorBlock == u.MajorBlock) {
+		return false
+	}
+	if !(v.ForHeight == u.ForHeight) {
 		return false
 	}
 
@@ -5509,6 +5515,7 @@ var fieldNames_Receipt = []string{
 	2: "LocalBlock",
 	3: "LocalBlockTime",
 	4: "MajorBlock",
+	5: "ForHeight",
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
@@ -5530,6 +5537,9 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.MajorBlock == 0) {
 		writer.WriteUint(4, v.MajorBlock)
+	}
+	if !(v.ForHeight == 0) {
+		writer.WriteUint(5, v.ForHeight)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Receipt)
@@ -7732,6 +7742,9 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(4); ok {
 		v.MajorBlock = x
 	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.ForHeight = x
+	}
 
 	seen, err := reader.Reset(fieldNames_Receipt)
 	if err != nil {
@@ -8383,6 +8396,7 @@ func init() {
 		encoding.NewTypeField("localBlock", "uint64"),
 		encoding.NewTypeField("localBlockTime", "string"),
 		encoding.NewTypeField("majorBlock", "uint64"),
+		encoding.NewTypeField("forHeight", "uint64"),
 	}, "Receipt", "receipt")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -9243,6 +9257,7 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 		LocalBlock     uint64                                  `json:"localBlock,omitempty"`
 		LocalBlockTime time.Time                               `json:"localBlockTime,omitempty"`
 		MajorBlock     uint64                                  `json:"majorBlock,omitempty"`
+		ForHeight      uint64                                  `json:"forHeight,omitempty"`
 		ExtraData      *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Receipt.Start) == 0) {
@@ -9271,6 +9286,9 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.MajorBlock == 0) {
 		u.MajorBlock = v.MajorBlock
+	}
+	if !(v.ForHeight == 0) {
+		u.ForHeight = v.ForHeight
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -10385,6 +10403,7 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 		LocalBlock     uint64                                  `json:"localBlock,omitempty"`
 		LocalBlockTime time.Time                               `json:"localBlockTime,omitempty"`
 		MajorBlock     uint64                                  `json:"majorBlock,omitempty"`
+		ForHeight      uint64                                  `json:"forHeight,omitempty"`
 		ExtraData      *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
@@ -10396,6 +10415,7 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	u.LocalBlock = v.LocalBlock
 	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
+	u.ForHeight = v.ForHeight
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -10421,6 +10441,7 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	v.LocalBlock = u.LocalBlock
 	v.LocalBlockTime = u.LocalBlockTime
 	v.MajorBlock = u.MajorBlock
+	v.ForHeight = u.ForHeight
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
