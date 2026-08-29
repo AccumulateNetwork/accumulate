@@ -1270,8 +1270,9 @@ async function tick(){
   // since the first sample, so a run's disk appetite is a number, not a
   // guess from the docker volume at teardown.
   const db=ns.disk||{};
-  $('ndbavg').textContent=mib(db.avgMiB); $('ndbmax').textContent=mib(db.maxMiB);
-  $('ndbgrow').textContent=(db.growthMiBPerHour==null)?'—':(db.growthMiBPerHour.toFixed(1)+' MiB/h');
+  const gb=v=>v?(v/1024).toFixed(2)+' GB':'—';
+  $('ndbavg').textContent=gb(db.avgMiB); $('ndbmax').textContent=gb(db.maxMiB);
+  $('ndbgrow').textContent=(db.growthMiBPerHour==null)?'—':((db.growthMiBPerHour/1024).toFixed(2)+' GB/h');
   $('ndbnode').textContent=db.maxNode?('max '+db.maxNode):'';
   $('ngravg').textContent=ns.grAvg!=null?fmt(ns.grAvg):'—';
   $('ngrmax').textContent=ns.grMax!=null?fmt(ns.grMax):'—';
