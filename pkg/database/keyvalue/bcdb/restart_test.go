@@ -124,3 +124,33 @@ func TestCommit_ReportsItsOwnWriteThroughError(t *testing.T) {
 	require.NoError(t, batch.Put(key, []byte("lost")))
 	require.Error(t, batch.Commit(), "the commit that could not be written through must be the one that fails")
 }
+
+// A block seal leaves one permanent segment per block; without merging,
+// a node accumulates a file pair per block forever (BlockchainDB#30).
+// Finished block sets below the lag are folded down.
+func TestMergeBelow_BoundsThePermanentSegmentCount(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "db")
+	db, err := Open(dir)
+	require.NoError(t, err)
+	defer db.Close()
+	db.CompressEvery, db.MergeLag, db.StatsEvery = 4, 4, 0
+
+	files := func() int {
+		m, _ := filepath.Glob(filepath.Join(dir, "perm", "*"))
+		return len(m)
+	}
+	for i := 0; i < 8; i++ {
+		put(t, db, record.NewKey("Message", [32]byte{byte(i), 1}, "Main"), "v")
+	}
+	before := files()
+	for i := 8; i < 24; i++ {
+		put(t, db, record.NewKey("Message", [32]byte{byte(i), 1}, "Main"), "v")
+	}
+	after := files()
+	require.Lessf(t, after, before+16, "16 more sealed blocks must not mean 16 more segment files (before %d, after %d)", before, after)
+
+	// And nothing merged away is lost.
+	for i := 0; i < 24; i++ {
+		require.Equal(t, "v", get(t, db, record.NewKey("Message", [32]byte{byte(i), 1}, "Main")))
+	}
+}

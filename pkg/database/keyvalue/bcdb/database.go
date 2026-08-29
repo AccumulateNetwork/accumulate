@@ -45,7 +45,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 
 	bcdb "github.com/AccumulateNetwork/BlockchainDB/database"
@@ -84,6 +83,10 @@ type Database struct {
 	// StatsEvery writes the layer counters after this many commits.
 	// Zero disables the report.
 	StatsEvery uint64
+
+	// MergeLag is how many of the newest blocks keep their own permanent
+	// segment (see writeThrough).
+	MergeLag uint64
 
 	statsPath string // Where reportStats writes
 
@@ -146,6 +149,12 @@ var _ keyvalue.Beginner = (*Database)(nil)
 // only bounds a layer that fills between commits.
 const SealLimit = 100_000
 
+// DefaultMergeLag is how many of the newest blocks keep their own
+// permanent segment; everything older is merged down (see
+// writeThrough).  Wide enough that a healing peer asking for a recent
+// block by number still finds it.
+const DefaultMergeLag = 512
+
 // DefaultTallyKeys is how many keys the per-shape tally remembers a
 // digest for: about 128 MB at the default.
 const DefaultTallyKeys = 1 << 20
@@ -192,6 +201,7 @@ func Open(path string) (*Database, error) {
 		CompressEvery:  128,
 		StatsEvery:     50,
 		TallyKeys:      DefaultTallyKeys,
+		MergeLag:       DefaultMergeLag,
 	}
 
 	// A commit seals the permanent layer at its version, and the store
@@ -397,6 +407,17 @@ func (d *Database) writeThrough(s *staged) error {
 		if err := d.kv.Compress(); err != nil {
 			return errors.UnknownError.WithFormat("compress: %w", err)
 		}
+		// Every block seal leaves one permanent segment per shard, so a
+		// node accumulates a file pair per block forever (BlockchainDB#30,
+		// #47).  MergeBelow folds a finished block set into one segment.
+		// The watermark is held MergeLag blocks back: below it nothing
+		// more arrives and nothing is still being healed, and a block a
+		// peer might still ask for by number is never merged away.
+		if s.version > d.MergeLag {
+			if _, _, err := d.kv.MergeBelow(s.version - d.MergeLag); err != nil {
+				return errors.UnknownError.WithFormat("merge sealed segments: %w", err)
+			}
+		}
 	}
 	return nil
 }
@@ -589,17 +610,11 @@ func (d *Database) putRouted(key [32]byte, e entry) error {
 }
 
 // isRefusal reports whether err is the permanent layer declining to
-// overwrite a key, rather than the store failing.
-//
-// It matches on the message because BlockchainDB builds that error
-// fresh at the point of refusal, so there is nothing to compare
-// against -- see AccumulateNetwork/BlockchainDB#28, which asks for a
-// sentinel.  Until then this is a string match, and the direction it
-// fails in is the safe one: if the message changes, a refusal is
-// reported as a store failure and the commit fails loudly, rather than
-// a real failure being quietly counted as a misclassification.
+// overwrite a key, rather than the store failing.  BlockchainDB#28
+// gave the refusal a sentinel; anything else is a store failure and
+// the commit fails loudly.
 func isRefusal(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "cannot overwrite immutable value")
+	return stderrors.Is(err, bcdb.ErrImmutable)
 }
 
 // reportStats writes what the two layers have been asked to do to
