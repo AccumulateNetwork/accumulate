@@ -470,6 +470,40 @@ func main() {
 // and hands each tick to a pool of submitter workers. One worker per
 // round-trip was the ceiling the 100 tps probe hit at ~84/s: build+sign+
 // submit is mostly waiting on the node, so the pacer must never wait on it.
+// maxPickAttempts bounds how many NotReady actions a tick tries before
+// giving up on it.
+const maxPickAttempts = 4
+
+// pacer spaces ticks against an absolute schedule. The next tick is due at a
+// fixed point and wait sleeps until then, so the scheduler's per-sleep
+// overshoot cannot accumulate. Falling behind by more than maxCatchUp resyncs
+// instead of bursting.
+type pacer struct {
+	next       time.Time
+	maxCatchUp time.Duration
+	now        func() time.Time
+	sleep      func(time.Duration)
+}
+
+func newPacer() *pacer {
+	return &pacer{next: time.Now(), maxCatchUp: time.Second, now: time.Now, sleep: time.Sleep}
+}
+
+// wait blocks until the next `batch` ticks at `tps` are due.
+func (p *pacer) wait(batch int, tps float64) {
+	if tps <= 0 {
+		return
+	}
+	p.next = p.next.Add(time.Duration(float64(batch) * float64(time.Second) / tps))
+	now := p.now()
+	switch {
+	case p.next.Before(now.Add(-p.maxCatchUp)):
+		p.next = now // too far behind to catch up honestly
+	case p.next.After(now):
+		p.sleep(p.next.Sub(now))
+	}
+}
+
 func generate(ctx context.Context, e *env, total int, limit time.Duration, trackMax, submitters int) {
 	// A zero limit means "no wall-clock limit, stop after total transactions".
 	// With a limit, the wall clock is the ONLY stop: the rate is adjustable at
@@ -501,17 +535,33 @@ func generate(ctx context.Context, e *env, total int, limit time.Duration, track
 		go func() {
 			defer wg.Done()
 			for i := range work {
-				act := e.pick()
-				ids, err := act.run(ctx, e)
-				mu.Lock()
-				switch {
-				case errors.Is(err, errors.NotReady):
+				// A tick is a transaction owed. An action that is NotReady
+				// (no mutable page yet, no custom token, lock-account before
+				// a major block) used to consume the tick and send nothing,
+				// which is where 7% of the target went at 100 tps. Re-pick,
+				// a bounded number of times; the skip is still counted.
+				var act action
+				var ids []*url.TxID
+				var err error
+				for attempt := 0; attempt < maxPickAttempts; attempt++ {
+					act = e.pick()
+					ids, err = act.run(ctx, e)
+					if !errors.Is(err, errors.NotReady) {
+						break
+					}
+					mu.Lock()
 					skipped++
 					e.track.skipped(act.name)
 					if !seenSkip[act.name] {
 						seenSkip[act.name] = true
 						log.Printf("%s: skipped (first time): %v", act.name, err)
 					}
+					mu.Unlock()
+				}
+				mu.Lock()
+				switch {
+				case errors.Is(err, errors.NotReady):
+					// Every attempt was NotReady; counted above, tick lost
 				case err != nil:
 					failed++
 					e.track.failed(act.name)
@@ -534,6 +584,13 @@ func generate(ctx context.Context, e *env, total int, limit time.Duration, track
 		}()
 	}
 
+	// Ticks are paced against an ABSOLUTE schedule: the next tick is due at
+	// a fixed point, and the pacer sleeps until then. Sleeping the period
+	// after each tick let the scheduler's overshoot (1-2 ms per sleep)
+	// accumulate — 10 ms sleeps at 100 tps came out ~6% slow. If the pacer
+	// falls behind (a stall, a rate change), it catches up at most one
+	// second before resetting, so a burst cannot follow a pause.
+	pace := newPacer()
 	lastLog := time.Now()
 	for i := 0; deadline.IsZero() && i < total || !deadline.IsZero(); {
 		if ctx.Err() != nil || (!deadline.IsZero() && time.Now().After(deadline)) {
@@ -589,9 +646,7 @@ func generate(ctx context.Context, e *env, total int, limit time.Duration, track
 		}
 		mu.Unlock()
 
-		if tps > 0 {
-			time.Sleep(time.Duration(float64(batch) * float64(time.Second) / tps))
-		}
+		pace.wait(batch, tps)
 	}
 	close(work)
 	wg.Wait()
