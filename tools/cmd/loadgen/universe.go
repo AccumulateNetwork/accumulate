@@ -314,6 +314,29 @@ func (u *universe) mutablePage(a *identity) (*keyBook, *keyPage) {
 	return b, p
 }
 
+// pickKey chooses one of a page's keys under the lock. Callers hold the KEY,
+// never an index: the page is mutated by other actions concurrently, and an
+// index chosen outside the lock can point past the end by the time it is used.
+func (u *universe) pickKey(p *keyPage) (ed25519.PrivateKey, bool) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if len(p.keys) == 0 {
+		return nil, false
+	}
+	return p.keys[u.rng.Intn(len(p.keys))], true
+}
+
+// indexOfKey locates a key in a page's key list, or -1 if it is gone. The
+// caller must hold the lock.
+func indexOfKey(keys []ed25519.PrivateKey, k ed25519.PrivateKey) int {
+	for i, x := range keys {
+		if x.Equal(k) {
+			return i
+		}
+	}
+	return -1
+}
+
 // newLiteAccount generates a fresh lite token account. Note it does not route
 // or otherwise care where the account lands.
 func newLiteAccount(rng *mrand.Rand) *liteAccount {

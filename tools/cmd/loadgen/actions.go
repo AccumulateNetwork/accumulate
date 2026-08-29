@@ -377,12 +377,18 @@ var updatePageKey = action{
 			return nil, errors.NotReady.With("no mutable page")
 		}
 		s := a.signer()
-		i := e.u.intn(len(p.keys))
+		// Pick the key, not the index: another action on the same page can
+		// shrink p.keys between the pick and the build, and indexing it in
+		// the builder panicked at 250 tps (run 20260829T054138Z).
+		old, ok := e.u.pickKey(p)
+		if !ok {
+			return nil, errors.NotReady.With("no mutable page")
+		}
 		k := newKey()
 		ids, err := e.sign(ctx, s.url, func() txBuilder {
 			return e.build(p).
 				UpdateKeyPage().Update().
-				Entry().Key(p.keys[i], protocol.SignatureTypeED25519).FinishEntry().
+				Entry().Key(old, protocol.SignatureTypeED25519).FinishEntry().
 				To().Key(k, protocol.SignatureTypeED25519).FinishEntry().
 				FinishOperation().
 				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
@@ -391,7 +397,9 @@ var updatePageKey = action{
 			return nil, err
 		}
 		e.u.mu.Lock()
-		p.keys[i] = k
+		if i := indexOfKey(p.keys, old); i >= 0 {
+			p.keys[i] = k
+		}
 		p.version++
 		e.u.mu.Unlock()
 		return ids, nil
@@ -412,17 +420,22 @@ var removePageKey = action{
 			return nil, errors.NotReady.With("no page with a removable key")
 		}
 		s := a.signer()
-		i := e.u.intn(len(p.keys))
+		old, ok := e.u.pickKey(p)
+		if !ok {
+			return nil, errors.NotReady.With("no page with a removable key")
+		}
 		ids, err := e.sign(ctx, s.url, func() txBuilder {
 			return e.build(p).
-				UpdateKeyPage().Remove().Entry().Key(p.keys[i], protocol.SignatureTypeED25519).FinishEntry().FinishOperation().
+				UpdateKeyPage().Remove().Entry().Key(old, protocol.SignatureTypeED25519).FinishEntry().FinishOperation().
 				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
 		})
 		if err != nil {
 			return nil, err
 		}
 		e.u.mu.Lock()
-		p.keys = append(p.keys[:i], p.keys[i+1:]...)
+		if i := indexOfKey(p.keys, old); i >= 0 {
+			p.keys = append(p.keys[:i], p.keys[i+1:]...)
+		}
 		p.version++
 		e.u.mu.Unlock()
 		return ids, nil
