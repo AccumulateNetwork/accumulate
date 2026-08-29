@@ -164,7 +164,7 @@ const SealLimit = 100_000
 // this is the hot window; it was 512, and at one segment per block that
 // let a node accumulate 1,052 sealed segments before the first merge —
 // long enough for the segment walk on every hit to stretch blocks from
-// 3 s to 5 s (run 20260829T060833Z, BlockchainDB#32).
+// 3 s to 5 s (run 20260829T060833Z, BlockchainDB#50).
 const DefaultMergeLag = 64
 
 // DefaultTallyKeys is how many keys the per-shape tally remembers a

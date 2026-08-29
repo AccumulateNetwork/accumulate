@@ -104,5 +104,5 @@ waits for 25 % garbage); 3.3 M walks over the run. (2) `KV2.Get` and
 `SegmentStore.Get` hold an exclusive mutex across the walk, so the 8
 execution shards' reads serialize on one lock — bvn2-val1 at ~110 % CPU, one
 core. BVN2 first because its database is 2.3× BVN1's. Filed as
-BlockchainDB#32. The 897 "Local delivery failed" errors are the loadgen's
+BlockchainDB#50. The 897 "Local delivery failed" errors are the loadgen's
 fail:send-to-void cases.
