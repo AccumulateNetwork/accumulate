@@ -188,18 +188,6 @@ echo "   commit:  $git_desc ($git_head)" | tee -a "$log"
 echo "   image:   $soak_image ($image_id)" | tee -a "$log"
 echo "   version: $exec_ver | healing: $heal_flags" | tee -a "$log"
 
-# ONE soak at a time. Every run shares the compose project, so a second
-# launch's `down -v` below destroys the first run's network and replaces it
-# with its own — which is exactly what happened to 20260829T141021Z. Refuse,
-# loudly, while another soak's driver is alive or its containers are up; the
-# operator decides which run survives.
-others=$(pgrep -f "[s]oak[.]sh " | grep -vx "$$" | grep -vx "$PPID" | wc -l)
-live=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c '^acc-')
-if [ "$others" -gt 0 ] || [ "$live" -gt 0 ]; then
-  echo "another soak is running ($others driver(s), $live acc-* containers) — refusing to start." | tee -a "$log"
-  echo "  stop it first, or SOAK_FORCE=1 to take the network over deliberately." | tee -a "$log"
-  [ "${SOAK_FORCE:-0}" = 1 ] || exit 1
-fi
 $compose down -v --remove-orphans >/dev/null 2>&1
 
 # Preflight the host ports the compose publishes. A single stray process on one
