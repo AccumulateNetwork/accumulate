@@ -57,10 +57,19 @@ import (
 
 // Database is a key-value store backed by a BlockchainDB KV2.
 type Database struct {
-	mu     sync.RWMutex
-	kv     *bcdb.KV2
-	prefix *record.Key
-	closed bool
+	mu sync.RWMutex
+
+	// writeMu serializes write-throughs. It is taken WITHOUT mu held: the
+	// write-through — puts, the per-block fsync of both layers, sealing,
+	// compaction — used to run under mu, so every reader waited out every
+	// commit. Measured on run 20260829T060833Z at 500 tps: read p50 2 ms,
+	// round maxima of 1-2 s, always coinciding with a commit. A staged
+	// batch stays readable from `staged` until the store has it, so the
+	// lock is only needed to pop it afterwards.
+	writeMu sync.Mutex
+	kv      *bcdb.KV2
+	prefix  *record.Key
+	closed  bool
 
 	// version counts commits.  A batch records the version it began at
 	// and reads as of that version; a commit produces the next one.
@@ -263,17 +272,32 @@ func (d *Database) loadExceptions() error {
 }
 
 // persistExceptions appends the exceptions recorded since the last
-// write-through and syncs them, so a restart cannot forget them.  The
-// caller must hold the lock.
+// write-through and syncs them, so a restart cannot forget them.  Takes
+// the lock only to hand the pending list over; on failure the list is
+// put back so the next write-through retries it.
 func (d *Database) persistExceptions() error {
-	if len(d.pendingDyna) == 0 {
+	d.mu.Lock()
+	pending := d.pendingDyna
+	d.pendingDyna = nil
+	d.mu.Unlock()
+	if len(pending) == 0 {
 		return nil
 	}
-	f, err := os.OpenFile(d.exceptionsPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	err := appendHashes(d.exceptionsPath, pending)
+	if err != nil {
+		d.mu.Lock()
+		d.pendingDyna = append(pending, d.pendingDyna...)
+		d.mu.Unlock()
+	}
+	return err
+}
+
+func appendHashes(path string, hashes [][32]byte) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		return err
 	}
-	for _, h := range d.pendingDyna {
+	for _, h := range hashes {
 		if _, err := f.Write(h[:]); err != nil {
 			_ = f.Close()
 			return err
@@ -283,11 +307,7 @@ func (d *Database) persistExceptions() error {
 		_ = f.Close()
 		return err
 	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	d.pendingDyna = d.pendingDyna[:0]
-	return nil
+	return f.Close()
 }
 
 // except marks a key as belonging to the dynamic layer from now on.  The
@@ -339,10 +359,9 @@ func (d *Database) closeView(at uint64) {
 	} else {
 		d.views[at] = n - 1
 	}
-	// Nothing to return an error to: the caller is discarding a batch.
-	// If the write-through fails the data stays staged, and the next
-	// commit retries it and reports the outcome to its caller.
-	_ = d.flush()
+	// Releasing a view may unblock staged commits, but nothing is
+	// written here: the next commit (or Close) drains them, and reports
+	// the outcome to a caller that can act on it.
 }
 
 // oldestView is the earliest version any open batch is reading at, and
@@ -358,25 +377,39 @@ func (d *Database) oldestView() (uint64, bool) {
 	return oldest, found
 }
 
-// flush writes through every staged batch that is already visible to
-// every open reader.  The caller must hold the lock.
-func (d *Database) flush() error {
-	oldest, any := d.oldestView()
-	for len(d.staged) > 0 {
-		s := d.staged[0]
-		if any && s.version > oldest {
-			break // A reader predates this commit and must not see it
+// drain writes through every staged batch that is already visible to
+// every open reader, oldest first. Called WITHOUT the lock held; it takes
+// the lock only to look at the queue and to pop a batch once the store has
+// it. A batch under write-through is still in staged, so a reader that
+// should see it still does — from staging.
+func (d *Database) drain() error {
+	d.writeMu.Lock()
+	defer d.writeMu.Unlock()
+	for {
+		d.mu.Lock()
+		if len(d.staged) == 0 {
+			d.mu.Unlock()
+			return nil
 		}
+		s := d.staged[0]
+		if oldest, any := d.oldestView(); any && s.version > oldest {
+			d.mu.Unlock()
+			return nil // A reader predates this commit and must not see it
+		}
+		d.mu.Unlock()
+
 		if err := d.writeThrough(s); err != nil {
 			return err
 		}
+
+		d.mu.Lock()
 		d.staged = d.staged[1:]
+		d.mu.Unlock()
 	}
-	return nil
 }
 
-// writeThrough puts a staged batch into the store and seals it.  The
-// caller must hold the lock.
+// writeThrough puts a staged batch into the store and seals it.  Runs
+// under writeMu, not mu; the shared maps it touches are guarded inside.
 func (d *Database) writeThrough(s *staged) error {
 	// Exceptions first: a key named here that the store never received
 	// is harmless, a key the store received that is forgotten here is
@@ -435,7 +468,10 @@ func (d *Database) Close() error {
 
 	// Everything staged is now unreachable by any reader
 	d.views = map[uint64]int{}
-	if err := d.flush(); err != nil {
+	d.mu.Unlock()
+	err := d.drain()
+	d.mu.Lock()
+	if err != nil {
 		return err
 	}
 	return d.kv.Close()
@@ -527,11 +563,15 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 	}
 	d.version = staged.version
 	d.staged = append(d.staged, staged)
-	if err := d.flush(); err != nil {
-		return err
-	}
 	d.reportStats()
-	return nil
+	d.mu.Unlock()
+
+	// Write through with the lock RELEASED, so readers proceed against
+	// staging while the store does its fsyncs; then re-take it for the
+	// deferred unlock.
+	err := d.drain()
+	d.mu.Lock()
+	return err
 }
 
 // tally records a write against its key's shape: the first write of a
@@ -585,7 +625,7 @@ func (d *Database) tally(key *record.Key, h [32]byte, value []byte, perm bool) s
 // Only the refusal is handled this way.  Any other error is a failure
 // of the store and is returned.
 //
-// The caller must hold the lock.
+// Runs under writeMu; takes mu for the exception bookkeeping only.
 func (d *Database) putRouted(key [32]byte, e entry) error {
 	if !e.perm {
 		_, err := d.kv.PutDyna(key, e.value)
@@ -601,10 +641,12 @@ func (d *Database) putRouted(key [32]byte, e entry) error {
 	}
 
 	// The store says this record is not write-once
+	d.mu.Lock()
 	d.except(key)
 	if c := d.shapes[e.shape]; c != nil {
 		c.Misrouted++
 	}
+	d.mu.Unlock()
 	_, err = d.kv.PutDyna(key, e.value)
 	return err
 }

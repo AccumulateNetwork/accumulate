@@ -9,6 +9,7 @@ package bcdb
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -67,4 +68,38 @@ func TestTally_IsBounded(t *testing.T) {
 	}
 	require.Len(t, d.last, 2, "digests remembered up to the cap and no further")
 	require.Equal(t, uint64(5), d.Shapes()["Message.(hash).Main"].New, "every write is still counted")
+}
+
+// A reader must not wait out a commit's write-through (#4175): the puts,
+// the per-block fsync of both layers, sealing and compaction run outside
+// the adapter's lock. Simulated by holding the write-through mutex while a
+// commit is in flight — a Get on another batch must still answer.
+func TestRead_DoesNotWaitForAWriteThrough(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "db"))
+	require.NoError(t, err)
+	defer d.Close()
+	key := record.NewKey("Account", "alice", "Main")
+	put(t, d, key, "v1")
+
+	d.writeMu.Lock() // the store is "busy" — nothing can write through
+	done := make(chan error, 1)
+	go func() {
+		b := d.Begin(nil, true)
+		_ = b.Put(key, []byte("v2"))
+		done <- b.Commit() // stages v2, then blocks in drain on writeMu
+	}()
+	time.Sleep(50 * time.Millisecond) // let the commit reach the write-through
+
+	got := make(chan string, 1)
+	go func() { got <- get(t, d, key) }()
+	select {
+	case v := <-got:
+		require.Equal(t, "v2", v, "a new reader sees the staged commit, without waiting for the store")
+	case <-time.After(2 * time.Second):
+		t.Fatal("a read waited for a write-through in progress")
+	}
+
+	d.writeMu.Unlock()
+	require.NoError(t, <-done)
+	require.Equal(t, "v2", get(t, d, key))
 }
