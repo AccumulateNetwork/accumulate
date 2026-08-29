@@ -48,3 +48,15 @@ func TestAwaitBalance_WaitsForAnEmptyAccount(t *testing.T) {
 	err := e.awaitBalance(context.Background(), url.MustParse("alice.acme/tokens"), 100*time.Millisecond)
 	require.Error(t, err)
 }
+
+// A page with no keys must be skipped, not fed to rand.Intn(0).
+func TestSetThreshold_SkipsAnEmptyPage(t *testing.T) {
+	u := newUniverse(nil)
+	p := &keyPage{}
+	require.Equal(t, 0, u.keyCount(p))
+	require.NotPanics(t, func() {
+		if n := u.keyCount(p); n > 0 {
+			_ = u.intn(n)
+		}
+	})
+}

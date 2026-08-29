@@ -326,6 +326,13 @@ func (u *universe) pickKey(p *keyPage) (ed25519.PrivateKey, bool) {
 	return p.keys[u.rng.Intn(len(p.keys))], true
 }
 
+// keyCount reads a page's key count under the lock.
+func (u *universe) keyCount(p *keyPage) int {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return len(p.keys)
+}
+
 // indexOfKey locates a key in a page's key list, or -1 if it is gone. The
 // caller must hold the lock.
 func indexOfKey(keys []ed25519.PrivateKey, k ed25519.PrivateKey) int {

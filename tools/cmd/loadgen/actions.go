@@ -320,7 +320,14 @@ var setThreshold = action{
 			return nil, errors.NotReady.With("no mutable page")
 		}
 		s := a.signer()
-		threshold := uint64(1 + e.u.intn(len(p.keys)))
+		// The key count is read under the lock, and a page another action
+		// has just emptied is skipped: rand.Intn(0) panics, and took run
+		// 20260829T060833Z down at 500 tps (#4176).
+		n := e.u.keyCount(p)
+		if n == 0 {
+			return nil, errors.NotReady.With("page has no keys")
+		}
+		threshold := uint64(1 + e.u.intn(n))
 		ids, err := e.sign(ctx, s.url, func() txBuilder {
 			return e.build(p).
 				UpdateKeyPage().SetThreshold(threshold).
