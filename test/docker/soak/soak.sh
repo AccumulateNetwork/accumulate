@@ -193,7 +193,9 @@ echo "   version: $exec_ver | healing: $heal_flags" | tee -a "$log"
 # with its own — which is exactly what happened to 20260829T141021Z. Refuse,
 # loudly, while another soak's driver is alive or its containers are up; the
 # operator decides which run survives.
-others=$(pgrep -f "[s]oak[.]sh " | grep -vx "$$" | grep -vx "$PPID" | wc -l)
+# Only real drivers count: the launcher's own `sh -c "setsid nohup ./soak.sh …"`
+# wrappers carry the script name too and refused the very first launch.
+others=$(pgrep -f "^bash \./soak[.]sh " | grep -vx "$$" | wc -l)
 live=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c '^acc-')
 if [ "$others" -gt 0 ] || [ "$live" -gt 0 ]; then
   echo "another soak is running ($others driver(s), $live acc-* containers) — refusing to start." | tee -a "$log"
