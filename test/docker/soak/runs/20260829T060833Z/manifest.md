@@ -85,3 +85,24 @@ layer dominates: every mutable rewrite appends a record and Compress every
 128 commits is not keeping up at this rate. Host root was at 83 % before the
 run; a disk guard (stop under 150 GB free) was armed. Store correctness held
 throughout: 0 conflicts, 0 misroutes, 1.19 % permanent duplicates.
+
+## Why BVN2 stalled (07:05Z, from the profiles and node logs)
+
+The loadgen panic ended the run; it did not cause the stall. BVN2's executor
+got slower every block in proportion to the number of sealed BlockchainDB
+segments: block time 3.0 s through block 448, then 3.7 / 4.1 / 4.4 / 5.0 /
+5.2 s per 2-minute window, while `SegmentStore.get` rose from 9 % to 20 % of
+CPU and `segment.lookup` (the walk over sealed segments on a hit) from 4 % to
+15 % across the 06:16–06:37 profiles. Consensus symptoms followed, not led:
+batch queue 500 → 1,000 at 06:38–06:40, then backpressure (160), then
+missing-batch deferrals (1 → 95/min) and re-shares.
+
+Two store-side causes: (1) hits walk every sealed segment and the count grows
+one per block — 1,052 perm + 284 dyna segments on bvn2's BVN database by
+commit 500 (MergeBelow's first merge, at commit 640, never arrived; Compress
+waits for 25 % garbage); 3.3 M walks over the run. (2) `KV2.Get` and
+`SegmentStore.Get` hold an exclusive mutex across the walk, so the 8
+execution shards' reads serialize on one lock — bvn2-val1 at ~110 % CPU, one
+core. BVN2 first because its database is 2.3× BVN1's. Filed as
+BlockchainDB#32. The 897 "Local delivery failed" errors are the loadgen's
+fail:send-to-void cases.
