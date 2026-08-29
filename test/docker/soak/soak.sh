@@ -510,6 +510,19 @@ printf '| [%s](%s/manifest.md) | `%s` | %s | %s | %sh | %s | %s→%s | %s→%s |
   "$run_id" "$run_id" "$git_desc" "$exec_ver" "$heal_flags" "$elapsed_h" "$rc" \
   "${first_h:-?}" "${last_h:-?}" "${first_x:-?}" "${last_x:-?}" "$NOTE" >> "$idx"
 
+# A finished run tears its network down. It did not, on a clean finish: only
+# the failure paths above called `down`, so every run that ended well left
+# eight validators up with no monitor — the 20260829T003712Z network ran 22
+# minutes past its verdict before anyone noticed. KEEP_UP=1 keeps it for
+# probing, deliberately.
+if [ "${KEEP_UP:-0}" = 1 ]; then
+  echo "KEEP_UP=1: network left up for probing — tear it down yourself:" | tee -a "$log"
+  echo "  COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME $compose down -v --remove-orphans" | tee -a "$log"
+else
+  $compose down -v --remove-orphans >/dev/null 2>&1
+  echo "network torn down" | tee -a "$log"
+fi
+
 echo
 echo "Run recorded: $rd/manifest.md"
 echo "Index:        $idx"
