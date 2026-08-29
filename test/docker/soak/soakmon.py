@@ -303,12 +303,54 @@ def parse_prom(text):
             continue
 
 
+# On-disk database size per node, both engines (dnn + bvnn), in KiB — read in
+# the same per-container thread as the metrics scrape. The first non-empty
+# sample is kept so growth can be reported as MiB per hour over the run.
+_DISK = {}
+_DISK_FIRST = {}
+_PATHS = topology.container_paths()
+
+
 def _scrape_one(c, out, lock):
     txt = sh(["docker", "exec", c, "sh", "-c",
               "curl -s -m5 http://localhost:%d/metrics" % METRICS_PORT], timeout=20)
     rows = list(parse_prom(txt))
+    sub = _PATHS.get(c)
+    du = None
+    if sub:
+        du = sh(["docker", "exec", c, "sh", "-c",
+                 "du -sk /root/.accumulate/%s/dnn/data/accumulate.db /root/.accumulate/%s/bvnn/data/accumulate.db 2>/dev/null" % (sub, sub)], timeout=20)
     with lock:
         out[c] = rows
+        if du:
+            sizes = {}
+            for line in du.splitlines():
+                parts = line.split()
+                if len(parts) == 2 and parts[0].isdigit():
+                    sizes["dn" if "/dnn/" in parts[1] else "bvn"] = int(parts[0])
+            if sizes:
+                _DISK[c] = sizes
+
+
+def disk_from(disk, first, now):
+    """Fleet view of database size. `disk` is container -> {dn, bvn} KiB;
+    `first` is the (time, avg MiB) of the earliest sample, updated in place."""
+    d = {"avgMiB": 0, "maxMiB": 0, "maxNode": "", "totalMiB": 0, "growthMiBPerHour": None, "byNode": {}}
+    if not disk:
+        return d
+    per = {c: (v.get("dn", 0) + v.get("bvn", 0)) / 1024.0 for c, v in disk.items()}
+    for c, v in disk.items():
+        d["byNode"][c] = {"dnMiB": round(v.get("dn", 0) / 1024.0), "bvnMiB": round(v.get("bvn", 0) / 1024.0)}
+    vals = list(per.values())
+    d["avgMiB"] = round(sum(vals) / len(vals))
+    d["maxMiB"] = round(max(vals))
+    d["maxNode"] = max(per, key=per.get)
+    d["totalMiB"] = round(sum(vals))
+    if "t" not in first:
+        first["t"], first["avg"] = now, sum(vals) / len(vals)
+    elif now - first["t"] >= 120:
+        d["growthMiBPerHour"] = round((sum(vals) / len(vals) - first["avg"]) / ((now - first["t"]) / 3600.0), 1)
+    return d
 
 
 # Batch lifecycle totals across the fleet. Pure, so it can be tested without a
@@ -512,6 +554,10 @@ def collect_metrics():
         nodes["grMaxNode"] = max(gor, key=gor.get)
     for c in sorted(set(rss) | set(gor)):
         nodes["byNode"][c] = {"rssMiB": round(rss.get(c, 0)), "goroutines": gor.get(c, 0)}
+    with lock:
+        nodes["disk"] = disk_from(dict(_DISK), _DISK_FIRST, time.time())
+    for c, v in nodes["disk"]["byNode"].items():
+        nodes["byNode"].setdefault(c, {}).update(v)
 
     # Sum the heal TYPES actually seen on heals_total, not a fixed pair, so a
     # recovery path added later cannot go uncounted. Deliberately not a sum over
@@ -1036,6 +1082,12 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       <span class=mut id=nrssmin>—</span><span class=sl>min</span>
       <span class=sl id=nrssnode></span>
     </div>
+    <div class=sgrp><span class=sh>database on disk</span>
+      <b id=ndbavg>—</b><span class=sl>avg/node</span>
+      <b id=ndbmax>—</b><span class=sl>max</span>
+      <span class=mut id=ndbgrow>—</span><span class=sl>growth</span>
+      <span class=sl id=ndbnode></span>
+    </div>
     <div class=sgrp><span class=sh>goroutines</span>
       <b id=ngravg>—</b><span class=sl>avg</span>
       <b id=ngrmax>—</b><span class=sl>max</span>
@@ -1214,6 +1266,13 @@ async function tick(){
   $('nrssavg').textContent=mib(ns.rssAvgMiB); $('nrssmax').textContent=mib(ns.rssMaxMiB);
   $('nrssmin').textContent=mib(ns.rssMinMiB);
   $('nrssnode').textContent=ns.rssMaxNode?('max '+ns.rssMaxNode):'';
+  // Database size on disk: both engines per node, summed. Growth is MiB/hour
+  // since the first sample, so a run's disk appetite is a number, not a
+  // guess from the docker volume at teardown.
+  const db=ns.disk||{};
+  $('ndbavg').textContent=mib(db.avgMiB); $('ndbmax').textContent=mib(db.maxMiB);
+  $('ndbgrow').textContent=(db.growthMiBPerHour==null)?'—':(db.growthMiBPerHour.toFixed(1)+' MiB/h');
+  $('ndbnode').textContent=db.maxNode?('max '+db.maxNode):'';
   $('ngravg').textContent=ns.grAvg!=null?fmt(ns.grAvg):'—';
   $('ngrmax').textContent=ns.grMax!=null?fmt(ns.grMax):'—';
   $('ngrmin').textContent=ns.grMin!=null?fmt(ns.grMin):'—';

@@ -194,3 +194,19 @@ class ExecBaselineTests(unittest.TestCase):
         self.assertEqual(0.0, soakmon.exec_from(None)["serialSec"])
         per = {"n": [("accumulate_exec_phase_seconds_total", "raw-string-label", "nan?")]}
         self.assertEqual(0.0, soakmon.exec_from(per)["serialSec"])
+
+
+class DiskTests(unittest.TestCase):
+    def test_sums_both_engines_and_reports_growth(self):
+        first = {}
+        d = soakmon.disk_from({"acc-bvn1-val1": {"dn": 1024 * 100, "bvn": 1024 * 300},
+                               "acc-bvn2-val1": {"dn": 1024 * 100, "bvn": 1024 * 500}}, first, 1000.0)
+        self.assertEqual(400, d["byNode"]["acc-bvn1-val1"]["dnMiB"] + d["byNode"]["acc-bvn1-val1"]["bvnMiB"])
+        self.assertEqual(500, d["avgMiB"]); self.assertEqual(600, d["maxMiB"]); self.assertEqual("acc-bvn2-val1", d["maxNode"])
+        self.assertIsNone(d["growthMiBPerHour"], "no growth until a second sample two minutes on")
+        d = soakmon.disk_from({"acc-bvn1-val1": {"dn": 1024 * 100, "bvn": 1024 * 400},
+                               "acc-bvn2-val1": {"dn": 1024 * 100, "bvn": 1024 * 600}}, first, 1000.0 + 3600)
+        self.assertEqual(100.0, d["growthMiBPerHour"])
+
+    def test_empty_is_zero_not_a_crash(self):
+        self.assertEqual(0, soakmon.disk_from({}, {}, 0)["avgMiB"])
