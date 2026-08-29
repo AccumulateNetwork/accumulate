@@ -684,8 +684,8 @@ func (e *env) awaitBalance(ctx context.Context, u *url.URL, limit time.Duration)
 		}
 		r, err := e.Q.QueryAccount(ctx, u, nil)
 		if err == nil {
-			if a, ok := r.Account.(interface{ GetBalance() *big.Int }); ok {
-				if b := a.GetBalance(); b != nil && b.Sign() > 0 {
+			if a, ok := r.Account.(interface{ TokenBalance() *big.Int }); ok {
+				if b := a.TokenBalance(); b != nil && b.Sign() > 0 {
 					return nil
 				}
 			}
