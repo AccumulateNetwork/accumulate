@@ -172,6 +172,7 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "| target duration | $DURATION |"
   echo "| target TPS | $TPS |"
   echo "| storage | ${ACC_STORAGE:-leveldb} |"
+  echo "| memory budget | mem_limit ${ACC_MEM_LIMIT:-1536m}, GOMEMLIMIT ${GOMEMLIMIT:-1200MiB} |"
   echo
   echo "Config as run is frozen in \`config/\`. Results appended below on exit."
 } > "$manifest"
@@ -294,6 +295,15 @@ fi
 # the single artifact that says whether the executor is parked in batch
 # collection. This dumps every node the moment soakmon reports a stalled
 # partition, and never touches the network itself.
+# Read-back probe: samples committed entries as the run goes and re-reads them
+# on a schedule, timing each read and recording the slowest per round with
+# the entry's age. Report in readprobe-report.md at teardown.
+if [ -x "$here/readprobe.py" ]; then
+  nohup env RUN_DIR="$rd" "$here/readprobe.py" > "$rd/readprobe.log" 2>&1 &
+  READPROBE=$!
+  echo "   readprobe: armed (sample every ${PROBE_SAMPLE_EVERY:-20}s, re-read every ${PROBE_EVERY:-60}s)" | tee -a "$log"
+fi
+
 if [ -x "$here/wedgewatch.sh" ]; then
   nohup env RUN_DIR="$rd" "$here/wedgewatch.sh" > "$rd/wedgewatch.log" 2>&1 &
   WEDGE=$!
@@ -439,6 +449,9 @@ fi
 # MON is the supervisor; kill its current soakmon child too, by PID, or the
 # restart loop's last child outlives the run.
 [ -n "${MON:-}" ] && pkill -P "$MON" 2>/dev/null
+# The read probe writes its report on SIGTERM; give it a moment before the
+# network goes away so the last round and the report land.
+if [ -n "${READPROBE:-}" ]; then kill $READPROBE 2>/dev/null; wait $READPROBE 2>/dev/null; fi
 kill $CHAOS ${MON:-} ${SEIZE:-} ${LOGCAP:-} ${WEDGE:-} 2>/dev/null
 ended=$(date -u +%FT%TZ)
 echo "== soak finished $(date -u) driver-exit=$rc ==" | tee -a "$log"
@@ -496,11 +509,12 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   echo "| seizure | $(grep -q SEIZED "$rd/seizewatch.out" 2>/dev/null && grep SEIZED "$rd/seizewatch.out" | tail -1 || echo 'none detected') |"
   echo "| reconcile pulls (#4073) | $reconcile_pulls |"
   echo "| stalled channels at end | $stalled_end |"
+  echo "| read-back probe | $(grep -m1 '^\*\*Whole run:\*\*' "$rd/readprobe-report.md" 2>/dev/null | sed 's/\*\*//g' || echo 'no report') |"
   # A run that wedged and dumped is the most valuable kind of run there is;
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
   echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
   echo
-  echo "Raw: \`soak.log\`, \`monitor.csv\`, \`chaos.log\`, \`loadgen-stats.json\`."
+  echo "Raw: \`soak.log\`, \`monitor.csv\`, \`chaos.log\`, \`loadgen-stats.json\`, \`readprobe.csv\` / \`readprobe-report.md\`."
 } >> "$manifest"
 
 # Accumulating index — one line per run, newest last, never rewritten.
