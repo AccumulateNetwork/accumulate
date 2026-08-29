@@ -195,7 +195,7 @@ echo "   version: $exec_ver | healing: $heal_flags" | tee -a "$log"
 # operator decides which run survives.
 # Only real drivers count: the launcher's own `sh -c "setsid nohup ./soak.sh …"`
 # wrappers carry the script name too and refused the very first launch.
-others=$(pgrep -f "^bash \./soak[.]sh " | grep -vx "$$" | wc -l)
+others=$(pgrep -f "^bash \./soak[.]sh " | grep -vxE "$$|$BASHPID" | wc -l) # $BASHPID: the $(…) subshell is a clone of us
 live=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c '^acc-')
 if [ "$others" -gt 0 ] || [ "$live" -gt 0 ]; then
   echo "another soak is running ($others driver(s), $live acc-* containers) — refusing to start." | tee -a "$log"
