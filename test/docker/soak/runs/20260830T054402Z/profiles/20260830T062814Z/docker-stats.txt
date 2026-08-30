@@ -1,0 +1,9 @@
+acc-bvn1-val1	137.52%	1.57GiB / 2.5GiB
+acc-bvn2-val3	175.74%	1.63GiB / 2.5GiB
+acc-bvn2-val1	164.08%	1.71GiB / 2.5GiB
+acc-bvn2-val2	154.32%	1.883GiB / 2.5GiB
+acc-bvn1-val3	248.00%	1.566GiB / 2.5GiB
+acc-bvn2-val4	181.89%	1.774GiB / 2.5GiB
+acc-bvn1-val2	249.71%	1.615GiB / 2.5GiB
+acc-bvn1-val4	193.87%	1.607GiB / 2.5GiB
+acc-bootstrap	0.03%	11.84MiB / 2.5GiB
