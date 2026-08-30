@@ -103,3 +103,44 @@ func TestRead_DoesNotWaitForAWriteThrough(t *testing.T) {
 	require.NoError(t, <-done)
 	require.Equal(t, "v2", get(t, d, key))
 }
+
+// Maintenance — compacting history, merging block sets — runs off the
+// commit path. The store took its lock off maintenance (BlockchainDB#58)
+// but the adapter still called it on the committing goroutine, which is
+// the block producer's: every node stopped producing blocks for 88–100 s
+// at block 400 in run 20260830T054402Z. A commit must not wait for it.
+func TestMaintenance_DoesNotBlockCommits(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "db"))
+	require.NoError(t, err)
+	d.CompressEvery, d.StatsEvery = 2, 0
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	d.maintainHook = func() { close(started); <-release } // a long compaction
+
+	key := func(i int) *record.Key { return record.NewKey("Account", "alice", "Main") }
+	put(t, d, key(0), "v0")
+	put(t, d, key(1), "v1") // version 2: maintenance starts, and blocks in the hook
+	<-started
+
+	done := make(chan struct{})
+	go func() { put(t, d, key(2), "v2"); put(t, d, key(3), "v3"); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("commits waited for maintenance")
+	}
+	require.Equal(t, "v3", get(t, d, key(3)))
+
+	// Close waits for the run in flight rather than closing the store
+	// under it.
+	closed := make(chan error, 1)
+	go func() { closed <- d.Close() }()
+	select {
+	case <-closed:
+		t.Fatal("Close returned while maintenance was still running")
+	case <-time.After(200 * time.Millisecond):
+	}
+	close(release)
+	require.NoError(t, <-closed)
+}

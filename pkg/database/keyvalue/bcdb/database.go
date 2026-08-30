@@ -46,6 +46,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	bcdb "github.com/AccumulateNetwork/BlockchainDB/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -107,6 +108,13 @@ type Database struct {
 	// keeping a second copy of the database in memory.
 	shapes map[string]*ShapeCount
 	last   map[[32]byte][32]byte
+
+	// Background maintenance (see maintain).
+	maintaining  atomic.Bool
+	maintWG      sync.WaitGroup
+	maintErr     error  // the last maintenance run's outcome
+	maintErrs    uint64 // how many runs failed
+	maintainHook func() // tests: runs at the start of a maintenance run
 
 	// TallyKeys bounds last.  Beyond it new keys are still counted but
 	// not remembered, so their later rewrites cannot be classified --
@@ -463,22 +471,61 @@ func (d *Database) writeThrough(s *staged) error {
 		return errors.UnknownError.WithFormat("seal: %w", err)
 	}
 	if d.CompressEvery > 0 && s.version%d.CompressEvery == 0 {
-		if err := d.kv.Compress(); err != nil {
-			return errors.UnknownError.WithFormat("compress: %w", err)
-		}
-		// Every block seal leaves one permanent segment per shard, so a
-		// node accumulates a file pair per block forever (BlockchainDB#30,
-		// #47).  MergeBelow folds a finished block set into one segment.
-		// The watermark is held MergeLag blocks back: below it nothing
-		// more arrives and nothing is still being healed, and a block a
-		// peer might still ask for by number is never merged away.
-		if s.version > d.MergeLag {
-			if _, _, err := d.kv.MergeBelow(s.version - d.MergeLag); err != nil {
-				return errors.UnknownError.WithFormat("merge sealed segments: %w", err)
-			}
-		}
+		d.maintain(s.version)
 	}
 	return nil
+}
+
+// maintain compacts history and merges finished block sets, in the
+// background.
+//
+// It used to run inline, here, on the committing goroutine — which is
+// the block producer's.  BlockchainDB#57/#58 took the store lock off
+// maintenance so that OTHER readers and writers proceed during a copy,
+// and the single-store benchmark showed exactly that; but the caller
+// still waited for its own call to return, so every node's block
+// production stopped for the length of the compaction: 88–100 s at
+// block 400 in run 20260830T054402Z, the goroutine dump reading
+// blockProductionLoop → ProduceBlock → commit → drain → writeThrough →
+// Compress → CompactHistory.  Maintenance on history needs nothing from
+// the protocol path, so the protocol path must not wait for it.
+//
+// One maintenance run at a time; a cadence that lands while one is
+// still running is skipped, not queued (history does not go anywhere).
+// Close waits for a run in flight.  An error is recorded for stats.json
+// and the next cadence retries.
+func (d *Database) maintain(version uint64) {
+	if !d.maintaining.CompareAndSwap(false, true) {
+		return
+	}
+	d.maintWG.Add(1)
+	go func() {
+		defer d.maintWG.Done()
+		defer d.maintaining.Store(false)
+		if d.maintainHook != nil {
+			d.maintainHook()
+		}
+		var err error
+		if err = d.kv.Compress(); err != nil {
+			err = errors.UnknownError.WithFormat("compress: %w", err)
+		} else if version > d.MergeLag {
+			// Every block seal leaves one permanent segment per shard,
+			// so a node accumulates a file pair per block forever
+			// (BlockchainDB#30, #47).  MergeBelow folds a finished block
+			// set into one segment.  The watermark is held MergeLag
+			// blocks back — the active window — below which nothing more
+			// arrives and nothing is still being healed.
+			if _, _, err = d.kv.MergeBelow(version - d.MergeLag); err != nil {
+				err = errors.UnknownError.WithFormat("merge sealed segments: %w", err)
+			}
+		}
+		d.mu.Lock()
+		d.maintErr = err
+		if err != nil {
+			d.maintErrs++
+		}
+		d.mu.Unlock()
+	}()
 }
 
 // Close closes the underlying database.
@@ -496,6 +543,7 @@ func (d *Database) Close() error {
 	d.views = map[uint64]int{}
 	d.mu.Unlock()
 	err := d.drain()
+	d.maintWG.Wait() // a compaction or merge in flight finishes first
 	d.mu.Lock()
 	if err != nil {
 		return err
@@ -729,8 +777,17 @@ func (d *Database) reportStats() {
 		Staged      int  `json:"stagedCommits"`
 		TallyKeys   int  `json:"tallyKeys"`
 		TallyCapped bool `json:"tallyCapped"`
+
+		// Maintenance runs in the background; a failure is recorded here
+		// rather than failing a commit.
+		MaintenanceErrors uint64 `json:"maintenanceErrors"`
+		MaintenanceLast   string `json:"maintenanceLastError,omitempty"`
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
-		Staged: len(d.staged), TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys}
+		Staged: len(d.staged), TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
+		MaintenanceErrors: d.maintErrs}
+	if d.maintErr != nil {
+		report.MaintenanceLast = d.maintErr.Error()
+	}
 
 	// Lifted out of the shape table so a run can be checked by looking
 	// at one field
