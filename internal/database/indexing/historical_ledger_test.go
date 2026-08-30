@@ -82,12 +82,12 @@ func TestHistoricalResolution_RealLedger(t *testing.T) {
 		require.Less(t, uint64(rootIndex.Height()), indexed.Latest-indexed.Earliest+1,
 			"expected the root index chain to be sparse")
 
-		// Every height in range resolves, forward only, onto an indexed block
+		// Every height in range resolves, backward only, onto an indexed block
 		for height := indexed.Earliest; height <= indexed.Latest; height++ {
-			entry, err := indexing.ResolveBlockAtOrAfter(partition, batch, height)
+			_, entry, err := indexing.ResolveBlockAtOrBefore(partition, batch, height)
 			require.NoErrorf(t, err, "height %d", height)
-			require.GreaterOrEqualf(t, entry.BlockIndex, height,
-				"resolution moved backward for height %d", height)
+			require.LessOrEqualf(t, entry.BlockIndex, height,
+				"resolution moved forward for height %d", height)
 			require.Truef(t, isIndexed[entry.BlockIndex],
 				"height %d resolved to unindexed block %d", height, entry.BlockIndex)
 		}
@@ -95,11 +95,11 @@ func TestHistoricalResolution_RealLedger(t *testing.T) {
 		// Below the horizon and past the tip are both refused, distinguishably
 		// from each other by message and from retention by status
 		if indexed.Earliest > 1 {
-			_, err = indexing.ResolveBlockAtOrAfter(partition, batch, indexed.Earliest-1)
+			_, _, err = indexing.ResolveBlockAtOrBefore(partition, batch, indexed.Earliest-1)
 			require.Error(t, err)
 			require.Equal(t, errors.NotFound, errors.Code(err))
 		}
-		_, err = indexing.ResolveBlockAtOrAfter(partition, batch, indexed.Latest+1)
+		_, _, err = indexing.ResolveBlockAtOrBefore(partition, batch, indexed.Latest+1)
 		require.Error(t, err)
 		require.Equal(t, errors.NotFound, errors.Code(err))
 
@@ -124,6 +124,105 @@ func TestHistoricalResolution_RealLedger(t *testing.T) {
 			_, err := indexing.ResolveHistoricalAccountState(partition, batch, account, height, 0)
 			require.Errorf(t, err, "height %d was answered", height)
 			require.Equalf(t, errors.IncompleteChain, errors.Code(err), "height %d", height)
+		}
+	})
+}
+
+// TestBPTRootAt_RealLedger locks the offset between the ledger's BptChain and
+// the root index chain by capturing the real BPT root after every block and
+// requiring BPTRootAt to return exactly that root for that block.
+//
+// The offset is not cosmetic. BptChain records the *previous* block's state
+// hash, so an off-by-one here would serve the neighbouring block's state — with
+// a valid receipt and a truthful height. That is the failure this whole
+// mechanism exists to prevent, so it is asserted against measured roots rather
+// than reasoned about.
+func TestBPTRootAt_RealLedger(t *testing.T) {
+	liteKey := acctesting.GenerateKey("lite")
+	lite := acctesting.AcmeLiteAddressStdPriv(liteKey).RootIdentity().JoinPath(ACME)
+
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime),
+	)
+	MakeLiteTokenAccount(t, sim.DatabaseFor(lite), liteKey[32:], AcmeUrl())
+	CreditCredits(t, sim.DatabaseFor(lite), lite.RootIdentity(), 1e9)
+	CreditTokens(t, sim.DatabaseFor(lite), lite, big.NewInt(1e12))
+
+	partition := config.NetworkUrl{URL: PartitionUrl("BVN0")}
+
+	// Capture the real BPT root at the end of every state-changing block
+	rootAtBlock := map[uint64][32]byte{}
+	capture := func() {
+		View(t, sim.DatabaseFor(lite), func(batch *database.Batch) {
+			var ledger *SystemLedger
+			require.NoError(t, batch.Account(partition.Ledger()).Main().GetAs(&ledger))
+			root, err := batch.BPT().GetRootHash()
+			require.NoError(t, err)
+			rootAtBlock[ledger.Index] = root
+		})
+	}
+	// Step once before capturing anything. MakeLiteTokenAccount and the credit
+	// helpers write straight to the database, changing the BPT outside block
+	// execution, so the root observed before the next block commits does not
+	// correspond to any BptChain entry.
+	sim.StepN(2)
+	var firstCaptured uint64
+	View(t, sim.DatabaseFor(lite), func(batch *database.Batch) {
+		var ledger *SystemLedger
+		require.NoError(t, batch.Account(partition.Ledger()).Main().GetAs(&ledger))
+		firstCaptured = ledger.Index
+	})
+	// Real transactions, so blocks actually change state — an idle simulator
+	// produces too few indexed blocks for this to prove anything
+	for i := 0; i < 12; i++ {
+		sim.BuildAndSubmitTxnSuccessfully(
+			build.Transaction().For(lite).
+				AddCredits().Spend(1).To(lite.RootIdentity()).WithOracle(InitialAcmeOracle).
+				SignWith(lite.RootIdentity()).Version(1).Timestamp(uint64(i + 1)).PrivateKey(liteKey))
+		for j := 0; j < 3; j++ {
+			sim.StepN(1)
+			capture()
+		}
+	}
+	delete(rootAtBlock, firstCaptured)
+
+	View(t, sim.DatabaseFor(lite), func(batch *database.Batch) {
+		indexed, err := indexing.IndexedBlockRange(partition, batch)
+		require.NoError(t, err)
+
+		checked := 0
+		for block, want := range rootAtBlock {
+			if block <= firstCaptured || block > indexed.Latest {
+				continue
+			}
+			got, at, err := indexing.BPTRootAt(partition, batch, block)
+			if err != nil {
+				// The most recent block's root is not on the chain yet — it is
+				// written when the next state-changing block commits. That is a
+				// documented refusal, not a failure.
+				require.Equalf(t, errors.IncompleteChain, errors.Code(err), "block %d", block)
+				continue
+			}
+			require.Equalf(t, block, at, "BPTRootAt(%d) reported block %d", block, at)
+			require.Equalf(t, want, got, "wrong root for block %d", block)
+			checked++
+		}
+		require.Greaterf(t, checked, 5, "only %d blocks checked; the test proved little", checked)
+
+		// A height in a gap returns the previous block's root, unchanged
+		for block := range rootAtBlock {
+			if block <= firstCaptured+1 || block > indexed.Latest {
+				continue
+			}
+			got, at, err := indexing.BPTRootAt(partition, batch, block-1)
+			if err != nil {
+				continue
+			}
+			require.LessOrEqualf(t, at, block-1, "resolution moved forward from %d", block-1)
+			if want, ok := rootAtBlock[at]; ok {
+				require.Equalf(t, want, got, "gap resolution returned the wrong root for %d", block-1)
+			}
 		}
 	})
 }

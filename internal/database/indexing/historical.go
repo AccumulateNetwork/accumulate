@@ -112,46 +112,64 @@ func RetainedBlockRange(partition config.NetworkUrl, batch *database.Batch, dept
 	return BlockRange{Earliest: earliest, Latest: indexed.Latest}, nil
 }
 
-// ResolveBlockAtOrAfter resolves a requested minor block height to the first
-// block at or after it that the partition ledger has indexed, and returns that
-// root index chain entry.
+// ResolveBlockAtOrBefore resolves a requested minor block height to the last
+// block at or before it that the partition ledger has indexed, and returns that
+// root index chain entry together with its position on the index chain.
 //
-// Resolution moves forward, never backward: the caller asked about height H and
-// gets a block no earlier than H, so the answer cannot silently predate the
-// question. The resolved height may exceed the requested one, which is why
-// callers must report the resolved height rather than the requested one.
-func ResolveBlockAtOrAfter(partition config.NetworkUrl, batch *database.Batch, height uint64) (*protocol.IndexEntry, error) {
+// Resolution moves BACKWARD, and the result is exact rather than approximate.
+// A partition indexes only the blocks that changed state; a block that changed
+// nothing has the same BPT root as its predecessor. So the last indexed block
+// at or before H holds precisely the state as of H — measured, not assumed:
+// across every observed block transition, the BPT root changed if and only if
+// the ledger's BptChain grew.
+//
+// Resolving forward would be wrong here, and wrongly in the dangerous
+// direction. The state at a later block includes changes that had not happened
+// at H, so a forward-resolved receipt would prove a key page's *later* version
+// against a signature made under its earlier one — a confident, checkable, and
+// false answer. Whether the resolved root can be bound to a quorum signature is
+// a separate question from whether it is the right root; this function answers
+// only the second.
+//
+// The position on the index chain is returned because it is the key into the
+// ledger's BptChain, which holds the root for that block — see [BPTRootAt].
+func ResolveBlockAtOrBefore(partition config.NetworkUrl, batch *database.Batch, height uint64) (uint64, *protocol.IndexEntry, error) {
 	if height == 0 {
-		return nil, errors.BadRequest.With("cannot resolve block zero: zero means the current state")
+		return 0, nil, errors.BadRequest.With("cannot resolve block zero: zero means the current state")
 	}
 
 	indexed, err := IndexedBlockRange(partition, batch)
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return 0, nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Below this node's horizon. Do not resolve forward — see IndexedBlockRange.
+	// Below this node's horizon. Do not resolve backward past it — see
+	// IndexedBlockRange.
 	if height < indexed.Earliest {
-		return nil, errors.NotFound.WithFormat(
+		return 0, nil, errors.NotFound.WithFormat(
 			"block %d precedes this node's earliest indexed block %d", height, indexed.Earliest)
 	}
 
-	// Not reached yet. This is "not yet", not "never".
+	// Beyond what this node has indexed. The state at H may well equal the
+	// state at the latest indexed block — but this node cannot tell a recent
+	// empty block from a block that has not happened, and guessing which would
+	// mean answering for a block that may not exist. This is "not yet", not
+	// "never".
 	if height > indexed.Latest {
-		return nil, errors.NotFound.WithFormat(
-			"block %d has not been reached; this node's latest indexed block is %d", height, indexed.Latest)
+		return 0, nil, errors.NotFound.WithFormat(
+			"block %d is beyond this node's latest indexed block %d", height, indexed.Latest)
 	}
 
 	rootIndexChain, err := batch.Account(partition.Ledger()).RootChain().Index().Get()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load minor root index chain: %w", err)
+		return 0, nil, errors.UnknownError.WithFormat("load minor root index chain: %w", err)
 	}
 
-	_, entry, err := SearchIndexChain(rootIndexChain, uint64(rootIndexChain.Height())-1, MatchAfter, SearchIndexChainByBlock(height))
+	pos, entry, err := SearchIndexChain(rootIndexChain, uint64(rootIndexChain.Height())-1, MatchBefore, SearchIndexChainByBlock(height))
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("locate index entry for block %d of the minor root chain: %w", height, err)
+		return 0, nil, errors.UnknownError.WithFormat("locate index entry for block %d of the minor root chain: %w", height, err)
 	}
-	return entry, nil
+	return pos, entry, nil
 }
 
 // AccountFirstIndexedBlock returns the earliest minor block in which this node
@@ -178,6 +196,63 @@ func AccountFirstIndexedBlock(account *database.Account) (block uint64, ok bool,
 	return entry.BlockIndex, true, nil
 }
 
+// BPTRootAt returns the BPT root as of the given minor block height, together
+// with the block it is actually the root of, which is the last indexed block at
+// or before the requested one.
+//
+// The root comes from the partition ledger's BptChain, which records one entry
+// per block that changed state (`internal/core/execute/v2/block/block_end.go:90`,
+// gated on V2Baikonur).
+//
+// The two chains align index-for-index: measured, bpt[j] is the root as of
+// root-index[j].BlockIndex. That is not a coincidence and it is not the naive
+// reading. BptChain records the PREVIOUS block's state hash, so the entry for
+// block B is written while block B+1 is being processed — one block late — and
+// root-index[j] is written during block B itself. Being written late by exactly
+// one entry is what makes the positions line up rather than differ.
+//
+// The consequence is that the newest indexed block's root is not on the chain
+// yet; it lands when the next state-changing block commits. So BptChain runs
+// exactly one entry shorter than the root index chain (measured: 46,105 against
+// 46,106 on MainNet, 390,980 against 390,981 on Kermit), and a request for that
+// newest block is refused rather than answered with its predecessor's root.
+//
+// NOTE ON WHAT THIS ROOT IS AND IS NOT. The BptChain is declared an anchor
+// chain and has an index chain allocated, but it is never passed through
+// addChainAnchor — its entry is written after enumerateModifiedChains has
+// already run, so it never appears in the block's chain updates. Measured: its
+// index chain is empty on a simulated ledger and on both live networks. **The
+// root returned here is therefore recorded by this node but not anchored into
+// the root chain, and so not covered by a quorum signature.** A caller that
+// needs a quorum-bound root must use one that reached an anchor(X)-bpt chain,
+// which is a sparse subset. Do not present this root as if it were signed.
+func BPTRootAt(partition config.NetworkUrl, batch *database.Batch, height uint64) (root [32]byte, block uint64, err error) {
+	pos, entry, err := ResolveBlockAtOrBefore(partition, batch, height)
+	if err != nil {
+		return root, 0, errors.UnknownError.Wrap(err)
+	}
+
+	bptChain, err := batch.Account(partition.Ledger()).BptChain().Get()
+	if err != nil {
+		return root, 0, errors.UnknownError.WithFormat("load bpt chain: %w", err)
+	}
+
+	i := int64(pos)
+	if i >= bptChain.Height() {
+		return root, 0, errors.IncompleteChain.WithFormat(
+			"the root for block %d is not on the bpt chain yet; it is recorded when the next state-changing block commits", entry.BlockIndex)
+	}
+
+	value, err := bptChain.Entry(i)
+	if err != nil {
+		return root, 0, errors.UnknownError.WithFormat("load bpt chain entry %d: %w", i, err)
+	}
+	if len(value) != 32 {
+		return root, 0, errors.InternalError.WithFormat("bpt chain entry %d is %d bytes, want 32", i, len(value))
+	}
+	return *(*[32]byte)(value), entry.BlockIndex, nil
+}
+
 // ResolveHistoricalAccountState resolves a request for an account's state at a
 // minor block height, returning the root index chain entry of the block a
 // receipt would be produced against.
@@ -194,7 +269,7 @@ func AccountFirstIndexedBlock(account *database.Account) (block uint64, ok bool,
 //
 // It never returns the current block for a historical request.
 func ResolveHistoricalAccountState(partition config.NetworkUrl, batch *database.Batch, account *database.Account, height, retainedDepth uint64) (*protocol.IndexEntry, error) {
-	entry, err := ResolveBlockAtOrAfter(partition, batch, height)
+	_, entry, err := ResolveBlockAtOrBefore(partition, batch, height)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

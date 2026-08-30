@@ -101,66 +101,73 @@ func TestIndexedBlockRange_Empty(t *testing.T) {
 	require.Equal(t, errors.InternalError, errors.Code(err))
 }
 
-// TestResolveBlockAtOrAfter proves resolution never moves backward: a height
-// that is not itself indexed resolves to the next indexed block, never the
-// previous one.
-func TestResolveBlockAtOrAfter(t *testing.T) {
+// TestResolveBlockAtOrBefore proves resolution never moves forward: a height
+// that is not itself indexed resolves to the previous indexed block, never the
+// next one.
+//
+// This is the direction that makes the answer exact. An unindexed block changed
+// no state, so its BPT root is the previous indexed block's root. Resolving
+// forward would return state that had not happened yet at the requested height.
+func TestResolveBlockAtOrBefore(t *testing.T) {
 	// Indexed blocks 4, 9, 17 — gaps on both sides of 9
 	batch := makeLedger(t, 4, 9, 17)
 
 	cases := []struct {
 		requested uint64
 		resolved  uint64
+		pos       uint64
 	}{
-		{4, 4},   // exactly the first
-		{5, 9},   // in a gap, resolves forward
-		{8, 9},   // just before an indexed block
-		{9, 9},   // exactly on an indexed block
-		{10, 17}, // in a gap, resolves forward
-		{16, 17}, // just before the last
-		{17, 17}, // exactly the last
+		{4, 4, 0},   // exactly the first
+		{5, 4, 0},   // in a gap, resolves back
+		{8, 4, 0},   // just before an indexed block
+		{9, 9, 1},   // exactly on an indexed block
+		{10, 9, 1},  // in a gap, resolves back
+		{16, 9, 1},  // just before the last
+		{17, 17, 2}, // exactly the last
 	}
 	for _, c := range cases {
-		entry, err := ResolveBlockAtOrAfter(testPartition, batch, c.requested)
+		pos, entry, err := ResolveBlockAtOrBefore(testPartition, batch, c.requested)
 		require.NoErrorf(t, err, "requested %d", c.requested)
 		require.Equalf(t, c.resolved, entry.BlockIndex, "requested %d", c.requested)
-		require.GreaterOrEqualf(t, entry.BlockIndex, c.requested,
-			"resolution moved backward for %d", c.requested)
+		require.Equalf(t, c.pos, pos, "position for %d", c.requested)
+		require.LessOrEqualf(t, entry.BlockIndex, c.requested,
+			"resolution moved forward for %d", c.requested)
 	}
 }
 
-// TestResolveBlockAtOrAfter_BeforeGenesis proves a height below this node's
+// TestResolveBlockAtOrBefore_BeforeGenesis proves a height below this node's
 // horizon is refused rather than resolved forward to the earliest block it has.
-func TestResolveBlockAtOrAfter_BeforeGenesis(t *testing.T) {
+func TestResolveBlockAtOrBefore_BeforeGenesis(t *testing.T) {
 	batch := makeLedger(t, 4, 9, 17)
 
 	for _, height := range []uint64{1, 2, 3} {
-		_, err := ResolveBlockAtOrAfter(testPartition, batch, height)
+		_, _, err := ResolveBlockAtOrBefore(testPartition, batch, height)
 		require.Errorf(t, err, "height %d", height)
 		require.Equalf(t, errors.NotFound, errors.Code(err), "height %d", height)
 		require.Containsf(t, err.Error(), "precedes this node's earliest indexed block 4", "height %d", height)
 	}
 }
 
-// TestResolveBlockAtOrAfter_NotReached proves a height the partition has not
-// reached is refused, and is refused distinguishably from a height below the
-// horizon.
-func TestResolveBlockAtOrAfter_NotReached(t *testing.T) {
+// TestResolveBlockAtOrBefore_NotReached proves a height beyond what the node
+// has indexed is refused, and is refused distinguishably from a height below
+// the horizon. It is NOT resolved back to the latest indexed block: the node
+// cannot tell a recent empty block from one that has not happened.
+func TestResolveBlockAtOrBefore_NotReached(t *testing.T) {
 	batch := makeLedger(t, 4, 9, 17)
 
-	_, err := ResolveBlockAtOrAfter(testPartition, batch, 18)
+	_, _, err := ResolveBlockAtOrBefore(testPartition, batch, 18)
 	require.Error(t, err)
 	require.Equal(t, errors.NotFound, errors.Code(err))
-	require.Contains(t, err.Error(), "has not been reached")
-	require.Contains(t, err.Error(), "latest indexed block is 17")
+	require.Contains(t, err.Error(), "is beyond this node's latest indexed block")
+	require.Contains(t, err.Error(), "latest indexed block 17")
 }
 
-// TestResolveBlockAtOrAfter_Zero proves zero — which means the current state —
+// TestResolveBlockAtOrBefore_Zero proves zero — which means the current state —
 // is rejected rather than treated as a historical height.
-func TestResolveBlockAtOrAfter_Zero(t *testing.T) {
+func TestResolveBlockAtOrBefore_Zero(t *testing.T) {
 	batch := makeLedger(t, 4, 9, 17)
 
-	_, err := ResolveBlockAtOrAfter(testPartition, batch, 0)
+	_, _, err := ResolveBlockAtOrBefore(testPartition, batch, 0)
 	require.Error(t, err)
 	require.Equal(t, errors.BadRequest, errors.Code(err))
 	require.Contains(t, err.Error(), "zero means the current state")
@@ -232,10 +239,10 @@ func TestResolveHistoricalAccountState_Retained(t *testing.T) {
 	batch := makeLedger(t, 4, 9, 17)
 	account := makeAccount(t, batch, protocol.AccountUrl("alice"), 4, 9, 17)
 
-	// Requesting 5 resolves forward to 9, which the window covers
+	// Requesting 5 resolves back to 4, which the window covers
 	entry, err := ResolveHistoricalAccountState(testPartition, batch, account, 5, 1000)
 	require.NoError(t, err)
-	require.Equal(t, uint64(9), entry.BlockIndex)
+	require.Equal(t, uint64(4), entry.BlockIndex)
 }
 
 // TestResolveHistoricalAccountState_AccountAbsent proves an account that did
