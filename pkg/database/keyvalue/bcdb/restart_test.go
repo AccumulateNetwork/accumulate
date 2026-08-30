@@ -133,24 +133,30 @@ func TestMergeBelow_BoundsThePermanentSegmentCount(t *testing.T) {
 	db, err := Open(dir)
 	require.NoError(t, err)
 	defer db.Close()
-	db.CompressEvery, db.MergeLag, db.StatsEvery = 4, 4, 0
+	// N = 20 is the store's minimum window. Merges and compactions work on
+	// history only — segments that have left the active window — so a
+	// merge of everything below version-N lags by up to N blocks and at
+	// most ~2N per-block segments are ever live (BlockchainDB#57, #58).
+	db.CompressEvery, db.StatsEvery = 4, 0
+	require.NoError(t, db.SetMergeLag(20))
 
 	files := func() int {
 		m, _ := filepath.Glob(filepath.Join(dir, "perm", "*"))
 		return len(m)
 	}
-	for i := 0; i < 8; i++ {
-		put(t, db, record.NewKey("Message", [32]byte{byte(i), 1}, "Main"), "v")
+	const blocks = 120
+	for i := 0; i < blocks; i++ {
+		put(t, db, record.NewKey("Message", [32]byte{byte(i), byte(i >> 8), 1}, "Main"), "v")
 	}
-	before := files()
-	for i := 8; i < 24; i++ {
-		put(t, db, record.NewKey("Message", [32]byte{byte(i), 1}, "Main"), "v")
-	}
+	// A sealed segment is two files (data + index). Unmerged, 120 blocks
+	// would leave ~240; with history merged, what remains is the active
+	// window (up to 2N segments) plus a merged history and manifests.
 	after := files()
-	require.Lessf(t, after, before+16, "16 more sealed blocks must not mean 16 more segment files (before %d, after %d)", before, after)
+	require.Lessf(t, after, blocks, "%d sealed blocks must not leave a segment each (got %d files)", blocks, after)
+	require.LessOrEqualf(t, after, 2*(2*20)+16, "files beyond the active window must have been merged (got %d)", after)
 
 	// And nothing merged away is lost.
-	for i := 0; i < 24; i++ {
-		require.Equal(t, "v", get(t, db, record.NewKey("Message", [32]byte{byte(i), 1}, "Main")))
+	for i := 0; i < blocks; i++ {
+		require.Equal(t, "v", get(t, db, record.NewKey("Message", [32]byte{byte(i), byte(i >> 8), 1}, "Main")))
 	}
 }

@@ -93,8 +93,8 @@ type Database struct {
 	// Zero disables the report.
 	StatsEvery uint64
 
-	// MergeLag is how many of the newest blocks keep their own permanent
-	// segment (see writeThrough).
+	// MergeLag is N, the active window (see DefaultMergeLag).  Set with
+	// SetMergeLag so the store's window moves with it.
 	MergeLag uint64
 
 	statsPath string // Where reportStats writes
@@ -158,13 +158,16 @@ var _ keyvalue.Beginner = (*Database)(nil)
 // only bounds a layer that fills between commits.
 const SealLimit = 100_000
 
-// DefaultMergeLag is how many of the newest blocks keep their own
-// permanent segment; everything older is merged down (see
+// DefaultMergeLag is N: how many of the newest blocks are the store's
+// active tier — its own segments, under the protocol's lock — and the
+// watermark below which history is merged and compacted (see
 // writeThrough).  The consensus path only ever reads recent blocks, so
 // this is the hot window; it was 512, and at one segment per block that
 // let a node accumulate 1,052 sealed segments before the first merge —
 // long enough for the segment walk on every hit to stretch blocks from
-// 3 s to 5 s (run 20260829T060833Z, BlockchainDB#50).
+// 3 s to 5 s (run 20260829T060833Z, BlockchainDB#50).  Since #57 the
+// store enforces the same N as the boundary maintenance may not cross
+// with a lock; it is set at creation (Open) and recorded on disk.
 const DefaultMergeLag = 64
 
 // DefaultTallyKeys is how many keys the per-shape tally remembers a
@@ -196,6 +199,15 @@ func Open(path string) (*Database, error) {
 		kv, err = bcdb.OpenKV2(path)
 	case stderrors.Is(statErr, fs.ErrNotExist):
 		kv, err = bcdb.NewKV2(path, SealLimit)
+		if err == nil {
+			// N, set once at creation and recorded in the manifests: the
+			// store's key-filter window AND the line between its active
+			// tier (the protocol's lock) and history (the maintainer's)
+			// (BlockchainDB#57). MergeBelow and Compress work on history
+			// only, so the adapter's merge watermark and the store's window
+			// are the same number, or nothing ever merges.
+			err = kv.SetFilterBlocks(DefaultMergeLag)
+		}
 	default:
 		err = statErr
 	}
@@ -232,6 +244,17 @@ func Open(path string) (*Database, error) {
 		return nil, errors.UnknownError.WithFormat("read %s: %w", d.exceptionsPath, err)
 	}
 	return d, nil
+}
+
+// SetMergeLag sets N for the adapter and the store together.  Meant for
+// a freshly created database; the store rebuilds its filters and
+// commits a manifest per layer, and refuses anything below its minimum.
+func (d *Database) SetMergeLag(n uint64) error {
+	if err := d.kv.SetFilterBlocks(n); err != nil {
+		return err
+	}
+	d.MergeLag = n
+	return nil
 }
 
 // sealedVersion reads the version the permanent layer was last sealed
