@@ -250,6 +250,11 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Retain what this block's BPT update is about to overwrite. A no-op at
+	// the default depth of zero, and it never changes the BPT root, so it
+	// needs no executor-version gate.
+	block.Batch.SetBPTHistory(block.Index, m.BPTHistoryDepth)
+
 	// Update the BPT
 	err = block.Batch.UpdateBPT()
 	if err != nil {

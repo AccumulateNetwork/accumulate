@@ -159,6 +159,17 @@ func (a *Account) Commit() error {
 	return errors.UnknownError.Wrap(err)
 }
 
+// SetBPTHistory configures retention of superseded BPT nodes for this batch.
+// height is the block being committed; depth is how many blocks to retain, and
+// zero — the default — retains nothing and writes nothing.
+//
+// This is a setter rather than an argument to UpdateBPT because UpdateBPT has
+// ten callers, most of them snapshot and restore paths that have no block to
+// speak of and must not retain anything.
+func (b *Batch) SetBPTHistory(height, depth uint64) {
+	b.BPT().SetHistory(height, depth)
+}
+
 func (b *Batch) UpdateBPT() error {
 	if b.parent != nil {
 		err := b.parent.UpdateBPT()

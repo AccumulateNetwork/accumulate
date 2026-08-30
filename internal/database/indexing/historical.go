@@ -87,15 +87,23 @@ func IndexedBlockRange(partition config.NetworkUrl, batch *database.Batch) (Bloc
 	return BlockRange{Earliest: first.BlockIndex, Latest: last.BlockIndex}, nil
 }
 
-// RetainedBlockRange returns the range of minor blocks for which this node
-// retains enough superseded BPT state to produce a historical membership
-// receipt.
+// RetainedBlockRange returns the range of minor blocks for which this node can
+// produce a historical BPT membership receipt.
 //
-// depth is how many blocks of history the node is configured to keep. Zero —
-// the default, and the only value any node uses today — yields an empty range:
-// the node retains no history and refuses every historical request.
-func RetainedBlockRange(partition config.NetworkUrl, batch *database.Batch, depth uint64) (BlockRange, error) {
-	if depth == 0 {
+// The earliest end is read from what the node ACTUALLY retained, not from its
+// configured depth. Raising the depth does not retroactively create history, and
+// a node advertising a range it does not hold is worse than one advertising
+// nothing — a client would believe it. The two cannot drift because there is
+// only one source: the BPT records the horizon as it retains.
+//
+// An empty range means the node retains no history, which is every node running
+// the default configuration.
+func RetainedBlockRange(partition config.NetworkUrl, batch *database.Batch) (BlockRange, error) {
+	earliest, ok, err := batch.BPT().EarliestRetained()
+	if err != nil {
+		return BlockRange{}, errors.UnknownError.WithFormat("load earliest retained height: %w", err)
+	}
+	if !ok {
 		return BlockRange{Earliest: 1, Latest: 0}, nil // Empty
 	}
 
@@ -103,11 +111,8 @@ func RetainedBlockRange(partition config.NetworkUrl, batch *database.Batch, dept
 	if err != nil {
 		return BlockRange{}, errors.UnknownError.Wrap(err)
 	}
-
-	// The retained window is the last depth blocks, clipped to what is indexed
-	earliest := indexed.Earliest
-	if indexed.Latest >= depth && indexed.Latest-depth+1 > earliest {
-		earliest = indexed.Latest - depth + 1
+	if earliest < indexed.Earliest {
+		earliest = indexed.Earliest
 	}
 	return BlockRange{Earliest: earliest, Latest: indexed.Latest}, nil
 }
@@ -268,7 +273,7 @@ func BPTRootAt(partition config.NetworkUrl, batch *database.Batch, height uint64
 //     must not reach here.
 //
 // It never returns the current block for a historical request.
-func ResolveHistoricalAccountState(partition config.NetworkUrl, batch *database.Batch, account *database.Account, height, retainedDepth uint64) (*protocol.IndexEntry, error) {
+func ResolveHistoricalAccountState(partition config.NetworkUrl, batch *database.Batch, account *database.Account, height uint64) (*protocol.IndexEntry, error) {
 	_, entry, err := ResolveBlockAtOrBefore(partition, batch, height)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -287,7 +292,7 @@ func ResolveHistoricalAccountState(partition config.NetworkUrl, batch *database.
 			"%v did not exist at block %d; this node's earliest record of it is block %d", account.Url(), height, first)
 	}
 
-	retained, err := RetainedBlockRange(partition, batch, retainedDepth)
+	retained, err := RetainedBlockRange(partition, batch)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

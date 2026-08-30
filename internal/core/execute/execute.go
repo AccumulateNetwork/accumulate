@@ -70,6 +70,7 @@ type Options struct {
 	NewDispatcher          func() Dispatcher  // Synthetic transaction dispatcher factory
 	Sequencer              private.Sequencer  // Synthetic and anchor sequence API service
 	Querier                api.Querier        // Query API service
+	BPTHistoryDepth        uint64             // Minor blocks of superseded BPT state to retain; zero retains none
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.

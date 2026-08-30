@@ -112,7 +112,7 @@ func TestHistoricalResolution_RealLedger(t *testing.T) {
 
 		// Asking about a block before alice existed is refused as NotFound even
 		// with retention enabled, because the account was not there to prove
-		_, err = indexing.ResolveHistoricalAccountState(partition, batch, account, first-1, 1000)
+		_, err = indexing.ResolveHistoricalAccountState(partition, batch, account, first-1)
 		require.Error(t, err)
 		require.Equal(t, errors.NotFound, errors.Code(err))
 		require.Contains(t, err.Error(), "did not exist at block")
@@ -121,7 +121,7 @@ func TestHistoricalResolution_RealLedger(t *testing.T) {
 		// refused with IncompleteChain. No height yields a receipt against the
 		// current root.
 		for height := first; height <= indexed.Latest; height++ {
-			_, err := indexing.ResolveHistoricalAccountState(partition, batch, account, height, 0)
+			_, err := indexing.ResolveHistoricalAccountState(partition, batch, account, height)
 			require.Errorf(t, err, "height %d was answered", height)
 			require.Equalf(t, errors.IncompleteChain, errors.Code(err), "height %d", height)
 		}
@@ -224,5 +224,37 @@ func TestBPTRootAt_RealLedger(t *testing.T) {
 				require.Equalf(t, want, got, "gap resolution returned the wrong root for %d", block-1)
 			}
 		}
+	})
+}
+
+// TestRetention_DefaultIsOff runs a real simulator, with the executor wired to
+// whatever BPTHistoryDepth defaults to, and requires that the node retains
+// nothing and advertises an empty range.
+//
+// This is the end of the config path, asserted rather than assumed: a mistake in
+// the default would silently start writing history on every node that upgrades,
+// which is exactly the surprise the depth-0 default exists to prevent.
+func TestRetention_DefaultIsOff(t *testing.T) {
+	liteKey := acctesting.GenerateKey("lite")
+	lite := acctesting.AcmeLiteAddressStdPriv(liteKey).RootIdentity().JoinPath(ACME)
+
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime),
+	)
+	MakeLiteTokenAccount(t, sim.DatabaseFor(lite), liteKey[32:], AcmeUrl())
+	CreditCredits(t, sim.DatabaseFor(lite), lite.RootIdentity(), 1e9)
+	CreditTokens(t, sim.DatabaseFor(lite), lite, big.NewInt(1e12))
+	sim.StepN(25)
+
+	partition := config.NetworkUrl{URL: PartitionUrl("BVN0")}
+	View(t, sim.DatabaseFor(lite), func(batch *database.Batch) {
+		_, ok, err := batch.BPT().EarliestRetained()
+		require.NoError(t, err)
+		require.False(t, ok, "the default configuration retained BPT history")
+
+		r, err := indexing.RetainedBlockRange(partition, batch)
+		require.NoError(t, err)
+		require.True(t, r.IsEmpty(), "a node retaining nothing advertised %v", r)
 	})
 }

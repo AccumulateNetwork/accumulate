@@ -613,6 +613,7 @@ func (c *CoreConsensusApp) prestart(inst *Instance) error {
 func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Application, error) {
 	setDefaultPtr(&c.EnableDirectDispatch, true)
 	setDefaultPtr(&c.MaxEnvelopesPerBlock, 100)
+	setDefaultPtr(&c.BPTHistoryDepth, 0) // Retain no BPT history unless asked
 
 	store, err := coreConsensusNeedsStorage.Get(inst.services, c)
 	if err != nil {
@@ -636,13 +637,14 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 	}}
 	db := database.New(store, d.logger)
 	execOpts := execute.Options{
-		Logger:    d.logger.With("module", "executor"),
-		Database:  db,
-		Key:       d.privVal.Key.PrivKey.Bytes(),
-		Router:    router,
-		EventBus:  d.eventBus,
-		Sequencer: client.Private(),
-		Querier:   client,
+		Logger:          d.logger.With("module", "executor"),
+		Database:        db,
+		Key:             d.privVal.Key.PrivKey.Bytes(),
+		Router:          router,
+		EventBus:        d.eventBus,
+		Sequencer:       client.Private(),
+		Querier:         client,
+		BPTHistoryDepth: *c.BPTHistoryDepth,
 		Describe: execute.DescribeShim{
 			NetworkType: c.Partition.Type,
 			PartitionId: c.Partition.ID,

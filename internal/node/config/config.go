@@ -158,6 +158,12 @@ type Accumulate struct {
 	DisableDirectDispatch bool   `toml:"disable-direct-dispatch" mapstructure:"disable-direct-dispatch"`
 	MaxEnvelopesPerBlock  int    `toml:"max-envelopes-per-block" mapstructure:"max-envelopes-per-block"`
 
+	// BPTHistoryDepth is how many minor blocks of superseded BPT state to
+	// retain, so the node can answer historical account state queries
+	// (AIP-58). Zero, the default, retains none: no extra records are written
+	// and the node refuses every historical query.
+	BPTHistoryDepth uint64 `toml:"bpt-history-depth" mapstructure:"bpt-history-depth"`
+
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`

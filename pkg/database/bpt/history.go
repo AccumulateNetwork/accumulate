@@ -81,6 +81,60 @@ func (b *BPT) RetainedHeight() (uint64, bool) {
 	return b.history.height, true
 }
 
+// earliestKey addresses the earliest block this node can answer for.
+//
+// It is recorded rather than derived from configuration on purpose. Raising the
+// configured depth does not retroactively create history, and a node that
+// advertised its configured depth would be advertising a range it does not hold
+// — which is worse than advertising nothing, because a client would believe it.
+func (b *BPT) earliestKey() *record.Key {
+	return b.key.Append("History").Append("Earliest")
+}
+
+// EarliestRetained returns the earliest block this node can produce historical
+// state for, and whether it retains any at all.
+func (b *BPT) EarliestRetained() (uint64, bool, error) {
+	raw, ok, err := readRaw(b.store, b.earliestKey())
+	if err != nil {
+		return 0, false, errors.UnknownError.Wrap(err)
+	}
+	if !ok || len(raw) == 0 {
+		return 0, false, nil
+	}
+	if len(raw) != 8 {
+		return 0, false, errors.InternalError.WithFormat("earliest retained height is %d bytes, want 8", len(raw))
+	}
+	return binary.BigEndian.Uint64(raw), true, nil
+}
+
+// noteRetained advances the earliest retained height for a commit at the given
+// height, which is the window floor once the window has filled, and the first
+// height retention ran at until then.
+func (b *BPT) noteRetained(height, depth uint64) error {
+	floor := uint64(0)
+	if height > depth {
+		floor = height - depth
+	}
+
+	cur, ok, err := b.EarliestRetained()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	switch {
+	case !ok:
+		// The first block retention ran at. Nothing before it was kept, so that
+		// is the horizon regardless of what the window would allow.
+		floor = height
+	case floor <= cur:
+		return nil // No change; do not rewrite the record every block
+	}
+
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], floor)
+	err = b.store.PutValue(b.earliestKey(), &rawBytes{data: buf[:], present: true})
+	return errors.UnknownError.Wrap(err)
+}
+
 func (b *BPT) historyKey(nodeKey [32]byte) *record.Key {
 	return b.key.Append("History").Append(nodeKey)
 }
@@ -220,7 +274,11 @@ func (b *BPT) retainSuperseded(nodeKey [32]byte, key *record.Key) error {
 	}
 
 	err = b.store.PutValue(idxKey, &rawBytes{data: encodeHeights(heights), present: true})
-	return errors.UnknownError.Wrap(err)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	return b.noteRetained(h.height, h.depth)
 }
 
 // pruneHeights drops retained heights that have fallen out of the window,

@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -36,6 +37,12 @@ func appendIndexEntries(t testing.TB, c *database.Chain2, entries ...*protocol.I
 // which is precisely what at-or-after resolution exists to handle.
 func makeLedger(t testing.TB, blocks ...uint64) *database.Batch {
 	t.Helper()
+	batch, _ := makeLedgerDB(t, blocks...)
+	return batch
+}
+
+func makeLedgerDB(t testing.TB, blocks ...uint64) (*database.Batch, *database.Database) {
+	t.Helper()
 	db := database.OpenInMemory(nil)
 	batch := db.Begin(true)
 	t.Cleanup(batch.Discard)
@@ -47,7 +54,29 @@ func makeLedger(t testing.TB, blocks ...uint64) *database.Batch {
 			BlockIndex: block,
 		})
 	}
-	return batch
+	return batch, db
+}
+
+// retainFrom makes the ledger actually retain BPT history from the given
+// height, by superseding a node with retention enabled — the same path a block
+// takes. The retained range is read from what was retained, never from a
+// configured depth, so a test cannot fake it by passing a number.
+func retainFrom(t testing.TB, db *database.Database, height, depth uint64) {
+	t.Helper()
+	key := record.NewKey("aip58", "probe")
+
+	b1 := db.Begin(true)
+	defer b1.Discard()
+	var v1, v2 [32]byte
+	v1[0], v2[0] = 1, 2
+	require.NoError(t, b1.BPT().Insert(key, v1[:]))
+	require.NoError(t, b1.Commit())
+
+	b2 := db.Begin(true)
+	defer b2.Discard()
+	b2.SetBPTHistory(height, depth)
+	require.NoError(t, b2.BPT().Insert(key, v2[:]))
+	require.NoError(t, b2.Commit())
 }
 
 // makeAccount records the account as having been updated in the given blocks,
@@ -174,22 +203,37 @@ func TestResolveBlockAtOrBefore_Zero(t *testing.T) {
 }
 
 func TestRetainedBlockRange(t *testing.T) {
-	batch := makeLedger(t, 4, 9, 17)
-
-	// Depth zero — the default, and every node today — retains nothing
-	r, err := RetainedBlockRange(testPartition, batch, 0)
+	// A node that has retained nothing — the default, and every node today —
+	// advertises an empty range
+	batch, db := makeLedgerDB(t, 4, 9, 17)
+	r, err := RetainedBlockRange(testPartition, batch)
 	require.NoError(t, err)
 	require.True(t, r.IsEmpty())
+	require.NoError(t, batch.Commit())
 
-	// A window shorter than the indexed range is clipped to the last depth blocks
-	r, err = RetainedBlockRange(testPartition, batch, 5)
+	// Once it has actually retained, the range starts at what it kept, not at
+	// what it was configured to keep
+	retainFrom(t, db, 14, 5) // floor = 14-5 = 9
+	batch2 := db.Begin(false)
+	t.Cleanup(batch2.Discard)
+	r, err = RetainedBlockRange(testPartition, batch2)
 	require.NoError(t, err)
-	require.Equal(t, BlockRange{Earliest: 13, Latest: 17}, r)
+	require.Equal(t, BlockRange{Earliest: 14, Latest: 17}, r,
+		"the first retaining block is the horizon; nothing before it was kept")
+}
 
-	// A window longer than the indexed range is clipped to what is indexed
-	r, err = RetainedBlockRange(testPartition, batch, 1000)
+// TestRetainedBlockRange_ClippedToIndexed proves the advertised range never
+// claims a block the ledger has not indexed.
+func TestRetainedBlockRange_ClippedToIndexed(t *testing.T) {
+	batch, db := makeLedgerDB(t, 40, 90, 170)
+	require.NoError(t, batch.Commit())
+	retainFrom(t, db, 2, 1000)
+	batch2 := db.Begin(false)
+	t.Cleanup(batch2.Discard)
+
+	r, err := RetainedBlockRange(testPartition, batch2)
 	require.NoError(t, err)
-	require.Equal(t, BlockRange{Earliest: 4, Latest: 17}, r)
+	require.Equal(t, BlockRange{Earliest: 40, Latest: 170}, r)
 }
 
 func TestAccountFirstIndexedBlock(t *testing.T) {
@@ -224,7 +268,7 @@ func TestResolveHistoricalAccountState_NotRetained(t *testing.T) {
 	batch := makeLedger(t, 4, 9, 17)
 	account := makeAccount(t, batch, protocol.AccountUrl("alice"), 4, 9, 17)
 
-	_, err := ResolveHistoricalAccountState(testPartition, batch, account, 9, 0)
+	_, err := ResolveHistoricalAccountState(testPartition, batch, account, 9)
 	require.Error(t, err)
 	require.Equal(t, errors.IncompleteChain, errors.Code(err))
 	require.Contains(t, err.Error(), "no BPT history retained for block 9")
@@ -236,11 +280,16 @@ func TestResolveHistoricalAccountState_NotRetained(t *testing.T) {
 // returned rather than a refusal. Nothing sets a non-zero depth today; this
 // exercises the machinery Phase 4 will supply state for.
 func TestResolveHistoricalAccountState_Retained(t *testing.T) {
-	batch := makeLedger(t, 4, 9, 17)
-	account := makeAccount(t, batch, protocol.AccountUrl("alice"), 4, 9, 17)
+	batch, db := makeLedgerDB(t, 4, 9, 17)
+	makeAccount(t, batch, protocol.AccountUrl("alice"), 4, 9, 17)
+	require.NoError(t, batch.Commit())
+	retainFrom(t, db, 4, 1000)
 
-	// Requesting 5 resolves back to 4, which the window covers
-	entry, err := ResolveHistoricalAccountState(testPartition, batch, account, 5, 1000)
+	b := db.Begin(false)
+	t.Cleanup(b.Discard)
+
+	// Requesting 5 resolves back to 4, which the retained window covers
+	entry, err := ResolveHistoricalAccountState(testPartition, b, b.Account(protocol.AccountUrl("alice")), 5)
 	require.NoError(t, err)
 	require.Equal(t, uint64(4), entry.BlockIndex)
 }
@@ -253,7 +302,7 @@ func TestResolveHistoricalAccountState_AccountAbsent(t *testing.T) {
 	// alice first appears at block 17
 	account := makeAccount(t, batch, protocol.AccountUrl("alice"), 17)
 
-	_, err := ResolveHistoricalAccountState(testPartition, batch, account, 9, 1000)
+	_, err := ResolveHistoricalAccountState(testPartition, batch, account, 9)
 	require.Error(t, err)
 	require.Equal(t, errors.NotFound, errors.Code(err))
 	require.Contains(t, err.Error(), "did not exist at block 9")
@@ -264,26 +313,40 @@ func TestResolveHistoricalAccountState_AccountAbsent(t *testing.T) {
 // distinguishable by status code alone, which is what lets a client branch
 // without parsing prose.
 func TestResolveHistoricalAccountState_Refusals(t *testing.T) {
-	batch := makeLedger(t, 4, 9, 17)
-	absent := makeAccount(t, batch, protocol.AccountUrl("absent"), 17)
-	present := makeAccount(t, batch, protocol.AccountUrl("present"), 4, 9, 17)
+	batch, db := makeLedgerDB(t, 4, 9, 17)
+	makeAccount(t, batch, protocol.AccountUrl("absent"), 17)
+	makeAccount(t, batch, protocol.AccountUrl("present"), 4, 9, 17)
+	require.NoError(t, batch.Commit())
+
+	// Retain from block 4, so the retained-range refusal is out of the way for
+	// every case except the one that tests it
+	retainFrom(t, db, 4, 1000)
 
 	cases := []struct {
 		name    string
-		account *database.Account
+		account string
 		height  uint64
-		depth   uint64
+		retain  bool
 		code    errors.Status
 	}{
-		{"before genesis", present, 2, 1000, errors.NotFound},
-		{"not reached", present, 99, 1000, errors.NotFound},
-		{"account absent", absent, 9, 1000, errors.NotFound},
-		{"beyond retained range", present, 9, 0, errors.IncompleteChain},
-		{"zero height", present, 0, 1000, errors.BadRequest},
+		{"before genesis", "present", 2, true, errors.NotFound},
+		{"not reached", "present", 99, true, errors.NotFound},
+		{"account absent", "absent", 9, true, errors.NotFound},
+		{"beyond retained range", "present", 9, false, errors.IncompleteChain},
+		{"zero height", "present", 0, true, errors.BadRequest},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := ResolveHistoricalAccountState(testPartition, batch, c.account, c.height, c.depth)
+			// The no-retention case needs a ledger that retained nothing, which
+			// is a different database — retention cannot be un-done
+			b := db.Begin(false)
+			defer b.Discard()
+			if !c.retain {
+				b2, _ := makeLedgerDB(t, 4, 9, 17)
+				makeAccount(t, b2, protocol.AccountUrl(c.account), 4, 9, 17)
+				b = b2
+			}
+			_, err := ResolveHistoricalAccountState(testPartition, b, b.Account(protocol.AccountUrl(c.account)), c.height)
 			require.Error(t, err)
 			require.Equal(t, c.code, errors.Code(err))
 		})
@@ -299,7 +362,7 @@ func TestResolveHistoricalAccountState_NeverCurrent(t *testing.T) {
 	account := makeAccount(t, batch, protocol.AccountUrl("alice"), 4, 9, 17)
 
 	for height := uint64(1); height <= 20; height++ {
-		_, err := ResolveHistoricalAccountState(testPartition, batch, account, height, 0)
+		_, err := ResolveHistoricalAccountState(testPartition, batch, account, height)
 		require.Errorf(t, err, "height %d was answered", height)
 	}
 }
