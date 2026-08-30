@@ -68,6 +68,21 @@ ConsensusStatus:
       description: counts anchors recovered by healing
       type: uint
       optional: true
+    - name: RetainedBlocks
+      description: is the range of minor blocks this node can produce historical account state proofs for; absent means none
+      type: BlockRange
+      marshal-as: reference
+      pointer: true
+      optional: true
+
+BlockRange:
+  fields:
+    - name: Earliest
+      description: is the lowest block in the range
+      type: uint
+    - name: Latest
+      description: is the highest block in the range
+      type: uint
 
 NetworkStatus:
   fields:

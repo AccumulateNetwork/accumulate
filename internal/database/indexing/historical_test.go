@@ -47,12 +47,21 @@ func makeLedgerDB(t testing.TB, blocks ...uint64) (*database.Batch, *database.Da
 	batch := db.Begin(true)
 	t.Cleanup(batch.Discard)
 
-	rootIndex := batch.Account(testPartition.Ledger()).RootChain().Index()
+	led := batch.Account(testPartition.Ledger())
+	rootIndex := led.RootChain().Index()
 	for i, block := range blocks {
 		appendIndexEntries(t, rootIndex, &protocol.IndexEntry{
 			Source:     uint64(10 * i),
 			BlockIndex: block,
 		})
+		// A real ledger's BptChain runs exactly one entry behind the root index
+		// chain, because it records the PREVIOUS block's state hash. Fixtures
+		// that omit it look like a node with no historical roots at all.
+		if i > 0 {
+			var root [32]byte
+			root[0] = byte(i)
+			require.NoError(t, led.BptChain().Inner().AddEntry(root[:], false))
+		}
 	}
 	return batch, db
 }
@@ -205,7 +214,7 @@ func TestResolveBlockAtOrBefore_Zero(t *testing.T) {
 func TestRetainedBlockRange(t *testing.T) {
 	// A node that has retained nothing — the default, and every node today —
 	// advertises an empty range
-	batch, db := makeLedgerDB(t, 4, 9, 17)
+	batch, db := makeLedgerDB(t, 4, 9, 17, 25, 33)
 	r, err := RetainedBlockRange(testPartition, batch)
 	require.NoError(t, err)
 	require.True(t, r.IsEmpty())
@@ -213,13 +222,17 @@ func TestRetainedBlockRange(t *testing.T) {
 
 	// Once it has actually retained, the range starts at what it kept, not at
 	// what it was configured to keep
-	retainFrom(t, db, 14, 5) // floor = 14-5 = 9
+	retainFrom(t, db, 8, 1000)
 	batch2 := db.Begin(false)
 	t.Cleanup(batch2.Discard)
 	r, err = RetainedBlockRange(testPartition, batch2)
 	require.NoError(t, err)
-	require.Equal(t, BlockRange{Earliest: 14, Latest: 17}, r,
-		"the first retaining block is the horizon; nothing before it was kept")
+
+	// Earliest is rounded UP to block 9, the first indexed block at or after the
+	// horizon of 8: a request for 8 would resolve back to block 4, below the
+	// horizon, and be refused. Latest is 25, not 33, because the BptChain runs
+	// one entry behind and block 33's root is not recorded yet.
+	require.Equal(t, BlockRange{Earliest: 9, Latest: 25}, r)
 }
 
 // TestRetainedBlockRange_ClippedToIndexed proves the advertised range never
@@ -233,7 +246,7 @@ func TestRetainedBlockRange_ClippedToIndexed(t *testing.T) {
 
 	r, err := RetainedBlockRange(testPartition, batch2)
 	require.NoError(t, err)
-	require.Equal(t, BlockRange{Earliest: 40, Latest: 170}, r)
+	require.Equal(t, BlockRange{Earliest: 40, Latest: 90}, r)
 }
 
 func TestAccountFirstIndexedBlock(t *testing.T) {

@@ -120,3 +120,73 @@ func TestHistoricalStateProof_VerifiesOffline(t *testing.T) {
 		t.Logf("verified %d offline proofs, terminating at %x", checked, current[:6])
 	})
 }
+
+// TestRetainedRange_IsPredictive is what makes advertising the range worth
+// anything: a client that reads it must be able to tell which heights the node
+// will answer, without asking.
+//
+// Every height inside the range must produce a proof, and every height below it
+// must be refused. A range that over-promises is worse than no range at all,
+// because a client would plan around it.
+func TestRetainedRange_IsPredictive(t *testing.T) {
+	liteKey := acctesting.GenerateKey(t.Name(), "lite")
+	lite := acctesting.AcmeLiteAddressStdPriv(liteKey).RootIdentity().JoinPath(ACME)
+
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime),
+		simulator.BPTHistoryDepth(10_000),
+	)
+	MakeLiteTokenAccount(t, sim.DatabaseFor(lite), liteKey[32:], AcmeUrl())
+	CreditCredits(t, sim.DatabaseFor(lite), lite.RootIdentity(), 1e9)
+	CreditTokens(t, sim.DatabaseFor(lite), lite, big.NewInt(1e12))
+	sim.StepN(5)
+
+	partition := config.NetworkUrl{URL: PartitionUrl("BVN0")}
+
+	for i := 0; i < 12; i++ {
+		sim.BuildAndSubmitTxnSuccessfully(
+			build.Transaction().For(lite).
+				AddCredits().Spend(1).To(lite.RootIdentity()).WithOracle(InitialAcmeOracle).
+				SignWith(lite.RootIdentity()).Version(1).Timestamp(uint64(i + 1)).PrivateKey(liteKey))
+		sim.StepN(3)
+	}
+
+	View(t, sim.DatabaseFor(lite), func(batch *database.Batch) {
+		advertised, err := indexing.RetainedBlockRange(partition, batch)
+		require.NoError(t, err)
+		require.False(t, advertised.IsEmpty())
+		t.Logf("advertised retained range %v", advertised)
+
+		account := batch.Account(lite.RootIdentity())
+		first, ok, err := indexing.AccountFirstIndexedBlock(account)
+		require.NoError(t, err)
+		require.True(t, ok)
+
+		// The range says what the NODE retains, not what any one account can be
+		// proven for. An account younger than the range is still refused below
+		// its own first block, and correctly so — the two refusals are
+		// different claims and the test must not conflate them.
+		from := advertised.Earliest
+		if first > from {
+			from = first
+		}
+		require.Less(t, from, advertised.Latest, "no overlap; the test would prove nothing")
+
+		inside, below := 0, 0
+		for h := uint64(1); h <= advertised.Latest+3; h++ {
+			_, err := indexing.HistoricalAccountStateProof(partition, batch, account, h)
+			switch {
+			case h >= from && h <= advertised.Latest:
+				require.NoErrorf(t, err, "height %d is advertised and the account existed, but it was refused", h)
+				inside++
+			case h < advertised.Earliest:
+				require.Errorf(t, err, "height %d is below the advertised range but was answered", h)
+				below++
+			}
+		}
+		require.Greater(t, inside, 5, "only %d heights inside the range were checked", inside)
+		require.Greater(t, below, 0, "no heights below the range were checked")
+		t.Logf("%d heights inside the range all answered; %d below all refused", inside, below)
+	})
+}

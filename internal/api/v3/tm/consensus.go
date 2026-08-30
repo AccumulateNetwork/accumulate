@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -104,6 +105,23 @@ func (s *ConsensusService) ConsensusStatus(ctx context.Context, opts api.Consens
 				return errors.UnknownError.WithFormat("load root anchor chain for the DN: %w", err)
 			}
 			res.LastBlock.DirectoryAnchorHeight = uint64(c.Height())
+
+			// Advertise what this node can prove about the past. The range comes
+			// from what was actually retained and is predictive: every height
+			// inside it is answerable and every height below it is refused. It is
+			// left nil when the node retains nothing, which is the default, and a
+			// client cannot distinguish that from a node too old to report it —
+			// which does not matter, because the safe action is the same.
+			retained, err := indexing.RetainedBlockRange(s.partition, batch)
+			if err != nil {
+				return errors.UnknownError.WithFormat("load retained block range: %w", err)
+			}
+			if !retained.IsEmpty() {
+				res.RetainedBlocks = &api.BlockRange{
+					Earliest: retained.Earliest,
+					Latest:   retained.Latest,
+				}
+			}
 			return nil
 		})
 		if err != nil {

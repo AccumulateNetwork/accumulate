@@ -90,31 +90,71 @@ func IndexedBlockRange(partition config.NetworkUrl, batch *database.Batch) (Bloc
 // RetainedBlockRange returns the range of minor blocks for which this node can
 // produce a historical BPT membership receipt.
 //
-// The earliest end is read from what the node ACTUALLY retained, not from its
-// configured depth. Raising the depth does not retroactively create history, and
-// a node advertising a range it does not hold is worse than one advertising
-// nothing — a client would believe it. The two cannot drift because there is
-// only one source: the BPT records the horizon as it retains.
+// The range is PREDICTIVE: every height inside it is answerable and every height
+// below it is refused. That is the whole value of advertising it, so both ends
+// are computed from what will actually be served rather than from what was
+// retained, which is not the same thing.
+//
+//   - The earliest end is read from what the node ACTUALLY retained, never from
+//     its configured depth — raising the depth does not retroactively create
+//     history — and is then rounded UP to the first indexed block at or after
+//     it. A height resolves backward to the last state-changing block at or
+//     before it, so a height sitting between the retention horizon and the next
+//     state-changing block resolves below the horizon and is refused. Advertising
+//     it would over-promise by up to one inter-block gap.
+//   - The latest end is the newest block whose root is on the ledger's BptChain,
+//     which is one entry SHORTER than the root index chain: BptChain records the
+//     previous block's state hash, so the newest indexed block's root lands only
+//     when the next state-changing block commits. Advertising the newest indexed
+//     block would over-promise by exactly one.
 //
 // An empty range means the node retains no history, which is every node running
 // the default configuration.
 func RetainedBlockRange(partition config.NetworkUrl, batch *database.Batch) (BlockRange, error) {
-	earliest, ok, err := batch.BPT().EarliestRetained()
+	empty := BlockRange{Earliest: 1, Latest: 0}
+
+	horizon, ok, err := batch.BPT().EarliestRetained()
 	if err != nil {
 		return BlockRange{}, errors.UnknownError.WithFormat("load earliest retained height: %w", err)
 	}
 	if !ok {
-		return BlockRange{Earliest: 1, Latest: 0}, nil // Empty
+		return empty, nil
 	}
 
-	indexed, err := IndexedBlockRange(partition, batch)
+	rootIndexChain, err := batch.Account(partition.Ledger()).RootChain().Index().Get()
 	if err != nil {
-		return BlockRange{}, errors.UnknownError.Wrap(err)
+		return BlockRange{}, errors.UnknownError.WithFormat("load minor root index chain: %w", err)
 	}
-	if earliest < indexed.Earliest {
-		earliest = indexed.Earliest
+	if rootIndexChain.Height() == 0 {
+		return empty, nil
 	}
-	return BlockRange{Earliest: earliest, Latest: indexed.Latest}, nil
+
+	bptChain, err := batch.Account(partition.Ledger()).BptChain().Get()
+	if err != nil {
+		return BlockRange{}, errors.UnknownError.WithFormat("load bpt chain: %w", err)
+	}
+	if bptChain.Height() == 0 {
+		return empty, nil
+	}
+
+	// The newest block whose root is recorded
+	last := new(protocol.IndexEntry)
+	err = rootIndexChain.EntryAs(bptChain.Height()-1, last)
+	if err != nil {
+		return BlockRange{}, errors.UnknownError.WithFormat("load minor root index chain entry %d: %w", bptChain.Height()-1, err)
+	}
+
+	// The first indexed block at or after the retention horizon
+	_, first, err := SearchIndexChain(rootIndexChain, uint64(rootIndexChain.Height())-1, MatchAfter, SearchIndexChainByBlock(horizon))
+	if err != nil {
+		// Every indexed block predates the horizon, so nothing is answerable
+		return empty, nil
+	}
+
+	if first.BlockIndex > last.BlockIndex {
+		return empty, nil
+	}
+	return BlockRange{Earliest: first.BlockIndex, Latest: last.BlockIndex}, nil
 }
 
 // ResolveBlockAtOrBefore resolves a requested minor block height to the last
