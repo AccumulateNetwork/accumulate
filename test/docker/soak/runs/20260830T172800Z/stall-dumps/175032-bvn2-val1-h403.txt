@@ -1,0 +1,2939 @@
+goroutine 1400465 [running]:
+runtime/pprof.writeGoroutineStacks({0x280a1a0, 0xc003cc21e0})
+	runtime/pprof/pprof.go:756 +0x6b
+runtime/pprof.writeGoroutine({0x280a1a0?, 0xc003cc21e0?}, 0x30?)
+	runtime/pprof/pprof.go:745 +0x25
+runtime/pprof.(*Profile).WriteTo(0x3b711b0?, {0x280a1a0?, 0xc003cc21e0?}, 0xc?)
+	runtime/pprof/pprof.go:371 +0x14b
+net/http/pprof.handler.ServeHTTP({0xc045275c61, 0x9}, {0x281cfd0, 0xc003cc21e0}, 0xc03a552640)
+	net/http/pprof/pprof.go:272 +0x52a
+net/http/pprof.Index({0x281cfd0, 0xc003cc21e0}, 0xc03a552640?)
+	net/http/pprof/pprof.go:389 +0xda
+net/http.HandlerFunc.ServeHTTP(0x3bb7dc0?, {0x281cfd0?, 0xc003cc21e0?}, 0x7ce356?)
+	net/http/server.go:2322 +0x29
+net/http.(*ServeMux).ServeHTTP(0x47e299?, {0x281cfd0, 0xc003cc21e0}, 0xc03a552640)
+	net/http/server.go:2861 +0x1c7
+net/http.serverHandler.ServeHTTP({0xc03a507a00?}, {0x281cfd0?, 0xc003cc21e0?}, 0x1?)
+	net/http/server.go:3340 +0x8e
+net/http.(*conn).serve(0xc00c37af30, {0x2823b48, 0xc000658120})
+	net/http/server.go:2103 +0x6a5
+created by net/http.(*Server).Serve in goroutine 120
+	net/http/server.go:3493 +0x485
+
+goroutine 1 [chan receive, 21 minutes]:
+main.runCfg(0xc000532ea0, 0x0)
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/main.go:107 +0x205
+main.run2(0xc0003cef00?, {0xc0003e6020, 0x1, 0x2168c9b?})
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/main.go:79 +0xb4
+github.com/spf13/cobra.(*Command).execute(0x3b9ff00, {0xc0000503d0, 0x2, 0x2})
+	github.com/spf13/cobra@v1.8.1/command.go:989 +0xb1b
+github.com/spf13/cobra.(*Command).ExecuteC(0x3b9ff00)
+	github.com/spf13/cobra@v1.8.1/command.go:1117 +0x44f
+github.com/spf13/cobra.(*Command).Execute(...)
+	github.com/spf13/cobra@v1.8.1/command.go:1041
+main.main()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/main.go:69 +0x1a
+
+goroutine 6 [select, 21 minutes]:
+github.com/ipfs/go-log/writer.(*MirrorWriter).logRoutine(0xc000050540)
+	github.com/ipfs/go-log@v1.0.5/writer/writer.go:71 +0x105
+created by github.com/ipfs/go-log/writer.NewMirrorWriter in goroutine 1
+	github.com/ipfs/go-log@v1.0.5/writer/writer.go:36 +0xbf
+
+goroutine 7 [select]:
+github.com/golang/glog.(*fileSink).flushDaemon(0x3bb79d8)
+	github.com/golang/glog@v1.2.2/glog_file.go:349 +0xb4
+created by github.com/golang/glog.init.1 in goroutine 1
+	github.com/golang/glog@v1.2.2/glog_file.go:164 +0x12e
+
+goroutine 8 [select]:
+go.opencensus.io/stats/view.(*worker).start(0xc000430300)
+	go.opencensus.io@v0.24.0/stats/view/worker.go:292 +0x9f
+created by go.opencensus.io/stats/view.init.0 in goroutine 1
+	go.opencensus.io@v0.24.0/stats/view/worker.go:34 +0x8d
+
+goroutine 118 [syscall, 21 minutes]:
+os/signal.signal_recv()
+	runtime/sigqueue.go:152 +0x29
+os/signal.loop()
+	os/signal/signal_unix.go:23 +0x13
+created by os/signal.Notify.func1.1 in goroutine 1
+	os/signal/signal.go:152 +0x1f
+
+goroutine 119 [select, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/internal/util/cmd.ContextForMainProcess.func1()
+	gitlab.com/accumulatenetwork/accumulate/internal/util/cmd/context.go:32 +0x6b
+created by gitlab.com/accumulatenetwork/accumulate/internal/util/cmd.ContextForMainProcess in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/internal/util/cmd/context.go:31 +0xee
+
+goroutine 120 [IO wait]:
+internal/poll.runtime_pollWait(0x744e40266a00, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc0003f8500?, 0x900000036?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0xc0003f8500)
+	internal/poll/fd_unix.go:613 +0x28c
+net.(*netFD).accept(0xc0003f8500)
+	net/fd_unix.go:161 +0x29
+net.(*TCPListener).accept(0xc0003c8ac0)
+	net/tcpsock_posix.go:159 +0x1b
+net.(*TCPListener).Accept(0xc0003c8ac0)
+	net/tcpsock.go:380 +0x30
+net/http.(*Server).Serve(0xc0003cf500, {0x281d2d0, 0xc0003c8ac0})
+	net/http/server.go:3463 +0x30c
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instrumentation).startPprof.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instrumentation.go:81 +0x25
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).run.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:279 +0x4e
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).run in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:277 +0x74
+
+goroutine 121 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 125 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 126 [IO wait]:
+internal/poll.runtime_pollWait(0x744e40266800, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc0003f8580?, 0x900000036?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0xc0003f8580)
+	internal/poll/fd_unix.go:613 +0x28c
+net.(*netFD).accept(0xc0003f8580)
+	net/fd_unix.go:161 +0x29
+net.(*TCPListener).accept(0xc0003c8d00)
+	net/tcpsock_posix.go:159 +0x1b
+net.(*TCPListener).Accept(0xc0003c8d00)
+	net/tcpsock.go:380 +0x30
+gitlab.com/accumulatenetwork/accumulate/internal/node/daemon.(*RateLimitedListener).Accept(0xc0003b5e48)
+	gitlab.com/accumulatenetwork/accumulate/internal/node/daemon/rate_limit.go:22 +0x37
+net/http.(*Server).Serve(0xc0003cf600, {0x281d3d0, 0xc0003b5e48})
+	net/http/server.go:3463 +0x30c
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*HttpListener).serveHTTP.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/http.go:243 +0x56
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).run.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:279 +0x4e
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).run in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:277 +0x74
+
+goroutine 127 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 128 [sleep, 1 minutes]:
+time.Sleep(0x8bb2c97000)
+	runtime/time.go:363 +0x165
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).checkDiskSpace(0xc0003fca20)
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:326 +0xff
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).StartFiltered in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:159 +0x1bb
+
+goroutine 142 [select]:
+github.com/libp2p/go-libp2p/p2p/host/resource-manager.(*resourceManager).background(0xc0003ba900)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/resource-manager/rcmgr.go:371 +0x105
+created by github.com/libp2p/go-libp2p/p2p/host/resource-manager.NewResourceManager in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/resource-manager/rcmgr.go:184 +0x646
+
+goroutine 143 [select, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem.(*memoryAddrBook).background(0xc000182d08, {0x2823b80, 0xc00073db30})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/peerstore/pstoremem/addr_book.go:116 +0x117
+created by github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem.NewAddrBook in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/peerstore/pstoremem/addr_book.go:96 +0x26a
+
+goroutine 144 [select]:
+github.com/libp2p/go-libp2p/p2p/net/connmgr.(*decayer).process(0xc000118850)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/connmgr/decay.go:164 +0x22c
+created by github.com/libp2p/go-libp2p/p2p/net/connmgr.NewDecayer in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/connmgr/decay.go:96 +0x245
+
+goroutine 145 [select]:
+github.com/libp2p/go-libp2p/p2p/net/connmgr.(*BasicConnMgr).background(0xc000610008)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/connmgr/connmgr.go:359 +0x126
+created by github.com/libp2p/go-libp2p/p2p/net/connmgr.NewConnManager in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/connmgr/connmgr.go:153 +0x325
+
+goroutine 162 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*DialBackoff).background(0xc000441590, {0x2823b80, 0xc000618460})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_dial.go:127 +0xcd
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*DialBackoff).init in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_dial.go:120 +0xac
+
+goroutine 185 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/protocol/identify.(*ObservedAddrManager).worker(0xc0003cdc70)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/protocol/identify/obsaddr.go:258 +0x1ca
+created by github.com/libp2p/go-libp2p/p2p/protocol/identify.NewObservedAddrManager in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/protocol/identify/obsaddr.go:159 +0x416
+
+goroutine 191 [select, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/protocol/identify.(*idService).loop.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/protocol/identify/id.go:258 +0xdf
+created by github.com/libp2p/go-libp2p/p2p/protocol/identify.(*idService).loop in goroutine 249
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/protocol/identify/id.go:254 +0x374
+
+goroutine 16 [select]:
+github.com/libp2p/go-libp2p/p2p/protocol/holepunch.(*Service).watchForPublicAddr(0xc0003f8000)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/protocol/holepunch/svc.go:115 +0x235
+created by github.com/libp2p/go-libp2p/p2p/protocol/holepunch.NewService in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/protocol/holepunch/svc.go:90 +0x216
+
+goroutine 193 [select]:
+github.com/libp2p/go-libp2p/p2p/transport/quicreuse.(*reuse).gc(0xc000763540)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/reuse.go:164 +0xfc
+created by github.com/libp2p/go-libp2p/p2p/transport/quicreuse.newReuse in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/reuse.go:139 +0x145
+
+goroutine 194 [select]:
+github.com/libp2p/go-libp2p/p2p/transport/quicreuse.(*reuse).gc(0xc000763590)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/reuse.go:164 +0xfc
+created by github.com/libp2p/go-libp2p/p2p/transport/quicreuse.newReuse in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/reuse.go:139 +0x145
+
+goroutine 195 [select, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client.(*Listener).Accept(0xc000214c60)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/protocol/circuitv2/client/listen.go:21 +0x131
+github.com/libp2p/go-libp2p/p2p/net/upgrader.(*listener).handleIncoming(0xc000772380)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/listener.go:75 +0xe3
+created by github.com/libp2p/go-libp2p/p2p/net/upgrader.(*upgrader).UpgradeListener in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/upgrader.go:119 +0x1c5
+
+goroutine 196 [chan receive, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/net/upgrader.(*listener).Accept(0xc000772380)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/listener.go:163 +0x3a
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr.func2()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:129 +0xee
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:107 +0x20d
+
+goroutine 197 [IO wait, 21 minutes]:
+internal/poll.runtime_pollWait(0x744e40266600, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc0002ce300?, 0x1?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0xc0002ce300)
+	internal/poll/fd_unix.go:613 +0x28c
+net.(*netFD).accept(0xc0002ce300)
+	net/fd_unix.go:161 +0x29
+net.(*TCPListener).accept(0xc0003c9b80)
+	net/tcpsock_posix.go:159 +0x1b
+net.(*TCPListener).Accept(0xc0003c9b80)
+	net/tcpsock.go:380 +0x30
+github.com/multiformats/go-multiaddr/net.(*maListener).Accept(0x1?)
+	github.com/multiformats/go-multiaddr@v0.12.2/net/net.go:243 +0x27
+github.com/libp2p/go-libp2p/p2p/net/upgrader.(*listener).handleIncoming(0xc000772460)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/listener.go:75 +0xe3
+created by github.com/libp2p/go-libp2p/p2p/net/upgrader.(*upgrader).UpgradeListener in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/upgrader.go:119 +0x1c5
+
+goroutine 198 [chan receive, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/net/upgrader.(*listener).Accept(0xc000772460)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/listener.go:163 +0x3a
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr.func2()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:129 +0xee
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:107 +0x20d
+
+goroutine 199 [IO wait, 21 minutes]:
+internal/poll.runtime_pollWait(0x744e40266400, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc0002ce380?, 0x0?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).RawRead(0xc0002ce380, 0xc00035e000)
+	internal/poll/fd_unix.go:710 +0x125
+net.(*rawConn).Read(0xc000768e08, 0xc0004fc200?)
+	net/rawconn.go:44 +0x36
+golang.org/x/net/internal/socket.(*syscaller).recvmmsg(0xc0001ee438, {0x281d360?, 0xc000768e08?}, {0xc0004fc200?, 0x2581ce8?, 0x0?}, 0x400c00075abd0?)
+	golang.org/x/net@v0.47.0/internal/socket/mmsghdr_unix.go:120 +0x70
+golang.org/x/net/internal/socket.(*Conn).recvMsgs(0xc0005b1700, {0xc00052e008, 0x8, 0x8}, 0x0)
+	golang.org/x/net@v0.47.0/internal/socket/rawconn_mmsg.go:24 +0x165
+golang.org/x/net/internal/socket.(*Conn).RecvMsgs(...)
+	golang.org/x/net@v0.47.0/internal/socket/socket.go:267
+golang.org/x/net/ipv4.(*payloadHandler).ReadBatch(0xc000763be0, {0xc00052e008?, 0x0?, 0x0?}, 0x0?)
+	golang.org/x/net@v0.47.0/ipv4/batch.go:80 +0x57
+github.com/quic-go/quic-go.(*oobConn).ReadPacket(0xc0003fdc20)
+	github.com/quic-go/quic-go@v0.42.0/sys_conn_oob.go:174 +0x702
+github.com/quic-go/quic-go.(*Transport).listen(0xc000478dc0, {0x2833668, 0xc0003fdc20})
+	github.com/quic-go/quic-go@v0.42.0/transport.go:354 +0x129
+created by github.com/quic-go/quic-go.(*Transport).init.func1 in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/transport.go:255 +0x445
+
+goroutine 200 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*Transport).runSendQueue(0xc000478dc0)
+	github.com/quic-go/quic-go@v0.42.0/transport.go:280 +0x107
+created by github.com/quic-go/quic-go.(*Transport).init.func1 in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/transport.go:256 +0x485
+
+goroutine 201 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*baseServer).run(0xc000624300)
+	github.com/quic-go/quic-go@v0.42.0/server.go:285 +0x110
+created by github.com/quic-go/quic-go.newServer in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/server.go:271 +0x4b6
+
+goroutine 202 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*baseServer).runSendQueue(0xc000624300)
+	github.com/quic-go/quic-go@v0.42.0/server.go:298 +0x1bf
+created by github.com/quic-go/quic-go.newServer in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/server.go:272 +0x4f6
+
+goroutine 203 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*baseServer).accept(0xc000624300, {0x28238a8, 0x3bdac20})
+	github.com/quic-go/quic-go@v0.42.0/server.go:320 +0x9d
+github.com/quic-go/quic-go.(*baseServer).Accept(...)
+	github.com/quic-go/quic-go@v0.42.0/server.go:316
+github.com/quic-go/quic-go.(*Listener).Accept(0x46ad52?, {0x28238a8?, 0x3bdac20?})
+	github.com/quic-go/quic-go@v0.42.0/server.go:127 +0x25
+github.com/libp2p/go-libp2p/p2p/transport/quicreuse.(*quicListener).Run(0xc000763b80)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/listener.go:136 +0xc5
+created by github.com/libp2p/go-libp2p/p2p/transport/quicreuse.newQuicListener in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/listener.go:79 +0x2cc
+
+goroutine 204 [select, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/transport/quicreuse.(*listener).Accept(0xc000763c20, {0x28238a8, 0x3bdac20})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/listener.go:200 +0x96
+github.com/libp2p/go-libp2p/p2p/transport/quic.(*listener).Accept(0xc000763c70)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quic/listener.go:50 +0x42
+github.com/libp2p/go-libp2p/p2p/transport/quic.(*acceptLoopRunner).innerAccept(0xc0005b17c0, 0xc000763c70, 0x1, 0x1?)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quic/virtuallistener.go:112 +0xbe
+github.com/libp2p/go-libp2p/p2p/transport/quic.(*acceptLoopRunner).Accept(0xc0005b17c0, 0xc000763c70, 0x1, 0xc000772c40)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quic/virtuallistener.go:159 +0xd2
+github.com/libp2p/go-libp2p/p2p/transport/quic.(*virtualListener).Accept(0x0?)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quic/virtuallistener.go:37 +0x25
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr.func2()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:129 +0xee
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:107 +0x20d
+
+goroutine 205 [select, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/transport/webtransport.(*certManager).background.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/webtransport/cert_manager.go:138 +0x20b
+created by github.com/libp2p/go-libp2p/p2p/transport/webtransport.(*certManager).background in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/webtransport/cert_manager.go:133 +0x285
+
+goroutine 206 [IO wait, 21 minutes]:
+internal/poll.runtime_pollWait(0x744e40266200, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc0002ce800?, 0x0?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).RawRead(0xc0002ce800, 0xc00035e020)
+	internal/poll/fd_unix.go:710 +0x125
+net.(*rawConn).Read(0xc000768e80, 0xc0004fc400?)
+	net/rawconn.go:44 +0x36
+golang.org/x/net/internal/socket.(*syscaller).recvmmsg(0xc0001ee4c8, {0x281d360?, 0xc000768e80?}, {0xc0004fc400?, 0x2581ce8?, 0x0?}, 0x4000000000000?)
+	golang.org/x/net@v0.47.0/internal/socket/mmsghdr_unix.go:120 +0x70
+golang.org/x/net/internal/socket.(*Conn).recvMsgs(0xc0005b1dc0, {0xc00052e308, 0x8, 0x8}, 0x0)
+	golang.org/x/net@v0.47.0/internal/socket/rawconn_mmsg.go:24 +0x165
+golang.org/x/net/internal/socket.(*Conn).RecvMsgs(...)
+	golang.org/x/net@v0.47.0/internal/socket/socket.go:267
+golang.org/x/net/ipv4.(*payloadHandler).ReadBatch(0xc000763dc0, {0xc00052e308?, 0x0?, 0x0?}, 0x0?)
+	golang.org/x/net@v0.47.0/ipv4/batch.go:80 +0x57
+github.com/quic-go/quic-go.(*oobConn).ReadPacket(0xc0003fdef0)
+	github.com/quic-go/quic-go@v0.42.0/sys_conn_oob.go:174 +0x702
+github.com/quic-go/quic-go.(*Transport).listen(0xc000479040, {0x2833668, 0xc0003fdef0})
+	github.com/quic-go/quic-go@v0.42.0/transport.go:354 +0x129
+created by github.com/quic-go/quic-go.(*Transport).init.func1 in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/transport.go:255 +0x445
+
+goroutine 207 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*Transport).runSendQueue(0xc000479040)
+	github.com/quic-go/quic-go@v0.42.0/transport.go:280 +0x107
+created by github.com/quic-go/quic-go.(*Transport).init.func1 in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/transport.go:256 +0x485
+
+goroutine 208 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*baseServer).run(0xc000624600)
+	github.com/quic-go/quic-go@v0.42.0/server.go:285 +0x110
+created by github.com/quic-go/quic-go.newServer in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/server.go:271 +0x4b6
+
+goroutine 209 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*baseServer).runSendQueue(0xc000624600)
+	github.com/quic-go/quic-go@v0.42.0/server.go:298 +0x1bf
+created by github.com/quic-go/quic-go.newServer in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/server.go:272 +0x4f6
+
+goroutine 210 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*baseServer).accept(0xc000624600, {0x28238a8, 0x3bdac20})
+	github.com/quic-go/quic-go@v0.42.0/server.go:320 +0x9d
+github.com/quic-go/quic-go.(*baseServer).Accept(...)
+	github.com/quic-go/quic-go@v0.42.0/server.go:316
+github.com/quic-go/quic-go.(*Listener).Accept(0x0?, {0x28238a8?, 0x3bdac20?})
+	github.com/quic-go/quic-go@v0.42.0/server.go:127 +0x25
+github.com/libp2p/go-libp2p/p2p/transport/quicreuse.(*quicListener).Run(0xc000763d60)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/listener.go:136 +0xc5
+created by github.com/libp2p/go-libp2p/p2p/transport/quicreuse.newQuicListener in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/listener.go:79 +0x2cc
+
+goroutine 211 [select, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/transport/quicreuse.(*listener).Accept(0xc000763e00, {0x28238a8, 0x3bdac20})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/listener.go:200 +0x96
+github.com/libp2p/go-libp2p/p2p/transport/webtransport.newListener.func2()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/webtransport/listener.go:69 +0x9e
+created by github.com/libp2p/go-libp2p/p2p/transport/webtransport.newListener in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/webtransport/listener.go:66 +0x2a5
+
+goroutine 212 [select, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/transport/webtransport.(*listener).Accept(0xc000295200)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/webtransport/listener.go:154 +0x7b
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr.func2()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:129 +0xee
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:107 +0x20d
+
+goroutine 213 [IO wait, 21 minutes]:
+internal/poll.runtime_pollWait(0x744e40266000, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc0002ce900?, 0x1?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0xc0002ce900)
+	internal/poll/fd_unix.go:613 +0x28c
+net.(*netFD).accept(0xc0002ce900)
+	net/fd_unix.go:161 +0x29
+net.(*TCPListener).accept(0xc000628040)
+	net/tcpsock_posix.go:159 +0x1b
+net.(*TCPListener).Accept(0xc000628040)
+	net/tcpsock.go:380 +0x30
+github.com/multiformats/go-multiaddr/net.(*maListener).Accept(0x1?)
+	github.com/multiformats/go-multiaddr@v0.12.2/net/net.go:243 +0x27
+github.com/libp2p/go-libp2p/p2p/net/upgrader.(*listener).handleIncoming(0xc000773730)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/listener.go:75 +0xe3
+created by github.com/libp2p/go-libp2p/p2p/net/upgrader.(*upgrader).UpgradeListener in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/upgrader.go:119 +0x1c5
+
+goroutine 214 [chan receive, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/net/upgrader.(*listener).Accept(0xc000773730)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/listener.go:163 +0x3a
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr.func2()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:129 +0xee
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:107 +0x20d
+
+goroutine 215 [IO wait, 21 minutes]:
+internal/poll.runtime_pollWait(0x744e40265e00, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc0002ce980?, 0x0?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).RawRead(0xc0002ce980, 0xc0008a2000)
+	internal/poll/fd_unix.go:710 +0x125
+net.(*rawConn).Read(0xc000768ed0, 0xc0001c8000?)
+	net/rawconn.go:44 +0x36
+golang.org/x/net/internal/socket.(*syscaller).recvmmsg(0xc000532048, {0x281d360?, 0xc000768ed0?}, {0xc0001c8000?, 0x2581ce8?, 0x0?}, 0x4000000000000?)
+	golang.org/x/net@v0.47.0/internal/socket/mmsghdr_unix.go:120 +0x70
+golang.org/x/net/internal/socket.(*Conn).recvMsgs(0xc0005b1ec0, {0xc00052e608, 0x8, 0x8}, 0x0)
+	golang.org/x/net@v0.47.0/internal/socket/rawconn_mmsg.go:24 +0x165
+golang.org/x/net/internal/socket.(*Conn).RecvMsgs(...)
+	golang.org/x/net@v0.47.0/internal/socket/socket.go:267
+golang.org/x/net/ipv4.(*payloadHandler).ReadBatch(0xc000438380, {0xc00052e608?, 0x0?, 0x0?}, 0x0?)
+	golang.org/x/net@v0.47.0/ipv4/batch.go:80 +0x57
+github.com/quic-go/quic-go.(*oobConn).ReadPacket(0xc00065e360)
+	github.com/quic-go/quic-go@v0.42.0/sys_conn_oob.go:174 +0x702
+github.com/quic-go/quic-go.(*Transport).listen(0xc000479180, {0x2833668, 0xc00065e360})
+	github.com/quic-go/quic-go@v0.42.0/transport.go:354 +0x129
+created by github.com/quic-go/quic-go.(*Transport).init.func1 in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/transport.go:255 +0x445
+
+goroutine 216 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*Transport).runSendQueue(0xc000479180)
+	github.com/quic-go/quic-go@v0.42.0/transport.go:280 +0x107
+created by github.com/quic-go/quic-go.(*Transport).init.func1 in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/transport.go:256 +0x485
+
+goroutine 217 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*baseServer).run(0xc000624900)
+	github.com/quic-go/quic-go@v0.42.0/server.go:285 +0x110
+created by github.com/quic-go/quic-go.newServer in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/server.go:271 +0x4b6
+
+goroutine 218 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*baseServer).runSendQueue(0xc000624900)
+	github.com/quic-go/quic-go@v0.42.0/server.go:298 +0x1bf
+created by github.com/quic-go/quic-go.newServer in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/server.go:272 +0x4f6
+
+goroutine 219 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*baseServer).accept(0xc000624900, {0x28238a8, 0x3bdac20})
+	github.com/quic-go/quic-go@v0.42.0/server.go:320 +0x9d
+github.com/quic-go/quic-go.(*baseServer).Accept(...)
+	github.com/quic-go/quic-go@v0.42.0/server.go:316
+github.com/quic-go/quic-go.(*Listener).Accept(0x0?, {0x28238a8?, 0x3bdac20?})
+	github.com/quic-go/quic-go@v0.42.0/server.go:127 +0x25
+github.com/libp2p/go-libp2p/p2p/transport/quicreuse.(*quicListener).Run(0xc000438320)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/listener.go:136 +0xc5
+created by github.com/libp2p/go-libp2p/p2p/transport/quicreuse.newQuicListener in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/listener.go:79 +0x2cc
+
+goroutine 220 [select, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/transport/quicreuse.(*listener).Accept(0xc0004383c0, {0x28238a8, 0x3bdac20})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/listener.go:200 +0x96
+github.com/libp2p/go-libp2p/p2p/transport/quic.(*listener).Accept(0xc000438410)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quic/listener.go:50 +0x42
+github.com/libp2p/go-libp2p/p2p/transport/quic.(*acceptLoopRunner).innerAccept(0xc0005b1f60, 0xc000438410, 0x1, 0x1?)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quic/virtuallistener.go:112 +0xbe
+github.com/libp2p/go-libp2p/p2p/transport/quic.(*acceptLoopRunner).Accept(0xc0005b1f60, 0xc000438410, 0x1, 0xc000773dc0)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quic/virtuallistener.go:159 +0xd2
+github.com/libp2p/go-libp2p/p2p/transport/quic.(*virtualListener).Accept(0x0?)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quic/virtuallistener.go:37 +0x25
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr.func2()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:129 +0xee
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:107 +0x20d
+
+goroutine 221 [IO wait, 21 minutes]:
+internal/poll.runtime_pollWait(0x744e40265c00, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc0002ceb00?, 0x0?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).RawRead(0xc0002ceb00, 0xc00035e040)
+	internal/poll/fd_unix.go:710 +0x125
+net.(*rawConn).Read(0xc000768f10, 0xc0004fc600?)
+	net/rawconn.go:44 +0x36
+golang.org/x/net/internal/socket.(*syscaller).recvmmsg(0xc0001eeca8, {0x281d360?, 0xc000768f10?}, {0xc0004fc600?, 0x2581ce8?, 0x0?}, 0x4000000000000?)
+	golang.org/x/net@v0.47.0/internal/socket/mmsghdr_unix.go:120 +0x70
+golang.org/x/net/internal/socket.(*Conn).recvMsgs(0xc0004ca0a0, {0xc00052ec08, 0x8, 0x8}, 0x0)
+	golang.org/x/net@v0.47.0/internal/socket/rawconn_mmsg.go:24 +0x165
+golang.org/x/net/internal/socket.(*Conn).RecvMsgs(...)
+	golang.org/x/net@v0.47.0/internal/socket/socket.go:267
+golang.org/x/net/ipv4.(*payloadHandler).ReadBatch(0xc000438510, {0xc00052ec08?, 0x0?, 0x0?}, 0x0?)
+	golang.org/x/net@v0.47.0/ipv4/batch.go:80 +0x57
+github.com/quic-go/quic-go.(*oobConn).ReadPacket(0xc00065e5a0)
+	github.com/quic-go/quic-go@v0.42.0/sys_conn_oob.go:174 +0x702
+github.com/quic-go/quic-go.(*Transport).listen(0xc0004792c0, {0x2833668, 0xc00065e5a0})
+	github.com/quic-go/quic-go@v0.42.0/transport.go:354 +0x129
+created by github.com/quic-go/quic-go.(*Transport).init.func1 in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/transport.go:255 +0x445
+
+goroutine 222 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*Transport).runSendQueue(0xc0004792c0)
+	github.com/quic-go/quic-go@v0.42.0/transport.go:280 +0x107
+created by github.com/quic-go/quic-go.(*Transport).init.func1 in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/transport.go:256 +0x485
+
+goroutine 223 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*baseServer).run(0xc000624b00)
+	github.com/quic-go/quic-go@v0.42.0/server.go:285 +0x110
+created by github.com/quic-go/quic-go.newServer in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/server.go:271 +0x4b6
+
+goroutine 224 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*baseServer).runSendQueue(0xc000624b00)
+	github.com/quic-go/quic-go@v0.42.0/server.go:298 +0x1bf
+created by github.com/quic-go/quic-go.newServer in goroutine 1
+	github.com/quic-go/quic-go@v0.42.0/server.go:272 +0x4f6
+
+goroutine 225 [select, 21 minutes]:
+github.com/quic-go/quic-go.(*baseServer).accept(0xc000624b00, {0x28238a8, 0x3bdac20})
+	github.com/quic-go/quic-go@v0.42.0/server.go:320 +0x9d
+github.com/quic-go/quic-go.(*baseServer).Accept(...)
+	github.com/quic-go/quic-go@v0.42.0/server.go:316
+github.com/quic-go/quic-go.(*Listener).Accept(0x0?, {0x28238a8?, 0x3bdac20?})
+	github.com/quic-go/quic-go@v0.42.0/server.go:127 +0x25
+github.com/libp2p/go-libp2p/p2p/transport/quicreuse.(*quicListener).Run(0xc0004384b0)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/listener.go:136 +0xc5
+created by github.com/libp2p/go-libp2p/p2p/transport/quicreuse.newQuicListener in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/listener.go:79 +0x2cc
+
+goroutine 226 [select, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/transport/quicreuse.(*listener).Accept(0xc000438550, {0x28238a8, 0x3bdac20})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/listener.go:200 +0x96
+github.com/libp2p/go-libp2p/p2p/transport/webtransport.newListener.func2()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/webtransport/listener.go:69 +0x9e
+created by github.com/libp2p/go-libp2p/p2p/transport/webtransport.newListener in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/webtransport/listener.go:66 +0x2a5
+
+goroutine 227 [select, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/transport/webtransport.(*listener).Accept(0xc000295c80)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/webtransport/listener.go:154 +0x7b
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr.func2()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:129 +0xee
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:107 +0x20d
+
+goroutine 234 [select, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem.(*memoryAddrBook).background(0xc000612408, {0x2823b80, 0xc0004389b0})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/peerstore/pstoremem/addr_book.go:116 +0x117
+created by github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem.NewAddrBook in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/peerstore/pstoremem/addr_book.go:96 +0x26a
+
+goroutine 235 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*DialBackoff).background(0xc0003c1590, {0x2823b80, 0xc000438b40})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_dial.go:127 +0xcd
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*DialBackoff).init in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_dial.go:120 +0xac
+
+goroutine 241 [select]:
+github.com/libp2p/go-libp2p/p2p/transport/quicreuse.(*reuse).gc(0xc000439ef0)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/reuse.go:164 +0xfc
+created by github.com/libp2p/go-libp2p/p2p/transport/quicreuse.newReuse in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/reuse.go:139 +0x145
+
+goroutine 242 [select]:
+github.com/libp2p/go-libp2p/p2p/transport/quicreuse.(*reuse).gc(0xc0005b4000)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/reuse.go:164 +0xfc
+created by github.com/libp2p/go-libp2p/p2p/transport/quicreuse.newReuse in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/transport/quicreuse/reuse.go:139 +0x145
+
+goroutine 243 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/host/autonat.(*autoNATService).background(0xc0009bd680, {0x2823b80, 0xc0005b44b0})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/autonat/svc.go:283 +0x148
+created by github.com/libp2p/go-libp2p/p2p/host/autonat.(*autoNATService).Enable in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/autonat/svc.go:261 +0x1a5
+
+goroutine 439 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 246 [select]:
+github.com/libp2p/go-libp2p/p2p/host/autonat.(*AmbientAutoNAT).background(0xc0009976c0)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/autonat/autonat.go:173 +0x2ac
+created by github.com/libp2p/go-libp2p/p2p/host/autonat.New in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/autonat/autonat.go:129 +0x70f
+
+goroutine 392 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 248 [select]:
+github.com/libp2p/go-libp2p/p2p/host/pstoremanager.(*PeerstoreManager).background(0xc0003b3680, {0x2823b80, 0xc0005b45f0}, {0x281fcb0, 0xc0005b4640})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/pstoremanager/pstoremanager.go:98 +0x285
+created by github.com/libp2p/go-libp2p/p2p/host/pstoremanager.(*PeerstoreManager).Start in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/pstoremanager/pstoremanager.go:80 +0x211
+
+goroutine 249 [select, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/protocol/identify.(*idService).loop(0xc000418ea0, {0x2823b80, 0xc000619450})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/protocol/identify/id.go:268 +0x409
+created by github.com/libp2p/go-libp2p/p2p/protocol/identify.(*idService).Start in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/protocol/identify/id.go:231 +0x186
+
+goroutine 250 [select]:
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).background(0xc000295800)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:550 +0x405
+created by github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).Start in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:391 +0x7f
+
+goroutine 251 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*backoff).cleanupLoop(0xc0009d6990, {0x2823b80, 0xc00073d590})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/backoff.go:100 +0xcb
+created by github.com/libp2p/go-libp2p-pubsub.newBackoff in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/backoff.go:47 +0x125
+
+goroutine 252 [select]:
+github.com/libp2p/go-libp2p-pubsub/timecache.background({0x2823b80, 0xc0005b4730}, {0x28150a8, 0xc0009d6ba0}, 0xc0009d6b70)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/timecache/util.go:16 +0x134
+created by github.com/libp2p/go-libp2p-pubsub/timecache.newFirstSeenCache in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/timecache/first_seen_cache.go:28 +0x125
+
+goroutine 253 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).heartbeatTimer(0xc0009c10e0)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:1332 +0x1d5
+created by github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).Attach in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:505 +0x1b6
+
+goroutine 254 [select, 21 minutes]:
+github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).connector(0xc0009c10e0)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:947 +0xc5
+created by github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).Attach in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:509 +0x1c5
+
+goroutine 255 [select, 21 minutes]:
+github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).connector(0xc0009c10e0)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:947 +0xc5
+created by github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).Attach in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:509 +0x1c5
+
+goroutine 256 [select, 21 minutes]:
+github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).connector(0xc0009c10e0)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:947 +0xc5
+created by github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).Attach in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:509 +0x1c5
+
+goroutine 257 [select, 21 minutes]:
+github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).connector(0xc0009c10e0)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:947 +0xc5
+created by github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).Attach in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:509 +0x1c5
+
+goroutine 258 [select, 21 minutes]:
+github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).connector(0xc0009c10e0)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:947 +0xc5
+created by github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).Attach in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:509 +0x1c5
+
+goroutine 259 [select, 21 minutes]:
+github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).connector(0xc0009c10e0)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:947 +0xc5
+created by github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).Attach in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:509 +0x1c5
+
+goroutine 260 [select, 21 minutes]:
+github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).connector(0xc0009c10e0)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:947 +0xc5
+created by github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).Attach in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:509 +0x1c5
+
+goroutine 261 [select, 21 minutes]:
+github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).connector(0xc0009c10e0)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:947 +0xc5
+created by github.com/libp2p/go-libp2p-pubsub.(*GossipSubRouter).Attach in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/gossipsub.go:509 +0x1c5
+
+goroutine 262 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 263 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 264 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 265 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 266 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 267 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 268 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 269 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 270 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 271 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 272 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 273 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 274 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 275 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 276 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 277 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 278 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 279 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 280 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 281 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 282 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 283 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 284 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 285 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*validation).validateWorker(0xc0005b4690)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:283 +0xbc
+created by github.com/libp2p/go-libp2p-pubsub.(*validation).Start in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/validation.go:136 +0x65
+
+goroutine 286 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).processLoop(0xc0009bf8c8, {0x2823b80, 0xc00073d590})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/pubsub.go:573 +0x4bc
+created by github.com/libp2p/go-libp2p-pubsub.NewPubSub in goroutine 1
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/pubsub.go:334 +0xe45
+
+goroutine 287 [select, 21 minutes]:
+github.com/libp2p/go-libp2p-pubsub.(*Subscription).Next(0xc0005b4780, {0x2823b80, 0xc00073d590})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/subscription.go:26 +0x85
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p.startServiceDiscovery.func1()
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/discovery.go:151 +0x99
+created by gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p.startServiceDiscovery in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/discovery.go:147 +0x1df
+
+goroutine 288 [select, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p.startServiceDiscovery.func2()
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/discovery.go:179 +0xb4
+created by gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p.startServiceDiscovery in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/discovery.go:176 +0x265
+
+goroutine 289 [select, 1 minutes]:
+github.com/libp2p/go-libp2p-kad-dht/providers.(*ProviderManager).run.func1()
+	github.com/libp2p/go-libp2p-kad-dht@v0.25.2/providers/providers_manager.go:160 +0x27c
+created by github.com/libp2p/go-libp2p-kad-dht/providers.(*ProviderManager).run in goroutine 1
+	github.com/libp2p/go-libp2p-kad-dht@v0.25.2/providers/providers_manager.go:139 +0x65
+
+goroutine 391 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 390 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 389 [select, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/keyrotation.(*Manager).rotationLoop(0xc000a38460)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/keyrotation/manager.go:218 +0xb7
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/keyrotation.(*Manager).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/keyrotation/manager.go:111 +0x11b
+
+goroutine 536 [IO wait]:
+internal/poll.runtime_pollWait(0x744e401a5000, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc000e80480?, 0xc005ae8000?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc000e80480, {0xc005ae8000, 0xa000, 0xa000})
+	internal/poll/fd_unix.go:165 +0x279
+net.(*netFD).Read(0xc000e80480, {0xc005ae8000?, 0xc005ae8000?, 0x5?})
+	net/fd_posix.go:68 +0x25
+net.(*conn).Read(0xc0008b6028, {0xc005ae8000?, 0x744e3edcc5c0?, 0x744e86e7b8a0?})
+	net/net.go:196 +0x45
+crypto/tls.(*atLeastReader).Read(0xc00aa48bd0, {0xc005ae8000?, 0x9ffb?, 0xc00c6e9b80?})
+	crypto/tls/conn.go:819 +0x3b
+bytes.(*Buffer).ReadFrom(0xc00057f0a8, {0x280e000, 0xc00aa48bd0})
+	bytes/buffer.go:217 +0x98
+crypto/tls.(*Conn).readFromUntil(0xc00057ee08, {0x744e3fd601b8, 0xc000b0c450}, 0xc00c6e9b98?)
+	crypto/tls/conn.go:841 +0xde
+crypto/tls.(*Conn).readRecordOrCCS(0xc00057ee08, 0x0)
+	crypto/tls/conn.go:630 +0x3db
+crypto/tls.(*Conn).readRecord(...)
+	crypto/tls/conn.go:592
+crypto/tls.(*Conn).Read(0xc00057ee08, {0xc000a30a60, 0xc, 0x1002b53?})
+	crypto/tls/conn.go:1397 +0x145
+io.ReadAtLeast({0x744e400e9ab8, 0xc0002beaf0}, {0xc000a30a60, 0xc, 0xc}, 0xc)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-yamux/v4.(*Session).recvLoop(0xc0003cf700)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:668 +0xe5
+github.com/libp2p/go-yamux/v4.(*Session).recv(0xc0003cf700)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:640 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 534
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:162 +0x50d
+
+goroutine 295 [select, 21 minutes]:
+github.com/libp2p/go-libp2p-kad-dht.(*IpfsDHT).startNetworkSubscriber.func1()
+	github.com/libp2p/go-libp2p-kad-dht@v0.25.2/subscriber_notifee.go:48 +0x14e
+created by github.com/libp2p/go-libp2p-kad-dht.(*IpfsDHT).startNetworkSubscriber in goroutine 1
+	github.com/libp2p/go-libp2p-kad-dht@v0.25.2/subscriber_notifee.go:43 +0x365
+
+goroutine 296 [select, 1 minutes]:
+github.com/libp2p/go-libp2p-kad-dht.(*IpfsDHT).persistRTPeersInPeerStore(0xc000985508)
+	github.com/libp2p/go-libp2p-kad-dht@v0.25.2/dht.go:558 +0xed
+created by github.com/libp2p/go-libp2p-kad-dht.New in goroutine 1
+	github.com/libp2p/go-libp2p-kad-dht@v0.25.2/dht.go:240 +0x579
+
+goroutine 297 [select, 1 minutes]:
+github.com/libp2p/go-libp2p-kad-dht.(*IpfsDHT).rtPeerLoop.func1()
+	github.com/libp2p/go-libp2p-kad-dht@v0.25.2/dht.go:613 +0x14c
+created by github.com/libp2p/go-libp2p-kad-dht.(*IpfsDHT).rtPeerLoop in goroutine 1
+	github.com/libp2p/go-libp2p-kad-dht@v0.25.2/dht.go:605 +0x65
+
+goroutine 298 [select, 1 minutes]:
+github.com/libp2p/go-libp2p-kad-dht/rtrefresh.(*RtRefreshManager).loop(0xc0005ab720)
+	github.com/libp2p/go-libp2p-kad-dht@v0.25.2/rtrefresh/rt_refresh_manager.go:197 +0x23b
+created by github.com/libp2p/go-libp2p-kad-dht/rtrefresh.(*RtRefreshManager).Start in goroutine 1
+	github.com/libp2p/go-libp2p-kad-dht@v0.25.2/rtrefresh/rt_refresh_manager.go:93 +0x65
+
+goroutine 299 [select, 1 minutes]:
+github.com/libp2p/go-libp2p-kad-dht.(*IpfsDHT).runFixLowPeersLoop.func1()
+	github.com/libp2p/go-libp2p-kad-dht@v0.25.2/dht.go:480 +0x138
+created by github.com/libp2p/go-libp2p-kad-dht.(*IpfsDHT).runFixLowPeersLoop in goroutine 1
+	github.com/libp2p/go-libp2p-kad-dht@v0.25.2/dht.go:471 +0x65
+
+goroutine 313 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).startMeasureRTT(0xc00099a100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:356 +0xc5
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 31
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:164 +0x585
+
+goroutine 422 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 443 [chan receive, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/net/upgrader.(*listener).Accept(0xc000552af0)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/listener.go:163 +0x3a
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr.func2()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:129 +0xee
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:107 +0x20d
+
+goroutine 505 [IO wait]:
+internal/poll.runtime_pollWait(0x744e400e4400, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc000e1ec00?, 0xc00392a000?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc000e1ec00, {0xc00392a000, 0xa000, 0xa000})
+	internal/poll/fd_unix.go:165 +0x279
+net.(*netFD).Read(0xc000e1ec00, {0xc00392a000?, 0xc00392a000?, 0x5?})
+	net/fd_posix.go:68 +0x25
+net.(*conn).Read(0xc000c26160, {0xc00392a000?, 0x744e3f967000?, 0x744e86e7b8a0?})
+	net/net.go:196 +0x45
+crypto/tls.(*atLeastReader).Read(0xc00846c018, {0xc00392a000?, 0x9ffb?, 0xc000857b08?})
+	crypto/tls/conn.go:819 +0x3b
+bytes.(*Buffer).ReadFrom(0xc00045d0a8, {0x280e000, 0xc00846c018})
+	bytes/buffer.go:217 +0x98
+crypto/tls.(*Conn).readFromUntil(0xc00045ce08, {0x744e3fd601b8, 0xc000e044b0}, 0xc000857b98?)
+	crypto/tls/conn.go:841 +0xde
+crypto/tls.(*Conn).readRecordOrCCS(0xc00045ce08, 0x0)
+	crypto/tls/conn.go:630 +0x3db
+crypto/tls.(*Conn).readRecord(...)
+	crypto/tls/conn.go:592
+crypto/tls.(*Conn).Read(0xc00045ce08, {0xc000954fd0, 0xc, 0x1002b53?})
+	crypto/tls/conn.go:1397 +0x145
+io.ReadAtLeast({0x744e400e9ab8, 0xc0001679d0}, {0xc000954fd0, 0xc, 0xc}, 0xc)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-yamux/v4.(*Session).recvLoop(0xc000bb4700)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:668 +0xe5
+github.com/libp2p/go-yamux/v4.(*Session).recv(0xc000bb4700)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:640 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 447
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:162 +0x50d
+
+goroutine 537 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).sendLoop(0xc0003cf700)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:583 +0x4ac
+github.com/libp2p/go-yamux/v4.(*Session).send(0xc0003cf700)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:512 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 534
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:163 +0x549
+
+goroutine 437 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p.startDHT.func2()
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/discovery.go:88 +0x105
+created by gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p.startDHT in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/discovery.go:84 +0x405
+
+goroutine 440 [IO wait, 21 minutes]:
+internal/poll.runtime_pollWait(0x744e400e4a00, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc000e1e400?, 0x1?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0xc000e1e400)
+	internal/poll/fd_unix.go:613 +0x28c
+net.(*netFD).accept(0xc000e1e400)
+	net/fd_unix.go:161 +0x29
+net.(*TCPListener).accept(0xc000a98540)
+	net/tcpsock_posix.go:159 +0x1b
+net.(*TCPListener).Accept(0xc000a98540)
+	net/tcpsock.go:380 +0x30
+github.com/multiformats/go-multiaddr/net.(*maListener).Accept(0x102825b?)
+	github.com/multiformats/go-multiaddr@v0.12.2/net/net.go:243 +0x27
+github.com/libp2p/go-libp2p/p2p/net/upgrader.(*listener).handleIncoming(0xc000552a10)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/listener.go:75 +0xe3
+created by github.com/libp2p/go-libp2p/p2p/net/upgrader.(*upgrader).UpgradeListener in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/upgrader.go:119 +0x1c5
+
+goroutine 419 [select, 21 minutes]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc0002c67e0, {0xc00015c0d5, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0xc000b97e70?, {0xc00015c0d5?, 0xc000119574?, 0x0?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc00066c700, {0xc00015c0d5?, 0x0?, 0x0?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+github.com/multiformats/go-multistream.(*lazyClientConn[...]).Read(0x47ee99?, {0xc00015c0d5?, 0x1?, 0x1?})
+	github.com/multiformats/go-multistream@v0.5.0/lazyClient.go:68 +0x98
+github.com/libp2p/go-libp2p/p2p/host/basic.(*streamWrapper).Read(0x0?, {0xc00015c0d5?, 0x0?, 0x0?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:1055 +0x22
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handlePeerDead(0xc0009bf8c8, {0x284ecd0, 0xc00075c3c0})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:147 +0x76
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 562
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:128 +0x345
+
+goroutine 348 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleSendingMessages(0xc0009855c0?, {0x2823b80, 0xc00073d590}, {0x284ecd0, 0xc0006a8560}, 0xc00076a000)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:175 +0x128
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 192
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:127 +0x2e5
+
+goroutine 442 [IO wait, 21 minutes]:
+internal/poll.runtime_pollWait(0x744e400e4800, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc000e1e480?, 0x1?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0xc000e1e480)
+	internal/poll/fd_unix.go:613 +0x28c
+net.(*netFD).accept(0xc000e1e480)
+	net/fd_unix.go:161 +0x29
+net.(*TCPListener).accept(0xc000a985c0)
+	net/tcpsock_posix.go:159 +0x1b
+net.(*TCPListener).Accept(0xc000a985c0)
+	net/tcpsock.go:380 +0x30
+github.com/multiformats/go-multiaddr/net.(*maListener).Accept(0x1?)
+	github.com/multiformats/go-multiaddr@v0.12.2/net/net.go:243 +0x27
+github.com/libp2p/go-libp2p/p2p/net/upgrader.(*listener).handleIncoming(0xc000552af0)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/listener.go:75 +0xe3
+created by github.com/libp2p/go-libp2p/p2p/net/upgrader.(*upgrader).UpgradeListener in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/upgrader.go:119 +0x1c5
+
+goroutine 1400100 [IO wait]:
+internal/poll.runtime_pollWait(0x744e401b6200, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc035c75580?, 0xc01e3bb000?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc035c75580, {0xc01e3bb000, 0x1000, 0x1000})
+	internal/poll/fd_unix.go:165 +0x279
+net.(*netFD).Read(0xc035c75580, {0xc01e3bb000?, 0x0?, 0x0?})
+	net/fd_posix.go:68 +0x25
+net.(*conn).Read(0xc033ce7a10, {0xc01e3bb000?, 0x744e401b6200?, 0x0?})
+	net/net.go:196 +0x45
+gitlab.com/accumulatenetwork/accumulate/internal/node/daemon.(*rateLimitedConn).Read(0xc035cfc6f0, {0xc01e3bb000?, 0x4e8200?, 0xc035c75580?})
+	gitlab.com/accumulatenetwork/accumulate/internal/node/daemon/rate_limit.go:63 +0x25
+net/http.(*connReader).Read(0xc035e00240, {0xc01e3bb000, 0x1000, 0x1000})
+	net/http/server.go:812 +0x154
+bufio.(*Reader).fill(0xc0421ed380)
+	bufio/bufio.go:113 +0x103
+bufio.(*Reader).Peek(0xc0421ed380, 0x4)
+	bufio/bufio.go:152 +0x53
+net/http.(*conn).serve(0xc025db0c60, {0x2823b48, 0xc000d84cf0})
+	net/http/server.go:2139 +0x805
+created by net/http.(*Server).Serve in goroutine 793
+	net/http/server.go:3493 +0x485
+
+goroutine 921 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleSendingMessages(0xc001580100?, {0x2823b80, 0xc00073d590}, {0x284ecd0, 0xc000194680}, 0xc000166620)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:175 +0x128
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 907
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:127 +0x2e5
+
+goroutine 565 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*Subscription).Next(0xc000d6bc20, {0x2823b80, 0xc000d6bb30})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/subscription.go:26 +0x85
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).handleSubscription(0xc000556cc0, {0x219937c, 0x18}, 0xc00011ddf0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:324 +0x1bd
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:183 +0x272
+
+goroutine 566 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*Subscription).Next(0xc000d6bcc0, {0x2823b80, 0xc000d6bb30})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/subscription.go:26 +0x85
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).handleVoteSubscription(0xc000556cc0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:550 +0x19e
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:184 +0x2b9
+
+goroutine 564 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*Subscription).Next(0xc000d6bb80, {0x2823b80, 0xc000d6bb30})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/subscription.go:26 +0x85
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).handleSubscription(0xc000556cc0, {0x2199394, 0x18}, 0xc00011ddd0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:324 +0x1bd
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:182 +0x1dc
+
+goroutine 608 [select, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).handleSyncRequests(0xc000e98700)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:363 +0x125
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).Start in goroutine 582
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:171 +0xc5
+
+goroutine 468 [select, 21 minutes]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc00097a620, {0xc000572609, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0xc0008aae70?, {0xc000572609?, 0x0?, 0x1000000000000?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc00031cb00, {0xc000572609?, 0x2809520?, 0x3b65470?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+github.com/multiformats/go-multistream.(*lazyClientConn[...]).Read(0x47ee99?, {0xc000572609?, 0x1?, 0x1?})
+	github.com/multiformats/go-multistream@v0.5.0/lazyClient.go:68 +0x98
+github.com/libp2p/go-libp2p/p2p/host/basic.(*streamWrapper).Read(0xc000a5e360?, {0xc000572609?, 0x11f4ac5?, 0xc00045f960?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:1055 +0x22
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handlePeerDead(0xc0009bf8c8, {0x284ecd0, 0xc000b127c0})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:147 +0x76
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 108
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:128 +0x345
+
+goroutine 578 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start(0xc0004fc000, {0x2823b80?, 0xc000a5bbd0?})
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:460 +0x48b
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start.func1()
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:576 +0x58
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:574 +0x458
+
+goroutine 445 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 788 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 804 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 444 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 727 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).reproposeLoop(0xc000da8400)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:913 +0x136
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 559
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:450 +0x2ce
+
+goroutine 342 [IO wait]:
+internal/poll.runtime_pollWait(0x744e401a5200, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc000952280?, 0xc007632000?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc000952280, {0xc007632000, 0xa000, 0xa000})
+	internal/poll/fd_unix.go:165 +0x279
+net.(*netFD).Read(0xc000952280, {0xc007632000?, 0xc007632000?, 0x5?})
+	net/fd_posix.go:68 +0x25
+net.(*conn).Read(0xc00095a018, {0xc007632000?, 0x744e3e263b48?, 0x744e86e8c6b8?})
+	net/net.go:196 +0x45
+crypto/tls.(*atLeastReader).Read(0xc029741f20, {0xc007632000?, 0x9ffb?, 0xc02ac71b08?})
+	crypto/tls/conn.go:819 +0x3b
+bytes.(*Buffer).ReadFrom(0xc00057ed28, {0x280e000, 0xc029741f20})
+	bytes/buffer.go:217 +0x98
+crypto/tls.(*Conn).readFromUntil(0xc00057ea88, {0x744e3fd601b8, 0xc000b86d20}, 0xc02ac71b98?)
+	crypto/tls/conn.go:841 +0xde
+crypto/tls.(*Conn).readRecordOrCCS(0xc00057ea88, 0x0)
+	crypto/tls/conn.go:630 +0x3db
+crypto/tls.(*Conn).readRecord(...)
+	crypto/tls/conn.go:592
+crypto/tls.(*Conn).Read(0xc00057ea88, {0xc0005a8250, 0xc, 0x1002b53?})
+	crypto/tls/conn.go:1397 +0x145
+io.ReadAtLeast({0x744e400e9ab8, 0xc000730310}, {0xc0005a8250, 0xc, 0xc}, 0xc)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-yamux/v4.(*Session).recvLoop(0xc000bb4400)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:668 +0xe5
+github.com/libp2p/go-yamux/v4.(*Session).recv(0xc000bb4400)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:640 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 385
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:162 +0x50d
+
+goroutine 310 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p.startDHT.func1.1()
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/discovery.go:60 +0xe5
+created by gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p.startDHT.func1 in goroutine 300
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/discovery.go:58 +0x219
+
+goroutine 725 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).handleIncomingBatches(0xc000da8400)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:864 +0x12c
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 559
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:442 +0x22c
+
+goroutine 538 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).startMeasureRTT(0xc0003cf700)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:356 +0xc5
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 534
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:164 +0x585
+
+goroutine 441 [chan receive, 21 minutes]:
+github.com/libp2p/go-libp2p/p2p/net/upgrader.(*listener).Accept(0xc000552a10)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/upgrader/listener.go:163 +0x3a
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr.func2()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:129 +0xee
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Swarm).AddListenAddr in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_listen.go:107 +0x20d
+
+goroutine 438 [select, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p.newPeerManager.func1()
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/peer_manager.go:78 +0xe7
+created by gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p.newPeerManager in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/peer_manager.go:74 +0x2e5
+
+goroutine 343 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).sendLoop(0xc000bb4400)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:583 +0x4ac
+github.com/libp2p/go-yamux/v4.(*Session).send(0xc000bb4400)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:512 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 385
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:163 +0x549
+
+goroutine 344 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).startMeasureRTT(0xc000bb4400)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:356 +0xc5
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 385
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:164 +0x585
+
+goroutine 484 [select, 21 minutes]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc000968380, {0xc000c368f4, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0xc0005f8e70?, {0xc000c368f4?, 0xc00014c5b4?, 0xc0005f8ee8?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc00066c500, {0xc000c368f4?, 0x744e400e3528?, 0x744e86e7d9a8?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+github.com/multiformats/go-multistream.(*lazyClientConn[...]).Read(0x47ee99?, {0xc000c368f4?, 0x1?, 0x1?})
+	github.com/multiformats/go-multistream@v0.5.0/lazyClient.go:68 +0x98
+github.com/libp2p/go-libp2p/p2p/host/basic.(*streamWrapper).Read(0x4954c5?, {0xc000c368f4?, 0xc0005f8f68?, 0x11f6213?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:1055 +0x22
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handlePeerDead(0xc0009bf8c8, {0x284ecd0, 0xc00092a6c0})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:147 +0x76
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 335
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:128 +0x345
+
+goroutine 347 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).AcceptStream(0xc000bb4400)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:272 +0x106
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*conn).AcceptStream(0x4551a0?)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/conn.go:43 +0x13
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:113 +0x96
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start in goroutine 322
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:108 +0x4f
+
+goroutine 95 [select]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc0003a4000, {0xc0002cb2e8, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0x45d5f0?, {0xc0002cb2e8?, 0x0?, 0x0?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc000d92200, {0xc0002cb2e8?, 0xc027eb7a80?, 0xc027eb7d38?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+io.ReadAtLeast({0x744e3ff64448, 0xc000d92200}, {0xc0002cb2e8, 0x1, 0x1}, 0x1)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-msgio.(*simpleByteReader).ReadByte(0xc0002cb2d8)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:185 +0x31
+github.com/multiformats/go-varint.ReadUvarint({0x280d9e0, 0xc0002cb2d8})
+	github.com/multiformats/go-varint@v0.0.7/varint.go:80 +0x51
+github.com/libp2p/go-msgio.(*varintReader).nextMsgLen(0xc000d14f00)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:119 +0x2a
+github.com/libp2p/go-msgio.(*varintReader).ReadMsg(0xc000d14f00)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:149 +0xa5
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewStream(0xc0009bf8c8, {0x284ec40, 0xc000d92200})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:66 +0x3cc
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).SetStreamHandler.func1({0x3b7b510?, 0x20c6e60?}, {0x744e3ff64418?, 0xc000d92200?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:597 +0x82
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).newStreamHandler(0xc000295800, {0x284ec40, 0xc000d92200})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:439 +0x6c9
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1.1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:137 +0xa5
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1 in goroutine 347
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:123 +0x1ab
+
+goroutine 349 [select, 21 minutes]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc0002c6540, {0xc0008ba400, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0xc0006d6e70?, {0xc0008ba400?, 0x0?, 0x1000000000000?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc000c40180, {0xc0008ba400?, 0x0?, 0x0?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+github.com/multiformats/go-multistream.(*lazyClientConn[...]).Read(0x47ee99?, {0xc0008ba400?, 0x1?, 0x1?})
+	github.com/multiformats/go-multistream@v0.5.0/lazyClient.go:68 +0x98
+github.com/libp2p/go-libp2p/p2p/host/basic.(*streamWrapper).Read(0x0?, {0xc0008ba400?, 0x100000000000000?, 0x0?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:1055 +0x22
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handlePeerDead(0xc0009bf8c8, {0x284ecd0, 0xc0006a8560})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:147 +0x76
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 192
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:128 +0x345
+
+goroutine 409 [IO wait]:
+internal/poll.runtime_pollWait(0x744e401a5600, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc000bb2b00?, 0xc00687c000?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc000bb2b00, {0xc00687c000, 0xa000, 0xa000})
+	internal/poll/fd_unix.go:165 +0x279
+net.(*netFD).Read(0xc000bb2b00, {0xc00687c000?, 0xc00687c000?, 0x5?})
+	net/fd_posix.go:68 +0x25
+net.(*conn).Read(0xc000b9c058, {0xc00687c000?, 0x744e3e401e00?, 0x744e86e7c210?})
+	net/net.go:196 +0x45
+crypto/tls.(*atLeastReader).Read(0xc010f915f0, {0xc00687c000?, 0x9ffb?, 0xc01f76db80?})
+	crypto/tls/conn.go:819 +0x3b
+bytes.(*Buffer).ReadFrom(0xc0002f0628, {0x280e000, 0xc010f915f0})
+	bytes/buffer.go:217 +0x98
+crypto/tls.(*Conn).readFromUntil(0xc0002f0388, {0x744e3fd601b8, 0xc000a946c0}, 0xc01f76db98?)
+	crypto/tls/conn.go:841 +0xde
+crypto/tls.(*Conn).readRecordOrCCS(0xc0002f0388, 0x0)
+	crypto/tls/conn.go:630 +0x3db
+crypto/tls.(*Conn).readRecord(...)
+	crypto/tls/conn.go:592
+crypto/tls.(*Conn).Read(0xc0002f0388, {0xc000142500, 0xc, 0x1002b53?})
+	crypto/tls/conn.go:1397 +0x145
+io.ReadAtLeast({0x744e400e9ab8, 0xc00013e3f0}, {0xc000142500, 0xc, 0xc}, 0xc)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-yamux/v4.(*Session).recvLoop(0xc000624100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:668 +0xe5
+github.com/libp2p/go-yamux/v4.(*Session).recv(0xc000624100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:640 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 406
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:162 +0x50d
+
+goroutine 543 [select]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc000db0380, {0xc0009fff30, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0x45d5f0?, {0xc0009fff30?, 0x0?, 0x0?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc00066c900, {0xc0009fff30?, 0xc000bd7a80?, 0xc000bd7d38?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+io.ReadAtLeast({0x744e3ff64448, 0xc00066c900}, {0xc0009fff30, 0x1, 0x1}, 0x1)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-msgio.(*simpleByteReader).ReadByte(0xc0009fff20)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:185 +0x31
+github.com/multiformats/go-varint.ReadUvarint({0x280d9e0, 0xc0009fff20})
+	github.com/multiformats/go-varint@v0.0.7/varint.go:80 +0x51
+github.com/libp2p/go-msgio.(*varintReader).nextMsgLen(0xc00061a980)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:119 +0x2a
+github.com/libp2p/go-msgio.(*varintReader).ReadMsg(0xc00061a980)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:149 +0xa5
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewStream(0xc0009bf8c8, {0x284ec40, 0xc00066c900})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:66 +0x3cc
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).SetStreamHandler.func1({0x3b7b510?, 0x20c6e60?}, {0x744e3ff64418?, 0xc00066c900?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:597 +0x82
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).newStreamHandler(0xc000295800, {0x284ec40, 0xc00066c900})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:439 +0x6c9
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1.1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:137 +0xa5
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1 in goroutine 542
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:123 +0x1ab
+
+goroutine 351 [IO wait]:
+internal/poll.runtime_pollWait(0x744e400e4000, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc00066c400?, 0xc001162000?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc00066c400, {0xc001162000, 0xa000, 0xa000})
+	internal/poll/fd_unix.go:165 +0x279
+net.(*netFD).Read(0xc00066c400, {0xc001162000?, 0xc001162074?, 0x5?})
+	net/fd_posix.go:68 +0x25
+net.(*conn).Read(0xc0006c4040, {0xc001162000?, 0x744e3e401e00?, 0x744e86e7c210?})
+	net/net.go:196 +0x45
+crypto/tls.(*atLeastReader).Read(0xc010f90840, {0xc001162000?, 0x9f87?, 0xc000ab1b80?})
+	crypto/tls/conn.go:819 +0x3b
+bytes.(*Buffer).ReadFrom(0xc0005ca9a8, {0x280e000, 0xc010f90840})
+	bytes/buffer.go:217 +0x98
+crypto/tls.(*Conn).readFromUntil(0xc0005ca708, {0x744e3fd601b8, 0xc0008326f0}, 0xc000ab1b98?)
+	crypto/tls/conn.go:841 +0xde
+crypto/tls.(*Conn).readRecordOrCCS(0xc0005ca708, 0x0)
+	crypto/tls/conn.go:630 +0x3db
+crypto/tls.(*Conn).readRecord(...)
+	crypto/tls/conn.go:592
+crypto/tls.(*Conn).Read(0xc0005ca708, {0xc000a30660, 0xc, 0x2a?})
+	crypto/tls/conn.go:1397 +0x145
+io.ReadAtLeast({0x744e400e9ab8, 0xc000730930}, {0xc000a30660, 0xc, 0xc}, 0xc)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-yamux/v4.(*Session).recvLoop(0xc000bb4500)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:668 +0xe5
+github.com/libp2p/go-yamux/v4.(*Session).recv(0xc000bb4500)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:640 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 332
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:162 +0x50d
+
+goroutine 410 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).sendLoop(0xc000624100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:583 +0x4ac
+github.com/libp2p/go-yamux/v4.(*Session).send(0xc000624100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:512 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 406
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:163 +0x549
+
+goroutine 411 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).startMeasureRTT(0xc000624100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:356 +0xc5
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 406
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:164 +0x585
+
+goroutine 483 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleSendingMessages(0x12?, {0x2823b80, 0xc00073d590}, {0x284ecd0, 0xc00092a6c0}, 0xc0002df0a0)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:175 +0x128
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 335
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:127 +0x2e5
+
+goroutine 109 [select]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc00097a540, {0xc000b8b558, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0x45d5f0?, {0xc000b8b558?, 0x0?, 0x0?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc00031cb80, {0xc000b8b558?, 0xc017d45a80?, 0xc017d45d38?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+io.ReadAtLeast({0x744e3ff64448, 0xc00031cb80}, {0xc000b8b558, 0x1, 0x1}, 0x1)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-msgio.(*simpleByteReader).ReadByte(0xc000b8b548)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:185 +0x31
+github.com/multiformats/go-varint.ReadUvarint({0x280d9e0, 0xc000b8b548})
+	github.com/multiformats/go-varint@v0.0.7/varint.go:80 +0x51
+github.com/libp2p/go-msgio.(*varintReader).nextMsgLen(0xc000a351c0)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:119 +0x2a
+github.com/libp2p/go-msgio.(*varintReader).ReadMsg(0xc000a351c0)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:149 +0xa5
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewStream(0xc0009bf8c8, {0x284ec40, 0xc00031cb80})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:66 +0x3cc
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).SetStreamHandler.func1({0x3b7b510?, 0x20c6e60?}, {0x744e3ff64418?, 0xc00031cb80?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:597 +0x82
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).newStreamHandler(0xc000295800, {0x284ec40, 0xc00031cb80})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:439 +0x6c9
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1.1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:137 +0xa5
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1 in goroutine 501
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:123 +0x1ab
+
+goroutine 415 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).AcceptStream(0xc000624100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:272 +0x106
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*conn).AcceptStream(0x4551a0?)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/conn.go:43 +0x13
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:113 +0x96
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start in goroutine 412
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:108 +0x4f
+
+goroutine 481 [select]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc0009682a0, {0xc00068e748, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0xc0006d4ac0?, {0xc00068e748?, 0x0?, 0xc00ff7039f?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc000bb2d00, {0xc00068e748?, 0xc0009fd6c0?, 0xc0006d4a80?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+io.ReadAtLeast({0x744e3ff64448, 0xc000bb2d00}, {0xc00068e748, 0x1, 0x1}, 0x1)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-msgio.(*simpleByteReader).ReadByte(0xc00068e738)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:185 +0x31
+github.com/multiformats/go-varint.ReadUvarint({0x280d9e0, 0xc00068e738})
+	github.com/multiformats/go-varint@v0.0.7/varint.go:80 +0x51
+github.com/libp2p/go-msgio.(*varintReader).nextMsgLen(0xc00082c500)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:119 +0x2a
+github.com/libp2p/go-msgio.(*varintReader).ReadMsg(0xc00082c500)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:149 +0xa5
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewStream(0xc0009bf8c8, {0x284ec40, 0xc000bb2d00})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:66 +0x3cc
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).SetStreamHandler.func1({0x3b7b510?, 0x20c6e60?}, {0x744e3ff64418?, 0xc000bb2d00?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:597 +0x82
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).newStreamHandler(0xc000295800, {0x284ec40, 0xc000bb2d00})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:439 +0x6c9
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1.1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:137 +0xa5
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1 in goroutine 415
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:123 +0x1ab
+
+goroutine 352 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).sendLoop(0xc000bb4500)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:583 +0x4ac
+github.com/libp2p/go-yamux/v4.(*Session).send(0xc000bb4500)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:512 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 332
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:163 +0x549
+
+goroutine 497 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).startMeasureRTT(0xc000bb4500)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:356 +0xc5
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 332
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:164 +0x585
+
+goroutine 467 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleSendingMessages(0xc000624100?, {0x2823b80, 0xc00073d590}, {0x284ecd0, 0xc000b127c0}, 0xc000159110)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:175 +0x128
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 108
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:127 +0x2e5
+
+goroutine 726 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).evictionLoop(0xc000da8400)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:982 +0x109
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 559
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:446 +0x27d
+
+goroutine 501 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).AcceptStream(0xc000bb4500)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:272 +0x106
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*conn).AcceptStream(0x4551a0?)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/conn.go:43 +0x13
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:113 +0x96
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start in goroutine 498
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:108 +0x4f
+
+goroutine 531 [select, 21 minutes]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc00097ae00, {0xc000a30bc2, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0xc000b96e70?, {0xc000a30bc2?, 0xc000abfe58?, 0x10000004af508?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc00031d180, {0xc000a30bc2?, 0x24?, 0xc000abff10?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+github.com/multiformats/go-multistream.(*lazyClientConn[...]).Read(0x47ee99?, {0xc000a30bc2?, 0x1?, 0x1?})
+	github.com/multiformats/go-multistream@v0.5.0/lazyClient.go:68 +0x98
+github.com/libp2p/go-libp2p/p2p/host/basic.(*streamWrapper).Read(0x2809c00?, {0xc000a30bc2?, 0x0?, 0x0?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:1055 +0x22
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handlePeerDead(0xc0009bf8c8, {0x284ecd0, 0xc00075c800})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:147 +0x76
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 112
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:128 +0x345
+
+goroutine 506 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).sendLoop(0xc000bb4700)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:583 +0x4ac
+github.com/libp2p/go-yamux/v4.(*Session).send(0xc000bb4700)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:512 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 447
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:163 +0x549
+
+goroutine 507 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).startMeasureRTT(0xc000bb4700)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:356 +0xc5
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 447
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:164 +0x585
+
+goroutine 530 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleSendingMessages(0xc000a35480?, {0x2823b80, 0xc00073d590}, {0x284ecd0, 0xc00075c800}, 0xc0002702a0)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:175 +0x128
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 112
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:127 +0x2e5
+
+goroutine 803 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 511 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).AcceptStream(0xc000bb4700)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:272 +0x106
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*conn).AcceptStream(0x4551a0?)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/conn.go:43 +0x13
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:113 +0x96
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start in goroutine 508
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:108 +0x4f
+
+goroutine 545 [select]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc000876460, {0xc000353600, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0x45d5f0?, {0xc000353600?, 0x0?, 0x0?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc0005ad100, {0xc000353600?, 0xc0007c4a80?, 0xc0007c4d38?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+io.ReadAtLeast({0x744e3ff64448, 0xc0005ad100}, {0xc000353600, 0x1, 0x1}, 0x1)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-msgio.(*simpleByteReader).ReadByte(0xc0003535f0)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:185 +0x31
+github.com/multiformats/go-varint.ReadUvarint({0x280d9e0, 0xc0003535f0})
+	github.com/multiformats/go-varint@v0.0.7/varint.go:80 +0x51
+github.com/libp2p/go-msgio.(*varintReader).nextMsgLen(0xc000a994c0)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:119 +0x2a
+github.com/libp2p/go-msgio.(*varintReader).ReadMsg(0xc000a994c0)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:149 +0xa5
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewStream(0xc0009bf8c8, {0x284ec40, 0xc0005ad100})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:66 +0x3cc
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).SetStreamHandler.func1({0x3b7b510?, 0x20c6e60?}, {0x744e3ff64418?, 0xc0005ad100?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:597 +0x82
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).newStreamHandler(0xc000295800, {0x284ec40, 0xc0005ad100})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:439 +0x6c9
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1.1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:137 +0xa5
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1 in goroutine 511
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:123 +0x1ab
+
+goroutine 802 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 312 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).sendLoop(0xc00099a100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:583 +0x4ac
+github.com/libp2p/go-yamux/v4.(*Session).send(0xc00099a100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:512 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 31
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:163 +0x549
+
+goroutine 318 [select]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc000e8e1c0, {0xc0009fe100, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0x45d5f0?, {0xc0009fe100?, 0x0?, 0x0?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc000d16080, {0xc0009fe100?, 0xc013343a80?, 0xc013343d38?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+io.ReadAtLeast({0x744e3ff64448, 0xc000d16080}, {0xc0009fe100, 0x1, 0x1}, 0x1)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-msgio.(*simpleByteReader).ReadByte(0xc0009fe0f0)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:185 +0x31
+github.com/multiformats/go-varint.ReadUvarint({0x280d9e0, 0xc0009fe0f0})
+	github.com/multiformats/go-varint@v0.0.7/varint.go:80 +0x51
+github.com/libp2p/go-msgio.(*varintReader).nextMsgLen(0xc00061a040)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:119 +0x2a
+github.com/libp2p/go-msgio.(*varintReader).ReadMsg(0xc00061a040)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:149 +0xa5
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewStream(0xc0009bf8c8, {0x284ec40, 0xc000d16080})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:66 +0x3cc
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).SetStreamHandler.func1({0x3b7b510?, 0x20c6e60?}, {0x744e3ff64418?, 0xc000d16080?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:597 +0x82
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).newStreamHandler(0xc000295800, {0x284ec40, 0xc000d16080})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:439 +0x6c9
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1.1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:137 +0xa5
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1 in goroutine 317
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:123 +0x1ab
+
+goroutine 311 [IO wait]:
+internal/poll.runtime_pollWait(0x744e401a4e00, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc000d16000?, 0xc006728000?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc000d16000, {0xc006728000, 0xa000, 0xa000})
+	internal/poll/fd_unix.go:165 +0x279
+net.(*netFD).Read(0xc000d16000, {0xc006728000?, 0xc006728000?, 0x5?})
+	net/fd_posix.go:68 +0x25
+net.(*conn).Read(0xc0006c4028, {0xc006728000?, 0x744e3edcc5c0?, 0x744e86e7b8a0?})
+	net/net.go:196 +0x45
+crypto/tls.(*atLeastReader).Read(0xc00aa49f68, {0xc006728000?, 0x9ffb?, 0xc01722fb20?})
+	crypto/tls/conn.go:819 +0x3b
+bytes.(*Buffer).ReadFrom(0xc0005cad28, {0x280e000, 0xc00aa49f68})
+	bytes/buffer.go:217 +0x98
+crypto/tls.(*Conn).readFromUntil(0xc0005caa88, {0x744e3fd601b8, 0xc000832120}, 0xc01722fb98?)
+	crypto/tls/conn.go:841 +0xde
+crypto/tls.(*Conn).readRecordOrCCS(0xc0005caa88, 0x0)
+	crypto/tls/conn.go:630 +0x3db
+crypto/tls.(*Conn).readRecord(...)
+	crypto/tls/conn.go:592
+crypto/tls.(*Conn).Read(0xc0005caa88, {0xc0005a8390, 0xc, 0x1002b53?})
+	crypto/tls/conn.go:1397 +0x145
+io.ReadAtLeast({0x744e400e9ab8, 0xc0004511f0}, {0xc0005a8390, 0xc, 0xc}, 0xc)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-yamux/v4.(*Session).recvLoop(0xc00099a100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:668 +0xe5
+github.com/libp2p/go-yamux/v4.(*Session).recv(0xc00099a100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:640 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 31
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:162 +0x50d
+
+goroutine 418 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleSendingMessages(0x0?, {0x2823b80, 0xc00073d590}, {0x284ecd0, 0xc00075c3c0}, 0xc00016a380)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:175 +0x128
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 562
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:127 +0x2e5
+
+goroutine 421 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 317 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).AcceptStream(0xc00099a100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:272 +0x106
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*conn).AcceptStream(0x4551a0?)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/conn.go:43 +0x13
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:113 +0x96
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start in goroutine 314
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:108 +0x4f
+
+goroutine 641 [select, 4 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).handleSyncResponses(0xc000e98700)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:482 +0x125
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).Start in goroutine 582
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:172 +0x105
+
+goroutine 607 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 594 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleSendingMessages(0xc0009bf8c8?, {0x2823b80, 0xc00073d590}, {0x284ecd0, 0xc0006a8040}, 0xc0002bf0a0)
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:175 +0x128
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 593
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:127 +0x2e5
+
+goroutine 599 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*Subscription).Next(0xc000a5bc70, {0x2823b80, 0xc000a5bc20})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/subscription.go:26 +0x85
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).handleSubscription(0xc0005566c0, {0x2199394, 0x18}, 0xc000928e70)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:324 +0x1bd
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:182 +0x1dc
+
+goroutine 542 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).AcceptStream(0xc0003cf700)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:272 +0x106
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*conn).AcceptStream(0x4551a0?)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/conn.go:43 +0x13
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:113 +0x96
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start in goroutine 539
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:108 +0x4f
+
+goroutine 595 [select, 21 minutes]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc0003b88c0, {0xc00015dd9d, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0xc0006eae70?, {0xc00015dd9d?, 0x88?, 0x1000001e82e40?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc000e80800, {0xc00015dd9d?, 0xc000c856b0?, 0x40a925?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+github.com/multiformats/go-multistream.(*lazyClientConn[...]).Read(0x47ee99?, {0xc00015dd9d?, 0x1?, 0x1?})
+	github.com/multiformats/go-multistream@v0.5.0/lazyClient.go:68 +0x98
+github.com/libp2p/go-libp2p/p2p/host/basic.(*streamWrapper).Read(0x4954c5?, {0xc00015dd9d?, 0xc000c85768?, 0x11f6213?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:1055 +0x22
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handlePeerDead(0xc0009bf8c8, {0x284ecd0, 0xc0006a8040})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:147 +0x76
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 593
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:128 +0x345
+
+goroutine 600 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*Subscription).Next(0xc000a5bd10, {0x2823b80, 0xc000a5bc20})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/subscription.go:26 +0x85
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).handleSubscription(0xc0005566c0, {0x219937c, 0x18}, 0xc000928e80)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:324 +0x1bd
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:183 +0x272
+
+goroutine 393 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 394 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 395 [select, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/keyrotation.(*Manager).rotationLoop(0xc0005aa0a0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/keyrotation/manager.go:218 +0xb7
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/keyrotation.(*Manager).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/keyrotation/manager.go:111 +0x11b
+
+goroutine 396 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 397 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 398 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 601 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*Subscription).Next(0xc000a5bdb0, {0x2823b80, 0xc000a5bc20})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/subscription.go:26 +0x85
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).handleVoteSubscription(0xc0005566c0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:550 +0x19e
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:184 +0x2b9
+
+goroutine 602 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*Subscription).Next(0xc000a5be50, {0x2823b80, 0xc000a5bc20})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/subscription.go:26 +0x85
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).handleSubscription(0xc0005566c0, {0x2193988, 0x16}, 0xc000928ea0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:324 +0x1bd
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:185 +0x34f
+
+goroutine 603 [select, 4 minutes]:
+github.com/libp2p/go-libp2p-pubsub.(*Subscription).Next(0xc0008c86e0, {0x2823b80, 0xc000a5bc20})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/subscription.go:26 +0x85
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).handleSubscription(0xc0005566c0, {0x219f63a, 0x1a}, 0xc000928eb0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:324 +0x1bd
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:186 +0x3e6
+
+goroutine 604 [select, 1 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).rateLimiterCleanup(0xc0005566c0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:655 +0x130
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:187 +0x428
+
+goroutine 605 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).meshMonitor(0xc0005566c0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:606 +0x332
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:188 +0x46a
+
+goroutine 606 [sync.Cond.Wait]:
+sync.runtime_notifyListWait(0xc0009bdad0, 0x15a6)
+	runtime/sema.go:606 +0x159
+sync.(*Cond).Wait(0x45ed80?)
+	sync/cond.go:71 +0x73
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*batchQueue).pop(0xc000a5bb80)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/batch_queue.go:86 +0x85
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).pumpBatches(0xc0005566c0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:370 +0x79
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:189 +0x4ac
+
+goroutine 642 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).retryLoop(0xc000e98700)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:544 +0x107
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).Start in goroutine 582
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:176 +0x156
+
+goroutine 567 [select]:
+github.com/libp2p/go-libp2p-pubsub.(*Subscription).Next(0xc000d6bd60, {0x2823b80, 0xc000d6bb30})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/subscription.go:26 +0x85
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).handleSubscription(0xc000556cc0, {0x2193988, 0x16}, 0xc00011de30)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:324 +0x1bd
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:185 +0x34f
+
+goroutine 579 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start(0xc0002eee00, {0x2823b80?, 0xc000a5bbd0?})
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:460 +0x48b
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start.func1()
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:576 +0x58
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:574 +0x458
+
+goroutine 580 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start(0xc0002ef000, {0x2823b80?, 0xc000a5bbd0?})
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:460 +0x48b
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start.func1()
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:576 +0x58
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:574 +0x458
+
+goroutine 581 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start(0xc0002ef200, {0x2823b80?, 0xc000a5bbd0?})
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:460 +0x48b
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start.func1()
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:576 +0x58
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:574 +0x458
+
+goroutine 582 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*Primary).Start(0xc0002ef400, {0x2823b80, 0xc000a5bbd0})
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/primary.go:278 +0x52b
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start.func2()
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:584 +0x5b
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:582 +0x595
+
+goroutine 583 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).processBullshark(0xc000e06380)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:803 +0x105
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:589 +0x5e9
+
+goroutine 584 [select]:
+gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft.(*Service).blockProductionLoop(0xc0004fe2c8)
+	gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft/service.go:440 +0x10e
+created by gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft.(*Service).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft/service.go:209 +0x887
+
+goroutine 585 [select]:
+gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft.(*Service).livenessLoop(0xc0004fe2c8)
+	gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft/service.go:480 +0xf5
+created by gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft.(*Service).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft/service.go:217 +0x8db
+
+goroutine 586 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 587 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 588 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 477 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).handleIncomingBatches(0xc0004fc000)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:864 +0x12c
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 578
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:442 +0x22c
+
+goroutine 476 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).batchLoop(0xc0004fc000)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:730 +0x108
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 578
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:438 +0x1db
+
+goroutine 478 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).evictionLoop(0xc0004fc000)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:982 +0x109
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 578
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:446 +0x27d
+
+goroutine 479 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).reproposeLoop(0xc0004fc000)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:913 +0x136
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 578
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:450 +0x2ce
+
+goroutine 480 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).batchLoop(0xc0002eee00)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:730 +0x108
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 579
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:438 +0x1db
+
+goroutine 625 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).handleIncomingBatches(0xc0002eee00)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:864 +0x12c
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 579
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:442 +0x22c
+
+goroutine 626 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).evictionLoop(0xc0002eee00)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:982 +0x109
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 579
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:446 +0x27d
+
+goroutine 627 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).reproposeLoop(0xc0002eee00)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:913 +0x136
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 579
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:450 +0x2ce
+
+goroutine 589 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 628 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).batchLoop(0xc0002ef000)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:730 +0x108
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 580
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:438 +0x1db
+
+goroutine 629 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).handleIncomingBatches(0xc0002ef000)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:864 +0x12c
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 580
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:442 +0x22c
+
+goroutine 630 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).evictionLoop(0xc0002ef000)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:982 +0x109
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 580
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:446 +0x27d
+
+goroutine 631 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).reproposeLoop(0xc0002ef000)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:913 +0x136
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 580
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:450 +0x2ce
+
+goroutine 619 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).batchLoop(0xc0002ef200)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:730 +0x108
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 581
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:438 +0x1db
+
+goroutine 620 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).handleIncomingBatches(0xc0002ef200)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:864 +0x12c
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 581
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:442 +0x22c
+
+goroutine 621 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).evictionLoop(0xc0002ef200)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:982 +0x109
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 581
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:446 +0x27d
+
+goroutine 622 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).reproposeLoop(0xc0002ef200)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:913 +0x136
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 581
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:450 +0x2ce
+
+goroutine 643 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).pendingRescanLoop(0xc000e98700)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:603 +0xf7
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).Start in goroutine 582
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:181 +0x1ad
+
+goroutine 786 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 592 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 624 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 568 [select, 21 minutes]:
+github.com/libp2p/go-libp2p-pubsub.(*Subscription).Next(0xc000d6be00, {0x2823b80, 0xc000d6bb30})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/subscription.go:26 +0x85
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).handleSubscription(0xc000556cc0, {0x219f63a, 0x1a}, 0xc00011de40)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:324 +0x1bd
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:186 +0x3e6
+
+goroutine 569 [select, 1 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).rateLimiterCleanup(0xc000556cc0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:655 +0x130
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:187 +0x428
+
+goroutine 570 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).meshMonitor(0xc000556cc0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:606 +0x332
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:188 +0x46a
+
+goroutine 571 [sync.Cond.Wait]:
+sync.runtime_notifyListWait(0xc000e259d0, 0x81cd)
+	runtime/sema.go:606 +0x159
+sync.(*Cond).Wait(0x45ed80?)
+	sync/cond.go:71 +0x73
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*batchQueue).pop(0xc000d6ba90)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/batch_queue.go:86 +0x85
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).pumpBatches(0xc000556cc0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:370 +0x79
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip.(*GossipLayer).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip/gossip.go:189 +0x4ac
+
+goroutine 724 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).batchLoop(0xc000da8400)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:730 +0x108
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 559
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:438 +0x1db
+
+goroutine 806 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 379 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).handleIncomingBatches(0xc000da8200)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:864 +0x12c
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 558
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:442 +0x22c
+
+goroutine 378 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).batchLoop(0xc000da8200)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:730 +0x108
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 558
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:438 +0x1db
+
+goroutine 380 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).evictionLoop(0xc000da8200)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:982 +0x109
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 558
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:446 +0x27d
+
+goroutine 785 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 728 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 575 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).batchLoop(0xc000da8600)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:730 +0x108
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 560
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:438 +0x1db
+
+goroutine 902 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).startMeasureRTT(0xc000d18100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:356 +0xc5
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 917
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:164 +0x585
+
+goroutine 557 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start(0xc000da8000, {0x2823b80?, 0xc000d6bae0?})
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:460 +0x48b
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start.func1()
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:576 +0x58
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:574 +0x458
+
+goroutine 558 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start(0xc000da8200, {0x2823b80?, 0xc000d6bae0?})
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:460 +0x48b
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start.func1()
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:576 +0x58
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:574 +0x458
+
+goroutine 559 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start(0xc000da8400, {0x2823b80?, 0xc000d6bae0?})
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:460 +0x48b
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start.func1()
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:576 +0x58
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:574 +0x458
+
+goroutine 560 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start(0xc000da8600, {0x2823b80?, 0xc000d6bae0?})
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:460 +0x48b
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start.func1()
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:576 +0x58
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:574 +0x458
+
+goroutine 737 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*Primary).Start(0xc000da8800, {0x2823b80, 0xc000d6bae0})
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/primary.go:278 +0x52b
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start.func2()
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:584 +0x5b
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:582 +0x595
+
+goroutine 738 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).processBullshark(0xc0008cce00)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:803 +0x105
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus.(*Node).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consensus.go:589 +0x5e9
+
+goroutine 739 [sync.WaitGroup.Wait]:
+sync.runtime_SemacquireWaitGroup(0xc026e02e70?, 0x40?)
+	runtime/sema.go:114 +0x2e
+sync.(*WaitGroup).Wait(0xc02bb8cce0)
+	sync/waitgroup.go:206 +0x85
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*Block).ProcessAll.func4()
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_parallel.go:313 +0x3b3
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*Block).ProcessAll(0xc00e0c7340, {0xc00284c008, 0x439, 0x5ff})
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_parallel.go:379 +0x797
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter.(*ExecutorBridge).ProduceBlock(0xc000d6c160, {0x2823b80?, 0xc000d6b950?}, {0x194, {0x2bdf22be, 0xee2266429, 0x0}, 0x0, 0x326, 0xc02652f4a0, ...})
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter/executor_bridge.go:319 +0x752
+gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft.(*Service).processCommittedGroup(0xc0009bb088, {0xc0440a3600, 0x8, 0x0?})
+	gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft/service.go:666 +0xa75
+gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft.(*Service).blockProductionLoop(0xc0009bb088)
+	gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft/service.go:452 +0x157
+created by gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft.(*Service).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft/service.go:209 +0x887
+
+goroutine 740 [select]:
+gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft.(*Service).livenessLoop(0xc0009bb088)
+	gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft/service.go:480 +0xf5
+created by gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft.(*Service).Start in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft/service.go:217 +0x8db
+
+goroutine 576 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).handleIncomingBatches(0xc000da8600)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:864 +0x12c
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 560
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:442 +0x22c
+
+goroutine 753 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).evictionLoop(0xc000da8600)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:982 +0x109
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 560
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:446 +0x27d
+
+goroutine 754 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).reproposeLoop(0xc000da8600)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:913 +0x136
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 560
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:450 +0x2ce
+
+goroutine 741 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 742 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 743 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 755 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).batchLoop(0xc000da8000)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:730 +0x108
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 557
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:438 +0x1db
+
+goroutine 756 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).handleIncomingBatches(0xc000da8000)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:864 +0x12c
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 557
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:442 +0x22c
+
+goroutine 757 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).evictionLoop(0xc000da8000)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:982 +0x109
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 557
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:446 +0x27d
+
+goroutine 758 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).reproposeLoop(0xc000da8000)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:913 +0x136
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 557
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:450 +0x2ce
+
+goroutine 744 [select, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).handleSyncRequests(0xc000d18600)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:363 +0x125
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).Start in goroutine 737
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:171 +0xc5
+
+goroutine 745 [select, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).handleSyncResponses(0xc000d18600)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:482 +0x125
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).Start in goroutine 737
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:172 +0x105
+
+goroutine 746 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).retryLoop(0xc000d18600)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:544 +0x107
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).Start in goroutine 737
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:176 +0x156
+
+goroutine 747 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).pendingRescanLoop(0xc000d18600)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:603 +0xf7
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary.(*CertSyncer).Start in goroutine 737
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary/cert_sync.go:181 +0x1ad
+
+goroutine 381 [select]:
+gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).reproposeLoop(0xc000da8200)
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:913 +0x136
+created by gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker.(*Worker).Start in goroutine 558
+	gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker/worker.go:450 +0x2ce
+
+goroutine 801 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 729 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 787 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 792 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 901 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).sendLoop(0xc000d18100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:583 +0x4ac
+github.com/libp2p/go-yamux/v4.(*Session).send(0xc000d18100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:512 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 917
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:163 +0x549
+
+goroutine 793 [IO wait]:
+internal/poll.runtime_pollWait(0x744e401a5400, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc000d92f80?, 0x900000036?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0xc000d92f80)
+	internal/poll/fd_unix.go:613 +0x28c
+net.(*netFD).accept(0xc000d92f80)
+	net/fd_unix.go:161 +0x29
+net.(*TCPListener).accept(0xc00092d140)
+	net/tcpsock_posix.go:159 +0x1b
+net.(*TCPListener).Accept(0xc00092d140)
+	net/tcpsock.go:380 +0x30
+gitlab.com/accumulatenetwork/accumulate/internal/node/daemon.(*RateLimitedListener).Accept(0xc00068f458)
+	gitlab.com/accumulatenetwork/accumulate/internal/node/daemon/rate_limit.go:22 +0x37
+net/http.(*Server).Serve(0xc0008dc700, {0x281d3d0, 0xc00068f458})
+	net/http/server.go:3463 +0x30c
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*HttpListener).serveHTTP.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/http.go:243 +0x56
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).run.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:279 +0x4e
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).run in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:277 +0x74
+
+goroutine 794 [IO wait, 21 minutes]:
+internal/poll.runtime_pollWait(0x744e400e4200, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc000d93080?, 0x1?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0xc000d93080)
+	internal/poll/fd_unix.go:613 +0x28c
+net.(*netFD).accept(0xc000d93080)
+	net/fd_unix.go:161 +0x29
+net.(*TCPListener).accept(0xc00092d1c0)
+	net/tcpsock_posix.go:159 +0x1b
+net.(*TCPListener).Accept(0xc00092d1c0)
+	net/tcpsock.go:380 +0x30
+gitlab.com/accumulatenetwork/accumulate/internal/node/daemon.(*RateLimitedListener).Accept(0xc00068f530)
+	gitlab.com/accumulatenetwork/accumulate/internal/node/daemon/rate_limit.go:22 +0x37
+net/http.(*Server).Serve(0xc0008dc700, {0x281d3d0, 0xc00068f530})
+	net/http/server.go:3463 +0x30c
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*HttpListener).serveHTTP.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/http.go:243 +0x56
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).run.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:279 +0x4e
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).run in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:277 +0x74
+
+goroutine 795 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 796 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 797 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 798 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 920 [select]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc0003b8540, {0xc001002aa8, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0x45d5f0?, {0xc001002aa8?, 0x0?, 0x0?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc0000f6280, {0xc001002aa8?, 0xc000bd9a80?, 0xc000bd9d38?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+io.ReadAtLeast({0x744e3ff64448, 0xc0000f6280}, {0xc001002aa8, 0x1, 0x1}, 0x1)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-msgio.(*simpleByteReader).ReadByte(0xc001002a98)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:185 +0x31
+github.com/multiformats/go-varint.ReadUvarint({0x280d9e0, 0xc001002a98})
+	github.com/multiformats/go-varint@v0.0.7/varint.go:80 +0x51
+github.com/libp2p/go-msgio.(*varintReader).nextMsgLen(0xc001580780)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:119 +0x2a
+github.com/libp2p/go-msgio.(*varintReader).ReadMsg(0xc001580780)
+	github.com/libp2p/go-msgio@v0.3.0/varint.go:149 +0xa5
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewStream(0xc0009bf8c8, {0x284ec40, 0xc0000f6280})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:66 +0x3cc
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).SetStreamHandler.func1({0x3b7b510?, 0x20c6e60?}, {0x744e3ff64418?, 0xc0000f6280?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:597 +0x82
+github.com/libp2p/go-libp2p/p2p/host/basic.(*BasicHost).newStreamHandler(0xc000295800, {0x284ec40, 0xc0000f6280})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:439 +0x6c9
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1.1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:137 +0xa5
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1 in goroutine 978
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:123 +0x1ab
+
+goroutine 807 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 808 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 809 [select, 1 minutes]:
+github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:42 +0x22e
+created by github.com/libp2p/go-libp2p/p2p/discovery/util.Advertise in goroutine 1
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/discovery/util/util.go:33 +0xe5
+
+goroutine 748 [chan receive, 21 minutes]:
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup.func1()
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:287 +0x8f
+created by gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*Instance).cleanup in goroutine 1
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/instance.go:285 +0xa5
+
+goroutine 908 [IO wait]:
+internal/poll.runtime_pollWait(0x744e400e4600, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc000e1e080?, 0xc004f60000?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc000e1e080, {0xc004f60000, 0xa000, 0xa000})
+	internal/poll/fd_unix.go:165 +0x279
+net.(*netFD).Read(0xc000e1e080, {0xc004f60000?, 0xc004f60074?, 0x5?})
+	net/fd_posix.go:68 +0x25
+net.(*conn).Read(0xc000aa0008, {0xc004f60000?, 0x744e3edcc5c0?, 0x744e86e7b8a0?})
+	net/net.go:196 +0x45
+crypto/tls.(*atLeastReader).Read(0xc00aa48678, {0xc004f60000?, 0x9f87?, 0xc000aafb80?})
+	crypto/tls/conn.go:819 +0x3b
+bytes.(*Buffer).ReadFrom(0xc00057f7a8, {0x280e000, 0xc00aa48678})
+	bytes/buffer.go:217 +0x98
+crypto/tls.(*Conn).readFromUntil(0xc00057f508, {0x744e3fd601b8, 0xc0009c20c0}, 0xc000aafb98?)
+	crypto/tls/conn.go:841 +0xde
+crypto/tls.(*Conn).readRecordOrCCS(0xc00057f508, 0x0)
+	crypto/tls/conn.go:630 +0x3db
+crypto/tls.(*Conn).readRecord(...)
+	crypto/tls/conn.go:592
+crypto/tls.(*Conn).Read(0xc00057f508, {0xc0009540c0, 0xc, 0x2a?})
+	crypto/tls/conn.go:1397 +0x145
+io.ReadAtLeast({0x744e400e9ab8, 0xc000166700}, {0xc0009540c0, 0xc, 0xc}, 0xc)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-yamux/v4.(*Session).recvLoop(0xc000d18300)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:668 +0xe5
+github.com/libp2p/go-yamux/v4.(*Session).recv(0xc000d18300)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:640 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 837
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:162 +0x50d
+
+goroutine 909 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).sendLoop(0xc000d18300)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:583 +0x4ac
+github.com/libp2p/go-yamux/v4.(*Session).send(0xc000d18300)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:512 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 837
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:163 +0x549
+
+goroutine 922 [select, 21 minutes]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc000db0460, {0xc000143718, 0x1, 0x1})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0xc000a11e70?, {0xc000143718?, 0x88?, 0x1000001e82e40?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc00066c800, {0xc000143718?, 0xc0010a9eb0?, 0x40a925?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+github.com/multiformats/go-multistream.(*lazyClientConn[...]).Read(0x47ee99?, {0xc000143718?, 0x1?, 0x1?})
+	github.com/multiformats/go-multistream@v0.5.0/lazyClient.go:68 +0x98
+github.com/libp2p/go-libp2p/p2p/host/basic.(*streamWrapper).Read(0x4954c5?, {0xc000143718?, 0xc0010a9f68?, 0x11f6213?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:1055 +0x22
+github.com/libp2p/go-libp2p-pubsub.(*PubSub).handlePeerDead(0xc0009bf8c8, {0x284ecd0, 0xc000194680})
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:147 +0x76
+created by github.com/libp2p/go-libp2p-pubsub.(*PubSub).handleNewPeer in goroutine 907
+	github.com/libp2p/go-libp2p-pubsub@v0.10.0/comm.go:128 +0x345
+
+goroutine 900 [IO wait]:
+internal/poll.runtime_pollWait(0x744e400e4c00, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc000d16100?, 0xc002936000?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc000d16100, {0xc002936000, 0xa000, 0xa000})
+	internal/poll/fd_unix.go:165 +0x279
+net.(*netFD).Read(0xc000d16100, {0xc002936000?, 0xc002936052?, 0x5?})
+	net/fd_posix.go:68 +0x25
+net.(*conn).Read(0xc000f26000, {0xc002936000?, 0x744e3eb036c8?, 0x744e86e7aa78?})
+	net/net.go:196 +0x45
+crypto/tls.(*atLeastReader).Read(0xc012e1ab58, {0xc002936000?, 0x9fa9?, 0xc0057abb80?})
+	crypto/tls/conn.go:819 +0x3b
+bytes.(*Buffer).ReadFrom(0xc0002f1428, {0x280e000, 0xc012e1ab58})
+	bytes/buffer.go:217 +0x98
+crypto/tls.(*Conn).readFromUntil(0xc0002f1188, {0x744e3fd601b8, 0xc000832150}, 0xc0057abb98?)
+	crypto/tls/conn.go:841 +0xde
+crypto/tls.(*Conn).readRecordOrCCS(0xc0002f1188, 0x0)
+	crypto/tls/conn.go:630 +0x3db
+crypto/tls.(*Conn).readRecord(...)
+	crypto/tls/conn.go:592
+crypto/tls.(*Conn).Read(0xc0002f1188, {0xc0001426b4, 0xc, 0x1002b53?})
+	crypto/tls/conn.go:1397 +0x145
+io.ReadAtLeast({0x744e400e9ab8, 0xc000166070}, {0xc0001426b4, 0xc, 0xc}, 0xc)
+	io/io.go:335 +0x8e
+io.ReadFull(...)
+	io/io.go:354
+github.com/libp2p/go-yamux/v4.(*Session).recvLoop(0xc000d18100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:668 +0xe5
+github.com/libp2p/go-yamux/v4.(*Session).recv(0xc000d18100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:640 +0x18
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 917
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:162 +0x50d
+
+goroutine 905 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).AcceptStream(0xc000d18100)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:272 +0x106
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*conn).AcceptStream(0x4551a0?)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/conn.go:43 +0x13
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:113 +0x96
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start in goroutine 877
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:108 +0x4f
+
+goroutine 910 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).startMeasureRTT(0xc000d18300)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:356 +0xc5
+created by github.com/libp2p/go-yamux/v4.newSession in goroutine 837
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:164 +0x585
+
+goroutine 978 [select]:
+github.com/libp2p/go-yamux/v4.(*Session).AcceptStream(0xc000d18300)
+	github.com/libp2p/go-yamux/v4@v4.0.1/session.go:272 +0x106
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*conn).AcceptStream(0x4551a0?)
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/conn.go:43 +0x13
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start.func1()
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:113 +0x96
+created by github.com/libp2p/go-libp2p/p2p/net/swarm.(*Conn).start in goroutine 911
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_conn.go:108 +0x4f
+
+goroutine 1397299 [sync.Mutex.Lock]:
+internal/sync.runtime_SemacquireMutex(0xc03a650dc0?, 0xa0?, 0x400c0129bbe40?)
+	runtime/sema.go:95 +0x25
+internal/sync.(*Mutex).lockSlow(0xc02bb8cc10)
+	internal/sync/mutex.go:149 +0x15d
+internal/sync.(*Mutex).Lock(...)
+	internal/sync/mutex.go:70
+sync.(*Mutex).Lock(...)
+	sync/mutex.go:46
+gitlab.com/accumulatenetwork/accumulate/internal/database.syncStore.GetValue({0xc02bb8cc10?, {0x28150d0?, 0xc012936be0?}}, 0xc03a650dc0, {0x283a878, 0xc03a3e7e40})
+	gitlab.com/accumulatenetwork/accumulate/internal/database/batch_concurrent.go:31 +0x94
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.(*value[...]).Get(0x0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/value.go:117 +0x5e
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.(*value[...]).GetValue(0x744e3f7c9530)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/value.go:259 +0x25
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.(*value[...]).LoadValue(0x2861fa0, {0x283a878, 0xc03a3e7e40?}, 0x0?)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/value.go:269 +0x4b
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.RecordStore.GetValue({{0x282a560?, 0xc012520d80?}}, 0xc00cab11a8?, {0x283a878, 0xc03a3e7e00})
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/store.go:28 +0x87
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.(*value[...]).Get(0xc03a626e80)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/value.go:117 +0x5e
+gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle.(*Chain).AddEntry(0xc03a640d00, {0xc03a626e60, 0x20, 0x13dae31e3c40c477?}, 0x0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle/chain.go:71 +0x18f
+gitlab.com/accumulatenetwork/accumulate/internal/database.(*AccountTransaction).RecordHistory(0xc03a640c80, {0x283c258, 0xc0129feb40})
+	gitlab.com/accumulatenetwork/accumulate/internal/database/signatures.go:98 +0x2c5
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.CreditPayment.process({}, 0xc03a640a80, 0xc0129fecc0, 0xc0129feb40)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/msg_credit_payment.go:96 +0xee
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.CreditPayment.Process({}, 0xc0003248a0?, 0xc0129fecc0)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/msg_credit_payment.go:77 +0x1b7
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*bundle).callMessageExecutor(0x0?, 0xc012520d80, 0xc0129fecc0)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_process.go:404 +0x36b
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*MessageContext).callMessageExecutor(0xc0129fec60, 0xc012520d80, {0x283c258, 0xc0129feb40})
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/msg_common.go:215 +0xa5
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.PseudoSynthetic.Process({}, 0xc0003248a0?, 0xffff0003?)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/msg_pseudo_synthetic.go:38 +0x59
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*bundle).callMessageExecutor(0x21874f4?, 0xc012520d80, 0xc0129fec60)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_process.go:404 +0x36b
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*bundle).process(0xc03a3e8580)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_process.go:258 +0x1085
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*Block).processMessages(0xc00e0c7340, 0xc012520d80, {0xc0127d21e0?, 0xc03a54ce10?, 0xc00cab1ea0?}, 0x47ee85?)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_process.go:178 +0x1a5
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*Block).processEnvelope(0xc00e0c7340, 0xc012520d80, {0xc0127d21e0, 0x2, 0x2})
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_process.go:122 +0x88
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*Block).ProcessAll.func4.2(0x6)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_parallel.go:307 +0x1bf
+created by gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*Block).ProcessAll.func4 in goroutine 739
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_parallel.go:303 +0x387
+
+goroutine 1397264 [syscall]:
+syscall.Syscall6(0x11, 0xd5, 0xc0047347b6, 0x30, 0xbe910, 0x0, 0x0)
+	syscall/syscall_linux.go:96 +0x39
+syscall.pread(0x6b5140e1a29da1c4?, {0xc0047347b6?, 0xc0047346e0?, 0x41d905?}, 0x18?)
+	syscall/zsyscall_linux_amd64.go:1229 +0x45
+syscall.Pread(...)
+	syscall/syscall_unix.go:226
+internal/poll.(*FD).Pread.func1(...)
+	internal/poll/fd_unix.go:187
+internal/poll.ignoringEINTR2[...](...)
+	internal/poll/fd_posix.go:84
+internal/poll.(*FD).Pread(0x4b?, {0xc0047347b6, 0x4ddfbc59f74853bc?, 0x30}, 0xbe910)
+	internal/poll/fd_unix.go:186 +0xf0
+os.(*File).pread(...)
+	os/file_posix.go:39
+os.(*File).ReadAt(0xc02a6967f8, {0xc0047347b6?, 0x7ed204467099e80a?, 0x974c74c02996804b?}, 0x80?)
+	os/file.go:162 +0x14c
+github.com/AccumulateNetwork/BlockchainDB/database.(*segment).lookup(0xc0405fdc80, {0xcc, 0x7a, 0xab, 0x2, 0xb7, 0x46, 0x3f, 0xc3, 0xa0, ...})
+	github.com/AccumulateNetwork/BlockchainDB@v0.1.2-0.20260830043925-eea0b868036d/database/segstore.go:269 +0x1a5
+github.com/AccumulateNetwork/BlockchainDB/database.(*SegmentStore).lookupHistory(0xc000220508, {0xcc, 0x7a, 0xab, 0x2, 0xb7, 0x46, 0x3f, 0xc3, 0xa0, ...}, ...)
+	github.com/AccumulateNetwork/BlockchainDB@v0.1.2-0.20260830043925-eea0b868036d/database/segstore.go:1564 +0x177
+github.com/AccumulateNetwork/BlockchainDB/database.(*SegmentStore).Get(0xc000220508, {0xcc, 0x7a, 0xab, 0x2, 0xb7, 0x46, 0x3f, 0xc3, 0xa0, ...})
+	github.com/AccumulateNetwork/BlockchainDB@v0.1.2-0.20260830043925-eea0b868036d/database/segstore.go:1489 +0x111
+github.com/AccumulateNetwork/BlockchainDB/database.(*KV2).Get(0xc000d9e120, {0xcc, 0x7a, 0xab, 0x2, 0xb7, 0x46, 0x3f, 0xc3, 0xa0, ...})
+	github.com/AccumulateNetwork/BlockchainDB@v0.1.2-0.20260830043925-eea0b868036d/database/kv_2.go:238 +0xef
+gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb.(*Database).getAt(0xc0004199e0, 0x184, 0xc03a4f2d20?)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb/database.go:602 +0x2ed
+gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb.(*Database).Begin.func2(0xc33f46b702ab7acc?)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb/database.go:371 +0x25
+gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory.(*ChangeSet).Get(0xc033f767d0, 0xc004734c70?)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory/changeset.go:152 +0x272
+gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue.RecordStore.GetValue({{0x744e3fd60538?, 0xc033f767d0?}}, 0xc03a5d4180, {0x283afb0, 0xc03a4f7d80})
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/store.go:42 +0x37
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.(*value[...]).Get(0xc004734d78)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/value.go:117 +0x5e
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.(*value[...]).GetValue(0x283af00)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/value.go:259 +0x25
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.(*value[...]).LoadValue(0x2862aa0, {0x283afb0, 0xc03a4f7d80?}, 0x0?)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/value.go:269 +0x4b
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.RecordStore.GetValue({{0x282a560?, 0xc025958300?}}, 0xe560bdba?, {0x283afb0, 0xc03a4f7d40})
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/store.go:28 +0x87
+gitlab.com/accumulatenetwork/accumulate/internal/database.syncStore.GetValue({0xc02bb8cc10?, {0x28150d0?, 0xc012936b80?}}, 0xc03a5d40e0?, {0x283afb0?, 0xc03a4f7d40?})
+	gitlab.com/accumulatenetwork/accumulate/internal/database/batch_concurrent.go:33 +0xed
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.(*value[...]).Get(0x2d125449dcc64675)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/value.go:117 +0x5e
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.(*value[...]).GetValue(0x283af00)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/value.go:259 +0x25
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.(*value[...]).LoadValue(0x2862aa0, {0x283afb0, 0xc03a4f7d40?}, 0x0?)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/value.go:269 +0x4b
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.RecordStore.GetValue({{0x282a560?, 0xc012520c00?}}, 0x40?, {0x283afb0, 0xc03a4f7d00})
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/store.go:28 +0x87
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.(*value[...]).Get(0x1cdfda0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/value.go:117 +0x5e
+gitlab.com/accumulatenetwork/accumulate/pkg/database/values.(*value[...]).Put(0xc003c42a08, {0x283c9e0?, 0xc03a52d1d0})
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/values/value.go:166 +0x3b
+gitlab.com/accumulatenetwork/accumulate/internal/database.(*messageMain).Put(0xc03a5ba460?, {0x283c9e0?, 0xc03a52d1d0?})
+	gitlab.com/accumulatenetwork/accumulate/internal/database/message.go:36 +0xbc
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*MessageContext).recordMessageAndStatus(0xc035844600, 0xc03a4f9280, 0xc03a4cefc0, 0x98c97c6102f90076?, {0x0?, 0x0?})
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/msg_common.go:365 +0x15f
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.SignatureRequest.Process({}, 0xc0003248a0?, 0xc035844600)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/msg_signature_request.go:75 +0x1df
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*bundle).callMessageExecutor(0x0?, 0xc012520c00, 0xc035844600)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_process.go:404 +0x36b
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*MessageContext).callMessageExecutor(0xc0358445a0, 0xc012520c00, {0x283c9e0, 0xc03a52d1d0})
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/msg_common.go:215 +0xa5
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.PseudoSynthetic.Process({}, 0xc0003248a0?, 0xffff0003?)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/msg_pseudo_synthetic.go:38 +0x59
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*bundle).callMessageExecutor(0x21874f4?, 0xc012520c00, 0xc0358445a0)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_process.go:404 +0x36b
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*bundle).process(0xc03a5bc2c0)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_process.go:258 +0x1085
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*Block).processMessages(0xc00e0c7340, 0xc012520c00, {0xc0128a1c60?, 0xc03a435020?, 0xc004735ea0?}, 0x47ee85?)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_process.go:178 +0x1a5
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*Block).processEnvelope(0xc00e0c7340, 0xc012520c00, {0xc0128a1c60, 0x2, 0x2})
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_process.go:122 +0x88
+gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*Block).ProcessAll.func4.2(0x3)
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_parallel.go:307 +0x1bf
+created by gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block.(*Block).ProcessAll.func4 in goroutine 739
+	gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block/exec_parallel.go:303 +0x387
+
+goroutine 1400403 [chan receive]:
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p.(*Node).getPeerService.func1()
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/p2p.go:301 +0x35
+created by gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p.(*Node).getPeerService in goroutine 1393419
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/p2p.go:301 +0x408
+
+goroutine 1393419 [select]:
+github.com/libp2p/go-yamux/v4.(*Stream).Read(0xc0317d08c0, {0xc0395b7000, 0x1000, 0x1000})
+	github.com/libp2p/go-yamux/v4@v4.0.1/stream.go:111 +0x19e
+github.com/libp2p/go-libp2p/p2p/muxer/yamux.(*stream).Read(0xc001acc8a0?, {0xc0395b7000?, 0xc039a3bb80?, 0x100000000013f?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/muxer/yamux/stream.go:17 +0x18
+github.com/libp2p/go-libp2p/p2p/net/swarm.(*Stream).Read(0xc0395e0480, {0xc0395b7000?, 0xc039a3bb80?, 0x210d340?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/net/swarm/swarm_stream.go:58 +0x2a
+github.com/multiformats/go-multistream.(*lazyClientConn[...]).Read(0xc001acc8f0?, {0xc0395b7000?, 0x1000?, 0x1000?})
+	github.com/multiformats/go-multistream@v0.5.0/lazyClient.go:68 +0x98
+github.com/libp2p/go-libp2p/p2p/host/basic.(*streamWrapper).Read(0xc039a3bb80?, {0xc0395b7000?, 0x13f?, 0x28526e0?})
+	github.com/libp2p/go-libp2p@v0.33.1/p2p/host/basic/basic_host.go:1055 +0x22
+bufio.(*Reader).fill(0xc039ba3320)
+	bufio/bufio.go:113 +0x103
+bufio.(*Reader).ReadByte(0xc039ba3320)
+	bufio/bufio.go:273 +0x27
+encoding/binary.ReadUvarint({0x280ba40, 0xc039ba3320})
+	encoding/binary/varint.go:134 +0x82
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message.(*stream[...]).Read(0xc0026dddd0)
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message/stream.go:67 +0x27
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial.(*stream).Read(0xc0395dce40)
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial/stream.go:62 +0x22
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message.(*RoutedTransport).RoundTrip.func1({0x2816d48, 0xc0395dce40})
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message/transport.go:113 +0x191
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message.(*RoutedTransport).dial(0xc00092cd00, {0x2823b48, 0xc0395de8d0}, {0x284a240, 0xc0026dddb8}, 0xc0395de900, 0xc001accd50)
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message/transport.go:320 +0x210
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message.(*RoutedTransport).RoundTrip(0xc00092cd00, {0x2823b80?, 0xc0395da320?}, {0xc0395baf20, 0x1, 0x1f945c0?}, 0xc0395dcd20)
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message/transport.go:99 +0x16b
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message.typedRequest[...]({0xc000d88dd0, {0x0?, 0x0?}}, {0x2823b80?, 0xc0395da320}, {0x282f708, 0xc0395e0400?})
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message/client.go:203 +0x1d0
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message.AddressedClient.Submit({0xc000d88dd0?, {0x0?, 0x0?}}, {0x2823b80, 0xc0395da320}, 0xc00c253a70, {{0x0, 0x0, 0x0}, 0x0, ...})
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message/client.go:175 +0x105
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message.(*Client).Submit(0x47eea5?, {0x2823b80?, 0xc0395da320?}, 0xc001accf80?, {{0x0, 0x0, 0x0}, 0x0, 0x0, {0x0, ...}})
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message/client.go:106 +0x65
+gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc.Submitter.submit({{0x280c8a0?, 0xc000d88dd0?}}, {0x2823b80, 0xc0395da320}, {0xc025fdfb00?, 0xc00c253858?, 0xc0395c5040?})
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc/services.go:171 +0x103
+github.com/AccumulateNetwork/jsonrpc2/v15.MethodFunc.call(0xc0395cf300?, {0x2823b80?, 0xc0395da320?}, {0xc0395cf300?, 0x40?}, {0xc025fdfb00?, 0x4?, 0xc00e93bd80?}, {0x2815828, 0x3bdac20})
+	github.com/AccumulateNetwork/jsonrpc2/v15@v15.0.0-20220517212445-953ad957e040/methods.go:109 +0x131
+github.com/AccumulateNetwork/jsonrpc2/v15.processRequest({0x2823b80, 0xc0395da320}, 0xc000697290, {0xc0317e5500, 0x313, 0x380}, {0x2815828, 0x3bdac20})
+	github.com/AccumulateNetwork/jsonrpc2/v15@v15.0.0-20220517212445-953ad957e040/handler.go:178 +0x21a
+github.com/AccumulateNetwork/jsonrpc2/v15.handle(0xc000697290, 0xc0395ab180, {0x2815828, 0x3bdac20})
+	github.com/AccumulateNetwork/jsonrpc2/v15@v15.0.0-20220517212445-953ad957e040/handler.go:118 +0x674
+github.com/AccumulateNetwork/jsonrpc2/v15.HTTPRequestHandler.func1({0x281cfd0, 0xc001ac2870}, 0xc0395ab180)
+	github.com/AccumulateNetwork/jsonrpc2/v15@v15.0.0-20220517212445-953ad957e040/handler.go:65 +0x110
+net/http.HandlerFunc.ServeHTTP(0xc0395ab180?, {0x281cfd0?, 0xc001ac2870?}, 0x41ced4?)
+	net/http/server.go:2322 +0x29
+gitlab.com/accumulatenetwork/accumulate/internal/node/http.NewHandler.(*Handler).FallbackTo.func6({0x281cfd0, 0xc001ac2870}, 0xc0395ab180)
+	gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/websocket/handler.go:54 +0x86
+net/http.HandlerFunc.ServeHTTP(...)
+	net/http/server.go:2322
+gitlab.com/accumulatenetwork/accumulate/internal/node/http.NewHandler.func1({0x281cfd0?, 0xc001ac2870?}, 0xc02bfadcf8?, {0xc001acd748?, 0xc001acd6f8?, 0x40baa9?})
+	gitlab.com/accumulatenetwork/accumulate/internal/node/http/handler.go:172 +0x31
+github.com/julienschmidt/httprouter.(*Router).ServeHTTP(0xc000bb9320, {0x281cfd0, 0xc001ac2870}, 0xc0395ab180)
+	github.com/julienschmidt/httprouter@v1.3.0/router.go:495 +0x1cf
+gitlab.com/accumulatenetwork/accumulate/internal/node/http.(*Handler).ServeHTTP(...)
+	gitlab.com/accumulatenetwork/accumulate/internal/node/http/handler.go:202
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*HttpService).start.func1({0x281cfd0, 0xc001ac2870}, 0xc0395ab180)
+	gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run/http.go:143 +0x485
+net/http.HandlerFunc.ServeHTTP(0xc000062480?, {0x281cfd0?, 0xc001ac2870?}, 0xc0395ab180?)
+	net/http/server.go:2322 +0x29
+gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run.(*HttpService).start.(*Cors).Handler.func2({0x281cfd0, 0xc001ac2870}, 0xc0395ab180)
+	github.com/rs/cors@v1.9.0/cors.go:236 +0x164
+net/http.HandlerFunc.ServeHTTP(0x41d905?, {0x281cfd0?, 0xc001ac2870?}, 0xc001ac2801?)
+	net/http/server.go:2322 +0x29
+net/http.serverHandler.ServeHTTP({0x2814848?}, {0x281cfd0?, 0xc001ac2870?}, 0x1?)
+	net/http/server.go:3340 +0x8e
+net/http.(*conn).serve(0xc009beafc0, {0x2823b48, 0xc000d84cf0})
+	net/http/server.go:2103 +0x6a5
+created by net/http.(*Server).Serve in goroutine 793
+	net/http/server.go:3493 +0x485
+
+goroutine 1400466 [IO wait]:
+internal/poll.runtime_pollWait(0x744e401b5e00, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc03a556d80?, 0xc03a507a21?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc03a556d80, {0xc03a507a21, 0x1, 0x1})
+	internal/poll/fd_unix.go:165 +0x279
+net.(*netFD).Read(0xc03a556d80, {0xc03a507a21?, 0xc03a5316c0?, 0xc03a427a70?})
+	net/fd_posix.go:68 +0x25
+net.(*conn).Read(0xc03951d3a8, {0xc03a507a21?, 0x28158f8?, 0xc03a556100?})
+	net/net.go:196 +0x45
+net/http.(*connReader).backgroundRead(0xc03a507a00)
+	net/http/server.go:702 +0x33
+created by net/http.(*connReader).startBackgroundRead in goroutine 1400465
+	net/http/server.go:698 +0xb6
+
+goroutine 1400402 [IO wait]:
+internal/poll.runtime_pollWait(0x744e401b5c00, 0x72)
+	runtime/netpoll.go:351 +0x85
+internal/poll.(*pollDesc).wait(0xc02dcc9b80?, 0xc00ee1bd21?, 0x0)
+	internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc02dcc9b80, {0xc00ee1bd21, 0x1, 0x1})
+	internal/poll/fd_unix.go:165 +0x279
+net.(*netFD).Read(0xc02dcc9b80, {0xc00ee1bd21?, 0xc000b181c0?, 0x4?})
+	net/fd_posix.go:68 +0x25
+net.(*conn).Read(0xc040bf04e8, {0xc00ee1bd21?, 0xc0395970e0?, 0xc001a06f70?})
+	net/net.go:196 +0x45
+gitlab.com/accumulatenetwork/accumulate/internal/node/daemon.(*rateLimitedConn).Read(0xc01cc69ec0, {0xc00ee1bd21?, 0x1?, 0x2843918?})
+	gitlab.com/accumulatenetwork/accumulate/internal/node/daemon/rate_limit.go:63 +0x25
+net/http.(*connReader).backgroundRead(0xc00ee1bd00)
+	net/http/server.go:702 +0x33
+created by net/http.(*connReader).startBackgroundRead in goroutine 1393419
+	net/http/server.go:698 +0xb6
+
+goroutine 1354337 [syscall]:
+syscall.Syscall(0x1, 0x12c, 0xc045e1c000, 0x100000)
+	syscall/syscall_linux.go:74 +0x25
+syscall.write(0xc034db7e00?, {0xc045e1c000?, 0xc03d082a80?, 0x200000003?})
+	syscall/zsyscall_linux_amd64.go:964 +0x3b
+syscall.Write(...)
+	syscall/syscall_unix.go:211
+internal/poll.ignoringEINTRIO(...)
+	internal/poll/fd_unix.go:738
+internal/poll.(*FD).Write(0xc034db7e00, {0xc045e1c000, 0x100000, 0x100000})
+	internal/poll/fd_unix.go:374 +0x394
+os.(*File).write(...)
+	os/file_posix.go:47
+os.(*File).Write(0xc0266ea8f0, {0xc045e1c000?, 0x100000, 0x100000?})
+	os/file.go:215 +0x4e
+bufio.(*Writer).Flush(0xc01be00240)
+	bufio/bufio.go:645 +0x55
+bufio.(*Writer).Write(0xc01be00240, {0xc046160000?, 0xc0006c40d8?, 0xc046160000?})
+	bufio/bufio.go:689 +0xcd
+io.(*multiWriter).Write(0xc01b563050?, {0xc046160000, 0x100000, 0x100000})
+	io/multi.go:85 +0x6d
+io.copyBuffer({0x280c1e0, 0xc00299ccc0}, {0x28119c0, 0xc01b563050}, {0xc046160000, 0x100000, 0x100000})
+	io/io.go:431 +0x1d7
+io.CopyBuffer({0x280c1e0?, 0xc00299ccc0?}, {0x28119c0?, 0xc01b563050?}, {0xc046160000?, 0x744e86e8de50?, 0x100000?})
+	io/io.go:402 +0x36
+github.com/AccumulateNetwork/BlockchainDB/database.(*segment).copyBody(0xc04518bd00, {0x280c1e0, 0xc00299ccc0}, 0x20ce8be8, {0xc046160000, 0x100000, 0x100000})
+	github.com/AccumulateNetwork/BlockchainDB@v0.1.2-0.20260830043925-eea0b868036d/database/segstore.go:2551 +0x16d
+github.com/AccumulateNetwork/BlockchainDB/database.(*SegmentStore).concatSegments(0xc000220508, {0xc041bad688, 0x81, 0x8f}, 0x13f, 0x1)
+	github.com/AccumulateNetwork/BlockchainDB@v0.1.2-0.20260830043925-eea0b868036d/database/segstore.go:2716 +0x99f
+github.com/AccumulateNetwork/BlockchainDB/database.(*SegmentStore).MergeBelow(0xc000220508, 0x140)
+	github.com/AccumulateNetwork/BlockchainDB@v0.1.2-0.20260830043925-eea0b868036d/database/segstore.go:2825 +0x2f9
+github.com/AccumulateNetwork/BlockchainDB/database.(*KV2).MergeBelow(...)
+	github.com/AccumulateNetwork/BlockchainDB@v0.1.2-0.20260830043925-eea0b868036d/database/kv_2.go:346
+gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb.(*Database).maintain.func1()
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb/database.go:518 +0x170
+created by gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb.(*Database).maintain in goroutine 739
+	gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb/database.go:502 +0x8b
