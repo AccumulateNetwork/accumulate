@@ -11,6 +11,8 @@
     type: '*stateData'
   - name: history
     type: '*historyConfig'
+  - name: view
+    type: '*historyView'
   attributes:
   - name: State
     private: true
