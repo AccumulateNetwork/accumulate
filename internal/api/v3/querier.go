@@ -340,6 +340,17 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 		return r, nil
 	}
 
+	// A historical request must branch BEFORE the current-state receipt is
+	// built. ReceiptOptions.Yes reports true for a ForHeight-only query
+	// (pkg/api/v3/query.go:104-106), so this path is already reached today and
+	// already answers such a request with a current-state receipt — which is
+	// the behaviour AIP-58 exists to stop. There is deliberately no fallback:
+	// a node that cannot prove the past refuses.
+	if wantReceipt.ForHeight != 0 {
+		err = s.historicalStateReceipt(batch, record, r, wantReceipt.ForHeight)
+		return r, errors.UnknownError.Wrap(err)
+	}
+
 	block, receipt, err := indexing.ReceiptForAccountState(s.partition, batch, record)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get state receipt: %w", err)
@@ -352,6 +363,62 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 		r.Receipt.LocalBlockTime = *block.BlockTime
 	}
 	return r, nil
+}
+
+// historicalStateReceipt answers a ForHeight request for an account's state.
+//
+// The receipt starts at the account's state hash as of the resolved block and
+// terminates at the partition's CURRENT BPT root, passing through the historical
+// root on the way. Terminating at the historical root instead would hand the
+// caller a root it cannot check: only the sparse subset of roots that reached an
+// anchor(<partition>)-bpt chain is covered by a quorum signature, and the root
+// for an arbitrary block is generally not among them. The current root is the
+// one the network is about to anchor, so it is the one worth reaching.
+//
+// Receipt.ForHeight carries the RESOLVED block, which is the last state-changing
+// block at or before the requested height. That is exact rather than
+// approximate: a block that changed nothing carries its predecessor's root.
+// LocalBlock keeps its existing meaning and describes the anchor, which is
+// current — reporting the resolved block there would make it disagree with the
+// root the receipt actually ends at.
+//
+// WHAT THE RECEIPT STARTS AT DIFFERS FROM THE CURRENT-STATE PATH, and a caller
+// that assumes otherwise will compare the wrong value. The current path starts
+// at the account's MAIN STATE hash: StateReceipt combines hasher.Receipt(0, …)
+// with the BPT receipt, proving element 0 of the account hash. This path cannot
+// do that — rebuilding the hasher at a past block needs the account's main
+// state at that block, and only BPT nodes are retained, not account state — so
+// it starts at the account's whole BPT entry: the merkle hash over main state,
+// secondary state, chain anchors and pending. Retaining the four components
+// would close the gap at 128 bytes per changed account per block; that is a
+// retention change and is not made here.
+func (s *Querier) historicalStateReceipt(batch *database.Batch, record *database.Account, r *api.AccountRecord, height uint64) error {
+	proof, err := indexing.HistoricalAccountStateProof(s.partition, batch, record, height)
+	if err != nil {
+		// NotFound, IncompleteChain and BadRequest are all meaningful to the
+		// caller and must reach it unchanged
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// The anchor is the current root, so the block it belongs to is the latest
+	// indexed one — the same value the current-state path reports
+	ledger := batch.Account(s.partition.Ledger())
+	block, err := indexing.LoadIndexEntryFromEnd(ledger.RootChain().Index(), 1)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if block == nil {
+		return errors.InternalError.With("root index chain is empty")
+	}
+
+	r.Receipt = new(api.Receipt)
+	r.Receipt.Receipt = *proof.Receipt
+	r.Receipt.ForHeight = proof.Block
+	r.Receipt.LocalBlock = block.BlockIndex
+	if block.BlockTime != nil {
+		r.Receipt.LocalBlockTime = *block.BlockTime
+	}
+	return nil
 }
 
 func (s *Querier) queryMessage(ctx context.Context, batch *database.Batch, txid *url.TxID) (*api.MessageRecord[messaging.Message], error) {
