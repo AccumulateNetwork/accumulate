@@ -9,6 +9,8 @@
     type: map[[32]byte]*mutation
   - name: loadedState
     type: '*stateData'
+  - name: history
+    type: '*historyConfig'
   attributes:
   - name: State
     private: true

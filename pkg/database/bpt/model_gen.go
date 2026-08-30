@@ -22,6 +22,7 @@ type BPT struct {
 	key         *record.Key
 	pending     map[[32]byte]*mutation
 	loadedState *stateData
+	history     *historyConfig
 
 	state values.Value[*stateData]
 	root  *rootRecord

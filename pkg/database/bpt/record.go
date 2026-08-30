@@ -283,7 +283,16 @@ func (e *rootRecord) Commit() error {
 
 			// If the node is on a boundary, write it
 			if e.Height&s.Mask == 0 {
-				err := e.bpt.store.PutValue(e.bpt.key.Append(e.Key), nodeRecord{e})
+				key := e.bpt.key.Append(e.Key)
+
+				// Keep what this write is about to destroy, if the node is
+				// configured to retain history. A no-op otherwise.
+				err := e.bpt.retainSuperseded(e.Key, key)
+				if err != nil {
+					return errors.UnknownError.WithFormat("retain superseded node: %w", err)
+				}
+
+				err = e.bpt.store.PutValue(key, nodeRecord{e})
 				if err != nil {
 					return errors.UnknownError.Wrap(err)
 				}
