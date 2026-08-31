@@ -198,6 +198,13 @@ func actionNames() []string {
 // to be producing major blocks — it just stops the load generator destroying
 // accounts while the answer is unknown. If major blocks appear, locking
 // resumes on its own.
+// majorBlocksSeen is the cached answer, for pick's ready predicates.
+func (e *env) majorBlocksSeen() bool {
+	e.majorMu.Lock()
+	defer e.majorMu.Unlock()
+	return e.majorSeen
+}
+
 func (e *env) majorBlocksExist(ctx context.Context) bool {
 	e.majorMu.Lock()
 	defer e.majorMu.Unlock()
@@ -638,6 +645,9 @@ func generate(ctx context.Context, e *env, total int, limit time.Duration, track
 
 		mu.Lock()
 		if time.Since(lastLog) > time.Minute {
+			// Refresh the major-block flag off the hot path so
+			// lock-account's ready predicate has a current answer.
+			go e.majorBlocksExist(ctx)
 			e.logProgress(sent, failed, skipped, total, started)
 			if lagged > 0 {
 				log.Printf("pacer: %d ticks waited for a free submitter (submit-bound; raise -submitters)", lagged)

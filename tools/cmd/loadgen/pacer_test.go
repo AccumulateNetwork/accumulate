@@ -7,6 +7,8 @@
 package main
 
 import (
+	"crypto/ed25519"
+	mrand "math/rand"
 	"testing"
 	"time"
 
@@ -45,4 +47,37 @@ func TestPacer_ResyncsAfterAStall(t *testing.T) {
 	require.Equal(t, clock, p.next, "resynced to now")
 	p.wait(1, 100)
 	require.InDelta(t, 0.01, slept.Seconds()-0.01, 0.001, "the tick after the resync waits a full period again")
+}
+
+// The generator must not draw work it already knows is impossible: an
+// action whose prerequisites are absent stays out of the draw entirely,
+// so a run-time skip can only be a race.
+func TestPick_OnlyDrawsAvailableActions(t *testing.T) {
+	u := newUniverse(mrand.New(mrand.NewSource(1)))
+	e := &env{u: u}
+
+	// One identity with a full second page, no custom tokens, no majors.
+	full := &keyPage{threshold: 1}
+	for i := 0; i < maxPageKeys; i++ {
+		full.keys = append(full.keys, newKey())
+	}
+	book := &keyBook{pages: []*keyPage{{keys: []ed25519.PrivateKey{newKey()}, threshold: 1}, full}}
+	adi := &identity{books: []*keyBook{book, {}, {}, {}}} // at the book cap too
+	u.addIdentity(adi)
+
+	never := map[string]bool{
+		"add-page-key": true, "lock-account": true, "issue-tokens": true,
+		"send-tokens-custom": true, "burn-tokens-custom": true, "add-key-book": true,
+	}
+	for i := 0; i < 2000; i++ {
+		a := e.pick()
+		require.Falsef(t, never[a.name], "pick drew %q whose prerequisites do not exist", a.name)
+	}
+
+	// remove-page-key IS available (5 keys, threshold 1) and must appear.
+	seen := map[string]bool{}
+	for i := 0; i < 5000; i++ {
+		seen[e.pick().name] = true
+	}
+	require.True(t, seen["remove-page-key"], "an available action must be drawn")
 }

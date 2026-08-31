@@ -26,7 +26,13 @@ type action struct {
 	// meant to fail (forcing a refund). They are counted but NOT followed for
 	// delivery, so they never count toward -max-stranded.
 	expectFail bool
-	run        func(ctx context.Context, e *env) ([]*url.TxID, error)
+	// ready reports whether the action can run right now — its
+	// prerequisites exist in the universe. nil means always. pick skips
+	// actions that are not ready, so a skip at run time can only be a
+	// race: the generator must not draw work it already knows is
+	// impossible (10,767 skips in seven minutes of 20260831T060018Z).
+	ready func(e *env) bool
+	run   func(ctx context.Context, e *env) ([]*url.TxID, error)
 }
 
 // menu is the full set of user transaction types the generator exercises.
@@ -55,6 +61,9 @@ func (e *env) pick() action {
 		if a.needsIdentity && !haveIdentity {
 			continue
 		}
+		if a.ready != nil && !a.ready(e) {
+			continue
+		}
 		total += e.weightOf(a)
 	}
 	if total == 0 {
@@ -64,6 +73,9 @@ func (e *env) pick() action {
 	n := e.u.intn(total)
 	for _, a := range menu {
 		if a.needsIdentity && !haveIdentity {
+			continue
+		}
+		if a.ready != nil && !a.ready(e) {
 			continue
 		}
 		w := e.weightOf(a)
@@ -241,8 +253,9 @@ var burnCredits = action{
 // ADI that holds them, so both pages must belong to the same identity.
 var transferCredits = action{
 	name: "transfer-credits", weight: 3, needsIdentity: true,
+	ready: func(e *env) bool { return e.u.anyIdentity(idHasMutablePage) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		a := e.u.randIdentity()
+		a := e.u.randIdentityWhere(idHasMutablePage)
 		if a == nil || a.signer() == nil {
 			return nil, errors.NotReady.With("no identity")
 		}
@@ -310,8 +323,9 @@ var writeDataLite = action{
 
 var setThreshold = action{
 	name: "set-threshold", weight: 4, needsIdentity: true,
+	ready: func(e *env) bool { return e.u.anyIdentity(idHasMutablePage) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		a := e.u.randIdentity()
+		a := e.u.randIdentityWhere(idHasMutablePage)
 		if a == nil {
 			return nil, errors.NotReady.With("no identity")
 		}
@@ -345,12 +359,13 @@ var setThreshold = action{
 
 var addPageKey = action{
 	name: "add-page-key", weight: 4, needsIdentity: true,
+	ready: func(e *env) bool { return e.u.anyIdentity(idHasPageWithRoom(maxPageKeys)) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		a := e.u.randIdentity()
+		a := e.u.randIdentityWhere(idHasPageWithRoom(maxPageKeys))
 		if a == nil {
 			return nil, errors.NotReady.With("no identity")
 		}
-		_, p := e.u.mutablePage(a)
+		_, p := e.u.mutablePageWhere(a, func(p *keyPage) bool { return len(p.keys) < maxPageKeys })
 		if p == nil || len(p.keys) >= maxPageKeys {
 			return nil, errors.NotReady.With("no page with room for another key")
 		}
@@ -374,12 +389,13 @@ var addPageKey = action{
 
 var updatePageKey = action{
 	name: "update-page-key", weight: 3, needsIdentity: true,
+	ready: func(e *env) bool { return e.u.anyIdentity(idHasMutablePage) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		a := e.u.randIdentity()
+		a := e.u.randIdentityWhere(idHasMutablePage)
 		if a == nil {
 			return nil, errors.NotReady.With("no identity")
 		}
-		_, p := e.u.mutablePage(a)
+		_, p := e.u.mutablePageWhere(a, func(p *keyPage) bool { return len(p.keys) > 0 })
 		if p == nil || len(p.keys) == 0 {
 			return nil, errors.NotReady.With("no mutable page")
 		}
@@ -415,14 +431,17 @@ var updatePageKey = action{
 
 var removePageKey = action{
 	name: "remove-page-key", weight: 2, needsIdentity: true,
+	ready: func(e *env) bool { return e.u.anyIdentity(idHasRemovableKey) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		a := e.u.randIdentity()
+		a := e.u.randIdentityWhere(idHasRemovableKey)
 		if a == nil {
 			return nil, errors.NotReady.With("no identity")
 		}
-		_, p := e.u.mutablePage(a)
 		// Removing below the threshold would strand the page, and the last key
 		// of a page cannot be removed at all.
+		_, p := e.u.mutablePageWhere(a, func(p *keyPage) bool {
+			return len(p.keys) > 1 && uint64(len(p.keys)-1) >= p.threshold
+		})
 		if p == nil || len(p.keys) <= 1 || uint64(len(p.keys)-1) < p.threshold {
 			return nil, errors.NotReady.With("no page with a removable key")
 		}
@@ -482,8 +501,9 @@ var updateAccountAuth = action{
 // constraints, like the other growth actions.
 var addToken = action{
 	name: "add-token", weight: 1, needsIdentity: true,
+	ready: func(e *env) bool { return e.u.anyIdentity(idWantsToken) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		a := e.u.randIdentity()
+		a := e.u.randIdentityWhere(idWantsToken)
 		if a == nil || len(a.issuers) >= 3 {
 			return nil, errors.NotReady.With("no identity wanting another token")
 		}
@@ -496,6 +516,7 @@ var addToken = action{
 // can do this, which is a different authorization path from moving tokens.
 var issueTokens = action{
 	name: "issue-tokens", weight: 2, needsIdentity: true,
+	ready: func(e *env) bool { return e.u.hasIssuer(1) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
 		a, tok := e.u.randIssuer(1)
 		if a == nil || a.signer() == nil {
@@ -516,6 +537,7 @@ var issueTokens = action{
 // produces.
 var sendTokensCustom = action{
 	name: "send-tokens-custom", weight: 3, needsIdentity: true,
+	ready: func(e *env) bool { return e.u.hasIssuer(2) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
 		a, tok := e.u.randIssuer(2)
 		if a == nil || a.signer() == nil {
@@ -534,6 +556,7 @@ var sendTokensCustom = action{
 // to this issuer instead of to acc://ACME on the Directory.
 var burnTokensCustom = action{
 	name: "burn-tokens-custom", weight: 1, needsIdentity: true,
+	ready: func(e *env) bool { return e.u.hasIssuer(1) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
 		a, tok := e.u.randIssuer(1)
 		if a == nil || a.signer() == nil {
@@ -550,6 +573,10 @@ var burnTokensCustom = action{
 
 var lockAccount = action{
 	name: "lock-account", weight: 1,
+	// The cached flag only: the refresh (a network query, throttled to
+	// one a minute) runs in the generation loop's minute tick, not in
+	// pick, which must never block on a round-trip.
+	ready: func(e *env) bool { return e.majorBlocksSeen() },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
 		// A lock is until a MAJOR block, and on a network that produces none
 		// it never expires — the account is destroyed, not delayed (#4129).
@@ -580,8 +607,9 @@ var lockAccount = action{
 
 var addBook = action{
 	name: "add-key-book", weight: 1, needsIdentity: true,
+	ready: func(e *env) bool { return e.u.anyIdentity(idWantsBook) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		a := e.u.randIdentity()
+		a := e.u.randIdentityWhere(idWantsBook)
 		if a == nil || len(a.books) >= 4 {
 			return nil, errors.NotReady.With("no identity wanting another book")
 		}
@@ -592,8 +620,9 @@ var addBook = action{
 
 var addAccount = action{
 	name: "add-account", weight: 2, needsIdentity: true,
+	ready: func(e *env) bool { return e.u.anyIdentity(idWantsAccount) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		a := e.u.randIdentity()
+		a := e.u.randIdentityWhere(idWantsAccount)
 		if a == nil || len(a.tokens)+len(a.data) >= 8 {
 			return nil, errors.NotReady.With("no identity wanting another account")
 		}

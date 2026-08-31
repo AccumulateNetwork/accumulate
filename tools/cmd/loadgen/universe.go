@@ -314,6 +314,115 @@ func (u *universe) mutablePage(a *identity) (*keyBook, *keyPage) {
 	return b, p
 }
 
+// anyIdentity reports whether some identity satisfies pred, and
+// randIdentityWhere picks uniformly among those that do. These are what
+// lets an action be drawn only when it can actually run: picking a RANDOM
+// identity and then testing it skipped whenever the dice landed on an
+// ineligible one, even though an eligible one existed — 10,767 skips in
+// the first seven minutes of run 20260831T060018Z.
+func (u *universe) anyIdentity(pred func(*identity) bool) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	for _, a := range u.adis {
+		if pred(a) {
+			return true
+		}
+	}
+	return false
+}
+
+func (u *universe) randIdentityWhere(pred func(*identity) bool) *identity {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	var cand []*identity
+	for _, a := range u.adis {
+		if pred(a) {
+			cand = append(cand, a)
+		}
+	}
+	if len(cand) == 0 {
+		return nil
+	}
+	return cand[u.rng.Intn(len(cand))]
+}
+
+// The eligibility rules, stated once. Callers hold no lock; the identity
+// predicates run under the universe lock via anyIdentity/randIdentityWhere.
+
+// hasMutablePage: a second page exists (pages[0] is the signer and is
+// never mutated).
+func idHasMutablePage(a *identity) bool {
+	return len(a.books) > 0 && len(a.books[0].pages) >= 2
+}
+
+// a mutable page with room for another key
+func idHasPageWithRoom(max int) func(*identity) bool {
+	return func(a *identity) bool {
+		if !idHasMutablePage(a) {
+			return false
+		}
+		for _, p := range a.books[0].pages[1:] {
+			if len(p.keys) < max {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// a mutable page a key can be removed from without stranding it
+func idHasRemovableKey(a *identity) bool {
+	if !idHasMutablePage(a) {
+		return false
+	}
+	for _, p := range a.books[0].pages[1:] {
+		if len(p.keys) > 1 && uint64(len(p.keys)-1) >= p.threshold {
+			return true
+		}
+	}
+	return false
+}
+
+func idWantsToken(a *identity) bool   { return len(a.issuers) < 3 }
+func idWantsBook(a *identity) bool    { return len(a.books) < 4 }
+func idWantsAccount(a *identity) bool { return len(a.tokens)+len(a.data) < 8 }
+
+// hasIssuer reports whether any custom token exists with at least
+// minAccounts holder accounts (the shape randIssuer selects by).
+func (u *universe) hasIssuer(minAccounts int) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	for _, a := range u.adis {
+		for _, t := range a.issuers {
+			if len(t.accounts) >= minAccounts {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// mutablePageWhere picks one of an identity's mutable pages satisfying
+// pred, under the lock.
+func (u *universe) mutablePageWhere(a *identity, pred func(*keyPage) bool) (*keyBook, *keyPage) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if a == nil || len(a.books) == 0 || len(a.books[0].pages) < 2 {
+		return nil, nil
+	}
+	b := a.books[0]
+	var cand []*keyPage
+	for _, p := range b.pages[1:] {
+		if pred == nil || pred(p) {
+			cand = append(cand, p)
+		}
+	}
+	if len(cand) == 0 {
+		return nil, nil
+	}
+	return b, cand[u.rng.Intn(len(cand))]
+}
+
 // pickKey chooses one of a page's keys under the lock. Callers hold the KEY,
 // never an index: the page is mutated by other actions concurrently, and an
 // index chosen outside the lock can point past the end by the time it is used.
