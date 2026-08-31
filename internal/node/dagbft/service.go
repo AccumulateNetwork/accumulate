@@ -298,9 +298,27 @@ func (s *Service) LastCommitRound() types.Round {
 	return s.node.LastCommitRound()
 }
 
-// SubmitTransaction submits a transaction to the consensus node.
+// SubmitTransaction submits a transaction to the consensus node, spreading
+// keyless traffic across workers.
+//
+// This used to call SubmitTransactionFor(""), which routes by hashing the key
+// — and the hash of an empty key is a constant. Since this is the ONLY path
+// the submitter API uses, every transaction on every node landed in the same
+// worker (worker 1 for the 2 and 4 worker counts we ship). That worker held
+// all of the node's own uncommitted batches inside its 1/N share of the
+// partition's byte budget — 8 MB of 32 MB at NumWorkers=4 — while the other
+// workers held budget they could never fill. Own batches cannot be evicted, so
+// the moment commit lagged, worker 1 evicted PEERS' batches instead, which are
+// what certificates need; they were refetched, commit lagged further, and the
+// network collapsed 15 minutes into a 500 tx/s soak (#4179).
 func (s *Service) SubmitTransaction(tx []byte) error {
-	return s.SubmitTransactionFor("", tx)
+	s.mu.RLock()
+	node := s.node
+	s.mu.RUnlock()
+	if node == nil {
+		return errors.BadRequest.With("node not started")
+	}
+	return node.SubmitTransaction(tx)
 }
 
 // SubmitTransactionFor submits on behalf of a named sender, so everything from

@@ -159,6 +159,41 @@ func TestSubmitRouting_KeylessSubmitStillRoundRobins(t *testing.T) {
 	_ = ctx
 }
 
+// An EMPTY key is not a key. It used to be hashed like any other, and the hash
+// of a constant is a constant — so a caller passing "" put every transaction in
+// the network into one worker, holding all of that node's own uncommitted
+// batches inside 1/N of the partition's byte budget (#4179).
+func TestSubmitRouting_EmptyKeyRoundRobinsInsteadOfPinning(t *testing.T) {
+	for _, n := range []int{2, 4, 8} {
+		node := nodeWithWorkers(t, n)
+		ctx, cancel := startNode(t, node)
+
+		base := pending(node)
+		for i := 0; i < 4*n; i++ {
+			require.NoError(t, node.SubmitTransactionFor("", []byte(fmt.Sprintf("tx-%d", i))))
+		}
+		after := pending(node)
+
+		for i := range after {
+			assert.Equal(t, base[i]+4, after[i],
+				"numWorkers=%d: worker %d should have taken an even share of keyless traffic", n, i)
+		}
+		cancel()
+		_ = ctx
+	}
+}
+
+// The constant that did the damage, pinned so it cannot come back by accident:
+// hashing an empty routing key picks worker 1, not worker 0, so the defect was
+// invisible to anyone checking whether traffic all landed in the first worker.
+func TestSubmitRouting_HashingAnEmptyKeyIsAConstant(t *testing.T) {
+	for _, n := range []int{2, 4} {
+		node := nodeWithWorkers(t, n)
+		assert.Equal(t, 1, node.WorkerFor(""),
+			"numWorkers=%d: the empty key hashes to worker 1 — this is why it must not be hashed", n)
+	}
+}
+
 // Received batches must spread rather than all landing in worker 0.
 //
 // Both intake paths used to store every batch this node did not create into

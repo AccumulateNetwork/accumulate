@@ -1,0 +1,7 @@
+  src -> dst                produced  received  delivered  UNDELIVERED
+  bvn-BVN1  -> dn         7327      6621      6621       706  <<< STALLED
+  bvn-BVN1  -> bvn-BVN2   43196     35403     35403      7793  <<< STALLED
+  bvn-BVN2  -> dn         23671     20751     20751      2920  <<< STALLED
+  bvn-BVN2  -> bvn-BVN1   107020    94474     94474      12546  <<< STALLED
+
+stalled channels: 4 [('bvn-BVN1', 'dn', 706), ('bvn-BVN1', 'bvn-BVN2', 7793), ('bvn-BVN2', 'dn', 2920), ('bvn-BVN2', 'bvn-BVN1', 12546)]

@@ -660,10 +660,15 @@ func (n *Node) SubmitTransaction(tx []byte) error {
 		return errors.New("no workers available")
 	}
 
-	// No routing key: fall back to round-robin. This spreads a single sender's
-	// transactions across workers, which destroys their execution order and
-	// gets all but an increasing subsequence rejected by replay protection
-	// (#4132). Callers that know the sender must use SubmitTransactionFor.
+	// No routing key: round-robin. This spreads a single sender's transactions
+	// across workers, so they are batched independently and can commit out of
+	// order — which used to cost all but an increasing subsequence to replay
+	// protection (#4132). Ordering across batches is now the executor's job
+	// (windowed replay, 0e2ea8966), not routing's; keying on the signer was
+	// tried for it and reverted, because it serialises a hot signer onto one
+	// worker and does not fix ordering anyway. Callers that know the sender
+	// should still use SubmitTransactionFor — it keeps a sender together, which
+	// is cheaper than making the executor tolerate the reordering.
 	idx := int(n.transactionsSubmitted.Add(1)-1) % len(n.workers)
 	return n.workers[idx].Submit(tx)
 }
@@ -674,8 +679,13 @@ func (n *Node) SubmitTransaction(tx []byte) error {
 // worker and keeps its order, while distinct senders still spread across
 // workers — which is the parallelism worth having. Pass the signer's URL.
 //
-// An empty key routes to a worker deterministically rather than round-robin:
-// unattributable traffic should still be stable, not deliberately scattered.
+// An empty key means there is no sender to keep together, so it round-robins
+// like SubmitTransaction. It used to route deterministically on the theory that
+// unattributable traffic should be stable — but "deterministic" for a constant
+// key means a constant worker, and one caller passing "" pinned every
+// transaction in the network to worker 1, into 1/N of the batch-store budget
+// (#4179). Stability is worth nothing here; nothing about an unattributed
+// transaction needs to share a worker with the next one.
 func (n *Node) SubmitTransactionFor(key string, tx []byte) error {
 	if n.closed.Load() {
 		return ErrNodeClosed
@@ -692,8 +702,13 @@ func (n *Node) SubmitTransactionFor(key string, tx []byte) error {
 		return errors.New("no workers available")
 	}
 
-	n.transactionsSubmitted.Add(1)
-	idx := workerFor(routingKeyBytes(key), len(n.workers))
+	seq := n.transactionsSubmitted.Add(1)
+	var idx int
+	if key == "" {
+		idx = int(seq-1) % len(n.workers)
+	} else {
+		idx = workerFor(routingKeyBytes(key), len(n.workers))
+	}
 	return n.workers[idx].Submit(tx)
 }
 
