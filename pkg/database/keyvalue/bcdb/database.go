@@ -600,6 +600,19 @@ func (d *Database) getAt(at uint64, key *record.Key) ([]byte, error) {
 	}
 
 	value, err := d.kv.Get(h)
+	if err != nil {
+		// Get stops at the window for the immutable layer (BlockchainDB
+		// 5c7b0e5): permanent data older than 2N is history, and probing
+		// it per segment was 23% of a validator's CPU. But this adapter
+		// is the ONE read path — the API serving an explorer, healing
+		// re-proving an old range, and a signature naming an old
+		// transaction all come through here and must see deep history.
+		// So a miss falls back to GetDeep. The consensus path's hot
+		// reads are recent and never reach this line; the cost lands on
+		// reads that are genuinely absent or genuinely old, which is
+		// the store's history-index problem (BlockchainDB#59) to shrink.
+		value, err = d.kv.GetDeep(h)
+	}
 	if err != nil || len(value) == 0 {
 		// A zero-length value is a deletion, reported the same way a
 		// key that was never written is
