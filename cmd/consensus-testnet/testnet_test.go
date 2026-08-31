@@ -322,6 +322,9 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 			case group := <-committed:
 				// One executor block per committed leader group (#4164)
 				for _, cert := range group {
+					if cert == nil {
+						continue
+					}
 					// Get batches for this certificate from workers
 					batches := make(map[types.BatchDigest]*types.Batch)
 					digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
@@ -465,6 +468,9 @@ func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
 				return
 			case group := <-committed:
 				for _, cert := range group {
+					if cert == nil {
+						continue
+					}
 					batches := make(map[types.BatchDigest]*types.Batch)
 					digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
 					for _, entry := range cert.Header.Payload {

@@ -180,6 +180,9 @@ func TestExtended_ThirtyMinuteIntegration(t *testing.T) {
 						return
 					}
 					for _, cert := range group {
+						if cert == nil {
+							continue
+						}
 						batches := make(map[types.BatchDigest]*types.Batch)
 						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
 						for _, entry := range cert.Header.Payload {

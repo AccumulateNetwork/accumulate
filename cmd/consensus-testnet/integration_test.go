@@ -170,6 +170,9 @@ func TestConsensusTestnet_TwoNodeCommunication(t *testing.T) {
 						return
 					}
 					for _, cert := range group {
+						if cert == nil {
+							continue
+						}
 						// Track message exchange (certificate commits are GossipSub messages)
 						messagesExchanged.Add(1)
 
@@ -462,6 +465,9 @@ func TestConsensusTestnet_BasicConsensus(t *testing.T) {
 						return
 					}
 					for _, cert := range group {
+						if cert == nil {
+							continue
+						}
 						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
 						if !ok {
 							return
@@ -700,6 +706,9 @@ func TestConsensusTestnet_Throughput(t *testing.T) {
 						return
 					}
 					for _, cert := range group {
+						if cert == nil {
+							continue
+						}
 						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
 						if !ok {
 							return
@@ -938,6 +947,9 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 						continue
 					}
 					for _, cert := range group {
+						if cert == nil {
+							continue
+						}
 						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
 						if !ok {
 							return
@@ -1095,6 +1107,9 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 					return
 				}
 				for _, cert := range group {
+					if cert == nil {
+						continue
+					}
 					batches, digests, ok := collectForCert(ctx, newNode, cert)
 					if !ok {
 						return

@@ -173,6 +173,9 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 						continue
 					}
 					for _, cert := range group {
+						if cert == nil {
+							continue
+						}
 						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
 						if !ok {
 							return
@@ -394,6 +397,9 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 					return
 				}
 				for _, cert := range group {
+					if cert == nil {
+						continue
+					}
 					batches, digests, ok := collectForCert(ctx, newNode, cert)
 					if !ok {
 						return
@@ -725,6 +731,9 @@ func TestStress_MemoryStability(t *testing.T) {
 						return
 					}
 					for _, cert := range group {
+						if cert == nil {
+							continue
+						}
 						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
 						if !ok {
 							return
@@ -988,6 +997,9 @@ func TestStress_ConsensusStallDetection(t *testing.T) {
 						return
 					}
 					for _, cert := range group {
+						if cert == nil {
+							continue
+						}
 						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
 						if !ok {
 							return
