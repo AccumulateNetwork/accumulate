@@ -361,12 +361,11 @@ var addPageKey = action{
 	name: "add-page-key", weight: 4, needsIdentity: true,
 	ready: func(e *env) bool { return e.u.anyIdentity(idHasPageWithRoom(maxPageKeys)) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		a := e.u.randIdentityWhere(idHasPageWithRoom(maxPageKeys))
-		if a == nil {
-			return nil, errors.NotReady.With("no identity")
-		}
-		_, p := e.u.mutablePageWhere(a, func(p *keyPage) bool { return len(p.keys) < maxPageKeys })
-		if p == nil || len(p.keys) >= maxPageKeys {
+		// Reserve the slot as it is chosen. Checking for room and then filling
+		// it are separated by a round trip, and every submitter that drew this
+		// page in that window saw the same room (#4179 run notes).
+		a, p := e.u.claimPageSlot(maxPageKeys)
+		if p == nil {
 			return nil, errors.NotReady.With("no page with room for another key")
 		}
 		s := a.signer()
@@ -377,12 +376,10 @@ var addPageKey = action{
 				SignWith(s.url).Version(s.version).Timestamp(e.nonce.next()).PrivateKey(a.key())
 		})
 		if err != nil {
+			e.u.releasePageSlot(p)
 			return nil, err
 		}
-		e.u.mu.Lock()
-		p.keys = append(p.keys, k)
-		p.version++
-		e.u.mu.Unlock()
+		e.u.commitPageKey(p, k)
 		return ids, nil
 	},
 }
@@ -609,11 +606,11 @@ var addBook = action{
 	name: "add-key-book", weight: 1, needsIdentity: true,
 	ready: func(e *env) bool { return e.u.anyIdentity(idWantsBook) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		a := e.u.randIdentityWhere(idWantsBook)
-		if a == nil || len(a.books) >= 4 {
+		a, seq := e.u.claimBook()
+		if a == nil {
 			return nil, errors.NotReady.With("no identity wanting another book")
 		}
-		e.detach(ctx, "add-key-book", func(ctx context.Context) error { return e.growBook(ctx, a) })
+		e.detach(ctx, "add-key-book", func(ctx context.Context) error { return e.growBook(ctx, a, seq) })
 		return nil, nil
 	},
 }
@@ -622,11 +619,11 @@ var addAccount = action{
 	name: "add-account", weight: 2, needsIdentity: true,
 	ready: func(e *env) bool { return e.u.anyIdentity(idWantsAccount) },
 	run: func(ctx context.Context, e *env) ([]*url.TxID, error) {
-		a := e.u.randIdentityWhere(idWantsAccount)
-		if a == nil || len(a.tokens)+len(a.data) >= 8 {
+		c := e.u.claimAccount()
+		if c == nil {
 			return nil, errors.NotReady.With("no identity wanting another account")
 		}
-		e.detach(ctx, "add-account", func(ctx context.Context) error { return e.growAccount(ctx, a) })
+		e.detach(ctx, "add-account", func(ctx context.Context) error { return e.growAccount(ctx, c) })
 		return nil, nil
 	},
 }

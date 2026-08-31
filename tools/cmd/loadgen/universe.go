@@ -70,7 +70,23 @@ type identity struct {
 	tokens  []*url.URL // ACME token accounts
 	data    []*url.URL
 	issuers []*tokenIssuer
+
+	// Reservations against the caps above, held from the moment an action
+	// claims the slot until the account exists (or the attempt fails). A book
+	// or account takes up to three minutes to confirm, and until it does the
+	// slice does not grow — so without these the same slot is handed out over
+	// and over, deriving the SAME url each time: run 20260831T060018Z drew
+	// add-key-book against identities already creating book2 and logged
+	// "timed out waiting for .../book2" while 542 draws went to waste.
+	// Tokens and data are counted apart even though the cap is on their sum:
+	// each names its url from its OWN length, so a shared counter would let a
+	// data account's commit hand a live token sequence number back out.
+	pendingBooks int
+	pendingToken int
+	pendingData  int
 }
+
+func (a *identity) pendingAccounts() int { return a.pendingToken + a.pendingData }
 
 // tokenIssuer is a custom token and the accounts that hold it.
 //
@@ -103,6 +119,11 @@ type keyPage struct {
 	keys      []ed25519.PrivateKey
 	threshold uint64
 	version   uint64 // tracked locally; UpdateKeyPage bumps it
+
+	// pending counts keys submitted but not yet recorded in keys. Capacity is
+	// what several submitters race for, so it has to be reserved when a page
+	// is chosen, not when the result comes back. See claimPageSlot.
+	pending int
 }
 
 func newUniverse(rng *mrand.Rand) *universe {
@@ -362,13 +383,15 @@ func idHasPageWithRoom(max int) func(*identity) bool {
 			return false
 		}
 		for _, p := range a.books[0].pages[1:] {
-			if len(p.keys) < max {
+			if pageHasRoom(p, max) {
 				return true
 			}
 		}
 		return false
 	}
 }
+
+func pageHasRoom(p *keyPage, max int) bool { return len(p.keys)+p.pending < max }
 
 // a mutable page a key can be removed from without stranding it
 func idHasRemovableKey(a *identity) bool {
@@ -383,9 +406,11 @@ func idHasRemovableKey(a *identity) bool {
 	return false
 }
 
-func idWantsToken(a *identity) bool   { return len(a.issuers) < 3 }
-func idWantsBook(a *identity) bool    { return len(a.books) < 4 }
-func idWantsAccount(a *identity) bool { return len(a.tokens)+len(a.data) < 8 }
+func idWantsToken(a *identity) bool { return len(a.issuers) < 3 }
+func idWantsBook(a *identity) bool  { return len(a.books)+a.pendingBooks < maxBooks }
+func idWantsAccount(a *identity) bool {
+	return len(a.tokens)+len(a.data)+a.pendingAccounts() < maxAccounts
+}
 
 // hasIssuer reports whether any custom token exists with at least
 // minAccounts holder accounts (the shape randIssuer selects by).
@@ -421,6 +446,170 @@ func (u *universe) mutablePageWhere(a *identity, pred func(*keyPage) bool) (*key
 		return nil, nil
 	}
 	return b, cand[u.rng.Intn(len(cand))]
+}
+
+// Claims.
+//
+// Selecting a slot and filling it are separated by a network round trip, and
+// 16 submitters draw concurrently. Testing capacity at selection and testing
+// it again inside the action does not help: both tests are outside the lock
+// that matters, so every submitter that draws the same page sees the same
+// room. Against a 5-key page that is not a narrow race — add-page-key was
+// drawn 21,397 times in run 20260831T060018Z and 13,693 of those found the
+// page full by the time they looked, because the winners had already taken
+// the slot they all saw.
+//
+// A claim reserves the capacity under the same lock that finds it. Release it
+// if the attempt fails; commit it when the account exists.
+
+// claimPageSlot picks an identity and one of its mutable pages with room for
+// another key, and reserves that room. Returns nil if nothing is eligible.
+func (u *universe) claimPageSlot(max int) (*identity, *keyPage) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	type slot struct {
+		a *identity
+		p *keyPage
+	}
+	var cand []slot
+	for _, a := range u.adis {
+		if len(a.books) == 0 || len(a.books[0].pages) < 2 {
+			continue
+		}
+		for _, p := range a.books[0].pages[1:] {
+			if pageHasRoom(p, max) {
+				cand = append(cand, slot{a, p})
+			}
+		}
+	}
+	if len(cand) == 0 {
+		return nil, nil
+	}
+	s := cand[u.rng.Intn(len(cand))]
+	s.p.pending++
+	return s.a, s.p
+}
+
+func (u *universe) releasePageSlot(p *keyPage) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if p.pending > 0 {
+		p.pending--
+	}
+}
+
+// commitPageKey turns a reservation into a key the rest of the generator can
+// sign with, and bumps the version UpdateKeyPage just incremented on chain.
+func (u *universe) commitPageKey(p *keyPage, k ed25519.PrivateKey) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if p.pending > 0 {
+		p.pending--
+	}
+	p.keys = append(p.keys, k)
+	p.version++
+}
+
+// claimBook reserves the next key book on some identity that wants one, and
+// returns the sequence number its url must use. Deriving the name from
+// len(books) instead let two concurrent creates pick the same one.
+func (u *universe) claimBook() (*identity, int) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	var cand []*identity
+	for _, a := range u.adis {
+		if idWantsBook(a) {
+			cand = append(cand, a)
+		}
+	}
+	if len(cand) == 0 {
+		return nil, 0
+	}
+	a := cand[u.rng.Intn(len(cand))]
+	a.pendingBooks++
+	return a, len(a.books) + a.pendingBooks
+}
+
+func (u *universe) releaseBook(a *identity) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if a.pendingBooks > 0 {
+		a.pendingBooks--
+	}
+}
+
+func (u *universe) commitBook(a *identity, b *keyBook) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if a.pendingBooks > 0 {
+		a.pendingBooks--
+	}
+	a.books = append(a.books, b)
+}
+
+// accountClaim is a reserved token or data account. Which of the two, and its
+// sequence number, are decided when the slot is reserved — both go into the
+// url, so neither can be chosen later without racing.
+type accountClaim struct {
+	adi  *identity
+	data bool
+	seq  int
+}
+
+func (u *universe) claimAccount() *accountClaim {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	var cand []*identity
+	for _, a := range u.adis {
+		if idWantsAccount(a) {
+			cand = append(cand, a)
+		}
+	}
+	if len(cand) == 0 {
+		return nil
+	}
+	a := cand[u.rng.Intn(len(cand))]
+	c := &accountClaim{adi: a, data: u.rng.Intn(2) == 0}
+	if c.data {
+		a.pendingData++
+		c.seq = len(a.data) + a.pendingData
+	} else {
+		a.pendingToken++
+		c.seq = len(a.tokens) + a.pendingToken
+	}
+	return c
+}
+
+// releasePending drops the reservation. Split out because release and commit
+// differ only in what they do after it.
+func (c *accountClaim) releasePending() {
+	if c.data {
+		if c.adi.pendingData > 0 {
+			c.adi.pendingData--
+		}
+		return
+	}
+	if c.adi.pendingToken > 0 {
+		c.adi.pendingToken--
+	}
+}
+
+func (u *universe) releaseAccount(c *accountClaim) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	c.releasePending()
+}
+
+func (u *universe) commitAccount(c *accountClaim, addr *url.URL) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	c.releasePending()
+	if c.data {
+		c.adi.data = append(c.adi.data, addr)
+	} else {
+		c.adi.tokens = append(c.adi.tokens, addr)
+	}
 }
 
 // pickKey chooses one of a page's keys under the lock. Callers hold the KEY,

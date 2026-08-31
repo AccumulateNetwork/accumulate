@@ -399,14 +399,25 @@ func (e *env) growToken(ctx context.Context, adi *identity) error {
 }
 
 // growBook adds another key book to an existing identity, with one page.
-func (e *env) growBook(ctx context.Context, adi *identity) error {
+// growBook adds another key book. seq comes from the caller's claim and names
+// the book: derived here from len(adi.books) instead, two concurrent creates
+// picked the same name and one of them waited out its three minutes on an
+// account the other was already making.
+func (e *env) growBook(ctx context.Context, adi *identity, seq int) error {
+	done := false
+	defer func() {
+		if !done {
+			e.u.releaseBook(adi)
+		}
+	}()
+
 	signer := adi.signer()
 	if signer == nil {
 		return errors.NotReady.With("identity has no signer")
 	}
 
 	key := newKey()
-	bookURL := adi.url.JoinPath("book" + itoa(len(adi.books)+1))
+	bookURL := adi.url.JoinPath("book" + itoa(seq))
 	ids, err := e.sign(ctx, signer.url, func() txBuilder {
 		return e.build(adi).
 			CreateKeyBook(bookURL).WithKey(key, protocol.SignatureTypeED25519).
@@ -420,8 +431,7 @@ func (e *env) growBook(ctx context.Context, adi *identity) error {
 	if err := e.awaitAccount(ctx, bookURL, 3*time.Minute); err != nil {
 		return err
 	}
-	e.u.mu.Lock()
-	adi.books = append(adi.books, &keyBook{
+	e.u.commitBook(adi, &keyBook{
 		url: bookURL,
 		pages: []*keyPage{{
 			url:       protocol.FormatKeyPageUrl(bookURL, 0),
@@ -430,19 +440,29 @@ func (e *env) growBook(ctx context.Context, adi *identity) error {
 			version:   1,
 		}},
 	})
-	e.u.mu.Unlock()
+	done = true
 	return nil
 }
 
-// growAccount adds another token or data account to an existing identity.
-func (e *env) growAccount(ctx context.Context, adi *identity) error {
+// growAccount adds the token or data account the caller reserved. Which kind
+// it is, and its sequence number, were fixed when the claim was taken — both
+// go into the url, so choosing either here would race.
+func (e *env) growAccount(ctx context.Context, c *accountClaim) error {
+	adi := c.adi
+	done := false
+	defer func() {
+		if !done {
+			e.u.releaseAccount(c)
+		}
+	}()
+
 	signer := adi.signer()
 	if signer == nil {
 		return errors.NotReady.With("identity has no signer")
 	}
 
-	if e.u.intn(2) == 0 {
-		u := adi.url.JoinPath("tokens" + itoa(len(adi.tokens)+1))
+	if !c.data {
+		u := adi.url.JoinPath("tokens" + itoa(c.seq))
 		ids, err := e.sign(ctx, signer.url, func() txBuilder {
 			return e.build(adi).
 				CreateTokenAccount(u).ForToken(protocol.AcmeUrl()).
@@ -473,13 +493,12 @@ func (e *env) growAccount(ctx context.Context, adi *identity) error {
 			return errors.UnknownError.WithFormat("fund token account %v: %w", u, err)
 		}
 
-		e.u.mu.Lock()
-		adi.tokens = append(adi.tokens, u)
-		e.u.mu.Unlock()
+		e.u.commitAccount(c, u)
+		done = true
 		return nil
 	}
 
-	u := adi.url.JoinPath("data" + itoa(len(adi.data)+1))
+	u := adi.url.JoinPath("data" + itoa(c.seq))
 	ids, err := e.sign(ctx, signer.url, func() txBuilder {
 		return e.build(adi).
 			CreateDataAccount(u).
@@ -492,9 +511,8 @@ func (e *env) growAccount(ctx context.Context, adi *identity) error {
 	if err := e.awaitAccount(ctx, u, 3*time.Minute); err != nil {
 		return err
 	}
-	e.u.mu.Lock()
-	adi.data = append(adi.data, u)
-	e.u.mu.Unlock()
+	e.u.commitAccount(c, u)
+	done = true
 	return nil
 }
 
@@ -554,6 +572,8 @@ const (
 	//                        a long run, so cross-partition load originates from
 	//                        every identity's partition, not just the treasury's.
 	maxPageKeys = 5 // most keys a generated page may carry
+	maxBooks    = 4 // most key books an identity may carry
+	maxAccounts = 8 // most token + data accounts an identity may carry
 
 	// Custom tokens.
 	maxTokenPrecision = 4         // issuers span precision 0..4
