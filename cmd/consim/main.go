@@ -21,6 +21,8 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consim"
@@ -39,7 +41,49 @@ func main() {
 	flag.DurationVar(&cfg.Duration, "duration", 10*time.Minute, "hard cap")
 	flag.DurationVar(&cfg.StallAfter, "stall-after", 20*time.Second, "no height progress for this long = stall")
 	flag.DurationVar(&cfg.BatchCollect, "batch-collect", 30*time.Second, "CollectBatches bound")
+	flag.IntVar(&cfg.NumWorkers, "workers", 4, "workers per node (cmd_init_network generates 4)")
+	execCost := flag.String("exec-cost", "", "per-transaction execution cost, e.g. 200us or BVN2=200us — consim's executor is otherwise free")
+	skew := flag.String("skew", "", "per-partition tps override, e.g. BVN2=200,Directory=5 — real load is not uniform (soak 20260831T070855Z)")
 	flag.Parse()
+
+	if *execCost != "" {
+		for _, kv := range strings.Split(*execCost, ",") {
+			k, v, ok := strings.Cut(kv, "=")
+			if !ok {
+				k, v = "", kv
+			}
+			d, err := time.ParseDuration(strings.TrimSpace(v))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "bad -exec-cost %q: %v\n", kv, err)
+				os.Exit(2)
+			}
+			if k == "" {
+				cfg.ExecCostPerTx = d
+				continue
+			}
+			if cfg.ExecCostByPartition == nil {
+				cfg.ExecCostByPartition = map[string]time.Duration{}
+			}
+			cfg.ExecCostByPartition[strings.TrimSpace(k)] = d
+		}
+	}
+
+	if *skew != "" {
+		cfg.TPSByPartition = map[string]int{}
+		for _, kv := range strings.Split(*skew, ",") {
+			k, v, ok := strings.Cut(kv, "=")
+			if !ok {
+				fmt.Fprintf(os.Stderr, "bad -skew %q: want partition=tps\n", kv)
+				os.Exit(2)
+			}
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "bad -skew %q: %v\n", kv, err)
+				os.Exit(2)
+			}
+			cfg.TPSByPartition[strings.TrimSpace(k)] = n
+		}
+	}
 	cfg.TargetHeight = *targetHeight
 	cfg.Out = os.Stdout
 

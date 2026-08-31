@@ -55,6 +55,46 @@ type Config struct {
 	StallAfter       time.Duration // no executed-height progress on some partition for this long = stall
 	BatchCollect     time.Duration // CollectBatches bound (0 = library default)
 	Out              io.Writer     // status output; nil = silent
+
+	// NumWorkers per node. The soak runs 4 (cmd_init_network sets it), and the
+	// batch-store byte budget is divided among them, so a sim on 1 worker is
+	// not exercising the store sizing the real network has.
+	NumWorkers int
+
+	// ExecCostPerTx makes execution cost wall time, per transaction in the
+	// block. consim's executor is otherwise free, which is why a partition
+	// absorbs 25x its peers' load while lagging only ~10%: the load creates no
+	// work. The real BVN2 must EXECUTE what it takes in and write it down, and
+	// that is the variable the Docker wedge turns on.
+	//
+	// ExecCostByPartition overrides it per partition.
+	ExecCostPerTx       time.Duration
+	ExecCostByPartition map[string]time.Duration
+
+	// TPSByPartition overrides TPS for named partitions ("Directory", "BVN1",
+	// ...). Real load is not spread evenly: in soak 20260831T070855Z, BVN2
+	// produced 80,991 synthetics to BVN1's 24,608 and 19,429 to the
+	// Directory's 1,313, carried twice the database, and was the partition
+	// that wedged while BVN1 held 3.0 s/block. Uniform load cannot express
+	// that, and therefore cannot ask whether an overloaded partition stops or
+	// merely lags.
+	TPSByPartition map[string]int
+}
+
+// execCost reports the per-transaction execution cost for one partition.
+func (c *Config) execCost(part string) time.Duration {
+	if d, ok := c.ExecCostByPartition[part]; ok {
+		return d
+	}
+	return c.ExecCostPerTx
+}
+
+// tps reports the submission rate for one partition.
+func (c *Config) tps(part string) int {
+	if n, ok := c.TPSByPartition[part]; ok {
+		return n
+	}
+	return c.TPS
 }
 
 // Defaults fills unset fields with values scaled for fast in-process runs.
@@ -76,6 +116,9 @@ func (c *Config) Defaults() {
 	}
 	if c.BatchSize == 0 {
 		c.BatchSize = 20
+	}
+	if c.NumWorkers <= 0 {
+		c.NumWorkers = 4 // what cmd_init_network generates
 	}
 	if c.Duration == 0 {
 		c.Duration = 5 * time.Minute
@@ -188,7 +231,7 @@ func New(cfg Config) (*Sim, error) {
 		n, err := consensus.NewNode(consensus.NodeConfig{
 			Partition:  part,
 			KeyPair:    keys[val],
-			NumWorkers: 1,
+			NumWorkers: cfg.NumWorkers,
 			WorkerConfig: worker.Config{
 				Partition:    part,
 				BatchSize:    cfg.BatchSize,
@@ -297,8 +340,23 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 				for _, e := range cert.Header.Payload {
 					digests = append(digests, e.Digest)
 				}
+				n := 0
 				for _, b := range batches {
-					sn.txs.Add(uint64(len(b.Transactions)))
+					n += len(b.Transactions)
+				}
+				sn.txs.Add(uint64(n))
+				if cost := s.cfg.execCost(sn.part); cost > 0 && n > 0 {
+					// Charge for the work on the goroutine that reads
+					// Committed() — where the real service pays it, and
+					// therefore where back-pressure into consensus would show
+					// up if it shows up at all.
+					t := time.NewTimer(time.Duration(n) * cost)
+					select {
+					case <-ctx.Done():
+						t.Stop()
+						return
+					case <-t.C:
+					}
 				}
 				for _, w := range sn.node.Workers() {
 					w.PruneCommitted(digests, worker.CommitInfo{Detail: fmt.Sprintf("block %d", sn.height.Load()+1), Cert: cert.Digest().String()})
@@ -316,10 +374,11 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 func (s *Sim) load(ctx context.Context, part string) {
 	defer s.wg.Done()
 	nodes := s.byPart[part]
-	if s.cfg.TPS <= 0 || len(nodes) == 0 {
+	tps := s.cfg.tps(part)
+	if tps <= 0 || len(nodes) == 0 {
 		return
 	}
-	interval := time.Second / time.Duration(s.cfg.TPS)
+	interval := time.Second / time.Duration(tps)
 	if interval <= 0 {
 		interval = time.Millisecond
 	}
