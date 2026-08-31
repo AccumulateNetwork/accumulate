@@ -40,6 +40,12 @@ type streamRun struct {
 // Within each group, streams run in canonical source order: the directory
 // first, then partitions by ID. Any fixed rule would do; what matters is that
 // every node uses the same one.
+//
+// Retained for #4169 step 10, when staging becomes authoritative. It is dead
+// today only because stageBlock, its sole constructor, is absent from the tree
+// while the doc comment above still describes it.
+//
+//nolint:unused
 type executionOrder struct {
 	anchors   []streamRun
 	synthetic []streamRun

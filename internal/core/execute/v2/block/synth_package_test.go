@@ -68,8 +68,8 @@ func testList(t *testing.T, hashes ...[32]byte) *merkle.ReceiptList {
 	t.Helper()
 	list := merkle.NewReceiptList()
 	list.MerkleState = new(merkle.State)
-	for _, h := range hashes {
-		list.Elements = append(list.Elements, h[:])
+	for i := range hashes {
+		list.Elements = append(list.Elements, hashes[i][:])
 	}
 	return list
 }
