@@ -7,9 +7,9 @@
 package block
 
 import (
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
