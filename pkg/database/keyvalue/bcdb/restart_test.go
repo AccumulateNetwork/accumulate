@@ -157,6 +157,27 @@ func TestMergeBelow_BoundsThePermanentSegmentCount(t *testing.T) {
 	// folded again once enough has gathered behind it to justify its
 	// size, which is what keeps the file count bounded without
 	// re-copying the layer on every pass (BlockchainDB#63, #30).
+	// Maintenance runs in the BACKGROUND, one at a time, and a cadence
+	// that lands while a run is going is skipped rather than queued
+	// (see maintain). On a loaded machine -- the whole test suite in
+	// parallel -- the last merges are still in flight when the writes
+	// stop, and counting files then counts work that has not happened
+	// yet. Drive it to a standstill first: each pass folds what the
+	// ratio says is worth folding, and a pass with nothing to do
+	// leaves the count where it is.
+	for i := 0; i < 8; i++ {
+		db.maintWG.Wait() // Whatever the cadence already started
+		before := files()
+		db.mu.Lock()
+		v := db.version
+		db.mu.Unlock()
+		db.maintain(v)
+		db.maintWG.Wait()
+		if files() == before {
+			break // Settled
+		}
+	}
+
 	after := files()
 	require.Lessf(t, after, blocks, "%d sealed blocks must not leave a segment each (got %d files)", blocks, after)
 	//
