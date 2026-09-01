@@ -68,7 +68,7 @@ type Database struct {
 	// batch stays readable from `staged` until the store has it, so the
 	// lock is only needed to pop it afterwards.
 	writeMu sync.Mutex
-	kv      *bcdb.KV2
+	kv      *bcdb.KVShard
 	prefix  *record.Key
 	closed  bool
 
@@ -89,6 +89,10 @@ type Database struct {
 	// CompressEvery seals and compacts the dynamic layer after this
 	// many commits.  Zero leaves compaction to the caller.
 	CompressEvery uint64
+
+	// PackEvery is how many blocks pass between cross-shard packs; see
+	// the constant of the same name.  Zero disables packing.
+	PackEvery uint64
 
 	// StatsEvery writes the layer counters after this many commits.
 	// Zero disables the report.
@@ -169,10 +173,35 @@ type entry struct {
 
 var _ keyvalue.Beginner = (*Database)(nil)
 
-// SealLimit is the number of records a layer accumulates before it
-// seals on its own.  A commit seals the permanent layer anyway, so this
-// only bounds a layer that fills between commits.
-const SealLimit = 100_000
+// SealLimit is the number of records ONE SHARD's layer accumulates
+// before it seals on its own.  A commit seals the permanent layer
+// anyway, so this only bounds a layer that fills between commits.
+//
+// It is PER SHARD, which is what makes the old single-store figure the
+// wrong number to carry across: at the store's eight shards, 100,000
+// would be 800,000 records of unsealed tail for the partition, every
+// one of them held in a live map and replayed on open.  Dividing keeps
+// the partition where it was -- 12,500 a shard is ~100,000 in total --
+// and keys route by hash, so each shard fills at its own eighth of the
+// rate.
+const SealLimit = 12_500
+
+// PackEvery is how many blocks pass between cross-shard packs.
+//
+// A block boundary seals a segment in every shard that took writes,
+// and a per-shard merge folds 20 blocks into one.  A shard pays ~58
+// files whatever share of the rate it sees, so the total is the shard
+// count times that, and it grows with the chain until something folds
+// the merges away.  Packing folds every shard's into ONE file, against
+// inodes that cannot be grown after mkfs (BlockchainDB#47).
+//
+// A thousand blocks rather than a day: the same bytes move either way
+// -- ~2 MB/s at 5,000 entries a block -- so a longer period buys only
+// fewer set files, and the per-day group filters make that worth
+// almost nothing (451 probes a year against 369). What it costs is
+// real: 11x the files on disk, 20 GB written in one pass instead of
+// 1 GB, and 5 1/2 hours of blocks unpacked instead of 17 minutes.
+const PackEvery = 1000
 
 // DefaultMergeLag is N: how many of the newest blocks are the store's
 // active tier — its own segments, under the protocol's lock — and the
@@ -191,8 +220,10 @@ const DefaultMergeLag = 20
 const DefaultTallyKeys = 1 << 20
 
 // permManifest is the file whose presence means a database is already
-// here: the permanent layer's segment manifest.
-var permManifest = filepath.Join("perm", "segments.json")
+// here: the permanent layer's segment manifest of the first shard.
+// Every shard is created together, so shard zero answers for all of
+// them.
+var permManifest = filepath.Join("Shard0000", "perm", "segments.json")
 
 // Open opens a BlockchainDB-backed store at path, creating one if there
 // is nothing there.
@@ -208,13 +239,13 @@ func Open(path string) (*Database, error) {
 		return nil, errors.UnknownError.WithFormat("create %s: %w", filepath.Dir(path), err)
 	}
 
-	var kv *bcdb.KV2
+	var kv *bcdb.KVShard
 	var err error
 	switch _, statErr := os.Stat(filepath.Join(path, permManifest)); {
 	case statErr == nil:
-		kv, err = bcdb.OpenKV2(path)
+		kv, err = bcdb.OpenKVShard(path)
 	case stderrors.Is(statErr, fs.ErrNotExist):
-		kv, err = bcdb.NewKV2(path, SealLimit)
+		kv, err = bcdb.NewKVShard(path, SealLimit)
 		if err == nil {
 			// N, set once at creation and recorded in the manifests: the
 			// store's key-filter window AND the line between its active
@@ -238,7 +269,8 @@ func Open(path string) (*Database, error) {
 		dyna:           map[[32]byte]bool{},
 		statsPath:      filepath.Join(path, "stats.json"),
 		exceptionsPath: filepath.Join(path, "dyna-exceptions"),
-		CompressEvery:  128,
+		CompressEvery:  20,
+		PackEvery:      PackEvery,
 		StatsEvery:     50,
 		TallyKeys:      DefaultTallyKeys,
 		MergeLag:       DefaultMergeLag,
@@ -493,7 +525,7 @@ func (d *Database) writeThrough(s *staged) error {
 	// A commit is the durability point, so it is what seals -- and
 	// sealing is what makes the permanent layer's segments a unit a
 	// peer can copy, which is the reason for the layer.
-	if _, err := d.kv.Seal(s.version); err != nil {
+	if err := d.kv.SealBlock(s.version); err != nil {
 		return errors.UnknownError.WithFormat("seal: %w", err)
 	}
 	if d.CompressEvery > 0 && s.version%d.CompressEvery == 0 {
@@ -537,12 +569,29 @@ func (d *Database) maintain(version uint64) {
 		} else if version > d.MergeLag {
 			// Every block seal leaves one permanent segment per shard,
 			// so a node accumulates a file pair per block forever
-			// (BlockchainDB#30, #47).  MergeBelow folds a finished block
-			// set into one segment.  The watermark is held MergeLag
-			// blocks back — the active window — below which nothing more
-			// arrives and nothing is still being healed.
-			if _, _, err = d.kv.MergeBelow(version - d.MergeLag); err != nil {
+			// (BlockchainDB#30, #47).  MergeFinalized folds each shard's
+			// finished blocks into one segment.  The watermark is held
+			// MergeLag blocks back — the active window — below which
+			// nothing more arrives and nothing is still being healed.
+			if _, err = d.kv.MergeFinalized(version - d.MergeLag); err != nil {
 				err = errors.UnknownError.WithFormat("merge sealed segments: %w", err)
+			} else if d.PackEvery > 0 && version >= d.PackEvery+d.MergeLag &&
+				version%d.PackEvery < d.CompressEvery {
+				// And fold every shard's merges into ONE file, on a
+				// period of its own.  Per-shard merging alone still
+				// leaves ~25 files a block at 512 shards; the pack is
+				// what makes the file count survivable, and it takes
+				// pins rather than locks, so the shards commit while it
+				// runs (BlockchainDB#47).
+				//
+				// The watermark is the merge's, so a pack never takes a
+				// segment the window still holds. The modulus is against
+				// the maintenance cadence, not equality, because
+				// maintenance runs every CompressEvery commits and a
+				// run that lands while another is going is skipped.
+				if _, _, err = d.kv.PackFinalized(version - d.MergeLag); err != nil {
+					err = errors.UnknownError.WithFormat("pack finalized blocks: %w", err)
+				}
 			}
 		}
 		d.mu.Lock()
@@ -583,7 +632,7 @@ func (d *Database) Close() error {
 // PutDuplicate over PutTotal says whether that lookup is earning its
 // keep on a real workload.
 func (d *Database) Stats() (perm, dyna bcdb.StoreStats) {
-	return d.kv.PermKV.Stats(), d.kv.DynaKV.Stats()
+	return d.kv.Stats()
 }
 
 // Shapes reports the per-shape tally: for every shape of key the
@@ -774,11 +823,11 @@ func (d *Database) tally(key *record.Key, h [32]byte, value []byte, perm bool) s
 // Runs under writeMu; takes mu for the exception bookkeeping only.
 func (d *Database) putRouted(key [32]byte, e entry) error {
 	if !e.perm {
-		_, err := d.kv.PutDyna(key, e.value)
+		err := d.kv.PutDyna(key, e.value)
 		return err
 	}
 
-	_, err := d.kv.PutPerm(key, e.value)
+	err := d.kv.PutPerm(key, e.value)
 	switch {
 	case err == nil:
 		return nil
@@ -793,7 +842,7 @@ func (d *Database) putRouted(key [32]byte, e entry) error {
 		c.Misrouted++
 	}
 	d.mu.Unlock()
-	_, err = d.kv.PutDyna(key, e.value)
+	err = d.kv.PutDyna(key, e.value)
 	return err
 }
 
@@ -832,7 +881,7 @@ func (d *Database) reportStats() {
 	if d.StatsEvery == 0 || d.version%d.StatsEvery != 0 {
 		return
 	}
-	perm, dyna := d.kv.PermKV.Stats(), d.kv.DynaKV.Stats()
+	perm, dyna := d.kv.Stats()
 	report := struct {
 		Commits      uint64                 `json:"commits"`
 		Perm         bcdb.StoreStats        `json:"perm"`
@@ -865,7 +914,7 @@ func (d *Database) reportStats() {
 		DeepFallbacks map[string]uint64 `json:"deepFallbacks,omitempty"`
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
 		DeepFallbacks: d.fallbackSnapshot(),
-		Staged: len(d.staged), TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
+		Staged:        len(d.staged), TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
 		MaintenanceErrors: d.maintErrs}
 	if d.maintErr != nil {
 		report.MaintenanceLast = d.maintErr.Error()

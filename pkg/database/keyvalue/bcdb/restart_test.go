@@ -7,9 +7,11 @@
 package bcdb
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
+	bcdb "github.com/AccumulateNetwork/BlockchainDB/database"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
@@ -119,9 +121,20 @@ func TestCommit_ReportsItsOwnWriteThroughError(t *testing.T) {
 	key := record.NewKey("Message", [32]byte{9}, "Main")
 	put(t, db, key, "ok")
 
-	require.NoError(t, db.kv.Close()) // the store fails from here on
+	// Make the store fail from here on. Closing is not enough: every
+	// operation on a shard calls Open first, so a closed shard reopens
+	// itself. Taking write permission off one shard's permanent layer
+	// makes the seal that ends the commit fail there -- and the write
+	// has to be a NEW permanent key, because rewriting an existing one
+	// with a different value moves it to the dynamic layer, which
+	// appends to a file it already holds open.
+	lost := record.NewKey("Message", [32]byte{10}, "Main")
+	perm := filepath.Join(db.kv.ShardDir(shardIndexOf(lost)), "perm")
+	require.NoError(t, os.Chmod(perm, 0o555))
+	defer os.Chmod(perm, 0o755)
+
 	batch := db.Begin(nil, true)
-	require.NoError(t, batch.Put(key, []byte("lost")))
+	require.NoError(t, batch.Put(lost, []byte("lost")))
 	require.Error(t, batch.Commit(), "the commit that could not be written through must be the one that fails")
 }
 
@@ -193,4 +206,10 @@ func TestMergeBelow_BoundsThePermanentSegmentCount(t *testing.T) {
 	for i := 0; i < blocks; i++ {
 		require.Equal(t, "v", get(t, db, record.NewKey("Message", [32]byte{byte(i), byte(i >> 8), 1}, "Main")))
 	}
+}
+
+// shardIndexOf is which shard a key routes to
+func shardIndexOf(key *record.Key) int {
+	h := key.Hash()
+	return bcdb.ShardIndex(h[:])
 }
