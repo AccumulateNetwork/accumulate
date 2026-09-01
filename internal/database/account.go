@@ -170,6 +170,20 @@ func (b *Batch) SetBPTHistory(height, depth uint64) {
 	b.BPT().SetHistory(height, depth)
 }
 
+// NoteBPTBlock records that retention covered this block, and moves the horizon
+// if retention was off for a state-changing block since the last one it ran at.
+//
+// prevStateChanging is the last block before this one that changed state, from
+// the partition ledger's root index chain. Zero means there is none, and
+// nothing can be missing.
+func (b *Batch) NoteBPTBlock(height, depth, prevStateChanging uint64) error {
+	if depth == 0 {
+		return nil
+	}
+	err := b.BPT().NoteBlock(height, prevStateChanging)
+	return errors.UnknownError.Wrap(err)
+}
+
 func (b *Batch) UpdateBPT() error {
 	if b.parent != nil {
 		err := b.parent.UpdateBPT()

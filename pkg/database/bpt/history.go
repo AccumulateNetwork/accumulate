@@ -135,6 +135,87 @@ func (b *BPT) noteRetained(height, depth uint64) error {
 	return errors.UnknownError.Wrap(err)
 }
 
+// lastRetainedKey addresses the highest block retention actually ran at.
+func (b *BPT) lastRetainedKey() *record.Key {
+	return b.key.Append("History").Append("Last")
+}
+
+// LastRetained reports the highest block at which something was retained.
+func (b *BPT) LastRetained() (uint64, bool, error) {
+	raw, ok, err := readRaw(b.store, b.lastRetainedKey())
+	if err != nil {
+		return 0, false, errors.UnknownError.Wrap(err)
+	}
+	if !ok || len(raw) == 0 {
+		return 0, false, nil
+	}
+	if len(raw) != 8 {
+		return 0, false, errors.InternalError.WithFormat("last retained height is %d bytes, want 8", len(raw))
+	}
+	return binary.BigEndian.Uint64(raw), true, nil
+}
+
+// NoteBlock records that retention is configured for a block, and moves the
+// horizon when retention was OFF for a state-changing block in between.
+//
+// prevStateChanging is the last block before this one that changed state, which
+// the caller reads from the partition ledger's root index chain. It is what
+// makes the check exact without assuming anything about block numbering: a
+// partition does not execute a block at every height, so a gap in heights means
+// nothing, but a state-changing block that retention did not run at means the
+// history before it is incomplete.
+//
+// Retention is per-node configuration applied block by block, so it can be
+// turned off and on again — an operator restarting without the flag, or
+// changing the depth. The horizon otherwise only advances toward the window
+// floor, so nothing records that the middle of the range is gone and the node
+// goes on advertising it. A query landing there is not answered wrongly
+// (GetReceiptAt refuses on a root mismatch) but it is refused as an
+// InternalError, for what is really "I do not have that".
+func (b *BPT) NoteBlock(height, prevStateChanging uint64) error {
+	if prevStateChanging == 0 {
+		return nil // No earlier state-changing block: nothing can be missing
+	}
+
+	last, ok, err := b.LastRetained()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if !ok || prevStateChanging <= last {
+		return nil // Never retained yet, or continuous
+	}
+
+	// Block prevStateChanging changed state and was not retained. Everything at
+	// or before it is unprovable however much is still on disk.
+	err = b.setEarliest(height)
+	return errors.UnknownError.Wrap(err)
+}
+
+// setEarliest moves the horizon unconditionally. noteRetained only ever
+// advances it toward the window floor; this is for history that is gone
+// regardless of what the window would allow.
+func (b *BPT) setEarliest(height uint64) error {
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], height)
+	err := b.store.PutValue(b.earliestKey(), &rawBytes{data: buf[:], present: true})
+	return errors.UnknownError.Wrap(err)
+}
+
+// noteLastRetained advances the highest block retention ran at.
+func (b *BPT) noteLastRetained(height uint64) error {
+	cur, ok, err := b.LastRetained()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if ok && height <= cur {
+		return nil
+	}
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], height)
+	err = b.store.PutValue(b.lastRetainedKey(), &rawBytes{data: buf[:], present: true})
+	return errors.UnknownError.Wrap(err)
+}
+
 func (b *BPT) historyKey(nodeKey [32]byte) *record.Key {
 	return b.key.Append("History").Append(nodeKey)
 }
@@ -278,6 +359,9 @@ func (b *BPT) retainSuperseded(nodeKey [32]byte, key *record.Key) error {
 		return errors.UnknownError.Wrap(err)
 	}
 
+	if err := b.noteLastRetained(h.height); err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
 	return b.noteRetained(h.height, h.depth)
 }
 

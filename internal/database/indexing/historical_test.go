@@ -379,3 +379,73 @@ func TestResolveHistoricalAccountState_NeverCurrent(t *testing.T) {
 		require.Errorf(t, err, "height %d was answered", height)
 	}
 }
+
+// supersedeAt changes a node WITHOUT retention, the way a block does when the
+// operator has turned retention off. It is retainFrom's counterpart: same
+// write, no history kept.
+func supersedeAt(t testing.TB, db *database.Database, height uint64) {
+	t.Helper()
+	key := record.NewKey("aip58", "probe")
+	b := db.Begin(true)
+	defer b.Discard()
+	b.SetBPTHistory(height, 0) // Retention off
+	var v [32]byte
+	v[0] = byte(height)
+	require.NoError(t, b.BPT().Insert(key, v[:]))
+	require.NoError(t, b.Commit())
+}
+
+// The advertised range must not span blocks the node did not retain.
+//
+// Retention is per-node configuration applied block by block, so an operator
+// can turn it off and on again — a restart without the flag, or a depth change.
+// State-changing blocks that pass while it is off supersede nodes that are
+// never kept. The horizon only ever advances toward the window floor, so
+// nothing records that the middle of the range is gone, and the node goes on
+// advertising it.
+//
+// A query landing there is not answered wrongly — GetReceiptAt recomputes the
+// root and refuses when it does not match the ledger's — but the node has
+// promised something it cannot deliver, and the refusal it gives is an
+// InternalError rather than an honest out-of-range.
+func TestRetainedBlockRange_MustNotSpanUnretainedBlocks(t *testing.T) {
+	batch, db := makeLedgerDB(t, 4, 9, 17, 25, 33, 41, 49)
+	require.NoError(t, batch.Commit())
+
+	retainFrom(t, db, 9, 1000) // Retention on
+	supersedeAt(t, db, 17)     // ...off: these change state and keep nothing
+	supersedeAt(t, db, 25)
+	// ...on again. block_end checks for a gap BEFORE the block's own retention
+	// writes: the last state-changing block before 33 is 25, and retention did
+	// not run there.
+	bn := db.Begin(true)
+	require.NoError(t, bn.NoteBPTBlock(33, 1000, 25))
+	require.NoError(t, bn.Commit())
+
+	retainFrom(t, db, 33, 1000)
+
+	b := db.Begin(false)
+	t.Cleanup(b.Discard)
+	r, err := RetainedBlockRange(testPartition, b)
+	require.NoError(t, err)
+	t.Logf("advertised %v; blocks 17 and 25 changed state with retention off", r)
+
+	require.True(t, r.IsEmpty() || r.Earliest > 25,
+		"blocks 17 and 25 were superseded with retention off, so nothing at or "+
+			"before them can be proved — the range must not cover them, but it is %v", r)
+
+	// ...and the node recovers: once it has retained across blocks whose roots
+	// the ledger has recorded, it advertises again, starting after the gap. An
+	// implementation that answered by going permanently empty would pass the
+	// assertion above and be useless.
+	retainFrom(t, db, 41, 1000)
+	retainFrom(t, db, 49, 1000)
+
+	b2 := db.Begin(false)
+	t.Cleanup(b2.Discard)
+	r2, err := RetainedBlockRange(testPartition, b2)
+	require.NoError(t, err)
+	t.Logf("after retaining again: %v", r2)
+	require.False(t, r2.IsEmpty(), "the node must advertise again once it has retained")
+	require.Greater(t, r2.Earliest, uint64(25), "and the range must start after the gap")
+}
