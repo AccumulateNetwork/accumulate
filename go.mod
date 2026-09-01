@@ -45,7 +45,7 @@ require (
 )
 
 require (
-	github.com/AccumulateNetwork/BlockchainDB v0.1.2-0.20260901045325-19076a756090
+	github.com/AccumulateNetwork/BlockchainDB v0.1.2-0.20260901052305-ec4e2e6097b8
 	github.com/FactomProject/factomd v1.13.0
 	github.com/chzyer/readline v1.5.1
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
