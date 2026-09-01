@@ -53,7 +53,13 @@ func TestClassification(t *testing.T) {
 		{false, "pending set", record.NewKey("Account", alice, "Pending")},
 		{false, "directory set", record.NewKey("Account", alice, "Directory")},
 		{false, "chain metadata set", record.NewKey("Account", alice, "Chains")},
-		{true, "the URL it is keyed by", record.NewKey("Account", alice, "Url")},
+		// Written once and still dynamic: the permanent layer is read
+		// through a window, so a record the executor reads on every
+		// touch of an account would be a history walk forever once it
+		// ages out.  96,303 of them over 200 commits, on every BVN
+		// engine, in run 20260901T054802Z.
+		{false, "the URL it is keyed by is read too often to live behind the window",
+			record.NewKey("Account", alice, "Url")},
 
 		// A merkle chain is a log: entries and mark points are facts
 		// about a position, the head is where the log currently ends

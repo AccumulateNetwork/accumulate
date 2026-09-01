@@ -57,9 +57,10 @@ import (
 //	----------                        -------
 //	Message(H).Main                   Account(U).Main
 //	Transaction(H).Main               Transaction(H).Status
-//	Account(U).Url                    Account(U).Pending, .Directory, .Chains
-//	<chain>.Element(I)                <chain>.Head
-//	<chain>.ElementIndex(H)           BPT nodes and BPT.Root
+//	<chain>.Element(I)                Account(U).Url (written once; see below)
+//	<chain>.ElementIndex(H)           Account(U).Pending, .Directory, .Chains
+//	                                  <chain>.Head
+//	                                  BPT nodes and BPT.Root
 //	<chain>.States(I)                 every set and counted collection
 //	Account(U).Data.Entry(I)          Account(U).Data.Entry (the count)
 //	SystemData(P).SyntheticIndexIndex(B)   Account(U).Data.Transaction(H)
@@ -85,8 +86,26 @@ func isWriteOnce(k *record.Key) bool {
 		return trailing == 0 && (prev == "Message" || prev == "Transaction" || prev == "Summary")
 
 	case "Url":
-		// An account's URL is the URL the account is keyed by.
-		return trailing == 0 && prev == "Account"
+		// An account's URL is written once and never changes -- and it
+		// still belongs in the DYNAMIC layer, because placement decides
+		// read cost as well as write cost.
+		//
+		// The permanent layer is read through a window: Get stops at N
+		// blocks and anything older is answered by GetDeep, which walks
+		// history.  A record written once when the account is created
+		// and then read every time the executor touches that account is
+		// the worst case for that window -- it ages out almost at once,
+		// and every read afterwards is a history walk, forever.
+		//
+		// Measured, in run 20260901T054802Z: Account.(url).Url was 96,303
+		// of the deep fallbacks over 200 commits on EVERY BVN engine,
+		// ~482 history walks a block, and the only shape falling back
+		// there at all.
+		//
+		// The cost of calling it mutable is the one this file's header
+		// names: space, and no file-copy sync path for that record.  It
+		// is worth paying for a record the executor reads constantly.
+		return false
 
 	case "Entry":
 		// Data.Entry is a counted collection: Entry(I) is the I'th

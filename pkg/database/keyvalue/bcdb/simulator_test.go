@@ -68,6 +68,11 @@ func TestSimulatorRouting(t *testing.T) {
 	open := func(partition *protocol.PartitionInfo, node int, _ logging.Logger) keyvalue.Beginner {
 		db, err := bcdb.Open(filepath.Join(dir, partition.ID, string(rune('a'+node))))
 		require.NoError(t, err)
+		// The minimum window, so records age out of the permanent layer
+		// within the handful of blocks this runs. At the production N
+		// nothing ages out here and the deep-fallback check below would
+		// pass whatever the routing did.
+		require.NoError(t, db.SetMergeLag(20))
 		mu.Lock()
 		defer mu.Unlock()
 		dbs = append(dbs, db)
@@ -150,6 +155,28 @@ func TestSimulatorRouting(t *testing.T) {
 	}
 
 	require.Empty(t, misrouted, "records classified write-once that Accumulate rewrites")
+
+	// Placement is not only about whether a record is rewritten. The
+	// permanent layer is read through a window, so a record the executor
+	// reads on every touch of an account is a history walk forever once
+	// it ages out -- Account.(url).Url was 96,303 of them over 200
+	// commits, on every BVN engine, in run 20260901T054802Z, and the only
+	// shape falling back there at all. It is dynamic for that reason.
+	// Reported, NOT asserted. This run is shorter than the smallest
+	// window the store allows (20 blocks), so nothing ages out of the
+	// permanent layer and the counters are empty whatever the routing
+	// does -- an assertion here would pass on the defect too. The
+	// evidence is the soak's own stats.json, where the shape appeared
+	// 96,303 times over 200 commits on every BVN engine.
+	deep := map[string]uint64{}
+	for _, db := range dbs {
+		for shape, n := range db.DeepFallbacks() {
+			deep[shape] += n
+		}
+	}
+	for shape, n := range deep {
+		t.Logf("  deep fallback %-40s %d", shape, n)
+	}
 	require.Zero(t, conflicts, "the permanent layer refused a write")
 
 	// A classification that sent nothing to the permanent layer would

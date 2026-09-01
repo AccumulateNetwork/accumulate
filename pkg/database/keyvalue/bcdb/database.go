@@ -649,6 +649,15 @@ func (d *Database) Shapes() map[string]ShapeCount {
 	return shapes
 }
 
+// DeepFallbacks reports, by key shape, the reads that the permanent
+// layer's window could not answer and that GetDeep had to walk history
+// for.  It is the read-side counterpart to Shapes: a shape that appears
+// here in quantity is one whose PLACEMENT is wrong, whatever its write
+// classification says (see route.go's Url case).
+func (d *Database) DeepFallbacks() map[string]uint64 {
+	return d.fallbackSnapshot()
+}
+
 // fallbackSnapshot copies the deep-fallback counters for a report
 func (d *Database) fallbackSnapshot() map[string]uint64 {
 	d.fallbackMu.Lock()
