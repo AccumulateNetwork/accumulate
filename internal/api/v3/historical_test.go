@@ -34,7 +34,6 @@ type historicalFixture struct {
 	sim     *Sim
 	querier api.Querier2
 	alice   *url.URL
-	created uint64
 }
 
 func newHistoricalFixture(t *testing.T, depth uint64) *historicalFixture {
