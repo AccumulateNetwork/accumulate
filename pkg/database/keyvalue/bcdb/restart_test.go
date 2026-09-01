@@ -150,10 +150,23 @@ func TestMergeBelow_BoundsThePermanentSegmentCount(t *testing.T) {
 	}
 	// A sealed segment is two files (data + index). Unmerged, 120 blocks
 	// would leave ~240; with history merged, what remains is the active
-	// window (up to 2N segments) plus a merged history and manifests.
+	// window (up to 2N segments), the few merged blocks the ratio has
+	// not yet folded into each other, and manifests.
+	//
+	// Merged blocks consolidate rather than accumulate: a block is
+	// folded again once enough has gathered behind it to justify its
+	// size, which is what keeps the file count bounded without
+	// re-copying the layer on every pass (BlockchainDB#63, #30).
 	after := files()
 	require.Lessf(t, after, blocks, "%d sealed blocks must not leave a segment each (got %d files)", blocks, after)
-	require.LessOrEqualf(t, after, 2*(2*20)+16, "files beyond the active window must have been merged (got %d)", after)
+	//
+	// The bound is the active window (2N segments, two files each),
+	// plus the merged blocks standing between folds, plus manifests and
+	// the live tail. This test merges every 4 commits -- far more often
+	// than a node, which does it every 128 -- so it sees the most
+	// merged blocks the ratio ever leaves standing.
+	require.LessOrEqualf(t, after, 2*(2*20)+2*12+16,
+		"files beyond the active window and its unfolded merged blocks must have been merged (got %d)", after)
 
 	// And nothing merged away is lost.
 	for i := 0; i < blocks; i++ {

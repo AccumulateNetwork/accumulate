@@ -43,6 +43,27 @@ func New(store keyvalue.Beginner, logger logging.Logger) *Database {
 	return d
 }
 
+// Deep returns a view of this database whose batches read the store's
+// whole history, not just the recent window it answers protocol reads
+// from.
+//
+// BlockchainDB answers a permanent read from the last N to 2N blocks
+// and calls anything older absent: probing history per segment on
+// every miss was 23% of a validator's CPU and grew with the chain. The
+// data is still there. A reader that knowingly looks back -- the API
+// serving an explorer, healing re-proving an old range -- takes this
+// once, at construction, and every batch it begins reaches history
+// without any of its call sites changing. The executor keeps the
+// windowed database, so the cost stays with the callers that need it.
+//
+// On a store with no window this returns an equivalent database: their
+// batches already read everything.
+func (d *Database) Deep() *Database {
+	e := *d
+	e.store = keyvalue.Deep(d.store)
+	return &e
+}
+
 func OpenInMemory(logger logging.Logger) *Database {
 	store := memory.New(nil)
 	return New(store, logger)

@@ -442,7 +442,13 @@ func (s *DAGBFTService) start(inst *Instance) error {
 // registerAPIServices registers the API services for DAG-BFT.
 func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters) error {
 	logger := logging.NewSlogLogger(inst.logger)
-	db := database.New(store, logger)
+	// These are the SERVING side of the node: consensus queries, the
+	// sequencer answering a peer's healing request, the API.  They are
+	// asked for whatever a caller names, which is routinely older than
+	// the window the store answers protocol reads from (BlockchainDB
+	// spec 1.3), so they read deep.  The executor keeps the windowed
+	// database it is given above, where the cost of a miss is bounded.
+	db := database.New(store, logger).Deep()
 
 	// Create consensus service
 	consensusSvc := dagbft.NewConsensusAPIService(dagbft.ConsensusAPIServiceParams{

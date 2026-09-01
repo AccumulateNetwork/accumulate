@@ -110,6 +110,14 @@ type Database struct {
 	last   map[[32]byte][32]byte
 
 	// Background maintenance (see maintain).
+	// deepFallbacks counts, by record shape, the reads a SHALLOW batch
+	// could only answer from history: the evidence for whether the
+	// window can be enforced without a fallback (see getAt).  Under
+	// fallbackMu, a leaf lock -- the counter is bumped while getAt
+	// holds d.mu shared, and it must not reach for that lock.
+	deepFallbacks map[string]uint64
+	fallbackMu    sync.Mutex
+
 	maintaining  atomic.Bool
 	maintWG      sync.WaitGroup
 	maintErr     error  // the last maintenance run's outcome
@@ -176,7 +184,7 @@ const SealLimit = 100_000
 // 3 s to 5 s (run 20260829T060833Z, BlockchainDB#50).  Since #57 the
 // store enforces the same N as the boundary maintenance may not cross
 // with a lock; it is set at creation (Open) and recorded on disk.
-const DefaultMergeLag = 64
+const DefaultMergeLag = 20
 
 // DefaultTallyKeys is how many keys the per-shape tally remembers a
 // digest for: about 128 MB at the default.
@@ -358,6 +366,24 @@ func (d *Database) except(h [32]byte) {
 // and goes on reading it that way however much is committed elsewhere
 // before the batch ends.
 func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
+	return d.begin(prefix, writable, false)
+}
+
+// BeginDeep is Begin for a reader that knowingly reaches back past the
+// store's window: the API serving an explorer, healing re-proving an
+// old range, a tool walking history.
+//
+// The permanent layer answers a protocol read from the last N to 2N
+// blocks and calls anything older absent (BlockchainDB spec 1.3):
+// probing per segment on every miss was 23% of a validator's CPU and
+// grew with the segment count.  The data is still there; reaching it
+// is a deeper read, and this is how a caller asks for one.  The cost
+// lands on the callers that need it instead of on every block.
+func (d *Database) BeginDeep(prefix *record.Key, writable bool) keyvalue.ChangeSet {
+	return d.begin(prefix, writable, true)
+}
+
+func (d *Database) begin(prefix *record.Key, writable, deep bool) keyvalue.ChangeSet {
 	d.mu.Lock()
 	at := d.version
 	d.views[at]++
@@ -368,7 +394,7 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 
 	return memory.NewChangeSet(memory.ChangeSetOptions{
 		Prefix: prefix,
-		Get:    func(key *record.Key) ([]byte, error) { return d.getAt(at, key) },
+		Get:    func(key *record.Key) ([]byte, error) { return d.getAt(at, key, deep) },
 		// The view is released BEFORE the commit, not after (#4173).
 		// While a batch still pins its version, flush stops short of
 		// its own commit; it was written through by the deferred
@@ -574,10 +600,24 @@ func (d *Database) Shapes() map[string]ShapeCount {
 	return shapes
 }
 
+// fallbackSnapshot copies the deep-fallback counters for a report
+func (d *Database) fallbackSnapshot() map[string]uint64 {
+	d.fallbackMu.Lock()
+	defer d.fallbackMu.Unlock()
+	if len(d.deepFallbacks) == 0 {
+		return nil
+	}
+	out := make(map[string]uint64, len(d.deepFallbacks))
+	for k, v := range d.deepFallbacks {
+		out[k] = v
+	}
+	return out
+}
+
 // getAt reads a key as of a version: the newest staged write no later
 // than that version, and otherwise the store, which by construction
 // holds nothing newer.
-func (d *Database) getAt(at uint64, key *record.Key) ([]byte, error) {
+func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) {
 	key = d.prefix.AppendKey(key)
 	h := key.Hash()
 
@@ -600,18 +640,37 @@ func (d *Database) getAt(at uint64, key *record.Key) ([]byte, error) {
 	}
 
 	value, err := d.kv.Get(h)
-	if err != nil {
-		// Get stops at the window for the immutable layer (BlockchainDB
-		// 5c7b0e5): permanent data older than 2N is history, and probing
-		// it per segment was 23% of a validator's CPU. But this adapter
-		// is the ONE read path — the API serving an explorer, healing
-		// re-proving an old range, and a signature naming an old
-		// transaction all come through here and must see deep history.
-		// So a miss falls back to GetDeep. The consensus path's hot
-		// reads are recent and never reach this line; the cost lands on
-		// reads that are genuinely absent or genuinely old, which is
-		// the store's history-index problem (BlockchainDB#59) to shrink.
+	if err != nil && deep {
+		// This reader asked to reach past the window (BeginDeep)
 		value, err = d.kv.GetDeep(h)
+	} else if err != nil {
+		// A shallow reader missed.  The window is the protocol's
+		// horizon and a miss here is meant to BE the answer -- but
+		// turning that on blind would turn any read this adapter has
+		// not accounted for into a silent not-found, which in the
+		// executor is a consensus fault. So the fallback still runs,
+		// and every use of it is counted and shaped: DeepFallbacks in
+		// stats.json says how often a shallow reader needed history,
+		// and for which kind of record.
+		//
+		// Zero over a soak is the evidence that the fallback can be
+		// removed and the window enforced; anything else names the
+		// call sites that must use BeginDeep first.
+		if v2, err2 := d.kv.GetDeep(h); err2 == nil {
+			// Its own lock, NOT d.mu: this runs while getAt holds
+			// d.mu.RLock, and a Go RWMutex is not reentrant -- taking
+			// it exclusively here deadlocked the read path against
+			// itself.  A leaf mutex over one map is also what keeps a
+			// diagnostic counter off the commit lock, which is what
+			// #4175 took the read path off.
+			d.fallbackMu.Lock()
+			if d.deepFallbacks == nil {
+				d.deepFallbacks = map[string]uint64{}
+			}
+			d.deepFallbacks[keyShape(key)]++
+			d.fallbackMu.Unlock()
+			value, err = v2, nil
+		}
 	}
 	if err != nil || len(value) == 0 {
 		// A zero-length value is a deletion, reported the same way a
@@ -795,7 +854,17 @@ func (d *Database) reportStats() {
 		// rather than failing a commit.
 		MaintenanceErrors uint64 `json:"maintenanceErrors"`
 		MaintenanceLast   string `json:"maintenanceLastError,omitempty"`
+
+		// DeepFallbacks is what a SHALLOW batch -- the executor's --
+		// could only answer from history, by record shape.  The store
+		// answers a permanent read from its window and calls anything
+		// older absent; a reader that means to look back takes a deep
+		// batch (BeginDeep).  Empty means every deep reader has one and
+		// the fallback in getAt can go, leaving the window enforced.
+		// Anything here NAMES the call sites that still need one.
+		DeepFallbacks map[string]uint64 `json:"deepFallbacks,omitempty"`
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
+		DeepFallbacks: d.fallbackSnapshot(),
 		Staged: len(d.staged), TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
 		MaintenanceErrors: d.maintErrs}
 	if d.maintErr != nil {
