@@ -56,15 +56,11 @@ func (a *observedAccount) hashSecondaryState(h *hashSet) error {
 		}
 	}
 
-	// Add the delivery queues (#4146) — consensus state the account hash
-	// must commit to (#4155). Skipped when empty, so accounts without
-	// queues hash as before. MUST mirror observer_prod.go exactly.
+	// Add the delivery queue (#4146) — consensus state the account hash
+	// must commit to (#4155). Skipped when empty, so accounts without a
+	// queue hash as before. MUST mirror observer_prod.go exactly.
 	if _, ok := protocol.ParsePartitionUrl(u); ok && u.PathEqual(protocol.Synthetic) {
-		local := loadState(&err, false, a.LocalDeliveryQueue().Get)
-		cascade := loadState(&err, false, a.CascadeDeliveryQueue().Get)
-		ids := make([]*url.TxID, 0, len(local)+len(cascade))
-		ids = append(ids, local...)
-		ids = append(ids, cascade...)
+		ids := loadState(&err, false, a.LocalDeliveryQueue().Get)
 		if len(ids) > 0 {
 			qh := h.Child("delivery-queues")
 			for _, id := range ids {

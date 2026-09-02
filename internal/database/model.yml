@@ -71,13 +71,6 @@
       emptyIfMissing: true
       pointer: true
       collection: list
-    - name: CascadeDeliveryQueue
-      description: is the ordered list of ready sequenced messages whose execution was deferred to the next block. Used only on the synthetic ledger (#4146)
-      type: state
-      dataType: txid
-      emptyIfMissing: true
-      pointer: true
-      collection: list
     - name: Directory
       type: state
       collection: set

@@ -299,7 +299,6 @@ type Account struct {
 	pending                values.Set[*url.TxID]
 	syntheticForAnchor     map[accountSyntheticForAnchorMapKey]values.Set[*url.TxID]
 	localDeliveryQueue     values.List[*url.TxID]
-	cascadeDeliveryQueue   values.List[*url.TxID]
 	directory              values.Set[*url.URL]
 	events                 *AccountEvents
 	blockLedger            *indexing.Log[*BlockLedger]
@@ -420,14 +419,6 @@ func (c *Account) LocalDeliveryQueue() values.List[*url.TxID] {
 
 func (c *Account) newLocalDeliveryQueue() values.List[*url.TxID] {
 	return values.NewList(c.logger.L, c.store, c.key.Append("LocalDeliveryQueue"), values.Wrapped(values.TxidWrapper))
-}
-
-func (c *Account) CascadeDeliveryQueue() values.List[*url.TxID] {
-	return values.GetOrCreate(c, &c.cascadeDeliveryQueue, (*Account).newCascadeDeliveryQueue)
-}
-
-func (c *Account) newCascadeDeliveryQueue() values.List[*url.TxID] {
-	return values.NewList(c.logger.L, c.store, c.key.Append("CascadeDeliveryQueue"), values.Wrapped(values.TxidWrapper))
 }
 
 func (c *Account) Directory() values.Set[*url.URL] {
@@ -618,8 +609,6 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return v, key.SliceI(2), nil
 	case "LocalDeliveryQueue":
 		return c.LocalDeliveryQueue(), key.SliceI(1), nil
-	case "CascadeDeliveryQueue":
-		return c.CascadeDeliveryQueue(), key.SliceI(1), nil
 	case "Directory":
 		return c.Directory(), key.SliceI(1), nil
 	case "Events":
@@ -713,9 +702,6 @@ func (c *Account) IsDirty() bool {
 		}
 	}
 	if values.IsDirty(c.localDeliveryQueue) {
-		return true
-	}
-	if values.IsDirty(c.cascadeDeliveryQueue) {
 		return true
 	}
 	if values.IsDirty(c.directory) {
@@ -825,7 +811,6 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.pending, c.newPending, opts, fn)
 	values.WalkMap(&err, c.syntheticForAnchor, c.newSyntheticForAnchor, nil, opts, fn)
 	values.WalkField(&err, c.localDeliveryQueue, c.newLocalDeliveryQueue, opts, fn)
-	values.WalkField(&err, c.cascadeDeliveryQueue, c.newCascadeDeliveryQueue, opts, fn)
 	values.WalkField(&err, c.directory, c.newDirectory, opts, fn)
 	values.WalkField(&err, c.events, c.newEvents, opts, fn)
 	values.WalkField(&err, c.blockLedger, c.newBlockLedger, opts, fn)
@@ -864,7 +849,6 @@ func (c *Account) baseCommit() error {
 		values.Commit(&err, v)
 	}
 	values.Commit(&err, c.localDeliveryQueue)
-	values.Commit(&err, c.cascadeDeliveryQueue)
 	values.Commit(&err, c.directory)
 	values.Commit(&err, c.events)
 	values.Commit(&err, c.blockLedger)

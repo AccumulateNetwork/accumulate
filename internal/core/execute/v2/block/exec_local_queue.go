@@ -30,16 +30,15 @@ import (
 // START of a block and are written at the END of one, so nothing queued
 // while draining can execute before the next block.
 //
-// Two queues, one rule each:
-//   - LocalDeliveryQueue holds locally produced messages, written by the
-//     block-end split below. Each entry is destination.WithTxID(msgHash), so
-//     the drain can re-check routing without re-deriving the destination
-//     from the message type.
-//   - (removed) CascadeDeliveryQueue held ready sequenced messages whose
-//     execution
-//     the MessageIsReady cascade deferred because they belong to a different
-//     identity (#4145 hazard iii). Entries are the pending txids the ledger
-//     already tracks.
+
+// One queue, one rule: LocalDeliveryQueue holds locally produced messages,
+// written by the block-end split below. Each entry is
+// destination.WithTxID(msgHash), so the drain can re-check routing without
+// re-deriving the destination from the message type.
+//
+// A second queue held ready sequenced messages whose execution the cascade
+// deferred. The cascade is gone (staging settles the run before anything
+// executes), and the queue went with it -- see #4195 for the removal.
 
 // routesToSelf reports whether the destination routes to this partition.
 func (x *Executor) routesToSelf(dest *url.URL) bool {

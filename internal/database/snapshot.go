@@ -787,7 +787,6 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 		get  func() ([]*url.TxID, error)
 	}{
 		{"local-delivery-queue", a.LocalDeliveryQueue().Get},
-		{"cascade-delivery-queue", a.CascadeDeliveryQueue().Get},
 	} {
 		ids, err := q.get()
 		if err != nil {
