@@ -98,10 +98,9 @@ func TestRestart_MisrouteSurvives(t *testing.T) {
 	db, err := Open(dir)
 	require.NoError(t, err)
 	// Summary(H).Main rather than Message(H).Main: both are write-once, and
-	// this one is not in the read cache (cache.go). The test rewrites the key
-	// with a DIFFERENT value, which is the misroute it exists to exercise --
-	// and which for a message or an anchor would mean a broken protocol, not
-	// a misclassification. Do not point it back at a cached shape.
+	// rewriting one with a DIFFERENT value is the misroute this exercises --
+	// which for a message or an anchor would mean a broken protocol rather
+	// than a misclassification.
 	key := record.NewKey("Summary", [32]byte{8}, "Main")
 
 	put(t, db, key, "first")

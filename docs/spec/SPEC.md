@@ -19,10 +19,11 @@ the same two sections:
 |---|---|
 | [Executor](executor.md) | How a block is produced: what runs, in what order, and what may be staged |
 | [Database abstraction](database.md) | The storage contract every backend satisfies, and how a backend is chosen |
+| [Healing](healing.md) | Filling gaps in sequenced cross-partition streams |
 
 Parts still to be written: consensus (DAG-BFT), the protocol's account and
-transaction model, the API, cross-partition messaging (synthetics and anchors),
-and healing. A missing part is a gap, not a statement that the subsystem has no
+transaction model, the API, and cross-partition messaging (synthetics and
+anchors). A missing part is a gap, not a statement that the subsystem has no
 rules.
 
 ## Working against the spec

@@ -46,13 +46,11 @@ func TestMisroute(t *testing.T) {
 
 	var hash [32]byte
 	// Summary(H).Main rather than Message(H).Main: both are write-once, and
-	// this one is not in the read cache (cache.go). The test rewrites the key
-	// with a DIFFERENT value, which is the misroute it exists to exercise --
-	// and which for a message or an anchor would mean a broken protocol, not
-	// a misclassification. Do not point it back at a cached shape.
+	// rewriting one with a DIFFERENT value is the misroute this exercises --
+	// which for a message or an anchor would mean a broken protocol rather
+	// than a misclassification.
 	key := record.NewKey("Summary", hash, "Main")
 	require.True(t, isWriteOnce(key), "the point of the test is that this is misclassified")
-	require.False(t, cacheable(key), "a rewritten key must not be one the cache holds")
 
 	put(t, d, key, "first")
 	require.Equal(t, "first", get(t, d, key))

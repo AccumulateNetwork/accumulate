@@ -122,10 +122,6 @@ type Database struct {
 	deepFallbacks map[string]uint64
 	fallbackMu    sync.Mutex
 
-	// cache holds the write-once records the executor reads on every
-	// block; see cache.go.  Nil disables it.
-	cache *recordCache
-
 	maintaining  atomic.Bool
 	maintWG      sync.WaitGroup
 	maintErr     error  // the last maintenance run's outcome
@@ -278,7 +274,6 @@ func Open(path string) (*Database, error) {
 		StatsEvery:     50,
 		TallyKeys:      DefaultTallyKeys,
 		MergeLag:       DefaultMergeLag,
-		cache:          newRecordCache(DefaultCacheEntries),
 	}
 
 	// A commit seals the permanent layer at its version, and the store
@@ -712,13 +707,6 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 	// reader older than it is open, so the store -- and therefore the cache
 	// -- never holds a version an open reader must not see. Every write
 	// forgets its key besides.
-	canCache := cacheable(key)
-	if canCache {
-		if v, ok := d.cache.get(h); ok {
-			return v, nil
-		}
-	}
-
 	value, err := d.kv.Get(h)
 	if err != nil && deep {
 		// This reader asked to reach past the window (BeginDeep)
@@ -755,19 +743,7 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 	if err != nil || len(value) == 0 {
 		// A zero-length value is a deletion, reported the same way a
 		// key that was never written is
-		if canCache {
-			// A read of a cacheable shape for a record that is not there.
-			// The cache cannot serve it -- there is nothing to hold, and
-			// caching the absence would answer "no" forever for a record
-			// that is simply written later -- but it still paid the walk,
-			// so it is what the hit rate's denominator is mostly made of
-			// and it has to be visible on its own.
-			d.cache.countAbsent()
-		}
 		return nil, (*database.NotFoundError)(key)
-	}
-	if canCache {
-		d.cache.put(h, value)
 	}
 	return value, nil
 }
@@ -982,15 +958,6 @@ func (d *Database) reportStats() {
 		MaintenanceErrors: d.maintErrs}
 	if d.maintErr != nil {
 		report.MaintenanceLast = d.maintErr.Error()
-	}
-
-	report.CacheHits, report.CacheMisses, report.CacheAbsent, report.CachePromotions,
-		report.CacheGenerations, report.CacheEntries = d.cache.stats()
-	if n := report.CacheHits + report.CacheMisses; n > 0 {
-		report.CacheHitPct = float64(report.CacheHits) / float64(n) * 100
-	}
-	if n := report.CacheHits + report.CacheMisses - report.CacheAbsent; n > 0 {
-		report.CacheHitPctPresent = float64(report.CacheHits) / float64(n) * 100
 	}
 
 	// Lifted out of the shape table so a run can be checked by looking
