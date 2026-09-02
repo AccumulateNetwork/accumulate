@@ -1,0 +1,18 @@
+2026-09-02T13:29:03 stuck=0 stuckStream= worst=none undeliv=none
+2026-09-02T13:29:48 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=54 undeliv=synthetic BVN2->BVN1 undeliv=54
+2026-09-02T13:30:33 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1 undeliv=synthetic BVN2->BVN1 undeliv=3206
+2026-09-02T13:31:18 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=9 undeliv=synthetic BVN2->BVN1 undeliv=4169
+2026-09-02T13:32:03 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=22 undeliv=synthetic BVN2->BVN1 undeliv=4088
+2026-09-02T13:32:48 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=162 undeliv=synthetic BVN2->BVN1 undeliv=2708
+2026-09-02T13:33:33 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=906 undeliv=synthetic BVN2->BVN1 undeliv=3012
+2026-09-02T13:34:18 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1556 undeliv=synthetic BVN2->BVN1 undeliv=2279
+2026-09-02T13:35:03 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=2198 undeliv=synthetic BVN2->BVN1 undeliv=2218
+2026-09-02T13:35:48 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=2559 undeliv=synthetic BVN2->BVN1 undeliv=2478
+2026-09-02T13:36:33 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=2766 undeliv=synthetic BVN2->BVN1 undeliv=2776
+2026-09-02T13:37:18 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=2968 undeliv=synthetic BVN2->BVN1 undeliv=3785
+2026-09-02T13:38:03 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=3202 undeliv=synthetic BVN2->BVN1 undeliv=3414
+2026-09-02T13:38:48 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=3400 undeliv=synthetic BVN2->BVN1 undeliv=4441
+2026-09-02T13:39:33 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=3400 undeliv=synthetic BVN2->BVN1 undeliv=4441
+2026-09-02T13:40:18 stuck=0 stuckStream= worst=none undeliv=none
+2026-09-02T13:41:03 stuck=0 stuckStream= worst=BVN2->BVN1 gap=2228 deliv=48576 undeliv=synthetic BVN2->BVN1 undeliv=5657
+SEIZED at 2026-09-02T13:41:03 :: stuck=0 stuckStream= worst=BVN2->BVN1 gap=2228 deliv=48576 undeliv=synthetic BVN2->BVN1 undeliv=5657
