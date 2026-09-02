@@ -12,13 +12,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // positionBlock builds a BVN0 block whose BVN1 synthetic stream stands at
 // `delivered`/`received`, holding messages for the numbers listed.
-func positionBlock(t *testing.T, delivered, received uint64, hold ...uint64) (*Block, stream) {
+// positionBlock builds a block whose stream is delivered to `delivered` and
+// holding `hold`.
+//
+// The two facts go to two different places, which is the change (#4189): the
+// LEDGER carries Delivered, because what a block delivered is its output; the
+// executor's STAGING carries what is held, because that is what the executor
+// has taken in from consensus. Seeding the held set into the record is what the
+// old fixture did, and it is what let the record and the database disagree.
+func positionBlock(t *testing.T, delivered uint64, hold ...uint64) (*Block, stream) {
 	t.Helper()
 	x := streamTestExec(t)
 	db := database.OpenInMemory(nil)
@@ -27,22 +34,21 @@ func positionBlock(t *testing.T, delivered, received uint64, hold ...uint64) (*B
 
 	ledger := new(protocol.SyntheticLedger)
 	ledger.Url = x.Describe.Synthetic()
-	part := ledger.Partition(protocol.PartitionUrl("BVN1"))
-	part.Delivered, part.Received = delivered, received
-	part.Pending = make([]*url.TxID, received-delivered)
-	for _, n := range hold {
-		part.Pending[n-delivered-1] = ledger.Url.WithTxID([32]byte{byte(n)})
-	}
+	ledger.Partition(protocol.PartitionUrl("BVN1")).Delivered = delivered
 	require.NoError(t, batch.Account(ledger.Url).Main().Put(ledger))
 
-	return &Block{positions: new(positionCache), Batch: batch, Executor: x},
-		stream{kind: streamSynthetic, ledger: ledger.Url, source: protocol.PartitionUrl("BVN1")}
+	s := stream{kind: streamSynthetic, ledger: ledger.Url, source: protocol.PartitionUrl("BVN1")}
+	for _, n := range hold {
+		x.Staging.Hold(s.id(), n, ledger.Url.WithTxID([32]byte{byte(n)}))
+	}
+
+	return &Block{positions: new(positionCache), Batch: batch, Executor: x}, s
 }
 
 func TestStreamPosition(t *testing.T) {
 	// Delivered 10, received 14, holding 12 and 14 — so 11 and 13 are gaps we
 	// know exist but cannot fill.
-	b, s := positionBlock(t, 10, 14, 12, 14)
+	b, s := positionBlock(t, 10, 12, 14)
 	p, err := b.positionOf(s)
 	require.NoError(t, err)
 
@@ -69,7 +75,7 @@ func TestStreamPosition(t *testing.T) {
 // The point of the type: the ledger is read once per stream per block, however
 // many times the position is asked for.
 func TestStreamPosition_ReadsOncePerBlock(t *testing.T) {
-	b, s := positionBlock(t, 0, 3, 2, 3)
+	b, s := positionBlock(t, 0, 2, 3)
 
 	first, err := b.positionOf(s)
 	require.NoError(t, err)
@@ -83,7 +89,7 @@ func TestStreamPosition_ReadsOncePerBlock(t *testing.T) {
 // Anchors and synthetics are separate streams even between the same pair of
 // partitions, so they must not share a cache entry.
 func TestStreamPosition_AnchorAndSyntheticAreDistinct(t *testing.T) {
-	b, synth := positionBlock(t, 5, 5)
+	b, synth := positionBlock(t, 5)
 
 	anchorLedger := new(protocol.AnchorLedger)
 	anchorLedger.Url = b.Executor.Describe.AnchorPool()

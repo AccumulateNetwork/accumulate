@@ -76,6 +76,13 @@ type Options struct {
 	// result — it is configuration, not consensus.
 	ExecutionShards int
 
+	// Staging holds sequenced messages the executor has received and cannot
+	// execute yet (#4189). It is passed in rather than created by the executor
+	// because healing must ask the SAME store what the node holds — a healer
+	// with its own view of that is the disagreement this replaces. Nil creates
+	// a private one, which is what tests that never heal want.
+	Staging *Staging
+
 	// MaxEnvelopeSize is the consensus transport's per-transaction size
 	// limit — for DAG-BFT, the worker's MaxBatchBytes. The synthetic package
 	// budget (#4141) is DERIVED from it, because a package is one envelope

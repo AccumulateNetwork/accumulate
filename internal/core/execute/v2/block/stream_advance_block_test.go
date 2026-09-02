@@ -37,7 +37,7 @@ func partitionOf(t *testing.T, b *Block, s stream) *protocol.PartitionSyntheticL
 // used to be true because every message wrote the ledger and the cache was
 // cleared between rounds; now it is true because the position IS the state.
 func TestStreamAdvance_IsVisibleWithinTheBlock(t *testing.T) {
-	b, s := positionBlock(t, 0, 3, 2, 3)
+	b, s := positionBlock(t, 0, 2, 3)
 
 	p, err := b.positionOf(s)
 	require.NoError(t, err)
@@ -63,7 +63,7 @@ func TestStreamAdvance_IsVisibleWithinTheBlock(t *testing.T) {
 // The same for a receipt: a message recorded pending during the block is
 // drainable in a later round of the same block.
 func TestStreamAdvance_ARecordedMessageIsVisibleWithinTheBlock(t *testing.T) {
-	b, s := positionBlock(t, 0, 0)
+	b, s := positionBlock(t, 0)
 
 	p, err := b.positionOf(s)
 	require.NoError(t, err)
@@ -72,48 +72,46 @@ func TestStreamAdvance_ARecordedMessageIsVisibleWithinTheBlock(t *testing.T) {
 	require.NoError(t, b.advanceStream(s, false, 2, txidFor(s, 2)))
 	assert.True(t, p.has(2))
 	assert.False(t, p.has(1), "1 is a gap: known received, not held")
-	assert.Equal(t, uint64(2), p.received)
+	assert.Equal(t, uint64(2), p.received())
 }
 
-// The proof step 7 owes: closing the block leaves EXACTLY the record that
-// writing after every message left. Same Adds, same order, one Put. Compared
-// on a real batch, against the per-message pattern the executor used to run,
-// over a mix of deliveries and out-of-order receipts.
-func TestStreamAdvance_FlushLeavesThePerMessageRecord(t *testing.T) {
+// The proof step 7 owes, restated for #4189: closing the block leaves the
+// watermark the deliveries reached, once, over a mix of deliveries and
+// out-of-order receipts — and leaves nothing else.
+func TestStreamAdvance_FlushWritesTheWatermarkAndNothingElse(t *testing.T) {
 	ops := []advOp{
 		{1, true}, {6, false}, {2, true}, {8, false}, {3, true}, {5, false}, {4, true}, {5, true},
 	}
 
-	// The executor's old path: a child batch per message, read-add-write.
-	want, s := positionBlock(t, 0, 3, 2, 3)
+	b, s := positionBlock(t, 0, 2, 3)
 	for _, op := range ops {
-		child := want.Batch.Begin(true)
-		var ledger *protocol.SyntheticLedger
-		require.NoError(t, child.Account(s.ledger).Main().GetAs(&ledger))
-		ledger.Partition(s.source).Add(op.delivered, op.number, txidFor(s, op.number))
-		require.NoError(t, child.Account(s.ledger).Main().Put(ledger))
-		require.NoError(t, child.Commit())
+		require.NoError(t, b.advanceStream(s, op.delivered, op.number, txidFor(s, op.number)))
 	}
+	require.NoError(t, b.flushStreams())
 
-	// Step 7: advance the working copy, flush once.
-	got, _ := positionBlock(t, 0, 3, 2, 3)
-	for _, op := range ops {
-		require.NoError(t, got.advanceStream(s, op.delivered, op.number, txidFor(s, op.number)))
-	}
-	require.NoError(t, got.flushStreams())
+	part := partitionOf(t, b, s)
+	require.Equal(t, uint64(5), part.Delivered, "1..5 delivered, 2 and 3 from the staged tail")
+	require.Empty(t, part.Pending, "the held set is staging's, and staging is not written")
+	require.Equal(t, uint64(0), part.Received, "nor is the high-water mark")
 
-	sameLedger(t, partitionOf(t, want, s), partitionOf(t, got, s), "flushed once vs written per message")
+	// Staging still holds everything, including what was just delivered: the
+	// block has not committed, so the delivery has not happened.
+	require.Equal(t, []uint64{2, 3, 5, 6, 8}, heldNumbers(b, s, 12))
 
-	// Flushing is idempotent per block: a second flush has nothing to replay.
-	require.NoError(t, got.flushStreams())
-	sameLedger(t, partitionOf(t, want, s), partitionOf(t, got, s), "a second flush changes nothing")
+	// On commit, what was delivered goes and what arrived past the gap stays.
+	b.releaseStreams()
+	require.Equal(t, []uint64{6, 8}, heldNumbers(b, s, 12))
+
+	// Flushing is idempotent per block: a second flush writes the same thing.
+	require.NoError(t, b.flushStreams())
+	require.Equal(t, uint64(5), partitionOf(t, b, s).Delivered, "a second flush changes nothing")
 }
 
 // The flush must not clobber what something else wrote to the same record
 // during the block. produceSynthetic bumps Produced on the same ledger at
 // close; the flush is a read-modify-write, not a put of the working copy.
 func TestStreamAdvance_FlushPreservesOtherWritesToTheRecord(t *testing.T) {
-	b, s := positionBlock(t, 0, 0)
+	b, s := positionBlock(t, 0)
 	require.NoError(t, b.advanceStream(s, false, 2, txidFor(s, 2)))
 
 	var ledger *protocol.SyntheticLedger
@@ -121,38 +119,50 @@ func TestStreamAdvance_FlushPreservesOtherWritesToTheRecord(t *testing.T) {
 	ledger.Partition(s.source).Produced = 77
 	require.NoError(t, b.Batch.Account(s.ledger).Main().Put(ledger))
 
+	require.NoError(t, b.advanceStream(s, true, 1, txidFor(s, 1)))
 	require.NoError(t, b.flushStreams())
 	part := partitionOf(t, b, s)
 	assert.Equal(t, uint64(77), part.Produced, "a write made between load and flush must survive")
-	assert.Equal(t, uint64(2), part.Received)
-	assert.True(t, part.Pending[1] != nil)
+	assert.Equal(t, uint64(1), part.Delivered, "and the flush still writes its own field")
 }
 
-// Bounding must survive (#4169 risks): a receipt far past the delivery point
-// is refused, deterministically, and leaves no trace in the position.
-func TestStreamAdvance_RefusesAFarFutureReceipt(t *testing.T) {
-	b, s := positionBlock(t, 10, 10)
-	far := uint64(10 + MaxPendingSequenced + 1)
-	require.NoError(t, b.advanceStream(s, false, far, txidFor(s, far)))
+// The livelock, inverted (#4189). A receipt far past the delivery point is
+// HELD, not refused.
+//
+// It used to be refused past MaxPendingSequenced — 4,096 — because the held set
+// was an array in a record hashed into the BPT every block, and an array in
+// such a record cannot grow without limit. But refusing the receipt did not
+// refuse the message: the body was stored anyway, so the cap discarded only the
+// INDEX of what the node held. The node then held a message and reported not
+// holding it, and healing fetched it back across the partition, forever. In one
+// twenty-minute soak that was 8,556 sequence numbers fetched 53,011 times, with
+// every partition live the whole time.
+//
+// Staging is not hashed and not written, so there is nothing left to bound.
+func TestStreamAdvance_HoldsAFarFutureReceipt(t *testing.T) {
+	b, s := positionBlock(t, 10)
 
-	p, err := b.positionOf(s)
-	require.NoError(t, err)
-	assert.Equal(t, uint64(10), p.received, "refused: not even counted as received")
-	assert.False(t, p.has(far))
+	for _, far := range []uint64{10 + 4096, 10 + 4097, 10 + 100_000} {
+		require.NoError(t, b.advanceStream(s, false, far, txidFor(s, far)))
+
+		p, err := b.positionOf(s)
+		require.NoError(t, err)
+		assert.Truef(t, p.has(far), "%d must be held, however far ahead it is", far)
+		assert.Equalf(t, far, p.received(), "and counted as seen")
+	}
+
+	// And none of it reached the record.
 	require.NoError(t, b.flushStreams())
-	assert.Equal(t, uint64(10), partitionOf(t, b, s).Received)
-
-	// The edge of the window is accepted.
-	edge := uint64(10 + MaxPendingSequenced)
-	require.NoError(t, b.advanceStream(s, false, edge, txidFor(s, edge)))
-	assert.True(t, b.positions.m[s.ledger.String()+"|"+s.source.String()].has(edge))
+	part := partitionOf(t, b, s)
+	assert.Equal(t, uint64(10), part.Delivered)
+	assert.Empty(t, part.Pending)
 }
 
 // Step 7 is the only step that can corrupt state: a wrong advance moves a
 // watermark that does not self-correct. Both ways of being wrong are refused
 // loudly rather than applied.
 func TestStreamAdvance_RefusesAnOutOfOrderAdvance(t *testing.T) {
-	b, s := positionBlock(t, 10, 12, 11, 12)
+	b, s := positionBlock(t, 10, 11, 12)
 
 	err := b.advanceStream(s, false, 10, txidFor(s, 10))
 	require.Error(t, err, "recording as pending something already delivered")
@@ -177,7 +187,7 @@ func TestStreamAdvance_RefusesAnOutOfOrderAdvance(t *testing.T) {
 func TestStreamAdvance_CostDoesNotScaleWithBacklog(t *testing.T) {
 	perMessage := func(backlog uint64) uint64 {
 		const N = 100
-		b, s := positionBlock(t, 0, backlog)
+		b, s := positionBlock(t, 0)
 		part := partitionOf(t, b, s)
 		for i := range part.Pending {
 			part.Pending[i] = txidFor(s, uint64(i+1))

@@ -25,7 +25,7 @@ import (
 //
 // Run this under -race.
 func TestStreamPosition_ConcurrentReadsAreSafe(t *testing.T) {
-	b, s := positionBlock(t, 5, 8, 6, 7)
+	b, s := positionBlock(t, 5, 6, 7)
 
 	const goroutines = 16
 	var wg sync.WaitGroup

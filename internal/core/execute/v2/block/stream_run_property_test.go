@@ -13,8 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Property tests over buildRun. The table tests say what it does for cases I
@@ -70,13 +68,13 @@ func checkRunInvariants(t *testing.T, pos *streamPosition, arriving map[uint64]*
 func propInputs(seed uint64) (*streamPosition, map[uint64]*arrival, uint64) {
 	delivered := seed % 7
 	window := (seed / 7) % 9
-	pos := &streamPosition{delivered: delivered, received: delivered + window}
-	pos.staged = make([]*url.TxID, window)
+	var hold []uint64
 	for i := uint64(0); i < window; i++ {
 		if (seed>>(i%13))&1 == 1 {
-			pos.staged[i] = protocol.PartitionUrl("BVN0").WithTxID([32]byte{byte(i)})
+			hold = append(hold, delivered+1+i)
 		}
 	}
+	pos := runPos(delivered, hold...)
 	arriving := map[uint64]*arrival{}
 	for i := uint64(0); i < (seed/63)%7; i++ {
 		n := delivered + 1 + ((seed >> i) % 12)
@@ -97,8 +95,8 @@ func TestBuildRun_PropertiesHoldOverManyShapes(t *testing.T) {
 		run, stage := buildRun(pos, arriving, limit)
 		checkRunInvariants(t, pos, arriving, limit, run, stage)
 		if t.Failed() {
-			t.Fatalf("seed %d: delivered=%d received=%d staged=%v arrivals=%d limit=%d",
-				seed, pos.delivered, pos.received, pos.staged, len(arriving), limit)
+			t.Fatalf("seed %d: delivered=%d received=%d held=%d arrivals=%d limit=%d",
+				seed, pos.delivered, pos.received(), pos.staging.Held(pos.stream.id()), len(arriving), limit)
 		}
 	}
 }
@@ -129,7 +127,7 @@ func TestBuildRun_IsDeterministicAcrossMapOrders(t *testing.T) {
 // run of N ends at number M, next block's run must begin at M+1 — otherwise
 // blocks either repeat a message or skip one.
 func TestBuildRun_NextBlockResumesWhereThisOneStopped(t *testing.T) {
-	pos := runPos(0, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+	pos := runPos(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 	seen := []uint64{}
 	for block := 0; block < 5; block++ {
 		run, _ := buildRun(pos, nil, 2)
@@ -140,7 +138,7 @@ func TestBuildRun_NextBlockResumesWhereThisOneStopped(t *testing.T) {
 			seen = append(seen, e.number)
 		}
 		last := run[len(run)-1].number
-		pos = runPos(last, 10, remaining(last, 10)...)
+		pos = runPos(last, remaining(last, 10)...)
 	}
 	assert.Equal(t, []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, seen,
 		"across blocks the stream is covered exactly once, in order, with no repeat and no skip")
@@ -157,30 +155,36 @@ func remaining(after, to uint64) []uint64 {
 // Degenerate and hostile inputs. These are the shapes a corrupted or crafted
 // ledger could present, and buildRun must not panic or loop on any of them.
 func TestBuildRun_DegenerateInputs(t *testing.T) {
-	t.Run("received behind delivered", func(t *testing.T) {
-		// A ledger claiming fewer received than delivered is inconsistent.
-		// idOf must reject rather than index backwards into the window.
-		pos := &streamPosition{delivered: 10, received: 3}
+	t.Run("held entries behind the watermark", func(t *testing.T) {
+		// Staging holding numbers at or below Delivered is inconsistent — they
+		// were delivered, so Release should have dropped them. idOf must answer
+		// from the watermark and not from what the map happens to contain.
+		//
+		// This replaces the two array hazards the positional window invited:
+		// reading backwards when received was behind delivered, and running off
+		// the end when the window was shorter than received claimed. Neither is
+		// expressible against a map keyed by the number itself (#4189) — but a
+		// stale entry is, so that is what is pinned here.
+		pos := runPos(10, 3, 8, 10, 11)
 		run, stage := buildRun(pos, nil, noLimit)
-		assert.Empty(t, run)
+		assert.Equal(t, []uint64{11}, runNumbers(run), "the run starts at 11 and ignores the stale entries")
 		assert.Empty(t, stage)
-		assert.False(t, pos.has(11))
+		assert.False(t, pos.has(10), "at the watermark is delivered, not staged")
+		assert.False(t, pos.has(3))
 	})
 
-	t.Run("window shorter than received claims", func(t *testing.T) {
-		// received says 5 are outstanding; the window holds 2. Reading slot 3
-		// would run off the end.
-		pos := &streamPosition{delivered: 0, received: 5, staged: make([]*url.TxID, 2)}
-		pos.staged[0] = protocol.PartitionUrl("BVN0").WithTxID([32]byte{1})
-		pos.staged[1] = protocol.PartitionUrl("BVN0").WithTxID([32]byte{2})
+	t.Run("a hole in the middle of what is held", func(t *testing.T) {
+		// The shape the whole design turns on: 1 and 2 held, 3 missing, 4 and 5
+		// held. The run must stop at the hole and not jump it.
+		pos := runPos(0, 1, 2, 4, 5)
 		run, _ := buildRun(pos, nil, noLimit)
-		assert.Equal(t, []uint64{1, 2}, runNumbers(run), "the run stops at the end of what is actually held")
+		assert.Equal(t, []uint64{1, 2}, runNumbers(run), "the run stops at the first number nothing holds")
 	})
 
 	t.Run("arrival numbered zero", func(t *testing.T) {
 		// Sequence numbers start at 1; 0 is invalid and must not be treated
 		// as next for a stream standing at 0.
-		pos := runPos(0, 0)
+		pos := runPos(0)
 		a := map[uint64]*arrival{0: {number: 0, bundle: []messaging.Message{&messaging.SequencedMessage{}}, admissible: true}}
 		run, stage := buildRun(pos, a, noLimit)
 		assert.Empty(t, run, "zero is not delivered+1 for any stream")
@@ -190,7 +194,7 @@ func TestBuildRun_DegenerateInputs(t *testing.T) {
 	t.Run("watermark at the top of the range", func(t *testing.T) {
 		// delivered+1 overflows. The walk must terminate rather than wrap to
 		// zero and start again.
-		pos := &streamPosition{delivered: math.MaxUint64, received: math.MaxUint64}
+		pos := runPos(math.MaxUint64)
 		run, stage := buildRun(pos, nil, noLimit)
 		assert.Empty(t, run)
 		assert.Empty(t, stage)

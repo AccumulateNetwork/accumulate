@@ -10,73 +10,57 @@ import (
 	"sort"
 	"sync"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // streamPosition is where one stream stands — how far it has been delivered,
-// how far it has been received, and which numbers in between are staged:
-// received, held, waiting for the gap ahead of them to close.
+// and which numbers above that the executor is holding.
 //
-// It is the block's WORKING COPY of the stream's ledger entry (#4169 step 7).
-// Read once per stream per block through Block.positionOf, advanced in place
-// as the block executes, and written back once when the block closes. The
-// executor used to read the ledger inside every message's own child batch,
-// and a child does not share its parent's value, so each read deep-copied the
-// whole ledger — every stream, every staged entry. Per message that was
-// O(total backlog), and draining n cost O(n^2). See
-// TestSequenceLedgerCostIsPerRead. Now the copy is paid once per stream per
-// block and every message pays only its own Add.
+// The two halves come from different places, and that is the point (#4189).
+// `delivered` is read from the stream's ledger, because what a block delivered
+// is its output and belongs in state the block wrote. What is HELD is read from
+// [execute.Staging], because that is the executor's own account of what it has
+// taken in from consensus, and nothing the block writes may feed back into it.
+//
+// It used to be one thing: the block's working copy of a ledger entry whose
+// Pending array was the held set. Being in an account forced that array to be
+// bounded, and past the bound the executor stored a message while refusing to
+// record that it had it — so the node held a message and reported not holding
+// it, and healing fetched back across the partition what was already in the
+// local database.
+//
+// Read once per stream per block through Block.positionOf. The executor used to
+// read the ledger inside every message's own child batch, and a child does not
+// share its parent's value, so each read deep-copied the whole ledger — every
+// stream, every staged entry. Per message that was O(total backlog), and
+// draining n cost O(n^2). See TestSequenceLedgerCostIsPerRead.
 type streamPosition struct {
 	stream    stream
 	delivered uint64
-	received  uint64
 
-	// staged is indexed by offset from delivered: staged[i] is number
-	// delivered+1+i. A nil entry is a number we know was received — because
-	// something past it arrived — but whose message we do not hold.
-	staged []*url.TxID
+	// staging is where held messages actually live. The position holds a
+	// reference rather than a copy: a copy is a snapshot, and the whole defect
+	// this replaces was a snapshot of what the node holds disagreeing with what
+	// the node holds.
+	staging *execute.Staging
 
-	// work is the private copy this position is derived from. Private,
-	// because the batch memoizes the record it was read from, and advancing
-	// that in place would write the block's state behind the batch's back.
-	work *protocol.PartitionSyntheticLedger
-
-	// ops is every Add applied to work, in order, so the flush can replay
-	// them onto the real record. The record is NOT overwritten with work:
-	// other things write it during the block (production bumps Produced), and
-	// a replay preserves those where a put of the copy would clobber them.
-	ops []streamOp
-}
-
-// streamOp is one advance of a stream: a delivery, or a receipt recorded
-// pending.
-type streamOp struct {
-	delivered bool
-	number    uint64
-	id        *url.TxID
+	// highest is the largest number this stream has delivered in THIS block, or
+	// zero if none. It is what the flush writes and what the commit releases.
+	highest uint64
 }
 
 // next is the number this stream is waiting for.
 func (p *streamPosition) next() uint64 { return p.delivered + 1 }
 
 // idOf returns the staged message ID for a sequence number, if we hold one.
-//
-// This is PartitionSyntheticLedger.Get restated, and it is restated rather than
-// called so the offset arithmetic — index = n - delivered - 1 — lives in one
-// place. Getting it wrong reads a neighbouring stream position and is the
-// failure the positional Pending array invites.
 func (p *streamPosition) idOf(n uint64) (*url.TxID, bool) {
-	if n <= p.delivered || n > p.received {
+	if n <= p.delivered {
 		return nil, false
 	}
-	i := n - p.delivered - 1
-	if i >= uint64(len(p.staged)) {
-		return nil, false // received is ahead of the window we actually hold
-	}
-	id := p.staged[i]
-	return id, id != nil
+	return p.staging.IDOf(p.stream.id(), n)
 }
 
 // has reports whether we hold a staged message for this number.
@@ -85,9 +69,13 @@ func (p *streamPosition) has(n uint64) bool {
 	return ok
 }
 
-// sync re-derives the position from the working copy after an advance.
-func (p *streamPosition) sync() {
-	p.delivered, p.received, p.staged = p.work.Delivered, p.work.Received, p.work.Pending
+// received is the largest number this stream has ever seen. It says the stream
+// is behind; it does not say what is missing, which is Staging.Missing.
+func (p *streamPosition) received() uint64 {
+	if h := p.staging.Highest(p.stream.id()); h > p.delivered {
+		return h
+	}
+	return p.delivered
 }
 
 // positionCache holds the block's stream positions. Its mutex is why it lives
@@ -98,6 +86,11 @@ type positionCache struct {
 }
 
 func (s stream) key() string { return s.ledger.String() + "|" + s.source.String() }
+
+// id is this stream's name in the executor's staging store.
+func (s stream) id() execute.StreamID {
+	return execute.StreamID{Ledger: s.ledger, Source: s.source}
+}
 
 // positionOf returns where a stream stands, loading it at most once per block.
 //
@@ -136,8 +129,14 @@ func (b *Block) positionOfLocked(s stream) (*streamPosition, error) {
 		return nil, errors.UnknownError.WithFormat("load %v: %w", s.ledger, err)
 	}
 
-	p := &streamPosition{stream: s, work: ledger.Partition(s.source).Copy()}
-	p.sync()
+	// Only Delivered. The rest of the entry is the source's Produced count and
+	// the residue of the old design, and neither says anything about what this
+	// node is holding right now.
+	p := &streamPosition{
+		stream:    s,
+		delivered: ledger.Partition(s.source).Delivered,
+		staging:   b.Executor.Staging,
+	}
 	if b.positions.m == nil {
 		b.positions.m = map[string]*streamPosition{}
 	}
@@ -146,15 +145,21 @@ func (b *Block) positionOfLocked(s stream) (*streamPosition, error) {
 }
 
 // advanceStream records one advance of a stream: a delivery of the next
-// number, or a receipt recorded pending. It is the executor's ledger write,
-// moved out of the message path (#4169 step 7) — the position moves now, so
-// the next ask in this block sees it, and the record is written at close.
+// number, or a receipt held for a later block.
 //
-// This is the one write in the restructure that can corrupt state: a wrong
-// advance moves a watermark that does not self-correct, and every node on the
-// other path is on a different chain. So both ways of being wrong are refused
-// rather than applied. Add would shift the pending window under a re-delivery
-// and panic on a receipt behind the watermark; neither may reach it.
+// A delivery moves a watermark that does not self-correct, and every node on
+// the other path is on a different chain, so a delivery out of order is refused
+// rather than applied. A RECEIPT is refused only when it is behind the
+// watermark, which is a caller error and not a state to be represented.
+//
+// There is no upper bound. There used to be one — MaxPendingSequenced, 4,096 —
+// and it existed because the held set was an array in a record hashed into the
+// BPT every block. Past it the executor logged at Debug and returned nil,
+// storing the message and refusing to record that it had it. Bounding receipts
+// bounded nothing real: the bodies were stored regardless, so the cap discarded
+// only the INDEX of what the node held, and healing spent the network fetching
+// it back. Staging is not hashed and not written, so there is nothing left to
+// bound.
 func (b *Block) advanceStream(s stream, delivered bool, n uint64, id *url.TxID) error {
 	b.positions.mu.Lock()
 	defer b.positions.mu.Unlock()
@@ -170,39 +175,38 @@ func (b *Block) advanceStream(s stream, delivered bool, n uint64, id *url.TxID) 
 
 	case !delivered && n <= p.delivered:
 		return errors.FatalError.WithFormat("%v: processed out of order: delivered %d, processed %d", s.source, p.delivered, n)
+	}
 
-	case !delivered && n > p.delivered+MaxPendingSequenced:
-		// Bounding must survive. Refusing to RECORD a receipt far beyond the
-		// delivery point is deterministic — same rule, same state on every
-		// validator — and converts unbounded receipt-state growth into a
-		// produced>received tail at the source, which the reconcile machinery
-		// heals once delivery catches up.
-		b.Executor.logger.Debug("Refusing to record far-future sequenced message",
-			"seq", n, "delivered", p.delivered, "window", MaxPendingSequenced, "source", s.source)
+	if !delivered {
+		b.Executor.Staging.Hold(s.id(), n, id)
 		return nil
 	}
 
-	p.work.Add(delivered, n, id)
-	p.ops = append(p.ops, streamOp{delivered: delivered, number: n, id: id})
-	p.sync()
+	p.delivered = n
+	p.highest = n
 	return nil
 }
 
-// flushStreams writes each advanced stream back to its ledger: one read, the
-// block's Adds replayed in order, one put. Once per stream per block, which is
-// where the O(n^2) drain went.
+// flushStreams writes each advanced stream's Delivered back to its ledger: one
+// read, one assignment, one put, once per stream per block. That is where the
+// O(n^2) drain went.
 //
-// A replay rather than a put of the working copy, so writes other code made to
-// the same record during the block survive — see streamPosition.ops. Streams
-// are flushed in a fixed order; the state does not depend on it, but every
-// node deriving the same thing the same way is cheap insurance.
+// ONLY Delivered. Received and Pending are not written and not maintained —
+// they describe what the executor has taken in, which is staging's to say, and
+// writing them here is exactly the feedback from block output into staging that
+// #4189 removes. The record is re-read rather than overwritten from a copy
+// because other things write it during the block (production bumps Produced),
+// and those must survive.
+//
+// Streams are flushed in a fixed order; the state does not depend on it, but
+// every node deriving the same thing the same way is cheap insurance.
 func (b *Block) flushStreams() error {
 	b.positions.mu.Lock()
 	defer b.positions.mu.Unlock()
 
 	keys := make([]string, 0, len(b.positions.m))
 	for k, p := range b.positions.m {
-		if len(p.ops) > 0 {
+		if p.highest > 0 {
 			keys = append(keys, k)
 		}
 	}
@@ -216,14 +220,31 @@ func (b *Block) flushStreams() error {
 			return errors.UnknownError.WithFormat("load %v: %w", p.stream.ledger, err)
 		}
 		part := ledger.Partition(p.stream.source)
-		for _, op := range p.ops {
-			part.Add(op.delivered, op.number, op.id)
+		if p.highest > part.Delivered {
+			part.Delivered = p.highest
 		}
 		err = b.Batch.Account(p.stream.ledger).Main().Put(ledger)
 		if err != nil {
 			return errors.UnknownError.WithFormat("store %v: %w", p.stream.ledger, err)
 		}
-		p.ops = nil
 	}
 	return nil
+}
+
+// releaseStreams drops everything the block delivered from staging.
+//
+// Called when the block COMMITS. Staging holds what the executor has and cannot
+// execute yet; a number this block delivered is neither, and keeping it would
+// leave the held set growing forever. Doing it at flush instead would drop
+// entries for a block that is then discarded — the node would fetch back
+// something it still holds, which is the failure this change exists to remove.
+func (b *Block) releaseStreams() {
+	b.positions.mu.Lock()
+	defer b.positions.mu.Unlock()
+
+	for _, p := range b.positions.m {
+		if p.highest > 0 {
+			b.Executor.Staging.Release(p.stream.id(), p.highest)
+		}
+	}
 }
