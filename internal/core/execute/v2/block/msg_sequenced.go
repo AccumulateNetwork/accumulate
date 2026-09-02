@@ -280,14 +280,6 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 	return true, nil
 }
 
-// MaxPendingSequenced bounds how far past the delivery point a received
-// sequenced message may be RECORDED in the pending window. The window lives
-// inline in the ledger record, so its length is the size of the record and of
-// the block's one copy of it; 4096 keeps the worst case ~300KB while leaving
-// four block-runs of runway. Receipts beyond it are refused (deterministically)
-// and heal later as a produced>received tail.
-const MaxPendingSequenced = 4 * maxRunPerBlock
-
 // isReady reports which stream governs the message and whether it is next on
 // it. It asks the block's position, never the ledger: the position is read
 // once per stream per block and advanced as the block executes, which is
