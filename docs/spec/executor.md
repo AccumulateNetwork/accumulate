@@ -65,12 +65,21 @@ Fixed, and each choice is a decision:
    deterministic either way.
 3. **User envelopes**, in arrival order — and anything staging did not place in
    a run.
-4. **Drain again**, because step 3 *reveals work to the block*. An envelope that
-   arrives out of sequence is recorded pending, and that makes it drainable now
-   rather than next block.
+4. **Drain again, repeatedly**, because step 3 *reveals work to the block*. An
+   envelope that arrives out of sequence is recorded pending, and that makes it
+   drainable now rather than next block. A delivery can reveal further messages
+   in turn, so draining repeats until a round delivers nothing.
 
 Step 4 is not tidying. Without it a message whose predecessor arrives in the
 same block waits a whole block for no reason.
+
+Two bounds apply, and they bound different things. `maxRunPerBlock` (1,024)
+limits how far one stage may carry a *single stream* in a block, so no block
+inherits an unbounded run. `maxDrainRounds` (8) limits how many times a block
+re-stages what its own execution revealed — two is normally enough, since
+envelopes are processed once and there is one wave of newly recorded messages,
+and the loop stops early when a round delivers nothing. The bound exists so that
+a round which somehow always reports progress cannot hang a block.
 
 Within each group, streams run in canonical source order — the directory first,
 then partitions by ID. Any fixed rule would do; what matters is that every node
@@ -286,7 +295,9 @@ type streamRun struct {
 }
 ```
 
-`executionOrder` composes the runs in the group order above. The decision is
+`drain` decides and runs every stream once in group order; `drainRevealed`
+repeats it while the block's own execution keeps making more of a stream
+drainable. `executionOrder` composes the runs in the group order above. The decision is
 made once per stream per block, not per message: the executor previously read
 the ledger inside every message's child batch, and because a child does not
 share its parent's value each read deep-copied the whole ledger, making a drain

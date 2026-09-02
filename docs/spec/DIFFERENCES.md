@@ -116,7 +116,21 @@ engine over 200 commits (`c37c2eeb0`).
 **Size**: medium. Either derive placement from the record model or make the
 divergence detectable without a soak.
 
-### D2. The window is not part of the backend contract
+### D2. Badger does not verify isolation
+
+**Spec** ([database.md](database.md)): a change set is isolated — changes are
+invisible to anyone else until `Commit`. A backend is correct when it passes the
+five `kvtest` cases, and one that does not run `kvtest` is unspecified.
+
+**Code**: every backend runs `TestDatabase`, `TestDelete`, `TestPrefix` and
+`TestSubBatch`. **Badger alone does not run `TestIsolation`** — v2 and v4 both
+omit it, with no comment saying why. So a shipped backend does not verify the
+invariant the record model depends on most.
+
+**Size**: small — add the case and see whether it passes. If it does not, the
+difference is larger than the test.
+
+### D3. The window is not part of the backend contract
 
 **Spec**: a windowed store answers ordinary reads from its window and a deep
 reader reaches history; a backend that cannot answer a read must say so, never
