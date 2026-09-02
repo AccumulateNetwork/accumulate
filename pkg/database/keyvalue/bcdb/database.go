@@ -110,6 +110,11 @@ type Database struct {
 	// last value written is remembered here instead -- for a SAMPLE of
 	// keys, not all of them.  See tally.
 	shapes map[string]*ShapeCount
+
+	// urls caches Account(U).Url, chains caches the synthetic and anchor
+	// chain records.  Both hold immutable records; see cache.go.
+	urls   *immutableCache
+	chains *immutableCache
 	last   map[[32]byte][32]byte
 
 	// Background maintenance (see maintain).
@@ -284,6 +289,8 @@ func Open(path string) (*Database, error) {
 		kv:             kv,
 		views:          map[uint64]int{},
 		shapes:         map[string]*ShapeCount{},
+		urls:           newImmutableCache(cacheGenSize),
+		chains:         newImmutableCache(cacheGenSize),
 		last:           map[[32]byte][32]byte{},
 		dyna:           map[[32]byte]bool{},
 		statsPath:      filepath.Join(path, "stats.json"),
@@ -717,6 +724,38 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 		}
 	}
 
+	// Cached shapes first, and on a miss go straight to the layer that
+	// holds them (#4165). Both caches hold records that cannot change,
+	// which is why they need no invalidation -- see cache.go.
+	if kind := cacheKindOf(key); kind != cacheNone {
+		c := d.urls
+		if kind == cacheChain {
+			c = d.chains
+		}
+		if v, ok := c.get(h); ok {
+			return v, nil
+		}
+
+		var v []byte
+		var err error
+		if kind == cacheURL {
+			// Dynamic, not the windowed permanent layer: this is
+			// written once at account creation and read on every touch
+			// of the account, so in perm it ages out and every read
+			// after that is a history walk.
+			v, err = d.kv.GetDyna(h)
+		} else {
+			v, err = d.kv.GetPerm(h)
+		}
+		if err == nil {
+			c.put(h, v)
+			return v, nil
+		}
+		// Fall through: a record not where it was expected is still a
+		// record, and refusing it here would turn a placement mistake
+		// into a missing read.
+	}
+
 	value, err := d.kv.Get(h)
 	if err != nil && deep {
 		// This reader asked to reach past the window (BeginDeep)
@@ -784,6 +823,25 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 
 		shape := d.tally(key, perm)
 		staged.entries[h] = entry{value: value, perm: perm, shape: shape}
+
+		// Write through to the caches. They hold records that cannot
+		// change, so this should never overwrite a different value --
+		// but a cache that goes stale when the assumption is broken
+		// turns a wrong classification into wrong DATA, served forever
+		// and silently. Writing through costs one map store on a path
+		// that is already walking every entry, and means the caches
+		// cannot disagree with the store whatever the shapes do.
+		if kind := cacheKindOf(key); kind != cacheNone {
+			c := d.urls
+			if kind == cacheChain {
+				c = d.chains
+			}
+			if len(value) == 0 {
+				c.drop(h) // A tombstone is not a value to serve
+			} else {
+				c.put(h, value)
+			}
+		}
 	}
 	d.version = staged.version
 	d.staged = append(d.staged, staged)
