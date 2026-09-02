@@ -301,6 +301,8 @@ type Account struct {
 	localDeliveryQueue     values.List[*url.TxID]
 	cascadeDeliveryQueue   values.List[*url.TxID]
 	directory              values.Set[*url.URL]
+	sequenced              map[accountSequencedMapKey]values.Value[*url.TxID]
+	sighted                map[accountSightedMapKey]values.Value[uint64]
 	events                 *AccountEvents
 	blockLedger            *indexing.Log[*BlockLedger]
 	transaction            map[accountTransactionMapKey]*AccountTransaction
@@ -332,6 +334,32 @@ type accountSyntheticForAnchorMapKey struct {
 
 func (k accountSyntheticForAnchorKey) ForMap() accountSyntheticForAnchorMapKey {
 	return accountSyntheticForAnchorMapKey{k.Anchor}
+}
+
+type accountSequencedKey struct {
+	Source *url.URL
+	Number uint64
+}
+
+type accountSequencedMapKey struct {
+	Source [32]byte
+	Number uint64
+}
+
+func (k accountSequencedKey) ForMap() accountSequencedMapKey {
+	return accountSequencedMapKey{values.MapKeyUrl(k.Source), k.Number}
+}
+
+type accountSightedKey struct {
+	Source *url.URL
+}
+
+type accountSightedMapKey struct {
+	Source [32]byte
+}
+
+func (k accountSightedKey) ForMap() accountSightedMapKey {
+	return accountSightedMapKey{values.MapKeyUrl(k.Source)}
 }
 
 type accountTransactionKey struct {
@@ -436,6 +464,22 @@ func (c *Account) Directory() values.Set[*url.URL] {
 
 func (c *Account) newDirectory() values.Set[*url.URL] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("Directory"), values.Wrapped(values.UrlWrapper), values.CompareUrl)
+}
+
+func (c *Account) Sequenced(source *url.URL, number uint64) values.Value[*url.TxID] {
+	return values.GetOrCreateMap(c, &c.sequenced, accountSequencedKey{source, number}, (*Account).newSequenced)
+}
+
+func (c *Account) newSequenced(k accountSequencedKey) values.Value[*url.TxID] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Sequenced", k.Source, k.Number), false, values.Wrapped(values.TxidWrapper))
+}
+
+func (c *Account) Sighted(source *url.URL) values.Value[uint64] {
+	return values.GetOrCreateMap(c, &c.sighted, accountSightedKey{source}, (*Account).newSighted)
+}
+
+func (c *Account) newSighted(k accountSightedKey) values.Value[uint64] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Sighted", k.Source), false, values.Wrapped(values.UintWrapper))
 }
 
 func (c *Account) Events() *AccountEvents {
@@ -622,17 +666,38 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.CascadeDeliveryQueue(), key.SliceI(1), nil
 	case "Directory":
 		return c.Directory(), key.SliceI(1), nil
+	case "Sequenced":
+		if key.Len() < 3 {
+			return nil, nil, errors.InternalError.With("bad key for account (4)")
+		}
+		source, okSource := key.Get(1).(*url.URL)
+		number, okNumber := key.Get(2).(uint64)
+		if !okSource || !okNumber {
+			return nil, nil, errors.InternalError.With("bad key for account (5)")
+		}
+		v := c.Sequenced(source, number)
+		return v, key.SliceI(3), nil
+	case "Sighted":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (6)")
+		}
+		source, okSource := key.Get(1).(*url.URL)
+		if !okSource {
+			return nil, nil, errors.InternalError.With("bad key for account (7)")
+		}
+		v := c.Sighted(source)
+		return v, key.SliceI(2), nil
 	case "Events":
 		return c.Events(), key.SliceI(1), nil
 	case "BlockLedger":
 		return c.BlockLedger(), key.SliceI(1), nil
 	case "Transaction":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (4)")
+			return nil, nil, errors.InternalError.With("bad key for account (8)")
 		}
 		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for account (5)")
+			return nil, nil, errors.InternalError.With("bad key for account (9)")
 		}
 		v := c.Transaction(hash)
 		return v, key.SliceI(2), nil
@@ -652,31 +717,31 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.MajorBlockChain(), key.SliceI(1), nil
 	case "SyntheticSequenceChain":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (6)")
-		}
-		partition, okPartition := key.Get(1).(string)
-		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account (7)")
-		}
-		v := c.getSyntheticSequenceChain(partition)
-		return v, key.SliceI(2), nil
-	case "SyntheticReplica":
-		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (8)")
-		}
-		stream, okStream := key.Get(1).(string)
-		if !okStream {
-			return nil, nil, errors.InternalError.With("bad key for account (9)")
-		}
-		v := c.getSyntheticReplica(stream)
-		return v, key.SliceI(2), nil
-	case "AnchorChain":
-		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (10)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.InternalError.With("bad key for account (11)")
+		}
+		v := c.getSyntheticSequenceChain(partition)
+		return v, key.SliceI(2), nil
+	case "SyntheticReplica":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (12)")
+		}
+		stream, okStream := key.Get(1).(string)
+		if !okStream {
+			return nil, nil, errors.InternalError.With("bad key for account (13)")
+		}
+		v := c.getSyntheticReplica(stream)
+		return v, key.SliceI(2), nil
+	case "AnchorChain":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (14)")
+		}
+		partition, okPartition := key.Get(1).(string)
+		if !okPartition {
+			return nil, nil, errors.InternalError.With("bad key for account (15)")
 		}
 		v := c.getAnchorChain(partition)
 		return v, key.SliceI(2), nil
@@ -689,7 +754,7 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Data":
 		return c.Data(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for account (12)")
+		return nil, nil, errors.InternalError.With("bad key for account (16)")
 	}
 }
 
@@ -720,6 +785,16 @@ func (c *Account) IsDirty() bool {
 	}
 	if values.IsDirty(c.directory) {
 		return true
+	}
+	for _, v := range c.sequenced {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.sighted {
+		if v.IsDirty() {
+			return true
+		}
 	}
 	if values.IsDirty(c.events) {
 		return true
@@ -827,6 +902,8 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.localDeliveryQueue, c.newLocalDeliveryQueue, opts, fn)
 	values.WalkField(&err, c.cascadeDeliveryQueue, c.newCascadeDeliveryQueue, opts, fn)
 	values.WalkField(&err, c.directory, c.newDirectory, opts, fn)
+	values.WalkMap(&err, c.sequenced, c.newSequenced, nil, opts, fn)
+	values.WalkMap(&err, c.sighted, c.newSighted, nil, opts, fn)
 	values.WalkField(&err, c.events, c.newEvents, opts, fn)
 	values.WalkField(&err, c.blockLedger, c.newBlockLedger, opts, fn)
 	values.WalkMap(&err, c.transaction, c.newTransaction, c.getTransactionKeys, opts, fn)
@@ -866,6 +943,12 @@ func (c *Account) baseCommit() error {
 	values.Commit(&err, c.localDeliveryQueue)
 	values.Commit(&err, c.cascadeDeliveryQueue)
 	values.Commit(&err, c.directory)
+	for _, v := range c.sequenced {
+		values.Commit(&err, v)
+	}
+	for _, v := range c.sighted {
+		values.Commit(&err, v)
+	}
 	values.Commit(&err, c.events)
 	values.Commit(&err, c.blockLedger)
 	for _, v := range c.transaction {

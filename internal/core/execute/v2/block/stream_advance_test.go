@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -50,15 +51,39 @@ func applyOps(t *testing.T, delivered uint64, hold []uint64, ops []advOp) (*Bloc
 	return b, s
 }
 
-// held reports which numbers staging holds for a stream, in order.
-func heldNumbers(b *Block, s stream, through uint64) []uint64 {
+// heldNumbers reports which numbers the block is holding for a stream, in
+// order: received, and above the delivery watermark. The record of a number
+// survives its delivery — nothing is deleted, because Delivered is the cutoff —
+// so the watermark is what makes this HELD rather than merely SEEN.
+func heldNumbers(t *testing.T, b *Block, s stream, through uint64) []uint64 {
+	t.Helper()
+	var ledger protocol.SequenceLedger
+	require.NoError(t, b.Batch.Account(s.ledger).Main().GetAs(&ledger))
+	delivered := ledger.Partition(s.source).Delivered
+
 	var held []uint64
-	for n := uint64(1); n <= through; n++ {
-		if _, ok := b.Executor.Staging.IDOf(s.id(), n); ok {
+	for n := delivered + 1; n <= through; n++ {
+		_, ok, err := execute.IDOf(b.Batch, s.id(), n)
+		require.NoError(t, err)
+		if ok {
 			held = append(held, n)
 		}
 	}
 	return held
+}
+
+// seenNumbers is every number recorded, watermark or not.
+func seenNumbers(t *testing.T, b *Block, s stream, through uint64) []uint64 {
+	t.Helper()
+	var seen []uint64
+	for n := uint64(1); n <= through; n++ {
+		_, ok, err := execute.IDOf(b.Batch, s.id(), n)
+		require.NoError(t, err)
+		if ok {
+			seen = append(seen, n)
+		}
+	}
+	return seen
 }
 
 // A run of consecutive deliveries — the case step 7 exists to collapse. One
@@ -87,8 +112,10 @@ func TestStreamAdvance_AReceiptDoesNotTouchTheLedger(t *testing.T) {
 	assert.Empty(t, part.Pending, "and nothing about what is HELD belongs in the record")
 	assert.Equal(t, uint64(0), part.Received)
 
-	assert.Equal(t, []uint64{5, 7, 9}, heldNumbers(b, s, 12), "staging has them")
-	assert.Equal(t, uint64(9), b.Executor.Staging.Highest(s.id()))
+	assert.Equal(t, []uint64{5, 7, 9}, heldNumbers(t, b, s, 12), "staging has them")
+	high, err := execute.Sighted(b.Batch, s.id())
+	require.NoError(t, err)
+	assert.Equal(t, uint64(9), high)
 }
 
 // A run followed by receipts: what a block does when it drains what it can and
@@ -102,7 +129,7 @@ func TestStreamAdvance_RunThenReceipts(t *testing.T) {
 	require.NoError(t, b.flushStreams())
 
 	assert.Equal(t, uint64(3), partitionOf(t, b, s).Delivered)
-	assert.Equal(t, []uint64{5, 7, 9}, heldNumbers(b, s, 12))
+	assert.Equal(t, []uint64{5, 7, 9}, heldNumbers(t, b, s, 12))
 }
 
 // Receipts interleaved with the run. If the outcome depends on the
@@ -123,7 +150,7 @@ func TestStreamAdvance_InterleavingDoesNotMatter(t *testing.T) {
 
 	assert.Equal(t, partitionOf(t, a, sa).Delivered, partitionOf(t, c, sc).Delivered,
 		"the same operations in a different order")
-	assert.Equal(t, heldNumbers(a, sa, 12), heldNumbers(c, sc, 12))
+	assert.Equal(t, heldNumbers(t, a, sa, 12), heldNumbers(t, c, sc, 12))
 }
 
 // Draining an existing held window, which is what a backlog presents. The
@@ -137,11 +164,15 @@ func TestStreamAdvance_DrainingAnExistingWindow(t *testing.T) {
 	require.NoError(t, b.flushStreams())
 
 	assert.Equal(t, uint64(15), partitionOf(t, b, s).Delivered)
-	assert.Equal(t, []uint64{11, 12, 13, 14, 15}, heldNumbers(b, s, 20),
-		"still held: the block has not committed, so the delivery has not happened")
+	assert.Empty(t, heldNumbers(t, b, s, 20),
+		"a fully drained window holds nothing: every number is at or below the watermark")
 
-	b.releaseStreams()
-	assert.Empty(t, heldNumbers(b, s, 20), "a fully drained window leaves nothing behind")
-	assert.Equal(t, uint64(15), b.Executor.Staging.Highest(s.id()),
-		"but the high-water mark stays: the stream WAS behind, and forgetting that says it never was")
+	// Nothing was deleted to achieve that. Delivered is the cutoff, so the
+	// records stay and simply stop counting as held — which is why there is no
+	// release step to get the timing of wrong.
+	assert.Equal(t, []uint64{11, 12, 13, 14, 15}, seenNumbers(t, b, s, 20))
+	high, err := execute.Sighted(b.Batch, s.id())
+	require.NoError(t, err)
+	assert.Equal(t, uint64(15), high,
+		"the high-water mark stays: the stream WAS behind, and forgetting that says it never was")
 }

@@ -40,47 +40,53 @@ func txid(b byte) *url.TxID { return protocol.PartitionUrl("BVN2").WithTxID([32]
 // trailing hole above everything held. A number above the highest thing we hold
 // is not known to exist — nothing sighted it — and finding it is reconcile's
 // job, from what the SOURCE says it produced.
-func gapFixture(delivered uint64, hold ...uint64) (*Conductor, *protocol.PartitionSyntheticLedger) {
+func gapFixture(t *testing.T, delivered uint64, hold ...uint64) (*Conductor, *database.Batch, *protocol.PartitionSyntheticLedger) {
+	t.Helper()
 	c := &Conductor{
 		Partition: &protocol.PartitionInfo{ID: "BVN1", Type: protocol.PartitionTypeBlockValidator},
-		Staging:   execute.NewStaging(),
 	}
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	t.Cleanup(batch.Discard)
+
 	source := protocol.PartitionUrl("BVN2")
 	part := &protocol.PartitionSyntheticLedger{Url: source, Delivered: delivered}
-	for _, n := range hold {
-		c.Staging.Hold(c.syntheticStream(source), n, txid(byte(n)))
-	}
-	return c, part
+	stageHeld(t, batch, c, source, hold...)
+	return c, batch, part
 }
 
 // stageHeld and stageHeldAnchors put `hold` into a conductor's staging for the
 // stream inbound from source. The held set lives there now, not in the ledger
 // record (#4189), so a fixture seeds it here rather than laying out Pending.
-func stageHeld(c *Conductor, source *url.URL, hold ...uint64) {
+func stageHeld(t *testing.T, batch *database.Batch, c *Conductor, source *url.URL, hold ...uint64) {
+	t.Helper()
 	for _, n := range hold {
-		c.staging().Hold(c.syntheticStream(source), n, source.WithTxID([32]byte{byte(n), byte(n >> 8)}))
+		require.NoError(t, execute.Hold(batch, c.syntheticStream(source), n,
+			source.WithTxID([32]byte{byte(n), byte(n >> 8)})))
 	}
 }
 
-func stageHeldAnchors(c *Conductor, source *url.URL, hold ...uint64) {
+func stageHeldAnchors(t *testing.T, batch *database.Batch, c *Conductor, source *url.URL, hold ...uint64) {
+	t.Helper()
 	for _, n := range hold {
-		c.staging().Hold(c.anchorStream(source), n, source.WithTxID([32]byte{byte(n), byte(n >> 8)}))
+		require.NoError(t, execute.Hold(batch, c.anchorStream(source), n,
+			source.WithTxID([32]byte{byte(n), byte(n >> 8)})))
 	}
 }
 
 func TestMissingRuns_EnumeratesScatteredHolesOldestFirst(t *testing.T) {
 	// Delivered=497; holding 507, 509, 510 and 513 — so 498-506, 508 and
 	// 511-512 are holes, and 513 is what proves the last of them exists.
-	c, part := gapFixture(497, 507, 509, 510, 513)
-	assert.Equal(t, [][2]uint64{{498, 506}, {508, 508}, {511, 512}}, c.missingRuns(part))
+	c, batch, part := gapFixture(t, 497, 507, 509, 510, 513)
+	assert.Equal(t, [][2]uint64{{498, 506}, {508, 508}, {511, 512}}, c.missingRuns(batch, part))
 }
 
 func TestMissingRuns_EmptyAndFullyKnownWindows(t *testing.T) {
-	c, part := gapFixture(5)
-	assert.Empty(t, c.missingRuns(part), "nothing sighted above the watermark is nothing missing")
+	c, batch, part := gapFixture(t, 5)
+	assert.Empty(t, c.missingRuns(batch, part), "nothing sighted above the watermark is nothing missing")
 
-	c, part = gapFixture(5, 6, 7)
-	assert.Empty(t, c.missingRuns(part), "a contiguous held run has no holes")
+	c, batch, part = gapFixture(t, 5, 6, 7)
+	assert.Empty(t, c.missingRuns(batch, part), "a contiguous held run has no holes")
 }
 
 // rangeRecorder records every SequenceRange attempt and refuses to serve, so
@@ -131,7 +137,7 @@ func TestRequestMissingSynthetics_PullsEveryRunUnderOneHeldAnchor(t *testing.T) 
 	// Holding 507, 509, 510 and 513 — so 498-506, 508 and 511-512 are holes.
 	// 513 is what makes the last run visible at all: a number above everything
 	// staged has not been sighted, and finding THAT is reconcile's job.
-	stageHeld(c, source, 507, 509, 510, 513)
+	stageHeld(t, batch, c, source, 507, 509, 510, 513)
 
 	// First scan registers the jittered claim; second fires.
 	require.NoError(t, c.requestMissingSynthetics(context.Background(), batch))

@@ -94,13 +94,12 @@ func TestStreamAdvance_FlushWritesTheWatermarkAndNothingElse(t *testing.T) {
 	require.Empty(t, part.Pending, "the held set is staging's, and staging is not written")
 	require.Equal(t, uint64(0), part.Received, "nor is the high-water mark")
 
-	// Staging still holds everything, including what was just delivered: the
-	// block has not committed, so the delivery has not happened.
-	require.Equal(t, []uint64{2, 3, 5, 6, 8}, heldNumbers(b, s, 12))
-
-	// On commit, what was delivered goes and what arrived past the gap stays.
-	b.releaseStreams()
-	require.Equal(t, []uint64{6, 8}, heldNumbers(b, s, 12))
+	// 6 and 8 arrived past the gap and are still held. 2, 3 and 5 executed, so
+	// they are at or below the watermark and no longer count as held — no
+	// deletion required, and nothing whose timing could be got wrong.
+	require.Equal(t, []uint64{6, 8}, heldNumbers(t, b, s, 12))
+	require.Equal(t, []uint64{2, 3, 5, 6, 8}, seenNumbers(t, b, s, 12),
+		"every number that arrived is still recorded")
 
 	// Flushing is idempotent per block: a second flush writes the same thing.
 	require.NoError(t, b.flushStreams())

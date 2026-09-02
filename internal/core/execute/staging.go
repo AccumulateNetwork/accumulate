@@ -7,13 +7,13 @@
 package execute
 
 import (
-	"sync"
-
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-// StreamID names one ordered cross-partition stream: the account whose sequence
-// ledger tracks it, and the partition its messages come from.
+// StreamID names one ordered cross-partition stream: the account whose ledger
+// tracks it, and the partition its messages come from.
 //
 // The ledger is part of the name, not just the source, because anchors and
 // synthetics between the same pair of partitions are SEPARATE streams — anchors
@@ -24,189 +24,121 @@ type StreamID struct {
 	Source *url.URL
 }
 
-func (s StreamID) key() string { return s.Ledger.String() + "|" + s.Source.String() }
+// Staging is what a node has received and cannot execute yet: the numbers above
+// a stream's Delivered watermark whose predecessors have not arrived. Nothing
+// reaches it that consensus did not accept.
+//
+// It is not a type. It is two records on the stream's ledger account —
+// Sequenced(source, number) and Sighted(source) — and this file is the
+// vocabulary for them. Everything that needs to know what the node holds reads
+// the same records: the executor deciding what to run, and healing deciding
+// what to fetch. Two views of that is the disagreement this replaces.
+//
+// # Durable, and not hashed
+//
+// Both properties are load-bearing, and they are not the same property.
+//
+// DURABLE, because staging decides what executes. A block delivers the
+// contiguous run from Delivered+1 taken from this block's arrivals AND from
+// what is already held, so a node holding less than its peers executes a
+// shorter run: different Delivered, different account state, different BPT
+// root. That is a divergent block hash, not a node briefly behind. Keeping this
+// in memory would make every restart a consensus fault.
+//
+// NOT HASHED, because it does not need to be. It is a deterministic function of
+// the consensus stream, so every node derives the same set from the same input.
+// Hashing it is what forced it into an account's main state; main state is
+// rewritten whole every block, which is what forced it to be BOUNDED —
+// MaxPendingSequenced, 4,096. Past that bound the executor stored the message
+// and refused to record that it had it, so the node held a message and reported
+// not holding it, and healing fetched back across the partition what was
+// already in the local database: 8,556 sequence numbers fetched 53,011 times in
+// one twenty-minute soak, every partition live throughout.
+//
+// One record per number, outside the hash, has no such limit. The records are
+// `state` rather than `index` so that snapshots collect them — a snapshot is
+// what a new node starts from, and one without staging diverges on that node's
+// first block.
+//
+// # Nothing is deleted
+//
+// Delivered is the cutoff, so an executed number needs no cleanup: it is below
+// the watermark, and these records are only ever consulted above it. Releasing
+// on delivery would be work that buys nothing, and getting its timing wrong —
+// dropping an entry for a block that is then discarded — would make the node
+// fetch back something it still holds, which is the failure this exists to
+// remove, reintroduced from the other end.
+//
+// So Sequenced is simply the record that a number arrived, and what it was.
 
-// Staging holds what the executor has received and cannot execute yet: the
-// numbers above a stream's Delivered watermark whose predecessors have not
-// arrived. Nothing reaches staging that consensus did not accept, so what fills
-// it is the rate at which the network delivers messages a stream is not ready
-// for.
-//
-// # It is executor state, not account state
-//
-// This was PartitionSyntheticLedger.Pending: main state of an account, hashed
-// into the BPT and rewritten whole every block. That is what forced a bound — an
-// array in a record rewritten every block cannot grow without limit — and the
-// bound is what livelocked the network. Past MaxPendingSequenced the executor
-// refused to RECORD the receipt while still storing the message, so the node
-// held a message and reported not holding it, and healing re-fetched across the
-// partition what was already in the local database: 8,556 sequence numbers
-// fetched 53,011 times in one twenty-minute soak, with every partition live.
-//
-// Nothing here is hashed, so nothing here needs bounding. What staging holds is
-// bounded by how far ahead of Delivered the network can run, which is the
-// backlog itself — and a backlog the node is holding is not a reason to claim it
-// is not.
-//
-// # It is not persisted
-//
-// Delivered is block output and survives because the block does. Everything
-// above it is staging, and staging is empty when the process starts. A restarted
-// node stages nothing, so every number above Delivered is a gap — which is what
-// healing already exists for. Persisting staging would mean writing every block
-// a state reconstructible from what is already durable.
-//
-// # Healing asks it
-//
-// A gap is a number above Delivered, up to what the source produced, that
-// staging does not hold. [Staging.Missing] is that question, and it is the only
-// way healing may answer it: reading what the block wrote is precisely what let
-// the executor and the healer disagree.
-//
-// Safe for concurrent use. The executor writes it from the block's serial phase
-// and healing reads it from its own goroutine.
-type Staging struct {
-	mu sync.RWMutex
-	m  map[string]*stagedStream
-}
-
-// stagedStream is one stream's held set.
-//
-// A map rather than the positional array it replaces. The array indexed by
-// offset from Delivered had to be shifted on every delivery and re-grown on
-// every receipt, and the offset arithmetic — index = n - delivered - 1 — is the
-// kind that reads a neighbouring stream's entry when it is wrong. A number is
-// the key here because a number is what it is.
-type stagedStream struct {
-	id      StreamID
-	held    map[uint64]*url.TxID
-	highest uint64
-}
-
-// NewStaging returns an empty staging store.
-func NewStaging() *Staging { return &Staging{m: map[string]*stagedStream{}} }
-
-func (s *Staging) streamLocked(id StreamID) *stagedStream {
-	k := id.key()
-	e, ok := s.m[k]
-	if !ok {
-		e = &stagedStream{id: id, held: map[uint64]*url.TxID{}}
-		if s.m == nil {
-			s.m = map[string]*stagedStream{}
-		}
-		s.m[k] = e
-	}
-	return e
-}
-
-// Hold records that the executor has a message for this number and cannot
-// execute it yet.
+// Hold records that a message for this number has been received.
 //
 // Idempotent, and the FIRST sighting wins. A number can be offered twice — a
-// block that is discarded and re-executed, a healed message racing the original
-// — and both carry the same message, because the number identifies it. Keeping
-// the first means the same block always produces the same staging, whatever
-// order the duplicates arrived in.
-func (s *Staging) Hold(id StreamID, n uint64, txid *url.TxID) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// block re-executed, a healed message racing the original — and both carry the
+// same message, because the number identifies it. Keeping the first means the
+// same input always produces the same state.
+func Hold(batch *database.Batch, id StreamID, n uint64, txid *url.TxID) error {
+	rec := batch.Account(id.Ledger).Sequenced(id.Source, n)
+	switch v, err := rec.Get(); {
+	case err != nil && !errors.Is(err, errors.NotFound):
+		return errors.UnknownError.WithFormat("load sequenced %v/%d: %w", id.Source, n, err)
 
-	e := s.streamLocked(id)
-	if n > e.highest {
-		e.highest = n
-	}
-	if _, ok := e.held[n]; !ok {
-		e.held[n] = txid
-	}
-}
-
-// IDOf returns the staged message ID for a number, if staging holds one.
-func (s *Staging) IDOf(id StreamID, n uint64) (*url.TxID, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	e, ok := s.m[id.key()]
-	if !ok {
-		return nil, false
-	}
-	txid, ok := e.held[n]
-	return txid, ok
-}
-
-// Highest is the largest number this stream has ever staged.
-//
-// It replaces the ledger's Received, and it is deliberately a high-water mark
-// that Release does not lower: "we have seen this far" is what says a stream is
-// behind, and forgetting it when the gap ahead fills would say the stream had
-// never been behind at all.
-func (s *Staging) Highest(id StreamID) uint64 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	e, ok := s.m[id.key()]
-	if !ok {
-		return 0
-	}
-	return e.highest
-}
-
-// Held reports how many numbers this stream is holding. For diagnostics and
-// tests; nothing decides anything from it.
-func (s *Staging) Held(id StreamID) int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	e, ok := s.m[id.key()]
-	if !ok {
-		return 0
-	}
-	return len(e.held)
-}
-
-// Release drops everything at or below delivered.
-//
-// Called when a block COMMITS, not when it advances a position: until the batch
-// commits, the delivery has not happened, and dropping a staged message for a
-// block that is then discarded would make the node fetch back something it
-// still holds — the failure this whole change exists to remove.
-func (s *Staging) Release(id StreamID, delivered uint64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	e, ok := s.m[id.key()]
-	if !ok {
-		return
-	}
-	for n := range e.held {
-		if n <= delivered {
-			delete(e.held, n)
+	case v == nil:
+		err = rec.Put(txid)
+		if err != nil {
+			return errors.UnknownError.WithFormat("store sequenced %v/%d: %w", id.Source, n, err)
 		}
 	}
-}
 
-// Streams lists every stream staging is holding something for.
-//
-// Healing needs it because a stream that has only STAGED has no ledger entry to
-// find it by: the ledger records what a block delivered, and a stream whose
-// first message went missing has delivered nothing. Before #4189 the entry
-// existed regardless, because receipts were written into the ledger — which is
-// the coupling being removed, so the set of known streams has to come from
-// staging as well.
-func (s *Staging) Streams() []StreamID {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	high := batch.Account(id.Ledger).Sighted(id.Source)
+	switch h, err := high.Get(); {
+	case err != nil && !errors.Is(err, errors.NotFound):
+		return errors.UnknownError.WithFormat("load sighted %v: %w", id.Source, err)
 
-	ids := make([]StreamID, 0, len(s.m))
-	for _, e := range s.m {
-		if len(e.held) > 0 {
-			ids = append(ids, e.id)
+	case h < n:
+		err = high.Put(n)
+		if err != nil {
+			return errors.UnknownError.WithFormat("store sighted %v: %w", id.Source, err)
 		}
 	}
-	return ids
+	return nil
+}
+
+// IDOf returns the message recorded for a number, if there is one.
+//
+// It answers about the record alone. Whether a number is HELD — received and
+// not yet executed — is that plus being above Delivered, and the watermark is
+// the caller's.
+func IDOf(batch *database.Batch, id StreamID, n uint64) (*url.TxID, bool, error) {
+	txid, err := batch.Account(id.Ledger).Sequenced(id.Source, n).Get()
+	switch {
+	case errors.Is(err, errors.NotFound):
+		return nil, false, nil
+	case err != nil:
+		return nil, false, errors.UnknownError.WithFormat("load sequenced %v/%d: %w", id.Source, n, err)
+	}
+	return txid, txid != nil, nil
+}
+
+// Sighted is the highest number ever received from a source.
+//
+// It says a stream is behind; it does not say what is missing, which is
+// [Missing]. It is a high-water mark and does not go backwards as messages
+// execute: "this stream was behind" is what makes a hole below it a hole, and
+// forgetting it would say the stream had never been behind at all.
+func Sighted(batch *database.Batch, id StreamID) (uint64, error) {
+	n, err := batch.Account(id.Ledger).Sighted(id.Source).Get()
+	switch {
+	case errors.Is(err, errors.NotFound):
+		return 0, nil
+	case err != nil:
+		return 0, errors.UnknownError.WithFormat("load sighted %v: %w", id.Source, err)
+	}
+	return n, nil
 }
 
 // Missing returns every contiguous run of numbers in (delivered, through] that
-// staging does not hold, oldest first, at most maxRuns of them.
+// nothing was received for, oldest first, at most maxRuns of them.
 //
 // A run rather than a number because a run is what one range request covers: a
 // collection proof is a merkle range, so it proves a run of adjacent entries and
@@ -217,24 +149,19 @@ func (s *Staging) Streams() []StreamID {
 // maxRuns bounds the answer and the scan. A stream far enough behind has one
 // enormous run, which costs nothing to find; a stream behind and dense with
 // holes is the case that would otherwise walk the whole distance to `through`.
-func (s *Staging) Missing(id StreamID, delivered, through uint64, maxRuns int) [][2]uint64 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
+func Missing(batch *database.Batch, id StreamID, delivered, through uint64, maxRuns int) ([][2]uint64, error) {
 	if through <= delivered || maxRuns <= 0 {
-		return nil
-	}
-	e, ok := s.m[id.key()]
-	if !ok {
-		// Nothing staged at all: everything the source produced past our
-		// watermark is missing, and it is one run.
-		return [][2]uint64{{delivered + 1, through}}
+		return nil, nil
 	}
 
 	var runs [][2]uint64
 	open := false
 	for n := delivered + 1; n <= through; n++ {
-		if _, held := e.held[n]; held {
+		_, held, err := IDOf(batch, id, n)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		if held {
 			open = false
 			continue
 		}
@@ -248,5 +175,5 @@ func (s *Staging) Missing(id StreamID, delivered, through uint64, maxRuns int) [
 		runs = append(runs, [2]uint64{n, n})
 		open = true
 	}
-	return runs
+	return runs, nil
 }

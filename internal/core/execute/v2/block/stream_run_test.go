@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -30,13 +31,17 @@ const noLimit = 1 << 20
 // alongside the held set, and the two could disagree; what a stream has seen is
 // now the highest thing staging holds, which is one fact with one owner
 // (#4189).
-func runPos(delivered uint64, hold ...uint64) *streamPosition {
-	st := execute.NewStaging()
+func runPos(t *testing.T, delivered uint64, hold ...uint64) *streamPosition {
+	t.Helper()
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	t.Cleanup(batch.Discard)
+
 	s := stream{kind: streamSynthetic, ledger: protocol.PartitionUrl("BVN0").JoinPath(protocol.Synthetic), source: protocol.PartitionUrl("BVN0")}
 	for _, n := range hold {
-		st.Hold(s.id(), n, protocol.PartitionUrl("BVN0").WithTxID([32]byte{byte(n)}))
+		require.NoError(t, execute.Hold(batch, s.id(), n, protocol.PartitionUrl("BVN0").WithTxID([32]byte{byte(n)})))
 	}
-	return &streamPosition{stream: s, delivered: delivered, staging: st}
+	return &streamPosition{stream: s, delivered: delivered, batch: batch}
 }
 
 // arr builds arrivals, all admissible.
@@ -65,14 +70,14 @@ func stagedNumbers(stage []*arrival) []uint64 {
 }
 
 func TestBuildRun_InOrderArrivals(t *testing.T) {
-	run, stage := buildRun(runPos(0), arr(1, 2, 3), noLimit)
+	run, stage := buildRun(runPos(t, 0), arr(1, 2, 3), noLimit)
 	assert.Equal(t, []uint64{1, 2, 3}, runNumbers(run))
 	assert.Empty(t, stage)
 }
 
 func TestBuildRun_AGapStopsIt(t *testing.T) {
 	// 1 and 2 are next; 4 is past a hole at 3.
-	run, stage := buildRun(runPos(0), arr(1, 2, 4), noLimit)
+	run, stage := buildRun(runPos(t, 0), arr(1, 2, 4), noLimit)
 	assert.Equal(t, []uint64{1, 2}, runNumbers(run), "the run ends at the hole")
 	assert.Equal(t, []uint64{4}, stagedNumbers(stage), "what is past the hole stays staged")
 }
@@ -80,7 +85,7 @@ func TestBuildRun_AGapStopsIt(t *testing.T) {
 // The case that used to need the cascade: #1 arrives, and #2 and #3 are
 // already held, so the stream runs to 3 in one block.
 func TestBuildRun_StagedTailDrainsBehindAnArrival(t *testing.T) {
-	run, stage := buildRun(runPos(0, 2, 3), arr(1), noLimit)
+	run, stage := buildRun(runPos(t, 0, 2, 3), arr(1), noLimit)
 	assert.Equal(t, []uint64{1, 2, 3}, runNumbers(run),
 		"the staged tail drains behind the arrival — one walk, not a cascade")
 	assert.Empty(t, stage)
@@ -91,7 +96,7 @@ func TestBuildRun_StagedTailDrainsBehindAnArrival(t *testing.T) {
 // The mirror case: the arrival is what closes a hole ahead of held entries.
 func TestBuildRun_AnArrivalFillsAGapAheadOfStagedEntries(t *testing.T) {
 	// Delivered 5, holding 7 and 8, and 6 turns up now.
-	run, _ := buildRun(runPos(5, 7, 8), arr(6), noLimit)
+	run, _ := buildRun(runPos(t, 5, 7, 8), arr(6), noLimit)
 	assert.Equal(t, []uint64{6, 7, 8}, runNumbers(run))
 }
 
@@ -102,7 +107,7 @@ func TestBuildRun_AnInadmissibleMessageStopsTheRun(t *testing.T) {
 	a := arr(1, 2, 3)
 	a[2].admissible = false
 
-	run, stage := buildRun(runPos(0), a, noLimit)
+	run, stage := buildRun(runPos(t, 0), a, noLimit)
 	assert.Equal(t, []uint64{1}, runNumbers(run), "the run stops AT the unproven message, not after it")
 	assert.Equal(t, []uint64{2, 3}, stagedNumbers(stage),
 		"the unproven message stays staged and is retried when its anchor lands")
@@ -110,24 +115,24 @@ func TestBuildRun_AnInadmissibleMessageStopsTheRun(t *testing.T) {
 
 func TestBuildRun_AppliesEachNumberOnce(t *testing.T) {
 	// Already staged AND arriving again. It must appear once.
-	run, stage := buildRun(runPos(0, 1, 2), arr(1, 2), noLimit)
+	run, stage := buildRun(runPos(t, 0, 1, 2), arr(1, 2), noLimit)
 	assert.Equal(t, []uint64{1, 2}, runNumbers(run))
 	assert.Empty(t, stage)
 
 	// And a number already behind the stream is neither run nor re-staged.
-	run, stage = buildRun(runPos(5), arr(3, 4), noLimit)
+	run, stage = buildRun(runPos(t, 5), arr(3, 4), noLimit)
 	assert.Empty(t, run, "already delivered")
 	assert.Empty(t, stage, "and not ours to record again")
 }
 
 func TestBuildRun_RespectsTheLimit(t *testing.T) {
-	run, stage := buildRun(runPos(0), arr(1, 2, 3, 4, 5), 3)
+	run, stage := buildRun(runPos(t, 0), arr(1, 2, 3, 4, 5), 3)
 	assert.Equal(t, []uint64{1, 2, 3}, runNumbers(run), "one block cannot inherit an unbounded drain")
 	assert.Equal(t, []uint64{4, 5}, stagedNumbers(stage), "the rest continues next block")
 }
 
 func TestBuildRun_EmptyStream(t *testing.T) {
-	run, stage := buildRun(runPos(0), nil, noLimit)
+	run, stage := buildRun(runPos(t, 0), nil, noLimit)
 	assert.Empty(t, run)
 	assert.Empty(t, stage)
 }
@@ -136,7 +141,7 @@ func TestBuildRun_EmptyStream(t *testing.T) {
 // collected from a map, so it is sorted before it leaves.
 func TestBuildRun_StagedOrderIsDeterministic(t *testing.T) {
 	for i := 0; i < 20; i++ {
-		_, stage := buildRun(runPos(0), arr(9, 3, 7, 5), noLimit)
+		_, stage := buildRun(runPos(t, 0), arr(9, 3, 7, 5), noLimit)
 		require.Equal(t, []uint64{3, 5, 7, 9}, stagedNumbers(stage))
 	}
 }
@@ -152,10 +157,10 @@ func TestBuildRun_RunIsConsecutiveFromNext(t *testing.T) {
 		pos  *streamPosition
 		arr  map[uint64]*arrival
 	}{
-		{"all arriving", runPos(0), arr(1, 2, 3, 4)},
-		{"all staged", runPos(0, 1, 2, 3), nil},
-		{"mixed", runPos(5, 7, 8), arr(6)},
-		{"arrivals ahead of staged", runPos(10, 11, 12), arr(13, 14)},
+		{"all arriving", runPos(t, 0), arr(1, 2, 3, 4)},
+		{"all staged", runPos(t, 0, 1, 2, 3), nil},
+		{"mixed", runPos(t, 5, 7, 8), arr(6)},
+		{"arrivals ahead of staged", runPos(t, 10, 11, 12), arr(13, 14)},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -173,7 +178,7 @@ func TestBuildRun_RunIsConsecutiveFromNext(t *testing.T) {
 // Exactly one source per entry. An entry with neither has nothing to execute;
 // an entry with both is ambiguous about which the executor should use.
 func TestBuildRun_EveryEntryHasExactlyOneSource(t *testing.T) {
-	run, _ := buildRun(runPos(0, 2, 3), arr(1), noLimit)
+	run, _ := buildRun(runPos(t, 0, 2, 3), arr(1), noLimit)
 	require.Len(t, run, 3)
 	for _, e := range run {
 		hasBundle := e.bundle != nil
@@ -198,31 +203,31 @@ func TestBuildRun_StagedEntriesAreNotGatedOnAdmissibility(t *testing.T) {
 	// #1 arrives and is inadmissible; the run cannot start at all.
 	a := arr(1)
 	a[1].admissible = false
-	run, _ := buildRun(runPos(0, 2, 3), a, noLimit)
+	run, _ := buildRun(runPos(t, 0, 2, 3), a, noLimit)
 	assert.Empty(t, run, "an unproven message at the head stops the stream dead")
 
 	// #1 arrives admissible; the staged tail behind it runs without any
 	// admissibility question being asked of it.
-	run, _ = buildRun(runPos(0, 2, 3), arr(1), noLimit)
+	run, _ = buildRun(runPos(t, 0, 2, 3), arr(1), noLimit)
 	assert.Equal(t, []uint64{1, 2, 3}, runNumbers(run))
 }
 
 // The limit bounds the run, not the stream: what is cut stays available and
 // the NEXT block resumes exactly where this one stopped.
 func TestBuildRun_LimitCutsTheRunNotTheStream(t *testing.T) {
-	pos := runPos(0, 1, 2, 3, 4, 5, 6)
+	pos := runPos(t, 0, 1, 2, 3, 4, 5, 6)
 	run, _ := buildRun(pos, nil, 2)
 	assert.Equal(t, []uint64{1, 2}, runNumbers(run))
 
 	// Next block, the stream stands two further on; the rest is still there.
-	run, _ = buildRun(runPos(2, 3, 4, 5, 6), nil, 2)
+	run, _ = buildRun(runPos(t, 2, 3, 4, 5, 6), nil, 2)
 	assert.Equal(t, []uint64{3, 4}, runNumbers(run), "the remainder is not lost, only deferred")
 }
 
 // A zero limit must produce nothing rather than everything — an off-by-one
 // here would turn "bounded" into "unbounded" silently.
 func TestBuildRun_ZeroLimitRunsNothing(t *testing.T) {
-	run, stage := buildRun(runPos(0), arr(1, 2, 3), 0)
+	run, stage := buildRun(runPos(t, 0), arr(1, 2, 3), 0)
 	assert.Empty(t, run)
 	assert.Equal(t, []uint64{1, 2, 3}, stagedNumbers(stage), "and nothing is lost")
 }

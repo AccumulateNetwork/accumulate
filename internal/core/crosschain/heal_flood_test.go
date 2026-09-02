@@ -122,21 +122,21 @@ func TestRunExclusive_ScansDoNotStack(t *testing.T) {
 // held entry is what proves the hole).
 func TestFirstMissingRun_RequestsOnlyMissing(t *testing.T) {
 	// Delivered through 5; 6 and 7 missing; 8 held.
-	c, part := gapFixture(5, 8)
-	first, last, ok := c.firstMissingRun(part)
+	c, batch, part := gapFixture(t, 5, 8)
+	first, last, ok := c.firstMissingRun(batch, part)
 	require.True(t, ok)
 	require.Equal(t, uint64(6), first)
 	require.Equal(t, uint64(7), last, "the run must stop at the held entry — request only the first contiguous hole")
 
 	// Nothing missing: nothing requested.
-	c, part = gapFixture(5, 6)
-	_, _, ok = c.firstMissingRun(part)
+	c, batch, part = gapFixture(t, 5, 6)
+	_, _, ok = c.firstMissingRun(batch, part)
 	require.False(t, ok, "a stream with no holes must request nothing")
 
 	// Nothing staged: nothing visible to request (the reconcile pull handles
 	// invisible tail loss separately).
-	c, part = gapFixture(5)
-	_, _, ok = c.firstMissingRun(part)
+	c, batch, part = gapFixture(t, 5)
+	_, _, ok = c.firstMissingRun(batch, part)
 	require.False(t, ok)
 }
 
@@ -252,7 +252,7 @@ func TestRecoverAnchorsViaRange_OnlyMissing_OneProofReused(t *testing.T) {
 	c.Globals.Store(&core.GlobalValues{
 		ExecutorVersion: protocol.ExecutorVersionV2Kourou,
 	})
-	stageHeldAnchors(c, source, 8) // 6 and 7 are the hole; 8 is what exposes it
+	stageHeldAnchors(t, batch, c, source, 8) // 6 and 7 are the hole; 8 is what exposes it
 
 	// Seed the request throttle as already-fired so the pull happens now;
 	// the throttle itself is covered by TestClaimSyntheticRequest_NoFlood.

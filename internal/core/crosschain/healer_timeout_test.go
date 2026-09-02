@@ -89,7 +89,7 @@ func TestRequestMissingSynthetics_ReturnsWhenAPeerNeverAnswers(t *testing.T) {
 		SyntheticHealWindow: time.Nanosecond,
 	}
 	c.Globals.Store(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV2Kourou})
-	stageHeld(c, source, 501)
+	stageHeld(t, batch, c, source, 501)
 
 	// First scan only registers the claim (jittered check-then-fire) and
 	// returns without pulling.

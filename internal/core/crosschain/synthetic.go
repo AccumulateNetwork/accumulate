@@ -11,6 +11,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -116,10 +117,6 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 		return nil
 	}
 
-	// The streams to scan are the ones STAGING is holding something for. A
-	// stream holding nothing has nothing to heal: either it is current, or it
-	// has lost a tail nobody here can see, which is reconcile's job.
-	//
 	// The ledger is opened for one thing only — Delivered, what has been
 	// processed. Nothing else about a stream lives there any more (#4189), and
 	// a message already processed needs nothing done about it.
@@ -134,20 +131,16 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 	if window <= 0 {
 		window = syntheticHealWindow
 	}
-	for _, id := range c.staging().Streams() {
-		if !id.Ledger.Equal(c.Url(protocol.Synthetic)) {
-			continue // an anchor stream; recoverAnchorsViaRange has those
-		}
-
+	for _, source := range c.inboundSources(ledger) {
 		// Partition returns the entry if there is one and a zero entry if there
-		// is not — a stream that has delivered nothing is delivered through 0,
-		// which is the right answer, not a missing one.
-		part := ledger.Partition(id.Source)
+		// is not. A stream that has delivered nothing is delivered through 0,
+		// which is the right answer and not a missing one.
+		part := ledger.Partition(source)
 
 		// A gap exists only if we are holding something past what we have
 		// delivered. The missing message is always Delivered+1 (receiving a
 		// later message proves the source produced everything up to it).
-		if c.sighted(part) <= part.Delivered {
+		if c.sighted(batch, part) <= part.Delivered {
 			continue
 		}
 		// Circuit breaker: a source that failed the last several pulls is down
@@ -173,7 +166,7 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 		// could not be pulled — a stream must never wedge because the fast
 		// path was not usable.
 		if held, ok := c.rangeProofAnchor(batch, part.Url); ok {
-			if runs := c.missingRuns(part); len(runs) > 0 {
+			if runs := c.missingRuns(batch, part); len(runs) > 0 {
 				budget := uint64(syntheticHealBatch)
 				allDone := true
 				for _, r := range runs {
@@ -218,7 +211,7 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 		// which sequence numbers are holes; batch them, capped per scan. Each
 		// pull is idempotent.
 		healed := 0
-		for _, seq := range c.missingNumbers(part) {
+		for _, seq := range c.missingNumbers(batch, part) {
 			if !c.claimSequence(part.Url, seq, now, window) {
 				continue
 			}
@@ -308,14 +301,20 @@ func (c *Conductor) rangeProofAnchor(batch *database.Batch, source *url.URL) (ui
 // Observed need: the 20260824T024122Z wedge left 63 holes scattered across
 // ~20 runs (498-506, 514, 518, 539-542, ...). One run per heal window would
 // have taken ~20 windows to converge; one scan covers them all.
-func (c *Conductor) missingRuns(part *protocol.PartitionSyntheticLedger) [][2]uint64 {
-	return c.staging().Missing(c.syntheticStream(part.Url), part.Delivered, c.sighted(part), syntheticHealBatch)
+func (c *Conductor) missingRuns(batch *database.Batch, part *protocol.PartitionSyntheticLedger) [][2]uint64 {
+	id := c.syntheticStream(part.Url)
+	runs, err := execute.Missing(batch, id, part.Delivered, c.sighted(batch, part), syntheticHealBatch)
+	if err != nil {
+		slog.Error("Failed to read staging", "module", "synthetic", "source", part.Url, "error", err)
+		return nil
+	}
+	return runs
 }
 
 // firstMissingRun returns the first contiguous run of holes above the delivery
 // point.
-func (c *Conductor) firstMissingRun(part *protocol.PartitionSyntheticLedger) (uint64, uint64, bool) {
-	runs := c.missingRuns(part)
+func (c *Conductor) firstMissingRun(batch *database.Batch, part *protocol.PartitionSyntheticLedger) (uint64, uint64, bool) {
+	runs := c.missingRuns(batch, part)
 	if len(runs) == 0 {
 		return 0, 0, false
 	}
@@ -325,9 +324,9 @@ func (c *Conductor) firstMissingRun(part *protocol.PartitionSyntheticLedger) (ui
 // missingNumbers flattens the runs into the individual numbers to pull, capped
 // per scan. Flat rather than nested because every failure rule below acts on
 // the whole scan — a breaker that opens stops the scan, not the run.
-func (c *Conductor) missingNumbers(part *protocol.PartitionSyntheticLedger) []uint64 {
+func (c *Conductor) missingNumbers(batch *database.Batch, part *protocol.PartitionSyntheticLedger) []uint64 {
 	var nums []uint64
-	for _, r := range c.missingRuns(part) {
+	for _, r := range c.missingRuns(batch, part) {
 		for seq := r[0]; seq <= r[1] && len(nums) < syntheticHealBatch; seq++ {
 			nums = append(nums, seq)
 		}
@@ -338,19 +337,41 @@ func (c *Conductor) missingNumbers(part *protocol.PartitionSyntheticLedger) []ui
 	return nums
 }
 
-// staging is the store healing asks what the node holds.
+// inboundSources lists the partitions this node may be receiving from.
 //
-// Never nil. A conductor built without one behaves as a node that has staged
-// nothing — which is exactly the state a restart leaves, and which healing
-// already handles: everything above Delivered is a gap, and reconcile finds the
-// tail from what the source says it produced.
-func (c *Conductor) staging() *execute.Staging {
-	c.stagingOnce.Do(func() {
-		if c.Staging == nil {
-			c.Staging = execute.NewStaging()
+// Primarily from the network definition, NOT from our own ledger: a stream that
+// has only staged has delivered nothing, so it has no ledger entry — and that
+// is exactly the stream most likely to be stuck. Before #4189 an entry existed
+// regardless, because receipts were written into the ledger, which is the
+// coupling being removed.
+//
+// The ledger's own entries are unioned in so a node whose globals have not
+// arrived yet still scans the streams it has delivered from. Sorted, because
+// every node deriving the same thing the same way is cheap insurance.
+func (c *Conductor) inboundSources(ledger *protocol.SyntheticLedger) []*url.URL {
+	seen := map[string]bool{}
+	var sources []*url.URL
+	add := func(u *url.URL) {
+		if u == nil || strings.EqualFold(u.String(), c.Url().String()) || seen[u.String()] {
+			return
 		}
-	})
-	return c.Staging
+		seen[u.String()] = true
+		sources = append(sources, u)
+	}
+
+	if g := c.Globals.Load(); g != nil && g.Network != nil {
+		for _, peer := range g.Network.Partitions {
+			if !strings.EqualFold(peer.ID, c.Partition.ID) {
+				add(protocol.PartitionUrl(peer.ID))
+			}
+		}
+	}
+	for _, part := range ledger.Sequence {
+		add(part.Url)
+	}
+
+	sort.Slice(sources, func(i, j int) bool { return sources[i].String() < sources[j].String() })
+	return sources
 }
 
 // syntheticStream and anchorStream name the staging streams for messages
@@ -375,14 +396,19 @@ func (c *Conductor) anchorStream(source *url.URL) execute.StreamID {
 // the two is what the node has evidence of. Seeing a number is what proves the
 // source produced everything below it, which is what makes a hole a hole rather
 // than a stream that has simply not started.
-func (c *Conductor) sighted(part *protocol.PartitionSyntheticLedger) uint64 {
-	return c.sightedOn(c.syntheticStream(part.Url), part.Delivered)
+func (c *Conductor) sighted(batch *database.Batch, part *protocol.PartitionSyntheticLedger) uint64 {
+	return c.sightedOn(batch, c.syntheticStream(part.Url), part.Delivered)
 }
 
 // sightedOn is sighted for a stream named directly, which the anchor path needs
 // because its entries come from the anchor ledger.
-func (c *Conductor) sightedOn(id execute.StreamID, delivered uint64) uint64 {
-	if h := c.staging().Highest(id); h > delivered {
+func (c *Conductor) sightedOn(batch *database.Batch, id execute.StreamID, delivered uint64) uint64 {
+	h, err := execute.Sighted(batch, id)
+	if err != nil {
+		slog.Error("Failed to read staging", "module", "synthetic", "source", id.Source, "error", err)
+		return delivered
+	}
+	if h > delivered {
 		return h
 	}
 	return delivered
@@ -773,7 +799,7 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 	received := map[[32]byte]uint64{}
 	for _, part := range ledger.Sequence {
 		if part.Url != nil {
-			received[part.Url.AccountID32()] = c.sighted(part)
+			received[part.Url.AccountID32()] = c.sighted(batch, part)
 		}
 	}
 

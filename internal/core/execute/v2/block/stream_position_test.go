@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -39,7 +40,7 @@ func positionBlock(t *testing.T, delivered uint64, hold ...uint64) (*Block, stre
 
 	s := stream{kind: streamSynthetic, ledger: ledger.Url, source: protocol.PartitionUrl("BVN1")}
 	for _, n := range hold {
-		x.Staging.Hold(s.id(), n, ledger.Url.WithTxID([32]byte{byte(n)}))
+		require.NoError(t, execute.Hold(batch, s.id(), n, ledger.Url.WithTxID([32]byte{byte(n)})))
 	}
 
 	return &Block{positions: new(positionCache), Batch: batch, Executor: x}, s

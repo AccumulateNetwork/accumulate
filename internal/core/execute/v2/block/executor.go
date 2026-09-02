@@ -108,13 +108,6 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		opts.BackgroundTaskLauncher = func(f func()) { go f() }
 	}
 
-	// A private store is the right default for anything that never heals: the
-	// executor still needs somewhere to hold what it cannot execute yet, and a
-	// caller that does not wire healing has nobody to disagree with.
-	if opts.Staging == nil {
-		opts.Staging = execute.NewStaging()
-	}
-
 	m := new(Executor)
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]chain.TransactionExecutor{}

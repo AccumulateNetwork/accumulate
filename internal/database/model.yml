@@ -85,6 +85,36 @@
       pointer: true
       emptyIfMissing: true
 
+    # Staging (#4189). Used on the accounts that track ordered cross-partition
+    # streams: the synthetic ledger and the anchor pool.
+    #
+    # NOT hashed. Staging decides what a block executes, so every node must hold
+    # the same thing -- but it is a deterministic function of the consensus
+    # stream, so it is agreed without being hashed, and hashing it is what
+    # forced it into main state and forced main state to be bounded. It is
+    # `state` rather than `index` so that snapshots collect it: a snapshot is
+    # what a new node starts from, and one without staging diverges on the new
+    # node's first block.
+    - name: Sequenced
+      description: is the message received for a sequence number of an inbound stream, whether or not it has been executed. A number is HELD if this exists and the number is above the stream's Delivered watermark (#4189)
+      type: state
+      dataType: txid
+      pointer: true
+      parameters: # Not indexed
+      - name: Source
+        type: url
+        pointer: true
+      - name: Number
+        type: uint
+    - name: Sighted
+      description: is the highest sequence number received from a source, whether or not it has been executed. It is what says a stream is behind (#4189)
+      type: state
+      dataType: uint
+      parameters: # Not indexed
+      - name: Source
+        type: url
+        pointer: true
+
     - name: Events
       description: tracks scheduled events. Should only be used on the system ledger
       type: entity

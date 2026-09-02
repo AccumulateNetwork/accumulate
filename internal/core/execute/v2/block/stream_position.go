@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -41,26 +42,40 @@ type streamPosition struct {
 	stream    stream
 	delivered uint64
 
-	// staging is where held messages actually live. The position holds a
-	// reference rather than a copy: a copy is a snapshot, and the whole defect
-	// this replaces was a snapshot of what the node holds disagreeing with what
-	// the node holds.
-	staging *execute.Staging
+	// batch is where held messages actually live — the block's own batch, so a
+	// receipt recorded here commits with the block and is discarded with it.
+	// The position reads through it rather than holding a copy: a copy is a
+	// snapshot, and the whole defect this replaces was a snapshot of what the
+	// node holds disagreeing with what the node holds.
+	batch *database.Batch
 
 	// highest is the largest number this stream has delivered in THIS block, or
-	// zero if none. It is what the flush writes and what the commit releases.
+	// zero if none. It is what the flush writes.
 	highest uint64
+
+	// err is the first failure from a read that could not report one — idOf is
+	// called from buildRun, which is pure and total by design. The caller
+	// checks it once, after the run is built.
+	err error
 }
 
 // next is the number this stream is waiting for.
 func (p *streamPosition) next() uint64 { return p.delivered + 1 }
 
 // idOf returns the staged message ID for a sequence number, if we hold one.
+//
+// Held is "received, and above the watermark". The record survives delivery —
+// nothing is deleted, because Delivered is the cutoff — so the watermark check
+// is what makes this mean HELD rather than merely SEEN.
 func (p *streamPosition) idOf(n uint64) (*url.TxID, bool) {
 	if n <= p.delivered {
 		return nil, false
 	}
-	return p.staging.IDOf(p.stream.id(), n)
+	id, ok, err := execute.IDOf(p.batch, p.stream.id(), n)
+	if err != nil && p.err == nil {
+		p.err = err
+	}
+	return id, ok
 }
 
 // has reports whether we hold a staged message for this number.
@@ -70,9 +85,13 @@ func (p *streamPosition) has(n uint64) bool {
 }
 
 // received is the largest number this stream has ever seen. It says the stream
-// is behind; it does not say what is missing, which is Staging.Missing.
+// is behind; it does not say what is missing, which is execute.Missing.
 func (p *streamPosition) received() uint64 {
-	if h := p.staging.Highest(p.stream.id()); h > p.delivered {
+	h, err := execute.Sighted(p.batch, p.stream.id())
+	if err != nil && p.err == nil {
+		p.err = err
+	}
+	if h > p.delivered {
 		return h
 	}
 	return p.delivered
@@ -135,7 +154,7 @@ func (b *Block) positionOfLocked(s stream) (*streamPosition, error) {
 	p := &streamPosition{
 		stream:    s,
 		delivered: ledger.Partition(s.source).Delivered,
-		staging:   b.Executor.Staging,
+		batch:     b.Batch,
 	}
 	if b.positions.m == nil {
 		b.positions.m = map[string]*streamPosition{}
@@ -178,8 +197,12 @@ func (b *Block) advanceStream(s stream, delivered bool, n uint64, id *url.TxID) 
 	}
 
 	if !delivered {
-		b.Executor.Staging.Hold(s.id(), n, id)
-		return nil
+		// Into the block's batch, so it commits with the block. A receipt
+		// recorded by a block that is then discarded is discarded with it,
+		// which is what makes "the node holds it" and "the node says it holds
+		// it" the same statement.
+		err = execute.Hold(b.Batch, s.id(), n, id)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	p.delivered = n
@@ -229,22 +252,4 @@ func (b *Block) flushStreams() error {
 		}
 	}
 	return nil
-}
-
-// releaseStreams drops everything the block delivered from staging.
-//
-// Called when the block COMMITS. Staging holds what the executor has and cannot
-// execute yet; a number this block delivered is neither, and keeping it would
-// leave the held set growing forever. Doing it at flush instead would drop
-// entries for a block that is then discarded — the node would fetch back
-// something it still holds, which is the failure this change exists to remove.
-func (b *Block) releaseStreams() {
-	b.positions.mu.Lock()
-	defer b.positions.mu.Unlock()
-
-	for _, p := range b.positions.m {
-		if p.highest > 0 {
-			b.Executor.Staging.Release(p.stream.id(), p.highest)
-		}
-	}
 }

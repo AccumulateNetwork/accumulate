@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -36,16 +37,28 @@ import (
 // 33,000 with the protocol executing exactly as designed (#4163, #4164).
 //
 // streamLag reads one destination partition's view of one source's stream.
+// streamLag reports how far a stream has been sighted and how far it has been
+// delivered — the two halves of where it stands, from the two records that own
+// them (#4189). Delivered is the ledger's, because it is what executed;
+// how far the stream has been sighted is staging's.
 func streamLag(t *testing.T, sim *Sim, dst *url.URL, src *url.URL) (received, delivered uint64) {
 	t.Helper()
 	require.NoError(t, sim.DatabaseFor(dst).View(func(batch *database.Batch) error {
+		ledgerUrl := dst.JoinPath(protocol.Synthetic)
 		var ledger *SyntheticLedger
-		err := batch.Account(dst.JoinPath(protocol.Synthetic)).Main().GetAs(&ledger)
+		err := batch.Account(ledgerUrl).Main().GetAs(&ledger)
 		if err != nil {
 			return err
 		}
-		part := ledger.Partition(src)
-		received, delivered = part.Received, part.Delivered
+		delivered = ledger.Partition(src).Delivered
+
+		received, err = execute.Sighted(batch, execute.StreamID{Ledger: ledgerUrl, Source: src})
+		if err != nil {
+			return err
+		}
+		if received < delivered {
+			received = delivered
+		}
 		return nil
 	}))
 	return
@@ -218,15 +231,23 @@ func TestNoLaggingChannels(t *testing.T) {
 	for _, dp := range []string{"Directory", "BVN0", "BVN1", "BVN2"} {
 		du := protocol.PartitionUrl(dp)
 		require.NoError(t, sim.DatabaseFor(du).View(func(batch *database.Batch) error {
+			ledgerUrl := du.JoinPath(protocol.Synthetic)
 			var ledger *SyntheticLedger
-			err := batch.Account(du.JoinPath(protocol.Synthetic)).Main().GetAs(&ledger)
+			err := batch.Account(ledgerUrl).Main().GetAs(&ledger)
 			if err != nil {
 				return nil // partition may not exist under this name; skip
 			}
 			for _, part := range ledger.Sequence {
-				if part.Received != part.Delivered {
-					sick = append(sick, fmt.Sprintf("%v -> %s: received=%d delivered=%d",
-						part.Url, dp, part.Received, part.Delivered))
+				// Sighted, not the ledger: how far a stream has been seen is
+				// staging's to say (#4189). A stream that never fell behind has
+				// staged nothing and reports 0, which is not a lag.
+				seen, err := execute.Sighted(batch, execute.StreamID{Ledger: ledgerUrl, Source: part.Url})
+				if err != nil {
+					return err
+				}
+				if seen > part.Delivered {
+					sick = append(sick, fmt.Sprintf("%v -> %s: sighted=%d delivered=%d",
+						part.Url, dp, seen, part.Delivered))
 				}
 			}
 			return nil

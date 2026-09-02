@@ -93,16 +93,7 @@ func (s *closedBlock) Commit() error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	err = s.Batch.Commit()
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Only once the delivery is durable. Staging holds what the executor has
-	// and cannot execute yet; releasing before the commit would drop entries
-	// for a block that never happened (#4189).
-	s.releaseStreams()
-	return nil
+	return s.Batch.Commit()
 }
 
 func (s *closedBlock) Discard() {

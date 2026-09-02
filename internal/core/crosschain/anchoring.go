@@ -15,6 +15,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	api "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -389,7 +390,10 @@ func (c *Conductor) recoverAnchorsViaRange(ctx context.Context, batch *database.
 	// while refusing to record it, so the ledger reported holes for anchors
 	// already in the local database.
 	id := c.anchorStream(source)
-	runs := c.staging().Missing(id, part.Delivered, c.sightedOn(id, part.Delivered), 1)
+	runs, err := execute.Missing(batch, id, part.Delivered, c.sightedOn(batch, id, part.Delivered), 1)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
 	if len(runs) == 0 {
 		return nil // Nothing missing
 	}

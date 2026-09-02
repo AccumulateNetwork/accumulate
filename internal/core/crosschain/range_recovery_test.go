@@ -165,8 +165,8 @@ func TestRangeProofAnchor_RefusesWhenAnchorLedgerIsMissing(t *testing.T) {
 
 func TestFirstMissingRun_SkipsKnownEntriesBeforeTheFirstHole(t *testing.T) {
 	// Holding 6 and 9: 7 and 8 are the hole, and 6 sits before it.
-	c, part := gapFixture(5, 6, 9)
-	first, last, ok := c.firstMissingRun(part)
+	c, batch, part := gapFixture(t, 5, 6, 9)
+	first, last, ok := c.firstMissingRun(batch, part)
 	require.True(t, ok)
 	assert.Equal(t, uint64(7), first, "the run starts at the first HOLE, past the known entry")
 	assert.Equal(t, uint64(8), last)
@@ -174,8 +174,8 @@ func TestFirstMissingRun_SkipsKnownEntriesBeforeTheFirstHole(t *testing.T) {
 
 func TestFirstMissingRun_KnownEntryEndsARunOnlyOnceStarted(t *testing.T) {
 	// Holding 7 and 9: the holes are 6 and 8, separated by 7.
-	c, part := gapFixture(5, 7, 9)
-	first, last, ok := c.firstMissingRun(part)
+	c, batch, part := gapFixture(t, 5, 7, 9)
+	first, last, ok := c.firstMissingRun(batch, part)
 	require.True(t, ok)
 	assert.Equal(t, uint64(6), first)
 	assert.Equal(t, uint64(6), last,
@@ -183,8 +183,8 @@ func TestFirstMissingRun_KnownEntryEndsARunOnlyOnceStarted(t *testing.T) {
 }
 
 func TestFirstMissingRun_AllKnownReturnsFalse(t *testing.T) {
-	c, part := gapFixture(5, 6, 7, 8)
-	_, _, ok := c.firstMissingRun(part)
+	c, batch, part := gapFixture(t, 5, 6, 7, 8)
+	_, _, ok := c.firstMissingRun(batch, part)
 	assert.False(t, ok, "a stream holding everything it has sighted has nothing to recover")
 }
 
@@ -434,7 +434,7 @@ func TestUsabilityIsCheckedBeforeClaimingASequence(t *testing.T) {
 	ranger := &recordingRanger{}
 	var submitted []*messaging.Envelope
 	c := newRangeConductor(ranger, &submitted)
-	stageHeld(c, source, 9)
+	stageHeld(t, batch, c, source, 9)
 
 	// Seed the per-stream throttle as already fired, so the scan acts now.
 	c.synthHealState = map[string]*synthHealEntry{
@@ -468,7 +468,7 @@ func TestRecoverAnchorsViaRange_SendsBareSequenceOptions(t *testing.T) {
 	ranger := &fakeRanger{list: &merkle.ReceiptList{}, src: source, dst: self}
 	var submitted []*messaging.Envelope
 	c := newRangeConductor(ranger, &submitted)
-	stageHeldAnchors(c, source, 8) // 6 and 7 are the hole; 8 is what exposes it
+	stageHeldAnchors(t, batch, c, source, 8) // 6 and 7 are the hole; 8 is what exposes it
 	c.synthHealState = map[string]*synthHealEntry{
 		source.JoinPath("anchor-range").String(): {want: 6, fireAt: time.Now().Add(-time.Hour)},
 	}
@@ -500,7 +500,7 @@ func TestRecoverAnchorsViaRange_IncrementsHealsTotalWithAnchorRangeLabel(t *test
 	ranger := &fakeRanger{list: &merkle.ReceiptList{}, src: source, dst: self}
 	var submitted []*messaging.Envelope
 	c := newRangeConductor(ranger, &submitted)
-	stageHeldAnchors(c, source, 8) // 6 and 7 are the hole; 8 is what exposes it
+	stageHeldAnchors(t, batch, c, source, 8) // 6 and 7 are the hole; 8 is what exposes it
 	c.Heals = new(HealCounters)
 	c.synthHealState = map[string]*synthHealEntry{
 		source.JoinPath("anchor-range").String(): {want: 6, fireAt: time.Now().Add(-time.Hour)},
