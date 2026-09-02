@@ -1,0 +1,598 @@
+{
+  "commits": 200,
+  "perm": {
+    "PutTotal": 2111436,
+    "PutNew": 2095506,
+    "PutDuplicate": 15930,
+    "PutConflict": 0,
+    "LookupTotal": 13874962,
+    "FilterAbsent": 13629672,
+    "FilterWalked": 245290,
+    "FilterMisled": 165056,
+    "LiveHit": 0
+  },
+  "dyna": {
+    "PutTotal": 2610678,
+    "PutNew": 2610678,
+    "PutDuplicate": 0,
+    "PutConflict": 0,
+    "LookupTotal": 12587035,
+    "FilterAbsent": 11771304,
+    "FilterWalked": 533044,
+    "FilterMisled": 93618,
+    "LiveHit": 282687
+  },
+  "permDuplicatePct": 0.7544628395082777,
+  "permConflictPct": 0,
+  "permWalkPct": 1.7678606975644329,
+  "misroutedShapes": null,
+  "shapes": {
+    "Account.(url).AnchorChain.directory.BPT.Element.(int)": {
+      "layer": "perm",
+      "new": 180,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 180,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Head": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 178,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Index.Element.(int)": {
+      "layer": "perm",
+      "new": 179,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 179,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Index.Head": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 178,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Element.(int)": {
+      "layer": "perm",
+      "new": 180,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 180,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Head": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 178,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Index.Element.(int)": {
+      "layer": "perm",
+      "new": 179,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 179,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Index.Head": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 178,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Element.(int)": {
+      "layer": "perm",
+      "new": 186,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 186,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Head": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 185,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Index.Element.(int)": {
+      "layer": "perm",
+      "new": 186,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 186,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Index.Head": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 185,
+      "misrouted": 0
+    },
+    "Account.(url).BlockLedger.Head": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 198,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.Element.(int)": {
+      "layer": "perm",
+      "new": 199,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 199,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.Head": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 198,
+      "misrouted": 0
+    },
+    "Account.(url).Chains": {
+      "layer": "dyna",
+      "new": 61808,
+      "duplicate": 94356,
+      "rewritten": 3366,
+      "misrouted": 0
+    },
+    "Account.(url).Data.Entry": {
+      "layer": "dyna",
+      "new": 9619,
+      "duplicate": 0,
+      "rewritten": 53,
+      "misrouted": 0
+    },
+    "Account.(url).Data.Entry.(int)": {
+      "layer": "perm",
+      "new": 9674,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).Data.Transaction.(hash)": {
+      "layer": "dyna",
+      "new": 9619,
+      "duplicate": 0,
+      "rewritten": 53,
+      "misrouted": 0
+    },
+    "Account.(url).Directory": {
+      "layer": "dyna",
+      "new": 4265,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).Events.BPT.Root": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).LocalDeliveryQueue": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 183,
+      "misrouted": 0
+    },
+    "Account.(url).Main": {
+      "layer": "dyna",
+      "new": 45863,
+      "duplicate": 1819,
+      "rewritten": 71129,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Element.(int)": {
+      "layer": "perm",
+      "new": 132109,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 132109,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Head": {
+      "layer": "dyna",
+      "new": 42134,
+      "duplicate": 0,
+      "rewritten": 61358,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Index.Element.(int)": {
+      "layer": "perm",
+      "new": 103480,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 103480,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Index.Head": {
+      "layer": "dyna",
+      "new": 42091,
+      "duplicate": 0,
+      "rewritten": 61399,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.States.(int)": {
+      "layer": "perm",
+      "new": 53,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).Pending": {
+      "layer": "dyna",
+      "new": 30812,
+      "duplicate": 27263,
+      "rewritten": 254,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Element.(int)": {
+      "layer": "perm",
+      "new": 215928,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 212248,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Head": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 199,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Index.Element.(int)": {
+      "layer": "perm",
+      "new": 199,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 199,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Index.Head": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 199,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.States.(int)": {
+      "layer": "perm",
+      "new": 843,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Element.(int)": {
+      "layer": "perm",
+      "new": 196688,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 196688,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Head": {
+      "layer": "dyna",
+      "new": 57399,
+      "duplicate": 0,
+      "rewritten": 54505,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Index.Element.(int)": {
+      "layer": "perm",
+      "new": 111904,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 111904,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Index.Head": {
+      "layer": "dyna",
+      "new": 57469,
+      "duplicate": 0,
+      "rewritten": 54435,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.States.(int)": {
+      "layer": "perm",
+      "new": 8,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SyntheticReplica.bvn2.Element.(int)": {
+      "layer": "perm",
+      "new": 43549,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SyntheticReplica.bvn2.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 43549,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SyntheticReplica.bvn2.Head": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 84,
+      "misrouted": 0
+    },
+    "Account.(url).SyntheticReplica.bvn2.States.(int)": {
+      "layer": "perm",
+      "new": 168,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SyntheticSequenceChain.bvn2.Element.(int)": {
+      "layer": "perm",
+      "new": 13710,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SyntheticSequenceChain.bvn2.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 13710,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SyntheticSequenceChain.bvn2.Head": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 183,
+      "misrouted": 0
+    },
+    "Account.(url).SyntheticSequenceChain.bvn2.States.(int)": {
+      "layer": "perm",
+      "new": 53,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SyntheticSequenceChain.directory.Element.(int)": {
+      "layer": "perm",
+      "new": 85,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SyntheticSequenceChain.directory.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "new": 85,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).SyntheticSequenceChain.directory.Head": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 84,
+      "misrouted": 0
+    },
+    "Account.(url).Transaction.(hash).History": {
+      "layer": "dyna",
+      "new": 130446,
+      "duplicate": 0,
+      "rewritten": 2,
+      "misrouted": 0
+    },
+    "Account.(url).Transaction.(hash).Payments": {
+      "layer": "dyna",
+      "new": 158712,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).Transaction.(hash).Signatures": {
+      "layer": "dyna",
+      "new": 65078,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).Transaction.(hash).ValidatorSignatures": {
+      "layer": "dyna",
+      "new": 38698,
+      "duplicate": 0,
+      "rewritten": 2,
+      "misrouted": 0
+    },
+    "Account.(url).Transaction.(hash).Votes": {
+      "layer": "dyna",
+      "new": 158712,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Account.(url).Url": {
+      "layer": "perm",
+      "new": 20410,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "BPT.(hash)": {
+      "layer": "dyna",
+      "new": 18615,
+      "duplicate": 0,
+      "rewritten": 53169,
+      "misrouted": 0
+    },
+    "BPT.Root": {
+      "layer": "dyna",
+      "new": 1,
+      "duplicate": 0,
+      "rewritten": 199,
+      "misrouted": 0
+    },
+    "Message.(hash).Cause": {
+      "layer": "dyna",
+      "new": 144392,
+      "duplicate": 1,
+      "rewritten": 2,
+      "misrouted": 0
+    },
+    "Message.(hash).Main": {
+      "layer": "perm",
+      "new": 456279,
+      "duplicate": 5851,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Message.(hash).Produced": {
+      "layer": "dyna",
+      "new": 211718,
+      "duplicate": 1,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Message.(hash).Signers": {
+      "layer": "dyna",
+      "new": 65368,
+      "duplicate": 2,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "SystemData.BVN1.SyntheticIndexIndex.(int)": {
+      "layer": "perm",
+      "new": 185,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Transaction.(hash).Chains": {
+      "layer": "dyna",
+      "new": 212063,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Transaction.(hash).Main": {
+      "layer": "perm",
+      "new": 2,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Transaction.(hash).Produced": {
+      "layer": "dyna",
+      "new": 132302,
+      "duplicate": 0,
+      "rewritten": 0,
+      "misrouted": 0
+    },
+    "Transaction.(hash).Status": {
+      "layer": "dyna",
+      "new": 448627,
+      "duplicate": 0,
+      "rewritten": 2,
+      "misrouted": 0
+    }
+  },
+  "stagedCommits": 2,
+  "tallyKeys": 1048576,
+  "tallyCapped": true,
+  "maintenanceErrors": 0,
+  "deepFallbacks": {
+    "Account.(url).Url": 96303
+  }
+}
