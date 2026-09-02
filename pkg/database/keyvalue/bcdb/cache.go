@@ -53,11 +53,19 @@ type recordCache struct {
 // DefaultCacheEntries is how many entries the hot generation holds before it
 // becomes the cold one. The cache holds up to twice this.
 //
-// 20,000 covers the working set the executor touches across a run of blocks —
-// the accounts under load, and the synthetics and anchors in flight — without
-// the map itself becoming the memory problem. Values are small: a URL record,
-// a message, an anchor.
-const DefaultCacheEntries = 20_000
+// 200,000 a generation, so 400,000 resident. The working set this has to cover
+// is the accounts under load plus the synthetics and anchors in flight, and it
+// has to cover them for long enough that a record is still there when it is
+// read again -- a generation that turns over in seconds caches nothing, it
+// just does bookkeeping before every miss.
+//
+// The memory is the entry count times what an entry holds: a 32-byte key, a
+// slice header, and the value. At a few hundred bytes a value that is on the
+// order of 100-150 MB resident, against nodes that ran ~800-930 MiB in soak
+// 20260902T041031Z under a 2.5 GB limit. cacheGenerations and cacheHitPct in
+// stats.json are what say whether it is the right number: many turnovers
+// against a low hit rate means the working set still does not fit.
+const DefaultCacheEntries = 200_000
 
 func newRecordCache(limit int) *recordCache {
 	if limit <= 0 {
