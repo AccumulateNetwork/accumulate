@@ -320,7 +320,11 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state: %w", err)
 	}
-	r.Account = state
+
+	// A sequence ledger's Received is derived, not stored (#4189). Fill it in
+	// on the way out so every reader that asks an account how far a stream has
+	// been sighted still gets an answer. Nothing is written.
+	r.Account = withSighted(batch, record.Url(), state)
 
 	switch state.Type() {
 	case protocol.AccountTypeIdentity, protocol.AccountTypeKeyBook:

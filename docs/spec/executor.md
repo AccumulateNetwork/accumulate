@@ -492,6 +492,18 @@ And a message at or below `Delivered` requires nothing at all. It is not healed,
 not re-recorded, and not counted: it has been processed, and that is the end of
 it.
 
+**`Received` is answered, not stored.** Removing the field from the record does
+not remove the question, and the question is the one every operator surface
+asks: how far is this stream behind. The API fills it in on the way out from
+staging's sighted mark, computed on read and never written, so the account on
+disk carries no trace of it and nothing about consensus depends on the answer.
+
+Writing it back instead would be the mistake. A value derived from staging,
+placed in an account, makes a staging discrepancy a divergent block hash rather
+than a wrong number on a dashboard. And simply dropping it is the other
+mistake: every reader then sees zero, which does not read as "no data" — it
+reads as "nothing ever arrived", and paints a healthy stream as stalled.
+
 `msg_sequenced.go`, `SequencedMessage`: `isReady` asks the block's position
 whether the message is next. Ready messages execute; not-ready messages record
 pending and execute nothing. `Process` records the message and its status, then
