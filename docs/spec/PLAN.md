@@ -17,21 +17,23 @@ neither is why the network stops.
 
 ---
 
-## Phase 0 — settle the design question
+## Phase 0 — settle the design question — DONE
 
 **E3 — how the executor's staging position is restored after a restart.**
 
-Blocks E1 and cannot be deferred past it: today the position comes from the
-ledger, and E1 removes the ledger as its source. Consensus replay is the
-obvious answer and would be consistent with the executor taking its input only
-from consensus, but it has not been traced and the answer decides E1's shape.
+Answered in [executor.md](executor.md): it is not restored, it is rebuilt.
+`Delivered` is block output and survives; everything above it is staging, held
+in memory, empty on restart, refilled by consensus and — for anything not
+re-delivered — by healing, which is what a gap already means. Staging can
+therefore be in memory, and persisting it would mean writing every block a state
+reconstructible from what is already durable.
 
-Design first, in the spec. No code.
+E1 implements it.
 
-## Phase 1 — cheap and independent
+## Alongside — cheap and independent
 
-Small, unrelated to the livelock, each closeable on its own. Worth doing first
-because none of them will get easier later and all are one sitting.
+Small, unrelated to the livelock, closeable on their own and in parallel with
+anything. **Not sequenced ahead of the critical path**, which is Phase 0 → E1.
 
 | | |
 |---|---|
@@ -95,8 +97,8 @@ placement from the record model or make divergence detectable without a soak.
 ## Order of work
 
 ```
-E3 ─▶ E1 ─▶ E2 ─▶ H2 ─▶ H3 ─▶ H1        the livelock
-D2, E6, D3                               independent, do first
+E3 ─▶ E1 ─▶ E2 ─▶ H2 ─▶ H3 ─▶ H1        the critical path
+D2, E6, D3                               parallel, any time
 E5, E4, D1                               after
 ```
 

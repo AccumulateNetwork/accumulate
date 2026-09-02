@@ -128,6 +128,33 @@ The predecessor of this design re-read the ledger after every single delivery,
 which is where its O(n²) came from. One evaluation per stream per block reads
 the position once.
 
+### Restart
+
+Staging is not persisted and is not restored. It is **rebuilt**.
+
+The split follows from what each thing is:
+
+- **`Delivered` is block output.** What a block executed is durable because the
+  block is durable; it is written when the block closes and read back on start.
+  It is the one part of a stream's position that survives.
+- **Everything above `Delivered` is staging** — received, not yet executed — and
+  staging is executor state fed only by consensus. A restarted executor begins
+  with it empty.
+
+So a node that restarts knows exactly where each stream stands and holds nothing
+above it. Consensus continues to deliver, and anything that was staged and is
+not re-delivered is a gap like any other — which is what healing is for. There
+is no separate recovery path, because a restart leaves the executor in a state
+the protocol already handles: behind, with holes.
+
+This is why staging can be in memory. Persisting it would mean writing, every
+block, state that is reconstructible from the thing that is already durable, and
+would put the executor back to reading what it wrote.
+
+The cost is bounded and is paid by healing: a restart re-obtains whatever was
+staged, which is as much as the node was behind. A node that was current stages
+nothing and loses nothing.
+
 ### A block does not begin with an empty slate
 
 Opening a block finishes the previous one. Before any of this block's messages

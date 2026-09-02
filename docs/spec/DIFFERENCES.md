@@ -54,17 +54,21 @@ account — the record the block writes.
 
 **Size**: follows from E1.
 
-### E3. Staging position after a restart is unspecified
+### E3. Staging position after a restart — SPECIFIED, not yet implemented
 
 *[#4188](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4188)*
 
-**Spec**: silent. Once staging stops reading the ledger, something must define
-how the executor's position is recovered.
+**Spec** ([executor.md](executor.md)): staging is not persisted and not
+restored — it is rebuilt. `Delivered` is block output and survives because the
+block does; everything above it is staging, held in memory, and a restarted
+executor begins with it empty. Anything staged and not re-delivered is a gap
+like any other, which is what healing is for.
 
-**Code**: the position comes from the ledger, so the question does not arise
-today.
+**Code**: the whole position, staged set included, comes from the ledger
+account, so a restart restores it — and that is only true because staging is
+stored where it should not be.
 
-**Size**: design question, blocking E1.
+**Size**: none of its own. The design question is answered; the work is E1.
 
 ### E4. An anchor's quorum is assembled by execution
 
