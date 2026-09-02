@@ -122,6 +122,10 @@ type Database struct {
 	deepFallbacks map[string]uint64
 	fallbackMu    sync.Mutex
 
+	// cache holds the write-once records the executor reads on every
+	// block; see cache.go.  Nil disables it.
+	cache *recordCache
+
 	maintaining  atomic.Bool
 	maintWG      sync.WaitGroup
 	maintErr     error  // the last maintenance run's outcome
@@ -274,6 +278,7 @@ func Open(path string) (*Database, error) {
 		StatsEvery:     50,
 		TallyKeys:      DefaultTallyKeys,
 		MergeLag:       DefaultMergeLag,
+		cache:          newRecordCache(DefaultCacheEntries),
 	}
 
 	// A commit seals the permanent layer at its version, and the store
@@ -697,6 +702,20 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 		}
 	}
 
+	// The cache answers before the store is asked. A hit skips the segment
+	// index, and with it the bloom filters the index reads from disk to
+	// decide which segment to look in -- 71.8% of the preads in the profile
+	// of run 20260902T041031Z.
+	//
+	// Isolation is preserved without versioning the cache. It is filled only
+	// from store reads, and drain() will not write a batch through while a
+	// reader older than it is open, so the store -- and therefore the cache
+	// -- never holds a version an open reader must not see. Every write
+	// forgets its key besides.
+	if v, ok := d.cache.get(h); ok {
+		return v, nil
+	}
+
 	value, err := d.kv.Get(h)
 	if err != nil && deep {
 		// This reader asked to reach past the window (BeginDeep)
@@ -735,6 +754,9 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 		// key that was never written is
 		return nil, (*database.NotFoundError)(key)
 	}
+	if cacheable(key) {
+		d.cache.put(h, value)
+	}
 	return value, nil
 }
 
@@ -761,6 +783,10 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 			d.except(h)
 		}
 		perm := len(value) > 0 && !d.dyna[h] && isWriteOnce(key)
+
+		// Whatever the classification says, a key being written now must
+		// not be answered from what it held before.
+		d.cache.forget(h)
 
 		shape := d.tally(key, h, value, perm)
 		staged.entries[h] = entry{value: value, perm: perm, shape: shape}
@@ -921,12 +947,31 @@ func (d *Database) reportStats() {
 		// the fallback in getAt can go, leaving the window enforced.
 		// Anything here NAMES the call sites that still need one.
 		DeepFallbacks map[string]uint64 `json:"deepFallbacks,omitempty"`
+
+		// The read cache (cache.go).  A hit skips the segment index and
+		// the bloom filters it reads from disk to use it, which was
+		// 71.8% of this adapter's preads under load.  HitPct is what
+		// says whether the cache is earning its memory; Generations is
+		// how often it has turned over, and a large number against a
+		// small HitPct means the working set does not fit.
+		CacheHits        uint64  `json:"cacheHits"`
+		CacheMisses      uint64  `json:"cacheMisses"`
+		CacheHitPct      float64 `json:"cacheHitPct"`
+		CachePromotions  uint64  `json:"cachePromotions"`
+		CacheGenerations uint64  `json:"cacheGenerations"`
+		CacheEntries     int     `json:"cacheEntries"`
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
 		DeepFallbacks: d.fallbackSnapshot(),
 		Staged:        len(d.staged), TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
 		MaintenanceErrors: d.maintErrs}
 	if d.maintErr != nil {
 		report.MaintenanceLast = d.maintErr.Error()
+	}
+
+	report.CacheHits, report.CacheMisses, report.CachePromotions,
+		report.CacheGenerations, report.CacheEntries = d.cache.stats()
+	if n := report.CacheHits + report.CacheMisses; n > 0 {
+		report.CacheHitPct = float64(report.CacheHits) / float64(n) * 100
 	}
 
 	// Lifted out of the shape table so a run can be checked by looking
