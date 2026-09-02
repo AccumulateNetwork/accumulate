@@ -26,18 +26,46 @@ source achieves this by adding hashes to the next receipt it was going to send
 anyway — no per-destination bookkeeping, no special range, and no request path
 to serve.
 
-**How far back a receipt can reach is bounded.** `MaxReceiptListElements`
-(4,096) caps the elements a collection proof may carry, and it binds at three
-points that must agree: the sender will not build a package whose span exceeds
-it (`packageSpanFits`), the sequencer refuses a range request larger than it,
-and the receiver rejects a proof carrying more. A destination further behind
-than that cap cannot be covered by one receipt, so closing the gap takes
-successive receipts, each covering the span it can.
+### Extending a proof rather than replacing it
 
-The bound exists because a receipt list is untrusted input and verifying one
+How far back a single proof reaches is bounded. `MaxReceiptListElements` (4,096)
+caps the elements a collection proof may carry, and it binds at three points
+that must agree: the sender will not build a package whose span exceeds it
+(`packageSpanFits`), the sequencer refuses a range request larger than it, and
+the receiver rejects a proof carrying more.
+
+The bound exists because a receipt list is untrusted input, and verifying one
 hashes every element before it can be known to be junk — unlike staging, which
-holds only what consensus already accepted. It is a limit on what an attacker
-can make a validator do, not a limit on what the protocol is allowed to need.
+holds only what consensus already accepted. It limits what an attacker can make
+a validator do.
+
+It does **not** limit how far back a destination can prove, because a proof can
+be extended rather than replaced. A collection proof is a merkle state at the
+*start* of its list, the elements, and a receipt anchoring the *last* element to
+a root. Widening the range backwards means an earlier merkle state and the
+elements in between: the replay still ends at the same anchor, so **the same
+receipt keeps working**. Hashes can be added to a collection proof without
+another receipt.
+
+So a destination that needs to reach further back asks for an **extension**, not
+a new proof. The request carries:
+
+- the **last hash of the proof it already holds** — where the extension
+  attaches, and what lets the source confirm the two are continuous;
+- that hash's **index**, which the existing proof already establishes, because a
+  receipt list's merkle state is counted and therefore binds each element to an
+  absolute position;
+- **how far back is wanted**, or the maximum a single request may carry.
+
+The source answers with the earlier merkle state and the intervening elements —
+raw hashes, no signature, no new anchor. The destination prepends them and
+validates the wider list against the receipt it already had.
+
+This keeps every property the order relies on. A single message stays bounded,
+so the attacker's cost is unchanged. Reach becomes unbounded in increments, so
+an arbitrarily lagged destination converges. And the expensive part of a proof —
+the anchored receipt — is transferred once and reused, rather than re-sent with
+every widening.
 
 A later collection proof does not invalidate an earlier one. Each verifies
 against its own merkle state and receipt, so work already done against the proof
@@ -101,3 +129,9 @@ identifies gaps, fetches, and submits.
 - **Healing is not ordered.** It does not heal newest-first, and it does not
   skip numbers already staged locally, so it re-fetches messages the node
   already holds (accumulatenetwork/accumulate#4187).
+- **Proof extension does not exist.** There is no extension request and no way
+  to widen a held proof; a destination further behind than
+  `MaxReceiptListElements` currently cannot be covered at all — the sender will
+  not build the package, the sequencer will not serve the range, and the
+  receiver would reject the proof. The gap in soak `20260902T132651Z` was 8,556,
+  more than twice the cap.
