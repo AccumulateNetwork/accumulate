@@ -200,7 +200,7 @@ absence rather than guessing.
 
 ### D4. The bcdb window is advisory, so absence is never reported
 
-*[#4196](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4196)*
+*[#4200](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4200)*
 
 **Spec**: an ordinary read is answered from the window; a read that needs
 history requires a deep reader. A backend that cannot answer must say so.
