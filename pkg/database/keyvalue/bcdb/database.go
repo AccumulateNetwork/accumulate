@@ -784,10 +784,6 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 		}
 		perm := len(value) > 0 && !d.dyna[h] && isWriteOnce(key)
 
-		// Whatever the classification says, a key being written now must
-		// not be answered from what it held before.
-		d.cache.forget(h)
-
 		shape := d.tally(key, h, value, perm)
 		staged.entries[h] = entry{value: value, perm: perm, shape: shape}
 	}

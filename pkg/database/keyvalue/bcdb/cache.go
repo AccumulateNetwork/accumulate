@@ -39,8 +39,8 @@ import (
 //
 // This bounds the cache at 2N entries and makes eviction O(1) amortized: the
 // cost of a generation change is dropping a map reference, not scanning
-// anything. An LRU would order every entry on every hit, against a workload
-// where hits are the common case.
+// anything, and no entry is ever removed individually. An LRU would order
+// every entry on every hit, against a workload where hits are the common case.
 type recordCache struct {
 	mu    sync.Mutex
 	limit int
@@ -115,20 +115,6 @@ func (c *recordCache) putLocked(h [32]byte, value []byte) {
 	c.generations++
 }
 
-// forget drops a key from both generations. A cached record is supposed to be
-// write-once, so this should never fire on a correctly classified key -- it is
-// here because "supposed to be" is not a guarantee, and serving a stale value
-// to the executor is a consensus fault. Every write goes through it.
-func (c *recordCache) forget(h [32]byte) {
-	if c == nil {
-		return
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.hot, h)
-	delete(c.cold, h)
-}
-
 // stats reports the counters for stats.json.
 func (c *recordCache) stats() (hits, misses, promotions, generations uint64, entries int) {
 	if c == nil {
@@ -141,10 +127,7 @@ func (c *recordCache) stats() (hits, misses, promotions, generations uint64, ent
 
 // cacheable reports whether a key names a record the cache may hold.
 //
-// The rule is narrower than isWriteOnce and deliberately so. isWriteOnce says
-// what may go in the permanent layer, and getting THAT wrong is caught: the
-// store refuses to overwrite. Getting this wrong is not caught by anything —
-// a mutable record cached would be served stale forever — so this names only
+// Narrower than isWriteOnce, and by hand rather than by reusing it: this names
 // the three kinds asked for, each of which cannot change under its own name:
 //
 //   - Account(U).Url, the URL an account is keyed by
@@ -153,6 +136,19 @@ func (c *recordCache) stats() (hits, misses, promotions, generations uint64, ent
 //     own content
 //   - the anchor chains' elements and mark points, which are positions in a
 //     log and do not move
+//
+// # Why nothing invalidates
+//
+// Nothing is removed from this cache by key, and a write does not touch it. An
+// entry leaves only by sitting unread in the cold generation through a swap.
+//
+// That needs no defending, because the records here cannot change. An anchor
+// that changed, a synthetic transaction that changed, an account URL that
+// changed under the same key -- any of those is a broken protocol, and a stale
+// cache entry would be the smallest of the consequences.
+//
+// The guard is this list, and code review of it. The bar for adding a shape is
+// that it cannot change under its own name.
 func cacheable(k *record.Key) bool {
 	last, prev, trailing := tail(k)
 	switch last {

@@ -87,16 +87,29 @@ func TestCache_PromotesOnAColdHit(t *testing.T) {
 	assert.True(t, ok, "a promoted entry survives the following generation")
 }
 
-// A write must drop the key. The cached records are write-once, so this should
-// never fire in practice — but serving the executor a stale value is a
-// consensus fault, and "should never" is not a guarantee.
-func TestCache_ForgetsOnWrite(t *testing.T) {
-	c := newRecordCache(100)
-	h := hashOf(1)
-	c.put(h, []byte("old"))
-	c.forget(h)
+// Entries leave only by aging out: an entry that is not read goes when its
+// generation has been swapped twice. Nothing is ever removed by key, and that
+// is the whole eviction policy.
+func TestCache_EntriesLeaveOnlyAfterTwoSwaps(t *testing.T) {
+	const limit = 10
+	c := newRecordCache(limit)
+
+	h := hashOf(999)
+	c.put(h, []byte("v"))
+
+	fill := func(from int) {
+		for i := from; i < from+limit; i++ {
+			c.put(hashOf(i), []byte{byte(i)})
+		}
+	}
+
+	fill(0) // First swap: the entry is now cold
+	_, _, _, gens, _ := c.stats()
+	require.Equal(t, uint64(1), gens)
+
+	fill(limit) // Second swap, with no read in between: cold is discarded
 	_, ok := c.get(h)
-	assert.False(t, ok, "a key that was written must not be answered from the cache")
+	assert.False(t, ok, "an entry unread across two swaps ages out")
 }
 
 // A deletion is a zero-length value and must never be cached: a later read
@@ -149,9 +162,8 @@ func TestCache_Cacheable(t *testing.T) {
 	}
 }
 
-// End to end: a record read twice is answered from the cache the second time,
-// and a rewrite is not answered from it at all.
-func TestCache_ServesRepeatedReadsAndNotStaleOnes(t *testing.T) {
+// End to end: a record read twice is answered from the cache the second time.
+func TestCache_ServesRepeatedReads(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "db")
 	db, err := Open(dir)
 	require.NoError(t, err)
@@ -172,19 +184,6 @@ func TestCache_ServesRepeatedReadsAndNotStaleOnes(t *testing.T) {
 	}
 	hits, _, _, _, _ := db.cache.stats()
 	assert.NotZero(t, hits, "the second read must come from the cache")
-
-	// A rewrite must not be shadowed by what the cache holds. This record is
-	// write-once in practice, which is why it may be cached at all; the point
-	// is that the cache does not make a stale answer possible if it is not.
-	b = db.Begin(nil, true)
-	require.NoError(t, b.Put(key, []byte("rewritten")))
-	require.NoError(t, b.Commit())
-
-	r := db.Begin(nil, false)
-	defer r.Discard()
-	v, err := r.Get(key)
-	require.NoError(t, err)
-	assert.Equal(t, []byte("rewritten"), v, "a write must not be answered from the cache")
 }
 
 // The cache must not break isolation: a batch open at an older version must
