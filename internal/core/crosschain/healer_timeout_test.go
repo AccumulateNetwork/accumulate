@@ -61,14 +61,12 @@ func TestRequestMissingSynthetics_ReturnsWhenAPeerNeverAnswers(t *testing.T) {
 	self := protocol.PartitionUrl("BVN1")
 	source := protocol.PartitionUrl("BVN2")
 
-	// A stream with interior holes: delivered 497, received past it, pending
-	// window all nil — the exact shape that must trigger pulls.
+	// A stream with interior holes: delivered 497, holding 501 — so 498-500
+	// are holes, the exact shape that must trigger pulls.
 	ledger := new(protocol.SyntheticLedger)
 	ledger.Url = self.JoinPath(protocol.Synthetic)
 	part := ledger.Partition(source)
 	part.Delivered = 497
-	part.Received = 500
-	part.Pending = []*url.TxID{nil, nil, nil}
 
 	// An anchor ledger with a delivered anchor from the source, so the range
 	// path (the one with no timeout of its own) is the one that fires.
@@ -91,6 +89,7 @@ func TestRequestMissingSynthetics_ReturnsWhenAPeerNeverAnswers(t *testing.T) {
 		SyntheticHealWindow: time.Nanosecond,
 	}
 	c.Globals.Store(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV2Kourou})
+	stageHeld(c, source, 501)
 
 	// First scan only registers the claim (jittered check-then-fire) and
 	// returns without pulling.

@@ -41,7 +41,14 @@ re-fetched 53,011 times, some 41 times each; `recv − deliv = 4,096` exactly on
 two samples eight minutes apart; 44,206 heals with `errors 0`, because nothing
 errors. All three partitions stayed live throughout.
 
-**Size**: large. Moves staging out of the account model and removes the bound.
+**The change**: the held set moves out of the account model to a durable store
+that is not hashed — one record per held entry, so nothing is rewritten whole
+and nothing needs a bound — and joins the snapshot, because a snapshot is what a
+new node starts from. `Delivered` stays in the ledger, and becomes the only
+thing the executor reads from it.
+
+**Size**: large. A new durable store, a snapshot section for it, staging moved
+off the account, and the bound removed.
 
 ### E2. `isReady` reads block state
 
@@ -58,15 +65,29 @@ account — the record the block writes.
 
 *[#4188](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4188) — closed*
 
-**Spec** ([executor.md](executor.md)): staging is not persisted and not
-restored — it is rebuilt. `Delivered` is block output and survives because the
-block does; everything above it is staging, held in memory, and a restarted
-executor begins with it empty. Anything staged and not re-delivered is a gap
-like any other, which is what healing is for.
+**Spec** ([executor.md](executor.md)): staging **survives** a restart. It is
+durable and not hashed. `Delivered` is block output and is hashed, because it is
+what executed; the held set is a deterministic function of the consensus stream,
+so it is agreed without being hashed. Staging is part of a snapshot.
+
+**Corrected 2026-09-02.** The first answer was that staging is rebuilt, not
+restored — empty on restart, refilled by healing. That is wrong, and the
+correction is not a detail: staging is an INPUT to what a block executes, not an
+optimisation over it. A block delivers the contiguous run from `Delivered + 1`
+taken from this block's arrivals *and what is already held*, so a restarted node
+holding less than its peers executes a shorter run — different `Delivered`,
+different account state, different BPT root. That is a divergent block hash, and
+healing cannot repair it because healing is asynchronous and the divergence is
+immediate.
+
+What the old design got right was that the held set has to be agreed; what it
+got wrong was concluding it therefore had to be hashed, and so had to live in an
+account, and so had to be bounded. Durable-but-not-hashed keeps the agreement
+and drops the bound.
 
 **Code**: the whole position, staged set included, comes from the ledger
-account, so a restart restores it — and that is only true because staging is
-stored where it should not be.
+account. A restart restores it — correctly — but only because it is stored
+somewhere that forces a bound on it.
 
 **Size**: none of its own. The design question is answered; the work is E1.
 

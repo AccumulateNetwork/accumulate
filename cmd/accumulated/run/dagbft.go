@@ -218,8 +218,14 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// are two coincident constants that drift apart silently (#4151).
 	dagCfg := dagconfig.DefaultConfig()
 
+	// The executor's staging store, created here because the conductor needs
+	// the SAME instance: staging is what the node holds, and healing asking a
+	// different view of that is the disagreement #4189 removes.
+	staging := multiexec.NewStaging()
+
 	// Create executor options
 	execOpts := multiexec.Options{
+		Staging:   staging,
 		Logger:    logger.With("module", "executor"),
 		Database:  db,
 		Key:       validatorKey,
@@ -273,6 +279,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
 		Sequencer:    client.Private(),
+		Staging:      staging,
 		Heals:        healCounters,
 		RunTask:      execOpts.BackgroundTaskLauncher,
 		// Healing is the ONLY retry mechanism for anchors — the conductor's

@@ -40,6 +40,15 @@ type Conductor struct {
 	Querier      api.Querier2
 	Dispatcher   execute.Dispatcher
 
+	// Staging is the executor's account of what it has received and cannot
+	// execute yet. Healing asks it what the node holds (#4189) — the SAME
+	// instance the executor writes, because a healer with its own view of that
+	// is exactly the disagreement this replaces. It used to read
+	// PartitionSyntheticLedger.Pending, which is what the block wrote, and the
+	// two disagreed the moment the record's bound was reached.
+	Staging     *execute.Staging
+	stagingOnce sync.Once
+
 	// Sequencer serves the ranges recovery pulls. Without it a stalled stream
 	// has no way back: dispatch is one-shot, so a message lost in transit is
 	// never resent, and the destination's delivered-sequence stops there

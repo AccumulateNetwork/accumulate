@@ -380,26 +380,20 @@ func (c *Conductor) recoverAnchorsViaRange(ctx context.Context, batch *database.
 	// per scan; the next block's scan takes the next.
 	//
 	// The run is always bounded above, which is the whole reason a hole is
-	// visible at all: Pending only extends as far as the highest anchor received,
-	// so its last entry is never nil. A gap exists because something later
-	// arrived — and that later something is what proves the gap's contents.
-	first, last := uint64(0), uint64(0)
-	for i, txid := range part.Pending {
-		seq := part.Delivered + uint64(i) + 1
-		if txid == nil {
-			if first == 0 {
-				first = seq
-			}
-			last = seq
-			continue
-		}
-		if first != 0 {
-			break
-		}
-	}
-	if first == 0 {
+	// visible at all: what we have SIGHTED reaches only as far as the highest
+	// anchor staged. A gap exists because something later arrived — and that
+	// later something is what proves the gap's contents.
+	//
+	// Asked of staging, not of the ledger's pending array (#4189). The array is
+	// what the block wrote, and past its bound the executor stored an anchor
+	// while refusing to record it, so the ledger reported holes for anchors
+	// already in the local database.
+	id := c.anchorStream(source)
+	runs := c.staging().Missing(id, part.Delivered, c.sightedOn(id, part.Delivered), 1)
+	if len(runs) == 0 {
 		return nil // Nothing missing
 	}
+	first, last := runs[0][0], runs[0][1]
 	if last-first+1 > protocol.MaxReceiptListElements {
 		last = first + protocol.MaxReceiptListElements - 1
 	}

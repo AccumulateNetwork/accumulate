@@ -30,6 +30,12 @@ type BlockParams = execute.BlockParams
 type BlockState = execute.BlockState
 type Options = execute.Options
 type DescribeShim = execute.DescribeShim
+type Staging = execute.Staging
+
+// NewStaging re-exports execute.NewStaging so a caller wiring both the executor
+// and the conductor does not have to import the executor package twice.
+func NewStaging() *Staging { return execute.NewStaging() }
+
 type ValidatorUpdate = execute.ValidatorUpdate
 type WillBeginBlock = execute.WillBeginBlock
 

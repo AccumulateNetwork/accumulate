@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -101,9 +102,9 @@ func (c *Conductor) claimSequence(source *url.URL, seq uint64, now time.Time, wi
 }
 
 // requestMissingSynthetics implements receiver-pull-on-gap healing. When an
-// inbound synthetic stream is stalled (Received > Delivered) it means the
-// predecessor Delivered+1 was never received, so nothing can advance until it
-// arrives. Rather than wait for the source to notice and re-push, the receiver
+// inbound synthetic stream is stalled — the node is holding something it cannot
+// execute — the predecessor Delivered+1 was never received, so nothing can
+// advance until it arrives. Rather than wait for the source to notice and re-push, the receiver
 // requests the missing message from the source partition's sequencer service
 // and resubmits it locally; the existing MessageIsReady cascade then drains the
 // whole pending tail. The re-submission is delivered in a block and advances
@@ -115,8 +116,13 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 		return nil
 	}
 
-	// Load this node's inbound synthetic ledger. Each entry tracks a source
-	// partition we have received synthetics from.
+	// The streams to scan are the ones STAGING is holding something for. A
+	// stream holding nothing has nothing to heal: either it is current, or it
+	// has lost a tail nobody here can see, which is reconcile's job.
+	//
+	// The ledger is opened for one thing only — Delivered, what has been
+	// processed. Nothing else about a stream lives there any more (#4189), and
+	// a message already processed needs nothing done about it.
 	var ledger *protocol.SyntheticLedger
 	err := batch.Account(c.Url(protocol.Synthetic)).Main().GetAs(&ledger)
 	if err != nil {
@@ -128,11 +134,20 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 	if window <= 0 {
 		window = syntheticHealWindow
 	}
-	for _, part := range ledger.Sequence {
-		// A gap exists only if we have received past what we have delivered.
-		// The missing message is always Delivered+1 (receiving a later message
-		// proves the source produced everything up to it).
-		if part.Received <= part.Delivered {
+	for _, id := range c.staging().Streams() {
+		if !id.Ledger.Equal(c.Url(protocol.Synthetic)) {
+			continue // an anchor stream; recoverAnchorsViaRange has those
+		}
+
+		// Partition returns the entry if there is one and a zero entry if there
+		// is not — a stream that has delivered nothing is delivered through 0,
+		// which is the right answer, not a missing one.
+		part := ledger.Partition(id.Source)
+
+		// A gap exists only if we are holding something past what we have
+		// delivered. The missing message is always Delivered+1 (receiving a
+		// later message proves the source produced everything up to it).
+		if c.sighted(part) <= part.Delivered {
 			continue
 		}
 		// Circuit breaker: a source that failed the last several pulls is down
@@ -158,7 +173,7 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 		// could not be pulled — a stream must never wedge because the fast
 		// path was not usable.
 		if held, ok := c.rangeProofAnchor(batch, part.Url); ok {
-			if runs := missingRuns(part); len(runs) > 0 {
+			if runs := c.missingRuns(part); len(runs) > 0 {
 				budget := uint64(syntheticHealBatch)
 				allDone := true
 				for _, r := range runs {
@@ -197,17 +212,13 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 			}
 		}
 
-		// Pull EVERY missing message in the pending window (nil entries), not
-		// just Delivered+1 — a run of consecutive drops or a dense drop
-		// pattern would otherwise heal one message per window and never catch
-		// up (#4067). The receiver knows exactly which sequence numbers are
-		// holes; batch them, capped per scan. Each pull is idempotent.
+		// Pull EVERY missing message, not just Delivered+1 — a run of
+		// consecutive drops or a dense drop pattern would otherwise heal one
+		// message per window and never catch up (#4067). Staging knows exactly
+		// which sequence numbers are holes; batch them, capped per scan. Each
+		// pull is idempotent.
 		healed := 0
-		for i, txid := range part.Pending {
-			if txid != nil {
-				continue
-			}
-			seq := part.Delivered + 1 + uint64(i)
+		for _, seq := range c.missingNumbers(part) {
 			if !c.claimSequence(part.Url, seq, now, window) {
 				continue
 			}
@@ -277,8 +288,14 @@ func (c *Conductor) rangeProofAnchor(batch *database.Batch, source *url.URL) (ui
 	return held, held > 0
 }
 
-// missingRuns returns every contiguous run of holes in a partition's pending
-// window, oldest first. Each run is what one range request covers: a
+// missingRuns returns every contiguous run of numbers above the delivery point
+// that staging does not hold, oldest first.
+//
+// It asks STAGING, not the ledger (#4189). It used to walk
+// PartitionSyntheticLedger.Pending for nil entries, which is what the block
+// wrote — and past that array's bound the executor stored a message while
+// refusing to record it, so the ledger reported holes for messages already in
+// the local database and this function sent the network to fetch them back. Each run is what one range request covers: a
 // collection proof is a merkle range, so it proves a run of adjacent entries,
 // not an arbitrary selection. But ONE held anchor proves ALL of them — the
 // anchor postdates the newest hole (holes are by definition below Received,
@@ -291,33 +308,84 @@ func (c *Conductor) rangeProofAnchor(batch *database.Batch, source *url.URL) (ui
 // Observed need: the 20260824T024122Z wedge left 63 holes scattered across
 // ~20 runs (498-506, 514, 518, 539-542, ...). One run per heal window would
 // have taken ~20 windows to converge; one scan covers them all.
-func missingRuns(part *protocol.PartitionSyntheticLedger) [][2]uint64 {
-	var runs [][2]uint64
-	open := false
-	for i, txid := range part.Pending {
-		seq := part.Delivered + uint64(i) + 1
-		if txid == nil {
-			if open {
-				runs[len(runs)-1][1] = seq
-			} else {
-				runs = append(runs, [2]uint64{seq, seq})
-				open = true
-			}
-			continue
-		}
-		open = false
-	}
-	return runs
+func (c *Conductor) missingRuns(part *protocol.PartitionSyntheticLedger) [][2]uint64 {
+	return c.staging().Missing(c.syntheticStream(part.Url), part.Delivered, c.sighted(part), syntheticHealBatch)
 }
 
-// firstMissingRun returns the first contiguous run of holes in a partition's
-// pending window.
-func firstMissingRun(part *protocol.PartitionSyntheticLedger) (uint64, uint64, bool) {
-	runs := missingRuns(part)
+// firstMissingRun returns the first contiguous run of holes above the delivery
+// point.
+func (c *Conductor) firstMissingRun(part *protocol.PartitionSyntheticLedger) (uint64, uint64, bool) {
+	runs := c.missingRuns(part)
 	if len(runs) == 0 {
 		return 0, 0, false
 	}
 	return runs[0][0], runs[0][1], true
+}
+
+// missingNumbers flattens the runs into the individual numbers to pull, capped
+// per scan. Flat rather than nested because every failure rule below acts on
+// the whole scan — a breaker that opens stops the scan, not the run.
+func (c *Conductor) missingNumbers(part *protocol.PartitionSyntheticLedger) []uint64 {
+	var nums []uint64
+	for _, r := range c.missingRuns(part) {
+		for seq := r[0]; seq <= r[1] && len(nums) < syntheticHealBatch; seq++ {
+			nums = append(nums, seq)
+		}
+		if len(nums) >= syntheticHealBatch {
+			break
+		}
+	}
+	return nums
+}
+
+// staging is the store healing asks what the node holds.
+//
+// Never nil. A conductor built without one behaves as a node that has staged
+// nothing — which is exactly the state a restart leaves, and which healing
+// already handles: everything above Delivered is a gap, and reconcile finds the
+// tail from what the source says it produced.
+func (c *Conductor) staging() *execute.Staging {
+	c.stagingOnce.Do(func() {
+		if c.Staging == nil {
+			c.Staging = execute.NewStaging()
+		}
+	})
+	return c.Staging
+}
+
+// syntheticStream and anchorStream name the staging streams for messages
+// inbound from a source. They are SEPARATE streams between the same pair of
+// partitions — anchors are tracked by the anchor pool, synthetics by the
+// synthetic account — so conflating them would let an anchor's position gate a
+// synthetic's.
+func (c *Conductor) syntheticStream(source *url.URL) execute.StreamID {
+	return execute.StreamID{Ledger: c.Url(protocol.Synthetic), Source: source}
+}
+
+func (c *Conductor) anchorStream(source *url.URL) execute.StreamID {
+	return execute.StreamID{Ledger: c.Url(protocol.AnchorPool), Source: source}
+}
+
+// sighted is the highest sequence number this node has seen from a source,
+// whether it executed it or is still holding it.
+//
+// It replaces the ledger's Received, which was written by the block and is not
+// written any more. The two halves come from the two places that own them: the
+// ledger says what was delivered, staging says what is held, and the larger of
+// the two is what the node has evidence of. Seeing a number is what proves the
+// source produced everything below it, which is what makes a hole a hole rather
+// than a stream that has simply not started.
+func (c *Conductor) sighted(part *protocol.PartitionSyntheticLedger) uint64 {
+	return c.sightedOn(c.syntheticStream(part.Url), part.Delivered)
+}
+
+// sightedOn is sighted for a stream named directly, which the anchor path needs
+// because its entries come from the anchor ledger.
+func (c *Conductor) sightedOn(id execute.StreamID, delivered uint64) uint64 {
+	if h := c.staging().Highest(id); h > delivered {
+		return h
+	}
+	return delivered
 }
 
 // claimSyntheticRequest returns true if this node should request source→self
@@ -679,10 +747,9 @@ const reconcileGraceBlocks = 60
 // this partition and pulls anything that was never received.
 //
 // This is the one recovery path that does not depend on a subsequent message
-// existing. requestMissingSynthetics needs Received > Delivered, and the
-// executor's old healNeeded needed a nil entry in a pending window; a stream
-// that lost its FIRST messages has neither — Received stays 0, Pending stays
-// empty, and it is indistinguishable from a healthy idle stream. A lost tail
+// existing. requestMissingSynthetics needs something sighted above Delivered; a
+// stream that lost its FIRST messages has nothing — staging holds nothing, the
+// watermark is 0, and it is indistinguishable from a healthy idle stream. A lost tail
 // looks the same. Observed live: DN->BVN1 sat at produced=2 received=0 for 23
 // hours while every gap-based check reported healthy (#4073).
 //
@@ -700,10 +767,13 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 	if err != nil {
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
+	// The high-water mark per source: what was delivered, or what staging is
+	// holding above it. This is the ledger's old Received, recomputed from the
+	// two records that now own its two halves (#4189).
 	received := map[[32]byte]uint64{}
 	for _, part := range ledger.Sequence {
 		if part.Url != nil {
-			received[part.Url.AccountID32()] = part.Received
+			received[part.Url.AccountID32()] = c.sighted(part)
 		}
 	}
 
@@ -766,12 +836,12 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 		}
 
 		// Prefer one range request under one collection proof (#4087). Only the
-		// OVERDUE tail is pulled, starting at have+1 where have is the ledger's
-		// Received HIGH-WATER mark. Under DAG-BFT that mark advances past
-		// interior holes (messages arrive out of order), so have+1 is NOT
-		// necessarily the oldest missing sequence — the holes below it live as
-		// nil entries in the pending window and belong to
-		// requestMissingSynthetics, which scans them directly. Reconcile's job
+		// OVERDUE tail is pulled, starting at have+1 where have is the
+		// HIGH-WATER mark of what has been sighted. Under DAG-BFT that mark
+		// advances past interior holes (messages arrive out of order), so
+		// have+1 is NOT necessarily the oldest missing sequence — the holes
+		// below it are the numbers staging does not hold, and they belong to
+		// requestMissingSynthetics, which asks for them directly. Reconcile's job
 		// is only the tail the destination cannot see: sequences the source has
 		// produced that have never been sighted here at all.
 		//

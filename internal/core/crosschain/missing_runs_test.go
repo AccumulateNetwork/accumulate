@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -30,26 +31,56 @@ import (
 
 func txid(b byte) *url.TxID { return protocol.PartitionUrl("BVN2").WithTxID([32]byte{b}) }
 
-func TestMissingRuns_EnumeratesScatteredHolesOldestFirst(t *testing.T) {
-	// Delivered=497; window: 498-506 missing, 507 known, 508 missing,
-	// 509-510 known, 511-512 missing.
-	pending := make([]*url.TxID, 0, 15)
-	for i := 0; i < 9; i++ {
-		pending = append(pending, nil) // 498-506
+// gapFixture builds a conductor and the ledger entry for one inbound stream:
+// delivered to `delivered`, with staging holding `hold`.
+//
+// The held set is STAGING's now, not the record's (#4189), so a fixture says
+// what the node holds rather than laying out a pending array. That rules out a
+// shape the old fixtures could write and the executor could never produce: a
+// trailing hole above everything held. A number above the highest thing we hold
+// is not known to exist — nothing sighted it — and finding it is reconcile's
+// job, from what the SOURCE says it produced.
+func gapFixture(delivered uint64, hold ...uint64) (*Conductor, *protocol.PartitionSyntheticLedger) {
+	c := &Conductor{
+		Partition: &protocol.PartitionInfo{ID: "BVN1", Type: protocol.PartitionTypeBlockValidator},
+		Staging:   execute.NewStaging(),
 	}
-	pending = append(pending, txid(1), nil, txid(2), txid(3), nil, nil) // 507..512
+	source := protocol.PartitionUrl("BVN2")
+	part := &protocol.PartitionSyntheticLedger{Url: source, Delivered: delivered}
+	for _, n := range hold {
+		c.Staging.Hold(c.syntheticStream(source), n, txid(byte(n)))
+	}
+	return c, part
+}
 
-	part := &protocol.PartitionSyntheticLedger{Delivered: 497, Pending: pending}
-	runs := missingRuns(part)
-	assert.Equal(t, [][2]uint64{{498, 506}, {508, 508}, {511, 512}}, runs)
+// stageHeld and stageHeldAnchors put `hold` into a conductor's staging for the
+// stream inbound from source. The held set lives there now, not in the ledger
+// record (#4189), so a fixture seeds it here rather than laying out Pending.
+func stageHeld(c *Conductor, source *url.URL, hold ...uint64) {
+	for _, n := range hold {
+		c.staging().Hold(c.syntheticStream(source), n, source.WithTxID([32]byte{byte(n), byte(n >> 8)}))
+	}
+}
+
+func stageHeldAnchors(c *Conductor, source *url.URL, hold ...uint64) {
+	for _, n := range hold {
+		c.staging().Hold(c.anchorStream(source), n, source.WithTxID([32]byte{byte(n), byte(n >> 8)}))
+	}
+}
+
+func TestMissingRuns_EnumeratesScatteredHolesOldestFirst(t *testing.T) {
+	// Delivered=497; holding 507, 509, 510 and 513 — so 498-506, 508 and
+	// 511-512 are holes, and 513 is what proves the last of them exists.
+	c, part := gapFixture(497, 507, 509, 510, 513)
+	assert.Equal(t, [][2]uint64{{498, 506}, {508, 508}, {511, 512}}, c.missingRuns(part))
 }
 
 func TestMissingRuns_EmptyAndFullyKnownWindows(t *testing.T) {
-	assert.Empty(t, missingRuns(&protocol.PartitionSyntheticLedger{Delivered: 5}))
-	assert.Empty(t, missingRuns(&protocol.PartitionSyntheticLedger{
-		Delivered: 5,
-		Pending:   []*url.TxID{txid(1), txid(2)},
-	}))
+	c, part := gapFixture(5)
+	assert.Empty(t, c.missingRuns(part), "nothing sighted above the watermark is nothing missing")
+
+	c, part = gapFixture(5, 6, 7)
+	assert.Empty(t, c.missingRuns(part), "a contiguous held run has no holes")
 }
 
 // rangeRecorder records every SequenceRange attempt and refuses to serve, so
@@ -78,13 +109,6 @@ func TestRequestMissingSynthetics_PullsEveryRunUnderOneHeldAnchor(t *testing.T) 
 	ledger.Url = self.JoinPath(protocol.Synthetic)
 	part := ledger.Partition(source)
 	part.Delivered = 497
-	part.Received = 512
-	pending := make([]*url.TxID, 0, 15)
-	for i := 0; i < 9; i++ {
-		pending = append(pending, nil) // 498-506
-	}
-	pending = append(pending, txid(1), nil, txid(2), txid(3), nil, nil) // 507..512
-	part.Pending = pending
 
 	anchors := new(protocol.AnchorLedger)
 	anchors.Url = self.JoinPath(protocol.AnchorPool)
@@ -103,6 +127,11 @@ func TestRequestMissingSynthetics_PullsEveryRunUnderOneHeldAnchor(t *testing.T) 
 		SyntheticHealWindow: time.Nanosecond, // claim fires on the second scan
 	}
 	c.Globals.Store(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV2Kourou})
+
+	// Holding 507, 509, 510 and 513 — so 498-506, 508 and 511-512 are holes.
+	// 513 is what makes the last run visible at all: a number above everything
+	// staged has not been sighted, and finding THAT is reconcile's job.
+	stageHeld(c, source, 507, 509, 510, 513)
 
 	// First scan registers the jittered claim; second fires.
 	require.NoError(t, c.requestMissingSynthetics(context.Background(), batch))

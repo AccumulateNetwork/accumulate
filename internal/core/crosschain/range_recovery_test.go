@@ -164,24 +164,18 @@ func TestRangeProofAnchor_RefusesWhenAnchorLedgerIsMissing(t *testing.T) {
 // #4138 test plan correction after reading the real code.
 
 func TestFirstMissingRun_SkipsKnownEntriesBeforeTheFirstHole(t *testing.T) {
-	known := protocol.PartitionUrl("BVN2").WithTxID([32]byte{1})
-	part := &protocol.PartitionSyntheticLedger{
-		Delivered: 5,
-		Pending:   []*url.TxID{known, nil, nil},
-	}
-	first, last, ok := firstMissingRun(part)
+	// Holding 6 and 9: 7 and 8 are the hole, and 6 sits before it.
+	c, part := gapFixture(5, 6, 9)
+	first, last, ok := c.firstMissingRun(part)
 	require.True(t, ok)
 	assert.Equal(t, uint64(7), first, "the run starts at the first HOLE, past the known entry")
 	assert.Equal(t, uint64(8), last)
 }
 
 func TestFirstMissingRun_KnownEntryEndsARunOnlyOnceStarted(t *testing.T) {
-	known := protocol.PartitionUrl("BVN2").WithTxID([32]byte{1})
-	part := &protocol.PartitionSyntheticLedger{
-		Delivered: 5,
-		Pending:   []*url.TxID{nil, known, nil},
-	}
-	first, last, ok := firstMissingRun(part)
+	// Holding 7 and 9: the holes are 6 and 8, separated by 7.
+	c, part := gapFixture(5, 7, 9)
+	first, last, ok := c.firstMissingRun(part)
 	require.True(t, ok)
 	assert.Equal(t, uint64(6), first)
 	assert.Equal(t, uint64(6), last,
@@ -189,13 +183,9 @@ func TestFirstMissingRun_KnownEntryEndsARunOnlyOnceStarted(t *testing.T) {
 }
 
 func TestFirstMissingRun_AllKnownReturnsFalse(t *testing.T) {
-	known := protocol.PartitionUrl("BVN2").WithTxID([32]byte{1})
-	part := &protocol.PartitionSyntheticLedger{
-		Delivered: 5,
-		Pending:   []*url.TxID{known, known, known},
-	}
-	_, _, ok := firstMissingRun(part)
-	assert.False(t, ok, "a fully-known pending window has nothing to recover")
+	c, part := gapFixture(5, 6, 7, 8)
+	_, _, ok := c.firstMissingRun(part)
+	assert.False(t, ok, "a stream holding everything it has sighted has nothing to recover")
 }
 
 // recoverSyntheticsViaRange: the range pull itself. Clamping and proof reuse
@@ -423,13 +413,11 @@ func TestUsabilityIsCheckedBeforeClaimingASequence(t *testing.T) {
 	self := protocol.PartitionUrl("BVN1")
 	source := protocol.PartitionUrl("BVN2")
 
-	// The stream has a visible gap: delivered 5, received 9, holes at 6-8.
+	// The stream has a visible gap: delivered 5, holding 9, holes at 6-8.
 	synth := new(protocol.SyntheticLedger)
 	synth.Url = self.JoinPath(protocol.Synthetic)
 	sp := synth.Partition(source)
 	sp.Delivered = 5
-	sp.Received = 9
-	sp.Pending = []*url.TxID{nil, nil, nil, source.WithTxID([32]byte{9})}
 
 	// The range path is UNUSABLE: nothing from BVN2 has ever been anchored
 	// into us (the BVN→BVN case), so rangeProofAnchor refuses.
@@ -446,6 +434,7 @@ func TestUsabilityIsCheckedBeforeClaimingASequence(t *testing.T) {
 	ranger := &recordingRanger{}
 	var submitted []*messaging.Envelope
 	c := newRangeConductor(ranger, &submitted)
+	stageHeld(c, source, 9)
 
 	// Seed the per-stream throttle as already fired, so the scan acts now.
 	c.synthHealState = map[string]*synthHealEntry{
@@ -466,12 +455,10 @@ func TestRecoverAnchorsViaRange_SendsBareSequenceOptions(t *testing.T) {
 	self := protocol.PartitionUrl("BVN1")
 	source := protocol.DnUrl()
 
-	held := source.WithTxID([32]byte{8})
 	ledger := new(protocol.AnchorLedger)
 	ledger.Url = self.JoinPath(protocol.AnchorPool)
 	lp := ledger.Partition(source)
 	lp.Delivered = 5
-	lp.Pending = []*url.TxID{nil, nil, held}
 
 	db := database.OpenInMemory(nil)
 	batch := db.Begin(true)
@@ -481,6 +468,7 @@ func TestRecoverAnchorsViaRange_SendsBareSequenceOptions(t *testing.T) {
 	ranger := &fakeRanger{list: &merkle.ReceiptList{}, src: source, dst: self}
 	var submitted []*messaging.Envelope
 	c := newRangeConductor(ranger, &submitted)
+	stageHeldAnchors(c, source, 8) // 6 and 7 are the hole; 8 is what exposes it
 	c.synthHealState = map[string]*synthHealEntry{
 		source.JoinPath("anchor-range").String(): {want: 6, fireAt: time.Now().Add(-time.Hour)},
 	}
@@ -499,12 +487,10 @@ func TestRecoverAnchorsViaRange_IncrementsHealsTotalWithAnchorRangeLabel(t *test
 	counter := mHeals.WithLabelValues("anchor-range", "BVN1", protocol.Directory)
 	before := testutil.ToFloat64(counter)
 
-	held := source.WithTxID([32]byte{8})
 	ledger := new(protocol.AnchorLedger)
 	ledger.Url = self.JoinPath(protocol.AnchorPool)
 	lp := ledger.Partition(source)
 	lp.Delivered = 5
-	lp.Pending = []*url.TxID{nil, nil, held}
 
 	db := database.OpenInMemory(nil)
 	batch := db.Begin(true)
@@ -514,6 +500,7 @@ func TestRecoverAnchorsViaRange_IncrementsHealsTotalWithAnchorRangeLabel(t *test
 	ranger := &fakeRanger{list: &merkle.ReceiptList{}, src: source, dst: self}
 	var submitted []*messaging.Envelope
 	c := newRangeConductor(ranger, &submitted)
+	stageHeldAnchors(c, source, 8) // 6 and 7 are the hole; 8 is what exposes it
 	c.Heals = new(HealCounters)
 	c.synthHealState = map[string]*synthHealEntry{
 		source.JoinPath("anchor-range").String(): {want: 6, fireAt: time.Now().Add(-time.Hour)},

@@ -26,6 +26,28 @@ it, and each has exactly one owner:
 that staging does not hold.** Healing asks staging directly; it does not infer
 what the node has from anything the block wrote.
 
+The ledger is opened for **`Delivered` and nothing else** — what has been
+processed. A number at or below it needs nothing done about it: it is not a gap,
+it is not re-requested, and it is not counted. Everything above it that the node
+is not holding is a gap, and everything above it that the node IS holding is
+already in hand.
+
+**Which streams to consider comes from staging, not from the ledger.** A stream
+that has only staged has delivered nothing and therefore has no ledger entry —
+so a scan driven by the ledger's entries would never look at the stream most
+likely to be stuck. A stream staging holds nothing for has nothing for this scan
+to find: it is current, or it has lost a tail that no local evidence can reveal,
+which is the reconcile path's job and is answered by the source's `Produced`.
+
+That is the division between the two, and it is worth stating plainly because
+they look like the same mechanism:
+
+- **The gap scan** fills holes BELOW what the node has sighted. Its evidence is
+  local: holding a number proves the source produced everything under it.
+- **Reconcile** fills the tail ABOVE it. It has no local evidence at all — a
+  stream that lost its first messages, or its last, looks exactly like a stream
+  with nothing to do — so it asks the source what it produced.
+
 That is the whole of it, and it is why staging must be askable. A healer that
 cannot see what the executor holds has only two options, and both are wrong:
 fetch everything above the watermark, which re-fetches what the node already
@@ -35,11 +57,12 @@ executor read its own output.
 It also gives H2's rule for free — skipping what is already staged is not a
 separate optimisation, it is what "gap" means.
 
-**After a restart, staging is empty**, so every number above `Delivered` is a
-gap and healing refetches it. That is the cost of not persisting staging, it is
-bounded by how far behind the node was, and it is paid here rather than by the
-executor keeping state it would have to write every block. A node that was
-current stages nothing and so loses nothing.
+**A restart changes nothing here.** Staging is durable ([executor.md](executor.md),
+Restart), so a restarted node holds what it held and has the same gaps it had.
+That is not a convenience: staging decides what a block executes, so a node that
+came back holding less than its peers would execute a shorter run and produce a
+different block hash. Healing is not what covers a restart, and could not be —
+it is asynchronous, and the divergence would be immediate.
 
 ### Generating requests
 

@@ -94,6 +94,7 @@ type nodeFactory struct {
 	peerID     peer.ID
 	store      keyvalue.Beginner
 	database   *database.Database
+	staging    *execute.Staging
 	eventBus   *events.Bus
 	svcHandler *message.Handler
 }
@@ -160,6 +161,7 @@ func (f *nodeFactory) Build(p *Partition) *Node {
 	n.peerID = f.getPeerID()
 	n.consensus = f.app(f)
 	n.services = f.getSvcHandler()
+	n.staging = f.staging // nil for a partition type with no executor
 
 	// This is a hack
 	if f.typ != protocol.PartitionTypeBlockSummary {
@@ -436,6 +438,16 @@ func (f *nodeFactory) getStore() keyvalue.Beginner {
 	return f.store
 }
 
+// getStaging returns the node's staging store — what its executor has received
+// and cannot execute yet (#4189). One per node, shared by the executor that
+// writes it and the conductor that asks it what the node holds.
+func (f *nodeFactory) getStaging() *execute.Staging {
+	if f.staging == nil {
+		f.staging = execute.NewStaging()
+	}
+	return f.staging
+}
+
 func (f *nodeFactory) getDatabase() *database.Database {
 	if f.database != nil {
 		return f.database
@@ -551,6 +563,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 	// Set up the executor options
 	execOpts := block.ExecutorOptions{
+		Staging:       f.getStaging(),
 		Logger:        f.getLogger(),
 		Database:      f.getDatabase(),
 		Key:           f.network.PrivValKey,
@@ -589,6 +602,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Querier:             api.Querier2{Querier: f.getServices()},
 		Dispatcher:          execOpts.NewDispatcher(),
 		Sequencer:           f.getServices().Private(),
+		Staging:             f.getStaging(),
 		RunTask:             execOpts.BackgroundTaskLauncher,
 		DropInitialAnchor:   f.dropInitialAnchor,
 		EnableAnchorHealing: &enableAnchorHealing,

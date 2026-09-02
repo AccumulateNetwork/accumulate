@@ -121,27 +121,22 @@ func TestRunExclusive_ScansDoNotStack(t *testing.T) {
 // entries would both waste the source's work and break the proof bound (the
 // held entry is what proves the hole).
 func TestFirstMissingRun_RequestsOnlyMissing(t *testing.T) {
-	held := protocol.PartitionUrl("BVN1").WithTxID([32]byte{1})
-
-	// Delivered through 5; 6 and 7 missing; 8 held; 9 missing.
-	part := &protocol.PartitionSyntheticLedger{
-		Delivered: 5,
-		Pending:   []*url.TxID{nil, nil, held, nil},
-	}
-	first, last, ok := firstMissingRun(part)
+	// Delivered through 5; 6 and 7 missing; 8 held.
+	c, part := gapFixture(5, 8)
+	first, last, ok := c.firstMissingRun(part)
 	require.True(t, ok)
 	require.Equal(t, uint64(6), first)
 	require.Equal(t, uint64(7), last, "the run must stop at the held entry — request only the first contiguous hole")
 
 	// Nothing missing: nothing requested.
-	part = &protocol.PartitionSyntheticLedger{Delivered: 5, Pending: []*url.TxID{held}}
-	_, _, ok = firstMissingRun(part)
+	c, part = gapFixture(5, 6)
+	_, _, ok = c.firstMissingRun(part)
 	require.False(t, ok, "a stream with no holes must request nothing")
 
-	// Empty pending: nothing visible to request (the reconcile pull handles
+	// Nothing staged: nothing visible to request (the reconcile pull handles
 	// invisible tail loss separately).
-	part = &protocol.PartitionSyntheticLedger{Delivered: 5}
-	_, _, ok = firstMissingRun(part)
+	c, part = gapFixture(5)
+	_, _, ok = c.firstMissingRun(part)
 	require.False(t, ok)
 }
 
@@ -232,12 +227,10 @@ func TestRecoverAnchorsViaRange_OnlyMissing_OneProofReused(t *testing.T) {
 
 	// Our anchor ledger: delivered through 5 from the source, 6-7 missing,
 	// 8 held (its arrival is what exposed the hole).
-	held := source.WithTxID([32]byte{8})
 	ledger := new(protocol.AnchorLedger)
 	ledger.Url = self.JoinPath(protocol.AnchorPool)
 	lp := ledger.Partition(source)
 	lp.Delivered = 5
-	lp.Pending = []*url.TxID{nil, nil, held}
 
 	db := database.OpenInMemory(nil)
 	batch := db.Begin(true)
@@ -259,6 +252,7 @@ func TestRecoverAnchorsViaRange_OnlyMissing_OneProofReused(t *testing.T) {
 	c.Globals.Store(&core.GlobalValues{
 		ExecutorVersion: protocol.ExecutorVersionV2Kourou,
 	})
+	stageHeldAnchors(c, source, 8) // 6 and 7 are the hole; 8 is what exposes it
 
 	// Seed the request throttle as already-fired so the pull happens now;
 	// the throttle itself is covered by TestClaimSyntheticRequest_NoFlood.

@@ -78,6 +78,7 @@ type Staging struct {
 // kind that reads a neighbouring stream's entry when it is wrong. A number is
 // the key here because a number is what it is.
 type stagedStream struct {
+	id      StreamID
 	held    map[uint64]*url.TxID
 	highest uint64
 }
@@ -89,7 +90,7 @@ func (s *Staging) streamLocked(id StreamID) *stagedStream {
 	k := id.key()
 	e, ok := s.m[k]
 	if !ok {
-		e = &stagedStream{held: map[uint64]*url.TxID{}}
+		e = &stagedStream{id: id, held: map[uint64]*url.TxID{}}
 		if s.m == nil {
 			s.m = map[string]*stagedStream{}
 		}
@@ -181,6 +182,27 @@ func (s *Staging) Release(id StreamID, delivered uint64) {
 			delete(e.held, n)
 		}
 	}
+}
+
+// Streams lists every stream staging is holding something for.
+//
+// Healing needs it because a stream that has only STAGED has no ledger entry to
+// find it by: the ledger records what a block delivered, and a stream whose
+// first message went missing has delivered nothing. Before #4189 the entry
+// existed regardless, because receipts were written into the ledger — which is
+// the coupling being removed, so the set of known streams has to come from
+// staging as well.
+func (s *Staging) Streams() []StreamID {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	ids := make([]StreamID, 0, len(s.m))
+	for _, e := range s.m {
+		if len(e.held) > 0 {
+			ids = append(ids, e.id)
+		}
+	}
+	return ids
 }
 
 // Missing returns every contiguous run of numbers in (delivered, through] that

@@ -35,6 +35,11 @@ type Node struct {
 	consensus  *consensus.Node
 	database   *database.Database
 	services   *message.Handler
+
+	// staging is what this node's executor has received and cannot execute yet
+	// (#4189). Held here because it is not database state and there is no other
+	// way for a test to ask a node what it is holding.
+	staging *execute.Staging
 }
 
 // ConsensusStatus implements [api.ConsensusService].

@@ -130,30 +130,53 @@ the position once.
 
 ### Restart
 
-Staging is not persisted and is not restored. It is **rebuilt**.
+**Staging survives a restart.** It is durable, and a node that has lost it has
+not lost performance — it has lost agreement.
 
-The split follows from what each thing is:
+The reason is that staging decides what executes. A block delivers the
+contiguous run starting at `Delivered + 1`, taken from this block's arrivals
+*and from what is already held*; so two nodes holding different things execute
+different runs from the same block. Suppose peers hold 5 through 9 and a
+restarted node holds nothing. Number 4 arrives. The peers deliver 4 through 9;
+the restarted node delivers 4 alone. Different `Delivered`, different account
+state, different BPT root — a divergent block hash. That is a consensus fault,
+not a node that is briefly behind, and healing cannot repair it because healing
+is asynchronous and the divergence is immediate.
 
-- **`Delivered` is block output.** What a block executed is durable because the
-  block is durable; it is written when the block closes and read back on start.
-  It is the one part of a stream's position that survives.
-- **Everything above `Delivered` is staging** — received, not yet executed — and
-  staging is executor state fed only by consensus. A restarted executor begins
-  with it empty.
+So "empty on restart, refilled by healing" is not available. It would be sound
+only if staging were an optimisation, and it is not: it is an input to what the
+block does.
 
-So a node that restarts knows exactly where each stream stands and holds nothing
-above it. Consensus continues to deliver, and anything that was staged and is
-not re-delivered is a gap like any other — which is what healing is for. There
-is no separate recovery path, because a restart leaves the executor in a state
-the protocol already handles: behind, with holes.
+The two halves are therefore both durable, and they are durable in different
+ways because they answer to different things:
 
-This is why staging can be in memory. Persisting it would mean writing, every
-block, state that is reconstructible from the thing that is already durable, and
-would put the executor back to reading what it wrote.
+- **`Delivered` is block output and is hashed.** What a block executed is part
+  of what the block agreed. It lives in the stream's ledger, in an account, in
+  the BPT.
+- **What is HELD is durable and NOT hashed.** It is a deterministic function of
+  the consensus stream — every node is fed the same messages and holds the same
+  set — so it does not need to be hashed to be agreed. Hashing it is what forced
+  it into an account, and being in an account is what forced it to be bounded.
 
-The cost is bounded and is paid by healing: a restart re-obtains whatever was
-staged, which is as much as the node was behind. A node that was current stages
-nothing and loses nothing.
+Not hashing it is the whole of the fix. The bound existed because the held set
+was an array in a record rewritten and hashed every block; a record written per
+entry and outside the BPT has no such limit.
+
+Two consequences follow, and both are requirements rather than remarks:
+
+- **Staging is part of a snapshot.** A snapshot is what a new node starts from,
+  so a snapshot without staging produces exactly the divergence above on the
+  first block the new node executes.
+- **Nothing derived from staging is written into hashed state** unless it is
+  derived through execution. `Delivered` qualifies: it is what executed. A
+  convenience copy of "how far this stream has been sighted" does not — a node
+  restoring from an older snapshot would write a different number than its
+  peers, for a field nothing needs.
+
+The message bodies were never the problem: they are recorded when they are
+accepted, before the stream advances, and they are already durable. What was
+lost across a restart was only the INDEX of which numbers are held — which is
+precisely what the old bound discarded, and what this makes durable instead.
 
 ### A block does not begin with an empty slate
 
@@ -207,10 +230,16 @@ transactions are ever candidates for a shard.
 4. **A message that reaches staging has been accepted, and accepted means
    recorded.** There is no state in which the node holds a message and reports
    not holding it.
-5. **Block state never feeds back into staging.**
-6. **State changes only as a side effect of execution**, and become durable only
+5. **Block state never feeds back into staging.** The only thing the executor
+   reads from a stream's ledger is `Delivered` — what has been processed.
+   Nothing else about an inbound stream lives there.
+6. **Staging is identical on every node.** It is fed only by consensus, so it
+   is a deterministic function of the same input everywhere; it is durable so a
+   restart cannot make it otherwise. A node whose staging differs from its
+   peers' will execute a different run and produce a different block hash.
+7. **State changes only as a side effect of execution**, and become durable only
    at the block's single commit.
-7. **A ready message executes; a not-ready message executes nothing.**
+8. **A ready message executes; a not-ready message executes nothing.**
 
 ### Versioning
 
@@ -371,13 +400,72 @@ the ledger inside every message's child batch, and because a child does not
 share its parent's value each read deep-copied the whole ledger, making a drain
 of n messages cost O(n²) (`TestSequenceLedgerCostIsPerRead`).
 
-`streamPosition` is the block's working copy of one stream — `delivered`,
-`received`, and the staged entries between. It is built once per stream per
-block from the ledger's `Delivered` and what staging holds, advanced in place,
-and at close **only `Delivered` is written back**. Staging is not block output,
-so nothing the block writes can feed back into what the executor believes it
-holds; a message is held because staging holds it, never because a record says
-so.
+`streamPosition` is the block's working copy of one stream: `delivered`, plus a
+reference to staging for what is held. It is built once per stream per block
+from the ledger's `Delivered` and advanced in place, and at close **only
+`Delivered` is written back**. It holds a reference rather than a copy of the
+held set — a copy is a snapshot, and a snapshot of what the node holds
+disagreeing with what the node holds is the whole defect.
+
+### Staging is a store, and this is what it answers
+
+Staging is one store per node, shared by everything that needs it. It is not the
+block's, and it is not the healer's: both ask the same store, because two views
+of what the node holds is exactly the disagreement that livelocked the network.
+
+A stream is named by the account whose ledger tracks it and the partition the
+messages come from. Anchors and synthetics between the same pair of partitions
+are separate streams — anchors tracked by the anchor pool, synthetics by the
+synthetic account — so conflating them would let an anchor's position gate a
+synthetic's.
+
+| question | asked by | answer |
+|---|---|---|
+| hold this number | the executor, on a receipt | recorded; the first sighting of a number wins |
+| do we hold *n* | the executor, building a run | the message ID, or no |
+| how far has this stream been sighted | healing | the highest number ever held: what says a stream is behind |
+| what is missing in (delivered, through] | healing | the contiguous runs nothing holds, oldest first, bounded |
+| which streams exist | healing | every stream holding anything |
+| release through *n* | the block, on commit | everything at or below *n* is dropped |
+
+Four rules govern it, and each of them is a defect that has actually happened:
+
+**The first sighting of a number wins.** A number can be offered twice — a block
+discarded and re-executed, a healed message racing the original — and both carry
+the same message, because the number identifies it. Keeping the first means the
+same input always produces the same staging.
+
+**The set of streams is staging's, not the ledger's.** A stream that has only
+staged has delivered nothing, so it has no ledger entry to be found by. Before
+the split, an entry existed regardless, because receipts were written into the
+ledger — the coupling being removed. A stream staging holds nothing for has
+nothing to heal: it is either current, or it has lost a tail nobody here can
+see, which is reconcile's job and reaches it from the source's `Produced`.
+
+**The high-water mark does not go backwards.** Releasing what was delivered
+drops the held entries but leaves the mark: "this stream was behind" is what
+makes a hole below the mark a hole, and forgetting it says the stream had never
+been behind at all.
+
+**Release happens on COMMIT, not at flush.** Until the batch commits the
+delivery has not happened. Dropping a staged message for a block that is then
+discarded makes the node fetch back across the network something it still holds,
+which is the failure this whole change removes, reintroduced from the other end.
+
+### What the stream ledger is for
+
+Exactly one field, in the inbound direction: **`Delivered`** — what has been
+processed. It is read to place the stream and written when the block closes.
+
+Nothing else about an inbound stream lives there. There is no pending array,
+because the held set is staging's; there is no received mark, because how far a
+stream has been sighted is staging's and writing it back would put a per-node
+value into hashed state (see Restart). `Produced` remains, but it belongs to the
+other direction — what this partition has produced FOR that one.
+
+And a message at or below `Delivered` requires nothing at all. It is not healed,
+not re-recorded, and not counted: it has been processed, and that is the end of
+it.
 
 `msg_sequenced.go`, `SequencedMessage`: `isReady` asks the block's position
 whether the message is next. Ready messages execute; not-ready messages record
