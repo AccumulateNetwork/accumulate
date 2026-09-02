@@ -394,6 +394,34 @@ arrival; one authorized by quorum takes as many executions as it takes
 signatures. Under this shape both are a staging decision followed by one
 execution.
 
+### There is no cascade
+
+A message does not queue further messages into a later pass of the running
+bundle. Staging decides the whole run before anything executes, so a successor
+does not need to be discovered while its predecessor is running.
+
+What replaced it is the run entry. Staging places the messages that will execute
+this block, and each is entered through an internal `MessageIsReady` naming the
+staged message; the executor loads it and calls its executor.
+
+**A run entry enters at pass 1, not pass 0**, and the number is load-bearing.
+Internal message types cannot be marshalled, so one arriving in a submitted
+envelope would have to be forged — the executor therefore refuses internal types
+at pass 0. A run entry is internally generated in exactly the same sense as the
+old mechanism's queued message, which was handed to a *later* pass, so it must
+enter at a later pass too.
+
+Getting it wrong is silent. The guard returns an error *status* rather than an
+error, so a staged entry looks like it ran: every staged entry fails, every run
+stops at its first one, and only freshly arrived messages are ever delivered.
+The symptom is a backlog that cannot close — 40 delivered per block against 40
+arriving — and it is invisible in the statuses. It is found by asking the ledger
+whether it moved.
+
+The one thing still carried to a later pass is a **network update**, produced
+when a directory anchor brings one. That is a genuine consequence of executing
+the anchor, not a deferred delivery.
+
 ### Parallel execution
 
 `exec_parallel.go`. `ProcessAll` runs consecutive single-identity user envelopes
@@ -484,3 +512,16 @@ These contradict section 1 and are filed, not fixed here:
   The cost is O(validators) per anchor. Measured in run `20260902T132651Z`,
   anchors were 445 against 180,997 synthetics, so this is small today and grows
   linearly with validator count.
+- **`CascadeDeliveryQueue` is dead state that is still hashed.** It held ready
+  sequenced messages whose execution the old cascade deferred. Nothing writes it
+  any more — every remaining reference is a reader — but it survives as an
+  account field with its accessor, dirty tracking, walk and commit; snapshots
+  carry it; and `observer_prod` folds it into the **account hash** beside
+  `LocalDeliveryQueue`, on the reasoning that delivery queues are consensus
+  state because they decide what executes at the next block's `Begin` (#4155).
+
+  It is inert only by accident: because nothing writes it, it is always empty,
+  so it never contributes to the hash. It is one accidental writer away from
+  changing account hashes, and it is walked on every hash of the synthetic
+  account. The queue that is still real is `LocalDeliveryQueue`; this one went
+  with the cascade and should have gone with it.
