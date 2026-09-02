@@ -26,6 +26,19 @@ source achieves this by adding hashes to the next receipt it was going to send
 anyway — no per-destination bookkeeping, no special range, and no request path
 to serve.
 
+**How far back a receipt can reach is bounded.** `MaxReceiptListElements`
+(4,096) caps the elements a collection proof may carry, and it binds at three
+points that must agree: the sender will not build a package whose span exceeds
+it (`packageSpanFits`), the sequencer refuses a range request larger than it,
+and the receiver rejects a proof carrying more. A destination further behind
+than that cap cannot be covered by one receipt, so closing the gap takes
+successive receipts, each covering the span it can.
+
+The bound exists because a receipt list is untrusted input and verifying one
+hashes every element before it can be known to be junk — unlike staging, which
+holds only what consensus already accepted. It is a limit on what an attacker
+can make a validator do, not a limit on what the protocol is allowed to need.
+
 A later collection proof does not invalidate an earlier one. Each verifies
 against its own merkle state and receipt, so work already done against the proof
 in hand stays valid when new proofs arrive — which is what lets a drain converge

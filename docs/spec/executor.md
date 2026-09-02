@@ -19,15 +19,21 @@ Read as a sequence of gates, each of which a message must pass before the next:
 1. **Consensus** decides which messages exist and in what order. It is the only
    input. Batches are executed in the certificate's canonical payload order —
    any node-local order diverges chain entries and BPT roots across validators.
-2. **Admission** decides whether a message is *provable*. A synthetic message
-   carries a proof that must terminate at a directory anchor this node has. If
-   the anchor has not arrived, the message is not refused — it is pending, and
-   is retried when the anchor does arrive.
-3. **Staging** decides whether a message is *next*. Sequenced streams execute in
+2. **Validity** is settled first, on the message alone. A proof that does not
+   hash to its own claimed anchor is refused outright — `BadRequest`, never
+   staged. This needs no state beyond the message, so it cannot be deferred and
+   is not a timing question.
+3. **Admission** then decides only *timing*: is the proof's terminal anchor one
+   this node has yet? Because validity is already established, a negative here
+   has exactly one meaning — the destination's directory-root knowledge has not
+   caught up to the range the proof covers. That is ordinary lag, so the message
+   is pending and retried, never failed. Failing it would be terminal: the same
+   message could never be re-applied once the anchor arrived.
+4. **Staging** decides whether a message is *next*. Sequenced streams execute in
    order with no gaps; a message whose predecessor is missing waits.
-4. **Execution** runs the message. Nothing before this point changes protocol
+5. **Execution** runs the message. Nothing before this point changes protocol
    state.
-5. **The database write is a side effect of execution**, not a stage of its own.
+6. **The database write is a side effect of execution**, not a stage of its own.
    Executors write into the block's batch as they run; the batch is committed
    once, when the block closes. There is no separate "persist" step and no
    partial commit.
@@ -65,9 +71,11 @@ uses the same one.
 ### The invariants
 
 1. **A stream executes in order, with no gaps.** There is no skip.
-2. **Nothing executes until it is admissible.** An unproven synthetic is
-   pending, never executed and never terminally failed — failing it would mean
-   it could not be re-applied when its anchor arrives.
+2. **An invalid proof is refused; a not-yet-provable one waits.** The two are
+   different answers to different questions and must not be conflated. A proof
+   that does not verify is a `BadRequest` and never enters staging. A proof that
+   verifies but names an anchor this node lacks is pending, never terminally
+   failed.
 3. **Everything received is held until it can be processed.** Staging is
    unbounded, because the protocol offers no alternative: a message that cannot
    be dropped and cannot yet execute must be kept.
@@ -144,21 +152,55 @@ through a bundle whose block is a shell. The batch is discarded unconditionally.
   `V2KourouEnabled`, because what a node is willing to accept is consensus
   critical.
 
-### Admission — the proof gate
+### Validity — the proof itself
+
+`msg_synthetic.go`, `SyntheticMessage.check`, before anything else:
+
+- A collection proof (`ReceiptList`) is refused unless `V2Kourou` is active, and
+  a proof may carry a receipt or a receipt list, never both.
+- `ReceiptList.Validate` replays `MerkleState` through `Elements`, requires the
+  last element to be the receipt's start and the recomputed anchor to equal the
+  receipt's anchor, then validates the receipt. So a list proves every element
+  it carries, in any order, without needing any other element — and it also
+  proves each element's absolute index, because the state is counted.
+- A list is validated **once per envelope**, not per member: a package's members
+  share one proof, and rehashing it per member is a CheckTx denial of service.
+- `MaxReceiptListElements` (4,096) bounds how many elements a proof may carry.
+  Unlike the other bounds in this document, a receipt list is untrusted input
+  and verification hashes every element before it can know the proof is junk, so
+  the bound limits what an attacker can make a validator do. It binds in three
+  places and all three must agree: the sender will not build a package whose
+  span exceeds it (`packageSpanFits`), the sequencer refuses a range request
+  larger than it, and the receiver rejects a proof carrying more.
+- Failing any of these is `BadRequest`. The message does not reach admission or
+  staging.
+
+### Admission — the timing gate
 
 `msg_synthetic.go`, `SyntheticMessage.process`:
 
 - A replica-accepted message (#4140) carries no proof; its proof was checked and
   absorbed when it first arrived.
-- Otherwise `isAdmissible` verifies the proof terminates at a directory anchor.
-  Individual and collection proofs terminate at the same trust root, so one
-  check covers both. The check is shared with staging (#4169 step 3); what a
-  negative *means* is decided here.
+- Otherwise `isAdmissible` asks one question and does no verification:
+  `AnchorChain(Directory).Root().IndexOf(anchor)`. The anchor's own signatures
+  were checked when it was applied to that chain, and the proof's integrity was
+  checked above, so the only thing left to establish is whether this node has
+  the anchor yet. Individual and collection proofs terminate at the same trust
+  root, so one check covers both. `provingAnchorIndex` returns where in the
+  chain it sits, which staging uses to tell an anchor applied THIS block from
+  one applied earlier (#4169 step 0c).
 - A missing anchor returns `errors.Pending` under `V2Kourou`, not a failure:
   failing it terminally wedges recovery, because the same message could never be
   re-applied once the anchor arrived (#4048).
 
-So an unproven synthetic never reaches sequencing.
+An anchor's gate is a validator signature quorum rather than a proof to a
+directory root, with one shortcut: a collection proof under a known directory
+root authorizes the anchor by itself (#4056). A not-yet-arrived anchor does not
+reject it — it falls through to the quorum, because healing resubmits until a
+current anchor extends the destination's knowledge past the proven range.
+
+So a message that is not yet provable never reaches sequencing, and one that can
+never be proven never reaches admission.
 
 ### Staging — the ordering gate
 
