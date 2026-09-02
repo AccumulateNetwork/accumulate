@@ -23,6 +23,7 @@ stops.
 |---|---|
 | **Spec** | Executor, database and healing written. Healing was rewritten after the first pass: gaps come from staging, requests are generated in staging, two senders are chosen by the previous block's hash, and healing activates on a cadence. |
 | **E1 + H4 + E2 + E3** | **Done**, on `issue-4189-staging-out-of-account`. Removed from the differences: the code matches the spec. |
+| **H5** | **Done**, same branch. Cadence and sender selection replace the jitter, back-off and breakers. |
 | **D3** | **Implemented, not merged.** `TestDeep` on branch `issue-4196-kvtest-deep` (`f3339116e`). |
 | **Everything else** | Not started. |
 
@@ -58,13 +59,17 @@ from re-fetching what the node holds to re-fetching *everything*. A gap becomes
 a number in `(Delivered, Produced]` that staging does not hold — which means
 staging must be askable.
 
-**#4201 — H5: generate requests in staging.** Follows immediately, because it
-needs the same thing H4 does. Requests are computed at the end of the anchor and
-synthetic groups on an activation block, deduped per gap, and sent by two
+**#4201 — H5: compute requests from staging, on a cadence. DONE.** Requests are
+computed at a block boundary on an activation block, and pulled by two
 validators chosen from the previous block's hash. The `Conductor`'s per-node
-jitter, back-off window, failure breaker and per-gap scheduling are deleted:
-with two senders and an activation every few blocks there is no load to manage,
-and a lost request costs nothing because the gap is still a gap next time.
+jitter, back-off windows, failure breaker and per-gap scheduling are deleted:
+with an activation every few blocks there is no rate to manage, and a lost
+request costs nothing because the gap is still a gap next time.
+
+The pair applies to **pulls only**. A request is fungible — whoever asks, the
+answer returns through consensus and heals everyone. A signature is not, so the
+anchor push runs on the cadence for every validator; selecting a pair there
+withholds the rest of the quorum.
 
 **#4190 — E2: `isReady` stops reading block state. DONE**, with #4189. It reads
 a position built from the ledger's `Delivered` and staging's own records, so
@@ -126,7 +131,7 @@ soak.
 ## Order of work
 
 ```
-E1+H4+E2 ─▶ H5 ─▶ H2 ─▶ H3 ─▶ H1         the critical path (first step DONE)
+E1+H4+E2 ─▶ H5 ─▶ H2 ─▶ H3 ─▶ H1         the critical path (through H5 DONE)
 E6, D2, D3 ─▶ D4                          parallel, any time
 E5, E4, D1                                after
 ```

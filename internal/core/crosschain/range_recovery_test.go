@@ -9,7 +9,6 @@ package crosschain
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
@@ -65,7 +64,6 @@ func newRangeConductor(seq private.Sequencer, submitted *[]*messaging.Envelope) 
 			*submitted = append(*submitted, env)
 			return false, nil // capture, do not dispatch
 		},
-		SyntheticHealWindow: time.Minute,
 	}
 	c.Globals.Store(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV2Kourou})
 	return c
@@ -436,11 +434,6 @@ func TestUsabilityIsCheckedBeforeClaimingASequence(t *testing.T) {
 	c := newRangeConductor(ranger, &submitted)
 	stageHeld(t, batch, c, source, 9)
 
-	// Seed the per-stream throttle as already fired, so the scan acts now.
-	c.synthHealState = map[string]*synthHealEntry{
-		source.String(): {want: 6, fireAt: time.Now().Add(-time.Hour)},
-	}
-
 	require.NoError(t, c.requestMissingSynthetics(context.Background(), batch))
 
 	assert.Empty(t, ranger.calls, "the unusable range path must not issue a range request")
@@ -469,9 +462,6 @@ func TestRecoverAnchorsViaRange_SendsBareSequenceOptions(t *testing.T) {
 	var submitted []*messaging.Envelope
 	c := newRangeConductor(ranger, &submitted)
 	stageHeldAnchors(t, batch, c, source, 8) // 6 and 7 are the hole; 8 is what exposes it
-	c.synthHealState = map[string]*synthHealEntry{
-		source.JoinPath("anchor-range").String(): {want: 6, fireAt: time.Now().Add(-time.Hour)},
-	}
 
 	require.NoError(t, c.recoverAnchorsViaRange(context.Background(), batch, source))
 
@@ -502,9 +492,6 @@ func TestRecoverAnchorsViaRange_IncrementsHealsTotalWithAnchorRangeLabel(t *test
 	c := newRangeConductor(ranger, &submitted)
 	stageHeldAnchors(t, batch, c, source, 8) // 6 and 7 are the hole; 8 is what exposes it
 	c.Heals = new(HealCounters)
-	c.synthHealState = map[string]*synthHealEntry{
-		source.JoinPath("anchor-range").String(): {want: 6, fireAt: time.Now().Add(-time.Hour)},
-	}
 
 	require.NoError(t, c.recoverAnchorsViaRange(context.Background(), batch, source))
 	require.Len(t, submitted, 2)

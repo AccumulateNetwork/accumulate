@@ -138,6 +138,26 @@ validator computes the same request set, so one that is not selected has already
 done the work and is ready to be selected at the next activation without
 discovering anything new.
 
+**Selection applies to a pull, never to a push.** The two look alike — both are
+a node acting to close a gap — and treating them alike breaks the network.
+
+A request is **fungible**. Whoever asks, the answer comes back through consensus
+and heals every validator at once, so the other N−2 askers add nothing but load.
+That is the whole argument for choosing a pair.
+
+A signature is **not fungible**. Only validator N can produce validator N's
+signature, so a node re-sending its own anchor signature is contributing
+something no other node can contribute. Selecting a pair there does not save
+duplicate work, it WITHHOLDS the rest of the quorum — and a destination that
+lost an anchor then waits for signatures that are never coming.
+
+So the anchor push runs on the cadence for every validator, while every pull —
+a missing synthetic, an anchor range, a reconcile against what a source says it
+produced — runs on the cadence for the selected pair. The test for which one a
+piece of healing is: **does another node's action make mine unnecessary?** If
+yes it is a pull and a pair is enough; if no it is a contribution and everyone
+owes theirs.
+
 A request is still not consensus: the node asks the source's sequencer, and the
 answer is submitted back and re-enters through consensus, sorted and staged and
 executed like any other message. What is deterministic is *which* requests are

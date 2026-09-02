@@ -188,41 +188,6 @@ executor's reads rather than the healer's fetches.
 
 **Size**: small.
 
-### H5. Requests are generated outside staging, per node, with jitter
-
-*[#4201](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4201)*
-
-**Spec** ([healing.md](healing.md)): requests are computed from staging at a
-block boundary — the moment the gap set is final — on the blocks where healing
-activates. Every validator computes the
-same gaps and therefore the same requests, and staging dedupes several askers of
-the same gap into one request. Two of them send, selected by the previous
-block's hash, and send immediately.
-
-**Code**: generation lives in the `Conductor`, outside staging and outside the
-block. `claimSyntheticRequest` schedules a per-node **random jittered delay** on
-first sight of a gap and enforces a back-off, "so a stalled stream isn't
-hammered by every validator on every block", relying on the first answer landing
-before the other validators fire. No pair is selected: every validator
-eventually fires for every gap, and the jitter only staggers them.
-
-That is a heuristic standing in for agreement the system already has. Every
-validator sees the same consensus stream and could compute the same request set
-directly; the jitter exists only because the computation was moved out of the
-place that knows.
-
-The `Conductor` also carries machinery the design does not need: a per-source
-back-off, a failure breaker, and per-gap scheduling state. With two senders and
-an activation every few blocks there is no load to manage, and a lost request
-costs nothing because the gap is still a gap at the next activation.
-
-There is no cadence either: the `Conductor` scans on its own schedule rather
-than activating on a block, so "when to ask again" is answered by the back-off
-window (`syntheticHealWindow`, 10 s) instead of by a number of blocks.
-
-**Size**: medium, and it lands with H4 — both are consequences of healing asking
-staging rather than reading what the block wrote. Most of it is deletion.
-
 ### H2. Healing is not ordered
 
 *[#4191](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4191)*

@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"math/big"
 	"sync"
-	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -593,17 +592,11 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		DropInitialAnchor:   f.dropInitialAnchor,
 		EnableAnchorHealing: &enableAnchorHealing,
 
-		// Healing is paced by wall-clock time, but the simulator executes
-		// dozens of blocks per second — tests that rely on healing (e.g.
-		// TestDropInitialAnchor) would starve under the default pacing. The
-		// same goes for the synthetic gap scan: its jitter/back-off window
-		// defaults to 10s of wall clock, which never elapses within a
-		// StepUntil, so a wedged stream would sit scheduled-but-never-fired
-		// for the whole test (#4138). Not nanoseconds, though: the window
-		// doubles as the pull's RPC deadline, and a deadline of zero fails
-		// every pull before it starts.
-		HealInterval:        time.Nanosecond,
-		SyntheticHealWindow: 10 * time.Millisecond,
+		// Nothing to override here any more. Healing used to be paced by wall
+		// clock, which the simulator had to defeat because it runs dozens of
+		// blocks a second and a 10s window never elapses inside a StepUntil
+		// (#4138). It is paced by block index now (#4201), so the simulator
+		// gets the same cadence as a real network by doing nothing.
 
 		// Setting Intercept is not necessary because the dispatcher will
 		// intercept messages

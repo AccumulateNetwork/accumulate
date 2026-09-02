@@ -9,7 +9,6 @@ package crosschain
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -128,9 +127,8 @@ func TestRequestMissingSynthetics_PullsEveryRunUnderOneHeldAnchor(t *testing.T) 
 
 	seq := new(rangeRecorder)
 	c := &Conductor{
-		Partition:           &protocol.PartitionInfo{ID: "BVN1", Type: protocol.PartitionTypeBlockValidator},
-		Sequencer:           seq,
-		SyntheticHealWindow: time.Nanosecond, // claim fires on the second scan
+		Partition: &protocol.PartitionInfo{ID: "BVN1", Type: protocol.PartitionTypeBlockValidator},
+		Sequencer: seq,
 	}
 	c.Globals.Store(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV2Kourou})
 
@@ -139,9 +137,8 @@ func TestRequestMissingSynthetics_PullsEveryRunUnderOneHeldAnchor(t *testing.T) 
 	// staged has not been sighted, and finding THAT is reconcile's job.
 	stageHeld(t, batch, c, source, 507, 509, 510, 513)
 
-	// First scan registers the jittered claim; second fires.
-	require.NoError(t, c.requestMissingSynthetics(context.Background(), batch))
-	time.Sleep(time.Millisecond)
+	// One scan. There is no claim to register first: a scan that runs pulls
+	// what is missing, and the cadence is what decides whether it runs (#4201).
 	require.NoError(t, c.requestMissingSynthetics(context.Background(), batch))
 
 	require.Equal(t, [][2]uint64{{498, 506}, {508, 508}, {511, 512}}, seq.ranges,

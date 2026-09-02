@@ -28,14 +28,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// syntheticHealWindow is the jitter/back-off window for receiver-pull synthetic
-// healing. When a synthetic stream stalls, each validator waits a random delay
-// in [0, syntheticHealWindow) before requesting the missing message, and backs
-// off for the same window between requests. ~10 block times at ~1s/block, so
-// the first requester's re-submission is delivered — advancing Delivered on
-// every validator — before most others fire. See issue #4064.
-const syntheticHealWindow = 10 * time.Second
-
 // syntheticHealBatch caps how many missing messages one scan pulls per stream.
 // Drain time must not scale with backlog: a stream that missed hundreds of
 // messages during an outage has to catch up in a window or two, not minutes
@@ -65,43 +57,6 @@ var mReconcile = promauto.NewCounterVec(prometheus.CounterOpts{
 	Help:      "Interval-reconcile pull attempts by outcome",
 }, []string{"outcome"}) // attempted | succeeded | failed
 
-// synthHealEntry tracks this node's back-off state for a single stalled inbound
-// synthetic stream.
-type synthHealEntry struct {
-	want    uint64    // the sequence number this stream is stalled on
-	fireAt  time.Time // when this node may first request it (first-seen + jitter)
-	lastTry time.Time // when this node last requested it (for back-off)
-}
-
-// claimSequence reports whether this node should (re)submit a heal for a
-// specific sequence number. Suppression by Delivered alone is not enough: if
-// delivery is blocked for any reason, Delivered never advances, every
-// validator's back-off expires and they all re-submit the same holes forever —
-// a heal storm that sustains the freeze (#4067). Bounding by DISTINCT hole
-// instead of by elapsed time keeps heal traffic proportional to the real gap.
-func (c *Conductor) claimSequence(source *url.URL, seq uint64, now time.Time, window time.Duration) bool {
-	c.synthHealMu.Lock()
-	defer c.synthHealMu.Unlock()
-	if c.seqHealAt == nil {
-		c.seqHealAt = map[string]time.Time{}
-	}
-	key := source.String() + "#" + strconv.FormatUint(seq, 10)
-	if last, ok := c.seqHealAt[key]; ok && now.Sub(last) < window {
-		return false
-	}
-	c.seqHealAt[key] = now
-
-	// Bound the map: drop entries older than 10 windows.
-	if len(c.seqHealAt) > 10000 {
-		for k, t := range c.seqHealAt {
-			if now.Sub(t) > 10*window {
-				delete(c.seqHealAt, k)
-			}
-		}
-	}
-	return true
-}
-
 // requestMissingSynthetics implements receiver-pull-on-gap healing. When an
 // inbound synthetic stream is stalled — the node is holding something it cannot
 // execute — the predecessor Delivered+1 was never received, so nothing can
@@ -126,11 +81,6 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 
-	now := time.Now()
-	window := c.SyntheticHealWindow
-	if window <= 0 {
-		window = syntheticHealWindow
-	}
 	for _, source := range c.inboundSources(ledger) {
 		// Partition returns the entry if there is one and a zero entry if there
 		// is not. A stream that has delivered nothing is delivered through 0,
@@ -143,19 +93,7 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 		if c.sighted(batch, part) <= part.Delivered {
 			continue
 		}
-		// Circuit breaker: a source that failed the last several pulls is down
-		// or drowning; pulling harder starves the transport for everyone
-		// (#4115). Skip it until its backoff expires.
-		if !c.remoteAllowed(part.Url.String()) {
-			continue
-		}
 		want := part.Delivered + 1
-
-		// Jittered check-then-fire: only one (or two) validators actually pull
-		// before the gap closes for everyone.
-		if !c.claimSyntheticRequest(part.Url, want, now) {
-			continue
-		}
 
 		// Range requests under collection proofs beat N per-message pulls,
 		// and unlike them they do not need the directory to have caught up
@@ -182,21 +120,17 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 					done, err := c.recoverSyntheticsViaRange(ctx, part.Url, first, last, held)
 					switch {
 					case err != nil:
+						// Never abandon the batch: delivery is ordered, so
+						// failing to pull one run must not stop the rest. A
+						// failed run is still a gap at the next activation,
+						// which is the whole of the retry story.
 						allDone = false
-						c.classifyRemoteError(part.Url.String(), err)
 						slog.ErrorContext(ctx, "Failed to recover synthetics by range",
 							"source", part.Url, "destination", c.Url(), "start", first, "end", last, "error", err)
 					case done:
-						c.remoteOK(part.Url.String())
 						budget -= last - first + 1
 					default:
 						allDone = false
-					}
-					// A source whose circuit just opened is down or drowning;
-					// stop hammering it with the remaining runs.
-					if !c.remoteAllowed(part.Url.String()) {
-						allDone = false
-						break
 					}
 				}
 				if allDone {
@@ -212,40 +146,28 @@ func (c *Conductor) requestMissingSynthetics(ctx context.Context, batch *databas
 		// pull is idempotent.
 		healed := 0
 		for _, seq := range c.missingNumbers(batch, part) {
-			if !c.claimSequence(part.Url, seq, now, window) {
-				continue
-			}
 			err := c.requestSyntheticFrom(ctx, part.Url, seq)
 			if err != nil {
 				// Never abandon the batch: delivery is ordered, so failing to
 				// pull the FIRST hole must not stop us pulling the rest — and
 				// a stream must never wedge because one pull failed (#4067).
-				// But feed the breaker: enough consecutive failures and the
-				// source is skipped for a backoff instead of hammered.
-				c.classifyRemoteError(part.Url.String(), err)
 				slog.ErrorContext(ctx, "Failed to request missing synthetic",
 					"source", part.Url, "destination", c.Url(), "number", seq, "error", err)
-				if !c.remoteAllowed(part.Url.String()) {
-					break
-				}
 				continue
 			}
-			c.remoteOK(part.Url.String())
 			healed++
 			if healed >= syntheticHealBatch {
 				break
 			}
 		}
-		if healed == 0 && c.remoteAllowed(part.Url.String()) {
-			// Delivered+1 may be missing without a pending entry
+		if healed == 0 {
+			// Delivered+1 may be missing without anything staged above it.
 			err := c.requestSyntheticFrom(ctx, part.Url, want)
 			if err != nil {
-				c.classifyRemoteError(part.Url.String(), err)
 				slog.ErrorContext(ctx, "Failed to request missing synthetic",
 					"source", part.Url, "destination", c.Url(), "number", want, "error", err)
 				continue
 			}
-			c.remoteOK(part.Url.String())
 		}
 	}
 	return nil
@@ -414,62 +336,14 @@ func (c *Conductor) sightedOn(batch *database.Batch, id execute.StreamID, delive
 	return delivered
 }
 
-// claimSyntheticRequest returns true if this node should request source→self
-// message `want` right now. It schedules a per-node random delay on first sight
-// of a gap and enforces a back-off between requests, so a stalled stream isn't
-// hammered by every validator on every block.
-func (c *Conductor) claimSyntheticRequest(source *url.URL, want uint64, now time.Time) bool {
-	window := c.SyntheticHealWindow
-	if window <= 0 {
-		window = syntheticHealWindow
-	}
-
-	c.synthHealMu.Lock()
-	defer c.synthHealMu.Unlock()
-
-	if c.synthHealState == nil {
-		c.synthHealState = map[string]*synthHealEntry{}
-	}
-
-	key := source.String()
-	e := c.synthHealState[key]
-	if e == nil || e.want != want {
-		// A new (or advanced) gap. Schedule this node's jittered fire time; do
-		// not fire yet. Different validators pick independent delays, so they
-		// wake at different times and the first re-submission closes the gap
-		// for the rest.
-		c.synthHealState[key] = &synthHealEntry{
-			want:   want,
-			fireAt: now.Add(randDuration(window)),
-		}
-		return false
-	}
-
-	// Check-then-fire: the gap is re-read from the ledger every block, so if
-	// another validator already healed it, `want` will have advanced (or the
-	// stream will no longer be stalled) and we never reach here.
-	if now.Before(e.fireAt) {
-		return false // still waiting out the jitter window
-	}
-	if !e.lastTry.IsZero() && now.Sub(e.lastTry) < window {
-		return false // backing off since the last request
-	}
-
-	e.lastTry = now
-	return true
-}
-
 // requestSyntheticFrom pulls a single missing synthetic message from the source
 // partition's sequencer service and resubmits it into this partition.
 func (c *Conductor) requestSyntheticFrom(ctx context.Context, source *url.URL, num uint64) error {
-	// Bound the pull: a hung RPC must not pin the goroutine (and its read
-	// batch) forever. The heal window is a natural bound — by the time it
-	// expires the back-off would allow a fresh attempt anyway (#4066).
-	window := c.SyntheticHealWindow
-	if window <= 0 {
-		window = syntheticHealWindow
-	}
-	ctx, cancel := context.WithTimeout(ctx, window)
+	// Bound the pull: a hung RPC must not pin the goroutine, or its read batch,
+	// forever (#4066). The bound need not be generous — the next activation is
+	// due regardless, and an expired request is simply a gap that is still a
+	// gap (#4201).
+	ctx, cancel := context.WithTimeout(ctx, def(c.HealTimeout, DefaultHealTimeout))
 	defer cancel()
 
 	// Pull the missing synthetic — message, proof, and the source's signature —
@@ -809,11 +683,6 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 	}
 
 	me := c.Url()
-	now := time.Now()
-	window := c.SyntheticHealWindow
-	if window <= 0 {
-		window = syntheticHealWindow
-	}
 	for _, peer := range globals.Network.Partitions {
 		if strings.EqualFold(peer.ID, c.Partition.ID) {
 			continue
@@ -825,10 +694,6 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 		// pulls in the 17-minute 20260820T050616Z shakedown — ~13/s per node
 		// of retries against sources that kept answering "end of the chain"
 		// (#4086, #4115).
-		if !c.remoteAllowed(source.String()) {
-			continue
-		}
-
 		// Ask the source what it has produced for us. The answer is an unproven
 		// hint and does not need to be trusted: acting on it means issuing a
 		// pull, and the pulled message arrives proof-carrying and is verified
@@ -871,9 +736,6 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 		// is only the tail the destination cannot see: sequences the source has
 		// produced that have never been sighted here at all.
 		//
-		// Availability is checked BEFORE claiming: claiming and then falling back
-		// would leave the per-message path suppressed by the claim the fast path
-		// just made, and the stream would sit unhealed until the window expired.
 		if held, ok := c.rangeProofAnchor(batch, source); ok {
 			overdue := have
 			for seq := have + 1; seq <= produced && overdue-have < syntheticHealBatch; seq++ {
@@ -882,19 +744,17 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 				}
 				overdue = seq
 			}
-			if overdue > have && c.claimSequence(source, have+1, now, window) {
+			if overdue > have {
 				mReconcile.WithLabelValues("attempted").Inc()
 				done, err := c.recoverSyntheticsViaRange(ctx, source, have+1, overdue, held)
 				switch {
 				case err != nil:
 					mReconcile.WithLabelValues("failed").Inc()
-					c.classifyRemoteError(source.String(), err)
 					slog.ErrorContext(ctx, "Reconcile: failed to recover synthetics by range",
 						"module", "synthetic", "source", source, "destination", me,
 						"start", have+1, "end", overdue, "error", err)
 				case done:
 					mReconcile.WithLabelValues("succeeded").Inc()
-					c.remoteOK(source.String())
 					slog.WarnContext(ctx, "Reconcile: pulled messages a gap scan cannot see",
 						"module", "synthetic", "source", source, "destination", me,
 						"received", have, "produced", produced, "requested", overdue-have)
@@ -913,21 +773,10 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 			if !c.gapIsOverdue(source, seq, blockIndex) {
 				continue
 			}
-			// claimSequence, NOT claimSyntheticRequest. The latter keeps
-			// per-source back-off around a single `want` value because #4064
-			// heals one hole at a time; calling it across a range makes each
-			// sequence clobber the previous one's state and they all back off
-			// against each other. Observed: 21 of 26 overdue sequences silently
-			// discarded, zero pulls, no error. claimSequence is keyed per
-			// (source, sequence), which is what a range needs.
-			if !c.claimSequence(source, seq, now, window) {
-				continue
-			}
 			mReconcile.WithLabelValues("attempted").Inc()
 			err := c.requestSyntheticFrom(ctx, source, seq)
 			if err != nil {
 				mReconcile.WithLabelValues("failed").Inc()
-				c.classifyRemoteError(source.String(), err)
 				slog.ErrorContext(ctx, "Reconcile: failed to request missing synthetic",
 					"module", "synthetic", "source", source, "destination", me,
 					"number", seq, "error", err)
@@ -942,7 +791,6 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 				continue
 			}
 			mReconcile.WithLabelValues("succeeded").Inc()
-			c.remoteOK(source.String())
 			healed++
 		}
 		if healed > 0 {

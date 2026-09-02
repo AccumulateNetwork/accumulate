@@ -34,43 +34,6 @@ import (
 // aborts were all, at bottom, healing machinery doing more work than the gap
 // it was closing.
 
-// TestClaimSyntheticRequest_NoFlood pins the request throttle: on first sight
-// of a gap a node schedules a jittered fire time and does NOT request; it
-// fires only after the jitter elapses; and consecutive requests for the same
-// gap are separated by at least the back-off window. Every validator runs
-// this logic every block — without the throttle, twelve validators would
-// hammer the source with the same request dozens of times per second.
-func TestClaimSyntheticRequest_NoFlood(t *testing.T) {
-	c := new(Conductor)
-	c.SyntheticHealWindow = time.Minute
-	src := protocol.PartitionUrl("BVN2")
-	t0 := time.Now()
-
-	// First sight schedules; it must not fire immediately.
-	require.False(t, c.claimSyntheticRequest(src, 7, t0),
-		"first sight of a gap schedules a jittered request, it must not fire")
-
-	// Within the window the claim may or may not fire depending on the
-	// jitter; after a full window it must fire.
-	require.True(t, c.claimSyntheticRequest(src, 7, t0.Add(time.Minute+time.Millisecond)),
-		"after the full jitter window the request must fire")
-
-	// Immediately after firing: back-off. No second request inside the window.
-	require.False(t, c.claimSyntheticRequest(src, 7, t0.Add(time.Minute+2*time.Millisecond)),
-		"a request immediately after another is a flood")
-	require.False(t, c.claimSyntheticRequest(src, 7, t0.Add(90*time.Second)),
-		"still inside the back-off window")
-
-	// After the back-off elapses the gap may be retried.
-	require.True(t, c.claimSyntheticRequest(src, 7, t0.Add(2*time.Minute+2*time.Millisecond)),
-		"after the back-off the retry is allowed")
-
-	// The gap advancing (someone healed part of it) starts a fresh jitter —
-	// again no immediate fire.
-	require.False(t, c.claimSyntheticRequest(src, 9, t0.Add(2*time.Minute+3*time.Millisecond)),
-		"an advanced gap is a new gap: schedule, do not fire")
-}
-
 // TestRunExclusive_ScansDoNotStack: healing scans are scheduled from every
 // block, and a scan that outlives the block interval must not stack a second
 // copy of itself — copies used to stack without bound (#4115).
@@ -247,18 +210,11 @@ func TestRecoverAnchorsViaRange_OnlyMissing_OneProofReused(t *testing.T) {
 			submitted = append(submitted, env)
 			return false, nil // capture, do not dispatch
 		},
-		SyntheticHealWindow: time.Minute,
 	}
 	c.Globals.Store(&core.GlobalValues{
 		ExecutorVersion: protocol.ExecutorVersionV2Kourou,
 	})
 	stageHeldAnchors(t, batch, c, source, 8) // 6 and 7 are the hole; 8 is what exposes it
-
-	// Seed the request throttle as already-fired so the pull happens now;
-	// the throttle itself is covered by TestClaimSyntheticRequest_NoFlood.
-	c.synthHealState = map[string]*synthHealEntry{
-		source.JoinPath("anchor-range").String(): {want: 6, fireAt: time.Now().Add(-time.Hour)},
-	}
 
 	require.NoError(t, c.recoverAnchorsViaRange(context.Background(), batch, source))
 

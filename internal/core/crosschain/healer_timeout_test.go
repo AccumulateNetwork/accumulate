@@ -84,18 +84,14 @@ func TestRequestMissingSynthetics_ReturnsWhenAPeerNeverAnswers(t *testing.T) {
 	c := &Conductor{
 		Partition: &protocol.PartitionInfo{ID: "BVN1", Type: protocol.PartitionTypeBlockValidator},
 		Sequencer: seq,
-		// Nanosecond window: the claim's jittered fire time lands in the
-		// past immediately, so the second scan fires instead of waiting.
-		SyntheticHealWindow: time.Nanosecond,
 	}
 	c.Globals.Store(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV2Kourou})
 	stageHeld(t, batch, c, source, 501)
 
-	// First scan only registers the claim (jittered check-then-fire) and
-	// returns without pulling.
-	require.NoError(t, c.requestMissingSynthetics(context.Background(), batch))
-	time.Sleep(time.Millisecond)
-
+	// Straight to the pull. There is no claim to register first: a scan that
+	// runs pulls what is missing, and the cadence decides whether it runs
+	// (#4201). The context is the only thing standing between a stuck peer and
+	// a wedged healer, which is what this test is about.
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 

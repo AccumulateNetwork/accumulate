@@ -11,7 +11,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"log/slog"
-	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
@@ -400,11 +399,6 @@ func (c *Conductor) recoverAnchorsViaRange(ctx context.Context, batch *database.
 	first, last := runs[0][0], runs[0][1]
 	if last-first+1 > protocol.MaxReceiptListElements {
 		last = first + protocol.MaxReceiptListElements - 1
-	}
-
-	// Throttle per (source, run) so every block does not re-pull the same run.
-	if !c.claimSyntheticRequest(source.JoinPath("anchor-range"), first, time.Now()) {
-		return nil
 	}
 
 	// Warn, not Info: nodes default to error level for this module, so an Info
