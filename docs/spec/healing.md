@@ -41,6 +41,51 @@ bounded by how far behind the node was, and it is paid here rather than by the
 executor keeping state it would have to write every block. A node that was
 current stages nothing and so loses nothing.
 
+### Generating requests
+
+A request is **not consensus**. It is a node asking the source's sequencer for a
+message, and the answer is submitted back into consensus like anything else.
+That asymmetry decides the whole design:
+
+- **Requesting is not a protocol decision**, so it need not be deterministic and
+  no node needs anyone's agreement to ask. Any node that sees a gap may ask.
+- **The answer is**, so a healed message re-enters through consensus and is
+  sorted, staged and executed exactly like one that arrived normally. Nothing
+  about healing bypasses the path.
+- **Duplicate answers are free.** Every validator of the destination sees the
+  same gap, because they see the same consensus stream. If several ask, several
+  answers are submitted, and the block's sort keeps the first sighting of each
+  sequence number and discards the rest. Over-requesting costs bandwidth, never
+  correctness.
+
+Because duplicates are harmless but not free, requests are **spread rather than
+suppressed**. On first sight of a gap a node schedules its own jittered fire
+time and does not ask immediately; validators pick independent delays, so they
+wake at different moments and the first answer usually closes the gap before the
+others fire. A node that has asked backs off before asking again.
+
+The gap is re-read every block, so a node that was going to ask discovers the
+gap has closed and never asks. Suppression falls out of re-reading rather than
+out of coordination.
+
+### Managing requests
+
+Four rules, each answering a way a healer can make things worse:
+
+- **A failure must not stop the batch.** Delivery is ordered, so failing to pull
+  one hole must not stop the others being pulled. A stream must never wedge
+  because one request failed.
+- **A source that keeps failing is skipped, not hammered.** Consecutive failures
+  trip a breaker and the source is left alone for a back-off. Retrying a
+  partition that cannot answer converts one node's problem into everyone's.
+- **A deterministic answer is not retried.** "Not found" is the source telling
+  the truth about its own state, not a transport hiccup; retrying it
+  milliseconds later multiplies the request rate for no possible gain. A
+  transport failure is retried, and routing picks a different peer each attempt,
+  so one transient "no live peers" cannot wedge a stream permanently.
+- **A request is bounded in time.** A hung call must not pin the goroutine, or
+  its read batch, indefinitely.
+
 ### Order
 
 Heal from the **newest gap to the lowest gap**.
@@ -153,12 +198,20 @@ That is the coupling the section above replaces: it reads what the block wrote
 rather than asking the executor what it holds, and it is why the two changes
 cannot be made separately.
 
+- `claimSyntheticRequest` decides whether this node asks now. On first sight of
+  a gap it schedules a jittered fire time and returns false; afterwards it fires
+  once per back-off window. The window is `syntheticHealWindow`, 10 s by
+  default.
 - `requestSyntheticFrom(ctx, source, num)` pulls one missing synthetic from the
   source partition's sequencer: `c.Sequencer.Sequence(source, destination, num)`.
   It retries up to three times, because routing picks a peer per attempt and one
   transient "no live peers" once wedged a stream permanently (#4067). A
   `NotFound` is a deterministic answer about the source's state and is not
-  retried (#4086, #4115).
+  retried (#4086, #4115). The call is bounded by the heal window, since by the
+  time it expires the back-off would allow a fresh attempt anyway (#4066).
+- A failed pull is classified into a per-source breaker (`classifyRemoteError`,
+  `remoteAllowed`) and the scan continues to the next hole rather than
+  abandoning the batch.
 - `buildSyntheticSubmission` assembles the envelope from the sequencer's
   response — the sequenced message, the proof, and the source's signature. A
   non-nil proof overrides the per-message one: that is the collection proof
