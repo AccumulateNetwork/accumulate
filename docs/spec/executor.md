@@ -52,9 +52,26 @@ execution.
 A message that reaches execution is validated again on the path above, by the
 gates that can only be evaluated with block state in hand.
 
+### Draining
+
+A stream's messages arrive out of order. One that is not next cannot execute, so
+staging holds it — and when the message it was waiting for arrives, everything
+held behind it becomes executable at once.
+
+**Draining a stream is executing that backlog**: the contiguous run of staged
+messages starting at the delivery point, in order, until the next gap. It is the
+only way a stream advances by more than one message, and it is why a single
+missing message stalls a stream and a single arrival can release thousands.
+
+The word is used for one other thing in this document, and they are unrelated:
+the **delivery queues** drained at `Begin` hold locally produced messages, not
+staged stream messages. Where the distinction matters the text says which.
+
 ### Ordering within a block
 
 Fixed, and each choice is a decision:
+
+Each step below drains the streams named, in the sense above.
 
 1. **Anchor streams**, because an anchor extends the directory root that admits
    synthetics — so a synthetic can use an anchor that arrived in the same block
@@ -100,7 +117,7 @@ are seen, `Begin`:
 - records the previous block's votes and evidence, unless that block was empty;
 - **drains the delivery queues** — everything the previous block queued, local
   synthetics and locally produced messages, is delivered before any of this
-  block's own.
+  block's own. These are the delivery queues, not staged streams.
 
 So "the executor's input is consensus" is true of *messages*; the block's work
 also includes the tail of the block before it.
