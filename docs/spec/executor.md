@@ -10,11 +10,16 @@ produces the same block and the same state hash.
 ### The path
 
 ```
-consensus ──▶ envelopes ──▶ admission ──▶ staging ──▶ execution ──▶ batch ──▶ commit
-                            (proof)      (ordering)   (effects)             (one, at close)
+consensus ──▶ sort ──▶ stage ──▶ execute ──▶ batch ──▶ commit
+              (streams) (what can run)  (effects)      (one, at close)
+                            ▲               │
+                            └───────────────┘
+                          re-evaluated as the block runs
 ```
 
-Read as a sequence of gates, each of which a message must pass before the next:
+A message must satisfy each of the following before it executes. Validity is
+decided on the message alone; admissibility and readiness are decided *by
+staging*, which is why they are not separate passes:
 
 1. **Consensus** decides which messages exist and in what order. It is the only
    input. Batches are executed in the certificate's canonical payload order —
@@ -23,14 +28,15 @@ Read as a sequence of gates, each of which a message must pass before the next:
    hash to its own claimed anchor is refused outright — `BadRequest`, never
    staged. This needs no state beyond the message, so it cannot be deferred and
    is not a timing question.
-3. **Admission** then decides only *timing*: is the proof's terminal anchor one
-   this node has yet? Because validity is already established, a negative here
+3. **Admissibility** is a question of *timing*: is the proof's terminal anchor
+   one this node has yet? Because validity is already established, a negative
    has exactly one meaning — the destination's directory-root knowledge has not
    caught up to the range the proof covers. That is ordinary lag, so the message
    is pending and retried, never failed. Failing it would be terminal: the same
    message could never be re-applied once the anchor arrived.
-4. **Staging** decides whether a message is *next*. Sequenced streams execute in
-   order with no gaps; a message whose predecessor is missing waits.
+4. **Readiness** is whether the message is *next* on its stream. Sequenced
+   streams execute in order with no gaps; a message whose predecessor is missing
+   waits. A user transaction is on no stream and is always ready.
 5. **Execution** runs the message. Nothing before this point changes protocol
    state.
 6. **The database write is a side effect of execution**, not a stage of its own.
@@ -38,8 +44,11 @@ Read as a sequence of gates, each of which a message must pass before the next:
    once, when the block closes. There is no separate "persist" step and no
    partial commit.
 
-Nothing later feeds back into anything earlier. What a block delivered is an
-output; staging never reads it back as an input.
+Staging and execution are not two passes but a loop: executing changes the
+answers staging gives, so staging is asked again. What must *not* feed back is
+the block's persisted output — staging reads the streams' positions and the
+anchor chain as the block builds them, never the ledger record the block writes
+at its close.
 
 ### Validation is a separate, earlier thing
 
@@ -67,40 +76,53 @@ The word is used for one other thing in this document, and they are unrelated:
 the **delivery queues** drained at `Begin` hold locally produced messages, not
 staged stream messages. Where the distinction matters the text says which.
 
-### Ordering within a block
+### Sorting, staging, and re-evaluating
 
-Fixed, and each choice is a decision:
+Everything consensus delivers is **sorted once**, in a single pass. Each message
+is asked which stream it belongs to; if it belongs to one it is recorded as an
+arrival on that stream, keyed by its sequence number, and the first sighting of
+a number wins — the same message may appear twice in a block and applies at most
+once. A message belonging to no stream is a user transaction.
 
-Each step below drains the streams named, in the sense above.
+So anchors and synthetics are sorted up front. There is no later step that
+discovers more of them.
 
-1. **Anchor streams**, because an anchor extends the directory root that admits
-   synthetics — so a synthetic can use an anchor that arrived in the same block
-   rather than waiting for the next.
-2. **Synthetic streams**, decided against the chain the anchors just extended,
-   so a deposit lands before a user transaction spends it. A send that would
-   fail on a stale balance succeeds instead: strictly more permissive, and
-   deterministic either way.
-3. **User envelopes**, in arrival order — and anything staging did not place in
-   a run.
-4. **Drain again, repeatedly**, because step 3 *reveals work to the block*. An
-   envelope that arrives out of sequence is recorded pending, and that makes it
-   drainable now rather than next block. A delivery can reveal further messages
-   in turn, so draining repeats until a round delivers nothing.
+**Staging** then applies the transactions and the anchor proofs and evaluates,
+per stream, what can execute:
 
-Step 4 is not tidying. Without it a message whose predecessor arrives in the
-same block waits a whole block for no reason.
+- a **synthetic** may be blocked — by its proof's anchor not having arrived, or
+  by a gap ahead of it in its stream;
+- an **anchor** may be blocked — by quorum or proof;
+- a **user transaction** is on no stream and simply executes.
 
-Two bounds apply, and they bound different things. `maxRunPerBlock` (1,024)
-limits how far one stage may carry a *single stream* in a block, so no block
-inherits an unbounded run. `maxDrainRounds` (8) limits how many times a block
-re-stages what its own execution revealed — two is normally enough, since
-envelopes are processed once and there is one wave of newly recorded messages,
-and the loop stops early when a round delivers nothing. The bound exists so that
-a round which somehow always reports progress cannot hang a block.
+Anchor streams are evaluated before synthetic streams, because an anchor extends
+the directory root that admits synthetics: a synthetic can then use an anchor
+that arrived in the same block instead of waiting one. Within a kind, streams
+run in canonical source order — the directory first, then partitions by ID. Any
+fixed rule would do; what matters is that every node uses the same one.
 
-Within each group, streams run in canonical source order — the directory first,
-then partitions by ID. Any fixed rule would do; what matters is that every node
-uses the same one.
+**What can execute is re-evaluated as the block executes**, and this is not
+tidying up after a discovery. The answer genuinely changes:
+
+- a synthetic's admissibility is read from the directory anchor chain, and the
+  anchor group *extends* that chain, so deciding synthetics before anchors have
+  run judges them against a chain missing this block's anchors;
+- a stream's position moves as the block executes, so a message recorded pending
+  by something processed in this block becomes drainable within this block.
+
+The second is measured, not theoretical. With runs decided once per block,
+delivery settled into exact lockstep with arrival — 40 in, 40 out, every block —
+leaving one block's worth of lag that never closed
+(`TestNoLaggingChannels`).
+
+Re-evaluation repeats until a round delivers nothing. Two bounds apply and they
+bound different things: `maxRunPerBlock` (1,024) limits how far one stage may
+carry a *single stream* in a block, so no block inherits an unbounded run;
+`maxDrainRounds` (8) limits how many times a block re-stages, and exists so a
+round that somehow always reports progress cannot hang a block.
+
+The predecessor of this design re-read the ledger after every single delivery,
+which is where its O(n²) came from. A stage re-reads once per round.
 
 ### A block does not begin with an empty slate
 
@@ -137,8 +159,8 @@ unresolvable is serial.
 Serial by construction: any non-user message, any signature that is not a user
 key signature, any system or partition identity, ACME, any held transaction,
 and any envelope spanning more than one identity. Sequenced messages are serial
-too, which is why staging can settle them before the envelope loop without
-changing where they run.
+too — they belong to streams, and streams are settled by staging — so only user
+transactions are ever candidates for a shard.
 
 ### The invariants
 
@@ -452,10 +474,14 @@ the anchor, not a deferred delivery.
 
 ### Parallel execution
 
-`exec_parallel.go`. `ProcessAll` runs consecutive single-identity user envelopes
-across `ExecutionShards`; at a shard count of one or less it is exactly a loop
-over `Process`. Staging settles anchor streams, then synthetic streams, then the
-envelope loop runs, then a second drain picks up what the loop revealed.
+`exec_parallel.go`. `classify` sorts every envelope once: each message is asked
+for its stream through `streamOf`, recorded as an arrival keyed by sequence
+number with first sighting winning, and an envelope whose messages belong to no
+stream is a user transaction. `stageRuns` then decides one kind of stream's runs
+*at the moment it is called*, and is called again as the block executes —
+`drainRevealed` repeats it until a round delivers nothing. `ProcessAll` runs the
+user transactions across `ExecutionShards`; at a shard count of one or less that
+is exactly a loop over `Process`.
 
 `envelopeIdentity` returns the one identity an envelope's messages belong to, or
 `(nil, false)` meaning serial. Serial covers any non-user message, any signature
