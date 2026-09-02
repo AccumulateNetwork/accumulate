@@ -125,6 +125,14 @@ func (c *recordCache) stats() (hits, misses, promotions, generations uint64, ent
 	return c.hits, c.misses, c.promotions, c.generations, len(c.hot) + len(c.cold)
 }
 
+// CacheStats reports what the read cache has done: hits, misses, promotions
+// from the cold generation, generation turnovers, and entries resident. A high
+// turnover against a low hit rate means the working set does not fit and the
+// entry limit is the wrong number.
+func (d *Database) CacheStats() (hits, misses, promotions, generations uint64, entries int) {
+	return d.cache.stats()
+}
+
 // cacheable reports whether a key names a record the cache may hold.
 //
 // Narrower than isWriteOnce, and by hand rather than by reusing it: this names

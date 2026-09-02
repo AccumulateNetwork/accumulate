@@ -177,6 +177,19 @@ func TestSimulatorRouting(t *testing.T) {
 	for shape, n := range deep {
 		t.Logf("  deep fallback %-40s %d", shape, n)
 	}
+
+	// Is the read cache actually hit by real traffic? Reported, not asserted:
+	// this run is short and its account set small, so the number here is a
+	// signal that the wiring works, not a measurement of what a node sees.
+	var hits, misses uint64
+	for _, db := range dbs {
+		h, m, _, _, _ := db.CacheStats()
+		hits += h
+		misses += m
+	}
+	if n := hits + misses; n > 0 {
+		t.Logf("  read cache: %d hits, %d misses (%.1f%%)", hits, misses, float64(hits)/float64(n)*100)
+	}
 	require.Zero(t, conflicts, "the permanent layer refused a write")
 
 	// A classification that sent nothing to the permanent layer would

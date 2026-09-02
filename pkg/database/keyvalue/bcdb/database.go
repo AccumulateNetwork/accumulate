@@ -712,8 +712,11 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 	// reader older than it is open, so the store -- and therefore the cache
 	// -- never holds a version an open reader must not see. Every write
 	// forgets its key besides.
-	if v, ok := d.cache.get(h); ok {
-		return v, nil
+	canCache := cacheable(key)
+	if canCache {
+		if v, ok := d.cache.get(h); ok {
+			return v, nil
+		}
 	}
 
 	value, err := d.kv.Get(h)
@@ -754,7 +757,7 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 		// key that was never written is
 		return nil, (*database.NotFoundError)(key)
 	}
-	if cacheable(key) {
+	if canCache {
 		d.cache.put(h, value)
 	}
 	return value, nil
