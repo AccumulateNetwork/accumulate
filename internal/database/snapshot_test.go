@@ -390,3 +390,59 @@ func TestSnapshot_PreservesStaging(t *testing.T) {
 	require.Equal(t, [][2]uint64{{6, 6}, {8, 8}}, runs,
 		"the restored node must see the same gaps its peers see")
 }
+
+// A snapshot carries what is HELD, not every message a stream ever received.
+//
+// A record at or below Delivered is a message that has executed: nothing
+// consults it, because the watermark is the cutoff. Collecting the whole history
+// of every stream into every snapshot would restore state that answers no
+// question, and on a busy partition that history is the traffic.
+func TestSnapshot_CarriesOnlyWhatIsHeld(t *testing.T) {
+	synthetic := PartitionUrl("BVN0").JoinPath(Synthetic)
+	source := PartitionUrl("BVN1")
+	id := execute.StreamID{Ledger: synthetic, Source: source}
+
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	defer batch.Discard()
+
+	ledger := new(protocol.SyntheticLedger)
+	ledger.Url = synthetic
+	ledger.Partition(source).Delivered = 5
+	require.NoError(t, batch.Account(synthetic).Main().Put(ledger))
+
+	// 1 through 9 arrived; 1 through 5 have executed.
+	for n := uint64(1); n <= 9; n++ {
+		require.NoError(t, execute.Hold(batch, id, n, source.WithTxID([32]byte{byte(n)})))
+	}
+	require.NoError(t, batch.UpdateBPT())
+	require.NoError(t, batch.Commit())
+
+	buf := new(ioutil.Buffer)
+	_, err := db.Collect(buf, nil, nil)
+	require.NoError(t, err)
+
+	db = database.OpenInMemory(nil)
+	require.NoError(t, database.Restore(db, buf, nil))
+
+	batch = db.Begin(false)
+	defer batch.Discard()
+
+	for n := uint64(6); n <= 9; n++ {
+		_, ok, err := execute.IDOf(batch, id, n)
+		require.NoError(t, err)
+		assert.Truef(t, ok, "%d is held and must survive", n)
+	}
+	for n := uint64(1); n <= 5; n++ {
+		_, ok, err := execute.IDOf(batch, id, n)
+		require.NoError(t, err)
+		assert.Falsef(t, ok, "%d executed; carrying it forward answers no question", n)
+	}
+
+	// And the restored node sees the same gaps, which is the point.
+	high, err := execute.Sighted(batch, id)
+	require.NoError(t, err)
+	runs, err := execute.Missing(batch, id, 5, high, 8)
+	require.NoError(t, err)
+	assert.Empty(t, runs, "6-9 are all held, so nothing is missing")
+}

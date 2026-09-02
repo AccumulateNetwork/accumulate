@@ -240,3 +240,38 @@ func TestStaging_Missing(t *testing.T) {
 		assert.Empty(t, runs, "asking for none returns none")
 	})
 }
+
+// Staging must be IDENTICAL on every node, because it decides what a block
+// executes. It is a deterministic function of the consensus stream, so the same
+// messages must produce the same state whatever order they were seen in — which
+// is what lets it be agreed without being hashed.
+func TestStaging_IsAFunctionOfTheMessagesAlone(t *testing.T) {
+	id := stream(t)
+	numbers := []uint64{9, 3, 7, 3, 12, 1, 7, 20}
+
+	build := func(order []uint64) (uint64, [][2]uint64) {
+		db := database.OpenInMemory(nil)
+		seedLedger(t, db, id)
+		batch := db.Begin(true)
+		defer batch.Discard()
+		for _, n := range order {
+			require.NoError(t, execute.Hold(batch, id, n, txid(n)))
+		}
+		high, err := execute.Sighted(batch, id)
+		require.NoError(t, err)
+		runs, err := execute.Missing(batch, id, 0, high, 16)
+		require.NoError(t, err)
+		return high, runs
+	}
+
+	wantHigh, wantRuns := build(numbers)
+
+	// Every rotation of the same set. A different arrival order is the only
+	// thing that varies between nodes, and it must change nothing.
+	for i := range numbers {
+		rotated := append(append([]uint64{}, numbers[i:]...), numbers[:i]...)
+		high, runs := build(rotated)
+		assert.Equalf(t, wantHigh, high, "rotation %d changed the watermark", i)
+		assert.Equalf(t, wantRuns, runs, "rotation %d changed the gaps", i)
+	}
+}

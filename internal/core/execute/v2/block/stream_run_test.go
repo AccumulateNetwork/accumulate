@@ -231,3 +231,29 @@ func TestBuildRun_ZeroLimitRunsNothing(t *testing.T) {
 	assert.Empty(t, run)
 	assert.Equal(t, []uint64{1, 2, 3}, stagedNumbers(stage), "and nothing is lost")
 }
+
+// WHY staging has to be durable, stated as a test.
+//
+// A block delivers the contiguous run from Delivered+1 taken from this block's
+// arrivals AND from what is already held. So two nodes holding different things
+// execute different runs from the same block — different Delivered, different
+// account state, different BPT root. That is a divergent block hash, not a node
+// briefly behind, and healing cannot repair it because healing is asynchronous
+// and the divergence is immediate.
+//
+// This is what "empty on restart, refilled by healing" would have cost (#4188).
+func TestBuildRun_WhatIsHeldDecidesWhatExecutes(t *testing.T) {
+	arriving := arr(2) // the message that closes the gap
+
+	// A node that kept its staging runs the whole tail behind the arrival.
+	kept, _ := buildRun(runPos(t, 1, 3, 4, 5, 6), arriving, noLimit)
+	require.Equal(t, []uint64{2, 3, 4, 5, 6}, runNumbers(kept))
+
+	// A node that lost it delivers the arrival alone, from the same block.
+	lost, _ := buildRun(runPos(t, 1), arriving, noLimit)
+	require.Equal(t, []uint64{2}, runNumbers(lost),
+		"same block, same arrival, different run — which is a different block hash")
+
+	require.NotEqual(t, len(kept), len(lost),
+		"if these ever match, staging no longer decides what executes and it could be rebuilt instead of restored")
+}

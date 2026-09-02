@@ -147,3 +147,50 @@ func TestRequestMissingSynthetics_PullsEveryRunUnderOneHeldAnchor(t *testing.T) 
 		assert.Equal(t, uint64(1454), a, "run %d must be proven against the same held anchor", i)
 	}
 }
+
+// The per-activation budget is spent on the OLDEST holes.
+//
+// Delivery is in order, so the stream advances the moment the oldest run fills.
+// Spending the budget on the holes furthest from the watermark would fetch
+// messages that unblock nothing, and a stream deep enough behind would never
+// advance at all — in the run this work comes from the gap was 8,556 and a scan
+// carries syntheticHealBatch.
+//
+// This says nothing about where the PROOF comes from: a receipt only needs the
+// hashes, so the proof is a separate fetch against the newest receipt held.
+func TestMissingNumbers_BudgetGoesToTheOldestHoles(t *testing.T) {
+	// Delivered 0, holding only the far end: everything below it is a hole.
+	const deep = 8556
+	c, batch, part := gapFixture(t, 0, deep)
+
+	nums := c.missingNumbers(batch, part)
+	require.Len(t, nums, syntheticHealBatch, "a scan carries its budget and no more")
+	require.Equal(t, uint64(1), nums[0],
+		"the first number fetched must be the one the stream is waiting for")
+	require.Equal(t, uint64(syntheticHealBatch), nums[len(nums)-1],
+		"and the budget runs contiguously from there, so Delivered can advance by the whole of it")
+}
+
+// A stream that has only STAGED has delivered nothing, so it has no ledger
+// entry — and it is exactly the stream most likely to be stuck. Scanning the
+// ledger's entries alone would never look at it.
+func TestInboundSources_IncludesStreamsWithNoLedgerEntry(t *testing.T) {
+	c := &Conductor{Partition: &protocol.PartitionInfo{ID: "BVN1", Type: protocol.PartitionTypeBlockValidator}}
+	c.Globals.Store(&core.GlobalValues{
+		ExecutorVersion: protocol.ExecutorVersionV2Kourou,
+		Network: &protocol.NetworkDefinition{Partitions: []*protocol.PartitionInfo{
+			{ID: protocol.Directory}, {ID: "BVN1"}, {ID: "BVN2"},
+		}},
+	})
+
+	// An empty ledger: nothing has ever been delivered from anyone.
+	sources := c.inboundSources(new(protocol.SyntheticLedger))
+
+	var got []string
+	for _, u := range sources {
+		got = append(got, u.String())
+	}
+	require.Contains(t, got, protocol.DnUrl().String())
+	require.Contains(t, got, protocol.PartitionUrl("BVN2").String())
+	require.NotContains(t, got, protocol.PartitionUrl("BVN1").String(), "not ourselves")
+}
