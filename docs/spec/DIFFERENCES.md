@@ -81,7 +81,40 @@ evaluated twice over state that execution had to write first.
 **Size**: medium. Cost is O(validators) per anchor: 445 anchors against 180,997
 synthetics in run `20260902T132651Z`, so small today, linear in validator count.
 
-### E5. `CascadeDeliveryQueue` is dead state that is still hashed
+### E5. Staging is re-evaluated in a loop
+
+**Spec** ([executor.md](executor.md)): each stream is evaluated once. A
+stream's run is computed from its arrivals and what is already staged, anchors
+are evaluated and executed before synthetics so the chain already carries this
+block's anchors, and a user transaction cannot unblock a stream because what it
+produces locally executes next block.
+
+**Code**: `stageRuns` "decides one kind of stream's runs AT THE MOMENT IT IS
+CALLED, and is meant to be called more than once per block". `drainRevealed`
+re-runs it up to `maxDrainRounds` (8) times, stopping when a round delivers
+nothing.
+
+Its stated reasons are the two the ordering above is supposed to remove: that
+deciding synthetics before anchors run judges them against a chain missing this
+block's anchors, and that a message recorded pending by something processed this
+block becomes drainable within it. The second is backed by a measurement — with
+runs decided once per block, delivery settled into exact lockstep with arrival,
+40 in and 40 out, leaving a block of lag that never closed
+(`TestNoLaggingChannels`).
+
+That measurement is evidence that *something* was incomplete when runs were
+decided once, not that repeated evaluation is the design. A loop that re-asks
+compensates for a run that was not computed completely the first time. What
+needs establishing is which of the two reasons still bites once the run is
+computed from arrivals **and** the staged set, and anchors execute first — and
+if neither does, the loop and its bound both go.
+
+**Size**: medium, and it is a correctness question before it is a performance
+one: `maxDrainRounds` exists so that a round which always reports progress
+cannot hang a block, which is a guard against a condition the design says
+cannot arise.
+
+### E6. `CascadeDeliveryQueue` is dead state that is still hashed
 
 **Spec**: there is no cascade.
 

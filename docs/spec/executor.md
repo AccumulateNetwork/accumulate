@@ -76,7 +76,7 @@ The word is used for one other thing in this document, and they are unrelated:
 the **delivery queues** drained at `Begin` hold locally produced messages, not
 staged stream messages. Where the distinction matters the text says which.
 
-### Sorting, staging, and re-evaluating
+### Sort, then three groups in turn
 
 Everything consensus delivers is **sorted once**, in a single pass. Each message
 is asked which stream it belongs to; if it belongs to one it is recorded as an
@@ -87,42 +87,45 @@ once. A message belonging to no stream is a user transaction.
 So anchors and synthetics are sorted up front. There is no later step that
 discovers more of them.
 
-**Staging** then applies the transactions and the anchor proofs and evaluates,
-per stream, what can execute:
+Then **three groups, each finished before the next begins**. A group is
+evaluated, drained and executed; only then is the next group evaluated.
 
-- a **synthetic** may be blocked — by its proof's anchor not having arrived, or
-  by a gap ahead of it in its stream;
-- an **anchor** may be blocked — by quorum or proof;
-- a **user transaction** is on no stream and simply executes.
+1. **Anchors.** Evaluated — each is admissible or not, by quorum or proof —
+   drained, and executed.
+2. **Synthetics.** Evaluated *after* the anchors have executed, so the directory
+   anchor chain they are judged against already carries this block's anchors.
+   That frees as much of the synthetic backlog as can be freed. Drained, and
+   executed.
+3. **User transactions.** Drained and executed last, so a deposit has landed
+   before a transaction spends it. A send that would fail on a stale balance
+   succeeds instead: strictly more permissive, and deterministic either way.
 
-Anchor streams are evaluated before synthetic streams, because an anchor extends
-the directory root that admits synthetics: a synthetic can then use an anchor
-that arrived in the same block instead of waiting one. Within a kind, streams
-run in canonical source order — the directory first, then partitions by ID. Any
-fixed rule would do; what matters is that every node uses the same one.
+Within a group, streams run in canonical source order — the directory first,
+then partitions by ID. Any fixed rule would do; what matters is that every node
+uses the same one.
 
-**What can execute is re-evaluated as the block executes**, and this is not
-tidying up after a discovery. The answer genuinely changes:
+**Each group is evaluated once**, and the sequence is what makes that
+sufficient:
 
-- a synthetic's admissibility is read from the directory anchor chain, and the
-  anchor group *extends* that chain, so deciding synthetics before anchors have
-  run judges them against a chain missing this block's anchors;
-- a stream's position moves as the block executes, so a message recorded pending
-  by something processed in this block becomes drainable within this block.
+- a synthetic's admissibility depends on the anchor chain, and the anchors that
+  extend it have already executed by the time synthetics are evaluated;
+- a stream's run is computed from its arrivals **and what is already staged**,
+  so a message arriving this block that unblocks a backlog from earlier blocks
+  is part of that stream's run when it is computed — nothing about it becomes
+  true later;
+- a user transaction is on no stream and cannot unblock one. What it produces
+  for this partition goes on the delivery queue and executes next block, so it
+  cannot free a synthetic within this block either.
 
-The second is measured, not theoretical. With runs decided once per block,
-delivery settled into exact lockstep with arrival — 40 in, 40 out, every block —
-leaving one block's worth of lag that never closed
-(`TestNoLaggingChannels`).
+Nothing is re-asked, because nothing that could change an answer happens after
+the answer is given.
 
-Re-evaluation repeats until a round delivers nothing. Two bounds apply and they
-bound different things: `maxRunPerBlock` (1,024) limits how far one stage may
-carry a *single stream* in a block, so no block inherits an unbounded run;
-`maxDrainRounds` (8) limits how many times a block re-stages, and exists so a
-round that somehow always reports progress cannot hang a block.
+`maxRunPerBlock` (1,024) bounds how far one evaluation may carry a single stream
+in a block, so no block inherits an unbounded run.
 
 The predecessor of this design re-read the ledger after every single delivery,
-which is where its O(n²) came from. A stage re-reads once per round.
+which is where its O(n²) came from. One evaluation per stream per block reads
+the position once.
 
 ### A block does not begin with an empty slate
 
@@ -334,9 +337,7 @@ type streamRun struct {
 }
 ```
 
-`drain` decides and runs every stream once in group order; `drainRevealed`
-repeats it while the block's own execution keeps making more of a stream
-drainable. `executionOrder` composes the runs in the group order above. The decision is
+`executionOrder` composes the runs in the group order above. The decision is
 made once per stream per block, not per message: the executor previously read
 the ledger inside every message's child batch, and because a child does not
 share its parent's value each read deep-copied the whole ledger, making a drain
@@ -477,11 +478,9 @@ the anchor, not a deferred delivery.
 `exec_parallel.go`. `classify` sorts every envelope once: each message is asked
 for its stream through `streamOf`, recorded as an arrival keyed by sequence
 number with first sighting winning, and an envelope whose messages belong to no
-stream is a user transaction. `stageRuns` then decides one kind of stream's runs
-*at the moment it is called*, and is called again as the block executes —
-`drainRevealed` repeats it until a round delivers nothing. `ProcessAll` runs the
-user transactions across `ExecutionShards`; at a shard count of one or less that
-is exactly a loop over `Process`.
+stream is a user transaction. `stageRuns` then decides one kind of stream's runs.
+`ProcessAll` runs the user transactions across `ExecutionShards`; at a shard
+count of one or less that is exactly a loop over `Process`.
 
 `envelopeIdentity` returns the one identity an envelope's messages belong to, or
 `(nil, false)` meaning serial. Serial covers any non-user message, any signature
