@@ -216,6 +216,27 @@ executor's reads rather than the healer's fetches.
 
 **Size**: small.
 
+### H4. Healing finds gaps by reading what the block wrote
+
+*[#4189](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4189)*
+
+**Spec** ([healing.md](healing.md)): a gap is a number above `Delivered`, up to
+what the source produced, that **staging does not hold**. Healing asks staging
+directly and does not infer what the node has from anything the block wrote.
+
+**Code**: `missingRuns` (`crosschain/synthetic.go:294`) walks
+`PartitionSyntheticLedger.Pending` — the positional array in the ledger account
+— treating a `nil` entry as a hole.
+
+**Why it is not separable from E1**: the moment staging leaves the ledger,
+`Pending` is empty and `missingRuns` reports every number above the watermark as
+missing. Healing would go from re-fetching what the node holds to re-fetching
+*everything*. E1 and this must land together.
+
+**Size**: part of E1. Recorded separately because it is a different defect —
+E1 is staging in the wrong place, this is healing reading the executor's output
+instead of asking it.
+
 ### H2. Healing is not ordered
 
 *[#4191](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4191)*

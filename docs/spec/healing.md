@@ -11,6 +11,36 @@ stream it receives, fetches the missing message from the source partition, and
 submits it to itself. The source is not asked to track who is behind and does
 not retry on anyone's behalf.
 
+### Finding the gaps
+
+A gap is a sequence number the node needs and does not hold. Three facts define
+it, and each has exactly one owner:
+
+| fact | owner | meaning |
+|---|---|---|
+| `Delivered` | the ledger | the highest number this stream has executed. Block output, durable because the block is |
+| what is **held** | the executor's staging | numbers received and not yet executed |
+| `Produced` | the source | how far the source has gone |
+
+**The gaps are the numbers above `Delivered`, up to what the source produced,
+that staging does not hold.** Healing asks staging directly; it does not infer
+what the node has from anything the block wrote.
+
+That is the whole of it, and it is why staging must be askable. A healer that
+cannot see what the executor holds has only two options, and both are wrong:
+fetch everything above the watermark, which re-fetches what the node already
+has, or trust a record the block wrote, which is the coupling that made the
+executor read its own output.
+
+It also gives H2's rule for free — skipping what is already staged is not a
+separate optimisation, it is what "gap" means.
+
+**After a restart, staging is empty**, so every number above `Delivered` is a
+gap and healing refetches it. That is the cost of not persisting staging, it is
+bounded by how far behind the node was, and it is paid here rather than by the
+executor keeping state it would have to write every block. A node that was
+current stages nothing and so loses nothing.
+
 ### Order
 
 Heal from the **newest gap to the lowest gap**.
@@ -116,6 +146,12 @@ The cache is therefore:
 
 `internal/core/crosschain`. The `Conductor` scans the streams it receives,
 identifies gaps, fetches, and submits.
+
+Gaps are found by `missingRuns`, which walks `PartitionSyntheticLedger.Pending`
+— the positional array in the ledger account — treating a `nil` entry as a hole.
+That is the coupling the section above replaces: it reads what the block wrote
+rather than asking the executor what it holds, and it is why the two changes
+cannot be made separately.
 
 - `requestSyntheticFrom(ctx, source, num)` pulls one missing synthetic from the
   source partition's sequencer: `c.Sequencer.Sequence(source, destination, num)`.

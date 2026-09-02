@@ -52,6 +52,11 @@ fed only by consensus. `Pending` and `Received` leave `PartitionSyntheticLedger`
 everything received is held until it can be processed, and a message that
 reaches staging is recorded.
 
+**H4 — healing asks staging for the gaps.** Not separable from E1: the moment
+staging leaves the ledger, `missingRuns` sees an empty `Pending` and reports
+everything above the watermark as missing, so healing would go from re-fetching
+what the node holds to re-fetching everything. Lands with E1.
+
 **E2 — `isReady` stops reading block state.** Falls out of E1; listed
 separately because it is the invariant being restored, not a side effect.
 
