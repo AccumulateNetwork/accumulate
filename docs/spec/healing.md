@@ -44,7 +44,7 @@ current stages nothing and so loses nothing.
 ### Generating requests
 
 **Requests are generated in staging, at the end of processing the anchor and
-synthetic groups.**
+synthetic groups**, on the blocks where healing activates.
 
 That point is chosen because it is the first moment the gap set is final for the
 block: the anchors have executed, the synthetics have been judged against the
@@ -69,7 +69,7 @@ obviously an anchor, where each signature can independently reveal the same
 missing message. Staging holds one request per gap, so the number of requests is
 the number of gaps, not the number of things that noticed them.
 
-**Two validators per block actually send, chosen by the previous block's hash.**
+**Two validators actually send, chosen by the previous block's hash.**
 Every validator computes the same gaps; that does not mean every validator
 should ask for them. The previous block's hash selects the pair, so each node
 knows whether it is one of the two without being told and without negotiating
@@ -85,22 +85,22 @@ the senders should not be the node deciding who they are.
 
 Two rather than one, because one is a single point of failure: if the chosen
 validator is down, or cannot reach the source, the gap goes unrequested for that
-block and healing waits on a node that is not going to answer. Two covers that
-at a cost of two requests per gap per block rather than N.
+activation and healing waits on a node that is not going to answer. Two covers
+that at a cost of two requests per gap rather than N.
 
 Two rather than all, because N validators asking for the same message is N−1
 wasted round trips at exactly the moment a stream is already behind — and the
 extra answers are discarded anyway, since the block's sort keeps the first
 sighting of a sequence number.
 
-The pair rotates every block, because the hash does, so a validator that cannot
-reach a source stops being asked within a block and the load spreads instead of
-settling on whoever was picked first.
+The pair rotates with every activation, because the hash does, so a validator
+that cannot reach a source stops being asked at the next activation and the load
+spreads instead of settling on whoever was picked first.
 
 The selection is over which node *sends*, not over what is requested. Every
 validator computes the same request set, so one that is not selected has already
-done the work and is ready to be selected next block without discovering
-anything new.
+done the work and is ready to be selected at the next activation without
+discovering anything new.
 
 A request is still not consensus: the node asks the source's sequencer, and the
 answer is submitted back and re-enters through consensus, sorted and staged and

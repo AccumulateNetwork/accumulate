@@ -243,8 +243,10 @@ instead of asking it.
 
 **Spec** ([healing.md](healing.md)): requests are generated in staging, at the
 end of processing the anchor and synthetic groups — the first moment the gap set
-is final. Every validator computes the same gaps and therefore the same
-requests, and staging dedupes several askers of the same gap into one request.
+is final — on the blocks where healing activates. Every validator computes the
+same gaps and therefore the same requests, and staging dedupes several askers of
+the same gap into one request. Two of them send, selected by the previous
+block's hash, and send immediately.
 
 **Code**: generation lives in the `Conductor`, outside staging and outside the
 block. `claimSyntheticRequest` schedules a per-node **random jittered delay** on
