@@ -42,12 +42,19 @@ x-node-env: &node-env
   # MUST STAY BELOW mem_limit. 2750MiB against a 1536m container is not a
   # ceiling at all — the soft limit can never engage, so the kernel OOM
   # killer is the only thing that stops growth, which is a kill instead of a
-  # collection. 1200MiB leaves ~336MiB of the cgroup for stacks, mmap, and
-  # non-Go allocations. If a run collapses into continuous GC at this
-  # ceiling, the fix is to cut the configured caches (the block cache is
-  # 512MiB across the two engines), NOT to raise the ceiling above the
+  # collection. If a run collapses into continuous GC at this ceiling, the
+  # fix is to cut the configured caches, NOT to raise the ceiling above the
   # container limit again.
-  GOMEMLIMIT: "${GOMEMLIMIT-1200MiB}"
+  #
+  # 2026-09-02: container 1536m -> 2048m, ceiling 1200MiB -> 1700MiB,
+  # keeping the same ~350MiB of the cgroup for stacks, mmap and non-Go
+  # allocations. The 1536m/1200MiB pair had the BVN2 nodes pinned ON the
+  # ceiling under leveldb at 500 tx/s — 194-264% CPU, scanobject 29% of a
+  # 30s profile, healing 0% — and the run died at 11 minutes when BVN1
+  # stalled 193s. Two things changed with it: bcdb replaces leveldb's
+  # recordCache and buffer pools (~310MB/node), and the bcdb write tally
+  # stopped keeping a digest per key (~190MB/node).
+  GOMEMLIMIT: "${GOMEMLIMIT-1700MiB}"
   # Execution sharding (#4145). Defaults to 1 = serial, which is what every
   # generated network has silently run since the feature landed — the config
   # plumbing is complete but cmd_init_network never sets it. Set
@@ -65,7 +72,7 @@ services:
     container_name: acc-bootstrap
     logging: *bounded-logging
     environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-1536m}
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
     ports:
       # Host port 16653 (not 16593) - accman-managed follower nodes use the
       # 165xx range on the host. In-network peers reach acc-bootstrap:16593
@@ -99,7 +106,7 @@ services:
     container_name: acc-init
     logging: *bounded-logging
     environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-1536m}
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
     volumes:
       - network-config:/root/.accumulate
       - ../..:/workspace
@@ -123,7 +130,7 @@ services:
     container_name: acc-bvn1-val1
     logging: *bounded-logging
     environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-1536m}
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -144,7 +151,7 @@ services:
     container_name: acc-bvn1-val2
     logging: *bounded-logging
     environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-1536m}
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -165,7 +172,7 @@ services:
     container_name: acc-bvn1-val3
     logging: *bounded-logging
     environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-1536m}
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -186,7 +193,7 @@ services:
     container_name: acc-bvn1-val4
     logging: *bounded-logging
     environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-1536m}
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -208,7 +215,7 @@ services:
     container_name: acc-bvn2-val1
     logging: *bounded-logging
     environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-1536m}
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -229,7 +236,7 @@ services:
     container_name: acc-bvn2-val2
     logging: *bounded-logging
     environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-1536m}
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -250,7 +257,7 @@ services:
     container_name: acc-bvn2-val3
     logging: *bounded-logging
     environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-1536m}
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -271,7 +278,7 @@ services:
     container_name: acc-bvn2-val4
     logging: *bounded-logging
     environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-1536m}
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
     volumes:
       - network-config:/root/.accumulate
     command:
