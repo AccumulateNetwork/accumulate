@@ -17,80 +17,6 @@ tracked; the entry itself is the difference.
 
 ## Executor
 
-### E1. Staging state lives in an account
-
-*[#4189](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4189)*
-
-**Spec** ([executor.md](executor.md)): staging belongs to the executor.
-Everything received is held until it can be processed; a message that reaches
-staging has been accepted, and accepted means recorded; block state never feeds
-back into staging.
-
-**Code**: `PartitionSyntheticLedger.Pending` is main state of an account of type
-`AccountTypeSyntheticLedger`. It is hashed into the BPT and rewritten whole
-every block, so the array must be bounded — `MaxPendingSequenced = 4096`. Past
-that bound `stream_position.go:174` refuses to record the receipt, silently
-(`return nil`, logged at Debug).
-
-**Consequence**: the node holds a message and reports not holding it. The
-reconciler believes the ledger and the healer re-fetches across the network what
-is already in the local database.
-
-**Evidence**: soak `20260902T132651Z` — 8,556 distinct sequence numbers
-re-fetched 53,011 times, some 41 times each; `recv − deliv = 4,096` exactly on
-two samples eight minutes apart; 44,206 heals with `errors 0`, because nothing
-errors. All three partitions stayed live throughout.
-
-**The change**: the held set moves out of the account model to a durable store
-that is not hashed — one record per held entry, so nothing is rewritten whole
-and nothing needs a bound — and joins the snapshot, because a snapshot is what a
-new node starts from. `Delivered` stays in the ledger, and becomes the only
-thing the executor reads from it.
-
-**Size**: large. A new durable store, a snapshot section for it, staging moved
-off the account, and the bound removed.
-
-### E2. `isReady` reads block state
-
-*[#4190](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4190)*
-
-**Spec**: block state never feeds back into staging.
-
-**Code**: `isReady` consults a stream position derived from the synthetic ledger
-account — the record the block writes.
-
-**Size**: follows from E1.
-
-### E3. Staging position after a restart — ANSWERED, implemented by E1
-
-*[#4188](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4188) — closed*
-
-**Spec** ([executor.md](executor.md)): staging **survives** a restart. It is
-durable and not hashed. `Delivered` is block output and is hashed, because it is
-what executed; the held set is a deterministic function of the consensus stream,
-so it is agreed without being hashed. Staging is part of a snapshot.
-
-**Corrected 2026-09-02.** The first answer was that staging is rebuilt, not
-restored — empty on restart, refilled by healing. That is wrong, and the
-correction is not a detail: staging is an INPUT to what a block executes, not an
-optimisation over it. A block delivers the contiguous run from `Delivered + 1`
-taken from this block's arrivals *and what is already held*, so a restarted node
-holding less than its peers executes a shorter run — different `Delivered`,
-different account state, different BPT root. That is a divergent block hash, and
-healing cannot repair it because healing is asynchronous and the divergence is
-immediate.
-
-What the old design got right was that the held set has to be agreed; what it
-got wrong was concluding it therefore had to be hashed, and so had to live in an
-account, and so had to be bounded. Durable-but-not-hashed keeps the agreement
-and drops the bound.
-
-**Code**: the whole position, staged set included, comes from the ledger
-account. A restart restores it — correctly — but only because it is stored
-somewhere that forces a bound on it.
-
-**Size**: none of its own. The design question is answered; the work is E1.
-
 ### E4. An anchor's quorum is assembled by execution
 
 *[#4198](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4198)*
@@ -261,27 +187,6 @@ on the storage read path it answered 0.40% of lookups, because it cached the
 executor's reads rather than the healer's fetches.
 
 **Size**: small.
-
-### H4. Healing finds gaps by reading what the block wrote
-
-*[#4189](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4189)*
-
-**Spec** ([healing.md](healing.md)): a gap is a number above `Delivered`, up to
-what the source produced, that **staging does not hold**. Healing asks staging
-directly and does not infer what the node has from anything the block wrote.
-
-**Code**: `missingRuns` (`crosschain/synthetic.go:294`) walks
-`PartitionSyntheticLedger.Pending` — the positional array in the ledger account
-— treating a `nil` entry as a hole.
-
-**Why it is not separable from E1**: the moment staging leaves the ledger,
-`Pending` is empty and `missingRuns` reports every number above the watermark as
-missing. Healing would go from re-fetching what the node holds to re-fetching
-*everything*. E1 and this must land together.
-
-**Size**: part of E1. Recorded separately because it is a different defect —
-E1 is staging in the wrong place, this is healing reading the executor's output
-instead of asking it.
 
 ### H5. Requests are generated outside staging, per node, with jitter
 

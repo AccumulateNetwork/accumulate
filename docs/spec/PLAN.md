@@ -21,19 +21,29 @@ stops.
 
 | | |
 |---|---|
-| **Spec** | Executor, database and healing written; 15 differences recorded, each with an issue. Healing was rewritten after the first pass: gaps come from staging, requests are generated in staging, two senders are chosen by the previous block's hash, and healing activates on a cadence. |
-| **E3** | **Done.** Answered in [executor.md](executor.md), #4188 closed. Staging is not restored, it is rebuilt. No code change of its own — E1 implements it. |
+| **Spec** | Executor, database and healing written. Healing was rewritten after the first pass: gaps come from staging, requests are generated in staging, two senders are chosen by the previous block's hash, and healing activates on a cadence. |
+| **E1 + H4 + E2 + E3** | **Done**, on `issue-4189-staging-out-of-account`. Removed from the differences: the code matches the spec. |
 | **D3** | **Implemented, not merged.** `TestDeep` on branch `issue-4196-kvtest-deep` (`f3339116e`). |
 | **Everything else** | Not started. |
 
-Nothing on the critical path has been written yet. That is the next thing.
+**What E3's answer turned out to be, because it changed the shape of E1.** The
+first answer was that staging is rebuilt on restart, not restored. That is
+wrong: staging decides what a block executes, so a node holding less than its
+peers executes a shorter run and produces a different block hash. The old design
+was right that the held set must be AGREED and wrong that it therefore had to be
+HASHED — which is what put it in an account, and what made it need a bound.
+Durable and unhashed keeps the agreement and drops the bound.
+
+**Not yet validated by a soak.** The livelock's mechanism is removed and the
+tests that pin it pass, but the claim that soaks stop dying is a claim about a
+12-hour run, not a test suite.
 
 ## Phase 2 — the livelock
 
 In order. Each depends on the one before.
 
-**#4189 — E1 + H4: move staging out of the account model, and have healing ask
-it.** One change, not two.
+**#4189 — E1 + H4 + E2: move staging out of the account model, and have healing
+ask it. DONE.** One change, not three.
 
 Staging becomes executor state fed only by consensus. `Pending` and `Received`
 leave `PartitionSyntheticLedger`; `Delivered` stays, because what a block
@@ -55,8 +65,9 @@ jitter, back-off window, failure breaker and per-gap scheduling are deleted:
 with two senders and an activation every few blocks there is no load to manage,
 and a lost request costs nothing because the gap is still a gap next time.
 
-**#4190 — E2: `isReady` stops reading block state.** Falls out of E1; listed
-separately because it is the invariant being restored, not a side effect.
+**#4190 — E2: `isReady` stops reading block state. DONE**, with #4189. It reads
+a position built from the ledger's `Delivered` and staging's own records, so
+nothing the block writes decides what the executor believes it holds.
 
 **#4191 — H2: order healing, newest gap to lowest.** Smaller than it was: "skip
 what is already staged" arrives with H4, since a staged number is not a gap.
