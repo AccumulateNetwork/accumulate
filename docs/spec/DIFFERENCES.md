@@ -192,18 +192,39 @@ executor's reads rather than the healer's fetches.
 
 *[#4192](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4192)*
 
-**Spec**: a destination that needs more reach asks for an extension — the last
-hash of the proof it holds, that hash's index, and how far back is wanted — and
-the source answers with the earlier merkle state and the intervening hashes. The
-same request fills holes in a held proof, not only its tail.
+**Spec** ([healing.md](healing.md)): a destination that needs more reach asks for
+an extension — a stream and two indices — and the source answers with the merkle
+state at the new start and the intervening hashes. The same request fills holes
+in a held proof, not only its tail.
 
-**Code**: no extension request. A destination further behind than
-`MaxReceiptListElements` (4,096) cannot be covered at all: the sender will not
-build the package (`packageSpanFits`), the sequencer will not serve the range,
-and the receiver would reject the proof.
+**Code**: no extension request exists.
 
-**Evidence**: the gap in soak `20260902T132651Z` was 8,556 — more than twice the
-cap.
+**The trigger is not lag.** This entry used to say a destination further behind
+than `MaxReceiptListElements` (4,096) could not be covered at all, and cited the
+8,556-deep gap of soak `20260902T132651Z`. That is wrong, and the correction
+matters because it decides whether this is urgent.
 
-**Size**: medium. A message type, a request path, and assembly at the
-destination.
+A collection proof spans from the requested range to the **block boundary
+covering it**, not to the chain head: `SequenceRange` builds
+`GetReceiptList(chain, indices[0], mainAnchorEntry.Source)` where
+`mainAnchorEntry` is found by `SearchIndexChain(..., MatchAfter, ...)` on the
+LAST requested index, and the send path says the same thing —
+`packageSpanFits` bounds "from its FIRST member to the block's last synthetic
+element". Every enforcement point bounds the RANGE (`sequencer.go:512`,
+`collection_proof.go:36`, `synthetic.go:526`, `anchoring.go:400`), and healing
+chunks at `syntheticHealBatch` regardless. So proof length does not grow with
+how far behind a destination is.
+
+The soak agrees: 44,206 heals with **errors 0**. A bound that was refusing
+8,556-deep pulls would have produced errors. The gap was deep because staging
+refused receipts (E1), not because proofs were too long.
+
+**What does trigger it**: a single block producing more than ~4,096 synthetics
+to one destination, so a range starting early in that block spans past the cap
+to the block's end. That is a throughput condition. The SEND path already has a
+fallback — `packageSpanFits` ships an oversized message with its own receipt —
+and the HEAL path has none, which is the actual hole.
+
+**Size**: medium, and **not urgent until measured**. A message type, a request
+path, and assembly at the destination. Build it when a run shows a proof-length
+rejection, which names the real trigger rather than a supposed one.

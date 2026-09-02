@@ -87,12 +87,16 @@ separate fetch with no order at all, and the entries go oldest-first because
 delivery is in order. Fetching entries newest-first under a bounded budget would
 spend it on messages that unblock nothing.
 
-**#4192 — H3: proof extension.** Without it a destination further behind than
-`MaxReceiptListElements` (4,096) cannot be covered at all, and the gap in the
-last run was 8,556. E1 stops the livelock; H3 is what lets a deep gap actually
-close. A message type, a request path, assembly at the destination.
+**#4192 — H3: proof extension. DESIGNED, deliberately not built.** The reason
+this was urgent turned out to be false: a collection proof spans from the
+requested range to the block boundary covering it, not to the chain head, so its
+length does not grow with how far behind a destination is. The soak's own
+evidence says so — 44,206 heals, errors 0. The real trigger is a single block
+producing more than ~4,096 synthetics to one destination, which is a throughput
+condition and has never been observed. Build it when a run shows a proof-length
+rejection.
 
-**#4193 — H1: the healing cache.** Last, and small. Keyed by source, destination
+**#4193 — H1: the healing cache.** Now the next item, and small. Keyed by source, destination
 and sequence number, in Accumulate, used only by healing. It turns 53,011
 fetches into 8,556 — worth having, but it optimises a loop E1 and H2 have
 already stopped.
