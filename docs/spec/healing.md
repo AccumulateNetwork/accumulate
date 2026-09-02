@@ -61,11 +61,25 @@ The source answers with the earlier merkle state and the intervening elements �
 raw hashes, no signature, no new anchor. The destination prepends them and
 validates the wider list against the receipt it already had.
 
+The same request fills holes, not only the tail. A receipt list must be
+contiguous to validate — the replay runs from the merkle state through every
+element to the anchor — but a destination may hold **fragments** of a range:
+proofs that arrived, some spans dropped in between. Because a counted merkle
+state binds each element to an absolute index, a fragment's position is
+unambiguous, so what is missing is a set of index spans and each can be asked
+for on its own. The destination assembles the pieces it has with the hashes it
+receives, and once the list is contiguous from the earliest element it needs to
+the receipt's start, it validates.
+
+So a proof is built up rather than obtained: nothing already held is fetched
+again, and no fragment has to be discarded because it does not reach far enough
+by itself.
+
 This keeps every property the order relies on. A single message stays bounded,
 so the attacker's cost is unchanged. Reach becomes unbounded in increments, so
-an arbitrarily lagged destination converges. And the expensive part of a proof —
-the anchored receipt — is transferred once and reused, rather than re-sent with
-every widening.
+an arbitrarily lagged destination converges. Only what is genuinely absent moves
+on the wire. And the expensive part of a proof — the anchored receipt — is
+transferred once and reused, rather than re-sent with every widening.
 
 A later collection proof does not invalidate an earlier one. Each verifies
 against its own merkle state and receipt, so work already done against the proof
