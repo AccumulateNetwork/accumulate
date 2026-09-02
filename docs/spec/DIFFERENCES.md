@@ -54,9 +54,9 @@ account — the record the block writes.
 
 **Size**: follows from E1.
 
-### E3. Staging position after a restart — SPECIFIED, not yet implemented
+### E3. Staging position after a restart — ANSWERED, implemented by E1
 
-*[#4188](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4188)*
+*[#4188](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4188) — closed*
 
 **Spec** ([executor.md](executor.md)): staging is not persisted and not
 restored — it is rebuilt. `Delivered` is block output and survives because the
@@ -264,7 +264,7 @@ instead of asking it.
 
 ### H5. Requests are generated outside staging, per node, with jitter
 
-*[#4191](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4191)*
+*[#4201](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4201)*
 
 **Spec** ([healing.md](healing.md)): requests are generated in staging, at the
 end of processing the anchor and synthetic groups — the first moment the gap set
