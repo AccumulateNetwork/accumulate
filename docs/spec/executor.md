@@ -372,8 +372,12 @@ share its parent's value each read deep-copied the whole ledger, making a drain
 of n messages cost O(n²) (`TestSequenceLedgerCostIsPerRead`).
 
 `streamPosition` is the block's working copy of one stream — `delivered`,
-`received`, and the staged entries between. Read once per stream per block,
-advanced in place, written back at close.
+`received`, and the staged entries between. It is built once per stream per
+block from the ledger's `Delivered` and what staging holds, advanced in place,
+and at close **only `Delivered` is written back**. Staging is not block output,
+so nothing the block writes can feed back into what the executor believes it
+holds; a message is held because staging holds it, never because a record says
+so.
 
 `msg_sequenced.go`, `SequencedMessage`: `isReady` asks the block's position
 whether the message is next. Ready messages execute; not-ready messages record

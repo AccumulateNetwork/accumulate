@@ -198,6 +198,31 @@ absence rather than guessing.
 
 **Size**: small. A conformance test.
 
+### D4. The bcdb window is advisory, so absence is never reported
+
+*[#4196](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4196)*
+
+**Spec**: an ordinary read is answered from the window; a read that needs
+history requires a deep reader. A backend that cannot answer must say so.
+
+**Code**: `getAt` (`bcdb/database.go:717`) falls back to `GetDeep` when a
+**shallow** reader misses, counting the fallback rather than returning
+not-found. So no shallow read ever reports absence, and the window is a
+performance property rather than a contract.
+
+This is deliberate and is documented in place: enforcing the window blind would
+turn any read the adapter has not accounted for into a silent not-found, which
+in the executor is a consensus fault. `DeepFallbacks` in `stats.json` is the
+instrument — zero over a soak is the evidence that the fallback can be removed.
+
+**Where it stands**: `Account(U).Url` was the only shape falling back (96,303
+over 200 commits, ~482 history walks a block); routing it to the dynamic layer
+took the count to none. So the evidence for enforcement now exists and has not
+been acted on.
+
+**Size**: small, and it depends on D3 — enforcement without a conformance test
+for `BeginDeep` swaps a measured fallback for an unverified one.
+
 ---
 
 ## Healing
