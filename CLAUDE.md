@@ -1,5 +1,19 @@
 # Accumulate Protocol - Development Notes
 
+## MANDATORY: Work against the spec
+
+ALL work is done **against the spec** — read the relevant section of
+[`docs/spec/`](docs/spec/SPEC.md) first. A change that contradicts the spec
+means fixing the spec or the plan first, not working around it.
+
+**New work requires updating the spec** — in the same change set, not "later".
+
+**Differences between the code and the spec go in
+[`docs/spec/DIFFERENCES.md`](docs/spec/DIFFERENCES.md)** — not into the spec,
+and not silently fixed. The spec says what we are doing; the differences say
+what has yet to be brought into line, and issues are written from them once a
+part of the spec is settled.
+
 ## MANDATORY: Review Tracking Repository Before Development
 
 **FIRST ACTION before any development work:**
