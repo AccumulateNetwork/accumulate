@@ -69,10 +69,19 @@ obviously an anchor, where each signature can independently reveal the same
 missing message. Staging holds one request per gap, so the number of requests is
 the number of gaps, not the number of things that noticed them.
 
-**Two validators per block actually send, chosen by the clock.** Every validator
-computes the same gaps; that does not mean every validator should ask for them.
-The block's time selects the pair deterministically, so each node knows whether
-it is one of the two without being told and without negotiating anything.
+**Two validators per block actually send, chosen by the previous block's hash.**
+Every validator computes the same gaps; that does not mean every validator
+should ask for them. The previous block's hash selects the pair, so each node
+knows whether it is one of the two without being told and without negotiating
+anything.
+
+The hash rather than the clock, for three reasons. It is already agreed —
+consensus settled it, and every node has it before this block begins, so there
+is nothing new to distribute or to disagree about. It changes every block, where
+a clock need not: a partition producing several blocks a second would keep
+selecting the same pair while its stream fell further behind. And it is not
+anyone's to choose — a validator can nudge its own clock, and the node picking
+the senders should not be the node deciding who they are.
 
 Two rather than one, because one is a single point of failure: if the chosen
 validator is down, or cannot reach the source, the gap goes unrequested for that
@@ -84,9 +93,9 @@ wasted round trips at exactly the moment a stream is already behind — and the
 extra answers are discarded anyway, since the block's sort keeps the first
 sighting of a sequence number.
 
-The pair rotates with the clock, so a validator that cannot reach a source stops
-being asked within a block, and the load spreads instead of settling on whoever
-was picked first.
+The pair rotates every block, because the hash does, so a validator that cannot
+reach a source stops being asked within a block and the load spreads instead of
+settling on whoever was picked first.
 
 The selection is over which node *sends*, not over what is requested. Every
 validator computes the same request set, so one that is not selected has already
