@@ -45,9 +45,10 @@ In order. Each depends on the one before.
 **#4189 — E1 + H4 + E2: move staging out of the account model, and have healing
 ask it. DONE.** One change, not three.
 
-Staging becomes executor state fed only by consensus. `Pending` and `Received`
-leave `PartitionSyntheticLedger`; `Delivered` stays, because what a block
-delivered is its output. `MaxPendingSequenced` and the refusal at
+Staging becomes durable, unhashed records on the stream's ledger account, fed
+only by consensus. `Pending` and `Received` leave `PartitionSyntheticLedger`;
+`Delivered` stays, because what a block delivered is its output, and becomes the
+only thing the executor reads from it. `MaxPendingSequenced` and the refusal at
 `stream_position.go:174` go with them: everything received is held until it can
 be processed, and a message that reaches staging is recorded.
 
@@ -125,7 +126,7 @@ soak.
 ## Order of work
 
 ```
-E1+H4 ─▶ H5 ─▶ E2 ─▶ H2 ─▶ H3 ─▶ H1      the critical path
+E1+H4+E2 ─▶ H5 ─▶ H2 ─▶ H3 ─▶ H1         the critical path (first step DONE)
 E6, D2, D3 ─▶ D4                          parallel, any time
 E5, E4, D1                                after
 ```
