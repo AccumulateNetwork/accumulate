@@ -38,10 +38,10 @@
 package bcdb
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	stderrors "errors"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -107,9 +107,8 @@ type Database struct {
 	// shapes tallies writes by key shape.  Classifying a rewrite means
 	// knowing what the key held before, and asking the store would
 	// perturb the very counters being measured, so a digest of the
-	// last value written for each key is remembered here instead --
-	// a digest and not the value, because remembering the values is
-	// keeping a second copy of the database in memory.
+	// last value written is remembered here instead -- for a SAMPLE of
+	// keys, not all of them.  See tally.
 	shapes map[string]*ShapeCount
 	last   map[[32]byte][32]byte
 
@@ -128,10 +127,13 @@ type Database struct {
 	maintErrs    uint64 // how many runs failed
 	maintainHook func() // tests: runs at the start of a maintenance run
 
-	// TallyKeys bounds last.  Beyond it new keys are still counted but
-	// not remembered, so their later rewrites cannot be classified --
-	// the report says so (tallyCapped).  Unbounded, the tally was ~120
-	// bytes per key ever written for the life of the process (#4175).
+	// TallySample is the sampling rate: one key in TallySample is
+	// remembered.  One is every key.
+	TallySample uint8
+
+	// TallyKeys bounds last as a backstop.  With sampling the bound is
+	// not normally reached; if it is, the report says so (tallyCapped)
+	// and the sample stops growing.
 	TallyKeys int
 
 	// dyna holds the keys that must go to the dynamic layer whatever
@@ -215,9 +217,26 @@ const PackEvery = 1000
 // with a lock; it is set at creation (Open) and recorded on disk.
 const DefaultMergeLag = 20
 
-// DefaultTallyKeys is how many keys the per-shape tally remembers a
-// digest for: about 128 MB at the default.
-const DefaultTallyKeys = 1 << 20
+// DefaultTallyKeys is the backstop bound on the tally's sample.
+const DefaultTallyKeys = 1 << 16
+
+// DefaultTallySample is how many keys the tally sees for each one it
+// remembers.
+//
+// The tally answers a RATIO -- of the writes to this shape, how many
+// changed the value -- and a ratio does not need a census.  Measured on
+// a 500 tx/s soak, remembering every key cost 192 MB, 38% of the live
+// heap and the largest single consumer on the node, for a statistic
+// that is a ratio (#4165).
+//
+// Sampling by KEY HASH rather than by arrival is what makes the sample
+// unbiased and is the real fix.  The previous bound admitted keys until
+// it was full, after which an unremembered key counted New and stayed
+// unremembered -- so every later rewrite of it counted New too, and the
+// longer a run went the more New inflated and Rewritten collapsed.  A
+// hash-selected key is in the sample for the life of the process, so
+// its rewrites are always classified, and the estimate stays true.
+const DefaultTallySample = 128
 
 // permManifest is the file whose presence means a database is already
 // here: the permanent layer's segment manifest of the first shard.
@@ -273,6 +292,7 @@ func Open(path string) (*Database, error) {
 		PackEvery:      PackEvery,
 		StatsEvery:     50,
 		TallyKeys:      DefaultTallyKeys,
+		TallySample:    DefaultTallySample,
 		MergeLag:       DefaultMergeLag,
 	}
 
@@ -762,7 +782,7 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 		}
 		perm := len(value) > 0 && !d.dyna[h] && isWriteOnce(key)
 
-		shape := d.tally(key, h, value, perm)
+		shape := d.tally(key, perm)
 		staged.entries[h] = entry{value: value, perm: perm, shape: shape}
 	}
 	d.version = staged.version
@@ -778,14 +798,18 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 	return err
 }
 
-// tally records a write against its key's shape: the first write of a
-// key, a rewrite with the same bytes, or a rewrite with different
-// bytes.  Only the third kind is data actually changing, and grouping
-// it by shape says which records change -- rather than leaving it to be
-// inferred from a total.  It returns the shape, which the write path
-// carries so that a refusal by the permanent layer can be attributed
-// to it.  The caller must hold the lock.
-func (d *Database) tally(key *record.Key, h [32]byte, value []byte, perm bool) string {
+// tally counts a write against its key's shape.  It returns the shape,
+// which the write path carries so that a refusal by the permanent layer
+// can be attributed to it.  The caller must hold the lock.
+//
+// A counter, and nothing more.  Whether a write CHANGED the record is
+// the store's to answer -- the permanent layer refuses a rewrite, and
+// that refusal is the exact signal, free and durable across restarts.
+// Answering it here instead meant remembering a digest of the last value
+// written for every key: 192 MB on a 500 tx/s soak, 38% of the live heap
+// and the largest single consumer on the node, spent on a diagnostic
+// (#4165).
+func (d *Database) tally(key *record.Key, perm bool) string {
 	shape := keyShape(key)
 	c := d.shapes[shape]
 	if c == nil {
@@ -796,20 +820,7 @@ func (d *Database) tally(key *record.Key, h [32]byte, value []byte, perm bool) s
 		}
 		d.shapes[shape] = c
 	}
-	digest := sha256.Sum256(value)
-	prev, seen := d.last[h]
-	switch {
-	case !seen:
-		c.New++
-		if len(d.last) >= d.TallyKeys {
-			return shape // Counted, not remembered
-		}
-	case prev == digest:
-		c.Duplicate++
-	default:
-		c.Rewritten++
-	}
-	d.last[h] = digest
+	c.Writes++
 	return shape
 }
 
@@ -844,13 +855,22 @@ func (d *Database) putRouted(key [32]byte, e entry) error {
 		return err
 	}
 
-	// The store says this record is not write-once
+	// The store says this record is not write-once.  Counted against
+	// the shape, and the FIRST one is logged: a shape classified
+	// write-once that the store refuses is a defect in isWriteOnce, and
+	// it should not have to be noticed by reading a stats file.
 	d.mu.Lock()
 	d.except(key)
+	first := false
 	if c := d.shapes[e.shape]; c != nil {
 		c.Misrouted++
+		first = c.Misrouted == 1
 	}
 	d.mu.Unlock()
+	if first {
+		slog.Warn("Permanent layer refused a write: this shape is not write-once",
+			"module", "bcdb", "shape", e.shape)
+	}
 	err = d.kv.PutDyna(key, e.value)
 	return err
 }
@@ -904,9 +924,13 @@ func (d *Database) reportStats() {
 		// Staged is how many commits are waiting on an open reader
 		// before they can reach the store.  Growing without bound means
 		// a batch was never closed -- and nothing staged is on disk.
-		Staged      int  `json:"stagedCommits"`
-		TallyKeys   int  `json:"tallyKeys"`
-		TallyCapped bool `json:"tallyCapped"`
+		Staged int `json:"stagedCommits"`
+
+		// TallySample is the rate New/Duplicate/Rewritten were sampled
+		// at: multiply by it to estimate, or read them as ratios.
+		TallySample uint8 `json:"tallySample"`
+		TallyKeys   int   `json:"tallyKeys"`
+		TallyCapped bool  `json:"tallyCapped"`
 
 		// Maintenance runs in the background; a failure is recorded here
 		// rather than failing a commit.
@@ -923,7 +947,8 @@ func (d *Database) reportStats() {
 		DeepFallbacks map[string]uint64 `json:"deepFallbacks,omitempty"`
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
 		DeepFallbacks: d.fallbackSnapshot(),
-		Staged:        len(d.staged), TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
+		Staged:        len(d.staged), TallySample: d.TallySample,
+		TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
 		MaintenanceErrors: d.maintErrs}
 	if d.maintErr != nil {
 		report.MaintenanceLast = d.maintErr.Error()

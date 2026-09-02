@@ -1,0 +1,31 @@
+diff --git a/test/docker/soak/runs/20260902T221300Z/readprobe.csv b/test/docker/soak/runs/20260902T221300Z/readprobe.csv
+index 9d6416707..b6e8dd1ae 100644
+--- a/test/docker/soak/runs/20260902T221300Z/readprobe.csv
++++ b/test/docker/soak/runs/20260902T221300Z/readprobe.csv
+@@ -5,3 +5,17 @@ time,reads,p50,p95,max,maxKind,maxAge,maxPartition,failed,gated,timeouts,reservo
+ 2026-09-02T22:18:46Z,60,1.6,3.4,4.5,chain,65,BVN1,0,0,0,30,74
+ 2026-09-02T22:19:47Z,60,0.0,0.0,0.1,chain,74,Directory,60,0,0,30,74
+ 2026-09-02T22:20:47Z,60,0.0,0.0,0.2,chain,74,Directory,60,0,0,30,74
++2026-09-02T22:21:47Z,60,0.1,0.1,0.1,chain,65,BVN1,60,0,0,30,74
++2026-09-02T22:22:48Z,60,0.1,0.1,0.1,chain,74,Directory,60,0,0,30,74
++2026-09-02T22:23:48Z,72,1.1,2.6,3.3,txn,6,BVN2,0,0,0,36,8
++2026-09-02T22:24:48Z,90,1.0,2.0,2.7,txn,30,Directory,0,0,0,45,30
++2026-09-02T22:25:49Z,108,1.8,4.9,18.6,txn,50,Directory,0,0,0,54,50
++2026-09-02T22:26:50Z,126,2.1,5.3,29.1,txn,70,Directory,0,0,0,63,70
++2026-09-02T22:27:50Z,144,2.2,4.4,33.4,txn,79,BVN1,0,0,0,72,90
++2026-09-02T22:28:51Z,162,2.3,10.7,29.2,txn,105,BVN2,0,0,0,81,110
++2026-09-02T22:29:52Z,180,1.7,3.2,6.8,txn,127,BVN2,0,0,0,90,130
++2026-09-02T22:30:53Z,198,2.0,6.7,12.4,txn,151,Directory,0,0,0,99,151
++2026-09-02T22:31:54Z,216,1.6,4.3,13.8,txn,98,BVN1,0,0,0,108,171
++2026-09-02T22:32:54Z,234,1.2,2.5,3.1,txn,166,BVN2,0,0,0,117,191
++2026-09-02T22:33:55Z,234,0.0,0.1,2.3,txn,166,BVN2,234,0,0,117,191
++2026-09-02T22:34:55Z,234,0.0,0.1,0.1,txn,166,BVN2,234,0,0,117,191
+diff --git a/test/docker/soak/runs/INDEX.md b/test/docker/soak/runs/INDEX.md
+index fdb9344f4..fcb315497 100644
+--- a/test/docker/soak/runs/INDEX.md
++++ b/test/docker/soak/runs/INDEX.md
+@@ -52,3 +52,4 @@ Every run appends one row. Details in `<runId>/manifest.md`.
+ | [20260901T054802Z](20260901T054802Z/manifest.md) | `10k-tps-619-gb05b09379` | v2-kourou | unconditional (DI conductor, #4105) | 0.19h | 143 | 8→210 | 0→3161 | first soak on the sharded store: 8 shards, N=20, windowed perm reads with deepFallbacks counting, pack tier every 1000 blocks (BlockchainDB ec4e2e6) |
+ | [20260902T041031Z](20260902T041031Z/manifest.md) | `10k-tps-620-gc37c2eeb0-dirty` | v2-kourou | unconditional (DI conductor, #4105) | 0.33h | 143 | 8→387 | 0→9317 | SOAK-12H-500-URLDYNA: 12h CHAOS soak at 500 tps on the sharded store (8 shards, N=20, BlockchainDB ec4e2e6) with Account(U).Url routed to the DYNAMIC layer (c37c2eeb0). The previous run 20260901T054802Z seized at 14 min: every BVN engine logged 96,303 deep fallbacks over 200 commits, ALL of them Account.(url).Url, ~482 history walks a block per node, and it was the only shape falling back on the BVN engines at all. The record is written once so isWriteOnce called it permanent, but the permanent layer is read through a window and the executor reads that record on every touch of an account, so it aged out at once and every read after walked history. Acceptance: deepFallbacks for Account.(url).Url ZERO in storage-stats; BVN2 CPU near BVN1's rather than 3-4x it; no seizure; blocks 3.0 s; heals return to 0 after chaos; maintenanceErrors 0; probe reads of old entries still answer. |
+ | [20260902T041031Z](20260902T041031Z/manifest.md) | `10k-tps-620-gc37c2eeb0-dirty` | v2-kourou | unconditional (DI conductor, #4105) | 0.33h | 143 | 8->387 | 0->9317 | 12h chaos soak at 500 tps on the sharded store with Account(U).Url routed to the dynamic layer. THE FIX WORKED: deep fallbacks per BVN engine 96,303 -> 5, `Account.(url).Url` gone entirely, and the CPU asymmetry with it (BVN1 130-221% vs BVN2 181-192%, against 14-19% vs 37-57% before). STILL SEIZED at 20 min on a synthetic gap, BVN1->BVN2=417 (direction flipped from the previous two). BVN2 stalled at 320 while DN/BVN1 held 3.1 s/block; goroutines show zero semacquire and block production parked in select -- consensus not delivering, not storage. Load skew unaddressed: BVN2 sends 2.6-4.4x. CPU profiled: 18.45% Syscall6, 16.5% pread, 71.8% of preads are segment.bloomTest reading filters off disk. |
++| [20260902T222155Z](20260902T222155Z/manifest.md) | `10k-tps-654-gd8d636b52-dirty` | v2-kourou | unconditional (DI conductor, #4105) | 0.14h | 143 | 8→114 | 0→402 | validate #4189 durable unhashed staging + #4201 heal cadence, at the same 12h/500tps as 20260902T132651Z which livelocked with recv-deliv pinned at exactly 4096. Includes d8d636b52: Received is answered from staging's sighted mark on read rather than stored, which is what the first attempt at this run got wrong -- every channel read 0 received and the dashboard called a healthy network STALLED. THE TEST: recv-deliv must never pin at 4096, heals must not climb into six figures against a stalled stream, and heights must keep moving. |

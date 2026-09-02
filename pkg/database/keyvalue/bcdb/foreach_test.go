@@ -7,6 +7,7 @@
 package bcdb
 
 import (
+	"crypto/sha256"
 	"path/filepath"
 	"testing"
 	"time"
@@ -56,18 +57,59 @@ func TestForEach_SeesTheBatchVersion(t *testing.T) {
 	}))
 }
 
-// The tally remembers a bounded number of keys and says so.
-func TestTally_IsBounded(t *testing.T) {
+// The tally counts writes by shape and remembers nothing.
+//
+// It used to remember a digest of the last value written for every key,
+// so it could report whether a write changed the record. On a 500 tx/s
+// soak that map was 192 MB -- 38% of the live heap and the largest single
+// consumer on the node -- spent on a diagnostic (#4165). The store already
+// answers the question that matters by refusing a rewrite of a permanent
+// record, so the memory bought nothing.
+func TestTally_CountsAndRemembersNothing(t *testing.T) {
 	d, err := Open(filepath.Join(t.TempDir(), "db"))
 	require.NoError(t, err)
 	defer d.Close()
-	d.TallyKeys = 2
 
-	for i := 0; i < 5; i++ {
-		put(t, d, record.NewKey("Message", [32]byte{byte(i)}, "Main"), "v")
+	const n = 2000
+	for i := 0; i < n; i++ {
+		put(t, d, record.NewKey("Message", sha256.Sum256([]byte{byte(i), byte(i >> 8)}), "Main"), "v")
 	}
-	require.Len(t, d.last, 2, "digests remembered up to the cap and no further")
-	require.Equal(t, uint64(5), d.Shapes()["Message.(hash).Main"].New, "every write is still counted")
+	// The same key many times over: still just writes.
+	same := record.NewKey("Account", sha256.Sum256([]byte("acct")), "Main")
+	for i := 0; i < 50; i++ {
+		put(t, d, same, "v")
+	}
+
+	require.Equal(t, uint64(n), d.Shapes()["Message.(hash).Main"].Writes)
+	require.Equal(t, uint64(50), d.Shapes()["Account.(hash).Main"].Writes)
+
+	// Nothing per-key survives a write. The tally is counters, so its
+	// cost does not scale with how many distinct keys the node has seen.
+	var perKey int
+	require.NotPanics(t, func() { perKey = len(d.shapes) })
+	require.Less(t, perKey, 8, "one entry per SHAPE, not per key")
+}
+
+// The store reports the thing the digests were kept for, exactly and
+// across restarts: a permanent record written again with different bytes
+// is refused, and the refusal is counted against the shape.
+func TestTally_MisroutedComesFromTheStore(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "db")
+	d, err := Open(dir)
+	require.NoError(t, err)
+	defer d.Close()
+
+	// Message(H).Main is classified write-once. Writing it twice with
+	// DIFFERENT bytes is the misclassification this counter exists for.
+	k := record.NewKey("Message", sha256.Sum256([]byte("m")), "Main")
+	put(t, d, k, "one")
+	put(t, d, k, "two")
+
+	c := d.Shapes()[keyShape(k)]
+	require.Equal(t, "perm", c.Layer)
+	require.Equal(t, uint64(2), c.Writes)
+	require.Equal(t, uint64(1), c.Misrouted,
+		"the permanent layer refused the second write, which is the signal")
 }
 
 // A reader must not wait out a commit's write-through (#4175): the puts,

@@ -132,9 +132,7 @@ func TestSimulatorRouting(t *testing.T) {
 			}
 			s := shapes[shape]
 			s.Layer = c.Layer
-			s.New += c.New
-			s.Duplicate += c.Duplicate
-			s.Rewritten += c.Rewritten
+			s.Writes += c.Writes
 			s.Misrouted += c.Misrouted
 			shapes[shape] = s
 		}
@@ -150,8 +148,8 @@ func TestSimulatorRouting(t *testing.T) {
 	t.Logf("perm writes %d, dyna writes %d, across %d databases", permWrites, dynaWrites, len(dbs))
 	for _, shape := range names {
 		c := shapes[shape]
-		t.Logf("  %-4s new=%-7d dup=%-7d rewritten=%-7d misrouted=%-7d %s",
-			c.Layer, c.New, c.Duplicate, c.Rewritten, c.Misrouted, shape)
+		t.Logf("  %-4s writes=%-9d misrouted=%-7d %s",
+			c.Layer, c.Writes, c.Misrouted, shape)
 	}
 
 	require.Empty(t, misrouted, "records classified write-once that Accumulate rewrites")

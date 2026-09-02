@@ -21,9 +21,10 @@ import (
 //	Account.(url).MainChain.Element.(uint)
 //
 // This is what lets the question "is legitimate blockchain data being
-// rewritten?" be answered by looking rather than by assuming: a rewrite
-// is counted against its shape, and the shapes that get rewritten are
-// then plainly visible.
+// rewritten?" be answered by looking rather than by assuming: the store
+// refuses a rewrite of a permanent record, the refusal is counted
+// against its shape, and the shapes that get rewritten are then plainly
+// visible.
 func keyShape(k *record.Key) string {
 	if k == nil || k.Len() == 0 {
 		return "(empty)"
@@ -60,21 +61,28 @@ func shapeOf(v any) string {
 	}
 }
 
-// ShapeCount is what happened to the writes of one shape
+// ShapeCount is what happened to the writes of one shape.
+//
+// Two counters, and nothing else.  An earlier version answered "was this
+// key written again with different bytes" by remembering a digest of the
+// last value written for every key -- which on a 500 tx/s soak was 192 MB,
+// 38% of the live heap and the largest single consumer on the node, to
+// produce a statistic (#4165).
+//
+// It was not needed.  The permanent layer REFUSES a rewrite, so the store
+// already reports the thing that matters, exactly, for free, and across
+// restarts -- which the in-memory digests never did.  Whatever the answer
+// costs, it should not be a second index of the database.
 type ShapeCount struct {
 	// Layer is where isWriteOnce sends this shape: "perm" or "dyna".
-	// Reading it beside Rewritten is the check -- a perm shape with a
-	// non-zero Rewritten is a classification that is wrong.
 	Layer string `json:"layer"`
 
-	New       uint64 `json:"new"`       // The key had not been written before
-	Duplicate uint64 `json:"duplicate"` // Written again with the same bytes
-	Rewritten uint64 `json:"rewritten"` // Written again with different bytes
+	// Writes is every write of this shape.
+	Writes uint64 `json:"writes"`
 
-	// Misrouted counts the writes the permanent layer refused, which
-	// is the same event as Rewritten seen from the store's side.  They
-	// can differ: the tally sees a rewrite the first time a key is
-	// written twice in one process, the store sees it across restarts
-	// too, having the previous value on disk.
+	// Misrouted counts the writes the permanent layer refused: a
+	// permanent record written again with different bytes, which means
+	// isWriteOnce classified this shape wrongly.  Non-zero on a perm
+	// shape is the defect, and the first one is logged.
 	Misrouted uint64 `json:"misrouted"`
 }
