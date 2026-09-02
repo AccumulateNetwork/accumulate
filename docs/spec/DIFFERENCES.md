@@ -10,13 +10,16 @@ issues are written from once a part of the spec is settled — not a substitute
 for them, and not a backlog in itself.
 
 **An entry is removed when the code matches the spec, not when an issue is
-filed.**
+filed or closed.** The issue link under each heading is where the work is
+tracked; the entry itself is the difference.
 
 ---
 
 ## Executor
 
 ### E1. Staging state lives in an account
+
+*[#4189](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4189)*
 
 **Spec** ([executor.md](executor.md)): staging belongs to the executor.
 Everything received is held until it can be processed; a message that reaches
@@ -42,6 +45,8 @@ errors. All three partitions stayed live throughout.
 
 ### E2. `isReady` reads block state
 
+*[#4190](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4190)*
+
 **Spec**: block state never feeds back into staging.
 
 **Code**: `isReady` consults a stream position derived from the synthetic ledger
@@ -50,6 +55,8 @@ account — the record the block writes.
 **Size**: follows from E1.
 
 ### E3. Staging position after a restart is unspecified
+
+*[#4188](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4188)*
 
 **Spec**: silent. Once staging stops reading the ledger, something must define
 how the executor's position is recovered.
@@ -60,6 +67,8 @@ today.
 **Size**: design question, blocking E1.
 
 ### E4. An anchor's quorum is assembled by execution
+
+*[#4198](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4198)*
 
 **Spec**: anchor authorization is a staging decision. Signatures route to
 staging, staging packs them with the one anchor and evaluates quorum or proof,
@@ -82,6 +91,8 @@ evaluated twice over state that execution had to write first.
 synthetics in run `20260902T132651Z`, so small today, linear in validator count.
 
 ### E5. Staging is re-evaluated in a loop
+
+*[#4197](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4197)*
 
 **Spec** ([executor.md](executor.md)): each stream is evaluated once. A
 stream's run is computed from its arrivals and what is already staged, anchors
@@ -116,6 +127,8 @@ cannot arise.
 
 ### E6. `CascadeDeliveryQueue` is dead state that is still hashed
 
+*[#4195](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4195)*
+
 **Spec**: there is no cascade.
 
 **Code**: nothing writes the queue, but it survives as an account field with its
@@ -134,6 +147,8 @@ to the hash. One accidental writer from changing account hashes.
 
 ### D1. Record placement is a second, hand-maintained model
 
+*[#4199](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4199)*
+
 **Spec** ([database.md](database.md)): a store maps a key to an opaque value
 and does not interpret it.
 
@@ -151,6 +166,8 @@ divergence detectable without a soak.
 
 ### D2. Badger does not verify isolation
 
+*[#4194](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4194)*
+
 **Spec** ([database.md](database.md)): a change set is isolated — changes are
 invisible to anyone else until `Commit`. A backend is correct when it passes the
 five `kvtest` cases, and one that does not run `kvtest` is unspecified.
@@ -164,6 +181,8 @@ invariant the record model depends on most.
 difference is larger than the test.
 
 ### D3. The window is not part of the backend contract
+
+*[#4196](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4196)*
 
 **Spec**: a windowed store answers ordinary reads from its window and a deep
 reader reaches history; a backend that cannot answer a read must say so, never
@@ -181,6 +200,8 @@ absence rather than guessing.
 
 ### H1. The healing cache does not exist
 
+*[#4193](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4193)*
+
 **Spec** ([healing.md](healing.md)): healing caches what it fetches, keyed by
 source, destination and sequence number; only healing uses it; it lives in
 Accumulate and is indifferent to the storage backend.
@@ -193,6 +214,8 @@ executor's reads rather than the healer's fetches.
 
 ### H2. Healing is not ordered
 
+*[#4191](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4191)*
+
 **Spec**: heal newest gap to lowest, and skip what is already staged locally.
 
 **Code**: neither. The healer re-fetches messages the node already holds, in no
@@ -202,6 +225,8 @@ particular order.
 with the database, ordering only makes the loop more efficient.
 
 ### H3. Proof extension does not exist
+
+*[#4192](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4192)*
 
 **Spec**: a destination that needs more reach asks for an extension — the last
 hash of the proof it holds, that hash's index, and how far back is wanted — and
