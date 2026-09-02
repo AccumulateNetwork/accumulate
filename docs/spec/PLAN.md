@@ -24,6 +24,7 @@ stops.
 | **Spec** | Executor, database and healing written. Healing was rewritten after the first pass: gaps come from staging, requests are generated in staging, two senders are chosen by the previous block's hash, and healing activates on a cadence. |
 | **E1 + H4 + E2 + E3** | **Done**, on `issue-4189-staging-out-of-account`. Removed from the differences: the code matches the spec. |
 | **H5** | **Done**, same branch. Cadence and sender selection replace the jitter, back-off and breakers. |
+| **H2** | **Done** — nothing to write. Oldest-first entries and "skip what is staged" both arrived with the staging change. |
 | **D3** | **Implemented, not merged.** `TestDeep` on branch `issue-4196-kvtest-deep` (`f3339116e`). |
 | **Everything else** | Not started. |
 
@@ -75,10 +76,16 @@ withholds the rest of the quorum.
 a position built from the ledger's `Delivered` and staging's own records, so
 nothing the block writes decides what the executor believes it holds.
 
-**#4191 — H2: order healing, newest gap to lowest.** Smaller than it was: "skip
-what is already staged" arrives with H4, since a staged number is not a gap.
-What is left is the order. Only meaningful after E1 — until the ledger stops
-disagreeing with the database, ordering makes a pointless loop more efficient.
+**#4191 — H2: order healing. DONE**, and it turned out to be nothing to write.
+"Skip what is already staged" arrived with H4, since a staged number is not a
+gap. The order arrived with it too: entries are fetched oldest-first, which is
+what advances delivery.
+
+What the entry had wrong was the direction. "Newest to lowest" conflated the two
+halves of closing a gap — a receipt only needs the HASHES, so the proof is a
+separate fetch with no order at all, and the entries go oldest-first because
+delivery is in order. Fetching entries newest-first under a bounded budget would
+spend it on messages that unblock nothing.
 
 **#4192 — H3: proof extension.** Without it a destination further behind than
 `MaxReceiptListElements` (4,096) cannot be covered at all, and the gap in the
@@ -131,7 +138,7 @@ soak.
 ## Order of work
 
 ```
-E1+H4+E2 ─▶ H5 ─▶ H2 ─▶ H3 ─▶ H1         the critical path (through H5 DONE)
+E1+H4+E2 ─▶ H5 ─▶ H2 ─▶ H3 ─▶ H1         the critical path (through H2 DONE)
 E6, D2, D3 ─▶ D4                          parallel, any time
 E5, E4, D1                                after
 ```

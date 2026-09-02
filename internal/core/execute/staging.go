@@ -151,9 +151,16 @@ func Sighted(batch *database.Batch, id StreamID) (uint64, error) {
 //
 // A run rather than a number because a run is what one range request covers: a
 // collection proof is a merkle range, so it proves a run of adjacent entries and
-// not an arbitrary selection. Oldest first because delivery is in order — the
-// stream advances the moment the oldest run fills, and keeps advancing as each
-// next one lands.
+// not an arbitrary selection.
+//
+// Oldest first, because delivery is in order: the stream advances the moment the
+// oldest run fills and keeps advancing as each next one lands. The caller's
+// budget is bounded, which is exactly why the direction matters — spending it on
+// the holes furthest from the watermark would fetch messages that unblock
+// nothing, and a stream deep enough behind would never advance. This says
+// nothing about where the PROOF comes from: a receipt only needs the hashes, so
+// the proof is a separate fetch against the newest receipt held, and it has no
+// order to get wrong.
 //
 // maxRuns bounds the answer and the scan. A stream far enough behind has one
 // enormous run, which costs nothing to find; a stream behind and dense with

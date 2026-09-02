@@ -205,18 +205,36 @@ Two things still matter when a request fails:
 
 ### Order
 
-Heal from the **newest gap to the lowest gap**.
+Two different things are fetched to close a gap, and only one of them has an
+order.
 
-Every receipt is a collection proof, and every receipt goes through staging. A
-receipt that was dropped means the hashes for its range were never held — so
-healing lowest-first would need the specific receipt covering the lowest hole,
-and if that is the receipt that went missing it cannot proceed.
+**A receipt only needs the hashes.** So the proof is one fetch: ask for whatever
+hashes the proof requires, however far back they reach, and validate them
+against the newest receipt already held. There is no ordering question here
+because there is no sequence to advance — a proof is complete or it is not.
 
-Newest-first works either way, and it never requires asking for a past receipt:
-drop twenty of them and the next receipt still proves everything behind it. The
-source achieves this by adding hashes to the next receipt it was going to send
-anyway — no per-destination bookkeeping, no special range, and no request path
-to serve.
+Every receipt is a collection proof, and every receipt goes through staging, so
+a receipt that was dropped means the hashes for its range were never held. That
+is why the proof is never chased backwards through past receipts: drop twenty of
+them and the newest still proves everything behind it, once the hashes in
+between are supplied. The source achieves that by adding hashes to the next
+receipt it was going to send anyway — no per-destination bookkeeping, no special
+range, and no request path to serve. [Extending a proof](#extending-a-proof-rather-than-replacing-it)
+is the mechanism.
+
+**The entries are fetched from the oldest gap to the newest.** Delivery is in
+order, so the stream advances the moment the oldest run fills and keeps
+advancing as each next one lands. A fetch is bounded per activation, and that
+bound is exactly why the direction matters: filling the holes furthest from the
+watermark first would consume the budget on messages that unblock nothing, and a
+stream deep enough behind would never advance at all. In the run this work comes
+from the gap was 8,556 and a scan carries a few hundred.
+
+The two used to be conflated, and conflating them is what made "heal newest
+first" look necessary: if a proof could only come from the receipt that
+originally covered a range, healing the oldest hole would depend on the one
+receipt most likely to be missing. It cannot, because a receipt only needs the
+hashes.
 
 ### Extending a proof rather than replacing it
 
@@ -238,6 +256,10 @@ a root. Widening the range backwards means an earlier merkle state and the
 elements in between: the replay still ends at the same anchor, so **the same
 receipt keeps working**. Hashes can be added to a collection proof without
 another receipt.
+
+This is the hash fetch the [order](#order) names — the half of closing a gap
+that has no ordering, because a proof is complete or it is not. It moves hashes
+and nothing else: no message bodies, no signature, no new anchor.
 
 So a destination that needs to reach further back asks for an **extension**, not
 a new proof. The request carries:

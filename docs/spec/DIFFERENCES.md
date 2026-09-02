@@ -188,18 +188,6 @@ executor's reads rather than the healer's fetches.
 
 **Size**: small.
 
-### H2. Healing is not ordered
-
-*[#4191](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4191)*
-
-**Spec**: heal newest gap to lowest, and skip what is already staged locally.
-
-**Code**: neither. The healer re-fetches messages the node already holds, in no
-particular order.
-
-**Size**: medium, and entangled with E1 — until the ledger stops disagreeing
-with the database, ordering only makes the loop more efficient.
-
 ### H3. Proof extension does not exist
 
 *[#4192](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4192)*
