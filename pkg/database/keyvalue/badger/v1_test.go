@@ -77,6 +77,10 @@ func TestV1Database(t *testing.T) {
 	kvtest.TestDatabase(t, newOpenerV1(t))
 }
 
+func TestV1Deep(t *testing.T) {
+	kvtest.TestDeep(t, newOpenerV1(t))
+}
+
 func TestV1SubBatch(t *testing.T) {
 	kvtest.TestSubBatch(t, newOpenerV1(t))
 }

@@ -151,6 +151,94 @@ func TestIsolation(t *testing.T, open Opener) {
 	require.ErrorIs(t, err, errors.NotFound)
 }
 
+// TestDeep is the contract for a store with a window.
+//
+// Some backends do not answer every read from the whole of history:
+// BlockchainDB answers a permanent read from a recent window and reports
+// anything older absent, because probing history on every miss cost 23% of a
+// validator's CPU and grew without bound with the chain. A reader that means to
+// look back takes a DEEP change set instead.
+//
+// Two things must hold, and the second is the one that matters:
+//
+//   - a deep reader sees everything that was written, however old;
+//   - a shallow reader may report a record ABSENT, but must never report a
+//     DIFFERENT value for it. Reporting not-found for data that exists is a
+//     window doing its job; reporting the wrong value is a consensus fault.
+//
+// The test is deliberately backend-agnostic: it does not know how a store
+// decides what falls outside its window, only that whatever falls outside must
+// still be readable deeply and must never be answered wrongly. Backends with no
+// window do not implement DeepBeginner and skip.
+func TestDeep(t *testing.T, open Opener) {
+	const records, commits = 20, 60
+
+	db := openDb(t, open)
+	deep, ok := db.Beginner.(keyvalue.DeepBeginner)
+	if !ok {
+		t.Skip("not a windowed store")
+	}
+
+	// Write the records the test will look for, then commit many more times,
+	// so anything the store ages out has aged out by the end.
+	want := map[record.KeyHash][]byte{}
+	for i := range records {
+		key := record.NewKey("Message", [32]byte{byte(i), 1}, "Main")
+		value := []byte(fmt.Sprintf("record %d", i))
+		want[key.Hash()] = value
+		doBatch(t, db, nil, func(batch keyvalue.ChangeSet) {
+			require.NoError(t, batch.Put(key, value))
+		})
+	}
+	for i := range commits {
+		doBatch(t, db, nil, func(batch keyvalue.ChangeSet) {
+			require.NoError(t, batch.Put(record.NewKey("Message", [32]byte{byte(i), 2}, "Main"), []byte("filler")))
+		})
+	}
+
+	// A deep reader sees all of it.
+	db2 := deep.BeginDeep(nil, false)
+	defer db2.Discard()
+	for i := range records {
+		key := record.NewKey("Message", [32]byte{byte(i), 1}, "Main")
+		v, err := db2.Get(key)
+		require.NoErrorf(t, err, "a deep read must answer record %d", i)
+		require.Equal(t, want[key.Hash()], v)
+	}
+
+	// A shallow reader may not have it — but must never answer wrongly.
+	b := db.Begin(nil, false)
+	defer b.Discard()
+	absent := 0
+	for i := range records {
+		key := record.NewKey("Message", [32]byte{byte(i), 1}, "Main")
+		v, err := b.Get(key)
+		switch {
+		case err == nil:
+			require.Equalf(t, want[key.Hash()], v,
+				"a shallow read of record %d answered, so it must answer correctly", i)
+		default:
+			require.ErrorAsf(t, err, new(*database.NotFoundError),
+				"a shallow read of record %d must answer or report absence, not fail", i)
+			absent++
+		}
+	}
+
+	// Reported, because the interesting half of this test is the records the
+	// shallow reader could NOT answer. Zero means the window never closed over
+	// anything in this run and the test proved only that deep reads work — a
+	// weaker result than it looks, and worth seeing rather than assuming.
+	//
+	// On BlockchainDB it is zero today for a reason that is not about this
+	// test: the adapter falls back to GetDeep when a shallow read misses the
+	// window, counting the fallback by record shape rather than reporting
+	// absence. The window is advisory until those counters reach zero over a
+	// soak and the fallback can be removed. So this half of the contract is
+	// currently unreachable, and the assertion above is what will catch it the
+	// day it is not.
+	t.Logf("deep answered %d/%d; shallow reported %d absent", records, records, absent)
+}
+
 func TestSubBatch(t *testing.T, open Opener) {
 	db := openDb(t, open)
 

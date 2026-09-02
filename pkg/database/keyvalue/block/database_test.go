@@ -78,6 +78,10 @@ func TestIsolation(t *testing.T) {
 	kvtest.TestIsolation(t, newOpener(t))
 }
 
+func TestDeep(t *testing.T) {
+	kvtest.TestDeep(t, newOpener(t))
+}
+
 func TestSubBatch(t *testing.T) {
 	kvtest.TestSubBatch(t, newOpener(t))
 }

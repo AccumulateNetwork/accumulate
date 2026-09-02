@@ -28,3 +28,4 @@ func TestIsolation(t *testing.T) { kvtest.TestIsolation(t, open(t)) }
 func TestSubBatch(t *testing.T)  { kvtest.TestSubBatch(t, open(t)) }
 func TestPrefix(t *testing.T)    { kvtest.TestPrefix(t, open(t)) }
 func TestDelete(t *testing.T)    { kvtest.TestDelete(t, open(t)) }
+func TestDeep(t *testing.T)      { kvtest.TestDeep(t, open(t)) }
