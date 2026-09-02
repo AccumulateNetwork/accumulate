@@ -360,10 +360,39 @@ The anchor itself must be a sequenced anchor transaction whose destination's
 root identity matches the transaction's principal, and a remote placeholder is
 resolved to the real transaction by hash before the type is checked.
 
-So the answer to "are signatures handled differently for anchors" is yes, and
-the difference is not the signature algorithm — it is that an anchor is
-authorized by *quorum or proof*, evaluated in the message executor, rather than
-by an authority chain evaluated in a signature executor.
+So the difference is not the signature algorithm. It is **when** authorization
+is decided:
+
+- **A user signature is checked as part of execution.** Authority, thresholds
+  and delegation are state-dependent, and evaluating them *is* execution work.
+- **An anchor is authorized before execution.** Quorum or proof is a
+  precondition, not an effect, so it is a staging decision.
+
+### Anchor authorization belongs to staging
+
+Signatures for an anchor route to **staging**, not through execution. They are
+inputs to a decision, not state changes.
+
+Staging holds the one anchor and collects the signatures that arrive for it,
+packs them together, and evaluates the quorum — or the collection proof, which
+needs no accumulation at all. Once it answers yes the anchor is **authorized**,
+and it executes once, in one block, **with no further checking**: everything an
+executor would re-verify has already been verified, so execution applies the
+anchor rather than re-deciding whether it may.
+
+The payload deduplicates naturally under this shape. Copies of an anchor from
+different validators are identical, so they collapse to one; today they cannot,
+because each `BlockAnchor` embeds a different signature and therefore hashes
+differently, and `checkStatus` never short-circuits.
+
+Determinism is free. Signatures arrive through consensus like everything else —
+there is no out-of-band path — so every node accumulates the same set by the
+same block and authorizes at the same block.
+
+This also removes an asymmetry. An anchor authorized by proof executes on first
+arrival; one authorized by quorum takes as many executions as it takes
+signatures. Under this shape both are a staging decision followed by one
+execution.
 
 ### Parallel execution
 
@@ -437,3 +466,21 @@ These contradict section 1 and are filed, not fixed here:
   feeding back into a staging decision, invariant 5.
 - **How the executor's staging position is restored after a restart is not
   specified**, and will need to be once staging stops reading the ledger.
+- **An anchor's quorum is assembled by execution rather than decided in
+  staging.** Each validator sends a full `BlockAnchor` carrying the whole
+  payload and its own signature; each is a complete message execution that
+  writes `recordMessageAndStatus` and `RecordHistory` and adds one signature to
+  `ValidatorSignatures()`, and the copy that crosses `ValidatorThreshold`
+  executes the anchor. For an N-validator partition, N−1 of those deliveries
+  exist only to deposit a signature.
+
+  Staging already asks the right question — `admissibilityOf` calls
+  `anchorIsAdmissible`, the same rule `txnIsReady` uses at execution, shared
+  deliberately (#4169 step 3b) — but it has nothing to collect, because the
+  signature set only grows as a side effect of those executions. So the rule is
+  evaluated twice: once to decide staging, once to decide execution, over state
+  that execution had to write first.
+
+  The cost is O(validators) per anchor. Measured in run `20260902T132651Z`,
+  anchors were 445 against 180,997 synthetics, so this is small today and grows
+  linearly with validator count.
