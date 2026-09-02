@@ -29,6 +29,10 @@ func TestV4Database(t *testing.T) {
 	kvtest.TestDatabase(t, newOpenerV4(t))
 }
 
+func TestV4Isolation(t *testing.T) {
+	kvtest.TestIsolation(t, newOpenerV4(t))
+}
+
 func TestV4SubBatch(t *testing.T) {
 	kvtest.TestSubBatch(t, newOpenerV4(t))
 }
