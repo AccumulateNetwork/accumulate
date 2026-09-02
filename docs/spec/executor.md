@@ -56,17 +56,63 @@ gates that can only be evaluated with block state in hand.
 
 Fixed, and each choice is a decision:
 
-1. **Anchors**, because an anchor extends the directory root that admits
+1. **Anchor streams**, because an anchor extends the directory root that admits
    synthetics — so a synthetic can use an anchor that arrived in the same block
    rather than waiting for the next.
-2. **Synthetics**, so a deposit lands before a user transaction spends it. A
-   send that would fail on a stale balance succeeds instead: strictly more
-   permissive, and deterministic either way.
-3. **User envelopes**, in arrival order.
+2. **Synthetic streams**, decided against the chain the anchors just extended,
+   so a deposit lands before a user transaction spends it. A send that would
+   fail on a stale balance succeeds instead: strictly more permissive, and
+   deterministic either way.
+3. **User envelopes**, in arrival order — and anything staging did not place in
+   a run.
+4. **Drain again**, because step 3 *reveals work to the block*. An envelope that
+   arrives out of sequence is recorded pending, and that makes it drainable now
+   rather than next block.
+
+Step 4 is not tidying. Without it a message whose predecessor arrives in the
+same block waits a whole block for no reason.
 
 Within each group, streams run in canonical source order — the directory first,
 then partitions by ID. Any fixed rule would do; what matters is that every node
 uses the same one.
+
+### A block does not begin with an empty slate
+
+Opening a block finishes the previous one. Before any of this block's messages
+are seen, `Begin`:
+
+- captures the previous block's BPT root, and where the directory anchor chain
+  stood before this block applies anything to it;
+- **finalizes the previous block** — records its anchor if it has not been
+  recorded, and dispatches the synthetic messages it produced. These are
+  independent duties: skipping the anchor must not skip the synthetics;
+- resets the ledger's transient values and refuses to move backwards — a block
+  index that does not increase is a panic, not an error;
+- records the previous block's votes and evidence, unless that block was empty;
+- **drains the delivery queues** — everything the previous block queued, local
+  synthetics and locally produced messages, is delivered before any of this
+  block's own.
+
+So "the executor's input is consensus" is true of *messages*; the block's work
+also includes the tail of the block before it.
+
+### Parallel execution
+
+A block may execute independent user envelopes in parallel across shards. What
+may be parallelised is decided by identity, and the rule is adversarial:
+
+**Classification never trusts a submitter's claim.** A remote stub's principal
+and a signature's TxID account are claims. The executor loads the real
+transaction by hash and writes *its* principal's records, so classifying by the
+claim would let a crafted envelope execute another identity's writes on the
+wrong shard. Claims are resolved to the real transaction, and anything
+unresolvable is serial.
+
+Serial by construction: any non-user message, any signature that is not a user
+key signature, any system or partition identity, ACME, any held transaction,
+and any envelope spanning more than one identity. Sequenced messages are serial
+too, which is why staging can settle them before the envelope loop without
+changing where they run.
 
 ### The invariants
 
@@ -96,6 +142,31 @@ network that is running; it is not ceremony for code that has never been
 deployed.
 
 ## 2. Specification — how it is implemented
+
+### Opening a block
+
+`block_begin.go`, `Executor.Begin`:
+
+1. Opens the block's writable batch, discarded if anything below fails.
+2. Publishes `WillBeginBlock`.
+3. Reads the previous BPT root into `State.PreviousStateHash`, and
+   `dnAnchorsAtStart` — the directory anchor chain's height before this block
+   applies anchors (#4169 step 0c), which staging uses to tell an anchor applied
+   this block from one applied earlier.
+4. `finalizeBlock` for the previous block: records its anchor if unrecorded, and
+   sends the synthetics it produced. The anchor is recorded for the last
+   *non-empty* block rather than strictly the previous one — under CometBFT at a
+   block a second the two nearly always coincide, but DAG-BFT produces a block
+   per committed certificate, dozens a second, and a one-block window that is
+   missed stalls the anchor sequence (#4054: 4 anchors recorded of 55 anchored
+   blocks). That changes when anchors are recorded, which is state, so it is
+   version-gated to preserve replay of pre-Kourou history.
+5. Loads the ledger and **panics** if the index does not increase.
+6. Resets transient ledger values: index, timestamp, pending updates, ACME
+   burnt, anchor.
+7. Captures votes and evidence as data entries, unless the previous block was
+   empty.
+8. `drainDeliveryQueues` — delivers what the previous block queued (#4146).
 
 ### Entry from consensus
 
@@ -230,6 +301,49 @@ whether the message is next. Ready messages execute; not-ready messages record
 pending and execute nothing. `Process` records the message and its status, then
 advances the stream — the advance is deferred so it lands only once everything
 the message records has, and never on a path that discards.
+
+### Closing a block
+
+`block_end.go`, in order — the order is part of the contract, because each step
+depends on the last:
+
+1. Write each stream's advances to its ledger, once per stream (#4169 step 7).
+2. Decide whether this completes a major block.
+3. Process events: expiring transactions and signature sets, against the major
+   block height just decided.
+4. Settle the block's produced messages — sequence what leaves the partition,
+   which is only known after the local/remote split.
+5. Decide whether an anchor must be sent.
+6. **If the block is empty, stop.** Nothing below runs.
+7. Record the previous block's state hash on the BPT chain.
+8. Record pending transactions; process chain updates; record block entries.
+9. Add the synthetic chain to the root chain, index the root chain, update the
+   transaction-chain index.
+10. Update major index chains if this is a major block.
+11. Execute post-update actions.
+12. **Update the BPT**, and only then active globals.
+
+### Parallel execution
+
+`exec_parallel.go`. `ProcessAll` runs consecutive single-identity user envelopes
+across `ExecutionShards`; at a shard count of one or less it is exactly a loop
+over `Process`. Staging settles anchor streams, then synthetic streams, then the
+envelope loop runs, then a second drain picks up what the loop revealed.
+
+`envelopeIdentity` returns the one identity an envelope's messages belong to, or
+`(nil, false)` meaning serial. Serial covers any non-user message, any signature
+that is not a user key signature, any system or partition identity, ACME, any
+held (`HoldUntil`) transaction, any transaction that cannot be resolved to its
+real content, and anything spanning more than one identity. Network accounts are
+serial even though they are user-writable, because they mutate shared executor
+state.
+
+Claims are resolved rather than trusted: a remote stub's principal and a
+signature's TxID account are claims, and classifying by them would let a crafted
+envelope execute another identity's writes on the wrong shard (#4149).
+
+Timing is booked as serial versus parallel share, so a run can say whether
+sharding helped or whether nothing was shardable.
 
 ### The database write
 
