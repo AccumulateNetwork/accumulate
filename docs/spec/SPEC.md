@@ -21,6 +21,12 @@ the same two sections:
 | [Database abstraction](database.md) | The storage contract every backend satisfies, and how a backend is chosen |
 | [Healing](healing.md) | Filling gaps in sequenced cross-partition streams |
 
+Alongside them, [DIFFERENCES.md](DIFFERENCES.md) records where the code departs
+from the specification. It is kept separate on purpose: a spec that documents
+its own exceptions stops being normative. The specification says what we are
+doing; the differences say what has yet to be brought into line, and issues are
+written from them once a part of the spec is settled.
+
 Parts still to be written: consensus (DAG-BFT), the protocol's account and
 transaction model, the API, and cross-partition messaging (synthetics and
 anchors). A missing part is a gap, not a statement that the subsystem has no
@@ -31,9 +37,10 @@ rules.
 - **All work is done against the spec.** Read the relevant section first. A
   change that contradicts the spec means fixing the spec or the plan first.
 - **New work requires updating the spec** — in the same change set, not later.
-- **Gaps found while writing the spec are filed as issues, not silently
-  fixed.** A spec that quietly documents the fix rather than the behaviour is
-  fiction.
+- **A difference found while writing the spec is recorded in
+  [DIFFERENCES.md](DIFFERENCES.md), not written into the spec and not silently
+  fixed.** An entry is removed when the code matches the spec, not when an issue
+  is filed for it.
 
 See accumulatenetwork/accumulate#4178 and the
 [standard](https://github.com/PaulSnow/tracking_repo/blob/main/docs/standards/spec-driven-development.md).

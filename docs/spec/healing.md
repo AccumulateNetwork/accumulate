@@ -134,18 +134,7 @@ identifies gaps, fetches, and submits.
   synthetic transaction" is emitted **after** the submit succeeds, so it records
   a completed heal, not a request.
 
-## Known gaps
+---
 
-- **The cache described above does not exist yet.** A read cache was built in
-  the BlockchainDB adapter instead (accumulatenetwork/accumulate#4186) and
-  removed: it sat on the storage read path where it answered 0.40% of lookups,
-  because it was caching the executor's reads rather than the healer's fetches.
-- **Healing is not ordered.** It does not heal newest-first, and it does not
-  skip numbers already staged locally, so it re-fetches messages the node
-  already holds (accumulatenetwork/accumulate#4187).
-- **Proof extension does not exist.** There is no extension request and no way
-  to widen a held proof; a destination further behind than
-  `MaxReceiptListElements` currently cannot be covered at all — the sender will
-  not build the package, the sequencer will not serve the range, and the
-  receiver would reject the proof. The gap in soak `20260902T132651Z` was 8,556,
-  more than twice the cap.
+Where the implementation departs from this specification, see
+[DIFFERENCES.md](DIFFERENCES.md).

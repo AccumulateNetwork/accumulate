@@ -162,17 +162,7 @@ hashes, integers. `Key.Hash()` reduces it to 32 bytes, which is what a store is
 keyed by. A store therefore cannot reconstruct the path from the key, which is
 why `ForEach` yields `record.KeyFromHash`.
 
-## Known gaps
+---
 
-Stated here because the standard requires gaps be filed, not fixed in silence:
-
-- **The BlockchainDB adapter's placement rules are not derived from this
-  spec.** `pkg/database/keyvalue/bcdb/route.go` classifies records as
-  write-once or mutable by inspecting key shapes — a second model of the record
-  model, maintained by hand. It has been wrong twice
-  (accumulatenetwork/accumulate#4174, and `Account(U).Url` in `c37c2eeb0`),
-  each time discovered in a soak rather than by construction.
-- **A windowed store's window is not part of the contract.** `kvtest` does not
-  exercise `BeginDeep`, so nothing verifies that a windowed backend answers a
-  deep read correctly, or that an ordinary read reports absence rather than
-  guessing.
+Where the implementation departs from this specification, see
+[DIFFERENCES.md](DIFFERENCES.md).

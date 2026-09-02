@@ -477,51 +477,7 @@ it on failure, so a failed message leaves nothing. The block's batch reaches
 disk exactly once, at `state.Commit()` in `ProduceBlock`. `state.Hash()` is
 taken before the commit, and a failure to hash discards rather than commits.
 
-## Known gaps
+---
 
-These contradict section 1 and are filed, not fixed here:
-
-- **Staging state lives in an account** (accumulatenetwork/accumulate#4187).
-  `PartitionSyntheticLedger.Pending` is main state of an account of type
-  `AccountTypeSyntheticLedger`, so it is hashed into the BPT and rewritten every
-  block. Because the record is rewritten whole each block the pending array must
-  be bounded (`MaxPendingSequenced = 4096`), so receipts past the delivery point
-  are refused, so the ledger reports not holding messages the node has, so the
-  healer re-fetches them. That violates invariants 3, 4 and 5. Measured in soak
-  `20260902T132651Z`: 8,556 distinct sequence numbers re-fetched 53,011 times,
-  some 41 times each, while all three partitions stayed live.
-- **`isReady` consults a position derived from that account** — block state
-  feeding back into a staging decision, invariant 5.
-- **How the executor's staging position is restored after a restart is not
-  specified**, and will need to be once staging stops reading the ledger.
-- **An anchor's quorum is assembled by execution rather than decided in
-  staging.** Each validator sends a full `BlockAnchor` carrying the whole
-  payload and its own signature; each is a complete message execution that
-  writes `recordMessageAndStatus` and `RecordHistory` and adds one signature to
-  `ValidatorSignatures()`, and the copy that crosses `ValidatorThreshold`
-  executes the anchor. For an N-validator partition, N−1 of those deliveries
-  exist only to deposit a signature.
-
-  Staging already asks the right question — `admissibilityOf` calls
-  `anchorIsAdmissible`, the same rule `txnIsReady` uses at execution, shared
-  deliberately (#4169 step 3b) — but it has nothing to collect, because the
-  signature set only grows as a side effect of those executions. So the rule is
-  evaluated twice: once to decide staging, once to decide execution, over state
-  that execution had to write first.
-
-  The cost is O(validators) per anchor. Measured in run `20260902T132651Z`,
-  anchors were 445 against 180,997 synthetics, so this is small today and grows
-  linearly with validator count.
-- **`CascadeDeliveryQueue` is dead state that is still hashed.** It held ready
-  sequenced messages whose execution the old cascade deferred. Nothing writes it
-  any more — every remaining reference is a reader — but it survives as an
-  account field with its accessor, dirty tracking, walk and commit; snapshots
-  carry it; and `observer_prod` folds it into the **account hash** beside
-  `LocalDeliveryQueue`, on the reasoning that delivery queues are consensus
-  state because they decide what executes at the next block's `Begin` (#4155).
-
-  It is inert only by accident: because nothing writes it, it is always empty,
-  so it never contributes to the hash. It is one accidental writer away from
-  changing account hashes, and it is walked on every hash of the synthetic
-  account. The queue that is still real is `LocalDeliveryQueue`; this one went
-  with the cascade and should have gone with it.
+Where the implementation departs from this specification, see
+[DIFFERENCES.md](DIFFERENCES.md).

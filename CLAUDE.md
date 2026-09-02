@@ -8,9 +8,11 @@ means fixing the spec or the plan first, not working around it.
 
 **New work requires updating the spec** — in the same change set, not "later".
 
-**Gaps found while writing or reading the spec are filed as issues, not
-silently fixed.** A spec that documents the fix rather than the behaviour is
-fiction.
+**Differences between the code and the spec go in
+[`docs/spec/DIFFERENCES.md`](docs/spec/DIFFERENCES.md)** — not into the spec,
+and not silently fixed. The spec says what we are doing; the differences say
+what has yet to be brought into line, and issues are written from them once a
+part of the spec is settled.
 
 ## MANDATORY: Review Tracking Repository Before Development
 
