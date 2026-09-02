@@ -107,23 +107,45 @@ answer is submitted back and re-enters through consensus, sorted and staged and
 executed like any other message. What is deterministic is *which* requests are
 made, not the transport that carries them.
 
-### Managing requests
+### Cadence
 
-Four rules, each answering a way a healer can make things worse:
+Healing activates **every few blocks**, not every block. The number is small and
+not magic — two may be enough.
+
+The reason is the round trip. A request goes to another partition and its answer
+comes back through consensus, which takes blocks. Activating every block would
+re-request gaps whose answers are still in flight, so a stream that is behind
+would generate requests at the block rate for messages already on their way.
+Waiting a few blocks lets an answer arrive before the same gap is considered
+again.
+
+That is the whole of the rate control. There is no back-off, no jitter and no
+per-source scheduling, because there is nothing to control: two requests a gap
+per activation is not a load worth managing. The earlier design spread requests
+in time to protect a source from N validators; with two senders and a cadence,
+the protection is already there and the machinery would only be a way to get it
+wrong.
+
+### Sending
+
+**A request is sent immediately.** It is a submission to another partition and
+changes nothing here, so it does not wait for the block to commit and is not
+part of what the block produces. Nothing in this partition's state depends on
+whether it was sent, when, or whether it succeeded.
+
+That is also why a lost request costs nothing. If it never goes out, or goes out
+and is never answered, the gap is still a gap at the next activation and is
+requested again. Healing does not need delivery guarantees because it is already
+the retry mechanism.
+
+Two things still matter when a request fails:
 
 - **A failure must not stop the batch.** Delivery is ordered, so failing to pull
   one hole must not stop the others being pulled. A stream must never wedge
   because one request failed.
-- **A source that keeps failing is skipped, not hammered.** Consecutive failures
-  trip a breaker and the source is left alone for a back-off. Retrying a
-  partition that cannot answer converts one node's problem into everyone's.
-- **A deterministic answer is not retried.** "Not found" is the source telling
-  the truth about its own state, not a transport hiccup; retrying it
-  milliseconds later multiplies the request rate for no possible gain. A
-  transport failure is retried, and routing picks a different peer each attempt,
-  so one transient "no live peers" cannot wedge a stream permanently.
 - **A request is bounded in time.** A hung call must not pin the goroutine, or
-  its read batch, indefinitely.
+  its read batch, indefinitely — and by the time the bound expires the next
+  activation is due anyway.
 
 ### Order
 

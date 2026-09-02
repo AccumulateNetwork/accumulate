@@ -258,8 +258,13 @@ validator sees the same consensus stream and could compute the same request set
 directly; the jitter exists only because the computation was moved out of the
 place that knows.
 
+The `Conductor` also carries machinery the design does not need: a per-source
+back-off, a failure breaker, and per-gap scheduling state. With two senders and
+an activation every few blocks there is no load to manage, and a lost request
+costs nothing because the gap is still a gap at the next activation.
+
 **Size**: medium, and it lands with H4 — both are consequences of healing asking
-staging rather than reading what the block wrote.
+staging rather than reading what the block wrote. Most of it is deletion.
 
 ### H2. Healing is not ordered
 
