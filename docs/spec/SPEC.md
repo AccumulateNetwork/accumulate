@@ -22,7 +22,7 @@ the same two sections:
 | [Healing](healing.md) | Filling gaps in sequenced cross-partition streams |
 
 Alongside them, [DIFFERENCES.md](DIFFERENCES.md) records where the code departs
-from the specification. It is kept separate on purpose: a spec that documents
+from the specification, and [PLAN.md](PLAN.md) orders that work. It is kept separate on purpose: a spec that documents
 its own exceptions stops being normative. The specification says what we are
 doing; the differences say what has yet to be brought into line, and issues are
 written from them once a part of the spec is settled.

@@ -10,11 +10,9 @@ produces the same block and the same state hash.
 ### The path
 
 ```
-consensus ──▶ sort ──▶ stage ──▶ execute ──▶ batch ──▶ commit
-              (streams) (what can run)  (effects)      (one, at close)
-                            ▲               │
-                            └───────────────┘
-                          re-evaluated as the block runs
+consensus ──▶ sort ──▶ ┌─ anchors:    evaluate ▸ drain ▸ execute ─┐
+              (streams)│  synthetics: evaluate ▸ drain ▸ execute  │─▶ batch ─▶ commit
+                       └─ user:       evaluate ▸ drain ▸ execute ─┘   (one, at close)
 ```
 
 A message must satisfy each of the following before it executes. Validity is
@@ -44,11 +42,14 @@ staging*, which is why they are not separate passes:
    once, when the block closes. There is no separate "persist" step and no
    partial commit.
 
-Staging and execution are not two passes but a loop: executing changes the
-answers staging gives, so staging is asked again. What must *not* feed back is
-the block's persisted output — staging reads the streams' positions and the
-anchor chain as the block builds them, never the ledger record the block writes
-at its close.
+The three groups run in sequence, each finished before the next is evaluated.
+Executing one group changes the state the next is evaluated against — anchors
+extend the chain synthetics are judged by — and that is the sequence doing its
+job, not a feedback loop. Within a group nothing is re-asked.
+
+What must never feed back is the block's persisted output. Staging reads the
+streams' positions and the anchor chain as the block builds them; it does not
+read the ledger record the block writes at its close.
 
 ### Validation is a separate, earlier thing
 
