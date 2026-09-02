@@ -250,7 +250,8 @@ requests, and staging dedupes several askers of the same gap into one request.
 block. `claimSyntheticRequest` schedules a per-node **random jittered delay** on
 first sight of a gap and enforces a back-off, "so a stalled stream isn't
 hammered by every validator on every block", relying on the first answer landing
-before the other validators fire.
+before the other validators fire. There is no clock-selected pair: every
+validator eventually fires for every gap, and the jitter only staggers them.
 
 That is a heuristic standing in for agreement the system already has. Every
 validator sees the same consensus stream and could compute the same request set

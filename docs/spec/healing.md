@@ -69,6 +69,30 @@ obviously an anchor, where each signature can independently reveal the same
 missing message. Staging holds one request per gap, so the number of requests is
 the number of gaps, not the number of things that noticed them.
 
+**Two validators per block actually send, chosen by the clock.** Every validator
+computes the same gaps; that does not mean every validator should ask for them.
+The block's time selects the pair deterministically, so each node knows whether
+it is one of the two without being told and without negotiating anything.
+
+Two rather than one, because one is a single point of failure: if the chosen
+validator is down, or cannot reach the source, the gap goes unrequested for that
+block and healing waits on a node that is not going to answer. Two covers that
+at a cost of two requests per gap per block rather than N.
+
+Two rather than all, because N validators asking for the same message is N−1
+wasted round trips at exactly the moment a stream is already behind — and the
+extra answers are discarded anyway, since the block's sort keeps the first
+sighting of a sequence number.
+
+The pair rotates with the clock, so a validator that cannot reach a source stops
+being asked within a block, and the load spreads instead of settling on whoever
+was picked first.
+
+The selection is over which node *sends*, not over what is requested. Every
+validator computes the same request set, so one that is not selected has already
+done the work and is ready to be selected next block without discovering
+anything new.
+
 A request is still not consensus: the node asks the source's sequencer, and the
 answer is submitted back and re-enters through consensus, sorted and staged and
 executed like any other message. What is deterministic is *which* requests are
