@@ -192,9 +192,9 @@ executor's reads rather than the healer's fetches.
 
 *[#4201](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4201)*
 
-**Spec** ([healing.md](healing.md)): requests are generated in staging, at the
-end of processing the anchor and synthetic groups — the first moment the gap set
-is final — on the blocks where healing activates. Every validator computes the
+**Spec** ([healing.md](healing.md)): requests are computed from staging at a
+block boundary — the moment the gap set is final — on the blocks where healing
+activates. Every validator computes the
 same gaps and therefore the same requests, and staging dedupes several askers of
 the same gap into one request. Two of them send, selected by the previous
 block's hash, and send immediately.

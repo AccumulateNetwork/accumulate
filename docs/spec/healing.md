@@ -66,18 +66,27 @@ it is asynchronous, and the divergence would be immediate.
 
 ### Generating requests
 
-**Requests are generated in staging, at the end of processing the anchor and
-synthetic groups**, on the blocks where healing activates.
+**Requests are computed from staging at a block boundary**, on the blocks where
+healing activates.
 
-That point is chosen because it is the first moment the gap set is final for the
-block: the anchors have executed, the synthetics have been judged against the
-chain those anchors extended, and every stream's run has been drained. What is
-still missing then is what is genuinely missing.
+A boundary is chosen because it is the moment the gap set is final: the anchors
+have executed, the synthetics have been judged against the chain those anchors
+extended, and every stream's run has been drained. What is still missing then is
+what is genuinely missing.
+
+Since staging is durable state ([executor.md](executor.md), Restart), the
+boundary can be read rather than intercepted: opening the committed state as a
+block begins sees exactly what the previous block finished with. So the
+computation does not have to live inside block execution, and it should not —
+sending a request is a network act, and the executor's business is what
+executes. What matters is not WHERE the set is computed but that it is a
+function of AGREED STATE rather than of local timing, and committed state is
+agreed by construction.
 
 **Every validator therefore generates the same requests.** Staging is a
-deterministic function of consensus input, so every node reaches that point with
-the same streams, the same held set and the same watermarks, and computes the
-same gaps. Nothing is random, no node needs to know what another node is doing,
+deterministic function of consensus input and is durable, so every node reaches
+that boundary with the same streams, the same held set and the same watermarks,
+and computes the same gaps. Nothing is random, no node needs to know what another node is doing,
 and there is no coordination to get wrong.
 
 That is worth contrasting with the alternative, because it is the one a healer
@@ -87,12 +96,16 @@ usually with a random per-node delay and a back-off, tuned so the first answer
 lands before the others fire. That is a heuristic standing in for agreement the
 system already has. Generating in staging uses it instead of approximating it.
 
-**Staging dedupes.** Several things can ask for the same gap in one block — most
-obviously an anchor, where each signature can independently reveal the same
-missing message. Staging holds one request per gap, so the number of requests is
-the number of gaps, not the number of things that noticed them.
+**One request per gap.** Several things can reveal the same gap in one block —
+most obviously an anchor, where each signature independently reveals the same
+missing message. Computing the set once, from the gaps themselves rather than
+from whatever noticed them, makes the number of requests the number of gaps.
+There is nothing to deduplicate because nothing is counted twice.
 
-**Two validators actually send, chosen by the previous block's hash.**
+**Two validators actually send, chosen by the previous block's hash** — which
+is the state hash the previous block committed, and is therefore available to
+every node as the next block begins, without being distributed or agreed
+separately.
 Every validator computes the same gaps; that does not mean every validator
 should ask for them. The previous block's hash selects the pair, so each node
 knows whether it is one of the two without being told and without negotiating
