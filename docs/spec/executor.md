@@ -2,37 +2,53 @@
 
 ## 1. Architecture — what we are doing
 
-The executor turns an ordered stream of messages into blocks of executed state.
-It is the only thing that writes protocol state, and it is deterministic: every
-validator given the same messages in the same order produces the same block and
-the same state hash.
+The executor turns an ordered stream of messages from consensus into blocks of
+executed state. It is the only thing that writes protocol state, and it is
+deterministic: every validator given the same messages in the same order
+produces the same block and the same state hash.
 
-### The pipeline
+### The path
 
 ```
-consensus ──▶ executor ──▶ block ──▶ state
-              (staging)
+consensus ──▶ envelopes ──▶ admission ──▶ staging ──▶ execution ──▶ batch ──▶ commit
+                            (proof)      (ordering)   (effects)             (one, at close)
 ```
 
-- **Consensus is the only input.** The executor takes messages from consensus
-  and nothing else.
-- **Staging belongs to the executor.** Messages that cannot be executed yet are
-  held there.
-- **Blocks are output.** Nothing a block writes feeds back into a staging
-  decision.
+Read as a sequence of gates, each of which a message must pass before the next:
 
-Every validator receives the same messages in the same order, so every
-executor stages identically. Staging is therefore consistent without being
-agreed, and needs no consensus state of its own.
+1. **Consensus** decides which messages exist and in what order. It is the only
+   input. Batches are executed in the certificate's canonical payload order —
+   any node-local order diverges chain entries and BPT roots across validators.
+2. **Admission** decides whether a message is *provable*. A synthetic message
+   carries a proof that must terminate at a directory anchor this node has. If
+   the anchor has not arrived, the message is not refused — it is pending, and
+   is retried when the anchor does arrive.
+3. **Staging** decides whether a message is *next*. Sequenced streams execute in
+   order with no gaps; a message whose predecessor is missing waits.
+4. **Execution** runs the message. Nothing before this point changes protocol
+   state.
+5. **The database write is a side effect of execution**, not a stage of its own.
+   Executors write into the block's batch as they run; the batch is committed
+   once, when the block closes. There is no separate "persist" step and no
+   partial commit.
 
-### Ordering
+Nothing later feeds back into anything earlier. What a block delivered is an
+output; staging never reads it back as an input.
 
-Cross-partition messages are **sequenced**: each stream — one source, one
-destination, one kind — numbers its messages, and they must execute in order
-with no gaps. A message whose predecessor has not arrived cannot execute; it
-waits.
+### Validation is a separate, earlier thing
 
-Within a block the order is fixed and is a decision, not an accident:
+`Executor.Validate` is the pre-consensus check — CheckTx's equivalent. It runs
+against a read-only batch that is always discarded, so it writes nothing and
+changes nothing. It exists so a node can refuse a malformed or unpayable
+envelope before it is gossiped and sequenced, not to decide anything about
+execution.
+
+A message that reaches execution is validated again on the path above, by the
+gates that can only be evaluated with block state in hand.
+
+### Ordering within a block
+
+Fixed, and each choice is a decision:
 
 1. **Anchors**, because an anchor extends the directory root that admits
    synthetics — so a synthetic can use an anchor that arrived in the same block
@@ -49,68 +65,105 @@ uses the same one.
 ### The invariants
 
 1. **A stream executes in order, with no gaps.** There is no skip.
-2. **Everything received is held until it can be processed.** Staging is
+2. **Nothing executes until it is admissible.** An unproven synthetic is
+   pending, never executed and never terminally failed — failing it would mean
+   it could not be re-applied when its anchor arrives.
+3. **Everything received is held until it can be processed.** Staging is
    unbounded, because the protocol offers no alternative: a message that cannot
    be dropped and cannot yet execute must be kept.
-3. **A message that reaches staging has been accepted.** Accepted means
-   recorded. There is no state in which the node holds a message and reports
+4. **A message that reaches staging has been accepted, and accepted means
+   recorded.** There is no state in which the node holds a message and reports
    not holding it.
-4. **Block state never feeds back into staging.** What a block delivered is an
-   output.
-5. **A ready message executes; a not-ready message executes nothing.** The two
-   are decided before execution, from the stream's position alone.
+5. **Block state never feeds back into staging.**
+6. **State changes only as a side effect of execution**, and become durable only
+   at the block's single commit.
+7. **A ready message executes; a not-ready message executes nothing.**
 
 ### Versioning
 
-Behaviour that changes what a block produces is gated on an `ExecutorVersion`
-so that nodes at different versions do not disagree about the same block —
-`V2Baikonur` (6), `V2Jiuquan` (8), `V2Kourou` (10, collection proofs). A gate
-exists to protect a network that is running; it is not ceremony to apply to
-code that has never been deployed.
+Behaviour that changes what a block produces is gated on an `ExecutorVersion` so
+nodes at different versions do not disagree about the same block — `V2Baikonur`
+(6), `V2Jiuquan` (8), `V2Kourou` (10, collection proofs). A gate protects a
+network that is running; it is not ceremony for code that has never been
+deployed.
 
 ## 2. Specification — how it is implemented
 
-### Interfaces
+### Entry from consensus
 
-`internal/core/execute/execute.go`:
+`pkg/consensus/adapter/executor_bridge.go`, `ProduceBlock`:
 
-```go
-type Executor interface {
-    LastBlock() (*BlockParams, [32]byte, error)
-    Init(validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error)
-    Validate(envelope *messaging.Envelope, recheck bool) ([]*protocol.TransactionStatus, error)
-    Begin(BlockParams) (Block, error)
-}
+1. `executor.Begin(BlockParams)` opens the block.
+2. Every batch named by the committed certificate is walked **in payload
+   order**. A nil batch is fatal: `CollectBatches` guarantees a complete set,
+   and executing a certificate without one of its batches silently diverges
+   state (#4116/#4119).
+3. Each transaction is unmarshalled into an envelope and processed —
+   `ProcessAll` when the block supports parallel execution (#4145), otherwise
+   `Process` per envelope.
+4. `block.Close()` produces the block state; `state.Hash()` then
+   `state.Commit()`.
 
-type Block interface {
-    Params() BlockParams
-    Process(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error)
-    Close() (BlockState, error)
-}
-```
+Accounting is emitted per non-empty block — arrived, executed, unmarshalFailed,
+processFailed, statusFailed, sharded, serial, shardsUsed — because 95 of 100
+submitted transactions once vanished between acceptance and execution with no
+log line anywhere (#4132). This is the seam where consensus hands to execution,
+so it is where "lost in consensus" and "lost in execution" separate.
 
-`BlockState` reports whether the block was empty, whether it completed a major
-block, whether it updated validators, and carries the change set and block hash.
+### Validation
+
+`exec_validate.go`, `Executor.Validate`: begins a read-only batch, normalizes
+the envelope, rejects unsigned transactions, and calls each message's validator
+through a bundle whose block is a shell. The batch is discarded unconditionally.
+
+### Execution
+
+`exec_process.go`:
+
+- `Block.Process(envelope)` normalizes, calls `processEnvelope`, then merges the
+  resulting bundles into block state. The merge is the caller's so that under
+  parallel execution every touch of shared block state happens serially, in a
+  deterministic order.
+- `processMessages` runs the messages and every pass of additional messages they
+  cascade into.
+- `bundle.callMessageExecutor` finds the executor registered for the message
+  type and calls `Process`. Internal message types are refused on the first
+  pass.
+- Statuses returned to consensus are **cleaned**: the result and a success code,
+  or a generic error code. Error messages are porcelain and differing text
+  across nodes would be a consensus failure; the API reads real status from the
+  database instead.
 
 ### Message executors
 
-`internal/core/execute/v2/block/msg_*.go`. Each message type registers an
-executor into `messageExecutors` at init:
+`msg_*.go`, registered at init into `messageExecutors`:
 
 - `registerSimpleExec[T]` — always available.
-- `registerConditionalExec[T]` — available only when a predicate holds, which
-  is how executor-version gating is expressed. `SyntheticProof` is registered
-  only when `V2KourouEnabled`, because what a node is willing to accept is
-  consensus critical.
+- `registerConditionalExec[T]` — available only when a predicate holds, which is
+  how version gating is expressed. `SyntheticProof` registers only under
+  `V2KourouEnabled`, because what a node is willing to accept is consensus
+  critical.
 
-Types include transactions, signatures, sequenced messages, synthetic messages
-and their proofs, block anchors, credit payments, signature requests, network
-updates and maintenance operations.
+### Admission — the proof gate
 
-### Staging
+`msg_synthetic.go`, `SyntheticMessage.process`:
+
+- A replica-accepted message (#4140) carries no proof; its proof was checked and
+  absorbed when it first arrived.
+- Otherwise `isAdmissible` verifies the proof terminates at a directory anchor.
+  Individual and collection proofs terminate at the same trust root, so one
+  check covers both. The check is shared with staging (#4169 step 3); what a
+  negative *means* is decided here.
+- A missing anchor returns `errors.Pending` under `V2Kourou`, not a failure:
+  failing it terminally wedges recovery, because the same message could never be
+  re-applied once the anchor arrived (#4048).
+
+So an unproven synthetic never reaches sequencing.
+
+### Staging — the ordering gate
 
 `exec_stage.go`, `exec_stage_run.go`, `stream*.go`. Before anything executes,
-each stream's work for the block is settled into a `streamRun`:
+each stream's work for the block is settled:
 
 ```go
 type streamRun struct {
@@ -121,22 +174,28 @@ type streamRun struct {
 ```
 
 `executionOrder` composes the runs in the group order above. The decision is
-made once per stream per block, not per message — the executor previously read
-the ledger inside every message's own child batch, and because a child does not
+made once per stream per block, not per message: the executor previously read
+the ledger inside every message's child batch, and because a child does not
 share its parent's value each read deep-copied the whole ledger, making a drain
 of n messages cost O(n²) (`TestSequenceLedgerCostIsPerRead`).
 
-`streamPosition` is the block's working copy of a stream's position: `delivered`,
-`received`, and the staged entries between them. Read once per stream per block,
-advanced in place as the block executes, written back when the block closes.
+`streamPosition` is the block's working copy of one stream — `delivered`,
+`received`, and the staged entries between. Read once per stream per block,
+advanced in place, written back at close.
 
-### Sequenced messages
+`msg_sequenced.go`, `SequencedMessage`: `isReady` asks the block's position
+whether the message is next. Ready messages execute; not-ready messages record
+pending and execute nothing. `Process` records the message and its status, then
+advances the stream — the advance is deferred so it lands only once everything
+the message records has, and never on a path that discards.
 
-`msg_sequenced.go`. `isReady` asks the block's position — not the ledger —
-whether the message is next on its stream. Ready messages execute; not-ready
-messages are recorded pending and execute nothing. `Process` records the
-message and its status first, then advances the stream, so an advance lands only
-once everything the message records has.
+### The database write
+
+Executors write into the block's `*database.Batch` as they run. A message
+executor takes a sub-batch and commits it into its parent on success or discards
+it on failure, so a failed message leaves nothing. The block's batch reaches
+disk exactly once, at `state.Commit()` in `ProduceBlock`. `state.Hash()` is
+taken before the commit, and a failure to hash discards rather than commits.
 
 ## Known gaps
 
@@ -145,14 +204,13 @@ These contradict section 1 and are filed, not fixed here:
 - **Staging state lives in an account** (accumulatenetwork/accumulate#4187).
   `PartitionSyntheticLedger.Pending` is main state of an account of type
   `AccountTypeSyntheticLedger`, so it is hashed into the BPT and rewritten every
-  block. That violates invariants 2, 3 and 4: because the record is rewritten
-  whole each block the pending array must be bounded
-  (`MaxPendingSequenced = 4096`), so receipts past the delivery point are
-  refused, so the ledger reports not holding messages the node has, so the
-  healer re-fetches them. Measured in soak `20260902T132651Z`: 8,556 distinct
-  sequence numbers re-fetched 53,011 times, some 41 times each, while all three
-  partitions stayed live.
-- **`isReady` consults a position derived from that account**, which is block
-  state feeding back into a staging decision — invariant 4.
+  block. Because the record is rewritten whole each block the pending array must
+  be bounded (`MaxPendingSequenced = 4096`), so receipts past the delivery point
+  are refused, so the ledger reports not holding messages the node has, so the
+  healer re-fetches them. That violates invariants 3, 4 and 5. Measured in soak
+  `20260902T132651Z`: 8,556 distinct sequence numbers re-fetched 53,011 times,
+  some 41 times each, while all three partitions stayed live.
+- **`isReady` consults a position derived from that account** — block state
+  feeding back into a staging decision, invariant 5.
 - **How the executor's staging position is restored after a restart is not
   specified**, and will need to be once staging stops reading the ledger.
