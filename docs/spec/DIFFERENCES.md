@@ -265,6 +265,10 @@ back-off, a failure breaker, and per-gap scheduling state. With two senders and
 an activation every few blocks there is no load to manage, and a lost request
 costs nothing because the gap is still a gap at the next activation.
 
+There is no cadence either: the `Conductor` scans on its own schedule rather
+than activating on a block, so "when to ask again" is answered by the back-off
+window (`syntheticHealWindow`, 10 s) instead of by a number of blocks.
+
 **Size**: medium, and it lands with H4 — both are consequences of healing asking
 staging rather than reading what the block wrote. Most of it is deletion.
 

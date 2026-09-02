@@ -250,39 +250,73 @@ The cache is therefore:
 
 ## 2. Specification — how it is implemented
 
-`internal/core/crosschain`. The `Conductor` scans the streams it receives,
-identifies gaps, fetches, and submits.
+Healing has two halves and they live in different places. **Deciding** is part
+of the block: staging computes the gaps and the request set, deterministically,
+as part of executing the block. **Fetching** is not: the transport lives in
+`internal/core/crosschain` and runs outside consensus, because a request changes
+no state here.
 
-Gaps are found by `missingRuns`, which walks `PartitionSyntheticLedger.Pending`
-— the positional array in the ledger account — treating a `nil` entry as a hole.
-That is the coupling the section above replaces: it reads what the block wrote
-rather than asking the executor what it holds, and it is why the two changes
-cannot be made separately.
+### Deciding, in staging
 
-- `claimSyntheticRequest` decides whether this node asks now. On first sight of
-  a gap it schedules a jittered fire time and returns false; afterwards it fires
-  once per back-off window. The window is `syntheticHealWindow`, 10 s by
-  default.
-- `requestSyntheticFrom(ctx, source, num)` pulls one missing synthetic from the
-  source partition's sequencer: `c.Sequencer.Sequence(source, destination, num)`.
-  It retries up to three times, because routing picks a peer per attempt and one
-  transient "no live peers" once wedged a stream permanently (#4067). A
-  `NotFound` is a deterministic answer about the source's state and is not
-  retried (#4086, #4115). The call is bounded by the heal window, since by the
-  time it expires the back-off would allow a fresh attempt anyway (#4066).
-- A failed pull is classified into a per-source breaker (`classifyRemoteError`,
-  `remoteAllowed`) and the scan continues to the next hole rather than
-  abandoning the batch.
-- `buildSyntheticSubmission` assembles the envelope from the sequencer's
-  response — the sequenced message, the proof, and the source's signature. A
-  non-nil proof overrides the per-message one: that is the collection proof
-  covering a whole range, which every record of the range shares.
-- For a message that belongs to a transaction, the transaction is bundled with
-  it, exactly as the normal outbound path does. Without it a healed message
-  fails on "load transaction" and the stream stays stuck (#4066).
-- The message is submitted with `c.submit`. The log line "Requested missing
-  synthetic transaction" is emitted **after** the submit succeeds, so it records
-  a completed heal, not a request.
+On an activation block, after the anchor and synthetic groups have been
+evaluated, drained and executed, staging computes for each stream:
+
+- `Delivered`, read from the ledger — the highest number executed;
+- the **held** set, read from staging itself — numbers received, not executed;
+- `Produced`, the source's high-water mark as carried by the stream.
+
+The gaps are the numbers in `(Delivered, Produced]` that staging does not hold.
+Requests are made one per gap: several askers of the same gap — most often the
+signatures of one anchor — collapse to a single request.
+
+Selection of senders is a function of the previous block's hash over the
+validator set, yielding two indices. A node compares them against its own
+position; no message is exchanged to establish this.
+
+### Fetching, outside the block
+
+A selected node sends its requests immediately, without waiting for the block to
+commit, because nothing in this partition's state depends on the send.
+
+`requestSyntheticFrom(ctx, source, num)` pulls one missing message from the
+source partition's sequencer: `c.Sequencer.Sequence(source, destination, num)`.
+
+- It retries a transient failure up to three times, because routing picks a peer
+  per attempt and one transient "no live peers" once wedged a stream
+  permanently (#4067).
+- A `NotFound` is a deterministic answer about the source's state and is **not**
+  retried (#4086, #4115).
+- The call is bounded in time, so a hung source cannot pin the goroutine or its
+  read batch. The bound need not be generous: the next activation is due
+  regardless, and an expired request is simply a gap that is still a gap.
+- A failure moves to the next hole rather than abandoning the batch. Delivery is
+  ordered, so one unfillable gap must not stop the others being pulled.
+
+`buildSyntheticSubmission` assembles the envelope from the sequencer's response
+— the sequenced message, the proof, and the source's signature.
+
+- A non-nil proof from the response overrides the per-message one: that is the
+  collection proof covering a whole range, which every record of the range
+  shares.
+- For a message belonging to a transaction, the transaction is bundled with it,
+  exactly as the normal outbound path does. Without it a healed message fails on
+  "load transaction" and the stream stays stuck (#4066).
+
+The envelope is submitted with `c.submit` and re-enters through consensus, where
+it is sorted, staged and executed like any other message — which is why the
+duplicate answer from the second sender costs nothing: the block's sort keeps
+the first sighting of a sequence number.
+
+The log line "Requested missing synthetic transaction" is emitted **after** the
+submit succeeds, so it records a completed heal, not an attempt.
+
+### Extension requests
+
+An extension is served from the source's chain rather than its outbox. The
+request carries the last hash of the proof held, its index, and how far back is
+wanted; the answer is the merkle state at the new start and the intervening
+elements, with no signature and no new anchor. The destination prepends them and
+revalidates against the receipt it already holds.
 
 ---
 
