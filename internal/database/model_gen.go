@@ -301,6 +301,7 @@ type Account struct {
 	localDeliveryQueue     values.List[*url.TxID]
 	cascadeDeliveryQueue   values.List[*url.TxID]
 	directory              values.Set[*url.URL]
+	stagedSources          values.Set[*url.URL]
 	sequenced              map[accountSequencedMapKey]values.Value[*url.TxID]
 	sighted                map[accountSightedMapKey]values.Value[uint64]
 	events                 *AccountEvents
@@ -464,6 +465,14 @@ func (c *Account) Directory() values.Set[*url.URL] {
 
 func (c *Account) newDirectory() values.Set[*url.URL] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("Directory"), values.Wrapped(values.UrlWrapper), values.CompareUrl)
+}
+
+func (c *Account) StagedSources() values.Set[*url.URL] {
+	return values.GetOrCreate(c, &c.stagedSources, (*Account).newStagedSources)
+}
+
+func (c *Account) newStagedSources() values.Set[*url.URL] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("StagedSources"), values.Wrapped(values.UrlWrapper), values.CompareUrl)
 }
 
 func (c *Account) Sequenced(source *url.URL, number uint64) values.Value[*url.TxID] {
@@ -666,6 +675,8 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.CascadeDeliveryQueue(), key.SliceI(1), nil
 	case "Directory":
 		return c.Directory(), key.SliceI(1), nil
+	case "StagedSources":
+		return c.StagedSources(), key.SliceI(1), nil
 	case "Sequenced":
 		if key.Len() < 3 {
 			return nil, nil, errors.InternalError.With("bad key for account (4)")
@@ -786,6 +797,9 @@ func (c *Account) IsDirty() bool {
 	if values.IsDirty(c.directory) {
 		return true
 	}
+	if values.IsDirty(c.stagedSources) {
+		return true
+	}
 	for _, v := range c.sequenced {
 		if v.IsDirty() {
 			return true
@@ -902,8 +916,9 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.localDeliveryQueue, c.newLocalDeliveryQueue, opts, fn)
 	values.WalkField(&err, c.cascadeDeliveryQueue, c.newCascadeDeliveryQueue, opts, fn)
 	values.WalkField(&err, c.directory, c.newDirectory, opts, fn)
-	values.WalkMap(&err, c.sequenced, c.newSequenced, nil, opts, fn)
-	values.WalkMap(&err, c.sighted, c.newSighted, nil, opts, fn)
+	values.WalkField(&err, c.stagedSources, c.newStagedSources, opts, fn)
+	values.WalkMap(&err, c.sequenced, c.newSequenced, c.getSequencedKeys, opts, fn)
+	values.WalkMap(&err, c.sighted, c.newSighted, c.getSightedKeys, opts, fn)
 	values.WalkField(&err, c.events, c.newEvents, opts, fn)
 	values.WalkField(&err, c.blockLedger, c.newBlockLedger, opts, fn)
 	values.WalkMap(&err, c.transaction, c.newTransaction, c.getTransactionKeys, opts, fn)
@@ -943,6 +958,7 @@ func (c *Account) baseCommit() error {
 	values.Commit(&err, c.localDeliveryQueue)
 	values.Commit(&err, c.cascadeDeliveryQueue)
 	values.Commit(&err, c.directory)
+	values.Commit(&err, c.stagedSources)
 	for _, v := range c.sequenced {
 		values.Commit(&err, v)
 	}

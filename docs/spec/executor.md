@@ -452,6 +452,31 @@ delivery has not happened. Dropping a staged message for a block that is then
 discarded makes the node fetch back across the network something it still holds,
 which is the failure this whole change removes, reintroduced from the other end.
 
+### Staging in a snapshot
+
+A snapshot is what a new node starts from, so staging has to be in it — a node
+restored without it holds nothing and executes a shorter run than its peers on
+the first block where a gap closes.
+
+Two mechanics make that true, and both fail SILENTLY when they are not:
+
+- The records are **account state, not an index.** Snapshot collection walks
+  with indices ignored, so an index record is simply absent from the snapshot,
+  with nothing said about it.
+- A parameterised record is walked only if it can be **enumerated**, so each
+  carries a function listing its keys. Without one it is skipped, again
+  silently. Enumeration comes from a small set of the sources staging holds
+  anything from — bounded by the number of peers — and, for each, the numbers
+  between that stream's `Delivered` and how far it has been sighted.
+
+Only what is HELD is collected. A record below `Delivered` is a message that has
+executed; nothing consults it, and carrying every stream's whole history into
+every snapshot would restore state that answers no question.
+
+Both mechanics are the kind that a test has to pin, because neither announces
+itself: the snapshot is written, the restore succeeds, and the node diverges a
+block later.
+
 ### What the stream ledger is for
 
 Exactly one field, in the inbound direction: **`Delivered`** — what has been

@@ -95,12 +95,20 @@
     # `state` rather than `index` so that snapshots collect it: a snapshot is
     # what a new node starts from, and one without staging diverges on the new
     # node's first block.
+    - name: StagedSources
+      description: lists the partitions staging holds anything from. Bounded by the number of peers, and the reason the staged records can be enumerated for a snapshot at all (#4189)
+      type: state
+      dataType: url
+      pointer: true
+      collection: set
+      emptyIfMissing: true
     - name: Sequenced
       description: is the message received for a sequence number of an inbound stream, whether or not it has been executed. A number is HELD if this exists and the number is above the stream's Delivered watermark (#4189)
       type: state
+      index: getSequencedKeys # Indexed by source and number, so snapshots collect it
       dataType: txid
       pointer: true
-      parameters: # Not indexed
+      parameters:
       - name: Source
         type: url
         pointer: true
@@ -109,8 +117,9 @@
     - name: Sighted
       description: is the highest sequence number received from a source, whether or not it has been executed. It is what says a stream is behind (#4189)
       type: state
+      index: getSightedKeys # Indexed by source, so snapshots collect it
       dataType: uint
-      parameters: # Not indexed
+      parameters:
       - name: Source
         type: url
         pointer: true

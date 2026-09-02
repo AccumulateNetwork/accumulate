@@ -90,6 +90,15 @@ func Hold(batch *database.Batch, id StreamID, n uint64, txid *url.TxID) error {
 		}
 	}
 
+	// Register the source. Bounded by the number of peers, and the reason the
+	// staged records can be enumerated for a snapshot at all — a parameterised
+	// record that cannot be walked is silently absent from a snapshot, and a
+	// node restored without staging diverges on its first block.
+	err := batch.Account(id.Ledger).StagedSources().Add(id.Source)
+	if err != nil {
+		return errors.UnknownError.WithFormat("record staged source %v: %w", id.Source, err)
+	}
+
 	high := batch.Account(id.Ledger).Sighted(id.Source)
 	switch h, err := high.Get(); {
 	case err != nil && !errors.Is(err, errors.NotFound):

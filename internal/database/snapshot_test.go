@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -331,4 +332,61 @@ func TestSnapshot_PreservesQueuedLocalDeliveryBodies(t *testing.T) {
 	_, err = batch.Message(ids[0].Hash()).Main().Get()
 	require.NoError(t, err,
 		"the queued BODY must survive — without it the restored node's next Begin fails forever")
+}
+
+// Staging must survive a snapshot, because a snapshot is what a new node starts
+// from (#4189).
+//
+// Staging decides what a block executes: a block delivers the contiguous run
+// from Delivered+1 taken from this block's arrivals AND from what is already
+// held. A node restored without it holds nothing, so it executes a shorter run
+// than its peers on the first block where a gap closes — different Delivered,
+// different account state, different BPT root. That is a divergent block hash,
+// not a node briefly behind.
+//
+// This is why the records are account STATE and not an index: collection
+// ignores indices.
+func TestSnapshot_PreservesStaging(t *testing.T) {
+	synthetic := PartitionUrl("BVN0").JoinPath(Synthetic)
+	source := PartitionUrl("BVN1")
+	id := execute.StreamID{Ledger: synthetic, Source: source}
+
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	defer batch.Discard()
+
+	ledger := new(protocol.SyntheticLedger)
+	ledger.Url = synthetic
+	ledger.Partition(source).Delivered = 5
+	require.NoError(t, batch.Account(synthetic).Main().Put(ledger))
+
+	// Received 7 and 9; 6 and 8 are holes.
+	require.NoError(t, execute.Hold(batch, id, 7, source.WithTxID([32]byte{7})))
+	require.NoError(t, execute.Hold(batch, id, 9, source.WithTxID([32]byte{9})))
+	require.NoError(t, batch.UpdateBPT())
+	require.NoError(t, batch.Commit())
+
+	buf := new(ioutil.Buffer)
+	_, err := db.Collect(buf, nil, nil)
+	require.NoError(t, err)
+
+	db = database.OpenInMemory(nil)
+	require.NoError(t, database.Restore(db, buf, nil))
+
+	batch = db.Begin(false)
+	defer batch.Discard()
+
+	got, ok, err := execute.IDOf(batch, id, 7)
+	require.NoError(t, err)
+	require.True(t, ok, "a held message must survive the snapshot")
+	require.Equal(t, source.WithTxID([32]byte{7}).String(), got.String())
+
+	high, err := execute.Sighted(batch, id)
+	require.NoError(t, err)
+	require.Equal(t, uint64(9), high, "and so must the high-water mark")
+
+	runs, err := execute.Missing(batch, id, 5, high, 8)
+	require.NoError(t, err)
+	require.Equal(t, [][2]uint64{{6, 6}, {8, 8}}, runs,
+		"the restored node must see the same gaps its peers see")
 }
