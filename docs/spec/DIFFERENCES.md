@@ -237,6 +237,29 @@ missing. Healing would go from re-fetching what the node holds to re-fetching
 E1 is staging in the wrong place, this is healing reading the executor's output
 instead of asking it.
 
+### H5. Requests are generated outside staging, per node, with jitter
+
+*[#4191](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4191)*
+
+**Spec** ([healing.md](healing.md)): requests are generated in staging, at the
+end of processing the anchor and synthetic groups — the first moment the gap set
+is final. Every validator computes the same gaps and therefore the same
+requests, and staging dedupes several askers of the same gap into one request.
+
+**Code**: generation lives in the `Conductor`, outside staging and outside the
+block. `claimSyntheticRequest` schedules a per-node **random jittered delay** on
+first sight of a gap and enforces a back-off, "so a stalled stream isn't
+hammered by every validator on every block", relying on the first answer landing
+before the other validators fire.
+
+That is a heuristic standing in for agreement the system already has. Every
+validator sees the same consensus stream and could compute the same request set
+directly; the jitter exists only because the computation was moved out of the
+place that knows.
+
+**Size**: medium, and it lands with H4 — both are consequences of healing asking
+staging rather than reading what the block wrote.
+
 ### H2. Healing is not ordered
 
 *[#4191](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4191)*

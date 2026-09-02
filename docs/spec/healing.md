@@ -43,30 +43,36 @@ current stages nothing and so loses nothing.
 
 ### Generating requests
 
-A request is **not consensus**. It is a node asking the source's sequencer for a
-message, and the answer is submitted back into consensus like anything else.
-That asymmetry decides the whole design:
+**Requests are generated in staging, at the end of processing the anchor and
+synthetic groups.**
 
-- **Requesting is not a protocol decision**, so it need not be deterministic and
-  no node needs anyone's agreement to ask. Any node that sees a gap may ask.
-- **The answer is**, so a healed message re-enters through consensus and is
-  sorted, staged and executed exactly like one that arrived normally. Nothing
-  about healing bypasses the path.
-- **Duplicate answers are free.** Every validator of the destination sees the
-  same gap, because they see the same consensus stream. If several ask, several
-  answers are submitted, and the block's sort keeps the first sighting of each
-  sequence number and discards the rest. Over-requesting costs bandwidth, never
-  correctness.
+That point is chosen because it is the first moment the gap set is final for the
+block: the anchors have executed, the synthetics have been judged against the
+chain those anchors extended, and every stream's run has been drained. What is
+still missing then is what is genuinely missing.
 
-Because duplicates are harmless but not free, requests are **spread rather than
-suppressed**. On first sight of a gap a node schedules its own jittered fire
-time and does not ask immediately; validators pick independent delays, so they
-wake at different moments and the first answer usually closes the gap before the
-others fire. A node that has asked backs off before asking again.
+**Every validator therefore generates the same requests.** Staging is a
+deterministic function of consensus input, so every node reaches that point with
+the same streams, the same held set and the same watermarks, and computes the
+same gaps. Nothing is random, no node needs to know what another node is doing,
+and there is no coordination to get wrong.
 
-The gap is re-read every block, so a node that was going to ask discovers the
-gap has closed and never asks. Suppression falls out of re-reading rather than
-out of coordination.
+That is worth contrasting with the alternative, because it is the one a healer
+reaches for: if requests are generated outside staging, each node decides on its
+own and the design has to stop N validators asking for the same thing at once —
+usually with a random per-node delay and a back-off, tuned so the first answer
+lands before the others fire. That is a heuristic standing in for agreement the
+system already has. Generating in staging uses it instead of approximating it.
+
+**Staging dedupes.** Several things can ask for the same gap in one block — most
+obviously an anchor, where each signature can independently reveal the same
+missing message. Staging holds one request per gap, so the number of requests is
+the number of gaps, not the number of things that noticed them.
+
+A request is still not consensus: the node asks the source's sequencer, and the
+answer is submitted back and re-enters through consensus, sorted and staged and
+executed like any other message. What is deterministic is *which* requests are
+made, not the transport that carries them.
 
 ### Managing requests
 
