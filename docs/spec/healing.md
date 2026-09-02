@@ -390,11 +390,65 @@ submit succeeds, so it records a completed heal, not an attempt.
 
 ### Extension requests
 
-An extension is served from the source's chain rather than its outbox. The
-request carries the last hash of the proof held, its index, and how far back is
-wanted; the answer is the merkle state at the new start and the intervening
-elements, with no signature and no new anchor. The destination prepends them and
-revalidates against the receipt it already holds.
+An extension is served from the source's **chain**, not from its outbox. That is
+the whole reason it is cheap: the source is not rebuilding a proof, signing
+anything, or tracking what any destination holds — it is reading hashes out of a
+merkle chain it already has.
+
+#### What a proof requires, and therefore what an extension is
+
+`ReceiptList.Validate` replays `MerkleState` through `Elements` and requires
+that the last element equals `Receipt.Start` and that the resulting anchor
+equals `Receipt.Anchor`. So a list must be **contiguous** from its merkle state
+to its receipt, and its reach backwards is decided entirely by where its merkle
+state sits.
+
+Widening backwards is therefore: an **earlier merkle state**, plus the
+**elements between** it and the state currently held. Replay then runs from the
+earlier state through the new elements into the existing ones and arrives at the
+same anchor — so the receipt is untouched and keeps working. This is why the
+expensive part of a proof is transferred once.
+
+#### The request
+
+A destination holding a list whose merkle state sits at count `c`, and needing
+to reach index `f` below it, asks the source for **the merkle state at `f` and
+the elements `[f, c)`** of the chain that carries this stream.
+
+That is the whole request: a stream, and two indices. It does not carry the hash
+it is attaching to, and does not need to — **the destination validates the
+widened list against the receipt it already holds**, so an extension that is
+wrong, stale, or dishonest fails to validate and is discarded. Continuity is
+self-checking, which is better than a continuity field the source could satisfy
+while being wrong about everything else.
+
+A request is bounded by `MaxReceiptListElements`, the same bound a proof carries,
+and for the same reason: it is untrusted input that must be hashed before it can
+be known to be junk. Reach is unbounded in increments rather than in one message.
+
+#### Fragments
+
+The same request fills interior holes, not only the tail. A destination may hold
+several disjoint pieces of one range — proofs that arrived, spans dropped in
+between — and because a counted merkle state binds element `j` to absolute index
+`Count + j`, every piece knows exactly where it sits. What is missing is a set of
+index spans, each of which is one request.
+
+**A fragment is worth keeping only if it outlives the activation that fetched
+it.** If assembly always completes within one activation there is nothing to
+store and no state to reason about; if it does not, fragments need somewhere to
+live, and that somewhere has the same two properties staging needed — durable,
+because losing them silently re-fetches, and unhashed, because they are a
+deterministic function of what the source served and prove themselves on
+validation. **This is the open question in this part of the design**, and it is
+answered by measurement rather than argument: how far back a real destination
+has to reach, against `MaxReceiptListElements` per request.
+
+#### Order, again
+
+None of this is ordered. The hashes are one fetch, complete or not; the entries
+are fetched oldest-first because delivery is. An extension moves hashes only —
+no message bodies, no signature, no anchor.
 
 ---
 
