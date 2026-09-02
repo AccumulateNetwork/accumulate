@@ -48,6 +48,12 @@ type recordCache struct {
 	cold  map[[32]byte][]byte
 
 	hits, misses, promotions, generations uint64
+
+	// absent counts reads of a cacheable shape for a record the store does
+	// not have. They are misses that can never become hits, and in soak
+	// 20260902T132651Z they were 94% of the misses -- so a raw hit rate
+	// describes the workload, not the cache.
+	absent uint64
 }
 
 // DefaultCacheEntries is how many entries the hot generation holds before it
@@ -123,21 +129,32 @@ func (c *recordCache) putLocked(h [32]byte, value []byte) {
 	c.generations++
 }
 
-// stats reports the counters for stats.json.
-func (c *recordCache) stats() (hits, misses, promotions, generations uint64, entries int) {
+// countAbsent records a read of a cacheable shape that the store could not
+// answer.
+func (c *recordCache) countAbsent() {
 	if c == nil {
-		return 0, 0, 0, 0, 0
+		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.hits, c.misses, c.promotions, c.generations, len(c.hot) + len(c.cold)
+	c.absent++
+}
+
+// stats reports the counters for stats.json.
+func (c *recordCache) stats() (hits, misses, absent, promotions, generations uint64, entries int) {
+	if c == nil {
+		return 0, 0, 0, 0, 0, 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.hits, c.misses, c.absent, c.promotions, c.generations, len(c.hot) + len(c.cold)
 }
 
 // CacheStats reports what the read cache has done: hits, misses, promotions
 // from the cold generation, generation turnovers, and entries resident. A high
 // turnover against a low hit rate means the working set does not fit and the
 // entry limit is the wrong number.
-func (d *Database) CacheStats() (hits, misses, promotions, generations uint64, entries int) {
+func (d *Database) CacheStats() (hits, misses, absent, promotions, generations uint64, entries int) {
 	return d.cache.stats()
 }
 

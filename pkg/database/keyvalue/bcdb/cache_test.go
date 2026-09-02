@@ -34,7 +34,7 @@ func TestCache_SwapsGenerationsAtTheLimit(t *testing.T) {
 	for i := 0; i < limit; i++ {
 		c.put(hashOf(i), []byte{byte(i)})
 	}
-	_, _, _, gens, entries := c.stats()
+	_, _, _, _, gens, entries := c.stats()
 	require.Equal(t, uint64(1), gens, "filling the hot map turns the generation over")
 	assert.Equal(t, limit, entries, "everything is still held, now as the cold generation")
 
@@ -56,7 +56,7 @@ func TestCache_IsBoundedByTwoGenerations(t *testing.T) {
 	for i := 0; i < 5*limit; i++ {
 		c.put(hashOf(i), []byte{1})
 	}
-	_, _, _, _, entries := c.stats()
+	_, _, _, _, _, entries := c.stats()
 	assert.LessOrEqual(t, entries, 2*limit,
 		"the cache holds at most two generations, not one per turnover")
 }
@@ -76,7 +76,7 @@ func TestCache_PromotesOnAColdHit(t *testing.T) {
 	v, ok := c.get(keep)
 	require.True(t, ok, "a cold entry is still a hit")
 	assert.Equal(t, []byte("keep"), v)
-	_, _, promotions, _, _ := c.stats()
+	_, _, _, promotions, _, _ := c.stats()
 	assert.Equal(t, uint64(1), promotions)
 
 	// It is now hot, so the NEXT turnover cannot drop it either.
@@ -104,7 +104,7 @@ func TestCache_EntriesLeaveOnlyAfterTwoSwaps(t *testing.T) {
 	}
 
 	fill(0) // First swap: the entry is now cold
-	_, _, _, gens, _ := c.stats()
+	_, _, _, _, gens, _ := c.stats()
 	require.Equal(t, uint64(1), gens)
 
 	fill(limit) // Second swap, with no read in between: cold is discarded
@@ -182,7 +182,7 @@ func TestCache_ServesRepeatedReads(t *testing.T) {
 		require.Equal(t, []byte("alice.acme"), v)
 		r.Discard()
 	}
-	hits, _, _, _, _ := db.cache.stats()
+	hits, _, _, _, _, _ := db.cache.stats()
 	assert.NotZero(t, hits, "the second read must come from the cache")
 }
 

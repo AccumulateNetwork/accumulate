@@ -755,6 +755,15 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 	if err != nil || len(value) == 0 {
 		// A zero-length value is a deletion, reported the same way a
 		// key that was never written is
+		if canCache {
+			// A read of a cacheable shape for a record that is not there.
+			// The cache cannot serve it -- there is nothing to hold, and
+			// caching the absence would answer "no" forever for a record
+			// that is simply written later -- but it still paid the walk,
+			// so it is what the hit rate's denominator is mostly made of
+			// and it has to be visible on its own.
+			d.cache.countAbsent()
+		}
 		return nil, (*database.NotFoundError)(key)
 	}
 	if canCache {
@@ -953,12 +962,20 @@ func (d *Database) reportStats() {
 		// says whether the cache is earning its memory; Generations is
 		// how often it has turned over, and a large number against a
 		// small HitPct means the working set does not fit.
-		CacheHits        uint64  `json:"cacheHits"`
-		CacheMisses      uint64  `json:"cacheMisses"`
-		CacheHitPct      float64 `json:"cacheHitPct"`
-		CachePromotions  uint64  `json:"cachePromotions"`
-		CacheGenerations uint64  `json:"cacheGenerations"`
-		CacheEntries     int     `json:"cacheEntries"`
+		CacheHits   uint64 `json:"cacheHits"`
+		CacheMisses uint64 `json:"cacheMisses"`
+
+		// CacheAbsent is the part of CacheMisses that can never become a
+		// hit: a cacheable shape read for a record the store does not
+		// have. CacheHitPct is over hits+misses and so describes the
+		// workload; CacheHitPctPresent excludes the absent reads and
+		// describes the cache.
+		CacheAbsent        uint64  `json:"cacheAbsent"`
+		CacheHitPct        float64 `json:"cacheHitPct"`
+		CacheHitPctPresent float64 `json:"cacheHitPctPresent"`
+		CachePromotions    uint64  `json:"cachePromotions"`
+		CacheGenerations   uint64  `json:"cacheGenerations"`
+		CacheEntries       int     `json:"cacheEntries"`
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
 		DeepFallbacks: d.fallbackSnapshot(),
 		Staged:        len(d.staged), TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
@@ -967,10 +984,13 @@ func (d *Database) reportStats() {
 		report.MaintenanceLast = d.maintErr.Error()
 	}
 
-	report.CacheHits, report.CacheMisses, report.CachePromotions,
+	report.CacheHits, report.CacheMisses, report.CacheAbsent, report.CachePromotions,
 		report.CacheGenerations, report.CacheEntries = d.cache.stats()
 	if n := report.CacheHits + report.CacheMisses; n > 0 {
 		report.CacheHitPct = float64(report.CacheHits) / float64(n) * 100
+	}
+	if n := report.CacheHits + report.CacheMisses - report.CacheAbsent; n > 0 {
+		report.CacheHitPctPresent = float64(report.CacheHits) / float64(n) * 100
 	}
 
 	// Lifted out of the shape table so a run can be checked by looking
