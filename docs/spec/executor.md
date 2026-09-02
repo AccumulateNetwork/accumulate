@@ -311,8 +311,9 @@ depends on the last:
 2. Decide whether this completes a major block.
 3. Process events: expiring transactions and signature sets, against the major
    block height just decided.
-4. Settle the block's produced messages — sequence what leaves the partition,
-   which is only known after the local/remote split.
+4. Settle the block's produced messages, `produceBlockMessages`. This must run
+   before the anchor decision, because whether an anchor is needed depends on
+   whether anything was *sequenced*, which is only known after the split below.
 5. Decide whether an anchor must be sent.
 6. **If the block is empty, stop.** Nothing below runs.
 7. Record the previous block's state hash on the BPT chain.
@@ -322,6 +323,47 @@ depends on the last:
 10. Update major index chains if this is a major block.
 11. Execute post-update actions.
 12. **Update the BPT**, and only then active globals.
+
+### Signatures
+
+Signatures are dispatched twice, through two registries.
+
+- `messageExecutors` handles `SignatureMessage`, which checks the wrapper — a
+  signature and a transaction ID must both be present — and then calls the
+  signature executor for the signature's *type*.
+- `signatureExecutors` holds the type-specific executors: `UserSignature` (the
+  ordinary key signatures, plus a conditional variant), `AuthoritySignature`,
+  and `EthereumDataSignature` under its own condition.
+
+So a user signature is not special: it is an ordinary message carrying a
+signature, and the second dispatch exists only because the signature's type
+decides how it is verified.
+
+### Anchor signatures are not that path
+
+A block anchor is a **message** executor, `BlockAnchor` in `messageExecutors`,
+and never reaches `signatureExecutors`. It is authorized in one of two ways:
+
+- **A validator signature**, counted towards a quorum. The signer must be a
+  validator of the anchor's *source* partition, and the source must parse as a
+  partition URL.
+- **A collection proof under a known directory root** (#4056). This authorizes a
+  *healed* anchor without re-gathering a quorum, because a historical quorum may
+  be impossible to re-gather after validator churn while the proof depends only
+  on the current directory root, which every synced node has.
+
+The proof is checked the same way a synthetic's is — receipt list only, never
+both forms, bounded by `MaxReceiptListElements`, and `Validate`d — and the same
+bound applies. An anchor with neither a signature nor a proof is `BadRequest`.
+
+The anchor itself must be a sequenced anchor transaction whose destination's
+root identity matches the transaction's principal, and a remote placeholder is
+resolved to the real transaction by hash before the type is checked.
+
+So the answer to "are signatures handled differently for anchors" is yes, and
+the difference is not the signature algorithm — it is that an anchor is
+authorized by *quorum or proof*, evaluated in the message executor, rather than
+by an authority chain evaluated in a signature executor.
 
 ### Parallel execution
 
@@ -344,6 +386,31 @@ envelope execute another identity's writes on the wrong shard (#4149).
 
 Timing is booked as serial versus parallel share, so a run can say whether
 sharding helped or whether nothing was shardable.
+
+### Produced messages, and the local/remote split
+
+`exec_local_queue.go`. A message a block produces is either **remote** — its
+destination routes to another partition — or **local**, routing back to the
+partition that produced it.
+
+- **Remote** messages are sequenced and dispatched: they take a sequence number,
+  a position on the synthetic main chain, a proof continued to a DN-anchored
+  root, and anchor-pool validation on arrival.
+- **Local** messages take none of that. They go on a persisted queue and execute
+  at the start of the *next* block as ordinary messages with their own
+  principal — no sequence number, no synthetic-chain position (so they consume
+  no collection-proof span), no dispatch, and no anchoring dependency (#4146).
+
+Next block rather than the same block, and that falls out of the geometry: the
+queues are drained at the *start* of a block and written at the *end* of one, so
+nothing queued while draining can execute before the next block. A local
+synthetic that produces further locals therefore creates ordered work in the
+following block — no cascade, and no termination bound to reason about.
+
+The input must already be in canonical order (#4144); the queue preserves it,
+which is what makes the drain deterministic. Each entry is
+`destination.WithTxID(msgHash)`, so the drain re-checks routing without
+re-deriving the destination from the message type.
 
 ### The database write
 
