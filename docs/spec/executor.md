@@ -617,6 +617,14 @@ paced — a bounded number per block — and gated on its own, never a walk of t
 whole chain inside one block. A chain that has only ever run this version has
 nothing to fall through to.
 
+**TBD — the existing network.** Mainnet holds one block-ledger account, and one
+BPT entry, for every block since 2022: 35 million on the Directory. Bringing
+that history into this form — or out of the state tree at all — is a database
+reorganization on a scale nothing in this specification covers, and it is a
+separate problem with its own design, not a step of this one. What is specified
+here is what a block writes from activation on. Test networks are fresh installs
+and have no history to reorganize, so they run this form from genesis.
+
 ### Signatures
 
 Signatures are dispatched twice, through two registries.
