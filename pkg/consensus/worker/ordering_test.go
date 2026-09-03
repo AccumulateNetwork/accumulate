@@ -105,23 +105,26 @@ func TestWorker_OrderIsPreservedAcrossBatchBoundaries(t *testing.T) {
 	}
 }
 
-// Backpressure must be reported, not silently swallowed: a dropped submission
-// that looks accepted is the failure mode that cost a week (#4132).
-func TestWorker_BackpressureIsReportedNotSwallowed(t *testing.T) {
+// Crossing a pending boundary SEALS; it does not refuse the envelope (#4165).
+//
+// Refusing was the failure: a full pending queue rejected the transaction at
+// the exact moment the fix was to turn it into a batch, so the queue stayed
+// full because nothing sealed it -- and what it turned away included
+// cross-partition synthetics and the healer's own re-submissions, so the
+// stream that needed the queue to drain was the stream being refused.
+//
+// A submission is still never silently swallowed (#4132): it is accepted, and
+// the batch it triggers is where it goes.
+func TestWorker_CrossingPendingBoundarySealsRatherThanRefusing(t *testing.T) {
 	w := worker.New(worker.Config{
 		ID: 0, Partition: "BVN1",
 		MaxPendingCount: 4,
 	}, nil)
 
-	var lastErr error
 	for i := 0; i < 100; i++ {
-		if err := w.Submit([]byte(fmt.Sprintf("tx-%d", i))); err != nil {
-			lastErr = err
-			break
-		}
+		require.NoErrorf(t, w.Submit([]byte(fmt.Sprintf("tx-%d", i))),
+			"submission %d was refused; crossing the boundary must seal, not reject", i)
 	}
-	require.Error(t, lastErr, "exceeding MaxPendingCount must return an error")
-	assert.ErrorIs(t, lastErr, worker.ErrBackpressure)
 }
 
 // An empty transaction is refused rather than batched, so it cannot occupy a

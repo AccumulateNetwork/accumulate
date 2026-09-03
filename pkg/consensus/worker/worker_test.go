@@ -95,7 +95,7 @@ func TestWorker_Submit(t *testing.T) {
 		assert.Equal(t, 0, w.PendingCount())
 	})
 
-	t.Run("backpressure when size limit reached", func(t *testing.T) {
+	t.Run("crossing the size boundary seals", func(t *testing.T) {
 		w := worker.New(worker.Config{
 			ID:             0,
 			Partition:      "test",
@@ -106,12 +106,12 @@ func TestWorker_Submit(t *testing.T) {
 		err := w.Submit(make([]byte, 90))
 		require.NoError(t, err)
 
-		// This should trigger backpressure
+		// Crossing the size boundary keeps the envelope and seals (#4165).
 		err = w.Submit(make([]byte, 20))
-		assert.ErrorIs(t, err, worker.ErrBackpressure)
+		require.NoError(t, err, "the envelope that crosses the boundary is what the next batch carries")
 	})
 
-	t.Run("backpressure when count limit reached", func(t *testing.T) {
+	t.Run("crossing the count boundary seals", func(t *testing.T) {
 		w := worker.New(worker.Config{
 			ID:              0,
 			Partition:       "test",
@@ -124,9 +124,8 @@ func TestWorker_Submit(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// This should trigger backpressure
-		err := w.Submit([]byte("tx"))
-		assert.ErrorIs(t, err, worker.ErrBackpressure)
+		// Crossing the count boundary keeps the envelope and seals (#4165).
+		require.NoError(t, w.Submit([]byte("tx")))
 	})
 
 	t.Run("transaction is copied", func(t *testing.T) {

@@ -44,23 +44,7 @@ const (
 	// raising num-workers scales parallelism without scaling memory. Read as
 	// per-worker they were multiplied by the worker count: 4 workers meant
 	// 256MB per partition and 512MB on a dual validator.
-	DefaultMaxStoredBatchBytes = 32 << 20 // active store: 32MB per partition
-
-	// DefaultSealHighWater is where sealing stops and backpressure starts,
-	// as a fraction of the store's limits.
-	//
-	// TWO BOUNDARIES, not one.  Eviction used to be the FIRST response to a
-	// full store, which is the worst one available: what it evicts is other
-	// nodes' uncommitted batches, which is exactly what this node needs in
-	// order to vote, so pressure was relieved by destroying progress.  A
-	// store cannot be drained by throwing away the work it is holding --
-	// only a commit drains it, by pruning what a certificate has settled.
-	//
-	// So the first boundary refuses to SEAL: transactions stay pending, the
-	// pending caps push back on submitters, and the store stops growing from
-	// our own side while commits catch up.  Eviction is what happens past the
-	// second boundary, when backpressure was not enough.
-	DefaultSealHighWater         = 0.75
+	DefaultMaxStoredBatchBytes   = 32 << 20 // active store: 32MB per partition
 	DefaultMaxRetainedBatchBytes = 32 << 20 // retention window: 32MB per partition
 	DefaultMaxBatchQueueSize     = 1000     // max batches in available queue before blocking
 )
@@ -68,8 +52,11 @@ const (
 // ErrWorkerClosed is returned when operations are attempted on a closed worker.
 var ErrWorkerClosed = errors.New("worker is closed")
 
-// ErrBackpressure is returned when the worker cannot accept more transactions
-// due to memory limits being reached (pending queue full or too many uncommitted batches).
+// ErrBackpressure was returned when the worker refused a transaction because a
+// limit had been reached.  Submit no longer refuses: crossing a pending
+// boundary SEALS instead, because refusing there discards work at the exact
+// moment the fix is to turn it into a batch (#4165).  Kept for callers that
+// still test for it.
 var ErrBackpressure = errors.New("worker backpressure: pending transactions exceed limit")
 
 // ErrTransactionTooLarge is returned when a single transaction exceeds the
@@ -112,14 +99,15 @@ type Config struct {
 	// Defaults to DefaultMaxBatchBytes.
 	MaxBatchBytes int
 
-	// MaxPendingSize is the maximum total size of pending transactions in bytes.
-	// When exceeded, Submit will return ErrBackpressure.
+	// MaxPendingSize is the size of pending transactions at which the worker
+	// seals a batch.  Crossing it keeps the envelope and triggers the seal;
+	// the queue is bounded by the batch it causes, not by a rejection.
 	// Defaults to DefaultMaxPendingSize.
 	MaxPendingSize int
 
-	// MaxPendingCount is the maximum number of pending transactions.
-	// When exceeded, Submit will return ErrBackpressure.
-	// Defaults to DefaultMaxPendingCount.
+	// MaxPendingCount is the number of pending transactions at which the
+	// worker seals a batch.  Crossing it keeps the envelope and triggers the
+	// seal.  Defaults to DefaultMaxPendingCount.
 	MaxPendingCount int
 
 	// MaxStoredBatchBytes bounds the active store in BYTES; the count cap
@@ -130,12 +118,6 @@ type Config struct {
 	// MaxRetainedBatchBytes bounds the retention window in bytes. Defaults
 	// to DefaultMaxRetainedBatchBytes.
 	MaxRetainedBatchBytes int
-
-	// SealHighWater is the fraction of the store at which this worker stops
-	// SEALING new batches -- the point where it applies backpressure instead
-	// of making more work for a store that is already full.  Zero uses
-	// DefaultSealHighWater.
-	SealHighWater float64
 
 	// MaxStoredBatches is the maximum number of batches to store.
 	// When exceeded, random batches are evicted to make room.
@@ -192,9 +174,6 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MaxStoredBatches <= 0 {
 		c.MaxStoredBatches = DefaultMaxStoredBatches
-	}
-	if c.SealHighWater <= 0 || c.SealHighWater > 1 {
-		c.SealHighWater = DefaultSealHighWater
 	}
 	if c.MaxStoredBatchBytes <= 0 {
 		c.MaxStoredBatchBytes = DefaultMaxStoredBatchBytes
@@ -299,10 +278,6 @@ type Worker struct {
 	// header is waiting on is not cache, it is a prerequisite for progress.
 	pins map[types.BatchDigest]int
 
-	// sealWasBlocked is the last answer sealBlocked gave, so a crossing is
-	// logged once instead of on every tick of the batch loop.
-	sealWasBlocked atomic.Bool
-
 	// Tombstones: why a batch left the store. A committed certificate whose
 	// batch is absent everywhere halts the partition permanently (#4125), and
 	// without this the log cannot say whether it was pruned, evicted, or never
@@ -378,8 +353,9 @@ func New(config Config, g *gossip.GossipLayer) *Worker {
 	}
 }
 
-// Submit adds a transaction to the pending batch.
-// Returns ErrBackpressure if the worker cannot accept more transactions.
+// Submit adds a transaction to the pending batch.  It does not refuse work:
+// crossing a pending boundary seals a batch rather than rejecting the envelope
+// that crossed it.
 // Returns ErrWorkerClosed if the worker has been closed.
 // Returns ErrValidationFailed (wrapped) if the transaction fails validation.
 func (w *Worker) Submit(tx []byte) error {
@@ -415,13 +391,12 @@ func (w *Worker) Submit(tx []byte) error {
 		w.txnsValidated.Add(1)
 	}
 
-	// Check batch count backpressure first (no lock needed, just read)
-	w.batchMu.RLock()
-	batchCount := len(w.batches)
-	w.batchMu.RUnlock()
-	if batchCount >= w.config.MaxStoredBatches {
-		return ErrBackpressure
-	}
+	// The batch store being full is not a reason to refuse a transaction.
+	// Accepting one does not grow the store -- only SEALING does -- and the
+	// store is bounded by eviction, which now leaves alone the batches a vote
+	// is waiting on.  Refusing here rejected cross-partition synthetics and
+	// the healer's own re-submissions, so the stream that needed the store to
+	// drain was the stream being turned away (#4165).
 
 	if txTraceEnabled {
 		slog.Info("TX accepted", "tx", txID(tx), "worker", w.config.ID,
@@ -430,18 +405,6 @@ func (w *Worker) Submit(tx []byte) error {
 
 	w.mu.Lock()
 
-	// Check pending count backpressure
-	if len(w.pending) >= w.config.MaxPendingCount {
-		w.mu.Unlock()
-		return ErrBackpressure
-	}
-
-	// Check pending size backpressure
-	if w.pendingSize+len(tx) > w.config.MaxPendingSize {
-		w.mu.Unlock()
-		return ErrBackpressure
-	}
-
 	// Copy the transaction to avoid external modification
 	txCopy := make([]byte, len(tx))
 	copy(txCopy, tx)
@@ -449,8 +412,19 @@ func (w *Worker) Submit(tx []byte) error {
 	w.pending = append(w.pending, txCopy)
 	w.pendingSize += len(txCopy)
 
-	// Check if we should create a batch immediately
-	shouldTrigger := len(w.pending) >= w.config.BatchSize || w.pendingSize >= w.config.MaxBatchBytes
+	// KEEP THE ENVELOPE AND SEAL.  Crossing a pending boundary is the signal
+	// to seal, not to drop: refusing the transaction there discards work at
+	// the exact moment the fix is to turn it into a batch, and the pending
+	// queue then stays full because nothing sealed it.  So the boundary
+	// triggers a seal and the envelope that crossed it goes into that batch.
+	//
+	// Pending is bounded by the seal it causes, not by a rejection.  It can
+	// exceed a limit by the one envelope that crossed it, and that envelope is
+	// what the next batch carries.
+	shouldTrigger := len(w.pending) >= w.config.BatchSize ||
+		w.pendingSize >= w.config.MaxBatchBytes ||
+		len(w.pending) >= w.config.MaxPendingCount ||
+		w.pendingSize >= w.config.MaxPendingSize
 
 	w.mu.Unlock()
 
@@ -798,15 +772,6 @@ func (w *Worker) batchLoop() {
 
 // createAndBroadcastBatch creates a batch from pending transactions and broadcasts it.
 func (w *Worker) createAndBroadcastBatch() {
-	// The first boundary: over it, do not seal.  Sealing ADDS to a store that
-	// is already under pressure, and the store is drained by commits, not by
-	// sealing more.  Holding the transactions in pending lets the pending
-	// caps push back on submitters -- backpressure toward the source instead
-	// of eviction at the sink.
-	if w.sealBlocked() {
-		return
-	}
-
 	batch := w.createBatch()
 	if batch == nil {
 		return
@@ -1178,34 +1143,6 @@ func (w *Worker) PinnedBatches() int {
 	w.batchMu.RLock()
 	defer w.batchMu.RUnlock()
 	return len(w.pins)
-}
-
-// sealBlocked reports whether the store is too full to take another batch of
-// our own making.
-//
-// Reported once per crossing rather than per attempt: the batch loop ticks
-// continuously, and a line per tick would bury the log at exactly the moment
-// it needs to be readable.
-func (w *Worker) sealBlocked() bool {
-	w.batchMu.RLock()
-	countMark := int(float64(w.config.MaxStoredBatches) * w.config.SealHighWater)
-	bytesMark := int(float64(w.maxStoredBytes) * w.config.SealHighWater)
-	blocked := len(w.batches) >= countMark || w.storedBytes >= bytesMark
-	stored, bytes := len(w.batches), w.storedBytes
-	w.batchMu.RUnlock()
-
-	if blocked != w.sealWasBlocked.Swap(blocked) {
-		if blocked {
-			slog.Warn("Not sealing: batch store is above the seal high water — applying backpressure",
-				"stored", stored, "storedBytes", bytes,
-				"countMark", countMark, "bytesMark", bytesMark,
-				"workerID", w.config.ID)
-		} else {
-			slog.Info("Sealing resumed: batch store drained below the seal high water",
-				"stored", stored, "storedBytes", bytes, "workerID", w.config.ID)
-		}
-	}
-	return blocked
 }
 
 // HasBatch returns true if the worker has the batch with the given digest.
