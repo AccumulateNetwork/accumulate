@@ -507,7 +507,12 @@ for part in blob.split("== ")[1:]:
 # the corpse, not the growth. Same capture as wedgewatch, prefixed hourly-.
 if [ -x "$here/wedgewatch.sh" ]; then
   ( while kill -0 $DRIVER 2>/dev/null; do
-      sleep ${PROFILE_INTERVAL:-3600}
+      # Sleep in short steps so the loop dies with the driver instead of
+      # outliving the run by up to an hour (runs 173742Z and 213153Z).
+      waited=0
+      while [ "$waited" -lt "${PROFILE_INTERVAL:-3600}" ] && kill -0 $DRIVER 2>/dev/null; do
+        sleep 30; waited=$((waited + 30))
+      done
       kill -0 $DRIVER 2>/dev/null || break
       env RUN_DIR="$rd" "$here/wedgewatch.sh" --now hourly >> "$rd/wedgewatch.log" 2>&1
     done ) &
