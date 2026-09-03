@@ -35,6 +35,8 @@ can be claimed until E7 is closed.
 | **H2** | **Done** — nothing to write. Oldest-first entries and "skip what is staged" both arrived with the staging change. |
 | **D3** | **Implemented, not merged.** `TestDeep` on branch `issue-4196-kvtest-deep` (`f3339116e`). |
 | **E7** | Spec written 2026-09-03. Not started. Blocks the next soak. |
+| **D5** | Written 2026-09-03 from the same run: commits are not durable while a reader is open, and that is what held 18 blocks in memory. Not started. |
+| **Steady state** | Plan written 2026-09-03 (below). S0 and S1 first. |
 | **Everything else** | Not started. |
 
 **What E3's answer turned out to be, because it changed the shape of E1.** The
@@ -121,6 +123,137 @@ export bcdb's staged-commit depth and the age of the oldest open view (18
 commits were staged on every BVN database at the end), and rate-limit the
 batch-store over-limit warnings (25,000 a minute per node).
 
+## Steady state — RAM and CPU under load
+
+The soaks now fail on resources, not on livelocks: memory climbs to the limit,
+GC takes the CPU, blocks slow, and the stall follows. This section is the plan
+to reach a node whose memory and CPU are flat for as long as it runs, at the
+target rate, and to be able to *show* that they are. It is ordered by what the
+evidence says is largest, and every item traces to a spec statement or names the
+spec it needs first — nothing here is tuning.
+
+### What steady state means
+
+Measured over a **12-hour run at 500 tps, 1 s blocks** (a shorter run proves
+nothing about growth). Warm-up is the first hour; the numbers are taken from
+hour 1 to hour 12.
+
+| property | criterion | spec |
+|---|---|---|
+| Memory is flat | RSS grows less than 1% per hour after warm-up; live heap stays under 70% of `GOMEMLIMIT`; `GOMEMLIMIT` is under 85% of the container limit | executor inv. 9; database inv. 5 |
+| GC is not the workload | GC cycles per second flat, not rising with height; GC CPU share under 10% | — (runtime) |
+| CPU is flat | seconds per block at the block interval, and process CPU per committed transaction the same at hour 12 as at hour 1 | executor inv. 9 |
+| Block work is bounded | bytes allocated per block does not correlate with height; no allocation site's share grows across the run | executor inv. 9 |
+| Commits are durable | `stagedCommits` ≤ 1 at every snapshot; oldest open view younger than one block | database inv. 5 |
+| Reads are bounded | read-probe p99 flat; `deepFallbacks` zero; no shallow read walks history | database, windows |
+| Caches are bounded | every cache is bounded in **bytes** and reports its size | database — *gap, see S6* |
+| Consensus memory is bounded | batch stores and queues hold at most their budget, per node, whatever the executor is doing | consensus — *gap, see S4* |
+| Logging is bounded | no message exceeds a fixed rate per node; log volume flat | — |
+
+The heap profile at hour 12 must have the same top ten as the profile at hour 1.
+
+### The work, in order
+
+**S0 — be able to measure it.** Nothing above can be judged from today's
+harness: memory is sampled every five minutes, `stats.json` is rewritten every
+50 commits so its history is lost, the dagbft block-time and round histograms
+emit nothing on any node, and the manifest prints the script's default memory
+budget rather than what compose ran. Sample RSS, heap, GC cycles and GC CPU
+fraction per node every 10–30 s into soakmon's history; snapshot `stats.json`
+on the same cadence; make the histograms emit; export `stagedCommits` and
+oldest-view age as metrics; record the effective `GOMEMLIMIT` and `mem_limit`.
+Take heap and CPU profiles at fixed hours, not only at the wedge. *Parallel
+with S1; done before the acceptance run.*
+
+**S1 — E7, the block ledger as a chain.** The dominant term: 41–46% of the live
+heap and the largest allocation site in our code, growing with height. Chain on
+the ledger, one keyed record per block, `indexing.Log` deleted, no migration.
+*Done when*: `indexing.(*Block).MarshalBinary` is absent from the profile and
+bytes allocated per block are flat across the run. Spec: executor, "The block
+ledger", invariant 9. Mainnet's history is the TBD in the spec, not this item.
+
+**S2 — D5, commits reach the store at commit.** The retention term: with E7
+fixed the pages are small, but a reader that pins a version still holds every
+commit since it, and a crash loses them. Restore durability at commit (write
+through unconditionally; isolate open views by overlay or by versioned reads),
+export the depth and the oldest view's age, tag views with their opener, add
+the `kvtest` case. Then find and fix whatever held eighteen blocks on every
+BVN. Prime suspect: the API event service, which opens a batch on every commit
+and loads the whole block ledger in an unbounded goroutine — bound it to one in
+flight and skip the load when nothing is subscribed. *Done when*:
+`stagedCommits` ≤ 1 at every snapshot for twelve hours, and no view outlives a
+block. Spec: database invariants 2 and 5.
+
+**S3 — write the consensus memory section of the spec, then hold it.** There is
+no consensus part of the spec, so the batch store has no specified budget and
+behaves as it happens to: 32 MB active, 32 MB retained, 32 MB inbound queue
+*per partition*, and own uncommitted batches exempt from eviction — so when the
+executor lags, the store exceeds its budget without bound, evicts peers'
+batches, defers votes, refetches, and warns 25,000 times a minute. Specify:
+one byte budget per node; what a full store does (back-pressure the submitter,
+never evict what a vote needs, never exceed the budget for own batches); and
+that the wire buffer a batch aliases counts against it. Then make the code
+match and rate-limit the warnings. *Done when*: `pubsub/pb.(*Message).Unmarshal`
+in-use is within the budget at every profile, and the over-limit warning is
+gone from a healthy run. Spec: **to be written** (SPEC.md lists consensus as a
+missing part).
+
+**S4 — allocation churn that sets the GC cadence.** None of these retain
+memory; together they are why the collector runs eight times a second once the
+heap is at the limit. From the hour-16 profile of `acc-bvn2-val1` (197 GB
+allocated):
+
+| site | allocated | fix |
+|---|---|---|
+| `encoding.Hash` of `SyntheticMessage` | 17 GB | hashing re-marshals the message with its receipts every time; cache the hash on the message |
+| `api/v3/message.Handler` serving synthetic pulls | 18 GB | H1, the healing cache, cuts the pulls; the sequencer's per-request receipt walk is the rest |
+| `merkle.(*State).Copy` via `CopyAsInterface` | 9 GB | every `Get` of a chain state deep-copies it; give readers a read-only view |
+| `Batch.UpdateBPT` | 22 GB cumulative | measure per block; it should be O(accounts touched) |
+
+*Done when*: bytes allocated per committed transaction halve, and GC cycles per
+second under 500 tps are flat and low. Spec: healing, "The cache"; executor,
+"The database write".
+
+**S5 — bound every cache in bytes.** The database spec says nothing about
+caches; the sub-1 GB work found that caches, not storage layout, set the
+footprint, and that ~350 MB of the heap is GC headroom the limit authorizes.
+bcdb's two immutable caches are bounded by entry count (200,000 per generation,
+two generations, two caches), not bytes. Add to database.md: a cache is bounded
+in bytes, reports hits, misses and bytes, and holds only records that cannot
+change. Then make the caches match. *Done when*: cache bytes are a metric and
+the sum of them is a chosen fraction of the memory budget. Spec: **database.md
+addition**.
+
+**S6 — GC and memory limits as configuration, not folklore.** `GOMEMLIMIT` must
+sit below the container limit with headroom (a limit above it is an OOM kill
+waiting for a spike); the manifest must record the effective values; the
+runtime's GC CPU fraction must be exported so the "GC is not the workload"
+criterion is measurable. Small, and part of S0's harness work.
+
+**S7 — logging is a resource.** Rate-limit every warning that can fire per
+message or per submit (the two batch-store warnings first), and add log lines
+per minute per node to the acceptance table. A node at 50,000 lines a minute is
+spending CPU on the symptom.
+
+**S8 — the store's own growth (BlockchainDB, cross-repo).** The dynamic layer's
+live-tail rewrite (BlockchainDB#60) and maintenance pauses scale with the
+dynamic layer's size, which E7 and S5 shrink but do not remove. Filed there,
+not edited here. Any store-side term that survives S1–S5 in the hour-12 profile
+becomes an issue in that repository.
+
+### Order
+
+```
+S0 (measure) ─┬─▶ S1 (E7) ─▶ S2 (D5 + view holders) ─▶ acceptance run #1
+              └─▶ S6, S7                         parallel, any time
+S3 (consensus spec, then batch store) ─▶ S4 (churn) ─▶ S5 (caches) ─▶ acceptance run #2
+S8 as issues, whenever a store term shows in a profile
+```
+
+Acceptance run #1 answers whether memory is flat with E7 and D5 closed. It will
+not yet meet the GC or churn criteria; that is what run #2 is for. Neither run
+is a claim until it has lasted twelve hours.
+
 ## Alongside — cheap and independent
 
 Closeable on their own, in parallel with anything. **Not sequenced ahead of the
@@ -162,7 +295,8 @@ soak.
 ## Order of work
 
 ```
-E1+H4+E2 ─▶ H5 ─▶ H2 ─▶ E7 ─▶ H3 ─▶ H1   the critical path (through H2 DONE; E7 next)
+E1+H4+E2 ─▶ H5 ─▶ H2 ─▶ E7 ─▶ D5 ─▶ H3 ─▶ H1   the critical path (through H2 DONE; E7 next)
+S0..S8                                       steady state — see its own order above
 E6, D2, D3 ─▶ D4                          parallel, any time
 E5, E4, D1                                after
 ```

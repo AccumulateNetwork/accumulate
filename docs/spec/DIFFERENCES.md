@@ -227,6 +227,43 @@ for `BeginDeep` swaps a measured fallback for an unverified one.
 
 ---
 
+### D5. A bcdb commit returns before its data reaches the store
+
+*Issue not yet filed — written from this entry.*
+
+**Spec** ([database.md](database.md), invariant 5): durability is the commit
+of the outermost change set. Invariant 2: a change set is isolated.
+
+**Code**: `bcdb.commit` appends the batch to `d.staged` and calls `drain`, which
+writes through only the staged batches that no open reader predates
+(`database.go:504`, "A reader predates this commit and must not see it"). If any
+batch begun at an older version is still open, `commit` returns nil with the
+data in memory and not on disk — `reportStats` says so in its own words:
+"nothing staged is on disk". `closeView` does not drain; the next commit does.
+Isolation is bought by delaying durability instead of by versioning the read.
+
+**Evidence**: run `20260903T121819Z`, `stats.json` at commit 700 on every BVN
+database: `stagedCommits: 18` (the DN: 2; earlier bcdb runs: 2–3). Eighteen
+committed blocks were in memory and not in the store, and with them eighteen
+copies of the E7 log page — the 776 MB `indexing.(*Block).MarshalBinary` line in
+the heap profile. The reader that held the version is not identified; the dumps
+were taken after the stall. `getAt` also walks the staged list newest-first on
+every read, so a deep queue slows every reader.
+
+**Consequence**: a crash with N staged commits loses N committed blocks from the
+store while consensus has them; memory held per staged commit is the size of a
+block's writes, so a long-lived reader turns into unbounded heap; and there is
+no metric for either — the depth is in a stats file rewritten every 50 commits.
+
+**Size**: medium. Either write through at commit and serve an open view from a
+per-view overlay (memory still held while the view is open, but durability is
+restored and bounded by the view, not by the writer), or version the store's
+reads (`view_kv.go` in BlockchainDB may already be that). In both cases: export
+staged depth and the age of the oldest open view, tag views with their opener,
+and add a `kvtest` case — commit while a view is open, reopen, the data is there.
+
+---
+
 ## Healing
 
 ### H1. The healing cache does not exist
