@@ -185,10 +185,18 @@
         pointer: true
 
     - name: BlockLedger
-      description: indexes entries of a block. Should only be used on the system ledger
+      description: records which chains a block changed. One per non-empty block, keyed by block index, written once and never rewritten. Only the system ledger may hold it (executor spec, "The block ledger")
+      type: state
+      dataType: BlockLedger
+      pointer: true
+      parameters: # Not indexed. Block ledgers are an API index, not consensus state; snapshots do not carry them, as they did not carry the log this replaces
+      - name: Index
+        type: uint
+    - name: BlockLedgerChain
+      description: takes the hash of each block's ledger record, so the ledger account's hash commits to what every block changed (executor spec, "The block ledger")
       type: other
-      dataType: indexing.Log[*BlockLedger]
-      constructor: newBlockEntryLog
+      dataType: Chain2
+      hasChains: true
       pointer: true
 
     - name: Transaction

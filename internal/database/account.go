@@ -72,7 +72,7 @@ func (a *Account) Commit() error {
 	}
 
 	// Prevent any accounts other than the system ledger from modifying events or the block ledger
-	if values.IsDirty(a.events) || values.IsDirty(a.blockLedger) {
+	if values.IsDirty(a.events) || a.blockLedgerDirty() {
 		u := a.Url()
 		if _, ok := protocol.ParsePartitionUrl(u); !ok {
 			return errors.InternalError.WithFormat("%v is not allowed to have events/blocks", u)
@@ -184,4 +184,15 @@ func (b *Batch) UpdateBPT() error {
 
 func compareSignatureByKey(a, b protocol.KeySignature) int {
 	return bytes.Compare(a.GetPublicKey(), b.GetPublicKey())
+}
+
+// blockLedgerDirty reports whether any block ledger record or the block ledger
+// chain has been written. Only the system ledger may write them.
+func (a *Account) blockLedgerDirty() bool {
+	for _, v := range a.blockLedger {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	return values.IsDirty(a.blockLedgerChain)
 }

@@ -1568,7 +1568,7 @@ func TestChainNames(t *testing.T) {
 	acc := batch.Account(account)
 
 	// Test various chain names
-	chains := []string{"main", "signature", "scratch", "root", "bpt", "major-block"}
+	chains := []string{"main", "signature", "scratch", "root", "bpt", "major-block", "block-ledger"}
 	for _, name := range chains {
 		chain, err := acc.ChainByName(name)
 		require.NoError(t, err, "Failed to get chain: %s", name)

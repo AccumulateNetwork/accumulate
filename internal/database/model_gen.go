@@ -14,7 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -305,7 +304,8 @@ type Account struct {
 	sequenced              map[accountSequencedMapKey]values.Value[*url.TxID]
 	sighted                map[accountSightedMapKey]values.Value[uint64]
 	events                 *AccountEvents
-	blockLedger            *indexing.Log[*BlockLedger]
+	blockLedger            map[accountBlockLedgerMapKey]values.Value[*BlockLedger]
+	blockLedgerChain       *Chain2
 	transaction            map[accountTransactionMapKey]*AccountTransaction
 	mainChain              *Chain2
 	scratchChain           *Chain2
@@ -361,6 +361,18 @@ type accountSightedMapKey struct {
 
 func (k accountSightedKey) ForMap() accountSightedMapKey {
 	return accountSightedMapKey{values.MapKeyUrl(k.Source)}
+}
+
+type accountBlockLedgerKey struct {
+	Index uint64
+}
+
+type accountBlockLedgerMapKey struct {
+	Index uint64
+}
+
+func (k accountBlockLedgerKey) ForMap() accountBlockLedgerMapKey {
+	return accountBlockLedgerMapKey{k.Index}
 }
 
 type accountTransactionKey struct {
@@ -504,12 +516,20 @@ func (c *Account) newEvents() *AccountEvents {
 	return v
 }
 
-func (c *Account) BlockLedger() *indexing.Log[*BlockLedger] {
-	return values.GetOrCreate(c, &c.blockLedger, (*Account).newBlockLedger)
+func (c *Account) BlockLedger(index uint64) values.Value[*BlockLedger] {
+	return values.GetOrCreateMap(c, &c.blockLedger, accountBlockLedgerKey{index}, (*Account).newBlockLedger)
 }
 
-func (c *Account) newBlockLedger() *indexing.Log[*BlockLedger] {
-	return newBlockEntryLog(c, c.logger.L, c.store, c.key.Append("BlockLedger"), "block-ledger")
+func (c *Account) newBlockLedger(k accountBlockLedgerKey) values.Value[*BlockLedger] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("BlockLedger", k.Index), false, values.Struct[BlockLedger]())
+}
+
+func (c *Account) BlockLedgerChain() *Chain2 {
+	return values.GetOrCreate(c, &c.blockLedgerChain, (*Account).newBlockLedgerChain)
+}
+
+func (c *Account) newBlockLedgerChain() *Chain2 {
+	return newChain2(c, c.logger.L, c.store, c.key.Append("BlockLedgerChain"), "block-ledger")
 }
 
 func (c *Account) Transaction(hash [32]byte) *AccountTransaction {
@@ -701,14 +721,24 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Events":
 		return c.Events(), key.SliceI(1), nil
 	case "BlockLedger":
-		return c.BlockLedger(), key.SliceI(1), nil
-	case "Transaction":
 		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (8)")
 		}
+		index, okIndex := key.Get(1).(uint64)
+		if !okIndex {
+			return nil, nil, errors.InternalError.With("bad key for account (9)")
+		}
+		v := c.BlockLedger(index)
+		return v, key.SliceI(2), nil
+	case "BlockLedgerChain":
+		return c.BlockLedgerChain(), key.SliceI(1), nil
+	case "Transaction":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (10)")
+		}
 		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for account (9)")
+			return nil, nil, errors.InternalError.With("bad key for account (11)")
 		}
 		v := c.Transaction(hash)
 		return v, key.SliceI(2), nil
@@ -728,31 +758,31 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.MajorBlockChain(), key.SliceI(1), nil
 	case "SyntheticSequenceChain":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (10)")
+			return nil, nil, errors.InternalError.With("bad key for account (12)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account (11)")
+			return nil, nil, errors.InternalError.With("bad key for account (13)")
 		}
 		v := c.getSyntheticSequenceChain(partition)
 		return v, key.SliceI(2), nil
 	case "SyntheticReplica":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (12)")
+			return nil, nil, errors.InternalError.With("bad key for account (14)")
 		}
 		stream, okStream := key.Get(1).(string)
 		if !okStream {
-			return nil, nil, errors.InternalError.With("bad key for account (13)")
+			return nil, nil, errors.InternalError.With("bad key for account (15)")
 		}
 		v := c.getSyntheticReplica(stream)
 		return v, key.SliceI(2), nil
 	case "AnchorChain":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (14)")
+			return nil, nil, errors.InternalError.With("bad key for account (16)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account (15)")
+			return nil, nil, errors.InternalError.With("bad key for account (17)")
 		}
 		v := c.getAnchorChain(partition)
 		return v, key.SliceI(2), nil
@@ -765,7 +795,7 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Data":
 		return c.Data(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for account (16)")
+		return nil, nil, errors.InternalError.With("bad key for account (18)")
 	}
 }
 
@@ -813,7 +843,12 @@ func (c *Account) IsDirty() bool {
 	if values.IsDirty(c.events) {
 		return true
 	}
-	if values.IsDirty(c.blockLedger) {
+	for _, v := range c.blockLedger {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	if values.IsDirty(c.blockLedgerChain) {
 		return true
 	}
 	for _, v := range c.transaction {
@@ -880,6 +915,7 @@ func (c *Account) dirtyChains() []*MerkleManager {
 
 	var chains []*MerkleManager
 
+	chains = append(chains, c.blockLedgerChain.dirtyChains()...)
 	chains = append(chains, c.mainChain.dirtyChains()...)
 	chains = append(chains, c.scratchChain.dirtyChains()...)
 	chains = append(chains, c.signatureChain.dirtyChains()...)
@@ -920,7 +956,8 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkMap(&err, c.sequenced, c.newSequenced, c.getSequencedKeys, opts, fn)
 	values.WalkMap(&err, c.sighted, c.newSighted, c.getSightedKeys, opts, fn)
 	values.WalkField(&err, c.events, c.newEvents, opts, fn)
-	values.WalkField(&err, c.blockLedger, c.newBlockLedger, opts, fn)
+	values.WalkMap(&err, c.blockLedger, c.newBlockLedger, nil, opts, fn)
+	values.WalkField(&err, c.blockLedgerChain, c.newBlockLedgerChain, opts, fn)
 	values.WalkMap(&err, c.transaction, c.newTransaction, c.getTransactionKeys, opts, fn)
 	values.WalkField(&err, c.mainChain, c.newMainChain, opts, fn)
 	values.WalkField(&err, c.scratchChain, c.newScratchChain, opts, fn)
@@ -966,7 +1003,10 @@ func (c *Account) baseCommit() error {
 		values.Commit(&err, v)
 	}
 	values.Commit(&err, c.events)
-	values.Commit(&err, c.blockLedger)
+	for _, v := range c.blockLedger {
+		values.Commit(&err, v)
+	}
+	values.Commit(&err, c.blockLedgerChain)
 	for _, v := range c.transaction {
 		values.Commit(&err, v)
 	}

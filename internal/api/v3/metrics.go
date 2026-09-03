@@ -59,20 +59,30 @@ func (s *MetricsService) Metrics(ctx context.Context, opts api.MetricsOptions) (
 	var count int
 	var start time.Time
 	for i := uint64(0); i < opts.Span && i <= last; i++ {
-		var block *protocol.BlockLedger
-		_, err = s.querier.QueryAccountAs(ctx, partition.BlockLedger(last-i), nil, &block)
+		// The block query reads the block ledger in whichever form recorded
+		// it (executor spec, "The block ledger"). Only the count and the time
+		// are wanted, so no entries are loaded.
+		index := last - i
+		block, err := s.querier.QueryMinorBlock(ctx, partition.URL, &api.BlockQuery{
+			Minor:      &index,
+			EntryRange: &api.RangeOptions{Count: new(uint64)},
+		})
 		switch {
 		case err == nil:
 		case errors.Is(err, errors.NotFound):
 			continue // Empty
 		default:
-			return nil, errors.UnknownError.WithFormat("load block %d ledger: %w", last-i, err)
+			return nil, errors.UnknownError.WithFormat("load block %d ledger: %w", index, err)
 		}
 
 		// This is technically chain entries per second, but that's a lot easier
 		// to calculate than actual transactions per second
-		start = block.Time
-		count += len(block.Entries)
+		if block.Time != nil {
+			start = *block.Time
+		}
+		if block.Entries != nil {
+			count += int(block.Entries.Total)
+		}
 	}
 
 	res := new(api.Metrics)

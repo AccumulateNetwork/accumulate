@@ -11,8 +11,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -130,16 +131,21 @@ func TestBlockLedger(t *testing.T) {
 	// Check the block ledger
 	var accounts []string
 	View(t, sim.Database("BVN0"), func(batch *database.Batch) {
-		batch.Account(PartitionUrl("BVN0").JoinPath(Ledger)).BlockLedger().All(func(r indexing.QueryResult[*database.BlockLedger]) bool {
-			_, bl, err := r.Get()
+		ledger := batch.Account(PartitionUrl("BVN0").JoinPath(Ledger))
+		var system *SystemLedger
+		require.NoError(t, ledger.Main().GetAs(&system))
+		for i := uint64(1); i <= system.Index; i++ {
+			_, entries, err := indexing.LoadBlockLedger(ledger, i)
+			if errors.Is(err, errors.NotFound) {
+				continue // empty block
+			}
 			require.NoError(t, err)
-			for _, e := range bl.Entries {
+			for _, e := range entries {
 				if !e.Account.RootIdentity().Equal(PartitionUrl("BVN0")) {
 					accounts = append(accounts, e.Account.WithFragment(e.Chain).String())
 				}
 			}
-			return true
-		})
+		}
 	})
 	require.Contains(t, accounts, "acc://alice.acme/tokens#main")
 }

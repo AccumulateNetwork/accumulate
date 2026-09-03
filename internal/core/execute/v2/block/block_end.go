@@ -7,6 +7,7 @@
 package block
 
 import (
+	"crypto/sha256"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,7 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -171,13 +171,16 @@ func (block *Block) Close() (execute.BlockState, error) {
 		}
 	}
 
-	// Record the block entries
+	// Record the block ledger: one record keyed by block index, and its hash
+	// on the block-ledger chain, so the ledger account's hash commits to what
+	// this block changed. Written once; the cost is the block's, not the
+	// chain's (executor spec, "The block ledger", invariant 9).
 	if block.Executor.globals().Active.ExecutorVersion.V2JiuquanEnabled() {
 		bl := new(database.BlockLedger)
 		bl.Index = block.Index
 		bl.Time = block.Time
 		bl.Entries = block.State.ChainUpdates.Entries
-		err = ledger.BlockLedger().Append(record.NewKey(block.Index), bl)
+		err = recordBlockLedger(ledger, bl)
 	} else {
 		bl := new(protocol.BlockLedger)
 		bl.Url = m.Describe.Ledger().JoinPath(strconv.FormatUint(block.Index, 10))
@@ -306,40 +309,11 @@ func (b *Block) executePostUpdateActions() error {
 
 	switch version {
 	case protocol.ExecutorVersionV2Jiuquan:
-		// For each previously recorded block, add a placeholder to the new
-		// block ledger and delete the BPT entry for the old block ledger
-		// account
-		acct := b.Batch.Account(b.Executor.Describe.Ledger())
-		chain := acct.RootChain().Index()
-		head, err := chain.Head().Get()
-		if err != nil {
-			return errors.UnknownError.WithFormat("load root index chain head: %w", err)
-		}
-
-		var entry protocol.IndexEntry
-		for i := 0; i < int(head.Count); i += 256 {
-			entries, err := chain.Inner().Entries(int64(i), int64(i+256))
-			if err != nil {
-				return errors.UnknownError.WithFormat("load root index chain entries (%d, %d): %w", i, i+255, err)
-			}
-
-			for j, data := range entries {
-				entry = protocol.IndexEntry{}
-				err = entry.UnmarshalBinary(data)
-				if err != nil {
-					return errors.UnknownError.WithFormat("decode root index chain entry %d: %w", i+j, err)
-				}
-				err = acct.BlockLedger().Append(record.NewKey(entry.BlockIndex), &database.BlockLedger{})
-				if err != nil {
-					return errors.UnknownError.WithFormat("add ledger entry for block %d: %w", i+j, err)
-				}
-				blockLedgerAccount := b.Batch.Account(b.Executor.Describe.BlockLedger(entry.BlockIndex))
-				err = b.Batch.BPT().Delete(blockLedgerAccount.Key())
-				if err != nil {
-					return errors.UnknownError.WithFormat("delete BPT entry for block ledger %d: %w", i+j, err)
-				}
-			}
-		}
+		// Nothing to migrate. Blocks recorded before activation stay readable
+		// through LoadBlockLedger's fall-through to the per-block account, and
+		// their BPT entries are not touched here: removing them is a
+		// reorganization of the whole history, which is a separate problem
+		// (executor spec, "The block ledger", activation and history).
 	}
 	return nil
 }
@@ -823,5 +797,24 @@ func (x *Executor) enumerateModifiedChains(block *Block) error {
 	e := block.State.ChainUpdates.Entries
 	sort.Slice(e, func(i, j int) bool { return e[i].Compare(e[j]) < 0 })
 
+	return nil
+}
+
+// recordBlockLedger writes a block's ledger record and appends its hash to the
+// block-ledger chain.
+func recordBlockLedger(ledger *database.Account, bl *database.BlockLedger) error {
+	err := ledger.BlockLedger(bl.Index).Put(bl)
+	if err != nil {
+		return errors.UnknownError.WithFormat("store block ledger: %w", err)
+	}
+	data, err := bl.MarshalBinary()
+	if err != nil {
+		return errors.UnknownError.WithFormat("marshal block ledger: %w", err)
+	}
+	h := sha256.Sum256(data)
+	err = ledger.BlockLedgerChain().Inner().AddEntry(h[:], false)
+	if err != nil {
+		return errors.UnknownError.WithFormat("add block ledger chain entry: %w", err)
+	}
 	return nil
 }

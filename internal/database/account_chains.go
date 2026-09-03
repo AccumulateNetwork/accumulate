@@ -53,6 +53,7 @@ func newChain2(parent record.Record, _ logging.Logger, _ record.Store, key *reco
 		typ = merkle.ChainTypeTransaction
 	case "RootChain",
 		"BptChain",
+		"BlockLedgerChain", // Hashes of block ledger records, as the BPT chain holds state hashes
 		"AnchorChain":
 		typ = merkle.ChainTypeAnchor
 	case "MajorBlockChain":
@@ -263,6 +264,8 @@ func (a *Account) chainByName(name string) *Chain2 {
 		return a.AnchorSequenceChain()
 	case "major-block":
 		return a.MajorBlockChain()
+	case "block-ledger":
+		return a.BlockLedgerChain()
 	}
 
 	first, arg, rest, ok := splitChainName(name)

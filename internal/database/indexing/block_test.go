@@ -14,15 +14,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// LoadBlockLedger is the read path the Jiuquan migration leans on: the
-// migration appends an EMPTY placeholder per historical block and deletes only
-// the BPT entry, so historical reads must fall through to the old account.
-// This is the "nothing breaks" claim of #4147, tested directly.
+// LoadBlockLedger reads the block ledger record written since the chain form
+// was activated, and falls through to the per-block account written before it
+// (executor spec, "The block ledger"). Nothing is migrated at activation, so
+// the fall-through is what keeps every historical block query working.
 
 func blockLedgerAccount(t *testing.T) (*database.Batch, *database.Account) {
 	t.Helper()
@@ -42,13 +41,13 @@ func putAccountForm(t *testing.T, ledger *database.Account, index uint64, entrie
 	require.NoError(t, ledger.Account(strconv.FormatUint(index, 10)).Main().Put(bl))
 }
 
-func TestLoadBlockLedger_PrefersTheLogWhenPopulated(t *testing.T) {
+func TestLoadBlockLedger_PrefersTheRecordWhenPresent(t *testing.T) {
 	_, ledger := blockLedgerAccount(t)
 	alice := protocol.AccountUrl("alice")
 
 	logTime := time.Date(2026, 8, 23, 1, 0, 0, 0, time.UTC)
 	logEntries := []*protocol.BlockEntry{{Account: alice, Chain: "main", Index: 3}}
-	require.NoError(t, ledger.BlockLedger().Append(record.NewKey(uint64(5)),
+	require.NoError(t, ledger.BlockLedger(5).Put(
 		&database.BlockLedger{Index: 5, Time: logTime, Entries: logEntries}))
 
 	// A DIFFERENT answer in the account form, to prove which one was read.
@@ -57,18 +56,16 @@ func TestLoadBlockLedger_PrefersTheLogWhenPopulated(t *testing.T) {
 
 	at, entries, err := LoadBlockLedger(ledger, 5)
 	require.NoError(t, err)
-	assert.True(t, at.Equal(logTime), "a populated log entry wins over the account form")
+	assert.True(t, at.Equal(logTime), "the record wins over the account form")
 	require.Len(t, entries, 1)
 	assert.Equal(t, "main", entries[0].Chain)
 }
 
-func TestLoadBlockLedger_FallsThroughToTheAccountWhenThePlaceholderIsEmpty(t *testing.T) {
+func TestLoadBlockLedger_FallsThroughToTheAccountWhenNoRecordExists(t *testing.T) {
 	_, ledger := blockLedgerAccount(t)
 	alice := protocol.AccountUrl("alice")
 
-	// The migration's placeholder: an empty BlockLedger, Index == 0.
-	require.NoError(t, ledger.BlockLedger().Append(record.NewKey(uint64(5)), &database.BlockLedger{}))
-
+	// No record for block 5: it was written before activation, as an account.
 	acctTime := time.Date(2026, 8, 23, 1, 0, 0, 0, time.UTC)
 	acctEntries := []*protocol.BlockEntry{{Account: alice, Chain: "main", Index: 3}}
 	putAccountForm(t, ledger, 5, acctEntries, acctTime)
@@ -76,7 +73,7 @@ func TestLoadBlockLedger_FallsThroughToTheAccountWhenThePlaceholderIsEmpty(t *te
 	at, entries, err := LoadBlockLedger(ledger, 5)
 	require.NoError(t, err)
 	assert.True(t, at.Equal(acctTime),
-		"an empty placeholder is 'not populated' — the read must fall through to the pre-Jiuquan account, or every historical block query breaks at activation")
+		"a block with no record must fall through to the pre-activation account, or every historical block query breaks at activation")
 	require.Len(t, entries, 1)
 	assert.True(t, entries[0].Account.Equal(alice))
 }

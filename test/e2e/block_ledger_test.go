@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -24,15 +23,16 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
-// #4147: before Jiuquan every block writes a BlockLedger ACCOUNT — one BPT
-// entry per block, permanently. Jiuquan writes an indexing log instead, and
-// the transition migrates: placeholder per past block, BPT entry deleted,
-// account left in place for reads. These tests run the real executor through
-// real blocks and check which form lands in the database.
+// Before Jiuquan every block writes a BlockLedger ACCOUNT — one BPT entry per
+// block, permanently. From Jiuquan on, a block writes one record keyed by its
+// index and puts the record's hash on the ledger's block-ledger chain (executor
+// spec, "The block ledger"). Nothing is migrated at activation: old blocks stay
+// as accounts and reads fall through to them. These tests run the real executor
+// through real blocks and check which form lands in the database.
 
 // blockLedgerForms scans blocks [1, head] on the partition and reports which
-// blocks have the account form and which have a populated log entry.
-func blockLedgerForms(t *testing.T, db database.Viewer, partition string) (accounts, logs []uint64, head uint64) {
+// blocks have the account form and which have a block ledger record.
+func blockLedgerForms(t *testing.T, db database.Viewer, partition string) (accounts, records []uint64, head uint64) {
 	t.Helper()
 	View(t, db, func(batch *database.Batch) {
 		partUrl := PartitionUrl(partition)
@@ -53,18 +53,18 @@ func blockLedgerForms(t *testing.T, db database.Viewer, partition string) (accou
 				require.NoError(t, err)
 			}
 
-			_, entry, err := ledger.BlockLedger().Find(record.NewKey(i)).Exact().Get()
+			_, err = ledger.BlockLedger(i).Get()
 			switch {
-			case err == nil && entry.Index != 0:
-				logs = append(logs, i)
-			case err == nil, errors.Is(err, errors.NotFound):
-				// absent or placeholder
+			case err == nil:
+				records = append(records, i)
+			case errors.Is(err, errors.NotFound):
+				// no record
 			default:
 				require.NoError(t, err)
 			}
 		}
 	})
-	return accounts, logs, head
+	return accounts, records, head
 }
 
 func TestBlockLedger_PreJiuquanWritesABlockLedgerAccount(t *testing.T) {
@@ -87,16 +87,24 @@ func TestBlockLedger_PreJiuquanWritesABlockLedgerAccount(t *testing.T) {
 	})
 }
 
-func TestBlockLedger_JiuquanWritesTheIndexingLog(t *testing.T) {
+func TestBlockLedger_JiuquanWritesTheRecordAndChain(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2Jiuquan),
 	)
 	sim.StepN(10)
 
-	accounts, logs, head := blockLedgerForms(t, sim.Database("BVN0"), "BVN0")
+	accounts, records, head := blockLedgerForms(t, sim.Database("BVN0"), "BVN0")
 	require.NotZero(t, head)
-	require.NotEmpty(t, logs, "under Jiuquan, blocks must record into the indexing log")
+	require.NotEmpty(t, records, "under Jiuquan, blocks must write a block ledger record")
+
+	// And the chain carries one entry per recorded block, so the ledger
+	// account's hash commits to what every block changed.
+	View(t, sim.Database("BVN0"), func(batch *database.Batch) {
+		chain, err := batch.Account(PartitionUrl("BVN0").JoinPath(Ledger)).BlockLedgerChain().Get()
+		require.NoError(t, err)
+		assert.Equal(t, int64(len(records)), chain.Height(), "one block-ledger chain entry per recorded block")
+	})
 
 	// Characterization: the GENESIS block still writes the account form, even
 	// when the genesis version is Jiuquan or later — the version is activated
@@ -111,9 +119,9 @@ func TestBlockLedger_JiuquanWritesTheIndexingLog(t *testing.T) {
 // form, with ONE exception this test pins: the genesis block itself writes
 // the account form on every partition, because the version activates during
 // genesis. So "no BlockLedger accounts exist in a DAG-BFT database" is
-// actually "exactly one per partition, at ledger/1" — noted on #4147. (The
-// corresponding check against a live DAG-BFT database is operational, not
-// something a simulator test can prove.)
+// actually "exactly one per partition, at ledger/1". (The corresponding check
+// against a live DAG-BFT database is operational, not something a simulator
+// test can prove.)
 func TestBlockLedger_OnlyGenesisWritesAnAccountOnAChainGenesisedAtKourou(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 2, 1),
@@ -129,11 +137,11 @@ func TestBlockLedger_OnlyGenesisWritesAnAccountOnAChainGenesisedAtKourou(t *test
 	}
 }
 
-// The move from account to log changes WHERE block entries are recorded, not
+// The move from account to record changes WHERE block entries are recorded, not
 // WHAT: the same transaction produces the same chain-update entries in both
 // forms. Runs identical traffic under Vandenberg and under Jiuquan and
 // compares what was recorded about it, through the same read path.
-func TestBlockLedger_LogEntryCarriesTheSameChainUpdates(t *testing.T) {
+func TestBlockLedger_RecordCarriesTheSameChainUpdates(t *testing.T) {
 	recordFor := func(version ExecutorVersion) map[string]bool {
 		sim := NewSim(t,
 			simulator.SimpleNetwork(t.Name()+"-"+version.String(), 1, 1),
@@ -176,13 +184,14 @@ func TestBlockLedger_LogEntryCarriesTheSameChainUpdates(t *testing.T) {
 	post := recordFor(ExecutorVersionV2Jiuquan)
 	require.NotEmpty(t, pre, "the burn must appear in the pre-Jiuquan record")
 	assert.Equal(t, pre, post,
-		"the log must record exactly the chain updates the account form recorded — the move changes the container, not the content")
+		"the record must carry exactly the chain updates the account form recorded — the move changes the container, not the content")
 }
 
 // The activation itself, end to end: historical block queries answer the same
-// before and after, the old accounts leave the BPT but not the database, and
-// new blocks use the log. This is the shape mainnet's activation will take.
-func TestBlockLedger_HistoricalBlockQueryWorksAcrossTheMigration(t *testing.T) {
+// before and after, the old accounts are left exactly where they were — in the
+// database AND in the BPT, because nothing is migrated (executor spec, "The
+// block ledger", activation and history) — and new blocks write the record.
+func TestBlockLedger_HistoricalBlockQueryWorksAcrossActivation(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2Vandenberg),
@@ -218,11 +227,10 @@ func TestBlockLedger_HistoricalBlockQueryWorksAcrossTheMigration(t *testing.T) {
 	// The BVN crosses the transition when the DN's anchor arrives, several
 	// blocks after preHead. Every account-form block up to and including the
 	// transition block wrote the old form; the LAST account-form block is the
-	// transition block itself (its Close still ran with Vandenberg active,
-	// then its post-update actions ran the migration).
-	accounts, logs, _ := blockLedgerForms(t, sim.Database("BVN0"), "BVN0")
+	// transition block itself (its Close still ran with Vandenberg active).
+	accounts, records, _ := blockLedgerForms(t, sim.Database("BVN0"), "BVN0")
 	require.NotEmpty(t, accounts)
-	require.NotEmpty(t, logs, "post-activation blocks must use the log")
+	require.NotEmpty(t, records, "post-activation blocks must write the record")
 	transition := accounts[len(accounts)-1]
 	require.Greater(t, transition, preHead, "the transition lands after the pre-activation snapshot")
 
@@ -236,42 +244,19 @@ func TestBlockLedger_HistoricalBlockQueryWorksAcrossTheMigration(t *testing.T) {
 			"precondition: the BVN must have activated Jiuquan")
 
 		for i, want := range before {
-			// Same answer as before the migration.
+			// Same answer as before activation.
 			_, got, err := indexing.LoadBlockLedger(ledger, i)
-			require.NoError(t, err, "block %d must still be readable after the migration", i)
-			require.Equal(t, len(want), len(got), "block %d's entries must survive the migration", i)
+			require.NoError(t, err, "block %d must still be readable after activation", i)
+			require.Equal(t, len(want), len(got), "block %d's entries must survive activation", i)
 
-			// The account survives; its BPT entry does not.
+			// Nothing was migrated: the account is still there, and so is
+			// its BPT entry. Removing them is a separate reorganization.
 			u := PartitionUrl("BVN0").JoinPath(Ledger, strconv.FormatUint(i, 10))
 			var bl *BlockLedger
 			require.NoError(t, batch.Account(u).Main().GetAs(&bl),
-				"the migration deletes the BPT entry, not the account")
+				"activation does not touch the pre-activation accounts")
 			_, err = batch.BPT().Get(batch.Account(u).Key())
-			assert.True(t, errors.Is(err, errors.NotFound),
-				"block %d's account must be out of the state tree", i)
-
-			// And the migration left its placeholder.
-			_, entry, err := ledger.BlockLedger().Find(record.NewKey(i)).Exact().Get()
-			require.NoError(t, err, "block %d must have a migration placeholder", i)
-			assert.Zero(t, entry.Index, "the placeholder is empty; reads fall through to the account")
-		}
-
-		// Every account-form block loses its BPT entry — EXCEPT the transition
-		// block itself. Its account is written and made dirty in the same
-		// batch that runs the migration, so UpdateBPT re-inserts its entry
-		// after the migration's delete. One stray BPT entry survives the
-		// activation, permanently. Characterization, not endorsement — noted
-		// on #4147; deterministic across nodes, so consensus is unaffected.
-		for _, i := range accounts {
-			u := PartitionUrl("BVN0").JoinPath(Ledger, strconv.FormatUint(i, 10))
-			_, err := batch.BPT().Get(batch.Account(u).Key())
-			if i == transition {
-				assert.NoError(t, err,
-					"the transition block's own account is re-inserted by UpdateBPT after the migration's delete")
-			} else {
-				assert.True(t, errors.Is(err, errors.NotFound),
-					"block %d's account must be out of the state tree", i)
-			}
+			assert.NoError(t, err, "block %d's BPT entry is left in place — there is no migration", i)
 		}
 
 		// Blocks after the transition never create accounts.

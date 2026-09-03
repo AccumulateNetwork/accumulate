@@ -64,7 +64,8 @@ import (
 //	<chain>.States(I)                 every set and counted collection
 //	Account(U).Data.Entry(I)          Account(U).Data.Entry (the count)
 //	SystemData(P).SyntheticIndexIndex(B)   Account(U).Data.Transaction(H)
-//	Summary(H).Main (BSN)             Events, BlockLedger, Log blocks
+//	Summary(H).Main (BSN)             Events, Log blocks
+//	Account(U).BlockLedger(I)
 //
 // Anything not named here is treated as mutable, which is the direction
 // that fails quietly rather than loudly.
@@ -123,6 +124,11 @@ func isWriteOnce(k *record.Key) bool {
 	case "SyntheticIndexIndex":
 		// Which synthetic index chain entry covers a given block.
 		return trailing == 1
+
+	case "BlockLedger":
+		// Account(ledger).BlockLedger(I): one record per non-empty block,
+		// written once (executor spec, "The block ledger").
+		return trailing == 1 && prev == "Account"
 	}
 
 	return false
