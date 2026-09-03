@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 )
 
 // testValidator holds a test validator's keys.
@@ -540,4 +541,64 @@ func TestPin_ReleaseOfAnUnpinnedHeaderIsHarmless(t *testing.T) {
 	var hd types.HeaderDigest
 	hd[0] = 99
 	require.NotPanics(t, func() { p.releasePins(hd) })
+}
+
+// The pin lifecycle driven through the REAL path: a deferred vote pins, a cast
+// vote releases.
+//
+// The unit tests above call pinHeaderBatches and releasePins directly, which
+// proves the bookkeeping and nothing about whether the vote gate ever drives
+// it. That distinction is not academic — the bug that wedged two soaks was
+// wiring, not logic: the release was called from a place that already held the
+// lock. A test that only calls the functions cannot see that.
+//
+// So this goes in through OnHeaderReceived, with a real worker, and asserts on
+// the worker's pin count rather than the primary's bookkeeping.
+func TestPin_DeferredVotePinsAndCastVoteReleases(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+
+	w := worker.New(worker.Config{Partition: "test", ID: 0}, nil)
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv, NewCertsChannelSize: 10},
+		newTestCommittee(validators, 1), nil, newTestDAG(), []*worker.Worker{w})
+
+	// A header from another validator naming two batches this node does not
+	// hold. No parents, so the parent gate passes and the batch gate is what
+	// the header meets.
+	b1 := types.NewBatch([][]byte{[]byte("tx-a")})
+	b2 := types.NewBatch([][]byte{[]byte("tx-b")})
+	payload := []types.PayloadEntry{{Digest: b1.Digest()}, {Digest: b2.Digest()}}
+	header := types.NewHeader(validators[1].pub, 0, 1, payload, nil) // epoch 1: the primary starts there
+	require.NoError(t, header.Sign(validators[1].priv))
+
+	// Missing batches: the vote defers, and everything the header names is
+	// pinned -- including any it already holds, which is the point. Eviction
+	// takes those while the node waits for the one it lacks, so the next
+	// rebroadcast finds a DIFFERENT batch missing.
+	p.OnHeaderReceived(header)
+	require.Equal(t, 2, w.PinnedBatches(),
+		"a deferred vote must pin every batch its header names")
+	p.pendingMu.Lock()
+	_, voted := p.votedHeaders[header.Digest()]
+	p.pendingMu.Unlock()
+	require.False(t, voted, "the vote must not go out while a batch is missing")
+
+	// Rebroadcasts while still missing must not stack pins.
+	p.OnHeaderReceived(header)
+	p.OnHeaderReceived(header)
+	require.Equal(t, 2, w.PinnedBatches(), "rebroadcasts must not accumulate pins")
+
+	// The batches arrive. The same header now votes, and the pins go with it.
+	require.NoError(t, w.StoreBatch(b1))
+	require.NoError(t, w.StoreBatch(b2))
+	p.OnHeaderReceived(header)
+
+	p.pendingMu.Lock()
+	_, voted = p.votedHeaders[header.Digest()]
+	p.pendingMu.Unlock()
+	require.True(t, voted, "with every batch present the vote must go out")
+	require.Zero(t, w.PinnedBatches(),
+		"a cast vote releases its pins; nothing is waiting on those batches any more")
 }
