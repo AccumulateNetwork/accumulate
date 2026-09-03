@@ -430,3 +430,48 @@ func TestPrimaryStartWhenClosed(t *testing.T) {
 	err := p.Start(context.Background())
 	require.ErrorIs(t, err, ErrPrimaryClosed)
 }
+
+// cleanupOldHeaders must not deadlock on its own lock.
+//
+// It holds pendingMu for the whole cleanup, so anything it calls that also
+// takes pendingMu deadlocks the primary permanently — and a deadlocked primary
+// stops advancing rounds while every other surface looks alive: gossip flows,
+// peers stay connected, the container is healthy, and the partition simply
+// stops producing blocks. That is what wedged BVN2 in soaks 20260903T035139Z
+// and 20260903T042628Z, at 23 and 8 minutes.
+//
+// A Go mutex is not reentrant, so this is caught by the test hanging rather
+// than failing. It runs cleanup with pins outstanding, which is the exact
+// shape that re-entered.
+func TestCleanupOldHeaders_DoesNotDeadlockReleasingPins(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv, NewCertsChannelSize: 10},
+		newTestCommittee(validators, 1), nil, newTestDAG(), nil)
+	p.SetRound(1000) // far ahead, so everything below is past the cutoff
+
+	// Deferred headers with pins, old enough to be cleaned up.
+	for i := 0; i < 16; i++ {
+		var hd types.HeaderDigest
+		hd[0], hd[1] = byte(i), 1
+		h := &types.Header{Round: types.Round(i)}
+		for j := 0; j < 4; j++ {
+			var bd types.BatchDigest
+			bd[0], bd[1] = byte(i), byte(j)
+			h.Payload = append(h.Payload, types.PayloadEntry{Digest: bd})
+		}
+		p.pinHeaderBatches(hd, h)
+	}
+
+	done := make(chan struct{})
+	go func() { defer close(done); p.cleanupOldHeaders() }()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("cleanupOldHeaders deadlocked: it holds pendingMu, so releasing pins " +
+			"inside it re-enters a non-reentrant mutex and the primary stops advancing rounds")
+	}
+}

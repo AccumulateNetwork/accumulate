@@ -71,6 +71,17 @@ type Config struct {
 	ExecCostPerTx       time.Duration
 	ExecCostByPartition map[string]time.Duration
 
+	// MaxStoredBatches, MaxPendingCount and MaxPendingSize size the worker's
+	// batch store and pending queue.  Zero uses the worker's defaults.
+	//
+	// A test that wants to ask what happens when the store FILLS has to be
+	// able to fill it, and the store's real default (1000 batches) takes a
+	// soak's throughput and several minutes to reach.  Shrinking it is what
+	// turns "run the network for 20 minutes and see" into a second.
+	MaxStoredBatches int
+	MaxPendingCount  int
+	MaxPendingSize   int
+
 	// TPSByPartition overrides TPS for named partitions ("Directory", "BVN1",
 	// ...). Real load is not spread evenly: in soak 20260831T070855Z, BVN2
 	// produced 80,991 synthetics to BVN1's 24,608 and 19,429 to the
@@ -152,7 +163,25 @@ type Sim struct {
 	parts  []string // stable order: Directory, BVN1..N
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	// submitted and refused count what the load offered and what the network
+	// turned away.  A refusal is a stage of the pipeline like any other, and
+	// the only one that leaves every downstream gauge looking healthy.
+	submitted   atomic.Uint64
+	refused     atomic.Uint64
+	refusedOnce sync.Once
 }
+
+// logf writes to the configured output, if any.
+func (s *Sim) logf(format string, args ...any) {
+	if s.cfg.Out != nil {
+		fmt.Fprintf(s.cfg.Out, format+"\n", args...)
+	}
+}
+
+// Submitted and Refused report the load offered and the load turned away.
+func (s *Sim) Submitted() uint64 { return s.submitted.Load() }
+func (s *Sim) Refused() uint64   { return s.refused.Load() }
 
 // Result reports how a run ended.
 type Result struct {
@@ -160,6 +189,12 @@ type Result struct {
 	Reason  string // "target height", "duration elapsed", "stalled: ..."
 	Heights map[string]uint64
 	Elapsed time.Duration
+
+	// Submitted and Refused: what the load offered, and what the network
+	// turned away before it reached consensus.  Refused > 0 is a finding on
+	// its own -- the network declined work it was healthy enough to take.
+	Submitted uint64
+	Refused   uint64
 }
 
 // ErrStalled is returned (wrapped) when a partition stops executing.
@@ -233,9 +268,12 @@ func New(cfg Config) (*Sim, error) {
 			KeyPair:    keys[val],
 			NumWorkers: cfg.NumWorkers,
 			WorkerConfig: worker.Config{
-				Partition:    part,
-				BatchSize:    cfg.BatchSize,
-				BatchTimeout: cfg.BatchTimeout,
+				Partition:        part,
+				BatchSize:        cfg.BatchSize,
+				BatchTimeout:     cfg.BatchTimeout,
+				MaxStoredBatches: cfg.MaxStoredBatches,
+				MaxPendingCount:  cfg.MaxPendingCount,
+				MaxPendingSize:   cfg.MaxPendingSize,
 			},
 			MinRoundInterval:    cfg.MinRoundInterval,
 			BatchCollectTimeout: cfg.BatchCollect,
@@ -392,9 +430,29 @@ func (s *Sim) load(ctx context.Context, part string) {
 		case <-tick.C:
 			n++
 			tx := []byte(fmt.Sprintf("consim-%s-%d", part, n))
-			// Backpressure and transient submit errors are part of the
-			// system under study; keep submitting.
-			_ = nodes[int(n)%len(nodes)].node.SubmitTransaction(tx)
+
+			// COUNT the refusals; do not discard them.
+			//
+			// This used to be `_ =` with a comment saying backpressure is
+			// part of the system under study -- and that is exactly why the
+			// simulator could not see the failure it was built to find.  A
+			// network that REFUSES work is not a network that is merely slow:
+			// the refused transaction never enters the pipeline, so every
+			// stage gauge downstream looks healthy while nothing progresses.
+			// In soak 20260903T035139Z that shape wedged a stream for its
+			// whole life -- BVN2 produced 46,428 messages for BVN1, BVN1
+			// received 10,378, both frozen -- while blocks were being
+			// produced at 6/s the entire time.
+			//
+			// Keep submitting after a refusal: the question is whether the
+			// network recovers, not whether the load backs off.
+			s.submitted.Add(1)
+			if err := nodes[int(n)%len(nodes)].node.SubmitTransaction(tx); err != nil {
+				s.refused.Add(1)
+				s.refusedOnce.Do(func() {
+					s.logf("REFUSED: %s refused a submission: %v", part, err)
+				})
+			}
 		}
 	}
 }
@@ -463,12 +521,7 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 		go s.load(ctx, part)
 	}
 
-	out := s.cfg.Out
-	logf := func(format string, args ...any) {
-		if out != nil {
-			fmt.Fprintf(out, format+"\n", args...)
-		}
-	}
+	logf := s.logf
 
 	prev := map[*simNode]snapshot{}
 	moved := map[*simNode]*lastMoved{}
@@ -576,7 +629,8 @@ func (s *Sim) diagnose(logf func(string, ...any), prev map[*simNode]snapshot, mo
 }
 
 func (s *Sim) finish(start time.Time, ok bool, reason string) *Result {
-	r := &Result{Ok: ok, Reason: reason, Heights: map[string]uint64{}, Elapsed: time.Since(start)}
+	r := &Result{Ok: ok, Reason: reason, Heights: map[string]uint64{}, Elapsed: time.Since(start),
+		Submitted: s.submitted.Load(), Refused: s.refused.Load()}
 	for _, part := range s.parts {
 		for _, sn := range s.byPart[part] {
 			if h := sn.height.Load(); h > r.Heights[part] {

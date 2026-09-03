@@ -111,3 +111,78 @@ func TestSkewedLoad_HeavyPartitionLagsButDoesNotWedge(t *testing.T) {
 	t.Logf("heights %v in %s — the heavy partition kept producing",
 		res.Heights, res.Elapsed.Truncate(time.Second))
 }
+
+// A network must not REFUSE work it is healthy enough to take.
+//
+// This is the failure the simulator could not previously see, because load()
+// discarded the submit error. Refusal is the one stage whose failure leaves
+// every downstream gauge looking healthy: the transaction never enters the
+// pipeline, so rounds advance, headers are created, votes flow, certificates
+// form and commit — and the work is simply gone.
+//
+// Observed in soak 20260903T035139Z: BVN2 produced 46,428 messages for BVN1,
+// BVN1 received 10,378, and both watermarks sat frozen while BVN1 produced
+// blocks at ~6/s for the entire run. What was being refused included the
+// cross-partition synthetics themselves and the healer's own re-submissions,
+// so the stream that needed the queue to drain was the stream being turned
+// away. Twenty minutes per attempt in Docker; seconds here.
+//
+// The store is deliberately tiny so it fills almost immediately — the real
+// default is 1000 batches, which takes a soak's throughput and minutes to
+// reach, and the question is what happens AFTER it fills, not how long it
+// takes to get there.
+func TestFullBatchStoreMustNotRefuseWork(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the consensus stack for ~20s")
+	}
+
+	sim, err := New(Config{
+		BVNs:             1,
+		ValidatorsPerBVN: 4,
+		TPS:              200,
+		MinRoundInterval: 5 * time.Millisecond,
+		BatchTimeout:     10 * time.Millisecond,
+		BatchSize:        4,
+
+		// Small enough to fill in the first seconds of load, but not smaller
+		// than the network's working set: a header names several batches and
+		// pins them all while its vote is deferred, so a store below that is
+		// degenerate — eviction can free nothing and the run wedges on the
+		// fixture rather than on the behaviour under test.
+		MaxStoredBatches: 120,
+		MaxPendingCount:  8,
+		MaxPendingSize:   8192,
+
+		TargetHeight: 40,
+		Duration:     45 * time.Second,
+		StallAfter:   15 * time.Second,
+		Out:          os.Stdout,
+	})
+	if err != nil {
+		t.Fatalf("build sim: %v", err)
+	}
+	defer sim.Close()
+
+	res, err := sim.Run(context.Background())
+	if res == nil {
+		t.Fatalf("run: %v", err)
+	}
+	t.Logf("submitted=%d refused=%d heights=%v elapsed=%s",
+		res.Submitted, res.Refused, res.Heights, res.Elapsed.Round(time.Millisecond))
+
+	// THE ASSERTION. A full store is a reason to seal, not a reason to refuse:
+	// accepting a transaction does not grow the store, only sealing does, and
+	// crossing a pending boundary is the signal to cut a batch.
+	if res.Refused != 0 {
+		t.Errorf("network refused %d of %d submissions with a full batch store; "+
+			"a refused transaction never enters the pipeline, and what gets refused "+
+			"under load includes cross-partition messages and heal re-submissions",
+			res.Refused, res.Submitted)
+	}
+
+	// And it must still make progress while the store is full — refusing
+	// nothing is worthless if the network merely stops instead.
+	if err != nil {
+		t.Errorf("network did not progress with a full batch store: %v (%s)", err, res.Reason)
+	}
+}

@@ -500,7 +500,15 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 }
 
 // cleanupOldHeaders removes headers, votes, and certificates for old rounds.
+// cleanupOldHeaders drops per-header state that has aged past the certificate
+// cutoff. It returns the headers whose pins the caller must release: the pins
+// cannot be released here because pendingMu is held and a Go mutex is not
+// reentrant.
 func (p *Primary) cleanupOldHeaders() {
+	p.releaseExpiredPins(p.cleanupOldHeadersLocked())
+}
+
+func (p *Primary) cleanupOldHeadersLocked() (expired []types.HeaderDigest) {
 	// Get current round
 	p.roundMu.Lock()
 	currentRound := p.currentRound
@@ -565,10 +573,26 @@ func (p *Primary) cleanupOldHeaders() {
 	// A header old enough to be dropped is never going to be voted on, so
 	// release whatever it was holding.  This is the path that bounds the pin
 	// set when a header is abandoned rather than voted.
+	//
+	// COLLECTED HERE, RELEASED BY THE CALLER, because pendingMu is already
+	// held and a Go mutex is not reentrant: calling releasePins from inside
+	// this loop deadlocks the primary on its own cleanup, permanently, and the
+	// partition stops advancing rounds while every other surface looks alive.
+	// That is what wedged BVN2 in soaks 20260903T035139Z and 20260903T042628Z,
+	// and what consim's TestSkewedLoad catches in 18 seconds.
 	for digest, round := range p.deferredRounds {
 		if round < certCutoff {
-			p.releasePins(digest)
+			expired = append(expired, digest)
 		}
+	}
+	return expired
+}
+
+// releaseExpiredPins drops the pins of headers that aged out. Separate from
+// the cleanup that finds them so no lock is held across it.
+func (p *Primary) releaseExpiredPins(expired []types.HeaderDigest) {
+	for _, digest := range expired {
+		p.releasePins(digest)
 	}
 }
 
