@@ -474,11 +474,15 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
 echo "time,node,database,commits,stagedCommits,deepFallbacks,maintenanceErrors,permPutTotal,dynaPutTotal,dynaLiveHit" > "$rd/storage-stats.csv"
 ( while kill -0 $DRIVER 2>/dev/null; do
     ts=$(date -u +%FT%TZ)
-    for c in $(docker ps --format '{{.Names}}' | grep -E '^acc-(dn|bvn)'); do
+    # Every container mounts the whole network's config volume, so any one
+    # of them sees every node's stats.json (run 20260903T173742Z had each
+    # row eight times). Ask one container, and take the node from the path.
+    c=$(docker ps --format '{{.Names}}' | grep -E '^acc-(dn|bvn)' | head -1)
+    [ -n "$c" ] && for once in 1; do
       docker exec "$c" sh -c 'for f in $(find /root/.accumulate -name stats.json 2>/dev/null); do echo "== $f"; cat "$f"; done' 2>/dev/null \
         | python3 -c '
 import sys, json
-ts, node = sys.argv[1], sys.argv[2]
+ts = sys.argv[1]
 blob = sys.stdin.read()
 for part in blob.split("== ")[1:]:
     path, _, body = part.partition("\n")
@@ -486,12 +490,14 @@ for part in blob.split("== ")[1:]:
         d = json.loads(body)
     except Exception:
         continue
-    db = path.split("/")[-4] if path.count("/") >= 4 else path
+    parts = path.split("/")
+    db = parts[-4] if len(parts) >= 4 else path      # dnn / bvnn
+    node = parts[-5] if len(parts) >= 5 else "?"      # e.g. bvn2-4
     perm, dyna = d.get("perm") or {}, d.get("dyna") or {}
     print(",".join(str(x) for x in [ts, node, db, d.get("commits", ""), d.get("stagedCommits", ""),
           sum((d.get("deepFallbacks") or {}).values()), d.get("maintenanceErrors", ""),
           perm.get("PutTotal", ""), dyna.get("PutTotal", ""), dyna.get("LiveHit", "")]))
-' "$ts" "${c#acc-}" >> "$rd/storage-stats.csv" 2>/dev/null
+' "$ts" >> "$rd/storage-stats.csv" 2>/dev/null
     done
     sleep ${STORAGE_STATS_INTERVAL:-60}
   done ) &

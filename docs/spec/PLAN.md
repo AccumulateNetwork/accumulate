@@ -36,7 +36,7 @@ can be claimed until E7 is closed.
 | **D3** | **Implemented, not merged.** `TestDeep` on branch `issue-4196-kvtest-deep` (`f3339116e`). |
 | **E7** | **Done**, on `issue-4202-block-ledger-chain`: a `block-ledger` chain and one keyed record per block; `indexing.Log` and the #4147 walk deleted; the invariant-9 cost test is green. Removed from the differences. Not yet soaked. |
 | **D5** | **Done**, on `issue-4203-bcdb-durable-commit` (#4203): every commit is written through and sealed at commit; readers are isolated by per-version pre-image overlays that are dropped as they close; the oldest view's opener is named in a warning; the event service loads one block at a time with a bounded queue and opens its view only while loading. Removed from the differences. Not yet soaked. |
-| **Steady state** | Plan written 2026-09-03 (below). S0, S1 and S2 done on stacked branches (#4204, #4202, #4203). **Acceptance run #1 is next**: 12 h at 500 tps on the #4203 branch. |
+| **Steady state** | S0, S1 and S2 done on stacked branches (#4204, #4202, #4203). **Acceptance run #1 (`20260903T173742Z`) ran 45 min**: E7 and D5 hold (no database term left in the heap; every commit sealed at commit; the view holder named), but the store's per-block seal capped the network at ~80 tps (S8a, BlockchainDB#84) and the batch store, with no back-pressure, doubled the live heap and stalled the BVNs (S3). Review in the run directory. **S8a and S3 come before run #2.** |
 | **Everything else** | Not started. |
 
 **What E3's answer turned out to be, because it changed the shape of E1.** The
@@ -266,6 +266,18 @@ S0 (measure) ─┬─▶ S1 (E7) ─▶ S2 (D5 + view holders) ─▶ acceptanc
               └─▶ S6, S7                         parallel, any time
 S3 (consensus spec, then batch store) ─▶ S4 (churn) ─▶ S5 (caches) ─▶ acceptance run #2
 S8 as issues, whenever a store term shows in a profile
+```
+
+**Revised after run #1 (2026-09-03).** Run #1 showed the order above is wrong
+about what comes before the second run. With the database terms gone, the heap
+that grew was the batch store and gossip buffers, because the store's seal
+holds every block to ~0.9 s and nothing tells the submitter to slow down:
+
+```
+S8a (BlockchainDB#84, store) ─┐
+S3  (consensus memory spec + back-pressure) ─┴─▶ acceptance run #2
+S7  (logging) alongside; S2 follow-up: captureProvableView holds a view for
+    minutes by design — capture it only when a snapshot is about to be pinned
 ```
 
 Acceptance run #1 answers whether memory is flat with E7 and D5 closed. It will

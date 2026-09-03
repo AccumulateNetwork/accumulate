@@ -959,7 +959,7 @@ func (d *Database) warnOldView() {
 	d.lastViewWarn = time.Now()
 	slog.Warn("A reader is holding an old database version",
 		"module", "bcdb", "database", d.metricLabel, "version", v, "current", d.version,
-		"age", time.Since(opened).Round(time.Second), "opener", d.viewOpener[v],
+		"age", time.Since(opened).Round(time.Second).String(), "opener", d.viewOpener[v],
 		"overlays", len(d.undoVersions))
 }
 
