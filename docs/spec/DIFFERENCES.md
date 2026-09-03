@@ -96,7 +96,7 @@ to the hash. One accidental writer from changing account hashes.
 
 ### E7. The block ledger is a paged log that rewrites itself, or an account per block
 
-*Issue not yet filed — written from this entry.*
+*[#4202](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4202)*
 
 **Spec** ([executor.md](executor.md), "The block ledger"): a chain on the
 system ledger account plus one keyed record per block. Written once, cost
@@ -229,7 +229,7 @@ for `BeginDeep` swaps a measured fallback for an unverified one.
 
 ### D5. A bcdb commit returns before its data reaches the store
 
-*Issue not yet filed — written from this entry.*
+*[#4203](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4203)*
 
 **Spec** ([database.md](database.md), invariant 5): durability is the commit
 of the outermost change set. Invariant 2: a change set is isolated.

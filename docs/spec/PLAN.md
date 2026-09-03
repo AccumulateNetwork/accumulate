@@ -34,8 +34,8 @@ can be claimed until E7 is closed.
 | **H5** | **Done**, same branch. Cadence and sender selection replace the jitter, back-off and breakers. |
 | **H2** | **Done** — nothing to write. Oldest-first entries and "skip what is staged" both arrived with the staging change. |
 | **D3** | **Implemented, not merged.** `TestDeep` on branch `issue-4196-kvtest-deep` (`f3339116e`). |
-| **E7** | Spec written 2026-09-03. Not started. Blocks the next soak. |
-| **D5** | Written 2026-09-03 from the same run: commits are not durable while a reader is open, and that is what held 18 blocks in memory. Not started. |
+| **E7** | Spec written 2026-09-03; #4202 filed. Not started. Blocks the next soak. |
+| **D5** | Written 2026-09-03 from the same run, #4203 filed: commits are not durable while a reader is open, and that is what held 18 blocks in memory. Not started. |
 | **Steady state** | Plan written 2026-09-03 (below). S0 and S1 first. |
 | **Everything else** | Not started. |
 
@@ -112,7 +112,7 @@ and sequence number, in Accumulate, used only by healing. It turns 53,011
 fetches into 8,556 — worth having, but it optimises a loop E1 and H2 have
 already stopped.
 
-**E7 — the block ledger as a chain. NEXT.** A `block-ledger` chain on the
+**#4202 — E7: the block ledger as a chain. NEXT.** A `block-ledger` chain on the
 system ledger account and one keyed record per block, written once; reads go to
 the keyed record and fall through to the pre-activation account; no migration,
 no walk of history. Deletes `indexing.Log`. Supersedes the mechanism in #4147:
@@ -165,14 +165,14 @@ oldest-view age as metrics; record the effective `GOMEMLIMIT` and `mem_limit`.
 Take heap and CPU profiles at fixed hours, not only at the wedge. *Parallel
 with S1; done before the acceptance run.*
 
-**S1 — E7, the block ledger as a chain.** The dominant term: 41–46% of the live
+**S1 — #4202, E7: the block ledger as a chain.** The dominant term: 41–46% of the live
 heap and the largest allocation site in our code, growing with height. Chain on
 the ledger, one keyed record per block, `indexing.Log` deleted, no migration.
 *Done when*: `indexing.(*Block).MarshalBinary` is absent from the profile and
 bytes allocated per block are flat across the run. Spec: executor, "The block
 ledger", invariant 9. Mainnet's history is the TBD in the spec, not this item.
 
-**S2 — D5, commits reach the store at commit.** The retention term: with E7
+**S2 — #4203, D5: commits reach the store at commit.** The retention term: with E7
 fixed the pages are small, but a reader that pins a version still holds every
 commit since it, and a crash loses them. Restore durability at commit (write
 through unconditionally; isolate open views by overlay or by versioned reads),
