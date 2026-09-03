@@ -412,21 +412,34 @@ func (w *Worker) Submit(tx []byte) error {
 	w.pending = append(w.pending, txCopy)
 	w.pendingSize += len(txCopy)
 
-	// KEEP THE ENVELOPE AND SEAL.  Crossing a pending boundary is the signal
-	// to seal, not to drop: refusing the transaction there discards work at
-	// the exact moment the fix is to turn it into a batch, and the pending
-	// queue then stays full because nothing sealed it.  So the boundary
-	// triggers a seal and the envelope that crossed it goes into that batch.
-	//
-	// Pending is bounded by the seal it causes, not by a rejection.  It can
-	// exceed a limit by the one envelope that crossed it, and that envelope is
-	// what the next batch carries.
+	// The ordinary batching trigger: a batch is worth making.  Signalled to
+	// the batch loop, and it does not matter if a signal is coalesced.
 	shouldTrigger := len(w.pending) >= w.config.BatchSize ||
-		w.pendingSize >= w.config.MaxBatchBytes ||
-		len(w.pending) >= w.config.MaxPendingCount ||
+		w.pendingSize >= w.config.MaxBatchBytes
+
+	// The BOUNDARY: pending is as large as it is allowed to get.  Crossing it
+	// keeps the envelope and seals, rather than refusing the transaction --
+	// refusing discards work at the exact moment the fix is to turn it into a
+	// batch, and the queue then stays full because nothing sealed it.
+	//
+	// This seal is SYNCHRONOUS, and that is what bounds pending.  Signalling
+	// the batch loop instead is a non-blocking send that coalesces: under load
+	// the trigger is already queued, the signal is dropped, and pending grows
+	// without limit.  Sealing here means the queue can never be more than the
+	// one envelope that crossed the boundary.
+	mustSeal := len(w.pending) >= w.config.MaxPendingCount ||
 		w.pendingSize >= w.config.MaxPendingSize
 
 	w.mu.Unlock()
+
+	if mustSeal && w.ctx != nil {
+		// Synchronous, and it may block: the available-batch queue applies
+		// backpressure when consensus is not consuming batches fast enough.
+		// Blocking the submitter is the point -- it slows the source instead
+		// of dropping its work, which is what refusing did.
+		w.createAndBroadcastBatch()
+		return nil
+	}
 
 	// Trigger batch creation outside the lock
 	if shouldTrigger {
