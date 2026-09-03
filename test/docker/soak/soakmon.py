@@ -208,6 +208,7 @@ def collect_heights():
 # time; a height that can be read says only that a node answers the phone.
 _PROGRESS = {}
 _RATE = {}  # part -> [(t, height)] rolling window for the block-rate display
+_FIRST = {}  # part -> (t, height) at first sighting, for the run-long average
 _RSS_ALARM = {}  # last RSS-alarm time, rate-limited to one per 5 min
 _FLOW_HIST = {}  # (kind,src,dst) -> [(t, sent, recv)] for channel-lag rates
 
@@ -253,11 +254,24 @@ def assess_progress(heights, now):
             if dh > 0 and dt > 0:
                 sec_per_block = round(dt / dh, 1)
 
+        # RUNNING average, over the whole run rather than the last five
+        # minutes. The two answer different questions and a soak needs both:
+        # the window says what the network is doing now, the running average
+        # says what it has sustained. A partition that paces at target for
+        # four minutes in every five reads healthy on the window and is not.
+        _FIRST.setdefault(part, (now, h))
+        t0, h0 = _FIRST[part]
+        avg_sec_per_block = None
+        if h > h0 and now > t0:
+            avg_sec_per_block = round((now - t0) / (h - h0), 1)
+
         out[part] = {
             "height": h,
             "state": "stalled" if stalled >= STALL_SECS else "live",
             "stalledFor": round(stalled, 1),
             "secPerBlock": sec_per_block,
+            "avgSecPerBlock": avg_sec_per_block,
+            "blocksSeen": h - h0,
         }
     return out
 
@@ -1224,10 +1238,13 @@ async function tick(){
   $('heights').innerHTML=parts.map(p=>{
     const g=pg[p]||{},st=g.state||'unknown';
     const col=st==='live'?'':(st==='stalled'?'var(--red)':'var(--yel)');
-    // Average time per block (rolling 5 min). A block is one committed
-    // leader group, targeted at one per 3s — the rate is what separates
-    // "paced by design" from "dragging".
-    const spb=(st==='live'&&g.secPerBlock)?` ${g.secPerBlock}s/blk`:'';
+    // Time per block, two ways. The rolling 5-minute window says what the
+    // partition is doing NOW; the running average, over the whole run, says
+    // what it has sustained. A partition that paces at target for four
+    // minutes in every five reads healthy on the window alone.
+    const now5=(st==='live'&&g.secPerBlock)?`${g.secPerBlock}s/blk`:'';
+    const avg=(st==='live'&&g.avgSecPerBlock)?` avg ${g.avgSecPerBlock}`:'';
+    const spb=now5?` ${now5}${avg}`:'';
     const note=st==='live'?spb:(st==='unknown'?' unreadable':` stalled ${Math.round(g.stalledFor||0)}s`);
     return `<span class=n ${col?`style="color:${col}"`:''}>${fmt(hh[p])}</span>`+
            `<span class=l ${col?`style="color:${col}"`:''}>${shortP(p)}${note}</span>`;
