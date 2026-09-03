@@ -551,6 +551,12 @@ func generate(ctx context.Context, e *env, total int, limit time.Duration, track
 				var ids []*url.TxID
 				var err error
 				for attempt := 0; attempt < maxPickAttempts; attempt++ {
+					if attempt > 0 {
+						// NotReady is the node saying "not now": a full store or a
+						// busy query gate. Wait before asking again rather than
+						// turning back-pressure into a hot loop.
+						time.Sleep(time.Duration(attempt) * 50 * time.Millisecond)
+					}
 					act = e.pick()
 					ids, err = act.run(ctx, e)
 					if !errors.Is(err, errors.NotReady) {

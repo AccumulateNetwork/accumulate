@@ -41,10 +41,6 @@ const (
 	// enough that it is a window and not a second database.
 	DefaultRetainCommittedFor = 10 * time.Minute
 
-	// DefaultMaxRetainedBatches caps the retention store independently of
-	// MaxStoredBatches. Batches are ~KB, so this is tens of MB at worst.
-	DefaultMaxRetainedBatches = 4096
-
 	// GoneRetentionExpired: held after commit, then dropped when the window
 	// closed. Distinct from pruned-after-commit, which now means "committed
 	// and no longer retained here" only once this has happened.
@@ -66,7 +62,9 @@ type retainedBatch struct {
 // retain moves a committed batch into the retention store. The caller must
 // hold batchMu.
 func (w *Worker) retain(digest types.BatchDigest, b *types.Batch, detail, cert string) {
-	if w.maxRetained <= 0 || b == nil {
+	// Retention is bounded in bytes; a count is only for tests, and a
+	// negative count turns retention off.
+	if w.maxRetained < 0 || w.maxRetainedBytes <= 0 || b == nil {
 		return
 	}
 	if w.retained == nil {
@@ -84,7 +82,7 @@ func (w *Worker) retain(digest types.BatchDigest, b *types.Batch, detail, cert s
 	// Oldest first, so neither cap can be exceeded even in a burst. The byte
 	// cap is what actually bounds memory (#4164).
 	for len(w.retainedOrder) > 0 &&
-		(len(w.retainedOrder) > w.maxRetained || w.retainedBytes > w.maxRetainedBytes) {
+		((w.maxRetained > 0 && len(w.retainedOrder) > w.maxRetained) || w.retainedBytes > w.maxRetainedBytes) {
 		oldest := w.retainedOrder[0]
 		w.retainedOrder = w.retainedOrder[1:]
 		if r, ok := w.retained[oldest]; ok {

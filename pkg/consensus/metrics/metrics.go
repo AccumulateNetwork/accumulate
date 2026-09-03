@@ -575,3 +575,20 @@ var (
 		Help:      "Blocks produced from a certificate with an empty payload (an idle network)",
 	})
 )
+
+// The batch plane's memory (consensus spec, invariants 1 and 4).
+var (
+	BatchStoreBytes = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "batch_store_bytes",
+		Help:      "Bytes held in a worker's active batch store, own (uncommitted, never evicted) and peer",
+	}, []string{"partition", "worker", "kind"})
+
+	BatchStoreRefusing = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "batch_store_refusing",
+		Help:      "1 while a worker refuses user submissions because its own uncommitted batches fill its share",
+	}, []string{"partition", "worker"})
+)

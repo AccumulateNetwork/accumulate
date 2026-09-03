@@ -93,43 +93,48 @@ is the memory actually resident.
 
 `Worker.Submit` appends to pending and signals a seal when pending reaches
 `BatchSize` (500) or `MaxBatchBytes` (500 KB); `batchLoop` also seals on a
-ticker of `BatchTimeout`. Invariant 2 requires the timeout to be a floor on
-latency for a quiet worker, not the normal seal trigger under load: with
-`BatchTimeout` at 100 ms and sixteen workers in a partition at 250 tps, a
-batch holds one or two transactions and the partition emits ~160 batches a
-second. The timeout is to be set so that a worker at its share of the target
-rate fills a batch before it fires, and the number of workers is a
-parallelism decision that must not multiply the batch rate.
+ticker of `BatchTimeout`, which is the latency floor for a quiet worker,
+one second (`DefaultBatchTimeout`, the block interval). Generated node
+configurations run one worker per node (`cmd_init_network.go`): at four, a
+partition ran sixteen seal timers and emitted ~160 one-transaction batches a
+second at 250 tps; at one, four workers at ~60 tps each seal batches of tens
+of transactions a few times a second.
 
 ### The active store and eviction
 
-`StoreBatch` adds a batch and, when the store exceeds its byte budget or
-`MaxStoredBatches`, runs an LRU eviction that skips own uncommitted batches
-and pinned batches (those a pending vote needs). Invariant 3 says the count
-limit goes: with byte budgets and full batches the count is implied, and a
-count that is small relative to the batch rate evicts what the next header
-needs.
+`StoreBatch` adds a batch and, when the store exceeds its byte budget, runs
+an LRU eviction that skips own uncommitted batches and pinned batches (those
+a pending vote needs). There is no count limit by default: `MaxStoredBatches`
+and `MaxRetainedBatches` are zero, and only a test sets them. A negative
+`MaxRetainedBatches` turns retention off.
 
 ### Refusal and back-pressure
 
-When own uncommitted batches alone exceed the worker's share, `Submit`
-returns `NotReady` (invariant 4). The API's submit path returns it to the
-client as the retry-later it already is for every internal caller, and the
-load generator honours it as it honours the query gate. The condition is
-exposed as a gauge per worker and logged on transition (invariant 5); the
-eviction summary is logged at most once a second per worker.
+A worker has two entry points. `Submit` is for the system's own traffic —
+synthetics, anchors, the healer's re-submissions — and never refuses for
+lack of room, because that traffic is what drains the store (#4165).
+`SubmitUser` is for a user's transaction from the API: while own uncommitted
+batches plus pending transactions exceed the worker's share it returns
+`ErrStoreFull`, which `SubmitterService.Submit` returns as `NotReady`
+(invariant 4). The API decides which by the envelope: a synthetic, sequenced,
+anchor, network-update or proof message anywhere in it makes it system
+traffic (`isUserEnvelope`). The load generator honours `NotReady` with a
+back-off as it honours the query gate. The condition is
+`accumulate_dagbft_batch_store_refusing{partition,worker}`, the store's own
+and peer bytes are `accumulate_dagbft_batch_store_bytes{kind}`, and the
+over-limit state is logged on transition only (invariant 5); the eviction
+summary is logged at most once a second per worker.
 
 The inbound queue already applies back-pressure at its byte budget (it drops
 the newest batch and lets the author re-broadcast); that is the model.
 
 ### Retention
 
-`retain` keeps executed batches up to `DefaultMaxRetainedBatchBytes`, and
-`DefaultMaxRetainedBatches` (4,096) goes with the other count. A peer that
-asks for a batch outside the window is told so (`absence=no-record`) and
-must snapshot-sync (#4205).
+`retain` keeps executed batches up to `DefaultMaxRetainedBatchBytes` and
+`RetainCommittedFor`; there is no count. A peer that asks for a batch outside
+the window is told so (`absence=no-record`) and must snapshot-sync (#4205).
 
 ---
 
 Where the implementation departs from this specification, see
-[DIFFERENCES.md](DIFFERENCES.md), entries C1–C3.
+[DIFFERENCES.md](DIFFERENCES.md).

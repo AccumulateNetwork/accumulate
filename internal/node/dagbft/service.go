@@ -325,6 +325,18 @@ func (s *Service) SubmitTransaction(tx []byte) error {
 // one signer is handled by one worker and keeps its execution order. Without
 // it, replay protection rejects all but an increasing subsequence of a
 // signer's transactions — 96 of 100, silently (#4132).
+// SubmitUserTransaction is SubmitTransaction for a user's transaction: it may
+// be refused with worker.ErrStoreFull while the store is full.
+func (s *Service) SubmitUserTransaction(tx []byte) error {
+	s.mu.RLock()
+	node := s.node
+	s.mu.RUnlock()
+	if node == nil {
+		return errors.BadRequest.With("node not started")
+	}
+	return node.SubmitUserTransaction(tx)
+}
+
 func (s *Service) SubmitTransactionFor(key string, tx []byte) error {
 	s.mu.RLock()
 	node := s.node

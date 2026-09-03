@@ -237,7 +237,18 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		"routeKey", routeKey)
 
 	// Submit to consensus (includes pre-batch validation)
-	if err := s.service.SubmitTransaction(b); err != nil {
+	// User traffic is bounded by the store's budget; system traffic --
+	// synthetics, anchors, the healer's re-submissions -- is what drains it
+	// and is never refused (consensus spec, invariant 4; #4165).
+	submit := s.service.SubmitTransaction
+	if isUserEnvelope(envelope) {
+		submit = s.service.SubmitUserTransaction
+	}
+	if err := submit(b); err != nil {
+		if stderrors.Is(err, worker.ErrStoreFull) {
+			// Retry later: the answer every internal client already handles.
+			return nil, errors.NotReady.WithFormat("submit: %w", err)
+		}
 		// Check if this is a validation error
 		if stderrors.Is(err, worker.ErrValidationFailed) {
 			s.logger.Error("TRACE-SUBMIT: validation failed, returning error submission", "error", err)
@@ -326,4 +337,18 @@ func (s *ValidatorService) Validate(ctx context.Context, envelope *messaging.Env
 		Success: true,
 		Message: "Transaction is valid",
 	}}, nil
+}
+
+// isUserEnvelope reports whether an envelope carries user traffic rather than
+// the system's own: a synthetic, sequenced or anchor message anywhere in it
+// makes it system traffic.
+func isUserEnvelope(env *messaging.Envelope) bool {
+	for _, m := range env.Messages {
+		switch m.Type() {
+		case messaging.MessageTypeSynthetic, messaging.MessageTypeSequenced, messaging.MessageTypeBlockAnchor,
+			messaging.MessageTypeBadSynthetic, messaging.MessageTypeNetworkUpdate, messaging.MessageTypeSyntheticProof:
+			return false
+		}
+	}
+	return true
 }

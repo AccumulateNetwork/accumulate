@@ -16,23 +16,30 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
 // Default configuration values.
 const (
-	DefaultBatchSize        = 500                    // max transactions per batch
-	DefaultBatchTimeout     = 100 * time.Millisecond // max time to wait for full batch
-	DefaultMaxBatchBytes    = 500 * 1024             // 500KB max batch size
-	DefaultMaxPendingSize   = 10 * 1024 * 1024       // 10MB max pending transactions
-	DefaultMaxPendingCount  = 10000                  // max pending transaction count
-	DefaultMaxStoredBatches = 1000                   // max batches stored before eviction (reduced for memory safety)
+	DefaultBatchSize = 500 // max transactions per batch
+	// DefaultBatchTimeout is the latency floor for a quiet worker: how long
+	// a lone transaction waits before it is sealed without company. It is
+	// not the seal trigger under load -- that is BatchSize -- and at 100 ms
+	// it was: sixteen workers at 250 tps sealed one or two transactions a
+	// batch, ~160 batches a second, and every count downstream held seconds
+	// of traffic (C1, #4206). One second is the block interval.
+	DefaultBatchTimeout    = time.Second
+	DefaultMaxBatchBytes   = 500 * 1024       // 500KB max batch size
+	DefaultMaxPendingSize  = 10 * 1024 * 1024 // 10MB max pending transactions
+	DefaultMaxPendingCount = 10000            // max pending transaction count
 	// Byte caps. Batch COUNT caps do not bound memory: at 700 tx/s the
 	// gossip store filled to its count cap holding 728MB of batch bytes per
 	// node instance — two instances per 4GiB cgroup — and the fleet was
@@ -67,6 +74,14 @@ var ErrTransactionTooLarge = errors.New("transaction exceeds the batch size limi
 
 // ErrValidationFailed is returned when a transaction fails pre-batch validation.
 var ErrValidationFailed = errors.New("transaction validation failed")
+
+// ErrStoreFull is returned by SubmitUser when this worker's own uncommitted
+// batches and pending transactions fill its byte share. Own batches cannot
+// be evicted -- the worker is responsible for them reaching a certificate --
+// so the bound is refusing work, not growing (consensus spec, invariant 4).
+// The API returns it as NotReady: retry later. Internal traffic (Submit) is
+// never refused; it is what drains the store (#4165).
+var ErrStoreFull = errors.New("worker store full: own uncommitted batches fill the budget")
 
 // TransactionValidator validates transactions before they are added to a batch.
 // This is equivalent to CometBFT's CheckTx.
@@ -122,7 +137,8 @@ type Config struct {
 	// MaxStoredBatches is the maximum number of batches to store.
 	// When exceeded, random batches are evicted to make room.
 	// This prevents unbounded memory growth from gossip batches.
-	// Defaults to DefaultMaxStoredBatches.
+	// Zero, the default, means no count limit: the store is bounded in bytes
+	// (consensus spec, invariant 1). A count is only for tests.
 	MaxStoredBatches int
 
 	// ReproposeAfter is how long an own batch may sit uncommitted before it
@@ -148,7 +164,8 @@ type Config struct {
 
 	// RetainCommittedFor is how long a committed batch stays fetchable for
 	// peers that fell behind, and MaxRetainedBatches caps how many are held.
-	// Defaults to DefaultRetainCommittedFor / DefaultMaxRetainedBatches.
+	// Defaults to DefaultRetainCommittedFor; a zero MaxRetainedBatches means
+	// no count limit, only bytes, and a negative one turns retention off.
 	// Negative disables retention, restoring the old delete-on-commit
 	// behaviour — which strands any node that misses the commit (#4128).
 	RetainCommittedFor time.Duration
@@ -172,9 +189,6 @@ func (c *Config) applyDefaults() {
 	if c.MaxPendingCount <= 0 {
 		c.MaxPendingCount = DefaultMaxPendingCount
 	}
-	if c.MaxStoredBatches <= 0 {
-		c.MaxStoredBatches = DefaultMaxStoredBatches
-	}
 	if c.MaxStoredBatchBytes <= 0 {
 		c.MaxStoredBatchBytes = DefaultMaxStoredBatchBytes
 	}
@@ -195,9 +209,6 @@ func (c *Config) applyDefaults() {
 	}
 	if c.RetainCommittedFor == 0 {
 		c.RetainCommittedFor = DefaultRetainCommittedFor
-	}
-	if c.MaxRetainedBatches == 0 {
-		c.MaxRetainedBatches = DefaultMaxRetainedBatches
 	}
 }
 
@@ -282,9 +293,18 @@ type Worker struct {
 	// batch is absent everywhere halts the partition permanently (#4125), and
 	// without this the log cannot say whether it was pruned, evicted, or never
 	// held. Bounded by maxTombstones. Guarded by batchMu.
-	gone          map[types.BatchDigest]BatchGone
-	goneOrder     []types.BatchDigest
-	maxTombstones int
+	gone map[types.BatchDigest]BatchGone
+
+	// ownBytes is the byte size of own uncommitted batches in the store; with
+	// pendingSize it is what SubmitUser refuses against. Under batchMu.
+	ownBytes int
+	// overLimit is the full-store state, logged on transition and counted
+	// while it holds (invariant 5). overLimitChanges counts transitions.
+	overLimit        bool
+	overLimitChanges atomic.Uint64
+	lastEvictLog     time.Time
+	goneOrder        []types.BatchDigest
+	maxTombstones    int
 
 	// Committed batches kept fetchable for peers that fell behind (#4128).
 	// Separate from `batches` on purpose: `batches` is what this node still
@@ -358,7 +378,17 @@ func New(config Config, g *gossip.GossipLayer) *Worker {
 // that crossed it.
 // Returns ErrWorkerClosed if the worker has been closed.
 // Returns ErrValidationFailed (wrapped) if the transaction fails validation.
-func (w *Worker) Submit(tx []byte) error {
+// Submit accepts a transaction from an internal source -- a synthetic, an
+// anchor, a healer's re-submission -- and never refuses it for lack of room:
+// that traffic is what drains the store (#4165).
+func (w *Worker) Submit(tx []byte) error { return w.submit(tx, false) }
+
+// SubmitUser accepts a user's transaction from the API, and refuses with
+// ErrStoreFull while this worker's own uncommitted batches and pending
+// transactions fill its byte share (consensus spec, invariant 4).
+func (w *Worker) SubmitUser(tx []byte) error { return w.submit(tx, true) }
+
+func (w *Worker) submit(tx []byte, bounded bool) error {
 	if w.closed.Load() {
 		return ErrWorkerClosed
 	}
@@ -403,7 +433,25 @@ func (w *Worker) Submit(tx []byte) error {
 			"partition", w.config.Partition, "bytes", len(tx))
 	}
 
+	w.batchMu.Lock()
+	own := w.ownBytes
+	w.batchMu.Unlock()
+
 	w.mu.Lock()
+
+	// A user's transaction must fit beside own uncommitted batches and what
+	// is pending. When it does not, the answer is "not now", and the store
+	// stays within its budget however far commits lag.
+	id := strconv.Itoa(int(w.config.ID))
+	if bounded && own+w.pendingSize+len(tx) > w.maxStoredBytes {
+		w.mu.Unlock()
+		w.txnsRejected.Add(1)
+		metrics.BatchStoreRefusing.WithLabelValues(w.config.Partition, id).Set(1)
+		return fmt.Errorf("%w: own %d + pending %d bytes of %d", ErrStoreFull, own, w.pendingSize, w.maxStoredBytes)
+	}
+	if bounded {
+		metrics.BatchStoreRefusing.WithLabelValues(w.config.Partition, id).Set(0)
+	}
 
 	// Copy the transaction to avoid external modification
 	txCopy := make([]byte, len(tx))
@@ -569,7 +617,7 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 
 	// Trigger eviction if we're approaching the limit (non-blocking)
 	// Eviction is handled by dedicated goroutine to minimize lock contention
-	if len(w.batches) > w.config.MaxStoredBatches || w.storedBytes > w.maxStoredBytes {
+	if w.overStoreLimit() {
 		select {
 		case w.triggerEviction <- struct{}{}:
 		default:
@@ -584,8 +632,48 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 		element: element,
 	}
 	w.storedBytes += batchBytes(batch)
+	w.observeStore()
 
 	return nil
+}
+
+// overStoreLimit reports whether the active store exceeds its byte budget,
+// or its count limit if a test set one. The caller must hold batchMu.
+func (w *Worker) overStoreLimit() bool {
+	return w.storedBytes > w.maxStoredBytes ||
+		(w.config.MaxStoredBatches > 0 && len(w.batches) > w.config.MaxStoredBatches)
+}
+
+// observeStore publishes the store's own and peer bytes. The caller must
+// hold batchMu.
+func (w *Worker) observeStore() {
+	id := strconv.Itoa(int(w.config.ID))
+	metrics.BatchStoreBytes.WithLabelValues(w.config.Partition, id, "own").Set(float64(w.ownBytes))
+	metrics.BatchStoreBytes.WithLabelValues(w.config.Partition, id, "peer").Set(float64(w.storedBytes - w.ownBytes))
+}
+
+// storeOwn puts a batch this worker sealed into the store. Own batches are
+// never evicted; their bytes are what SubmitUser refuses against.
+func (w *Worker) storeOwn(batch *types.Batch) {
+	digest := batch.Digest()
+	w.batchMu.Lock()
+	if w.overStoreLimit() {
+		select {
+		case w.triggerEviction <- struct{}{}:
+		default:
+		}
+	}
+	element := w.lruList.PushFront(digest)
+	w.batches[digest] = &lruEntry{
+		batch:      batch,
+		element:    element,
+		own:        true,
+		lastQueued: time.Now(),
+	}
+	w.storedBytes += batchBytes(batch)
+	w.ownBytes += batchBytes(batch)
+	w.observeStore()
+	w.batchMu.Unlock()
 }
 
 // AvailableBatches returns all batch digests that are available for header creation.
@@ -688,6 +776,9 @@ func (w *Worker) PruneCommitted(committed []types.BatchDigest, info CommitInfo) 
 			w.lruList.Remove(entry.element)
 			delete(w.batches, digest)
 			w.storedBytes -= batchBytes(entry.batch)
+			if entry.own {
+				w.ownBytes -= batchBytes(entry.batch)
+			}
 			// Committed, so it leaves the active store and stops being
 			// re-proposed — but keep it fetchable for a while, because a peer
 			// that missed this commit has nowhere else to get it (#4128).
@@ -697,6 +788,7 @@ func (w *Worker) PruneCommitted(committed []types.BatchDigest, info CommitInfo) 
 		}
 	}
 
+	w.observeStore()
 	slog.Debug("Pruned committed batches",
 		"count", len(committed),
 		"pruned", pruned,
@@ -792,25 +884,7 @@ func (w *Worker) createAndBroadcastBatch() {
 
 	// Store locally first (eviction is handled by dedicated goroutine)
 	digest := batch.Digest()
-	w.batchMu.Lock()
-	// Trigger eviction if we're approaching the limit (non-blocking)
-	if len(w.batches) > w.config.MaxStoredBatches || w.storedBytes > w.maxStoredBytes {
-		select {
-		case w.triggerEviction <- struct{}{}:
-		default:
-			// Eviction already triggered or in progress
-		}
-	}
-	// Add new batch to front of LRU list (most recently used)
-	element := w.lruList.PushFront(digest)
-	w.batches[digest] = &lruEntry{
-		batch:      batch,
-		element:    element,
-		own:        true,
-		lastQueued: time.Now(),
-	}
-	w.storedBytes += batchBytes(batch)
-	w.batchMu.Unlock()
+	w.storeOwn(batch)
 
 	// Update metrics immediately after creating the batch
 	// This must happen before enqueueing to ensure metrics are updated even if shutdown occurs
@@ -1036,16 +1110,23 @@ func (w *Worker) performEviction() {
 	w.batchMu.Lock()
 	defer w.batchMu.Unlock()
 
-	if len(w.batches) <= w.config.MaxStoredBatches && w.storedBytes <= w.maxStoredBytes {
+	if !w.overStoreLimit() {
+		w.setOverLimit(false, 0)
 		return // No eviction needed unless we exceed a limit
 	}
 
-	// Evict down to 90% of BOTH caps: the count cap and the byte cap. The
-	// byte cap is the one that actually bounds memory (#4164); the old
-	// count-only target also evicted to 110% of the cap, which parked the
-	// store permanently above its own limit.
-	targetCount := int(float64(w.config.MaxStoredBatches) * 0.9)
+	// Evict down to 90% of the byte cap, which is what bounds memory
+	// (#4164, consensus spec invariant 1), and of the count cap if a test
+	// set one. Evicting to 90% rather than to the cap keeps the store from
+	// parking permanently above its own limit.
+	targetCount := 0 // no count limit unless a test set one
+	if c := w.config.MaxStoredBatches; c > 0 {
+		targetCount = max(1, c*9/10)
+	}
 	targetBytes := int(float64(w.maxStoredBytes) * 0.9)
+	overTarget := func() bool {
+		return w.storedBytes > targetBytes || (targetCount > 0 && len(w.batches) > targetCount)
+	}
 
 	// Never evict a batch this worker AUTHORED and has not yet seen committed.
 	// Bullshark commits leaders in causal order, so an early leader can be
@@ -1057,7 +1138,7 @@ func (w *Worker) performEviction() {
 	// moves them to `retained`. Walk from the LRU back (least-recently-used)
 	// toward the front, skipping own entries.
 	evicted, skippedOwn, skippedPinned := 0, 0, 0
-	for e := w.lruList.Back(); e != nil && (len(w.batches) > targetCount || w.storedBytes > targetBytes); {
+	for e := w.lruList.Back(); e != nil && overTarget(); {
 		prev := e.Prev()
 		lruDigest := e.Value.(types.BatchDigest)
 		entry, ok := w.batches[lruDigest]
@@ -1085,8 +1166,15 @@ func (w *Worker) performEviction() {
 		e = prev
 	}
 
+	w.observeStore()
 	if evicted > 0 {
-		slog.Warn("Evicted batches due to storage limit (LRU)",
+		// A summary at most once a second per worker; the rest is Debug.
+		// Run 20260903T173742Z logged 208,150 of these in nine minutes.
+		level := slog.LevelDebug
+		if time.Since(w.lastEvictLog) >= time.Second {
+			level, w.lastEvictLog = slog.LevelWarn, time.Now()
+		}
+		slog.Log(context.Background(), level, "Evicted batches due to storage limit (LRU)",
 			"evicted", evicted,
 			"remaining", len(w.batches),
 			"skippedOwnUncommitted", skippedOwn,
@@ -1096,15 +1184,33 @@ func (w *Worker) performEviction() {
 	// Could not reach the target because our own uncommitted batches are not
 	// evictable: the store is growing because OUR batches are not committing.
 	// That is the pressure that #4159 turned into a permanent wedge when these
-	// batches were silently dropped; surface it rather than lose data a late
-	// commit will need.
-	if (len(w.batches) > targetCount || w.storedBytes > targetBytes) && skippedOwn > 0 {
+	// batches were silently dropped. It is a state: logged when it changes,
+	// counted while it holds (invariant 5), and what SubmitUser refuses on.
+	w.setOverLimit(overTarget() && skippedOwn > 0, skippedOwn)
+}
+
+// setOverLimit records whether the store is over its limit with nothing
+// left to evict, logging the transition and counting it. The caller must
+// hold batchMu.
+func (w *Worker) setOverLimit(over bool, ownUncommitted int) {
+	if over == w.overLimit {
+		return
+	}
+	w.overLimit = over
+	w.overLimitChanges.Add(1)
+	if over {
 		slog.Warn("Batch store over limit with un-evictable own uncommitted batches (commit is lagging)",
 			"stored", len(w.batches),
 			"storedBytes", w.storedBytes,
-			"limit", w.config.MaxStoredBatches,
+			"ownBytes", w.ownBytes,
 			"limitBytes", w.maxStoredBytes,
-			"ownUncommitted", skippedOwn,
+			"ownUncommitted", ownUncommitted,
+			"workerID", w.config.ID)
+	} else {
+		slog.Info("Batch store back within limit",
+			"stored", len(w.batches),
+			"storedBytes", w.storedBytes,
+			"limitBytes", w.maxStoredBytes,
 			"workerID", w.config.ID)
 	}
 }

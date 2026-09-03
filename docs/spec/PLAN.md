@@ -36,7 +36,7 @@ can be claimed until E7 is closed.
 | **D3** | **Implemented, not merged.** `TestDeep` on branch `issue-4196-kvtest-deep` (`f3339116e`). |
 | **E7** | **Done**, on `issue-4202-block-ledger-chain`: a `block-ledger` chain and one keyed record per block; `indexing.Log` and the #4147 walk deleted; the invariant-9 cost test is green. Removed from the differences. Not yet soaked. |
 | **D5** | **Done**, on `issue-4203-bcdb-durable-commit` (#4203): every commit is written through and sealed at commit; readers are isolated by per-version pre-image overlays that are dropped as they close; the oldest view's opener is named in a warning; the event service loads one block at a time with a bounded queue and opens its view only while loading. Removed from the differences. Not yet soaked. |
-| **Steady state** | S0, S1, S2 done; S8a delivered. Run #2 (`20260903T202621Z`): 500 tps flat for twelve minutes, then a chaos restart (#4205). **Run #3 (`20260903T213153Z`, no chaos): the batch plane fails on its own at minute 16** — clock-sealed batches of 1–2 transactions, a count-bounded store, unbounded own batches, no refusal (C1–C3, #4206–#4208; spec `consensus.md`). **S3 is next; run #4 follows it, chaos off.** Reviews in the run directories. |
+| **Steady state** | S0, S1, S2, S3 done; S8a delivered. Run #2 (`20260903T202621Z`): 500 tps flat for twelve minutes, then a chaos restart (#4205). **Run #3 (`20260903T213153Z`, no chaos): the batch plane fails on its own at minute 16** — clock-sealed batches of 1–2 transactions, a count-bounded store, unbounded own batches, no refusal (C1–C3, #4206–#4208; spec `consensus.md`). **Run #4 is next, chaos off, on the S3 branch.** Reviews in the run directories. |
 | **Everything else** | Not started. |
 
 **What E3's answer turned out to be, because it changed the shape of E1.** The
@@ -188,8 +188,13 @@ flight and skip the load when nothing is subscribed. *Done when*:
 `stagedCommits` ≤ 1 at every snapshot for twelve hours, and no view outlives a
 block. Spec: database invariants 2 and 5.
 
-**S3 — write the consensus memory section of the spec, then hold it. SPEC
-WRITTEN 2026-09-03 (`consensus.md`, partial part; differences C1–C3 = #4206, #4207, #4208). Run #3
+**S3 — write the consensus memory section of the spec, then hold it. DONE on
+`issue-4207-batch-plane-budgets`: spec `consensus.md` (partial part), then
+C1–C3 (#4206, #4207, #4208) implemented — a one-second seal floor and one
+worker per node, byte-only budgets with own uncommitted batches bounded by
+`SubmitUser` refusing (`NotReady`) while system traffic is never refused,
+gauges for store bytes and refusal, and the over-limit state logged on
+transition. C1–C3 removed from the differences; not yet soaked. Run #3
 (`20260903T213153Z`, no chaos) reproduced it alone: batches of one or two
 transactions from a 100 ms seal timeout, a count-bounded store holding six
 seconds of them, evictions of what the next header needed, and the storm at

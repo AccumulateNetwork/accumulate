@@ -686,6 +686,26 @@ func (n *Node) SubmitTransaction(tx []byte) error {
 // transaction in the network to worker 1, into 1/N of the batch-store budget
 // (#4179). Stability is worth nothing here; nothing about an unattributed
 // transaction needs to share a worker with the next one.
+// SubmitUserTransaction submits a user's transaction from the API. Unlike
+// SubmitTransaction it is refused with worker.ErrStoreFull while the worker's
+// own uncommitted batches fill its share (consensus spec, invariant 4).
+func (n *Node) SubmitUserTransaction(tx []byte) error {
+	if n.closed.Load() {
+		return ErrNodeClosed
+	}
+	n.mu.RLock()
+	started := n.ctx != nil
+	n.mu.RUnlock()
+	if !started {
+		return ErrNodeNotStarted
+	}
+	if len(n.workers) == 0 {
+		return errors.New("no workers available")
+	}
+	idx := int(n.transactionsSubmitted.Add(1)-1) % len(n.workers)
+	return n.workers[idx].SubmitUser(tx)
+}
+
 func (n *Node) SubmitTransactionFor(key string, tx []byte) error {
 	if n.closed.Load() {
 		return ErrNodeClosed
