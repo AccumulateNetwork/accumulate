@@ -105,3 +105,61 @@ func TestPin_OnAbsentBatchIsHarmless(t *testing.T) {
 	require.False(t, w.HasBatch(digest(9)))
 	require.Equal(t, 1, w.PinnedBatches())
 }
+
+// Two boundaries, not one.
+//
+// Eviction used to be the first response to a full store, and what it evicts
+// is other nodes' uncommitted batches -- exactly what this node needs to vote.
+// Pressure was relieved by destroying progress. The first boundary refuses to
+// SEAL instead: transactions stay pending, the pending caps push back on
+// submitters, and the store stops growing from our own side while commits
+// catch up. Eviction is what happens past the second boundary.
+func TestSeal_StopsBeforeEvictionDoes(t *testing.T) {
+	w := &Worker{
+		batches: map[types.BatchDigest]*lruEntry{},
+		pins:    map[types.BatchDigest]int{},
+		config:  Config{MaxStoredBatches: 100, SealHighWater: 0.75},
+	}
+	w.lruList = list.New()
+	w.maxStoredBytes = 1 << 30
+
+	// Below the seal mark: sealing proceeds.
+	for i := 0; i < 74; i++ {
+		pinTestStore(w, digest(byte(i)))
+	}
+	require.False(t, w.sealBlocked(), "74 of 100 is under the 75% seal mark")
+
+	// At the seal mark: sealing stops, and eviction has NOT started -- the
+	// store is nowhere near its own limit.
+	pinTestStore(w, digest(75))
+	require.True(t, w.sealBlocked(), "75 of 100 is at the seal mark")
+
+	w.performEviction()
+	require.Equal(t, 75, len(w.batches),
+		"backpressure first: nothing is evicted while the store is under its limit")
+}
+
+// Backpressure has to lift when the store drains, or a partition that hit the
+// mark once would stop sealing forever.
+func TestSeal_ResumesWhenTheStoreDrains(t *testing.T) {
+	w := &Worker{
+		batches: map[types.BatchDigest]*lruEntry{},
+		pins:    map[types.BatchDigest]int{},
+		config:  Config{MaxStoredBatches: 10, SealHighWater: 0.75},
+	}
+	w.lruList = list.New()
+	w.maxStoredBytes = 1 << 30
+
+	for i := 0; i < 8; i++ {
+		pinTestStore(w, digest(byte(i)))
+	}
+	require.True(t, w.sealBlocked())
+
+	// A commit prunes: the store drops back under the mark.
+	for i := 0; i < 4; i++ {
+		d := digest(byte(i))
+		w.lruList.Remove(w.batches[d].element)
+		delete(w.batches, d)
+	}
+	require.False(t, w.sealBlocked(), "drained below the mark, so sealing resumes")
+}

@@ -44,7 +44,23 @@ const (
 	// raising num-workers scales parallelism without scaling memory. Read as
 	// per-worker they were multiplied by the worker count: 4 workers meant
 	// 256MB per partition and 512MB on a dual validator.
-	DefaultMaxStoredBatchBytes   = 32 << 20 // active store: 32MB per partition
+	DefaultMaxStoredBatchBytes = 32 << 20 // active store: 32MB per partition
+
+	// DefaultSealHighWater is where sealing stops and backpressure starts,
+	// as a fraction of the store's limits.
+	//
+	// TWO BOUNDARIES, not one.  Eviction used to be the FIRST response to a
+	// full store, which is the worst one available: what it evicts is other
+	// nodes' uncommitted batches, which is exactly what this node needs in
+	// order to vote, so pressure was relieved by destroying progress.  A
+	// store cannot be drained by throwing away the work it is holding --
+	// only a commit drains it, by pruning what a certificate has settled.
+	//
+	// So the first boundary refuses to SEAL: transactions stay pending, the
+	// pending caps push back on submitters, and the store stops growing from
+	// our own side while commits catch up.  Eviction is what happens past the
+	// second boundary, when backpressure was not enough.
+	DefaultSealHighWater         = 0.75
 	DefaultMaxRetainedBatchBytes = 32 << 20 // retention window: 32MB per partition
 	DefaultMaxBatchQueueSize     = 1000     // max batches in available queue before blocking
 )
@@ -115,6 +131,12 @@ type Config struct {
 	// to DefaultMaxRetainedBatchBytes.
 	MaxRetainedBatchBytes int
 
+	// SealHighWater is the fraction of the store at which this worker stops
+	// SEALING new batches -- the point where it applies backpressure instead
+	// of making more work for a store that is already full.  Zero uses
+	// DefaultSealHighWater.
+	SealHighWater float64
+
 	// MaxStoredBatches is the maximum number of batches to store.
 	// When exceeded, random batches are evicted to make room.
 	// This prevents unbounded memory growth from gossip batches.
@@ -170,6 +192,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MaxStoredBatches <= 0 {
 		c.MaxStoredBatches = DefaultMaxStoredBatches
+	}
+	if c.SealHighWater <= 0 || c.SealHighWater > 1 {
+		c.SealHighWater = DefaultSealHighWater
 	}
 	if c.MaxStoredBatchBytes <= 0 {
 		c.MaxStoredBatchBytes = DefaultMaxStoredBatchBytes
@@ -273,6 +298,10 @@ type Worker struct {
 	// next eviction, and at 17 evictions a second it does not.  A batch some
 	// header is waiting on is not cache, it is a prerequisite for progress.
 	pins map[types.BatchDigest]int
+
+	// sealWasBlocked is the last answer sealBlocked gave, so a crossing is
+	// logged once instead of on every tick of the batch loop.
+	sealWasBlocked atomic.Bool
 
 	// Tombstones: why a batch left the store. A committed certificate whose
 	// batch is absent everywhere halts the partition permanently (#4125), and
@@ -769,6 +798,15 @@ func (w *Worker) batchLoop() {
 
 // createAndBroadcastBatch creates a batch from pending transactions and broadcasts it.
 func (w *Worker) createAndBroadcastBatch() {
+	// The first boundary: over it, do not seal.  Sealing ADDS to a store that
+	// is already under pressure, and the store is drained by commits, not by
+	// sealing more.  Holding the transactions in pending lets the pending
+	// caps push back on submitters -- backpressure toward the source instead
+	// of eviction at the sink.
+	if w.sealBlocked() {
+		return
+	}
+
 	batch := w.createBatch()
 	if batch == nil {
 		return
@@ -1140,6 +1178,34 @@ func (w *Worker) PinnedBatches() int {
 	w.batchMu.RLock()
 	defer w.batchMu.RUnlock()
 	return len(w.pins)
+}
+
+// sealBlocked reports whether the store is too full to take another batch of
+// our own making.
+//
+// Reported once per crossing rather than per attempt: the batch loop ticks
+// continuously, and a line per tick would bury the log at exactly the moment
+// it needs to be readable.
+func (w *Worker) sealBlocked() bool {
+	w.batchMu.RLock()
+	countMark := int(float64(w.config.MaxStoredBatches) * w.config.SealHighWater)
+	bytesMark := int(float64(w.maxStoredBytes) * w.config.SealHighWater)
+	blocked := len(w.batches) >= countMark || w.storedBytes >= bytesMark
+	stored, bytes := len(w.batches), w.storedBytes
+	w.batchMu.RUnlock()
+
+	if blocked != w.sealWasBlocked.Swap(blocked) {
+		if blocked {
+			slog.Warn("Not sealing: batch store is above the seal high water — applying backpressure",
+				"stored", stored, "storedBytes", bytes,
+				"countMark", countMark, "bytesMark", bytesMark,
+				"workerID", w.config.ID)
+		} else {
+			slog.Info("Sealing resumed: batch store drained below the seal high water",
+				"stored", stored, "storedBytes", bytes, "workerID", w.config.ID)
+		}
+	}
+	return blocked
 }
 
 // HasBatch returns true if the worker has the batch with the given digest.
