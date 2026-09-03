@@ -216,6 +216,33 @@ and any envelope spanning more than one identity. Sequenced messages are serial
 too — they belong to streams, and streams are settled by staging — so only user
 transactions are ever candidates for a shard.
 
+### The block ledger
+
+Every block leaves a record of which chains it changed: for block *N*, the
+list of (account, chain, index) entries the block's execution touched. This is
+the **block ledger**. It is the only place the block-to-chains direction exists
+— the root chain commits to every changed chain's anchor, but an anchor is a
+hash, not a name — and it is what the block query, the block event stream and
+the metrics service answer from.
+
+The block ledger is a **chain on the partition's system ledger account**, with
+one entry per non-empty block, and the block's entry list stored once, keyed by
+block index. Two things follow, and both are the point:
+
+- **Closing a block costs the block, not the chain.** Recording block *N*
+  writes one record the size of block *N*'s entry list and appends one hash to
+  a chain. Nothing already written is read back or written again. A node at
+  block 35,000,000 pays the same to record a block as a node at block 100.
+- **The block ledger is consensus state.** The chain's anchor is part of the
+  ledger account's hash, so the state root commits to what every block changed,
+  and a receipt from the chain proves it.
+
+It is not an account per block — that puts a BPT entry into the state tree for
+every block forever, which is the tree's size doubling for no consensus
+purpose. It is not a paged log that re-writes its head page on every append —
+that makes the cost of a block grow with the height of the chain, which is the
+one thing a per-block record must never do. An empty block has no entry.
+
 ### The invariants
 
 1. **A stream executes in order, with no gaps.** There is no skip.
@@ -240,6 +267,10 @@ transactions are ever candidates for a shard.
 7. **State changes only as a side effect of execution**, and become durable only
    at the block's single commit.
 8. **A ready message executes; a not-ready message executes nothing.**
+9. **The work of closing a block is bounded by the block's contents.** No
+   step at block end re-reads or re-writes a record whose size grows with the
+   height of the chain. A per-block record is written once and never touched
+   again.
 
 ### Versioning
 
@@ -525,12 +556,66 @@ depends on the last:
 5. Decide whether an anchor must be sent.
 6. **If the block is empty, stop.** Nothing below runs.
 7. Record the previous block's state hash on the BPT chain.
-8. Record pending transactions; process chain updates; record block entries.
+8. Record pending transactions; process chain updates; record the block
+   ledger (below).
 9. Add the synthetic chain to the root chain, index the root chain, update the
    transaction-chain index.
 10. Update major index chains if this is a major block.
 11. Execute post-update actions.
 12. **Update the BPT**, and only then active globals.
+
+### The block ledger
+
+Step 8 of closing a block records the block ledger. The records live on the
+partition's system ledger account, `<partition>.acme/ledger`, which is the only
+account permitted to hold them (`Account.Commit` rejects a dirty block ledger
+on any other account).
+
+**Two records per block.**
+
+1. `Account(ledger).BlockLedger(index)` — a state record keyed by the block
+   index, holding `database.BlockLedger{Index, Time, Entries}`. `Entries` is
+   `block.State.ChainUpdates.Entries` as collected before this step: the
+   `BlockEntry` list of every (account, chain, index) the block changed. The
+   block-ledger chain's own append happens after that list is collected and is
+   not registered as a chain update, so the record never lists itself.
+2. `Account(ledger).BlockLedgerChain()` — a chain named `block-ledger`. The
+   block appends one entry: the hash of the marshaled record above.
+
+Both are written once. The record is never rewritten, which is what a layered
+backend's permanent layer holds ([database.md](database.md), "Backends"); the
+chain's element, element-index and mark-state records already qualify. Only the
+chain head, a few hundred bytes, is rewritten.
+
+**Commitment.** The ledger's chains are not added to the root chain in the
+chain-update loop (the root chain and the BPT chain live on the same account and
+would anchor themselves). The block-ledger chain is committed the same way they
+are: the anchor of every chain on an account is folded into the account's hash
+(`observer_prod.hashChains`), the ledger account's hash is in the BPT, and the
+BPT root is the state root. A receipt from the block-ledger chain to the state
+root therefore proves what a block changed.
+
+The chain's height is not a block number: empty blocks write nothing, so
+entry *i* of the chain is the *i*-th non-empty block. Lookups never go through
+the chain; they go to the keyed record.
+
+**Reads.** `LoadBlockLedger(index)` reads the keyed record. If it is absent it
+reads the pre-activation account `<partition>.acme/ledger/<index>`; if that is
+absent too the block is not found. One read for any block, at any height.
+`queryMinorBlock`, the event service and the metrics service all go through it.
+
+**Cost.** Per non-empty block: one record of size O(entries in the block), four
+small chain records (element, element-index, head, and a mark state every 256
+entries). Nothing is read back from earlier blocks. This is invariant 9.
+
+**Activation and history.** Recording the block ledger this way changes the
+ledger account's hash, so it is gated on an `ExecutorVersion` like any change to
+what a block produces. Nothing is migrated at activation: blocks recorded before
+it stay readable through the fall-through above, and their BPT entries are sunk
+cost that the activation block does not touch. If they are ever removed it is
+paced — a bounded number per block — and gated on its own, never a walk of the
+whole chain inside one block. A chain that has only ever run this version has
+nothing to fall through to.
 
 ### Signatures
 

@@ -94,6 +94,61 @@ to the hash. One accidental writer from changing account hashes.
 
 ---
 
+### E7. The block ledger is a paged log that rewrites itself, or an account per block
+
+*Issue not yet filed — written from this entry.*
+
+**Spec** ([executor.md](executor.md), "The block ledger"): a chain on the
+system ledger account plus one keyed record per block. Written once, cost
+bounded by the block's contents (invariant 9), committed by the ledger account's
+hash, no migration at activation.
+
+**Code**: two forms, neither of them that.
+
+- **Jiuquan and later** (`block_end.go:180`, the only form the DAG-BFT line has
+  ever written): `ledger.BlockLedger().Append(...)` into an `indexing.Log` with
+  a page size of 4096 (`internal/database/utils.go:41`). Each entry carries the
+  block's whole `BlockLedger` **inline** in the level-0 page, and `Append`
+  writes the **entire page** back on every block (`pkg/database/indexing/log.go`,
+  `append2`). The page grows by one block's entry list per block until it fills
+  at 4096 blocks. The page's key (`...BlockLedger.Head`) is rewritten every
+  block, so it sits in the dynamic layer. The log is not in the account hash
+  (`observer_prod.hashState` hashes main, secondary, chains, pending), so the
+  state root stopped committing to block ledgers when this form arrived.
+- **Before Jiuquan** (mainnet, at Vandenberg): a `protocol.BlockLedger`
+  **account** at `<partition>.acme/ledger/<index>`, one BPT entry per block,
+  permanently. Mainnet's Directory is at height 35,168,475 (2026-09-03).
+- **Reads** (`internal/database/indexing/block.go`): `Find(...).Exact()` on the
+  log decodes the whole level-0 page — up to 4096 block ledgers — to return
+  one.
+- **#4147** proposes activating the log form on mainnet, with the in-band
+  migration at `block_end.go:295-332`: for every past block, append a
+  placeholder to the log and delete the account's BPT entry, in one block. The
+  characterization tests pinned that it is not idempotent, that the transition
+  block keeps its own BPT entry, and that genesis writes an account regardless
+  of version. `metrics.go:63` still queries the account form.
+
+**Evidence**: soak `20260903T121819Z` (bcdb, 1 s blocks, 500 tps). The
+marshaled log page was 41–46% of the live heap on every node (776 MB on
+`acc-bvn2-val1`) and the largest allocation site in our code (19.9 GB of
+197 GB). Measured against the real code with 1000 entries per block, the page is
+27 MB at block 700 and 9.5 GB have been written cumulatively; both grow with
+height. The nodes hit GOMEMLIMIT in ten minutes, GC ran eight times a second,
+CPU went to six cores, and the run stalled at 0.26 h. Review:
+`test/docker/soak/runs/20260903T121819Z/review-memory-cpu.md`.
+
+**Consequence**: the cost of a block grows with the height of the chain, which
+breaks invariant 9 and is the wall every 500 tps soak now hits; the block ledger
+is not consensus state; and mainnet cannot reach Kourou without either running
+this form or a one-block migration of thirty-five million entries.
+
+**Size**: medium. A chain and a keyed record on the ledger (model.yml), the
+write at `block_end.go:180`, `LoadBlockLedger`, a write-once case in `route.go`
+(D1), the metrics query, and a version gate. Delete `indexing.Log` — the block
+ledger is its only user. The #4147 migration is not needed and should not run.
+
+---
+
 ## Database abstraction
 
 ### D1. Record placement is a second, hand-maintained model

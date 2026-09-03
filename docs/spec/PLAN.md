@@ -15,6 +15,14 @@ times in run `20260902T132651Z`, while all three partitions stayed live.
 Phase 2 exists to close that. Phase 3 is real work but is not why the network
 stops.
 
+**With E1 closed, the next run died on E7.** Soak `20260903T121819Z` — the
+first at 1 s blocks on the staging change — never livelocked. It ran out of
+memory: the block ledger's log page grows with height and is rewritten every
+block, every node reached GOMEMLIMIT in ten minutes, GC took six cores, and the
+partitions stalled at 0.26 h. The batch-store eviction storms and deferred votes
+in that run are downstream of the executor lagging. Nothing about a 12-hour run
+can be claimed until E7 is closed.
+
 ---
 
 ## Where we are
@@ -26,6 +34,7 @@ stops.
 | **H5** | **Done**, same branch. Cadence and sender selection replace the jitter, back-off and breakers. |
 | **H2** | **Done** — nothing to write. Oldest-first entries and "skip what is staged" both arrived with the staging change. |
 | **D3** | **Implemented, not merged.** `TestDeep` on branch `issue-4196-kvtest-deep` (`f3339116e`). |
+| **E7** | Spec written 2026-09-03. Not started. Blocks the next soak. |
 | **Everything else** | Not started. |
 
 **What E3's answer turned out to be, because it changed the shape of E1.** The
@@ -101,6 +110,17 @@ and sequence number, in Accumulate, used only by healing. It turns 53,011
 fetches into 8,556 — worth having, but it optimises a loop E1 and H2 have
 already stopped.
 
+**E7 — the block ledger as a chain. NEXT.** A `block-ledger` chain on the
+system ledger account and one keyed record per block, written once; reads go to
+the keyed record and fall through to the pre-activation account; no migration,
+no walk of history. Deletes `indexing.Log`. Supersedes the mechanism in #4147:
+mainnet's Jiuquan activation becomes this form, and the in-band walk of
+35 million blocks does not happen. Also close the two things the same run
+exposed alongside it, because the next run must be able to tell them apart:
+export bcdb's staged-commit depth and the age of the oldest open view (18
+commits were staged on every BVN database at the end), and rate-limit the
+batch-store over-limit warnings (25,000 a minute per node).
+
 ## Alongside — cheap and independent
 
 Closeable on their own, in parallel with anything. **Not sequenced ahead of the
@@ -142,7 +162,7 @@ soak.
 ## Order of work
 
 ```
-E1+H4+E2 ─▶ H5 ─▶ H2 ─▶ H3 ─▶ H1         the critical path (through H2 DONE)
+E1+H4+E2 ─▶ H5 ─▶ H2 ─▶ E7 ─▶ H3 ─▶ H1   the critical path (through H2 DONE; E7 next)
 E6, D2, D3 ─▶ D4                          parallel, any time
 E5, E4, D1                                after
 ```
