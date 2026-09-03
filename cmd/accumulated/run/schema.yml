@@ -244,6 +244,10 @@ Configuration:
         - name: DagGcDepth
           type: '*int'
           optional: true
+        - name: BlockInterval
+          description: is the target time between blocks, pinned into every generated node config. Halving it halves the wall time a failure takes to show itself
+          type: '*encoding.Duration'
+          optional: true
 
     - name: GatewayConfiguration
       class: composite

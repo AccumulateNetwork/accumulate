@@ -172,6 +172,7 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "| target duration | $DURATION |"
   echo "| target TPS | $TPS |"
   echo "| storage | ${ACC_STORAGE:-leveldb} |"
+  echo "| block interval | ${ACC_BLOCK_INTERVAL:-1s} |"
   echo "| memory budget | mem_limit ${ACC_MEM_LIMIT:-1536m}, GOMEMLIMIT ${GOMEMLIMIT:-1200MiB} |"
   echo
   echo "Config as run is frozen in \`config/\`. Results appended below on exit."

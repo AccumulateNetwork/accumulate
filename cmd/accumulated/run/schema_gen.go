@@ -381,6 +381,15 @@ func init() {
 					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
 				},
 			},
+			{
+				Name:        "BlockInterval",
+				Description: "is the target time between blocks, pinned into every generated node config. Halving it halves the wall time a failure takes to show itself",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[encoding.Duration](),
+				},
+			},
 		},
 	}).SetGoType()
 

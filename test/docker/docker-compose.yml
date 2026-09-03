@@ -1,6 +1,12 @@
 # Docker Compose for 8-Node DAG-BFT Network
 # 2 BVNs × 4 validators each
 #
+# Block interval defaults to 1s here (ACC_BLOCK_INTERVAL), not the binary's 3s.
+# A soak exists to reach failures, and at 3s/block every failure that needs
+# height to appear takes three times as long to arrive: the runs that wedged
+# BVN2 took 8 and 23 minutes to show it. Rounds pace at half the interval,
+# since Bullshark commits a leader every other round.
+#
 # Cut from 3 BVNs to 2 on 2026-08-25: chasing 1000 tx/s on a single 24-core
 # host, 12 dual-engine validators left too little CPU per node, and every
 # rate above ~60 tx/s collapsed. The topology is still a real multi-partition
@@ -120,6 +126,7 @@ services:
         fi
         accumulated init network test/docker/docker-network.yml --reset --faucet-seed=FAUCET \
           --database=${ACC_STORAGE-leveldb} \
+          --block-interval=${ACC_BLOCK_INTERVAL-1s} \
           && touch /root/.accumulate/init-done
 
   # BVN1 Validators

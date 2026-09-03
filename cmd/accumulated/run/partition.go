@@ -42,6 +42,7 @@ func (p partOpts) apply(cfg *Config) error {
 			NumWorkers:           p.NumWorkers,
 			ExecutionShards:      p.ExecutionShards,
 			DAGGCDepth:           p.DagGcDepth,
+			BlockInterval:        p.BlockInterval,
 		},
 		func(s *DAGBFTService) string { return s.Partition.ID })
 

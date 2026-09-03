@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -94,6 +95,7 @@ var flagInitNetwork struct {
 	GenesisDoc     string
 	FactomBalances string
 	Database       string
+	BlockInterval  time.Duration
 }
 
 func initInitFlags() {
@@ -101,6 +103,7 @@ func initInitFlags() {
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.Database, "database", "", "Storage backend to pin in every generated node configuration (default: the binary's default)")
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.FactomBalances, "factom-balances", "", "Factom addresses and balances file path for writing onto the genesis block")
+	cmdInitNetwork.Flags().DurationVar(&flagInitNetwork.BlockInterval, "block-interval", 0, "Target time between blocks, pinned in every generated node configuration (default: the binary's default)")
 
 	cmdInit.ResetFlags()
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")

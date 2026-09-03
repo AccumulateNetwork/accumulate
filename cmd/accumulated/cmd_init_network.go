@@ -33,6 +33,7 @@ import (
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gopkg.in/yaml.v3"
@@ -225,6 +226,13 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			// default - that could reboot a node into a different (empty)
 			// database.
 			cvc.StorageType = run.Ptr(storageType)
+
+			// Pin the block interval too, for the same reason: it decides how
+			// fast a network moves, so it must not depend on which binary
+			// happens to start the node.
+			if flagInitNetwork.BlockInterval > 0 {
+				cvc.BlockInterval = run.Ptr(encoding.Duration(flagInitNetwork.BlockInterval))
+			}
 			// Use Directory().AccumulateP2P() for all bootstrap peers to match the actual P2P listen port
 			// (CoreValidatorConfiguration derives P2P listen from cvc.Listen + portDir + portAccP2P = base + 0 + 2)
 			cvc.BvnBootstrapPeers = bvn.Peers(node).Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr()

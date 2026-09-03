@@ -256,6 +256,8 @@ type CoreValidatorConfiguration struct {
 	// ExecutionShards is the number of identity shards user transactions execute across; zero or one is serial (#4145).
 	ExecutionShards *int64
 	DagGcDepth      *int64
+	// BlockInterval is the target time between blocks, pinned into every generated node config. Halving it halves the wall time a failure takes to show itself.
+	BlockInterval *encoding.Duration
 }
 
 func (CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }
