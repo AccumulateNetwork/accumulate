@@ -36,7 +36,7 @@ can be claimed until E7 is closed.
 | **D3** | **Implemented, not merged.** `TestDeep` on branch `issue-4196-kvtest-deep` (`f3339116e`). |
 | **E7** | **Done**, on `issue-4202-block-ledger-chain`: a `block-ledger` chain and one keyed record per block; `indexing.Log` and the #4147 walk deleted; the invariant-9 cost test is green. Removed from the differences. Not yet soaked. |
 | **D5** | Written 2026-09-03 from the same run, #4203 filed: commits are not durable while a reader is open, and that is what held 18 blocks in memory. Not started. |
-| **Steady state** | Plan written 2026-09-03 (below). S0 and S1 first. |
+| **Steady state** | Plan written 2026-09-03 (below). S1 done on its branch; S0 done on `issue-4204-soak-instrumentation` (#4204), with S6's measurement half. Acceptance run #1 needs S2. |
 | **Everything else** | Not started. |
 
 **What E3's answer turned out to be, because it changed the shape of E1.** The
@@ -163,7 +163,11 @@ fraction per node every 10–30 s into soakmon's history; snapshot `stats.json`
 on the same cadence; make the histograms emit; export `stagedCommits` and
 oldest-view age as metrics; record the effective `GOMEMLIMIT` and `mem_limit`.
 Take heap and CPU profiles at fixed hours, not only at the wedge. *Parallel
-with S1; done before the acceptance run.*
+with S1; done before the acceptance run.* **DONE on `issue-4204-soak-instrumentation`
+(#4204):** `mem.csv` and `storage-stats.csv` per run, hourly captures with a
+30 s CPU profile, the effective memory budget in the manifest, the two
+histograms observed, GC cycles and GC CPU exported, and
+`accumulate_bcdb_staged_commits` / `oldest_view_age_seconds` gauges.
 
 **S1 — #4202, E7: the block ledger as a chain. DONE on its branch.** The dominant term: 41–46% of the live
 heap and the largest allocation site in our code, growing with height. Chain on
@@ -228,7 +232,8 @@ addition**.
 sit below the container limit with headroom (a limit above it is an OOM kill
 waiting for a spike); the manifest must record the effective values; the
 runtime's GC CPU fraction must be exported so the "GC is not the workload"
-criterion is measurable. Small, and part of S0's harness work.
+criterion is measurable. Small, and part of S0's harness work. *The measurement
+half is done with S0; the limit policy is a compose change still to make.*
 
 **S7 — logging is a resource.** Rate-limit every warning that can fire per
 message or per submit (the two batch-store warnings first), and add log lines

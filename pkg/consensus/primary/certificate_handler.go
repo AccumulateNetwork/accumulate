@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -250,6 +251,9 @@ func (p *Primary) tryAdvanceRound() {
 
 		oldRound := p.currentRound
 		p.currentRound++
+		if !p.lastRoundAdvance.IsZero() {
+			metrics.RoundDurationSeconds.Observe(now.Sub(p.lastRoundAdvance).Seconds())
+		}
 		p.lastRoundAdvance = now
 		p.roundMu.Unlock()
 		advanced = true

@@ -78,6 +78,12 @@ capture() {
         > "$out/$c.block.txt" 2>/dev/null
       docker exec "$c" curl -s -m 10 \
         "http://localhost:26670/metrics" > "$out/$c.metrics.txt" 2>/dev/null
+      # A 30 s CPU profile. The heap profile says what is held; this says
+      # what the cores are doing — GC scanning or execution — which the
+      # steady-state criteria need to tell apart (PLAN S0).
+      docker exec "$c" curl -s -m 45 \
+        "http://localhost:$PPROF_PORT/debug/pprof/profile?seconds=30" \
+        > "$out/$c.cpu.pb.gz" 2>/dev/null
     ) &
   done
   wait
@@ -108,7 +114,9 @@ capture() {
 }
 
 if [ "${1:-}" = "--now" ]; then
-  capture "manual capture (--now) — network state not asserted" probe
+  # An optional prefix (default probe-) keeps a scheduled capture out of the
+  # wedge count: soak.sh takes one every hour as hourly-<ts>.
+  capture "manual capture (--now) — network state not asserted" "${2:-probe}"
   exit 0
 fi
 

@@ -40,6 +40,8 @@ package bcdb
 import (
 	"encoding/json"
 	stderrors "errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -47,6 +49,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	bcdb "github.com/AccumulateNetwork/BlockchainDB/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -83,8 +86,16 @@ type Database struct {
 	staged []*staged
 
 	// views counts the open batches at each version, so flushing knows
-	// what the oldest reader can still see.
-	views map[uint64]int
+	// what the oldest reader can still see. viewOpened is when the first
+	// batch at each version was begun, so the age of the oldest open view
+	// can be reported: a view older than a block is what holds staged
+	// commits in memory and off disk (DIFFERENCES D5).
+	views      map[uint64]int
+	viewOpened map[uint64]time.Time
+
+	// metricLabel names this database in the staging gauges: the directory
+	// two above the store, "dnn" or "bvnn" on a node.
+	metricLabel string
 
 	// CompressEvery seals and compacts the dynamic layer after this
 	// many commits.  Zero leaves compaction to the caller.
@@ -301,6 +312,7 @@ func Open(path string) (*Database, error) {
 		TallyKeys:      DefaultTallyKeys,
 		TallySample:    DefaultTallySample,
 		MergeLag:       DefaultMergeLag,
+		metricLabel:    metricLabelFor(path),
 	}
 
 	// A commit seals the permanent layer at its version, and the store
@@ -446,6 +458,12 @@ func (d *Database) begin(prefix *record.Key, writable, deep bool) keyvalue.Chang
 	d.mu.Lock()
 	at := d.version
 	d.views[at]++
+	if d.viewOpened == nil {
+		d.viewOpened = map[uint64]time.Time{}
+	}
+	if _, ok := d.viewOpened[at]; !ok {
+		d.viewOpened[at] = time.Now()
+	}
 	d.mu.Unlock()
 
 	var once sync.Once
@@ -475,6 +493,7 @@ func (d *Database) closeView(at uint64) {
 	defer d.mu.Unlock()
 	if n := d.views[at]; n <= 1 {
 		delete(d.views, at)
+		delete(d.viewOpened, at)
 	} else {
 		d.views[at] = n - 1
 	}
@@ -853,7 +872,42 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 	// deferred unlock.
 	err := d.drain()
 	d.mu.Lock()
+	d.observeStaging()
 	return err
+}
+
+var (
+	stagedCommitsGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "accumulate", Subsystem: "bcdb", Name: "staged_commits",
+		Help: "Committed batches held in memory because an older reader is still open (DIFFERENCES D5)",
+	}, []string{"database"})
+	oldestViewAgeGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "accumulate", Subsystem: "bcdb", Name: "oldest_view_age_seconds",
+		Help: "Age of the oldest open read view; zero when none is open",
+	}, []string{"database"})
+)
+
+// observeStaging publishes the staging depth and the oldest view's age after
+// a commit has drained what it could. The caller must hold the lock.
+func (d *Database) observeStaging() {
+	stagedCommitsGauge.WithLabelValues(d.metricLabel).Set(float64(len(d.staged)))
+	age := 0.0
+	if v, ok := d.oldestView(); ok {
+		if t, ok := d.viewOpened[v]; ok {
+			age = time.Since(t).Seconds()
+		}
+	}
+	oldestViewAgeGauge.WithLabelValues(d.metricLabel).Set(age)
+}
+
+// metricLabelFor names a database for the staging gauges by the directory
+// two above the store: /.../bvnn/data/accumulate.db -> "bvnn".
+func metricLabelFor(path string) string {
+	up := filepath.Dir(filepath.Dir(filepath.Clean(path)))
+	if b := filepath.Base(up); b != "." && b != string(filepath.Separator) && b != "" {
+		return b
+	}
+	return path
 }
 
 // tally counts a write against its key's shape.  It returns the shape,

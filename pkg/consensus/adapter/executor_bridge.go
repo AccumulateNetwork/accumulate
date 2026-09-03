@@ -17,6 +17,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -202,6 +203,12 @@ func (b *ExecutorBridge) SetValidators(validators []ValidatorInfo, version uint6
 // It extracts transactions from batches, converts them to envelopes,
 // and calls the executor to process them.
 func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) ([32]byte, error) {
+	// Wall time from the certificate's hand-over to the executor's commit.
+	// This is the histogram the soak's acceptance criteria read seconds per
+	// block from; it was declared and never observed (PLAN, S0).
+	start := time.Now()
+	defer func() { metrics.BlockProductionSeconds.Observe(time.Since(start).Seconds()) }()
+
 	// Create executor block params
 	// Note: We don't have CometBFT CommitInfo/Evidence, so we leave them nil
 	execParams := execute.BlockParams{

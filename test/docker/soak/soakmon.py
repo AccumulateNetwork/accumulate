@@ -102,6 +102,22 @@ _SHFAIL = {"n": 0, "last": "", "calls": 0}
 
 # Refresh cadences (seconds): cheap things often, docker-heavy things rarely.
 I_STATS, I_HEIGHT, I_WEDGE, I_HEAL, I_CHAOS, I_FLOW = 1, 1, 5, 5, 5, 1
+I_MEM = 30  # seconds between rows of mem.csv, the run-long memory/GC series (PLAN S0)
+# Per-node runtime series. process_* and go_memstats_* come from the default
+# Go collector; go_gc_cycles_* and go_cpu_classes_gc_* need the runtime-metrics
+# collector (S0/S6) and read as absent on an older image.
+MEM_METRICS = {
+    "process_resident_memory_bytes": "rss",
+    "process_cpu_seconds_total": "cpu",
+    "go_memstats_heap_alloc_bytes": "heapAlloc",
+    "go_memstats_heap_inuse_bytes": "heapInuse",
+    "go_memstats_next_gc_bytes": "nextGC",
+    "go_gc_duration_seconds_count": "gcCount",
+    "go_cpu_classes_gc_total_cpu_seconds_total": "gcCpu",
+    "go_goroutines": "goroutines",
+}
+_MEM_LAST = {}   # node -> {field: value, "t": when}; for GC/s and GC-CPU rates
+_MEM_CSV_T = [0.0]
 HIST_MAX = 600  # ~10 min of 1s ticks kept for the sparklines' recent window
 # A partition whose height has not moved for this long is stalled. Matches the
 # node-side watchdog so the dashboard and the logs agree on the word.
@@ -406,6 +422,83 @@ EXEC_METRICS = {
 }
 
 
+def mem_from(per):
+    """Per-node memory and GC from one scrape, with rates against the previous
+    scrape. Feeds the dashboard's node table and mem.csv (PLAN S0)."""
+    now = time.time()
+    by = {}
+    for c, rows in (per or {}).items():
+        cur = {"t": now}
+        staged, view_age = 0.0, 0.0
+        for name, lab, v in rows or ():
+            key = MEM_METRICS.get(name)
+            try:
+                f = float(v)
+            except (TypeError, ValueError):
+                continue
+            if key:
+                cur[key] = f
+            elif name == "accumulate_bcdb_staged_commits":
+                staged = max(staged, f)
+            elif name == "accumulate_bcdb_oldest_view_age_seconds":
+                view_age = max(view_age, f)
+        if len(cur) == 1:
+            continue
+        prev = _MEM_LAST.get(c)
+        out = {"rssMiB": round(cur.get("rss", 0) / 1048576.0),
+               "heapAllocMiB": round(cur.get("heapAlloc", 0) / 1048576.0),
+               "heapInuseMiB": round(cur.get("heapInuse", 0) / 1048576.0),
+               "nextGCMiB": round(cur.get("nextGC", 0) / 1048576.0),
+               "gcCount": int(cur.get("gcCount", 0)),
+               "cpuSec": cur.get("cpu", 0.0),
+               "gcCpuSec": cur.get("gcCpu"),
+               "goroutines": int(cur.get("goroutines", 0)),
+               "staged": int(staged), "viewAgeS": round(view_age, 1),
+               "gcPerSec": None, "gcCores": None, "cpuCores": None}
+        if prev and now - prev["t"] > 0:
+            dt = now - prev["t"]
+            if "gcCount" in cur and "gcCount" in prev:
+                out["gcPerSec"] = round(max(0.0, cur["gcCount"] - prev["gcCount"]) / dt, 2)
+            if "gcCpu" in cur and "gcCpu" in prev:
+                out["gcCores"] = round(max(0.0, cur["gcCpu"] - prev["gcCpu"]) / dt, 2)
+            if "cpu" in cur and "cpu" in prev:
+                out["cpuCores"] = round(max(0.0, cur["cpu"] - prev["cpu"]) / dt, 2)
+        _MEM_LAST[c] = cur
+        by[c] = out
+    summary = {"byNode": by}
+    if by:
+        summary["heapMaxMiB"] = max(v["heapAllocMiB"] for v in by.values())
+        summary["heapMaxNode"] = max(by, key=lambda c: by[c]["heapAllocMiB"])
+        gcs = [v["gcPerSec"] for v in by.values() if v["gcPerSec"] is not None]
+        summary["gcPerSecMax"] = max(gcs) if gcs else None
+        cores = [v["gcCores"] for v in by.values() if v["gcCores"] is not None]
+        summary["gcCoresSum"] = round(sum(cores), 2) if cores else None
+        summary["stagedMax"] = max(v["staged"] for v in by.values())
+        summary["viewAgeMaxS"] = max(v["viewAgeS"] for v in by.values())
+    return summary
+
+
+def write_mem_csv(mem):
+    """Append one row per node to RUN_DIR/mem.csv every I_MEM seconds. The
+    dashboard's history keeps ten minutes; this is the twelve-hour series the
+    steady-state criteria are judged from."""
+    now = time.time()
+    if now - _MEM_CSV_T[0] < I_MEM or not mem.get("byNode"):
+        return
+    _MEM_CSV_T[0] = now
+    path = os.path.join(RUN_DIR, "mem.csv")
+    cols = ["rssMiB", "heapAllocMiB", "heapInuseMiB", "nextGCMiB", "gcCount", "gcPerSec",
+            "gcCores", "cpuSec", "cpuCores", "goroutines", "staged", "viewAgeS"]
+    new = not os.path.exists(path)
+    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+    with open(path, "a") as f:
+        if new:
+            f.write("time,node," + ",".join(cols) + "\n")
+        for c in sorted(mem["byNode"]):
+            v = mem["byNode"][c]
+            f.write(ts + "," + c + "," + ",".join("" if v.get(k) is None else str(v.get(k)) for k in cols) + "\n")
+
+
 def exec_from(per):
     """Sum the #4169 step-0 baseline counters over every node's scrape."""
     ex = {"serialSec": 0.0, "parallelSec": 0.0, "blocks": 0, "flushes": 0,
@@ -538,6 +631,8 @@ def collect_metrics():
     nodes = {"count": 0, "rssMinMiB": 0, "rssAvgMiB": 0, "rssMaxMiB": 0, "rssMaxNode": "",
              "grMin": 0, "grAvg": 0, "grMax": 0, "grMaxNode": "", "byNode": {}}
     rss, gor = {}, {}
+    mem = mem_from(per)
+    nodes["mem"] = mem
     # Batch lifecycle, added after the 20260822 night. Each answers a question
     # that previously needed a grep over gigabytes of container log.
     #   redelivered — keeps the #4125 skip honest: skipping a re-delivered
@@ -568,6 +663,11 @@ def collect_metrics():
         nodes["grMaxNode"] = max(gor, key=gor.get)
     for c in sorted(set(rss) | set(gor)):
         nodes["byNode"][c] = {"rssMiB": round(rss.get(c, 0)), "goroutines": gor.get(c, 0)}
+        m = mem["byNode"].get(c)
+        if m:
+            nodes["byNode"][c].update({"heapMiB": m.get("heapAllocMiB"), "gcPerSec": m.get("gcPerSec"),
+                                       "gcCores": m.get("gcCores"), "staged": m.get("staged"),
+                                       "viewAgeS": m.get("viewAgeS")})
     with lock:
         nodes["disk"] = disk_from(dict(_DISK), _DISK_FIRST, time.time())
     for c, v in nodes["disk"]["byNode"].items():
@@ -946,6 +1046,10 @@ def _collect_once(last, hist):
             upd["exec"] = m.get("exec", {})
             upd["scrape"] = {"nodes": m["nodes"], "scraped": m["scraped"]}
             upd["nodeStats"] = m.get("nodeStats", {})
+            try:
+                write_mem_csv(upd["nodeStats"].get("mem", {}))
+            except Exception as e:
+                log("mem.csv: %s" % e)
             # OOM early warning. Run 20260824T065208Z grew from 146MiB to the
             # 4GiB cgroup limit and SEVEN containers were OOM-killed (exit
             # 137) before anything said a word — the death was reconstructed
@@ -981,7 +1085,9 @@ def _collect_once(last, hist):
                          "wedges": w.get("total", 0),
                          "heals": h.get("total", 0),
                          "sProd": STATE.get("synProduced", 0),
-                         "aProd": STATE.get("ancProduced", 0)})
+                         "aProd": STATE.get("ancProduced", 0),
+                         "heapMax": ((STATE.get("nodeStats") or {}).get("mem") or {}).get("heapMaxMiB", 0),
+                         "rssMax": (STATE.get("nodeStats") or {}).get("rssMaxMiB", 0)})
             if len(hist) > HIST_MAX:
                 del hist[0:len(hist) - HIST_MAX]
             STATE["history"] = list(hist)
@@ -1277,7 +1383,7 @@ async function tick(){
     card('Wedges',`<span class="${(w.total||0)?'yel':''}">${fmt(w.total||0)}</span>`,`${fmt(w.synthetic||0)} syn · ${fmt(w.anchor||0)} anc`),
     card('Heal errors',`<span class="${(h.errors||0)?'red':''}">${fmt(h.errors||0)}</span>`,`stuck ${fmt(h.stuck||0)}`),
     card('Rejected',`<span class="${(lg.rejected||0)?'red':''}">${fmt(lg.rejected||0)}</span>`,`${fmt(lg.skipped||0)} skipped`),
-    card('Nodes',fmt(ns.count||0),`${fmt(ns.rssAvgMiB||0)} MiB avg · ${fmt(ns.rssMaxMiB||0)} max`),
+    card('Nodes',fmt(ns.count||0),`${fmt(ns.rssAvgMiB||0)} MiB avg · ${fmt(ns.rssMaxMiB||0)} max · heap ${fmt((ns.mem||{}).heapMaxMiB||0)} · GC ${(ns.mem||{}).gcPerSecMax!=null?(ns.mem||{}).gcPerSecMax.toFixed(1)+'/s':'—'} ${(ns.mem||{}).gcCoresSum!=null?'· '+(ns.mem||{}).gcCoresSum.toFixed(1)+' GC cores':''} · staged ${fmt((ns.mem||{}).stagedMax||0)}`),
   ].join('');
   const mib=v=>v?fmt(v)+' MiB':'—';
   $('nrssavg').textContent=mib(ns.rssAvgMiB); $('nrssmax').textContent=mib(ns.rssMaxMiB);

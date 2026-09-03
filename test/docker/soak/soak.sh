@@ -243,6 +243,18 @@ if ! $compose up -d >>"$log" 2>&1; then
   exit 1
 fi
 
+# The manifest's memory line above prints this script's defaults, which are
+# not compose's: run 20260903T121819Z recorded 1536m/1200MiB and ran at
+# 2048m/1700MiB. Replace it with what the containers actually got (PLAN S0/S6).
+eff_c=$(docker ps --format '{{.Names}}' | grep -E '^acc-bvn' | head -1)
+if [ -n "$eff_c" ]; then
+  eff_mem=$(docker inspect -f '{{.HostConfig.Memory}}' "$eff_c" 2>/dev/null)
+  eff_gml=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$eff_c" 2>/dev/null | sed -n 's/^GOMEMLIMIT=//p' | head -1)
+  eff_mem_h=$([ -n "$eff_mem" ] && [ "$eff_mem" -gt 0 ] 2>/dev/null && echo "$((eff_mem / 1048576))MiB" || echo "unlimited")
+  sed -i "s#^| memory budget | .*#| memory budget | mem_limit ${eff_mem_h}, GOMEMLIMIT ${eff_gml:-unset} (effective, from docker inspect) |#" "$manifest"
+  echo "$(date -u +%FT%TZ) effective memory budget: mem_limit ${eff_mem_h}, GOMEMLIMIT ${eff_gml:-unset}" | tee -a "$log"
+fi
+
 # Record the image actually running, so a rebuild later cannot be confused for this run.
 docker image inspect --format '{{.Id}} {{.RepoTags}}' "$soak_image" \
   > "$rd/config/image.txt" 2>/dev/null
@@ -450,8 +462,50 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
     echo "$stats" | sed "s/^/$ts,/" >> "$rd/stats.csv"
     cpu=$(echo "$stats" | cut -d, -f2 | tr -d '%' | awk '{s+=$1} END {printf "%.0f", s}')
     echo "$ts,${h:-?},$heals,${cpu:-?}" >> "$mon"
-    sleep ${MON_INTERVAL:-$([ "$duration_seconds" -le 1800 ] && echo 20 || echo 300)}
+    # 30 s, not 5 min: run 20260903T121819Z climbed from 45 MiB to the
+    # GOMEMLIMIT in ten minutes and stats.csv had two points for it (PLAN S0).
+    sleep ${MON_INTERVAL:-$([ "$duration_seconds" -le 1800 ] && echo 20 || echo 30)}
   done ) &
+
+# Storage-backend counters over time (PLAN S0). BlockchainDB rewrites
+# stats.json every 50 commits, so only the last snapshot survives a run — and
+# stagedCommits, the D5 instrument, had no history. One row per (node,
+# database) a minute, the few counters that move.
+echo "time,node,database,commits,stagedCommits,deepFallbacks,maintenanceErrors,permPutTotal,dynaPutTotal,dynaLiveHit" > "$rd/storage-stats.csv"
+( while kill -0 $DRIVER 2>/dev/null; do
+    ts=$(date -u +%FT%TZ)
+    for c in $(docker ps --format '{{.Names}}' | grep -E '^acc-(dn|bvn)'); do
+      docker exec "$c" sh -c 'for f in $(find /root/.accumulate -name stats.json 2>/dev/null); do echo "== $f"; cat "$f"; done' 2>/dev/null \
+        | python3 -c '
+import sys, json
+ts, node = sys.argv[1], sys.argv[2]
+blob = sys.stdin.read()
+for part in blob.split("== ")[1:]:
+    path, _, body = part.partition("\n")
+    try:
+        d = json.loads(body)
+    except Exception:
+        continue
+    db = path.split("/")[-4] if path.count("/") >= 4 else path
+    perm, dyna = d.get("perm") or {}, d.get("dyna") or {}
+    print(",".join(str(x) for x in [ts, node, db, d.get("commits", ""), d.get("stagedCommits", ""),
+          sum((d.get("deepFallbacks") or {}).values()), d.get("maintenanceErrors", ""),
+          perm.get("PutTotal", ""), dyna.get("PutTotal", ""), dyna.get("LiveHit", "")]))
+' "$ts" "${c#acc-}" >> "$rd/storage-stats.csv" 2>/dev/null
+    done
+    sleep ${STORAGE_STATS_INTERVAL:-60}
+  done ) &
+
+# Profiles on the hour (PLAN S0): the steady-state criteria compare the heap
+# profile at hour 12 with hour 1, and a capture taken only at the wedge shows
+# the corpse, not the growth. Same capture as wedgewatch, prefixed hourly-.
+if [ -x "$here/wedgewatch.sh" ]; then
+  ( while kill -0 $DRIVER 2>/dev/null; do
+      sleep ${PROFILE_INTERVAL:-3600}
+      kill -0 $DRIVER 2>/dev/null || break
+      env RUN_DIR="$rd" "$here/wedgewatch.sh" --now hourly >> "$rd/wedgewatch.log" 2>&1
+    done ) &
+fi
 
 wait $DRIVER; rc=$?
 

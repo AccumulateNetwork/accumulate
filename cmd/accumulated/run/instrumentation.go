@@ -12,11 +12,13 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"regexp"
 	"runtime"
 	"runtime/pprof"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
@@ -52,6 +54,9 @@ func (i *Instrumentation) listen(inst *Instance) error {
 		return nil
 	}
 	i.applyHttpDefaults()
+
+	registerGoRuntimeMetrics(prometheus.DefaultRegisterer)
+
 	_, err := i.startHTTP(inst, promhttp.InstrumentMetricHandler(
 		prometheus.DefaultRegisterer, promhttp.HandlerFor(
 			prometheus.DefaultGatherer,
@@ -150,4 +155,16 @@ func (m *Monitor) takeHeapProfile(inst *Instance) {
 	if err != nil {
 		slog.Error("Failed to capture heap profile", "error", err, "path", name)
 	}
+}
+
+// registerGoRuntimeMetrics replaces the default Go collector, which exports
+// memstats only, with one that also exports the GC's cycle counts (/gc/...)
+// and its own CPU time (/cpu/classes/gc/...). Those are what say whether the
+// collector is the workload once the heap sits at GOMEMLIMIT (PLAN, S0/S6).
+func registerGoRuntimeMetrics(r prometheus.Registerer) {
+	r.Unregister(collectors.NewGoCollector())
+	_ = r.Register(collectors.NewGoCollector(collectors.WithGoCollectorRuntimeMetrics(
+		collectors.MetricsGC,
+		collectors.GoRuntimeMetricsRule{Matcher: regexp.MustCompile(`^/cpu/classes/gc/.*`)},
+	)))
 }
