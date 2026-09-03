@@ -35,8 +35,8 @@ can be claimed until E7 is closed.
 | **H2** | **Done** — nothing to write. Oldest-first entries and "skip what is staged" both arrived with the staging change. |
 | **D3** | **Implemented, not merged.** `TestDeep` on branch `issue-4196-kvtest-deep` (`f3339116e`). |
 | **E7** | **Done**, on `issue-4202-block-ledger-chain`: a `block-ledger` chain and one keyed record per block; `indexing.Log` and the #4147 walk deleted; the invariant-9 cost test is green. Removed from the differences. Not yet soaked. |
-| **D5** | Written 2026-09-03 from the same run, #4203 filed: commits are not durable while a reader is open, and that is what held 18 blocks in memory. Not started. |
-| **Steady state** | Plan written 2026-09-03 (below). S1 done on its branch; S0 done on `issue-4204-soak-instrumentation` (#4204), with S6's measurement half. Acceptance run #1 needs S2. |
+| **D5** | **Done**, on `issue-4203-bcdb-durable-commit` (#4203): every commit is written through and sealed at commit; readers are isolated by per-version pre-image overlays that are dropped as they close; the oldest view's opener is named in a warning; the event service loads one block at a time with a bounded queue and opens its view only while loading. Removed from the differences. Not yet soaked. |
+| **Steady state** | Plan written 2026-09-03 (below). S0, S1 and S2 done on stacked branches (#4204, #4202, #4203). **Acceptance run #1 is next**: 12 h at 500 tps on the #4203 branch. |
 | **Everything else** | Not started. |
 
 **What E3's answer turned out to be, because it changed the shape of E1.** The
@@ -176,7 +176,7 @@ the ledger, one keyed record per block, `indexing.Log` deleted, no migration.
 bytes allocated per block are flat across the run. Spec: executor, "The block
 ledger", invariant 9. Mainnet's history is the TBD in the spec, not this item.
 
-**S2 — #4203, D5: commits reach the store at commit.** The retention term: with E7
+**S2 — #4203, D5: commits reach the store at commit. DONE on its branch.** The retention term: with E7
 fixed the pages are small, but a reader that pins a version still holds every
 commit since it, and a crash loses them. Restore durability at commit (write
 through unconditionally; isolate open views by overlay or by versioned reads),

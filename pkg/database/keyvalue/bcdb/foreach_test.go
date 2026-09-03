@@ -115,7 +115,10 @@ func TestTally_MisroutedComesFromTheStore(t *testing.T) {
 // A reader must not wait out a commit's write-through (#4175): the puts,
 // the per-block fsync of both layers, sealing and compaction run outside
 // the adapter's lock. Simulated by holding the write-through mutex while a
-// commit is in flight — a Get on another batch must still answer.
+// commit is in flight — a Get on another batch must still answer. It
+// answers with the value BEFORE the commit: a commit is durable when it
+// returns and not before (database invariant 5), so until then it has not
+// happened for anyone else.
 func TestRead_DoesNotWaitForAWriteThrough(t *testing.T) {
 	d, err := Open(filepath.Join(t.TempDir(), "db"))
 	require.NoError(t, err)
@@ -128,7 +131,7 @@ func TestRead_DoesNotWaitForAWriteThrough(t *testing.T) {
 	go func() {
 		b := d.Begin(nil, true)
 		_ = b.Put(key, []byte("v2"))
-		done <- b.Commit() // stages v2, then blocks in drain on writeMu
+		done <- b.Commit() // blocks on writeMu before it can write through
 	}()
 	time.Sleep(50 * time.Millisecond) // let the commit reach the write-through
 
@@ -136,7 +139,7 @@ func TestRead_DoesNotWaitForAWriteThrough(t *testing.T) {
 	go func() { got <- get(t, d, key) }()
 	select {
 	case v := <-got:
-		require.Equal(t, "v2", v, "a new reader sees the staged commit, without waiting for the store")
+		require.Equal(t, "v1", v, "a new reader answers without waiting for the store, and sees the state before the commit that has not returned")
 	case <-time.After(2 * time.Second):
 		t.Fatal("a read waited for a write-through in progress")
 	}

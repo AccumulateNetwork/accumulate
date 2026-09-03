@@ -46,7 +46,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -79,11 +81,15 @@ type Database struct {
 	// and reads as of that version; a commit produces the next one.
 	version uint64
 
-	// staged holds committed batches that have not been written
-	// through yet, oldest first.  A batch older than the oldest open
-	// view cannot be written through without becoming visible to that
-	// view, which is the thing isolation forbids.
-	staged []*staged
+	// undo holds, for each committed version, the value every key it
+	// rewrote had BEFORE that commit -- what a reader begun at an older
+	// version must go on seeing (database invariant 2). A commit reaches
+	// the store at commit (invariant 5); this is only the memory of what
+	// it replaced, kept while a reader that predates it is open and
+	// dropped when the last such reader closes (D5). An empty pre-image
+	// means the key did not exist before.
+	undo         map[uint64]map[[32]byte][]byte
+	undoVersions []uint64 // keys of undo, ascending
 
 	// views counts the open batches at each version, so flushing knows
 	// what the oldest reader can still see. viewOpened is when the first
@@ -92,6 +98,12 @@ type Database struct {
 	// commits in memory and off disk (DIFFERENCES D5).
 	views      map[uint64]int
 	viewOpened map[uint64]time.Time
+	viewOpener map[uint64]string // who begun the first view at each version
+
+	// ViewWarnAfter is how old the oldest open view may get before a
+	// commit says who holds it. Zero disables the warning.
+	ViewWarnAfter time.Duration
+	lastViewWarn  time.Time
 
 	// metricLabel names this database in the staging gauges: the directory
 	// two above the store, "dnn" or "bvnn" on a node.
@@ -174,7 +186,7 @@ type Database struct {
 	pendingDyna    [][32]byte // Exceptions not yet appended to the file
 }
 
-// staged is one committed batch that has not reached the store yet
+// staged is one committed batch on its way to the store
 type staged struct {
 	version uint64
 	entries map[[32]byte]entry
@@ -313,6 +325,7 @@ func Open(path string) (*Database, error) {
 		TallySample:    DefaultTallySample,
 		MergeLag:       DefaultMergeLag,
 		metricLabel:    metricLabelFor(path),
+		ViewWarnAfter:  10 * time.Second,
 	}
 
 	// A commit seals the permanent layer at its version, and the store
@@ -463,6 +476,10 @@ func (d *Database) begin(prefix *record.Key, writable, deep bool) keyvalue.Chang
 	}
 	if _, ok := d.viewOpened[at]; !ok {
 		d.viewOpened[at] = time.Now()
+		if d.viewOpener == nil {
+			d.viewOpener = map[uint64]string{}
+		}
+		d.viewOpener[at] = viewOpener()
 	}
 	d.mu.Unlock()
 
@@ -494,12 +511,11 @@ func (d *Database) closeView(at uint64) {
 	if n := d.views[at]; n <= 1 {
 		delete(d.views, at)
 		delete(d.viewOpened, at)
+		delete(d.viewOpener, at)
+		d.pruneUndo()
 	} else {
 		d.views[at] = n - 1
 	}
-	// Releasing a view may unblock staged commits, but nothing is
-	// written here: the next commit (or Close) drains them, and reports
-	// the outcome to a caller that can act on it.
 }
 
 // oldestView is the earliest version any open batch is reading at, and
@@ -513,37 +529,6 @@ func (d *Database) oldestView() (uint64, bool) {
 		}
 	}
 	return oldest, found
-}
-
-// drain writes through every staged batch that is already visible to
-// every open reader, oldest first. Called WITHOUT the lock held; it takes
-// the lock only to look at the queue and to pop a batch once the store has
-// it. A batch under write-through is still in staged, so a reader that
-// should see it still does — from staging.
-func (d *Database) drain() error {
-	d.writeMu.Lock()
-	defer d.writeMu.Unlock()
-	for {
-		d.mu.Lock()
-		if len(d.staged) == 0 {
-			d.mu.Unlock()
-			return nil
-		}
-		s := d.staged[0]
-		if oldest, any := d.oldestView(); any && s.version > oldest {
-			d.mu.Unlock()
-			return nil // A reader predates this commit and must not see it
-		}
-		d.mu.Unlock()
-
-		if err := d.writeThrough(s); err != nil {
-			return err
-		}
-
-		d.mu.Lock()
-		d.staged = d.staged[1:]
-		d.mu.Unlock()
-	}
 }
 
 // writeThrough puts a staged batch into the store and seals it.  Runs
@@ -660,15 +645,9 @@ func (d *Database) Close() error {
 	d.StatsEvery = 1 // Force a final tally
 	d.reportStats()
 
-	// Everything staged is now unreachable by any reader
-	d.views = map[uint64]int{}
 	d.mu.Unlock()
-	err := d.drain()
 	d.maintWG.Wait() // a compaction or merge in flight finishes first
 	d.mu.Lock()
-	if err != nil {
-		return err
-	}
 	return d.kv.Close()
 }
 
@@ -731,16 +710,14 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	for i := len(d.staged) - 1; i >= 0; i-- {
-		if d.staged[i].version > at {
-			continue // Committed after this batch began
+	// A commit after this batch began may have rewritten the key. The
+	// earliest such commit remembers what the key held before it, which
+	// is the value at this batch's version.
+	if pre, ok := d.preImageAt(at, h); ok {
+		if len(pre) == 0 {
+			return nil, (*database.NotFoundError)(key)
 		}
-		if e, ok := d.staged[i].entries[h]; ok {
-			if len(e.value) == 0 {
-				return nil, (*database.NotFoundError)(key)
-			}
-			return e.value, nil
-		}
+		return pre, nil
 	}
 
 	// Cached shapes first, and on a miss go straight to the layer that
@@ -816,11 +793,23 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 	return value, nil
 }
 
+// commit writes a batch through to the store and seals it, so that when
+// it returns the batch is durable (database invariant 5). Readers begun
+// before it are kept isolated (invariant 2) by remembering, under this
+// commit's version, what every key it rewrites held before -- see undo.
+//
+// Commits are serialized by writeMu. The version is bumped only after the
+// store has the batch, and the pre-images are installed before the store
+// is touched, so a reader that begins during the write-through is at the
+// previous version and sees a consistent state whichever keys have
+// landed. mu is held only around the shared maps, never across I/O.
 func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.writeMu.Lock()
+	defer d.writeMu.Unlock()
 
-	staged := &staged{version: d.version + 1, entries: make(map[[32]byte]entry, len(entries))}
+	d.mu.Lock()
+	version := d.version + 1
+	staged := &staged{version: version, entries: make(map[[32]byte]entry, len(entries))}
 	for _, e := range entries {
 		key := d.prefix.AppendKey(e.Key)
 		h := key.Hash()
@@ -862,24 +851,140 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 			}
 		}
 	}
-	d.version = staged.version
-	d.staged = append(d.staged, staged)
-	d.reportStats()
+	readers := len(d.views) > 0
 	d.mu.Unlock()
 
-	// Write through with the lock RELEASED, so readers proceed against
-	// staging while the store does its fsyncs; then re-take it for the
-	// deferred unlock.
-	err := d.drain()
+	// Isolation, only when someone needs it: with no reader open there is
+	// nobody to keep the old values for.
+	if readers {
+		pre := d.preImages(staged)
+		d.mu.Lock()
+		if d.undo == nil {
+			d.undo = map[uint64]map[[32]byte][]byte{}
+		}
+		d.undo[version] = pre
+		d.undoVersions = append(d.undoVersions, version)
+		d.mu.Unlock()
+	}
+
+	// Durability: the store has it, sealed, before this returns.
+	err := d.writeThrough(staged)
+
 	d.mu.Lock()
+	defer d.mu.Unlock()
+	if err != nil {
+		// The store may hold part of the batch; the version does not move
+		// and the overlay stays for its readers. The caller stops the node.
+		return err
+	}
+	d.version = version
+	d.pruneUndo()
+	d.reportStats()
 	d.observeStaging()
-	return err
+	d.warnOldView()
+	return nil
+}
+
+// preImages reads what the store holds for every key a batch rewrites,
+// before the batch is written. A key classified write-once has no
+// pre-image by definition -- it is being written for the first time -- so
+// only the dynamic layer is consulted, which is where every rewritable key
+// lives. Runs under writeMu with mu released; the store is at the previous
+// version because commits are serialized.
+func (d *Database) preImages(s *staged) map[[32]byte][]byte {
+	pre := make(map[[32]byte][]byte, len(s.entries))
+	for h, e := range s.entries {
+		if e.perm {
+			pre[h] = []byte{}
+			continue
+		}
+		v, err := d.kv.GetDyna(h)
+		if err != nil || len(v) == 0 {
+			pre[h] = []byte{}
+			continue
+		}
+		pre[h] = v
+	}
+	return pre
+}
+
+// preImageAt returns what key h held at version at, if a commit after at
+// rewrote it: the pre-image recorded by the EARLIEST such commit. The
+// caller must hold the lock (shared is enough).
+func (d *Database) preImageAt(at uint64, h [32]byte) ([]byte, bool) {
+	for _, v := range d.undoVersions {
+		if v <= at {
+			continue
+		}
+		if pre, ok := d.undo[v][h]; ok {
+			return pre, true
+		}
+	}
+	return nil, false
+}
+
+// pruneUndo drops the overlays no open reader can need: a reader at
+// version o needs the pre-images of every commit after o, so an overlay
+// for version v is needed only while a reader at some version below v is
+// open. The caller must hold the lock.
+func (d *Database) pruneUndo() {
+	oldest, any := d.oldestView()
+	kept := d.undoVersions[:0]
+	for _, v := range d.undoVersions {
+		if any && v > oldest {
+			kept = append(kept, v)
+			continue
+		}
+		delete(d.undo, v)
+	}
+	d.undoVersions = kept
+}
+
+// warnOldView names the reader that has held the oldest open version, once
+// it is older than ViewWarnAfter and at most once every 30 s. This is how
+// a soak says WHO is holding commits in memory rather than that someone is.
+// The caller must hold the lock.
+func (d *Database) warnOldView() {
+	if d.ViewWarnAfter <= 0 {
+		return
+	}
+	v, ok := d.oldestView()
+	if !ok {
+		return
+	}
+	opened, ok := d.viewOpened[v]
+	if !ok || time.Since(opened) < d.ViewWarnAfter || time.Since(d.lastViewWarn) < 30*time.Second {
+		return
+	}
+	d.lastViewWarn = time.Now()
+	slog.Warn("A reader is holding an old database version",
+		"module", "bcdb", "database", d.metricLabel, "version", v, "current", d.version,
+		"age", time.Since(opened).Round(time.Second), "opener", d.viewOpener[v],
+		"overlays", len(d.undoVersions))
+}
+
+// viewOpener names the function that begun a view: the first caller above
+// the store and record-model wrappers.
+func viewOpener() string {
+	pcs := make([]uintptr, 16)
+	n := runtime.Callers(3, pcs)
+	frames := runtime.CallersFrames(pcs[:n])
+	for {
+		f, more := frames.Next()
+		fn := f.Function
+		if fn != "" && !isViewWrapper(fn) {
+			return fn
+		}
+		if !more {
+			return "unknown"
+		}
+	}
 }
 
 var (
 	stagedCommitsGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "accumulate", Subsystem: "bcdb", Name: "staged_commits",
-		Help: "Committed batches held in memory because an older reader is still open (DIFFERENCES D5)",
+		Help: "Commit overlays held in memory for readers begun before them; every commit is on disk (D5)",
 	}, []string{"database"})
 	oldestViewAgeGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "accumulate", Subsystem: "bcdb", Name: "oldest_view_age_seconds",
@@ -887,10 +992,10 @@ var (
 	}, []string{"database"})
 )
 
-// observeStaging publishes the staging depth and the oldest view's age after
-// a commit has drained what it could. The caller must hold the lock.
+// observeStaging publishes how many commit overlays open readers are holding
+// and the oldest view's age. The caller must hold the lock.
 func (d *Database) observeStaging() {
-	stagedCommitsGauge.WithLabelValues(d.metricLabel).Set(float64(len(d.staged)))
+	stagedCommitsGauge.WithLabelValues(d.metricLabel).Set(float64(len(d.undoVersions)))
 	age := 0.0
 	if v, ok := d.oldestView(); ok {
 		if t, ok := d.viewOpened[v]; ok {
@@ -1033,9 +1138,9 @@ func (d *Database) reportStats() {
 		Misrouted    []string               `json:"misroutedShapes"`
 		Shapes       map[string]*ShapeCount `json:"shapes"`
 
-		// Staged is how many commits are waiting on an open reader
-		// before they can reach the store.  Growing without bound means
-		// a batch was never closed -- and nothing staged is on disk.
+		// Staged is how many commits' pre-images are held for readers
+		// that predate them. Every commit is on disk; growing without
+		// bound means a reader was never closed (D5).
 		Staged int `json:"stagedCommits"`
 
 		// TallySample is the rate New/Duplicate/Rewritten were sampled
@@ -1059,7 +1164,7 @@ func (d *Database) reportStats() {
 		DeepFallbacks map[string]uint64 `json:"deepFallbacks,omitempty"`
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
 		DeepFallbacks: d.fallbackSnapshot(),
-		Staged:        len(d.staged), TallySample: d.TallySample,
+		Staged:        len(d.undoVersions), TallySample: d.TallySample,
 		TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
 		MaintenanceErrors: d.maintErrs}
 	if d.maintErr != nil {
@@ -1096,50 +1201,73 @@ func (d *Database) reportStats() {
 	}
 }
 
-// forEachAt visits every key as of a version: staged writes no later
-// than it, then the store, which holds nothing newer than the oldest
-// open view -- and the caller's own view is at least that old.
-//
-// The lock is not held across the callback (#4175).  Staged entries
-// are snapshotted under a read lock and visited after it is released,
-// so a callback may read the database and does not stall commits.  The
-// store's own ForEach does hold the store's mutex across the callback,
-// so a callback must not read the STORE (a staged hit is fine, a store
-// read deadlocks) -- BlockchainDB#31.
+// forEachAt iterates the store as it was at version at: keys rewritten by
+// a later commit yield the pre-image the earliest such commit recorded,
+// keys created later are skipped, and keys deleted later are yielded from
+// their pre-image.
 func (d *Database) forEachAt(at uint64, fn func(*record.Key, []byte) error) error {
-	type kv struct {
-		key   [32]byte
-		value []byte
-	}
+	// Pre-images a reader at this version must see, earliest commit first
+	// so the first recorded value for a key wins.
 	d.mu.RLock()
-	seen := map[[32]byte]bool{}
-	var snapshot []kv
-	for i := len(d.staged) - 1; i >= 0; i-- {
-		if d.staged[i].version > at {
-			continue // Committed after this batch began
+	pre := map[[32]byte][]byte{}
+	for _, v := range d.undoVersions {
+		if v <= at {
+			continue
 		}
-		for key, e := range d.staged[i].entries {
-			if seen[key] {
-				continue
+		for h, p := range d.undo[v] {
+			if _, seen := pre[h]; !seen {
+				pre[h] = p
 			}
-			seen[key] = true
-			if len(e.value) == 0 {
-				continue // Deleted
-			}
-			snapshot = append(snapshot, kv{key, e.value})
 		}
 	}
 	d.mu.RUnlock()
 
-	for _, e := range snapshot {
-		if err := fn(record.KeyFromHash(e.key), e.value); err != nil {
-			return err
+	yielded := map[[32]byte]bool{}
+	err := d.kv.ForEach(func(key [32]byte, value []byte) error {
+		if p, ok := pre[key]; ok {
+			yielded[key] = true
+			if len(p) == 0 {
+				return nil // Did not exist at this version
+			}
+			return fn(record.KeyFromHash(key), p)
 		}
-	}
-	return d.kv.ForEach(func(key [32]byte, value []byte) error {
-		if seen[key] || len(value) == 0 {
+		if len(value) == 0 {
 			return nil
 		}
 		return fn(record.KeyFromHash(key), value)
 	})
+	if err != nil {
+		return err
+	}
+	// Keys that existed at this version and have since been deleted are
+	// not in the store's iteration; they are here.
+	for h, p := range pre {
+		if yielded[h] || len(p) == 0 {
+			continue
+		}
+		if err := fn(record.KeyFromHash(h), p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// isViewWrapper reports whether fn is one of the layers a view passes
+// through on its way from the caller that wanted it: this store, the
+// keyvalue adapters, and the record model's Begin/View/Update.
+func isViewWrapper(fn string) bool {
+	for _, w := range []string{
+		"/keyvalue/bcdb.(*Database).",
+		"/keyvalue.deepBeginner",
+		"/keyvalue.Deep",
+		"/keyvalue/memory.",
+		"/internal/database.(*Database).Begin",
+		"/internal/database.(*Database).View",
+		"/internal/database.(*Database).Update",
+	} {
+		if strings.Contains(fn, w) {
+			return true
+		}
+	}
+	return false
 }

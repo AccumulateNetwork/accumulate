@@ -10,6 +10,7 @@ import (
 	"context"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -31,6 +32,9 @@ type EventService struct {
 	lastEvent   api.Event
 	lastGlobals *api.GlobalsEvent
 	lastBlock   *api.BlockEvent
+
+	blocks      chan *api.BlockEvent // committed blocks waiting for the loader
+	subscribers atomic.Int32         // open Subscribe streams
 }
 
 var _ api.EventService = (*EventService)(nil)
@@ -50,12 +54,21 @@ func NewEventService(params EventServiceParams) *EventService {
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	s.eventMu = new(sync.RWMutex)
 	s.eventReady = make(chan struct{})
+	s.blocks = make(chan *api.BlockEvent, blockQueueDepth)
+	go s.loadBlocks()
 	events.SubscribeSync(params.EventBus, s.willChangeGlobals)
 	events.SubscribeSync(params.EventBus, s.didCommitBlock)
 	return s
 }
 
 func (s *EventService) Type() api.ServiceType { return api.ServiceTypeEvent }
+
+// blockQueueDepth bounds the block events waiting to be loaded. Loading a
+// block's entries is API work that must never hold the executor's memory:
+// the loader runs one at a time, opens its database view only while it
+// loads, and a queue that fills drops the oldest event with a warning
+// rather than growing (DIFFERENCES D5, PLAN S2).
+const blockQueueDepth = 64
 
 func (s *EventService) didCommitBlock(e events.DidCommitBlock) error {
 	event := new(api.BlockEvent)
@@ -64,21 +77,41 @@ func (s *EventService) didCommitBlock(e events.DidCommitBlock) error {
 	event.Time = e.Time
 	event.Major = e.Major
 
-	// Start a batch (synchronously)
-	batch := s.db.Begin(false)
-
-	// Process the event (asynchronously)
-	go s.loadBlockInfo(batch, event)
-	return nil
+	// Hand the event to the loader without opening a batch here: a batch
+	// begun at commit time pins this version for as long as the loader
+	// takes, and the loader's time grows with the block. Every version so
+	// pinned is a commit the store must keep in memory.
+	for {
+		select {
+		case s.blocks <- event:
+			return nil
+		default:
+		}
+		select {
+		case dropped := <-s.blocks:
+			s.logger.Error("Block event queue full, dropping oldest", "dropped", dropped.Index, "queued", e.Index)
+		default:
+		}
+	}
 }
 
-func (s *EventService) loadBlockInfo(batch *database.Batch, e *api.BlockEvent) {
+// loadBlocks is the single loader. It publishes every block event, and
+// loads the block's entries only when someone is subscribed to receive them.
+func (s *EventService) loadBlocks() {
+	for e := range s.blocks {
+		if s.subscribers.Load() > 0 {
+			s.loadBlockInfo(e)
+		}
+		s.publish(e)
+	}
+}
+
+// loadBlockInfo fills in the block's entries, holding a database view only
+// for the duration of the load.
+func (s *EventService) loadBlockInfo(e *api.BlockEvent) {
+	batch := s.db.Begin(false)
 	defer batch.Discard()
 
-	// Check for an entry in the new block ledger. If the conversion process is
-	// incomplete there will be empty entries, so we also need to check for that
-	// (hence l1.Index == 0). If there is not an entry in the new block ledger
-	// or it is empty, check for an old block ledger account.
 	_, entries, err := indexing.LoadBlockLedger(batch.Account(s.partition.Ledger()), e.Index)
 	if err != nil {
 		s.logger.Error("Loading block ledger failed", "error", err, "block", e.Index, "url", s.partition.BlockLedger(e.Index))
@@ -94,8 +127,10 @@ func (s *EventService) loadBlockInfo(batch *database.Batch, e *api.BlockEvent) {
 			continue
 		}
 	}
+}
 
-	// Notify subscribers
+// publish makes e the last block and wakes every subscriber.
+func (s *EventService) publish(e *api.BlockEvent) {
 	s.eventMu.Lock()
 	defer s.eventMu.Unlock()
 	ready := s.eventReady
@@ -134,6 +169,9 @@ func (s *EventService) Subscribe(ctx context.Context, opts api.SubscribeOptions)
 		}()
 		defer close(ch)
 
+		s.subscribers.Add(1)
+		defer s.subscribers.Add(-1)
+
 		s.eventMu.RLock()
 		ready := s.eventReady        // Get the initial broadcast channel
 		lastBlock := s.lastBlock     // Get the last block
@@ -143,8 +181,14 @@ func (s *EventService) Subscribe(ctx context.Context, opts api.SubscribeOptions)
 		// Send the last block. That way, if the client calls QueryRecord for a
 		// transaction, doesn't find it, then calls Subscribe, they will
 		// certainly receive the block with their transaction unless there's a
-		// delay on the order of 1 second between the calls.
+		// delay on the order of 1 second between the calls. Its entries were
+		// not loaded if nobody was subscribed when it was published; load
+		// them now, for this subscriber.
 		if lastBlock != nil {
+			if lastBlock.Entries == nil {
+				lastBlock = copyBlockEvent(lastBlock)
+				s.loadBlockInfo(lastBlock)
+			}
 			ch <- lastBlock
 		}
 		if lastGlobals != nil {
@@ -172,4 +216,9 @@ func (s *EventService) Subscribe(ctx context.Context, opts api.SubscribeOptions)
 	}()
 
 	return ch, nil
+}
+
+func copyBlockEvent(e *api.BlockEvent) *api.BlockEvent {
+	c := *e
+	return &c
 }
