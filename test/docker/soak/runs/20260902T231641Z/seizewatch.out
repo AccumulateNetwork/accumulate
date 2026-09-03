@@ -1,0 +1,17 @@
+2026-09-02T23:19:02 stuck=0 stuckStream= worst=none undeliv=anchor Directory->Directory undeliv=2
+2026-09-02T23:19:47 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=53 undeliv=synthetic BVN2->BVN1 undeliv=53
+2026-09-02T23:20:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=2 undeliv=synthetic BVN2->BVN1 undeliv=3053
+2026-09-02T23:21:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=10 undeliv=synthetic BVN2->BVN1 undeliv=4008
+2026-09-02T23:22:02 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=24 undeliv=synthetic BVN2->BVN1 undeliv=4335
+2026-09-02T23:22:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=123 undeliv=synthetic BVN2->BVN1 undeliv=3544
+2026-09-02T23:23:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=864 undeliv=synthetic BVN2->BVN1 undeliv=3035
+2026-09-02T23:24:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=1621 undeliv=synthetic BVN2->BVN1 undeliv=2592
+2026-09-02T23:25:02 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=2018 undeliv=synthetic BVN2->BVN1 undeliv=2173
+2026-09-02T23:25:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=2386 undeliv=synthetic BVN2->BVN1 undeliv=2155
+2026-09-02T23:26:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=2847 undeliv=synthetic BVN2->BVN1 undeliv=2331
+2026-09-02T23:27:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=3269 undeliv=synthetic BVN2->BVN1 undeliv=1564
+2026-09-02T23:28:02 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=3519 undeliv=synthetic BVN2->BVN1 undeliv=2186
+2026-09-02T23:28:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=3870 undeliv=synthetic BVN2->BVN1 undeliv=2262
+2026-09-02T23:29:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=4129 undeliv=synthetic BVN2->BVN1 undeliv=2474
+2026-09-02T23:30:17 stuck=0 stuckStream= worst=BVN1->BVN2 gap=261 deliv=22331 undeliv=synthetic BVN2->BVN1 undeliv=2872
+SEIZED at 2026-09-02T23:30:17 :: stuck=0 stuckStream= worst=BVN1->BVN2 gap=261 deliv=22331 undeliv=synthetic BVN2->BVN1 undeliv=2872

@@ -254,6 +254,26 @@ type Worker struct {
 	batches map[types.BatchDigest]*lruEntry
 	lruList *list.List // LRU tracking: front = most recent, back = least recent
 
+	// pins counts, per batch, how many headers await this node's vote while
+	// naming it.  A pinned batch is not evictable (#4165 soak
+	// 20260902T231641Z).
+	//
+	// `own` was the only protection before, and it protects the wrong half of
+	// the problem.  A header names several batches; if one is missing the vote
+	// defers and the others -- which this node DOES hold and will need the
+	// moment the missing one lands -- stay evictable.  Under load they were
+	// evicted while the node waited, so the next rebroadcast found a
+	// DIFFERENT batch missing and deferred again: 777 fetches for 172 distinct
+	// batches, one asked 29 times, while the store turned over 1.7 times a
+	// second and BVN2 stopped producing blocks.
+	//
+	// The store's assumption was that a gossiped batch is "just cache" because
+	// the author still has it.  That is true of the DATA and false of the
+	// TIME: re-fetching is only free if the re-fetch wins the race against the
+	// next eviction, and at 17 evictions a second it does not.  A batch some
+	// header is waiting on is not cache, it is a prerequisite for progress.
+	pins map[types.BatchDigest]int
+
 	// Tombstones: why a batch left the store. A committed certificate whose
 	// batch is absent everywhere halts the partition permanently (#4125), and
 	// without this the log cannot say whether it was pruned, evicted, or never
@@ -314,6 +334,7 @@ func New(config Config, g *gossip.GossipLayer) *Worker {
 		validator:           config.Validator,
 		pending:             make([][]byte, 0, config.BatchSize),
 		batches:             make(map[types.BatchDigest]*lruEntry),
+		pins:                make(map[types.BatchDigest]int),
 		lruList:             list.New(),
 		gone:                make(map[types.BatchDigest]BatchGone),
 		maxTombstones:       config.MaxTombstones,
@@ -1019,13 +1040,21 @@ func (w *Worker) performEviction() {
 	// is the source of truth and must retain its own batches until PruneCommitted
 	// moves them to `retained`. Walk from the LRU back (least-recently-used)
 	// toward the front, skipping own entries.
-	evicted, skippedOwn := 0, 0
+	evicted, skippedOwn, skippedPinned := 0, 0, 0
 	for e := w.lruList.Back(); e != nil && (len(w.batches) > targetCount || w.storedBytes > targetBytes); {
 		prev := e.Prev()
 		lruDigest := e.Value.(types.BatchDigest)
 		entry, ok := w.batches[lruDigest]
 		if ok && entry.own {
 			skippedOwn++
+			e = prev
+			continue
+		}
+		if w.pins[lruDigest] > 0 {
+			// A header is waiting on this to vote.  Evicting it is not
+			// reclaiming cache, it is undoing work that has to be redone
+			// before the partition can advance.
+			skippedPinned++
 			e = prev
 			continue
 		}
@@ -1045,6 +1074,7 @@ func (w *Worker) performEviction() {
 			"evicted", evicted,
 			"remaining", len(w.batches),
 			"skippedOwnUncommitted", skippedOwn,
+			"skippedPinned", skippedPinned,
 			"workerID", w.config.ID)
 	}
 	// Could not reach the target because our own uncommitted batches are not
@@ -1061,6 +1091,55 @@ func (w *Worker) performEviction() {
 			"ownUncommitted", skippedOwn,
 			"workerID", w.config.ID)
 	}
+}
+
+// PinBatches marks batches as required by a header awaiting this node's vote,
+// so LRU eviction leaves them alone.  Calls nest: a batch named by two pending
+// headers is pinned twice and released twice.
+//
+// Pinning does NOT fetch.  A pin on a batch this node does not hold is still
+// meaningful -- it says "when this arrives, keep it" -- and costs one map entry.
+func (w *Worker) PinBatches(digests []types.BatchDigest) {
+	if len(digests) == 0 {
+		return
+	}
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	if w.pins == nil {
+		w.pins = map[types.BatchDigest]int{}
+	}
+	for _, d := range digests {
+		w.pins[d]++
+	}
+}
+
+// UnpinBatches releases pins taken by PinBatches: the vote went out, or the
+// header was abandoned.
+//
+// Releasing is what keeps the pin set bounded, and it must happen on BOTH
+// paths.  A pin that is never released is a batch that can never be evicted,
+// which is the memory bound failing open rather than closed.
+func (w *Worker) UnpinBatches(digests []types.BatchDigest) {
+	if len(digests) == 0 {
+		return
+	}
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	for _, d := range digests {
+		if n := w.pins[d]; n <= 1 {
+			delete(w.pins, d)
+		} else {
+			w.pins[d] = n - 1
+		}
+	}
+}
+
+// PinnedBatches reports how many batches are currently pinned. For tests and
+// diagnostics.
+func (w *Worker) PinnedBatches() int {
+	w.batchMu.RLock()
+	defer w.batchMu.RUnlock()
+	return len(w.pins)
 }
 
 // HasBatch returns true if the worker has the batch with the given digest.

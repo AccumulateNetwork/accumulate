@@ -1,0 +1,9 @@
+diff --git a/test/docker/soak/runs/20260902T221300Z/readprobe.csv b/test/docker/soak/runs/20260902T221300Z/readprobe.csv
+index be3b3fbce..a3f577616 100644
+--- a/test/docker/soak/runs/20260902T221300Z/readprobe.csv
++++ b/test/docker/soak/runs/20260902T221300Z/readprobe.csv
+@@ -59,3 +59,4 @@ time,reads,p50,p95,max,maxKind,maxAge,maxPartition,failed,gated,timeouts,reservo
+ 2026-09-02T23:13:11Z,300,0.0,0.0,0.1,txn,185,BVN2,300,0,0,246,275
+ 2026-09-02T23:14:11Z,300,0.0,0.0,0.1,chain,185,BVN2,300,0,0,246,275
+ 2026-09-02T23:15:11Z,300,0.0,0.1,0.1,chain,201,BVN1,300,0,0,246,275
++2026-09-02T23:16:12Z,300,0.0,0.1,0.1,chain,201,BVN1,300,0,0,246,275

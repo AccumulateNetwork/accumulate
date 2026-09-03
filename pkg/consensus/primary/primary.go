@@ -129,6 +129,15 @@ type Primary struct {
 	votedHeaders map[types.HeaderDigest]types.Round
 	sentVotes    map[types.HeaderDigest]*types.Vote
 
+	// deferredPins records, per header whose vote is deferred, the batches
+	// pinned in the workers on its behalf, and the round it was for so the
+	// same round-based cleanup that drops votedHeaders releases these.
+	//
+	// Without it the pins leak, and a pin that is never released is a batch
+	// that can never be evicted -- the memory bound failing open.
+	deferredPins   map[types.HeaderDigest][]types.BatchDigest
+	deferredRounds map[types.HeaderDigest]types.Round
+
 	// Round-sync pacing (#4057)
 	roundSyncMu       sync.Mutex
 	lastRoundPull     time.Time
@@ -195,20 +204,22 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 	pendingCerts := NewPendingCertificates(pendingCertsMaxSize)
 
 	p := &Primary{
-		config:       config,
-		committee:    committee,
-		gossip:       g,
-		dag:          d,
-		workers:      workers,
-		currentRound: 0,
-		currentEpoch: committee.Epoch,
-		pendingVotes: make(map[types.HeaderDigest][]*types.Vote),
-		ourHeaders:   make(map[types.HeaderDigest]*types.Header),
-		ourCerts:     make(map[types.Round]*types.Certificate),
-		votedHeaders: make(map[types.HeaderDigest]types.Round),
-		sentVotes:    make(map[types.HeaderDigest]*types.Vote),
-		pendingCerts: pendingCerts,
-		newCerts:     make(chan *types.Certificate, config.NewCertsChannelSize),
+		config:         config,
+		committee:      committee,
+		gossip:         g,
+		dag:            d,
+		workers:        workers,
+		currentRound:   0,
+		currentEpoch:   committee.Epoch,
+		pendingVotes:   make(map[types.HeaderDigest][]*types.Vote),
+		ourHeaders:     make(map[types.HeaderDigest]*types.Header),
+		ourCerts:       make(map[types.Round]*types.Certificate),
+		votedHeaders:   make(map[types.HeaderDigest]types.Round),
+		deferredPins:   make(map[types.HeaderDigest][]types.BatchDigest),
+		deferredRounds: make(map[types.HeaderDigest]types.Round),
+		sentVotes:      make(map[types.HeaderDigest]*types.Vote),
+		pendingCerts:   pendingCerts,
+		newCerts:       make(chan *types.Certificate, config.NewCertsChannelSize),
 	}
 
 	// Initialize CertSyncer if gossip is available
@@ -549,6 +560,62 @@ func (p *Primary) cleanupOldHeaders() {
 			delete(p.votedHeaders, digest)
 			delete(p.sentVotes, digest)
 		}
+	}
+
+	// A header old enough to be dropped is never going to be voted on, so
+	// release whatever it was holding.  This is the path that bounds the pin
+	// set when a header is abandoned rather than voted.
+	for digest, round := range p.deferredRounds {
+		if round < certCutoff {
+			p.releasePins(digest)
+		}
+	}
+}
+
+// pinHeaderBatches keeps every batch a deferred header names, so eviction
+// cannot take the ones this node already holds while it waits for the one it
+// does not.
+//
+// That is the failure this exists for: a header names several batches, one is
+// missing, the vote defers -- and the rest stay evictable even though they are
+// needed the moment the missing one lands.  Under load they were evicted
+// during the wait, so the next rebroadcast found a different batch missing and
+// deferred again.
+//
+// Idempotent per header. The vote gate re-runs on every rebroadcast, and
+// pinning again each time would count the same requirement repeatedly and
+// never release.
+func (p *Primary) pinHeaderBatches(headerDigest types.HeaderDigest, header *types.Header) {
+	p.pendingMu.Lock()
+	if _, already := p.deferredPins[headerDigest]; already {
+		p.pendingMu.Unlock()
+		return
+	}
+	digests := make([]types.BatchDigest, 0, len(header.Payload))
+	for _, entry := range header.Payload {
+		digests = append(digests, entry.Digest)
+	}
+	p.deferredPins[headerDigest] = digests
+	p.deferredRounds[headerDigest] = header.Round
+	p.pendingMu.Unlock()
+
+	for _, w := range p.workers {
+		w.PinBatches(digests)
+	}
+}
+
+// releasePins drops the pins a header took: it was voted on, or it aged out.
+func (p *Primary) releasePins(headerDigest types.HeaderDigest) {
+	p.pendingMu.Lock()
+	digests, ok := p.deferredPins[headerDigest]
+	delete(p.deferredPins, headerDigest)
+	delete(p.deferredRounds, headerDigest)
+	p.pendingMu.Unlock()
+	if !ok {
+		return
+	}
+	for _, w := range p.workers {
+		w.UnpinBatches(digests)
 	}
 }
 

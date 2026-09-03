@@ -384,6 +384,12 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	// the same defer-until-available shape as the missing-parent gate above.
 	for _, entry := range header.Payload {
 		if !p.haveBatch(entry.Digest) {
+			// Pin every batch this header names -- including the ones we
+			// already hold. Those are the ones eviction takes while we wait
+			// for this one, which is what turned a deferred vote into a
+			// livelock (#4165).
+			p.pinHeaderBatches(headerDigest, header)
+
 			slog.Info("Missing batch for header — deferring vote and fetching",
 				"partition", p.config.Partition,
 				"headerDigest", headerDigest.String(),
@@ -400,6 +406,9 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 			return // missing batch — do not certify data we do not have
 		}
 	}
+
+	// Every batch is here, so nothing is waiting on them any more.
+	p.releasePins(headerDigest)
 
 	// Create and send vote
 	vote := types.NewVote(headerDigest, header.Round, header.Epoch, pubKey)
