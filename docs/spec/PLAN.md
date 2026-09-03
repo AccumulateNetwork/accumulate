@@ -246,6 +246,19 @@ dynamic layer's size, which E7 and S5 shrink but do not remove. Filed there,
 not edited here. Any store-side term that survives S1–S5 in the hour-12 profile
 becomes an issue in that repository.
 
+**S8a — the seal is the throughput wall (BlockchainDB#84).** Acceptance run #1
+(`20260903T173742Z`) had flat memory and idle CPU and delivered ~80 user tps of
+500 offered. Block production averaged 0.88 s of every 1 s block with 65 ms of
+execution in it; every node's block producer was sampled inside `fsync` in the
+store's per-block seal, which issues about forty serialized fsyncs across the
+eight shards (17 ms each on this host) while holding each shard's write lock, so
+the read that validates a submission waits the seal out. Sixteen submitters at
+~190 ms each is ~84 tps. The pre-sharding store reached 497 tps on the same
+soak. Fix is the store's: seal shards concurrently, one fsync per layer per
+block, no read lock across fsync. Until it lands, **no bcdb run can be judged
+against the 500 tps criteria**; the memory and CPU criteria can still be read at
+the rate the store allows, and that is what run #1 is now measuring.
+
 ### Order
 
 ```
