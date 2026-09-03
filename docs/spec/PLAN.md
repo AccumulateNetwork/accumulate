@@ -255,9 +255,12 @@ eight shards (17 ms each on this host) while holding each shard's write lock, so
 the read that validates a submission waits the seal out. Sixteen submitters at
 ~190 ms each is ~84 tps. The pre-sharding store reached 497 tps on the same
 soak. Fix is the store's: seal shards concurrently, one fsync per layer per
-block, no read lock across fsync. Until it lands, **no bcdb run can be judged
-against the 500 tps criteria**; the memory and CPU criteria can still be read at
-the rate the store allows, and that is what run #1 is now measuring.
+block, no read lock across fsync. **Delivered 2026-09-03 as BlockchainDB PR #85
+(`dcce242`, "Seal off the lock, and seal the shards together")**: the cut under
+the lock with no barrier, fsyncs with the lock released, layers side by side,
+shards concurrent; their measurement a block boundary 253 → 50 ms mean and the
+worst Get during a seal 56 → 1.8 ms. Pulled into accumulate on the #4203
+branch; acceptance run #2 runs on it.
 
 ### Order
 
