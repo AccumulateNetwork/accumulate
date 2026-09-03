@@ -474,4 +474,70 @@ func TestCleanupOldHeaders_DoesNotDeadlockReleasingPins(t *testing.T) {
 		t.Fatal("cleanupOldHeaders deadlocked: it holds pendingMu, so releasing pins " +
 			"inside it re-enters a non-reentrant mutex and the primary stops advancing rounds")
 	}
+
+	// And it must actually RELEASE them. Not deadlocking is worthless if the
+	// pins survive: a pin that is never released is a batch that can never be
+	// evicted, which is the memory bound failing open rather than closed.
+	p.pendingMu.Lock()
+	pins, rounds := len(p.deferredPins), len(p.deferredRounds)
+	p.pendingMu.Unlock()
+	require.Zero(t, pins, "headers aged past the cutoff must release their pins")
+	require.Zero(t, rounds, "and their round bookkeeping")
+}
+
+// The vote gate re-runs on every rebroadcast of a header, so pinning has to be
+// idempotent per header. If it were not, each rebroadcast would take another
+// pin on the same batches and the releases would never balance -- pins would
+// accumulate for the life of the process and eviction would slowly lose every
+// batch it is allowed to touch.
+func TestPin_IsIdempotentPerHeader(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv, NewCertsChannelSize: 10},
+		newTestCommittee(validators, 1), nil, newTestDAG(), nil)
+
+	var hd types.HeaderDigest
+	hd[0] = 7
+	h := &types.Header{Round: 5}
+	for j := 0; j < 3; j++ {
+		var bd types.BatchDigest
+		bd[0] = byte(j)
+		h.Payload = append(h.Payload, types.PayloadEntry{Digest: bd})
+	}
+
+	for i := 0; i < 10; i++ {
+		p.pinHeaderBatches(hd, h) // as ten rebroadcasts would
+	}
+
+	p.pendingMu.Lock()
+	n := len(p.deferredPins[hd])
+	total := len(p.deferredPins)
+	p.pendingMu.Unlock()
+	require.Equal(t, 3, n, "one pin per batch the header names, however many times it arrives")
+	require.Equal(t, 1, total, "one entry per header")
+
+	// And releasing once is enough to clear it.
+	p.releasePins(hd)
+	p.pendingMu.Lock()
+	total = len(p.deferredPins)
+	p.pendingMu.Unlock()
+	require.Zero(t, total, "one release balances however many rebroadcasts arrived")
+}
+
+// Releasing a header that was never pinned must be a no-op, not a panic or a
+// stray unpin: the vote path calls releasePins on every header it votes on,
+// including the ones that were never deferred.
+func TestPin_ReleaseOfAnUnpinnedHeaderIsHarmless(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv, NewCertsChannelSize: 10},
+		newTestCommittee(validators, 1), nil, newTestDAG(), nil)
+
+	var hd types.HeaderDigest
+	hd[0] = 99
+	require.NotPanics(t, func() { p.releasePins(hd) })
 }
