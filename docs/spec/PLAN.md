@@ -188,7 +188,12 @@ flight and skip the load when nothing is subscribed. *Done when*:
 `stagedCommits` ≤ 1 at every snapshot for twelve hours, and no view outlives a
 block. Spec: database invariants 2 and 5.
 
-**S3 — write the consensus memory section of the spec, then hold it.** There is
+**S3 — write the consensus memory section of the spec, then hold it. SPEC
+WRITTEN 2026-09-03 (`consensus.md`, partial part; differences C1–C3 = #4206, #4207, #4208). Run #3
+(`20260903T213153Z`, no chaos) reproduced it alone: batches of one or two
+transactions from a 100 ms seal timeout, a count-bounded store holding six
+seconds of them, evictions of what the next header needed, and the storm at
+minute 16 with no fault anywhere else.** There is
 no consensus part of the spec, so the batch store has no specified budget and
 behaves as it happens to: 32 MB active, 32 MB retained, 32 MB inbound queue
 *per partition*, and own uncommitted batches exempt from eviction — so when the

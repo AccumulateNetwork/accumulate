@@ -20,6 +20,7 @@ the same two sections:
 | [Executor](executor.md) | How a block is produced: what runs, in what order, and what may be staged |
 | [Database abstraction](database.md) | The storage contract every backend satisfies, and how a backend is chosen |
 | [Healing](healing.md) | Filling gaps in sequenced cross-partition streams |
+| [Consensus](consensus.md) | **Partial**: the memory the batch plane may hold, and what a full store does. Rounds, certificates and the DAG are still to be written |
 
 Alongside them, [DIFFERENCES.md](DIFFERENCES.md) records where the code departs
 from the specification, and [PLAN.md](PLAN.md) orders that work. It is kept separate on purpose: a spec that documents
@@ -27,9 +28,9 @@ its own exceptions stops being normative. The specification says what we are
 doing; the differences say what has yet to be brought into line, and issues are
 written from them once a part of the spec is settled.
 
-Parts still to be written: consensus (DAG-BFT), the protocol's account and
-transaction model, the API, and cross-partition messaging (synthetics and
-anchors). A missing part is a gap, not a statement that the subsystem has no
+Parts still to be written: consensus (DAG-BFT) beyond its batch-plane memory
+section, the protocol's account and transaction model, the API, and
+cross-partition messaging (synthetics and anchors). A missing part is a gap, not a statement that the subsystem has no
 rules.
 
 ## Working against the spec

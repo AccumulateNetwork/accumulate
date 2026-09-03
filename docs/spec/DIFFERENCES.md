@@ -94,6 +94,72 @@ to the hash. One accidental writer from changing account hashes.
 
 ---
 
+## Consensus
+
+### C1. Batches are sealed by the clock, so a partition emits ~160 batches a second
+
+*[#4206](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4206)*
+
+**Spec** ([consensus.md](consensus.md), invariant 2): under load a batch is
+full; the batch rate is throughput over batch size.
+
+**Code**: `Worker.batchLoop` seals on a `BatchTimeout` ticker of 100 ms
+(`worker.go:31`), and a partition runs sixteen workers (four validators, four
+workers each). At 250 tps per partition that is one to two transactions per
+batch: run `20260903T213153Z`, BVN2, 21:41–21:49, 2.1–2.5 tx/batch, 10,000–
+15,000 batches a minute on one node's execution accounting.
+
+**Consequence**: every count-shaped limit downstream holds seconds of traffic
+— the active store's 1,000 batches is six seconds, retention's 4,096 is
+twenty-five — and headers name hundreds of batches a second.
+
+**Size**: small in code (a timeout and a worker count), large in effect.
+
+### C2. Stores are bounded by count, and own uncommitted batches by nothing
+
+*[#4207](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4207)*
+
+**Spec** (invariants 1, 3, 4): bytes, per node; what a vote needs is never
+evicted; own batches are bounded by refusing work.
+
+**Code**: `MaxStoredBatches` = 1,000 and `MaxRetainedBatches` = 4,096 are
+counts; eviction is LRU under a count or byte limit and skips own
+uncommitted and pinned batches, so own uncommitted batches grow without
+bound while commits lag (`worker.go:1039–1110`). Budgets are per partition
+and a dual node holds two.
+
+**Evidence**: run `20260903T213153Z` (no chaos), 21:47:40 on BVN2:
+`ownUncommitted=496 stored=975 storedBytes=1.4MB` — the count limit reached
+at 1.4 MB of an 8 MB share — then `Missing batch for header — deferring vote`
+33 → 99 → 390 → 652 → 752 a minute as evicted batches were re-fetched,
+216,315 over-limit warnings and 75,854 evictions in four minutes, BVN2 at
+2 s/block, live heap 300 → 500–900 MB per node (`createBatch` 55 → 99 MB,
+`pubsub Unmarshal` 36 → 78 MB, headers 40 → 55 MB). Runs
+`20260903T173742Z` and `20260903T202621Z` ended the same way after the
+store's seal and a chaos restart, respectively, had made commits lag first.
+
+**Consequence**: any commit lag, from any cause, becomes memory growth and
+then a stall; a partition never refuses work.
+
+**Size**: medium. Byte budgets and refusal in the worker, the `NotReady`
+path through the API submit, the load generator honouring it.
+
+### C3. A full store is logged once per submission
+
+*[#4208](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4208)*
+
+**Spec** (invariant 5): a state, logged on transition and counted.
+
+**Code**: `Batch store over limit with un-evictable own uncommitted batches`
+and `Evicted batches due to storage limit (LRU)` are emitted from the
+eviction that every `StoreBatch` and `Submit` can trigger: 756,948 and
+208,150 lines in nine minutes in run `20260903T173742Z`; 50,000 lines a
+minute per node.
+
+**Size**: small. Part of S7.
+
+---
+
 ## Database abstraction
 
 ### D1. Record placement is a second, hand-maintained model
