@@ -241,22 +241,23 @@ for `BeginDeep` swaps a measured fallback for an unverified one.
 
 ---
 
-### D6. The adapter walks history on every miss, for every shape, and does not count the misses
+### D6. The adapter walks permanent history for a permanent shape's miss
 
 *[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
 
 **Spec**: a mutable record is answered by the dynamic layer alone; a permanent
 record from the window; nothing reaches into history to prove an absence.
 
-**Code**: `getAt` (`bcdb/database.go:772`) runs `GetDeep` on every shallow
-miss, whatever the shape. For a mutable shape the dynamic layer has already
-walked its history and the key cannot be in the permanent layer, so the walk
-repeats the dynamic walk and adds a walk of all permanent history for nothing.
-`DeepFallbacks` counts hits only, so the absent-key walks — about 95% of the
-executor's segment-store reads at 500 tps — are invisible in the stats.
+**Code**: `getAt` (`bcdb/database.go`) no longer walks history for a mutable
+shape — the dynamic layer's miss is the answer — and counts every shallow miss
+by shape (`ShallowMisses`, `FallbackWalks` in `stats.json`). For a permanent
+shape it still falls back to `GetDeep`, because the readers that legitimately
+reach past the window have no deep batch (E9). Before the rule, about 95% of
+a BVN's segment-store reads at 500 tps were these walks, none finding
+anything; what remains is the permanent-shape share, named by the counters.
 
-**Size**: small; guard the fallback with the shape's placement and count
-shallow misses by shape.
+**Size**: the rest is E9: once those readers take `BeginDeep`, the branch goes
+and the permanent misses must read zero over a soak.
 
 ---
 
@@ -294,8 +295,10 @@ whatever its caller said. Instrumented over the e2e and executor suites, the
 only rejected duplicates were the double append of E9 and v1's signature path;
 every other duplicate was a permitted repeat on a root or signature chain.
 
-**Size**: small once D7 is in: a per-chain mode for the chains unique by
-construction, the flag honoured or removed.
+**Size**: small once D7 is in: a per-chain mode for the chains the writer
+deduplicates, the flag honoured or removed. `merkle.OnDuplicate` now records
+every duplicate append in test builds and the e2e suite fails on any outside
+the permitted repeats, so a removal here is checked by the suite.
 
 ---
 

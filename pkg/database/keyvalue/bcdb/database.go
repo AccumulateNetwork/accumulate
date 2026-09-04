@@ -147,6 +147,13 @@ type Database struct {
 	// fallbackMu, a leaf lock -- the counter is bumped while getAt
 	// holds d.mu shared, and it must not reach for that lock.
 	deepFallbacks map[string]uint64
+	// shallowMisses counts, by shape, every shallow read the window
+	// could not answer -- found in history or not -- and fallbackWalks
+	// how many of those walked history.  A mutable shape never walks
+	// (database spec, "Duplicates are caught at entry"); the count for
+	// a permanent shape names the reader that still needs BeginDeep.
+	shallowMisses map[string]uint64
+	fallbackWalks uint64
 	fallbackMu    sync.Mutex
 
 	maintaining  atomic.Bool
@@ -683,6 +690,34 @@ func (d *Database) DeepFallbacks() map[string]uint64 {
 	return d.fallbackSnapshot()
 }
 
+// ShallowMisses reports, by key shape, every read a SHALLOW batch made
+// that the window could not answer, whether or not history then had it.
+// A mutable shape here is normal -- a first write's absence, a set that
+// is still empty -- and cost nothing beyond the dynamic layer's own
+// lookup.  A permanent shape here is a reader that reaches past the
+// window without BeginDeep, and the count is what says the fallback in
+// getAt is still needed.
+func (d *Database) ShallowMisses() map[string]uint64 {
+	d.fallbackMu.Lock()
+	defer d.fallbackMu.Unlock()
+	if len(d.shallowMisses) == 0 {
+		return nil
+	}
+	out := make(map[string]uint64, len(d.shallowMisses))
+	for k, v := range d.shallowMisses {
+		out[k] = v
+	}
+	return out
+}
+
+// FallbackWalks reports how many shallow misses walked history: the
+// permanent-shape misses.  A mutable miss never does.
+func (d *Database) FallbackWalks() uint64 {
+	d.fallbackMu.Lock()
+	defer d.fallbackMu.Unlock()
+	return d.fallbackWalks
+}
+
 // fallbackSnapshot copies the deep-fallback counters for a report
 func (d *Database) fallbackSnapshot() map[string]uint64 {
 	d.fallbackMu.Lock()
@@ -757,32 +792,54 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 		// This reader asked to reach past the window (BeginDeep)
 		value, err = d.kv.GetDeep(h)
 	} else if err != nil {
-		// A shallow reader missed.  The window is the protocol's
-		// horizon and a miss here is meant to BE the answer -- but
-		// turning that on blind would turn any read this adapter has
-		// not accounted for into a silent not-found, which in the
-		// executor is a consensus fault. So the fallback still runs,
-		// and every use of it is counted and shaped: DeepFallbacks in
-		// stats.json says how often a shallow reader needed history,
-		// and for which kind of record.
+		// A shallow reader missed.  Which layer answered decides what
+		// happens next (database spec, "Duplicates are caught at
+		// entry").
 		//
-		// Zero over a soak is the evidence that the fallback can be
-		// removed and the window enforced; anything else names the
-		// call sites that must use BeginDeep first.
-		if v2, err2 := d.kv.GetDeep(h); err2 == nil {
-			// Its own lock, NOT d.mu: this runs while getAt holds
-			// d.mu.RLock, and a Go RWMutex is not reentrant -- taking
-			// it exclusively here deadlocked the read path against
-			// itself.  A leaf mutex over one map is also what keeps a
-			// diagnostic counter off the commit lock, which is what
-			// #4175 took the read path off.
-			d.fallbackMu.Lock()
-			if d.deepFallbacks == nil {
-				d.deepFallbacks = map[string]uint64{}
+		// A MUTABLE shape lives in the dynamic layer and nowhere else
+		// (commit routes it there without exception), and the dynamic
+		// layer's Get already walked its own history.  The miss IS the
+		// answer, and walking the permanent history for it could only
+		// find a key that cannot be there.  Before this rule that walk
+		// ran on every miss -- about 95% of a BVN's segment-store reads
+		// at 500 tps, none of them finding anything (#4219).
+		//
+		// A PERMANENT shape is answered from the window, and the window
+		// is meant to be the horizon -- but a reader that legitimately
+		// reaches further (a pending transaction's message, dispatch
+		// after the anchor returns, a receipt through the root chain)
+		// has no deep batch yet.  Until every one of them does, the
+		// fallback runs for permanent shapes only, and every miss is
+		// counted by shape: ShallowMisses names the readers that still
+		// need BeginDeep, DeepFallbacks says how often history had the
+		// answer.  Zero permanent misses over a soak is the evidence
+		// that this branch can go.
+		//
+		// The counters take their own leaf lock, NOT d.mu: this runs
+		// while getAt holds d.mu shared, and a Go RWMutex is not
+		// reentrant (#4175).
+		shape := keyShape(key)
+		d.fallbackMu.Lock()
+		if d.shallowMisses == nil {
+			d.shallowMisses = map[string]uint64{}
+		}
+		d.shallowMisses[shape]++
+		walk := isWriteOnce(key)
+		if walk {
+			d.fallbackWalks++
+		}
+		d.fallbackMu.Unlock()
+
+		if walk {
+			if v2, err2 := d.kv.GetDeep(h); err2 == nil {
+				d.fallbackMu.Lock()
+				if d.deepFallbacks == nil {
+					d.deepFallbacks = map[string]uint64{}
+				}
+				d.deepFallbacks[shape]++
+				d.fallbackMu.Unlock()
+				value, err = v2, nil
 			}
-			d.deepFallbacks[keyShape(key)]++
-			d.fallbackMu.Unlock()
-			value, err = v2, nil
 		}
 	}
 	if err != nil || len(value) == 0 {
@@ -1162,9 +1219,16 @@ func (d *Database) reportStats() {
 		// the fallback in getAt can go, leaving the window enforced.
 		// Anything here NAMES the call sites that still need one.
 		DeepFallbacks map[string]uint64 `json:"deepFallbacks,omitempty"`
+
+		// ShallowMisses is every shallow read the window could not
+		// answer, by shape, found or not; FallbackWalks how many of them
+		// walked history (the permanent shapes).  See ShallowMisses.
+		ShallowMisses map[string]uint64 `json:"shallowMisses,omitempty"`
+		FallbackWalks uint64            `json:"fallbackWalks"`
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
 		DeepFallbacks: d.fallbackSnapshot(),
-		Staged:        len(d.undoVersions), TallySample: d.TallySample,
+		ShallowMisses: d.ShallowMisses(), FallbackWalks: d.FallbackWalks(),
+		Staged: len(d.undoVersions), TallySample: d.TallySample,
 		TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
 		MaintenanceErrors: d.maintErrs}
 	if d.maintErr != nil {

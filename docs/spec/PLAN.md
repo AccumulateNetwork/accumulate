@@ -178,45 +178,41 @@ Twelve hours at 500 tps, 1 s blocks, chaos off, then the same with chaos once
 
 ### R #4219 — reads that prove an absence
 
-Spec: database "Duplication". At 500 tps a BVN executor's reads that reach the
-segment store are ~95% for keys that do not exist yet, each walking history up
-to three times. In order, each step proven before the next:
+Spec: database "Duplicates are caught at entry". A duplicate is stopped by
+recent, mutable state; a write below that never asks history. At 500 tps a
+BVN executor's segment-store reads were ~95% such asks.
 
-- **R0 — the proof harness.** An A/B golden run: one envelope stream executed
-  under two builds, compared per block on state root, block ledger, every
-  touched account's chain heights and anchors, and all element-index records.
-  A duplicate-append assertion in test builds (the simulator, e2e, consim
-  fail on a prohibited duplication; permitted ones counted). Shallow misses
-  counted by record shape in the adapter.
-- **R1 — adapter.** No deep fallback for a mutable shape (D6). Proof: golden
-  run unchanged; miss counters show the walks gone.
-- **R2 — values.** Version-only fetch replaces the pre-read in `Put` (D7).
-  Proof: golden run; unit tests for a child writing a key its parent wrote,
-  sibling conflict still detected, a three-level version chain.
-- **R3 — chains.** Chains unique by construction skip the element-index read
-  and write it blind (D8). Proof: golden run; a counting store shows an append
-  issues no `ElementIndex` or `Element` read.
-- **R4 — executor.** The transaction hash appended to the principal's chain
-  once, by skipping the state-cache append for the principal when the success
-  path runs; `ErrNotFound` there becomes an error; `AddChainEntry2` honours or
-  loses its flag (E9). Proof: a per-transaction-type table test that the
-  principal's target chain grows by one and holds the hash once; golden run.
-- **R5 — deep readers.** `BeginDeep` exposed through `internal/database` and
-  used by the pending-transaction loads, dispatch's message reads and the root
-  receipt; `SyntheticIndexIndex` in the dynamic layer or replaced by a
-  dispatch-pending set. Then the fallback goes for permanent shapes and D4
-  closes. Proof: shallow-miss counters at zero for permanent shapes over 12 h.
-- **R6 — observer.** The v1 `Transaction.Main` read gated on v1 records being
-  possible; an account hashed once per block; `clearActiveSignatures` touches
-  only signers that signed. Proof: golden hashes for absent versus empty
-  components; golden run.
-- **R7 — restore.** Element index restored as first occurrence (D9). Proof:
-  the restore test with duplicate values.
+- **R0 — the assertions.** DONE: `merkle.OnDuplicate` records every duplicate
+  append in test builds and the e2e suite fails on any outside the permitted
+  repeats (root and signature chains, and the E9 double append until it has
+  one site). The adapter counts shallow misses by shape and the history walks
+  it made for them.
+- **R1 — mutable shapes never walk.** DONE: a mutable miss is the dynamic
+  layer's answer; tests prove a mutable miss makes no walk, a permanent miss
+  still does and is counted, a deep reader's miss is neither.
+- **R2 — deep readers, then no fallback.** `BeginDeep` exposed through
+  `internal/database`; the pending-transaction loads, dispatch's message reads
+  and the root receipt take it; `SyntheticIndexIndex` moves to the dynamic
+  layer or is replaced by a dispatch-pending set. Then the permanent-shape
+  fallback goes and D4 closes. Proof: `ShallowMisses` zero for every
+  permanent shape over 12 h; the A/B golden run for the reads that moved.
 
-What tests cannot prove, and the soak must: that no permanent shape is read
-past the window by a path the suites do not exercise (the miss counters over
-12 h), and that a mainnet snapshot holds no v1 pending records before R6's
-gate is removed.
+Then, as cost work rather than correctness (each still proven by the suite's
+duplicate assertion and an A/B golden run — same envelope stream under two
+builds, compared per block on state root, block ledger, every touched
+account's chain heights and anchors, and all element-index records):
+
+- the transaction hash appended to the principal's chain once, by skipping
+  the state-cache append for the principal when the success path runs, and
+  `ErrNotFound` there made an error (E9); after that the e2e assertion
+  tightens to root and signature chains only;
+- the version-only fetch replacing the pre-read in `Put` (D7), with unit
+  tests for a child writing a key its parent wrote, a sibling conflict still
+  detected, and a three-level version chain;
+- chains the writer deduplicates skip the element-index read (D8);
+- the observer's v1 `Transaction.Main` read gated, an account hashed once per
+  block, `clearActiveSignatures` touching only signers that signed;
+- the element index restored as first occurrence (D9).
 
 
 - **S4 #4211** — hash a message once; read-only chain state without deep copy.

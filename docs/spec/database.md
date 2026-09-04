@@ -58,81 +58,64 @@ that means to look back must say so:
 A store with no window ignores the distinction: its ordinary reads already see
 everything.
 
-### Duplication — what is prohibited, what is permitted, what the code may assume
+### Duplicates are caught at entry
 
-The record model above the store is written by one writer, the executor, in a
-fixed order. Whether a key is already present is therefore something the writer
-**knows**, not something it has to ask. A read whose only purpose is to learn
-that a key is absent before writing it is a defect: it costs a search of the
-store, and on a windowed store a search of all history, to confirm what the
-model already knew.
+There is no rule that a hash appears once in the store. What there is, is a
+place where each kind of repeat is stopped, and it is always **recent,
+mutable state**:
+
+| a repeat of | is stopped by | which is |
+|---|---|---|
+| a signature | the key entry's spent timestamps | the key page's state |
+| a transaction or message | its status, already Delivered | the message's status record |
+| a sequenced entry (synthetic, anchor) | staging's delivered index for the stream | the ledger's stream position |
+| an anchor signature | the anchor message's status | as above |
+
+Every one of those is a record the executor rewrites, so it lives in the
+dynamic layer, whose own short history answers the question. By the time a
+hash reaches a chain append or a first record write it has passed those
+checks and is new. **The write does not ask again.** A read whose only purpose
+is to learn that a key is absent before writing it is a defect: on a windowed
+store it is a search of all history to confirm what recent state already
+settled.
 
 **Chains are logs.** A chain is an append-only sequence of hashes. Its element
-index maps a hash to the index of its **first** occurrence; a later identical
-entry is appended and does not move the index, and a restore preserves this so
-that a restored node, a live node and an indexer agree. No reader relies on a
-hash appearing once: a receipt, a query by hash, a proof check and the proven
-set each need *an* index at or before the anchoring point, and the first serves.
-
-Three kinds of chain, by how their entries relate:
-
-| kind | chains | duplicates |
-|---|---|---|
-| **unique by construction** | index chains; the synthetic ledger's main chain and its replicas; the anchor sequence chain; the block ledger chain; the ledger's BPT chain | cannot occur — every entry carries an index or a root that changes each block. Appended without asking. |
-| **logs that repeat** | root chains; signature chains | identical values recur: genesis anchors every system account's single genesis entry; one transaction creating several accounts leaves the same first entry in each; a maintenance operation records one cause per signer. Appended without asking; the index keeps the first. |
-| **deduplicated by the writer** | account main and scratch chains; anchor root and BPT chains | one hash per message per chain, guaranteed by the executor appending it from one place, not by the chain checking on every append. |
-
-**Prohibited duplications** — these cannot occur if the executor is correct,
-and the executor does not check for them at write time. The defence is the
-single writer, the sequencing rules in [executor.md](executor.md), and the
-assertions below.
-
-1. **A message executes once per partition.** Its hash is appended to any one
-   chain once, from one site. The replay check is on the message's status
-   before it executes, not on the chain when it is recorded.
-2. **A record is created once.** The first write of a message record, a
-   status, a chain element at the head's count, a set that was empty, is a
-   write, not a read followed by a write.
-3. **A sequenced entry is delivered once per stream and index.** Staging
-   tosses anything at or below the delivered index (executor spec,
-   "Readiness").
-4. **An anchor signature counts once per validator per anchor.** A second copy
-   is a message already delivered, and stops at the replay check.
-
-**Permitted duplications** — these occur by construction and are appended,
-never rejected: the repeats in root and signature chains above, and a
-re-sent signature message, whose *set* is deduplicated while the chain logs
-what arrived.
+index maps a hash to its **first** occurrence; a later identical entry is
+appended and does not move the index, and a restore preserves this so a
+restored node, a live node and an indexer agree. No reader relies on a hash
+appearing once: a receipt, a query by hash, a proof check and the proven set
+each need *an* index at or before the anchoring point, and the first serves.
+Repeats do occur, by construction, and are appended: a root chain receives
+equal anchors from equal chains (genesis, one transaction creating several
+accounts); a signature chain records one cause per signer and every signature
+message as it arrived. Every other chain — index chains, the synthetic chain
+and its replicas, the anchor sequence, block ledger and BPT chains, account
+main and scratch chains, anchor root and BPT chains — receives each hash once
+because the writer appends it once, from one place. A duplicate reaching one of
+them is the writer's bug, not the chain's to absorb.
 
 **What the code may assume.**
 
-- A writer that knows a key is new writes it without reading.
-- The conflict check between concurrent children of a batch compares the
-  versions of records **in memory**; the store holds no version, so a first
-  write never reads the store to learn one.
-- The store is asked whether a key exists only where the protocol's answer
-  depends on it: the replay check on a message's status, the proven set's
-  membership test, the anchor-chain lookup that validates a proof. A set is
-  read to be merged into, which is not an existence check.
-- A mutable record is answered by the dynamic layer alone: its history is the
-  dynamic layer's, and it is never in the permanent layer, so a miss there is
-  the answer. A permanent record is answered from the window; the readers that
-  legitimately reach further — a pending transaction's message and payments, a
-  block's synthetics dispatched after its anchor returns, a receipt through the
-  root chain — take a deep reader ("Windowed stores"). Nothing else reaches
+- A writer that knows a key is new writes it without reading. The conflict
+  check between concurrent children of a batch compares versions of records in
+  memory; the store holds no version, so a first write never reads the store
+  to learn one.
+- A mutable record is answered by the dynamic layer alone. It is routed there
+  without exception, so a miss there is the answer, and the permanent history
+  is never searched for it.
+- A permanent record is answered from the window. The readers that
+  legitimately reach further — a pending transaction's message and payments,
+  a block's synthetics dispatched after its anchor returns, a receipt through
+  the root chain — take a deep reader ("Windowed stores"). Nothing else reaches
   into history to prove an absence.
 
-**Proof.** Removing a check is provable only against the check itself. The
-duplicate test the code no longer performs at write time is kept as an
-**assertion in test builds**: the simulator, the e2e suite and consim fail on
-any prohibited duplication, and the permitted ones are counted so a new kind
-shows. Equivalence of the rewritten write path with the old is shown by
-executing the same envelope stream under both and comparing, per block, the
-state root, the block ledger, every touched account's chain heights and
-anchors, and every element-index record. The simulator's cross-node comparison
-cannot do this — all its nodes run the same code — so it is an A/B golden run.
-Then a soak, with shallow misses counted by record shape and at zero for every
-permanent shape.
+**How it is tested.** The chain records every append of a hash it already
+holds, in test builds, and the executor suites assert that the only ones are
+the permitted repeats; a duplicate on any other chain fails the suite. The
+adapter counts every shallow miss by record shape and every history walk it
+made for one; a test proves a mutable miss never walks, and a soak proves the
+permanent shapes' misses are zero once their readers are deep. The replay
+tests prove the entry checks themselves.
 
 ### Caches
 

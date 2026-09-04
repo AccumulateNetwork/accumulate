@@ -17,6 +17,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
+// OnDuplicate, when set, is called for every append of a hash the chain
+// already holds, with the chain's key and whether the append was asked
+// to be unique.  It is nil in production; tests install a recorder and
+// assert that the only duplicates are the permitted repeats (database
+// spec, "Duplicates are caught at entry").
+var OnDuplicate func(chain *record.Key, unique bool)
+
 func NewChain(logger logging.Logger, store record.Store, key *record.Key, markPower int64, typ ChainType, namefmt string) *Chain {
 	c := new(Chain)
 	c.logger.L = logger
@@ -76,8 +83,19 @@ func (m *Chain) AddEntry(hash []byte, unique bool) error {
 		}
 	} else if err != nil {
 		return err
-	} else if unique {
-		return nil // Don't add duplicates
+	} else {
+		// The hash is already in the chain.  A duplicate is caught
+		// where it enters the executor, by recent state (database
+		// spec, "Duplicates are caught at entry"); reaching this
+		// branch is either a permitted repeat (a root or signature
+		// chain) or the writer appending the same hash twice.  Test
+		// builds record every one so the suites can assert which.
+		if OnDuplicate != nil {
+			OnDuplicate(m.key, unique)
+		}
+		if unique {
+			return nil // Don't add duplicates
+		}
 	}
 
 	err = m.Element(uint64(head.Count)).Put(hash)
