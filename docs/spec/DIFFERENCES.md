@@ -204,8 +204,8 @@ was most of each block (H6) — turns into a permanent refusal that reports the
 wrong thing, twenty minutes of submit-to-execute latency, and unbounded
 memory in the commit queue and own store.
 
-**Size**: small — the executor's committed height is already reported to the
-bridge; the header builder skips `ConsumeAvailableBatches` and the worker sets
+**Size**: small — the executor's executed leader round must be reported to the
+node after each commit (no such feedback exists today); the header builder skips `ConsumeAvailableBatches` and the worker sets
 refusing when the lag exceeds the bound. A test: an executor that executes
 one block in three keeps the DAG within the bound and the own store within
 its share.

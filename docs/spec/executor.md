@@ -10,9 +10,10 @@ produces the same block and the same state hash.
 ### The path
 
 ```
-consensus ──▶ sort ──▶ ┌─ anchors:    evaluate ▸ drain ▸ execute ─┐
-              (streams)│  synthetics: evaluate ▸ drain ▸ execute  │─▶ batch ─▶ commit
-                       └─ user:       evaluate ▸ drain ▸ execute ─┘   (one, at close)
+consensus ──▶ sort ──▶ ┌─ bundles:    hold in staging               ─┐
+              (streams)│  anchors:    evaluate ▸ drain ▸ execute    │─▶ batch ─▶ commit
+                       │  synthetics: evaluate ▸ drain ▸ execute    │   (one, at close)
+                       └─ user:       evaluate ▸ drain ▸ execute   ─┘
 ```
 
 A message must satisfy each of the following before it executes. Validity is
@@ -42,7 +43,7 @@ staging*, which is why they are not separate passes:
    once, when the block closes. There is no separate "persist" step and no
    partial commit.
 
-The three groups run in sequence, each finished before the next is evaluated.
+The four groups run in sequence, each finished before the next is evaluated.
 Executing one group changes the state the next is evaluated against — anchors
 extend the chain synthetics are judged by — and that is the sequence doing its
 job, not a feedback loop. Within a group nothing is re-asked.
@@ -77,7 +78,7 @@ The word is used for one other thing in this document, and they are unrelated:
 the **delivery queues** drained at `Begin` hold locally produced messages, not
 staged stream messages. Where the distinction matters the text says which.
 
-### Sort, then three groups in turn
+### Sort, then four groups in turn
 
 Everything consensus delivers is **sorted once**, in a single pass. Each message
 is asked which stream it belongs to; if it belongs to one it is recorded as an
