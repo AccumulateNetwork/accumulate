@@ -52,6 +52,11 @@ type DAG struct {
 	lastCommitRound types.Round
 	// latestRound is the highest round number seen.
 	latestRound types.Round
+	// certifiedBatches maps each batch digest a certified header names to
+	// the highest round that named it. A worker asks it before re-proposing:
+	// a batch in a certified header is never proposed again (consensus spec,
+	// invariant 7). Pruned with the rounds.
+	certifiedBatches map[types.BatchDigest]types.Round
 }
 
 // NewDAG creates a new DAG with the specified garbage collection depth.
@@ -61,7 +66,9 @@ func NewDAG(gcDepth types.Round) *DAG {
 	return &DAG{
 		rounds:      make(map[types.Round]map[authorKey]*types.Certificate),
 		digestIndex: make(map[types.CertificateDigest]*types.Certificate),
-		gcDepth:     gcDepth,
+
+		certifiedBatches: make(map[types.BatchDigest]types.Round),
+		gcDepth:          gcDepth,
 	}
 }
 
@@ -124,6 +131,13 @@ func (d *DAG) Insert(cert *types.Certificate) error {
 
 	// Add to digest index for O(1) lookups
 	d.digestIndex[cert.Digest()] = cert
+	if cert.Header != nil {
+		for _, e := range cert.Header.Payload {
+			if r, ok := d.certifiedBatches[e.Digest]; !ok || round > r {
+				d.certifiedBatches[e.Digest] = round
+			}
+		}
+	}
 
 	// Update latest round
 	if round > d.latestRound {
@@ -131,6 +145,17 @@ func (d *DAG) Insert(cert *types.Certificate) error {
 	}
 
 	return nil
+}
+
+// HasCertifiedBatch reports whether a certified header in the DAG names the
+// batch. Once it does, the batch's author must not propose it again
+// (consensus spec, invariant 7): the executor will need it when that
+// certificate's block is produced, and again is a duplicate.
+func (d *DAG) HasCertifiedBatch(digest types.BatchDigest) bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	_, ok := d.certifiedBatches[digest]
+	return ok
 }
 
 // InsertGenesis inserts a genesis certificate (round 0) without parent validation.
@@ -285,6 +310,11 @@ func (d *DAG) GarbageCollect(commitRound types.Round) {
 				delete(d.digestIndex, cert.Digest())
 			}
 			delete(d.rounds, round)
+		}
+	}
+	for digest, round := range d.certifiedBatches {
+		if round < cutoff {
+			delete(d.certifiedBatches, digest)
 		}
 	}
 

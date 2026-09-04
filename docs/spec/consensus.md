@@ -124,8 +124,9 @@ A worker has two entry points. `Submit` is for the system's own traffic —
 synthetics, anchors, the healer's re-submissions — and never refuses for
 lack of room, because that traffic is what drains the store (#4165).
 `SubmitUser` is for a user's transaction from the API: while own uncommitted
-batches plus pending transactions exceed the worker's share it returns
-`ErrStoreFull`, which `SubmitterService.Submit` returns as `NotReady`
+batches plus pending transactions exceed the worker's own share
+(`maxOwnBytes`, separate from the peer cache's `maxStoredBytes`, invariant 8)
+it returns `ErrStoreFull`, which `SubmitterService.Submit` returns as `NotReady`
 (invariant 4). The API decides which by the envelope: a synthetic, sequenced,
 anchor, network-update or proof message anywhere in it makes it system
 traffic (`isUserEnvelope`). The load generator honours `NotReady` with a
@@ -140,9 +141,11 @@ the newest batch and lets the author re-broadcast); that is the model.
 
 ### Re-proposal
 
-`ReproposeAfter` re-broadcasts an own batch that has not been committed. It
-must ask the DAG, not the executor: a batch in any certified header is not
-re-proposed (invariant 7). The executor's `PruneCommitted` is the wrong signal,
+`ReproposeAfter` re-broadcasts an own batch that has waited without a
+certificate. It asks the DAG, not the executor: `Config.Certified` is wired to
+`DAG.HasCertifiedBatch`, which indexes every batch digest a certified header
+names (pruned with the rounds), and `staleOwnBatches` skips any batch it
+reports (invariant 7). The executor's `PruneCommitted` is the wrong signal,
 because execution can lag certification by minutes when blocks are slow.
 
 ### Retention

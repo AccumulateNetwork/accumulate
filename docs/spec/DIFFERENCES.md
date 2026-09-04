@@ -94,51 +94,6 @@ to the hash. One accidental writer from changing account hashes.
 
 ---
 
-## Consensus
-
-### C4. Own batches share the peer cache's budget, and a full own store empties it
-
-*[#4209](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4209)*
-
-**Spec** ([consensus.md](consensus.md), invariants 3 and 8): what a vote
-needs is never evicted; own batches and the peer cache do not share a budget.
-
-**Code**: one `maxStoredBytes` per worker holds both; eviction can only take
-peers' batches; own bytes are bounded by `SubmitUser` refusing but sealed and
-re-proposed own batches keep growing past the share.
-
-**Evidence**: run `20260903T222843Z`, BVN2: own bytes 11 → 23 → 37 MB against
-a 32 MB share while the peer side went to zero (`absence="evicted-lru (store
-over limit (0 batches / 33554432 bytes))"`); `Missing batch for header —
-deferring vote` 1–3 → 168 a minute at 22:55; blocks 117 → 62 a minute; then
-the stall.
-
-**Size**: small. Two budgets in the worker, `perWorkerBytes` for each.
-
-### C5. A batch is re-proposed while the DAG has already certified it
-
-*[#4210](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4210)*
-
-**Spec** (invariant 7): a batch is proposed once; re-proposal is for a batch
-no header has certified.
-
-**Code**: `ReproposeAfter` (15 s) re-broadcasts any own batch the executor has
-not yet pruned; pruning happens at execution, minutes after certification
-when blocks are slow. The same batch then lands in a second certificate,
-which the executor cannot serve once retention (32 MB, ~30 s of traffic) has
-dropped it.
-
-**Evidence**: run `20260903T222843Z`: `Re-proposed uncommitted batches` from
-22:45; `Waiting for batches of committed certificate absence="retention-
-expired (block 1071 ...) 6m17s ago" attempts=5587` on every BVN2 node from
-23:01; BVN2 stalled at 1238. `TestSameBatchInTwoCertificates_*` document the
-duplicate as something retention papers over; it is the defect.
-
-**Size**: medium. Re-proposal must consult the DAG (certified headers), which
-is consensus, not the worker.
-
----
-
 ## Database abstraction
 
 ### D1. Record placement is a second, hand-maintained model

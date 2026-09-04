@@ -71,9 +71,9 @@ func TestEviction_IsByBytesNotByCount(t *testing.T) {
 	require.Equal(t, 5000, n)
 }
 
-// A full store is a state: it is logged when it changes and counted while it
+// Refusal is a state: it is logged when it changes and counted while it
 // holds (invariant 5), not once per submission.
-func TestOverLimit_IsLoggedOnTransition(t *testing.T) {
+func TestRefusal_IsLoggedOnTransition(t *testing.T) {
 	w := New(Config{ID: 1, Partition: "test", MaxStoredBatchBytes: 8 * 1024}, nil)
 
 	var digests []types.BatchDigest
@@ -81,23 +81,36 @@ func TestOverLimit_IsLoggedOnTransition(t *testing.T) {
 		digests = append(digests, ownBatch(t, w, 4*1024, byte(i)))
 	}
 	for i := 0; i < 5; i++ {
-		w.performEviction() // over limit, un-evictable: one transition, not five
+		require.ErrorIs(t, w.SubmitUser([]byte{1}), ErrStoreFull) // five refusals, one transition
 	}
-	require.Equal(t, uint64(1), w.overLimitChanges.Load())
+	require.Equal(t, uint64(1), w.refusingChanges.Load())
 
 	w.PruneCommitted(digests, CommitInfo{Detail: "test"})
-	w.performEviction()
-	require.Equal(t, uint64(2), w.overLimitChanges.Load(), "leaving the state is the second transition")
+	require.NoError(t, w.SubmitUser([]byte{1}))
+	require.Equal(t, uint64(2), w.refusingChanges.Load(), "accepting again is the second transition")
 }
 
-// Internal traffic -- synthetics, anchors, the healer's re-submissions -- is
-// never refused: it is what drains the store (#4165). Only user submissions
-// from the API are bounded.
-func TestSubmit_InternalTrafficIsNeverRefused(t *testing.T) {
+// Own batches and the peer cache do not share a budget (invariant 8): a
+// worker whose own batches exceed their share must still hold every peer
+// batch, because those are what the next header's vote needs (invariant 3).
+// Run 20260903T222843Z emptied the peer cache this way and stalled BVN2.
+func TestPeerCache_SurvivesOwnOverflow(t *testing.T) {
 	w := New(Config{ID: 1, Partition: "test", MaxStoredBatchBytes: 8 * 1024}, nil)
-	for i := 0; i < 3; i++ {
+
+	for i := 0; i < 4; i++ { // 16 KB of own batches against an 8 KB share
 		ownBatch(t, w, 4*1024, byte(i))
 	}
-	require.ErrorIs(t, w.SubmitUser([]byte{1}), ErrStoreFull)
-	require.NoError(t, w.Submit([]byte{1}), "the internal path accepts while the user path refuses")
+	var peers []types.BatchDigest
+	for i := 0; i < 4; i++ { // 4 KB of peers' batches, within their own 8 KB budget
+		tx := make([]byte, 1024)
+		tx[0], tx[1] = 0xee, byte(i)
+		b := types.NewBatch([][]byte{tx})
+		require.NoError(t, w.StoreBatch(b))
+		peers = append(peers, b.Digest())
+	}
+	w.performEviction()
+	for _, d := range peers {
+		require.True(t, w.HasBatch(d), "a peer batch within the peer budget survives own overflow")
+	}
+	require.ErrorIs(t, w.SubmitUser([]byte{1}), ErrStoreFull, "and the own overflow is what refuses")
 }

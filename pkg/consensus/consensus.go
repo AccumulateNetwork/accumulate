@@ -219,6 +219,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		wcfg.Partition = config.Partition
 		wcfg.MaxStoredBatchBytes = storedPerWorker
 		wcfg.MaxRetainedBatchBytes = retainedPerWorker
+		wcfg.Certified = d.HasCertifiedBatch
 		workers[i] = worker.New(wcfg, g)
 	}
 

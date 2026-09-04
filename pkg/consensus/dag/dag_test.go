@@ -483,3 +483,31 @@ func TestDAG_EquivocationIsASentinel(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, dag.ErrEquivocation)
 }
+
+// The DAG answers "has a certified header named this batch?" so an author
+// never proposes a batch twice (consensus spec, invariant 7), and forgets the
+// answer with the rounds it garbage-collects.
+func TestDAG_HasCertifiedBatch(t *testing.T) {
+	committee, privKeys := makeTestCommittee(t, 4)
+	d := dag.NewDAG(2)
+
+	genesis := createTestCert(t, committee, privKeys, 0, 0, nil)
+	require.NoError(t, d.InsertGenesis(genesis))
+
+	batch := types.BatchDigest{1, 2, 3}
+	header := types.NewHeader(committee.Validators[1].PublicKey, 1, 0,
+		[]types.PayloadEntry{{Digest: batch, Worker: 0}}, []types.CertificateDigest{genesis.Digest()})
+	require.NoError(t, header.Sign(privKeys[1]))
+	cert := types.NewCertificate(header, nil, nil)
+	hd := header.Digest()
+	for i := 0; i < 3; i++ {
+		cert.AddSignature(uint16(i), ed25519.Sign(privKeys[i], hd[:]))
+	}
+
+	require.False(t, d.HasCertifiedBatch(batch), "nothing certified yet")
+	require.NoError(t, d.Insert(cert))
+	require.True(t, d.HasCertifiedBatch(batch), "a certified header names it")
+
+	d.GarbageCollect(10) // cutoff 8: round 1 is gone, and so is the answer
+	require.False(t, d.HasCertifiedBatch(batch))
+}

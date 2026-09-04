@@ -36,7 +36,7 @@ can be claimed until E7 is closed.
 | **D3** | **Implemented, not merged.** `TestDeep` on branch `issue-4196-kvtest-deep` (`f3339116e`). |
 | **E7** | **Done**, on `issue-4202-block-ledger-chain`: a `block-ledger` chain and one keyed record per block; `indexing.Log` and the #4147 walk deleted; the invariant-9 cost test is green. Removed from the differences. Not yet soaked. |
 | **D5** | **Done**, on `issue-4203-bcdb-durable-commit` (#4203): every commit is written through and sealed at commit; readers are isolated by per-version pre-image overlays that are dropped as they close; the oldest view's opener is named in a warning; the event service loads one block at a time with a bounded queue and opens its view only while loading. Removed from the differences. Not yet soaked. |
-| **Steady state** | S0–S3 done; S8a delivered. **Run #4 (`20260903T222843Z`, no chaos, S3): 35 minutes** — batches of 40, stores in budget, refusal engaged and logged once — then BVN2 stalled on two defects S3 exposed: own batches emptied the shared peer cache (C4) and a 15 s re-proposal duplicated batches into second certificates that retention could not serve (C5). Reviews in the run directories. **C4 and C5 before run #5.** |
+| **Steady state** | S0–S3 done; S8a delivered; run #4 exposed C4 and C5, **both done on `issue-4210-batch-plane-c4-c5`**: own batches and the peer cache have separate budgets, and re-proposal asks the DAG (`HasCertifiedBatch`) so a certified batch is never proposed twice. Removed from the differences; not yet soaked. **Run #5 is next, chaos off.** |
 | **Everything else** | Not started. |
 
 **What E3's answer turned out to be, because it changed the shape of E1.** The
@@ -292,7 +292,7 @@ S3  (consensus memory spec + back-pressure) ─┴─▶ acceptance run #2
 S7  (logging) alongside; S2 follow-up: captureProvableView holds a view for
     minutes by design — capture it only when a snapshot is about to be pinned
 #4205 (restart recovery) before chaos returns to an acceptance run
-C4 #4209 (own/peer budgets) + C5 #4210 (re-propose asks the DAG) ─▶ acceptance run #5, chaos off
+C4 #4209 + C5 #4210 DONE ─▶ acceptance run #5, chaos off
 ```
 
 Acceptance run #1 answers whether memory is flat with E7 and D5 closed. It will
