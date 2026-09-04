@@ -403,7 +403,11 @@ func (x SyntheticMessage) collect(batch *database.Batch, ctx *MessageContext, se
 		return errors.BadRequest.WithFormat("sequence %d is beyond the horizon (delivered %d)", seq.Number, delivered)
 	}
 	if seq.Number <= delivered {
-		return errors.Delivered.WithFormat("sequence %d already delivered", seq.Number)
+		// Already processed: tossed. Not an error — a copy of a delivered
+		// entry arrives beside entries that are new, and an error here would
+		// fail the whole envelope with them (executor spec, "Readiness").
+		mExecSyntheticAnchor.WithLabelValues("tossed").Inc()
+		return nil
 	}
 
 	h := ctx.message.Hash()

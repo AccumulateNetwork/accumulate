@@ -46,6 +46,7 @@ type stagingSim struct {
 	chain  *database.Chain
 	chain2 *database.Chain2
 	root   *database.Chain
+	roots  [][]byte // roots[k] is the root chain's anchor at height k
 	str    stream
 }
 
@@ -102,6 +103,7 @@ func newStagingSim(t *testing.T, entries int) *stagingSim {
 		h := seq.Hash()
 		require.NoError(t, c.AddEntry(h[:], false))
 		require.NoError(t, root.AddEntry(c.Anchor(), false))
+		s.roots = append(s.roots, append([]byte(nil), root.Anchor()...))
 		s.seqs = append(s.seqs, seq)
 	}
 	s.root = root
@@ -122,17 +124,25 @@ func (s *stagingSim) newBlock() {
 	s.c.addStream(s.str)
 }
 
-func (s *stagingSim) directoryRoot() []byte { return s.root.Anchor() }
+// rootAt is the Directory root that anchor block k carries in this
+// simulation: the source's root chain anchored at height k. Distinct per k,
+// so a proof under block k is admissible only once anchor k has executed.
+func (s *stagingSim) rootAt(k uint64) []byte {
+	s.t.Helper()
+	require.LessOrEqual(s.t, k, uint64(len(s.roots)))
+	return s.roots[k-1]
+}
 
 // proof builds the package proof a source would send for entries [first,
-// last] under Directory anchor block anchorBlock.
+// last] under Directory anchor block anchorBlock (which must cover last).
 func (s *stagingSim) proof(first, last int, anchorBlock uint64) *protocol.AnnotatedReceipt {
 	s.t.Helper()
+	require.Greater(s.t, anchorBlock, uint64(last), "an anchor covers the entries before it")
 	list, err := merkle.GetReceiptList(s.chain2.Inner(), int64(first), int64(last))
 	require.NoError(s.t, err)
 	// Continue from the root chain entry that anchors the chain as of `last`
-	// to the root chain's final anchor, the Directory root.
-	cont, err := s.root.Receipt(int64(last), s.root.Height()-1)
+	// to the root chain as anchor block anchorBlock saw it.
+	cont, err := s.root.Receipt(int64(last), int64(anchorBlock)-1)
 	require.NoError(s.t, err)
 	list.ContinuedReceipt = cont
 	require.True(s.t, list.Validate(nil), "the simulation's proof must be valid")
@@ -287,7 +297,7 @@ func (e simSequencedExecutor) Process(batch *database.Batch, ctx *MessageContext
 func TestStaging_PackageAheadOfItsAnchor_IsCollectedThenRuns(t *testing.T) {
 	s := newStagingSim(t, 6)
 
-	codes := s.packageArrives(0, 2, 7)
+	codes := s.packageArrives(0, 2, 3)
 	for _, c := range codes {
 		require.Equal(t, errors.Pending, c, "collected, not executed")
 	}
@@ -301,7 +311,7 @@ func TestStaging_PackageAheadOfItsAnchor_IsCollectedThenRuns(t *testing.T) {
 
 	// The anchor lands: the proof validates, the entries are proven and run.
 	s.newBlock()
-	s.anchorExecutes(7, s.directoryRoot())
+	s.anchorExecutes(3, s.rootAt(3))
 	for n := 0; n < 3; n++ {
 		require.True(t, s.proven(n))
 	}
@@ -311,8 +321,8 @@ func TestStaging_PackageAheadOfItsAnchor_IsCollectedThenRuns(t *testing.T) {
 
 func TestStaging_PackageAfterItsAnchor_ExecutesAtOnce(t *testing.T) {
 	s := newStagingSim(t, 6)
-	s.anchorExecutes(7, s.directoryRoot())
-	codes := s.packageArrives(0, 2, 7)
+	s.anchorExecutes(3, s.rootAt(3))
+	codes := s.packageArrives(0, 2, 3)
 	for _, c := range codes {
 		require.Equal(t, errors.Delivered, c)
 	}
@@ -324,13 +334,13 @@ func TestStaging_PackageAfterItsAnchor_ExecutesAtOnce(t *testing.T) {
 
 func TestStaging_EntriesAtOrBelowDeliveredAreTossed(t *testing.T) {
 	s := newStagingSim(t, 6)
-	s.anchorExecutes(7, s.directoryRoot())
-	s.packageArrives(0, 2, 7)
+	s.anchorExecutes(3, s.rootAt(3))
+	s.packageArrives(0, 2, 3)
 	require.Equal(t, uint64(3), s.delivered())
 
 	// A copy of 1..3 arrives again, and 2 arrives alone without a proof.
 	s.newBlock()
-	s.packageArrives(0, 2, 7)
+	s.packageArrives(0, 2, 3)
 	code := s.process([]messaging.Message{s.member(1)}, s.member(1))
 	require.NotEqual(t, errors.Pending, code)
 	require.Equal(t, uint64(3), s.delivered(), "nothing moved")
@@ -339,12 +349,37 @@ func TestStaging_EntriesAtOrBelowDeliveredAreTossed(t *testing.T) {
 	}
 }
 
+// A copy of an already-delivered entry arriving BEFORE the anchor it names is
+// tossed silently: it must not fail its envelope, whose other members may be
+// new. This was the leg that reopened holes in run 20260904T163... — the
+// healer's copies and re-dispatched packages all took it.
+func TestStaging_DeliveredEntryAheadOfItsAnchorIsTossedSilently(t *testing.T) {
+	s := newStagingSim(t, 6)
+	s.anchorExecutes(3, s.rootAt(3))
+	s.packageArrives(0, 2, 3)
+	require.Equal(t, uint64(3), s.delivered())
+
+	// A package for 1..4 under anchor 4, which has not executed: 1..3 are
+	// delivered already, 4 is new. Nothing may fail; 4 is collected.
+	s.newBlock()
+	codes := s.packageArrives(0, 3, 4)
+	require.Len(t, codes, 4)
+	require.Equal(t, errors.Pending, codes[3], "the new entry is collected")
+	require.True(t, s.held(4))
+	require.True(t, s.collected(4))
+	for n := uint64(1); n <= 3; n++ {
+		require.False(t, s.collected(n), "delivered entries are tossed, not collected")
+	}
+	s.anchorExecutes(4, s.rootAt(4))
+	require.Equal(t, []uint64{4}, s.run())
+}
+
 func TestStaging_EntriesAboveTheLastValidatedAreHeld_WithinTheHorizon(t *testing.T) {
 	s := newStagingSim(t, 6)
 	// Entries 4..6 arrive proven, out of order, before 1..3 exist here: held
 	// by the sequenced layer, not run.
-	s.anchorExecutes(7, s.directoryRoot())
-	s.packageArrives(3, 5, 7)
+	s.anchorExecutes(6, s.rootAt(6))
+	s.packageArrives(3, 5, 6)
 	for n := uint64(4); n <= 6; n++ {
 		require.True(t, s.held(n))
 		require.False(t, s.collected(n), "proven when held: no collected mark")
@@ -353,7 +388,7 @@ func TestStaging_EntriesAboveTheLastValidatedAreHeld_WithinTheHorizon(t *testing
 
 	// 1..3 arrive; everything drains in order.
 	s.newBlock()
-	s.packageArrives(0, 2, 7)
+	s.packageArrives(0, 2, 6)
 	require.Equal(t, uint64(3), s.delivered())
 	require.Equal(t, []uint64{4, 5, 6}, s.run())
 	require.Equal(t, uint64(6), s.delivered())
@@ -376,12 +411,12 @@ func TestStaging_EntriesAboveTheLastValidatedAreHeld_WithinTheHorizon(t *testing
 }
 
 func TestStaging_DisprovedProofLeavesEntriesWaitingForARealOne(t *testing.T) {
-	s := newStagingSim(t, 6)
-	s.packageArrives(0, 2, 8)
+	s := newStagingSim(t, 8)
+	s.packageArrives(0, 2, 6)
 	other := make([]byte, 32)
 	other[0] = 0xEE
 	disproved0 := count("disproved")
-	s.anchorExecutes(8, other) // anchor 8 does not carry the claimed root
+	s.anchorExecutes(6, other) // anchor 6 does not carry the claimed root
 	require.Equal(t, disproved0+1, count("disproved"))
 	for n := uint64(1); n <= 3; n++ {
 		require.True(t, s.held(n), "the entries stay, waiting")
@@ -389,17 +424,17 @@ func TestStaging_DisprovedProofLeavesEntriesWaitingForARealOne(t *testing.T) {
 	}
 	require.Empty(t, s.run())
 
-	// The source re-dispatches under the next anchor, which does carry it.
+	// The source re-dispatches under a later anchor, which does carry it.
 	s.newBlock()
-	s.packageArrives(0, 2, 9)
-	s.anchorExecutes(9, s.directoryRoot())
+	s.packageArrives(0, 2, 8)
+	s.anchorExecutes(8, s.rootAt(8))
 	require.Equal(t, []uint64{1, 2, 3}, s.run())
 }
 
 func TestStaging_ConflictingProofIsTossed_TheFirstStands(t *testing.T) {
 	s := newStagingSim(t, 3)
-	s.anchorExecutes(7, s.directoryRoot())
-	s.packageArrives(0, 2, 7)
+	s.anchorExecutes(3, s.rootAt(3))
+	s.packageArrives(0, 2, 3)
 	require.Equal(t, uint64(3), s.delivered())
 
 	// A well-formed proof from another chain claiming the same indexes.
@@ -415,7 +450,7 @@ func TestStaging_ConflictingProofIsTossed_TheFirstStands(t *testing.T) {
 	require.NoError(t, err)
 	conflict0 := count("conflict")
 	b := &Block{positions: new(positionCache), Executor: s.x, Batch: s.batch}
-	require.NoError(t, b.proofValidated(s.str.source, &protocol.AnnotatedReceipt{ReceiptList: forged, Anchor: directoryAnchorMetadata(7)}))
+	require.NoError(t, b.proofValidated(s.str.source, &protocol.AnnotatedReceipt{ReceiptList: forged, Anchor: directoryAnchorMetadata(3)}))
 	require.Equal(t, conflict0+1, count("conflict"))
 	for i := 0; i < 3; i++ {
 		require.True(t, s.proven(i), "the first proof stands")
