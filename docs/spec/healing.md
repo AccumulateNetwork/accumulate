@@ -258,9 +258,12 @@ covers, and knows exactly which of those entries it does not have. That set of
 hashes is the request. It says nothing about sequence numbers, sources' index
 chains, or how the entries should be proven — the proof is already in hand.
 
-The answer is the entries whose hashes were asked for, **bundled**: one message
-carries as many anchors and synthetic transactions as fit the envelope budget,
-whatever their stream. An entry answering a request carries no proof of its own
+The answer is the entries whose hashes were asked for, **bundled**: one
+envelope carries as many anchors and synthetic transactions as fit the envelope
+budget, whatever their stream. The bundle is not a transaction and is never
+executed as one: it is the envelope that provides the missing synthetic and
+anchor messages, and those messages execute as what they are, in their
+streams. Nothing is recorded for the bundle itself. An entry answering a request carries no proof of its own
 (the destination's replica already contains its hash, [#4140]), so a bundle is
 entries and nothing else. Bundles are subject to a minimum size: a source does
 not answer a request one entry at a time, and a destination does not issue a
@@ -471,9 +474,11 @@ same submit path a dispatch uses. A bundle below the minimum size waits for
 the next request to the same destination unless nothing else is pending.
 
 At the destination a bundle arrives through consensus and is the block's
-first group: its entries are written **to staging** as held before the anchor
+first group. It is never handed to the executor as a message: the block opens
+the envelope and writes its entries **to staging** as held before the anchor
 and synthetic groups are evaluated, so the runs they complete drain in the same
-block. Every entry is proven by a receipt this partition already accepted, so
+block, and the entries execute there as the synthetic and anchor messages they
+are. Every entry is proven by a receipt this partition already accepted, so
 no admissibility question is asked of it. Once a run executes, the executed
 entries are truncated from staging; staging holds only what is above
 `Delivered`.

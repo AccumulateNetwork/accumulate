@@ -91,11 +91,15 @@ discovers more of them.
 Then **four groups, each finished before the next begins**. A group is
 evaluated, drained and executed; only then is the next group evaluated.
 
-0. **Healing bundles.** A bundle is entries the destination already proved —
-   the source answered a request for hashes the destination's accepted
-   receipts cover ([healing.md](healing.md), "A request names hashes") — so
-   there is nothing to evaluate: every entry is **applied to staging first**,
-   as held, before any anchor or synthetic is judged. A bundle arrives through
+0. **Healing bundles.** A bundle is not a transaction and is never sent to
+   the executor: it is an **envelope** carrying the missing synthetic and
+   anchor messages themselves — entries the destination already proved, the
+   source having answered a request for hashes the destination's accepted
+   receipts cover ([healing.md](healing.md), "A request names hashes"). There
+   is no healing message type, no executor for one, and no status or chain
+   entry recorded for the bundle. Its entries are ordinary sequenced messages
+   and are **applied to staging first**, as held, before any anchor or
+   synthetic is judged; they then execute as what they are, in their streams. A bundle arrives through
    consensus like every other message, never by a side door, because staging
    decides what a block executes and every validator must hold the same
    staging at the same block (see Restart). Healing is first because its
