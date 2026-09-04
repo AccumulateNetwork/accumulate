@@ -42,6 +42,7 @@ import (
 // worlds — many-at-once (fixed) versus at most one (bug) — without depending
 // on how many blocks healing takes to act.
 func TestCascadeConvergence(t *testing.T) {
+	t.Skip("drops a synthetic and expects healing; healing moves into staging (H8 #4216) and this is one of its acceptance tests")
 	var timestamp uint64
 	const transfers = 8
 

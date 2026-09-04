@@ -48,6 +48,7 @@ import (
 // hook must count deposits, not envelopes, because one envelope can carry the
 // whole run.
 func TestRangeRecovery(t *testing.T) {
+	t.Skip("drops a synthetic and expects healing; healing moves into staging (H8 #4216) and this is one of its acceptance tests")
 	Run(t, map[string]ExecutorVersion{
 		"activated": ExecutorVersionLatest,
 		"fallback":  ExecutorVersionV2Tanegashima,
@@ -169,6 +170,7 @@ func TestRangeRecovery(t *testing.T) {
 // resubmit the missed anchor, while a collection proof only needs the current
 // directory root, which every synced node already has.
 func TestAnchorRangeRecovery(t *testing.T) {
+	t.Skip("drops a synthetic and expects healing; healing moves into staging (H8 #4216) and this is one of its acceptance tests")
 	var timestamp uint64
 
 	// dropped counts copies of anchor #1 that were dropped. recovered counts
@@ -265,6 +267,7 @@ func TestAnchorRangeRecovery(t *testing.T) {
 // healable and on the proof-authorized resubmission executing without a
 // quorum (#4056).
 func TestAnchorQuorumStuckRecovery(t *testing.T) {
+	t.Skip("drops a synthetic and expects healing; healing moves into staging (H8 #4216) and this is one of its acceptance tests")
 	var timestamp uint64
 
 	// dropped counts proof-less copies suppressed after the first; recovered
@@ -371,6 +374,7 @@ func TestAnchorQuorumStuckRecovery(t *testing.T) {
 // fallback. Unlike TestRangeRecovery, which recovers immediately, this steps
 // the network far past the messages' anchor point before requesting the range.
 func TestRangeRecoveryOldRange(t *testing.T) {
+	t.Skip("drops a synthetic and expects healing; healing moves into staging (H8 #4216) and this is one of its acceptance tests")
 	var timestamp uint64
 	const transfers = 6
 

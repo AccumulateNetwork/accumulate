@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -33,15 +32,6 @@ import (
 type interceptor = func(ctx context.Context, env *messaging.Envelope) (send bool, err error)
 
 type Conductor struct {
-	// reconcileRunning makes the reconcile single-flight: a run can last up
-	// to HealTimeout per partition, blocks arrive every second, and one run
-	// per block overlapped into dozens of concurrent pulls per node (run
-	// 20260904T012004Z). reconcileBackoff is the block before which a source
-	// is not asked again after its requests failed (healing spec, "Sending").
-	reconcileRunning atomic.Bool
-	reconcileMu      sync.Mutex
-	reconcileBackoff map[string]*sourceBackoff
-
 	Partition    *protocol.PartitionInfo
 	Globals      atomic.Pointer[network.GlobalValues]
 	ValidatorKey ed25519.PrivateKey
@@ -124,21 +114,6 @@ const (
 	breakerBase      = 15 * time.Second
 	breakerMax       = 5 * time.Minute
 )
-
-// anchorRecoverySourceAllowed reports whether this conductor may recover
-// anchors from the given source partition. Anchors flow BVN<->DN only: a BVN
-// conductor "recovering" from another BVN pulls that BVN's ->dn anchors and
-// submits them into its OWN partition, where they execute as wrong-partition
-// noise (#4111 diagnostics, run 20260820T100912Z).
-func (c *Conductor) anchorRecoverySourceAllowed(srcID string) bool {
-	if strings.EqualFold(srcID, c.Partition.ID) {
-		return false
-	}
-	if c.Partition.Type == protocol.PartitionTypeDirectory {
-		return true
-	}
-	return strings.EqualFold(srcID, protocol.Directory)
-}
 
 // runExclusive runs the task like runTask, unless a task with the same key is
 // still running — then it does nothing. Healing scans are scheduled from every
@@ -255,35 +230,12 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 		})
 	}()
 
-	// Does healing act at all this block, and if so does this node PULL (#4201)?
-	//
-	// Both answers come from state every node agrees on — the block index and
-	// the previous block's hash — so every validator reaches the same
-	// conclusion about the same blocks without coordinating. Together they
-	// replace the per-node jitter, the back-off windows and the circuit
-	// breakers: with an activation every few blocks there is no rate to manage,
-	// and a request that fails or is never answered costs nothing, because the
-	// gap is still a gap at the next activation. Healing does not need delivery
-	// guarantees because it IS the retry mechanism.
-	//
-	// The pair applies to PULLS ONLY. A request is fungible — whoever asks, the
-	// answer returns through consensus and heals every validator at once, so
-	// the other N-2 askers are pure load. A SIGNATURE is not: only this node
-	// can produce this node's anchor signature, so selecting a pair there does
-	// not save duplicate work, it withholds the rest of the quorum and the
-	// destination waits for signatures that are never coming.
-	// TestDropInitialAnchor is what says so.
+	// Every validator re-sends its own anchor signatures on the cadence. That
+	// is a contribution only this node can make, not healing: an anchor is
+	// admitted by quorum, and a signature withheld is a quorum withheld.
+	// Healing of synthetics — asking a source for entries a destination lacks
+	// — is staging's (healing.md); the conductor does none.
 	activate := healActivates(e.Index)
-	pull := false
-	if activate {
-		batch := c.Database.Begin(false)
-		selected, err := c.selectedToSend(batch)
-		batch.Discard()
-		if err != nil {
-			slog.Debug("Cannot decide whether to send heal requests", "block", e.Index, "error", err)
-		}
-		pull = selected
-	}
 
 	// Check old anchors. Healing queries the DESTINATION, so every scan gets
 	// a deadline: an unreachable or restarted destination (stale peer IDs)
@@ -302,95 +254,6 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 				slog.Error("Error while healing anchors", "destination", destination, "error", err)
 			}
 		})
-	}
-	// Destination-side recovery. This is the half healAnchors defers to when
-	// collection proofs are active: it retires the source-side push on the
-	// grounds that "the DESTINATION owns anchor recovery", and until now that
-	// owner did not exist on this branch — so under Kourou nothing retried at
-	// all and a single lost message wedged a stream permanently (#4103, #4105).
-	//
-	// Paced by the same shouldHeal window as the push it replaces, so the
-	// StallScans reasoning about DAG-BFT block rates still governs how often a
-	// destination asks.
-	// Request any missing inbound synthetic messages (receiver-pull on gap).
-	// Unconditional: a lost synthetic wedges the stream permanently, so recovery
-	// is not something an operator should be able to switch off.
-	if c.Sequencer != nil && pull {
-		// Exclusive: a scan over many gapped streams can outlive the block it
-		// started in, and copies used to stack without bound (#4115).
-		c.runExclusive("requestMissingSynthetics", func() {
-			// Bounded, like every other network call in this loop. The p2p
-			// transport closes the stream when the context is canceled
-			// (p2p.go: "Close the stream when the context is canceled") — but
-			// only if the context CAN be canceled. With context.Background()
-			// a peer that dies mid-request (a chaos restart) leaves the read
-			// blocked forever, this exclusive slot held forever, and the one
-			// healer that can see interior sequence holes dead on this
-			// validator from that moment on. Observed live in run
-			// 20260824T024122Z: recoverSyntheticsViaRange(498, 506) parked in
-			// ReadUvarint while BVN2→DN delivery sat wedged at 497.
-			ctx, cancel := context.WithTimeout(context.Background(), def(c.HealTimeout, DefaultHealTimeout))
-			defer cancel()
-
-			batch := c.Database.Begin(false)
-			defer batch.Discard()
-
-			err := c.requestMissingSynthetics(ctx, batch)
-			if err != nil {
-				slog.Error("Error while requesting missing synthetics", "error", err)
-			}
-		})
-	}
-
-	if c.Sequencer != nil && pull {
-		for _, src := range c.Globals.Load().Network.Partitions {
-			if strings.EqualFold(src.ID, c.Partition.ID) {
-				continue
-			}
-			if !c.anchorRecoverySourceAllowed(src.ID) {
-				continue
-			}
-			source := protocol.PartitionUrl(src.ID)
-			c.runExclusive("recoverAnchors:"+source.String(), func() {
-				ctx, cancel := context.WithTimeout(context.Background(), def(c.HealTimeout, DefaultHealTimeout))
-				defer cancel()
-
-				batch := c.Database.Begin(false)
-				defer batch.Discard()
-
-				err := c.recoverAnchorsViaRange(ctx, batch, source)
-				if err != nil {
-					slog.Error("Error while recovering anchors by range", "source", src.ID, "error", err)
-				}
-			})
-		}
-
-		// The "anything new?" pull. A gap the destination can SEE is bounded by
-		// the entry that exposed it; a stream whose tail was lost shows no gap
-		// at all, and only asking the source what it has produced finds it.
-		if e.Index%reconcileInterval == 0 && pull && c.reconcileRunning.CompareAndSwap(false, true) {
-			c.runTask(func() {
-				defer c.reconcileRunning.Store(false)
-				// Bounded for the same reason as requestMissingSynthetics
-				// above: an unanswerable read must time out, not park the
-				// task forever. Reconcile queries every peer partition, so it
-				// gets one heal-timeout per partition rather than one total.
-				n := len(c.Globals.Load().Network.Partitions)
-				if n < 1 {
-					n = 1
-				}
-				ctx, cancel := context.WithTimeout(context.Background(), time.Duration(n)*def(c.HealTimeout, DefaultHealTimeout))
-				defer cancel()
-
-				batch := c.Database.Begin(false)
-				defer batch.Discard()
-
-				err := c.reconcileInboundStreams(ctx, batch, e.Index)
-				if err != nil {
-					slog.Error("Error while reconciling inbound streams", "error", err)
-				}
-			})
-		}
 	}
 
 	// The anchor PUSH: every validator, on the cadence. healAnchors re-signs

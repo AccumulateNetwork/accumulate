@@ -244,7 +244,7 @@ throughput 7 tps. Transactions executing at 04:45 had been submitted before
 04:25.
 
 **Consequence**: an executor slower than consensus — here because the healer
-was most of each block (H6) — turns into a permanent refusal that reports the
+was most of each block (the old healer, since deleted) — turns into a permanent refusal that reports the
 wrong thing, twenty minutes of submit-to-execute latency, and unbounded
 memory in the commit queue and own store.
 
@@ -274,107 +274,32 @@ cached the executor's reads rather than what healing asks for.
 
 **Size**: small for the cache itself; it is the foundation of H8.
 
-### H6. Healing asks for the same number again, and the source rebuilds every answer
-
-*[#4212](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4212)*
-
-**Spec** ([healing.md](healing.md), "Invariants" 1 and 2): a number is requested at most until it lands, never
-after; the source holds its recent synthetics and anchors ready to serve.
-
-**Code**: the healer's gap scan re-requests a number every cadence until the
-message is staged, with no record of a request in flight, and re-requests
-numbers it already holds ("Reconcile: pulled messages a gap scan cannot see",
-905 in 30 minutes); the source (`Sequencer.getSynth`, `Sequence`) rebuilds
-each response — message, receipt, marshaling — from the database on every
-request. There is no cache on either side (H1).
-
-**Evidence**: run `20260904T012004Z`, no faults injected, 30 minutes, receiver
-`acc-bvn1-val1`: 22,166 synthetic pulls for 9,846 distinct numbers, 3,588
-numbers requested more than once, up to nine times; 48 anchor heals for 40
-sequences. Network-wide 139,852 heals against zero drops. The marshaling those
-pulls drive is 35% of all allocation (#4211) and the largest part of the CPU
-rise from minute 5 to 15. Run `20260904T035906Z`, 55 minutes: the suppression
-the code's comments still describe (`claimSyntheticRequest`) no longer exists
-(`632c1d2a8`); every one of a partition's four validators scans every block and
-re-pulls every missing number — `bvn1-val1` 1,417 pulls for 330 distinct
-numbers in one minute, `bvn1-val2`'s 264 numbers all also pulled by val1, four
-validators 5,631 pulls a minute for a gap of ~170 missing numbers; 230 heals a
-second network-wide against 7 user transactions a second, each re-submitted
-through `Submit` and executed, so the healer was most of every block (see C6).
-
-**Consequence**: at 500 tps the healer carries a fifth of all synthetics and
-the source pays for every repeat; the "GC is not the workload" criterion fails
-on traffic the streams do not require.
-
-**Size**: small for the request bookkeeping (a per-stream in-flight set with an
-expiry); small for the source cache (H1's design, on the producer: keyed by
-stream and number, two generations, never invalidated).
-
-### H8. Healing pulls one message per request and re-submits it as a transaction
+### H8. The node has no synthetic healing; the spec's lives in staging and is unbuilt
 
 *[#4216](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4216)*
 
-**Spec** ([healing.md](healing.md), "The request", "The answer", "Where it lands"): a request is the set of hashes the destination's receipts prove but
-it does not hold; the answer is a bundle of entries served from the producer's
-cache, submitted by the source into the requesting network, applied to staging
-before execution, and truncated from staging once executed.
+**Spec** ([healing.md](healing.md)): staging computes the gaps by index; a
+selected validator sends one request naming hashes and index spans; the
+source answers from its producer cache with a bundle; intake takes it. It is
+the recovery for **dropped** entries; with nothing dropped it does nothing.
 
-**Code**: `requestSyntheticFrom` asks the source's `Sequencer.Sequence` for
-ONE sequence number, the source rebuilds message, receipt and signature from
-the database (`getSynth`), and the requester re-submits the result into its
-own mempool through `Submit`, where it is sealed, certified and executed like
-any transaction. Up to 200 such round trips per stream per activation
-(`syntheticHealBatch`). Nothing reaches staging except through a block. The
-decision itself — which numbers are gaps, what to ask for — is computed in the
-conductor (`requestMissingSynthetics`, `missingRuns`, `reconcileInboundStreams`
-in `internal/core/crosschain`) by reading staging from outside the block, not
-in staging as part of the block as the spec places it; the transport (the
-sequencer API call and the dispatcher) is where the spec puts it.
+**Code**: none. The conductor's synthetic healer — per-number pulls through the
+source's sequencer, a reconcile by the source's `Produced`, range recovery
+under source roots that no destination could accept — was deleted on
+2026-09-04 (`issue-4217-two-store-staging`): it was not the spec's mechanism,
+it was most of every block under load, and it hid staging's own defects by
+re-delivering what dispatch had lost. What remains in the conductor is the
+anchor signature re-send on the cadence, which is a validator's own
+contribution and not healing. The end-to-end tests that drop an entry and
+expect recovery are skipped, named, and are H8's acceptance tests.
 
-**Evidence**: run `20260904T035906Z`: 230 heals a second network-wide, each a
-separate request and a separate re-submission, executed in blocks of 200–400
-messages that were mostly heals; `bvn1-val1` 1,417 requests for 330 distinct
-numbers in one minute; the executors fell to a third of consensus on that
-load (C6).
+**Consequence**: until H8 is built, a lost synthetic is a stalled stream with a
+visible gap between received and delivered — which, with no drops, is the
+measurement of dispatch and staging that the old healer prevented.
 
-**Consequence**: the healer's cost scales with messages, not with gaps, and it
-runs through the executor, so under loss it becomes the load that slows the
-executor that creates the loss.
-
-**Size**: medium. A hash-set request and a bundle answer on the sequencer API;
-the producer cache (H1) as its only source; a staging write path for proven
-entries; truncation on execution; the counters in the spec table.
-
-### H9. Range recovery proves under a source root, which no destination accepts
-
-*[#4216](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4216)*
-
-**Spec** ([executor.md](executor.md), "Anchor staging", "Proof"): a proof
-terminates at a Directory anchor; the destination checks its terminal root
-against the Directory anchor chain and nothing else.
-
-**Code**: the reconcile path's range recovery (`recoverSyntheticsViaRange`,
-`recoverAnchorsViaRange`, `internal/core/crosschain`) asks the source to
-continue the collection proof to a root of the **source** the destination
-holds (`rangeProofAnchor`, `getHeldAnchorContinuation`; the proof's
-`Anchor.Account` is the source). `provingAnchorIndex` looks only in the
-Directory anchor chain, so every message a range recovers arrives with an
-inadmissible proof: recorded pending outside staging before E8, collected and
-never proven after it, and pulled again by the next reconcile.
-
-**Evidence**: run `20260904T140000Z` (E8 check): on the Directory,
-`synthetic_anchor_total{applied="missing"}` 13,000–33,000 per node against
-1,000–5,000 `heals_total{type="synthetic-range"}` of 200 entries each; the
-Directory's own batch store reached 235 MB of range answers re-submitted into
-its own mempool, its executor fell 75 blocks behind consensus, and the run
-stalled at 17 minutes. Run `20260904T035906Z` showed the same streams
-(BVN→Directory) delivering less than half of what was produced.
-
-**Consequence**: the Directory's inbound streams heal by a path that cannot
-deliver, and the attempts are the heaviest traffic on the network.
-
-**Size**: none of its own — the path is retired with H8 (proof requests by
-index span, continued to a Directory root the destination holds).
+**Size**: medium. The producer cache (H1), a hash-set and span request on the
+sequencer service, bundles through the dispatcher, the decision in staging with
+two cycles of patience, the counting table.
 
 ### H3. Proof extension does not exist
 

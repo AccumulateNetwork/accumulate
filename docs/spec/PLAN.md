@@ -17,8 +17,12 @@ throughput near zero. The chain of work below follows that chain of causes.
 
 ## Order
 
+The first criterion of every no-drop run is **heals == 0**. The old conductor
+healer is gone; a lost entry now shows as a stalled stream, and that gap is
+what the next item hunts.
+
 ```
-E8 #4217 ─▶ H8 #4216 (with H1 #4193, H6 #4212) ─▶ C6 #4215 ─▶ #4214 check ─▶ acceptance run #7
+E8 #4217 (done) ─▶ #4214: find the loss with the real staging code in a disorder simulator ─▶ C6 #4215 ─▶ H8 #4216 (healing in staging, for dropped entries; with H1 #4193) ─▶ acceptance run #7
 S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86      cost, after run #7 shows the healer gone
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3 ─▶ D4       correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back
@@ -99,7 +103,7 @@ for injected drops. **Check run `20260904T140000Z`**: the BVN↔BVN leg is
 closed (87,908 proven, 20,074 collected, streams with no backlog), but heals
 did not fall — the healer pulls every one-block-late hole immediately (H8),
 and the Directory's range recovery proves under source roots that no
-destination accepts (H9), so the Directory spiralled and the run stalled at
+destination accepts (a range path since deleted), so the Directory spiralled and the run stalled at
 17 minutes. **Check #2 (`20260904T163512Z`, with the review fixes)** ran to its
 30-minute deadline: 1.0 s blocks on every partition, heap flat at ~500 MiB,
 no refusal, no Directory spiral, streams with no backlog — and found one more
@@ -107,7 +111,7 @@ defect (a delivered copy ahead of its anchor failed its envelope; 11,248
 envelopes; fixed `cc8c06366`). The heals criterion is H8's to meet; E8's code
 is complete except release of the proven set.
 
-### H8 #4216 — healing by hash set, from the producer cache
+### H8 #4216 — healing by hash set, from the producer cache (for dropped entries)
 
 Spec: healing.md throughout; database.md "Caches".
 
@@ -136,7 +140,7 @@ Spec: healing.md throughout; database.md "Caches".
 
 Done when: a soak with 5% of packages dropped shows heals equal to distinct
 gaps, one request per gap, zero cache misses, and executors spending under 5%
-on healing. Closes H1 #4193 and H6 #4212 with it.
+on healing. Closes H1 #4193 with it.
 
 ### C6 #4215 — consensus does not outrun execution
 
@@ -152,12 +156,18 @@ Test: an executor that executes one block in three keeps the DAG within the
 bound, the own store within its share, and the reason says lag. Done when a
 soak with an artificially slow executor never exceeds the bound.
 
-### #4214 — the dispatch leg, verified
+### #4214 — find the loss, with the real staging code
 
-After E8 the "missing anchor" leg is gone by construction. Verify the rest:
-dispatch counters (packages built, dispatched, refused) against the
-destination's proven-missing gaps over a 30-minute soak. Any remaining loss is
-a new difference to record before run #7.
+E8 check #2 (`20260904T163512Z`) lost 5,974 BVN2→BVN1 entries to no known
+cause, with nothing dropped and no dispatch error. The old healer delivered
+them and hid the leg. Work: give the end-to-end simulator a seeded disorder
+mode — dispatched envelopes and anchors to each destination delayed and
+reordered by a random number of blocks, validators seeing batches in different
+orders — and drive the current code at load until the holes appear, then read
+the leg off the state. Add the sender's dispatch counters (packages built,
+dispatched, refused, per block) so a soak names the leg too. Done when a
+30-minute no-drop soak at 500 tps shows heals == 0 and every stream at
+received == delivered at the end of load.
 
 ### Acceptance run #7
 
