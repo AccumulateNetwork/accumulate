@@ -687,10 +687,20 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 		}
 	}
 
+	// A snapshot carries a chain's entries but not its hash index (an index
+	// record), and IndexOf is how the executor asks whether a Directory anchor
+	// or a proven hash is on a chain. Rebuild every chain's index from its
+	// entries, or a restored node answers "no" where its peers answer "yes".
 	// Force the BPT to update
 	err = batch.UpdateBPT()
 	if err != nil {
 		return errors.UnknownError.WithFormat("update BPT: %w", err)
+	}
+
+	// Walks the BPT, so after it is built.
+	err = rebuildChainIndexes(batch)
+	if err != nil {
+		return errors.UnknownError.WithFormat("rebuild chain indexes: %w", err)
 	}
 
 	err = batch.Commit()
@@ -987,4 +997,37 @@ func collectOptions(index *indexing.Bucket, opts *CollectOptions) snapshot.Colle
 	}
 
 	return copts
+}
+
+// rebuildChainIndexes writes every chain's hash-to-index records from its
+// entries. Linear in the number of entries restored; run once, at restore.
+func rebuildChainIndexes(batch *Batch) error {
+	return batch.ForEachAccount(func(account *Account, _ [32]byte) error {
+		chains, err := account.Chains().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load chains of %v: %w", account.Url(), err)
+		}
+		for _, meta := range chains {
+			c2, err := account.ChainByName(meta.Name)
+			if err != nil {
+				return errors.UnknownError.WithFormat("resolve chain %s of %v: %w", meta.Name, account.Url(), err)
+			}
+			inner := c2.Inner()
+			head, err := inner.Head().Get()
+			if err != nil {
+				return errors.UnknownError.WithFormat("load head of %s of %v: %w", meta.Name, account.Url(), err)
+			}
+			for i := int64(0); i < head.Count; i++ {
+				hash, err := inner.Entry(i)
+				if err != nil {
+					return errors.UnknownError.WithFormat("load entry %d of %s of %v: %w", i, meta.Name, account.Url(), err)
+				}
+				err = inner.ElementIndex(hash).Put(uint64(i))
+				if err != nil {
+					return errors.UnknownError.WithFormat("index entry %d of %s of %v: %w", i, meta.Name, account.Url(), err)
+				}
+			}
+		}
+		return nil
+	})
 }

@@ -42,10 +42,13 @@ Steps, each test-first:
    step 2, when anchor staging reads it. Test: `synth_proof_anchor_test.go`.
 2. **Anchor staging. DONE.** `StagedProofs(source, block)`,
    `StagedProofBlocks(source)`, `DirectoryAnchorBlock`; intake from `classify`,
-   validation after the anchor group; `staged_proofs_total{outcome}`. A
-   validated proof still seeds the replica until step 3 replaces it. Test:
-   `anchor_staging_test.go`. Not yet counted: two proofs for the same indexes
-   with different hashes (with step 3, where the proven ranges live).
+   validation after the anchor group; a proof is bound to its source by
+   covering a sequenced sibling from that source; bounded by `maxAnchorAhead`
+   and `maxStagedProofBlocks`; every Directory anchor re-evaluates every held
+   stream so what it proves drains in the same block;
+   `staged_proofs_total{staged,validated,disproved,conflict,invalid,unbound,refused}`.
+   Not done: refusing a proof that does not name its anchor (deferred to H8,
+   whose paths produce such proofs). Test: `anchor_staging_test.go`.
 3. **Proven ranges by index. DONE except release.** The proven set is the
    per-stream mirror chain (`synthetic-replica:<stream>`), index to hash: it
    is now excluded from the account hash (`isProvenSetChain`), and a proof
@@ -62,9 +65,11 @@ Steps, each test-first:
    — never recorded pending outside staging; staging judges a proof-less
    entry by the proven set (`syntheticIsProven`); a held entry executes
    without a signature once proven; a number beyond `maxSequenceAhead` is
-   refused. Test: `test/e2e/collection_test.go` — a package kept ahead of its
-   anchor is sighted and not delivered, then delivered when the anchor lands.
-   Counters: `synthetic_anchor_total{proven,unproven,collected}`.
+   refused; a held entry re-run before its proof lands stays collected (never
+   a terminal status). Test: `test/e2e/collection_test.go` — a two-deposit
+   package kept ahead of its anchor, with the healer's copies dropped, is
+   sighted and not delivered, then delivered by the collected entries when
+   the anchor lands. Counters: `synthetic_anchor_total{proven,unproven,collected}`.
 5. **Intake as group 0. DONE in effect.** `classify` records every entry as an
    arrival and hands every proof to anchor staging before the anchor group
    is evaluated; an entry becomes a durable held record the moment it cannot
@@ -74,8 +79,10 @@ Steps, each test-first:
    effect and is not worth a write per entry.
 6. **Snapshot. DONE.** Anchor staging's records are `state` with key
    enumerators, so collection walks them; the proven set is an account chain.
-   Test: `snapshot_anchor_staging_test.go` restores waiting proofs, the blocks
-   they wait on, and the newest executed anchor block.
+   Found and fixed on the way: a restored chain had no hash index, so
+   `IndexOf` — admissibility and the proven set — failed on every restored
+   node; restore now rebuilds every chain's index. Tests:
+   `snapshot_anchor_staging_test.go`, `snapshot_chain_index_test.go`.
 7. **Gaps.** Moved to H8, whose request set is the consumer: staging answers
    "proven and missing" and "held or expected and unproven" by index, and
    "anchors missing below the newest held"; the reconcile-by-`Produced` path is

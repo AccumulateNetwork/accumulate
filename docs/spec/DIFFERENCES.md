@@ -111,7 +111,7 @@ A collection proof is staged under its anchor block since E8 step 2
 the `synthetic-replica:<stream>` mirror chain) is excluded from the account
 hash and refuses conflicting proofs; it is still not released below the
 delivered point, so it grows with the stream. A proof does not carry
-its anchor's block (`AnchorMetadata.SourceBlock` is filled since E8 step 1 but unread); the destination tests the proof's terminal root
+its anchor's block before E8 (`AnchorMetadata.SourceBlock`, filled and read since E8 steps 1–2); the destination tests the proof's terminal root
 against its directory anchor chain at execution (`admissible.go`). Since step 4 a
 package member whose anchor has not executed is collected — held in staging at
 its number — and staging judges proof-less entries by the proven set, so the
@@ -126,10 +126,16 @@ of one package.
 **Consequence**: the delivery race between a package and the anchor that proves
 it is decided by whichever executes first, and losing it costs a heal per entry.
 
-**Remaining**: release of the proven set below the delivered point; the gap
-questions by index ("proven and missing", "held and unproven") and the
-retirement of the reconcile-by-`Produced` path, which land with H8's request
-set.
+**Remaining**: release of the proven set and of held entries below the
+delivered point (`internal/core/execute/staging.go` deletes nothing); the
+sequenced layer still records a Pending status and an `Account.Pending()` entry
+for an out-of-order arrival (`msg_sequenced.go`, `recordPending`) beside the
+hold — a status outside staging the spec says must not exist; a proof that does
+not name its anchor block is left to its message executor rather than refused,
+until H8 retires the paths that produce such proofs; intake writes an entry
+durably only when it cannot execute this block; the gap questions by index
+("proven and missing", "held and unproven") and the retirement of the
+reconcile-by-`Produced` path, which land with H8's request set.
 
 ## Database abstraction
 

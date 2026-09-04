@@ -86,9 +86,21 @@ type classified struct {
 	proofs []proofArrival
 }
 
+// addStream makes a stream part of this block's evaluation even though nothing
+// arrived on it, so what staging already holds for it is considered.
+func (c *classified) addStream(str stream) {
+	key := str.key()
+	if _, ok := c.streams[key]; ok {
+		return
+	}
+	c.streams[key] = str
+	c.arrivals[key] = map[uint64]*arrival{}
+}
+
 type proofArrival struct {
-	source *url.URL
-	proof  *protocol.AnnotatedReceipt
+	source   *url.URL
+	proof    *protocol.AnnotatedReceipt
+	siblings [][]byte // hashes of the sequenced messages from source in the same envelope
 }
 
 func (b *Block) classify(envelopes []*messaging.Envelope) *classified {
@@ -104,6 +116,7 @@ func (b *Block) classify(envelopes []*messaging.Envelope) *classified {
 		isUser := true
 		var proofs []*protocol.AnnotatedReceipt
 		var source *url.URL
+		var siblings [][]byte
 		for _, msg := range messages {
 			if p, ok := msg.(*messaging.SyntheticProof); ok && p.Proof != nil {
 				proofs = append(proofs, p.Proof)
@@ -114,8 +127,14 @@ func (b *Block) classify(envelopes []*messaging.Envelope) *classified {
 				continue
 			}
 			isUser = false
-			if source == nil && str.kind == streamSynthetic {
-				source = str.source
+			if str.kind == streamSynthetic {
+				if source == nil {
+					source = str.source
+				}
+				if source.Equal(str.source) {
+					h := seq.Hash()
+					siblings = append(siblings, h[:])
+				}
 			}
 
 			key := str.ledger.String() + "|" + str.source.String()
@@ -135,7 +154,7 @@ func (b *Block) classify(envelopes []*messaging.Envelope) *classified {
 		}
 		if source != nil {
 			for _, p := range proofs {
-				c.proofs = append(c.proofs, proofArrival{source: source, proof: p})
+				c.proofs = append(c.proofs, proofArrival{source: source, proof: p, siblings: siblings})
 			}
 		}
 	}

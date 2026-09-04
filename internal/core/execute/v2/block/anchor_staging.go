@@ -23,7 +23,7 @@ import (
 // invalid list, decides a proof whose anchor already executed, and stages the
 // rest. A proof that does not name its anchor is left to its message executor
 // (the pre-#4217 paths, retired with H8).
-func (b *Block) intakeProof(source *url.URL, proof *protocol.AnnotatedReceipt) error {
+func (b *Block) intakeProof(source *url.URL, proof *protocol.AnnotatedReceipt, siblings [][]byte) error {
 	list := proof.ReceiptList
 	if list == nil || proof.Receipt != nil ||
 		len(list.Elements) > protocol.MaxReceiptListElements ||
@@ -33,6 +33,23 @@ func (b *Block) intakeProof(source *url.URL, proof *protocol.AnnotatedReceipt) e
 	}
 	if proof.Anchor == nil || proof.Anchor.SourceBlock == 0 {
 		return nil
+	}
+
+	// A proof is bound to the source it is staged under by the messages it
+	// travels with: it must cover the hash of a sequenced message FROM that
+	// source in the same envelope. A sequenced message's hash commits to its
+	// source, so a proof lifted from another partition's package cannot be
+	// made to cover one, and cannot poison this source's proven set.
+	bound := false
+	for _, h := range siblings {
+		if list.Included(h) {
+			bound = true
+			break
+		}
+	}
+	if !bound {
+		mExecStagedProofs.WithLabelValues("unbound").Inc()
+		return errors.BadRequest.WithFormat("proof covers no message from %v in its envelope", source)
 	}
 
 	_, ok, err := b.Executor.provingAnchorIndex(b.Batch, proof)
@@ -53,8 +70,22 @@ func (b *Block) intakeProof(source *url.URL, proof *protocol.AnnotatedReceipt) e
 		mExecStagedProofs.WithLabelValues("disproved").Inc()
 		return nil
 	}
+	if proof.Anchor.SourceBlock > executed+maxAnchorAhead {
+		// Further ahead than the Directory could plausibly be: refused, not
+		// held (the sanity horizon, executor spec "Validity").
+		mExecStagedProofs.WithLabelValues("refused").Inc()
+		return errors.BadRequest.WithFormat("proof names Directory block %d, %d past the newest executed", proof.Anchor.SourceBlock, proof.Anchor.SourceBlock-executed)
+	}
 
 	acct := b.Batch.Account(b.Executor.Describe.Synthetic())
+	blocks, err := acct.StagedProofBlocks(source).Get()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if len(blocks) >= maxStagedProofBlocks {
+		mExecStagedProofs.WithLabelValues("refused").Inc()
+		return errors.BadRequest.WithFormat("anchor staging for %v already waits on %d blocks", source, len(blocks))
+	}
 	err = acct.StagedProofs(source, proof.Anchor.SourceBlock).Add(proof)
 	if err != nil {
 		return errors.UnknownError.WithFormat("stage proof: %w", err)
@@ -71,10 +102,25 @@ func (b *Block) intakeProof(source *url.URL, proof *protocol.AnnotatedReceipt) e
 	return nil
 }
 
+// maxAnchorAhead bounds how far past the newest executed Directory anchor a
+// proof may claim to be anchored: about an hour of Directory blocks. Beyond it
+// the proof is refused rather than held.
+const maxAnchorAhead = 3600
+
+// maxStagedProofBlocks bounds how many Directory blocks one source may have
+// proofs waiting on. Honest traffic waits on a handful — the anchors a block
+// or two ahead — so the bound only ever binds on a flood.
+const maxStagedProofBlocks = 256
+
 // validateStagedProofs runs after the anchor group has executed: every
 // Directory anchor this block executed decides the proofs waiting on its
 // block and on any earlier block still waiting (anchors arrive in order).
-func (b *Block) validateStagedProofs() error {
+//
+// A Directory anchor also makes every stream that holds anything worth
+// re-evaluating this block: a collected entry it proves, or an entry held on
+// its own receipt under that anchor, must drain now even if nothing new
+// arrived on its stream (executor spec, "Sort, then four groups").
+func (b *Block) validateStagedProofs(c *classified) error {
 	for ; b.proofsValidatedThrough < len(b.State.ReceivedAnchors); b.proofsValidatedThrough++ {
 		r := b.State.ReceivedAnchors[b.proofsValidatedThrough]
 		if r.Partition != protocol.Directory || r.Body == nil {
@@ -82,6 +128,15 @@ func (b *Block) validateStagedProofs() error {
 		}
 		through := r.Body.GetPartitionAnchor().MinorBlockIndex
 		acct := b.Batch.Account(b.Executor.Describe.Synthetic())
+		if c != nil {
+			held, err := acct.StagedSources().Get()
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			for _, source := range held {
+				c.addStream(stream{kind: streamSynthetic, ledger: b.Executor.Describe.Synthetic(), source: source})
+			}
+		}
 
 		sources, err := acct.StagedSources().Get()
 		if err != nil {

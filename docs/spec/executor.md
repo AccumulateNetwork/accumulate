@@ -553,6 +553,12 @@ whole history into every snapshot would restore state that answers no
 question. A node restored without any of the three diverges on the first block
 where a gap closes.
 
+A snapshot carries a chain's entries and not its hash index, and the hash index
+is how a node asks whether a Directory anchor or a proven hash is on a chain.
+Restore rebuilds every chain's index from its entries before the node runs;
+without that a restored node judges every proof inadmissible and every entry
+unproven, silently.
+
 Both mechanics are the kind that a test has to pin, because neither announces
 itself: the snapshot is written, the restore succeeds, and the node diverges a
 block later.

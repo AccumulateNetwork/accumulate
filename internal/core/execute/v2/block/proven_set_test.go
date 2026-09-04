@@ -12,9 +12,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -86,4 +89,54 @@ func TestProvenSet_ConflictingProofIsRefusedAndCounted(t *testing.T) {
 	b := &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}
 	require.NoError(t, b.proofValidated(source, &protocol.AnnotatedReceipt{ReceiptList: forged, Anchor: directoryAnchorMetadata(3)}))
 	require.Equal(t, conflict0+1, count("conflict"))
+}
+
+// A held entry may be put in a run before its proof has been validated — runs
+// take every held number. Re-running it then must leave it collected, never
+// record a terminal status: a failed status is "delivered" to the stream and
+// wedges it on a message nothing will ever retry.
+func TestCollectedEntry_RerunBeforeProven_StaysCollected(t *testing.T) {
+	f := newReplicaFixture(t, 3)
+	f.x.globalsPtr.Store(&Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest}})
+	ledger := new(protocol.SyntheticLedger)
+	ledger.Url = f.x.Describe.Synthetic()
+	require.NoError(t, f.batch.Account(ledger.Url).Main().Put(ledger))
+
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = protocol.AccountUrl("alice", "tokens")
+	txn.Body = &protocol.SyntheticDepositCredits{Amount: 1}
+	seq := &messaging.SequencedMessage{
+		Message:     &messaging.TransactionMessage{Transaction: txn},
+		Source:      protocol.PartitionUrl("BVN1"),
+		Destination: protocol.PartitionUrl("BVN0"),
+		Number:      1,
+	}
+	member := &messaging.SyntheticMessage{Message: seq,
+		Signature: &protocol.ED25519Signature{PublicKey: make([]byte, 32), Signer: protocol.DnUrl().JoinPath(protocol.Network)}}
+
+	// Not proven, no proof in hand: exactly what MessageIsReady presents.
+	d := &bundle{Block: &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}, batch: f.batch, messages: []messaging.Message{member}}
+	status, err := SyntheticMessage{}.Process(f.batch, &MessageContext{bundle: d, message: member})
+	require.NoError(t, err)
+	require.Equal(t, errors.Pending, status.Code, "still collected")
+	h := member.Hash()
+	st, err := f.batch.Transaction(h[:]).Status().Get()
+	require.NoError(t, err)
+	require.False(t, st.Delivered(), "nothing terminal recorded outside staging: code %v", st.Code)
+	require.Zero(t, st.Code, "no status recorded at all")
+}
+
+// A proof that overlaps indexes below the replica's seed origin cannot be
+// compared there — the replica never stored those entries — and that is not
+// an error and not a conflict: the range is simply already proven or not ours
+// to judge.
+func TestProvenSet_ProofBelowTheSeedOriginIsNotAnError(t *testing.T) {
+	f := newReplicaFixture(t, 300)
+	source := protocol.PartitionUrl("BVN1")
+	f.seed(t, 290, 299) // the replica begins at 290
+	require.NoError(t, f.x.seedSyntheticReplica(f.batch, source, f.proof(t, 10, 20)),
+		"a proof entirely below the origin is a no-op, not an error")
+	require.NoError(t, f.x.seedSyntheticReplica(f.batch, source, f.proof(t, 280, 295)),
+		"a proof straddling the origin compares only what is held")
+	require.True(t, f.x.replicaIncludes(f.batch, source, f.src[295]))
 }

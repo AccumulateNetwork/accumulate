@@ -212,13 +212,6 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 	// envelopeIdentity classified them serial — so moving them here takes work
 	// out of the loop below rather than changing where it runs.
 	c := b.classify(envelopes)
-	// Intake (executor spec, "Sort, then four groups", group 0): every proof the
-	// block brought goes to anchor staging — or is decided now — before any
-	// group is evaluated. An invalid proof is counted and refused; the message
-	// that carried it is refused again by its own executor.
-	for _, p := range c.proofs {
-		_ = b.intakeProof(p.source, p.proof)
-	}
 	ran := map[int]bool{}
 
 	fail := func(err error) []*execute.ProcessResult {
@@ -226,6 +219,19 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 			results[i] = &execute.ProcessResult{Error: err, Shard: -1}
 		}
 		return results
+	}
+	// Intake (executor spec, "Sort, then four groups", group 0): every proof the
+	// block brought goes to anchor staging — or is decided now — before any
+	// group is evaluated. An invalid proof is counted and refused; the message
+	// that carried it is refused again by its own executor.
+	for _, p := range c.proofs {
+		err := b.intakeProof(p.source, p.proof, p.siblings)
+		if err != nil && !errors.Is(err, errors.BadRequest) {
+			// A refusal is counted and the envelope's own executor refuses
+			// it again; anything else is the store failing, and a node that
+			// staged less than its peers would diverge.
+			return fail(err)
+		}
 	}
 
 	// drain decides and runs every stream once, in group order. Each round
@@ -243,7 +249,7 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 			if kind == streamAnchor {
 				// The anchors that just executed decide the proofs waiting
 				// on them, before synthetics are judged.
-				if err := b.validateStagedProofs(); err != nil {
+				if err := b.validateStagedProofs(c); err != nil {
 					return n, err
 				}
 			}

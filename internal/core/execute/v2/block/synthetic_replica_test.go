@@ -249,5 +249,5 @@ func TestReplica_MessageUnderTheReplicaNeedsNoProofAndNoSignature(t *testing.T) 
 	}
 	_, err = SyntheticMessage{}.check(f.batch, ctx)
 	require.Error(t, err, "a message the replica does not contain is refused")
-	require.ErrorContains(t, err, "missing proof")
+	require.ErrorContains(t, err, "not yet proven")
 }

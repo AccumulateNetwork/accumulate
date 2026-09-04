@@ -94,6 +94,9 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	if !ok {
 		return nil, errors.BadRequest.With("a synthetic message must be sequenced")
 	}
+	if seq.Source == nil {
+		return nil, errors.BadRequest.With("a synthetic message must name its source")
+	}
 
 	// A message the destination's replica already contains needs no proof and
 	// no signature of its own (#4140): the replica was seeded from a proof
@@ -136,15 +139,14 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		syn.Proof = findProofInBundle(ctx, syn.Message.Hash())
 	}
 
-	if syn.Proof == nil && syn.Signature == nil {
-		return nil, errors.BadRequest.With("missing proof")
+	if syn.Proof == nil {
+		// No proof in hand and not yet proven. In an envelope that is a
+		// refusal; re-run from staging it means the entry is still collected
+		// and must stay so — a terminal status here would wedge the stream.
+		return nil, errUnproven
 	}
-
 	if syn.Signature == nil {
 		return nil, errors.BadRequest.With("missing signature")
-	}
-	if syn.Proof == nil {
-		return nil, errors.BadRequest.With("missing proof")
 	}
 	if syn.Proof.Anchor == nil || syn.Proof.Anchor.Account == nil {
 		return nil, errors.BadRequest.With("missing proof metadata")
@@ -274,8 +276,9 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 	err = x.process(batch, ctx)
 
 	// A collected entry is in staging and nowhere else; the block records
-	// nothing for it until it executes.
-	if errors.Is(err, errCollected) {
+	// nothing for it until it executes. The same for an entry re-run from
+	// staging before its proof has been validated.
+	if errors.Is(err, errCollected) || errors.Is(err, errUnproven) {
 		status.Code = errors.Pending
 		return status, nil
 	}
@@ -332,7 +335,14 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 	if syn.Proof.ReceiptList != nil {
 		if seq, ok := syn.Message.(*messaging.SequencedMessage); ok {
 			err = ctx.Executor.seedSyntheticReplica(batch, seq.Source, syn.Proof.ReceiptList)
-			if err != nil {
+			switch {
+			case errors.Is(err, errors.Conflict):
+				// Contradicts what is already proven: counted, and this
+				// proof proves nothing here. The message itself is still
+				// anchored and executes on its own proof (executor spec,
+				// "Proof").
+				mExecStagedProofs.WithLabelValues("conflict").Inc()
+			case err != nil:
 				return errors.UnknownError.Wrap(err)
 			}
 		}
@@ -358,6 +368,10 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 // errCollected is process's answer when an entry has been collected into
 // staging rather than executed. It is not a failure and nothing is recorded.
 var errCollected = errors.Pending.With("collected")
+
+// errUnproven is check's answer for a proof-less entry the proven set does not
+// cover yet: not valid, not invalid, not yet.
+var errUnproven = errors.Pending.With("not yet proven")
 
 // maxSequenceAhead is the sanity horizon (executor spec, "Validity"): an entry
 // numbered further ahead of the stream's delivery point than the source could

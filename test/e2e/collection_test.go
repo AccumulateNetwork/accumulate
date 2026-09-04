@@ -36,7 +36,7 @@ import (
 func TestPackageAheadOfItsAnchor_IsCollectedThenDelivered(t *testing.T) {
 	var timestamp uint64
 	var dropping atomic.Bool
-	var dropped atomic.Int32
+	var dropped, healed atomic.Int32
 	var dest atomic.Pointer[url.URL]
 
 	sim := NewSim(t,
@@ -44,12 +44,24 @@ func TestPackageAheadOfItsAnchor_IsCollectedThenDelivered(t *testing.T) {
 		simulator.Genesis(GenesisTime),
 		simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
 			d := dest.Load()
-			if !dropping.Load() || d == nil {
+			if d == nil {
 				return true, nil
 			}
 			messages, err := env.Normalize()
 			if err != nil {
 				return false, err
+			}
+			// The healer's re-submission carries an individual receipt. Drop
+			// it, so delivery can only come from the collected entry executing
+			// on the proven set once the anchor lands.
+			for _, msg := range messages {
+				if syn, ok := msg.(*messaging.SyntheticMessage); ok && syn.Proof != nil && syn.Proof.Receipt != nil {
+					healed.Add(1)
+					return false, nil
+				}
+			}
+			if !dropping.Load() {
+				return true, nil
 			}
 			for _, msg := range messages {
 				anchor, ok := msg.(*messaging.BlockAnchor)
@@ -92,7 +104,13 @@ func TestPackageAheadOfItsAnchor_IsCollectedThenDelivered(t *testing.T) {
 	// From here the destination gets no Directory anchors, so the deposit's
 	// package arrives before the anchor that proves it.
 	dropping.Store(true)
+	// Two deposits to Bob in one block make a package (a shared proof and
+	// proof-less members), which is the form dispatch uses under load.
 	st := sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(aliceUrl).
+			SendTokens(1, protocol.AcmePrecisionPower).To(bobUrl).
+			SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
+	st2 := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(aliceUrl).
 			SendTokens(1, protocol.AcmePrecisionPower).To(bobUrl).
 			SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
@@ -111,7 +129,10 @@ func TestPackageAheadOfItsAnchor_IsCollectedThenDelivered(t *testing.T) {
 	dropping.Store(false)
 	sim.StepUntilN(300,
 		Txn(st.TxID).Succeeds(),
-		Txn(st.TxID).Produced().Succeeds())
+		Txn(st.TxID).Produced().Succeeds(),
+		Txn(st2.TxID).Succeeds(),
+		Txn(st2.TxID).Produced().Succeeds())
 	lta := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(bobUrl), bobUrl)
-	require.Equal(t, int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
+	require.Equal(t, 2*int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
+	t.Logf("healer re-submissions dropped: %d — the deposit was delivered by the collected entry, not by healing", healed.Load())
 }

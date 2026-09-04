@@ -169,7 +169,7 @@ func TestPackageMember_AcceptedViaBundleProof(t *testing.T) {
 	d2 := &bundle{Block: &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}, batch: f.batch,
 		messages: []messaging.Message{member}}
 	_, err = SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d2, message: member})
-	require.ErrorContains(t, err, "missing proof")
+	require.ErrorContains(t, err, "not yet proven")
 }
 
 // #4150: the sender must apply the receiver's element bound. A package's

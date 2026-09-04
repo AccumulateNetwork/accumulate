@@ -98,7 +98,12 @@ func (x *Executor) seedSyntheticReplica(batch *database.Batch, source *url.URL, 
 		}
 		for i := start; i < overlap; i++ {
 			have, err := chain.Entry(i)
-			if err != nil {
+			switch {
+			case errors.Is(err, errors.NotFound):
+				// Below the replica's seed origin: never stored here, so
+				// there is nothing to compare and nothing to prove again.
+				continue
+			case err != nil:
 				return errors.UnknownError.WithFormat("load proven entry %d for %s: %w", i, stream, err)
 			}
 			if !bytes.Equal(have, elements[i-start]) {

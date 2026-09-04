@@ -64,5 +64,5 @@ var mExecStagedProofs = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
 	Subsystem: "exec",
 	Name:      "staged_proofs_total",
-	Help:      "Collection proofs by anchor-staging outcome: staged, validated, disproved, invalid",
+	Help:      "Collection proofs by anchor-staging outcome: staged, validated, disproved, conflict, invalid, unbound, refused",
 }, []string{"outcome"})

@@ -295,4 +295,3 @@ func TestSyntheticIsAdmissible_CountsWhenTheAnchorLanded(t *testing.T) {
 	assert.Equal(t, e0+1, count("earlier"), "no proof, nothing to classify")
 	assert.Equal(t, t0+1, count("this_block"))
 }
-
