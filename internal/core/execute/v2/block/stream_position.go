@@ -41,6 +41,9 @@ import (
 type streamPosition struct {
 	stream    stream
 	delivered uint64
+	// proven answers whether the proven set covers a hash; nil means every
+	// held entry is runnable (tests without an executor).
+	proven func(hash []byte) bool
 
 	// batch is where held messages actually live — the block's own batch, so a
 	// receipt recorded here commits with the block and is discarded with it.
@@ -82,6 +85,27 @@ func (p *streamPosition) idOf(n uint64) (*url.TxID, bool) {
 func (p *streamPosition) has(n uint64) bool {
 	_, ok := p.idOf(n)
 	return ok
+}
+
+// runnable reports whether a held number may be taken into a run. An entry
+// held by the sequenced layer passed its proof when it was held; an entry
+// COLLECTED without one carries its hash in Collected, and is runnable only
+// once the proven set covers that hash (executor spec, "Collection").
+func (p *streamPosition) runnable(n uint64) bool {
+	if p.proven == nil {
+		return true
+	}
+	h, err := p.batch.Account(p.stream.ledger).Collected(p.stream.source, n).Get()
+	switch {
+	case errors.Is(err, errors.NotFound):
+		return true
+	case err != nil:
+		if p.err == nil {
+			p.err = err
+		}
+		return false
+	}
+	return p.proven(h[:])
 }
 
 // received is the largest number this stream has ever seen. It says the stream
@@ -159,6 +183,10 @@ func (b *Block) positionOfLocked(s stream) (*streamPosition, error) {
 		stream:    s,
 		delivered: delivered,
 		batch:     b.Batch,
+	}
+	if b.Executor != nil && s.kind == streamSynthetic {
+		x, batch, source := b.Executor, b.Batch, s.source
+		p.proven = func(h []byte) bool { return x.replicaIncludes(batch, source, h) }
 	}
 	if b.positions.m == nil {
 		b.positions.m = map[string]*streamPosition{}

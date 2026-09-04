@@ -140,3 +140,41 @@ func TestProvenSet_ProofBelowTheSeedOriginIsNotAnError(t *testing.T) {
 		"a proof straddling the origin compares only what is held")
 	require.True(t, f.x.replicaIncludes(f.batch, source, f.src[295]))
 }
+
+// The run builder never takes a collected entry until the proven set covers
+// its hash: the synth stage runs only validated entries (executor spec,
+// "Collection").
+func TestRun_DoesNotTakeACollectedEntryUntilProven(t *testing.T) {
+	f := newReplicaFixture(t, 3)
+	source := protocol.PartitionUrl("BVN1")
+	ledgerUrl := f.x.Describe.Synthetic()
+	ledger := new(protocol.SyntheticLedger)
+	ledger.Url = ledgerUrl
+	require.NoError(t, f.batch.Account(ledgerUrl).Main().Put(ledger))
+	str := stream{kind: streamSynthetic, ledger: ledgerUrl, source: source}
+	id := execute.StreamID{Ledger: ledgerUrl, Source: source}
+
+	// Number 1 is held and collected: its hash is the source chain's entry 0,
+	// which nothing has proven yet.
+	require.NoError(t, execute.Hold(f.batch, id, 1, source.WithTxID([32]byte{1})))
+	var h [32]byte
+	copy(h[:], f.src[0])
+	require.NoError(t, f.batch.Account(ledgerUrl).Collected(source, 1).Put(h))
+
+	b := &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}
+	pos, err := b.positionOf(str)
+	require.NoError(t, err)
+	run, _ := buildRun(pos, nil, 10)
+	require.Empty(t, run, "collected and unproven: not runnable")
+
+	f.seed(t, 0, 2)
+	run, _ = buildRun(pos, nil, 10)
+	require.Len(t, run, 1, "proven: runnable")
+	require.Equal(t, uint64(1), run[0].number)
+
+	// An entry held by the sequenced layer (no Collected mark) was proven
+	// when it was held and is always runnable.
+	require.NoError(t, execute.Hold(f.batch, id, 2, source.WithTxID([32]byte{2})))
+	run, _ = buildRun(pos, nil, 10)
+	require.Len(t, run, 2)
+}

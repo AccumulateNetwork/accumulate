@@ -437,10 +437,18 @@ conflict, invalid.
 `SyntheticMessage.process`: an entry whose proof's anchor is not here yet is
 collected (`collect`): the message is stored under its own hash with the
 transaction it belongs to, and held in staging at its number (`execute.Hold`,
-first sighting wins). Nothing else is recorded. Staging judges a proof-less
-entry by the proven set (`syntheticIsProven`), so a collected entry is not put
-in a run until a validated proof covers its hash; when it is, `MessageIsReady`
-loads it and `check` accepts it on the proven set alone, signature or not. An
+first sighting wins) with its sequenced hash recorded in `Collected(source,
+number)`. Nothing else is recorded. The run builder never takes a collected
+number until the proven set covers that hash (`streamPosition.runnable`), and
+staging judges an arriving proof-less entry the same way (`syntheticIsProven`);
+an entry held by the sequenced layer carries no `Collected` mark because it
+passed its proof when it was held. When a collected entry is proven,
+`MessageIsReady` loads it and `check` accepts it on the proven set alone,
+signature or not. Should one be run before that — it cannot be, by
+construction — `check` answers "not yet proven" and nothing is recorded.
+An entry whose number is taken by a proven arrival is superseded: the
+arrival executes, the stream advances past the collected mark, and the
+collected entry is never consulted again — tossed, in effect. An
 entry numbered more than `maxSequenceAhead` past the delivery point is refused
 (`BadRequest`), not collected. Counted as
 `accumulate_exec_synthetic_anchor_total{applied}`: proven, unproven,

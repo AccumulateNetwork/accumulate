@@ -156,6 +156,17 @@
       description: is the Directory block index of the newest Directory anchor executed here. Anchor staging compares a proof's anchor block against it to tell "not yet" from "never"
       type: state
       dataType: uint
+    - name: Collected
+      description: is the hash of the sequenced message held at a number of an inbound stream WITHOUT a validated proof — collected, in the executor spec's word. A run never takes it until the proven set covers this hash (executor spec, "Collection")
+      type: state
+      index: getCollectedKeys # Indexed by source and number, so snapshots collect it
+      dataType: hash
+      parameters:
+      - name: Source
+        type: url
+        pointer: true
+      - name: Number
+        type: uint
 
     - name: Events
       description: tracks scheduled events. Should only be used on the system ledger

@@ -65,8 +65,9 @@ Steps, each test-first:
    — never recorded pending outside staging; staging judges a proof-less
    entry by the proven set (`syntheticIsProven`); a held entry executes
    without a signature once proven; a number beyond `maxSequenceAhead` is
-   refused; a held entry re-run before its proof lands stays collected (never
-   a terminal status). Test: `test/e2e/collection_test.go` — a two-deposit
+   refused; the run builder never takes a collected entry until proven
+   (`Collected(source, number)` carries its hash), and should one be run
+   early it stays collected (never a terminal status). Test: `test/e2e/collection_test.go` — a two-deposit
    package kept ahead of its anchor, with the healer's copies dropped, is
    sighted and not delivered, then delivered by the collected entries when
    the anchor lands. Counters: `synthetic_anchor_total{proven,unproven,collected}`.

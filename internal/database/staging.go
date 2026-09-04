@@ -140,3 +140,25 @@ func (c *Account) getStagedProofsKeys() ([]accountStagedProofsKey, error) {
 	}
 	return keys, nil
 }
+
+// getCollectedKeys enumerates the collected marks the way getSequencedKeys
+// enumerates held entries: for each staged source, every number above
+// Delivered up to the sighted mark that carries one.
+func (c *Account) getCollectedKeys() ([]accountCollectedKey, error) {
+	held, err := c.getSequencedKeys()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	var keys []accountCollectedKey
+	for _, k := range held {
+		_, err := c.Collected(k.Source, k.Number).Get()
+		switch {
+		case errors.Is(err, errors.NotFound):
+			continue
+		case err != nil:
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		keys = append(keys, accountCollectedKey{Source: k.Source, Number: k.Number})
+	}
+	return keys, nil
+}

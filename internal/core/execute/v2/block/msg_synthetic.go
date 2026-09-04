@@ -429,6 +429,13 @@ func (x SyntheticMessage) collect(batch *database.Batch, ctx *MessageContext, se
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
+	// Mark it collected: the run builder never takes this number until the
+	// proven set covers this hash (executor spec, "Collection").
+	seqHash := seq.Hash()
+	err = batch.Account(str.ledger).Collected(str.source, seq.Number).Put(seqHash)
+	if err != nil {
+		return errors.UnknownError.WithFormat("mark collected: %w", err)
+	}
 	mExecSyntheticAnchor.WithLabelValues("collected").Inc()
 	return errCollected
 }
