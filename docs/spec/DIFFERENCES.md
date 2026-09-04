@@ -99,7 +99,7 @@ to the hash. One accidental writer from changing account hashes.
 *[#4217](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4217)*
 
 **Spec** ([executor.md](executor.md), "Collection", "Proof", "Anchor staging"):
-two stores — entries by stream and index, proofs by anchor sequence number; a
+two stores — entries by stream and index, proofs by the Directory block of their anchor; a
 proof waits for its anchor and is validated or discarded by it; a validated
 proof marks its index range proven; an entry executes when proven and next;
 nothing is recorded pending outside staging; a gap is a proven index without
@@ -109,7 +109,7 @@ an entry or a held index without a proof.
 A collection proof is not staged: it is verified when the envelope carrying it
 executes, and its hashes are absorbed into a per-stream "replica" written into
 the BPT (`synthetic_replica.go`), unbounded and hashed. A proof does not carry
-its anchor's sequence number; the destination tests the proof's terminal root
+its anchor's block (`AnchorMetadata.SourceBlock` is filled since E8 step 1 but unread); the destination tests the proof's terminal root
 against its directory anchor chain at execution (`admissible.go`). A package
 member whose anchor has not executed yet is admitted by staging (its own proof
 is nil) and then recorded `Pending` by `SyntheticMessage.Process` before the

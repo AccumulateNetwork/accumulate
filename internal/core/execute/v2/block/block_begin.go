@@ -399,7 +399,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, ledger *prot
 		}
 
 		if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
-			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, anchor.MinorBlockIndex, nil)
+			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, anchor.MinorBlockIndex, nil, anchor.MinorBlockIndex)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -411,7 +411,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, ledger *prot
 				continue
 			}
 
-			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, receipt.Anchor.MinorBlockIndex, receipt)
+			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, receipt.Anchor.MinorBlockIndex, receipt, anchor.MinorBlockIndex)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -421,7 +421,12 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, ledger *prot
 	return nil
 }
 
-func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLeader bool, blockIndex uint64, blockReceipt *protocol.PartitionAnchorReceipt) error {
+// sendSyntheticTransactionsForBlock dispatches the synthetic messages block
+// blockIndex produced, proven through blockReceipt to the Directory anchor of
+// block anchorBlock. Every proof names anchorBlock so the destination can hold
+// it in anchor staging until that anchor executes (executor spec, "Anchor
+// staging").
+func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLeader bool, blockIndex uint64, blockReceipt *protocol.PartitionAnchorReceipt, anchorBlock uint64) error {
 	indexIndex, err := batch.SystemData(x.Describe.PartitionId).SyntheticIndexIndex(blockIndex).Get()
 	switch {
 	case err == nil:
@@ -542,14 +547,14 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		// 2 until the replica's effect is measured.
 		if len(group) < synthBundleMin || !x.globals().Active.ExecutorVersion.V2KourouEnabled() {
 			for _, o := range group {
-				err = x.sendSynthWithOwnProof(batch, o, synthMainChain, rootReceipt, blockReceipt, int64(to))
+				err = x.sendSynthWithOwnProof(batch, o, synthMainChain, rootReceipt, blockReceipt, int64(to), anchorBlock)
 				if err != nil {
 					return errors.UnknownError.Wrap(err)
 				}
 			}
 			continue
 		}
-		err = x.sendSynthPackages(batch, group, synthMainChain, record.MainChain(), rootReceipt, blockReceipt, int64(to))
+		err = x.sendSynthPackages(batch, group, synthMainChain, record.MainChain(), rootReceipt, blockReceipt, int64(to), anchorBlock)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -590,15 +595,14 @@ func (x *Executor) synthPackageBudget() int {
 
 // sendSynthWithOwnProof dispatches one synthetic message carrying its own
 // individual receipt — the pre-#4090 form, kept for single-message groups.
-func (x *Executor) sendSynthWithOwnProof(batch *database.Batch, o *synthOutbound, synthMainChain *database.Chain, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64) error {
+func (x *Executor) sendSynthWithOwnProof(batch *database.Batch, o *synthOutbound, synthMainChain *database.Chain, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock uint64) error {
 	synthReceipt, err := synthMainChain.Receipt(o.index, to)
 	if err != nil {
 		return errors.UnknownError.WithFormat("get synthetic main chain receipt from %d to %d: %w", o.index, to, err)
 	}
 
 	receipt := new(protocol.AnnotatedReceipt)
-	receipt.Anchor = new(protocol.AnchorMetadata)
-	receipt.Anchor.Account = protocol.DnUrl()
+	receipt.Anchor = directoryAnchorMetadata(anchorBlock)
 	if blockReceipt == nil {
 		receipt.Receipt, err = synthReceipt.Combine(rootReceipt)
 	} else {
@@ -634,7 +638,7 @@ func (x *Executor) sendSynthWithOwnProof(batch *database.Batch, o *synthOutbound
 // receipts use. Packages may therefore be delivered in any order, and losing one
 // does not block another — the property that would be given up by sending the
 // proof once and referring back to it from later packages.
-func (x *Executor) sendSynthPackages(batch *database.Batch, group []*synthOutbound, synthMainChain *database.Chain, synthChain2 *database.Chain2, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64) error {
+func (x *Executor) sendSynthPackages(batch *database.Batch, group []*synthOutbound, synthMainChain *database.Chain, synthChain2 *database.Chain2, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock uint64) error {
 	budget := x.synthPackageBudget()
 	for len(group) > 0 {
 		// The receiver refuses a ReceiptList longer than
@@ -646,7 +650,7 @@ func (x *Executor) sendSynthPackages(batch *database.Batch, group []*synthOutbou
 		// index, so members taken after the first only shrink the distance:
 		// one check per package bounds the whole list.
 		if !packageSpanFits(group[0].index, to) {
-			err := x.sendSynthWithOwnProof(batch, group[0], synthMainChain, rootReceipt, blockReceipt, to)
+			err := x.sendSynthWithOwnProof(batch, group[0], synthMainChain, rootReceipt, blockReceipt, to, anchorBlock)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -690,7 +694,7 @@ func (x *Executor) sendSynthPackages(batch *database.Batch, group []*synthOutbou
 			group = group[1:]
 		}
 
-		proof, err := x.buildSynthPackageProof(pkg, synthChain2, rootReceipt, blockReceipt, to)
+		proof, err := x.buildSynthPackageProof(pkg, synthChain2, rootReceipt, blockReceipt, to, anchorBlock)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -733,7 +737,7 @@ func packageSpanFits(first, to int64) bool {
 // elements belonging to OTHER destinations, because the synthetic main chain
 // interleaves them — harmless, since extra elements are proven hashes and
 // nothing more, and it is what lets the span stay contiguous.
-func (x *Executor) buildSynthPackageProof(pkg []*synthOutbound, synthChain2 *database.Chain2, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64) (*protocol.AnnotatedReceipt, error) {
+func (x *Executor) buildSynthPackageProof(pkg []*synthOutbound, synthChain2 *database.Chain2, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock uint64) (*protocol.AnnotatedReceipt, error) {
 	first := pkg[0].index
 
 	// The span runs to the block's LAST synthetic element, not to the package's
@@ -764,8 +768,17 @@ func (x *Executor) buildSynthPackageProof(pkg []*synthOutbound, synthChain2 *dat
 
 	return &protocol.AnnotatedReceipt{
 		ReceiptList: list,
-		Anchor:      &protocol.AnchorMetadata{Account: protocol.DnUrl()},
+		Anchor:      directoryAnchorMetadata(anchorBlock),
 	}, nil
+}
+
+// directoryAnchorMetadata names the Directory anchor a proof terminates in:
+// the account is the Directory and SourceBlock is the Directory block whose
+// anchor carries the proof's root. The destination records the same block
+// index on each entry of its Directory anchor chain, so it can hold the proof
+// until that anchor has executed and validate it then.
+func directoryAnchorMetadata(anchorBlock uint64) *protocol.AnchorMetadata {
+	return &protocol.AnchorMetadata{Account: protocol.DnUrl(), SourceBlock: anchorBlock}
 }
 
 // wrapSynthetic wraps a sequenced message for dispatch, signed by this node. A

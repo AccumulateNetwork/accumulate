@@ -36,11 +36,11 @@ groups", "Staging in a snapshot"; healing.md "Gaps".
 
 Steps, each test-first:
 
-1. **Anchor sequence number on the proof.** `AnnotatedReceipt` gains the
-   Directory anchor's sequence number; `buildSynthPackageProof` and
-   `sendSynthWithOwnProof` fill it; the validator refuses a proof without it.
-   Test: a built package proof names the anchor its receipt terminates in.
-2. **Anchor staging.** A store of proofs keyed by (source, anchor sequence).
+1. **The anchor's block on the proof. DONE.** `AnnotatedReceipt.Anchor.SourceBlock`
+   is the Directory block whose anchor proves the package; both dispatch paths
+   fill it (`directoryAnchorMetadata`). Refusing a proof without it lands with
+   step 2, when anchor staging reads it. Test: `synth_proof_anchor_test.go`.
+2. **Anchor staging.** A store of proofs keyed by (source, anchor block).
    Intake writes every arriving proof there; executing a Directory anchor
    validates or discards every proof waiting on its number; a proof whose
    anchor already executed is validated at intake. Counters: proofs validated,

@@ -30,7 +30,7 @@ decided on the message alone; everything after it is decided *by staging*:
 3. **Collection.** Staging is two stores. **Synthetic staging** holds entries by
    stream and index; an entry whose index no validated proof covers yet is
    *collected* and waits. **Anchor staging** holds collection proofs by the
-   sequence number of the anchor each terminates in; a proof whose anchor has
+   Directory block index of the anchor each terminates in; a proof whose anchor has
    not executed yet is collected and waits. Entries and indexes are one to one:
    every index will be covered by some later proof, because the source's chain
    grows and every later anchor covers everything before it, so a collected
@@ -106,7 +106,7 @@ evaluated, drained and executed; only then is the next group evaluated.
 0. **Intake.** Every arriving entry and proof — dispatched packages and
    healing bundles alike — is written into staging before anything is
    evaluated: entries into synthetic staging at their index, proofs into
-   anchor staging at their anchor's sequence number. A healing bundle is not a
+   anchor staging at their anchor's Directory block index. A healing bundle is not a
    transaction and is never sent to the executor: it is an envelope carrying
    missing entries or a proof, there is no message type or executor for it,
    and nothing is recorded for the envelope. Intake is first so that what the
@@ -413,8 +413,12 @@ through a bundle whose block is a shell. The batch is discarded unconditionally.
 
 ### Anchor staging — proofs wait for their anchor
 
-A collection proof carries the sequence number of the directory anchor it
-terminates in. On intake it is written to anchor staging under that number. When
+A collection proof names the directory anchor it terminates in:
+`AnnotatedReceipt.Anchor.SourceBlock` is the Directory block whose anchor
+carries the proof's root (`directoryAnchorMetadata`, filled on both dispatch
+paths), the same block index the destination records on each entry of its
+Directory anchor chain. On intake the proof is written to anchor staging under
+that block. When
 that anchor executes, every proof waiting on it is validated against the
 anchor's root: a match marks the proof's index range proven in synthetic
 staging; a mismatch discards the proof and increments a counter. A proof whose

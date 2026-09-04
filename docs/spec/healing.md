@@ -11,7 +11,7 @@ retry mechanism of its own.
 ### Gaps
 
 Staging is two stores ([executor.md](executor.md), "Collection"): entries by
-stream and index, and collection proofs by the sequence number of the anchor
+stream and index, and collection proofs by the Directory block index of the anchor
 each terminates in. Entries and indexes are one to one, and every index is
 eventually covered by a proof, so there are exactly two kinds of gap, both by
 index:
@@ -111,7 +111,7 @@ same staging at the same block ([executor.md](executor.md), Restart).
 In the block it is **intake**, the first group of the sort
 ([executor.md](executor.md), "Sort, then four groups"): entries go to synthetic
 staging at their index, where the proof that named them has already proven
-them, and a proof goes to anchor staging under its anchor's sequence number.
+them, and a proof goes to anchor staging under its anchor's Directory block index.
 Nothing is evaluated for the envelope and nothing is recorded for it. The runs
 the entries complete drain in the same block.
 
@@ -276,7 +276,7 @@ hash is a deterministic answer and is counted as a miss.
 
 The block's sort (`exec_stage.go`, `classify`) writes every sequenced entry to
 synthetic staging at its index and every collection proof to anchor staging
-under its anchor sequence number, bundles and packages alike, before the anchor
+under its anchor's Directory block index, bundles and packages alike, before the anchor
 group is evaluated. Nothing is recorded for an envelope. `stageRuns` then
 computes runs from what is proven and held, and executed entries and the proven
 ranges at or below `Delivered` are released when the block commits.
