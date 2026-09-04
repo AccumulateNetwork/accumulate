@@ -114,7 +114,8 @@ func TestHistoryReadsAreAttributed(t *testing.T) {
 	require.Equal(t, uint64(2), hr[shape].Hits)
 	require.Equal(t, 1, hr[shape].Distinct, "one key, asked twice")
 	require.Zero(t, hr[shape].Misses)
-	require.NotEmpty(t, hr[shape].Callers, "the first read is sampled")
+	require.NotEmpty(t, hr[shape].HitCallers, "the first read is sampled")
+	require.Empty(t, hr[shape].MissCallers)
 	require.Equal(t, uint64(2), d.DeepFallbacks()[shape])
 
 	// A miss on a permanent shape walks, finds nothing, and is a miss

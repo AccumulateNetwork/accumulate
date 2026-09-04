@@ -730,14 +730,20 @@ func (d *Database) FallbackWalks() uint64 {
 // HistoryShape is what one record shape cost in history reads: Hits
 // found the key below the window, Misses walked and found nothing,
 // Distinct is how many different keys the hits were for (Capped when
-// the set stopped growing), and Callers is a 1-in-historySample sample
-// of the code that asked, by its first frame above the database layers.
+// the set stopped growing), and the callers are a 1-in-historySample
+// sample of the code that asked, by its first frame above the database
+// layers, hits and misses apart.
 type HistoryShape struct {
-	Hits     uint64            `json:"hits"`
-	Misses   uint64            `json:"misses"`
-	Distinct int               `json:"distinct"`
-	Capped   bool              `json:"capped,omitempty"`
-	Callers  map[string]uint64 `json:"callers,omitempty"`
+	Hits     uint64 `json:"hits"`
+	Misses   uint64 `json:"misses"`
+	Distinct int    `json:"distinct"`
+	Capped   bool   `json:"capped,omitempty"`
+	// HitCallers asked for a record history had; MissCallers walked
+	// history for a record that was nowhere.  Kept apart because the
+	// misses outnumber the hits by orders of magnitude and would bury
+	// the readers that actually reach back.
+	HitCallers  map[string]uint64 `json:"hitCallers,omitempty"`
+	MissCallers map[string]uint64 `json:"missCallers,omitempty"`
 }
 
 // historySample is the caller sampling rate; historyKeysCap bounds the
@@ -789,11 +795,15 @@ func (d *Database) recordHistoryRead(shape string, h [32]byte, hit bool) {
 		hs.Misses++
 	}
 	if caller != "" {
-		if hs.Callers == nil {
-			hs.Callers = map[string]uint64{}
+		callers := &hs.MissCallers
+		if hit {
+			callers = &hs.HitCallers
 		}
-		if len(hs.Callers) < 64 || hs.Callers[caller] > 0 {
-			hs.Callers[caller]++
+		if *callers == nil {
+			*callers = map[string]uint64{}
+		}
+		if len(*callers) < 64 || (*callers)[caller] > 0 {
+			(*callers)[caller]++
 		}
 	}
 }
@@ -846,13 +856,20 @@ func (d *Database) HistoryReads() map[string]HistoryShape {
 	out := make(map[string]HistoryShape, len(d.history))
 	for shape, hs := range d.history {
 		c := *hs
-		if hs.Callers != nil {
-			c.Callers = make(map[string]uint64, len(hs.Callers))
-			for k, v := range hs.Callers {
-				c.Callers[k] = v
-			}
-		}
+		c.HitCallers = copyCounts(hs.HitCallers)
+		c.MissCallers = copyCounts(hs.MissCallers)
 		out[shape] = c
+	}
+	return out
+}
+
+func copyCounts(m map[string]uint64) map[string]uint64 {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]uint64, len(m))
+	for k, v := range m {
+		out[k] = v
 	}
 	return out
 }
