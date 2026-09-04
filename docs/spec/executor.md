@@ -453,7 +453,13 @@ construction — `check` answers "not yet proven" and nothing is recorded.
 An entry at or below the delivered point is tossed on arrival
 (`errors.Delivered`, nothing stored); an entry whose number is later taken by
 a proven arrival is superseded — the arrival executes, the stream advances
-past the collected mark, and the collected entry is never consulted again. An
+past the collected mark, and the collected entry is never consulted again.
+
+Staging is testable in isolation: `staging_sim_test.go` drives both stores
+event by event — a package arrives, a Directory anchor executes, a block runs
+— against a source chain of real sequenced messages, with the sequenced layer
+replaced by a fake that only moves the stream position. Each rule above is one
+simulation there. An
 entry numbered more than `maxSequenceAhead` past the delivery point is refused
 (`BadRequest`), not collected. Counted as
 `accumulate_exec_synthetic_anchor_total{applied}`: proven, unproven,

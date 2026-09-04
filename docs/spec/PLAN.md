@@ -70,7 +70,11 @@ Steps, each test-first:
    early it stays collected (never a terminal status). Test: `test/e2e/collection_test.go` — a two-deposit
    package kept ahead of its anchor, with the healer's copies dropped, is
    sighted and not delivered, then delivered by the collected entries when
-   the anchor lands. Counters: `synthetic_anchor_total{proven,unproven,collected}`.
+   the anchor lands; `staging_sim_test.go` — staging in isolation: package
+   ahead of / after its anchor, toss at or below delivered, hold above the
+   last validated within the horizon, disproved proof leaves entries
+   waiting, conflicting proof tossed. Counters:
+   `synthetic_anchor_total{proven,unproven,collected}`.
 5. **Intake as group 0. DONE in effect.** `classify` records every entry as an
    arrival and hands every proof to anchor staging before the anchor group
    is evaluated; an entry becomes a durable held record the moment it cannot
