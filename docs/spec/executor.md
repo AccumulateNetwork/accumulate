@@ -417,8 +417,16 @@ A collection proof names the directory anchor it terminates in:
 `AnnotatedReceipt.Anchor.SourceBlock` is the Directory block whose anchor
 carries the proof's root (`directoryAnchorMetadata`, filled on both dispatch
 paths), the same block index the destination records on each entry of its
-Directory anchor chain. On intake the proof is written to anchor staging under
-that block. When
+Directory anchor chain. On intake (`Block.intakeProof`, from `classify`) the
+proof is written to anchor staging under that block: `StagedProofs(source,
+block)` on the synthetic ledger, with `StagedProofBlocks(source)` naming the
+blocks waited on so snapshots enumerate them. `DirectoryAnchorBlock` on the
+anchor pool is the newest Directory anchor executed here, written as a
+`DirectoryAnchor` executes; a proof naming a block at or below it that the
+chain does not carry is disproved at intake. `validateStagedProofs` runs after
+the anchor group, over the Directory anchors the block executed. Outcomes are
+`accumulate_exec_staged_proofs_total{outcome}`: staged, validated, disproved,
+invalid. When
 that anchor executes, every proof waiting on it is validated against the
 anchor's root: a match marks the proof's index range proven in synthetic
 staging; a mismatch discards the proof and increments a counter. A proof whose

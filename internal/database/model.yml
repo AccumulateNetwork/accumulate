@@ -123,6 +123,39 @@
       - name: Source
         type: url
         pointer: true
+    # Anchor staging (executor spec, "Anchor staging"). A collection proof
+    # waits under the Directory anchor block it terminates in until that anchor
+    # executes here and validates or disproves it. Same rules as Sequenced:
+    # state so snapshots collect it, not hashed, enumerable from StagedSources.
+    - name: StagedProofBlocks
+      description: lists, per source, the Directory anchor blocks that anchor staging holds proofs for
+      type: state
+      index: getStagedProofBlocksKeys
+      dataType: uint
+      collection: set
+      emptyIfMissing: true
+      parameters:
+      - name: Source
+        type: url
+        pointer: true
+    - name: StagedProofs
+      description: is the collection proofs from a source that wait on a Directory anchor block
+      type: state
+      index: getStagedProofsKeys
+      dataType: protocol.AnnotatedReceipt
+      pointer: true
+      collection: list
+      emptyIfMissing: true
+      parameters:
+      - name: Source
+        type: url
+        pointer: true
+      - name: AnchorBlock
+        type: uint
+    - name: DirectoryAnchorBlock
+      description: is the Directory block index of the newest Directory anchor executed here. Anchor staging compares a proof's anchor block against it to tell "not yet" from "never"
+      type: state
+      dataType: uint
 
     - name: Events
       description: tracks scheduled events. Should only be used on the system ledger

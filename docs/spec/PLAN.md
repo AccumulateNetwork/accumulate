@@ -40,13 +40,12 @@ Steps, each test-first:
    is the Directory block whose anchor proves the package; both dispatch paths
    fill it (`directoryAnchorMetadata`). Refusing a proof without it lands with
    step 2, when anchor staging reads it. Test: `synth_proof_anchor_test.go`.
-2. **Anchor staging.** A store of proofs keyed by (source, anchor block).
-   Intake writes every arriving proof there; executing a Directory anchor
-   validates or discards every proof waiting on its number; a proof whose
-   anchor already executed is validated at intake. Counters: proofs validated,
-   disproved, duplicate-for-same-indexes. Test: a proof arriving one block
-   before its anchor is validated when the anchor executes; a disproved proof
-   is gone and counted.
+2. **Anchor staging. DONE.** `StagedProofs(source, block)`,
+   `StagedProofBlocks(source)`, `DirectoryAnchorBlock`; intake from `classify`,
+   validation after the anchor group; `staged_proofs_total{outcome}`. A
+   validated proof still seeds the replica until step 3 replaces it. Test:
+   `anchor_staging_test.go`. Not yet counted: two proofs for the same indexes
+   with different hashes (with step 3, where the proven ranges live).
 3. **Proven ranges by index.** Per stream, the union of validated proofs'
    index ranges, above `Delivered`, durable and unhashed, in the snapshot.
    The BPT-hashed replica is deleted. Test: two overlapping proofs give one

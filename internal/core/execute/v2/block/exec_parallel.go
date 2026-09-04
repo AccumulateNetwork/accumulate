@@ -212,6 +212,13 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 	// envelopeIdentity classified them serial — so moving them here takes work
 	// out of the loop below rather than changing where it runs.
 	c := b.classify(envelopes)
+	// Intake (executor spec, "Sort, then four groups", group 0): every proof the
+	// block brought goes to anchor staging — or is decided now — before any
+	// group is evaluated. An invalid proof is counted and refused; the message
+	// that carried it is refused again by its own executor.
+	for _, p := range c.proofs {
+		_ = b.intakeProof(p.source, p.proof)
+	}
 	ran := map[int]bool{}
 
 	fail := func(err error) []*execute.ProcessResult {
@@ -233,6 +240,13 @@ func (b *Block) ProcessAll(envelopes []*messaging.Envelope) []*execute.ProcessRe
 				return n, err
 			}
 			n += b.executeRuns(runs, results, ran)
+			if kind == streamAnchor {
+				// The anchors that just executed decide the proofs waiting
+				// on them, before synthetics are judged.
+				if err := b.validateStagedProofs(); err != nil {
+					return n, err
+				}
+			}
 		}
 		return n, nil
 	}

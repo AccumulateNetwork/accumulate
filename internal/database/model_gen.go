@@ -303,6 +303,9 @@ type Account struct {
 	stagedSources          values.Set[*url.URL]
 	sequenced              map[accountSequencedMapKey]values.Value[*url.TxID]
 	sighted                map[accountSightedMapKey]values.Value[uint64]
+	stagedProofBlocks      map[accountStagedProofBlocksMapKey]values.Set[uint64]
+	stagedProofs           map[accountStagedProofsMapKey]values.List[*protocol.AnnotatedReceipt]
+	directoryAnchorBlock   values.Value[uint64]
 	events                 *AccountEvents
 	blockLedger            map[accountBlockLedgerMapKey]values.Value[*BlockLedger]
 	blockLedgerChain       *Chain2
@@ -361,6 +364,32 @@ type accountSightedMapKey struct {
 
 func (k accountSightedKey) ForMap() accountSightedMapKey {
 	return accountSightedMapKey{values.MapKeyUrl(k.Source)}
+}
+
+type accountStagedProofBlocksKey struct {
+	Source *url.URL
+}
+
+type accountStagedProofBlocksMapKey struct {
+	Source [32]byte
+}
+
+func (k accountStagedProofBlocksKey) ForMap() accountStagedProofBlocksMapKey {
+	return accountStagedProofBlocksMapKey{values.MapKeyUrl(k.Source)}
+}
+
+type accountStagedProofsKey struct {
+	Source      *url.URL
+	AnchorBlock uint64
+}
+
+type accountStagedProofsMapKey struct {
+	Source      [32]byte
+	AnchorBlock uint64
+}
+
+func (k accountStagedProofsKey) ForMap() accountStagedProofsMapKey {
+	return accountStagedProofsMapKey{values.MapKeyUrl(k.Source), k.AnchorBlock}
 }
 
 type accountBlockLedgerKey struct {
@@ -501,6 +530,30 @@ func (c *Account) Sighted(source *url.URL) values.Value[uint64] {
 
 func (c *Account) newSighted(k accountSightedKey) values.Value[uint64] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("Sighted", k.Source), false, values.Wrapped(values.UintWrapper))
+}
+
+func (c *Account) StagedProofBlocks(source *url.URL) values.Set[uint64] {
+	return values.GetOrCreateMap(c, &c.stagedProofBlocks, accountStagedProofBlocksKey{source}, (*Account).newStagedProofBlocks)
+}
+
+func (c *Account) newStagedProofBlocks(k accountStagedProofBlocksKey) values.Set[uint64] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("StagedProofBlocks", k.Source), values.Wrapped(values.UintWrapper), values.CompareUint)
+}
+
+func (c *Account) StagedProofs(source *url.URL, anchorBlock uint64) values.List[*protocol.AnnotatedReceipt] {
+	return values.GetOrCreateMap(c, &c.stagedProofs, accountStagedProofsKey{source, anchorBlock}, (*Account).newStagedProofs)
+}
+
+func (c *Account) newStagedProofs(k accountStagedProofsKey) values.List[*protocol.AnnotatedReceipt] {
+	return values.NewList(c.logger.L, c.store, c.key.Append("StagedProofs", k.Source, k.AnchorBlock), values.Struct[protocol.AnnotatedReceipt]())
+}
+
+func (c *Account) DirectoryAnchorBlock() values.Value[uint64] {
+	return values.GetOrCreate(c, &c.directoryAnchorBlock, (*Account).newDirectoryAnchorBlock)
+}
+
+func (c *Account) newDirectoryAnchorBlock() values.Value[uint64] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("DirectoryAnchorBlock"), false, values.Wrapped(values.UintWrapper))
 }
 
 func (c *Account) Events() *AccountEvents {
@@ -718,15 +771,38 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		}
 		v := c.Sighted(source)
 		return v, key.SliceI(2), nil
+	case "StagedProofBlocks":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (8)")
+		}
+		source, okSource := key.Get(1).(*url.URL)
+		if !okSource {
+			return nil, nil, errors.InternalError.With("bad key for account (9)")
+		}
+		v := c.StagedProofBlocks(source)
+		return v, key.SliceI(2), nil
+	case "StagedProofs":
+		if key.Len() < 3 {
+			return nil, nil, errors.InternalError.With("bad key for account (10)")
+		}
+		source, okSource := key.Get(1).(*url.URL)
+		anchorBlock, okAnchorBlock := key.Get(2).(uint64)
+		if !okSource || !okAnchorBlock {
+			return nil, nil, errors.InternalError.With("bad key for account (11)")
+		}
+		v := c.StagedProofs(source, anchorBlock)
+		return v, key.SliceI(3), nil
+	case "DirectoryAnchorBlock":
+		return c.DirectoryAnchorBlock(), key.SliceI(1), nil
 	case "Events":
 		return c.Events(), key.SliceI(1), nil
 	case "BlockLedger":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (8)")
+			return nil, nil, errors.InternalError.With("bad key for account (12)")
 		}
 		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
-			return nil, nil, errors.InternalError.With("bad key for account (9)")
+			return nil, nil, errors.InternalError.With("bad key for account (13)")
 		}
 		v := c.BlockLedger(index)
 		return v, key.SliceI(2), nil
@@ -734,11 +810,11 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.BlockLedgerChain(), key.SliceI(1), nil
 	case "Transaction":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (10)")
+			return nil, nil, errors.InternalError.With("bad key for account (14)")
 		}
 		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for account (11)")
+			return nil, nil, errors.InternalError.With("bad key for account (15)")
 		}
 		v := c.Transaction(hash)
 		return v, key.SliceI(2), nil
@@ -758,31 +834,31 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.MajorBlockChain(), key.SliceI(1), nil
 	case "SyntheticSequenceChain":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (12)")
-		}
-		partition, okPartition := key.Get(1).(string)
-		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account (13)")
-		}
-		v := c.getSyntheticSequenceChain(partition)
-		return v, key.SliceI(2), nil
-	case "SyntheticReplica":
-		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (14)")
-		}
-		stream, okStream := key.Get(1).(string)
-		if !okStream {
-			return nil, nil, errors.InternalError.With("bad key for account (15)")
-		}
-		v := c.getSyntheticReplica(stream)
-		return v, key.SliceI(2), nil
-	case "AnchorChain":
-		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (16)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.InternalError.With("bad key for account (17)")
+		}
+		v := c.getSyntheticSequenceChain(partition)
+		return v, key.SliceI(2), nil
+	case "SyntheticReplica":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (18)")
+		}
+		stream, okStream := key.Get(1).(string)
+		if !okStream {
+			return nil, nil, errors.InternalError.With("bad key for account (19)")
+		}
+		v := c.getSyntheticReplica(stream)
+		return v, key.SliceI(2), nil
+	case "AnchorChain":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (20)")
+		}
+		partition, okPartition := key.Get(1).(string)
+		if !okPartition {
+			return nil, nil, errors.InternalError.With("bad key for account (21)")
 		}
 		v := c.getAnchorChain(partition)
 		return v, key.SliceI(2), nil
@@ -795,7 +871,7 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Data":
 		return c.Data(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for account (18)")
+		return nil, nil, errors.InternalError.With("bad key for account (22)")
 	}
 }
 
@@ -839,6 +915,19 @@ func (c *Account) IsDirty() bool {
 		if v.IsDirty() {
 			return true
 		}
+	}
+	for _, v := range c.stagedProofBlocks {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.stagedProofs {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	if values.IsDirty(c.directoryAnchorBlock) {
+		return true
 	}
 	if values.IsDirty(c.events) {
 		return true
@@ -955,6 +1044,9 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.stagedSources, c.newStagedSources, opts, fn)
 	values.WalkMap(&err, c.sequenced, c.newSequenced, c.getSequencedKeys, opts, fn)
 	values.WalkMap(&err, c.sighted, c.newSighted, c.getSightedKeys, opts, fn)
+	values.WalkMap(&err, c.stagedProofBlocks, c.newStagedProofBlocks, c.getStagedProofBlocksKeys, opts, fn)
+	values.WalkMap(&err, c.stagedProofs, c.newStagedProofs, c.getStagedProofsKeys, opts, fn)
+	values.WalkField(&err, c.directoryAnchorBlock, c.newDirectoryAnchorBlock, opts, fn)
 	values.WalkField(&err, c.events, c.newEvents, opts, fn)
 	values.WalkMap(&err, c.blockLedger, c.newBlockLedger, nil, opts, fn)
 	values.WalkField(&err, c.blockLedgerChain, c.newBlockLedgerChain, opts, fn)
@@ -1002,6 +1094,13 @@ func (c *Account) baseCommit() error {
 	for _, v := range c.sighted {
 		values.Commit(&err, v)
 	}
+	for _, v := range c.stagedProofBlocks {
+		values.Commit(&err, v)
+	}
+	for _, v := range c.stagedProofs {
+		values.Commit(&err, v)
+	}
+	values.Commit(&err, c.directoryAnchorBlock)
 	values.Commit(&err, c.events)
 	for _, v := range c.blockLedger {
 		values.Commit(&err, v)

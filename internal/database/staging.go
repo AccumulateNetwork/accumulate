@@ -106,3 +106,37 @@ func (c *Account) getSequencedKeys() ([]accountSequencedKey, error) {
 	}
 	return keys, nil
 }
+
+// getStagedProofBlocksKeys enumerates anchor staging's per-source block sets
+// for snapshots: one per staged source.
+func (c *Account) getStagedProofBlocksKeys() ([]accountStagedProofBlocksKey, error) {
+	sources, err := c.StagedSources().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	keys := make([]accountStagedProofBlocksKey, 0, len(sources))
+	for _, u := range sources {
+		keys = append(keys, accountStagedProofBlocksKey{Source: u})
+	}
+	return keys, nil
+}
+
+// getStagedProofsKeys enumerates the proofs anchor staging holds, by source
+// and Directory anchor block, so snapshots collect them.
+func (c *Account) getStagedProofsKeys() ([]accountStagedProofsKey, error) {
+	sources, err := c.StagedSources().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	var keys []accountStagedProofsKey
+	for _, u := range sources {
+		blocks, err := c.StagedProofBlocks(u).Get()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		for _, b := range blocks {
+			keys = append(keys, accountStagedProofsKey{Source: u, AnchorBlock: b})
+		}
+	}
+	return keys, nil
+}

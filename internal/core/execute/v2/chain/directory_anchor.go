@@ -9,6 +9,7 @@ package chain
 import (
 	"bytes"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -77,6 +78,19 @@ func (x DirectoryAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Trans
 		return nil, err
 	}
 	st.State.DidReceiveAnchor(protocol.Directory, body, index)
+
+	// Anchor staging compares a proof's anchor block against the newest
+	// Directory anchor executed here (executor spec, "Anchor staging").
+	dab := st.batch.Account(st.OriginUrl).DirectoryAnchorBlock()
+	switch cur, err := dab.Get(); {
+	case err != nil && !errors.Is(err, errors.NotFound):
+		return nil, err
+	case cur < body.MinorBlockIndex:
+		err = dab.Put(body.MinorBlockIndex)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// And the BPT root
 	_, err = st.State.ChainUpdates.AddChainEntry2(st.batch, record.BPT(), body.StateTreeAnchor[:], 0, 0, false)

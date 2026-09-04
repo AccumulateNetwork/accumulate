@@ -22,6 +22,10 @@ type Block struct {
 	Batch    *database.Batch
 	Executor *Executor
 
+	// proofsValidatedThrough is how many of State.ReceivedAnchors anchor
+	// staging has already used to decide waiting proofs this block.
+	proofsValidatedThrough int
+
 	// produced accumulates every delivery's produced messages so they can be
 	// sequenced in ONE sorted pass at block end (#4144). Sequencing inline —
 	// destLedger.Produced++ per message as each delivery executes — was the

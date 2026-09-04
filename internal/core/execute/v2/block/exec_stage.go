@@ -9,6 +9,8 @@ package block
 import (
 	"sort"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -79,6 +81,14 @@ type classified struct {
 	streams  map[string]stream
 	arrivals map[string]map[uint64]*arrival
 	user     []int
+	// proofs are the collection proofs the block brought, each with the source
+	// stream of the sequenced messages it travelled with (anchor staging).
+	proofs []proofArrival
+}
+
+type proofArrival struct {
+	source *url.URL
+	proof  *protocol.AnnotatedReceipt
 }
 
 func (b *Block) classify(envelopes []*messaging.Envelope) *classified {
@@ -92,12 +102,21 @@ func (b *Block) classify(envelopes []*messaging.Envelope) *classified {
 		}
 
 		isUser := true
+		var proofs []*protocol.AnnotatedReceipt
+		var source *url.URL
 		for _, msg := range messages {
+			if p, ok := msg.(*messaging.SyntheticProof); ok && p.Proof != nil {
+				proofs = append(proofs, p.Proof)
+				continue
+			}
 			str, seq, err := b.Executor.streamOf(msg, resolveFromBatch(b.Batch))
 			if err != nil || !str.ok() {
 				continue
 			}
 			isUser = false
+			if source == nil && str.kind == streamSynthetic {
+				source = str.source
+			}
 
 			key := str.ledger.String() + "|" + str.source.String()
 			if _, seen := streams[key]; !seen {
@@ -113,6 +132,11 @@ func (b *Block) classify(envelopes []*messaging.Envelope) *classified {
 
 		if isUser {
 			c.user = append(c.user, i)
+		}
+		if source != nil {
+			for _, p := range proofs {
+				c.proofs = append(c.proofs, proofArrival{source: source, proof: p})
+			}
 		}
 	}
 	return c
