@@ -95,7 +95,7 @@ evaluated, drained and executed; only then is the next group evaluated.
    the executor: it is an **envelope** carrying the missing synthetic and
    anchor messages themselves — entries the destination already proved, the
    source having answered a request for hashes the destination's accepted
-   receipts cover ([healing.md](healing.md), "A request names hashes"). There
+   receipts cover ([healing.md](healing.md), "The request"). There
    is no healing message type, no executor for one, and no status or chain
    entry recorded for the bundle. Its entries are ordinary sequenced messages
    and are **applied to staging first**, as held, before any anchor or

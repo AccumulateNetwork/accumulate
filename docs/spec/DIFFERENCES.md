@@ -234,8 +234,7 @@ cached the executor's reads rather than what healing asks for.
 
 *[#4212](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4212)*
 
-**Spec** ([healing.md](healing.md), "Healing is monotonic, and the source
-already has the answer"): a number is requested at most until it lands, never
+**Spec** ([healing.md](healing.md), "Invariants" 1 and 2): a number is requested at most until it lands, never
 after; the source holds its recent synthetics and anchors ready to serve.
 
 **Code**: the healer's gap scan re-requests a number every cadence until the
@@ -271,8 +270,7 @@ stream and number, two generations, never invalidated).
 
 *[#4216](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4216)*
 
-**Spec** ([healing.md](healing.md), "A request names hashes, an answer is a
-bundle"): a request is the set of hashes the destination's receipts prove but
+**Spec** ([healing.md](healing.md), "The request", "The answer", "Where it lands"): a request is the set of hashes the destination's receipts prove but
 it does not hold; the answer is a bundle of entries served from the producer's
 cache, submitted by the source into the requesting network, applied to staging
 before execution, and truncated from staging once executed.
