@@ -100,8 +100,12 @@ closed (87,908 proven, 20,074 collected, streams with no backlog), but heals
 did not fall — the healer pulls every one-block-late hole immediately (H8),
 and the Directory's range recovery proves under source roots that no
 destination accepts (H9), so the Directory spiralled and the run stalled at
-17 minutes. The heals criterion is H8's to meet; E8's code is complete except
-release of the proven set.
+17 minutes. **Check #2 (`20260904T163512Z`, with the review fixes)** ran to its
+30-minute deadline: 1.0 s blocks on every partition, heap flat at ~500 MiB,
+no refusal, no Directory spiral, streams with no backlog — and found one more
+defect (a delivered copy ahead of its anchor failed its envelope; 11,248
+envelopes; fixed `cc8c06366`). The heals criterion is H8's to meet; E8's code
+is complete except release of the proven set.
 
 ### H8 #4216 — healing by hash set, from the producer cache
 
