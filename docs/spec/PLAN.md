@@ -1,132 +1,170 @@
 # Development plan
 
-Ordered from [DIFFERENCES.md](DIFFERENCES.md). The order is by dependency and
-by what is actually stopping the network, not by size.
+The plan to bring the code to the specification. Ordered from
+[DIFFERENCES.md](DIFFERENCES.md) by dependency and by what stops the network,
+not by size. Every item names the spec section it implements, what changes,
+the tests that come first, and what "done" means. An entry leaves DIFFERENCES
+when the code matches the spec, not when its issue is filed or closed.
 
-## What is stopping us
+## Status
 
-The livelock (E1) and the memory growth (E7, D5) are closed. Runs now hold
-memory and CPU flat and fail on throughput: a third of dispatched synthetic
-packages arrive before the anchor that proves them and are parked outside
-staging (E8), the healer fills those holes one message at a time with no
-memory and no cache (H8), the executor spends itself on that traffic,
-consensus runs ahead of it without bound (C6), and refusal holds user
-throughput near zero. The order below follows that chain.
+E1, E2, E7, D5, S0–S3, C1–C5, H2, H4, H5, H7 and S8a are done. Memory and CPU
+hold flat under load. Throughput does not: dispatched packages that arrive
+before their anchor are parked outside staging (E8), the healer fills the holes
+one message at a time with no cache (H8, H1), the executor spends itself on
+that, consensus runs ahead of it without bound (C6), and refusal holds user
+throughput near zero. The chain of work below follows that chain of causes.
 
----
+## Order
 
-## Where we are
+```
+E8 #4217 ─▶ H8 #4216 (with H1 #4193, H6 #4212) ─▶ C6 #4215 ─▶ #4214 check ─▶ acceptance run #7
+S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86      cost, after run #7 shows the healer gone
+E5 #4197, E4 #4198, E6, D1 #4199, D2, D3 ─▶ D4       correctness debt, parallel or after
+H3 #4192                                              when measurement says proofs must reach further back
+#4205 restart recovery                                before chaos returns to a soak
+```
 
-| | |
-|---|---|
-| **Spec** | Executor, database and healing written. Healing was rewritten after the first pass: gaps come from staging, requests are generated in staging, two senders are chosen by the previous block's hash, and healing activates on a cadence. |
-| **E1 + H4 + E2 + E3** | **Done**, on `issue-4189-staging-out-of-account`. Removed from the differences: the code matches the spec. |
-| **H5** | **Done**, same branch. Cadence and sender selection replace the jitter, back-off and breakers. |
-| **H2** | **Done** — nothing to write. Oldest-first entries and "skip what is staged" both arrived with the staging change. |
-| **D3** | **Implemented, not merged.** `TestDeep` on branch `issue-4196-kvtest-deep` (`f3339116e`). |
-| **E7** | **Done**, on `issue-4202-block-ledger-chain`: a `block-ledger` chain and one keyed record per block; `indexing.Log` and the #4147 walk deleted; the invariant-9 cost test is green. Removed from the differences. Not yet soaked. |
-| **D5** | **Done**, on `issue-4203-bcdb-durable-commit` (#4203): every commit is written through and sealed at commit; readers are isolated by per-version pre-image overlays that are dropped as they close; the oldest view's opener is named in a warning; the event service loads one block at a time with a bounded queue and opens its view only while loading. Removed from the differences. Not yet soaked. |
-| **Steady state** | S0–S3, C4, C5 done; S8a delivered. **Run #5 (`20260904T012004Z`, no chaos): 1.75 h**, the longest yet — parity and near-empty stores for 15 minutes, CPU plateau at ~15 fleet cores from GC (#4211) and store history walks (BlockchainDB#86) — then two defects: the reconcile ran once per block, overlapping, past its deadline and hammered failing sources into a 9.4-million-line storm that took the Directory down (H7 #4213, fixed on `issue-4210-batch-plane-c4-c5`), and a stale digest in the availability queue put a retired batch into a new header (C5b, fixed). Healing at zero drops remains the anomaly (H6 #4212, H1 #4193). **Run #6 next, chaos off.** **Run #6 (`20260904T035906Z`): no storm, no re-proposal, no back-off — and still a third of every synthetic stream is never sighted by its destination and is carried by the healer (#4214), which is what slows the BVNs and drives the GC.** At 55 min: **7 user tps.** The healer, with no per-sequence memory and every validator pulling, made 230 heals/s of system traffic; the BVN executors spent themselves on it and fell to a third of consensus (BVN1 voting round 5,900 while executing round 3,500); own batches pin until *execution*, so the own store sat 18 MB over its share and refusal never lifted — C6 #4215, new invariant 9 in consensus.md. Review: `runs/20260904T035906Z/review.md`. |
-| **Everything else** | Not started. |
+Each item is its own issue branch from the previous item's tip.
 
-**What E3's answer turned out to be, because it changed the shape of E1.** The
-first answer was that staging is rebuilt on restart, not restored. That is
-wrong: staging decides what a block executes, so a node holding less than its
-peers executes a shorter run and produces a different block hash. The old design
-was right that the held set must be AGREED and wrong that it therefore had to be
-HASHED — which is what put it in an account, and what made it need a bound.
-Durable and unhashed keeps the agreement and drops the bound.
+## The critical path
 
-**Not yet validated by a soak.** The livelock's mechanism is removed and the
-tests that pin it pass, but the claim that soaks stop dying is a claim about a
-12-hour run, not a test suite.
+### E8 #4217 — staging as two stores
 
-## Phase 2 — the livelock
+Spec: executor.md "Collection", "Proof", "Anchor staging", "Sort, then four
+groups", "Staging in a snapshot"; healing.md "Gaps".
 
-In order. Each depends on the one before.
+Steps, each test-first:
 
-**#4189 — E1 + H4 + E2: move staging out of the account model, and have healing
-ask it. DONE.** One change, not three.
+1. **Anchor sequence number on the proof.** `AnnotatedReceipt` gains the
+   Directory anchor's sequence number; `buildSynthPackageProof` and
+   `sendSynthWithOwnProof` fill it; the validator refuses a proof without it.
+   Test: a built package proof names the anchor its receipt terminates in.
+2. **Anchor staging.** A store of proofs keyed by (source, anchor sequence).
+   Intake writes every arriving proof there; executing a Directory anchor
+   validates or discards every proof waiting on its number; a proof whose
+   anchor already executed is validated at intake. Counters: proofs validated,
+   disproved, duplicate-for-same-indexes. Test: a proof arriving one block
+   before its anchor is validated when the anchor executes; a disproved proof
+   is gone and counted.
+3. **Proven ranges by index.** Per stream, the union of validated proofs'
+   index ranges, above `Delivered`, durable and unhashed, in the snapshot.
+   The BPT-hashed replica is deleted. Test: two overlapping proofs give one
+   range; release at commit drops ranges at or below `Delivered`.
+4. **Collection.** Synthetic staging holds every arriving entry by index,
+   proven or not; an entry more than the sanity horizon ahead is refused.
+   `buildRun` executes an entry only when proven and next. `SyntheticMessage`
+   never returns `Pending`: the pending-outside-staging path is deleted. Test:
+   a package arriving before its anchor is held, executes the block after the
+   anchor lands, and no status is recorded in between.
+5. **Intake as group 0.** `classify` writes entries and proofs into both
+   stores before the anchor group is evaluated, for packages and bundles
+   alike. Test: an envelope's entries complete a run that drains in the same
+   block.
+6. **Snapshot.** Both stores and the proven ranges are collected and restored.
+   Test: a node restored from a snapshot holds what the source held and
+   executes the same run.
+7. **Gaps.** Staging answers "proven and missing" and "held or expected and
+   unproven" by index, and "anchors missing below the newest held". The
+   reconcile-by-`Produced` path is deleted. Test: a lost package produces the
+   first kind, a lost proof the second, and neither is reported before staging
+   has finished the block.
 
-Staging becomes durable, unhashed records on the stream's ledger account, fed
-only by consensus. `Pending` and `Received` leave `PartitionSyntheticLedger`;
-`Delivered` stays, because what a block delivered is its output, and becomes the
-only thing the executor reads from it. `MaxPendingSequenced` and the refusal at
-`stream_position.go:174` go with them: everything received is held until it can
-be processed, and a message that reaches staging is recorded.
+Done when: the e2e suite delivers packages with anchors arriving in either
+order without healing; `exec_synthetic_anchor_total{applied="missing"}` no
+longer exists because nothing is judged that way; a 30-minute soak at 500 tps
+shows heals only for injected drops.
 
-H4 is inseparable. `missingRuns` finds gaps by walking `Pending` for `nil`
-entries, so the moment `Pending` leaves the ledger it is empty and healing goes
-from re-fetching what the node holds to re-fetching *everything*. A gap becomes
-a number in `(Delivered, Produced]` that staging does not hold — which means
-staging must be askable.
+### H8 #4216 — healing by hash set, from the producer cache
 
-**#4201 — H5: compute requests from staging, on a cadence. DONE.** Requests are
-computed at a block boundary on an activation block, and pulled by two
-validators chosen from the previous block's hash. The `Conductor`'s per-node
-jitter, back-off windows, failure breaker and per-gap scheduling are deleted:
-with an activation every few blocks there is no rate to manage, and a lost
-request costs nothing because the gap is still a gap next time.
+Spec: healing.md throughout; database.md "Caches".
 
-The pair applies to **pulls only**. A request is fungible — whoever asks, the
-answer returns through consensus and heals everyone. A signature is not, so the
-anchor push runs on the cadence for every validator; selecting a pair there
-withholds the rest of the quorum.
+1. **Producer cache.** `internal/core/crosschain/cache.go`: entries in play by
+   (partition, index) and by hash, filled from `produceSynthetic` and
+   `prepareAnchor`, dropped as the destination's `Delivered` is learned,
+   `HealCacheEntries` from measurement, misses served from the permanent layer
+   and counted with depth. Test: a produced entry is in the cache before the
+   block closes; a request for it never touches the chain.
+2. **The request.** A third sequencer method: entries by hash set and proofs
+   by index spans for a destination, bounded by `MaxRequestHashes` and
+   `MaxRequestSpans`. Test: a request for a thousand hashes is one call and
+   one answer.
+3. **The answer.** The source packs bundles under `synthPackageBudget` and
+   submits them to the requesting partition through the dispatcher. A bundle
+   is an envelope of entries or a proof, no message type of its own. Test: a
+   destination's staging holds every requested entry one block after the
+   answer, with nothing recorded for the envelope.
+4. **Deciding in staging.** On activation blocks staging computes the request
+   set after the block: gaps first seen two activations ago, not asked within
+   `healPatience`, anchors at once. The conductor's `requestMissingSynthetics`
+   and reconcile are deleted; the pair selection is kept. Test: the same
+   request set on every validator; a gap seen once is not asked.
+5. **Counters.** Every row of healing.md's counting table on the metrics
+   endpoint.
 
-**#4190 — E2: `isReady` stops reading block state. DONE**, with #4189. It reads
-a position built from the ledger's `Delivered` and staging's own records, so
-nothing the block writes decides what the executor believes it holds.
+Done when: a soak with 5% of packages dropped shows heals equal to distinct
+gaps, one request per gap, zero cache misses, and executors spending under 5%
+on healing. Closes H1 #4193 and H6 #4212 with it.
 
-**#4191 — H2: order healing. DONE**, and it turned out to be nothing to write.
-"Skip what is already staged" arrived with H4, since a staged number is not a
-gap. The order arrived with it too: entries are fetched oldest-first, which is
-what advances delivery.
+### C6 #4215 — consensus does not outrun execution
 
-What the entry had wrong was the direction. "Newest to lowest" conflated the two
-halves of closing a gap — a receipt only needs the HASHES, so the proof is a
-separate fetch with no order at all, and the entries go oldest-first because
-delivery is in order. Fetching entries newest-first under a bounded budget would
-spend it on messages that unblock nothing.
+Spec: consensus.md invariants 9 and 10, "Execution lag".
 
-**#4192 — H3: proof extension. DESIGNED, deliberately not built.** The reason
-this was urgent turned out to be false: a collection proof spans from the
-requested range to the block boundary covering it, not to the chain head, so its
-length does not grow with how far behind a destination is. The soak's own
-evidence says so — 44,206 heals, errors 0. The real trigger is a single block
-producing more than ~4,096 synthetics to one destination, which is a throughput
-condition and has never been observed. Build it when a run shows a proof-length
-rejection.
+1. The bridge reports the executed leader round to the node after each commit.
+2. The header builder takes no batches while the lag exceeds `MaxExecutionLag`
+   (8); the worker refuses with reason `execution-lagging`.
+3. `batch_store_refusing{reason}` and separate transition log lines; a lag gauge
+   and commit queue depth gauge.
 
-**#4193 — H1: the healing cache.** Now the next item, and small. Keyed by source, destination
-and sequence number, in Accumulate, used only by healing. It turns 53,011
-fetches into 8,556 — worth having, but it optimises a loop E1 and H2 have
-already stopped.
+Test: an executor that executes one block in three keeps the DAG within the
+bound, the own store within its share, and the reason says lag. Done when a
+soak with an artificially slow executor never exceeds the bound.
 
-**#4202 — E7: the block ledger as a chain. DONE, on its branch; not yet soaked.** A `block-ledger` chain on the
-system ledger account and one keyed record per block, written once; reads go to
-the keyed record and fall through to the pre-activation account; no migration,
-no walk of history. Deletes `indexing.Log`. Supersedes the mechanism in #4147:
-mainnet's Jiuquan activation becomes this form, and the in-band walk of
-35 million blocks does not happen. Also close the two things the same run
-exposed alongside it, because the next run must be able to tell them apart:
-export bcdb's staged-commit depth and the age of the oldest open view (18
-commits were staged on every BVN database at the end), and rate-limit the
-batch-store over-limit warnings (25,000 a minute per node).
+### #4214 — the dispatch leg, verified
 
-## Steady state — RAM and CPU under load
+After E8 the "missing anchor" leg is gone by construction. Verify the rest:
+dispatch counters (packages built, dispatched, refused) against the
+destination's proven-missing gaps over a 30-minute soak. Any remaining loss is
+a new difference to record before run #7.
 
-The soaks now fail on resources, not on livelocks: memory climbs to the limit,
-GC takes the CPU, blocks slow, and the stall follows. This section is the plan
-to reach a node whose memory and CPU are flat for as long as it runs, at the
-target rate, and to be able to *show* that they are. It is ordered by what the
-evidence says is largest, and every item traces to a spec statement or names the
-spec it needs first — nothing here is tuning.
+### Acceptance run #7
 
-### What steady state means
+Twelve hours at 500 tps, 1 s blocks, chaos off, then the same with chaos once
+#4205 is closed. Judged by the criteria below; nothing shorter is a claim.
 
-Measured over a **12-hour run at 500 tps, 1 s blocks** (a shorter run proves
-nothing about growth). Warm-up is the first hour; the numbers are taken from
-hour 1 to hour 12.
+## Cost, after the healer is gone
+
+- **S4 #4211** — hash a message once; read-only chain state without deep copy.
+  Spec: executor invariant 9.
+- **S5** — both caches sized in bytes and reporting their size. Spec: database
+  "Caches".
+- **S2 follow-up** — capture the provable view only when a snapshot is about
+  to be pinned. Spec: database invariant 5.
+- **S7** — every warning that can fire per message is rate-limited; log
+  volume is a metric.
+- **BlockchainDB#86** — history lookups indexed rather than bloom-walked.
+  Store-side.
+
+## Correctness debt
+
+- **E5 #4197** — one evaluation per stream per block; the re-evaluation loop
+  goes.
+- **E4 #4198** — anchor signature quorum assembled in staging, not by
+  execution.
+- **E6** — `CascadeDeliveryQueue` deleted from the hashed state.
+- **D1 #4199** — record placement derived from the record model, or divergence
+  detectable without a soak.
+- **D2, D3 ─▶ D4** — isolation verified for every backend; the window part of
+  the backend contract; absence reported.
+- **H3 #4192** — proof extension, when measurement shows a destination must
+  reach further back than one proof.
+- **#4205** — a restarted validator rejoins from retention or a snapshot;
+  required before chaos returns.
+
+## Acceptance criteria
+
+Measured over a **12-hour run at 500 tps, 1 s blocks**. Warm-up is the first
+hour; the numbers are taken from hour 1 to hour 12.
 
 | property | criterion | spec |
 |---|---|---|
@@ -136,216 +174,15 @@ hour 1 to hour 12.
 | Block work is bounded | bytes allocated per block does not correlate with height; no allocation site's share grows across the run | executor inv. 9 |
 | Commits are durable | `stagedCommits` ≤ 1 at every snapshot; oldest open view younger than one block | database inv. 5 |
 | Reads are bounded | read-probe p99 flat; `deepFallbacks` zero; no shallow read walks history | database, windows |
-| Caches are bounded | every cache is bounded in **bytes** and reports its size | database — *gap, see S6* |
+| Caches are bounded | both caches bounded in **bytes** and reporting their size | database "Caches" |
 | Consensus memory is bounded | batch stores and queues hold at most their budget, per node, whatever the executor is doing | consensus — *gap, see S4* |
 | Logging is bounded | no message exceeds a fixed rate per node; log volume flat | — |
 
 The heap profile at hour 12 must have the same top ten as the profile at hour 1.
 
-### The work, in order
 
-**S0 — be able to measure it.** Nothing above can be judged from today's
-harness: memory is sampled every five minutes, `stats.json` is rewritten every
-50 commits so its history is lost, the dagbft block-time and round histograms
-emit nothing on any node, and the manifest prints the script's default memory
-budget rather than what compose ran. Sample RSS, heap, GC cycles and GC CPU
-fraction per node every 10–30 s into soakmon's history; snapshot `stats.json`
-on the same cadence; make the histograms emit; export `stagedCommits` and
-oldest-view age as metrics; record the effective `GOMEMLIMIT` and `mem_limit`.
-Take heap and CPU profiles at fixed hours, not only at the wedge. *Parallel
-with S1; done before the acceptance run.* **DONE on `issue-4204-soak-instrumentation`
-(#4204):** `mem.csv` and `storage-stats.csv` per run, hourly captures with a
-30 s CPU profile, the effective memory budget in the manifest, the two
-histograms observed, GC cycles and GC CPU exported, and
-`accumulate_bcdb_staged_commits` / `oldest_view_age_seconds` gauges.
+### Metrics behind the criteria
 
-**S1 — #4202, E7: the block ledger as a chain. DONE on its branch.** The dominant term: 41–46% of the live
-heap and the largest allocation site in our code, growing with height. Chain on
-the ledger, one keyed record per block, `indexing.Log` deleted, no migration.
-*Done when*: `indexing.(*Block).MarshalBinary` is absent from the profile and
-bytes allocated per block are flat across the run. Spec: executor, "The block
-ledger", invariant 9. Mainnet's history is the TBD in the spec, not this item.
-
-**S2 — #4203, D5: commits reach the store at commit. DONE on its branch.** The retention term: with E7
-fixed the pages are small, but a reader that pins a version still holds every
-commit since it, and a crash loses them. Restore durability at commit (write
-through unconditionally; isolate open views by overlay or by versioned reads),
-export the depth and the oldest view's age, tag views with their opener, add
-the `kvtest` case. Then find and fix whatever held eighteen blocks on every
-BVN. Prime suspect: the API event service, which opens a batch on every commit
-and loads the whole block ledger in an unbounded goroutine — bound it to one in
-flight and skip the load when nothing is subscribed. *Done when*:
-`stagedCommits` ≤ 1 at every snapshot for twelve hours, and no view outlives a
-block. Spec: database invariants 2 and 5.
-
-**S3 — write the consensus memory section of the spec, then hold it. DONE on
-`issue-4207-batch-plane-budgets`: spec `consensus.md` (partial part), then
-C1–C3 (#4206, #4207, #4208) implemented — a one-second seal floor and one
-worker per node, byte-only budgets with own uncommitted batches bounded by
-`SubmitUser` refusing (`NotReady`) while system traffic is never refused,
-gauges for store bytes and refusal, and the over-limit state logged on
-transition. C1–C3 removed from the differences; not yet soaked. Run #3
-(`20260903T213153Z`, no chaos) reproduced it alone: batches of one or two
-transactions from a 100 ms seal timeout, a count-bounded store holding six
-seconds of them, evictions of what the next header needed, and the storm at
-minute 16 with no fault anywhere else.** There is
-no consensus part of the spec, so the batch store has no specified budget and
-behaves as it happens to: 32 MB active, 32 MB retained, 32 MB inbound queue
-*per partition*, and own uncommitted batches exempt from eviction — so when the
-executor lags, the store exceeds its budget without bound, evicts peers'
-batches, defers votes, refetches, and warns 25,000 times a minute. Specify:
-one byte budget per node; what a full store does (back-pressure the submitter,
-never evict what a vote needs, never exceed the budget for own batches); and
-that the wire buffer a batch aliases counts against it. Then make the code
-match and rate-limit the warnings. *Done when*: `pubsub/pb.(*Message).Unmarshal`
-in-use is within the budget at every profile, and the over-limit warning is
-gone from a healthy run. Spec: **to be written** (SPEC.md lists consensus as a
-missing part).
-
-**S4 — allocation churn that sets the GC cadence. Filed as #4211 from run #5's 18-minute profile: synthetic and sequenced message marshaling through `encoding.Hash` is 35% of all allocation (~290 MB/s per node), and GC cores per node rose 0.14 → 1.3 in ten minutes with execution work flat.** None of these retain
-memory; together they are why the collector runs eight times a second once the
-heap is at the limit. From the hour-16 profile of `acc-bvn2-val1` (197 GB
-allocated):
-
-| site | allocated | fix |
-|---|---|---|
-| `encoding.Hash` of `SyntheticMessage` | 17 GB | hashing re-marshals the message with its receipts every time; cache the hash on the message |
-| `api/v3/message.Handler` serving synthetic pulls | 18 GB | H1, the healing cache, cuts the pulls; the sequencer's per-request receipt walk is the rest |
-| `merkle.(*State).Copy` via `CopyAsInterface` | 9 GB | every `Get` of a chain state deep-copies it; give readers a read-only view |
-| `Batch.UpdateBPT` | 22 GB cumulative | measure per block; it should be O(accounts touched) |
-
-*Done when*: bytes allocated per committed transaction halve, and GC cycles per
-second under 500 tps are flat and low. Spec: healing, "The cache"; executor,
-"The database write".
-
-**S5 — bound every cache in bytes.** The database spec says nothing about
-caches; the sub-1 GB work found that caches, not storage layout, set the
-footprint, and that ~350 MB of the heap is GC headroom the limit authorizes.
-bcdb's two immutable caches are bounded by entry count (200,000 per generation,
-two generations, two caches), not bytes. Add to database.md: a cache is bounded
-in bytes, reports hits, misses and bytes, and holds only records that cannot
-change. Then make the caches match. *Done when*: cache bytes are a metric and
-the sum of them is a chosen fraction of the memory budget. Spec: **database.md
-addition**.
-
-**S6 — GC and memory limits as configuration, not folklore.** `GOMEMLIMIT` must
-sit below the container limit with headroom (a limit above it is an OOM kill
-waiting for a spike); the manifest must record the effective values; the
-runtime's GC CPU fraction must be exported so the "GC is not the workload"
-criterion is measurable. Small, and part of S0's harness work. *The measurement
-half is done with S0; the limit policy is a compose change still to make.*
-
-**S7 — logging is a resource.** Rate-limit every warning that can fire per
-message or per submit (the two batch-store warnings first), and add log lines
-per minute per node to the acceptance table. A node at 50,000 lines a minute is
-spending CPU on the symptom.
-
-**S8 — the store's own growth (BlockchainDB, cross-repo).** The dynamic layer's
-live-tail rewrite (BlockchainDB#60) and maintenance pauses scale with the
-dynamic layer's size, which E7 and S5 shrink but do not remove. Filed there,
-not edited here. Any store-side term that survives S1–S5 in the hour-12 profile
-becomes an issue in that repository.
-
-**S8b — history lookups walk every segment's bloom (BlockchainDB#86).** Run #5:
-`segment.lookup` is 18% of CPU, 94% from `lookupHistory`, 82% of that testing
-bloom filters across ~40 history segments per shard, for reads of accounts last
-touched more than N blocks ago — most of a 10,000-account load. Grows with the
-segment count. Filed there.
-
-**S8a — the seal is the throughput wall (BlockchainDB#84).** Acceptance run #1
-(`20260903T173742Z`) had flat memory and idle CPU and delivered ~80 user tps of
-500 offered. Block production averaged 0.88 s of every 1 s block with 65 ms of
-execution in it; every node's block producer was sampled inside `fsync` in the
-store's per-block seal, which issues about forty serialized fsyncs across the
-eight shards (17 ms each on this host) while holding each shard's write lock, so
-the read that validates a submission waits the seal out. Sixteen submitters at
-~190 ms each is ~84 tps. The pre-sharding store reached 497 tps on the same
-soak. Fix is the store's: seal shards concurrently, one fsync per layer per
-block, no read lock across fsync. **Delivered 2026-09-03 as BlockchainDB PR #85
-(`dcce242`, "Seal off the lock, and seal the shards together")**: the cut under
-the lock with no barrier, fsyncs with the lock released, layers side by side,
-shards concurrent; their measurement a block boundary 253 → 50 ms mean and the
-worst Get during a seal 56 → 1.8 ms. Pulled into accumulate on the #4203
-branch; acceptance run #2 runs on it.
-
-### Order
-
-```
-S0 (measure) ─┬─▶ S1 (E7) ─▶ S2 (D5 + view holders) ─▶ acceptance run #1
-              └─▶ S6, S7                         parallel, any time
-S3 (consensus spec, then batch store) ─▶ S4 (churn) ─▶ S5 (caches) ─▶ acceptance run #2
-S8 as issues, whenever a store term shows in a profile
-```
-
-**Revised after run #1 (2026-09-03).** Run #1 showed the order above is wrong
-about what comes before the second run. With the database terms gone, the heap
-that grew was the batch store and gossip buffers, because the store's seal
-holds every block to ~0.9 s and nothing tells the submitter to slow down:
-
-```
-S8a (BlockchainDB#84, store) ─┐
-S3  (consensus memory spec + back-pressure) ─┴─▶ acceptance run #2
-S7  (logging) alongside; S2 follow-up: captureProvableView holds a view for
-    minutes by design — capture it only when a snapshot is about to be pinned
-#4205 (restart recovery) before chaos returns to an acceptance run
-C4 #4209 + C5 #4210 DONE ─▶ acceptance run #5, chaos off (ran; see row above)
-H7 #4213 + C5b DONE ─▶ acceptance run #6, chaos off
-E8 #4217 (staging as two stores: entries by index, proofs by anchor sequence; the dispatch leg of #4214) + H8 #4216 (heal by hash set: bundles from the producer cache; absorbs H6 #4212 + H1 #4193) + C6 #4215 (consensus does not outrun execution)
-  + #4214 (why a third of synthetics need the healer at all) ─▶ then S4 #4211, S5 ─▶ acceptance run #7
-```
-
-Acceptance run #1 answers whether memory is flat with E7 and D5 closed. It will
-not yet meet the GC or churn criteria; that is what run #2 is for. Neither run
-is a claim until it has lasted twelve hours.
-
-## Alongside — cheap and independent
-
-Closeable on their own, in parallel with anything. **Not sequenced ahead of the
-critical path.**
-
-| | |
-|---|---|
-| **#4195 — E6** | `CascadeDeliveryQueue` is dead state still folded into the account hash. Remove the field, the hasher contribution, the snapshot entry, the debug observer. |
-| **#4196 — D3** | Done on a branch; merge it. |
-| **#4194 — D2** | Badger does not run `TestIsolation` — it runs only Database, SubBatch, Prefix and Delete, across all four versions. Add it and see whether it passes. If it does not, the difference is much larger than the test. |
-| **#4200 — D4** | Enforce the bcdb read window: `getAt` falls back to `GetDeep` for a **shallow** reader, so no ordinary read ever reports absence. The fallback count is now zero, which is the evidence its own comment asks for. After #4196 — enforcement without the conformance test swaps a measured fallback for an unverified one. |
-
-## Phase 3 — correctness debt
-
-Not urgent, not optional.
-
-**#4197 — E5: the re-evaluation loop.** `stageRuns` is documented as callable
-more than once per block and `drainRevealed` runs it up to eight times. The spec
-says three groups in sequence, each evaluated once. Establish whether either
-stated reason still bites once the run is computed from arrivals *and* the
-staged set with anchors executing first; if neither does, the loop and
-`maxDrainRounds` go. A correctness question before a performance one: that bound
-exists to stop a round that always reports progress from hanging a block, which
-guards a condition the design says cannot arise.
-
-**#4198 — E4: anchor authorization into staging.** Signatures route to staging,
-staging packs them with the one anchor and evaluates quorum or proof, and the
-anchor executes once with no further checking. Removes N−1 executions per anchor
-whose only product is a signature, and lets the payload deduplicate.
-O(validators) per anchor: small at four, linear as that grows.
-
-**#4199 — D1: record placement.** `route.go` is a second model of the record
-model, maintained by hand, wrong twice and both times caught by a soak. Either
-derive placement from the record model or make divergence detectable without a
-soak.
-
----
-
-## Order of work
-
-```
-E8 #4217 (two-store staging) ─▶ H8 #4216 (heal by hash set, producer cache) ─▶ C6 #4215 (lag bound) ─▶ acceptance run #7
-S4 #4211, S5, S2 follow-up, BlockchainDB#86         steady-state cost, after run #7 shows the healer gone
-E6, D2, D3 ─▶ D4                                    parallel, any time
-E5, E4, D1, H3                                      after
-```
-
-### Metrics behind the acceptance criteria
 
 | criterion | metric | exists |
 |---|---|---|
@@ -360,5 +197,3 @@ E5, E4, D1, H3                                      after
 | staging bounded | staging entries and proofs held, proven range size | no |
 | logging bounded | log lines per minute per node | harness only |
 
-An entry leaves [DIFFERENCES.md](DIFFERENCES.md) when the code matches the
-spec, not when its issue is filed or closed.
