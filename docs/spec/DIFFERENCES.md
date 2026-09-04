@@ -172,6 +172,44 @@ for `BeginDeep` swaps a measured fallback for an unverified one.
 
 ---
 
+## Consensus
+
+### C6. Consensus outruns execution, and own batches pin until execution
+
+*[#4215](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4215)*
+
+**Spec** ([consensus.md](consensus.md), invariant 9): a validator whose
+executor is more than a bound of blocks behind the last commit proposes empty
+headers and refuses user work until it catches up.
+
+**Code**: the proposer never reads the executor's height. Committed
+certificates queue in `committed` (`DefaultCommitBufferSize` = 5,000 blocks)
+"and the DAG regardless" (`pkg/consensus/consensus.go`, commit loop); own
+batches are released by `PruneCommitted` when their block **executes**, so
+while execution lags every own batch of the lag is "uncommitted", the own
+store exceeds its share through `Submit` (system traffic, never refused) and
+`SubmitUser` refuses indefinitely.
+
+**Evidence**: run `20260904T035906Z` at 04:48. BVN1 voting on rounds
+5,794–5,911 while executing blocks whose leader round was 3,472–3,554; BVN2
+5,787–5,904 vs 2,532–2,568; the Directory executes the round it certifies.
+Consensus 118 rounds a minute on every partition, execution 84 (BVN1) and 36
+(BVN2). Own store 50 MB against a 32 MB share on BVN1, growing 1.1 MB a
+minute; `batch_store_refusing=1` on both BVNs from 04:25 to the end; user
+throughput 7 tps. Transactions executing at 04:45 had been submitted before
+04:25.
+
+**Consequence**: an executor slower than consensus — here because the healer
+was most of each block (H6) — turns into a permanent refusal that reports the
+wrong thing, twenty minutes of submit-to-execute latency, and unbounded
+memory in the commit queue and own store.
+
+**Size**: small — the executor's committed height is already reported to the
+bridge; the header builder skips `ConsumeAvailableBatches` and the worker sets
+refusing when the lag exceeds the bound. A test: an executor that executes
+one block in three keeps the DAG within the bound and the own store within
+its share.
+
 ## Healing
 
 ### H1. The healing cache does not exist
@@ -208,7 +246,14 @@ request. There is no cache on either side (H1).
 numbers requested more than once, up to nine times; 48 anchor heals for 40
 sequences. Network-wide 139,852 heals against zero drops. The marshaling those
 pulls drive is 35% of all allocation (#4211) and the largest part of the CPU
-rise from minute 5 to 15.
+rise from minute 5 to 15. Run `20260904T035906Z`, 55 minutes: the suppression
+the code's comments still describe (`claimSyntheticRequest`) no longer exists
+(`632c1d2a8`); every one of a partition's four validators scans every block and
+re-pulls every missing number — `bvn1-val1` 1,417 pulls for 330 distinct
+numbers in one minute, `bvn1-val2`'s 264 numbers all also pulled by val1, four
+validators 5,631 pulls a minute for a gap of ~170 missing numbers; 230 heals a
+second network-wide against 7 user transactions a second, each re-submitted
+through `Submit` and executed, so the healer was most of every block (see C6).
 
 **Consequence**: at 500 tps the healer carries a fifth of all synthetics and
 the source pays for every repeat; the "GC is not the workload" criterion fails

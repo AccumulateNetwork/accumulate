@@ -75,6 +75,17 @@ So a validator holds batches in four places, for four reasons:
    bounded by refusal (invariant 4); the peer cache is bounded by eviction.
    A full own store must not empty the cache of peers' batches, because
    those are what the next header's vote needs (invariant 3).
+9. **Consensus does not outrun execution.** A certificate the executor has
+   not executed is memory — its batches, and the certificate itself in the
+   commit queue — and an own batch is "uncommitted" until its block is
+   executed, not until it is certified. If proposal continues while execution
+   lags, that memory grows without bound and the own store's refusal
+   (invariant 4) reports a backlog that no amount of waiting by the
+   submitter can drain. So a validator whose executor is more than a bound of
+   blocks behind the DAG's last commit proposes **empty** headers — rounds
+   continue, liveness is kept, no new batch is certified — and refuses user
+   work with the same `NotReady` until execution catches up. The bound is in
+   blocks, a few seconds of traffic; it is not a buffer to be made bigger.
 
 ## 2. Specification — how it is implemented
 
@@ -147,6 +158,14 @@ certificate. It asks the DAG, not the executor: `Config.Certified` is wired to
 names (pruned with the rounds), and `staleOwnBatches` skips any batch it
 reports (invariant 7). The executor's `PruneCommitted` is the wrong signal,
 because execution can lag certification by minutes when blocks are slow.
+
+### Execution lag
+
+Committed certificates reach the executor through `committed`, a channel of
+`CommitBufferSize` (5,000) leader groups, and `PruneCommitted` releases own
+batches only when their block executes. The proposer does not consult the
+executor's height (invariant 9 is not implemented — see
+[DIFFERENCES.md](DIFFERENCES.md), C6).
 
 ### Retention
 
