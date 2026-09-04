@@ -112,11 +112,10 @@ the `synthetic-replica:<stream>` mirror chain) is excluded from the account
 hash and refuses conflicting proofs; it is still not released below the
 delivered point, so it grows with the stream. A proof does not carry
 its anchor's block (`AnchorMetadata.SourceBlock` is filled since E8 step 1 but unread); the destination tests the proof's terminal root
-against its directory anchor chain at execution (`admissible.go`). A package
-member whose anchor has not executed yet is admitted by staging (its own proof
-is nil) and then recorded `Pending` by `SyntheticMessage.Process` before the
-sequenced layer runs (`msg_synthetic.go`), so it is never held: it is a hole
-the healer must fill. The healer's reconcile path infers a lost tail from the
+against its directory anchor chain at execution (`admissible.go`). Since step 4 a
+package member whose anchor has not executed is collected — held in staging at
+its number — and staging judges proof-less entries by the proven set, so the
+hole the healer had to fill no longer opens (`test/e2e/collection_test.go`). The healer's reconcile path infers a lost tail from the
 source's `Produced`, which the spec no longer needs.
 
 **Evidence**: run `20260904T035906Z`: `exec_synthetic_anchor_total{applied="missing"}`
@@ -127,9 +126,10 @@ of one package.
 **Consequence**: the delivery race between a package and the anchor that proves
 it is decided by whichever executes first, and losing it costs a heal per entry.
 
-**Size**: medium. Anchor staging keyed by sequence number (a field on the proof);
-proven ranges by index replacing the replica; removal of the pending-outside-
-staging path; the reconcile path retired.
+**Remaining**: release of the proven set below the delivered point; the gap
+questions by index ("proven and missing", "held and unproven") and the
+retirement of the reconcile-by-`Produced` path, which land with H8's request
+set.
 
 ## Database abstraction
 

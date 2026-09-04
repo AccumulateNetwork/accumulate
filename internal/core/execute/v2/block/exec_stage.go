@@ -223,10 +223,10 @@ func (b *Block) admissibilityOf(str stream, outer messaging.Message, seq *messag
 		return b.Executor.anchorIsAdmissible(b.Batch, m.Proof, txn.Transaction, seq.Source)
 
 	case *messaging.SyntheticMessage:
-		return b.syntheticIsAdmissible(m.Proof)
+		return b.syntheticIsProven(m.Proof, seq)
 
 	case *messaging.BadSyntheticMessage:
-		return b.syntheticIsAdmissible(m.Proof)
+		return b.syntheticIsProven(m.Proof, seq)
 
 	default:
 		// A bare sequenced message carries no proof of its own. For a
@@ -242,6 +242,24 @@ func (b *Block) admissibilityOf(str stream, outer messaging.Message, seq *messag
 		}
 		return b.Executor.isAdmissible(b.Batch, nil)
 	}
+}
+
+// syntheticIsProven decides whether an arriving synthetic may execute this
+// block (executor spec, "Proof"): a proof-less entry is proven when the proven
+// set covers its hash — a validated proof this partition accepted — and one
+// carrying its own receipt when that receipt's anchor is here. Anything else is
+// collected and waits.
+func (b *Block) syntheticIsProven(proof *protocol.AnnotatedReceipt, seq *messaging.SequencedMessage) (bool, error) {
+	if proof != nil {
+		return b.syntheticIsAdmissible(proof)
+	}
+	h := seq.Hash()
+	if b.Executor.replicaIncludes(b.Batch, seq.Source, h[:]) {
+		mExecSyntheticAnchor.WithLabelValues("proven").Inc()
+		return true, nil
+	}
+	mExecSyntheticAnchor.WithLabelValues("unproven").Inc()
+	return false, nil
 }
 
 // syntheticIsAdmissible is the executor's proof check, counted by when the

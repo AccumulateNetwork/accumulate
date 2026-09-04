@@ -57,16 +57,21 @@ Steps, each test-first:
    proven set is by main-chain index; the mapping is only known from the
    proofs of executed entries. Done after step 4, when execution has the
    proof in hand and can record the executed index per stream.
-4. **Collection.** Synthetic staging holds every arriving entry by index,
-   proven or not; an entry more than the sanity horizon ahead is refused.
-   `buildRun` executes an entry only when proven and next. `SyntheticMessage`
-   never returns `Pending`: the pending-outside-staging path is deleted. Test:
-   a package arriving before its anchor is held, executes the block after the
-   anchor lands, and no status is recorded in between.
-5. **Intake as group 0.** `classify` writes entries and proofs into both
-   stores before the anchor group is evaluated, for packages and bundles
-   alike. Test: an envelope's entries complete a run that drains in the same
-   block.
+4. **Collection. DONE.** An unproven synthetic is collected — stored under its
+   hash with its transaction and held at its number (`SyntheticMessage.collect`)
+   — never recorded pending outside staging; staging judges a proof-less
+   entry by the proven set (`syntheticIsProven`); a held entry executes
+   without a signature once proven; a number beyond `maxSequenceAhead` is
+   refused. Test: `test/e2e/collection_test.go` — a package kept ahead of its
+   anchor is sighted and not delivered, then delivered when the anchor lands.
+   Counters: `synthetic_anchor_total{proven,unproven,collected}`.
+5. **Intake as group 0. DONE in effect.** `classify` records every entry as an
+   arrival and hands every proof to anchor staging before the anchor group
+   is evaluated; an entry becomes a durable held record the moment it cannot
+   execute (collection), which is within the same block. The remaining
+   difference from the spec's wording — arrivals are not written durably at
+   intake when they are going to execute this block — has no observable
+   effect and is not worth a write per entry.
 6. **Snapshot.** Both stores and the proven ranges are collected and restored.
    Test: a node restored from a snapshot holds what the source held and
    executes the same run.

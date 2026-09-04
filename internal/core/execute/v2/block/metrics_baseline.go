@@ -54,7 +54,7 @@ var mExecSyntheticAnchor = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
 	Subsystem: "exec",
 	Name:      "synthetic_anchor_total",
-	Help:      "Synthetics judged by staging, by when their proving anchor was applied: this_block, earlier, or missing (not yet anchored)",
+	Help:      "Synthetics judged by staging: proven or unproven (proof-less, by the proven set); this_block, earlier or missing (by their own receipt); collected (held in staging awaiting a proof)",
 }, []string{"applied"}) // this_block | earlier | missing
 
 // mExecStagedProofs counts collection proofs by what anchor staging did with

@@ -8,6 +8,7 @@ package block
 
 import (
 	"bytes"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
@@ -101,7 +102,13 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	// resolution (#4152): a replica-covered, signature-less message must be
 	// accepted no matter what else its envelope carries — resolving a
 	// sibling proof first sent it to the missing-signature refusal below.
-	if syn.Proof == nil && syn.Signature == nil {
+	// A proof-less message the proven set already covers needs no proof and
+	// no signature of its own: a validated proof this partition accepted
+	// vouches for its hash (executor spec, "Proof"). This is how a collected
+	// entry executes once its proof's anchor arrives, and how a package
+	// member or a bundle entry is accepted. Tried BEFORE bundle resolution
+	// (#4152).
+	if syn.Proof == nil {
 		h := syn.Message.Hash()
 		if ctx.Executor.replicaIncludes(batch, seq.Source, h[:]) {
 			err := checkSyntheticInnerType(seq)
@@ -265,13 +272,10 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 	// Process the message (error is handled by the next step)
 	err = x.process(batch, ctx)
 
-	// A pending result is not a failure — record the message with a pending
-	// status, leaving it retryable for when the proof's anchor arrives
-	if errors.Code(err) == errors.Pending {
-		err = ctx.recordMessageAndStatus(batch, status, errors.Pending, nil)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
+	// A collected entry is in staging and nowhere else; the block records
+	// nothing for it until it executes.
+	if errors.Is(err, errCollected) {
+		status.Code = errors.Pending
 		return status, nil
 	}
 
@@ -308,14 +312,15 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 		return errors.UnknownError.Wrap(err)
 	}
 	if !ok {
-		// If the anchor simply hasn't arrived yet, failing the message
-		// terminally wedges recovery: the same message can never be
-		// re-applied once the anchor shows up. Once collection proofs are
-		// active, record it as pending instead so it can be retried (#4048).
-		anchor := syn.Proof.TerminalAnchor()
-		if ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
-			return errors.Pending.WithFormat("proof anchor %x has not been received", anchor)
+		// The anchor has not arrived yet. The entry is COLLECTED: stored and
+		// held in staging at its number, where it executes once a validated
+		// proof covers it (executor spec, "Collection"). Nothing is recorded
+		// pending outside staging — that was the hole the healer had to fill.
+		if seq, ok := syn.Message.(*messaging.SequencedMessage); ok &&
+			ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
+			return x.collect(batch, ctx, seq)
 		}
+		anchor := syn.Proof.TerminalAnchor()
 		return errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", anchor)
 	}
 
@@ -347,4 +352,68 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 		ValidatorSignatures().
 		Add(syn.Signature)
 	return errors.InternalError.Wrap(err)
+}
+
+// errCollected is process's answer when an entry has been collected into
+// staging rather than executed. It is not a failure and nothing is recorded.
+var errCollected = errors.Pending.With("collected")
+
+// maxSequenceAhead is the sanity horizon (executor spec, "Validity"): an entry
+// numbered further ahead of the stream's delivery point than the source could
+// plausibly have produced in about an hour is refused, not collected. A
+// partition that far ahead is a fault, and the bound caps what a peer can make
+// this node hold.
+const maxSequenceAhead = 2_000_000
+
+// collect stores an unproven entry and holds it in staging at its number.
+// The outer message is stored under its own hash so MessageIsReady can load
+// and re-run it, and the transaction it belongs to is stored with it so the
+// run does not fail on "load transaction". Holding is first-sighting-wins.
+func (x SyntheticMessage) collect(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) error {
+	str, err := ctx.Executor.streamFor(seq, resolveFromBatch(batch))
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	var delivered uint64
+	var ledger protocol.SequenceLedger
+	switch err := batch.Account(str.ledger).Main().GetAs(&ledger); {
+	case errors.Is(err, errors.NotFound):
+		// Delivered nothing yet
+	case err != nil:
+		return errors.UnknownError.WithFormat("load %v: %w", str.ledger, err)
+	default:
+		delivered = ledger.Partition(str.source).Delivered
+	}
+	if seq.Number > delivered+maxSequenceAhead {
+		return errors.BadRequest.WithFormat("sequence %d is beyond the horizon (delivered %d)", seq.Number, delivered)
+	}
+	if seq.Number <= delivered {
+		return errors.Delivered.WithFormat("sequence %d already delivered", seq.Number)
+	}
+
+	h := ctx.message.Hash()
+	err = batch.Message(h).Main().Put(ctx.message)
+	if err != nil {
+		return errors.UnknownError.WithFormat("store collected message: %w", err)
+	}
+	if m, ok := seq.Message.(messaging.MessageForTransaction); ok {
+		want := m.GetTxID().Hash()
+		for _, sibling := range ctx.messages {
+			txn, ok := sibling.(messaging.MessageWithTransaction)
+			if !ok || txn.GetTransaction().ID().Hash() != want {
+				continue
+			}
+			err = batch.Message(want).Main().Put(sibling)
+			if err != nil {
+				return errors.UnknownError.WithFormat("store collected transaction: %w", err)
+			}
+			break
+		}
+	}
+	err = execute.Hold(batch, str.id(), seq.Number, ctx.message.ID())
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	mExecSyntheticAnchor.WithLabelValues("collected").Inc()
+	return errCollected
 }

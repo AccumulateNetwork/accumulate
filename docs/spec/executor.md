@@ -430,7 +430,21 @@ mirror chain (index to hash), which is excluded from the account hash
 (`isProvenSetChain`); a proof that contradicts an index already proven is
 refused (`errors.Conflict`). Outcomes are
 `accumulate_exec_staged_proofs_total{outcome}`: staged, validated, disproved,
-conflict, invalid. When
+conflict, invalid.
+
+### Collection — an unproven entry is held, never parked
+
+`SyntheticMessage.process`: an entry whose proof's anchor is not here yet is
+collected (`collect`): the message is stored under its own hash with the
+transaction it belongs to, and held in staging at its number (`execute.Hold`,
+first sighting wins). Nothing else is recorded. Staging judges a proof-less
+entry by the proven set (`syntheticIsProven`), so a collected entry is not put
+in a run until a validated proof covers its hash; when it is, `MessageIsReady`
+loads it and `check` accepts it on the proven set alone, signature or not. An
+entry numbered more than `maxSequenceAhead` past the delivery point is refused
+(`BadRequest`), not collected. Counted as
+`accumulate_exec_synthetic_anchor_total{applied}`: proven, unproven,
+collected. When
 that anchor executes, every proof waiting on it is validated against the
 anchor's root: a match marks the proof's index range proven in synthetic
 staging; a mismatch discards the proof and increments a counter. A proof whose

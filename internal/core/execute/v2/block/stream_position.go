@@ -142,18 +142,22 @@ func (b *Block) positionOfLocked(s stream) (*streamPosition, error) {
 		return p, nil
 	}
 
-	var ledger protocol.SequenceLedger
-	err := b.Batch.Account(s.ledger).Main().GetAs(&ledger)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load %v: %w", s.ledger, err)
-	}
-
 	// Only Delivered. The rest of the entry is the source's Produced count and
 	// the residue of the old design, and neither says anything about what this
-	// node is holding right now.
+	// node is holding right now. A stream whose ledger does not exist yet has
+	// delivered nothing: zero is the answer, not an error.
+	var delivered uint64
+	var ledger protocol.SequenceLedger
+	switch err := b.Batch.Account(s.ledger).Main().GetAs(&ledger); {
+	case errors.Is(err, errors.NotFound):
+	case err != nil:
+		return nil, errors.UnknownError.WithFormat("load %v: %w", s.ledger, err)
+	default:
+		delivered = ledger.Partition(s.source).Delivered
+	}
 	p := &streamPosition{
 		stream:    s,
-		delivered: ledger.Partition(s.source).Delivered,
+		delivered: delivered,
 		batch:     b.Batch,
 	}
 	if b.positions.m == nil {

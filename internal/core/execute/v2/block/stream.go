@@ -87,6 +87,9 @@ func (x *Executor) streamFor(seq *messaging.SequencedMessage, resolve resolveTxn
 // and a supplied lookup.
 func (x *Executor) sequencedIsAnchor(seq *messaging.SequencedMessage, resolve resolveTxn) (bool, error) {
 	msg, ok := seq.Message.(*messaging.TransactionMessage)
+	if ok && (msg.Transaction == nil || msg.Transaction.Body == nil) {
+		return false, nil // no transaction, so not an anchor
+	}
 	switch {
 	case ok && msg.Transaction.Body.Type().IsAnchor():
 		return true, nil
