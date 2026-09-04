@@ -740,7 +740,19 @@ func (w *Worker) AvailableBatches() []types.BatchDigest {
 
 // ConsumeAvailableBatches returns and clears all available batch digests.
 // This is used by the primary when creating a header.
+// ConsumeAvailableBatches drains the availability queue for a header. A digest
+// can wait in the queue for as long as headers are slow to take it, and by
+// then its batch may have been certified through an earlier re-queue and
+// retired by execution. Proposing it again puts one batch in two certificates
+// and the second cannot be served (run 20260904T012004Z: a header at round
+// 4524 named a batch retired 57 minutes earlier). So what is returned is
+// filtered to what is proposable: in the active store, and named by no
+// certified header (consensus spec, invariant 7).
 func (w *Worker) ConsumeAvailableBatches() []types.BatchDigest {
+	return w.proposable(w.drainAvailable())
+}
+
+func (w *Worker) drainAvailable() []types.BatchDigest {
 	var result []types.BatchDigest
 
 	// Drain all available batches from channel without blocking
@@ -1366,4 +1378,31 @@ func (w *Worker) staleOwnBatches(now time.Time) (stale []types.BatchDigest, batc
 		slog.Debug("Own batches already certified, not re-proposed", "count", certified, "worker", w.config.ID)
 	}
 	return stale, batches
+}
+
+// proposable filters digests down to those whose batch is still in the active
+// store and that no certified header names.
+func (w *Worker) proposable(digests []types.BatchDigest) []types.BatchDigest {
+	if len(digests) == 0 {
+		return digests
+	}
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	kept := digests[:0]
+	dropped := 0
+	for _, d := range digests {
+		if _, ok := w.batches[d]; !ok {
+			dropped++
+			continue
+		}
+		if w.config.Certified != nil && w.config.Certified(d) {
+			dropped++
+			continue
+		}
+		kept = append(kept, d)
+	}
+	if dropped > 0 {
+		slog.Debug("Queued batches no longer proposable", "dropped", dropped, "worker", w.config.ID)
+	}
+	return kept
 }

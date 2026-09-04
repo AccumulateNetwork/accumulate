@@ -136,3 +136,27 @@ func TestRepropose_SkipsBatchesTheDAGHasCertified(t *testing.T) {
 	require.Equal(t, []types.BatchDigest{b.Digest()}, stale,
 		"only the batch no certificate names is re-proposed")
 }
+
+// A digest that waited in the availability queue past its batch's commit is
+// not proposed: the batch is gone from the active store, or a certified
+// header names it. Run 20260904T012004Z put a batch retired 57 minutes
+// earlier into a new header this way (C5, #4210).
+func TestConsumeAvailableBatches_DropsRetiredAndCertifiedDigests(t *testing.T) {
+	certified := map[types.BatchDigest]bool{}
+	w := New(Config{ID: 0, Partition: "test",
+		Certified: func(d types.BatchDigest) bool { return certified[d] }}, nil)
+
+	live := types.NewBatch([][]byte{[]byte("live")})
+	retired := types.NewBatch([][]byte{[]byte("retired")})
+	named := types.NewBatch([][]byte{[]byte("named by a certificate")})
+	for _, b := range []*types.Batch{live, retired, named} {
+		w.storeOwn(b)
+		w.availableBatchQueue <- b.Digest()
+	}
+	w.PruneCommitted([]types.BatchDigest{retired.Digest()}, CommitInfo{Detail: "executed"})
+	certified[named.Digest()] = true
+
+	got := w.ConsumeAvailableBatches()
+	require.Equal(t, []types.BatchDigest{live.Digest()}, got,
+		"only a live, uncertified batch is proposable")
+}

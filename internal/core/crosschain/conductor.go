@@ -33,6 +33,15 @@ import (
 type interceptor = func(ctx context.Context, env *messaging.Envelope) (send bool, err error)
 
 type Conductor struct {
+	// reconcileRunning makes the reconcile single-flight: a run can last up
+	// to HealTimeout per partition, blocks arrive every second, and one run
+	// per block overlapped into dozens of concurrent pulls per node (run
+	// 20260904T012004Z). reconcileBackoff is the block before which a source
+	// is not asked again after its requests failed (healing spec, "Sending").
+	reconcileRunning atomic.Bool
+	reconcileMu      sync.Mutex
+	reconcileBackoff map[string]*sourceBackoff
+
 	Partition    *protocol.PartitionInfo
 	Globals      atomic.Pointer[network.GlobalValues]
 	ValidatorKey ed25519.PrivateKey
@@ -359,8 +368,9 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 		// The "anything new?" pull. A gap the destination can SEE is bounded by
 		// the entry that exposed it; a stream whose tail was lost shows no gap
 		// at all, and only asking the source what it has produced finds it.
-		if e.Index%reconcileInterval == 0 && pull {
+		if e.Index%reconcileInterval == 0 && pull && c.reconcileRunning.CompareAndSwap(false, true) {
 			c.runTask(func() {
+				defer c.reconcileRunning.Store(false)
 				// Bounded for the same reason as requestMissingSynthetics
 				// above: an unanswerable read must time out, not park the
 				// task forever. Reconcile queries every peer partition, so it

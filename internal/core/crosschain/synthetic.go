@@ -687,7 +687,18 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 		if strings.EqualFold(peer.ID, c.Partition.ID) {
 			continue
 		}
+		// An activation ends when its time is up. Continuing past the
+		// deadline issues requests that fail on arrival, one per sequence
+		// number per source, thousands a second (run 20260904T012004Z,
+		// 9.4 million in forty minutes).
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		source := protocol.PartitionUrl(peer.ID)
+		if c.sourceBackedOff(source, blockIndex) {
+			continue
+		}
+		asked, failed := 0, 0
 
 		// Circuit breaker, same as every other pull path. The reconcile loop
 		// was the one healer left unwired, and it alone produced 157k failed
@@ -773,13 +784,23 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 			if !c.gapIsOverdue(source, seq, blockIndex) {
 				continue
 			}
+			if ctx.Err() != nil {
+				c.recordSourceOutcome(source, blockIndex, asked, failed)
+				return ctx.Err()
+			}
 			mReconcile.WithLabelValues("attempted").Inc()
+			asked++
 			err := c.requestSyntheticFrom(ctx, source, seq)
 			if err != nil {
 				mReconcile.WithLabelValues("failed").Inc()
-				slog.ErrorContext(ctx, "Reconcile: failed to request missing synthetic",
-					"module", "synthetic", "source", source, "destination", me,
-					"number", seq, "error", err)
+				failed++
+				// The first failure of an activation is worth a line; the
+				// rest are the same story and are counted.
+				if failed == 1 {
+					slog.ErrorContext(ctx, "Reconcile: failed to request missing synthetic",
+						"module", "synthetic", "source", source, "destination", me,
+						"number", seq, "error", err)
+				}
 				// "Reached the end of the chain" is the source saying it
 				// cannot serve this sequence YET — its own anchoring has not
 				// caught up. Every higher sequence is past the same end, so
@@ -803,6 +824,7 @@ func (c *Conductor) reconcileInboundStreams(ctx context.Context, batch *database
 				"module", "synthetic", "source", source, "destination", me,
 				"received", have, "produced", produced, "requested", healed)
 		}
+		c.recordSourceOutcome(source, blockIndex, asked, failed)
 	}
 	return nil
 }
@@ -840,4 +862,59 @@ func (c *Conductor) pruneOverdue(source *url.URL, received uint64) {
 			delete(c.reconcileSeen, k)
 		}
 	}
+}
+
+// sourceBackoff is a stream's standing after failed activations: how many in a
+// row failed outright, and the block before which it is not asked again.
+type sourceBackoff struct {
+	failures int
+	until    uint64
+}
+
+// maxReconcileBackoffBlocks caps how long a failing source is left alone. A
+// source whose every request fails is asked again after 1, 2, 4, ... blocks,
+// up to this; a single success resets it. Healing does not need to hammer a
+// peer that is not answering -- the gap is still a gap when it is asked again
+// (healing spec, "Sending").
+const maxReconcileBackoffBlocks = 64
+
+// sourceBackedOff reports whether a source is inside its back-off window.
+func (c *Conductor) sourceBackedOff(source *url.URL, blockIndex uint64) bool {
+	c.reconcileMu.Lock()
+	defer c.reconcileMu.Unlock()
+	b, ok := c.reconcileBackoff[source.String()]
+	return ok && blockIndex < b.until
+}
+
+// recordSourceOutcome updates a source's standing after an activation: an
+// activation that asked and got nothing back doubles the wait; one that got
+// anything back clears it.
+func (c *Conductor) recordSourceOutcome(source *url.URL, blockIndex uint64, asked, failed int) {
+	if asked == 0 {
+		return
+	}
+	c.reconcileMu.Lock()
+	defer c.reconcileMu.Unlock()
+	if c.reconcileBackoff == nil {
+		c.reconcileBackoff = map[string]*sourceBackoff{}
+	}
+	key := source.String()
+	if failed < asked {
+		delete(c.reconcileBackoff, key)
+		return
+	}
+	b := c.reconcileBackoff[key]
+	if b == nil {
+		b = &sourceBackoff{}
+		c.reconcileBackoff[key] = b
+	}
+	b.failures++
+	wait := uint64(1) << min(b.failures-1, 6)
+	if wait > maxReconcileBackoffBlocks {
+		wait = maxReconcileBackoffBlocks
+	}
+	b.until = blockIndex + wait
+	slog.WarnContext(context.Background(), "Reconcile: every request to a source failed; backing off",
+		"module", "synthetic", "source", source, "destination", c.Url(),
+		"failedActivations", b.failures, "untilBlock", b.until)
 }

@@ -202,6 +202,19 @@ Two things still matter when a request fails:
 - **A request is bounded in time.** A hung call must not pin the goroutine, or
   its read batch, indefinitely — and by the time the bound expires the next
   activation is due anyway.
+- **An activation ends when its time is up.** It does not go on issuing
+  requests that cannot complete: once its context is done, the rest of the
+  scan is the next activation's. Run `20260904T012004Z` continued past the
+  deadline over up to 200 sequence numbers per source and logged 9.4 million
+  failures in forty minutes.
+- **One activation at a time.** A run can last as long as its bound; blocks
+  arrive faster than that under load. The next activation is skipped while
+  one is still running, not started beside it.
+- **A source that is not answering is asked less, not more.** After an
+  activation in which every request to a source failed, that source is left
+  alone for one block, then two, then four, up to a cap; one answer resets
+  it. "A lost request costs nothing" holds while lost requests are the
+  exception; when they are the rule, the requests themselves are the load.
 
 ### Order
 
