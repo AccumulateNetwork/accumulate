@@ -296,6 +296,15 @@ fi
 # costs the whole run for what may be a momentary loss. Restart it instead, and
 # record every exit in the log so a repeating death is visible rather than
 # silently papered over.
+# A monitor from an earlier run that outlived its teardown holds the port,
+# answers the gate below, and feeds every watcher a dead run's data: run
+# 20260903T222843Z ran 22 minutes with no mem.csv and stallkill reading run
+# 213153Z. A monitor that is not ours is a reason to stop, not to proceed.
+if stale=$(pgrep -f "$here/soakmon.py" 2>/dev/null) && [ -n "$stale" ]; then
+  echo "another soakmon is running (pid $stale) — an earlier run's monitor outlived its teardown; kill it and retry. Refusing to run against someone else's dashboard." | tee -a "$log"
+  $compose down -v --remove-orphans >/dev/null 2>&1
+  exit 1
+fi
 ( while kill -0 $$ 2>/dev/null; do
     env RUN_DIR="$rd" "$here/soakmon.py" >> "$rd/soakmon.log" 2>&1
     echo "$(date -u +%FT%TZ) soakmon exited rc=$? — restarting" >> "$rd/soakmon.log"
@@ -622,6 +631,8 @@ if [ "${KEEP_UP:-0}" = 1 ]; then
 else
   $compose down -v --remove-orphans >/dev/null 2>&1
   echo "network torn down" | tee -a "$log"
+  # And the monitor, which otherwise keeps the port for the next run.
+  pkill -P "$MON" 2>/dev/null; kill "$MON" 2>/dev/null
 fi
 
 echo

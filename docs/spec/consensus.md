@@ -66,6 +66,15 @@ So a validator holds batches in four places, for four reasons:
    that is further behind than the window cannot recover by fetching batches
    and must recover by snapshot (see the healing and fast-sync parts). The
    window is not made longer to cover that case.
+7. **A batch is proposed once.** Re-proposal exists for a batch no header has
+   certified — the author's own recovery from a lost broadcast. A batch that
+   is in a certified header is never proposed again, whatever the executor
+   has since done with it; a second certificate naming the same batch is the
+   defect that makes the executor need a batch it has already retired.
+8. **Own batches and the peer cache do not share a budget.** Own batches are
+   bounded by refusal (invariant 4); the peer cache is bounded by eviction.
+   A full own store must not empty the cache of peers' batches, because
+   those are what the next header's vote needs (invariant 3).
 
 ## 2. Specification — how it is implemented
 
@@ -102,9 +111,10 @@ of transactions a few times a second.
 
 ### The active store and eviction
 
-`StoreBatch` adds a batch and, when the store exceeds its byte budget, runs
-an LRU eviction that skips own uncommitted batches and pinned batches (those
-a pending vote needs). There is no count limit by default: `MaxStoredBatches`
+`StoreBatch` adds a batch and, when the peer cache exceeds its byte budget,
+runs an LRU eviction over peers' batches that skips pinned ones (those a
+pending vote needs); own batches are counted against their own share
+(invariant 8). There is no count limit by default: `MaxStoredBatches`
 and `MaxRetainedBatches` are zero, and only a test sets them. A negative
 `MaxRetainedBatches` turns retention off.
 
@@ -127,6 +137,13 @@ summary is logged at most once a second per worker.
 
 The inbound queue already applies back-pressure at its byte budget (it drops
 the newest batch and lets the author re-broadcast); that is the model.
+
+### Re-proposal
+
+`ReproposeAfter` re-broadcasts an own batch that has not been committed. It
+must ask the DAG, not the executor: a batch in any certified header is not
+re-proposed (invariant 7). The executor's `PruneCommitted` is the wrong signal,
+because execution can lag certification by minutes when blocks are slow.
 
 ### Retention
 
