@@ -158,10 +158,11 @@ piece of healing is: **does another node's action make mine unnecessary?** If
 yes it is a pull and a pair is enough; if no it is a contribution and everyone
 owes theirs.
 
-A request is still not consensus: the node asks the source's sequencer, and the
-answer is submitted back and re-enters through consensus, sorted and staged and
-executed like any other message. What is deterministic is *which* requests are
-made, not the transport that carries them.
+A request is still not consensus: the node asks a validator of the source, and
+the answer is a bundle the source submits into this network, which re-enters
+through consensus and is applied to staging first, ahead of every other group.
+What is deterministic is *which* requests are made, not the transport that
+carries them.
 
 ### Cadence
 
@@ -276,12 +277,16 @@ slow path: it is counted, with the depth of the miss (how far below the
 newest cached entry the hash lay) and any construction failure, so the window
 and the cache can be sized from data rather than guessed.
 
-Where a bundle goes: to **staging**, before anything is submitted to execute.
-Staging is durable and outside the account hash (executor spec, invariant 4;
-[#4189]), and every entry in a bundle is already proven by a receipt the
-destination accepted, so applying it to staging needs no block. Once a stream's
-gaps are filled and its run executes, everything executed is **truncated** from
-staging; staging holds only what is above `Delivered`.
+Where a bundle goes: through the requesting network's consensus, and in the
+block **to staging first**, before any other action. The block's sort
+(executor spec, "Sort, then four groups") applies a bundle's entries to
+staging as held before a single anchor or synthetic is evaluated; every entry
+is already proven by a receipt the destination accepted, so there is nothing
+to judge. It goes through a block and not around one because staging decides
+what a block executes, and every validator must hold the same staging at the
+same block (executor spec, Restart). Once a stream's gaps are filled and its
+run executes, everything executed is **truncated** from staging; staging holds
+only what is above `Delivered`.
 
 What is counted, per node and per stream, so healing can be judged from data:
 
@@ -465,11 +470,13 @@ its own — and **submits each bundle into the requesting network** through the
 same submit path a dispatch uses. A bundle below the minimum size waits for
 the next request to the same destination unless nothing else is pending.
 
-At the destination a bundle does not go through a block. Every entry in it is
-proven by a receipt this partition already accepted, so it is written **to
-staging** as it arrives, as held; the next block's stage sees it as received
-and drains the run it completes. Once a run executes, the executed entries are
-truncated from staging; staging holds only what is above `Delivered`.
+At the destination a bundle arrives through consensus and is the block's
+first group: its entries are written **to staging** as held before the anchor
+and synthetic groups are evaluated, so the runs they complete drain in the same
+block. Every entry is proven by a receipt this partition already accepted, so
+no admissibility question is asked of it. Once a run executes, the executed
+entries are truncated from staging; staging holds only what is above
+`Delivered`.
 
 The counters in [A request names hashes](#a-request-names-hashes-an-answer-is-a-bundle)
 are emitted at the points named there: requests and hashes at the requester,

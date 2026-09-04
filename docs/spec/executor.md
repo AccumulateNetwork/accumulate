@@ -88,9 +88,18 @@ once. A message belonging to no stream is a user transaction.
 So anchors and synthetics are sorted up front. There is no later step that
 discovers more of them.
 
-Then **three groups, each finished before the next begins**. A group is
+Then **four groups, each finished before the next begins**. A group is
 evaluated, drained and executed; only then is the next group evaluated.
 
+0. **Healing bundles.** A bundle is entries the destination already proved —
+   the source answered a request for hashes the destination's accepted
+   receipts cover ([healing.md](healing.md), "A request names hashes") — so
+   there is nothing to evaluate: every entry is **applied to staging first**,
+   as held, before any anchor or synthetic is judged. A bundle arrives through
+   consensus like every other message, never by a side door, because staging
+   decides what a block executes and every validator must hold the same
+   staging at the same block (see Restart). Healing is first because its
+   entries complete runs that the groups below then drain in this block.
 1. **Anchors.** Evaluated — each is admissible or not, by quorum or proof —
    drained, and executed.
 2. **Synthetics.** Evaluated *after* the anchors have executed, so the directory
@@ -114,6 +123,9 @@ sufficient:
   so a message arriving this block that unblocks a backlog from earlier blocks
   is part of that stream's run when it is computed — nothing about it becomes
   true later;
+- a healing bundle is applied to staging before anything is evaluated, so the
+  runs it completes are seen by the anchor and synthetic evaluations, and
+  its entries are truncated from staging when those runs execute;
 - a user transaction is on no stream and cannot unblock one. What it produces
   for this partition goes on the delivery queue and executes next block, so it
   cannot free a synthetic within this block either.
