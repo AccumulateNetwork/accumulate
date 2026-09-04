@@ -28,10 +28,20 @@ today; a raw past anchor that arrives or is held is validated when a later
 anchor's hashes prove it. Healed anchors therefore travel raw, and every
 validator keeps re-sending its own signatures on the cadence.
 
+**Nothing is provable before the Directory has anchored it.** A synthetic or
+anchor a BVN produces in block N cannot leave, and cannot be proven to anyone,
+until the Directory has executed the BVN's anchor for N and sent the receipt
+back ([executor.md](executor.md), "Dispatch"). So an index the destination has
+not sighted is not a gap until that round trip has had time to complete, and a
+source can serve a proof only for spans its Directory receipts already cover;
+asked sooner it answers "not yet", which is counted and is not a miss.
+
 **A gap is judged only after staging has finished the block** — intake,
 anchors, proofs, drains. A new gap is ignored until the next healing cycle. If
 it is still there at the second cycle, it is requested. Two cycles is the
-patience, counted in blocks, so every validator judges the same gaps.
+patience, counted in blocks, so every validator judges the same gaps; the
+cadence times two must exceed the Directory round trip above, or the healer
+asks for what is still on its way.
 
 Nothing at or below `Delivered` is a gap. An index further ahead than about an
 hour of the source's production is refused on arrival, not healed: a partition
@@ -89,7 +99,9 @@ way — a bookkeeping defect, not traffic the stream requires.
 
 For hashes, the source answers **entirely from its cache** (below) and nothing
 else: no chain walk, no receipt, no signature, no database read. For index
-spans it answers with a proof read from its chain ([Proofs are extended](#proofs-are-extended-not-replaced)).
+spans it answers with a proof read from its chain, continued to a Directory
+root ([Proofs are extended](#proofs-are-extended-not-replaced)) — and only for
+spans the Directory has anchored back to it; a span above that is "not yet".
 It packs the entries into a **bundle** — as many anchors and synthetic transactions as fit the
 envelope budget, whatever their streams, each with the transaction it belongs to
 when it has one, and with no proof of its own — and **submits the bundle into
