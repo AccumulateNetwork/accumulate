@@ -188,6 +188,36 @@ executor's reads rather than the healer's fetches.
 
 **Size**: small.
 
+### H6. Healing asks for the same number again, and the source rebuilds every answer
+
+*[#4212](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4212)*
+
+**Spec** ([healing.md](healing.md), "Healing is monotonic, and the source
+already has the answer"): a number is requested at most until it lands, never
+after; the source holds its recent synthetics and anchors ready to serve.
+
+**Code**: the healer's gap scan re-requests a number every cadence until the
+message is staged, with no record of a request in flight, and re-requests
+numbers it already holds ("Reconcile: pulled messages a gap scan cannot see",
+905 in 30 minutes); the source (`Sequencer.getSynth`, `Sequence`) rebuilds
+each response — message, receipt, marshaling — from the database on every
+request. There is no cache on either side (H1).
+
+**Evidence**: run `20260904T012004Z`, no faults injected, 30 minutes, receiver
+`acc-bvn1-val1`: 22,166 synthetic pulls for 9,846 distinct numbers, 3,588
+numbers requested more than once, up to nine times; 48 anchor heals for 40
+sequences. Network-wide 139,852 heals against zero drops. The marshaling those
+pulls drive is 35% of all allocation (#4211) and the largest part of the CPU
+rise from minute 5 to 15.
+
+**Consequence**: at 500 tps the healer carries a fifth of all synthetics and
+the source pays for every repeat; the "GC is not the workload" criterion fails
+on traffic the streams do not require.
+
+**Size**: small for the request bookkeeping (a per-stream in-flight set with an
+expiry); small for the source cache (H1's design, on the producer: keyed by
+stream and number, two generations, never invalidated).
+
 ### H3. Proof extension does not exist
 
 *[#4192](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4192)*

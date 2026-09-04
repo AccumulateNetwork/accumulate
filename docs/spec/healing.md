@@ -236,6 +236,34 @@ originally covered a range, healing the oldest hole would depend on the one
 receipt most likely to be missing. It cannot, because a receipt only needs the
 hashes.
 
+### Healing is monotonic, and the source already has the answer
+
+Two facts bound the cost of healing, and both are properties of the streams,
+not of any tuning:
+
+1. **A depth is healed once.** A sequenced message is named by its position in
+   a stream, and staging is durable (executor spec, invariant 4): once a number
+   has been received it is held, and a gap scan that runs after it landed does
+   not see a gap there. So a number is requested at most until it lands, never
+   after, and a range healed to a depth is not healed to that depth again. A
+   healer that asks for the same number twice is asking about a message it
+   already holds, or one whose request is still in flight; both are a
+   bookkeeping defect, not traffic the stream requires.
+2. **The source keeps what it produced.** The synthetic and anchor messages a
+   partition produces over the healing window are few — hundreds a second at
+   500 tps, bounded by the window — and every one of them was marshaled,
+   hashed and signed when it was produced. Serving a pull is handing that back,
+   not rebuilding it: the source holds its recent synthetics and anchors, with
+   their receipts, ready to serve, and lets them go as the window passes.
+   Whatever has left the source's cache has also left every destination's gap
+   scan (it is older than the window, so it was healed to depth or the
+   destination needs a snapshot); the two windows are the same window.
+
+Together they say what healing costs: one fetch per missing number, served
+from memory. Run `20260904T012004Z` measured the alternative — 22,166 pulls for
+9,846 numbers on one receiver, each rebuilt with its receipts at the source —
+as 35% of everything the node allocated.
+
 ### Extending a proof rather than replacing it
 
 How far back a single proof reaches is bounded. `MaxReceiptListElements` (4,096)
