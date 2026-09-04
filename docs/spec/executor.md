@@ -46,7 +46,11 @@ decided on the message alone; everything after it is decided *by staging*:
    validator signature is future work.
 5. **Readiness** is whether the message is *next* on its stream. Sequenced
    streams execute in order with no gaps; a proven entry whose predecessor is
-   missing waits. A user transaction is on no stream and is always ready.
+   missing waits. Once index *i* has executed, any entry at or below *i* is
+   **tossed** — it is already processed and nothing consults it; any entry
+   above the last validated index is **held**, waiting for validation, as
+   long as it is within the horizon. A user transaction is on no stream and
+   is always ready.
 6. **Execution** runs the message. Nothing before this point changes protocol
    state, and nothing is ever recorded as pending outside staging: an entry the
    block cannot execute is in staging, or it was refused.
@@ -446,9 +450,10 @@ passed its proof when it was held. When a collected entry is proven,
 `MessageIsReady` loads it and `check` accepts it on the proven set alone,
 signature or not. Should one be run before that — it cannot be, by
 construction — `check` answers "not yet proven" and nothing is recorded.
-An entry whose number is taken by a proven arrival is superseded: the
-arrival executes, the stream advances past the collected mark, and the
-collected entry is never consulted again — tossed, in effect. An
+An entry at or below the delivered point is tossed on arrival
+(`errors.Delivered`, nothing stored); an entry whose number is later taken by
+a proven arrival is superseded — the arrival executes, the stream advances
+past the collected mark, and the collected entry is never consulted again. An
 entry numbered more than `maxSequenceAhead` past the delivery point is refused
 (`BadRequest`), not collected. Counted as
 `accumulate_exec_synthetic_anchor_total{applied}`: proven, unproven,
