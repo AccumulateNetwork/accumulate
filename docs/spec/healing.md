@@ -249,6 +249,51 @@ originally covered a range, healing the oldest hole would depend on the one
 receipt most likely to be missing. It cannot, because a receipt only needs the
 hashes.
 
+### A request names hashes, an answer is a bundle
+
+There are no "pulled messages". Every receipt is a collection proof, so a
+destination that holds a receipt holds the **hashes** of every entry the proof
+covers, and knows exactly which of those entries it does not have. That set of
+hashes is the request. It says nothing about sequence numbers, sources' index
+chains, or how the entries should be proven — the proof is already in hand.
+
+The answer is the entries whose hashes were asked for, **bundled**: one message
+carries as many anchors and synthetic transactions as fit the envelope budget,
+whatever their stream. An entry answering a request carries no proof of its own
+(the destination's replica already contains its hash, [#4140]), so a bundle is
+entries and nothing else. Bundles are subject to a minimum size: a source does
+not answer a request one entry at a time, and a destination does not issue a
+request for one hash while an activation is still collecting gaps — it asks
+for the set once, at the activation.
+
+Who asks and who answers: a request is an API call from a validator selected
+on the requesting side (the pair, per [Cadence](#cadence)) to a validator of
+the source partition. The source constructs the bundle **entirely from its
+producer cache** — every synthetic and anchor it produced over the window is
+there, marshaled and hashed once, at production — and submits it into the
+requesting network as a transaction. A miss in that cache is a defect, not a
+slow path: it is counted, with the depth of the miss (how far below the
+newest cached entry the hash lay) and any construction failure, so the window
+and the cache can be sized from data rather than guessed.
+
+Where a bundle goes: to **staging**, before anything is submitted to execute.
+Staging is durable and outside the account hash (executor spec, invariant 4;
+[#4189]), and every entry in a bundle is already proven by a receipt the
+destination accepted, so applying it to staging needs no block. Once a stream's
+gaps are filled and its run executes, everything executed is **truncated** from
+staging; staging holds only what is above `Delivered`.
+
+What is counted, per node and per stream, so healing can be judged from data:
+
+| count | what it says |
+|---|---|
+| requests issued, hashes per request | how much is missing and how often we ask |
+| requests per hash (repeats) | monotonicity; anything above one is a defect |
+| bundles received, entries per bundle | that answers are bulk, not per message |
+| cache hits, misses, miss depth, construction failures | at the source; a miss is a defect |
+| request to landing, in blocks | whether the cadence gives an answer time to arrive |
+| staging depth, entries truncated | that staging is a buffer, not a store |
+
 ### Healing is monotonic, and the source already has the answer
 
 Two facts bound the cost of healing, and both are properties of the streams,
@@ -272,8 +317,8 @@ not of any tuning:
    scan (it is older than the window, so it was healed to depth or the
    destination needs a snapshot); the two windows are the same window.
 
-Together they say what healing costs: one fetch per missing number, served
-from memory. Run `20260904T012004Z` measured the alternative — 22,166 pulls for
+Together they say what healing costs: one request per activation naming the
+hashes a stream lacks, one bundle back, served from memory. Run `20260904T012004Z` measured the alternative — 22,166 pulls for
 9,846 numbers on one receiver, each rebuilt with its receipts at the source —
 as 35% of everything the node allocated.
 
@@ -342,6 +387,13 @@ in hand stays valid when new proofs arrive — which is what lets a drain conver
 under load rather than restarting each time a proof lands.
 
 ### The cache
+
+The cache that matters is the **producer's**: what a partition produced over
+the window, by hash and by stream position, serving every request without
+touching the database ([A request names hashes](#a-request-names-hashes-an-answer-is-a-bundle)).
+The destination-side cache described below caches what healing fetched; once
+requests name hash sets and answers are bundles, nothing is fetched twice and
+that cache has nothing to do. It is kept here until the request path is built.
 
 Healing caches what it fetches, and **only healing uses that cache**.
 

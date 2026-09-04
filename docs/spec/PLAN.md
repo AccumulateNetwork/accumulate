@@ -300,7 +300,7 @@ S7  (logging) alongside; S2 follow-up: captureProvableView holds a view for
 #4205 (restart recovery) before chaos returns to an acceptance run
 C4 #4209 + C5 #4210 DONE ─▶ acceptance run #5, chaos off (ran; see row above)
 H7 #4213 + C5b DONE ─▶ acceptance run #6, chaos off
-H6 #4212 + H1 #4193 (one pull per number per partition, source cache) + C6 #4215 (consensus does not outrun execution)
+H8 #4216 (heal by hash set: bundles from the producer cache into staging; absorbs H6 #4212 + H1 #4193) + C6 #4215 (consensus does not outrun execution)
   + #4214 (why a third of synthetics need the healer at all) ─▶ then S4 #4211, S5 ─▶ acceptance run #7
 ```
 

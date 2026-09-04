@@ -263,6 +263,37 @@ on traffic the streams do not require.
 expiry); small for the source cache (H1's design, on the producer: keyed by
 stream and number, two generations, never invalidated).
 
+### H8. Healing pulls one message per request and re-submits it as a transaction
+
+*[#4216](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4216)*
+
+**Spec** ([healing.md](healing.md), "A request names hashes, an answer is a
+bundle"): a request is the set of hashes the destination's receipts prove but
+it does not hold; the answer is a bundle of entries served from the producer's
+cache, submitted by the source into the requesting network, applied to staging
+before execution, and truncated from staging once executed.
+
+**Code**: `requestSyntheticFrom` asks the source's `Sequencer.Sequence` for
+ONE sequence number, the source rebuilds message, receipt and signature from
+the database (`getSynth`), and the requester re-submits the result into its
+own mempool through `Submit`, where it is sealed, certified and executed like
+any transaction. Up to 200 such round trips per stream per activation
+(`syntheticHealBatch`). Nothing reaches staging except through a block.
+
+**Evidence**: run `20260904T035906Z`: 230 heals a second network-wide, each a
+separate request and a separate re-submission, executed in blocks of 200–400
+messages that were mostly heals; `bvn1-val1` 1,417 requests for 330 distinct
+numbers in one minute; the executors fell to a third of consensus on that
+load (C6).
+
+**Consequence**: the healer's cost scales with messages, not with gaps, and it
+runs through the executor, so under loss it becomes the load that slows the
+executor that creates the loss.
+
+**Size**: medium. A hash-set request and a bundle answer on the sequencer API;
+the producer cache (H1) as its only source; a staging write path for proven
+entries; truncation on execution; the counters in the spec table.
+
 ### H3. Proof extension does not exist
 
 *[#4192](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4192)*
