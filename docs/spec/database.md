@@ -58,6 +58,22 @@ that means to look back must say so:
 A store with no window ignores the distinction: its ordinary reads already see
 everything.
 
+### Caches
+
+Two caches sit in front of the store, for two different readers, and they are
+not the same cache:
+
+| cache | serves | shape | layer behind it |
+|---|---|---|---|
+| **hash-to-URL mapping** | reads that resolve a hash to the account it belongs to | two-level, cycled: a lookup tries the hot level then the cold one and promotes a hit; when hot fills it becomes cold and a new hot starts | dynamic |
+| **synthetic/anchor entries** | healing requests for entries a destination lacks ([healing.md](healing.md), "The cache") | indexed by partition and index and by hash; holds only the entries in play; cleared as the destination delivers | permanent — every entry is persisted through execution |
+
+Hash-to-URL mappings live in the **dynamic** layer: they are read constantly and
+churn with the working set. Synthetic and anchor entries are persisted to the
+**permanent** layer through execution and never change, so their cache is a hot
+front for entries in play and a miss falls through to permanent storage, counted.
+Sizing either cache is decided from measurement, not here.
+
 ## 2. Specification — how it is implemented
 
 ### Interfaces

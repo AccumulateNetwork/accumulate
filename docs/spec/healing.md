@@ -141,13 +141,11 @@ are released from staging at commit. Staging holds only what is above
   consensus state.** They live in memory beside the healer, keyed by hash and
   by source with the block index of the activation that asked. A restart
   empties them; the cost is at most one duplicate request per gap.
-- **The producer cache is in memory.** At start it is rebuilt from the
-  synthetic and anchor chains over the window, and misses during the rebuild
-  are counted separately from misses in steady state. Its window is
-  `HealWindowBlocks` (256) or `HealWindowBytes` (128 MB), whichever binds
-  first; the window must exceed the cadence times the patience plus the time
-  an answer takes to land. The sanity horizon of about an hour is a separate
-  constant and bounds what staging will hold, not what the cache keeps.
+- **The synthetic/anchor cache holds entries in play**, indexed by partition and
+  index, cleared as the destination delivers, backed by the permanent layer
+  ([The cache](#the-cache)). Its size is decided from measurement of how many
+  entries are in play at the target rate. The sanity horizon of about an hour
+  bounds what staging will hold, not what the cache keeps.
 
 ### Proofs are extended, not replaced
 
@@ -180,27 +178,32 @@ outside the account hash.
 
 ### The cache
 
-The cache is the **producer's**. A partition keeps every synthetic message and
-every anchor it produced over the healing window and serves every request from
-it. There is no destination-side cache; nothing is fetched twice.
+The synthetic/anchor cache is the **producer's**, and it holds only the entries
+**in play**: what this partition has produced that a destination may still ask
+for. It is one of two caches and must not be confused with the other
+([database.md](database.md), "Caches"): the hash-to-URL mapping cache is a
+two-level cycled cache in the dynamic layer and serves reads, not healing.
 
-- **When.** An entry enters the cache when it is **produced** — when the block
-  sequences it onto the synthetic chain or builds the anchor — not when it is
-  dispatched and not when a destination executes it. That is the earliest
-  point at which the entry is final, it is one write on a path the block
-  already takes, and it makes the cache a mirror of production.
+- **Indexed by partition and index** — the stream and the sequence number —
+  and by entry hash, the request's vocabulary.
+- **Filled at production**, when the block sequences the entry onto the
+  synthetic chain or builds the anchor: the earliest point at which the entry
+  is final, one write on a path the block already takes, a mirror of
+  production.
 - **Contents.** The sequenced message and, when it has one, the transaction it
-  belongs to. No proofs: bundles carry none, and proof requests are read from
-  the chains.
-- **Keys.** By entry hash, the request's vocabulary; and by stream and
-  sequence number, for anchor requests.
-- **Window.** Bounded in blocks and in bytes ([Bounds](#bounds)). What leaves
-  the cache has also left every destination's gap scan: older than the window
-  means healed to depth or in need of a snapshot. Nothing is invalidated; an
-  entry's content cannot change under its hash.
-- **A miss is a defect.** The cache is populated at production, so a request
-  inside the window that misses means the window or the cache is wrong. It is
-  counted, with its depth.
+  belongs to. No proofs; proofs are read from the chains.
+- **Cleared as gaps close.** Because it is indexed by partition and index, every
+  entry the destination is known to have delivered can be dropped: the cache
+  holds the entries in play, not a window of history. It is sized for the
+  entries in play, and sizing it is a separate matter decided from measurement.
+- **Backed by permanent storage.** Every entry is persisted to the permanent
+  layer through execution, so nothing is ever lost when it leaves the cache and
+  nothing is rebuilt: a request for an entry not in the cache is served from
+  the permanent layer and **counted as a miss** with its depth — a miss means
+  the cache is undersized or the request is stale, and either is worth a
+  number.
+- **Nothing is invalidated.** An entry's content cannot change under its index
+  or its hash.
 
 ### Counting
 
