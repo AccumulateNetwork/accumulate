@@ -420,11 +420,14 @@ staging; a mismatch discards the proof and increments a counter. A proof whose
 anchor has already executed is validated at intake. Nothing about a proof is
 decided by the block that receives it except where it waits.
 
-An anchor's own gate is a validator signature quorum, with one shortcut: a
-collection proof under a known directory root authorizes the anchor by itself.
-A later anchor exposes a missing earlier one — anchors are sequenced and
-predictable — and that gap is requested at once, without waiting a healing
-cycle.
+An anchor's own gate is a **validator signature quorum**, as it is today: each
+validator's signature is a contribution only that validator can make, and
+every validator re-sends its own on the cadence. There is one other way an
+anchor is validated: a raw past anchor that arrives or is already held is
+validated when a **later anchor's hashes prove it** — the later anchor's chain
+covers the earlier one, so the anchor chain itself is the proof. A later anchor
+exposes a missing earlier one — anchors are sequenced and predictable — and
+that anchor is requested at once, without waiting a healing cycle.
 
 ### Staging — the ordering gate
 

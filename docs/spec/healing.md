@@ -23,7 +23,10 @@ index:
 
 Anchors are a third case and are not a healing-cycle matter: anchors are slow
 and sequenced, so a later anchor exposes a missing earlier one, and that anchor
-is requested at once.
+is requested at once. An anchor is admitted by validator signature quorum, as
+today; a raw past anchor that arrives or is held is validated when a later
+anchor's hashes prove it. Healed anchors therefore travel raw, and every
+validator keeps re-sending its own signatures on the cadence.
 
 **A gap is judged only after staging has finished the block** — intake,
 anchors, proofs, drains. A new gap is ignored until the next healing cycle. If
