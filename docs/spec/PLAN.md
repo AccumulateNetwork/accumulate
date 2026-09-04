@@ -212,7 +212,7 @@ in-use is within the budget at every profile, and the over-limit warning is
 gone from a healthy run. Spec: **to be written** (SPEC.md lists consensus as a
 missing part).
 
-**S4 — allocation churn that sets the GC cadence.** None of these retain
+**S4 — allocation churn that sets the GC cadence. Filed as #4211 from run #5's 18-minute profile: synthetic and sequenced message marshaling through `encoding.Hash` is 35% of all allocation (~290 MB/s per node), and GC cores per node rose 0.14 → 1.3 in ten minutes with execution work flat.** None of these retain
 memory; together they are why the collector runs eight times a second once the
 heap is at the limit. From the hour-16 profile of `acc-bvn2-val1` (197 GB
 allocated):
@@ -255,6 +255,12 @@ live-tail rewrite (BlockchainDB#60) and maintenance pauses scale with the
 dynamic layer's size, which E7 and S5 shrink but do not remove. Filed there,
 not edited here. Any store-side term that survives S1–S5 in the hour-12 profile
 becomes an issue in that repository.
+
+**S8b — history lookups walk every segment's bloom (BlockchainDB#86).** Run #5:
+`segment.lookup` is 18% of CPU, 94% from `lookupHistory`, 82% of that testing
+bloom filters across ~40 history segments per shard, for reads of accounts last
+touched more than N blocks ago — most of a 10,000-account load. Grows with the
+segment count. Filed there.
 
 **S8a — the seal is the throughput wall (BlockchainDB#84).** Acceptance run #1
 (`20260903T173742Z`) had flat memory and idle CPU and delivered ~80 user tps of
