@@ -212,19 +212,23 @@ its share.
 
 ## Healing
 
-### H1. The healing cache does not exist
+### H1. The producer cache does not exist
 
 *[#4193](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4193)*
 
-**Spec** ([healing.md](healing.md)): healing caches what it fetches, keyed by
-source, destination and sequence number; only healing uses it; it lives in
-Accumulate and is indifferent to the storage backend.
+**Spec** ([healing.md](healing.md), "The cache"): a partition keeps every
+synthetic and anchor it produced over the healing window, keyed by hash and by
+stream position, and serves every heal request from it; a miss is a counted
+defect.
 
-**Code**: no such cache. One was built in the BlockchainDB adapter and removed —
-on the storage read path it answered 0.40% of lookups, because it cached the
-executor's reads rather than the healer's fetches.
+**Code**: no cache on either side. The sequencer rebuilds message, receipt and
+signature from the database on every request (`getSynth`,
+`getDirectoryReceiptForBlock`): 35% of a source's CPU at hour one of run
+`20260904T012004Z`. One cache was built earlier in the BlockchainDB adapter and
+removed — on the storage read path it answered 0.40% of lookups, because it
+cached the executor's reads rather than what healing asks for.
 
-**Size**: small.
+**Size**: small for the cache itself; it is the foundation of H8.
 
 ### H6. Healing asks for the same number again, and the source rebuilds every answer
 

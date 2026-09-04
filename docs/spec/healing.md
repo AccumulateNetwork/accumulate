@@ -388,36 +388,27 @@ under load rather than restarting each time a proof lands.
 
 ### The cache
 
-The cache that matters is the **producer's**: what a partition produced over
-the window, by hash and by stream position, serving every request without
-touching the database ([A request names hashes](#a-request-names-hashes-an-answer-is-a-bundle)).
-The destination-side cache described below caches what healing fetched; once
-requests name hash sets and answers are bundles, nothing is fetched twice and
-that cache has nothing to do. It is kept here until the request path is built.
+The cache is the **producer's**. A partition keeps every synthetic message and
+every anchor it produced over the healing window, marshaled, hashed and signed
+once, at production, and serves every heal request from it without touching the
+database. There is no destination-side cache: a request names hashes the
+destination does not hold, so nothing is ever fetched twice.
 
-Healing caches what it fetches, and **only healing uses that cache**.
-
-The reason is what each reader does. The executor reads a record once per block
-and its reads do not repeat; a cache serves it nothing. Healing fetches the same
-message from the source over and over while a stream is behind — in soak
-`20260902T132651Z`, 53,011 fetches for 8,556 distinct sequence numbers, some
-41 times each. Those repeat, so they can be cached.
-
-The cache is therefore:
-
-- **In Accumulate, with the healer.** It caches what healing fetched, which is a
-  property of healing, not of any storage backend. It works the same whichever
-  database is configured, and no storage backend knows it exists.
-- **Keyed by what identifies a fetch** — source, destination and sequence
-  number.
-- **Two generations.** A lookup tries the hot map, then the cold one, and a hit
-  in cold is promoted. When hot fills it becomes cold and a new hot starts, so
-  entries leave by being unused for a whole generation and nothing is evicted
-  one at a time.
-- **Never invalidated.** A sequenced message is named by its position in a
-  stream and its content cannot change under that name. If it could, the
-  protocol would be broken and a stale cache entry would be the smallest
-  consequence.
+- **Contents.** Each entry as it was dispatched: the sequenced message, the
+  transaction it belongs to when it has one, and the collection proof it was
+  sent under. Anchors and synthetics alike.
+- **Keys.** By entry hash — the request's vocabulary — and by stream and
+  sequence number, which is how the reconcile path and range requests name
+  things.
+- **Window.** The healing window, bounded in blocks and in bytes. What leaves
+  the cache has also left every destination's gap scan: older than the window
+  means healed to depth or in need of a snapshot; the two windows are the same
+  window. Nothing is invalidated: an entry's content cannot change under its
+  hash.
+- **A miss is a defect.** The cache is populated at production, so a request
+  for a hash inside the window that misses means the window is wrong or the
+  cache is. Misses are counted with their depth — how far below the newest
+  cached entry the hash lay — and construction failures with them.
 
 ## 2. Specification — how it is implemented
 
@@ -433,53 +424,56 @@ On an activation block, after the anchor and synthetic groups have been
 evaluated, drained and executed, staging computes for each stream:
 
 - `Delivered`, read from the ledger — the highest number executed;
-- the **held** set, read from staging itself — numbers received, not executed;
+- the **held** set, read from staging itself — entries received, not executed;
+- the **proven** set, read from the replica — the hashes every accepted
+  collection proof covers;
 - `Produced`, the source's high-water mark as carried by the stream.
 
-The gaps are the numbers in `(Delivered, Produced]` that staging does not hold.
-Requests are made one per gap: several askers of the same gap — most often the
-signatures of one anchor — collapse to a single request.
+The request is the proven hashes above `Delivered` that staging does not hold,
+per source. One request per source per activation, whatever the number of
+gaps; several askers of the same hash — most often the signatures of one
+anchor — collapse into the one set. A stream with a lost tail has no proof for
+it and therefore no hashes to ask for; that is the reconcile path's case, and
+it asks by stream and range instead.
 
 Selection of senders is a function of the previous block's hash over the
 validator set, yielding two indices. A node compares them against its own
 position; no message is exchanged to establish this.
 
-### Fetching, outside the block
+### Requesting and answering, outside the block
 
-A selected node sends its requests immediately, without waiting for the block to
-commit, because nothing in this partition's state depends on the send.
+A selected node sends its request immediately, without waiting for the block
+to commit, because nothing in this partition's state depends on the send. The
+request is an API call to a validator of the source partition: the destination
+partition, and the hash set. It carries no sequence numbers and no proofs.
 
-`requestSyntheticFrom(ctx, source, num)` pulls one missing message from the
-source partition's sequencer: `c.Sequencer.Sequence(source, destination, num)`.
-
-- It retries a transient failure up to three times, because routing picks a peer
-  per attempt and one transient "no live peers" once wedged a stream
-  permanently (#4067).
-- A `NotFound` is a deterministic answer about the source's state and is **not**
-  retried (#4086, #4115).
 - The call is bounded in time, so a hung source cannot pin the goroutine or its
   read batch. The bound need not be generous: the next activation is due
-  regardless, and an expired request is simply a gap that is still a gap.
-- A failure moves to the next hole rather than abandoning the batch. Delivery is
-  ordered, so one unfillable gap must not stop the others being pulled.
+  regardless, and an unanswered request is a gap that is still a gap.
+- A transient transport failure is retried a few times, because routing picks a
+  peer per attempt and one transient "no live peers" once wedged a stream
+  permanently (#4067). A `NotFound` for a hash is a deterministic answer about
+  the source's cache and is not retried; it is counted as a miss.
+- A hash asked for is remembered with the activation that asked. It is not
+  asked again while the answer can still arrive; it is asked again when that
+  many activations have passed without it landing (monotonicity, above).
 
-`buildSyntheticSubmission` assembles the envelope from the sequencer's response
-— the sequenced message, the proof, and the source's signature.
+The source answers from its cache and nothing else. It packs the entries into
+**bundles** — as many as fit the envelope budget, anchors and synthetics
+together, each entry with its transaction when it has one and with no proof of
+its own — and **submits each bundle into the requesting network** through the
+same submit path a dispatch uses. A bundle below the minimum size waits for
+the next request to the same destination unless nothing else is pending.
 
-- A non-nil proof from the response overrides the per-message one: that is the
-  collection proof covering a whole range, which every record of the range
-  shares.
-- For a message belonging to a transaction, the transaction is bundled with it,
-  exactly as the normal outbound path does. Without it a healed message fails on
-  "load transaction" and the stream stays stuck (#4066).
+At the destination a bundle does not go through a block. Every entry in it is
+proven by a receipt this partition already accepted, so it is written **to
+staging** as it arrives, as held; the next block's stage sees it as received
+and drains the run it completes. Once a run executes, the executed entries are
+truncated from staging; staging holds only what is above `Delivered`.
 
-The envelope is submitted with `c.submit` and re-enters through consensus, where
-it is sorted, staged and executed like any other message — which is why the
-duplicate answer from the second sender costs nothing: the block's sort keeps
-the first sighting of a sequence number.
-
-The log line "Requested missing synthetic transaction" is emitted **after** the
-submit succeeds, so it records a completed heal, not an attempt.
+The counters in [A request names hashes](#a-request-names-hashes-an-answer-is-a-bundle)
+are emitted at the points named there: requests and hashes at the requester,
+bundles and cache outcomes at the source, landing and truncation at staging.
 
 ### Extension requests
 
