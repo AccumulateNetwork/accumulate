@@ -402,9 +402,19 @@ once, at production, and serves every heal request from it without touching the
 database. There is no destination-side cache: a request names hashes the
 destination does not hold, so nothing is ever fetched twice.
 
-- **Contents.** Each entry as it was dispatched: the sequenced message, the
-  transaction it belongs to when it has one, and the collection proof it was
-  sent under. Anchors and synthetics alike.
+- **When.** An entry enters the cache at the moment it is produced — when the
+  block sequences it onto the synthetic chain, or builds the anchor — not when
+  it is dispatched and not when a destination executes it. That is the earliest
+  point at which the entry is final (hash and sequence number assigned), it is
+  one write on a path the block already takes, and it makes the cache a
+  mirror of production: an entry produced and not in the cache is a defect
+  with a single place to look. Nothing downstream — dispatch, receipts,
+  execution — is involved.
+- **Contents.** Each entry as produced: the sequenced message and the
+  transaction it belongs to when it has one. Anchors and synthetics alike. A
+  bundle carries no proofs, so the cache need not hold the collection proof an
+  entry was later dispatched under; the receipt path (reconcile, ranges) reads
+  proofs from the chains as it does today.
 - **Keys.** By entry hash — the request's vocabulary — and by stream and
   sequence number, which is how the reconcile path and range requests name
   things.
