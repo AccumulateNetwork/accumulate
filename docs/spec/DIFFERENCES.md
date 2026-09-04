@@ -282,7 +282,12 @@ ONE sequence number, the source rebuilds message, receipt and signature from
 the database (`getSynth`), and the requester re-submits the result into its
 own mempool through `Submit`, where it is sealed, certified and executed like
 any transaction. Up to 200 such round trips per stream per activation
-(`syntheticHealBatch`). Nothing reaches staging except through a block.
+(`syntheticHealBatch`). Nothing reaches staging except through a block. The
+decision itself — which numbers are gaps, what to ask for — is computed in the
+conductor (`requestMissingSynthetics`, `missingRuns`, `reconcileInboundStreams`
+in `internal/core/crosschain`) by reading staging from outside the block, not
+in staging as part of the block as the spec places it; the transport (the
+sequencer API call and the dispatcher) is where the spec puts it.
 
 **Evidence**: run `20260904T035906Z`: 230 heals a second network-wide, each a
 separate request and a separate re-submission, executed in blocks of 200–400
