@@ -178,3 +178,33 @@ func TestRun_DoesNotTakeACollectedEntryUntilProven(t *testing.T) {
 	run, _ = buildRun(pos, nil, 10)
 	require.Len(t, run, 2)
 }
+
+// A proof for an earlier span than the proven set's origin proves what it
+// covers: its elements are recorded below the origin so the entries it names
+// are proven wherever the proof lands, and a later contradicting proof for the
+// same indexes is still a conflict.
+func TestProvenSet_ExtendsBackwardsBelowTheOrigin(t *testing.T) {
+	f := newReplicaFixture(t, 300)
+	source := protocol.PartitionUrl("BVN1")
+	f.seed(t, 290, 299) // the proven set begins at 290
+	require.False(t, f.x.replicaIncludes(f.batch, source, f.src[15]))
+
+	require.NoError(t, f.x.seedSyntheticReplica(f.batch, source, f.proof(t, 10, 20)))
+	for i := 10; i <= 20; i++ {
+		require.True(t, f.x.replicaIncludes(f.batch, source, f.src[i]), "proven by the earlier proof: %d", i)
+	}
+	require.False(t, f.x.replicaIncludes(f.batch, source, f.src[25]), "not covered by any proof")
+
+	// A contradicting proof for those indexes is a conflict, as above the origin.
+	other := f.batch.Account(protocol.PartitionUrl("BVN2").JoinPath(protocol.Synthetic)).MainChain()
+	c, err := other.Get()
+	require.NoError(t, err)
+	for i := 0; i < 21; i++ {
+		h := sha256.Sum256([]byte(fmt.Sprintf("other %d", i)))
+		require.NoError(t, c.AddEntry(h[:], false))
+	}
+	forged, err := merkle.GetReceiptList(other.Inner(), 10, 20)
+	require.NoError(t, err)
+	err = f.x.seedSyntheticReplica(f.batch, source, forged)
+	require.ErrorContains(t, err, "conflict")
+}

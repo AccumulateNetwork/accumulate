@@ -100,8 +100,19 @@ func (x *Executor) seedSyntheticReplica(batch *database.Batch, source *url.URL, 
 			have, err := chain.Entry(i)
 			switch {
 			case errors.Is(err, errors.NotFound):
-				// Below the replica's seed origin: never stored here, so
-				// there is nothing to compare and nothing to prove again.
+				// Below the proven set's origin: the chain was seeded from a
+				// later state and never stored this index. The proof proves
+				// it, so record the element and its index directly — the
+				// proven set answers IndexOf for it from now on, and a later
+				// contradicting proof for the same index is a conflict.
+				err = record.Inner().Element(uint64(i)).Put(elements[i-start])
+				if err != nil {
+					return errors.UnknownError.WithFormat("record proven element %d for %s: %w", i, stream, err)
+				}
+				err = record.Inner().ElementIndex(elements[i-start]).Put(uint64(i))
+				if err != nil {
+					return errors.UnknownError.WithFormat("index proven element %d for %s: %w", i, stream, err)
+				}
 				continue
 			case err != nil:
 				return errors.UnknownError.WithFormat("load proven entry %d for %s: %w", i, stream, err)

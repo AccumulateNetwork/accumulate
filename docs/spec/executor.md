@@ -436,7 +436,10 @@ the anchor group, over the Directory anchors the block executed. A validated
 proof's hashes go into the stream's proven set, the `synthetic-replica:<stream>`
 mirror chain (index to hash), which is excluded from the account hash
 (`isProvenSetChain`); a proof that contradicts an index already proven is
-refused (`errors.Conflict`). Outcomes are
+refused (`errors.Conflict`). A proof for a span below the set's origin — the
+set was seeded from a later proof's state — records its elements and their
+indexes directly below the origin, so what it proves is proven wherever it
+lands and a later contradiction there is still a conflict. Outcomes are
 `accumulate_exec_staged_proofs_total{outcome}`: staged, validated, disproved,
 conflict, invalid.
 

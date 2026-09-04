@@ -22,7 +22,7 @@ healer is gone; a lost entry now shows as a stalled stream, and that gap is
 what the next item hunts.
 
 ```
-E8 #4217 (done) ─▶ proven set extends backwards ─▶ C6 #4215 ─▶ S4 #4211, S5, BlockchainDB#86 (what slows blocks in hour one) ─▶ H8 #4216 (healing in staging, for dropped entries; with H1 #4193) ─▶ acceptance run #7
+E8 #4217 (done, proven set extends backwards) ─▶ C6 #4215 ─▶ S4 #4211, S5, BlockchainDB#86 (what slows blocks in hour one) ─▶ H8 #4216 (healing in staging, for dropped entries; with H1 #4193) ─▶ acceptance run #7
 S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86      cost, after run #7 shows the healer gone
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3 ─▶ D4       correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back
