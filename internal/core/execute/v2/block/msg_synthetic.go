@@ -108,15 +108,16 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	// entry executes once its proof's anchor arrives, and how a package
 	// member or a bundle entry is accepted. Tried BEFORE bundle resolution
 	// (#4152).
-	if syn.Proof == nil {
-		h := syn.Message.Hash()
-		if ctx.Executor.replicaIncludes(batch, seq.Source, h[:]) {
-			err := checkSyntheticInnerType(seq)
-			if err != nil {
-				return nil, err
-			}
-			return syn, nil
+	// Proven is proven: a message the proven set covers is accepted whatever
+	// proof it carries — a range recovered under a source root and later
+	// covered by the source's package proof, for instance.
+	if h := syn.Message.Hash(); ctx.Executor.replicaIncludes(batch, seq.Source, h[:]) {
+		err := checkSyntheticInnerType(seq)
+		if err != nil {
+			return nil, err
 		}
+		syn.Proof = nil
+		return syn, nil
 	}
 
 	// A synthetic message may omit its own proof when a SyntheticProof travels

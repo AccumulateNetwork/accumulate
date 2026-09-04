@@ -339,6 +339,37 @@ executor that creates the loss.
 the producer cache (H1) as its only source; a staging write path for proven
 entries; truncation on execution; the counters in the spec table.
 
+### H9. Range recovery proves under a source root, which no destination accepts
+
+*[#4216](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4216)*
+
+**Spec** ([executor.md](executor.md), "Anchor staging", "Proof"): a proof
+terminates at a Directory anchor; the destination checks its terminal root
+against the Directory anchor chain and nothing else.
+
+**Code**: the reconcile path's range recovery (`recoverSyntheticsViaRange`,
+`recoverAnchorsViaRange`, `internal/core/crosschain`) asks the source to
+continue the collection proof to a root of the **source** the destination
+holds (`rangeProofAnchor`, `getHeldAnchorContinuation`; the proof's
+`Anchor.Account` is the source). `provingAnchorIndex` looks only in the
+Directory anchor chain, so every message a range recovers arrives with an
+inadmissible proof: recorded pending outside staging before E8, collected and
+never proven after it, and pulled again by the next reconcile.
+
+**Evidence**: run `20260904T140000Z` (E8 check): on the Directory,
+`synthetic_anchor_total{applied="missing"}` 13,000–33,000 per node against
+1,000–5,000 `heals_total{type="synthetic-range"}` of 200 entries each; the
+Directory's own batch store reached 235 MB of range answers re-submitted into
+its own mempool, its executor fell 75 blocks behind consensus, and the run
+stalled at 17 minutes. Run `20260904T035906Z` showed the same streams
+(BVN→Directory) delivering less than half of what was produced.
+
+**Consequence**: the Directory's inbound streams heal by a path that cannot
+deliver, and the attempts are the heaviest traffic on the network.
+
+**Size**: none of its own — the path is retired with H8 (proof requests by
+index span, continued to a Directory root the destination holds).
+
 ### H3. Proof extension does not exist
 
 *[#4192](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4192)*

@@ -230,3 +230,37 @@ func TestReplicaMember_AcceptedEvenWhenTheEnvelopeCarriesAProof(t *testing.T) {
 	require.NotNil(t, syn)
 	assert.Nil(t, syn.Proof, "accepted via the replica, not the bundle proof")
 }
+
+// Proven is proven. A message whose hash the proven set covers is accepted even
+// if it carries a proof of its own that cannot be checked here — a range
+// recovered from a source and later covered by the source's package proof, for
+// instance. The proof it carries is simply not needed (executor spec, "Proof").
+func TestProvenMember_AcceptedRegardlessOfItsOwnProof(t *testing.T) {
+	f := newReplicaFixture(t, 0)
+	f.x.globalsPtr.Store(&Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest}})
+
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = protocol.AccountUrl("alice", "tokens")
+	txn.Body = &protocol.SyntheticDepositCredits{Amount: 1}
+	seq := &messaging.SequencedMessage{
+		Message:     &messaging.TransactionMessage{Transaction: txn},
+		Source:      protocol.PartitionUrl("BVN1"),
+		Destination: protocol.PartitionUrl("BVN0"),
+		Number:      1,
+	}
+	h := seq.Hash()
+	require.NoError(t, f.chain.AddEntry(h[:], false))
+	f.seed(t, 0, 0)
+
+	unknown := make([]byte, 32)
+	unknown[0] = 0x99
+	member := &messaging.SyntheticMessage{
+		Message:   seq,
+		Proof:     &protocol.AnnotatedReceipt{Anchor: &protocol.AnchorMetadata{Account: protocol.PartitionUrl("BVN1")}, Receipt: &merkle.Receipt{Start: h[:], Anchor: unknown}},
+		Signature: &protocol.ED25519Signature{PublicKey: make([]byte, 32), Signer: protocol.DnUrl().JoinPath(protocol.Network)},
+	}
+	d := &bundle{Block: &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}, batch: f.batch, messages: []messaging.Message{member}}
+	syn, err := SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d, message: member})
+	require.NoError(t, err, "the proven set vouches for it")
+	require.Nil(t, syn.Proof, "its own proof is not consulted")
+}

@@ -82,9 +82,14 @@ Steps, each test-first:
    deleted with the conductor's pull paths.
 
 Done when: the e2e suite delivers packages with anchors arriving in either
-order without healing; `exec_synthetic_anchor_total{applied="missing"}` no
-longer exists because nothing is judged that way; a 30-minute soak at 500 tps
-shows heals only for injected drops.
+order without healing (done); a 30-minute soak at 500 tps shows heals only
+for injected drops. **Check run `20260904T140000Z`**: the BVN↔BVN leg is
+closed (87,908 proven, 20,074 collected, streams with no backlog), but heals
+did not fall — the healer pulls every one-block-late hole immediately (H8),
+and the Directory's range recovery proves under source roots that no
+destination accepts (H9), so the Directory spiralled and the run stalled at
+17 minutes. The heals criterion is H8's to meet; E8's code is complete except
+release of the proven set.
 
 ### H8 #4216 — healing by hash set, from the producer cache
 
