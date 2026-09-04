@@ -10,33 +10,32 @@ retry mechanism of its own.
 
 ### Gaps
 
-A gap is an entry the node needs and does not hold. Four facts define it, each
-with one owner:
+Staging is two stores ([executor.md](executor.md), "Collection"): entries by
+stream and index, and collection proofs by the sequence number of the anchor
+each terminates in. Entries and indexes are one to one, and every index is
+eventually covered by a proof, so there are exactly two kinds of gap, both by
+index:
 
-| fact | owner | meaning |
+| gap | meaning | answer |
 |---|---|---|
-| `Delivered` | the ledger | the highest number this stream has executed |
-| **held** | staging | entries received and not yet executed |
-| **proven** | the replica | the hashes every accepted collection proof covers |
-| `Produced` | the source | how far the source has gone |
+| **proven, missing** | a validated proof covers the index and no entry is held there | the entry, in a bundle |
+| **held or expected, unproven** | entries are held (or lower indexes are proven) and no validated proof covers the index | a proof extending the covered range |
 
-The gaps a destination can see are the **proven hashes above `Delivered` that
-staging does not hold**. Holding a proof for a range means the source produced
-every entry in it; not holding an entry means it never arrived. Nothing at or
-below `Delivered` is a gap, is requested, or is counted.
+Anchors are a third case and are not a healing-cycle matter: anchors are slow
+and sequenced, so a later anchor exposes a missing earlier one, and that anchor
+is requested at once.
 
-A stream that lost its **tail** shows no gap: there is no proof for what was
-never sighted. That case is found by asking the source what it has produced —
-the reconcile path — and is requested by stream and range rather than by hash.
-A gap must persist for a grace period before reconcile acts on it, so entries
-merely in flight are not requested.
+**A gap is judged only after staging has finished the block** — intake,
+anchors, proofs, drains. A new gap is ignored until the next healing cycle. If
+it is still there at the second cycle, it is requested. Two cycles is the
+patience, counted in blocks, so every validator judges the same gaps.
 
-Which streams to consider comes from staging and the replica, not from the
-ledger: a stream that has only staged has delivered nothing and has no ledger
-entry, yet is the stream most likely to be stuck.
+Nothing at or below `Delivered` is a gap. An index further ahead than about an
+hour of the source's production is refused on arrival, not healed: a partition
+that far ahead is a fault to be dealt with elsewhere.
 
-A restart changes nothing. Staging is durable ([executor.md](executor.md),
-Restart), so a restarted node holds what it held and has the gaps it had.
+A restart changes nothing. Staging is durable, so a restarted node holds what it
+held and has the gaps it had.
 
 ### Who asks, and when
 
@@ -44,7 +43,7 @@ Healing **activates every few blocks**, not every block. A request goes to
 another partition and its answer comes back through consensus, which takes
 blocks; activating every block would re-request what is already on its way.
 
-**Every validator computes the same request set.** Staging and the replica are
+**Every validator computes the same request set.** Both staging stores are
 deterministic functions of consensus input, so every node reaches an activation
 with the same gaps. Nothing is random and nothing is negotiated.
 
@@ -65,9 +64,10 @@ enough; if no, everyone owes theirs.
 
 A request is an API call from a selected validator to a validator of the source
 partition. It carries the **destination partition and the set of hashes**
-wanted — nothing else: no sequence numbers, no proofs, no receipts. One request
-per source per activation, whatever the number of gaps; the several messages
-that reveal one gap collapse into one hash in the set.
+wanted for proven-missing gaps, and the **index spans** for which a proof is
+wanted — nothing else. One request per source per activation, whatever the
+number of gaps; the several messages that reveal one gap collapse into one
+hash in the set.
 
 A request is bounded in time and is sent at once, without waiting for the block
 to commit, because nothing in this partition's state depends on it. A lost
@@ -84,9 +84,10 @@ way — a bookkeeping defect, not traffic the stream requires.
 
 ### The answer
 
-The source answers **entirely from its cache** (below) and nothing else: no
-chain walk, no receipt, no signature, no database read. It packs the entries
-into a **bundle** — as many anchors and synthetic transactions as fit the
+For hashes, the source answers **entirely from its cache** (below) and nothing
+else: no chain walk, no receipt, no signature, no database read. For index
+spans it answers with a proof read from its chain ([Proofs are extended](#proofs-are-extended-not-replaced)).
+It packs the entries into a **bundle** — as many anchors and synthetic transactions as fit the
 envelope budget, whatever their streams, each with the transaction it belongs to
 when it has one, and with no proof of its own — and **submits the bundle into
 the requesting network** through the same path a dispatch uses. A bundle below
@@ -104,15 +105,20 @@ A bundle arrives through the requesting network's consensus, never by a side
 door: staging decides what a block executes, and every validator must hold the
 same staging at the same block ([executor.md](executor.md), Restart).
 
-In the block, bundles are the **first group** of the sort
-([executor.md](executor.md), "Sort, then four groups"). The block opens the
-envelope and writes its entries to staging as held before any anchor or
-synthetic is evaluated, so the runs they complete drain in the same block. Every
-entry is already proven by a receipt the destination accepted, so no
-admissibility question is asked of it.
+In the block it is **intake**, the first group of the sort
+([executor.md](executor.md), "Sort, then four groups"): entries go to synthetic
+staging at their index, where the proof that named them has already proven
+them, and a proof goes to anchor staging under its anchor's sequence number.
+Nothing is evaluated for the envelope and nothing is recorded for it. The runs
+the entries complete drain in the same block.
 
-When a run executes, its entries are **truncated** from staging. Staging holds
-only what is above `Delivered`; it is a buffer, not a store.
+A proof an anchor disproves is discarded and counted. Two proofs for the same
+indexes with different hashes are an attack, counted; a validator signature on
+proofs is the eventual answer.
+
+When a run executes, its entries and the proven ranges at or below `Delivered`
+are released from staging at commit. Staging holds only what is above
+`Delivered`.
 
 ### Proofs are extended, not replaced
 
@@ -155,10 +161,10 @@ it. There is no destination-side cache; nothing is fetched twice.
   point at which the entry is final, it is one write on a path the block
   already takes, and it makes the cache a mirror of production.
 - **Contents.** The sequenced message and, when it has one, the transaction it
-  belongs to. No proofs: bundles carry none, and the extension and range paths
-  read proofs from the chains.
+  belongs to. No proofs: bundles carry none, and proof requests are read from
+  the chains.
 - **Keys.** By entry hash, the request's vocabulary; and by stream and
-  sequence number, for the reconcile and range paths.
+  sequence number, for anchor requests.
 - **Window.** Bounded in blocks and in bytes. What leaves the cache has also
   left every destination's gap scan: older than the window means healed to
   depth or in need of a snapshot. Nothing is invalidated; an entry's content
@@ -179,7 +185,8 @@ Per node and per stream, so healing is judged from data:
 | cache hits, misses, miss depth, construction failures | at the source; a miss is a defect |
 | request to landing, in blocks | whether the cadence gives an answer time to arrive |
 | staging depth, entries truncated | that staging is a buffer, not a store |
-| reconcile requests, ranges, entries recovered | how often a tail is lost outright |
+| proof requests, spans per request, proofs disproved, duplicate proofs | proof loss, and attempts to lie about hashes |
+| anchor requests | anchors lost, requested at once |
 
 ### Invariants
 
@@ -191,12 +198,13 @@ Per node and per stream, so healing is judged from data:
    Signatures are contributions and are exempt from selection.
 4. **A bundle is an envelope, not a transaction.** Nothing is executed or
    recorded for it; its entries execute in their streams.
-5. **Bundles land through consensus and are applied to staging first.** Staging
-   is the same on every validator at every block.
-6. **Staging is truncated as runs execute.** It holds only what is above
+5. **Bundles land through consensus and go into staging at intake.** Staging is
+   the same on every validator at every block.
+6. **Staging is released as runs commit.** It holds only what is above
    `Delivered`.
 7. **Healing is bounded per activation** in requests, in time, and to one
    activation at a time.
+8. **Anchors are requested at once; entries and proofs after two cycles.**
 
 ## 2. Specification — how it is implemented
 
@@ -209,24 +217,20 @@ API call, the bundle submission and the counters live in
 
 On an activation block (`healActivates(index)`, every `healCadence` blocks),
 after the four groups have executed, staging computes per source: the proven
-hashes above `Delivered` not held, minus hashes asked for within the last
-`healPatience` activations. That is the request set. Sender selection is a
-function of the previous block's hash over the validator set yielding two
-indices; a node compares them against its own position.
-
-The reconcile path runs on the same activations for the selected pair: it asks
-each source for its `Produced` toward this partition and, for a tail above the
-sighted high-water mark that has been overdue for `reconcileGraceBlocks`,
-requests the range by stream and indices.
+indexes not held and the held or expected indexes not proven, each first seen
+at least two activations ago and not asked within the last `healPatience`
+activations. That is the request set: a hash set and a list of index spans.
+Anchor gaps — a sequence number below the newest held anchor with no anchor —
+are requested on the block that exposes them. Sender selection is a function
+of the previous block's hash over the validator set yielding two indices; a
+node compares them against its own position.
 
 ### Requesting and answering
 
 The private sequencer service (`internal/api/private`) carries three methods:
-one entry by stream and number, a range by stream and indices, and **entries by
-hash set** for a destination. The first two serve the reconcile and extension
-paths; the third serves healing. All three are answered from the producer cache
-where it holds the entry; a range or extension that reaches below the cache is
-read from the chains.
+one entry by stream and number (anchors), a **proof for index spans** of a
+stream, and **entries by hash set** for a destination. Entries are answered
+from the producer cache; a proof is read from the chain.
 
 The source packs the entries into bundles under the envelope budget
 (`synthPackageBudget`) and above the minimum size, and submits each bundle to
@@ -238,12 +242,12 @@ hash is a deterministic answer and is counted as a miss.
 
 ### Landing
 
-The block's sort (`exec_stage.go`, `classify`) recognises a bundle by its shape
-— sequenced entries with no proof whose hashes the replica already contains —
-and records each entry as an arrival on its stream before the anchor group is
-evaluated. Nothing is recorded for the envelope. `stageRuns` then computes runs
-with those entries held, and executed entries are removed from staging when the
-stream's position is written back at close.
+The block's sort (`exec_stage.go`, `classify`) writes every sequenced entry to
+synthetic staging at its index and every collection proof to anchor staging
+under its anchor sequence number, bundles and packages alike, before the anchor
+group is evaluated. Nothing is recorded for an envelope. `stageRuns` then
+computes runs from what is proven and held, and executed entries and the proven
+ranges at or below `Delivered` are released when the block commits.
 
 ### The cache
 

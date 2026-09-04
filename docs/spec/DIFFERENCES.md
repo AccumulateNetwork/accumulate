@@ -94,6 +94,41 @@ to the hash. One accidental writer from changing account hashes.
 
 ---
 
+### E8. Staging is one store, proofs are not keyed by their anchor, and an unproven entry is parked outside it
+
+*[#4217](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4217)*
+
+**Spec** ([executor.md](executor.md), "Collection", "Proof", "Anchor staging"):
+two stores — entries by stream and index, proofs by anchor sequence number; a
+proof waits for its anchor and is validated or discarded by it; a validated
+proof marks its index range proven; an entry executes when proven and next;
+nothing is recorded pending outside staging; a gap is a proven index without
+an entry or a held index without a proof.
+
+**Code**: one store of held entries (`internal/core/execute/v2/block/staging.go`).
+A collection proof is not staged: it is verified when the envelope carrying it
+executes, and its hashes are absorbed into a per-stream "replica" written into
+the BPT (`synthetic_replica.go`), unbounded and hashed. A proof does not carry
+its anchor's sequence number; the destination tests the proof's terminal root
+against its directory anchor chain at execution (`admissible.go`). A package
+member whose anchor has not executed yet is admitted by staging (its own proof
+is nil) and then recorded `Pending` by `SyntheticMessage.Process` before the
+sequenced layer runs (`msg_synthetic.go`), so it is never held: it is a hole
+the healer must fill. The healer's reconcile path infers a lost tail from the
+source's `Produced`, which the spec no longer needs.
+
+**Evidence**: run `20260904T035906Z`: `exec_synthetic_anchor_total{applied="missing"}`
+outnumbered `earlier` nine to one on BVN2; a third of everything BVN1 received
+from BVN2 had been pulled by the healer; the lost numbers came in runs the size
+of one package.
+
+**Consequence**: the delivery race between a package and the anchor that proves
+it is decided by whichever executes first, and losing it costs a heal per entry.
+
+**Size**: medium. Anchor staging keyed by sequence number (a field on the proof);
+proven ranges by index replacing the replica; removal of the pending-outside-
+staging path; the reconcile path retired.
+
 ## Database abstraction
 
 ### D1. Record placement is a second, hand-maintained model

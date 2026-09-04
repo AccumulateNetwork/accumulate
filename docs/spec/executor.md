@@ -17,31 +17,42 @@ consensus ──▶ sort ──▶ ┌─ bundles:    hold in staging           
 ```
 
 A message must satisfy each of the following before it executes. Validity is
-decided on the message alone; admissibility and readiness are decided *by
-staging*, which is why they are not separate passes:
+decided on the message alone; everything after it is decided *by staging*:
 
 1. **Consensus** decides which messages exist and in what order. It is the only
    input. Batches are executed in the certificate's canonical payload order —
    any node-local order diverges chain entries and BPT roots across validators.
 2. **Validity** is settled first, on the message alone. A proof that does not
    hash to its own claimed anchor is refused outright — `BadRequest`, never
-   staged. This needs no state beyond the message, so it cannot be deferred and
-   is not a timing question.
-3. **Admissibility** is a question of *timing*: is the proof's terminal anchor
-   one this node has yet? Because validity is already established, a negative
-   has exactly one meaning — the destination's directory-root knowledge has not
-   caught up to the range the proof covers. That is ordinary lag, so the message
-   is pending and retried, never failed. Failing it would be terminal: the same
-   message could never be re-applied once the anchor arrived.
-4. **Readiness** is whether the message is *next* on its stream. Sequenced
-   streams execute in order with no gaps; a message whose predecessor is missing
-   waits. A user transaction is on no stream and is always ready.
-5. **Execution** runs the message. Nothing before this point changes protocol
-   state.
-6. **The database write is a side effect of execution**, not a stage of its own.
+   staged. An index further ahead than the source could have produced in about
+   an hour is refused the same way: a partition that far ahead is a fault, not
+   something staging waits for.
+3. **Collection.** Staging is two stores. **Synthetic staging** holds entries by
+   stream and index; an entry whose index no validated proof covers yet is
+   *collected* and waits. **Anchor staging** holds collection proofs by the
+   sequence number of the anchor each terminates in; a proof whose anchor has
+   not executed yet is collected and waits. Entries and indexes are one to one:
+   every index will be covered by some later proof, because the source's chain
+   grows and every later anchor covers everything before it, so a collected
+   entry is never a category of its own — only an entry whose proof has not
+   arrived yet.
+4. **Proof.** When an anchor executes, every proof waiting on its sequence
+   number is validated against it. A validated proof moves to synthetic staging
+   and marks its index range **proven**; the collected entries whose hashes sit
+   at those indexes are proven with it, and a later proof extends the proven
+   range. A proof the anchor disproves is discarded and counted — the entries
+   it claimed are simply not proven by it. Two proofs claiming the same indexes
+   with different hashes are an attack, counted; squashing them with a
+   validator signature is future work.
+5. **Readiness** is whether the message is *next* on its stream. Sequenced
+   streams execute in order with no gaps; a proven entry whose predecessor is
+   missing waits. A user transaction is on no stream and is always ready.
+6. **Execution** runs the message. Nothing before this point changes protocol
+   state, and nothing is ever recorded as pending outside staging: an entry the
+   block cannot execute is in staging, or it was refused.
+7. **The database write is a side effect of execution**, not a stage of its own.
    Executors write into the block's batch as they run; the batch is committed
-   once, when the block closes. There is no separate "persist" step and no
-   partial commit.
+   once, when the block closes.
 
 The four groups run in sequence, each finished before the next is evaluated.
 Executing one group changes the state the next is evaluated against — anchors
@@ -92,25 +103,20 @@ discovers more of them.
 Then **four groups, each finished before the next begins**. A group is
 evaluated, drained and executed; only then is the next group evaluated.
 
-0. **Healing bundles.** A bundle is not a transaction and is never sent to
-   the executor: it is an **envelope** carrying the missing synthetic and
-   anchor messages themselves — entries the destination already proved, the
-   source having answered a request for hashes the destination's accepted
-   receipts cover ([healing.md](healing.md), "The request"). There
-   is no healing message type, no executor for one, and no status or chain
-   entry recorded for the bundle. Its entries are ordinary sequenced messages
-   and are **applied to staging first**, as held, before any anchor or
-   synthetic is judged; they then execute as what they are, in their streams. A bundle arrives through
-   consensus like every other message, never by a side door, because staging
-   decides what a block executes and every validator must hold the same
-   staging at the same block (see Restart). Healing is first because its
-   entries complete runs that the groups below then drain in this block.
+0. **Intake.** Every arriving entry and proof — dispatched packages and
+   healing bundles alike — is written into staging before anything is
+   evaluated: entries into synthetic staging at their index, proofs into
+   anchor staging at their anchor's sequence number. A healing bundle is not a
+   transaction and is never sent to the executor: it is an envelope carrying
+   missing entries or a proof, there is no message type or executor for it,
+   and nothing is recorded for the envelope. Intake is first so that what the
+   groups below execute is decided against everything the block brought.
 1. **Anchors.** Evaluated — each is admissible or not, by quorum or proof —
    drained, and executed.
-2. **Synthetics.** Evaluated *after* the anchors have executed, so the directory
-   anchor chain they are judged against already carries this block's anchors.
-   That frees as much of the synthetic backlog as can be freed. Drained, and
-   executed.
+2. **Synthetics.** Evaluated *after* the anchors have executed, so every proof
+   waiting on one of this block's anchors has been validated and its indexes
+   proven before an entry is judged. That frees as much of the synthetic
+   backlog as can be freed. Drained, and executed.
 3. **User transactions.** Drained and executed last, so a deposit has landed
    before a transaction spends it. A send that would fail on a stale balance
    succeeds instead: strictly more permissive, and deterministic either way.
@@ -122,15 +128,16 @@ uses the same one.
 **Each group is evaluated once**, and the sequence is what makes that
 sufficient:
 
-- a synthetic's admissibility depends on the anchor chain, and the anchors that
-  extend it have already executed by the time synthetics are evaluated;
+- an entry is proven by a proof, and a proof by its anchor; the anchors that
+  validate this block's waiting proofs have executed by the time synthetics
+  are evaluated;
 - a stream's run is computed from its arrivals **and what is already staged**,
   so a message arriving this block that unblocks a backlog from earlier blocks
   is part of that stream's run when it is computed — nothing about it becomes
   true later;
-- a healing bundle is applied to staging before anything is evaluated, so the
-  runs it completes are seen by the anchor and synthetic evaluations, and
-  its entries are truncated from staging when those runs execute;
+- intake writes every entry and proof into staging before anything is
+  evaluated, so the runs they complete are seen by the anchor and synthetic
+  evaluations, and executed entries are released from staging at commit;
 - a user transaction is on no stream and cannot unblock one. What it produces
   for this partition goes on the delivery queue and executes next block, so it
   cannot free a synthetic within this block either.
@@ -263,14 +270,15 @@ one thing a per-block record must never do. An empty block has no entry.
 ### The invariants
 
 1. **A stream executes in order, with no gaps.** There is no skip.
-2. **An invalid proof is refused; a not-yet-provable one waits.** The two are
-   different answers to different questions and must not be conflated. A proof
-   that does not verify is a `BadRequest` and never enters staging. A proof that
-   verifies but names an anchor this node lacks is pending, never terminally
-   failed.
+2. **An invalid proof is refused; an unproven one waits in anchor staging until
+   its anchor decides it.** A proof that does not verify is a `BadRequest` and
+   never enters staging. A proof whose anchor has not executed yet is collected;
+   the anchor validates or disproves it. Nothing is ever recorded pending
+   outside staging.
 3. **Everything received is held until it can be processed.** Staging is
-   unbounded, because the protocol offers no alternative: a message that cannot
-   be dropped and cannot yet execute must be kept.
+   bounded only by the sanity horizon: about an hour of the source's
+   production ahead of `Delivered`. Within it a message that cannot be dropped
+   and cannot yet execute is kept.
 4. **A message that reaches staging has been accepted, and accepted means
    recorded.** There is no state in which the node holds a message and reports
    not holding it.
@@ -402,32 +410,21 @@ through a bundle whose block is a shell. The batch is discarded unconditionally.
 - Failing any of these is `BadRequest`. The message does not reach admission or
   staging.
 
-### Admission — the timing gate
+### Anchor staging — proofs wait for their anchor
 
-`msg_synthetic.go`, `SyntheticMessage.process`:
+A collection proof carries the sequence number of the directory anchor it
+terminates in. On intake it is written to anchor staging under that number. When
+that anchor executes, every proof waiting on it is validated against the
+anchor's root: a match marks the proof's index range proven in synthetic
+staging; a mismatch discards the proof and increments a counter. A proof whose
+anchor has already executed is validated at intake. Nothing about a proof is
+decided by the block that receives it except where it waits.
 
-- A replica-accepted message (#4140) carries no proof; its proof was checked and
-  absorbed when it first arrived.
-- Otherwise `isAdmissible` asks one question and does no verification:
-  `AnchorChain(Directory).Root().IndexOf(anchor)`. The anchor's own signatures
-  were checked when it was applied to that chain, and the proof's integrity was
-  checked above, so the only thing left to establish is whether this node has
-  the anchor yet. Individual and collection proofs terminate at the same trust
-  root, so one check covers both. `provingAnchorIndex` returns where in the
-  chain it sits, which staging uses to tell an anchor applied THIS block from
-  one applied earlier (#4169 step 0c).
-- A missing anchor returns `errors.Pending` under `V2Kourou`, not a failure:
-  failing it terminally wedges recovery, because the same message could never be
-  re-applied once the anchor arrived (#4048).
-
-An anchor's gate is a validator signature quorum rather than a proof to a
-directory root, with one shortcut: a collection proof under a known directory
-root authorizes the anchor by itself (#4056). A not-yet-arrived anchor does not
-reject it — it falls through to the quorum, because healing resubmits until a
-current anchor extends the destination's knowledge past the proven range.
-
-So a message that is not yet provable never reaches sequencing, and one that can
-never be proven never reaches admission.
+An anchor's own gate is a validator signature quorum, with one shortcut: a
+collection proof under a known directory root authorizes the anchor by itself.
+A later anchor exposes a missing earlier one — anchors are sequenced and
+predictable — and that gap is requested at once, without waiting a healing
+cycle.
 
 ### Staging — the ordering gate
 
@@ -469,12 +466,12 @@ synthetic's.
 
 | question | asked by | answer |
 |---|---|---|
-| hold this number | the executor, on a receipt | recorded; the first sighting of a number wins |
-| do we hold *n* | the executor, building a run | the message ID, or no |
-| how far has this stream been sighted | healing | the highest number ever held: what says a stream is behind |
-| what is missing in (delivered, through] | healing | the contiguous runs nothing holds, oldest first, bounded |
-| which streams exist | healing | every stream holding anything |
-| release through *n* | the block, on commit | everything at or below *n* is dropped |
+| hold this entry at index *n* | intake | recorded; the first sighting of an index wins |
+| hold this proof for anchor *a* | intake | recorded; validated when *a* executes, or now if it has |
+| is index *n* proven, and do we hold it | the executor, building a run | proven and held: executes; proven and missing: a gap; held and unproven: waits |
+| which proven indexes are missing, which held indexes are unproven | healing, after the block | the two kinds of gap, by index, oldest first |
+| which anchors are missing below the newest held | healing | requested at once |
+| release through *n* | the block, on commit | every entry at or below *n* is dropped; proven ranges below *n* are dropped |
 
 Four rules govern it, and each of them is a defect that has actually happened:
 
@@ -484,16 +481,13 @@ the same message, because the number identifies it. Keeping the first means the
 same input always produces the same staging.
 
 **The set of streams is staging's, not the ledger's.** A stream that has only
-staged has delivered nothing, so it has no ledger entry to be found by. Before
-the split, an entry existed regardless, because receipts were written into the
-ledger — the coupling being removed. A stream staging holds nothing for has
-nothing to heal: it is either current, or it has lost a tail nobody here can
-see, which is reconcile's job and reaches it from the source's `Produced`.
+staged has delivered nothing, so it has no ledger entry to be found by. A
+stream staging holds nothing for is current: an index it has never seen is
+covered by the next proof the source's next anchor brings.
 
-**The high-water mark does not go backwards.** Releasing what was delivered
-drops the held entries but leaves the mark: "this stream was behind" is what
-makes a hole below the mark a hole, and forgetting it says the stream had never
-been behind at all.
+**The proven range is what says an index is missing.** Releasing what was
+delivered drops the entries and the proven ranges at or below `Delivered`; what
+remains proven above it and unheld is a gap.
 
 **Release happens on COMMIT, not at flush.** Until the batch commits the
 delivery has not happened. Dropping a staged message for a block that is then
