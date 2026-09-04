@@ -137,6 +137,32 @@ durably only when it cannot execute this block; the gap questions by index
 ("proven and missing", "held and unproven") and the retirement of the
 reconcile-by-`Produced` path, which land with H8's request set.
 
+### E9. The executor reads permanent records past the window with no deep reader, and appends a transaction's hash from two sites
+
+*[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
+
+**Spec**: a reader that reaches past the window takes a deep reader; a message's
+hash is appended to a chain once, from one site (database spec, "Duplication").
+
+**Code**: `Message.Main` is read for pending transactions for up to
+`PendingMajorBlocks` (14 major blocks) and by dispatch after the Directory
+anchor returns (`block_begin.go` dispatch reads), through an ordinary batch —
+`BeginDeep` exists in the adapter and nothing in `internal/` calls it. The
+observer reads the v1 `Transaction(h).Main` record for every pending txid
+(`observer_prod.go:121`), a permanent shape never written by v2.
+`clearActiveSignatures` writes `Signatures` of every signer in the book, absent
+or not. `SyntheticIndexIndex` is write-once and read after the window on every
+dispatch. The transaction hash reaches the principal's main chain from the
+state cache (`state_cache.go:207`) and again from the success path
+(`transaction.go:581`); the chain's uniqueness check absorbs the second, and a
+lost append would be swallowed as `ErrNotFound` at `transaction.go:582`.
+
+**Size**: medium; the deep-reader plumbing is the larger part. The
+single-site append is small and state-neutral when the state-cache append is
+the one skipped (the success path runs for every type that reaches it).
+
+---
+
 ## Database abstraction
 
 ### D1. Record placement is a second, hand-maintained model
@@ -212,6 +238,80 @@ been acted on.
 
 **Size**: small, and it depends on D3 — enforcement without a conformance test
 for `BeginDeep` swaps a measured fallback for an unverified one.
+
+---
+
+### D6. The adapter walks history on every miss, for every shape, and does not count the misses
+
+*[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
+
+**Spec**: a mutable record is answered by the dynamic layer alone; a permanent
+record from the window; nothing reaches into history to prove an absence.
+
+**Code**: `getAt` (`bcdb/database.go:772`) runs `GetDeep` on every shallow
+miss, whatever the shape. For a mutable shape the dynamic layer has already
+walked its history and the key cannot be in the permanent layer, so the walk
+repeats the dynamic walk and adds a walk of all permanent history for nothing.
+`DeepFallbacks` counts hits only, so the absent-key walks — about 95% of the
+executor's segment-store reads at 500 tps — are invisible in the stats.
+
+**Size**: small; guard the fallback with the shape's placement and count
+shallow misses by shape.
+
+---
+
+### D7. A first write reads the store to learn a version the store does not hold
+
+*[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
+
+**Spec**: a first write never reads the store to learn a version.
+
+**Code**: `value.Put` (`values/value.go:164`) calls `Get` when the value is
+unloaded, "for proper versioning". The read's value and status are discarded;
+only `version` survives, and it is copied from the parent batch's in-memory
+record — `LoadBytes` never sets it, so the store read contributes nothing.
+Every first write of a record therefore costs a full miss. A naive skip is
+wrong: a shard child writing a key its parent wrote earlier in the block would
+raise a spurious conflict and poison the block. The fix is a version-only
+fetch that resolves the parent record without reading the store.
+
+**Size**: small in code; the proof is the A/B golden run plus unit tests for
+the child-after-parent and sibling-conflict cases, which do not exist.
+
+---
+
+### D8. The chain checks uniqueness on every append, and the flag that governs it is ignored
+
+*[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
+
+**Spec**: chains unique by construction are appended without asking; the
+writer deduplicates the rest.
+
+**Code**: `merkle.Chain.AddEntry` reads `ElementIndex(hash)` for every chain
+before consulting `unique`, and `Element(count)` and `States(count-1)` are
+blind writes that pre-read (D7). `ChainUpdates.AddChainEntry2` passes `true`
+whatever its caller said. Instrumented over the e2e and executor suites, the
+only rejected duplicates were the double append of E9 and v1's signature path;
+every other duplicate was a permitted repeat on a root or signature chain.
+
+**Size**: small once D7 is in: a per-chain mode for the chains unique by
+construction, the flag honoured or removed.
+
+---
+
+### D9. Restore writes the element index as the last occurrence
+
+*[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
+
+**Spec**: the element index is the first occurrence, preserved across restore.
+
+**Code**: `merkle_snapshot.go` and `rebuildChainIndexes` write
+`ElementIndex` in order, so a later duplicate overwrites the earlier index;
+a live append keeps the first. The BSN indexer preserves first occurrence
+deliberately because the store classifies the index write-once. Not consensus
+state; the test that guards restore uses unique values only.
+
+**Size**: small.
 
 ---
 
