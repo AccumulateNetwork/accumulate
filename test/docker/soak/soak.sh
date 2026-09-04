@@ -480,7 +480,7 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
 # stats.json every 50 commits, so only the last snapshot survives a run — and
 # stagedCommits, the D5 instrument, had no history. One row per (node,
 # database) a minute, the few counters that move.
-echo "time,node,database,commits,stagedCommits,deepFallbacks,maintenanceErrors,permPutTotal,dynaPutTotal,dynaLiveHit" > "$rd/storage-stats.csv"
+echo "time,node,database,commits,stagedCommits,deepFallbacks,maintenanceErrors,permPutTotal,dynaPutTotal,dynaLiveHit,historyHits,historyMisses,fallbackWalks" > "$rd/storage-stats.csv"
 ( while kill -0 $DRIVER 2>/dev/null; do
     ts=$(date -u +%FT%TZ)
     # Every container mounts the whole network's config volume, so any one
@@ -505,7 +505,10 @@ for part in blob.split("== ")[1:]:
     perm, dyna = d.get("perm") or {}, d.get("dyna") or {}
     print(",".join(str(x) for x in [ts, node, db, d.get("commits", ""), d.get("stagedCommits", ""),
           sum((d.get("deepFallbacks") or {}).values()), d.get("maintenanceErrors", ""),
-          perm.get("PutTotal", ""), dyna.get("PutTotal", ""), dyna.get("LiveHit", "")]))
+          perm.get("PutTotal", ""), dyna.get("PutTotal", ""), dyna.get("LiveHit", ""),
+          sum(v.get("hits", 0) for v in (d.get("historyReads") or {}).values()),
+          sum(v.get("misses", 0) for v in (d.get("historyReads") or {}).values()),
+          d.get("fallbackWalks", "")]))
 ' "$ts" >> "$rd/storage-stats.csv" 2>/dev/null
     done
     sleep ${STORAGE_STATS_INTERVAL:-60}
@@ -562,14 +565,18 @@ reconcile_pulls=$(wc -l < "$rd/reconcile-pulls.txt" 2>/dev/null || echo 0)
 # database — permanent-layer duplicates and conflicts, per record shape — and
 # it dies with the volume. One file per (node, database).
 mkdir -p "$rd/storage-stats"
-for c in $(docker ps --format '{{.Names}}' | grep -E '^acc-(dn|bvn)'); do
-  for f in $(docker exec "$c" sh -c 'find /root/.accumulate -name stats.json 2>/dev/null'); do
-    # Every node runs TWO databases (dnn/ and bvnn/), both named accumulate.db —
-    # name the copy by the path under the node's directory or the second
-    # overwrites the first.
-    rel=$(printf '%s' "$f" | sed -E 's#^/root/.accumulate/[^/]+/##; s#/stats.json$##; s#/#-#g')
-    docker exec "$c" cat "$f" > "$rd/storage-stats/${c#acc-}-$rel.json" 2>/dev/null
-  done
+# Every container mounts the whole network's volume, so one container sees
+# every node's stats.json — and naming the copy by the CONTAINER wrote one
+# node's file under every node's name (run 20260904T180918Z: eight identical
+# bvnn files). Ask one container, name the copy by the node in the path.
+c=$(docker ps --format '{{.Names}}' | grep -E '^acc-(dn|bvn)' | head -1)
+[ -n "$c" ] && for f in $(docker exec "$c" sh -c 'find /root/.accumulate -name stats.json 2>/dev/null'); do
+  node=$(printf '%s' "$f" | sed -E 's#^/root/.accumulate/([^/]+)/.*#\1#')
+  # Every node runs TWO databases (dnn/ and bvnn/), both named accumulate.db —
+  # name the copy by the path under the node's directory or the second
+  # overwrites the first.
+  rel=$(printf '%s' "$f" | sed -E 's#^/root/.accumulate/[^/]+/##; s#/stats.json$##; s#/#-#g')
+  docker exec "$c" cat "$f" > "$rd/storage-stats/${node}-$rel.json" 2>/dev/null
 done
 rmdir "$rd/storage-stats" 2>/dev/null || true
 # Final produced-vs-received across every channel, the check that sees a stall.

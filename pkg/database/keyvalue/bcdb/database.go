@@ -40,6 +40,7 @@ package bcdb
 import (
 	"encoding/json"
 	stderrors "errors"
+	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"io/fs"
@@ -154,7 +155,15 @@ type Database struct {
 	// a permanent shape names the reader that still needs BeginDeep.
 	shallowMisses map[string]uint64
 	fallbackWalks uint64
-	fallbackMu    sync.Mutex
+	// history is the detail behind DeepFallbacks: for every shape a
+	// shallow reader needed history for, how many reads hit, how many
+	// walked and found nothing, how many DISTINCT keys the hits were,
+	// and a sample of who asked.  Repeats say a cache would pay;
+	// single reads say the reader should carry the record instead.
+	history     map[string]*HistoryShape
+	historyKeys map[string]map[[32]byte]struct{}
+	historySeq  uint64
+	fallbackMu  sync.Mutex
 
 	maintaining  atomic.Bool
 	maintWG      sync.WaitGroup
@@ -718,6 +727,136 @@ func (d *Database) FallbackWalks() uint64 {
 	return d.fallbackWalks
 }
 
+// HistoryShape is what one record shape cost in history reads: Hits
+// found the key below the window, Misses walked and found nothing,
+// Distinct is how many different keys the hits were for (Capped when
+// the set stopped growing), and Callers is a 1-in-historySample sample
+// of the code that asked, by its first frame above the database layers.
+type HistoryShape struct {
+	Hits     uint64            `json:"hits"`
+	Misses   uint64            `json:"misses"`
+	Distinct int               `json:"distinct"`
+	Capped   bool              `json:"capped,omitempty"`
+	Callers  map[string]uint64 `json:"callers,omitempty"`
+}
+
+// historySample is the caller sampling rate; historyKeysCap bounds the
+// distinct-key set per shape.
+const (
+	historySample  = 32
+	historyKeysCap = 200_000
+)
+
+// recordHistoryRead books a shallow read that reached history.  The
+// stack is captured outside the leaf lock; everything else under it.
+func (d *Database) recordHistoryRead(shape string, h [32]byte, hit bool) {
+	var caller string
+	d.fallbackMu.Lock()
+	d.historySeq++
+	sample := d.historySeq%historySample == 1
+	d.fallbackMu.Unlock()
+	if sample {
+		caller = historyCaller()
+	}
+
+	d.fallbackMu.Lock()
+	defer d.fallbackMu.Unlock()
+	if d.history == nil {
+		d.history = map[string]*HistoryShape{}
+		d.historyKeys = map[string]map[[32]byte]struct{}{}
+	}
+	hs := d.history[shape]
+	if hs == nil {
+		hs = &HistoryShape{}
+		d.history[shape] = hs
+	}
+	if hit {
+		hs.Hits++
+		keys := d.historyKeys[shape]
+		if keys == nil {
+			keys = map[[32]byte]struct{}{}
+			d.historyKeys[shape] = keys
+		}
+		if _, seen := keys[h]; !seen {
+			if len(keys) < historyKeysCap {
+				keys[h] = struct{}{}
+				hs.Distinct = len(keys)
+			} else {
+				hs.Capped = true
+			}
+		}
+	} else {
+		hs.Misses++
+	}
+	if caller != "" {
+		if hs.Callers == nil {
+			hs.Callers = map[string]uint64{}
+		}
+		if len(hs.Callers) < 64 || hs.Callers[caller] > 0 {
+			hs.Callers[caller]++
+		}
+	}
+}
+
+// historyCaller names the first frame above the database layers: the
+// executor, the API, a tool -- whoever actually wanted the record.
+func historyCaller() string {
+	var pcs [40]uintptr
+	n := runtime.Callers(3, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	last := ""
+	for {
+		f, more := frames.Next()
+		fn := f.Function
+		if fn == "" {
+			break
+		}
+		last = fn
+		switch {
+		case strings.Contains(fn, "/pkg/database/"),
+			strings.Contains(fn, "/internal/database."),
+			strings.Contains(fn, "/internal/database/"),
+			strings.HasPrefix(fn, "runtime."):
+		default:
+			return shortFrame(fn, f.Line)
+		}
+		if !more {
+			break
+		}
+	}
+	return shortFrame(last, 0)
+}
+
+func shortFrame(fn string, line int) string {
+	fn = strings.TrimPrefix(fn, "gitlab.com/accumulatenetwork/accumulate/")
+	if line > 0 {
+		return fmt.Sprintf("%s:%d", fn, line)
+	}
+	return fn
+}
+
+// HistoryReads reports, by shape, what the shallow reads that reached
+// history cost and who made them.  The map and its inner maps are copies.
+func (d *Database) HistoryReads() map[string]HistoryShape {
+	d.fallbackMu.Lock()
+	defer d.fallbackMu.Unlock()
+	if len(d.history) == 0 {
+		return nil
+	}
+	out := make(map[string]HistoryShape, len(d.history))
+	for shape, hs := range d.history {
+		c := *hs
+		if hs.Callers != nil {
+			c.Callers = make(map[string]uint64, len(hs.Callers))
+			for k, v := range hs.Callers {
+				c.Callers[k] = v
+			}
+		}
+		out[shape] = c
+	}
+	return out
+}
+
 // fallbackSnapshot copies the deep-fallback counters for a report
 func (d *Database) fallbackSnapshot() map[string]uint64 {
 	d.fallbackMu.Lock()
@@ -831,7 +970,8 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 		d.fallbackMu.Unlock()
 
 		if walk {
-			if v2, err2 := d.kv.GetDeep(h); err2 == nil {
+			v2, err2 := d.kv.GetDeep(h)
+			if err2 == nil {
 				d.fallbackMu.Lock()
 				if d.deepFallbacks == nil {
 					d.deepFallbacks = map[string]uint64{}
@@ -840,6 +980,7 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 				d.fallbackMu.Unlock()
 				value, err = v2, nil
 			}
+			d.recordHistoryRead(shape, h, err2 == nil)
 		}
 	}
 	if err != nil || len(value) == 0 {
@@ -1225,10 +1366,15 @@ func (d *Database) reportStats() {
 		// walked history (the permanent shapes).  See ShallowMisses.
 		ShallowMisses map[string]uint64 `json:"shallowMisses,omitempty"`
 		FallbackWalks uint64            `json:"fallbackWalks"`
+
+		// HistoryReads is the detail behind DeepFallbacks: hits, misses,
+		// distinct keys and sampled callers per shape.  See HistoryShape.
+		HistoryReads map[string]HistoryShape `json:"historyReads,omitempty"`
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
 		DeepFallbacks: d.fallbackSnapshot(),
 		ShallowMisses: d.ShallowMisses(), FallbackWalks: d.FallbackWalks(),
-		Staged: len(d.undoVersions), TallySample: d.TallySample,
+		HistoryReads: d.HistoryReads(),
+		Staged:       len(d.undoVersions), TallySample: d.TallySample,
 		TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
 		MaintenanceErrors: d.maintErrs}
 	if d.maintErr != nil {

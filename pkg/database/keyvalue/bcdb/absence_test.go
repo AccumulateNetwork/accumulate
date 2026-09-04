@@ -7,6 +7,7 @@
 package bcdb
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -84,4 +85,42 @@ func TestDeepReaderMissIsNotAShallowMiss(t *testing.T) {
 	require.ErrorAs(t, err, &nf)
 	require.Empty(t, d.ShallowMisses())
 	require.Zero(t, d.FallbackWalks())
+}
+
+// A permanent record older than the window is found by the fallback, and
+// the read is attributed: shape, hit, whether the key was asked before,
+// and who asked.  Two reads of one key are two hits and one distinct key
+// -- the pattern a cache would serve; one read each of many keys is the
+// pattern where the reader should carry the record instead.
+func TestHistoryReadsAreAttributed(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "db"))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, d.Close()) }()
+
+	old := record.NewKey("Message", [32]byte{1}, "Main")
+	put(t, d, old, "old")
+
+	// Roll the window past it: the filters cover N..2N commits
+	for i := 0; i < 3*int(d.MergeLag); i++ {
+		put(t, d, record.NewKey("Account", fmt.Sprintf("a%d", i), "Main"), "x")
+	}
+
+	require.Equal(t, "old", get(t, d, old))
+	require.Equal(t, "old", get(t, d, old))
+
+	hr := d.HistoryReads()
+	shape := keyShape(old)
+	require.Contains(t, hr, shape, "the read reached history and was attributed")
+	require.Equal(t, uint64(2), hr[shape].Hits)
+	require.Equal(t, 1, hr[shape].Distinct, "one key, asked twice")
+	require.Zero(t, hr[shape].Misses)
+	require.NotEmpty(t, hr[shape].Callers, "the first read is sampled")
+	require.Equal(t, uint64(2), d.DeepFallbacks()[shape])
+
+	// A miss on a permanent shape walks, finds nothing, and is a miss
+	batch := d.Begin(nil, false)
+	_, err = batch.Get(record.NewKey("Message", [32]byte{9}, "Main"))
+	batch.Discard()
+	require.Error(t, err)
+	require.Equal(t, uint64(1), d.HistoryReads()[shape].Misses)
 }
