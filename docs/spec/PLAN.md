@@ -72,14 +72,14 @@ Steps, each test-first:
    difference from the spec's wording — arrivals are not written durably at
    intake when they are going to execute this block — has no observable
    effect and is not worth a write per entry.
-6. **Snapshot.** Both stores and the proven ranges are collected and restored.
-   Test: a node restored from a snapshot holds what the source held and
-   executes the same run.
-7. **Gaps.** Staging answers "proven and missing" and "held or expected and
-   unproven" by index, and "anchors missing below the newest held". The
-   reconcile-by-`Produced` path is deleted. Test: a lost package produces the
-   first kind, a lost proof the second, and neither is reported before staging
-   has finished the block.
+6. **Snapshot. DONE.** Anchor staging's records are `state` with key
+   enumerators, so collection walks them; the proven set is an account chain.
+   Test: `snapshot_anchor_staging_test.go` restores waiting proofs, the blocks
+   they wait on, and the newest executed anchor block.
+7. **Gaps.** Moved to H8, whose request set is the consumer: staging answers
+   "proven and missing" and "held or expected and unproven" by index, and
+   "anchors missing below the newest held"; the reconcile-by-`Produced` path is
+   deleted with the conductor's pull paths.
 
 Done when: the e2e suite delivers packages with anchors arriving in either
 order without healing; `exec_synthetic_anchor_total{applied="missing"}` no
