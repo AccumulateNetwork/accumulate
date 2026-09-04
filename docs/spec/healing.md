@@ -135,8 +135,8 @@ are released from staging at commit. Staging holds only what is above
 - **A request needs no authentication.** It changes nothing at the source, its
   answer is gated by the requesting network's consensus and proven by proofs
   the destination already holds, and its cost to the source is bounded by the
-  request bounds and served from memory. A source refuses hashes outside its
-  window as counted misses.
+  request bounds and served from the cache. A hash the cache does not hold is
+  served from the permanent layer and counted as a miss.
 - **The asked-once record and the per-source back-off are node state, not
   consensus state.** They live in memory beside the healer, keyed by hash and
   by source with the block index of the activation that asked. A restart
@@ -285,10 +285,11 @@ ranges at or below `Delivered` are released when the block commits.
 
 `internal/core/crosschain/cache.go`, filled by the executor at production
 (`produceSynthetic`, `prepareAnchor`) through a hook the block calls once per
-entry; keyed by hash and by (stream, number); bounded by `HealWindowBlocks` and
-`HealWindowBytes`; read by the sequencer service. Hits, misses, miss depth and
-construction failures are counters on the node's metrics endpoint, as are every
-row of the counting table above.
+entry; keyed by hash and by (stream, number); entries dropped as the
+destination's `Delivered` passes them; sized by `HealCacheEntries`, set from
+measurement; read by the sequencer service, which falls through to the permanent
+layer on a miss. Hits, misses, miss depth and construction failures are counters
+on the node's metrics endpoint, as are every row of the counting table above.
 
 ---
 
