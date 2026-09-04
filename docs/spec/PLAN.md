@@ -22,7 +22,7 @@ healer is gone; a lost entry now shows as a stalled stream, and that gap is
 what the next item hunts.
 
 ```
-E8 #4217 (done) ─▶ #4214: find the loss with the real staging code in a disorder simulator ─▶ C6 #4215 ─▶ H8 #4216 (healing in staging, for dropped entries; with H1 #4193) ─▶ acceptance run #7
+E8 #4217 (done) ─▶ proven set extends backwards ─▶ C6 #4215 ─▶ S4 #4211, S5, BlockchainDB#86 (what slows blocks in hour one) ─▶ H8 #4216 (healing in staging, for dropped entries; with H1 #4193) ─▶ acceptance run #7
 S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86      cost, after run #7 shows the healer gone
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3 ─▶ D4       correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back
@@ -156,18 +156,18 @@ Test: an executor that executes one block in three keeps the DAG within the
 bound, the own store within its share, and the reason says lag. Done when a
 soak with an artificially slow executor never exceeds the bound.
 
-### #4214 — find the loss, with the real staging code
+### #4214 — resolved: there was no loss
 
-E8 check #2 (`20260904T163512Z`) lost 5,974 BVN2→BVN1 entries to no known
-cause, with nothing dropped and no dispatch error. The old healer delivered
-them and hid the leg. Work: give the end-to-end simulator a seeded disorder
-mode — dispatched envelopes and anchors to each destination delayed and
-reordered by a random number of blocks, validators seeing batches in different
-orders — and drive the current code at load until the holes appear, then read
-the leg off the state. Add the sender's dispatch counters (packages built,
-dispatched, refused, per block) so a soak names the leg too. Done when a
-30-minute no-drop soak at 500 tps shows heals == 0 and every stream at
-received == delivered at the end of load.
+The no-healer run (`20260904T180918Z`) delivered every stream to received ==
+delivered with zero heals and nothing dropped. The 5,974 entries the old
+healer "delivered" in check #2 were in flight behind a slowing Directory round
+trip, pulled by a healer with no patience. What remains is latency, and it is
+the cost work below plus one executor term: entries judged unproven because
+their proof arrived after a later proof had seeded the stream's proven set
+(28,220 on one node in 21 minutes), each taking the envelope-loop-and-hold
+path. Fix: a proof for an earlier span writes its element and index records
+below the proven set's origin, so it proves what it covers wherever it lands.
+The disorder simulator stays useful for H8 and C6 but is no longer the hunt.
 
 ### Acceptance run #7
 
