@@ -123,6 +123,32 @@ When a run executes, its entries and the proven ranges at or below `Delivered`
 are released from staging at commit. Staging holds only what is above
 `Delivered`.
 
+### Bounds
+
+- **A request carries at most `MaxRequestHashes` (1,024) hashes and
+  `MaxRequestSpans` (16) index spans.** What does not fit waits for the next
+  activation; the oldest indexes go first, because delivery is in order.
+- **An answer is as many bundles as the entries need**, each within the envelope
+  budget. A bundle is never held back to grow: the minimum size only coalesces
+  requests from the same destination that are pending in the same block, so a
+  lone missing entry is answered by the call that asked for it.
+- **A request needs no authentication.** It changes nothing at the source, its
+  answer is gated by the requesting network's consensus and proven by proofs
+  the destination already holds, and its cost to the source is bounded by the
+  request bounds and served from memory. A source refuses hashes outside its
+  window as counted misses.
+- **The asked-once record and the per-source back-off are node state, not
+  consensus state.** They live in memory beside the healer, keyed by hash and
+  by source with the block index of the activation that asked. A restart
+  empties them; the cost is at most one duplicate request per gap.
+- **The producer cache is in memory.** At start it is rebuilt from the
+  synthetic and anchor chains over the window, and misses during the rebuild
+  are counted separately from misses in steady state. Its window is
+  `HealWindowBlocks` (256) or `HealWindowBytes` (128 MB), whichever binds
+  first; the window must exceed the cadence times the patience plus the time
+  an answer takes to land. The sanity horizon of about an hour is a separate
+  constant and bounds what staging will hold, not what the cache keeps.
+
 ### Proofs are extended, not replaced
 
 A collection proof is a merkle state at the start of its list, the elements, and
@@ -168,10 +194,10 @@ it. There is no destination-side cache; nothing is fetched twice.
   the chains.
 - **Keys.** By entry hash, the request's vocabulary; and by stream and
   sequence number, for anchor requests.
-- **Window.** Bounded in blocks and in bytes. What leaves the cache has also
-  left every destination's gap scan: older than the window means healed to
-  depth or in need of a snapshot. Nothing is invalidated; an entry's content
-  cannot change under its hash.
+- **Window.** Bounded in blocks and in bytes ([Bounds](#bounds)). What leaves
+  the cache has also left every destination's gap scan: older than the window
+  means healed to depth or in need of a snapshot. Nothing is invalidated; an
+  entry's content cannot change under its hash.
 - **A miss is a defect.** The cache is populated at production, so a request
   inside the window that misses means the window or the cache is wrong. It is
   counted, with its depth.

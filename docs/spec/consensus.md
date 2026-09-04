@@ -81,11 +81,17 @@ So a validator holds batches in four places, for four reasons:
    executed, not until it is certified. If proposal continues while execution
    lags, that memory grows without bound and the own store's refusal
    (invariant 4) reports a backlog that no amount of waiting by the
-   submitter can drain. So a validator whose executor is more than a bound of
-   blocks behind the DAG's last commit proposes **empty** headers — rounds
-   continue, liveness is kept, no new batch is certified — and refuses user
-   work with the same `NotReady` until execution catches up. The bound is in
-   blocks, a few seconds of traffic; it is not a buffer to be made bigger.
+   submitter can drain. So a validator whose executor is more than
+   **`MaxExecutionLag` = 8 blocks** behind the DAG's last commit proposes
+   **empty** headers — parents and weak links, no batches; rounds continue,
+   liveness is kept, nothing new is certified — and refuses user work until
+   execution catches up. The bound is a few seconds of traffic and is not a
+   buffer to be made bigger.
+10. **A refusal says why.** Refusing for a full own store (consensus is not
+   committing this validator's batches) and refusing for execution lag (commits
+   are fine, the executor is behind) are the same `NotReady` to the submitter
+   and different facts to the operator. Each is reported separately: a reason
+   in the error, and a gauge per reason.
 
 ## 2. Specification — how it is implemented
 
@@ -161,11 +167,44 @@ because execution can lag certification by minutes when blocks are slow.
 
 ### Execution lag
 
-Committed certificates reach the executor through `committed`, a channel of
-`CommitBufferSize` (5,000) leader groups, and `PruneCommitted` releases own
-batches only when their block executes. The proposer does not consult the
-executor's height (invariant 9 is not implemented — see
-[DIFFERENCES.md](DIFFERENCES.md), C6).
+After each block commits, the bridge reports the **executed leader round** to
+the node. The header builder compares it with the DAG's last committed leader
+round; when the difference exceeds `MaxExecutionLag` (8 blocks, config
+`max_execution_lag`) the header takes no batches from `ConsumeAvailableBatches`
+— it still carries its parents and weak links so rounds and the DAG advance —
+and the worker enters refusal with reason `execution-lagging`. Both clear when
+the lag falls back under the bound. The reasons are separate gauges,
+`accumulate_dagbft_batch_store_refusing{partition,worker,reason}` with reason
+`store-full` or `execution-lagging`, and separate transition log lines. The
+commit channel's depth is then a consequence of the bound plus the DAG's GC
+depth, not a buffer: it never holds more than the bound allows.
+
+### The DAG facts the rest of the specification relies on
+
+The rounds, votes and certificates of DAG-BFT are still to be written. Until
+they are, these are the facts the executor and healing parts depend on:
+
+- **The leader of a block** is the author of the leader certificate whose
+  causal history the block executes. Exactly one validator is the leader of a
+  block, and duties assigned to "the leader" — dispatching the block's
+  synthetics — are that validator's alone.
+- **Canonical payload order.** A block executes the batches of its committed
+  certificates in the certificates' canonical order and each batch's
+  transactions in order. Any node-local order diverges state.
+- **A committed certificate's batches are fetched, never skipped.** A validator
+  that lacks a batch a committed certificate names fetches it from a peer and
+  waits; after `BatchCollectTimeout` the node halts rather than execute a
+  block its peers executed differently. Retention is what lets a peer serve
+  it (invariant 6).
+- **Re-delivery is idempotent.** A certificate delivered to the executor twice
+  executes once; the second delivery is recognised and skipped, and its
+  batches are not pruned a second time.
+- **Weak links.** A header references the certificates of the previous round
+  and, as weak links, recent older certificates it has not yet referenced, so
+  a certificate that arrived late still enters a committed leader's causal
+  history. A certificate no header ever references is never executed and its
+  batches are lost; the weak-link window is what makes that impossible in
+  practice, and the count of orphaned certificates is a metric.
 
 ### Retention
 

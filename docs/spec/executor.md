@@ -210,8 +210,9 @@ are seen, `Begin`:
 - captures the previous block's BPT root, and where the directory anchor chain
   stood before this block applies anything to it;
 - **finalizes the previous block** — records its anchor if it has not been
-  recorded, and dispatches the synthetic messages it produced. These are
-  independent duties: skipping the anchor must not skip the synthetics;
+  recorded, and dispatches the synthetic messages whose receipts the previous
+  block brought back (see Dispatch). These are independent duties: skipping
+  the anchor must not skip the synthetics;
 - resets the ledger's transient values and refuses to move backwards — a block
   index that does not increase is a panic, not an error;
 - records the previous block's votes and evidence, unless that block was empty;
@@ -514,9 +515,13 @@ Two mechanics make that true, and both fail SILENTLY when they are not:
   anything from — bounded by the number of peers — and, for each, the numbers
   between that stream's `Delivered` and how far it has been sighted.
 
-Only what is HELD is collected. A record below `Delivered` is a message that has
-executed; nothing consults it, and carrying every stream's whole history into
-every snapshot would restore state that answers no question.
+Both stores are collected: the entries synthetic staging holds, the **proven
+index ranges** above `Delivered`, and the proofs anchor staging holds by anchor
+sequence number. Only what is HELD is collected. A record below `Delivered` is
+a message that has executed; nothing consults it, and carrying every stream's
+whole history into every snapshot would restore state that answers no
+question. A node restored without any of the three diverges on the first block
+where a gap closes.
 
 Both mechanics are the kind that a test has to pin, because neither announces
 itself: the snapshot is written, the restore succeeds, and the node diverges a
@@ -760,6 +765,44 @@ envelope execute another identity's writes on the wrong shard (#4149).
 
 Timing is booked as serial versus parallel share, so a run can say whether
 sharding helped or whether nothing was shardable.
+
+### Dispatch — when a block's synthetics leave, and who sends them
+
+A block's synthetic messages do not leave when the block closes. They leave
+when the **Directory's receipt for that block comes back**: the block's anchor
+goes to the Directory, the Directory anchors it and sends back a
+`DirectoryAnchor` carrying a receipt for that block, and the block that
+executes that `DirectoryAnchor` is the one whose `Begin` dispatches the
+synthetics of every block the receipts cover. Only then can a proof be built
+that terminates in a Directory root the destination will hold.
+
+**The leader sends.** Every validator builds the packages; only the block's
+leader (consensus.md, "The DAG facts") submits them, through the dispatcher,
+to the destination partition's submit service. A dispatch changes no state
+here, so it is not part of what the block produces and nothing waits on it.
+
+**The package.** For a destination, the block's synthetics are grouped into as
+many envelopes as fit `synthPackageBudget`. Each envelope is one
+`SyntheticProof` — a collection proof over the span of the synthetic chain from
+the package's first member to the block's last element, continued through the
+root chain to the Directory root, and carrying that Directory anchor's
+**sequence number** — followed by the members as proof-less sequenced messages,
+each with the transaction it belongs to. A group of one is sent with an
+individual receipt instead. At the destination the members go to synthetic
+staging by index and the proof to anchor staging by its anchor's sequence
+number (Collection), whichever arrives first.
+
+**Failure has one fallback.** A dispatch the leader never makes — its executor
+behind, the receipt lost, the submission refused — is not retried by the
+executor. The destination sees the gap and healing fills it
+([healing.md](healing.md)). The executor counts packages built, packages
+dispatched and submission errors so that the two can be compared.
+
+### Executed height
+
+After each block commits, the executor reports the block's leader round to the
+node. Consensus uses it to keep the DAG within `MaxExecutionLag` of execution
+(consensus.md, invariant 9).
 
 ### Produced messages, and the local/remote split
 

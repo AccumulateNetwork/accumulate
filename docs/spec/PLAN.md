@@ -5,23 +5,13 @@ by what is actually stopping the network, not by size.
 
 ## What is stopping us
 
-Soaks die in twenty minutes and have done for five consecutive runs. The
-mechanism is known and it is one difference: **E1**. Staging lives in an
-account, so the pending array must be bounded, so receipts past the bound are
-refused, so the ledger reports not holding messages the node has, so the healer
-re-fetches them across the partition — 8,556 sequence numbers fetched 53,011
-times in run `20260902T132651Z`, while all three partitions stayed live.
-
-Phase 2 exists to close that. Phase 3 is real work but is not why the network
-stops.
-
-**With E1 closed, the next run died on E7.** Soak `20260903T121819Z` — the
-first at 1 s blocks on the staging change — never livelocked. It ran out of
-memory: the block ledger's log page grows with height and is rewritten every
-block, every node reached GOMEMLIMIT in ten minutes, GC took six cores, and the
-partitions stalled at 0.26 h. The batch-store eviction storms and deferred votes
-in that run are downstream of the executor lagging. Nothing about a 12-hour run
-can be claimed until E7 is closed.
+The livelock (E1) and the memory growth (E7, D5) are closed. Runs now hold
+memory and CPU flat and fail on throughput: a third of dispatched synthetic
+packages arrive before the anchor that proves them and are parked outside
+staging (E8), the healer fills those holes one message at a time with no
+memory and no cache (H8), the executor spends itself on that traffic,
+consensus runs ahead of it without bound (C6), and refusal holds user
+throughput near zero. The order below follows that chain.
 
 ---
 
@@ -349,11 +339,26 @@ soak.
 ## Order of work
 
 ```
-E1+H4+E2 ─▶ H5 ─▶ H2 ─▶ E7 ─▶ D5 ─▶ H3 ─▶ H1   the critical path (through H2 DONE; E7 next)
-S0..S8                                       steady state — see its own order above
-E6, D2, D3 ─▶ D4                          parallel, any time
-E5, E4, D1                                after
+E8 #4217 (two-store staging) ─▶ H8 #4216 (heal by hash set, producer cache) ─▶ C6 #4215 (lag bound) ─▶ acceptance run #7
+S4 #4211, S5, S2 follow-up, BlockchainDB#86         steady-state cost, after run #7 shows the healer gone
+E6, D2, D3 ─▶ D4                                    parallel, any time
+E5, E4, D1, H3                                      after
 ```
+
+### Metrics behind the acceptance criteria
+
+| criterion | metric | exists |
+|---|---|---|
+| memory flat | process RSS, `go_memstats_heap_alloc_bytes`, `GOMEMLIMIT` | yes |
+| GC is not the workload | `go_gc_cycles`, `/cpu/classes/gc` | yes |
+| CPU flat | `accumulate_dagbft_block_production_seconds`, process CPU | yes |
+| block work bounded | allocation profile per hour | capture |
+| commits durable | `accumulate_bcdb_staged_commits`, `accumulate_bcdb_oldest_view_age_seconds` | yes |
+| consensus memory bounded | `accumulate_dagbft_batch_store_bytes{kind}`, `batch_store_refusing{reason}` | reason label: no |
+| consensus within execution | executed-round lag gauge, commit queue depth | no |
+| healing small | the healing counting table (healing.md) | partly (`heals_total`, `reconcile_pulls_total`) |
+| staging bounded | staging entries and proofs held, proven range size | no |
+| logging bounded | log lines per minute per node | harness only |
 
 An entry leaves [DIFFERENCES.md](DIFFERENCES.md) when the code matches the
 spec, not when its issue is filed or closed.

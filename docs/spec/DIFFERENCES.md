@@ -223,7 +223,8 @@ certificates queue in `committed` (`DefaultCommitBufferSize` = 5,000 blocks)
 batches are released by `PruneCommitted` when their block **executes**, so
 while execution lags every own batch of the lag is "uncommitted", the own
 store exceeds its share through `Submit` (system traffic, never refused) and
-`SubmitUser` refuses indefinitely.
+`SubmitUser` refuses indefinitely, with no reason distinguishing a full store
+from execution lag (invariant 10).
 
 **Evidence**: run `20260904T035906Z` at 04:48. BVN1 voting on rounds
 5,794–5,911 while executing blocks whose leader round was 3,472–3,554; BVN2
