@@ -30,8 +30,10 @@ validator keeps re-sending its own signatures on the cadence.
 
 **Nothing is provable before the Directory has anchored it.** A synthetic or
 anchor a BVN produces in block N cannot leave, and cannot be proven to anyone,
-until the Directory has executed the BVN's anchor for N and sent the receipt
-back ([executor.md](executor.md), "Dispatch"). So an index the destination has
+until the Directory has executed a BVN anchor that covers N — the anchor for N
+itself in the normal case, but any later block's anchor works, since the later
+root chain contains N's root — and sent the receipt back
+([executor.md](executor.md), "Dispatch"). So an index the destination has
 not sighted is not a gap until that round trip has had time to complete, and a
 source can serve a proof only for spans its Directory receipts already cover;
 asked sooner it answers "not yet", which is counted and is not a miss.

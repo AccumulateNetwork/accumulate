@@ -799,12 +799,15 @@ sharding helped or whether nothing was shardable.
 ### Dispatch — when a block's synthetics leave, and who sends them
 
 A block's synthetic messages do not leave when the block closes. They leave
-when the **Directory's receipt for that block comes back**: the block's anchor
-goes to the Directory, the Directory anchors it and sends back a
+when a **Directory receipt covering that block comes back**: the block's
+anchor goes to the Directory, the Directory anchors it and sends back a
 `DirectoryAnchor` carrying a receipt for that block, and the block that
 executes that `DirectoryAnchor` is the one whose `Begin` dispatches the
 synthetics of every block the receipts cover. Only then can a proof be built
-that terminates in a Directory root the destination will hold.
+that terminates in a Directory root the destination will hold. The receipt for
+the block itself is the normal case; a receipt for any later block also covers
+it, because the later root chain contains the earlier root, and that is what a
+healed proof is built under.
 
 **The leader sends.** Every validator builds the packages; only the block's
 leader (consensus.md, "The DAG facts") submits them, through the dispatcher,
