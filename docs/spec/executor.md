@@ -258,6 +258,10 @@ The block ledger is a **chain on the partition's system ledger account**, with
 one entry per non-empty block, and the block's entry list stored once, keyed by
 block index. Two things follow, and both are the point:
 
+- **A snapshot carries every block's ledger record.** They are what a restored
+  node rebuilds its account indices from (`repair-indices`), as it could from
+  the per-block accounts they replace; a snapshot without them leaves a
+  restored node with no way back to its indices.
 - **Closing a block costs the block, not the chain.** Recording block *N*
   writes one record the size of block *N*'s entry list and appends one hash to
   a chain. Nothing already written is read back or written again. A node at

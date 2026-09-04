@@ -233,7 +233,8 @@
       type: state
       dataType: BlockLedger
       pointer: true
-      parameters: # Not indexed. Block ledgers are an API index, not consensus state; snapshots do not carry them, as they did not carry the log this replaces
+      index: getBlockLedgerKeys # Indexed by block, so snapshots carry them: a restored node rebuilds its account indices from them (tools/cmd/repair-indices), as it could from the per-block accounts this replaces
+      parameters:
       - name: Index
         type: uint
     - name: BlockLedgerChain

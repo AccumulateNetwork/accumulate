@@ -1088,7 +1088,7 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.directoryAnchorBlock, c.newDirectoryAnchorBlock, opts, fn)
 	values.WalkMap(&err, c.collected, c.newCollected, c.getCollectedKeys, opts, fn)
 	values.WalkField(&err, c.events, c.newEvents, opts, fn)
-	values.WalkMap(&err, c.blockLedger, c.newBlockLedger, nil, opts, fn)
+	values.WalkMap(&err, c.blockLedger, c.newBlockLedger, c.getBlockLedgerKeys, opts, fn)
 	values.WalkField(&err, c.blockLedgerChain, c.newBlockLedgerChain, opts, fn)
 	values.WalkMap(&err, c.transaction, c.newTransaction, c.getTransactionKeys, opts, fn)
 	values.WalkField(&err, c.mainChain, c.newMainChain, opts, fn)
