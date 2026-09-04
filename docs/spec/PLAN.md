@@ -46,10 +46,17 @@ Steps, each test-first:
    validated proof still seeds the replica until step 3 replaces it. Test:
    `anchor_staging_test.go`. Not yet counted: two proofs for the same indexes
    with different hashes (with step 3, where the proven ranges live).
-3. **Proven ranges by index.** Per stream, the union of validated proofs'
-   index ranges, above `Delivered`, durable and unhashed, in the snapshot.
-   The BPT-hashed replica is deleted. Test: two overlapping proofs give one
-   range; release at commit drops ranges at or below `Delivered`.
+3. **Proven ranges by index. DONE except release.** The proven set is the
+   per-stream mirror chain (`synthetic-replica:<stream>`), index to hash: it
+   is now excluded from the account hash (`isProvenSetChain`), and a proof
+   that contradicts a proven index is refused as `Conflict` and counted
+   (`staged_proofs_total{outcome="conflict"}`). Tests: `proven_set_test.go`.
+   **Deferred:** releasing proven indexes at or below the delivered point.
+   The mirror is a chain, whose prefix cannot be dropped without rebasing
+   its merkle state, and the delivered point is a sequence number while the
+   proven set is by main-chain index; the mapping is only known from the
+   proofs of executed entries. Done after step 4, when execution has the
+   proof in hand and can record the executed index per stream.
 4. **Collection.** Synthetic staging holds every arriving entry by index,
    proven or not; an entry more than the sanity horizon ahead is refused.
    `buildRun` executes an entry only when proven and next. `SyntheticMessage`

@@ -1,0 +1,89 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+package block
+
+import (
+	"crypto/sha256"
+	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+// The proven set (executor spec, "Proof"): what validated proofs have proven,
+// by index. It is staging, not state — unhashed — and two proofs that claim
+// the same indexes with different hashes are an attack, counted and refused.
+
+func TestProvenSet_IsNotPartOfTheAccountHash(t *testing.T) {
+	x := new(Executor)
+	x.Describe = execute.DescribeShim{NetworkType: protocol.PartitionTypeBlockValidator, PartitionId: "BVN0"}
+	db := database.OpenInMemory(nil)
+	db.SetObserver(database.NewDatabaseObserver())
+	batch := db.Begin(true)
+	defer batch.Discard()
+
+	// Give the synthetic account a main state so it has a hash at all.
+	ledger := new(protocol.SyntheticLedger)
+	ledger.Url = x.Describe.Synthetic()
+	require.NoError(t, batch.Account(ledger.Url).Main().Put(ledger))
+
+	// The source chain is another account's state; build it before measuring.
+	src := batch.Account(protocol.PartitionUrl("BVN1").JoinPath(protocol.Synthetic)).MainChain()
+	chain, err := src.Get()
+	require.NoError(t, err)
+	for i := 0; i < 3; i++ {
+		h := sha256.Sum256([]byte(fmt.Sprintf("entry %d", i)))
+		require.NoError(t, chain.AddEntry(h[:], false))
+	}
+	list, err := merkle.GetReceiptList(src.Inner(), 0, 2)
+	require.NoError(t, err)
+	require.NoError(t, batch.UpdateBPT())
+	before, err := batch.GetBptRootHash()
+	require.NoError(t, err)
+
+	require.NoError(t, x.seedSyntheticReplica(batch, protocol.PartitionUrl("BVN1"), list))
+	require.NoError(t, batch.UpdateBPT())
+	after, err := batch.GetBptRootHash()
+	require.NoError(t, err)
+	require.Equal(t, before, after, "proving hashes changes no hashed state")
+}
+
+func TestProvenSet_ConflictingProofIsRefusedAndCounted(t *testing.T) {
+	f := newReplicaFixture(t, 3)
+	source := protocol.PartitionUrl("BVN1")
+	f.seed(t, 0, 2)
+
+	// A second, equally well-formed chain claiming the same indexes.
+	other := f.batch.Account(protocol.PartitionUrl("BVN2").JoinPath(protocol.Synthetic)).MainChain()
+	chain, err := other.Get()
+	require.NoError(t, err)
+	for i := 0; i < 3; i++ {
+		h := sha256.Sum256([]byte(fmt.Sprintf("forged %d", i)))
+		require.NoError(t, chain.AddEntry(h[:], false))
+	}
+	forged, err := merkle.GetReceiptList(other.Inner(), 0, 2)
+	require.NoError(t, err)
+	require.True(t, forged.Validate(nil))
+
+	conflict0 := count("conflict")
+	err = f.x.seedSyntheticReplica(f.batch, source, forged)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "conflict")
+	require.True(t, f.x.replicaIncludes(f.batch, source, f.src[1]), "the first proof stands")
+	h := sha256.Sum256([]byte("forged 1"))
+	require.False(t, f.x.replicaIncludes(f.batch, source, h[:]), "the second proves nothing")
+
+	// Through anchor staging the same proof is discarded and counted, never
+	// an error the block sees.
+	b := &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}
+	require.NoError(t, b.proofValidated(source, &protocol.AnnotatedReceipt{ReceiptList: forged, Anchor: directoryAnchorMetadata(3)}))
+	require.Equal(t, conflict0+1, count("conflict"))
+}

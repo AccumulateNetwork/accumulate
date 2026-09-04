@@ -81,6 +81,14 @@ func (a *observedAccount) hashSecondaryState(h *hashSet) error {
 func (a *observedAccount) hashChains(hs *hashSet) error {
 	var err error
 	for _, chainMeta := range loadState(&err, false, a.Chains().Get) {
+		// The proven set is staging, not state (executor spec, "Proof"): a
+		// mirror of a source's chain that proofs have vouched for. Every
+		// node derives the same one from consensus, so it is agreed without
+		// being hashed, and hashing it would make proving a hash a state
+		// change.
+		if isProvenSetChain(chainMeta.Name) {
+			continue
+		}
 		chain := loadState1(&err, false, a.GetChainByName, chainMeta.Name)
 		if err != nil {
 			break

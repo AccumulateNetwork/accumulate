@@ -107,9 +107,10 @@ an entry or a held index without a proof.
 
 **Code**: one store of held entries (`internal/core/execute/v2/block/staging.go`).
 A collection proof is staged under its anchor block since E8 step 2
-(`anchor_staging.go`), but a validated proof's hashes still go into a per-stream
-"replica" written into the BPT (`synthetic_replica.go`), unbounded and hashed,
-rather than into proven ranges by index. A proof does not carry
+(`anchor_staging.go`), and since step 3 the proven set (`synthetic_replica.go`,
+the `synthetic-replica:<stream>` mirror chain) is excluded from the account
+hash and refuses conflicting proofs; it is still not released below the
+delivered point, so it grows with the stream. A proof does not carry
 its anchor's block (`AnchorMetadata.SourceBlock` is filled since E8 step 1 but unread); the destination tests the proof's terminal root
 against its directory anchor chain at execution (`admissible.go`). A package
 member whose anchor has not executed yet is admitted by staging (its own proof

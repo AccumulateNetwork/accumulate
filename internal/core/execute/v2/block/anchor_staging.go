@@ -132,7 +132,14 @@ func (b *Block) validateStagedProofs() error {
 // replace it (E8 step 3) the proven set is the synthetic replica.
 func (b *Block) proofValidated(source *url.URL, proof *protocol.AnnotatedReceipt) error {
 	err := b.Executor.seedSyntheticReplica(b.Batch, source, proof.ReceiptList)
-	if err != nil {
+	switch {
+	case errors.Is(err, errors.Conflict):
+		// Anchored, and contradicting what an earlier proof proved: an attack
+		// on the stream, not an error the block acts on. Counted; a validator
+		// signature on proofs is the eventual answer (executor spec, "Proof").
+		mExecStagedProofs.WithLabelValues("conflict").Inc()
+		return nil
+	case err != nil:
 		return errors.UnknownError.Wrap(err)
 	}
 	mExecStagedProofs.WithLabelValues("validated").Inc()

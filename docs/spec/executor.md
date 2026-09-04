@@ -424,9 +424,13 @@ blocks waited on so snapshots enumerate them. `DirectoryAnchorBlock` on the
 anchor pool is the newest Directory anchor executed here, written as a
 `DirectoryAnchor` executes; a proof naming a block at or below it that the
 chain does not carry is disproved at intake. `validateStagedProofs` runs after
-the anchor group, over the Directory anchors the block executed. Outcomes are
+the anchor group, over the Directory anchors the block executed. A validated
+proof's hashes go into the stream's proven set, the `synthetic-replica:<stream>`
+mirror chain (index to hash), which is excluded from the account hash
+(`isProvenSetChain`); a proof that contradicts an index already proven is
+refused (`errors.Conflict`). Outcomes are
 `accumulate_exec_staged_proofs_total{outcome}`: staged, validated, disproved,
-invalid. When
+conflict, invalid. When
 that anchor executes, every proof waiting on it is validated against the
 anchor's root: a match marks the proof's index range proven in synthetic
 staging; a mismatch discards the proof and increments a counter. A proof whose

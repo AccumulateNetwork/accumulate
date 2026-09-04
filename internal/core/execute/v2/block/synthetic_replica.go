@@ -7,6 +7,7 @@
 package block
 
 import (
+	"bytes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -86,10 +87,27 @@ func (x *Executor) seedSyntheticReplica(batch *database.Batch, source *url.URL, 
 
 	elements := list.Elements
 	switch height := chain.Height(); {
-	case height >= end:
-		return nil // Already proven through here
-
 	case height >= start:
+		// Where the proof overlaps what is already proven, the hashes must
+		// agree. Two proofs claiming the same indexes with different hashes
+		// are an attack on the stream (executor spec, "Proof"); the first
+		// stands and the second proves nothing.
+		overlap := height
+		if end < overlap {
+			overlap = end
+		}
+		for i := start; i < overlap; i++ {
+			have, err := chain.Entry(i)
+			if err != nil {
+				return errors.UnknownError.WithFormat("load proven entry %d for %s: %w", i, stream, err)
+			}
+			if !bytes.Equal(have, elements[i-start]) {
+				return errors.Conflict.WithFormat("conflicting proof for %s: index %d is proven as %x, proof says %x", stream, i, have[:4], elements[i-start][:4])
+			}
+		}
+		if height >= end {
+			return nil // Already proven through here
+		}
 		// Extend with the missing tail
 		elements = elements[height-start:]
 
