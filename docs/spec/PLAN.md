@@ -190,12 +190,21 @@ BVN executor's segment-store reads were ~95% such asks.
 - **R1 — mutable shapes never walk.** DONE: a mutable miss is the dynamic
   layer's answer; tests prove a mutable miss makes no walk, a permanent miss
   still does and is counted, a deep reader's miss is neither.
-- **R2 — deep readers, then no fallback.** `BeginDeep` exposed through
-  `internal/database`; the pending-transaction loads, dispatch's message reads
-  and the root receipt take it; `SyntheticIndexIndex` moves to the dynamic
-  layer or is replaced by a dispatch-pending set. Then the permanent-shape
-  fallback goes and D4 closes. Proof: `ShallowMisses` zero for every
-  permanent shape over 12 h; the A/B golden run for the reads that moved.
+- **R2 — the first-write reads.** Run 20260904T221627Z: 113.8 M history
+  walks on the BVN stores, 99.2% proving a key absent before its first write
+  (~6,300 a block a node). The two reads per first write go — the version
+  pre-read (D7) and the chain's element-index check (D8) — and the dead
+  `Transaction.Main` read of a v1 shape v2 never writes. Proof: the e2e
+  duplicate assertion, the A/B golden run, `fallbackWalks` near zero.
+- **R3 — the readers that reach back, then no fallback.** The run found two:
+  dispatch reading a block's synthetics once their anchor is past the window
+  (442,652 hits, every key read once — carry the block's messages; C6 keeps
+  the leg under the window) and `getRootReceiptForBlock`'s binary search over
+  the root index chain (424,392 hits on 6,720 keys, 63 reads each — record
+  the root index position per block instead of searching). `SyntheticIndexIndex`
+  moves to the dynamic layer. `BeginDeep` exposed for the pending-transaction
+  loads. Then the permanent-shape fallback goes and D4 closes. Proof:
+  `ShallowMisses` zero for every permanent shape over 12 h.
 
 Then, as cost work rather than correctness (each still proven by the suite's
 duplicate assertion and an A/B golden run — same envelope stream under two
@@ -206,10 +215,6 @@ account's chain heights and anchors, and all element-index records):
   the state-cache append for the principal when the success path runs, and
   `ErrNotFound` there made an error (E9); after that the e2e assertion
   tightens to root and signature chains only;
-- the version-only fetch replacing the pre-read in `Put` (D7), with unit
-  tests for a child writing a key its parent wrote, a sibling conflict still
-  detected, and a three-level version chain;
-- chains the writer deduplicates skip the element-index read (D8);
 - the observer's v1 `Transaction.Main` read gated, an account hashed once per
   block, `clearActiveSignatures` touching only signers that signed;
 - the element index restored as first occurrence (D9).

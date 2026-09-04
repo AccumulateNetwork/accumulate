@@ -252,9 +252,12 @@ record from the window; nothing reaches into history to prove an absence.
 shape — the dynamic layer's miss is the answer — and counts every shallow miss
 by shape (`ShallowMisses`, `FallbackWalks` in `stats.json`). For a permanent
 shape it still falls back to `GetDeep`, because the readers that legitimately
-reach past the window have no deep batch (E9). Before the rule, about 95% of
-a BVN's segment-store reads at 500 tps were these walks, none finding
-anything; what remains is the permanent-shape share, named by the counters.
+reach past the window have no deep batch (E9). Run 20260904T221627Z, with
+the rule in: 113.8 M walks over eight BVN stores in 40 minutes, 99.2% of
+them proving a key absent before its first write (D7, D8, and a dead read of
+the v1 `Transaction.Main`), ~6,300 a block a node; the reads history actually
+answered were dispatch's (once per key) and the root-index search (63 reads
+per key).
 
 **Size**: the rest is E9: once those readers take `BeginDeep`, the branch goes
 and the permanent misses must read zero over a soak.
