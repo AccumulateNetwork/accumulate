@@ -299,7 +299,6 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		// ledgers stuck at height 2, #4054). The conductor paces healing
 		// scans internally (HealInterval), so this is safe even at DAG-BFT
 		// block rates.
-		EnableAnchorHealing: Ptr(true),
 	}
 	err = conductor.Start(s.eventBus)
 	if err != nil {

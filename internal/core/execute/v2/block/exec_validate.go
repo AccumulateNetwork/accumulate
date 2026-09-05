@@ -33,10 +33,13 @@ func (x *Executor) Validate(envelope *messaging.Envelope, _ bool) ([]*protocol.T
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Set up the bundle
+	// Set up the bundle. Validation reads staging the way a block does — a
+	// placeholder resolves against a held anchor — and adds nothing to it.
 	d := new(bundle)
 	d.Block = new(Block)
 	d.Block.Executor = x
+	d.Block.staging = x.staging().Begin()
+	defer d.Block.staging.Discard()
 	d.messages = messages
 	d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
 

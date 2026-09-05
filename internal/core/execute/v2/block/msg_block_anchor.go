@@ -7,6 +7,7 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -74,6 +75,25 @@ func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (_ *pro
 }
 
 func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) error {
+	// Where the anchor's stream stands. An anchor at or below Delivered is a
+	// copy of one that executed: tossed, nothing recorded, not an error — a
+	// re-sent anchor arrives beside ones that are new (executor spec, "One
+	// chain per pair, one stage per chain").
+	str, err := ctx.Executor.streamFor(ctx.sequenced, func(hash [32]byte) (*protocol.Transaction, error) {
+		return ctx.getTransaction(batch, hash) // the bundle, then staging, then the store
+	})
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	pos, err := ctx.Block.positionOf(str)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if ctx.sequenced.Number <= pos.delivered {
+		mExecSyntheticAnchor.WithLabelValues("anchor-tossed").Inc()
+		return nil
+	}
+
 	// Record the anchor signature (proof-authorized anchors may not have one)
 	if ctx.blockAnchor.Signature != nil {
 		err := batch.Account(ctx.transaction.Header.Principal).
@@ -87,7 +107,7 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) err
 	}
 
 	// Add the signature to the signature chain
-	err := batch.Account(ctx.transaction.Header.Principal).
+	err = batch.Account(ctx.transaction.Header.Principal).
 		Transaction(ctx.transaction.ID().Hash()).
 		RecordHistory(ctx.message)
 	if err != nil {
@@ -99,9 +119,22 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) err
 		return errors.UnknownError.Wrap(err)
 	}
 	if !ready {
-		// Mark the message as pending
-		_, err = ctx.childWith(ctx.sequenced.Message).recordPending(batch)
-		return errors.UnknownError.Wrap(err)
+		// Below its quorum: an entry in the anchor stream's stage at its
+		// number, collected, runnable once the signatures reach the threshold
+		// or a validated hash at its number is its own. Nothing is recorded
+		// pending (executor spec, "One chain per pair, one stage per chain").
+		// The hash a proof over the source's anchor chain validates is the
+		// transaction's canonical stored form, without a principal.
+		stored := new(protocol.Transaction)
+		stored.Body = ctx.transaction.Body
+		ctx.Block.staging.Hold(str.id(), ctx.sequenced.Number, &execute.Held{
+			ID:        ctx.sequenced.ID(),
+			Message:   ctx.sequenced,
+			Collected: true,
+			Hash:      *(*[32]byte)(stored.GetHash()),
+		})
+		mExecSyntheticAnchor.WithLabelValues("anchor-collected").Inc()
+		return nil
 	}
 
 	// Process the transaction

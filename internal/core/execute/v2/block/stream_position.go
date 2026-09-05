@@ -62,7 +62,8 @@ type streamPosition struct {
 	// err is the first failure from a read that could not report one — idOf is
 	// called from buildRun, which is pure and total by design. The caller
 	// checks it once, after the run is built.
-	err error
+	err  error
+	exec *Executor
 }
 
 // next is the number this stream is waiting for.
@@ -108,7 +109,21 @@ func (p *streamPosition) runnable(n uint64) bool {
 	if h == nil || !h.Collected {
 		return true
 	}
-	return p.staging.IsValidated(p.stream.id(), n, h.Hash)
+	if p.staging.IsValidated(p.stream.id(), n, h.Hash) {
+		return true
+	}
+	// An anchor is also validated by a validator signature quorum, which
+	// builds as its copies arrive (executor spec, "One chain per pair, one
+	// stage per chain").
+	if p.stream.kind == streamAnchor && p.exec != nil {
+		if seq, ok := h.Message.(*messaging.SequencedMessage); ok {
+			if txn, ok := seq.Message.(*messaging.TransactionMessage); ok {
+				ok, err := p.exec.anchorIsAdmissible(p.batch, nil, txn.Transaction, p.stream.source)
+				return err == nil && ok
+			}
+		}
+	}
+	return false
 }
 
 // received is the largest number this stream has ever seen. It says the stream
@@ -187,6 +202,7 @@ func (b *Block) positionOfLocked(s stream) (*streamPosition, error) {
 		delivered: delivered,
 		batch:     b.Batch,
 		staging:   b.staging,
+		exec:      b.Executor,
 	}
 	if b.positions.m == nil {
 		b.positions.m = map[string]*streamPosition{}

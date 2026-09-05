@@ -145,10 +145,11 @@ func TestReuseDirectoryAnchorSignatures(t *testing.T) {
 			return toBVN != nil && len(dnSigs) == numVal*numNode
 		}))
 
-	// Verify the anchor sent to the BVN is pending
+	// Verify the anchor sent to the BVN does not execute on one signature:
+	// held in the anchor stream's stage, not recorded pending
 	txn := toBVN.Message.(*messaging.TransactionMessage).Transaction
-	sim.StepUntil(
-		Txn(txn.ID()).IsPending())
+	sim.StepN(20)
+	requireNotExecuted(t, sim, txn.ID())
 
 	// Take the anchors sent to the DN and send them to the BVN to resolve the
 	// anchor

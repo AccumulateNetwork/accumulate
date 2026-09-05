@@ -189,72 +189,54 @@ func (c *Conductor) requestGaps(ctx context.Context, batch *database.Batch, bloc
 	if !ok {
 		return nil
 	}
-	var ledger *protocol.SyntheticLedger
-	err := batch.Account(c.Url(protocol.Synthetic)).Main().GetAs(&ledger)
+	var synth *protocol.SyntheticLedger
+	err := batch.Account(c.Url(protocol.Synthetic)).Main().GetAs(&synth)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
+	}
+	var anchors *protocol.AnchorLedger
+	err = batch.Account(c.Url(protocol.AnchorPool)).Main().GetAs(&anchors)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load anchor ledger: %w", err)
 	}
 
 	staged := c.Staging.Begin()
 	defer staged.Discard()
 
-	for _, source := range c.inboundSources(ledger) {
-		if c.requester.backedOff(source, blockIndex) {
-			continue
-		}
-		stream := execute.StreamID{Ledger: c.Url(protocol.Synthetic), Source: source}
-		spans := c.requester.decide(staged, stream, ledger.Partition(source).Delivered, blockIndex)
-		if len(spans) == 0 {
-			continue
-		}
-		asked, failed := 0, 0
-		for _, span := range spans {
-			if ctx.Err() != nil {
-				break
-			}
-			n, served, err := c.requestSpan(ctx, ranger, source, span[0], span[1])
-			switch {
-			case err == nil:
-				asked++
-				c.requester.asked(stream, [2]uint64{span[0], served}, blockIndex)
-				mHealRequests.WithLabelValues("answered", c.Partition.ID, partitionLabel(source)).Inc()
-				mHealEntries.Add(float64(n))
+	// Every stream is its own stage and is asked about on its own (executor
+	// spec, "One chain per pair, one stage per chain"): the synthetic stream
+	// from each source, and the anchor stream from each partition that
+	// anchors here.
+	for _, source := range c.inboundSources(synth) {
+		c.requestStream(ctx, staged, blockIndex, source, streamAsk{
+			stream:    execute.StreamID{Ledger: c.Url(protocol.Synthetic), Source: source},
+			delivered: synth.Partition(source).Delivered,
+			what:      "synthetics",
+			ask: func(first, last uint64) (int, uint64, error) {
+				return c.requestSpan(ctx, ranger, source, first, last)
+			},
+			healed: func(n int) {
 				if c.Heals != nil {
-					c.Heals.Requests.Add(1)
 					c.Heals.Synthetic.Add(uint64(n))
 				}
 				c.synthHeals.Add(uint64(n))
-				slog.WarnContext(ctx, "Requested missing synthetics", "module", "conductor",
-					"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "entries", n, "block", blockIndex)
-			case errors.Is(err, errors.NotReady):
-				// The source has not dispatched the span, or dispatched it
-				// within the last few blocks: the entries are on their way.
-				// Not a gap yet, not a failure.
-				mHealRequests.WithLabelValues("not-yet", c.Partition.ID, partitionLabel(source)).Inc()
-				slog.DebugContext(ctx, "Missing synthetics are still in flight at the source", "module", "conductor",
-					"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "error", err)
-			case errors.Is(err, errors.NotFound):
-				// The source's cache does not hold the span. Deterministic:
-				// asking again does not help. A miss is a defect at the source.
-				failed++
-				mHealRequests.WithLabelValues("miss", c.Partition.ID, partitionLabel(source)).Inc()
+			},
+		})
+	}
+	for _, source := range c.anchorSources() {
+		c.requestStream(ctx, staged, blockIndex, source.JoinPath(protocol.AnchorPool), streamAsk{
+			stream:    execute.StreamID{Ledger: c.Url(protocol.AnchorPool), Source: source},
+			delivered: anchors.Partition(source).Delivered,
+			what:      "anchors",
+			ask: func(first, last uint64) (int, uint64, error) {
+				return c.requestAnchorSpan(ctx, ranger, source, first, last)
+			},
+			healed: func(n int) {
 				if c.Heals != nil {
-					c.Heals.Requests.Add(1)
-					c.Heals.Misses.Add(1)
+					c.Heals.Anchor.Add(uint64(n))
 				}
-				slog.ErrorContext(ctx, "Source cannot serve missing synthetics", "module", "conductor",
-					"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "error", err)
-			default:
-				failed++
-				mHealRequests.WithLabelValues("failed", c.Partition.ID, partitionLabel(source)).Inc()
-				if c.Heals != nil {
-					c.Heals.Requests.Add(1)
-				}
-				slog.ErrorContext(ctx, "Failed to request missing synthetics", "module", "conductor",
-					"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "error", err)
-			}
-		}
-		c.requester.outcome(source, blockIndex, asked, failed)
+			},
+		})
 	}
 
 	// Bundles were submitted to the dispatcher by this task, after the block
@@ -263,6 +245,93 @@ func (c *Conductor) requestGaps(ctx context.Context, batch *database.Batch, bloc
 		slog.ErrorContext(ctx, "Failed to dispatch healing bundle", "module", "conductor", "error", err)
 	}
 	return nil
+}
+
+// anchorSources lists the partitions whose anchors this partition executes:
+// the Directory for a BVN; every partition, itself included, for the Directory.
+func (c *Conductor) anchorSources() []*url.URL {
+	if c.Partition.Type != protocol.PartitionTypeDirectory {
+		return []*url.URL{protocol.DnUrl()}
+	}
+	var sources []*url.URL
+	if g := c.Globals.Load(); g != nil && g.Network != nil {
+		for _, part := range g.Network.Partitions {
+			sources = append(sources, protocol.PartitionUrl(part.ID))
+		}
+	}
+	sort.Slice(sources, func(i, j int) bool { return sources[i].String() < sources[j].String() })
+	return sources
+}
+
+// streamAsk is one stream's part of an activation: where it stands, how to
+// ask its source for a span, and how to count what came back.
+type streamAsk struct {
+	stream    execute.StreamID
+	delivered uint64
+	what      string
+	ask       func(first, last uint64) (int, uint64, error)
+	healed    func(n int)
+}
+
+// requestStream decides one stream's gaps from staging, asks for them, and
+// records each outcome. backoff names the source for the per-source back-off;
+// a source's two streams back off independently.
+func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTxn, blockIndex uint64, backoff *url.URL, a streamAsk) {
+	if c.requester.backedOff(backoff, blockIndex) {
+		return
+	}
+	source := a.stream.Source
+	spans := c.requester.decide(staged, a.stream, a.delivered, blockIndex)
+	if len(spans) == 0 {
+		return
+	}
+	asked, failed := 0, 0
+	for _, span := range spans {
+		if ctx.Err() != nil {
+			break
+		}
+		n, served, err := a.ask(span[0], span[1])
+		switch {
+		case err == nil:
+			asked++
+			c.requester.asked(a.stream, [2]uint64{span[0], served}, blockIndex)
+			mHealRequests.WithLabelValues("answered", c.Partition.ID, partitionLabel(source)).Inc()
+			mHealEntries.Add(float64(n))
+			if c.Heals != nil {
+				c.Heals.Requests.Add(1)
+			}
+			a.healed(n)
+			slog.WarnContext(ctx, "Requested missing "+a.what, "module", "conductor",
+				"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "entries", n, "block", blockIndex)
+		case errors.Is(err, errors.NotReady):
+			// The source has not dispatched the span, or dispatched it
+			// within the last few blocks: the entries are on their way.
+			// Not a gap yet, not a failure.
+			mHealRequests.WithLabelValues("not-yet", c.Partition.ID, partitionLabel(source)).Inc()
+			slog.DebugContext(ctx, "Missing "+a.what+" are still in flight at the source", "module", "conductor",
+				"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "error", err)
+		case errors.Is(err, errors.NotFound):
+			// The source's cache does not hold the span. Deterministic:
+			// asking again does not help. A miss is a defect at the source.
+			failed++
+			mHealRequests.WithLabelValues("miss", c.Partition.ID, partitionLabel(source)).Inc()
+			if c.Heals != nil {
+				c.Heals.Requests.Add(1)
+				c.Heals.Misses.Add(1)
+			}
+			slog.ErrorContext(ctx, "Source cannot serve missing "+a.what, "module", "conductor",
+				"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "error", err)
+		default:
+			failed++
+			mHealRequests.WithLabelValues("failed", c.Partition.ID, partitionLabel(source)).Inc()
+			if c.Heals != nil {
+				c.Heals.Requests.Add(1)
+			}
+			slog.ErrorContext(ctx, "Failed to request missing "+a.what, "module", "conductor",
+				"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "error", err)
+		}
+	}
+	c.requester.outcome(backoff, blockIndex, asked, failed)
 }
 
 // decide walks one stream from Delivered to the highest entry held and
@@ -477,6 +546,38 @@ func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRang
 	}
 	if err := flush(); err != nil {
 		return 0, 0, errors.UnknownError.WithFormat("submit bundle from %v: %w", source, err)
+	}
+	return len(records), served, nil
+}
+
+// requestAnchorSpan asks the source for anchors [first, last] of its stream to
+// this partition and submits each as a BlockAnchor carrying the answering
+// validator's signature: one attestation towards the anchor's quorum, the
+// same thing the validator's own dispatch would have carried. The source
+// may answer a prefix; the number it served through is returned.
+func (c *Conductor) requestAnchorSpan(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64) (int, uint64, error) {
+	records, err := ranger.SequenceRange(ctx, source.JoinPath(protocol.AnchorPool), c.Url(), first, last, private.SequenceOptions{})
+	if err != nil {
+		return 0, 0, errors.UnknownError.Wrap(err)
+	}
+	if len(records) == 0 {
+		return 0, 0, errors.InvalidRecord.With("empty answer")
+	}
+	var served uint64
+	for _, r := range records {
+		if r.Sequence == nil {
+			return 0, 0, errors.InvalidRecord.With("answer carries an unsequenced message")
+		}
+		keySig := keySignatureOf(r)
+		if keySig == nil {
+			return 0, 0, errors.InvalidRecord.WithFormat("answer for anchor %v→%v #%d is not signed", source, c.Url(), r.Sequence.Number)
+		}
+		env := &messaging.Envelope{Messages: []messaging.Message{&messaging.BlockAnchor{Anchor: r.Sequence, Signature: keySig}}}
+		err := c.submit(ctx, c.Url(), env)
+		if err != nil {
+			return 0, 0, errors.UnknownError.WithFormat("submit anchor from %v: %w", source, err)
+		}
+		served = r.Sequence.Number
 	}
 	return len(records), served, nil
 }

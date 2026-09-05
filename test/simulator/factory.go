@@ -56,7 +56,6 @@ type simFactory struct {
 	dropInitialAnchor           bool
 	executionShards             int
 	executionShardsPerNode      []int
-	disableAnchorHealing        bool
 	interceptDispatchedMessages DispatchInterceptor
 
 	// State
@@ -618,19 +617,17 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 	// Create the conductor. This must happen before creating the executor since
 	// it needs to receive the initial WillChangeGlobals event.
-	enableAnchorHealing := !f.disableAnchorHealing
 	conductor := &crosschain.Conductor{
-		Partition:           &protocol.PartitionInfo{ID: f.networkFactory.id, Type: f.typ},
-		ValidatorKey:        execOpts.Key,
-		Database:            execOpts.Database,
-		Querier:             api.Querier2{Querier: f.getServices()},
-		Dispatcher:          execOpts.NewDispatcher(),
-		Sequencer:           f.getServices().Private(),
-		Staging:             f.getStaging(),
-		Heals:               f.getHeals(),
-		RunTask:             execOpts.BackgroundTaskLauncher,
-		DropInitialAnchor:   f.dropInitialAnchor,
-		EnableAnchorHealing: &enableAnchorHealing,
+		Partition:         &protocol.PartitionInfo{ID: f.networkFactory.id, Type: f.typ},
+		ValidatorKey:      execOpts.Key,
+		Database:          execOpts.Database,
+		Querier:           api.Querier2{Querier: f.getServices()},
+		Dispatcher:        execOpts.NewDispatcher(),
+		Sequencer:         f.getServices().Private(),
+		Staging:           f.getStaging(),
+		Heals:             f.getHeals(),
+		RunTask:           execOpts.BackgroundTaskLauncher,
+		DropInitialAnchor: f.dropInitialAnchor,
 
 		// Nothing to override here any more. Healing used to be paced by wall
 		// clock, which the simulator had to defeat because it runs dozens of

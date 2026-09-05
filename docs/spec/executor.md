@@ -496,14 +496,18 @@ staging; a mismatch discards the proof and increments a counter. A proof whose
 anchor has already executed is validated at intake. Nothing about a proof is
 decided by the block that receives it except where it waits.
 
-An anchor's own gate is a **validator signature quorum**, as it is today: each
-validator's signature is a contribution only that validator can make, and
-every validator re-sends its own on the cadence. There is one other way an
-anchor is validated: a raw past anchor that arrives or is already held is
-validated when a **later anchor's hashes prove it** — the later anchor's chain
-covers the earlier one, so the anchor chain itself is the proof. A later anchor
-exposes a missing earlier one — anchors are sequenced and predictable — and
-that anchor is requested at once, without waiting a healing cycle.
+An anchor's own gate is a **validator signature quorum**: each copy of an
+anchor carries one validator's signature, recorded as it arrives, and the
+anchor executes once the signatures reach the threshold. Below it the anchor
+is an entry held in its stream's stage, collected, like a synthetic without
+its proof; it is never recorded pending. An anchor at or below `Delivered` is
+tossed on arrival. There is one other way an anchor is validated: a raw past
+anchor that arrives or is already held is validated when a **proof over the
+source's anchor chain covers it** — the chain itself is the proof. A missing
+anchor is a gap of entries and is requested on the cadence; a held anchor
+below its quorum is an unvalidated entry and is requested the same way, each
+answer carrying the answering validator's signature. Nothing is re-sent from
+the source on its own.
 
 ### Staging — the ordering gate
 

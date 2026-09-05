@@ -247,6 +247,14 @@ func (b *bundle) getTransaction(batch *database.Batch, hash [32]byte) (*protocol
 		}
 	}
 
+	// Look in staging: an anchor held below its quorum carries its
+	// transaction, and a later copy may name it by hash alone
+	if b.Block != nil && b.Block.staging != nil {
+		if txn, ok := b.Block.staging.HeldTransaction(hash); ok {
+			return txn, nil
+		}
+	}
+
 	// Look in the database. A transaction referenced by a signature may be
 	// pending for longer than the store's window, so a miss there is asked
 	// again of a deep reader (database spec, "Windowed stores").

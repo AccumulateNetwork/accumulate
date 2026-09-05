@@ -183,43 +183,6 @@ chaos returning to a soak.
 
 ---
 
-### E12. Anchors are not staged
-
-*(no issue yet)*
-
-**Spec** ([executor.md](executor.md), "One chain per pair, one stage per
-chain"): a synthetic chain per destination at the source; a collection proof
-covers one chain, so its index is the sequence number; one stage per chain
-holding two index-aligned lists; anchors through the same stage.
-
-**Code**, as of 2026-09-05: the chains are per destination
-(`SyntheticChain(partition)`, entry n-1 is sequence number n, each anchored
-into the root chain when it changes); the producer cache holds a segment per
-destination chain per block; dispatch proofs and the sequencer's range answers
-cover one chain, so a proof's elements are exactly the destination's entries
-(`test/e2e` `TestSyntheticChainPerDestination`). The sequence (index) chains
-are no longer written; the v1 executor's interleaved layout is served only
-under a v1 network version. The stage is two lists indexed from
-`Delivered + 1` — entries and validated hashes — a proof's element i at chain
-index s validates number s+i+1, a collected entry runs when the hash at its
-number is its own, a collected entry a proof contradicts is dropped so its
-number is asked for again, and the requester walks to whichever list reaches
-further (`execute.Staging`, `TestStaging_*`, `TestDecide_ValidatedBeyondHeld`).
-What remains: anchors are executed with their signatures and not staged;
-proofs for them are held in anchor staging by Directory block (H9). A
-consequence seen
-while building this: an anchor re-sent by the source's anchor healer reaches
-the executor directly, and if its body differs from the one already delivered
-at that sequence number (a different state-tree root, for instance) the
-"already delivered" result fails the whole block instead of discarding the
-entry — a stage tosses anything at or below Delivered before it executes,
-which is what step 4 gives anchors.
-
-**Size**: medium — anchors through the stage, the reproductions. Plan in
-PLAN.md, E12 (steps 1–3 done).
-
----
-
 ## Database abstraction
 
 ### D1. Record placement is a second, hand-maintained model
@@ -429,29 +392,32 @@ accepts unsigned proven entries; not urgent.
 
 ---
 
-### H9. Anchors are re-sent, not pulled with a proof
+### H9. A pulled anchor is re-attested, not proven
 
 *[#4056](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4056)*
 
-**Spec** ([healing.md](healing.md), "Deciding, in staging"): anchor gaps — a
-sequence number below the newest held anchor with no anchor — are requested on
-the block that exposes them, answered by the source from its cache.
+**Spec** ([executor.md](executor.md), "Proof"; [healing.md](healing.md),
+"Deciding, in staging"): an anchor is validated by a validator signature quorum
+or by a collection proof over the source's anchor chain; a missing or
+below-quorum anchor is requested from the source's cache like any other entry.
 
-**Code**: an anchor is healed by its source re-sending its own signature on the
-cadence (`healAnchors`), which is each validator's contribution and needs the
-re-send to arrive; nothing pulls an anchor. The proof-authorized anchor of
-#4056 — a `BlockAnchor` with a collection proof over the source's anchor
-sequence chain, continued to a root the destination already holds — is what
-`TestAnchorRangeRecovery` and `TestAnchorQuorumStuckRecovery` expect, and the
-cache cannot build it: the continuation is a root chain receipt across blocks,
-and the cache keeps each block's receipt to its own root only. Building it
-means keeping the root chain's span across the horizon in the cache, or
-building it from the store, which the spec forbids. Both tests are skipped
-with this reason.
+**Code**, as of 2026-09-05: anchors go through the stage — an anchor below its
+quorum is held at its number, collected, and runs when the signatures reach
+the threshold; one at or below `Delivered` is tossed; a copy naming its
+transaction by hash resolves against the held one. The requester walks the
+anchor streams with the synthetic ones and asks the source for gaps
+(`requestAnchorSpan`); the source answers from its cache, a prefix at a time,
+`NotReady` for anchors still in flight. The source-side re-send (`healAnchors`)
+is deleted. What remains: an answer carries only the answering validator's
+signature, so a quorum is gathered one answer at a time, over activations, as
+the pair rotates; the proof form — a `BlockAnchor` with a collection proof over
+the source's anchor chain, continued to a root the destination already holds —
+needs the root chain's span across blocks, which the cache does not keep, and
+is what `TestAnchorQuorumStuckRecovery` expects (skipped with this reason).
+`TestAnchorRangeRecovery` runs on the re-attestation form.
 
-**Size**: small if anchors pull by number and the answering validator's
-signature counts as one attestation (the request-as-re-attestation form, which
-the current `Sequence` method already answers); medium for the proof form.
+**Size**: medium — the root chain span in the cache, bounded by the horizon,
+and the proof built from it.
 
 ---
 

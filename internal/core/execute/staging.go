@@ -44,6 +44,7 @@ type Staging struct {
 	proofs  map[string]map[uint64][]*protocol.AnnotatedReceipt // source -> anchor block
 	sources map[string]*url.URL                                // the source URL as received, by key
 	byID    map[[32]byte]*Held
+	byTxn   map[[32]byte]*Held // held entries whose message carries a transaction, by its hash
 }
 
 // A StreamID names an inbound stream: the ledger that tracks it and the
@@ -150,23 +151,19 @@ func (st *streamState) validate(n uint64, h [32]byte) {
 // release drops everything at or below n from both lists. The slices are
 // re-sliced, and copied down once the dropped prefix outweighs what is kept,
 // so the lists neither allocate per release nor pin what they have dropped.
-func (st *streamState) release(n uint64, byID map[[32]byte]*Held) {
+func (st *streamState) release(n uint64, s *Staging) {
 	if n <= st.delivered {
 		return
 	}
 	drop := n - st.delivered
 	if drop > uint64(len(st.entries)) {
 		for _, h := range st.entries {
-			if h != nil && h.ID != nil {
-				delete(byID, h.ID.Hash())
-			}
+			s.unindex(h)
 		}
 		st.entries = st.entries[:0]
 	} else {
 		for _, h := range st.entries[:drop] {
-			if h != nil && h.ID != nil {
-				delete(byID, h.ID.Hash())
-			}
+			s.unindex(h)
 		}
 		st.entries = compactHeld(st.entries[drop:])
 	}
@@ -176,6 +173,42 @@ func (st *streamState) release(n uint64, byID map[[32]byte]*Held) {
 		st.validated = compactHashes(st.validated[drop:])
 	}
 	st.delivered = n
+}
+
+// index and unindex keep the by-ID and by-transaction lookups in step with
+// what the streams hold; the caller holds s.mu.
+func (s *Staging) index(h *Held) {
+	if h == nil {
+		return
+	}
+	if h.ID != nil {
+		s.byID[h.ID.Hash()] = h
+	}
+	if txn, ok := heldTransaction(h); ok {
+		s.byTxn[*(*[32]byte)(txn.GetHash())] = h
+	}
+}
+
+func (s *Staging) unindex(h *Held) {
+	if h == nil {
+		return
+	}
+	if h.ID != nil {
+		delete(s.byID, h.ID.Hash())
+	}
+	if txn, ok := heldTransaction(h); ok {
+		delete(s.byTxn, *(*[32]byte)(txn.GetHash()))
+	}
+}
+
+// heldTransaction is the transaction a held message carries, if it carries
+// one in full: a sequenced anchor, for instance.
+func heldTransaction(h *Held) (*protocol.Transaction, bool) {
+	txn, ok := messaging.UnwrapAs[messaging.MessageWithTransaction](h.Message)
+	if !ok || txn.GetTransaction() == nil || txn.GetTransaction().Body == nil || txn.GetTransaction().Body.Type() == protocol.TransactionTypeRemote {
+		return nil, false
+	}
+	return txn.GetTransaction(), true
 }
 
 func compactHeld(s []*Held) []*Held {
@@ -194,7 +227,7 @@ func compactHashes(s [][32]byte) [][32]byte {
 
 // NewStaging returns empty staging.
 func NewStaging() *Staging {
-	return &Staging{streams: map[string]*streamState{}, proofs: map[string]map[uint64][]*protocol.AnnotatedReceipt{}, sources: map[string]*url.URL{}, byID: map[[32]byte]*Held{}}
+	return &Staging{streams: map[string]*streamState{}, proofs: map[string]map[uint64][]*protocol.AnnotatedReceipt{}, sources: map[string]*url.URL{}, byID: map[[32]byte]*Held{}, byTxn: map[[32]byte]*Held{}}
 }
 
 // A StagingTxn is one block's view of staging: everything committed, plus
@@ -306,6 +339,32 @@ func (t *StagingTxn) HeldByID(txid *url.TxID) (*Held, bool) {
 	defer t.s.mu.Unlock()
 	e, ok := t.s.byID[h]
 	return e, ok
+}
+
+// HeldTransaction answers a transaction a held message carries in full, by
+// its hash: what a placeholder in a later copy resolves against while the
+// entry waits in its stage.
+func (t *StagingTxn) HeldTransaction(hash [32]byte) (*protocol.Transaction, bool) {
+	if t == nil {
+		return nil, false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for _, m := range t.held {
+		for _, e := range m {
+			if txn, ok := heldTransaction(e); ok && *(*[32]byte)(txn.GetHash()) == hash {
+				return txn, true
+			}
+		}
+	}
+	t.s.mu.Lock()
+	defer t.s.mu.Unlock()
+	if h, ok := t.s.byTxn[hash]; ok {
+		if txn, ok := heldTransaction(h); ok {
+			return txn, true
+		}
+	}
+	return nil, false
 }
 
 // Sighted is the highest number ever held on a stream, executed or not.
@@ -627,9 +686,7 @@ func (t *StagingTxn) Commit() {
 			st.validate(n, h)
 			if e := st.entry(n); e != nil && e.Collected && e.Hash != h {
 				// Contradicted by the proof: not the stream's entry
-				if e.ID != nil {
-					delete(s.byID, e.ID.Hash())
-				}
+				s.unindex(e)
 				st.entries[n-st.delivered-1] = nil
 			}
 		}
@@ -644,9 +701,7 @@ func (t *StagingTxn) Commit() {
 				continue
 			}
 			st.hold(n, h)
-			if h.ID != nil {
-				s.byID[h.ID.Hash()] = h
-			}
+			s.index(h)
 		}
 	}
 	for k, n := range t.sighted {
@@ -673,7 +728,7 @@ func (t *StagingTxn) Commit() {
 	}
 	for k, n := range t.released {
 		if st := s.streams[k]; st != nil {
-			st.release(n, s.byID)
+			st.release(n, s)
 		}
 	}
 	t.reset()

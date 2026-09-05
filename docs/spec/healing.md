@@ -21,12 +21,15 @@ index:
 | **proven, missing** | a validated proof covers the index and no entry is held there | the entry, in a bundle |
 | **held or expected, unproven** | entries are held (or lower indexes are proven) and no validated proof covers the index | a proof extending the covered range |
 
-Anchors are a third case and are not a healing-cycle matter: anchors are slow
-and sequenced, so a later anchor exposes a missing earlier one, and that anchor
-is requested at once. An anchor is admitted by validator signature quorum, as
-today; a raw past anchor that arrives or is held is validated when a later
-anchor's hashes prove it. Healed anchors therefore travel raw, and every
-validator keeps re-sending its own signatures on the cadence.
+Anchors are the same two cases on their own stage (executor.md, "One chain
+per pair, one stage per chain"): a missing anchor is a gap of entries and is
+requested from the source like any other; an anchor held below its validator
+signature quorum is an unvalidated entry, and each answer to a request for it
+carries the answering validator's signature, one more towards the quorum. A
+raw past anchor that arrives or is held is also validated when a later proof
+over the source's anchor chain covers it. Nothing is pushed a second time
+from the source: dispatch sends an anchor once, and the destination asks for
+what it lacks.
 
 **Nothing is provable before the Directory has anchored it.** A synthetic or
 anchor a BVN produces in block N cannot leave, and cannot be proven to anyone,
@@ -70,11 +73,11 @@ an activation; two rather than all because a request is fungible — whoever ask
 the answer heals every validator — so further askers are only load. The pair
 rotates with every activation.
 
-Selection applies to **pulls only**. An anchor **signature** is a contribution
-only its validator can make, so every validator re-sends its own signatures on
-the cadence; selecting a pair there would withhold the quorum. The test: does
-another node's action make mine unnecessary? If yes it is a pull and a pair is
-enough; if no, everyone owes theirs.
+Selection applies to every request, anchors included: the answer to an anchor
+request carries whichever validator answered, and the pair rotates, so
+successive activations gather distinct signatures towards the quorum. The
+test: does another node's action make mine unnecessary? If yes it is a pull
+and a pair is enough.
 
 ### The request
 

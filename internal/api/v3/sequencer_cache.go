@@ -216,22 +216,37 @@ func (s *Sequencer) anchorRecord(globals *core.GlobalValues, dst *url.URL, num u
 }
 
 func (s *Sequencer) getAnchorFromCache(globals *core.GlobalValues, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
-	txn, ok := s.cache.Anchor(num)
+	txn, _, ok := s.cache.Anchor(num)
 	if !ok {
 		return nil, errors.NotFound.WithFormat("anchor %d is not in the cache", num)
 	}
 	return s.anchorRecord(globals, dst, num, txn)
 }
 
-// getAnchorRangeFromCache answers anchors start..end. An anchor is validated
-// by its signatures at the destination, and a later anchor's chain proves an
-// earlier one, so no receipt list travels with a range of them.
+// getAnchorRangeFromCache answers anchors start..end, or the prefix of them
+// the cache holds. An anchor is validated at the destination by its
+// signatures — the answering validator's counts as one — so no receipt list
+// travels with a range of them. A first number not produced yet, or recorded
+// within the in-flight window, is NotReady: it is on its way, not missing
+// (healing spec, "The answer").
 func (s *Sequencer) getAnchorRangeFromCache(globals *core.GlobalValues, dst *url.URL, start, end uint64) ([]*api.MessageRecord[messaging.Message], error) {
 	var records []*api.MessageRecord[messaging.Message]
 	for num := start; num <= end; num++ {
-		txn, ok := s.cache.Anchor(num)
+		txn, block, ok := s.cache.Anchor(num)
 		if !ok {
+			if len(records) > 0 {
+				return records, nil
+			}
+			if last, ok := s.cache.LastAnchorNumber(); !ok || num > last {
+				return nil, errors.NotReady.WithFormat("anchor %d is not produced yet", num)
+			}
 			return nil, errors.NotFound.WithFormat("anchor %d is not in the cache", num)
+		}
+		if age := s.cache.Newest() - block; age < synthcache.InFlightBlocks {
+			if len(records) > 0 {
+				return records, nil
+			}
+			return nil, errors.NotReady.WithFormat("anchor %d was sent %d blocks ago and is in flight", num, age)
 		}
 		r, err := s.anchorRecord(globals, dst, num, txn)
 		if err != nil {

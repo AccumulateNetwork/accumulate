@@ -62,9 +62,6 @@ type Conductor struct {
 	// the anchor the first time around.
 	DropInitialAnchor bool
 
-	// Enables healing of anchors after they are initially submitted.
-	EnableAnchorHealing *bool
-
 	// **FOR TESTING PURPOSES ONLY**. Intercepts dispatched envelopes.
 	Intercept interceptor
 
@@ -84,12 +81,6 @@ type Conductor struct {
 	synthHealMu   sync.Mutex
 	reconcileSeen map[string]uint64
 	synthHeals    atomic.Uint64
-
-	// delivery tracks each destination's anchor-delivery progress across scans,
-	// so healing acts only when delivery is genuinely stalled rather than
-	// merely catching up or momentarily paused.
-	deliveryMu sync.Mutex
-	delivery   map[string]*deliveryProgress
 
 	// inflight is the per-task overlap guard (see runExclusive). It bounds what
 	// healing may cost when a scan outlives the block that started it: without
@@ -126,6 +117,9 @@ const (
 // still running — then it does nothing. Healing scans are scheduled from every
 // block; a scan that outlives the block interval must not stack a second copy
 // of itself on top.
+// DefaultHealTimeout is the default deadline for a single healing activation.
+const DefaultHealTimeout = 30 * time.Second
+
 func (c *Conductor) runExclusive(key string, task func()) {
 	if _, busy := c.inflight.LoadOrStore(key, struct{}{}); busy {
 		return
@@ -134,62 +128,6 @@ func (c *Conductor) runExclusive(key string, task func()) {
 		defer c.inflight.Delete(key)
 		task()
 	})
-}
-
-// StallScans is the number of consecutive scans a destination's delivered
-// anchor count must fail to advance, while anchors remain undelivered, before
-// its next anchor is treated as stuck and resubmitted. A scan is an activation,
-// so this is three activations — long enough that normal, bursty delivery
-// (which pauses for a scan or two between batches) is not mistaken for a stall,
-// short enough to recover a genuinely lost quorum promptly.
-const StallScans = 3
-
-type deliveryProgress struct {
-	delivered uint64 // delivered count at the last scan
-	stalls    int    // consecutive scans with no advance while behind
-}
-
-// DefaultHealTimeout is the default deadline for a single healing scan.
-const DefaultHealTimeout = 30 * time.Second
-
-// deliveryStalled reports whether the destination's delivered anchor count has
-// failed to advance across StallScans consecutive scans while anchors remain
-// undelivered. Anchors deliver sequentially, so a destination whose Delivered
-// is climbing is flowing on its own and needs no help — re-driving its in-flight
-// anchors only adds load, and under DAG-BFT's dozens-of-blocks-per-second
-// cadence that is the feedback that saturates a partition. Delivery is bursty
-// (a batch, then a pause), so a single stalled scan is not enough to conclude a
-// stall; only Delivered pinned across the whole window marks the next anchor as
-// genuinely stuck — a quorum lost to validator churn, say — and worth a
-// resubmission (#4056). It updates the destination's progress each call.
-func (c *Conductor) deliveryStalled(destination string, delivered, produced uint64) bool {
-	c.deliveryMu.Lock()
-	defer c.deliveryMu.Unlock()
-
-	if c.delivery == nil {
-		c.delivery = make(map[string]*deliveryProgress)
-	}
-	p := c.delivery[destination]
-	if p == nil {
-		p = new(deliveryProgress)
-		c.delivery[destination] = p
-	}
-
-	switch {
-	case delivered >= produced:
-		// Caught up — nothing undelivered
-		p.delivered, p.stalls = delivered, 0
-		return false
-	case delivered > p.delivered:
-		// Advancing — flowing on its own, reset the stall count
-		p.delivered, p.stalls = delivered, 0
-		return false
-	default:
-		// Behind and not advancing this scan — stuck only once the count has
-		// been pinned across the whole window
-		p.stalls++
-		return p.stalls >= StallScans
-	}
 }
 
 func (c *Conductor) Start(bus *events.Bus) error {
@@ -237,44 +175,10 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 		})
 	}()
 
-	// Every validator re-sends its own anchor signatures on the cadence. That
-	// is a contribution only this node can make, not healing: an anchor is
-	// admitted by quorum, and a signature withheld is a quorum withheld.
-	// Healing of synthetics — asking a source for entries a destination lacks
-	// — is staging's (healing.md); the conductor does none.
+	// Healing is staging's (healing.md): on the cadence, the destination
+	// asks each source for the gaps its stages show, anchors and synthetics
+	// alike. Nothing is pushed a second time from the source.
 	activate := healActivates(e.Index)
-
-	// Check old anchors. Healing queries the DESTINATION, so every scan gets
-	// a deadline: an unreachable or restarted destination (stale peer IDs)
-	// otherwise hangs the query forever — the goroutine leaks silently and
-	// that destination is never healed again (#4056).
-	healOne := func(destination *url.URL) {
-		c.runExclusive("healAnchors:"+destination.String(), func() {
-			ctx, cancel := context.WithTimeout(context.Background(), def(c.HealTimeout, DefaultHealTimeout))
-			defer cancel()
-
-			batch := c.Database.Begin(false)
-			defer batch.Discard()
-
-			err := c.healAnchors(ctx, batch, destination, e.Index)
-			if err != nil {
-				slog.Error("Error while healing anchors", "destination", destination, "error", err)
-			}
-		})
-	}
-
-	// The anchor PUSH: every validator, on the cadence. healAnchors re-signs
-	// with this node's own key and skips what it has already signed, so what it
-	// sends is a contribution no other node can make.
-	if activate {
-		if c.Partition.Type != protocol.PartitionTypeDirectory {
-			healOne(protocol.DnUrl())
-		} else {
-			for _, dst := range c.Globals.Load().Network.Partitions {
-				healOne(protocol.PartitionUrl(dst.ID))
-			}
-		}
-	}
 
 	// Load the ledger state
 	var ledger *protocol.SystemLedger

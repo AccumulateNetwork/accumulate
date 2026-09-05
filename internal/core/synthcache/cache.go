@@ -418,16 +418,25 @@ func (c *Cache) ByHash(hash [32]byte) (*Entry, bool) {
 	return e, ok
 }
 
-// Anchor answers a produced anchor by sequence number.
-func (c *Cache) Anchor(number uint64) (*protocol.Transaction, bool) {
+// Anchor answers a produced anchor by sequence number, and the block that
+// recorded it.
+func (c *Cache) Anchor(number uint64) (*protocol.Transaction, uint64, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	a, ok := c.anchors[number]
 	count("anchor", ok)
 	if !ok {
-		return nil, false
+		return nil, 0, false
 	}
-	return a.txn, true
+	return a.txn, a.block, true
+}
+
+// LastAnchorNumber is the sequence number of the newest anchor produced since
+// the cache began, and whether there is one.
+func (c *Cache) LastAnchorNumber() (uint64, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.lastAnchorNumber, c.lastAnchorOK
 }
 
 // LastAnchoredBlock is the block the newest produced anchor anchors, and

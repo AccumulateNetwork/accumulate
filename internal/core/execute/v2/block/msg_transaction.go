@@ -284,6 +284,16 @@ func (x TransactionMessage) Process(batch *database.Batch, ctx *MessageContext) 
 func (TransactionMessage) resolveTransaction(batch *database.Batch, ctx *MessageContext, msg *messaging.TransactionMessage) (bool, error) {
 	isRemote := msg.GetTransaction().Body.Type() == protocol.TransactionTypeRemote
 	s, err := batch.Message(msg.ID().Hash()).Main().Get()
+	if isRemote && errors.Is(err, errors.NotFound) && ctx.Block != nil && ctx.Block.staging != nil {
+		// A held anchor carries its transaction in staging, and a later
+		// copy may name it by hash alone; nothing about it is in the store
+		// until it executes (executor spec, "One chain per pair, one stage
+		// per chain")
+		if txn, ok := ctx.Block.staging.HeldTransaction(msg.ID().Hash()); ok {
+			msg.Transaction = txn
+			return false, nil
+		}
+	}
 	if isRemote && errors.Is(err, errors.NotFound) {
 		// The local copy a remote transaction refers to may be older than
 		// the store's window (database spec, "Windowed stores")
