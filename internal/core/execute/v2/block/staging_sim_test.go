@@ -254,7 +254,7 @@ func (s *stagingSim) collected(n uint64) bool {
 }
 
 func (s *stagingSim) proven(i int) bool {
-	return s.b.staging.IsProven(s.str.id(), s.seqs[i].Hash())
+	return s.b.staging.IsValidated(s.str.id(), s.seqs[i].Number, s.seqs[i].Hash())
 }
 
 // simSequencedExecutor stands in for the sequenced layer.
@@ -448,7 +448,7 @@ func TestStaging_ConflictingProofIsTossed_TheFirstStands(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		require.True(t, s.proven(i), "the first proof stands")
 	}
-	require.False(t, s.b.staging.IsProven(s.str.id(), to32(forged.Elements[1])), "the forged one proves nothing")
+	require.False(t, s.b.staging.IsValidated(s.str.id(), 2, to32(forged.Elements[1])), "the forged one proves nothing")
 }
 
 func to32(b []byte) [32]byte {

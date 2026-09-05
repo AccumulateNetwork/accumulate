@@ -101,14 +101,14 @@ func (p *streamPosition) has(n uint64) bool {
 
 // runnable reports whether a held number may be taken into a run. An entry
 // held by the sequenced layer passed its proof when it was held; an entry
-// COLLECTED without one carries its hash in Collected, and is runnable only
-// once the proven set covers that hash (executor spec, "Collection").
+// COLLECTED without one is runnable only once the hash validated at its
+// number is its own (executor spec, "Collection").
 func (p *streamPosition) runnable(n uint64) bool {
 	h := p.heldAt(n)
 	if h == nil || !h.Collected {
 		return true
 	}
-	return p.staging.IsProven(p.stream.id(), h.Hash)
+	return p.staging.IsValidated(p.stream.id(), n, h.Hash)
 }
 
 // received is the largest number this stream has ever seen. It says the stream

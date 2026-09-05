@@ -26,29 +26,34 @@ func reqHeld(n uint64, collected bool) *execute.Held {
 	return &execute.Held{ID: seq.ID(), Message: seq, Hash: seq.Hash(), Collected: collected}
 }
 
-// A staging that holds the given indexes; collected ones are unproven unless
-// listed in proven.
+// A staging that holds the given numbers; collected ones are unvalidated
+// unless listed in proven, each validated by a one-element proof at its own
+// number.
 func reqStaging(t *testing.T, held map[uint64]bool, proven ...uint64) *execute.Staging {
 	s := execute.NewStaging()
 	tx := s.Begin()
-	hashes := map[uint64][32]byte{}
 	for n, collected := range held {
-		h := reqHeld(n, collected)
-		hashes[n] = h.Hash
-		tx.Hold(reqStream, n, h)
+		tx.Hold(reqStream, n, reqHeld(n, collected))
 	}
-	if len(proven) > 0 {
-		list := merkle.NewReceiptList()
-		st := new(merkle.State)
-		list.MerkleState = st
-		for _, n := range proven {
-			h := hashes[n]
-			list.Elements = append(list.Elements, h[:])
-		}
-		require.NoError(t, tx.Prove(reqStream, list))
+	for _, n := range proven {
+		require.NoError(t, tx.Prove(reqStream, reqProof(n, reqHeld(n, true).Hash)))
 	}
 	tx.Commit()
 	return s
+}
+
+// reqProof is a one-element collection proof validating hash at number n.
+func reqProof(n uint64, hash [32]byte) *merkle.ReceiptList {
+	list := merkle.NewReceiptList()
+	st := new(merkle.State)
+	for i := uint64(0); i < n-1; i++ {
+		var pad [32]byte
+		pad[0] = byte(i + 100)
+		st.AddEntry(pad[:])
+	}
+	list.MerkleState = st
+	list.Elements = [][]byte{hash[:]}
+	return list
 }
 
 // Two senders are drawn from the seed, distinct, and the same for the same
@@ -101,6 +106,16 @@ func TestDecide_ValidatedEntryBehindAHole(t *testing.T) {
 	tx := s.Begin()
 	defer tx.Discard()
 	require.Equal(t, [][2]uint64{{1, 2}}, r.decide(tx, reqStream, 0, 4), "only the hole below it")
+}
+
+// A validated hash with no entry under it is a gap of entries, even above
+// everything held: the walk runs to the validated reach.
+func TestDecide_ValidatedBeyondHeld(t *testing.T) {
+	s := reqStaging(t, map[uint64]bool{1: false, 2: false}, 5)
+	var r healRequester
+	tx := s.Begin()
+	defer tx.Discard()
+	require.Equal(t, [][2]uint64{{3, 5}}, r.decide(tx, reqStream, 0, 4), "3 and 4 are holes, 5 is validated but not held")
 }
 
 // Separate holes become separate spans, oldest first, capped.

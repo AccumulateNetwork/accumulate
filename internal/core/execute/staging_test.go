@@ -89,8 +89,7 @@ func TestStaging_Missing(t *testing.T) {
 	require.Empty(t, tx.Missing(testStream, 10, 10, 10))
 }
 
-// Committing a delivery releases everything held at or below it, and the
-// proven set below the last delivered entry's index.
+// Committing a delivery releases everything at or below it from both lists.
 func TestStaging_ReleaseOnCommit(t *testing.T) {
 	s := NewStaging()
 	list := merkle.NewReceiptList()
@@ -107,7 +106,8 @@ func TestStaging_ReleaseOnCommit(t *testing.T) {
 		tx.Hold(testStream, h.Message.(*messaging.SequencedMessage).Number, h)
 	}
 	require.NoError(t, tx.Prove(testStream, list))
-	require.True(t, tx.IsProven(testStream, entries[0].Hash))
+	require.True(t, tx.IsValidated(testStream, 1, entries[0].Hash))
+	require.Equal(t, uint64(4), tx.Reach(testStream))
 	tx.Commit()
 
 	tx = s.Begin()
@@ -121,48 +121,126 @@ func TestStaging_ReleaseOnCommit(t *testing.T) {
 	require.False(t, ok, "released")
 	_, ok = tx.IDOf(testStream, 3)
 	require.True(t, ok, "above the release")
-	require.False(t, tx.IsProven(testStream, entries[1].Hash), "proven set pruned through the delivered entry")
-	require.True(t, tx.IsProven(testStream, entries[2].Hash))
+	require.False(t, tx.IsValidated(testStream, 2, entries[1].Hash), "validated hashes pruned through the delivered number")
+	require.True(t, tx.IsValidated(testStream, 3, entries[2].Hash))
+	require.Equal(t, uint64(4), tx.Reach(testStream))
 	_, ok = s.Begin().HeldByID(entries[1].ID)
 	require.False(t, ok)
 }
 
-// Two proofs claiming the same index with different hashes conflict; the
-// first stands. A proof below what is proven extends the set backwards.
+// Two proofs claiming different hashes for one number conflict; the first
+// stands. A proof's element i at chain index s is number s+i+1, and a proof
+// below what is validated fills in behind.
 func TestStaging_ProveConflictAndExtension(t *testing.T) {
 	s := NewStaging()
-	mk := func(start int64, hashes ...[32]byte) *merkle.ReceiptList {
-		l := merkle.NewReceiptList()
-		st := new(merkle.State)
-		for i := int64(0); i < start; i++ {
-			var pad [32]byte
-			pad[0] = byte(i + 100)
-			st.AddEntry(pad[:])
-		}
-		l.MerkleState = st
-		for _, h := range hashes {
-			h := h
-			l.Elements = append(l.Elements, h[:])
-		}
-		return l
-	}
 	a, b, c := [32]byte{1}, [32]byte{2}, [32]byte{3}
 	tx := s.Begin()
-	require.NoError(t, tx.Prove(testStream, mk(2, a, b)))
+	require.NoError(t, tx.Prove(testStream, proofList(2, a, b))) // numbers 3, 4
 	tx.Commit()
 
 	tx = s.Begin()
-	err := tx.Prove(testStream, mk(3, c))
-	require.ErrorIs(t, err, errors.Conflict, "index 3 is proven as b")
-	require.NoError(t, tx.Prove(testStream, mk(3, b)), "agreeing is fine")
-	require.NoError(t, tx.Prove(testStream, mk(0, [32]byte{9}, [32]byte{8})), "extends backwards")
-	idx, ok := tx.ProvenIndex(testStream, [32]byte{8})
+	err := tx.Prove(testStream, proofList(3, c))
+	require.ErrorIs(t, err, errors.Conflict, "number 4 is validated as b")
+	require.NoError(t, tx.Prove(testStream, proofList(3, b)), "agreeing is fine")
+	require.NoError(t, tx.Prove(testStream, proofList(0, [32]byte{9}, [32]byte{8})), "fills in behind")
+	v, ok := tx.Validated(testStream, 2)
 	require.True(t, ok)
-	require.Equal(t, int64(1), idx)
+	require.Equal(t, [32]byte{8}, v)
 	tx.Commit()
-	idx, ok = s.Begin().ProvenIndex(testStream, a)
+	v, ok = s.Begin().Validated(testStream, 3)
 	require.True(t, ok)
-	require.Equal(t, int64(2), idx)
+	require.Equal(t, a, v)
+	require.Equal(t, uint64(4), s.Begin().Reach(testStream))
+}
+
+// A collected entry a validated proof contradicts is not the stream's entry:
+// it is dropped (or refused) so the number is a hole to ask for again, and the
+// entry with the validated hash is held when it comes. An entry that proved
+// itself is left alone.
+func TestStaging_DisprovedEntryIsDropped(t *testing.T) {
+	s := NewStaging()
+	wrong := held(3)
+	wrong.Collected = true
+	wrong.Hash = [32]byte{0xBA, 0xD}
+	right := held(3)
+	right.Collected = true
+
+	// Held first, disproved by a later proof
+	tx := s.Begin()
+	tx.Hold(testStream, 3, wrong)
+	tx.Commit()
+	tx = s.Begin()
+	require.NoError(t, tx.Prove(testStream, proofList(2, right.Hash)))
+	tx.Commit()
+	_, ok := s.Begin().IDOf(testStream, 3)
+	require.False(t, ok, "dropped at commit")
+
+	// Proof first, the wrong entry refused, the right one held
+	tx = s.Begin()
+	tx.Hold(testStream, 3, wrong)
+	_, ok = tx.IDOf(testStream, 3)
+	require.False(t, ok, "refused")
+	tx.Hold(testStream, 3, right)
+	h, ok := tx.IDOf(testStream, 3)
+	require.True(t, ok)
+	require.Same(t, right, h)
+	require.True(t, tx.IsValidated(testStream, 3, right.Hash))
+	tx.Commit()
+
+	// An own-proof entry is not touched by a disagreeing list: the list
+	// conflicts with nothing validated, so it is recorded, and the entry
+	// stays runnable on its own proof.
+	own := held(5)
+	tx = s.Begin()
+	tx.Hold(testStream, 5, own)
+	require.NoError(t, tx.Prove(testStream, proofList(4, [32]byte{7})))
+	tx.Commit()
+	h, ok = s.Begin().IDOf(testStream, 5)
+	require.True(t, ok)
+	require.Same(t, own, h)
+}
+
+// Numbers at or below Delivered and beyond the span are neither held nor
+// validated; the lists start at Delivered + 1.
+func TestStaging_Bounds(t *testing.T) {
+	s := NewStaging()
+	tx := s.Begin()
+	tx.Hold(testStream, 1, held(1))
+	tx.Release(testStream, 1)
+	tx.Commit()
+
+	tx = s.Begin()
+	tx.Hold(testStream, 1, held(1))
+	require.NoError(t, tx.Prove(testStream, proofList(0, [32]byte{1}, [32]byte{2})))
+	tx.Hold(testStream, MaxStageSpan+10, held(MaxStageSpan+10))
+	tx.Commit()
+	tx = s.Begin()
+	_, ok := tx.IDOf(testStream, 1)
+	require.False(t, ok, "at Delivered")
+	_, ok = tx.Validated(testStream, 1)
+	require.False(t, ok, "at Delivered")
+	require.True(t, tx.IsValidated(testStream, 2, [32]byte{2}))
+	_, ok = tx.IDOf(testStream, MaxStageSpan+10)
+	require.False(t, ok, "beyond the span")
+	require.Equal(t, uint64(1), tx.Sighted(testStream))
+}
+
+// proofList is a collection proof whose first element sits at chain index
+// start: numbers start+1 onwards.
+func proofList(start int64, hashes ...[32]byte) *merkle.ReceiptList {
+	l := merkle.NewReceiptList()
+	st := new(merkle.State)
+	for i := int64(0); i < start; i++ {
+		var pad [32]byte
+		pad[0] = byte(i + 100)
+		st.AddEntry(pad[:])
+	}
+	l.MerkleState = st
+	for _, h := range hashes {
+		h := h
+		l.Elements = append(l.Elements, h[:])
+	}
+	return l
 }
 
 // Proofs wait under their anchor block per source; they are listed, decided

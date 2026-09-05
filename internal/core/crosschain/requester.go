@@ -272,7 +272,13 @@ func (c *Conductor) requestGaps(ctx context.Context, batch *database.Batch, bloc
 // A span asked within the last healPatience activations is not asked again.
 // One pass, two map lookups per index, no allocation beyond the spans.
 func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.StreamID, delivered, blockIndex uint64) [][2]uint64 {
+	// The walk runs to whichever list reaches further: entries beyond the
+	// validated hashes are a gap of proof, validated hashes beyond the
+	// entries are a gap of entries.
 	sighted := staged.Sighted(stream)
+	if reach := staged.Reach(stream); reach > sighted {
+		sighted = reach
+	}
 	if sighted <= delivered {
 		// Nothing held above Delivered: every validating hash above it is
 		// missing, so the span above Delivered is asked for whole. The source
@@ -308,7 +314,7 @@ func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.Stream
 	var spans [][2]uint64
 	for n := delivered + 1; n <= through; n++ {
 		h, held := staged.IDOf(stream, n)
-		if held && (!h.Collected || staged.IsProven(stream, h.Hash)) {
+		if held && (!h.Collected || staged.IsValidated(stream, n, h.Hash)) {
 			continue // held and validated: runnable, nothing to ask
 		}
 		if g := mem[n]; g != nil && g.askedAt != 0 && blockIndex-g.askedAt < healPatience*healCadence {

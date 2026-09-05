@@ -159,8 +159,9 @@ are released from staging at commit. Staging holds only what is above
   request bounds and served from the cache. A hash the cache does not hold is
   not served: the miss is counted, and it is a defect.
 - **The asked-once record and the per-source back-off are node state, not
-  consensus state.** They live in memory beside the healer, keyed by hash and
-  by source with the block index of the activation that asked. A restart
+  consensus state.** They live in memory beside the healer, keyed by stream
+  and number and by source, with the block index of the activation that
+  asked. A restart
   empties them; the cost is at most one duplicate request per gap.
 - **The synthetic/anchor cache holds entries in play**, indexed by partition and
   index, cleared as the destination delivers ([The cache](#the-cache)). Its size is decided from measurement of how many
@@ -324,11 +325,12 @@ ranges at or below `Delivered` are released when the block commits.
 `internal/core/synthcache`, filled by the executor as it produces
 (`produceSyntheticInto`, `recordAnchor`) through a per-block transaction that
 commits after the store commits, so the cache never holds an entry the chain
-does not; keyed by hash and by (stream, number); per block, the synthetic
-chain's segment (`merkle.Segment`: the state before the block's first element
-and its elements, proving byte-identically to the stored chain) and the
-receipt from the chain's anchor to the block's root, built at close from the
-root chain segment the block appended; the Directory receipt and anchor the
+does not; keyed by hash and by (stream, number); per block, a segment per
+destination chain (`merkle.Segment`: the chain's state before the block's
+first entry for that destination and the entries since, proving
+byte-identically to the stored chain) with the receipt from that chain's
+anchor to the block's root, built at close from the root chain segment the
+block appended; the Directory receipt and anchor the
 block was dispatched under, recorded at dispatch (`MarkDispatched`).
 Dispatch (`sendSyntheticTransactionsForBlock`) and the sequencer service
 (`sequencer_cache.go`) read it and nothing else; a miss is refused as

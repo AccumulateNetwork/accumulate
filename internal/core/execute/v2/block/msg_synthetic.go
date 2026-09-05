@@ -111,10 +111,11 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	// entry executes once its proof's anchor arrives, and how a package
 	// member or a bundle entry is accepted. Tried BEFORE bundle resolution
 	// (#4152).
-	// Proven is proven: a message the proven set covers is accepted whatever
-	// proof it carries — a range recovered under a source root and later
-	// covered by the source's package proof, for instance.
-	if ctx.Block.staging.IsProven(ctx.Executor.synthStream(seq.Source), syn.Message.Hash()) {
+	// Validated is validated: a message whose hash a validated proof stands
+	// at its number is accepted whatever proof it carries — a range recovered
+	// under a source root and later covered by the source's package proof,
+	// for instance.
+	if ctx.Block.staging.IsValidated(ctx.Executor.synthStream(seq.Source), seq.Number, syn.Message.Hash()) {
 		err := checkSyntheticInnerType(seq)
 		if err != nil {
 			return nil, err

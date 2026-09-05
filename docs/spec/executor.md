@@ -452,11 +452,14 @@ executed here, written as a `DirectoryAnchor` executes — execution output,
 like `Delivered`; a proof naming a block at or below it that the chain does
 not carry is disproved at intake. `validateStagedProofs` runs after
 the anchor group, over the Directory anchors the block executed. A validated
-proof's hashes go into the stream's **proven set**, an in-memory map from index
-to hash; a proof that contradicts an index already proven is refused
-(`errors.Conflict`). A proof for a span below the set's earliest index extends
-the set backwards, so what it proves is proven wherever it lands and a later
-contradiction there is still a conflict. Outcomes are
+proof's hashes go into the stream's stage as the **validated hashes at their
+numbers**: the proof covers one chain, so element i of a proof starting at
+chain index s is sequence number s+i+1 ("One chain per pair, one stage per
+chain"). A proof that contradicts a hash already validated at a number is
+refused (`errors.Conflict`); a collected entry a proof contradicts is dropped,
+so its number is a hole healing asks for again. A proof below what is
+validated fills in behind, so what it proves is validated wherever it lands
+and a later contradiction there is still a conflict. Outcomes are
 `accumulate_exec_staged_proofs_total{outcome}`: staged, validated, disproved,
 conflict, invalid.
 
@@ -465,13 +468,13 @@ conflict, invalid.
 `SyntheticMessage.process`: an entry whose proof's anchor is not here yet is
 collected (`collect`): the message and the transaction it belongs to are held
 in staging at the entry's number (first sighting wins), marked collected until
-a proof covers the hash. Nothing is written. The run builder never takes a collected
-number until the proven set covers that hash (`streamPosition.runnable`), and
-staging judges an arriving proof-less entry the same way (`syntheticIsProven`);
-an entry held by the sequenced layer carries no `Collected` mark because it
-passed its proof when it was held. When a collected entry is proven,
-`MessageIsReady` loads it and `check` accepts it on the proven set alone,
-signature or not. Should one be run before that — it cannot be, by
+the hash validated at its number is its own. Nothing is written. The run
+builder never takes a collected number until then (`streamPosition.runnable`),
+and staging judges an arriving proof-less entry the same way
+(`syntheticIsProven`); an entry held by the sequenced layer carries no
+`Collected` mark because it passed its proof when it was held. When a
+collected entry is validated, `MessageIsReady` loads it and `check` accepts it
+on the validated hash alone, signature or not. Should one be run before that — it cannot be, by
 construction — `check` answers "not yet proven" and nothing is recorded.
 An entry at or below the delivered point is tossed on arrival
 (`errors.Delivered`, nothing stored); an entry whose number is later taken by

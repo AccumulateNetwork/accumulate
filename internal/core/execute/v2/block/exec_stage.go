@@ -264,15 +264,16 @@ func (b *Block) admissibilityOf(str stream, outer messaging.Message, seq *messag
 }
 
 // syntheticIsProven decides whether an arriving synthetic may execute this
-// block (executor spec, "Proof"): a proof-less entry is proven when the proven
-// set covers its hash — a validated proof this partition accepted — and one
-// carrying its own receipt when that receipt's anchor is here. Anything else is
+// block (executor spec, "Proof"): a proof-less entry is proven when the hash
+// validated at its number is its own — a validated proof this partition
+// accepted — and one carrying its own receipt when that receipt's anchor is
+// here. Anything else is
 // collected and waits.
 func (b *Block) syntheticIsProven(proof *protocol.AnnotatedReceipt, seq *messaging.SequencedMessage) (bool, error) {
 	if proof != nil {
 		return b.syntheticIsAdmissible(proof)
 	}
-	if b.staging.IsProven(b.Executor.synthStream(seq.Source), seq.Hash()) {
+	if b.staging.IsValidated(b.Executor.synthStream(seq.Source), seq.Number, seq.Hash()) {
 		mExecSyntheticAnchor.WithLabelValues("proven").Inc()
 		return true, nil
 	}

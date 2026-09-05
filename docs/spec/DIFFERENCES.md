@@ -183,7 +183,7 @@ chaos returning to a soak.
 
 ---
 
-### E12. Stages align by hash; anchors are not staged
+### E12. Anchors are not staged
 
 *(no issue yet)*
 
@@ -199,12 +199,15 @@ destination chain per block; dispatch proofs and the sequencer's range answers
 cover one chain, so a proof's elements are exactly the destination's entries
 (`test/e2e` `TestSyntheticChainPerDestination`). The sequence (index) chains
 are no longer written; the v1 executor's interleaved layout is served only
-under a v1 network version. What remains: the destination's stage still keeps
-its validated hashes in a map keyed by hash and asks "is this entry's hash
-validated" rather than aligning two lists by index, and so cannot recognise a
-validated hash whose entry it lacks until a later entry of its own reveals the
-hole. Anchors are executed with their signatures and not staged; proofs for
-them are held in anchor staging by Directory block (H9). A consequence seen
+under a v1 network version. The stage is two lists indexed from
+`Delivered + 1` — entries and validated hashes — a proof's element i at chain
+index s validates number s+i+1, a collected entry runs when the hash at its
+number is its own, a collected entry a proof contradicts is dropped so its
+number is asked for again, and the requester walks to whichever list reaches
+further (`execute.Staging`, `TestStaging_*`, `TestDecide_ValidatedBeyondHeld`).
+What remains: anchors are executed with their signatures and not staged;
+proofs for them are held in anchor staging by Directory block (H9). A
+consequence seen
 while building this: an anchor re-sent by the source's anchor healer reaches
 the executor directly, and if its body differs from the one already delivered
 at that sequence number (a different state-tree root, for instance) the
@@ -212,8 +215,8 @@ at that sequence number (a different state-tree root, for instance) the
 entry — a stage tosses anything at or below Delivered before it executes,
 which is what step 4 gives anchors.
 
-**Size**: medium — the stage as two lists, anchors through it, the
-reproductions. Plan in PLAN.md, E12 (steps 1–2 done).
+**Size**: medium — anchors through the stage, the reproductions. Plan in
+PLAN.md, E12 (steps 1–3 done).
 
 ---
 

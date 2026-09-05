@@ -7,6 +7,7 @@
 package block
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"testing"
@@ -68,8 +69,21 @@ func (f *stagingFixture) prove(t *testing.T, start, end int64) {
 	require.NoError(t, f.b.staging.Prove(f.stream(), f.proof(t, start, end)))
 }
 
+// isProven reports whether hash is the validated hash at its number: the
+// fixture's chain index i is number i+1. A hash not on the fixture's chain is
+// checked at every number the fixture spans.
 func (f *stagingFixture) isProven(hash []byte) bool {
 	var h [32]byte
 	copy(h[:], hash)
-	return f.b.staging.IsProven(f.stream(), h)
+	for i, src := range f.src {
+		if bytes.Equal(src, hash) {
+			return f.b.staging.IsValidated(f.stream(), uint64(i)+1, h)
+		}
+	}
+	for n := uint64(1); n <= uint64(len(f.src)); n++ {
+		if f.b.staging.IsValidated(f.stream(), n, h) {
+			return true
+		}
+	}
+	return false
 }

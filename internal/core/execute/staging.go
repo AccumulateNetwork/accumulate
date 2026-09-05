@@ -21,11 +21,19 @@ import (
 // Staging is the state a node builds up after it syncs with the protocol
 // (executor spec, "Sync"): what it has received on each inbound stream and
 // not yet executed, the collection proofs waiting for their Directory anchor,
-// and the index ranges those proofs have proven. It is memory. Nothing in it
-// is written to the database; what is written is what executes, at the
-// block's commit. It is fed only by consensus, so it is a deterministic
-// function of the same input on every node, and a node that joins rebuilds
-// it by collecting from consensus while it pulls the chains' state down.
+// and the hashes those proofs have validated. It is memory. Nothing in it is
+// written to the database; what is written is what executes, at the block's
+// commit. It is fed only by consensus, so it is a deterministic function of
+// the same input on every node, and a node that joins rebuilds it by
+// collecting from consensus while it pulls the chains' state down.
+//
+// One stage per stream, and a stage is two lists indexed from Delivered + 1
+// (executor spec, "One chain per pair, one stage per chain"): the entries
+// held, and beside them the hashes collection proofs have validated at the
+// same numbers. A proof covers one chain, so its index is the sequence
+// number less one, and aligning the two lists is a walk, not a lookup.
+// Anything at or below Delivered is dropped. The stage does not know which
+// chain it serves.
 //
 // A block writes it through a Txn that commits with the block: the block's
 // own arrivals are visible to the block's own run building, and a discarded
@@ -52,8 +60,8 @@ func (id StreamID) key() string {
 // A Held entry is a message received on a stream and not yet executed: the
 // message as it arrived (what runs when its number is next), the transaction
 // that travels with it when it has one, and whether it was collected without
-// a validated proof — a collected entry never runs until the proven set
-// covers its hash (executor spec, "Collection").
+// a validated proof — a collected entry never runs until a validated hash
+// at its number matches it (executor spec, "Collection").
 type Held struct {
 	ID        *url.TxID
 	Message   messaging.Message
@@ -62,17 +70,126 @@ type Held struct {
 	Hash      [32]byte // the sequenced message's hash, what a proof proves
 }
 
+// MaxStageSpan bounds how far above Delivered a stage grows: a number beyond
+// it is not held and a hash there is not recorded. The sanity horizon is an
+// hour of the source's production; this is well past it, and it is what
+// keeps a forged sequence number from sizing the lists.
+const MaxStageSpan = 4 << 20
+
+// streamState is one stream's stage. entries[i] and validated[i] both stand
+// for number delivered+1+i; a nil entry is a hole, a zero hash is unvalidated.
 type streamState struct {
-	held    map[uint64]*Held
-	sighted uint64
-	// The proven set: the source chain's hashes by index, from validated
-	// proofs. Both directions, so a later proof can extend it backwards.
-	proven      map[int64][32]byte
-	provenIndex map[[32]byte]int64
+	delivered uint64
+	entries   []*Held
+	validated [][32]byte
+	sighted   uint64 // the highest number ever held, executed or not
 }
 
-func newStreamState() *streamState {
-	return &streamState{held: map[uint64]*Held{}, proven: map[int64][32]byte{}, provenIndex: map[[32]byte]int64{}}
+var zeroHash [32]byte
+
+// at returns the offset of n in the lists, or false when n is at or below
+// Delivered or beyond the span.
+func (st *streamState) at(n uint64) (int, bool) {
+	if n <= st.delivered || n-st.delivered > MaxStageSpan {
+		return 0, false
+	}
+	return int(n - st.delivered - 1), true
+}
+
+func (st *streamState) entry(n uint64) *Held {
+	i, ok := st.at(n)
+	if !ok || i >= len(st.entries) {
+		return nil
+	}
+	return st.entries[i]
+}
+
+func (st *streamState) hash(n uint64) ([32]byte, bool) {
+	i, ok := st.at(n)
+	if !ok || i >= len(st.validated) || st.validated[i] == zeroHash {
+		return zeroHash, false
+	}
+	return st.validated[i], true
+}
+
+// reach is the highest number a validated hash stands at, or zero.
+func (st *streamState) reach() uint64 {
+	for i := len(st.validated) - 1; i >= 0; i-- {
+		if st.validated[i] != zeroHash {
+			return st.delivered + 1 + uint64(i)
+		}
+	}
+	return 0
+}
+
+func (st *streamState) hold(n uint64, h *Held) {
+	i, ok := st.at(n)
+	if !ok {
+		return
+	}
+	for len(st.entries) <= i {
+		st.entries = append(st.entries, nil)
+	}
+	st.entries[i] = h
+	if n > st.sighted {
+		st.sighted = n
+	}
+}
+
+func (st *streamState) validate(n uint64, h [32]byte) {
+	i, ok := st.at(n)
+	if !ok {
+		return
+	}
+	for len(st.validated) <= i {
+		st.validated = append(st.validated, zeroHash)
+	}
+	st.validated[i] = h
+}
+
+// release drops everything at or below n from both lists. The slices are
+// re-sliced, and copied down once the dropped prefix outweighs what is kept,
+// so the lists neither allocate per release nor pin what they have dropped.
+func (st *streamState) release(n uint64, byID map[[32]byte]*Held) {
+	if n <= st.delivered {
+		return
+	}
+	drop := n - st.delivered
+	if drop > uint64(len(st.entries)) {
+		for _, h := range st.entries {
+			if h != nil && h.ID != nil {
+				delete(byID, h.ID.Hash())
+			}
+		}
+		st.entries = st.entries[:0]
+	} else {
+		for _, h := range st.entries[:drop] {
+			if h != nil && h.ID != nil {
+				delete(byID, h.ID.Hash())
+			}
+		}
+		st.entries = compactHeld(st.entries[drop:])
+	}
+	if drop > uint64(len(st.validated)) {
+		st.validated = st.validated[:0]
+	} else {
+		st.validated = compactHashes(st.validated[drop:])
+	}
+	st.delivered = n
+}
+
+func compactHeld(s []*Held) []*Held {
+	if cap(s) > 2*len(s)+1024 {
+		return append(make([]*Held, 0, len(s)), s...)
+	}
+	return s
+}
+
+func compactHashes(s [][32]byte) [][32]byte {
+	if cap(s) > 2*len(s)+1024 {
+		return append(make([][32]byte, 0, len(s)), s...)
+	}
+	return s
 }
 
 // NewStaging returns empty staging.
@@ -80,49 +197,36 @@ func NewStaging() *Staging {
 	return &Staging{streams: map[string]*streamState{}, proofs: map[string]map[uint64][]*protocol.AnnotatedReceipt{}, sources: map[string]*url.URL{}, byID: map[[32]byte]*Held{}}
 }
 
-func (s *Staging) stream(id StreamID) *streamState {
-	st := s.streams[id.key()]
-	if st == nil {
-		st = newStreamState()
-		s.streams[id.key()] = st
-	}
-	return st
-}
-
 // A StagingTxn is one block's view of staging: everything committed, plus
 // what this block has added, minus what it has released. Commit publishes
-// it; Discard drops it.
+// it; Discard drops it. The block's own additions are few and keyed by
+// number; the lists live in the committed state.
 type StagingTxn struct {
 	s  *Staging
 	mu sync.Mutex
 
-	held     map[string]map[uint64]*Held
-	sighted  map[string]uint64
-	proven   map[string]map[int64][32]byte
-	proofs   map[string]map[uint64][]*protocol.AnnotatedReceipt
-	sources  map[string]*url.URL
-	dropped  map[string]map[uint64]bool
-	released map[string]uint64
+	held      map[string]map[uint64]*Held
+	validated map[string]map[uint64][32]byte
+	sighted   map[string]uint64
+	proofs    map[string]map[uint64][]*protocol.AnnotatedReceipt
+	sources   map[string]*url.URL
+	dropped   map[string]map[uint64]bool
+	released  map[string]uint64
 }
 
 // Begin starts a block's transaction.
 func (s *Staging) Begin() *StagingTxn {
-	return &StagingTxn{
-		s:        s,
-		held:     map[string]map[uint64]*Held{},
-		sighted:  map[string]uint64{},
-		proven:   map[string]map[int64][32]byte{},
-		proofs:   map[string]map[uint64][]*protocol.AnnotatedReceipt{},
-		sources:  map[string]*url.URL{},
-		dropped:  map[string]map[uint64]bool{},
-		released: map[string]uint64{},
-	}
+	t := &StagingTxn{s: s}
+	t.reset()
+	return t
 }
 
 func sourceKey(source *url.URL) string { return strings.ToLower(source.String()) }
 
 // Hold keeps a message at a number of a stream. The first sighting of a
-// number wins: a number offered twice carries the same message.
+// number wins: a number offered twice carries the same message. A collected
+// entry that contradicts a hash already validated at its number is not held:
+// it is not the stream's entry, and the hole it leaves is asked for again.
 func (t *StagingTxn) Hold(id StreamID, n uint64, h *Held) {
 	if t == nil {
 		return
@@ -135,9 +239,22 @@ func (t *StagingTxn) Hold(id StreamID, n uint64, h *Held) {
 	}
 	t.s.mu.Lock()
 	base := t.s.streams[k]
-	inBase := base != nil && base.held[n] != nil
+	var inBase, disproved bool
+	if base != nil {
+		if _, ok := base.at(n); !ok {
+			t.s.mu.Unlock()
+			return // at or below Delivered, or beyond the span
+		}
+		inBase = base.entry(n) != nil
+		if v, ok := base.hash(n); ok && h.Collected && v != h.Hash {
+			disproved = true
+		}
+	}
 	t.s.mu.Unlock()
-	if inBase {
+	if inBase || disproved {
+		return
+	}
+	if v, ok := t.validated[k][n]; ok && h.Collected && v != h.Hash {
 		return
 	}
 	if t.held[k] == nil {
@@ -163,7 +280,7 @@ func (t *StagingTxn) IDOf(id StreamID, n uint64) (*Held, bool) {
 	t.s.mu.Lock()
 	defer t.s.mu.Unlock()
 	if base := t.s.streams[k]; base != nil {
-		if h, ok := base.held[n]; ok {
+		if h := base.entry(n); h != nil {
 			return h, true
 		}
 	}
@@ -191,7 +308,7 @@ func (t *StagingTxn) HeldByID(txid *url.TxID) (*Held, bool) {
 	return e, ok
 }
 
-// Sighted is the highest number seen on a stream, executed or not.
+// Sighted is the highest number ever held on a stream, executed or not.
 func (t *StagingTxn) Sighted(id StreamID) uint64 {
 	if t == nil {
 		return 0
@@ -204,6 +321,31 @@ func (t *StagingTxn) Sighted(id StreamID) uint64 {
 	defer t.s.mu.Unlock()
 	if base := t.s.streams[k]; base != nil && base.sighted > n {
 		n = base.sighted
+	}
+	return n
+}
+
+// Reach is the highest number a validated hash stands at on a stream, above
+// Delivered, or zero. Entries missing below it are a gap of entries.
+func (t *StagingTxn) Reach(id StreamID) uint64 {
+	if t == nil {
+		return 0
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	k := id.key()
+	var n uint64
+	for m := range t.validated[k] {
+		if m > n {
+			n = m
+		}
+	}
+	t.s.mu.Lock()
+	defer t.s.mu.Unlock()
+	if base := t.s.streams[k]; base != nil {
+		if r := base.reach(); r > n {
+			n = r
+		}
 	}
 	return n
 }
@@ -234,11 +376,14 @@ func (t *StagingTxn) Missing(id StreamID, delivered, through uint64, maxRuns int
 	return runs
 }
 
-// Prove records a validated collection proof's elements in the stream's
-// proven set. Where the proof overlaps what is already proven the hashes
-// must agree: two proofs claiming the same index with different hashes are
-// an attack on the stream, the first stands and the second proves nothing
-// (errors.Conflict). A proof below what is proven extends the set backwards.
+// Prove records a validated collection proof's hashes at their numbers: the
+// proof covers one chain, so element i of a proof starting at chain index s
+// is sequence number s+i+1. Where a hash is already validated at a number the
+// two must agree: two proofs claiming different hashes for one number are an
+// attack on the stream, the first stands and the second proves nothing
+// (errors.Conflict). A collected entry the proof contradicts is dropped, so
+// the number is a hole and is asked for again. Numbers at or below Delivered
+// are tossed.
 func (t *StagingTxn) Prove(id StreamID, list *merkle.ReceiptList) error {
 	if t == nil {
 		return nil
@@ -254,56 +399,62 @@ func (t *StagingTxn) Prove(id StreamID, list *merkle.ReceiptList) error {
 	defer t.s.mu.Unlock()
 	base := t.s.streams[k]
 	for i, el := range list.Elements {
-		idx := start + int64(i)
+		n := uint64(start) + uint64(i) + 1
 		var h [32]byte
 		copy(h[:], el)
-		if have, ok := t.proven[k][idx]; ok && have != h {
-			return errors.Conflict.WithFormat("conflicting proof for %v: index %d is proven as %x, proof says %x", id.Source, idx, have[:4], h[:4])
+		if have, ok := t.validated[k][n]; ok && have != h {
+			return errors.Conflict.WithFormat("conflicting proof for %v: %d is validated as %x, proof says %x", id.Source, n, have[:4], h[:4])
 		}
 		if base != nil {
-			if have, ok := base.proven[idx]; ok && have != h {
-				return errors.Conflict.WithFormat("conflicting proof for %v: index %d is proven as %x, proof says %x", id.Source, idx, have[:4], h[:4])
+			if have, ok := base.hash(n); ok && have != h {
+				return errors.Conflict.WithFormat("conflicting proof for %v: %d is validated as %x, proof says %x", id.Source, n, have[:4], h[:4])
 			}
 		}
 	}
-	if t.proven[k] == nil {
-		t.proven[k] = map[int64][32]byte{}
+	if t.validated[k] == nil {
+		t.validated[k] = map[uint64][32]byte{}
 	}
 	for i, el := range list.Elements {
+		n := uint64(start) + uint64(i) + 1
+		if base != nil {
+			if _, ok := base.at(n); !ok {
+				continue
+			}
+		}
 		var h [32]byte
 		copy(h[:], el)
-		t.proven[k][start+int64(i)] = h
+		t.validated[k][n] = h
+		if e, ok := t.held[k][n]; ok && e.Collected && e.Hash != h {
+			delete(t.held[k], n)
+		}
 	}
 	return nil
 }
 
-// IsProven reports whether a hash is in the stream's proven set.
-func (t *StagingTxn) IsProven(id StreamID, hash [32]byte) bool {
-	_, ok := t.ProvenIndex(id, hash)
-	return ok
+// IsValidated reports whether the hash validated at a number of a stream is
+// this one: what makes a collected entry runnable.
+func (t *StagingTxn) IsValidated(id StreamID, n uint64, hash [32]byte) bool {
+	v, ok := t.Validated(id, n)
+	return ok && v == hash
 }
 
-// ProvenIndex is the source chain index a proven hash sits at.
-func (t *StagingTxn) ProvenIndex(id StreamID, hash [32]byte) (int64, bool) {
+// Validated is the hash validated at a number of a stream, if any.
+func (t *StagingTxn) Validated(id StreamID, n uint64) ([32]byte, bool) {
 	if t == nil {
-		return 0, false
+		return zeroHash, false
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	k := id.key()
-	for idx, h := range t.proven[k] {
-		if h == hash {
-			return idx, true
-		}
+	if h, ok := t.validated[k][n]; ok {
+		return h, true
 	}
 	t.s.mu.Lock()
 	defer t.s.mu.Unlock()
 	if base := t.s.streams[k]; base != nil {
-		if idx, ok := base.provenIndex[hash]; ok {
-			return idx, true
-		}
+		return base.hash(n)
 	}
-	return 0, false
+	return zeroHash, false
 }
 
 // StageProof holds a collection proof from a source under the Directory
@@ -440,8 +591,7 @@ func (t *StagingTxn) ProofSources() []*url.URL {
 }
 
 // Release records that the block delivered a stream through n: at commit,
-// every entry held at or below n is dropped, and so is everything proven at
-// or below the chain index of the entry delivered last.
+// everything at or below n is dropped from both lists.
 func (t *StagingTxn) Release(id StreamID, n uint64) {
 	if t == nil {
 		return
@@ -463,41 +613,46 @@ func (t *StagingTxn) Commit() {
 	s := t.s
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for k, m := range t.held {
+	stream := func(k string) *streamState {
 		st := s.streams[k]
 		if st == nil {
-			st = newStreamState()
+			st = new(streamState)
 			s.streams[k] = st
 		}
+		return st
+	}
+	for k, m := range t.validated {
+		st := stream(k)
 		for n, h := range m {
-			if _, ok := st.held[n]; ok {
+			st.validate(n, h)
+			if e := st.entry(n); e != nil && e.Collected && e.Hash != h {
+				// Contradicted by the proof: not the stream's entry
+				if e.ID != nil {
+					delete(s.byID, e.ID.Hash())
+				}
+				st.entries[n-st.delivered-1] = nil
+			}
+		}
+	}
+	for k, m := range t.held {
+		st := stream(k)
+		for n, h := range m {
+			if st.entry(n) != nil {
 				continue // first sighting wins
 			}
-			st.held[n] = h
+			if v, ok := st.hash(n); ok && h.Collected && v != h.Hash {
+				continue
+			}
+			st.hold(n, h)
 			if h.ID != nil {
 				s.byID[h.ID.Hash()] = h
 			}
 		}
 	}
 	for k, n := range t.sighted {
-		st := s.streams[k]
-		if st == nil {
-			st = newStreamState()
-			s.streams[k] = st
-		}
+		st := stream(k)
 		if n > st.sighted {
 			st.sighted = n
-		}
-	}
-	for k, m := range t.proven {
-		st := s.streams[k]
-		if st == nil {
-			st = newStreamState()
-			s.streams[k] = st
-		}
-		for idx, h := range m {
-			st.proven[idx] = h
-			st.provenIndex[h] = idx
 		}
 	}
 	for k, dropped := range t.dropped {
@@ -517,30 +672,8 @@ func (t *StagingTxn) Commit() {
 		}
 	}
 	for k, n := range t.released {
-		st := s.streams[k]
-		if st == nil {
-			continue
-		}
-		var lastIdx int64 = -1
-		for num, h := range st.held {
-			if num > n {
-				continue
-			}
-			if idx, ok := st.provenIndex[h.Hash]; ok && idx > lastIdx {
-				lastIdx = idx
-			}
-			if h.ID != nil {
-				delete(s.byID, h.ID.Hash())
-			}
-			delete(st.held, num)
-		}
-		if lastIdx >= 0 {
-			for idx, h := range st.proven {
-				if idx <= lastIdx {
-					delete(st.proven, idx)
-					delete(st.provenIndex, h)
-				}
-			}
+		if st := s.streams[k]; st != nil {
+			st.release(n, s.byID)
 		}
 	}
 	t.reset()
@@ -559,8 +692,8 @@ func (t *StagingTxn) Discard() {
 // reset empties the transaction; the caller holds t.mu.
 func (t *StagingTxn) reset() {
 	t.held = map[string]map[uint64]*Held{}
+	t.validated = map[string]map[uint64][32]byte{}
 	t.sighted = map[string]uint64{}
-	t.proven = map[string]map[int64][32]byte{}
 	t.proofs = map[string]map[uint64][]*protocol.AnnotatedReceipt{}
 	t.sources = map[string]*url.URL{}
 	t.dropped = map[string]map[uint64]bool{}
