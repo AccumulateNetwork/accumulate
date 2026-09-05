@@ -427,8 +427,6 @@ func (x *Executor) sendSyntheticTransactionsForBlock(blockIndex uint64, blockRec
 	if !send || len(blk.Entries) == 0 {
 		return nil
 	}
-	seg := blk.Segment
-	to := seg.Last()
 
 	if blockReceipt == nil {
 		x.logger.Debug("Sending synthetic transactions for block", "module", "synthetic", "index", blockIndex)
@@ -455,6 +453,14 @@ func (x *Executor) sendSyntheticTransactionsForBlock(blockIndex uint64, blockRec
 
 	for _, k := range order {
 		group := byDest[k]
+		// The destination's own chain segment: proofs for its entries are built
+		// from it alone (executor spec, "One chain per pair, one stage per chain").
+		st := blk.Stream(group[0].seq.Destination)
+		if st == nil || st.Segment == nil || st.RootReceipt == nil {
+			x.logger.Error("Synthetic cache holds no chain segment for the destination; its synthetics are not dispatched", "module", "synthetic", "block", blockIndex, "destination", group[0].seq.Destination)
+			continue
+		}
+		seg, to := st.Segment, st.Segment.Last()
 		// One proof per message is what a single-message package amounts to, and
 		// a list of one element is slightly LARGER than the receipt it replaces —
 		// so do not pretend. Below the threshold, keep the old form.
@@ -465,14 +471,14 @@ func (x *Executor) sendSyntheticTransactionsForBlock(blockIndex uint64, blockRec
 		// 2 until the replica's effect is measured.
 		if len(group) < synthBundleMin || !x.globals().Active.ExecutorVersion.V2KourouEnabled() {
 			for _, o := range group {
-				err := x.sendSynthWithOwnProof(o, seg, blk.RootReceipt, blockReceipt, to, anchorBlock)
+				err := x.sendSynthWithOwnProof(o, seg, st.RootReceipt, blockReceipt, to, anchorBlock)
 				if err != nil {
 					return errors.UnknownError.Wrap(err)
 				}
 			}
 			continue
 		}
-		err := x.sendSynthPackages(group, seg, blk.RootReceipt, blockReceipt, to, anchorBlock)
+		err := x.sendSynthPackages(group, seg, st.RootReceipt, blockReceipt, to, anchorBlock)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}

@@ -213,11 +213,11 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.WithFormat("store block ledger: %w", err)
 	}
 
-	// Add the synthetic transaction chain to the root chain
-	var synthIndexIndex uint64
-	var synthRootPos int64 = -1
+	// Anchor each destination's synthetic chain this block appended to into
+	// the root chain, and remember where (executor spec, "One chain per
+	// pair, one stage per chain").
 	if block.State.Produced > 0 {
-		synthIndexIndex, synthRootPos, err = m.anchorSynthChain(block, rootChain)
+		err = m.anchorSynthChains(block, rootChain)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -227,7 +227,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 	// from the synthetic chain's anchor to the block's root is built from the
 	// segment this block appended. A block that produced nothing is held too,
 	// so a later lookup distinguishes "nothing to send" from a miss.
-	err = block.completeCacheBlock(rootChain, rootSeg, synthRootPos)
+	err = block.completeCacheBlock(rootChain, rootSeg)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -260,16 +260,23 @@ func (block *Block) Close() (execute.BlockState, error) {
 		}
 	}
 
-	// Add transaction-chain index entries for synthetic transactions
-	for _, e := range block.State.ChainUpdates.SynthEntries {
-		err = indexing.TransactionChain(block.Batch, e.Transaction).Add(&database.TransactionChainEntry{
-			Account:     m.Describe.Synthetic(),
-			Chain:       protocol.MainChain,
-			ChainIndex:  synthIndexIndex,
-			AnchorIndex: rootIndexIndex,
-		})
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("store transaction chain index: %w", err)
+	// Add transaction-chain index entries for synthetic transactions: each
+	// names the destination's chain and that chain's index entry for the block.
+	if block.cacheBlock != nil {
+		for _, e := range block.cacheBlock.Entries {
+			st := block.cacheBlock.Stream(e.Stream)
+			if st == nil {
+				continue
+			}
+			err = indexing.TransactionChain(block.Batch, e.Hash[:]).Add(&database.TransactionChainEntry{
+				Account:     m.Describe.Synthetic(),
+				Chain:       st.ChainName,
+				ChainIndex:  st.IndexIndex,
+				AnchorIndex: rootIndexIndex,
+			})
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("store transaction chain index: %w", err)
+			}
 		}
 	}
 
@@ -454,26 +461,37 @@ func getMajorHeight(desc execute.DescribeShim, batch *database.Batch) (uint64, e
 	return entry.BlockIndex, nil
 }
 
-// anchorSynthChain anchors the synthetic transaction chain.
-func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (indexIndex uint64, rootPos int64, err error) {
-	url := m.Describe.Synthetic()
-	indexIndex, _, err = addChainAnchor(rootChain, block.Batch.Account(url).MainChain(), block.Index)
-	if err != nil {
-		return 0, 0, errors.UnknownError.Wrap(err)
+// anchorSynthChains anchors each destination's synthetic chain this block
+// appended to into the root chain, records the chain's index entry for the
+// block, and remembers the root position for the block's proofs.
+func (m *Executor) anchorSynthChains(block *Block, rootChain *database.Chain) error {
+	if block.cacheBlock == nil {
+		return nil
 	}
-	rootPos = rootChain.Height() - 1 // the anchor just appended
-
-	err = block.Batch.SystemData(m.Describe.PartitionId).SyntheticIndexIndex(block.Index).Put(indexIndex)
-	if err != nil {
-		return 0, 0, errors.UnknownError.WithFormat("store synthetic transaction index index for block: %w", err)
+	record := block.Batch.Account(m.Describe.Synthetic())
+	keys := make([]string, 0, len(block.cacheBlock.Streams))
+	for k := range block.cacheBlock.Streams {
+		keys = append(keys, k)
 	}
-
-	block.State.ChainUpdates.DidUpdateChain(&protocol.BlockEntry{
-		Account: url,
-		Chain:   protocol.MainChain,
-	})
-
-	return indexIndex, rootPos, nil
+	sort.Strings(keys) // one order on every node: the root chain is hashed
+	for _, k := range keys {
+		st := block.cacheBlock.Streams[k]
+		partition, ok := protocol.ParsePartitionUrl(st.Destination)
+		if !ok {
+			return errors.InternalError.WithFormat("destination %v is not a partition", st.Destination)
+		}
+		indexIndex, _, err := addChainAnchor(rootChain, record.SyntheticChain(partition), block.Index)
+		if err != nil {
+			return errors.UnknownError.WithFormat("anchor synthetic chain to %v: %w", st.Destination, err)
+		}
+		st.IndexIndex = indexIndex
+		st.RootPos = rootChain.Height() - 1 // the anchor just appended
+		block.State.ChainUpdates.DidUpdateChain(&protocol.BlockEntry{
+			Account: m.Describe.Synthetic(),
+			Chain:   st.ChainName,
+		})
+	}
+	return nil
 }
 
 func (b *Block) shouldSendAnchor() bool {
@@ -851,18 +869,12 @@ func recordBlockLedger(ledger *database.Account, bl *database.BlockLedger) error
 // appended, in memory; the Directory anchors the block executed, for the
 // next block's dispatch; and the block record itself, present even when
 // nothing was produced so a lookup can tell "nothing to send" from a miss.
-func (block *Block) completeCacheBlock(rootChain *database.Chain, rootSeg *merkle.Segment, synthRootPos int64) error {
+func (block *Block) completeCacheBlock(rootChain *database.Chain, rootSeg *merkle.Segment) error {
 	blk := block.cacheBlock
 	if blk == nil {
-		synthChain := block.Batch.Account(block.Executor.Describe.Synthetic()).MainChain().Inner()
-		head, err := synthChain.Head().Get()
-		if err != nil {
-			return errors.UnknownError.WithFormat("load synthetic chain head: %w", err)
-		}
-		blk = &synthcache.Block{Index: block.Index, Segment: &merkle.Segment{First: head.Count, Before: head.Copy(), MarkMask: synthChain.MarkMask()}}
+		blk = &synthcache.Block{Index: block.Index, Streams: map[string]*synthcache.Stream{}}
 		block.cacheBlock = blk
 	}
-
 	// Extend the block's root segment with what this block appended: its own
 	// writes, read back from the batch, never from history.
 	height := rootChain.Height()
@@ -873,14 +885,16 @@ func (block *Block) completeCacheBlock(rootChain *database.Chain, rootSeg *merkl
 		}
 		rootSeg.Append(h)
 	}
-	if synthRootPos >= 0 {
-		receipt, err := rootSeg.Receipt(synthRootPos, height-1)
+	// Each destination's chain was anchored into the root chain at its own
+	// position; the receipt from there to the block's root completes what a
+	// proof for that destination's entries is built from.
+	for _, st := range blk.Streams {
+		receipt, err := rootSeg.Receipt(st.RootPos, height-1)
 		if err != nil {
-			return errors.UnknownError.WithFormat("build root receipt %d..%d: %w", synthRootPos, height-1, err)
+			return errors.UnknownError.WithFormat("build root receipt %d..%d for %v: %w", st.RootPos, height-1, st.Destination, err)
 		}
-		blk.RootReceipt = receipt
+		st.RootReceipt = receipt
 	}
-
 	for _, r := range block.State.ReceivedAnchors {
 		if da, ok := r.Body.(*protocol.DirectoryAnchor); ok {
 			block.cache.AddReceived(da)

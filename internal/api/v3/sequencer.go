@@ -273,27 +273,33 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 	if !ok {
 		return nil, errors.UnknownError.WithFormat("destination is not a partition")
 	}
+	// The destination's own chain: sequence number n is entry n-1 (executor
+	// spec, "One chain per pair, one stage per chain"). The v1 executor
+	// interleaved every destination on the main chain and mapped sequence
+	// numbers through an index chain.
 	ledger := batch.Account(s.partition.Synthetic())
-	sequenceChain, err := ledger.SyntheticSequenceChain(partition).Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic sequence chain: %w", err)
+	synthChain := ledger.SyntheticChain(partition)
+	entry := int64(num) - 1
+	if !globals.ExecutorVersion.V2Enabled() {
+		synthChain = ledger.MainChain()
+		sequenceChain, err := ledger.SyntheticSequenceChain(partition).Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load synthetic sequence chain: %w", err)
+		}
+		sequenceEntry := new(protocol.IndexEntry)
+		err = sequenceChain.EntryAs(int64(num)-1, sequenceEntry)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load synthetic sequence chain entry %d: %w", num-1, err)
+		}
+		entry = int64(sequenceEntry.Source)
 	}
-
-	// Load the Nth sequence chain entry
-	sequenceEntry := new(protocol.IndexEntry)
-	err = sequenceChain.EntryAs(int64(num)-1, sequenceEntry)
+	chain, err := synthChain.Get()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic sequence chain entry %d: %w", num-1, err)
+		return nil, errors.UnknownError.WithFormat("load synthetic chain for %v: %w", dst, err)
 	}
-
-	// Load the corresponding main chain entry
-	mainChain, err := ledger.MainChain().Get()
+	hash, err := chain.Entry(entry)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic main chain: %w", err)
-	}
-	hash, err := mainChain.Entry(int64(sequenceEntry.Source))
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d: %w", sequenceEntry.Source, err)
+		return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d for %v: %w", entry, dst, err)
 	}
 
 	r := new(api.MessageRecord[messaging.Message])
@@ -345,7 +351,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 	}
 
 	// Get the synthetic main chain receipt
-	synthReceipt, mainAnchorEntry, err := s.getReceiptForChainEntry(ledger.MainChain(), sequenceEntry.Source)
+	synthReceipt, mainAnchorEntry, err := s.getReceiptForChainEntry(synthChain, uint64(entry))
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -565,34 +571,21 @@ func (s *Sequencer) getSynthRange(batch *database.Batch, globals *core.GlobalVal
 	if !ok {
 		return nil, errors.UnknownError.WithFormat("destination is not a partition")
 	}
+	// The destination's own chain: sequence number n is entry n-1, so the
+	// proven span is exactly the requested messages (executor spec, "One chain
+	// per pair, one stage per chain").
 	ledger := batch.Account(s.partition.Synthetic())
-	sequenceChain, err := ledger.SyntheticSequenceChain(partition).Get()
+	synthChain := ledger.SyntheticChain(partition)
+	chain, err := synthChain.Get()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic sequence chain: %w", err)
+		return nil, errors.UnknownError.WithFormat("load synthetic chain for %v: %w", dst, err)
 	}
 
-	mainChain, err := ledger.MainChain().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic main chain: %w", err)
-	}
-
-	// Map sequence numbers to synthetic main chain indices and load each
-	// message. The main chain interleaves messages for all destinations, so
-	// the proven range may cover more entries than the requested messages -
-	// that is fine, extra elements are just proven hashes.
-	indices := make([]uint64, 0, end-start+1)
 	records := make([]*api.MessageRecord[messaging.Message], 0, end-start+1)
 	for num := start; num <= end; num++ {
-		sequenceEntry := new(protocol.IndexEntry)
-		err = sequenceChain.EntryAs(int64(num)-1, sequenceEntry)
+		hash, err := chain.Entry(int64(num) - 1)
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load synthetic sequence chain entry %d: %w", num-1, err)
-		}
-		indices = append(indices, sequenceEntry.Source)
-
-		hash, err := mainChain.Entry(int64(sequenceEntry.Source))
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d: %w", sequenceEntry.Source, err)
+			return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d for %v: %w", num-1, dst, err)
 		}
 
 		var seq *messaging.SequencedMessage
@@ -640,16 +633,16 @@ func (s *Sequencer) getSynthRange(batch *database.Batch, globals *core.GlobalVal
 
 	// Extend the proven range to the block-boundary anchor point covering the
 	// last message, so the proof can be continued to a directory-anchored root
-	indexChain, err := ledger.MainChain().Index().Get()
+	indexChain, err := synthChain.Index().Get()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic main index chain: %w", err)
+		return nil, errors.UnknownError.WithFormat("load synthetic index chain for %v: %w", dst, err)
 	}
 	if indexChain.Height() == 0 {
-		return nil, errors.Conflict.With("synthetic main index chain is empty")
+		return nil, errors.Conflict.WithFormat("synthetic index chain for %v is empty", dst)
 	}
-	_, mainAnchorEntry, err := indexing.SearchIndexChain(indexChain, uint64(indexChain.Height()-1), indexing.MatchAfter, indexing.SearchIndexChainBySource(indices[len(indices)-1]))
+	_, mainAnchorEntry, err := indexing.SearchIndexChain(indexChain, uint64(indexChain.Height()-1), indexing.MatchAfter, indexing.SearchIndexChainBySource(end-1))
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("locate index entry for synthetic chain entry %d: %w", indices[len(indices)-1], err)
+		return nil, errors.UnknownError.WithFormat("locate index entry for synthetic chain entry %d: %w", end-1, err)
 	}
 
 	// Prefer a continuation to our own root chain, under an anchor the
@@ -674,7 +667,7 @@ func (s *Sequencer) getSynthRange(batch *database.Batch, globals *core.GlobalVal
 		return nil, errors.NotReady.With("the directory has not receipted the block yet")
 	}
 
-	list, err := merkle.GetReceiptList(ledger.MainChain().Inner(), int64(indices[0]), int64(mainAnchorEntry.Source))
+	list, err := merkle.GetReceiptList(synthChain.Inner(), int64(start)-1, int64(mainAnchorEntry.Source))
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("build receipt list: %w", err)
 	}

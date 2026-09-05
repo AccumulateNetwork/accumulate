@@ -66,7 +66,7 @@ func (s *Sequencer) entryRecord(globals *core.GlobalValues, e *synthcache.Entry,
 	r.Companion = e.Companion
 
 	if blk != nil {
-		r.SourceReceipt, err = blk.Proof(e.Index)
+		r.SourceReceipt, err = blk.Proof(e.Stream, e.Index)
 		if err != nil {
 			return nil, errors.InternalError.WithFormat("build proof for %v: %w", r.ID, err)
 		}
@@ -138,12 +138,16 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 				}
 				return nil, errors.NotReady.WithFormat("block %d was dispatched %d blocks ago and is in flight", e.Block, s.cache.Newest()-blk.DispatchedAt)
 			}
+			st := blk.Stream(dst)
+			if st == nil || st.Segment == nil {
+				return nil, errors.NotFound.WithFormat("block %d holds no chain segment for %v", e.Block, dst)
+			}
 			switch {
 			case span == nil:
-				cp := *blk.Segment
+				cp := *st.Segment
 				span = &cp
-			case blk.Segment.First == span.Last()+1:
-				span.Elements = append(append([][]byte(nil), span.Elements...), blk.Segment.Elements...)
+			case st.Segment.First == span.Last()+1:
+				span.Elements = append(append([][]byte(nil), span.Elements...), st.Segment.Elements...)
 			default:
 				return nil, errors.InternalError.WithFormat("blocks %d and %d are not consecutive on the synthetic chain", lastIndex, e.Block)
 			}
@@ -168,7 +172,7 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 	if err != nil {
 		return nil, errors.InternalError.WithFormat("build receipt list: %w", err)
 	}
-	list.ContinuedReceipt, err = last.Continuation()
+	list.ContinuedReceipt, err = last.Continuation(dst)
 	if err != nil {
 		return nil, errors.InternalError.WithFormat("continue receipt list: %w", err)
 	}

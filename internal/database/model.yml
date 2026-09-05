@@ -253,6 +253,17 @@
       parameters: # Indexed by chains
       - name: Partition
         type: string
+    - name: SyntheticChain
+      description: the synthetic messages this partition produced for one destination, in sequence order (executor spec, "One chain per pair, one stage per chain")
+      type: other
+      dataType: Chain2
+      hasChains: true
+      pointer: true
+      private: true
+      index: getSyntheticChainKeys
+      parameters: # Indexed by chains
+      - name: Partition
+        type: string
     - name: AnchorChain
       type: entity
       private: true

@@ -48,6 +48,7 @@ func newChain2(parent record.Record, _ logging.Logger, _ record.Store, key *reco
 		"SignatureChain",
 		"ScratchChain",
 		"AnchorSequenceChain",
+		"SyntheticChain",
 		"SyntheticSequenceChain": // Bug, this is actually an index chain
 		typ = merkle.ChainTypeTransaction
 	case "RootChain",
@@ -284,6 +285,9 @@ func (a *Account) chainByName(name string) *Chain2 {
 
 	case "synthetic-sequence":
 		return a.SyntheticSequenceChain(arg)
+
+	case "synthetic":
+		return a.SyntheticChain(arg)
 	}
 
 	return nil
@@ -301,6 +305,32 @@ func splitChainName(name string) (first, arg, rest string, ok bool) {
 
 func (c *Account) SyntheticSequenceChain(partition string) *Chain2 {
 	return c.getSyntheticSequenceChain(strings.ToLower(partition))
+}
+
+// SyntheticChain is the chain of synthetic messages this partition produced
+// for one destination, in sequence order: entry n-1 is sequence number n, so
+// a collection proof over a span of it is exactly the destination's entries
+// (executor spec, "One chain per pair, one stage per chain").
+func (c *Account) SyntheticChain(partition string) *Chain2 {
+	return c.getSyntheticChain(strings.ToLower(partition))
+}
+
+func (c *Account) getSyntheticChainKeys() ([]accountSyntheticChainKey, error) {
+	chains, err := c.Chains().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	keys := make([]accountSyntheticChainKey, 0, len(chains))
+	seen := map[string]bool{}
+	for _, c := range chains {
+		first, arg, rest, ok := splitChainName(strings.ToLower(c.Name))
+		if !ok || first != "synthetic" || rest != "" || seen[arg] {
+			continue
+		}
+		seen[arg] = true
+		keys = append(keys, accountSyntheticChainKey{arg})
+	}
+	return keys, nil
 }
 
 func (c *Account) AnchorChain(partition string) *AccountAnchorChain {

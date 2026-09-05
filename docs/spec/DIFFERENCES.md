@@ -183,7 +183,7 @@ chaos returning to a soak.
 
 ---
 
-### E12. One interleaved synthetic chain; stages align by hash; anchors are not staged
+### E12. Stages align by hash; anchors are not staged
 
 *(no issue yet)*
 
@@ -192,21 +192,28 @@ chain"): a synthetic chain per destination at the source; a collection proof
 covers one chain, so its index is the sequence number; one stage per chain
 holding two index-aligned lists; anchors through the same stage.
 
-**Code**: a partition keeps one synthetic main chain with every destination's
-entries interleaved, plus a per-destination sequence (index) chain that maps
-sequence numbers to positions on it. A collection proof covers a span of the
-interleaved chain and carries other destinations' hashes; the destination's
-stage therefore keeps its validated hashes in a map keyed by hash and asks "is
-this entry's hash validated" rather than aligning two lists, cannot recognise
-a validated hash whose entry it lacks unless a later entry of its own reveals
-the hole, and the producer cache and sequencer follow the interleaved chain.
-Anchors are executed with their signatures and not staged; proofs for them are
-held in anchor staging by Directory block (H9). Everything in "One chain per
-pair" that is not yet built follows from the single chain.
+**Code**, as of 2026-09-05: the chains are per destination
+(`SyntheticChain(partition)`, entry n-1 is sequence number n, each anchored
+into the root chain when it changes); the producer cache holds a segment per
+destination chain per block; dispatch proofs and the sequencer's range answers
+cover one chain, so a proof's elements are exactly the destination's entries
+(`test/e2e` `TestSyntheticChainPerDestination`). The sequence (index) chains
+are no longer written; the v1 executor's interleaved layout is served only
+under a v1 network version. What remains: the destination's stage still keeps
+its validated hashes in a map keyed by hash and asks "is this entry's hash
+validated" rather than aligning two lists by index, and so cannot recognise a
+validated hash whose entry it lacks until a later entry of its own reveals the
+hole. Anchors are executed with their signatures and not staged; proofs for
+them are held in anchor staging by Directory block (H9). A consequence seen
+while building this: an anchor re-sent by the source's anchor healer reaches
+the executor directly, and if its body differs from the one already delivered
+at that sequence number (a different state-tree root, for instance) the
+"already delivered" result fails the whole block instead of discarding the
+entry — a stage tosses anything at or below Delivered before it executes,
+which is what step 4 gives anchors.
 
-**Size**: large — the chain layout (model, block close, root anchoring), the
-producer cache and sequencer per destination, the stage as two lists, anchors
-through it, the acceptance tests and reproductions. Plan in PLAN.md, E12.
+**Size**: medium — the stage as two lists, anchors through it, the
+reproductions. Plan in PLAN.md, E12 (steps 1–2 done).
 
 ---
 

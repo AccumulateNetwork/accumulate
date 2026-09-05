@@ -313,6 +313,7 @@ type Account struct {
 	anchorSequenceChain    *Chain2
 	majorBlockChain        *Chain2
 	syntheticSequenceChain map[accountSyntheticSequenceChainMapKey]*Chain2
+	syntheticChain         map[accountSyntheticChainMapKey]*Chain2
 	anchorChain            map[accountAnchorChainMapKey]*AccountAnchorChain
 	chains                 values.Set[*protocol.ChainMetadata]
 	syntheticAnchors       values.Set[[32]byte]
@@ -368,6 +369,18 @@ type accountSyntheticSequenceChainMapKey struct {
 
 func (k accountSyntheticSequenceChainKey) ForMap() accountSyntheticSequenceChainMapKey {
 	return accountSyntheticSequenceChainMapKey{k.Partition}
+}
+
+type accountSyntheticChainKey struct {
+	Partition string
+}
+
+type accountSyntheticChainMapKey struct {
+	Partition string
+}
+
+func (k accountSyntheticChainKey) ForMap() accountSyntheticChainMapKey {
+	return accountSyntheticChainMapKey{k.Partition}
 }
 
 type accountAnchorChainKey struct {
@@ -552,6 +565,14 @@ func (c *Account) newSyntheticSequenceChain(k accountSyntheticSequenceChainKey) 
 	return newChain2(c, c.logger.L, c.store, c.key.Append("SyntheticSequenceChain", k.Partition), "synthetic-sequence(%[4]v)")
 }
 
+func (c *Account) getSyntheticChain(partition string) *Chain2 {
+	return values.GetOrCreateMap(c, &c.syntheticChain, accountSyntheticChainKey{partition}, (*Account).newSyntheticChain)
+}
+
+func (c *Account) newSyntheticChain(k accountSyntheticChainKey) *Chain2 {
+	return newChain2(c, c.logger.L, c.store, c.key.Append("SyntheticChain", k.Partition), "synthetic(%[4]v)")
+}
+
 func (c *Account) getAnchorChain(partition string) *AccountAnchorChain {
 	return values.GetOrCreateMap(c, &c.anchorChain, accountAnchorChainKey{partition}, (*Account).newAnchorChain)
 }
@@ -680,13 +701,23 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		}
 		v := c.getSyntheticSequenceChain(partition)
 		return v, key.SliceI(2), nil
-	case "AnchorChain":
+	case "SyntheticChain":
 		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (10)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.InternalError.With("bad key for account (11)")
+		}
+		v := c.getSyntheticChain(partition)
+		return v, key.SliceI(2), nil
+	case "AnchorChain":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (12)")
+		}
+		partition, okPartition := key.Get(1).(string)
+		if !okPartition {
+			return nil, nil, errors.InternalError.With("bad key for account (13)")
 		}
 		v := c.getAnchorChain(partition)
 		return v, key.SliceI(2), nil
@@ -699,7 +730,7 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Data":
 		return c.Data(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for account (12)")
+		return nil, nil, errors.InternalError.With("bad key for account (14)")
 	}
 }
 
@@ -776,6 +807,11 @@ func (c *Account) IsDirty() bool {
 			return true
 		}
 	}
+	for _, v := range c.syntheticChain {
+		if v.IsDirty() {
+			return true
+		}
+	}
 	for _, v := range c.anchorChain {
 		if v.IsDirty() {
 			return true
@@ -815,6 +851,9 @@ func (c *Account) dirtyChains() []*MerkleManager {
 	for _, v := range c.syntheticSequenceChain {
 		chains = append(chains, v.dirtyChains()...)
 	}
+	for _, v := range c.syntheticChain {
+		chains = append(chains, v.dirtyChains()...)
+	}
 	for _, v := range c.anchorChain {
 		chains = append(chains, v.dirtyChains()...)
 	}
@@ -851,6 +890,7 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.anchorSequenceChain, c.newAnchorSequenceChain, opts, fn)
 	values.WalkField(&err, c.majorBlockChain, c.newMajorBlockChain, opts, fn)
 	values.WalkMap(&err, c.syntheticSequenceChain, c.newSyntheticSequenceChain, c.getSyntheticSequenceKeys, opts, fn)
+	values.WalkMap(&err, c.syntheticChain, c.newSyntheticChain, c.getSyntheticChainKeys, opts, fn)
 	values.WalkMap(&err, c.anchorChain, c.newAnchorChain, c.getAnchorKeys, opts, fn)
 	values.WalkField(&err, c.chains, c.newChains, opts, fn)
 	if !opts.IgnoreIndices {
@@ -895,6 +935,9 @@ func (c *Account) baseCommit() error {
 	values.Commit(&err, c.anchorSequenceChain)
 	values.Commit(&err, c.majorBlockChain)
 	for _, v := range c.syntheticSequenceChain {
+		values.Commit(&err, v)
+	}
+	for _, v := range c.syntheticChain {
 		values.Commit(&err, v)
 	}
 	for _, v := range c.anchorChain {

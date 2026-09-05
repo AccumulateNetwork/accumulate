@@ -8,11 +8,11 @@ package database
 
 import (
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 

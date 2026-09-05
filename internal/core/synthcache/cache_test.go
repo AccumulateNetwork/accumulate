@@ -28,7 +28,7 @@ func TestTxn_CommitAndDiscard(t *testing.T) {
 	tx := c.Begin(7)
 	e := entry(7, "acc://bvn-BVN1.acme", 3, 10)
 	tx.Add(e)
-	tx.SetBlock(&Block{Index: 7, Segment: &merkle.Segment{First: 10}, Entries: []*Entry{e}})
+	tx.SetBlock(&Block{Index: 7, Streams: map[string]*Stream{streamKey(e.Stream): {Destination: e.Stream, Segment: &merkle.Segment{First: 10}}}, Entries: []*Entry{e}})
 	tx.AddAnchor(2, 6, &protocol.Transaction{})
 	tx.AddReceived(&protocol.DirectoryAnchor{})
 

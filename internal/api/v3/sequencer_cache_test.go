@@ -9,6 +9,7 @@ package api
 import (
 	"context"
 	"crypto/ed25519"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -72,7 +73,9 @@ func TestSequencer_AnswersFromTheCache(t *testing.T) {
 	for _, e := range entries {
 		tx.Add(e)
 	}
-	tx.SetBlock(&synthcache.Block{Index: 7, Segment: seg, RootReceipt: rootReceipt, Entries: entries})
+	tx.SetBlock(&synthcache.Block{Index: 7, Streams: map[string]*synthcache.Stream{
+		strings.ToLower(bvn1.String()): {Destination: bvn1, ChainName: "synthetic(bvn1)", Segment: seg, RootReceipt: rootReceipt},
+	}, Entries: entries})
 	anchorTxn := &protocol.Transaction{Body: &protocol.BlockValidatorAnchor{PartitionAnchor: protocol.PartitionAnchor{Source: protocol.PartitionUrl("BVN0"), MinorBlockIndex: 7}}}
 	tx.AddAnchor(3, 7, anchorTxn)
 	tx.Commit()

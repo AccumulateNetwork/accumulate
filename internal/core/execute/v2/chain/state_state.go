@@ -90,8 +90,7 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 }
 
 type ChainUpdates struct {
-	Entries      []*protocol.BlockEntry
-	SynthEntries []*database.BlockStateSynthTxnEntry
+	Entries []*protocol.BlockEntry
 
 	// Segments holds, for each anchor chain this block appended to, the
 	// chain's state before the block's first append and the hashes appended
@@ -113,7 +112,6 @@ func (c *ChainUpdates) Merge(d *ChainUpdates) {
 	for _, u := range d.Entries {
 		c.DidUpdateChain(u)
 	}
-	c.SynthEntries = append(c.SynthEntries, d.SynthEntries...)
 	for k, seg := range d.Segments {
 		if c.Segments == nil {
 			c.Segments = map[string]*merkle.Segment{}
@@ -139,17 +137,6 @@ func (c *ChainUpdates) DidUpdateChain(update *protocol.BlockEntry) {
 
 // DidAddChainEntry records a chain update in the block state.
 func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex, sourceBlock uint64) error {
-	if name == protocol.MainChain && typ == protocol.ChainTypeTransaction {
-		partition, ok := protocol.ParsePartitionUrl(u)
-		if ok && protocol.PartitionUrl(partition).JoinPath(protocol.Synthetic).Equal(u) {
-			c.SynthEntries = append(c.SynthEntries, &database.BlockStateSynthTxnEntry{
-				Account:     u,
-				Transaction: entry,
-				ChainEntry:  index,
-			})
-		}
-	}
-
 	var update protocol.BlockEntry
 	update.Account = u
 	update.Chain = name

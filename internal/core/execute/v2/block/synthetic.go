@@ -79,28 +79,29 @@ func (x *Executor) produceSyntheticInto(batch *database.Batch, produced []*Produ
 	// Shouldn't this be recorded somewhere?
 	state := new(chain.ChainUpdates)
 
-	// The synthetic chain's state before this block's first element: what a
-	// proof over the block's entries is built from, captured once, from the
-	// head the block already holds.
-	synthChain := batch.Account(x.Describe.Synthetic()).MainChain().Inner()
-	head, err := synthChain.Head().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic chain head: %w", err)
-	}
-	blk := &synthcache.Block{
-		Index:   block,
-		Segment: &merkle.Segment{First: head.Count, Before: head.Copy(), MarkMask: synthChain.MarkMask()},
-	}
+	blk := &synthcache.Block{Index: block, Streams: map[string]*synthcache.Stream{}}
 
 	// Finalize the produced transactions
 	for _, p := range produced {
-		seq, index, err := x.buildSynthTxn(state, batch, p, block)
+		seq, index, before, err := x.buildSynthTxn(state, batch, p, block)
 		if err != nil {
 			return nil, err
 		}
 
 		h := seq.Hash()
-		blk.Segment.Append(h[:])
+		// One segment per destination: the chain's state before this block's
+		// first entry for it, then the entries in order (executor spec, "One
+		// chain per pair, one stage per chain"). A proof over the segment is
+		// exactly the destination's entries, and its index is the sequence
+		// number less one.
+		st := blk.Stream(seq.Destination)
+		if st == nil {
+			partition, _ := protocol.ParsePartitionUrl(seq.Destination)
+			c := batch.Account(x.Describe.Synthetic()).SyntheticChain(partition)
+			st = &synthcache.Stream{Destination: seq.Destination, ChainName: c.Name(), Segment: &merkle.Segment{First: index, Before: before, MarkMask: c.Inner().MarkMask()}}
+			blk.Streams[synthcache.StreamKey(seq.Destination)] = st
+		}
+		st.Segment.Append(h[:])
 		entry := &synthcache.Entry{Stream: seq.Destination, Number: seq.Number, Index: index, Block: block, Hash: h, Seq: seq}
 		// The transaction the message belongs to travels with it. It
 		// executed in this block or is pending here, so it is recent state.
@@ -132,7 +133,7 @@ func (x *Executor) produceSyntheticInto(batch *database.Batch, produced []*Produ
 		}
 	}
 
-	err = batch.Commit()
+	err := batch.Commit()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("commit batch: %w", err)
 	}
@@ -217,13 +218,13 @@ func adjust64(prod *ProducedMessage) error {
 	return nil
 }
 
-func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batch, prod *ProducedMessage, block uint64) (*messaging.SequencedMessage, int64, error) {
+func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batch, prod *ProducedMessage, block uint64) (*messaging.SequencedMessage, int64, *merkle.State, error) {
 	// Generate a synthetic tx and send to the router. Need to track txid to
 	// make sure they get processed.
 
 	err := adjust64(prod)
 	if err != nil {
-		return nil, 0, errors.UnknownError.WithFormat("pad synthetic message: %w", err)
+		return nil, 0, nil, errors.UnknownError.WithFormat("pad synthetic message: %w", err)
 	}
 
 	var ledger *protocol.SyntheticLedger
@@ -236,7 +237,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 
 	destPart, err := m.Router.RouteAccount(prod.Destination)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 	destPartUrl := protocol.PartitionUrl(destPart)
 	destLedger := ledger.Partition(destPartUrl)
@@ -257,7 +258,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	// Update the ledger
 	err = record.Main().Put(ledger)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 
 	// Store the transaction, its status, and the initiator
@@ -267,43 +268,40 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 			Code: errors.Remote,
 		})
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 
-	// Add the transaction to the synthetic transaction chain
-	chain, err := record.MainChain().Get()
+	// Add the transaction to the destination's own synthetic chain: entry n-1
+	// is sequence number n, so a proof over a span of the chain is exactly the
+	// destination's entries in order (executor spec, "One chain per pair, one
+	// stage per chain").
+	chain2 := record.SyntheticChain(destPart)
+	before, err := chain2.Head().Get()
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, errors.UnknownError.WithFormat("load synthetic chain head: %w", err)
+	}
+	before = before.Copy()
+	chain, err := chain2.Get()
+	if err != nil {
+		return nil, 0, nil, err
 	}
 
 	h := seq.Hash()
 	index := chain.Height()
+	if uint64(index)+1 != seq.Number {
+		return nil, 0, nil, errors.InternalError.WithFormat("synthetic chain to %v is at %d but the next sequence number is %d", seq.Destination, index, seq.Number)
+	}
 	err = chain.AddEntry(h[:], false)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 
-	err = state.DidAddChainEntry(batch, m.Describe.Synthetic(), protocol.MainChain, protocol.ChainTypeTransaction, h[:], uint64(index), 0, 0)
+	err = state.DidAddChainEntry(batch, m.Describe.Synthetic(), chain2.Name(), protocol.ChainTypeTransaction, h[:], uint64(index), 0, 0)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 
-	partition, ok := protocol.ParsePartitionUrl(seq.Destination)
-	if !ok {
-		return nil, 0, errors.InternalError.WithFormat("destination URL is not a valid partition")
-	}
-
-	indexIndex, err := addIndexChainEntry(record.SyntheticSequenceChain(partition), &protocol.IndexEntry{
-		Source: uint64(index),
-	})
-	if err != nil {
-		return nil, 0, err
-	}
-	if indexIndex+1 != seq.Number {
-		m.logger.Error("Sequence number does not match index chain index", "seq-num", seq.Number, "index", indexIndex, "source", seq.Source, "destination", seq.Destination)
-	}
-
-	return seq, index, nil
+	return seq, index, before, nil
 }
 
 func putMessageWithStatus(batch *database.Batch, message messaging.Message, status *protocol.TransactionStatus) error {

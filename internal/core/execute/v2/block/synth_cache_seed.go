@@ -49,74 +49,89 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64) error {
 }
 
 // rebuildCacheBlock reads what block b produced and what its proofs are built
-// from, by position. A block that produced nothing has no synthetic index
-// entry and is held empty, so dispatch can tell "nothing to send" from a miss.
+// from, by position, one destination chain at a time (executor spec, "One
+// chain per pair, one stage per chain"). A block that appended to no chain is
+// held empty, so dispatch can tell "nothing to send" from a miss.
 func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcache.Block, error) {
-	indexIndex, err := batch.SystemData(x.Describe.PartitionId).SyntheticIndexIndex(b).Get()
-	switch {
-	case err == nil:
-	case errors.Is(err, errors.NotFound):
-		return &synthcache.Block{Index: b}, nil
-	default:
-		return nil, errors.UnknownError.WithFormat("load synthetic index index: %w", err)
-	}
+	blk := &synthcache.Block{Index: b, Streams: map[string]*synthcache.Stream{}}
 
 	record := batch.Account(x.Describe.Synthetic())
-	synthIndexChain, err := record.MainChain().Index().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic index chain: %w", err)
-	}
-	indexEntry := new(protocol.IndexEntry)
-	err = synthIndexChain.EntryAs(int64(indexIndex), indexEntry)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic index chain entry %d: %w", indexIndex, err)
-	}
-	to := int64(indexEntry.Source)
-	var from int64 = 1 // skip genesis
-	if indexIndex > 0 {
-		prev := new(protocol.IndexEntry)
-		err = synthIndexChain.EntryAs(int64(indexIndex-1), prev)
+	for _, part := range x.globals().Active.Network.Partitions {
+		dst := protocol.PartitionUrl(part.ID)
+		c := record.SyntheticChain(part.ID)
+		// Existence is read from the head: Chain2.Get registers the chain on
+		// the account, and a seed must write nothing. A chain never appended
+		// to has no head and is skipped before anything registers it.
+		head, err := c.Index().Head().Get()
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load synthetic index chain entry %d: %w", indexIndex-1, err)
+			return nil, errors.UnknownError.WithFormat("load synthetic index chain head for %v: %w", dst, err)
 		}
-		from = int64(prev.Source) + 1
-	}
-
-	synthChain, err := record.MainChain().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic chain: %w", err)
-	}
-	before, err := synthChain.State(from - 1)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic chain state before %d: %w", from, err)
-	}
-	blk := &synthcache.Block{Index: b, Segment: &merkle.Segment{First: from, Before: before, MarkMask: record.MainChain().Inner().MarkMask()}}
-
-	hashes, err := synthChain.Entries(from, to+1)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic chain entries %d..%d: %w", from, to, err)
-	}
-	for i, hash := range hashes {
-		var seq *messaging.SequencedMessage
-		err := batch.Message2(hash).Main().GetAs(&seq)
+		if head.Count == 0 {
+			continue
+		}
+		index, err := c.Index().Get()
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load synthetic message: %w", err)
+			return nil, errors.UnknownError.WithFormat("load synthetic index chain for %v: %w", dst, err)
 		}
-		blk.Segment.Append(hash)
-		e := &synthcache.Entry{Stream: seq.Destination, Number: seq.Number, Index: from + int64(i), Block: b, Hash: seq.Hash(), Seq: seq}
-		if msg, ok := seq.Message.(messaging.MessageForTransaction); ok && seq.Message.Type() != messaging.MessageTypeBlockAnchor {
-			var txn messaging.MessageWithTransaction
-			err := batch.Message(msg.GetTxID().Hash()).Main().GetAs(&txn)
+		indexIndex, indexEntry, err := indexing.SearchIndexChain(index, uint64(index.Height()-1), indexing.MatchExact, indexing.SearchIndexChainByBlock(b))
+		switch {
+		case err == nil:
+		case errors.Is(err, errors.NotFound):
+			continue // nothing for this destination in block b
+		default:
+			return nil, errors.UnknownError.WithFormat("locate block %d on the synthetic index chain for %v: %w", b, dst, err)
+		}
+		to := int64(indexEntry.Source)
+		var from int64
+		if indexIndex > 0 {
+			prev := new(protocol.IndexEntry)
+			err = index.EntryAs(int64(indexIndex-1), prev)
 			if err != nil {
-				return nil, errors.UnknownError.WithFormat("load transaction for synthetic message: %w", err)
+				return nil, errors.UnknownError.WithFormat("load synthetic index chain entry %d for %v: %w", indexIndex-1, dst, err)
 			}
-			e.Companion = txn
+			from = int64(prev.Source) + 1
 		}
-		blk.Entries = append(blk.Entries, e)
+
+		chain, err := c.Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load synthetic chain for %v: %w", dst, err)
+		}
+		before, err := chain.State(from - 1)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load synthetic chain state for %v before %d: %w", dst, from, err)
+		}
+		st := &synthcache.Stream{Destination: dst, ChainName: c.Name(), IndexIndex: indexIndex, RootPos: int64(indexEntry.Anchor), Segment: &merkle.Segment{First: from, Before: before, MarkMask: c.Inner().MarkMask()}}
+		blk.Streams[synthcache.StreamKey(dst)] = st
+
+		hashes, err := chain.Entries(from, to+1)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load synthetic chain entries %d..%d for %v: %w", from, to, dst, err)
+		}
+		for i, hash := range hashes {
+			var seq *messaging.SequencedMessage
+			err := batch.Message2(hash).Main().GetAs(&seq)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("load synthetic message: %w", err)
+			}
+			st.Segment.Append(hash)
+			e := &synthcache.Entry{Stream: seq.Destination, Number: seq.Number, Index: from + int64(i), Block: b, Hash: seq.Hash(), Seq: seq}
+			if msg, ok := seq.Message.(messaging.MessageForTransaction); ok && seq.Message.Type() != messaging.MessageTypeBlockAnchor {
+				var txn messaging.MessageWithTransaction
+				err := batch.Message(msg.GetTxID().Hash()).Main().GetAs(&txn)
+				if err != nil {
+					return nil, errors.UnknownError.WithFormat("load transaction for synthetic message: %w", err)
+				}
+				e.Companion = txn
+			}
+			blk.Entries = append(blk.Entries, e)
+		}
+	}
+	if len(blk.Streams) == 0 {
+		return blk, nil
 	}
 
-	// The receipt from the synthetic chain's anchor in the root chain to the
-	// block's root
+	// The block's root chain entry: every stream's root receipt runs from the
+	// stream's anchor to it.
 	ledger := batch.Account(x.Describe.Ledger())
 	rootIndex, err := ledger.RootChain().Index().Get()
 	if err != nil {
@@ -133,9 +148,11 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
 	}
-	blk.RootReceipt, err = root.Receipt(int64(indexEntry.Anchor), int64(rootEntry.Source))
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("get root chain receipt from %d to %d: %w", indexEntry.Anchor, rootEntry.Source, err)
+	for _, st := range blk.Streams {
+		st.RootReceipt, err = root.Receipt(st.RootPos, int64(rootEntry.Source))
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("get root chain receipt from %d to %d: %w", st.RootPos, rootEntry.Source, err)
+		}
 	}
 	return blk, nil
 }

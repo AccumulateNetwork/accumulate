@@ -51,10 +51,9 @@ type Entry struct {
 // Directory's receipt for the block arrives later, in a DirectoryAnchor,
 // and is combined at dispatch.
 type Block struct {
-	Index       uint64
-	Segment     *merkle.Segment
-	RootReceipt *merkle.Receipt
-	Entries     []*Entry // in synthetic chain order
+	Index   uint64
+	Streams map[string]*Stream // by destination: this block's span of each synthetic chain
+	Entries []*Entry           // in production order
 
 	// Set when the block's synthetics were dispatched: the Directory anchor
 	// they were proven under and the Directory's receipt for the block (nil
@@ -66,6 +65,29 @@ type Block struct {
 	DirectoryReceipt *protocol.PartitionAnchorReceipt
 }
 
+// A Stream is this block's span of one destination's synthetic chain
+// (executor spec, "One chain per pair, one stage per chain"): the chain's
+// state before the block's first entry for that destination and the entries
+// since, the receipt from the chain's anchor in the root chain to the root at
+// close, and where that anchor landed. A proof for the destination's entries
+// is built from this and nothing else; its index is the sequence number.
+type Stream struct {
+	Destination *url.URL
+	ChainName   string
+	Segment     *merkle.Segment
+	RootReceipt *merkle.Receipt
+	RootPos     int64  // the chain's anchor's position in the root chain
+	IndexIndex  uint64 // the chain's index chain entry for this block
+}
+
+// Stream is the block's span of the chain to dst, or nil.
+func (b *Block) Stream(dst *url.URL) *Stream {
+	if b == nil || b.Streams == nil {
+		return nil
+	}
+	return b.Streams[streamKey(dst)]
+}
+
 // InFlightBlocks is how many of the producer's blocks a dispatched block is
 // considered in flight: its entries are on their way and are not served to a
 // healing request, so an answer never duplicates a delivery that is about to
@@ -75,30 +97,32 @@ const InFlightBlocks = 8
 // Proof is the receipt from the entry at index to the anchor the block was
 // dispatched under: through the synthetic chain, the root chain and, off the
 // Directory, the Directory's receipt. Nil until the block is dispatched.
-func (b *Block) Proof(index int64) (*merkle.Receipt, error) {
-	if !b.Dispatched || b.Segment == nil || b.RootReceipt == nil {
+func (b *Block) Proof(dst *url.URL, index int64) (*merkle.Receipt, error) {
+	st := b.Stream(dst)
+	if !b.Dispatched || st == nil || st.Segment == nil || st.RootReceipt == nil {
 		return nil, nil
 	}
-	synth, err := b.Segment.Receipt(index, b.Segment.Last())
+	synth, err := st.Segment.Receipt(index, st.Segment.Last())
 	if err != nil {
 		return nil, err
 	}
 	if b.DirectoryReceipt == nil {
-		return synth.Combine(b.RootReceipt)
+		return synth.Combine(st.RootReceipt)
 	}
-	return synth.Combine(b.RootReceipt, b.DirectoryReceipt.RootChainReceipt)
+	return synth.Combine(st.RootReceipt, b.DirectoryReceipt.RootChainReceipt)
 }
 
 // Continuation is what a receipt list over the block's entries continues
 // with to reach the anchor the block was dispatched under. Nil until then.
-func (b *Block) Continuation() (*merkle.Receipt, error) {
-	if !b.Dispatched || b.RootReceipt == nil {
+func (b *Block) Continuation(dst *url.URL) (*merkle.Receipt, error) {
+	st := b.Stream(dst)
+	if !b.Dispatched || st == nil || st.RootReceipt == nil {
 		return nil, nil
 	}
 	if b.DirectoryReceipt == nil {
-		return b.RootReceipt, nil
+		return st.RootReceipt, nil
 	}
-	return b.RootReceipt.Combine(b.DirectoryReceipt.RootChainReceipt)
+	return st.RootReceipt.Combine(b.DirectoryReceipt.RootChainReceipt)
 }
 
 // A ReceivedAnchor is a Directory anchor this partition executed, kept for
@@ -173,6 +197,9 @@ func New(horizon uint64) *Cache {
 }
 
 func streamKey(u *url.URL) string { return strings.ToLower(u.String()) }
+
+// StreamKey is the key a destination's stream is held under in Block.Streams.
+func StreamKey(dst *url.URL) string { return streamKey(dst) }
 
 // A Txn collects one block's additions. Nothing is visible until Commit, and
 // a discarded block leaves nothing behind, so the cache never holds an entry
