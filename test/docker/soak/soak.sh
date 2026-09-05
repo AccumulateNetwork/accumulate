@@ -362,7 +362,7 @@ fi
 # loadgen, let this script write its verdict, then take the network down.
 # STALL_KILL_SECS=0 disables it for a run that is meant to sit in a stall.
 if [ -x "$here/stallkill.sh" ] && [ "${STALL_KILL_SECS:-240}" != "0" ]; then
-  nohup env RUN_DIR="$rd" STALL_KILL_SECS="${STALL_KILL_SECS:-240}" \
+  nohup env RUN_DIR="$rd" STALL_KILL_SECS="${STALL_KILL_SECS:-240}" SOAK_PID=$$ \
     "$here/stallkill.sh" > "$rd/stallkill.log" 2>&1 &
   STALLKILL=$!
   echo "   stallkill: armed (stop the run after ${STALL_KILL_SECS:-240}s stalled)" | tee -a "$log"
@@ -637,8 +637,10 @@ if [ "${KEEP_UP:-0}" = 1 ]; then
 else
   $compose down -v --remove-orphans >/dev/null 2>&1
   echo "network torn down" | tee -a "$log"
-  # And the monitor, which otherwise keeps the port for the next run.
-  pkill -P "$MON" 2>/dev/null; kill "$MON" 2>/dev/null
+  # And the monitor, which otherwise keeps the port for the next run. The
+  # supervisor first, or it respawns a child between the two kills (run
+  # 20260905T032333Z left a soakmon.py serving :8099 into the next run).
+  kill "$MON" 2>/dev/null; sleep 1; pkill -P "$MON" 2>/dev/null; pkill -f "soakmon.py" 2>/dev/null
 fi
 
 echo
