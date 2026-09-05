@@ -183,6 +183,33 @@ chaos returning to a soak.
 
 ---
 
+### E12. One interleaved synthetic chain; stages align by hash; anchors are not staged
+
+*(no issue yet)*
+
+**Spec** ([executor.md](executor.md), "One chain per pair, one stage per
+chain"): a synthetic chain per destination at the source; a collection proof
+covers one chain, so its index is the sequence number; one stage per chain
+holding two index-aligned lists; anchors through the same stage.
+
+**Code**: a partition keeps one synthetic main chain with every destination's
+entries interleaved, plus a per-destination sequence (index) chain that maps
+sequence numbers to positions on it. A collection proof covers a span of the
+interleaved chain and carries other destinations' hashes; the destination's
+stage therefore keeps its validated hashes in a map keyed by hash and asks "is
+this entry's hash validated" rather than aligning two lists, cannot recognise
+a validated hash whose entry it lacks unless a later entry of its own reveals
+the hole, and the producer cache and sequencer follow the interleaved chain.
+Anchors are executed with their signatures and not staged; proofs for them are
+held in anchor staging by Directory block (H9). Everything in "One chain per
+pair" that is not yet built follows from the single chain.
+
+**Size**: large — the chain layout (model, block close, root anchoring), the
+producer cache and sequencer per destination, the stage as two lists, anchors
+through it, the acceptance tests and reproductions. Plan in PLAN.md, E12.
+
+---
+
 ## Database abstraction
 
 ### D1. Record placement is a second, hand-maintained model

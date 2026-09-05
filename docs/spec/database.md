@@ -90,8 +90,8 @@ followed by a write.
 Repeats do occur, by construction, and are appended: a root chain receives
 equal anchors from equal chains (genesis, one transaction creating several
 accounts); a signature chain records one cause per signer and every signature
-message as it arrived. Every other chain — index chains, the synthetic chain
-and its replicas, the anchor sequence, block ledger and BPT chains, account
+message as it arrived. Every other chain — index chains, the synthetic chains
+(one per destination), the anchor sequence, block ledger and BPT chains, account
 main and scratch chains, anchor root and BPT chains — receives each hash once
 because the writer appends it once, from one place. A duplicate reaching one of
 them is the writer's bug, not the chain's to absorb.

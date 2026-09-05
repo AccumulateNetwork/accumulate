@@ -23,6 +23,7 @@ what the next item hunts.
 
 ```
 E8 #4217 (done) ─▶ H1 #4193 (DONE) ─▶ E10 (DONE: staging is memory, `execute.Staging`, a block transaction that commits with the block) ─▶ C6 #4215 (DONE: execution lag bounded at 8 blocks; empty headers and refusal by reason past it) ─▶ H8 #4216 (DONE as a pull by span from staging; push and hash set are DIFFERENCES H8) ─▶ acceptance run #7
+E12 one chain per pair, one stage per chain (DIFFERENCES E12)   Paul 2026-09-05; spec written, layout to build
 C7 cross-partition back-pressure (DIFFERENCES C7)      the death reproduction's finding; a spec decision first
 R #4219 ─▶ S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86   cost: first the reads that prove an absence, then the rest
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3               correctness debt, parallel or after
@@ -303,6 +304,34 @@ account's chain heights and anchors, and all element-index records):
   reach further back than one proof.
 - **#4205 (E11)** — a restarted validator rejoins by syncing from the running
   protocol (plan above); required before chaos returns.
+
+### E12 — one chain per pair, one stage per chain
+
+Spec: executor.md "One chain per pair, one stage per chain"; healing.md
+"Deciding, in staging"; database.md "Chains are logs".
+
+1. **Chains.** The synthetic ledger gets a chain per destination
+   (`SyntheticChain(partition)`), each anchored into the root chain when it
+   changes; `buildSynthTxn` appends to the destination's chain; the sequence
+   (index) chains go, because the chain index is the sequence number. Test:
+   a block sending to two destinations appends to two chains, and each chain's
+   entries are that destination's entries in order.
+2. **Proofs and the cache.** The producer cache keeps a segment per destination
+   chain per block; the package proof and the sequencer's answer cover one
+   chain. Test: a proof's element list equals the destination's entries for
+   the span, and the proof's index is the sequence number.
+3. **The stage as two lists.** One implementation: entries and validated
+   hashes indexed from `Delivered + 1`, the two walks, the run where they
+   agree, the two gap spans; hash-keyed maps removed. Test: the walks on a
+   stage with a hole, with entries beyond the proof, and with a proof beyond
+   the entries.
+4. **Anchors through the stage.** An anchor is an entry in its chain's stage,
+   validated by proof or quorum; missing anchors are gaps; the separate anchor
+   healer and H9 close. Test: the two skipped anchor-proof tests, un-skipped.
+5. **Reproductions.** The store-backed receipt test and the lagging-destination
+   test on the new layout; a Docker run to compare.
+
+Fresh installs; no migration of the interleaved chain.
 
 ## Simulation first
 

@@ -156,6 +156,39 @@ The predecessor of this design re-read the ledger after every single delivery,
 which is where its O(n²) came from. One evaluation per stream per block reads
 the position once.
 
+### One chain per pair, one stage per chain
+
+Every stream between two partitions is **its own chain at the source and its
+own stage at the destination**, and nothing is shared between streams.
+
+- A partition keeps a **synthetic chain per destination**: BVN1 has a chain of
+  what it sends BVN2, another of what it sends the Directory, and so on, each
+  anchored into BVN1's root chain when it changes. The Directory keeps an
+  **anchor chain per BVN** and each BVN keeps one for the Directory, as they do
+  today. One interleaved chain for every destination, which is what exists
+  now, makes a proof carry other destinations' hashes, and a destination
+  cannot tell which hashes are its own without already holding the entries.
+- A **collection proof covers a span of one chain**, so its hashes are exactly
+  the destination's entries in sequence order: the proof's index *is* the
+  sequence number.
+- The destination keeps **one stage per chain**: an indexed list of the entries
+  it holds, from `Delivered + 1`, and beside it the list of hashes proofs have
+  validated at the same indexes. Anything at or below `Delivered` is dropped.
+  Aligning the two lists is a walk, not a lookup, and allocates nothing per
+  entry.
+- Two walks from `Delivered + 1`: how far the validated hashes reach, and how
+  far the held entries match them. Where the two agree, that run executes, in
+  order. Fewer entries than validated hashes is a **gap of entries**; entries
+  beyond the validated hashes is a **gap of proof**. Those two spans are what
+  healing requests, on its cadence, and nothing else is.
+- **Anchors go through the same stage.** An anchor is an entry at its sequence
+  number in the anchor chain's stage; it is validated by a collection proof
+  over that chain or by a validator signature quorum, and executes once, in
+  order, when validated. A missing anchor is a gap of entries like any other.
+  There is no separate anchor mechanism.
+
+The stage is one implementation. It does not know which chain it serves.
+
 ### Sync
 
 **Staging is a state that builds up after a node syncs with the protocol.** It
@@ -502,19 +535,21 @@ it. It is not the block's, and it is not the healer's: both ask the same
 structure, because two views of what the node holds is exactly the
 disagreement that livelocked the network.
 
-A stream is named by the account whose ledger tracks it and the partition the
-messages come from. Anchors and synthetics between the same pair of partitions
-are separate streams — anchors tracked by the anchor pool, synthetics by the
-synthetic account — so conflating them would let an anchor's position gate a
-synthetic's.
+A stream is one chain: the source's synthetic chain to this partition, or an
+anchor chain between the two (architecture, "One chain per pair, one stage per
+chain"). Anchors and synthetics between the same pair of partitions are
+separate chains and separate stages — anchors tracked by the anchor pool,
+synthetics by the synthetic account — so conflating them would let an anchor's
+position gate a synthetic's. A stage holds two lists indexed from `Delivered +
+1`: the entries received, and the hashes proofs have validated; because a proof
+covers one chain, its element at position *i* is the entry at index *i*.
 
 | question | asked by | answer |
 |---|---|---|
 | hold this entry at index *n* | intake | held; the first sighting of an index wins |
 | hold this proof for anchor *a* | intake | held; validated when *a* executes, or now if it has |
-| is index *n* proven, and do we hold it | the executor, building a run | proven and held: executes; proven and missing: a gap; held and unproven: waits |
-| which proven indexes are missing, which held indexes are unproven | healing, after the block | the two kinds of gap, by index, oldest first |
-| which anchors are missing below the newest held | healing | requested at once |
+| how far do the validated hashes reach, and how far do the held entries match them | the executor, building a run | the run is where both agree, from `Delivered + 1`, in order |
+| fewer entries than validated hashes; entries beyond the validated hashes | healing, on its cadence | a gap of entries; a gap of proof — the two spans it requests |
 | release through *n* | the block, on commit | every entry at or below *n* is dropped; proven ranges below *n* are dropped |
 
 Four rules govern it, and each of them is a defect that has actually happened:
@@ -588,8 +623,8 @@ depends on the last:
 7. Record the previous block's state hash on the BPT chain.
 8. Record pending transactions; process chain updates; record the block
    ledger (below).
-9. Add the synthetic chain to the root chain, index the root chain, update the
-   transaction-chain index.
+9. Add each synthetic chain that changed to the root chain, index the root
+   chain, update the transaction-chain index.
 10. Update major index chains if this is a major block.
 11. Execute post-update actions.
 12. **Update the BPT**, and only then active globals.
@@ -811,11 +846,13 @@ here, so it is not part of what the block produces and nothing waits on it.
 
 **The package.** For a destination, the block's synthetics are grouped into as
 many envelopes as fit `synthPackageBudget`. Each envelope is one
-`SyntheticProof` — a collection proof over the span of the synthetic chain from
-the package's first member to the block's last element, continued through the
-root chain to the Directory root, and carrying that Directory anchor's
-**sequence number** — followed by the members as proof-less sequenced messages,
-each with the transaction it belongs to. A group of one is sent with an
+`SyntheticProof` — a collection proof over the span of **that destination's
+synthetic chain** from the package's first member to the block's last element,
+continued through the root chain to the Directory root, and carrying that
+Directory anchor's **sequence number** — followed by the members as proof-less
+sequenced messages, each with the transaction it belongs to. The proof's hashes
+are the destination's entries in order, so the proof's index is the sequence
+number and the stage aligns the two by position. A group of one is sent with an
 individual receipt instead. At the destination the members go to synthetic
 staging by index and the proof to anchor staging by its anchor's sequence
 number (Collection), whichever arrives first.
@@ -839,8 +876,8 @@ destination routes to another partition — or **local**, routing back to the
 partition that produced it.
 
 - **Remote** messages are sequenced and dispatched: they take a sequence number,
-  a position on the synthetic main chain, a proof continued to a DN-anchored
-  root, and anchor-pool validation on arrival.
+  a position on the synthetic chain **to their destination**, a proof continued
+  to a DN-anchored root, and anchor-pool validation on arrival.
 - **Local** messages take none of that. They go on a persisted queue and execute
   at the start of the *next* block as ordinary messages with their own
   principal — no sequence number, no synthetic-chain position (so they consume

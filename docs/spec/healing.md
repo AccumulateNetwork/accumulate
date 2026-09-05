@@ -216,9 +216,9 @@ two-level cycled cache in the dynamic layer and serves reads, not healing.
   historical record while building a package, a bundle or a proof is a
   failure**, and it is counted.
 - **Contents.** The sequenced message and, when it has one, the transaction it
-  belongs to; and, per block, what a proof is built from — the block's span on
-  the synthetic chain and the receipt to the Directory root the block was
-  dispatched under — so a package's or a bundle's proof is built from the
+  belongs to; and, per block and per destination, what a proof is built from —
+  the block's span on that destination's synthetic chain and the receipt to
+  the Directory root the block was dispatched under — so a package's or a bundle's proof is built from the
   cache alone.
 - **Cleared as gaps close.** Because it is indexed by partition and index, every
   entry the destination is known to have delivered can be dropped: the cache
@@ -276,22 +276,21 @@ API call, the bundle submission and the counters live in
 ### Deciding, in staging
 
 On an activation block (`healActivates(index)`, every `healCadence` blocks),
-staging is read per stream as two indexed lists: the entries received at their
-index, and the hashes collection proofs have validated. Execution takes the
-validated prefix from `Delivered` upward, in order. Two things are gaps, and
-they are all healing asks for: an index a proof validated that staging does
-not hold, and entries staging holds that no proof has validated. A selected
-sender walks each stream once from `Delivered` to the highest entry held,
-coalesces both into index spans, and asks the source; nothing is timed and
-nothing inferred from the source's ledger, and an index asked within the last
-`healPatience` activations is not asked again. A stream holding nothing above
-`Delivered` is missing every validating hash above it, and asks for the span
+each stage is read as its two lists from `Delivered + 1` — the entries held,
+the hashes proofs have validated, aligned by index because a proof covers one
+chain (executor.md, "One chain per pair, one stage per chain"). Two walks:
+how far the validated hashes reach, and how far the held entries match them.
+Fewer entries than validated hashes is a gap of entries; entries beyond the
+validated hashes is a gap of proof. Those spans are the request set, coalesced,
+oldest first, at most `MaxRequestSpans`; an index asked within the last
+`healPatience` activations is not asked again. A stage holding nothing above
+`Delivered` is missing every validating hash above it and asks for the span
 above `Delivered` whole; the source answers with what it has dispatched, or
-that it has produced nothing there yet. Aligning a proof's hashes with
-the entries at their indexes must not allocate per entry: one lookup per index,
-the spans the only output.
-Anchor gaps — a sequence number below the newest held anchor with no anchor —
-are requested on the block that exposes them. Sender selection is a function
+that it has produced nothing there yet. Nothing is timed and nothing is
+inferred from the source's ledger, and the walks allocate nothing per entry.
+Anchors are a stage like any other (executor.md, "One chain per pair, one
+stage per chain"): a missing anchor below a validated one is a gap of entries
+and is requested the same way. Sender selection is a function
 of the previous block's hash over the validator set yielding two indices; a
 node compares them against its own position.
 
