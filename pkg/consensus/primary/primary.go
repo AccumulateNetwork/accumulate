@@ -92,6 +92,13 @@ type Config struct {
 	// disables the bound.
 	ExecutionLag    func() int
 	MaxExecutionLag int
+
+	// MaxHeaderBytes bounds the batches one header carries, so a backlog
+	// that built while the primary was not proposing (execution lag) is
+	// metered back in over several headers instead of becoming one block
+	// the executor takes many seconds over. Zero means
+	// DefaultMaxHeaderBytes.
+	MaxHeaderBytes int
 }
 
 // DefaultMaxExecutionLag is the bound, in blocks, on how far execution may
@@ -99,10 +106,18 @@ type Config struct {
 // of traffic, not a buffer.
 const DefaultMaxExecutionLag = 8
 
+// DefaultMaxHeaderBytes is the bound on the batches one header carries: two
+// batches at the default batch size, about two seconds of traffic at the
+// target rate, so a backlog of a few blocks is spread over a few headers.
+const DefaultMaxHeaderBytes = 1 << 20
+
 // applyDefaults fills in default values for unset configuration fields.
 func (c *Config) applyDefaults() {
 	if c.MaxExecutionLag <= 0 {
 		c.MaxExecutionLag = DefaultMaxExecutionLag
+	}
+	if c.MaxHeaderBytes <= 0 {
+		c.MaxHeaderBytes = DefaultMaxHeaderBytes
 	}
 	if c.RoundAdvanceInterval <= 0 {
 		c.RoundAdvanceInterval = DefaultRoundAdvanceInterval

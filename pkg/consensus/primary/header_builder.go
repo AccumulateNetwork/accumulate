@@ -52,15 +52,20 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	// nothing new is certified, and the batches stay available for a later
 	// header.
 	lagging := p.executionLagging()
+	// One byte budget for the header, shared by the workers in order: what
+	// built up while the primary was not proposing comes back a header at a
+	// time, not as one block (consensus spec, invariant 9).
+	budget := p.config.MaxHeaderBytes
 	for _, w := range p.workers {
-		if lagging {
+		if lagging || budget <= 0 {
 			break
 		}
-		// Use ConsumeAvailableBatches to get and clear available batches.
 		// Dedup: the requeue (never-certified headers) and re-proposal
 		// (never-committed batches) paths can both re-enqueue a digest, and a
 		// header must not list the same batch twice.
-		for _, digest := range w.ConsumeAvailableBatches() {
+		digests, used := w.ConsumeAvailableBatchesWithin(budget)
+		budget -= used
+		for _, digest := range digests {
 			if seen[digest] {
 				continue
 			}

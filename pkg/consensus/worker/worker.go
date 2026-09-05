@@ -791,6 +791,47 @@ func (w *Worker) ConsumeAvailableBatches() []types.BatchDigest {
 	return w.proposable(w.drainAvailable())
 }
 
+// ConsumeAvailableBatchesWithin is ConsumeAvailableBatches under a byte
+// budget: it returns proposable batches, oldest first, while their sizes fit
+// the budget (always at least one when any is available), and requeues the
+// rest for a later header. It reports the bytes it consumed. The budget is
+// how a backlog is metered back in after the primary stopped proposing for
+// execution lag (consensus spec, invariant 9): draining everything into one
+// header made one block of ten to seventeen seconds and re-crossed the bound
+// (run 20260905T144928Z).
+func (w *Worker) ConsumeAvailableBatchesWithin(budget int) ([]types.BatchDigest, int) {
+	digests := w.proposable(w.drainAvailable())
+	if budget <= 0 || len(digests) == 0 {
+		return digests, w.sizeOf(digests)
+	}
+	used := 0
+	take := 0
+	for take < len(digests) {
+		size := w.sizeOf(digests[take : take+1])
+		if take > 0 && used+size > budget {
+			break
+		}
+		used += size
+		take++
+	}
+	if take < len(digests) {
+		w.RequeueBatches(digests[take:])
+	}
+	return digests[:take], used
+}
+
+func (w *Worker) sizeOf(digests []types.BatchDigest) int {
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	n := 0
+	for _, d := range digests {
+		if e, ok := w.batches[d]; ok && e.batch != nil {
+			n += e.batch.Size()
+		}
+	}
+	return n
+}
+
 func (w *Worker) drainAvailable() []types.BatchDigest {
 	var result []types.BatchDigest
 

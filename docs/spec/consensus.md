@@ -86,7 +86,12 @@ So a validator holds batches in four places, for four reasons:
    **empty** headers — parents and weak links, no batches; rounds continue,
    liveness is kept, nothing new is certified — and refuses user work until
    execution catches up. The bound is a few seconds of traffic and is not a
-   buffer to be made bigger.
+   buffer to be made bigger. When execution catches up, the batches that
+   built up meanwhile come back **a header at a time**: a header carries at
+   most `MaxHeaderBytes` of batches and the rest wait for the next. Draining
+   the backlog into one header made one block the executor took ten to
+   seventeen seconds over, which re-crossed the bound and refused user work
+   again — an oscillation, not a recovery (run `20260905T144928Z`).
 10. **A refusal says why.** Refusing for a full own store (consensus is not
    committing this validator's batches) and refusing for execution lag (commits
    are fine, the executor is behind) are the same `NotReady` to the submitter
