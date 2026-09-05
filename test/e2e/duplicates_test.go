@@ -14,6 +14,7 @@ import (
 	"sync"
 	"testing"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 )
@@ -83,6 +84,15 @@ func TestMain(m *testing.M) {
 	for entry, n := range duplicates.seen {
 		if !permittedDuplicate(entry) {
 			bad = append(bad, fmt.Sprintf("  %6d  %s", n, entry))
+		}
+	}
+	// The producer's cache answered every dispatch: a block miss means a
+	// package was built from nothing, and healing had to fill what dispatch
+	// should have sent (healing spec, "The cache").
+	if n := synthcache.Stats().Misses["block"]; n > 0 {
+		fmt.Fprintf(os.Stderr, "\nFAIL: %d dispatch lookups missed the producer's synthetic cache\n", n)
+		if code == 0 {
+			code = 1
 		}
 	}
 	if len(bad) > 0 {

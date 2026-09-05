@@ -9,6 +9,7 @@ package block
 import (
 	"context"
 	"crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,8 +31,10 @@ func TestSynthPackageProof_NamesTheDirectoryAnchor(t *testing.T) {
 	rootReceipt, err := rootChain.Receipt(0, 0)
 	require.NoError(t, err)
 
+	seg, err := merkle.NewSegment(f.chain2.Inner(), 0)
+	require.NoError(t, err)
 	pkg := []*synthOutbound{{index: 0}, {index: 1}}
-	proof, err := f.x.buildSynthPackageProof(pkg, f.chain2, rootReceipt, nil, 2, 42)
+	proof, err := f.x.buildSynthPackageProof(pkg, seg, rootReceipt, nil, 2, 42)
 	require.NoError(t, err)
 	require.True(t, proof.ReceiptList.Validate(nil))
 	require.NotNil(t, proof.Anchor)
@@ -74,7 +77,9 @@ func TestSynthOwnProof_NamesTheDirectoryAnchor(t *testing.T) {
 		Destination: protocol.PartitionUrl("BVN0"),
 		Number:      1,
 	}}
-	require.NoError(t, f.x.sendSynthWithOwnProof(f.batch, o, f.chain, rootReceipt, nil, 2, 42))
+	seg, err := merkle.NewSegment(f.chain2.Inner(), 0)
+	require.NoError(t, err)
+	require.NoError(t, f.x.sendSynthWithOwnProof(o, seg, rootReceipt, nil, 2, 42))
 	require.Len(t, d.envelopes, 1)
 	syn, ok := d.envelopes[0].Messages[0].(*messaging.SyntheticMessage)
 	require.True(t, ok)

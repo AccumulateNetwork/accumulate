@@ -7,6 +7,7 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -21,6 +22,13 @@ type Block struct {
 	State    BlockState
 	Batch    *database.Batch
 	Executor *Executor
+
+	// cache collects what this block produces for the producer's
+	// synthetic/anchor cache; it commits with the block. cacheBlock is what
+	// the block's proofs are built from, filled at production and completed
+	// at close (healing spec, "The cache").
+	cache      *synthcache.Txn
+	cacheBlock *synthcache.Block
 
 	// proofsValidatedThrough is how many of State.ReceivedAnchors anchor
 	// staging has already used to decide waiting proofs this block.
@@ -97,9 +105,17 @@ func (s *closedBlock) Commit() error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	return s.Batch.Commit()
+	err = s.Batch.Commit()
+	if err != nil {
+		return err
+	}
+	// The cache commits after the store: an entry is in the cache only once
+	// the chain has it.
+	s.cache.Commit()
+	return nil
 }
 
 func (s *closedBlock) Discard() {
 	s.Batch.Discard()
+	s.cache.Discard()
 }

@@ -7,7 +7,6 @@
 package block
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -35,6 +34,7 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	block.BlockParams = params
 	block.Executor = x
 	block.Batch = x.Database.Begin(true)
+	block.cache = x.synthCache().Begin(params.Index)
 
 	defer func() {
 		if err != nil {
@@ -258,11 +258,10 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		}
 	}
 
-	// If the previous block included a directory anchor, send synthetic
-	// transactions anchored by that anchor. Use a read-only batch.
-	batch := block.Batch.Begin(false)
-	defer batch.Discard()
-	err = x.sendSyntheticTransactions(batch, ledger, block.IsLeader)
+	// Dispatch the synthetics of every block the Directory anchors executed
+	// in the previous block cover — from the cache, never the store (healing
+	// spec, "The cache"; executor spec, "Dispatch").
+	err = x.sendSyntheticTransactions(block.IsLeader)
 	if err != nil {
 		// We didn't write anything so don't break if we get an error. This
 		// could be masking a consensus error but I'm too tired to care.
@@ -275,6 +274,12 @@ func (x *Executor) finalizeBlock(block *Block) error {
 // lastAnchoredBlock returns the block index anchored by the most recently
 // recorded anchor, or zero if no anchor has been recorded.
 func (x *Executor) lastAnchoredBlock(batch *database.Batch) (uint64, error) {
+	// The cache knows the newest anchor this partition produced since it
+	// started. Only a node that has produced none since start reads the
+	// chain, once (healing spec, "The cache").
+	if last, ok := x.synthCache().LastAnchoredBlock(); ok {
+		return last, nil
+	}
 	sequence := batch.Account(x.Describe.AnchorPool()).AnchorSequenceChain()
 	head, err := sequence.Head().Get()
 	if err != nil {
@@ -334,6 +339,7 @@ func (x *Executor) recordAnchor(block *Block, ledger *protocol.SystemLedger) err
 	if index+1 != int64(sequenceNumber) {
 		x.logger.Error("Sequence number does not match index chain index", "seq-num", sequenceNumber, "index", index)
 	}
+	block.cache.AddAnchor(sequenceNumber, anchor.GetPartitionAnchor().MinorBlockIndex, anchorTxn)
 
 	err = block.State.ChainUpdates.DidAddChainEntry(block.Batch, x.Describe.AnchorPool(), record.Name(), record.Type(), anchorTxn.GetHash(), uint64(index), 0, 0)
 	if err != nil {
@@ -355,51 +361,20 @@ func (x *Executor) recordAnchor(block *Block, ledger *protocol.SystemLedger) err
 	return nil
 }
 
-func (x *Executor) sendSyntheticTransactions(batch *database.Batch, ledger *protocol.SystemLedger, isLeader bool) error {
-	// Check for received anchors
-	anchorLedger := batch.Account(x.Describe.AnchorPool())
-	anchorIndexLast, anchorIndexPrev, err := indexing.LoadLastTwoIndexEntries(anchorLedger.MainChain().Index())
-	if err != nil {
-		return errors.InternalError.WithFormat("load last two anchor index chain entries: %w", err)
-	}
-	if anchorIndexLast == nil {
-		return nil // Chain is empty
-	}
-	to := anchorIndexLast.Source
-
-	if anchorIndexLast.BlockIndex < ledger.Index {
-		return nil // Last block did not have an anchor
+func (x *Executor) sendSyntheticTransactions(isLeader bool) error {
+	// Every Directory anchor executed since the last block open, with its
+	// receipts, was kept by the block that executed it. Take them whether or
+	// not this node sends: nothing here changes state, and only the leader
+	// submits.
+	received := x.synthCache().TakeReceived()
+	if !isLeader {
+		return nil
 	}
 
-	var from uint64
-	if anchorIndexPrev != nil {
-		from = anchorIndexPrev.Source + 1
-	}
-
-	anchorChain, err := anchorLedger.MainChain().Get()
-	if err != nil {
-		return errors.InternalError.WithFormat("load anchor main chain: %w", err)
-	}
-	entries, err := anchorChain.Entries(int64(from), int64(to+1))
-	if err != nil {
-		return errors.InternalError.WithFormat("load entries %d to %d of the anchor main chain: %w", from, to, err)
-	}
-
-	for i, hash := range entries {
-		var msg messaging.MessageWithTransaction
-		err := batch.Message2(hash).Main().GetAs(&msg)
-		if err != nil {
-			return errors.InternalError.WithFormat("load transaction %d of the anchor main chain: %w", from+uint64(i), err)
-		}
-
-		// Ignore anything that's not a directory anchor
-		anchor, ok := msg.GetTransaction().Body.(*protocol.DirectoryAnchor)
-		if !ok {
-			continue
-		}
-
+	for _, r := range received {
+		anchor := r.Anchor
 		if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
-			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, anchor.MinorBlockIndex, nil, anchor.MinorBlockIndex)
+			err := x.sendSyntheticTransactionsForBlock(anchor.MinorBlockIndex, nil, anchor.MinorBlockIndex)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -411,7 +386,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, ledger *prot
 				continue
 			}
 
-			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, receipt.Anchor.MinorBlockIndex, receipt, anchor.MinorBlockIndex)
+			err := x.sendSyntheticTransactionsForBlock(receipt.Anchor.MinorBlockIndex, receipt, anchor.MinorBlockIndex)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -426,43 +401,23 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, ledger *prot
 // block anchorBlock. Every proof names anchorBlock so the destination can hold
 // it in anchor staging until that anchor executes (executor spec, "Anchor
 // staging").
-func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLeader bool, blockIndex uint64, blockReceipt *protocol.PartitionAnchorReceipt, anchorBlock uint64) error {
-	indexIndex, err := batch.SystemData(x.Describe.PartitionId).SyntheticIndexIndex(blockIndex).Get()
-	switch {
-	case err == nil:
-		// Found
-	case errors.Is(err, errors.NotFound):
+//
+// Everything a package needs comes from the cache: the bodies, the
+// transactions they belong to, and the block's segment of the synthetic chain
+// and root receipt that its proofs are built from. Nothing is read from the
+// store. A block the cache does not hold is a counted miss; its synthetics
+// are not dispatched and healing fills them (healing spec, "The cache").
+func (x *Executor) sendSyntheticTransactionsForBlock(blockIndex uint64, blockReceipt *protocol.PartitionAnchorReceipt, anchorBlock uint64) error {
+	blk, ok := x.synthCache().Block(blockIndex)
+	if !ok {
+		x.logger.Error("Synthetic cache does not hold the block; its synthetics are not dispatched", "module", "synthetic", "block", blockIndex, "anchor-block", anchorBlock)
 		return nil
-	default:
-		return errors.InternalError.WithFormat("load synthetic transaction index index for block %d: %w", blockIndex, err)
 	}
-
-	// Find the synthetic main chain index entry for the block
-	record := batch.Account(x.Describe.Synthetic())
-	synthIndexChain, err := record.MainChain().Index().Get()
-	if err != nil {
-		return errors.InternalError.WithFormat("load synthetic index chain: %w", err)
+	if len(blk.Entries) == 0 {
+		return nil
 	}
-
-	indexEntry := new(protocol.IndexEntry)
-	err = synthIndexChain.EntryAs(int64(indexIndex), indexEntry)
-	if err != nil {
-		return errors.InternalError.WithFormat("load synthetic index chain entry %d: %w", indexIndex-1, err)
-	}
-	to := indexEntry.Source
-
-	// Is there a previous entry?
-	var from uint64
-	if indexIndex > 0 {
-		prevEntry := new(protocol.IndexEntry)
-		err = synthIndexChain.EntryAs(int64(indexIndex-1), prevEntry)
-		if err != nil {
-			return errors.InternalError.WithFormat("load synthetic index chain entry %d: %w", indexIndex-1, err)
-		}
-		from = prevEntry.Source + 1
-	} else {
-		from = 1 // Skip genesis
-	}
+	seg := blk.Segment
+	to := seg.Last()
 
 	if blockReceipt == nil {
 		x.logger.Debug("Sending synthetic transactions for block", "module", "synthetic", "index", blockIndex)
@@ -470,57 +425,9 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		x.logger.Debug("Sending synthetic transactions for block", "module", "synthetic", "index", blockIndex, "anchor-from", logging.AsHex(blockReceipt.RootChainReceipt.Start).Slice(0, 4), "anchor-to", logging.AsHex(blockReceipt.Anchor).Slice(0, 4))
 	}
 
-	// Get the root receipt
-	rootReceipt, err := x.getRootReceiptForBlock(batch, indexEntry.Anchor, blockIndex)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Process the transactions
-	synthMainChain, err := record.MainChain().Get()
-	if err != nil {
-		return errors.InternalError.WithFormat("load synthetic main chain: %w", err)
-	}
-
-	entries, err := synthMainChain.Entries(int64(from), int64(to+1))
-	if err != nil {
-		return errors.InternalError.WithFormat("load synthetic main chain entries %d to %d: %w", from, to, err)
-	}
-
-	// Load every synthetic message of the block, keeping its absolute position on
-	// the synthetic main chain. The position is what a collection proof is built
-	// from, and it is also what makes the packages below contiguous.
-	outbound := make([]*synthOutbound, 0, len(entries))
-	for i, hash := range entries {
-		var seq *messaging.SequencedMessage
-		err := batch.Message2(hash).Main().GetAs(&seq)
-		if err != nil {
-			return errors.UnknownError.WithFormat("load synthetic transaction: %w", err)
-		}
-		if h := seq.Hash(); !bytes.Equal(hash, h[:]) {
-			return errors.InternalError.WithFormat("synthetic message stored as %X hashes to %X", hash[:4], h[:4])
-		}
-
-		o := &synthOutbound{index: int64(from) + int64(i), seq: seq}
-
-		// Send the transaction along with the signature request/authority
-		// signature
-		//
-		// TODO Make this smarter, only send it the first time?
-		if msg, ok := seq.Message.(messaging.MessageForTransaction); ok &&
-			seq.Message.Type() != messaging.MessageTypeBlockAnchor {
-			var txn messaging.MessageWithTransaction
-			err := batch.Message(msg.GetTxID().Hash()).Main().GetAs(&txn)
-			if err != nil {
-				return errors.UnknownError.WithFormat("load transaction for synthetic message: %w", err)
-			}
-			o.companion = txn
-		}
-		outbound = append(outbound, o)
-	}
-
-	if !isLeader {
-		return nil // Only send synthetic transactions from the leader
+	outbound := make([]*synthOutbound, 0, len(blk.Entries))
+	for _, e := range blk.Entries {
+		outbound = append(outbound, &synthOutbound{index: e.Index, seq: e.Seq, companion: e.Companion})
 	}
 
 	// Group by destination. One package can only share a proof among messages
@@ -547,14 +454,14 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		// 2 until the replica's effect is measured.
 		if len(group) < synthBundleMin || !x.globals().Active.ExecutorVersion.V2KourouEnabled() {
 			for _, o := range group {
-				err = x.sendSynthWithOwnProof(batch, o, synthMainChain, rootReceipt, blockReceipt, int64(to), anchorBlock)
+				err := x.sendSynthWithOwnProof(o, seg, blk.RootReceipt, blockReceipt, to, anchorBlock)
 				if err != nil {
 					return errors.UnknownError.Wrap(err)
 				}
 			}
 			continue
 		}
-		err = x.sendSynthPackages(batch, group, synthMainChain, record.MainChain(), rootReceipt, blockReceipt, int64(to), anchorBlock)
+		err := x.sendSynthPackages(group, seg, blk.RootReceipt, blockReceipt, to, anchorBlock)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -595,8 +502,8 @@ func (x *Executor) synthPackageBudget() int {
 
 // sendSynthWithOwnProof dispatches one synthetic message carrying its own
 // individual receipt — the pre-#4090 form, kept for single-message groups.
-func (x *Executor) sendSynthWithOwnProof(batch *database.Batch, o *synthOutbound, synthMainChain *database.Chain, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock uint64) error {
-	synthReceipt, err := synthMainChain.Receipt(o.index, to)
+func (x *Executor) sendSynthWithOwnProof(o *synthOutbound, seg *merkle.Segment, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock uint64) error {
+	synthReceipt, err := seg.Receipt(o.index, to)
 	if err != nil {
 		return errors.UnknownError.WithFormat("get synthetic main chain receipt from %d to %d: %w", o.index, to, err)
 	}
@@ -638,7 +545,7 @@ func (x *Executor) sendSynthWithOwnProof(batch *database.Batch, o *synthOutbound
 // receipts use. Packages may therefore be delivered in any order, and losing one
 // does not block another — the property that would be given up by sending the
 // proof once and referring back to it from later packages.
-func (x *Executor) sendSynthPackages(batch *database.Batch, group []*synthOutbound, synthMainChain *database.Chain, synthChain2 *database.Chain2, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock uint64) error {
+func (x *Executor) sendSynthPackages(group []*synthOutbound, seg *merkle.Segment, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock uint64) error {
 	budget := x.synthPackageBudget()
 	for len(group) > 0 {
 		// The receiver refuses a ReceiptList longer than
@@ -650,7 +557,7 @@ func (x *Executor) sendSynthPackages(batch *database.Batch, group []*synthOutbou
 		// index, so members taken after the first only shrink the distance:
 		// one check per package bounds the whole list.
 		if !packageSpanFits(group[0].index, to) {
-			err := x.sendSynthWithOwnProof(batch, group[0], synthMainChain, rootReceipt, blockReceipt, to, anchorBlock)
+			err := x.sendSynthWithOwnProof(group[0], seg, rootReceipt, blockReceipt, to, anchorBlock)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -694,7 +601,7 @@ func (x *Executor) sendSynthPackages(batch *database.Batch, group []*synthOutbou
 			group = group[1:]
 		}
 
-		proof, err := x.buildSynthPackageProof(pkg, synthChain2, rootReceipt, blockReceipt, to, anchorBlock)
+		proof, err := x.buildSynthPackageProof(pkg, seg, rootReceipt, blockReceipt, to, anchorBlock)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -737,7 +644,7 @@ func packageSpanFits(first, to int64) bool {
 // elements belonging to OTHER destinations, because the synthetic main chain
 // interleaves them — harmless, since extra elements are proven hashes and
 // nothing more, and it is what lets the span stay contiguous.
-func (x *Executor) buildSynthPackageProof(pkg []*synthOutbound, synthChain2 *database.Chain2, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock uint64) (*protocol.AnnotatedReceipt, error) {
+func (x *Executor) buildSynthPackageProof(pkg []*synthOutbound, seg *merkle.Segment, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock uint64) (*protocol.AnnotatedReceipt, error) {
 	first := pkg[0].index
 
 	// The span runs to the block's LAST synthetic element, not to the package's
@@ -746,7 +653,7 @@ func (x *Executor) buildSynthPackageProof(pkg []*synthOutbound, synthChain2 *dat
 	// point the root receipt is built from, so the list must reach it. Ending the
 	// span early leaves an anchor nothing continues from, which Validate rejects
 	// outright ("built an invalid receipt list").
-	list, err := merkle.GetReceiptList(synthChain2.Inner(), first, to)
+	list, err := seg.ReceiptList(first, to)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("build receipt list %d to %d: %w", first, to, err)
 	}
@@ -819,34 +726,4 @@ func (x *Executor) signTransaction(hash []byte) (protocol.KeySignature, error) {
 	}
 
 	return ks, nil
-}
-
-func (x *Executor) getRootReceiptForBlock(batch *database.Batch, from, block uint64) (*merkle.Receipt, error) {
-	// Load the root index chain
-	index, err := batch.Account(x.Describe.Ledger()).RootChain().Index().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
-	}
-	if index.Height() == 0 {
-		return nil, errors.NotFound.With("root index chain is empty")
-	}
-
-	// Locate the index entry for the given block
-	_, entry, err := indexing.SearchIndexChain(index, uint64(index.Height()-1), indexing.MatchExact, indexing.SearchIndexChainByBlock(block))
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("locate block %d root index chain entry: %w", block, err)
-	}
-
-	// Load the root chain
-	root, err := batch.Account(x.Describe.Ledger()).RootChain().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
-	}
-
-	// Get a receipt from the entry to the block's anchor
-	receipt, err := root.Receipt(int64(from), int64(entry.Source))
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("get root chain receipt from %d to %d: %w", from, entry.Source, err)
-	}
-	return receipt, nil
 }

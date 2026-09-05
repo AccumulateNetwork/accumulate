@@ -21,6 +21,7 @@ type (
 	Receipt         = merkle.Receipt
 	ReceiptEntry    = merkle.ReceiptEntry
 	ReceiptList     = merkle.ReceiptList
+	Segment         = merkle.Segment
 	ValidateOptions = merkle.ValidateOptions
 )
 

@@ -8,6 +8,8 @@ package block
 
 import (
 	"crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
+	"sync"
 	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -43,9 +45,21 @@ type Executor struct {
 	signatureExecutors map[protocol.SignatureType]ExecutorFactory2[protocol.SignatureType, *SignatureContext]
 	logger             logging.OptionalLogger
 	db                 database.Beginner
+	cacheOnce          sync.Once
+	cacheDefault       *synthcache.Cache
 	isValidator        bool
 	isGenesis          bool
 	mainDispatcher     Dispatcher
+}
+
+// synthCache is the producer's synthetic/anchor cache: the one the node
+// shares with its sequencer, or a private one.
+func (x *Executor) synthCache() *synthcache.Cache {
+	if x.SynthCache != nil {
+		return x.SynthCache
+	}
+	x.cacheOnce.Do(func() { x.cacheDefault = synthcache.New(0) })
+	return x.cacheDefault
 }
 
 type ExecutorOptions = execute.Options

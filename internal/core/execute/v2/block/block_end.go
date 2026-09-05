@@ -8,6 +8,8 @@ package block
 
 import (
 	"crypto/sha256"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"sort"
 	"strconv"
 	"strings"
@@ -121,6 +123,14 @@ func (block *Block) Close() (execute.BlockState, error) {
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
 	}
+	// The root chain's state before this block anchors anything: with the
+	// entries this block appends, it is the segment the block's root receipt
+	// is built from, in memory (healing spec, "The cache").
+	rootHead, err := ledger.RootChain().Inner().Head().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load root chain head: %w", err)
+	}
+	rootSeg := &merkle.Segment{First: rootHead.Count, Before: rootHead.Copy(), MarkMask: ledger.RootChain().Inner().MarkMask()}
 
 	// Process chain updates
 	type chainUpdate struct {
@@ -195,11 +205,21 @@ func (block *Block) Close() (execute.BlockState, error) {
 
 	// Add the synthetic transaction chain to the root chain
 	var synthIndexIndex uint64
+	var synthRootPos int64 = -1
 	if block.State.Produced > 0 {
-		synthIndexIndex, err = m.anchorSynthChain(block, rootChain)
+		synthIndexIndex, synthRootPos, err = m.anchorSynthChain(block, rootChain)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
+	}
+
+	// Complete the cache's block: the root chain is final, so the receipt
+	// from the synthetic chain's anchor to the block's root is built from the
+	// segment this block appended. A block that produced nothing is held too,
+	// so a later lookup distinguishes "nothing to send" from a miss.
+	err = block.completeCacheBlock(rootChain, rootSeg, synthRootPos)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Index the root chain
@@ -425,16 +445,17 @@ func getMajorHeight(desc execute.DescribeShim, batch *database.Batch) (uint64, e
 }
 
 // anchorSynthChain anchors the synthetic transaction chain.
-func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (indexIndex uint64, err error) {
+func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (indexIndex uint64, rootPos int64, err error) {
 	url := m.Describe.Synthetic()
 	indexIndex, _, err = addChainAnchor(rootChain, block.Batch.Account(url).MainChain(), block.Index)
 	if err != nil {
-		return 0, errors.UnknownError.Wrap(err)
+		return 0, 0, errors.UnknownError.Wrap(err)
 	}
+	rootPos = rootChain.Height() - 1 // the anchor just appended
 
 	err = block.Batch.SystemData(m.Describe.PartitionId).SyntheticIndexIndex(block.Index).Put(indexIndex)
 	if err != nil {
-		return 0, errors.UnknownError.WithFormat("store synthetic transaction index index for block: %w", err)
+		return 0, 0, errors.UnknownError.WithFormat("store synthetic transaction index index for block: %w", err)
 	}
 
 	block.State.ChainUpdates.DidUpdateChain(&protocol.BlockEntry{
@@ -442,7 +463,7 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 		Chain:   protocol.MainChain,
 	})
 
-	return indexIndex, nil
+	return indexIndex, rootPos, nil
 }
 
 func (b *Block) shouldSendAnchor() bool {
@@ -729,7 +750,7 @@ func (b *Block) produceBlockMessages() error {
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	err = b.Executor.produceSynthetic(b.Batch, remote, b.Index)
+	b.cacheBlock, err = b.Executor.produceSyntheticInto(b.Batch, remote, b.Index, b.cache)
 	if err != nil {
 		return errors.UnknownError.WithFormat("sequence produced messages: %w", err)
 	}
@@ -816,5 +837,48 @@ func recordBlockLedger(ledger *database.Account, bl *database.BlockLedger) error
 	if err != nil {
 		return errors.UnknownError.WithFormat("add block ledger chain entry: %w", err)
 	}
+	return nil
+}
+
+// completeCacheBlock finishes what the producer's cache holds for this block
+// (healing spec, "The cache"): the root receipt from the synthetic chain's
+// anchor to the block's root, built from the root chain segment this block
+// appended, in memory; the Directory anchors the block executed, for the
+// next block's dispatch; and the block record itself, present even when
+// nothing was produced so a lookup can tell "nothing to send" from a miss.
+func (block *Block) completeCacheBlock(rootChain *database.Chain, rootSeg *merkle.Segment, synthRootPos int64) error {
+	blk := block.cacheBlock
+	if blk == nil {
+		synthChain := block.Batch.Account(block.Executor.Describe.Synthetic()).MainChain().Inner()
+		head, err := synthChain.Head().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load synthetic chain head: %w", err)
+		}
+		blk = &synthcache.Block{Index: block.Index, Segment: &merkle.Segment{First: head.Count, Before: head.Copy(), MarkMask: synthChain.MarkMask()}}
+		block.cacheBlock = blk
+	}
+
+	if synthRootPos >= 0 {
+		height := rootChain.Height()
+		for i := rootSeg.First; i < height; i++ {
+			h, err := rootChain.Entry(i)
+			if err != nil {
+				return errors.UnknownError.WithFormat("load root chain entry %d: %w", i, err)
+			}
+			rootSeg.Append(h)
+		}
+		receipt, err := rootSeg.Receipt(synthRootPos, height-1)
+		if err != nil {
+			return errors.UnknownError.WithFormat("build root receipt %d..%d: %w", synthRootPos, height-1, err)
+		}
+		blk.RootReceipt = receipt
+	}
+
+	for _, r := range block.State.ReceivedAnchors {
+		if da, ok := r.Body.(*protocol.DirectoryAnchor); ok {
+			block.cache.AddReceived(da)
+		}
+	}
+	block.cache.SetBlock(blk)
 	return nil
 }
