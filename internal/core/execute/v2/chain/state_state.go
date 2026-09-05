@@ -7,7 +7,9 @@
 package chain
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"math/big"
+	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
@@ -90,6 +92,21 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 type ChainUpdates struct {
 	Entries      []*protocol.BlockEntry
 	SynthEntries []*database.BlockStateSynthTxnEntry
+
+	// Segments holds, for each anchor chain this block appended to, the
+	// chain's state before the block's first append and the hashes appended
+	// since: what a receipt over this block's appends is built from, without
+	// reading the chain back (a chain is a sequence of hashes to everything
+	// above the merkle library). Keyed by SegmentKey. Only anchor chains:
+	// the root chain has its own segment in the block, the synthetic chain
+	// its own in the producer cache, and a main chain's receipts are never
+	// built here.
+	Segments map[string]*merkle.Segment
+}
+
+// SegmentKey names a chain for ChainUpdates.Segments.
+func SegmentKey(account *url.URL, chain string) string {
+	return strings.ToLower(account.String()) + ";" + chain
 }
 
 func (c *ChainUpdates) Merge(d *ChainUpdates) {
@@ -97,6 +114,22 @@ func (c *ChainUpdates) Merge(d *ChainUpdates) {
 		c.DidUpdateChain(u)
 	}
 	c.SynthEntries = append(c.SynthEntries, d.SynthEntries...)
+	for k, seg := range d.Segments {
+		if c.Segments == nil {
+			c.Segments = map[string]*merkle.Segment{}
+		}
+		cur, ok := c.Segments[k]
+		switch {
+		case !ok:
+			c.Segments[k] = seg
+		case seg.First == cur.Last()+1:
+			cur.Elements = append(cur.Elements, seg.Elements...)
+		default:
+			// Two transactions appended to the same chain out of order
+			// within one block, which the executor's sort does not do.
+			// Keep the earlier span; a receipt outside it will say so.
+		}
+	}
 }
 
 // DidUpdateChain records a chain update.
@@ -152,6 +185,25 @@ func (u *ChainUpdates) AddChainEntry2(batch *database.Batch, chain *database.Cha
 	}
 
 	index := c.Height()
+	// An anchor chain's appends are also kept as a segment, so the block can
+	// build receipts over them from memory. The state before the first
+	// append is the chain's head, a live record.
+	var seg *merkle.Segment
+	if chain.Type() == merkle.ChainTypeAnchor {
+		key := SegmentKey(chain.Account(), chain.Name())
+		if u.Segments == nil {
+			u.Segments = map[string]*merkle.Segment{}
+		}
+		seg = u.Segments[key]
+		if seg == nil {
+			head, err := chain.Head().Get()
+			if err != nil {
+				return 0, errors.UnknownError.WithFormat("load %s chain head: %w", chain.Name(), err)
+			}
+			seg = &merkle.Segment{First: index, Before: head.Copy(), MarkMask: chain.Inner().MarkMask()}
+			u.Segments[key] = seg
+		}
+	}
 	err = c.AddEntry(entry, unique)
 	if err != nil {
 		return 0, errors.UnknownError.WithFormat("add entry to %s chain: %w", chain.Name(), err)
@@ -160,6 +212,9 @@ func (u *ChainUpdates) AddChainEntry2(batch *database.Batch, chain *database.Cha
 	// The entry was a duplicate, do not update the ledger
 	if index == c.Height() {
 		return c.HeightOf(entry)
+	}
+	if seg != nil {
+		seg.Append(entry)
 	}
 
 	// Update the ledger

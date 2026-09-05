@@ -105,16 +105,19 @@ them is the writer's bug, not the chain's to absorb.
 - A mutable record is answered by the dynamic layer alone. It is routed there
   without exception, so a miss there is the answer, and the permanent history
   is never searched for it.
-- A chain's **mark-point states** are dynamic, not permanent. A mark point is
-  the merkle state every later state of the chain is computed from; it is
-  written once and read by every receipt the chain ever builds, and a receipt
-  over a slow chain — the Directory's root chain, an anchor chain at one entry
-  a block — reaches for a mark point written hundreds of blocks ago. Behind
-  the window that read is "absent", and a chain that treats an absent mark
-  point as a truncated chain builds a different chain: soak
-  `20260905T032333Z` and every run after it had the Directory's anchors
-  carrying receipts to a root no BVN held, every anchor rejected, nothing
-  dispatched. A missing mark point is an error, never an empty state.
+- **The protocol never proves from the stored tree.** A chain is a sequence
+  of hashes to everything above the merkle library; receipts and receipt lists
+  are built from a *segment* — the chain's state before a span and the hashes
+  of the span, kept in memory by whoever appended them — and validated by the
+  library. The producer cache holds the synthetic chain's segment per block;
+  the block holds its root chain segment and a segment for every anchor chain
+  it appended to, and the Directory's anchor receipts are built from those. A
+  receipt built by reading the stored tree depends on what the store still
+  answers, and a windowed store turned that into rejected anchors for every
+  run from `20260905T032333Z` to `051008Z`. Where the store keeps the tree's
+  own records (mark points, elements, element indexes) is the store's
+  business; mark points are in the dynamic layer because queries reach them
+  at any age, and a missing one is an error, never an empty state.
 - A permanent record is answered from the window. The one reader that
   legitimately reaches further — a signature or reference arriving for a
   pending transaction whose body is older than the window — takes a deep

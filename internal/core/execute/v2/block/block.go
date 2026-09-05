@@ -8,6 +8,7 @@ package block
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -35,6 +36,11 @@ type Block struct {
 	// block (executor spec, "Sync").
 	staging *execute.StagingTxn
 
+	// rootSeg is this block's span of the root chain, and rootPosOf where
+	// each modified chain's anchor landed in it: what the Directory's
+	// receipts are built from, in memory.
+	rootSeg   *merkle.Segment
+	rootPosOf map[string]int64
 	// proofsValidatedThrough is how many of State.ReceivedAnchors anchor
 	// staging has already used to decide waiting proofs this block.
 	proofsValidatedThrough int

@@ -779,6 +779,15 @@ sharding helped or whether nothing was shardable.
 
 ### Dispatch — when a block's synthetics leave, and who sends them
 
+**Every proof a block sends is built from memory, never from the stored tree.**
+The block keeps the span of the root chain it appends and, for every anchor
+chain it appends to, that chain's state before the block and the hashes it
+added (`merkle.Segment`); the Directory's receipts for the partition anchors it
+received are the anchor-chain segment from the received anchor to its new head
+joined to the root segment from where that head landed. The synthetic proofs
+come from the producer cache's segments the same way. Nothing reads a chain
+back to prove it (database.md, "Duplicates are caught at entry").
+
 A block's synthetic messages do not leave when the block closes. They leave
 when a **Directory receipt covering that block comes back**: the block's
 anchor goes to the Directory, the Directory anchors it and sends back a
