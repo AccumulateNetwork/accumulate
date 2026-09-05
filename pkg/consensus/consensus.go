@@ -82,6 +82,11 @@ type NodeConfig struct {
 	// (consensus spec, invariant 9). Zero means primary.DefaultMaxExecutionLag.
 	MaxExecutionLag int
 
+	// MaxHeaderBytes bounds the batches one header carries, so a backlog that
+	// built while headers were empty comes back a header at a time
+	// (consensus spec, invariant 9). Zero means primary.DefaultMaxHeaderBytes.
+	MaxHeaderBytes int
+
 	// MinRoundInterval paces round advancement, and therefore block cadence:
 	// Bullshark commits a leader every other round, so blocks arrive at
 	// roughly twice this interval. Zero falls back to
@@ -239,6 +244,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		Partition:        config.Partition,
 		KeyPair:          config.KeyPair,
 		MinRoundInterval: config.MinRoundInterval,
+		MaxHeaderBytes:   config.MaxHeaderBytes,
 	}
 	p := primary.New(pcfg, committee, g, d, workers)
 

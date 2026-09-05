@@ -106,10 +106,13 @@ type Config struct {
 // of traffic, not a buffer.
 const DefaultMaxExecutionLag = 8
 
-// DefaultMaxHeaderBytes is the bound on the batches one header carries: two
-// batches at the default batch size, about two seconds of traffic at the
-// target rate, so a backlog of a few blocks is spread over a few headers.
-const DefaultMaxHeaderBytes = 1 << 20
+// DefaultMaxHeaderBytes is the bound on the batches one header carries. It is
+// sized to about one block interval of the executor's capacity -- some 500
+// transactions at ~250 bytes -- so a backlog of several blocks is spread over
+// several headers and no single block takes many seconds to execute. A full
+// default batch (500 KiB) is already ~2,000 transactions, seconds of
+// execution; two of them per header was not a cap.
+const DefaultMaxHeaderBytes = 256 << 10
 
 // applyDefaults fills in default values for unset configuration fields.
 func (c *Config) applyDefaults() {
