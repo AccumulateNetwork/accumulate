@@ -36,6 +36,15 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	block.Batch = x.Database.Begin(true)
 	block.cache = x.synthCache().Begin(params.Index)
 
+	// Once, at the first block this executor opens: rebuild the cache for the
+	// recent blocks whose anchors have not returned (genesis produced them, or
+	// the node restarted). A start-up read, by position, not a runtime path.
+	var seedErr error
+	x.cacheSeedOnce.Do(func() { seedErr = x.seedSynthCache(block.Batch, params.Index) })
+	if seedErr != nil {
+		return nil, errors.UnknownError.WithFormat("seed synthetic cache: %w", seedErr)
+	}
+
 	defer func() {
 		if err != nil {
 			block.Batch.Discard()

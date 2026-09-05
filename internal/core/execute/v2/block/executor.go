@@ -47,6 +47,7 @@ type Executor struct {
 	db                 database.Beginner
 	cacheOnce          sync.Once
 	cacheDefault       *synthcache.Cache
+	cacheSeedOnce      sync.Once
 	isValidator        bool
 	isGenesis          bool
 	mainDispatcher     Dispatcher

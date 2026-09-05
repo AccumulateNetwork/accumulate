@@ -255,6 +255,37 @@ func (c *Cache) trimLocked() {
 	}
 }
 
+// Seed inserts blocks rebuilt from the node's own chains at start, before
+// the cache has seen a block committed: genesis produces through another
+// executor, and a restarted node has produced blocks whose anchors have not
+// returned. It is the cache's sync step, run once, and it does not touch what
+// a running block has added.
+func (c *Cache) Seed(blocks []*Block) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, b := range blocks {
+		if _, held := c.blocks[b.Index]; held {
+			continue
+		}
+		c.blocks[b.Index] = b
+		for _, e := range b.Entries {
+			k := streamKey(e.Stream)
+			m := c.entries[k]
+			if m == nil {
+				m = map[uint64]*Entry{}
+				c.entries[k] = m
+			}
+			m[e.Number] = e
+			c.byHash[e.Hash] = e
+		}
+		if b.Index > c.newest {
+			c.newest = b.Index
+		}
+	}
+	mEntries.Set(float64(len(c.byHash)))
+	mBlocks.Set(float64(len(c.blocks)))
+}
+
 // Block answers what block index's proofs are built from and its entries. A
 // miss is counted: it is a defect, an undersized cache or a request for a
 // block older than the horizon.
