@@ -72,7 +72,6 @@ func streamLag(t *testing.T, sim *Sim, dst *url.URL, src *url.URL) (received, de
 // is what turned one overloaded stream into a 33,000-message wedge in run
 // 20260824T051249Z.
 func TestNoLaggingChannels(t *testing.T) {
-	t.Skip("drops a synthetic and expects healing; healing moves into staging (H8 #4216) and this is one of its acceptance tests")
 	var timestamp uint64
 	const (
 		perBlock = 40 // deposits per block, all distinct identities

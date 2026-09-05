@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"log/slog"
 	"math/big"
 	"sync"
@@ -84,6 +85,7 @@ type networkFactory struct {
 type nodeFactory struct {
 	*networkFactory
 	staging *coreexec.Staging
+	cache   *synthcache.Cache
 
 	// Options
 	id      int
@@ -519,6 +521,16 @@ func (f *nodeFactory) getStaging() *coreexec.Staging {
 	return f.staging
 }
 
+// getSynthCache is the node's synthetic/anchor cache, shared by its executor
+// (which fills it and dispatches from it) and its sequencer (which answers
+// healing requests from it and nothing else).
+func (f *nodeFactory) getSynthCache() *synthcache.Cache {
+	if f.cache == nil {
+		f.cache = synthcache.New(0)
+	}
+	return f.cache
+}
+
 func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a querier service
 	f.registerSvc(api.ServiceTypeQuery, message.Querier{
@@ -557,6 +569,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 			EventBus:     f.getEventBus(),
 			Partition:    f.networkFactory.id,
 			ValidatorKey: f.network.PrivValKey,
+			Cache:        f.getSynthCache(),
 		}),
 	})
 
@@ -572,6 +585,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Querier:       f.getServices(),
 		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
 		Staging:       f.getStaging(),
+		SynthCache:    f.getSynthCache(),
 
 		// Shard user-transaction execution by identity (#4145). Zero is the
 		// serial path; tests opt in via simulator.ExecutionShards, or give
@@ -601,6 +615,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Querier:             api.Querier2{Querier: f.getServices()},
 		Dispatcher:          execOpts.NewDispatcher(),
 		Sequencer:           f.getServices().Private(),
+		Staging:             f.getStaging(),
 		RunTask:             execOpts.BackgroundTaskLauncher,
 		DropInitialAnchor:   f.dropInitialAnchor,
 		EnableAnchorHealing: &enableAnchorHealing,

@@ -62,6 +62,7 @@ func (s *Sequencer) entryRecord(globals *core.GlobalValues, e *synthcache.Entry,
 		return nil, errors.InternalError.Wrap(err)
 	}
 	r.Signatures = signatureSet(keySig, r.ID)
+	r.Companion = e.Companion
 
 	if blk != nil {
 		r.SourceReceipt, err = blk.Proof(e.Index)
@@ -141,6 +142,7 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 		return nil, errors.InternalError.With("built an invalid receipt list")
 	}
 	records[len(records)-1].SourceReceiptList = list
+	records[len(records)-1].SourceAnchorBlock = last.AnchorBlock
 	return records, nil
 }
 

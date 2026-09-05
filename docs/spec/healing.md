@@ -276,6 +276,12 @@ after the four groups have executed, staging computes per source: the proven
 indexes not held and the held or expected indexes not proven, each first seen
 at least two activations ago and not asked within the last `healPatience`
 activations. That is the request set: a hash set and a list of index spans.
+An index is **expected** when the source's synthetic ledger says it was
+produced for this partition: a lost tail leaves nothing in staging to reveal
+a gap, so a selected sender reads the source's ledger once per activation —
+mutable state, one query — and an unsighted index below that count is a gap
+after a longer notice (`healExpectedAge`), since production runs ahead of
+dispatch by the Directory round trip.
 Anchor gaps — a sequence number below the newest held anchor with no anchor —
 are requested on the block that exposes them. Sender selection is a function
 of the previous block's hash over the validator set yielding two indices; a

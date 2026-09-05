@@ -290,6 +290,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
 		Sequencer:    client.Private(),
+		Staging:      staging,
 		Heals:        healCounters,
 		RunTask:      execOpts.BackgroundTaskLauncher,
 		// Healing is the ONLY retry mechanism for anchors — the conductor's

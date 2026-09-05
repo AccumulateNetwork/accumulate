@@ -26,7 +26,6 @@ import (
 )
 
 func TestMissingSynthTxn(t *testing.T) {
-	t.Skip("drops a synthetic and expects healing; healing moves into staging (H8 #4216) and this is one of its acceptance tests")
 	// This test was flaky because the simulator lost messages that healing
 	// submitted from background tasks — fixed by the shared hub dispatcher
 	// (#4048).

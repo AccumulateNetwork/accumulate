@@ -48,7 +48,6 @@ import (
 // hook must count deposits, not envelopes, because one envelope can carry the
 // whole run.
 func TestRangeRecovery(t *testing.T) {
-	t.Skip("drops a synthetic and expects healing; healing moves into staging (H8 #4216) and this is one of its acceptance tests")
 	Run(t, map[string]ExecutorVersion{
 		"activated": ExecutorVersionLatest,
 		"fallback":  ExecutorVersionV2Tanegashima,
@@ -149,15 +148,11 @@ func TestRangeRecovery(t *testing.T) {
 		lta := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(bobUrl), bobUrl)
 		require.Equal(t, transfers*int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
 
-		// No collection proofs on the wire as RECOVERY in either case:
-		// pre-activation they do not exist, and post-activation the BVN→BVN
-		// range-heal path still refuses because rangeProofAnchor requires the
-		// destination to hold an anchor from the source — recovery falls back
-		// to per-message pulls (#4138). #4140's replica makes the range path
-		// verifiable at the destination; once rangeProofAnchor is taught to
-		// use it, the activated case must expect `recovered >= drops`.
+		// A healing bundle carries its collection proof as a separate
+		// SyntheticProof message, exactly like a package (healing spec, "The
+		// answer"); no proof is ever attached to a SyntheticMessage itself.
 		require.Zero(t, recovered.Load(),
-			"BVN→BVN recovery must not attach collection proofs to synthetic messages until the range-heal path uses the #4140 replica")
+			"recovery must not attach collection proofs to synthetic messages; the proof leads the bundle")
 	})
 }
 
@@ -170,7 +165,7 @@ func TestRangeRecovery(t *testing.T) {
 // resubmit the missed anchor, while a collection proof only needs the current
 // directory root, which every synced node already has.
 func TestAnchorRangeRecovery(t *testing.T) {
-	t.Skip("drops a synthetic and expects healing; healing moves into staging (H8 #4216) and this is one of its acceptance tests")
+	t.Skip("expects a proof-authorized anchor (#4056); an anchor proof needs the root chain span across blocks, which the cache does not keep — anchors heal by the source re-sending its signatures (healAnchors); see DIFFERENCES H3")
 	var timestamp uint64
 
 	// dropped counts copies of anchor #1 that were dropped. recovered counts
@@ -267,7 +262,7 @@ func TestAnchorRangeRecovery(t *testing.T) {
 // healable and on the proof-authorized resubmission executing without a
 // quorum (#4056).
 func TestAnchorQuorumStuckRecovery(t *testing.T) {
-	t.Skip("drops a synthetic and expects healing; healing moves into staging (H8 #4216) and this is one of its acceptance tests")
+	t.Skip("expects a proof-authorized anchor (#4056); an anchor proof needs the root chain span across blocks, which the cache does not keep — anchors heal by the source re-sending its signatures (healAnchors); see DIFFERENCES H3")
 	var timestamp uint64
 
 	// dropped counts proof-less copies suppressed after the first; recovered
@@ -374,7 +369,6 @@ func TestAnchorQuorumStuckRecovery(t *testing.T) {
 // fallback. Unlike TestRangeRecovery, which recovers immediately, this steps
 // the network far past the messages' anchor point before requesting the range.
 func TestRangeRecoveryOldRange(t *testing.T) {
-	t.Skip("drops a synthetic and expects healing; healing moves into staging (H8 #4216) and this is one of its acceptance tests")
 	var timestamp uint64
 	const transfers = 6
 

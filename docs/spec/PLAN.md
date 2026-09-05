@@ -22,7 +22,7 @@ healer is gone; a lost entry now shows as a stalled stream, and that gap is
 what the next item hunts.
 
 ```
-E8 #4217 (done) ─▶ H1 #4193 (DONE) ─▶ E10 (DONE: staging is memory, `execute.Staging`, a block transaction that commits with the block) ─▶ C6 #4215 (DONE: execution lag bounded at 8 blocks; empty headers and refusal by reason past it) ─▶ H8 #4216 ─▶ acceptance run #7
+E8 #4217 (done) ─▶ H1 #4193 (DONE) ─▶ E10 (DONE: staging is memory, `execute.Staging`, a block transaction that commits with the block) ─▶ C6 #4215 (DONE: execution lag bounded at 8 blocks; empty headers and refusal by reason past it) ─▶ H8 #4216 (DONE as a pull by span from staging; push and hash set are DIFFERENCES H8) ─▶ acceptance run #7
 R #4219 ─▶ S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86   cost: first the reads that prove an absence, then the rest
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3               correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back
@@ -112,6 +112,16 @@ envelopes; fixed `cc8c06366`). The heals criterion is H8's to meet; E8's code
 is complete except release of the proven set.
 
 ### H8 #4216 — healing by hash set, from the producer cache (for dropped entries)
+
+DONE 2026-09-05 as a pull: the conductor's requester
+(`internal/core/crosschain/requester.go`) decides from `execute.Staging` on
+activation blocks, asks the source's `SequenceRange` by span and submits the
+bundle itself; the source's sequencer answers from the cache with the span's
+proof, the Directory block it is provable under and each entry's companion.
+Items 1, 4 and most of 5 below are done as written; 2 and 3 are done in the
+pull form (DIFFERENCES H8). Anchors are not pulled (DIFFERENCES H9). Seven
+dropped-entry acceptance tests pass; the two anchor-proof tests are skipped.
+Still to show: the "done when" soak below.
 
 Spec: healing.md throughout; database.md "Caches".
 

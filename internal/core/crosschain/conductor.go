@@ -45,6 +45,11 @@ type Conductor struct {
 	// permanently (#4105).
 	Sequencer private.Sequencer
 
+	// Staging is the executor's synthetic staging. The requesting side of
+	// healing decides from it: an index above Delivered that staging does not
+	// hold, or holds unproven, is a gap (healing.md, "Deciding, in staging").
+	Staging *execute.Staging
+
 	// Ready can be used to pause the conductor, for example to stop it from
 	// sending anchors while the node is catching up.
 	Ready func(execute.WillBeginBlock) bool
@@ -97,6 +102,8 @@ type Conductor struct {
 	// rate; with an activation every few blocks and two senders, there is no
 	// rate to break.
 	inflight sync.Map
+
+	requester healRequester
 }
 
 // remoteHealth is one remote partition's circuit breaker state.
@@ -279,6 +286,19 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 	}
 
 	// Did anything happen last block?
+	if activate && c.Staging != nil && c.Sequencer != nil && c.selectedToPull(ledger) {
+		c.runExclusive("requestGaps", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), def(c.HealTimeout, DefaultHealTimeout))
+			defer cancel()
+			batch := c.Database.Begin(false)
+			defer batch.Discard()
+			err := c.requestGaps(ctx, batch, e.Index)
+			if err != nil {
+				slog.Error("Error while requesting missing synthetics", "error", err)
+			}
+		})
+	}
+
 	if ledger.Index < e.Index-1 {
 		slog.DebugContext(e.Context, "Skipping anchor", "module", "conductor", "index", ledger.Index)
 		return nil
@@ -389,6 +409,8 @@ func def[T any](value *T, def T) T {
 // HealCounters is shared with the consensus service so recoveries are visible
 // to operators rather than only in logs.
 type HealCounters struct {
-	Synthetic atomic.Uint64
+	Synthetic atomic.Uint64 // synthetic entries a requested bundle carried
 	Anchor    atomic.Uint64
+	Requests  atomic.Uint64 // span requests sent
+	Misses    atomic.Uint64 // requests the source could not answer from its cache
 }

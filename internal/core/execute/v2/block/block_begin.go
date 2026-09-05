@@ -373,18 +373,15 @@ func (x *Executor) recordAnchor(block *Block, ledger *protocol.SystemLedger) err
 
 func (x *Executor) sendSyntheticTransactions(isLeader bool) error {
 	// Every Directory anchor executed since the last block open, with its
-	// receipts, was kept by the block that executed it. Take them whether or
-	// not this node sends: nothing here changes state, and only the leader
-	// submits.
+	// receipts, was kept by the block that executed it. Every node records
+	// which Directory block receipted each of its blocks — that is what lets
+	// its sequencer answer a healing request for the block's entries with a
+	// proof — but only the leader submits.
 	received := x.synthCache().TakeReceived()
-	if !isLeader {
-		return nil
-	}
-
 	for _, r := range received {
 		anchor := r.Anchor
 		if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
-			err := x.sendSyntheticTransactionsForBlock(anchor.MinorBlockIndex, nil, anchor.MinorBlockIndex)
+			err := x.sendSyntheticTransactionsForBlock(anchor.MinorBlockIndex, nil, anchor.MinorBlockIndex, isLeader)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -396,7 +393,7 @@ func (x *Executor) sendSyntheticTransactions(isLeader bool) error {
 				continue
 			}
 
-			err := x.sendSyntheticTransactionsForBlock(receipt.Anchor.MinorBlockIndex, receipt, anchor.MinorBlockIndex)
+			err := x.sendSyntheticTransactionsForBlock(receipt.Anchor.MinorBlockIndex, receipt, anchor.MinorBlockIndex, isLeader)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -417,16 +414,17 @@ func (x *Executor) sendSyntheticTransactions(isLeader bool) error {
 // and root receipt that its proofs are built from. Nothing is read from the
 // store. A block the cache does not hold is a counted miss; its synthetics
 // are not dispatched and healing fills them (healing spec, "The cache").
-func (x *Executor) sendSyntheticTransactionsForBlock(blockIndex uint64, blockReceipt *protocol.PartitionAnchorReceipt, anchorBlock uint64) error {
+func (x *Executor) sendSyntheticTransactionsForBlock(blockIndex uint64, blockReceipt *protocol.PartitionAnchorReceipt, anchorBlock uint64, send bool) error {
 	blk, ok := x.synthCache().Block(blockIndex)
 	if !ok {
 		x.logger.Error("Synthetic cache does not hold the block; its synthetics are not dispatched", "module", "synthetic", "block", blockIndex, "anchor-block", anchorBlock)
 		return nil
 	}
 	// Healing proves its bundles under the same anchor this dispatch proves
-	// under (healing spec, "The cache")
+	// under (healing spec, "The cache"). Recorded on every node; sent by the
+	// leader.
 	x.synthCache().MarkDispatched(blockIndex, anchorBlock, blockReceipt)
-	if len(blk.Entries) == 0 {
+	if !send || len(blk.Entries) == 0 {
 		return nil
 	}
 	seg := blk.Segment

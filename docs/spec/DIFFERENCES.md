@@ -301,41 +301,89 @@ answers are built from it alone; the e2e suite fails on a dispatch miss.
 Remaining: the cache is cleared by a horizon of blocks, not by the
 destination's delivered index, because no signal carries that back to the
 producer; the v1 simulator's sequencer still reads the store, since the v1
-executor has no cache; the requester side (H8) does not exist, so nothing
-asks the sequencer yet; the Directory receipt a block was dispatched under is
+executor has no cache; the Directory receipt a block was dispatched under is
 the only anchor a bundle can be proven under (`ProveAgainstAnchor` for any
-other is `NotReady`), which is H3.
+other is `NotReady`), which is H3. The requester exists (H8) and asks the
+sequencer by span.
 
 **Size**: small; the delivery signal is the open design point.
 
 ---
 
-### H8. The node has no synthetic healing; the spec's lives in staging and is unbuilt
+### H8. Healing pulls spans and the requester submits; the spec says hashes, and the source submits
 
 *[#4216](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4216)*
 
 **Spec** ([healing.md](healing.md)): staging computes the gaps by index; a
-selected validator sends one request naming hashes and index spans; the
-source answers from its producer cache with a bundle; intake takes it. It is
-the recovery for **dropped** entries; with nothing dropped it does nothing.
+selected validator sends one request naming **hashes and index spans**; the
+**source** answers from its producer cache and **submits the bundle into the
+requesting network** through its dispatcher; intake takes it; the answer
+carries no signature.
 
-**Code**: none. The conductor's synthetic healer — per-number pulls through the
-source's sequencer, a reconcile by the source's `Produced`, range recovery
-under source roots that no destination could accept — was deleted on
-2026-09-04 (`issue-4217-two-store-staging`): it was not the spec's mechanism,
-it was most of every block under load, and it hid staging's own defects by
-re-delivering what dispatch had lost. What remains in the conductor is the
-anchor signature re-send on the cadence, which is a validator's own
-contribution and not healing. The end-to-end tests that drop an entry and
-expect recovery are skipped, named, and are H8's acceptance tests.
+**Code**: the requesting side is built (`internal/core/crosschain/requester.go`,
+2026-09-05). On an activation block a validator selected by the previous
+block's root anchor reads the executor's `execute.Staging`: every index above
+`Delivered` up to what is sighted or expected that staging does not hold, or
+holds collected without a proof, is a gap; gaps are remembered by index with
+the activation that first saw them and the one that asked, coalesced into
+spans (at most `MaxRequestSpans`, each within `MaxReceiptListElements`), and
+asked after two activations (six for an unsighted tail) and not again within
+`healPatience`. A source whose requests all failed is backed off, doubling to
+eight activations. Counted: `accumulate_conductor_heal_requests_total{outcome}`,
+`heal_entries_total`, and `HealCounters.Requests/Misses/Synthetic`. Seven of
+the nine dropped-entry acceptance tests run and pass; the two that drop an
+anchor are H9.
 
-**Consequence**: until H8 is built, a lost synthetic is a stalled stream with a
-visible gap between received and delivered — which, with no drops, is the
-measurement of dispatch and staging that the old healer prevented.
+Where it departs from the spec:
 
-**Size**: medium. The producer cache (H1), a hash-set and span request on the
-sequencer service, bundles through the dispatcher, the decision in staging with
-two cycles of patience, the counting table.
+- **Pull, not push.** The requester calls the source's `SequenceRange` and
+  submits the answer into its own partition itself, as a bundle shaped like a
+  package (`SyntheticProof` first, then the entries, each with its companion).
+  The source submits nothing. The push form needs a submit path from the
+  source into a foreign partition's consensus that the dispatcher does not have
+  today; the pull form uses the request's reply channel, which exists.
+- **Spans, not hashes.** There is no entries-by-hash-set method; a
+  proven-missing entry is asked for by its index inside a span, and the answer
+  carries the span's proof whether or not the requester already held it.
+- **A signature in the answer.** The sequencer signs each entry with the
+  answering validator's key; the executor requires a key signature on a
+  `SyntheticMessage`, so the requester copies it into the bundle. The spec's
+  "no signature" would need the executor to accept a proven entry unsigned.
+- **The answer names its anchor.** `MessageRecord.SourceAnchorBlock` and
+  `MessageRecord.Companion` were added to the API record so the requester can
+  build the proof's `AnchorMetadata` and include the companion without reading
+  the source's history; the spec has no wire format for these.
+
+**Size**: the push form and the hash method are each small once the executor
+accepts unsigned proven entries; not urgent.
+
+---
+
+### H9. Anchors are re-sent, not pulled with a proof
+
+*[#4056](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4056)*
+
+**Spec** ([healing.md](healing.md), "Deciding, in staging"): anchor gaps — a
+sequence number below the newest held anchor with no anchor — are requested on
+the block that exposes them, answered by the source from its cache.
+
+**Code**: an anchor is healed by its source re-sending its own signature on the
+cadence (`healAnchors`), which is each validator's contribution and needs the
+re-send to arrive; nothing pulls an anchor. The proof-authorized anchor of
+#4056 — a `BlockAnchor` with a collection proof over the source's anchor
+sequence chain, continued to a root the destination already holds — is what
+`TestAnchorRangeRecovery` and `TestAnchorQuorumStuckRecovery` expect, and the
+cache cannot build it: the continuation is a root chain receipt across blocks,
+and the cache keeps each block's receipt to its own root only. Building it
+means keeping the root chain's span across the horizon in the cache, or
+building it from the store, which the spec forbids. Both tests are skipped
+with this reason.
+
+**Size**: small if anchors pull by number and the answering validator's
+signature counts as one attestation (the request-as-re-attestation form, which
+the current `Sequence` method already answers); medium for the proof form.
+
+---
 
 ### H3. Proof extension does not exist
 
