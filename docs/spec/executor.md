@@ -169,12 +169,11 @@ Staging decides what executes: a block delivers the contiguous run starting at
 `Delivered + 1`, taken from this block's arrivals and from what is held. Two
 nodes holding different things execute different runs from the same block, so
 staging must be the same everywhere, and it is, because it is a deterministic
-function of the consensus stream. A node that starts from a snapshot or
-restarts does not begin with empty staging and hope: it **replays the
-committed stream** from its last executed block to the head, rebuilding
-staging exactly as its peers built it, and it executes nothing as a validator
-until it has caught up. Retention and the snapshot are what make that replay
-possible (consensus.md, "Retention"; #4205).
+function of the consensus stream. A node that joins or restarts does not begin
+with empty staging and hope: it **replays the committed stream** from its last
+executed block to the head, rebuilding staging exactly as its peers built it,
+and it executes nothing as a validator until it has caught up. Retention is
+what makes that replay possible (consensus.md, "Retention"; #4205).
 
 Nothing derived from staging is written into hashed state unless it is derived
 through execution. `Delivered` qualifies. A copy of how far a stream has been
@@ -236,7 +235,9 @@ block index. Two things follow, and both are the point:
 - **A snapshot carries every block's ledger record.** They are what a restored
   node rebuilds its account indices from (`repair-indices`), as it could from
   the per-block accounts they replace; a snapshot without them leaves a
-  restored node with no way back to its indices.
+  restored node with no way back to its indices. A snapshot carries a chain's
+  entries and not its hash index, and restore rebuilds every chain's index
+  from its entries before the node runs.
 - **Closing a block costs the block, not the chain.** Recording block *N*
   writes one record the size of block *N*'s entry list and appends one hash to
   a chain. Nothing already written is read back or written again. A node at
@@ -482,7 +483,7 @@ of n messages cost O(n²) (`TestSequenceLedgerCostIsPerRead`).
 reference to staging for what is held. It is built once per stream per block
 from the ledger's `Delivered` and advanced in place, and at close **only
 `Delivered` is written back**. It holds a reference rather than a copy of the
-held set — a copy is a snapshot, and a snapshot of what the node holds
+held set — a copy is a moment, and a moment of what the node holds
 disagreeing with what the node holds is the whole defect.
 
 ### Staging is one structure, and this is what it answers
@@ -527,21 +528,6 @@ remains proven above it and unheld is a gap.
 delivery has not happened. Dropping a staged message for a block that is then
 discarded makes the node fetch back across the network something it still holds,
 which is the failure this whole change removes, reintroduced from the other end.
-
-### Staging and a snapshot
-
-A snapshot carries executed state and nothing of staging. A node restored from
-one has the `Delivered` of every stream and none of what its peers hold above
-it, so it does not execute as a validator until it has replayed the committed
-stream from the snapshot's block to the head ("Sync"). Putting staging in the
-snapshot would only move the same problem: a snapshot is a moment, and the
-node needs the moment its peers are at.
-
-One thing a snapshot must carry that is not an account's hashed state: a
-chain's entries are in it and its hash index is not, and the hash index is how
-a node asks whether a Directory anchor is on a chain. Restore rebuilds every
-chain's index from its entries before the node runs; without that a restored
-node judges every proof inadmissible, silently.
 
 ### What the stream ledger is for
 
