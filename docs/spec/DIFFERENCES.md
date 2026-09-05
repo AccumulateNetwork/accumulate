@@ -190,6 +190,30 @@ precondition for executing.
 
 ---
 
+### E11. A node cannot sync from the running protocol
+
+*[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
+
+**Spec** ([executor.md](executor.md), "Sync"): every node, validator or
+follower, pulls the state of the chains down from the running protocol,
+verified against the anchored root, while collecting messages from consensus
+into staging, and processes transactions only once the state matches and
+staging holds what its peers hold.
+
+**Code**: a node starts from genesis or from a snapshot file it was given, and
+consensus "catches up" by fetching batches from peers' retention
+(`pkg/consensus/recovery.go`, `DefaultCatchUpTimeout` 60 s). A peer further
+behind than retention is told `absence=no-record` and has no way back; a
+validator restarted under load could not rejoin and stalled its partition
+(#4205, run `20260903T202621Z`). Nothing pulls chain state from peers, nothing
+verifies it against an anchored root, and nothing gates execution on staging
+being complete.
+
+**Size**: large; it is the precondition for E10 (staging in memory) and for
+chaos returning to a soak.
+
+---
+
 ## Database abstraction
 
 ### D1. Record placement is a second, hand-maintained model
