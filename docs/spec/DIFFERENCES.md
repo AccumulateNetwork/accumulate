@@ -413,28 +413,28 @@ its share.
 
 ## Healing
 
-### H1. The producer cache does not exist
+### H1. The producer cache exists; what it is not yet cleared by, and what still reads the store
 
 *[#4193](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4193)*
 
-**Spec** ([healing.md](healing.md), "The cache"): a partition keeps every
-synthetic and anchor it produced over the healing window, keyed by hash and by
-stream position, and serves every heal request from it; a miss is a counted
-defect.
+**Spec** ([healing.md](healing.md), "The cache"): the producer keeps every
+synthetic and anchor in play, keyed by hash and by stream position, with what
+its proofs are built from; dispatch and healing read it and nothing else;
+cleared as the destination delivers; a miss is refused and counted.
 
-**Code**: no cache on either side. The sequencer rebuilds message, receipt and
-signature from the database on every request (`getSynth`,
-`getDirectoryReceiptForBlock`): 35% of a source's CPU at hour one of run
-`20260904T012004Z`. Dispatch reads every body and companion by hash and
-searches the root index chain for the block's position
-(`sendSyntheticTransactionsForBlock`, `getRootReceiptForBlock`) — the reads
-the cache exists to prevent. Run `20260904T221627Z`: 442,652 body reads and
-424,392 root-index reads answered from history on eight BVN nodes in 40
-minutes, the only history reads that found anything. One cache was built earlier in the BlockchainDB adapter and
-removed — on the storage read path it answered 0.40% of lookups, because it
-cached the executor's reads rather than what healing asks for.
+**Code**: built (`internal/core/synthcache`). Dispatch and the sequencer's
+answers are built from it alone; the e2e suite fails on a dispatch miss.
+Remaining: the cache is cleared by a horizon of blocks, not by the
+destination's delivered index, because no signal carries that back to the
+producer; the v1 simulator's sequencer still reads the store, since the v1
+executor has no cache; the requester side (H8) does not exist, so nothing
+asks the sequencer yet; the Directory receipt a block was dispatched under is
+the only anchor a bundle can be proven under (`ProveAgainstAnchor` for any
+other is `NotReady`), which is H3.
 
-**Size**: small for the cache itself; it is the foundation of H8.
+**Size**: small; the delivery signal is the open design point.
+
+---
 
 ### H8. The node has no synthetic healing; the spec's lives in staging and is unbuilt
 

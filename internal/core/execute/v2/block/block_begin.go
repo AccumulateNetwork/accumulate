@@ -422,6 +422,9 @@ func (x *Executor) sendSyntheticTransactionsForBlock(blockIndex uint64, blockRec
 		x.logger.Error("Synthetic cache does not hold the block; its synthetics are not dispatched", "module", "synthetic", "block", blockIndex, "anchor-block", anchorBlock)
 		return nil
 	}
+	// Healing proves its bundles under the same anchor this dispatch proves
+	// under (healing spec, "The cache")
+	x.synthCache().MarkDispatched(blockIndex, anchorBlock, blockReceipt)
 	if len(blk.Entries) == 0 {
 		return nil
 	}

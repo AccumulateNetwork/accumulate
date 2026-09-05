@@ -22,7 +22,7 @@ healer is gone; a lost entry now shows as a stalled stream, and that gap is
 what the next item hunts.
 
 ```
-E8 #4217 (done) ─▶ H1 #4193 (the cache: dispatch and healing read it, never the store) + E10 (staging in memory) ─▶ C6 #4215 ─▶ R2 #4219 (first-write reads) ─▶ H8 #4216 ─▶ acceptance run #7
+E8 #4217 (done) ─▶ H1 #4193 (DONE: dispatch and the sequencer read the cache, never the store) ─▶ E10 (staging in memory) ─▶ C6 #4215 ─▶ R2 #4219 (first-write reads) ─▶ H8 #4216 ─▶ acceptance run #7
 R #4219 ─▶ S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86   cost: first the reads that prove an absence, then the rest
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3 ─▶ D4       correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back

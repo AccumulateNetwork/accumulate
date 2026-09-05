@@ -55,6 +55,43 @@ type Block struct {
 	Segment     *merkle.Segment
 	RootReceipt *merkle.Receipt
 	Entries     []*Entry // in synthetic chain order
+
+	// Set when the block's synthetics were dispatched: the Directory anchor
+	// they were proven under and the Directory's receipt for the block (nil
+	// on the Directory itself, whose root is the terminal). A bundle answering
+	// a healing request is proven under the same anchor.
+	Dispatched       bool
+	AnchorBlock      uint64
+	DirectoryReceipt *protocol.PartitionAnchorReceipt
+}
+
+// Proof is the receipt from the entry at index to the anchor the block was
+// dispatched under: through the synthetic chain, the root chain and, off the
+// Directory, the Directory's receipt. Nil until the block is dispatched.
+func (b *Block) Proof(index int64) (*merkle.Receipt, error) {
+	if !b.Dispatched || b.Segment == nil || b.RootReceipt == nil {
+		return nil, nil
+	}
+	synth, err := b.Segment.Receipt(index, b.Segment.Last())
+	if err != nil {
+		return nil, err
+	}
+	if b.DirectoryReceipt == nil {
+		return synth.Combine(b.RootReceipt)
+	}
+	return synth.Combine(b.RootReceipt, b.DirectoryReceipt.RootChainReceipt)
+}
+
+// Continuation is what a receipt list over the block's entries continues
+// with to reach the anchor the block was dispatched under. Nil until then.
+func (b *Block) Continuation() (*merkle.Receipt, error) {
+	if !b.Dispatched || b.RootReceipt == nil {
+		return nil, nil
+	}
+	if b.DirectoryReceipt == nil {
+		return b.RootReceipt, nil
+	}
+	return b.RootReceipt.Combine(b.DirectoryReceipt.RootChainReceipt)
 }
 
 // A ReceivedAnchor is a Directory anchor this partition executed, kept for
@@ -286,15 +323,33 @@ func (c *Cache) Seed(blocks []*Block) {
 	mBlocks.Set(float64(len(c.blocks)))
 }
 
-// Block answers what block index's proofs are built from and its entries. A
-// miss is counted: it is a defect, an undersized cache or a request for a
-// block older than the horizon.
+// Block answers what block index's proofs are built from and its entries, as
+// a copy whose slices are shared and never modified. A miss is counted: it
+// is a defect, an undersized cache or a request for a block older than the
+// horizon.
 func (c *Cache) Block(index uint64) (*Block, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	b, ok := c.blocks[index]
 	count("block", ok)
-	return b, ok
+	if !ok {
+		return nil, false
+	}
+	cp := *b
+	return &cp, true
+}
+
+// MarkDispatched records the Directory anchor block index's synthetics were
+// proven under when they left, and the Directory's receipt for the block
+// (nil on the Directory). Healing proves its bundles under the same anchor.
+func (c *Cache) MarkDispatched(index, anchorBlock uint64, receipt *protocol.PartitionAnchorReceipt) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	b, ok := c.blocks[index]
+	if !ok {
+		return
+	}
+	b.Dispatched, b.AnchorBlock, b.DirectoryReceipt = true, anchorBlock, receipt
 }
 
 // Entry answers one produced entry by stream and number.

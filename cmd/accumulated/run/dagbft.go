@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"log/slog"
 	"os"
 	"strconv"
@@ -218,15 +219,21 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// are two coincident constants that drift apart silently (#4151).
 	dagCfg := dagconfig.DefaultConfig()
 
+	// The producer's synthetic/anchor cache, shared by the executor that
+	// fills it and the sequencer that answers healing from it (healing spec,
+	// "The cache")
+	synthCache := synthcache.New(0)
+
 	// Create executor options
 	execOpts := multiexec.Options{
-		Logger:    logger.With("module", "executor"),
-		Database:  db,
-		Key:       validatorKey,
-		Router:    router,
-		EventBus:  s.eventBus,
-		Sequencer: client.Private(),
-		Querier:   client,
+		Logger:     logger.With("module", "executor"),
+		Database:   db,
+		SynthCache: synthCache,
+		Key:        validatorKey,
+		Router:     router,
+		EventBus:   s.eventBus,
+		Sequencer:  client.Private(),
+		Querier:    client,
 		// Shard user-transaction execution by identity (#4145).
 		ExecutionShards: int(*s.ExecutionShards),
 		// A synthetic package must fit in one worker batch (#4141).
@@ -430,7 +437,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 
 	// Register consensus API services
-	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters)
+	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache)
 	if err != nil {
 		return err
 	}
@@ -440,7 +447,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 }
 
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache) error {
 	logger := logging.NewSlogLogger(inst.logger)
 	// These are the SERVING side of the node: consensus queries, the
 	// sequencer answering a peer's healing request, the API.  They are
@@ -494,6 +501,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	sequencerSvc := api.NewSequencer(api.SequencerParams{
 		Logger:       logger.With("module", "api"),
 		Database:     db,
+		Cache:        synthCache,
 		EventBus:     s.eventBus,
 		Globals:      globals,
 		Partition:    s.Partition.ID,

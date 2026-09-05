@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -32,6 +33,7 @@ import (
 type Sequencer struct {
 	logger      logging.OptionalLogger
 	db          database.Viewer
+	cache       *synthcache.Cache
 	partitionID string
 	partition   config.NetworkUrl
 	valKey      []byte
@@ -71,12 +73,19 @@ type SequencerParams struct {
 	Globals      *core.GlobalValues
 	Partition    string
 	ValidatorKey []byte
+
+	// Cache is the producer's synthetic/anchor cache the executor fills.
+	// With it, every answer is built from the cache and a miss is refused
+	// and counted (healing spec, "The cache"). Without it — only the v1
+	// simulator, which has no cache — answers are read from the store.
+	Cache *synthcache.Cache
 }
 
 func NewSequencer(params SequencerParams) *Sequencer {
 	s := new(Sequencer)
 	s.logger.L = params.Logger
 	s.db = params.Database
+	s.cache = params.Cache
 	s.partitionID = params.Partition
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	s.valKey = params.ValidatorKey
@@ -151,12 +160,18 @@ func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64,
 	var err error
 	switch {
 	case s.partition.Synthetic().Equal(src):
+		if s.cache != nil {
+			return s.getSynthFromCache(globals, dst, num)
+		}
 		return r, s.db.View(func(batch *database.Batch) error {
 			r, err = s.getSynth(batch, globals, dst, num)
 			return err
 		})
 
 	case s.partition.AnchorPool().Equal(src):
+		if s.cache != nil {
+			return s.getAnchorFromCache(globals, dst, num)
+		}
 		return r, s.db.View(func(batch *database.Batch) error {
 			r, err = s.getAnchor(batch, globals, dst, num)
 			return err
@@ -525,11 +540,17 @@ func (s *Sequencer) SequenceRange(ctx context.Context, src, dst *url.URL, start,
 	var err error
 	switch {
 	case s.partition.Synthetic().Equal(src):
+		if s.cache != nil {
+			return s.getSynthRangeFromCache(globals, dst, start, end, opts)
+		}
 		return r, s.db.View(func(batch *database.Batch) error {
 			r, err = s.getSynthRange(batch, globals, dst, start, end, opts)
 			return err
 		})
 	case s.partition.AnchorPool().Equal(src):
+		if s.cache != nil {
+			return s.getAnchorRangeFromCache(globals, dst, start, end)
+		}
 		return r, s.db.View(func(batch *database.Batch) error {
 			r, err = s.getAnchorRange(batch, globals, dst, start, end, opts)
 			return err

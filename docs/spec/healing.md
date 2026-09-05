@@ -308,12 +308,25 @@ ranges at or below `Delivered` are released when the block commits.
 
 ### The cache
 
-`internal/core/crosschain/cache.go`, filled by the executor at production
-(`produceSynthetic`, `prepareAnchor`) through a hook the block calls once per
-entry; keyed by hash and by (stream, number); entries dropped as the
-destination's `Delivered` passes them; sized by `HealCacheEntries`, set from
-measurement; read by the sequencer service, which refuses and counts a miss
-rather than reading the store. Hits, misses, miss depth and construction failures are counters
+`internal/core/synthcache`, filled by the executor as it produces
+(`produceSyntheticInto`, `recordAnchor`) through a per-block transaction that
+commits after the store commits, so the cache never holds an entry the chain
+does not; keyed by hash and by (stream, number); per block, the synthetic
+chain's segment (`merkle.Segment`: the state before the block's first element
+and its elements, proving byte-identically to the stored chain) and the
+receipt from the chain's anchor to the block's root, built at close from the
+root chain segment the block appended; the Directory receipt and anchor the
+block was dispatched under, recorded at dispatch (`MarkDispatched`).
+Dispatch (`sendSyntheticTransactionsForBlock`) and the sequencer service
+(`sequencer_cache.go`) read it and nothing else; a miss is refused as
+`NotFound` and counted (`accumulate_synthcache_misses_total{kind}`). Trimmed by
+a horizon of blocks (`DefaultHorizon`, an hour) until a delivery signal
+exists. At the first block an executor opens, the cache is seeded from the
+node's own chains by position for the recent blocks whose anchors have not
+returned (`seedSynthCache`): genesis produces through another executor, and a
+node that starts has produced blocks not yet anchored — a start-up step, not a
+runtime path. The store path in the sequencer remains only for the v1
+simulator, which has no cache; the node never wires it. Hits, misses, miss depth and construction failures are counters
 on the node's metrics endpoint, as are every row of the counting table above.
 
 ---
