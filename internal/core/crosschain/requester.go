@@ -330,11 +330,30 @@ func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.Stream
 		r.gaps[key] = mem
 	}
 
+	// A collected entry whose proof has arrived and waits for its Directory
+	// anchor is not a gap: the proof is staged, the anchor is on its way
+	// (late when the destination's executor lags), and asking the source
+	// again lands the entry twice (run 20260905T134346Z: 22,642 heals with
+	// nothing dropped). Only an entry no staged proof covers is unproven.
+	covered := map[[32]byte]bool{}
+	for _, block := range staged.ProofBlocks(stream.Source) {
+		for _, proof := range staged.Proofs(stream.Source, block) {
+			if proof == nil || proof.ReceiptList == nil {
+				continue
+			}
+			for _, e := range proof.ReceiptList.Elements {
+				if len(e) == 32 {
+					covered[*(*[32]byte)(e)] = true
+				}
+			}
+		}
+	}
+
 	var spans [][2]uint64
 	for n := delivered + 1; n <= through; n++ {
 		h, held := staged.IDOf(stream, n)
-		if held && (!h.Collected || staged.IsProven(stream, h.Hash)) {
-			continue // held and runnable: nothing to ask
+		if held && (!h.Collected || covered[h.Hash] || staged.IsProven(stream, h.Hash)) {
+			continue // held and runnable, or its proof is waiting for its anchor: nothing to ask
 		}
 		g := mem[n]
 		if g == nil {

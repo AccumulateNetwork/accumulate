@@ -90,6 +90,29 @@ func TestDecide_NoticeAndPatience(t *testing.T) {
 	require.Empty(t, r.gaps[streamKey(reqStream)])
 }
 
+// A collected entry whose proof is staged, waiting for its anchor, is not a
+// gap: the anchor is on its way. Once the proof is dropped it is.
+func TestDecide_StagedProofIsNotAGap(t *testing.T) {
+	s := reqStaging(t, map[uint64]bool{1: true})
+	tx := s.Begin()
+	h, _ := tx.IDOf(reqStream, 1)
+	list := merkle.NewReceiptList()
+	list.MerkleState = new(merkle.State)
+	list.Elements = [][]byte{h.Hash[:]}
+	tx.StageProof(reqSource, 42, &protocol.AnnotatedReceipt{ReceiptList: list, Anchor: &protocol.AnchorMetadata{SourceBlock: 42}})
+	tx.Commit()
+
+	var r healRequester
+	tx = s.Begin()
+	defer tx.Discard()
+	r.decide(tx, reqStream, 0, 0, 4)
+	require.Empty(t, r.decide(tx, reqStream, 0, 0, 4+healNoticeAge*healCadence), "its proof is staged")
+	tx.DropProofs(reqSource, 42)
+	at := uint64(4 + healNoticeAge*healCadence)
+	require.Empty(t, r.decide(tx, reqStream, 0, 0, at), "the proof is gone: the gap is first seen now")
+	require.Equal(t, [][2]uint64{{1, 1}}, r.decide(tx, reqStream, 0, 0, at+healNoticeAge*healCadence), "and asked after the notice")
+}
+
 // An unsighted tail the source says it produced is a gap after the longer
 // notice; separate holes become separate spans, oldest first, capped.
 func TestDecide_ExpectedTailAndSpans(t *testing.T) {

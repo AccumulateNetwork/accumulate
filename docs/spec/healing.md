@@ -280,6 +280,9 @@ after the four groups have executed, staging computes per source: the proven
 indexes not held and the held or expected indexes not proven, each first seen
 at least two activations ago and not asked within the last `healPatience`
 activations. That is the request set: a hash set and a list of index spans.
+A held entry whose proof has arrived and is staged, waiting for its Directory
+anchor, is not unproven: the anchor is on its way, late when the
+destination's executor lags, and asking for the entry again lands it twice.
 An index is **expected** when the source's synthetic ledger says it was
 produced for this partition: a lost tail leaves nothing in staging to reveal
 a gap, so a selected sender reads the source's ledger once per activation —
