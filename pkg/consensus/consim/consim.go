@@ -653,7 +653,19 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 			if s.cfg.TargetHeight > 0 && maxH < s.cfg.TargetHeight {
 				allAtTarget = false
 			}
-			line = append(line, fmt.Sprintf("%s h=%d r=%d", part, maxH, maxR))
+			// Lag, the largest block so far and the refused count are what
+			// a stall looks like while it forms: lag climbing past the bound,
+			// one block many times the usual size, user work refused.
+			maxLag, maxBlk := 0, uint64(0)
+			for _, sn := range s.byPart[part] {
+				if l := int(sn.maxLag.Load()); l > maxLag {
+					maxLag = l
+				}
+				if b := sn.maxBlockTxs.Load(); b > maxBlk {
+					maxBlk = b
+				}
+			}
+			line = append(line, fmt.Sprintf("%s h=%d r=%d lag=%d blk=%d", part, maxH, maxR, maxLag, maxBlk))
 
 			if time.Since(lastProgress[part]) > s.cfg.StallAfter {
 				logf("STALL on %s: no executed-height progress for %s", part, s.cfg.StallAfter)
@@ -662,7 +674,7 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 					fmt.Errorf("%w: %s at height %d", ErrStalled, part, maxH)
 			}
 		}
-		logf("%8s  %s", time.Since(start).Truncate(time.Second), strings.Join(line, " | "))
+		logf("%8s  %s | refused=%d/%d", time.Since(start).Truncate(time.Second), strings.Join(line, " | "), s.refused.Load(), s.submitted.Load())
 
 		now := time.Now()
 		for _, sn := range s.nodes {

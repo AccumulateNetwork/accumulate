@@ -303,6 +303,25 @@ account's chain heights and anchors, and all element-index records):
 - **#4205 (E11)** — a restarted validator rejoins by syncing from the running
   protocol (plan above); required before chaos returns.
 
+## Simulation first
+
+Every failure a soak finds gets an in-process reproduction before its fix, and
+the fix is tested there, with every earlier reproduction, in seconds — not in
+the next thirty-minute run (Paul, 2026-09-05: "replicate in simulation these
+crashes, so we can debug and fix the crashes and test that our fix doesn't
+break the past fixes"). The soak is the twelve-hour confirmation, not the
+discovery loop. Reproductions so far:
+
+| failure | reproduction | time |
+|---|---|---|
+| Directory anchors rejected once a mark point is behind the store's window; every stream frozen (runs 032333Z–051008Z) | `test/e2e` `TestDirectoryReceiptsPastTheWindow` on the BlockchainDB-backed store (`simulator.BcdbDbOpener`); `pkg/database/keyvalue/bcdb` `TestReceiptReachesPastTheWindow` | 2 min; 4 s |
+| the backlog after a refusal window comes back as one block, lag oscillates on the bound (run 144928Z) | `pkg/consensus/consim` `TestOverload_BacklogComesBackAHeaderAtATime`: user and system load, slow executor, cap off and on | 60 s |
+| the requester pulls entries sitting in the destination's own backlog; heals with nothing dropped (runs 134346Z–142724Z) | `test/e2e` `TestRequester_LaggingDestination`: a block hook holds the destination's envelopes thirty blocks, the conductor reads the depth as its lag; nothing dropped and one package dropped | 3 s |
+
+Each fails on the code before its fix (checked by reverting the fix), and the
+existing dropped-entry tests (`TestMissingSynthTxn`, `TestRangeRecovery`, ...)
+stay green with it.
+
 ## Acceptance criteria
 
 Measured over a **12-hour run at 500 tps, 1 s blocks**. Warm-up is the first

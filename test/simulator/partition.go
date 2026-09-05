@@ -8,6 +8,7 @@ package simulator
 
 import (
 	"bytes"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"io"
 	"sort"
@@ -41,6 +42,21 @@ func (p *Partition) View(fn func(*database.Batch) error) error { return p.nodes[
 // Staging is the partition's staging as its first node holds it: what has been
 // received on each stream and not yet executed (executor spec, "Sync").
 func (p *Partition) Staging() *coreexec.Staging { return p.nodes[0].staging }
+
+// Heals is the partition's healing counters as its first node's conductor
+// keeps them: entries pulled by the requester, requests, misses.
+func (p *Partition) Heals() *crosschain.HealCounters { return p.nodes[0].heals }
+
+// SetExecutionLagSource tells every node's conductor how far this partition's
+// executor is behind its consensus. The simulator executes every block as it
+// commits, so a test that delays execution (a block hook holding envelopes
+// back) installs the depth of what it holds here, and the requester asks for
+// nothing while it is above zero (healing spec, "Deciding, in staging").
+func (p *Partition) SetExecutionLagSource(fn func() int) {
+	for _, n := range p.nodes {
+		n.lag.set(fn)
+	}
+}
 
 func (p *Partition) Update(fn func(*database.Batch) error) error {
 	for i, n := range p.nodes {

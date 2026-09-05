@@ -86,6 +86,8 @@ type nodeFactory struct {
 	*networkFactory
 	staging *coreexec.Staging
 	cache   *synthcache.Cache
+	heals   *crosschain.HealCounters
+	lag     *lagSource
 
 	// Options
 	id      int
@@ -169,6 +171,8 @@ func (f *nodeFactory) Build(p *Partition) *Node {
 		n.database = f.getDatabase()
 	}
 	n.staging = f.getStaging()
+	n.heals = f.getHeals()
+	n.lag = f.getLag()
 
 	// Register services
 	f.registerSvc(api.ServiceTypeNode, message.NodeService{NodeService: &nodeService{
@@ -521,6 +525,26 @@ func (f *nodeFactory) getStaging() *coreexec.Staging {
 	return f.staging
 }
 
+// getHeals is the node's healing counters, shared by its conductor and the
+// tests that assert on them.
+func (f *nodeFactory) getHeals() *crosschain.HealCounters {
+	if f.heals == nil {
+		f.heals = new(crosschain.HealCounters)
+	}
+	return f.heals
+}
+
+// getLag is the node's execution-lag source: what the conductor asks before
+// deciding a healing request (healing spec, "Deciding, in staging"). The
+// simulator executes every block as it commits, so it reports zero unless a
+// test installs a source (Partition.SetExecutionLagSource).
+func (f *nodeFactory) getLag() *lagSource {
+	if f.lag == nil {
+		f.lag = new(lagSource)
+	}
+	return f.lag
+}
+
 // getSynthCache is the node's synthetic/anchor cache, shared by its executor
 // (which fills it and dispatches from it) and its sequencer (which answers
 // healing requests from it and nothing else).
@@ -616,6 +640,8 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Dispatcher:          execOpts.NewDispatcher(),
 		Sequencer:           f.getServices().Private(),
 		Staging:             f.getStaging(),
+		Heals:               f.getHeals(),
+		ExecutionLag:        f.getLag().get,
 		RunTask:             execOpts.BackgroundTaskLauncher,
 		DropInitialAnchor:   f.dropInitialAnchor,
 		EnableAnchorHealing: &enableAnchorHealing,

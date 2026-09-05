@@ -9,7 +9,9 @@ package simulator
 import (
 	"context"
 	"crypto/sha256"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"sync"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -37,6 +39,30 @@ type Node struct {
 	database   *database.Database
 	services   *message.Handler
 	staging    *execute.Staging
+	heals      *crosschain.HealCounters
+	lag        *lagSource
+}
+
+// lagSource is a swappable execution-lag reading for a node's conductor.
+type lagSource struct {
+	mu sync.Mutex
+	fn func() int
+}
+
+func (l *lagSource) get() int {
+	l.mu.Lock()
+	fn := l.fn
+	l.mu.Unlock()
+	if fn == nil {
+		return 0
+	}
+	return fn()
+}
+
+func (l *lagSource) set(fn func() int) {
+	l.mu.Lock()
+	l.fn = fn
+	l.mu.Unlock()
 }
 
 // ConsensusStatus implements [api.ConsensusService].
