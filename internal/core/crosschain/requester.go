@@ -44,14 +44,20 @@ import (
 const (
 	// healNoticeAge is how many activations a gap must have been visible
 	// before it is asked for. Delivery is in flight for a few blocks after
-	// dispatch; asking sooner asks about entries already on their way.
-	healNoticeAge = 2
+	// dispatch, and either side's executor may lag its consensus by up to
+	// the bound (consensus.md, "Execution lag": 8 blocks) before it is
+	// refused work -- a lagging source dispatches late, a lagging destination
+	// executes late -- so a hole can stand for two bounds and a flight and
+	// still be nobody's loss. Six activations is 24 blocks; asking sooner
+	// asked for entries already on their way (run 20260905T140609Z).
+	healNoticeAge = 6
 
 	// healExpectedAge is the notice age for an index the destination has not
 	// sighted at all but the source's ledger says it produced. Production runs
-	// ahead of dispatch by the Directory round trip, so an unsighted index is
-	// in flight for longer than a hole below a sighted one.
-	healExpectedAge = 6
+	// ahead of dispatch by the Directory round trip on top of everything a
+	// sighted hole allows for, so an unsighted index is in flight for longer.
+	// Ten activations is 40 blocks.
+	healExpectedAge = 10
 
 	// healPatience is how many activations pass before an asked span is asked
 	// again. A hash is asked for once while the answer can still arrive.

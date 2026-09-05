@@ -292,7 +292,13 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Sequencer:    client.Private(),
 		Staging:      staging,
 		Heals:        healCounters,
-		RunTask:      execOpts.BackgroundTaskLauncher,
+		ExecutionLagging: func() bool {
+			if s.service == nil || s.service.Node() == nil {
+				return false
+			}
+			return s.service.Node().ExecutionLag() > int(*s.MaxExecutionLag)
+		},
+		RunTask: execOpts.BackgroundTaskLauncher,
 		// Healing is the ONLY retry mechanism for anchors — the conductor's
 		// per-block dispatch is one-shot, and a single lost anchor freezes
 		// the destination's delivered-sequence forever (observed as BVN

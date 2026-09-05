@@ -76,17 +76,19 @@ func TestDecide_NoticeAndPatience(t *testing.T) {
 	tx := s.Begin()
 	defer tx.Discard()
 
-	require.Empty(t, r.decide(tx, reqStream, 0, 0, 8), "first sighting is remembered, not asked")
-	require.Empty(t, r.decide(tx, reqStream, 0, 0, 12), "one activation is too soon")
-	spans := r.decide(tx, reqStream, 0, 0, 16)
+	const first = 8
+	notice := uint64(first + healNoticeAge*healCadence)
+	require.Empty(t, r.decide(tx, reqStream, 0, 0, first), "first sighting is remembered, not asked")
+	require.Empty(t, r.decide(tx, reqStream, 0, 0, notice-healCadence), "one activation short of the notice")
+	spans := r.decide(tx, reqStream, 0, 0, notice)
 	require.Equal(t, [][2]uint64{{1, 2}}, spans, "the hole and the unproven entry, coalesced; 3 and 4 are runnable")
 
-	r.asked(reqStream, spans[0], 16)
-	require.Empty(t, r.decide(tx, reqStream, 0, 0, 20), "asked: patience")
-	require.Empty(t, r.decide(tx, reqStream, 0, 0, 24))
-	require.Equal(t, [][2]uint64{{1, 2}}, r.decide(tx, reqStream, 0, 0, 28), "patience over: asked again")
+	r.asked(reqStream, spans[0], notice)
+	require.Empty(t, r.decide(tx, reqStream, 0, 0, notice+healCadence), "asked: patience")
+	require.Empty(t, r.decide(tx, reqStream, 0, 0, notice+(healPatience-1)*healCadence))
+	require.Equal(t, [][2]uint64{{1, 2}}, r.decide(tx, reqStream, 0, 0, notice+healPatience*healCadence), "patience over: asked again")
 
-	require.Empty(t, r.decide(tx, reqStream, 4, 0, 32), "delivered past everything: nothing, and the memory is pruned")
+	require.Empty(t, r.decide(tx, reqStream, 4, 0, notice+(healPatience+1)*healCadence), "delivered past everything: nothing, and the memory is pruned")
 	require.Empty(t, r.gaps[streamKey(reqStream)])
 }
 
