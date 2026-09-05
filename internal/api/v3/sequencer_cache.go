@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -86,6 +87,22 @@ func (s *Sequencer) getSynthFromCache(globals *core.GlobalValues, dst *url.URL, 
 // list over their span of the synthetic chain, continued to the anchor the
 // last entry's block was dispatched under. Consecutive blocks' segments join
 // into one, so a range may span blocks.
+// producedFor is how many synthetics this partition has produced for a
+// destination, from its own synthetic ledger: mutable state, one read.
+func (s *Sequencer) producedFor(dst *url.URL) (uint64, error) {
+	var produced uint64
+	err := s.db.View(func(batch *database.Batch) error {
+		var ledger *protocol.SyntheticLedger
+		err := batch.Account(s.partition.Synthetic()).Main().GetAs(&ledger)
+		if err != nil {
+			return err
+		}
+		produced = ledger.Partition(dst).Produced
+		return nil
+	})
+	return produced, err
+}
+
 func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.URL, start, end uint64, opts private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
 	var records []*api.MessageRecord[messaging.Message]
 	var span *merkle.Segment
@@ -94,6 +111,14 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 	for num := start; num <= end; num++ {
 		e, ok := s.cache.Entry(dst, num)
 		if !ok {
+			if num > start {
+				break // the range ends where production has so far
+			}
+			// The first number asked for is not in the cache. Not produced
+			// yet is "not yet"; produced and gone is a miss, and a defect.
+			if produced, err := s.producedFor(dst); err == nil && num > produced {
+				return nil, errors.NotReady.WithFormat("synthetic %d for %v is not produced yet (%d so far)", num, dst, produced)
+			}
 			return nil, errors.NotFound.WithFormat("synthetic %d for %v is not in the cache", num, dst)
 		}
 		if last == nil || last.Index != e.Block {

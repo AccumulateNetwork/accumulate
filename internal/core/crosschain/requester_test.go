@@ -66,78 +66,54 @@ func TestPullSenders(t *testing.T) {
 	require.Len(t, seen, 4, "every position is drawn over enough blocks")
 }
 
-// A hole below a sighted entry is asked after healNoticeAge activations, then
-// not again until healPatience activations have passed; a held and runnable
-// entry is never asked; a collected entry without a proof is.
-func TestDecide_NoticeAndPatience(t *testing.T) {
-	// 1 missing, 2 collected+unproven, 3 collected+proven, 4 own-proof held
+// Two things are gaps and nothing else is: an index not held below a held
+// entry, and a held entry no proof has validated. Both are asked for when seen
+// and not again within patience; a held, validated entry is never asked.
+func TestDecide_TwoKindsOfGap(t *testing.T) {
+	// 1 missing, 2 collected+unvalidated, 3 collected+validated, 4 own-proof held
 	s := reqStaging(t, map[uint64]bool{2: true, 3: true, 4: false}, 3)
 	var r healRequester
 	tx := s.Begin()
 	defer tx.Discard()
 
-	const first = 8
-	notice := uint64(first + healNoticeAge*healCadence)
-	require.Empty(t, r.decide(tx, reqStream, 0, 0, first), "first sighting is remembered, not asked")
-	require.Empty(t, r.decide(tx, reqStream, 0, 0, notice-healCadence), "one activation short of the notice")
-	spans := r.decide(tx, reqStream, 0, 0, notice)
-	require.Equal(t, [][2]uint64{{1, 2}}, spans, "the hole and the unproven entry, coalesced; 3 and 4 are runnable")
+	spans := r.decide(tx, reqStream, 0, 8)
+	require.Equal(t, [][2]uint64{{1, 2}}, spans, "the hole and the unvalidated entry, coalesced; 3 and 4 are runnable")
 
-	r.asked(reqStream, spans[0], notice)
-	require.Empty(t, r.decide(tx, reqStream, 0, 0, notice+healCadence), "asked: patience")
-	require.Empty(t, r.decide(tx, reqStream, 0, 0, notice+(healPatience-1)*healCadence))
-	require.Equal(t, [][2]uint64{{1, 2}}, r.decide(tx, reqStream, 0, 0, notice+healPatience*healCadence), "patience over: asked again")
+	r.asked(reqStream, spans[0], 8)
+	require.Empty(t, r.decide(tx, reqStream, 0, 8+healCadence), "asked: patience")
+	require.Empty(t, r.decide(tx, reqStream, 0, 8+(healPatience-1)*healCadence))
+	require.Equal(t, [][2]uint64{{1, 2}}, r.decide(tx, reqStream, 0, 8+healPatience*healCadence), "patience over: asked again")
 
-	require.Empty(t, r.decide(tx, reqStream, 4, 0, notice+(healPatience+1)*healCadence), "delivered past everything: nothing, and the memory is pruned")
-	require.Empty(t, r.gaps[streamKey(reqStream)])
+	// Delivered past everything held: nothing above Delivered is known, so
+	// the span above it is asked for whole, once per patience.
+	probe := r.decide(tx, reqStream, 4, 8+(healPatience+1)*healCadence)
+	require.Equal(t, [][2]uint64{{5, 4 + protocol.MaxReceiptListElements}}, probe, "an empty stream asks for the span above Delivered")
+	r.asked(reqStream, [2]uint64{5, 5}, 8+(healPatience+1)*healCadence)
+	require.Empty(t, r.decide(tx, reqStream, 4, 8+(healPatience+2)*healCadence), "asked: patience")
+	require.NotEmpty(t, r.decide(tx, reqStream, 4, 8+(2*healPatience+2)*healCadence), "patience over: asked again")
 }
 
-// A collected entry whose proof is staged, waiting for its anchor, is not a
-// gap: the anchor is on its way. Once the proof is dropped it is.
-func TestDecide_StagedProofIsNotAGap(t *testing.T) {
-	s := reqStaging(t, map[uint64]bool{1: true})
-	tx := s.Begin()
-	h, _ := tx.IDOf(reqStream, 1)
-	list := merkle.NewReceiptList()
-	list.MerkleState = new(merkle.State)
-	list.Elements = [][]byte{h.Hash[:]}
-	tx.StageProof(reqSource, 42, &protocol.AnnotatedReceipt{ReceiptList: list, Anchor: &protocol.AnchorMetadata{SourceBlock: 42}})
-	tx.Commit()
-
-	var r healRequester
-	tx = s.Begin()
-	defer tx.Discard()
-	r.decide(tx, reqStream, 0, 0, 4)
-	require.Empty(t, r.decide(tx, reqStream, 0, 0, 4+healNoticeAge*healCadence), "its proof is staged")
-	tx.DropProofs(reqSource, 42)
-	at := uint64(4 + healNoticeAge*healCadence)
-	require.Empty(t, r.decide(tx, reqStream, 0, 0, at), "the proof is gone: the gap is first seen now")
-	require.Equal(t, [][2]uint64{{1, 1}}, r.decide(tx, reqStream, 0, 0, at+healNoticeAge*healCadence), "and asked after the notice")
-}
-
-// An unsighted tail the source says it produced is a gap after the longer
-// notice; separate holes become separate spans, oldest first, capped.
-func TestDecide_ExpectedTailAndSpans(t *testing.T) {
-	s := reqStaging(t, map[uint64]bool{})
+// A validated entry whose proof arrived with it is not a gap even when it
+// cannot run yet because of a hole below it; the hole is.
+func TestDecide_ValidatedEntryBehindAHole(t *testing.T) {
+	s := reqStaging(t, map[uint64]bool{3: true}, 3)
 	var r healRequester
 	tx := s.Begin()
 	defer tx.Discard()
+	require.Equal(t, [][2]uint64{{1, 2}}, r.decide(tx, reqStream, 0, 4), "only the hole below it")
+}
 
-	require.Empty(t, r.decide(tx, reqStream, 0, 5, 4))
-	require.Empty(t, r.decide(tx, reqStream, 0, 5, 4+healNoticeAge*healCadence), "sighted-notice is not enough for an unsighted tail")
-	require.Equal(t, [][2]uint64{{1, 5}}, r.decide(tx, reqStream, 0, 5, 4+healExpectedAge*healCadence))
-
-	// Many single holes: at most MaxRequestSpans, the oldest.
+// Separate holes become separate spans, oldest first, capped.
+func TestDecide_Spans(t *testing.T) {
 	held := map[uint64]bool{}
 	for n := uint64(2); n <= 100; n += 2 {
 		held[n] = false
 	}
-	s = reqStaging(t, held)
-	r = healRequester{}
-	tx2 := s.Begin()
-	defer tx2.Discard()
-	r.decide(tx2, reqStream, 0, 0, 4)
-	spans := r.decide(tx2, reqStream, 0, 0, 4+healNoticeAge*healCadence)
+	s := reqStaging(t, held)
+	var r healRequester
+	tx := s.Begin()
+	defer tx.Discard()
+	spans := r.decide(tx, reqStream, 0, 4)
 	require.Len(t, spans, MaxRequestSpans)
 	require.Equal(t, [2]uint64{1, 1}, spans[0])
 	require.Equal(t, [2]uint64{31, 31}, spans[MaxRequestSpans-1])

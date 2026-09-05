@@ -276,25 +276,20 @@ API call, the bundle submission and the counters live in
 ### Deciding, in staging
 
 On an activation block (`healActivates(index)`, every `healCadence` blocks),
-after the four groups have executed, staging computes per source: the proven
-indexes not held and the held or expected indexes not proven, each first seen
-at least `healNoticeAge` activations ago — longer than the execution-lag
-bound on either side (consensus.md, "Execution lag") plus a flight, because a
-lagging source dispatches late and a lagging destination executes late, and a
-hole that stands for that long is nobody's loss — and not asked within the
-last `healPatience` activations. A partition whose executor has committed
-blocks it has not yet executed asks for nothing: a hole in its staging may be
-sitting in that backlog, so the hole says nothing about the source until the
-executor has caught up. That is the request set: a hash set and a list of index spans.
-A held entry whose proof has arrived and is staged, waiting for its Directory
-anchor, is not unproven: the anchor is on its way, late when the
-destination's executor lags, and asking for the entry again lands it twice.
-An index is **expected** when the source's synthetic ledger says it was
-produced for this partition: a lost tail leaves nothing in staging to reveal
-a gap, so a selected sender reads the source's ledger once per activation —
-mutable state, one query — and an unsighted index below that count is a gap
-after a longer notice (`healExpectedAge`), since production runs ahead of
-dispatch by the Directory round trip.
+staging is read per stream as two indexed lists: the entries received at their
+index, and the hashes collection proofs have validated. Execution takes the
+validated prefix from `Delivered` upward, in order. Two things are gaps, and
+they are all healing asks for: an index a proof validated that staging does
+not hold, and entries staging holds that no proof has validated. A selected
+sender walks each stream once from `Delivered` to the highest entry held,
+coalesces both into index spans, and asks the source; nothing is timed and
+nothing inferred from the source's ledger, and an index asked within the last
+`healPatience` activations is not asked again. A stream holding nothing above
+`Delivered` is missing every validating hash above it, and asks for the span
+above `Delivered` whole; the source answers with what it has dispatched, or
+that it has produced nothing there yet. Aligning a proof's hashes with
+the entries at their indexes must not allocate per entry: one lookup per index,
+the spans the only output.
 Anchor gaps — a sequence number below the newest held anchor with no anchor —
 are requested on the block that exposes them. Sender selection is a function
 of the previous block's hash over the validator set yielding two indices; a

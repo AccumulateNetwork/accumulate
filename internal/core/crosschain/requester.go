@@ -30,35 +30,20 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// The requesting side of healing (healing.md, "Who asks, and when" and
-// "Deciding, in staging"). On an activation block a selected validator reads
-// its synthetic staging: every index above Delivered that staging does not
-// hold, or holds collected but unproven, is a gap. Gaps that have been visible
-// for healNoticeAge activations and were not asked within healPatience
-// activations are coalesced into index spans and requested from the source
-// partition, whose answer — the entries and one collection proof — is
-// submitted into this partition as a bundle. Nothing here reads history: the
-// decision comes from staging and the synthetic ledger, the answer from the
-// source's cache.
+// The requesting side of healing (healing.md, "Deciding, in staging").
+// Staging keeps, per stream, the entries received at their index and the
+// hashes collection proofs have validated. Execution takes the validated
+// prefix from Delivered upward, in order. Two things are gaps, and they are
+// the only things healing asks for: an index a proof validated that staging
+// does not hold, and entries staging holds that no proof has validated. On an
+// activation block a selected validator walks the stream once, from Delivered
+// to the highest entry held, coalesces both kinds into spans and asks the
+// source for them; the answer -- the entries and the span's proof -- lands as
+// a bundle. Nothing is timed and nothing is inferred: a hole is asked for when
+// it is seen, and asked again only after healPatience activations without
+// its answer landing.
 
 const (
-	// healNoticeAge is how many activations a gap must have been visible
-	// before it is asked for. Delivery is in flight for a few blocks after
-	// dispatch, and either side's executor may lag its consensus by up to
-	// the bound (consensus.md, "Execution lag": 8 blocks) before it is
-	// refused work -- a lagging source dispatches late, a lagging destination
-	// executes late -- so a hole can stand for two bounds and a flight and
-	// still be nobody's loss. Six activations is 24 blocks; asking sooner
-	// asked for entries already on their way (run 20260905T140609Z).
-	healNoticeAge = 6
-
-	// healExpectedAge is the notice age for an index the destination has not
-	// sighted at all but the source's ledger says it produced. Production runs
-	// ahead of dispatch by the Directory round trip on top of everything a
-	// sighted hole allows for, so an unsighted index is in flight for longer.
-	// Ten activations is 40 blocks.
-	healExpectedAge = 10
-
 	// healPatience is how many activations pass before an asked span is asked
 	// again. A hash is asked for once while the answer can still arrive.
 	healPatience = 3
@@ -91,12 +76,11 @@ var mHealEntries = promauto.NewCounter(prometheus.CounterOpts{
 	Help:      "Synthetic entries received in answer to span requests",
 })
 
-// gapMemory is what the requester remembers about one missing index, in block
-// indexes: when it first saw the gap and when it last asked. Node state, not
-// consensus state; a restart empties it at the cost of one duplicate request.
+// gapMemory is what the requester remembers about one asked index: the block
+// it asked at. Node state, not consensus state; a restart empties it at the
+// cost of one duplicate request.
 type gapMemory struct {
-	firstSeen uint64
-	askedAt   uint64
+	askedAt uint64
 }
 
 type healRequester struct {
@@ -219,8 +203,7 @@ func (c *Conductor) requestGaps(ctx context.Context, batch *database.Batch, bloc
 			continue
 		}
 		stream := execute.StreamID{Ledger: c.Url(protocol.Synthetic), Source: source}
-		expected := c.expectedFrom(ctx, source)
-		spans := c.requester.decide(staged, stream, ledger.Partition(source).Delivered, expected, blockIndex)
+		spans := c.requester.decide(staged, stream, ledger.Partition(source).Delivered, blockIndex)
 		if len(spans) == 0 {
 			continue
 		}
@@ -282,31 +265,33 @@ func (c *Conductor) requestGaps(ctx context.Context, batch *database.Batch, bloc
 	return nil
 }
 
-// expectedFrom asks the source what it has produced for this partition: its
-// synthetic ledger's Produced count for us. A lost tail leaves nothing in
-// staging to reveal a gap; the source's ledger is the one place the expected
-// indexes are written. Mutable state at the source, one query per activation;
-// a failed query expects nothing, and the tail is asked about next time.
-func (c *Conductor) expectedFrom(ctx context.Context, source *url.URL) uint64 {
-	var ledger *protocol.SyntheticLedger
-	_, err := c.Querier.QueryAccountAs(ctx, source.JoinPath(protocol.Synthetic), nil, &ledger)
-	if err != nil {
-		slog.DebugContext(ctx, "Failed to query the source's synthetic ledger", "module", "conductor", "source", source, "error", err)
-		return 0
-	}
-	for _, part := range ledger.Sequence {
-		if part.Url != nil && strings.EqualFold(part.Url.String(), c.Url().String()) {
-			return part.Produced
+// decide walks one stream from Delivered to the highest entry held and
+// returns the spans to ask for: indexes not held, and entries held without a
+// validating hash. Consecutive gaps of either kind coalesce; at most
+// MaxRequestSpans spans, each within MaxReceiptListElements, oldest first.
+// A span asked within the last healPatience activations is not asked again.
+// One pass, two map lookups per index, no allocation beyond the spans.
+func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.StreamID, delivered, blockIndex uint64) [][2]uint64 {
+	sighted := staged.Sighted(stream)
+	if sighted <= delivered {
+		// Nothing held above Delivered: every validating hash above it is
+		// missing, so the span above Delivered is asked for whole. The source
+		// answers with what it has dispatched, or that it has produced
+		// nothing there yet. A lost package -- entries and proof together --
+		// leaves exactly this, and nothing else would ever see it.
+		r.forget(stream, delivered)
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if g := r.gaps[streamKey(stream)][delivered+1]; g != nil && blockIndex-g.askedAt < healPatience*healCadence {
+			return nil
 		}
+		return [][2]uint64{{delivered + 1, delivered + protocol.MaxReceiptListElements}}
 	}
-	return 0
-}
+	through := sighted
+	if through > delivered+healHorizon {
+		through = delivered + healHorizon
+	}
 
-// decide computes the spans to ask a source for: indexes in (delivered,
-// max(sighted, expected)] that staging does not hold or holds unproven, first
-// seen healNoticeAge activations ago (healExpectedAge above what is sighted)
-// and not asked within healPatience.
-func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.StreamID, delivered, expected, blockIndex uint64) [][2]uint64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.gaps == nil {
@@ -320,61 +305,14 @@ func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.Stream
 		}
 	}
 
-	sighted := staged.Sighted(stream)
-	through := sighted
-	if expected > through {
-		through = expected
-	}
-	if through <= delivered {
-		return nil
-	}
-	if through > delivered+healHorizon {
-		through = delivered + healHorizon
-	}
-	if mem == nil {
-		mem = map[uint64]*gapMemory{}
-		r.gaps[key] = mem
-	}
-
-	// A collected entry whose proof has arrived and waits for its Directory
-	// anchor is not a gap: the proof is staged, the anchor is on its way
-	// (late when the destination's executor lags), and asking the source
-	// again lands the entry twice (run 20260905T134346Z: 22,642 heals with
-	// nothing dropped). Only an entry no staged proof covers is unproven.
-	covered := map[[32]byte]bool{}
-	for _, block := range staged.ProofBlocks(stream.Source) {
-		for _, proof := range staged.Proofs(stream.Source, block) {
-			if proof == nil || proof.ReceiptList == nil {
-				continue
-			}
-			for _, e := range proof.ReceiptList.Elements {
-				if len(e) == 32 {
-					covered[*(*[32]byte)(e)] = true
-				}
-			}
-		}
-	}
-
 	var spans [][2]uint64
 	for n := delivered + 1; n <= through; n++ {
 		h, held := staged.IDOf(stream, n)
-		if held && (!h.Collected || covered[h.Hash] || staged.IsProven(stream, h.Hash)) {
-			continue // held and runnable, or its proof is waiting for its anchor: nothing to ask
+		if held && (!h.Collected || staged.IsProven(stream, h.Hash)) {
+			continue // held and validated: runnable, nothing to ask
 		}
-		g := mem[n]
-		if g == nil {
-			mem[n] = &gapMemory{firstSeen: blockIndex}
-			continue
-		}
-		age := uint64(healNoticeAge)
-		if n > sighted {
-			age = healExpectedAge
-		}
-		if blockIndex-g.firstSeen < age*healCadence {
-			continue
-		}
-		if g.askedAt != 0 && blockIndex-g.askedAt < healPatience*healCadence {
-			continue
+		if g := mem[n]; g != nil && g.askedAt != 0 && blockIndex-g.askedAt < healPatience*healCadence {
+			continue // asked; its answer can still land
 		}
 		if k := len(spans); k > 0 && spans[k-1][1]+1 == n && n-spans[k-1][0]+1 <= protocol.MaxReceiptListElements {
 			spans[k-1][1] = n
@@ -388,15 +326,32 @@ func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.Stream
 	return spans
 }
 
+// forget drops what a stream's memory holds at or below Delivered; what was
+// asked above it keeps its asked-at.
+func (r *healRequester) forget(stream execute.StreamID, delivered uint64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for n := range r.gaps[streamKey(stream)] {
+		if n <= delivered {
+			delete(r.gaps[streamKey(stream)], n)
+		}
+	}
+}
+
 // asked records that every index of the span was asked on this block.
 func (r *healRequester) asked(stream execute.StreamID, span [2]uint64, blockIndex uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.gaps == nil {
+		r.gaps = map[string]map[uint64]*gapMemory{}
+	}
 	mem := r.gaps[streamKey(stream)]
+	if mem == nil {
+		mem = map[uint64]*gapMemory{}
+		r.gaps[streamKey(stream)] = mem
+	}
 	for n := span[0]; n <= span[1]; n++ {
-		if g := mem[n]; g != nil {
-			g.askedAt = blockIndex
-		}
+		mem[n] = &gapMemory{askedAt: blockIndex}
 	}
 }
 

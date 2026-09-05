@@ -354,19 +354,18 @@ selected validator sends one request naming **hashes and index spans**; the
 requesting network** through its dispatcher; intake takes it; the answer
 carries no signature.
 
-**Code**: the requesting side is built (`internal/core/crosschain/requester.go`,
-2026-09-05). On an activation block a validator selected by the previous
-block's root anchor reads the executor's `execute.Staging`: every index above
-`Delivered` up to what is sighted or expected that staging does not hold, or
-holds collected without a proof, is a gap; gaps are remembered by index with
-the activation that first saw them and the one that asked, coalesced into
-spans (at most `MaxRequestSpans`, each within `MaxReceiptListElements`), and
-asked after two activations (six for an unsighted tail) and not again within
-`healPatience`. A source whose requests all failed is backed off, doubling to
-eight activations. Counted: `accumulate_conductor_heal_requests_total{outcome}`,
-`heal_entries_total`, and `HealCounters.Requests/Misses/Synthetic`. Seven of
-the nine dropped-entry acceptance tests run and pass; the two that drop an
-anchor are H9.
+**Code**: the requesting side is built (`internal/core/crosschain/requester.go`).
+On an activation block a validator selected by the previous block's root
+anchor walks each stream of the executor's `execute.Staging` once, from
+`Delivered` to the highest entry held: an index not held, and a held entry no
+proof has validated, are the two gaps; consecutive ones coalesce into spans
+(at most `MaxRequestSpans`, each within `MaxReceiptListElements`); a span
+asked within `healPatience` activations is not asked again; a source whose
+requests all failed is backed off, doubling to eight activations. Nothing is
+timed and nothing is inferred from the source's ledger. Counted:
+`accumulate_conductor_heal_requests_total{outcome}`, `heal_entries_total`, and
+`HealCounters.Requests/Misses/Synthetic`. Seven of the nine dropped-entry
+acceptance tests run and pass; the two that drop an anchor are H9.
 
 Where it departs from the spec:
 

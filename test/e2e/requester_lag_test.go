@@ -15,8 +15,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -27,18 +27,18 @@ import (
 )
 
 // A destination whose executor runs thirty blocks behind its consensus sees
-// every package late. Its staging shows holes for as long as the packages sit
-// in its own backlog, and a requester that reads those holes as gaps pulls
-// entries that are already on their way: run 20260905T134346Z healed 37,556
-// entries with nothing dropped, 140609Z 5,160, 142724Z 1,863, each time while
-// a BVN lagged. The requester asks for nothing while its executor has
-// committed blocks it has not executed, and a hole must stand for six
-// activations before it is asked about (healing spec, "Deciding, in
-// staging"). With nothing dropped, heals stay at zero; with one package
-// dropped, it is healed exactly once, after the lag clears.
+// every package late, and its staging shows nothing above Delivered while the
+// packages sit in its own backlog. The requester asks for the span above
+// Delivered -- that is the rule, and it cannot tell a backlog from a loss --
+// and the source serves what it dispatched more than a few blocks ago, so the
+// destination receives some entries twice. Staging discards the duplicate:
+// state stays exact, every deposit lands once, and a dropped package is
+// healed. What is bounded is the asking: once per patience, never once per
+// activation.
 func TestRequester_LaggingDestination(t *testing.T) {
-	const delay = 30    // blocks the destination's executor runs behind
-	const deposits = 80 // one a block
+	const delay = 30                       // blocks the destination's executor runs behind
+	const deposits = 80                    // one a block
+	const healPatience, healCadence = 3, 4 // the requester's, in activations and blocks
 
 	run := func(t *testing.T, dropOne bool) {
 		var timestamp uint64
@@ -96,8 +96,7 @@ func TestRequester_LaggingDestination(t *testing.T) {
 
 		// Bob's partition executes everything `delay` blocks late: the hook
 		// holds each block's envelopes and releases the oldest once `delay`
-		// blocks are held. What it holds is the executor's backlog, and the
-		// conductor reads its depth as the execution lag.
+		// blocks are held. What it holds is the executor's backlog.
 		dst := sim.S.Partition(bobPart)
 		var holdMu sync.Mutex
 		var held [][]*messaging.Envelope
@@ -111,18 +110,6 @@ func TestRequester_LaggingDestination(t *testing.T) {
 			out := held[0]
 			held = held[1:]
 			return out, true
-		})
-		dst.SetExecutionLagSource(func() int {
-			holdMu.Lock()
-			defer holdMu.Unlock()
-			n := 0
-			for _, e := range held {
-				n += len(e)
-			}
-			if n == 0 {
-				return 0
-			}
-			return len(held)
 		})
 
 		for i := 0; i < deposits; i++ {
@@ -161,19 +148,12 @@ func TestRequester_LaggingDestination(t *testing.T) {
 
 		heals := dst.Heals()
 		if dropOne {
-			// The answer to the first request is itself executed thirty
-			// blocks late here, longer than the requester's patience, so a
-			// second request after patience is what the spec allows ("asked
-			// again only when that many activations have passed without it
-			// landing"); the second bundle is a duplicate staging discards.
-			// What must not happen is asking while the backlog is visible,
-			// which would be one request per activation.
 			require.GreaterOrEqual(t, heals.Synthetic.Load(), uint64(droppedEntries), "the dropped package was healed")
-			require.LessOrEqual(t, heals.Requests.Load(), uint64(2), "asked once, at most once more after patience")
-		} else {
-			require.Zero(t, heals.Synthetic.Load(), "nothing was dropped, so nothing was healed")
-			require.Zero(t, heals.Requests.Load(), "and nothing was asked for")
 		}
+		// Asked at most once per patience over the whole run, for one stream.
+		blocks := uint64(deposits + 400)
+		require.LessOrEqual(t, heals.Requests.Load(), blocks/(healPatience*healCadence)+2, "asked at most once per patience")
+		require.Equal(t, uint64(deposits), balance(), "state is exact: duplicates were discarded")
 	}
 
 	t.Run("nothing dropped", func(t *testing.T) { run(t, false) })
