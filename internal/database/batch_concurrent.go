@@ -8,6 +8,7 @@ package database
 
 import (
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -31,6 +32,17 @@ func (s syncStore) GetValue(key *record.Key, value database.Value) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.inner.GetValue(key, value)
+}
+
+// Version resolves through the parent under mu, like every other touch of
+// it: Resolve creates the parent's records, and that is not race-free.
+func (s syncStore) Version(key *record.Key) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if vs, ok := s.inner.(database.VersionStore); ok {
+		return vs.Version(key)
+	}
+	return 0, errors.InternalError.With("the parent store cannot report versions")
 }
 
 func (s syncStore) PutValue(key *record.Key, value database.Value) error {

@@ -192,10 +192,11 @@ BVN executor's segment-store reads were ~95% such asks.
   still does and is counted, a deep reader's miss is neither.
 - **R2 — the first-write reads.** Run 20260904T221627Z: 113.8 M history
   walks on the BVN stores, 99.2% proving a key absent before its first write
-  (~6,300 a block a node). The two reads per first write go — the version
-  pre-read (D7) and the chain's element-index check (D8) — and the dead
-  `Transaction.Main` read of a v1 shape v2 never writes. Proof: the e2e
-  duplicate assertion, the A/B golden run, `fallbackWalks` near zero.
+  (~6,300 a block a node). The version pre-read is gone (D7, DONE: version-only
+  fetch, proven by the counting, conflict and differential tests). Next the
+  chain's element-index check (D8) and the dead `Transaction.Main` read of a
+  v1 shape v2 never writes. Proof: the e2e duplicate assertion, the A/B golden
+  run, `fallbackWalks` near zero.
 - **R3 — no fallback.** The run found exactly two readers reaching back, and
   both are H1's: dispatch reading bodies by hash (442,652 hits, once each) and
   the root-index search (424,392 hits on 6,720 keys). With the cache built

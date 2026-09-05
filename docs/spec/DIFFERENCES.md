@@ -315,23 +315,25 @@ and the permanent misses must read zero over a soak.
 
 ---
 
-### D7. A first write reads the store to learn a version the store does not hold
+### D7. A first write no longer reads the store; one store cannot say a version
 
 *[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
 
 **Spec**: a first write never reads the store to learn a version.
 
-**Code**: `value.Put` (`values/value.go:164`) calls `Get` when the value is
-unloaded, "for proper versioning". The read's value and status are discarded;
-only `version` survives, and it is copied from the parent batch's in-memory
-record — `LoadBytes` never sets it, so the store read contributes nothing.
-Every first write of a record therefore costs a full miss. A naive skip is
-wrong: a shard child writing a key its parent wrote earlier in the block would
-raise a spurious conflict and poison the block. The fix is a version-only
-fetch that resolves the parent record without reading the store.
+**Code**: done. `value.Put` asks its store for the version alone
+(`database.VersionStore`): the key-value store below the outermost batch
+answers zero, a batch answers from the parent's record in memory, a shard's
+child answers through the parent under its mutex. The read remains only as a
+fallback for a store that cannot say (the BPT's node records, which are in
+memory). Proven by: a counting store showing a first write reads nothing and a
+set merge reads once; the conflict cases a naive skip would break (a child
+writing a key its parent wrote, siblings, three levels, shards); and a
+differential run of accounts, chains, sets, child batches and shards under
+both paths committing byte-identical state and the same root
+(`internal/database/version_fetch_test.go`).
 
-**Size**: small in code; the proof is the A/B golden run plus unit tests for
-the child-after-parent and sibling-conflict cases, which do not exist.
+**Size**: none remaining.
 
 ---
 
