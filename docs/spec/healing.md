@@ -102,8 +102,10 @@ way — a bookkeeping defect, not traffic the stream requires.
 
 For hashes, the source answers **entirely from its cache** (below) and nothing
 else: no chain walk, no receipt, no signature, no database read. For index
-spans it answers with a proof read from its chain, continued to a Directory
-root ([Proofs are extended](#proofs-are-extended-not-replaced)) — and only for
+spans it answers with a proof built from the same cache — the span's hashes,
+and the receipt to a Directory root the cache keeps for the block those
+entries were dispatched under ([Proofs are
+extended](#proofs-are-extended-not-replaced)) — and only for
 spans the Directory has anchored back to it; a span above that is "not yet".
 It packs the entries into a **bundle** — as many anchors and synthetic transactions as fit the
 envelope budget, whatever their streams, each with the transaction it belongs to
@@ -151,14 +153,13 @@ are released from staging at commit. Staging holds only what is above
   answer is gated by the requesting network's consensus and proven by proofs
   the destination already holds, and its cost to the source is bounded by the
   request bounds and served from the cache. A hash the cache does not hold is
-  served from the permanent layer and counted as a miss.
+  not served: the miss is counted, and it is a defect.
 - **The asked-once record and the per-source back-off are node state, not
   consensus state.** They live in memory beside the healer, keyed by hash and
   by source with the block index of the activation that asked. A restart
   empties them; the cost is at most one duplicate request per gap.
 - **The synthetic/anchor cache holds entries in play**, indexed by partition and
-  index, cleared as the destination delivers, backed by the permanent layer
-  ([The cache](#the-cache)). Its size is decided from measurement of how many
+  index, cleared as the destination delivers ([The cache](#the-cache)). Its size is decided from measurement of how many
   entries are in play at the target rate. The sanity horizon of about an hour
   bounds what staging will hold, not what the cache keeps.
 
@@ -175,8 +176,8 @@ backwards means an earlier merkle state and the elements in between; the replay
 ends at the same anchor, so **the same receipt keeps working**. A destination
 that needs to reach further back asks the source for **the merkle state at
 index `f` and the elements `[f, c)`** of the stream's chain, where `c` is where
-its current list begins. The source reads hashes out of a chain it already has —
-no rebuilding, no signing — and the destination validates the widened list
+its current list begins. The source reads the hashes out of its cache — no
+chain walk, no rebuilding, no signing — and the destination validates the widened list
 against the receipt it already holds, so a wrong or dishonest extension fails
 to validate and is discarded.
 
@@ -211,20 +212,20 @@ two-level cycled cache in the dynamic layer and serves reads, not healing.
   historical record while building a package, a bundle or a proof is a
   failure**, and it is counted.
 - **Contents.** The sequenced message and, when it has one, the transaction it
-  belongs to; and, per block, the positions a proof is built from — the
-  block's span on the synthetic chain and its root chain position — so the
-  proof is built from the cache and the chains' recent entries, never by
-  searching.
+  belongs to; and, per block, what a proof is built from — the block's span on
+  the synthetic chain and the receipt to the Directory root the block was
+  dispatched under — so a package's or a bundle's proof is built from the
+  cache alone.
 - **Cleared as gaps close.** Because it is indexed by partition and index, every
   entry the destination is known to have delivered can be dropped: the cache
   holds the entries in play, not a window of history. It is sized for the
   entries in play, and sizing it is a separate matter decided from measurement.
-- **Backed by permanent storage.** Every entry is persisted to the permanent
-  layer through execution, so nothing is ever lost when it leaves the cache and
-  nothing is rebuilt: a request for an entry not in the cache is served from
-  the permanent layer and **counted as a miss** with its depth — a miss means
-  the cache is undersized or the request is stale, and either is worth a
-  number.
+- **Never served from storage.** Every entry is also persisted to the
+  permanent layer through execution; that is the record, not a fallback. A
+  request for an entry the cache does not hold is refused and **counted as a
+  miss** with its depth — a miss means the cache is undersized or the request
+  is stale, and either is a defect worth a number. The historical record is
+  not read to build an answer.
 - **Nothing is invalidated.** An entry's content cannot change under its index
   or its hash.
 
@@ -284,8 +285,8 @@ node compares them against its own position.
 
 The private sequencer service (`internal/api/private`) carries three methods:
 one entry by stream and number (anchors), a **proof for index spans** of a
-stream, and **entries by hash set** for a destination. Entries are answered
-from the producer cache; a proof is read from the chain.
+stream, and **entries by hash set** for a destination. Entries and proofs are
+answered from the producer cache; nothing is read from the store.
 
 The source packs the entries into bundles under the envelope budget
 (`synthPackageBudget`) and above the minimum size, and submits each bundle to
@@ -311,8 +312,8 @@ ranges at or below `Delivered` are released when the block commits.
 (`produceSynthetic`, `prepareAnchor`) through a hook the block calls once per
 entry; keyed by hash and by (stream, number); entries dropped as the
 destination's `Delivered` passes them; sized by `HealCacheEntries`, set from
-measurement; read by the sequencer service, which falls through to the permanent
-layer on a miss. Hits, misses, miss depth and construction failures are counters
+measurement; read by the sequencer service, which refuses and counts a miss
+rather than reading the store. Hits, misses, miss depth and construction failures are counters
 on the node's metrics endpoint, as are every row of the counting table above.
 
 ---
