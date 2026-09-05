@@ -337,40 +337,25 @@ both paths committing byte-identical state and the same root
 
 ---
 
-### D8. The chain checks uniqueness on every append, and the flag that governs it is ignored
+### D8. The chain reads its element index only for the writer's deduplicated chains
 
 *[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
 
-**Spec**: chains unique by construction are appended without asking; the
-writer deduplicates the rest.
+**Spec**: the element index is written, not read then written; the writer
+deduplicates.
 
-**Code**: `merkle.Chain.AddEntry` reads `ElementIndex(hash)` for every chain
-before consulting `unique`, and `Element(count)` and `States(count-1)` are
-blind writes that pre-read (D7). `ChainUpdates.AddChainEntry2` passes `true`
-whatever its caller said. Instrumented over the e2e and executor suites, the
-only rejected duplicates were the double append of E9 and v1's signature path;
-every other duplicate was a permitted repeat on a root or signature chain.
+**Code**: `merkle.Chain.AddEntry` writes the element index blind for every
+chain appended with `unique == false` — root, signature, index, synthetic,
+replica, anchor-sequence, block-ledger and BPT chains, the bulk of the
+appends — and reads it first only for `unique == true`: the account main and
+scratch chains and, through `AddChainEntry2` forcing `true`, the anchor root
+and BPT chains. That read stays until the transaction hash is appended from
+one site (E9), which is what makes it dead. `AddChainEntry2` still ignores its
+own argument. The `Element` and `States` writes read nothing since D7. The
+element index now names the last-written occurrence live as it does after a
+restore, so the former D9 is closed.
 
-**Size**: small once D7 is in: a per-chain mode for the chains the writer
-deduplicates, the flag honoured or removed. `merkle.OnDuplicate` now records
-every duplicate append in test builds and the e2e suite fails on any outside
-the permitted repeats, so a removal here is checked by the suite.
-
----
-
-### D9. Restore writes the element index as the last occurrence
-
-*[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
-
-**Spec**: the element index is the first occurrence, preserved across restore.
-
-**Code**: `merkle_snapshot.go` and `rebuildChainIndexes` write
-`ElementIndex` in order, so a later duplicate overwrites the earlier index;
-a live append keeps the first. The BSN indexer preserves first occurrence
-deliberately because the store classifies the index write-once. Not consensus
-state; the test that guards restore uses unique values only.
-
-**Size**: small.
+**Size**: small: the single-site append, then the flag goes.
 
 ---
 

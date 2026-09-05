@@ -74,28 +74,31 @@ func (m *Chain) AddEntry(hash []byte, unique bool) error {
 		return err
 	}
 
-	hash = copyHash(hash)                    // Just to make sure hash doesn't get changed
-	_, err = m.ElementIndex(hash).Get()      // See if this element is a duplicate
-	if errors.Is(err, storage.ErrNotFound) { // So only if the hash is not yet added to the Merkle Tree
-		err = m.ElementIndex(hash).Put(uint64(head.Count)) // Keep its index
-		if err != nil {
+	hash = copyHash(hash) // Just to make sure hash doesn't get changed
+
+	// The element index maps a hash to the position it was last written at.
+	// A chain that does not ask for uniqueness writes it without reading: a
+	// duplicate is caught where it enters the executor, by recent state, and
+	// a chain that repeats by construction (a root or signature chain) keeps
+	// every entry (database spec, "Duplicates are caught at entry"). Only a
+	// chain the writer still asks to deduplicate reads first; reaching the
+	// duplicate branch there is the writer appending the same hash twice,
+	// which test builds record so the suites can assert which.
+	if unique {
+		_, err = m.ElementIndex(hash).Get()
+		switch {
+		case err == nil:
+			if OnDuplicate != nil {
+				OnDuplicate(m.key, unique)
+			}
+			return nil // Don't add duplicates
+		case !errors.Is(err, storage.ErrNotFound):
 			return err
 		}
-	} else if err != nil {
+	}
+	err = m.ElementIndex(hash).Put(uint64(head.Count))
+	if err != nil {
 		return err
-	} else {
-		// The hash is already in the chain.  A duplicate is caught
-		// where it enters the executor, by recent state (database
-		// spec, "Duplicates are caught at entry"); reaching this
-		// branch is either a permitted repeat (a root or signature
-		// chain) or the writer appending the same hash twice.  Test
-		// builds record every one so the suites can assert which.
-		if OnDuplicate != nil {
-			OnDuplicate(m.key, unique)
-		}
-		if unique {
-			return nil // Don't add duplicates
-		}
 	}
 
 	err = m.Element(uint64(head.Count)).Put(hash)

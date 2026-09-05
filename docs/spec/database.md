@@ -82,11 +82,11 @@ store it is a search of all history to confirm what recent state already
 settled.
 
 **Chains are logs.** A chain is an append-only sequence of hashes. Its element
-index maps a hash to its **first** occurrence; a later identical entry is
-appended and does not move the index, and a restore preserves this so a
-restored node, a live node and an indexer agree. No reader relies on a hash
-appearing once: a receipt, a query by hash, a proof check and the proven set
-each need *an* index at or before the anchoring point, and the first serves.
+index maps a hash to the position it was **last written** at, live and after
+a restore alike, and no reader relies on which occurrence it names: a receipt,
+a query by hash, a proof check and the proven set each need *an* index of the
+hash, and any serves. Writing the index is therefore a write, not a read
+followed by a write.
 Repeats do occur, by construction, and are appended: a root chain receives
 equal anchors from equal chains (genesis, one transaction creating several
 accounts); a signature chain records one cause per signer and every signature
