@@ -543,10 +543,14 @@ func (f *nodeFactory) getSynthCache() *synthcache.Cache {
 
 func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a querier service
+	// The API services read deep, as the node's do (cmd/accumulated/run,
+	// dagbft.go): a store with a window answers a shallow read of anything
+	// older than the window as absent, and an explorer or a harness asking
+	// about an old transaction must reach history.
 	f.registerSvc(api.ServiceTypeQuery, message.Querier{
 		Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{
 			Logger:    f.getLogger().With("module", "acc-rpc"),
-			Database:  f.getDatabase(),
+			Database:  f.getDatabase().Deep(),
 			Partition: f.networkFactory.id,
 		}),
 	})
@@ -555,7 +559,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	f.registerSvc(api.ServiceTypeEvent, message.EventService{
 		EventService: apiimpl.NewEventService(apiimpl.EventServiceParams{
 			Logger:    f.getLogger().With("module", "acc-rpc"),
-			Database:  f.getDatabase(),
+			Database:  f.getDatabase().Deep(),
 			Partition: f.networkFactory.id,
 			EventBus:  f.getEventBus(),
 		}),
@@ -565,7 +569,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	f.registerSvc(api.ServiceTypeNetwork, message.NetworkService{
 		NetworkService: apiimpl.NewNetworkService(apiimpl.NetworkServiceParams{
 			Logger:    f.getLogger().With("module", "acc-rpc"),
-			Database:  f.getDatabase(),
+			Database:  f.getDatabase().Deep(),
 			Partition: f.networkFactory.id,
 			EventBus:  f.getEventBus(),
 		}),
@@ -575,7 +579,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	f.registerSvc(private.ServiceTypeSequencer, &message.Sequencer{
 		Sequencer: apiimpl.NewSequencer(apiimpl.SequencerParams{
 			Logger:       f.getLogger().With("module", "acc-rpc"),
-			Database:     f.getDatabase(),
+			Database:     f.getDatabase().Deep(),
 			EventBus:     f.getEventBus(),
 			Partition:    f.networkFactory.id,
 			ValidatorKey: f.network.PrivValKey,

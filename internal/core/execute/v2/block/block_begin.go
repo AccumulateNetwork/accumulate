@@ -424,6 +424,12 @@ func (x *Executor) sendSyntheticTransactionsForBlock(blockIndex uint64, blockRec
 	// under (healing spec, "The cache"). Recorded on every node; sent by the
 	// leader.
 	x.synthCache().MarkDispatched(blockIndex, anchorBlock, blockReceipt)
+	if len(blk.Entries) > 0 {
+		// Info, not Debug: a block whose synthetics never leave is the
+		// failure a soak has to be able to see (run 20260905T225751Z)
+		x.logger.Info("Dispatching synthetic transactions for block", "module", "synthetic",
+			"block", blockIndex, "anchor-block", anchorBlock, "entries", len(blk.Entries), "streams", len(blk.Streams), "send", send, "receipt", blockReceipt != nil)
+	}
 	if !send || len(blk.Entries) == 0 {
 		return nil
 	}

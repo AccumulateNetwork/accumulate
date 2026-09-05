@@ -308,7 +308,7 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 			// within the last few blocks: the entries are on their way.
 			// Not a gap yet, not a failure.
 			mHealRequests.WithLabelValues("not-yet", c.Partition.ID, partitionLabel(source)).Inc()
-			slog.DebugContext(ctx, "Missing "+a.what+" are still in flight at the source", "module", "conductor",
+			slog.InfoContext(ctx, "Missing "+a.what+" are still in flight at the source", "module", "conductor",
 				"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "error", err)
 		case errors.Is(err, errors.NotFound):
 			// The source's cache does not hold the span. Deterministic:
