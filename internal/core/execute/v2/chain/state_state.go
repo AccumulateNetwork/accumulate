@@ -139,8 +139,20 @@ func (u *ChainUpdates) AddChainEntry2(batch *database.Batch, chain *database.Cha
 		return 0, errors.UnknownError.WithFormat("load %s chain: %w", chain.Name(), err)
 	}
 
+	// A transaction appends to a chain once (database spec, "Duplicates are
+	// caught at entry"). The state cache appends the transaction hash to
+	// every account it writes, and the success path appends it to the
+	// principal; when both name the same chain, this record — the
+	// transaction's own — says so, and nothing is read from the chain to find
+	// out.
+	for _, e := range u.Entries {
+		if e.Chain == chain.Name() && e.Account.Equal(chain.Account()) {
+			return int64(e.Index), nil
+		}
+	}
+
 	index := c.Height()
-	err = c.AddEntry(entry, true)
+	err = c.AddEntry(entry, unique)
 	if err != nil {
 		return 0, errors.UnknownError.WithFormat("add entry to %s chain: %w", chain.Name(), err)
 	}

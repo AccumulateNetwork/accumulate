@@ -211,10 +211,10 @@ duplicate assertion and an A/B golden run — same envelope stream under two
 builds, compared per block on state root, block ledger, every touched
 account's chain heights and anchors, and all element-index records):
 
-- the transaction hash appended to the principal's chain once, by skipping
-  the state-cache append for the principal when the success path runs, and
-  `ErrNotFound` there made an error (E9); after that the e2e assertion
-  tightens to root and signature chains only;
+- DONE: the transaction hash appended to a chain once per transaction,
+  settled from the transaction's own chain-update record (E9), `ErrNotFound`
+  on the success path an error, `AddChainEntry2` honouring its argument;
+  proven per transaction type by `single_append_test.go`;
 - the observer's v1 `Transaction.Main` read gated, an account hashed once per
   block, `clearActiveSignatures` touching only signers that signed;
 - the element index restored as first occurrence (D9).

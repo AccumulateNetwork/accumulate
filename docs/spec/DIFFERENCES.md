@@ -136,31 +136,26 @@ durably only when it cannot execute this block; the gap questions by index
 ("proven and missing", "held and unproven") and the retirement of the
 reconcile-by-`Produced` path, which land with H8's request set.
 
-### E9. The transaction hash is appended from two sites, and the observer reads a v1 record
+### E9. The observer reads a v1 record, and every signer's set is cleared
 
 *[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
 
-**Spec**: a message's hash is appended to a chain once, from one site
-(database spec, "Duplicates are caught at entry"); a reader that reaches past
-the window takes a deep reader.
+**Spec**: a first write never reads; a reader that reaches past the window
+takes a deep reader.
 
-**Code**: the executor's one legitimate deep read — a transaction a signature
-or a remote copy refers to, pending for longer than the window — now takes a
-deep reader (`Executor.deepView`, in `getTransaction`, `GetSignatureAs` and
-`resolveTransaction`), and the adapter reports absence for every other
-shallow miss. The transaction hash still reaches the principal's main chain
-from the state cache (`state_cache.go:207`) and again from the success path
-(`transaction.go:581`); the chain's uniqueness check absorbs the second, and a
-lost append would be swallowed as `ErrNotFound` at `transaction.go:582`. The
-observer reads the v1 `Transaction(h).Main` record for every pending txid
-(`observer_prod.go:121`), a shape v2 never writes; inside the window that is
-now a cheap miss, and a v1 record older than the window reads as absent.
-`clearActiveSignatures` writes `Signatures` of every signer in the book,
-absent or not.
+**Code**: the transaction hash now reaches a chain once per transaction —
+`AddChainEntry2` settles a second append to the same chain from the
+transaction's own chain-update record, not by reading the chain, and honours
+its `unique` argument (`test/e2e/single_append_test.go`, nine transaction
+types). What remains: the observer reads the v1 `Transaction(h).Main` record
+for every pending txid (`observer_prod.go:121`), a shape v2 never writes,
+which is a cheap in-window miss now; `clearActiveSignatures` writes
+`Signatures` of every signer in the book, absent or not; the main and scratch
+chains still read their element index on append (`unique == true` from
+`AddChainEntry`) as a guard against a repeat across transactions, which no
+path is known to produce.
 
-**Size**: small. The single-site append is state-neutral when the state-cache
-append is the one skipped (the success path runs for every type that reaches
-it); after it the main-chain uniqueness read (D8) goes too.
+**Size**: small.
 
 ---
 
@@ -183,7 +178,7 @@ validator restarted under load could not rejoin and stalled its partition
 verifies it against an anchored root, and nothing gates execution on staging
 being complete.
 
-**Size**: large; it is the precondition for E10 (staging in memory) and for
+**Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.
 
 ---
@@ -272,14 +267,17 @@ deduplicates.
 chain appended with `unique == false` — root, signature, index, synthetic,
 replica, anchor-sequence, block-ledger and BPT chains, the bulk of the
 appends — and reads it first only for `unique == true`: the account main and
-scratch chains and, through `AddChainEntry2` forcing `true`, the anchor root
-and BPT chains. That read stays until the transaction hash is appended from
-one site (E9), which is what makes it dead. `AddChainEntry2` still ignores its
-own argument. The `Element` and `States` writes read nothing since D7. The
-element index now names the last-written occurrence live as it does after a
-restore, so the former D9 is closed.
+scratch chains through `AddChainEntry`. `AddChainEntry2` honours its argument,
+so the anchor root and BPT chains write blind, and a transaction's second
+append to the same chain is settled from its own chain-update record (E9).
+The remaining read is an in-window miss for a new hash, a guard against a
+repeat across transactions that no path is known to produce; it goes when
+the e2e duplicate assertion has run clean long enough to say so. The
+`Element` and `States` writes read nothing since D7. The element index names
+the last-written occurrence live as it does after a restore, so the former D9
+is closed.
 
-**Size**: small: the single-site append, then the flag goes.
+**Size**: none required; the guard read is a choice.
 
 ---
 
