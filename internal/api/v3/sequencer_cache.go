@@ -101,6 +101,18 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 			if !ok {
 				return nil, errors.NotFound.WithFormat("block %d is not in the cache", e.Block)
 			}
+			// A block still in flight is not served: its entries are on
+			// their way. Answer the dispatched prefix of the range, or "not
+			// yet" when even the first block is in flight.
+			if !s.cache.Servable(blk) {
+				if len(records) > 0 {
+					break
+				}
+				if !blk.Dispatched {
+					return nil, errors.NotReady.With("the directory has not receipted the block yet")
+				}
+				return nil, errors.NotReady.WithFormat("block %d was dispatched %d blocks ago and is in flight", e.Block, s.cache.Newest()-blk.DispatchedAt)
+			}
 			switch {
 			case span == nil:
 				cp := *blk.Segment
@@ -122,9 +134,6 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 		return nil, errors.BadRequest.With("empty range")
 	}
 
-	if !last.Dispatched {
-		return nil, errors.NotReady.With("the directory has not receipted the block yet")
-	}
 	if opts.ProveAgainstAnchor > 0 && opts.ProveAgainstAnchor != last.AnchorBlock {
 		return nil, errors.NotReady.WithFormat("the range is provable under Directory anchor %d, not %d", last.AnchorBlock, opts.ProveAgainstAnchor)
 	}

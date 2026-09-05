@@ -61,9 +61,16 @@ type Block struct {
 	// on the Directory itself, whose root is the terminal). A bundle answering
 	// a healing request is proven under the same anchor.
 	Dispatched       bool
+	DispatchedAt     uint64 // the producer's newest block when it dispatched
 	AnchorBlock      uint64
 	DirectoryReceipt *protocol.PartitionAnchorReceipt
 }
+
+// InFlightBlocks is how many of the producer's blocks a dispatched block is
+// considered in flight: its entries are on their way and are not served to a
+// healing request, so an answer never duplicates a delivery that is about to
+// arrive. Two activations of the healing cadence.
+const InFlightBlocks = 8
 
 // Proof is the receipt from the entry at index to the anchor the block was
 // dispatched under: through the synthetic chain, the root chain and, off the
@@ -349,7 +356,20 @@ func (c *Cache) MarkDispatched(index, anchorBlock uint64, receipt *protocol.Part
 	if !ok {
 		return
 	}
-	b.Dispatched, b.AnchorBlock, b.DirectoryReceipt = true, anchorBlock, receipt
+	b.Dispatched, b.DispatchedAt, b.AnchorBlock, b.DirectoryReceipt = true, c.newest, anchorBlock, receipt
+}
+
+// Newest is the newest block committed to the cache.
+func (c *Cache) Newest() uint64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.newest
+}
+
+// Servable answers whether a block's entries may be served to a healing
+// request: dispatched, and not for the last InFlightBlocks blocks.
+func (c *Cache) Servable(b *Block) bool {
+	return b.Dispatched && c.Newest() >= b.DispatchedAt+InFlightBlocks
 }
 
 // Entry answers one produced entry by stream and number.

@@ -115,6 +115,11 @@ func TestSequencer_AnswersFromTheCache(t *testing.T) {
 	require.Equal(t, dnReceipt.Anchor, r.SourceReceipt.Anchor)
 
 	// A range: one list over the span, continued to the same root
+	// Just dispatched: in flight, not served to a healing request
+	_, err = svc.SequenceRange(context.Background(), src, bvn1, 2, 4, private.SequenceOptions{})
+	require.ErrorIs(t, err, errors.NotReady)
+	cache.Begin(7 + synthcache.InFlightBlocks).Commit()
+
 	rs, err := svc.SequenceRange(context.Background(), src, bvn1, 2, 4, private.SequenceOptions{})
 	require.NoError(t, err)
 	require.Len(t, rs, 3)

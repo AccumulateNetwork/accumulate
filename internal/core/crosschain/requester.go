@@ -75,7 +75,7 @@ var mHealRequests = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
 	Subsystem: "conductor",
 	Name:      "heal_requests_total",
-	Help:      "Synthetic span requests by outcome: answered, miss (the source's cache lacks the span), failed",
+	Help:      "Synthetic span requests by outcome: answered, not-yet (the span is in flight at the source), miss (the source's cache lacks the span), failed",
 }, []string{"outcome", "destination", "source"})
 
 var mHealEntries = promauto.NewCounter(prometheus.CounterOpts{
@@ -223,11 +223,11 @@ func (c *Conductor) requestGaps(ctx context.Context, batch *database.Batch, bloc
 			if ctx.Err() != nil {
 				break
 			}
-			n, err := c.requestSpan(ctx, ranger, source, span[0], span[1])
+			n, served, err := c.requestSpan(ctx, ranger, source, span[0], span[1])
 			switch {
 			case err == nil:
 				asked++
-				c.requester.asked(stream, span, blockIndex)
+				c.requester.asked(stream, [2]uint64{span[0], served}, blockIndex)
 				mHealRequests.WithLabelValues("answered", c.Partition.ID, partitionLabel(source)).Inc()
 				mHealEntries.Add(float64(n))
 				if c.Heals != nil {
@@ -237,6 +237,13 @@ func (c *Conductor) requestGaps(ctx context.Context, batch *database.Batch, bloc
 				c.synthHeals.Add(uint64(n))
 				slog.WarnContext(ctx, "Requested missing synthetics", "module", "conductor",
 					"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "entries", n, "block", blockIndex)
+			case errors.Is(err, errors.NotReady):
+				// The source has not dispatched the span, or dispatched it
+				// within the last few blocks: the entries are on their way.
+				// Not a gap yet, not a failure.
+				mHealRequests.WithLabelValues("not-yet", c.Partition.ID, partitionLabel(source)).Inc()
+				slog.DebugContext(ctx, "Missing synthetics are still in flight at the source", "module", "conductor",
+					"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "error", err)
 			case errors.Is(err, errors.NotFound):
 				// The source's cache does not hold the span. Deterministic:
 				// asking again does not help. A miss is a defect at the source.
@@ -403,22 +410,28 @@ func sourceKey(u *url.URL) string { return strings.ToLower(u.String()) }
 // requestSpan asks the source for [first, last] of its synthetic stream to
 // this partition and submits the answer — the entries, each with its
 // companion transaction when it has one, under one collection proof — as
-// bundles within the envelope budget. Returns how many entries were submitted.
-func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64) (int, error) {
+// bundles within the envelope budget. The source may answer a prefix of the
+// span — what it has dispatched and is not still in flight — so the result
+// says how many entries were submitted and the last number among them.
+func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64) (int, uint64, error) {
 	records, err := ranger.SequenceRange(ctx, source.JoinPath(protocol.Synthetic), c.Url(), first, last, private.SequenceOptions{})
 	if err != nil {
-		return 0, errors.UnknownError.Wrap(err)
+		return 0, 0, errors.UnknownError.Wrap(err)
 	}
 	if len(records) == 0 {
-		return 0, errors.InvalidRecord.With("empty answer")
+		return 0, 0, errors.InvalidRecord.With("empty answer")
 	}
 	tail := records[len(records)-1]
+	if tail.Sequence == nil {
+		return 0, 0, errors.InvalidRecord.With("answer carries an unsequenced message")
+	}
 	if tail.SourceReceiptList == nil {
-		return 0, errors.InvalidRecord.With("answer carries no collection proof")
+		return 0, 0, errors.InvalidRecord.With("answer carries no collection proof")
 	}
 	if tail.SourceAnchorBlock == 0 {
-		return 0, errors.InvalidRecord.With("answer does not say which Directory block proves it")
+		return 0, 0, errors.InvalidRecord.With("answer does not say which Directory block proves it")
 	}
+	served := tail.Sequence.Number
 	proof := &protocol.AnnotatedReceipt{
 		ReceiptList: tail.SourceReceiptList,
 		Anchor:      &protocol.AnchorMetadata{Account: protocol.DnUrl(), SourceBlock: tail.SourceAnchorBlock},
@@ -426,7 +439,7 @@ func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRang
 	proofMsg := &messaging.SyntheticProof{Proof: proof}
 	proofSize, err := marshalledSize(proofMsg)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 	baikonur := c.Globals.Load().ExecutorVersion.V2BaikonurEnabled()
@@ -444,11 +457,11 @@ func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRang
 	}
 	for _, r := range records {
 		if r.Sequence == nil {
-			return 0, errors.InvalidRecord.With("answer carries an unsequenced message")
+			return 0, 0, errors.InvalidRecord.With("answer carries an unsequenced message")
 		}
 		keySig := keySignatureOf(r)
 		if keySig == nil {
-			return 0, errors.InvalidRecord.WithFormat("answer for %v→%v #%d is not signed", source, c.Url(), r.Sequence.Number)
+			return 0, 0, errors.InvalidRecord.WithFormat("answer for %v→%v #%d is not signed", source, c.Url(), r.Sequence.Number)
 		}
 		var entry messaging.Message
 		if baikonur {
@@ -464,22 +477,22 @@ func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRang
 		for _, m := range add {
 			k, err := marshalledSize(m)
 			if err != nil {
-				return 0, err
+				return 0, 0, err
 			}
 			n += k
 		}
 		if len(msgs) > 0 && proofSize+size+n > budget {
 			if err := flush(); err != nil {
-				return 0, errors.UnknownError.WithFormat("submit bundle from %v: %w", source, err)
+				return 0, 0, errors.UnknownError.WithFormat("submit bundle from %v: %w", source, err)
 			}
 		}
 		msgs = append(msgs, add...)
 		size += n
 	}
 	if err := flush(); err != nil {
-		return 0, errors.UnknownError.WithFormat("submit bundle from %v: %w", source, err)
+		return 0, 0, errors.UnknownError.WithFormat("submit bundle from %v: %w", source, err)
 	}
-	return len(records), nil
+	return len(records), served, nil
 }
 
 func marshalledSize(m messaging.Message) (int, error) {

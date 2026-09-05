@@ -107,6 +107,10 @@ and the receipt to a Directory root the cache keeps for the block those
 entries were dispatched under ([Proofs are
 extended](#proofs-are-extended-not-replaced)) — and only for
 spans the Directory has anchored back to it; a span above that is "not yet".
+Nor does it serve what it dispatched within the last few blocks
+(`InFlightBlocks`): those entries are on their way, and an answer must never
+duplicate a delivery in flight. A span that is partly ready is answered as
+far as it is ready; the requester remembers only what it was given.
 It packs the entries into a **bundle** — as many anchors and synthetic transactions as fit the
 envelope budget, whatever their streams, each with the transaction it belongs to
 when it has one, and with no proof of its own — and **submits the bundle into
