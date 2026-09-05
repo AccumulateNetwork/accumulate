@@ -50,12 +50,13 @@ type Conductor struct {
 	// hold, or holds unproven, is a gap (healing.md, "Deciding, in staging").
 	Staging *execute.Staging
 
-	// ExecutionLagging reports whether this partition's executor is behind
-	// its consensus past the bound (consensus.md, "Execution lag"). While it
-	// is, the primary proposes no batches and nothing can land here, so a
-	// hole in staging says nothing about the source: the requester asks for
-	// nothing until execution has caught up.
-	ExecutionLagging func() bool
+	// ExecutionLag reports how many committed blocks this partition's
+	// executor has not yet executed (consensus.md, "Execution lag"). While
+	// it is above zero, a hole in staging may be sitting in that backlog --
+	// a package committed after the one that revealed it -- so the hole says
+	// nothing about the source, and the requester asks for nothing until the
+	// executor has caught up.
+	ExecutionLag func() int
 
 	// Ready can be used to pause the conductor, for example to stop it from
 	// sending anchors while the node is catching up.
@@ -294,7 +295,7 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 
 	// Did anything happen last block?
 	if activate && c.Staging != nil && c.Sequencer != nil && c.selectedToPull(ledger) &&
-		!(c.ExecutionLagging != nil && c.ExecutionLagging()) {
+		(c.ExecutionLag == nil || c.ExecutionLag() == 0) {
 		c.runExclusive("requestGaps", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), def(c.HealTimeout, DefaultHealTimeout))
 			defer cancel()

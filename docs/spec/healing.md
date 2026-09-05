@@ -282,9 +282,10 @@ at least `healNoticeAge` activations ago — longer than the execution-lag
 bound on either side (consensus.md, "Execution lag") plus a flight, because a
 lagging source dispatches late and a lagging destination executes late, and a
 hole that stands for that long is nobody's loss — and not asked within the
-last `healPatience` activations. A partition whose own execution is lagging
-asks for nothing: its primary proposes no batches, so nothing can land, and
-its holes say nothing about the source. That is the request set: a hash set and a list of index spans.
+last `healPatience` activations. A partition whose executor has committed
+blocks it has not yet executed asks for nothing: a hole in its staging may be
+sitting in that backlog, so the hole says nothing about the source until the
+executor has caught up. That is the request set: a hash set and a list of index spans.
 A held entry whose proof has arrived and is staged, waiting for its Directory
 anchor, is not unproven: the anchor is on its way, late when the
 destination's executor lags, and asking for the entry again lands it twice.

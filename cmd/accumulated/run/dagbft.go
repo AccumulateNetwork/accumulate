@@ -292,11 +292,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Sequencer:    client.Private(),
 		Staging:      staging,
 		Heals:        healCounters,
-		ExecutionLagging: func() bool {
+		ExecutionLag: func() int {
 			if s.service == nil || s.service.Node() == nil {
-				return false
+				return 0
 			}
-			return s.service.Node().ExecutionLag() > int(*s.MaxExecutionLag)
+			return s.service.Node().ExecutionLag()
 		},
 		RunTask: execOpts.BackgroundTaskLauncher,
 		// Healing is the ONLY retry mechanism for anchors — the conductor's
