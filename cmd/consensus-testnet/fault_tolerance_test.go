@@ -637,6 +637,9 @@ func startCommitProcessor(ctx context.Context, wg *sync.WaitGroup, node *consens
 						w.PruneBatches(digests)
 					}
 				}
+				// The executor reports each committed group back, or the execution-lag
+				// bound (consensus spec, invariant 9) empties every header after eight.
+				node.ReportExecuted()
 			}
 		}
 	}()

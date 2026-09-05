@@ -182,6 +182,9 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 							w.PruneBatches(digests)
 						}
 					}
+					// The executor reports each committed group back, or the execution-lag
+					// bound (consensus spec, invariant 9) empties every header after eight.
+					nodes[i].ReportExecuted()
 				}
 			}
 		}()
@@ -400,6 +403,9 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 						w.PruneBatches(digests)
 					}
 				}
+				// The executor reports each committed group back, or the execution-lag
+				// bound (consensus spec, invariant 9) empties every header after eight.
+				newNode.ReportExecuted()
 			}
 		}
 	}()
@@ -728,6 +734,9 @@ func TestStress_MemoryStability(t *testing.T) {
 							w.PruneBatches(digests)
 						}
 					}
+					// The executor reports each committed group back, or the execution-lag
+					// bound (consensus spec, invariant 9) empties every header after eight.
+					nodes[i].ReportExecuted()
 				}
 			}
 		}()
@@ -988,6 +997,9 @@ func TestStress_ConsensusStallDetection(t *testing.T) {
 							w.PruneBatches(digests)
 						}
 					}
+					// The executor reports each committed group back, or the execution-lag
+					// bound (consensus spec, invariant 9) empties every header after eight.
+					nodes[i].ReportExecuted()
 				}
 			}
 		}()
