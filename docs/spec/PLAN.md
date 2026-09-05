@@ -22,7 +22,7 @@ healer is gone; a lost entry now shows as a stalled stream, and that gap is
 what the next item hunts.
 
 ```
-E8 #4217 (done) ─▶ H1 #4193 (DONE) ─▶ E10 (DONE: staging is memory, `execute.Staging`, a block transaction that commits with the block) ─▶ C6 #4215 ─▶ R2 #4219 (first-write reads) ─▶ H8 #4216 ─▶ acceptance run #7
+E8 #4217 (done) ─▶ H1 #4193 (DONE) ─▶ E10 (DONE: staging is memory, `execute.Staging`, a block transaction that commits with the block) ─▶ C6 #4215 (DONE: execution lag bounded at 8 blocks; empty headers and refusal by reason past it) ─▶ H8 #4216 ─▶ acceptance run #7
 R #4219 ─▶ S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86   cost: first the reads that prove an absence, then the rest
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3               correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back
@@ -144,17 +144,14 @@ on healing. Closes H1 #4193 with it.
 
 ### C6 #4215 — consensus does not outrun execution
 
-Spec: consensus.md invariants 9 and 10, "Execution lag".
-
-1. The bridge reports the executed leader round to the node after each commit.
-2. The header builder takes no batches while the lag exceeds `MaxExecutionLag`
-   (8); the worker refuses with reason `execution-lagging`.
-3. `batch_store_refusing{reason}` and separate transition log lines; a lag gauge
-   and commit queue depth gauge.
-
-Test: an executor that executes one block in three keeps the DAG within the
-bound, the own store within its share, and the reason says lag. Done when a
-soak with an artificially slow executor never exceeds the bound.
+DONE. The node counts committed leader groups against executed blocks; past
+`MaxExecutionLag` (8) the primary proposes headers without batches and every
+worker refuses user work with reason `execution-lagging`, apart from
+`store-full`; both clear when execution catches up. Tests: the worker refuses
+user work and passes system traffic while lagging; the primary's header carries
+no batches past the bound, the batches wait, and proposal resumes when the
+lag falls. Proof outstanding: a soak in which BVN2's lag stays under the bound
+and its anchor leg stays near its floor.
 
 ### #4214 — resolved: there was no loss
 

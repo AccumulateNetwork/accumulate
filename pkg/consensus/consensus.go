@@ -77,6 +77,11 @@ type NodeConfig struct {
 	// Defaults to DefaultCommitBufferSize.
 	CommitBufferSize int
 
+	// MaxExecutionLag is how many committed leader groups the executor may
+	// fall behind before headers carry no batches and user work is refused
+	// (consensus spec, invariant 9). Zero means primary.DefaultMaxExecutionLag.
+	MaxExecutionLag int
+
 	// MinRoundInterval paces round advancement, and therefore block cadence:
 	// Bullshark commits a leader every other round, so blocks arrive at
 	// roughly twice this interval. Zero falls back to
@@ -165,6 +170,12 @@ type Node struct {
 	// Metrics
 	transactionsSubmitted atomic.Uint64
 	certificatesCommitted atomic.Uint64
+
+	// committedGroups counts leader groups handed to the executor's channel;
+	// executedGroups counts the blocks the executor has produced from them.
+	// Their difference is the execution lag (consensus spec, invariant 9).
+	committedGroups atomic.Uint64
+	executedGroups  atomic.Uint64
 }
 
 // NewNode creates a new consensus Node with the given configuration.
@@ -253,6 +264,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		bullshark: bs,
 		committed: make(chan []*types.Certificate, config.CommitBufferSize),
 	}
+	p.SetExecutionLagSource(n.ExecutionLag, config.MaxExecutionLag)
 
 	// The batch-fetch protocol backs CollectBatches and the vote gate's
 	// missing-batch pull: a committed certificate proves 2f+1 validators
@@ -749,6 +761,21 @@ func (n *Node) Committed() <-chan []*types.Certificate {
 	return n.committed
 }
 
+// ReportExecuted records that the executor produced a block from one
+// committed group. The primary reads the lag between commits and executions
+// from this (consensus spec, invariant 9).
+func (n *Node) ReportExecuted() { n.executedGroups.Add(1) }
+
+// ExecutionLag is how many committed leader groups the executor has not yet
+// executed.
+func (n *Node) ExecutionLag() int {
+	c, e := n.committedGroups.Load(), n.executedGroups.Load()
+	if e >= c {
+		return 0
+	}
+	return int(c - e)
+}
+
 // Committee returns the current committee.
 func (n *Node) Committee() *types.Committee {
 	return n.committee
@@ -874,6 +901,7 @@ func (n *Node) processBullshark() {
 				// the DAG regardless.
 				select {
 				case n.committed <- group:
+					n.committedGroups.Add(1)
 					group = nil
 					return true
 				case <-n.ctx.Done():

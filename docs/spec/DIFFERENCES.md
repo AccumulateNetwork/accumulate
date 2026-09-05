@@ -283,42 +283,7 @@ is closed.
 
 ## Consensus
 
-### C6. Consensus outruns execution, and own batches pin until execution
-
-*[#4215](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4215)*
-
-**Spec** ([consensus.md](consensus.md), invariant 9): a validator whose
-executor is more than a bound of blocks behind the last commit proposes empty
-headers and refuses user work until it catches up.
-
-**Code**: the proposer never reads the executor's height. Committed
-certificates queue in `committed` (`DefaultCommitBufferSize` = 5,000 blocks)
-"and the DAG regardless" (`pkg/consensus/consensus.go`, commit loop); own
-batches are released by `PruneCommitted` when their block **executes**, so
-while execution lags every own batch of the lag is "uncommitted", the own
-store exceeds its share through `Submit` (system traffic, never refused) and
-`SubmitUser` refuses indefinitely, with no reason distinguishing a full store
-from execution lag (invariant 10).
-
-**Evidence**: run `20260904T035906Z` at 04:48. BVN1 voting on rounds
-5,794–5,911 while executing blocks whose leader round was 3,472–3,554; BVN2
-5,787–5,904 vs 2,532–2,568; the Directory executes the round it certifies.
-Consensus 118 rounds a minute on every partition, execution 84 (BVN1) and 36
-(BVN2). Own store 50 MB against a 32 MB share on BVN1, growing 1.1 MB a
-minute; `batch_store_refusing=1` on both BVNs from 04:25 to the end; user
-throughput 7 tps. Transactions executing at 04:45 had been submitted before
-04:25.
-
-**Consequence**: an executor slower than consensus — here because the healer
-was most of each block (the old healer, since deleted) — turns into a permanent refusal that reports the
-wrong thing, twenty minutes of submit-to-execute latency, and unbounded
-memory in the commit queue and own store.
-
-**Size**: small — the executor's executed leader round must be reported to the
-node after each commit (no such feedback exists today); the header builder skips `ConsumeAvailableBatches` and the worker sets
-refusing when the lag exceeds the bound. A test: an executor that executes
-one block in three keeps the DAG within the bound and the own store within
-its share.
+No recorded differences.
 
 ## Healing
 

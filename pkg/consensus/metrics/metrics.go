@@ -589,6 +589,24 @@ var (
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "batch_store_refusing",
-		Help:      "1 while a worker refuses user submissions because its own uncommitted batches fill its share",
-	}, []string{"partition", "worker"})
+		Help:      "1 while a worker refuses user submissions, by reason: store-full (own uncommitted batches fill its share) or execution-lagging (the executor is more than MaxExecutionLag blocks behind the DAG's commits)",
+	}, []string{"partition", "worker", "reason"})
+
+	// ExecutionLagBlocks is how many committed leader groups the executor has
+	// not yet executed (consensus spec, invariant 9).
+	ExecutionLagBlocks = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "execution_lag_blocks",
+		Help:      "Committed leader groups the executor has not yet executed",
+	}, []string{"partition"})
+
+	// ExecutionLagging is 1 while the primary proposes empty headers because
+	// execution is more than MaxExecutionLag blocks behind.
+	ExecutionLagging = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "execution_lagging",
+		Help:      "1 while headers carry no batches because execution lags the DAG's commits by more than MaxExecutionLag blocks",
+	}, []string{"partition"})
 )

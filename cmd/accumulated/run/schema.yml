@@ -379,6 +379,10 @@ Service:
         - name: CommitBufferSize
           type: '*int'
           optional: true
+        - name: MaxExecutionLag
+          description: is how many committed blocks the executor may fall behind before headers carry no batches and user work is refused (consensus spec, invariant 9). Defaults to 8
+          type: '*int'
+          optional: true
         - name: BlockInterval
           description: target time between blocks; rounds are paced at half this, since Bullshark commits every other round. Defaults to 3s (#4098)
           type: '*encoding.Duration'

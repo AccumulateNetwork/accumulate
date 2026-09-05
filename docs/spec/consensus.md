@@ -167,15 +167,22 @@ because execution can lag certification by minutes when blocks are slow.
 
 ### Execution lag
 
-After each block commits, the bridge reports the **executed leader round** to
-the node. The header builder compares it with the DAG's last committed leader
-round; when the difference exceeds `MaxExecutionLag` (8 blocks, config
-`max_execution_lag`) the header takes no batches from `ConsumeAvailableBatches`
-— it still carries its parents and weak links so rounds and the DAG advance —
-and the worker enters refusal with reason `execution-lagging`. Both clear when
-the lag falls back under the bound. The reasons are separate gauges,
-`accumulate_dagbft_batch_store_refusing{partition,worker,reason}` with reason
-`store-full` or `execution-lagging`, and separate transition log lines. The
+The node counts the leader groups Bullshark hands to the executor's channel
+and the blocks the executor has produced from them (`Node.ReportExecuted`,
+called by the block production loop after each block); their difference is
+the **execution lag** in blocks (`Node.ExecutionLag`,
+`accumulate_dagbft_execution_lag_blocks{partition}`). The header builder asks
+before every header (`Primary.executionLagging`); when the lag exceeds
+`MaxExecutionLag` (8 blocks, `primary.DefaultMaxExecutionLag`, config
+`max_execution_lag`) the header takes no batches from
+`ConsumeAvailableBatches` — it still carries its parents and weak links so
+rounds and the DAG advance, and the batches stay queued for a later header —
+and every worker enters refusal with reason `execution-lagging`
+(`Worker.SetExecutionLagging`, `ErrExecutionLagging`, `NotReady` to the
+submitter). Both clear when the lag falls back under the bound. The reasons
+are separate gauges, `accumulate_dagbft_batch_store_refusing{partition,worker,reason}`
+with reason `store-full` or `execution-lagging`, and separate transition log
+lines; `accumulate_dagbft_execution_lagging{partition}` is the state. The
 commit channel's depth is then a consequence of the bound plus the DAG's GC
 depth, not a buffer: it never holds more than the bound allows.
 

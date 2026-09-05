@@ -245,8 +245,9 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		submit = s.service.SubmitUserTransaction
 	}
 	if err := submit(b); err != nil {
-		if stderrors.Is(err, worker.ErrStoreFull) {
+		if stderrors.Is(err, worker.ErrStoreFull) || stderrors.Is(err, worker.ErrExecutionLagging) {
 			// Retry later: the answer every internal client already handles.
+			// The reason travels in the error (consensus spec, invariant 10).
 			return nil, errors.NotReady.WithFormat("submit: %w", err)
 		}
 		// Check if this is a validation error

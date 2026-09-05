@@ -10,8 +10,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"log/slog"
 	"os"
 	"strconv"
@@ -25,7 +23,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	multiexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -37,6 +37,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	dagconfig "gitlab.com/accumulatenetwork/accumulate/pkg/consensus/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -130,6 +131,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
+	setDefaultPtr(&s.MaxExecutionLag, int64(primary.DefaultMaxExecutionLag))
 	setDefaultPtr(&s.BlockInterval, encoding.Duration(dagconfig.DefaultBlockInterval))
 
 	// Get the logger
@@ -326,6 +328,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		NumWorkers:       int(*s.NumWorkers),
 		DAGGCDepth:       types.Round(*s.DAGGCDepth),
 		CommitBufferSize: int(*s.CommitBufferSize),
+		MaxExecutionLag:  int(*s.MaxExecutionLag),
 
 		// The same limit the executor's package budget derives from
 		// (#4151) — never let the two diverge.

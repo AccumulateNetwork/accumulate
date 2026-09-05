@@ -46,7 +46,16 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	// NewHeader sorts the payload into canonical (execution) order.
 	var payload []types.PayloadEntry
 	seen := make(map[types.BatchDigest]bool)
+	// Consensus does not outrun execution (consensus spec, invariant 9):
+	// while the executor is more than MaxExecutionLag blocks behind, the
+	// header carries parents and weak links but no batches — rounds continue,
+	// nothing new is certified, and the batches stay available for a later
+	// header.
+	lagging := p.executionLagging()
 	for _, w := range p.workers {
+		if lagging {
+			break
+		}
 		// Use ConsumeAvailableBatches to get and clear available batches.
 		// Dedup: the requeue (never-certified headers) and re-proposal
 		// (never-committed batches) paths can both re-enqueue a digest, and a

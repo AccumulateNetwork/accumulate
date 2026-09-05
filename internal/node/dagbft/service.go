@@ -479,7 +479,11 @@ func (s *Service) blockProductionLoop() {
 				continue
 			}
 
-			if cert, err := s.processCommittedGroup(group); err != nil {
+			cert, err := s.processCommittedGroup(group)
+			if err == nil {
+				s.node.ReportExecuted()
+			}
+			if err != nil {
 				// A committed certificate whose batches are gone from the whole
 				// network (#4159) cannot be executed and MUST NOT be skipped —
 				// skipping diverges this node's state. Halt cleanly so the node

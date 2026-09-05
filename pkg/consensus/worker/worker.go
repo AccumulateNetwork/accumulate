@@ -83,6 +83,13 @@ var ErrValidationFailed = errors.New("transaction validation failed")
 // never refused; it is what drains the store (#4165).
 var ErrStoreFull = errors.New("worker store full: own uncommitted batches fill the budget")
 
+// ErrExecutionLagging is returned by SubmitUser while the primary has stopped
+// proposing batches because the executor is more than MaxExecutionLag blocks
+// behind the DAG's commits (consensus spec, invariants 9 and 10). Commits are
+// fine; the executor is behind; accepting more user work would only pile it
+// into batches nothing will propose.
+var ErrExecutionLagging = errors.New("worker refusing user submissions: execution is lagging consensus")
+
 // TransactionValidator validates transactions before they are added to a batch.
 // This is equivalent to CometBFT's CheckTx.
 type TransactionValidator interface {
@@ -331,8 +338,11 @@ type Worker struct {
 	// of what the next header's vote needs (consensus spec, invariant 8).
 	maxOwnBytes int
 	// refusing is the state SubmitUser is in, logged on transition.
-	refusing         bool
-	refusingChanges  atomic.Uint64
+	refusing        bool
+	refusingChanges atomic.Uint64
+	// lagging is set by the primary while execution lags consensus by more
+	// than the bound; SubmitUser refuses with ErrExecutionLagging meanwhile.
+	lagging          atomic.Bool
 	maxRetainedBytes int
 
 	// Available batch digests (for header creation) - bounded queue with backpressure
@@ -453,6 +463,15 @@ func (w *Worker) submit(tx []byte, bounded bool) error {
 	w.batchMu.Unlock()
 
 	w.mu.Lock()
+
+	// While execution lags consensus the primary proposes no batches, so
+	// user work is refused rather than piled into batches nothing will
+	// propose (consensus spec, invariant 9). System traffic passes.
+	if bounded && w.lagging.Load() {
+		w.mu.Unlock()
+		w.txnsRejected.Add(1)
+		return ErrExecutionLagging
+	}
 
 	// A user's transaction must fit beside own uncommitted batches and what
 	// is pending. When it does not, the answer is "not now", and the store
@@ -675,14 +694,34 @@ func (w *Worker) setRefusing(on bool, own, pending int) {
 	w.refusingChanges.Add(1)
 	id := strconv.Itoa(int(w.config.ID))
 	if on {
-		metrics.BatchStoreRefusing.WithLabelValues(w.config.Partition, id).Set(1)
+		metrics.BatchStoreRefusing.WithLabelValues(w.config.Partition, id, "store-full").Set(1)
 		slog.Warn("Refusing user submissions: own uncommitted batches fill the share (commit is lagging)",
 			"ownBytes", own, "pendingBytes", pending, "shareBytes", w.maxOwnBytes,
 			"workerID", w.config.ID, "partition", w.config.Partition)
 	} else {
-		metrics.BatchStoreRefusing.WithLabelValues(w.config.Partition, id).Set(0)
+		metrics.BatchStoreRefusing.WithLabelValues(w.config.Partition, id, "store-full").Set(0)
 		slog.Info("Accepting user submissions again",
 			"ownBytes", own, "pendingBytes", pending, "shareBytes", w.maxOwnBytes,
+			"workerID", w.config.ID, "partition", w.config.Partition)
+	}
+}
+
+// SetExecutionLagging records whether the primary has stopped proposing
+// batches because execution lags consensus. While set, SubmitUser refuses with
+// ErrExecutionLagging; system traffic is never refused. Logged and reported
+// on transition only (consensus spec, invariants 5 and 10).
+func (w *Worker) SetExecutionLagging(on bool) {
+	if w.lagging.Swap(on) == on {
+		return
+	}
+	id := strconv.Itoa(int(w.config.ID))
+	if on {
+		metrics.BatchStoreRefusing.WithLabelValues(w.config.Partition, id, "execution-lagging").Set(1)
+		slog.Warn("Refusing user submissions: execution is lagging consensus",
+			"workerID", w.config.ID, "partition", w.config.Partition)
+	} else {
+		metrics.BatchStoreRefusing.WithLabelValues(w.config.Partition, id, "execution-lagging").Set(0)
+		slog.Info("Accepting user submissions again: execution has caught up",
 			"workerID", w.config.ID, "partition", w.config.Partition)
 	}
 }
