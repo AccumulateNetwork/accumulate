@@ -7,7 +7,9 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"sort"
+	"strings"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -43,7 +45,8 @@ type streamPosition struct {
 	delivered uint64
 	// proven answers whether the proven set covers a hash; nil means every
 	// held entry is runnable (tests without an executor).
-	proven func(hash []byte) bool
+	// staging is the block's view of what is held and proven
+	staging *execute.StagingTxn
 
 	// batch is where held messages actually live — the block's own batch, so a
 	// receipt recorded here commits with the block and is discarded with it.
@@ -74,11 +77,20 @@ func (p *streamPosition) idOf(n uint64) (*url.TxID, bool) {
 	if n <= p.delivered {
 		return nil, false
 	}
-	id, ok, err := execute.IDOf(p.batch, p.stream.id(), n)
-	if err != nil && p.err == nil {
-		p.err = err
+	h, ok := p.staging.IDOf(p.stream.id(), n)
+	if !ok {
+		return nil, false
 	}
-	return id, ok
+	return h.ID, true
+}
+
+// heldAt is what staging holds at n, if anything.
+func (p *streamPosition) heldAt(n uint64) *execute.Held {
+	if n <= p.delivered {
+		return nil
+	}
+	h, _ := p.staging.IDOf(p.stream.id(), n)
+	return h
 }
 
 // has reports whether we hold a staged message for this number.
@@ -92,30 +104,17 @@ func (p *streamPosition) has(n uint64) bool {
 // COLLECTED without one carries its hash in Collected, and is runnable only
 // once the proven set covers that hash (executor spec, "Collection").
 func (p *streamPosition) runnable(n uint64) bool {
-	if p.proven == nil {
+	h := p.heldAt(n)
+	if h == nil || !h.Collected {
 		return true
 	}
-	h, err := p.batch.Account(p.stream.ledger).Collected(p.stream.source, n).Get()
-	switch {
-	case errors.Is(err, errors.NotFound):
-		return true
-	case err != nil:
-		if p.err == nil {
-			p.err = err
-		}
-		return false
-	}
-	return p.proven(h[:])
+	return p.staging.IsProven(p.stream.id(), h.Hash)
 }
 
 // received is the largest number this stream has ever seen. It says the stream
 // is behind; it does not say what is missing, which is execute.Missing.
 func (p *streamPosition) received() uint64 {
-	h, err := execute.Sighted(p.batch, p.stream.id())
-	if err != nil && p.err == nil {
-		p.err = err
-	}
-	if h > p.delivered {
+	if h := p.staging.Sighted(p.stream.id()); h > p.delivered {
 		return h
 	}
 	return p.delivered
@@ -128,7 +127,11 @@ type positionCache struct {
 	m  map[string]*streamPosition
 }
 
-func (s stream) key() string { return s.ledger.String() + "|" + s.source.String() }
+// key names the stream case-insensitively, as URLs are: one stream, one
+// position, however its source was spelled.
+func (s stream) key() string {
+	return strings.ToLower(s.ledger.String()) + "|" + strings.ToLower(s.source.String())
+}
 
 // id is this stream's name in the executor's staging store.
 func (s stream) id() execute.StreamID {
@@ -183,10 +186,7 @@ func (b *Block) positionOfLocked(s stream) (*streamPosition, error) {
 		stream:    s,
 		delivered: delivered,
 		batch:     b.Batch,
-	}
-	if b.Executor != nil && s.kind == streamSynthetic {
-		x, batch, source := b.Executor, b.Batch, s.source
-		p.proven = func(h []byte) bool { return x.replicaIncludes(batch, source, h) }
+		staging:   b.staging,
 	}
 	if b.positions.m == nil {
 		b.positions.m = map[string]*streamPosition{}
@@ -211,7 +211,7 @@ func (b *Block) positionOfLocked(s stream) (*streamPosition, error) {
 // only the INDEX of what the node held, and healing spent the network fetching
 // it back. Staging is not hashed and not written, so there is nothing left to
 // bound.
-func (b *Block) advanceStream(s stream, delivered bool, n uint64, id *url.TxID) error {
+func (b *Block) advanceStream(s stream, delivered bool, n uint64, id *url.TxID, msg messaging.Message) error {
 	b.positions.mu.Lock()
 	defer b.positions.mu.Unlock()
 
@@ -229,12 +229,11 @@ func (b *Block) advanceStream(s stream, delivered bool, n uint64, id *url.TxID) 
 	}
 
 	if !delivered {
-		// Into the block's batch, so it commits with the block. A receipt
-		// recorded by a block that is then discarded is discarded with it,
-		// which is what makes "the node holds it" and "the node says it holds
-		// it" the same statement.
-		err = execute.Hold(b.Batch, s.id(), n, id)
-		return errors.UnknownError.Wrap(err)
+		// Held in memory, with the message itself — what runs when the
+		// number is next — through the block's staging transaction, so a
+		// discarded block leaves nothing behind (executor spec, "Sync")
+		b.staging.Hold(s.id(), n, &execute.Held{ID: id, Message: msg})
+		return nil
 	}
 
 	p.delivered = n
@@ -282,6 +281,8 @@ func (b *Block) flushStreams() error {
 		if err != nil {
 			return errors.UnknownError.WithFormat("store %v: %w", p.stream.ledger, err)
 		}
+		// Release what this block delivered — applied when the block commits
+		b.staging.Release(p.stream.id(), p.highest)
 	}
 	return nil
 }

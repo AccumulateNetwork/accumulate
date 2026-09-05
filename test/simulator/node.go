@@ -9,6 +9,7 @@ package simulator
 import (
 	"context"
 	"crypto/sha256"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -35,6 +36,7 @@ type Node struct {
 	consensus  *consensus.Node
 	database   *database.Database
 	services   *message.Handler
+	staging    *execute.Staging
 }
 
 // ConsensusStatus implements [api.ConsensusService].

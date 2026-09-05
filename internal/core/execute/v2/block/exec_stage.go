@@ -272,8 +272,7 @@ func (b *Block) syntheticIsProven(proof *protocol.AnnotatedReceipt, seq *messagi
 	if proof != nil {
 		return b.syntheticIsAdmissible(proof)
 	}
-	h := seq.Hash()
-	if b.Executor.replicaIncludes(b.Batch, seq.Source, h[:]) {
+	if b.staging.IsProven(b.Executor.synthStream(seq.Source), seq.Hash()) {
 		mExecSyntheticAnchor.WithLabelValues("proven").Inc()
 		return true, nil
 	}

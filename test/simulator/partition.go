@@ -8,6 +8,7 @@ package simulator
 
 import (
 	"bytes"
+	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"io"
 	"sort"
 	"sync"
@@ -36,6 +37,10 @@ type BlockHookFunc = func(execute.BlockParams, []*messaging.Envelope) (_ []*mess
 type NodeBlockHookFunc = func(int, execute.BlockParams, []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool)
 
 func (p *Partition) View(fn func(*database.Batch) error) error { return p.nodes[0].database.View(fn) }
+
+// Staging is the partition's staging as its first node holds it: what has been
+// received on each stream and not yet executed (executor spec, "Sync").
+func (p *Partition) Staging() *coreexec.Staging { return p.nodes[0].staging }
 
 func (p *Partition) Update(fn func(*database.Batch) error) error {
 	for i, n := range p.nodes {

@@ -15,7 +15,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"strings"
 )
 
 func (databaseObserver) DidChangeAccount(batch *Batch, account *Account) (hash.Hasher, error) {
@@ -91,9 +90,6 @@ func (a *observedAccount) hashChains() (hash.Hasher, error) {
 		// node derives the same one from consensus, so it is agreed without
 		// being hashed, and hashing it would make proving a hash a state
 		// change.
-		if isProvenSetChain(chainMeta.Name) {
-			continue
-		}
 		chain := loadState1(&err, false, a.GetChainByName, chainMeta.Name)
 		if err != nil {
 			break
@@ -205,12 +201,4 @@ func hashValue(lastErr *error, hasher *hash.Hasher, v any) {
 		h := storage.MakeKey(v)
 		hasher.AddHash2(h)
 	}
-}
-
-// isProvenSetChain reports whether an account chain is a source stream's
-// proven set (`synthetic-replica(:stream)`), which is excluded from the
-// account hash.
-func isProvenSetChain(name string) bool {
-	first, _, _, ok := splitChainName(strings.ToLower(name))
-	return ok && first == "synthetic-replica"
 }

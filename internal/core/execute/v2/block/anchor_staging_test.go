@@ -11,7 +11,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -24,20 +23,17 @@ import (
 // decided at intake.
 
 type anchorStagingFixture struct {
-	*replicaFixture
-	b        *Block
+	*stagingFixture
 	terminal []byte
 }
 
 func newAnchorStagingFixture(t *testing.T) *anchorStagingFixture {
 	t.Helper()
-	f := newReplicaFixture(t, 3)
-	f.x.globalsPtr.Store(&Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest}})
+	f := newStagingFixture(t, 3)
 	rootChain, err := f.batch.Account(protocol.PartitionUrl("BVN1").JoinPath(protocol.Ledger)).RootChain().Get()
 	require.NoError(t, err)
 	require.NoError(t, rootChain.AddEntry(f.chain.Anchor(), false))
-	b := &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}
-	return &anchorStagingFixture{replicaFixture: f, b: b, terminal: rootChain.Anchor()}
+	return &anchorStagingFixture{stagingFixture: f, terminal: rootChain.Anchor()}
 }
 
 // siblingsOf returns the hashes of the source chain's entries in [start, end]:
@@ -88,22 +84,19 @@ func TestAnchorStaging_ProofWaitsForItsAnchorThenProvesItsRange(t *testing.T) {
 
 	require.NoError(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 7), f.siblingsOf(0, 2)))
 	require.Equal(t, staged0+1, count("staged"))
-	require.False(t, f.x.replicaIncludes(f.batch, source, f.src[1]), "not proven until the anchor executes")
-	blocks, err := f.batch.Account(f.x.Describe.Synthetic()).StagedProofBlocks(source).Get()
-	require.NoError(t, err)
+	require.False(t, f.isProven(f.src[1]), "not proven until the anchor executes")
+	blocks := f.b.staging.ProofBlocks(source)
 	require.Equal(t, []uint64{7}, blocks)
 
 	f.anchorExecutes(t, 7, f.terminal)
 	require.NoError(t, f.b.validateStagedProofs(nil))
 	require.Equal(t, validated0+1, count("validated"))
 	for _, h := range f.src {
-		require.True(t, f.x.replicaIncludes(f.batch, source, h), "proven once the anchor validated the proof")
+		require.True(t, f.isProven(h), "proven once the anchor validated the proof")
 	}
-	blocks, err = f.batch.Account(f.x.Describe.Synthetic()).StagedProofBlocks(source).Get()
-	require.NoError(t, err)
+	blocks = f.b.staging.ProofBlocks(source)
 	require.Empty(t, blocks, "nothing left waiting")
-	proofs, err := f.batch.Account(f.x.Describe.Synthetic()).StagedProofs(source, 7).Get()
-	require.NoError(t, err)
+	proofs := f.b.staging.Proofs(source, 7)
 	require.Empty(t, proofs)
 }
 
@@ -115,9 +108,8 @@ func TestAnchorStaging_AnchorAlreadyExecutedDecidesAtIntake(t *testing.T) {
 
 	require.NoError(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 9), f.siblingsOf(0, 2)))
 	require.Equal(t, validated0+1, count("validated"))
-	require.True(t, f.x.replicaIncludes(f.batch, source, f.src[0]))
-	blocks, err := f.batch.Account(f.x.Describe.Synthetic()).StagedProofBlocks(source).Get()
-	require.NoError(t, err)
+	require.True(t, f.isProven(f.src[0]))
+	blocks := f.b.staging.ProofBlocks(source)
 	require.Empty(t, blocks, "nothing was staged")
 }
 
@@ -133,9 +125,8 @@ func TestAnchorStaging_DisprovedProofIsDiscardedAndCounted(t *testing.T) {
 	f.anchorExecutes(t, 8, other)
 	require.NoError(t, f.b.validateStagedProofs(nil))
 	require.Equal(t, disproved0+1, count("disproved"))
-	require.False(t, f.x.replicaIncludes(f.batch, source, f.src[0]), "a disproved proof proves nothing")
-	blocks, err := f.batch.Account(f.x.Describe.Synthetic()).StagedProofBlocks(source).Get()
-	require.NoError(t, err)
+	require.False(t, f.isProven(f.src[0]), "a disproved proof proves nothing")
+	blocks := f.b.staging.ProofBlocks(source)
 	require.Empty(t, blocks)
 
 	// A late proof for an anchor that already executed with a different root
@@ -152,8 +143,7 @@ func TestAnchorStaging_InvalidListIsRefusedNotStaged(t *testing.T) {
 	proof.ReceiptList.Elements[1] = make([]byte, 32) // corrupt
 	require.Error(t, f.b.intakeProof(source, proof, f.siblingsOf(0, 2)))
 	require.Equal(t, invalid0+1, count("invalid"))
-	blocks, err := f.batch.Account(f.x.Describe.Synthetic()).StagedProofBlocks(source).Get()
-	require.NoError(t, err)
+	blocks := f.b.staging.ProofBlocks(source)
 	require.Empty(t, blocks)
 }
 
@@ -168,8 +158,7 @@ func TestAnchorStaging_ProofMustCoverAMessageFromItsSource(t *testing.T) {
 	foreign := [][]byte{make([]byte, 32)}
 	require.Error(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 7), foreign))
 	require.Equal(t, unbound0+1, count("unbound"))
-	blocks, err := f.batch.Account(f.x.Describe.Synthetic()).StagedProofBlocks(source).Get()
-	require.NoError(t, err)
+	blocks := f.b.staging.ProofBlocks(source)
 	require.Empty(t, blocks)
 }
 

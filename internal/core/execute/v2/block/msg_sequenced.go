@@ -211,8 +211,10 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 		st, err = ctx.callMessageExecutor(batch, msg)
 	} else {
 		// Mark the message as pending
+		// Not next on its stream: held in memory by advanceStream below,
+		// nothing recorded until it executes (executor spec, invariant 4)
 		ctx.Executor.logger.Debug("Pending sequenced message", "hash", logging.AsHex(seq.Message.Hash()).Slice(0, 4), "module", "synthetic")
-		st, err = ctx.childWith(seq.Message).recordPending(batch)
+		st = &protocol.TransactionStatus{TxID: seq.Message.ID(), Code: errors.Pending, Received: ctx.Block.Index}
 	}
 	if err != nil {
 		return false, errors.UnknownError.Wrap(err)
@@ -264,7 +266,7 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 	// everything this message records has, and not on a path that discards.
 	delivered := !st.Pending()
 	ctx.advance = func() error {
-		return ctx.Block.advanceStream(str, delivered, seq.Number, seq.ID())
+		return ctx.Block.advanceStream(str, delivered, seq.Number, seq.ID(), seq)
 	}
 
 	if !st.Delivered() {

@@ -114,7 +114,7 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	// Proven is proven: a message the proven set covers is accepted whatever
 	// proof it carries — a range recovered under a source root and later
 	// covered by the source's package proof, for instance.
-	if h := syn.Message.Hash(); ctx.Executor.replicaIncludes(batch, seq.Source, h[:]) {
+	if ctx.Block.staging.IsProven(ctx.Executor.synthStream(seq.Source), syn.Message.Hash()) {
 		err := checkSyntheticInnerType(seq)
 		if err != nil {
 			return nil, err
@@ -334,7 +334,7 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 	// this proof needs no proof of its own.
 	if syn.Proof.ReceiptList != nil {
 		if seq, ok := syn.Message.(*messaging.SequencedMessage); ok {
-			err = ctx.Executor.seedSyntheticReplica(batch, seq.Source, syn.Proof.ReceiptList)
+			err = ctx.Block.staging.Prove(ctx.Executor.synthStream(seq.Source), syn.Proof.ReceiptList)
 			switch {
 			case errors.Is(err, errors.Conflict):
 				// Contradicts what is already proven: counted, and this
@@ -410,36 +410,20 @@ func (x SyntheticMessage) collect(batch *database.Batch, ctx *MessageContext, se
 		return nil
 	}
 
-	h := ctx.message.Hash()
-	err = batch.Message(h).Main().Put(ctx.message)
-	if err != nil {
-		return errors.UnknownError.WithFormat("store collected message: %w", err)
-	}
+	// Held in memory with the transaction that travels with it; nothing is
+	// written until it executes (executor spec, "Collection", "Sync")
+	held := &execute.Held{ID: ctx.message.ID(), Message: ctx.message, Collected: true, Hash: seq.Hash()}
 	if m, ok := seq.Message.(messaging.MessageForTransaction); ok {
 		want := m.GetTxID().Hash()
 		for _, sibling := range ctx.messages {
 			txn, ok := sibling.(messaging.MessageWithTransaction)
-			if !ok || txn.GetTransaction().ID().Hash() != want {
-				continue
+			if ok && txn.GetTransaction().ID().Hash() == want {
+				held.Companion = sibling
+				break
 			}
-			err = batch.Message(want).Main().Put(sibling)
-			if err != nil {
-				return errors.UnknownError.WithFormat("store collected transaction: %w", err)
-			}
-			break
 		}
 	}
-	err = execute.Hold(batch, str.id(), seq.Number, ctx.message.ID())
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	// Mark it collected: the run builder never takes this number until the
-	// proven set covers this hash (executor spec, "Collection").
-	seqHash := seq.Hash()
-	err = batch.Account(str.ledger).Collected(str.source, seq.Number).Put(seqHash)
-	if err != nil {
-		return errors.UnknownError.WithFormat("mark collected: %w", err)
-	}
+	ctx.Block.staging.Hold(str.id(), seq.Number, held)
 	mExecSyntheticAnchor.WithLabelValues("collected").Inc()
 	return errCollected
 }

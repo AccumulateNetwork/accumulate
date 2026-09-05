@@ -24,7 +24,7 @@ import (
 // (executor spec, "Anchor staging"). Both dispatch forms carry it.
 
 func TestSynthPackageProof_NamesTheDirectoryAnchor(t *testing.T) {
-	f := newReplicaFixture(t, 3)
+	f := newStagingFixture(t, 3)
 	rootChain, err := f.batch.Account(protocol.PartitionUrl("BVN1").JoinPath(protocol.Ledger)).RootChain().Get()
 	require.NoError(t, err)
 	require.NoError(t, rootChain.AddEntry(f.chain.Anchor(), false))
@@ -56,7 +56,7 @@ func (d *captureDispatcher) Send(context.Context) <-chan error {
 func (d *captureDispatcher) Close() {}
 
 func TestSynthOwnProof_NamesTheDirectoryAnchor(t *testing.T) {
-	f := newReplicaFixture(t, 3)
+	f := newStagingFixture(t, 3)
 	f.x.globalsPtr.Store(&Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest, Network: &protocol.NetworkDefinition{Version: 1}}})
 	_, f.x.Key, _ = ed25519.GenerateKey(nil)
 	d := new(captureDispatcher)

@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"log/slog"
 	"os"
@@ -224,11 +225,18 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// "The cache")
 	synthCache := synthcache.New(0)
 
+	// The partition's staging: memory, built up from consensus (executor
+	// spec, "Sync"); registered so the API can report how far each stream
+	// has been sighted
+	staging := execute.NewStaging()
+	execute.RegisterStaging(s.Partition.ID, staging)
+
 	// Create executor options
 	execOpts := multiexec.Options{
 		Logger:     logger.With("module", "executor"),
 		Database:   db,
 		SynthCache: synthCache,
+		Staging:    staging,
 		Key:        validatorKey,
 		Router:     router,
 		EventBus:   s.eventBus,

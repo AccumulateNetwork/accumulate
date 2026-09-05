@@ -77,27 +77,11 @@ func (b *Block) intakeProof(source *url.URL, proof *protocol.AnnotatedReceipt, s
 		return errors.BadRequest.WithFormat("proof names Directory block %d, %d past the newest executed", proof.Anchor.SourceBlock, proof.Anchor.SourceBlock-executed)
 	}
 
-	acct := b.Batch.Account(b.Executor.Describe.Synthetic())
-	blocks, err := acct.StagedProofBlocks(source).Get()
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	if len(blocks) >= maxStagedProofBlocks {
+	if blocks := b.staging.ProofBlocks(source); len(blocks) >= maxStagedProofBlocks {
 		mExecStagedProofs.WithLabelValues("refused").Inc()
 		return errors.BadRequest.WithFormat("anchor staging for %v already waits on %d blocks", source, len(blocks))
 	}
-	err = acct.StagedProofs(source, proof.Anchor.SourceBlock).Add(proof)
-	if err != nil {
-		return errors.UnknownError.WithFormat("stage proof: %w", err)
-	}
-	err = acct.StagedProofBlocks(source).Add(proof.Anchor.SourceBlock)
-	if err != nil {
-		return errors.UnknownError.WithFormat("stage proof block: %w", err)
-	}
-	err = acct.StagedSources().Add(source)
-	if err != nil {
-		return errors.UnknownError.WithFormat("record staged source: %w", err)
-	}
+	b.staging.StageProof(source, proof.Anchor.SourceBlock, proof)
 	mExecStagedProofs.WithLabelValues("staged").Inc()
 	return nil
 }
@@ -127,35 +111,20 @@ func (b *Block) validateStagedProofs(c *classified) error {
 			continue
 		}
 		through := r.Body.GetPartitionAnchor().MinorBlockIndex
-		acct := b.Batch.Account(b.Executor.Describe.Synthetic())
+		sources := b.staging.ProofSources()
 		if c != nil {
-			held, err := acct.StagedSources().Get()
-			if err != nil {
-				return errors.UnknownError.Wrap(err)
-			}
-			for _, source := range held {
+			// A validated proof can make a held stream runnable, so every
+			// stream with proofs waiting is evaluated this block
+			for _, source := range sources {
 				c.addStream(stream{kind: streamSynthetic, ledger: b.Executor.Describe.Synthetic(), source: source})
 			}
 		}
-
-		sources, err := acct.StagedSources().Get()
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
 		for _, source := range sources {
-			blocks, err := acct.StagedProofBlocks(source).Get()
-			if err != nil {
-				return errors.UnknownError.Wrap(err)
-			}
-			for _, blk := range blocks {
+			for _, blk := range b.staging.ProofBlocks(source) {
 				if blk > through {
 					continue
 				}
-				proofs, err := acct.StagedProofs(source, blk).Get()
-				if err != nil {
-					return errors.UnknownError.Wrap(err)
-				}
-				for _, p := range proofs {
+				for _, p := range b.staging.Proofs(source, blk) {
 					_, ok, err := b.Executor.provingAnchorIndex(b.Batch, p)
 					if err != nil {
 						return errors.UnknownError.Wrap(err)
@@ -169,24 +138,15 @@ func (b *Block) validateStagedProofs(c *classified) error {
 						return errors.UnknownError.Wrap(err)
 					}
 				}
-				err = acct.StagedProofs(source, blk).Put(nil)
-				if err != nil {
-					return errors.UnknownError.Wrap(err)
-				}
-				err = acct.StagedProofBlocks(source).Remove(blk)
-				if err != nil {
-					return errors.UnknownError.Wrap(err)
-				}
+				b.staging.DropProofs(source, blk)
 			}
 		}
 	}
 	return nil
 }
 
-// proofValidated marks a proof's range proven. Until proven ranges by index
-// replace it (E8 step 3) the proven set is the synthetic replica.
 func (b *Block) proofValidated(source *url.URL, proof *protocol.AnnotatedReceipt) error {
-	err := b.Executor.seedSyntheticReplica(b.Batch, source, proof.ReceiptList)
+	err := b.staging.Prove(b.Executor.synthStream(source), proof.ReceiptList)
 	switch {
 	case errors.Is(err, errors.Conflict):
 		// Anchored, and contradicting what an earlier proof proved: an attack

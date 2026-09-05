@@ -39,11 +39,12 @@ func positionBlock(t *testing.T, delivered uint64, hold ...uint64) (*Block, stre
 	require.NoError(t, batch.Account(ledger.Url).Main().Put(ledger))
 
 	s := stream{kind: streamSynthetic, ledger: ledger.Url, source: protocol.PartitionUrl("BVN1")}
+	b := &Block{positions: new(positionCache), Batch: batch, Executor: x, staging: x.staging().Begin()}
 	for _, n := range hold {
-		require.NoError(t, execute.Hold(batch, s.id(), n, ledger.Url.WithTxID([32]byte{byte(n)})))
+		b.staging.Hold(s.id(), n, &execute.Held{ID: ledger.Url.WithTxID([32]byte{byte(n)})})
 	}
 
-	return &Block{positions: new(positionCache), Batch: batch, Executor: x}, s
+	return b, s
 }
 
 func TestStreamPosition(t *testing.T) {

@@ -9,6 +9,7 @@ package block
 import (
 	"crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"sync"
 	"sync/atomic"
 
@@ -48,6 +49,8 @@ type Executor struct {
 	cacheOnce          sync.Once
 	cacheDefault       *synthcache.Cache
 	cacheSeedOnce      sync.Once
+	stagingOnce        sync.Once
+	stagingDefault     *execute.Staging
 	isValidator        bool
 	isGenesis          bool
 	mainDispatcher     Dispatcher
@@ -61,6 +64,21 @@ func (x *Executor) synthCache() *synthcache.Cache {
 	}
 	x.cacheOnce.Do(func() { x.cacheDefault = synthcache.New(0) })
 	return x.cacheDefault
+}
+
+// staging is the partition's in-memory staging: the one the node shares with
+// its API, or a private one.
+func (x *Executor) staging() *execute.Staging {
+	if x.Staging != nil {
+		return x.Staging
+	}
+	x.stagingOnce.Do(func() { x.stagingDefault = execute.NewStaging() })
+	return x.stagingDefault
+}
+
+// synthStream names the inbound synthetic stream from a source partition.
+func (x *Executor) synthStream(source *url.URL) execute.StreamID {
+	return execute.StreamID{Ledger: x.Describe.Synthetic(), Source: source}
 }
 
 // deepView runs fn against a reader that reaches past the store's window,

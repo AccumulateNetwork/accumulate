@@ -87,6 +87,11 @@ type Options struct {
 	// sequencer that answers healing requests (healing spec, "The cache").
 	// Nil makes the executor keep a private one.
 	SynthCache *synthcache.Cache
+
+	// Staging is the partition's in-memory staging (executor spec, "Sync"),
+	// shared with the API that reports how far a stream has been sighted.
+	// Nil makes the executor keep a private one.
+	Staging *Staging
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.

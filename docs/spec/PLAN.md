@@ -22,7 +22,7 @@ healer is gone; a lost entry now shows as a stalled stream, and that gap is
 what the next item hunts.
 
 ```
-E8 #4217 (done) ─▶ H1 #4193 (DONE: dispatch and the sequencer read the cache, never the store) ─▶ E10 (staging in memory) ─▶ C6 #4215 ─▶ R2 #4219 (first-write reads) ─▶ H8 #4216 ─▶ acceptance run #7
+E8 #4217 (done) ─▶ H1 #4193 (DONE) ─▶ E10 (DONE: staging is memory, `execute.Staging`, a block transaction that commits with the block) ─▶ C6 #4215 ─▶ R2 #4219 (first-write reads) ─▶ H8 #4216 ─▶ acceptance run #7
 R #4219 ─▶ S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86   cost: first the reads that prove an absence, then the rest
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3               correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back
@@ -44,8 +44,8 @@ Steps, each test-first:
    is the Directory block whose anchor proves the package; both dispatch paths
    fill it (`directoryAnchorMetadata`). Refusing a proof without it lands with
    step 2, when anchor staging reads it. Test: `synth_proof_anchor_test.go`.
-2. **Anchor staging. DONE.** `StagedProofs(source, block)`,
-   `StagedProofBlocks(source)`, `DirectoryAnchorBlock`; intake from `classify`,
+2. **Anchor staging. DONE.** Proofs held in memory by source and anchor
+   block (`StagingTxn.StageProof`), `DirectoryAnchorBlock` as execution output; intake from `classify`,
    validation after the anchor group; a proof is bound to its source by
    covering a sequenced sibling from that source; bounded by `maxAnchorAhead`
    and `maxStagedProofBlocks`; every Directory anchor re-evaluates every held
@@ -54,8 +54,8 @@ Steps, each test-first:
    Not done: refusing a proof that does not name its anchor (deferred to H8,
    whose paths produce such proofs). Test: `anchor_staging_test.go`.
 3. **Proven ranges by index. DONE except release.** The proven set is the
-   per-stream mirror chain (`synthetic-replica:<stream>`), index to hash: it
-   is now excluded from the account hash (`isProvenSetChain`), and a proof
+   per-stream proven set in memory (`StagingTxn.Prove`), index to hash, outside
+   anything hashed or written, and a proof
    that contradicts a proven index is refused as `Conflict` and counted
    (`staged_proofs_total{outcome="conflict"}`). Tests: `proven_set_test.go`.
    **Deferred:** releasing proven indexes at or below the delivered point.
@@ -70,7 +70,7 @@ Steps, each test-first:
    entry by the proven set (`syntheticIsProven`); a held entry executes
    without a signature once proven; a number beyond `maxSequenceAhead` is
    refused; the run builder never takes a collected entry until proven
-   (`Collected(source, number)` carries its hash), and should one be run
+   (a held entry marked collected carries its hash), and should one be run
    early it stays collected (never a terminal status). Test: `test/e2e/collection_test.go` — a two-deposit
    package kept ahead of its anchor, with the healer's copies dropped, is
    sighted and not delivered, then delivered by the collected entries when

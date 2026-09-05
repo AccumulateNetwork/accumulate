@@ -7,6 +7,7 @@
 package simulator
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"io"
 	"math/big"
 
@@ -205,6 +206,19 @@ func (s *Simulator) Database(partition string) database.Beginner {
 		return errDb{errors.BadRequest.WithFormat("%s is not a partition", partition)}
 	}
 	return p
+}
+
+// StagingFor is the staging of the partition an account routes to.
+func (s *Simulator) StagingFor(account *url.URL) *execute.Staging {
+	partition, err := s.router.RouteAccount(account)
+	if err != nil {
+		return nil
+	}
+	p, ok := s.partitions[partition]
+	if !ok {
+		return nil
+	}
+	return p.Staging()
 }
 
 func (s *Simulator) DatabaseFor(account *url.URL) database.Updater {

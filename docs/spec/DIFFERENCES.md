@@ -107,10 +107,9 @@ an entry or a held index without a proof.
 
 **Code**: one store of held entries (`internal/core/execute/v2/block/staging.go`).
 A collection proof is staged under its anchor block since E8 step 2
-(`anchor_staging.go`), and since step 3 the proven set (`synthetic_replica.go`,
-the `synthetic-replica:<stream>` mirror chain) is excluded from the account
-hash and refuses conflicting proofs; it is still not released below the
-delivered point, so it grows with the stream. A proof does not carry
+(`anchor_staging.go`), and since step 3 the proven set refuses conflicting
+proofs; since E10 both live in memory (`internal/core/execute/staging.go`) and
+are released as the stream delivers. A proof does not carry
 its anchor's block before E8 (`AnchorMetadata.SourceBlock`, filled and read since E8 steps 1–2); the destination tests the proof's terminal root
 against its directory anchor chain at execution (`admissible.go`). Since step 4 a
 package member whose anchor has not executed is collected — held in staging at
@@ -162,33 +161,6 @@ absent or not.
 **Size**: small. The single-site append is state-neutral when the state-cache
 append is the one skipped (the success path runs for every type that reaches
 it); after it the main-chain uniqueness read (D8) goes too.
-
----
-
-### E10. Staging is written to the database and snapshotted
-
-*[#4217](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4217), [#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
-
-**Spec** ([executor.md](executor.md), "Sync", invariants 4 and 6): staging is
-memory, the state before any persistence; a node that joins or restarts
-replays the committed stream from its last executed block and rebuilds it,
-executing nothing until it has caught up. A snapshot carries executed state
-only.
-
-**Code**: E8 built staging as durable, unhashed records — `Sequenced`,
-`Sighted`, `StagedSources`, `StagedProofs`, `StagedProofBlocks`, `Collected`
-and the `synthetic-replica:<stream>` chain — written at intake, enumerated for
-snapshots (`snapshot_anchor_staging_test.go`) and restored with them. Every
-one of those writes is a first write paying the absence proofs of D7 and D8,
-and the collected message body is written twice: at intake and again at
-execution. The spec text that justified durability ("Restart", "Staging in a
-snapshot") was written with E8, not agreed, and is withdrawn.
-
-**Size**: medium. The staging structures move to memory behind the same
-questions (`Hold`, proven set, anchor staging); the durable records and their
-snapshot enumeration go; a joining node's replay of the committed stream from
-its last executed block is #4205's restart recovery, which becomes the
-precondition for executing.
 
 ---
 

@@ -8,7 +8,6 @@ package api
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -37,7 +36,20 @@ import (
 // The ledger is COPIED before being modified. The batch memoizes the record it
 // loaded, so writing to it here would edit what every other reader of that
 // batch sees — and this is a read.
-func withSighted(batch *database.Batch, u *url.URL, account protocol.Account) protocol.Account {
+// stagingFor is the staging the querier reports from: the one it was given,
+// or the one registered for its partition.
+func (s *Querier) stagingFor() *execute.Staging {
+	if s.staging != nil {
+		return s.staging
+	}
+	id, _ := protocol.ParsePartitionUrl(s.partition.URL)
+	return execute.StagingFor(id)
+}
+
+func withSighted(staging *execute.Staging, u *url.URL, account protocol.Account) protocol.Account {
+	if staging == nil {
+		return account
+	}
 	var seq []*protocol.PartitionSyntheticLedger
 	switch l := account.(type) {
 	case *protocol.SyntheticLedger:
@@ -54,10 +66,7 @@ func withSighted(batch *database.Batch, u *url.URL, account protocol.Account) pr
 		if part.Url == nil {
 			continue
 		}
-		n, err := execute.Sighted(batch, execute.StreamID{Ledger: u, Source: part.Url})
-		if err != nil {
-			continue // a report, not a decision: a missing record reads as zero
-		}
+		n := staging.SightedOn(execute.StreamID{Ledger: u, Source: part.Url})
 		if n > part.Delivered {
 			part.Received = n
 		} else {

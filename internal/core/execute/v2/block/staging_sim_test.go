@@ -118,8 +118,9 @@ func (s *stagingSim) newBlock() {
 	if s.b != nil {
 		// Close the previous block: Delivered is written back to the ledger.
 		require.NoError(s.t, s.b.flushStreams())
+		s.b.staging.Commit()
 	}
-	s.b = &Block{positions: new(positionCache), Executor: s.x, Batch: s.batch}
+	s.b = &Block{positions: new(positionCache), Executor: s.x, Batch: s.batch, staging: s.x.staging().Begin()}
 	s.c = &classified{streams: map[string]stream{}, arrivals: map[string]map[uint64]*arrival{}}
 	s.c.addStream(s.str)
 }
@@ -224,8 +225,9 @@ func (s *stagingSim) run() (executed []uint64) {
 	run, _ := buildRun(pos, nil, 1024)
 	for _, e := range run {
 		require.NotNil(s.t, e.staged, "the simulation feeds arrivals directly; runs hold staged ids")
-		loaded, err := s.batch.Message(e.staged.Hash()).Main().Get()
-		require.NoError(s.t, err)
+		held, ok := s.b.staging.HeldByID(e.staged)
+		require.True(s.t, ok, "a staged id is held in staging")
+		loaded := held.Message
 		before := pos.delivered
 		s.process([]messaging.Message{loaded}, loaded)
 		if pos.delivered > before {
@@ -242,23 +244,17 @@ func (s *stagingSim) delivered() uint64 {
 }
 
 func (s *stagingSim) held(n uint64) bool {
-	_, ok, err := execute.IDOf(s.batch, s.str.id(), n)
-	require.NoError(s.t, err)
+	_, ok := s.b.staging.IDOf(s.str.id(), n)
 	return ok
 }
 
 func (s *stagingSim) collected(n uint64) bool {
-	_, err := s.batch.Account(s.str.ledger).Collected(s.str.source, n).Get()
-	if errors.Is(err, errors.NotFound) {
-		return false
-	}
-	require.NoError(s.t, err)
-	return true
+	h, ok := s.b.staging.IDOf(s.str.id(), n)
+	return ok && h.Collected
 }
 
 func (s *stagingSim) proven(i int) bool {
-	h := s.seqs[i].Hash()
-	return s.x.replicaIncludes(s.batch, s.str.source, h[:])
+	return s.b.staging.IsProven(s.str.id(), s.seqs[i].Hash())
 }
 
 // simSequencedExecutor stands in for the sequenced layer.
@@ -279,14 +275,11 @@ func (e simSequencedExecutor) Process(batch *database.Batch, ctx *MessageContext
 	case seq.Number <= pos.delivered:
 		st.Code = errors.Delivered
 	case seq.Number == pos.next():
-		err = ctx.Block.advanceStream(e.s.str, true, seq.Number, seq.ID())
+		err = ctx.Block.advanceStream(e.s.str, true, seq.Number, seq.ID(), seq)
 		st.Code = errors.Delivered
 	default:
 		// Not next: the sequenced layer holds it (it passed its proof).
-		if err := batch.Message(seq.Hash()).Main().Put(seq); err != nil {
-			return nil, err
-		}
-		err = ctx.Block.advanceStream(e.s.str, false, seq.Number, seq.ID())
+		err = ctx.Block.advanceStream(e.s.str, false, seq.Number, seq.ID(), seq)
 		st.Code = errors.Pending
 	}
 	return st, err
@@ -449,11 +442,17 @@ func TestStaging_ConflictingProofIsTossed_TheFirstStands(t *testing.T) {
 	forged, err := merkle.GetReceiptList(otherChain.Inner(), 0, 2)
 	require.NoError(t, err)
 	conflict0 := count("conflict")
-	b := &Block{positions: new(positionCache), Executor: s.x, Batch: s.batch}
+	b := s.b
 	require.NoError(t, b.proofValidated(s.str.source, &protocol.AnnotatedReceipt{ReceiptList: forged, Anchor: directoryAnchorMetadata(3)}))
 	require.Equal(t, conflict0+1, count("conflict"))
 	for i := 0; i < 3; i++ {
 		require.True(t, s.proven(i), "the first proof stands")
 	}
-	require.False(t, s.x.replicaIncludes(s.batch, s.str.source, forged.Elements[1]), "the forged one proves nothing")
+	require.False(t, s.b.staging.IsProven(s.str.id(), to32(forged.Elements[1])), "the forged one proves nothing")
+}
+
+func to32(b []byte) [32]byte {
+	var h [32]byte
+	copy(h[:], b)
+	return h
 }

@@ -85,88 +85,12 @@
       pointer: true
       emptyIfMissing: true
 
-    # Staging (#4189). Used on the accounts that track ordered cross-partition
-    # streams: the synthetic ledger and the anchor pool.
-    #
-    # NOT hashed. Staging decides what a block executes, so every node must hold
-    # the same thing -- but it is a deterministic function of the consensus
-    # stream, so it is agreed without being hashed, and hashing it is what
-    # forced it into main state and forced main state to be bounded. It is
-    # `state` rather than `index` so that snapshots collect it: a snapshot is
-    # what a new node starts from, and one without staging diverges on the new
-    # node's first block.
-    - name: StagedSources
-      description: lists the partitions staging holds anything from. Bounded by the number of peers, and the reason the staged records can be enumerated for a snapshot at all (#4189)
-      type: state
-      dataType: url
-      pointer: true
-      collection: set
-      emptyIfMissing: true
-    - name: Sequenced
-      description: is the message received for a sequence number of an inbound stream, whether or not it has been executed. A number is HELD if this exists and the number is above the stream's Delivered watermark (#4189)
-      type: state
-      index: getSequencedKeys # Indexed by source and number, so snapshots collect it
-      dataType: txid
-      pointer: true
-      parameters:
-      - name: Source
-        type: url
-        pointer: true
-      - name: Number
-        type: uint
-    - name: Sighted
-      description: is the highest sequence number received from a source, whether or not it has been executed. It is what says a stream is behind (#4189)
-      type: state
-      index: getSightedKeys # Indexed by source, so snapshots collect it
-      dataType: uint
-      parameters:
-      - name: Source
-        type: url
-        pointer: true
-    # Anchor staging (executor spec, "Anchor staging"). A collection proof
-    # waits under the Directory anchor block it terminates in until that anchor
-    # executes here and validates or disproves it. Same rules as Sequenced:
-    # state so snapshots collect it, not hashed, enumerable from StagedSources.
-    - name: StagedProofBlocks
-      description: lists, per source, the Directory anchor blocks that anchor staging holds proofs for
-      type: state
-      index: getStagedProofBlocksKeys
-      dataType: uint
-      collection: set
-      emptyIfMissing: true
-      parameters:
-      - name: Source
-        type: url
-        pointer: true
-    - name: StagedProofs
-      description: is the collection proofs from a source that wait on a Directory anchor block
-      type: state
-      index: getStagedProofsKeys
-      dataType: protocol.AnnotatedReceipt
-      pointer: true
-      collection: list
-      emptyIfMissing: true
-      parameters:
-      - name: Source
-        type: url
-        pointer: true
-      - name: AnchorBlock
-        type: uint
+    # Execution output, like Delivered: written as a Directory anchor
+    # executes. Staging itself is memory (executor spec, "Sync").
     - name: DirectoryAnchorBlock
       description: is the Directory block index of the newest Directory anchor executed here. Anchor staging compares a proof's anchor block against it to tell "not yet" from "never"
       type: state
       dataType: uint
-    - name: Collected
-      description: is the hash of the sequenced message held at a number of an inbound stream WITHOUT a validated proof — collected, in the executor spec's word. A run never takes it until the proven set covers this hash (executor spec, "Collection")
-      type: state
-      index: getCollectedKeys # Indexed by source and number, so snapshots collect it
-      dataType: hash
-      parameters:
-      - name: Source
-        type: url
-        pointer: true
-      - name: Number
-        type: uint
 
     - name: Events
       description: tracks scheduled events. Should only be used on the system ledger
@@ -328,17 +252,6 @@
       index: getSyntheticSequenceKeys
       parameters: # Indexed by chains
       - name: Partition
-        type: string
-    - name: SyntheticReplica
-      description: is the destination's replica of a source's synthetic sequence, keyed on stream identity (#4140)
-      type: other
-      dataType: Chain2
-      hasChains: true
-      pointer: true
-      private: true
-      index: getSyntheticReplicaKeys
-      parameters: # Indexed by chains
-      - name: Stream
         type: string
     - name: AnchorChain
       type: entity

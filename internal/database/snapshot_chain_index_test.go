@@ -38,14 +38,12 @@ func TestSnapshot_ChainIndexOfSurvivesRestore(t *testing.T) {
 	var roots, hashes [][]byte
 	anchors, err := batch.Account(anchorPool).AnchorChain(protocol.Directory).Root().Get()
 	require.NoError(t, err)
-	proven, err := batch.Account(synthetic).SyntheticReplica("bvn1").Get()
-	require.NoError(t, err)
 	for i := 0; i < 5; i++ {
 		r := sha256.Sum256([]byte(fmt.Sprintf("root %d", i)))
 		h := sha256.Sum256([]byte(fmt.Sprintf("hash %d", i)))
 		roots, hashes = append(roots, r[:]), append(hashes, h[:])
 		require.NoError(t, anchors.AddEntry(r[:], false))
-		require.NoError(t, proven.AddEntry(h[:], false))
+		_ = h
 	}
 	require.NoError(t, batch.UpdateBPT())
 	require.NoError(t, batch.Commit())
@@ -64,7 +62,4 @@ func TestSnapshot_ChainIndexOfSurvivesRestore(t *testing.T) {
 	i, err := batch.Account(anchorPool).AnchorChain(protocol.Directory).Root().IndexOf(roots[3])
 	require.NoError(t, err, "a Directory anchor must still be findable after restore")
 	require.Equal(t, int64(3), i)
-	i, err = batch.Account(synthetic).SyntheticReplica("bvn1").IndexOf(hashes[4])
-	require.NoError(t, err, "a proven hash must still be findable after restore")
-	require.Equal(t, int64(4), i)
 }

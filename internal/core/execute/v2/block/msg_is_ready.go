@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -35,12 +36,20 @@ func (MessageIsReady) Process(batch *database.Batch, ctx *MessageContext) (*prot
 	}
 
 	// Load the message
-	loaded, err := batch.Message(msg.TxID.Hash()).Main().Get()
-	switch {
-	case errors.Is(err, errors.NotFound):
-		return protocol.NewErrorStatus(msg.TxID, err), nil
-	case err != nil:
-		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+	// A held entry runs from staging (executor spec, "Sync"); anything else
+	// that is ready — a local delivery — was recorded when it was produced
+	var loaded messaging.Message
+	if h, ok := ctx.Block.staging.HeldByID(msg.TxID); ok {
+		loaded = h.Message
+	} else {
+		var err error
+		loaded, err = batch.Message(msg.TxID.Hash()).Main().Get()
+		switch {
+		case errors.Is(err, errors.NotFound):
+			return protocol.NewErrorStatus(msg.TxID, err), nil
+		case err != nil:
+			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+		}
 	}
 
 	// Process the message

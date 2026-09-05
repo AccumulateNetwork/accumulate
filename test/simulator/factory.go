@@ -9,6 +9,7 @@ package simulator
 import (
 	"context"
 	"fmt"
+	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"log/slog"
 	"math/big"
 	"sync"
@@ -82,6 +83,7 @@ type networkFactory struct {
 
 type nodeFactory struct {
 	*networkFactory
+	staging *coreexec.Staging
 
 	// Options
 	id      int
@@ -164,6 +166,7 @@ func (f *nodeFactory) Build(p *Partition) *Node {
 	if f.typ != protocol.PartitionTypeBlockSummary {
 		n.database = f.getDatabase()
 	}
+	n.staging = f.getStaging()
 
 	// Register services
 	f.registerSvc(api.ServiceTypeNode, message.NodeService{NodeService: &nodeService{
@@ -507,6 +510,15 @@ func (f *nodeFactory) makeSummaryApp() *consensus.Node {
 	return f.makeConsensusNode(abci)
 }
 
+// getStaging is the node's staging, shared by its executor and its querier
+// (executor spec, "Sync"), created on first use from whichever path asks.
+func (f *nodeFactory) getStaging() *coreexec.Staging {
+	if f.staging == nil {
+		f.staging = coreexec.NewStaging()
+	}
+	return f.staging
+}
+
 func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a querier service
 	f.registerSvc(api.ServiceTypeQuery, message.Querier{
@@ -559,6 +571,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Sequencer:     f.getServices().Private(),
 		Querier:       f.getServices(),
 		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
+		Staging:       f.getStaging(),
 
 		// Shard user-transaction execution by identity (#4145). Zero is the
 		// serial path; tests opt in via simulator.ExecutionShards, or give

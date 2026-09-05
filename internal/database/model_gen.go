@@ -300,13 +300,7 @@ type Account struct {
 	localDeliveryQueue     values.List[*url.TxID]
 	cascadeDeliveryQueue   values.List[*url.TxID]
 	directory              values.Set[*url.URL]
-	stagedSources          values.Set[*url.URL]
-	sequenced              map[accountSequencedMapKey]values.Value[*url.TxID]
-	sighted                map[accountSightedMapKey]values.Value[uint64]
-	stagedProofBlocks      map[accountStagedProofBlocksMapKey]values.Set[uint64]
-	stagedProofs           map[accountStagedProofsMapKey]values.List[*protocol.AnnotatedReceipt]
 	directoryAnchorBlock   values.Value[uint64]
-	collected              map[accountCollectedMapKey]values.Value[[32]byte]
 	events                 *AccountEvents
 	blockLedger            map[accountBlockLedgerMapKey]values.Value[*BlockLedger]
 	blockLedgerChain       *Chain2
@@ -319,7 +313,6 @@ type Account struct {
 	anchorSequenceChain    *Chain2
 	majorBlockChain        *Chain2
 	syntheticSequenceChain map[accountSyntheticSequenceChainMapKey]*Chain2
-	syntheticReplica       map[accountSyntheticReplicaMapKey]*Chain2
 	anchorChain            map[accountAnchorChainMapKey]*AccountAnchorChain
 	chains                 values.Set[*protocol.ChainMetadata]
 	syntheticAnchors       values.Set[[32]byte]
@@ -339,72 +332,6 @@ type accountSyntheticForAnchorMapKey struct {
 
 func (k accountSyntheticForAnchorKey) ForMap() accountSyntheticForAnchorMapKey {
 	return accountSyntheticForAnchorMapKey{k.Anchor}
-}
-
-type accountSequencedKey struct {
-	Source *url.URL
-	Number uint64
-}
-
-type accountSequencedMapKey struct {
-	Source [32]byte
-	Number uint64
-}
-
-func (k accountSequencedKey) ForMap() accountSequencedMapKey {
-	return accountSequencedMapKey{values.MapKeyUrl(k.Source), k.Number}
-}
-
-type accountSightedKey struct {
-	Source *url.URL
-}
-
-type accountSightedMapKey struct {
-	Source [32]byte
-}
-
-func (k accountSightedKey) ForMap() accountSightedMapKey {
-	return accountSightedMapKey{values.MapKeyUrl(k.Source)}
-}
-
-type accountStagedProofBlocksKey struct {
-	Source *url.URL
-}
-
-type accountStagedProofBlocksMapKey struct {
-	Source [32]byte
-}
-
-func (k accountStagedProofBlocksKey) ForMap() accountStagedProofBlocksMapKey {
-	return accountStagedProofBlocksMapKey{values.MapKeyUrl(k.Source)}
-}
-
-type accountStagedProofsKey struct {
-	Source      *url.URL
-	AnchorBlock uint64
-}
-
-type accountStagedProofsMapKey struct {
-	Source      [32]byte
-	AnchorBlock uint64
-}
-
-func (k accountStagedProofsKey) ForMap() accountStagedProofsMapKey {
-	return accountStagedProofsMapKey{values.MapKeyUrl(k.Source), k.AnchorBlock}
-}
-
-type accountCollectedKey struct {
-	Source *url.URL
-	Number uint64
-}
-
-type accountCollectedMapKey struct {
-	Source [32]byte
-	Number uint64
-}
-
-func (k accountCollectedKey) ForMap() accountCollectedMapKey {
-	return accountCollectedMapKey{values.MapKeyUrl(k.Source), k.Number}
 }
 
 type accountBlockLedgerKey struct {
@@ -441,18 +368,6 @@ type accountSyntheticSequenceChainMapKey struct {
 
 func (k accountSyntheticSequenceChainKey) ForMap() accountSyntheticSequenceChainMapKey {
 	return accountSyntheticSequenceChainMapKey{k.Partition}
-}
-
-type accountSyntheticReplicaKey struct {
-	Stream string
-}
-
-type accountSyntheticReplicaMapKey struct {
-	Stream string
-}
-
-func (k accountSyntheticReplicaKey) ForMap() accountSyntheticReplicaMapKey {
-	return accountSyntheticReplicaMapKey{k.Stream}
 }
 
 type accountAnchorChainKey struct {
@@ -523,60 +438,12 @@ func (c *Account) newDirectory() values.Set[*url.URL] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("Directory"), values.Wrapped(values.UrlWrapper), values.CompareUrl)
 }
 
-func (c *Account) StagedSources() values.Set[*url.URL] {
-	return values.GetOrCreate(c, &c.stagedSources, (*Account).newStagedSources)
-}
-
-func (c *Account) newStagedSources() values.Set[*url.URL] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("StagedSources"), values.Wrapped(values.UrlWrapper), values.CompareUrl)
-}
-
-func (c *Account) Sequenced(source *url.URL, number uint64) values.Value[*url.TxID] {
-	return values.GetOrCreateMap(c, &c.sequenced, accountSequencedKey{source, number}, (*Account).newSequenced)
-}
-
-func (c *Account) newSequenced(k accountSequencedKey) values.Value[*url.TxID] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Sequenced", k.Source, k.Number), false, values.Wrapped(values.TxidWrapper))
-}
-
-func (c *Account) Sighted(source *url.URL) values.Value[uint64] {
-	return values.GetOrCreateMap(c, &c.sighted, accountSightedKey{source}, (*Account).newSighted)
-}
-
-func (c *Account) newSighted(k accountSightedKey) values.Value[uint64] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Sighted", k.Source), false, values.Wrapped(values.UintWrapper))
-}
-
-func (c *Account) StagedProofBlocks(source *url.URL) values.Set[uint64] {
-	return values.GetOrCreateMap(c, &c.stagedProofBlocks, accountStagedProofBlocksKey{source}, (*Account).newStagedProofBlocks)
-}
-
-func (c *Account) newStagedProofBlocks(k accountStagedProofBlocksKey) values.Set[uint64] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("StagedProofBlocks", k.Source), values.Wrapped(values.UintWrapper), values.CompareUint)
-}
-
-func (c *Account) StagedProofs(source *url.URL, anchorBlock uint64) values.List[*protocol.AnnotatedReceipt] {
-	return values.GetOrCreateMap(c, &c.stagedProofs, accountStagedProofsKey{source, anchorBlock}, (*Account).newStagedProofs)
-}
-
-func (c *Account) newStagedProofs(k accountStagedProofsKey) values.List[*protocol.AnnotatedReceipt] {
-	return values.NewList(c.logger.L, c.store, c.key.Append("StagedProofs", k.Source, k.AnchorBlock), values.Struct[protocol.AnnotatedReceipt]())
-}
-
 func (c *Account) DirectoryAnchorBlock() values.Value[uint64] {
 	return values.GetOrCreate(c, &c.directoryAnchorBlock, (*Account).newDirectoryAnchorBlock)
 }
 
 func (c *Account) newDirectoryAnchorBlock() values.Value[uint64] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("DirectoryAnchorBlock"), false, values.Wrapped(values.UintWrapper))
-}
-
-func (c *Account) Collected(source *url.URL, number uint64) values.Value[[32]byte] {
-	return values.GetOrCreateMap(c, &c.collected, accountCollectedKey{source, number}, (*Account).newCollected)
-}
-
-func (c *Account) newCollected(k accountCollectedKey) values.Value[[32]byte] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Collected", k.Source, k.Number), false, values.Wrapped(values.HashWrapper))
 }
 
 func (c *Account) Events() *AccountEvents {
@@ -685,14 +552,6 @@ func (c *Account) newSyntheticSequenceChain(k accountSyntheticSequenceChainKey) 
 	return newChain2(c, c.logger.L, c.store, c.key.Append("SyntheticSequenceChain", k.Partition), "synthetic-sequence(%[4]v)")
 }
 
-func (c *Account) getSyntheticReplica(stream string) *Chain2 {
-	return values.GetOrCreateMap(c, &c.syntheticReplica, accountSyntheticReplicaKey{stream}, (*Account).newSyntheticReplica)
-}
-
-func (c *Account) newSyntheticReplica(k accountSyntheticReplicaKey) *Chain2 {
-	return newChain2(c, c.logger.L, c.store, c.key.Append("SyntheticReplica", k.Stream), "synthetic-replica(%[4]v)")
-}
-
 func (c *Account) getAnchorChain(partition string) *AccountAnchorChain {
 	return values.GetOrCreateMap(c, &c.anchorChain, accountAnchorChainKey{partition}, (*Account).newAnchorChain)
 }
@@ -771,72 +630,17 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.CascadeDeliveryQueue(), key.SliceI(1), nil
 	case "Directory":
 		return c.Directory(), key.SliceI(1), nil
-	case "StagedSources":
-		return c.StagedSources(), key.SliceI(1), nil
-	case "Sequenced":
-		if key.Len() < 3 {
-			return nil, nil, errors.InternalError.With("bad key for account (4)")
-		}
-		source, okSource := key.Get(1).(*url.URL)
-		number, okNumber := key.Get(2).(uint64)
-		if !okSource || !okNumber {
-			return nil, nil, errors.InternalError.With("bad key for account (5)")
-		}
-		v := c.Sequenced(source, number)
-		return v, key.SliceI(3), nil
-	case "Sighted":
-		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (6)")
-		}
-		source, okSource := key.Get(1).(*url.URL)
-		if !okSource {
-			return nil, nil, errors.InternalError.With("bad key for account (7)")
-		}
-		v := c.Sighted(source)
-		return v, key.SliceI(2), nil
-	case "StagedProofBlocks":
-		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (8)")
-		}
-		source, okSource := key.Get(1).(*url.URL)
-		if !okSource {
-			return nil, nil, errors.InternalError.With("bad key for account (9)")
-		}
-		v := c.StagedProofBlocks(source)
-		return v, key.SliceI(2), nil
-	case "StagedProofs":
-		if key.Len() < 3 {
-			return nil, nil, errors.InternalError.With("bad key for account (10)")
-		}
-		source, okSource := key.Get(1).(*url.URL)
-		anchorBlock, okAnchorBlock := key.Get(2).(uint64)
-		if !okSource || !okAnchorBlock {
-			return nil, nil, errors.InternalError.With("bad key for account (11)")
-		}
-		v := c.StagedProofs(source, anchorBlock)
-		return v, key.SliceI(3), nil
 	case "DirectoryAnchorBlock":
 		return c.DirectoryAnchorBlock(), key.SliceI(1), nil
-	case "Collected":
-		if key.Len() < 3 {
-			return nil, nil, errors.InternalError.With("bad key for account (12)")
-		}
-		source, okSource := key.Get(1).(*url.URL)
-		number, okNumber := key.Get(2).(uint64)
-		if !okSource || !okNumber {
-			return nil, nil, errors.InternalError.With("bad key for account (13)")
-		}
-		v := c.Collected(source, number)
-		return v, key.SliceI(3), nil
 	case "Events":
 		return c.Events(), key.SliceI(1), nil
 	case "BlockLedger":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (14)")
+			return nil, nil, errors.InternalError.With("bad key for account (4)")
 		}
 		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
-			return nil, nil, errors.InternalError.With("bad key for account (15)")
+			return nil, nil, errors.InternalError.With("bad key for account (5)")
 		}
 		v := c.BlockLedger(index)
 		return v, key.SliceI(2), nil
@@ -844,11 +648,11 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.BlockLedgerChain(), key.SliceI(1), nil
 	case "Transaction":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (16)")
+			return nil, nil, errors.InternalError.With("bad key for account (6)")
 		}
 		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for account (17)")
+			return nil, nil, errors.InternalError.With("bad key for account (7)")
 		}
 		v := c.Transaction(hash)
 		return v, key.SliceI(2), nil
@@ -868,31 +672,21 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.MajorBlockChain(), key.SliceI(1), nil
 	case "SyntheticSequenceChain":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (18)")
+			return nil, nil, errors.InternalError.With("bad key for account (8)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account (19)")
+			return nil, nil, errors.InternalError.With("bad key for account (9)")
 		}
 		v := c.getSyntheticSequenceChain(partition)
 		return v, key.SliceI(2), nil
-	case "SyntheticReplica":
-		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (20)")
-		}
-		stream, okStream := key.Get(1).(string)
-		if !okStream {
-			return nil, nil, errors.InternalError.With("bad key for account (21)")
-		}
-		v := c.getSyntheticReplica(stream)
-		return v, key.SliceI(2), nil
 	case "AnchorChain":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (22)")
+			return nil, nil, errors.InternalError.With("bad key for account (10)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account (23)")
+			return nil, nil, errors.InternalError.With("bad key for account (11)")
 		}
 		v := c.getAnchorChain(partition)
 		return v, key.SliceI(2), nil
@@ -905,7 +699,7 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Data":
 		return c.Data(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for account (24)")
+		return nil, nil, errors.InternalError.With("bad key for account (12)")
 	}
 }
 
@@ -937,36 +731,8 @@ func (c *Account) IsDirty() bool {
 	if values.IsDirty(c.directory) {
 		return true
 	}
-	if values.IsDirty(c.stagedSources) {
-		return true
-	}
-	for _, v := range c.sequenced {
-		if v.IsDirty() {
-			return true
-		}
-	}
-	for _, v := range c.sighted {
-		if v.IsDirty() {
-			return true
-		}
-	}
-	for _, v := range c.stagedProofBlocks {
-		if v.IsDirty() {
-			return true
-		}
-	}
-	for _, v := range c.stagedProofs {
-		if v.IsDirty() {
-			return true
-		}
-	}
 	if values.IsDirty(c.directoryAnchorBlock) {
 		return true
-	}
-	for _, v := range c.collected {
-		if v.IsDirty() {
-			return true
-		}
 	}
 	if values.IsDirty(c.events) {
 		return true
@@ -1010,11 +776,6 @@ func (c *Account) IsDirty() bool {
 			return true
 		}
 	}
-	for _, v := range c.syntheticReplica {
-		if v.IsDirty() {
-			return true
-		}
-	}
 	for _, v := range c.anchorChain {
 		if v.IsDirty() {
 			return true
@@ -1054,9 +815,6 @@ func (c *Account) dirtyChains() []*MerkleManager {
 	for _, v := range c.syntheticSequenceChain {
 		chains = append(chains, v.dirtyChains()...)
 	}
-	for _, v := range c.syntheticReplica {
-		chains = append(chains, v.dirtyChains()...)
-	}
 	for _, v := range c.anchorChain {
 		chains = append(chains, v.dirtyChains()...)
 	}
@@ -1080,13 +838,7 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.localDeliveryQueue, c.newLocalDeliveryQueue, opts, fn)
 	values.WalkField(&err, c.cascadeDeliveryQueue, c.newCascadeDeliveryQueue, opts, fn)
 	values.WalkField(&err, c.directory, c.newDirectory, opts, fn)
-	values.WalkField(&err, c.stagedSources, c.newStagedSources, opts, fn)
-	values.WalkMap(&err, c.sequenced, c.newSequenced, c.getSequencedKeys, opts, fn)
-	values.WalkMap(&err, c.sighted, c.newSighted, c.getSightedKeys, opts, fn)
-	values.WalkMap(&err, c.stagedProofBlocks, c.newStagedProofBlocks, c.getStagedProofBlocksKeys, opts, fn)
-	values.WalkMap(&err, c.stagedProofs, c.newStagedProofs, c.getStagedProofsKeys, opts, fn)
 	values.WalkField(&err, c.directoryAnchorBlock, c.newDirectoryAnchorBlock, opts, fn)
-	values.WalkMap(&err, c.collected, c.newCollected, c.getCollectedKeys, opts, fn)
 	values.WalkField(&err, c.events, c.newEvents, opts, fn)
 	values.WalkMap(&err, c.blockLedger, c.newBlockLedger, c.getBlockLedgerKeys, opts, fn)
 	values.WalkField(&err, c.blockLedgerChain, c.newBlockLedgerChain, opts, fn)
@@ -1099,7 +851,6 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.anchorSequenceChain, c.newAnchorSequenceChain, opts, fn)
 	values.WalkField(&err, c.majorBlockChain, c.newMajorBlockChain, opts, fn)
 	values.WalkMap(&err, c.syntheticSequenceChain, c.newSyntheticSequenceChain, c.getSyntheticSequenceKeys, opts, fn)
-	values.WalkMap(&err, c.syntheticReplica, c.newSyntheticReplica, c.getSyntheticReplicaKeys, opts, fn)
 	values.WalkMap(&err, c.anchorChain, c.newAnchorChain, c.getAnchorKeys, opts, fn)
 	values.WalkField(&err, c.chains, c.newChains, opts, fn)
 	if !opts.IgnoreIndices {
@@ -1127,23 +878,7 @@ func (c *Account) baseCommit() error {
 	values.Commit(&err, c.localDeliveryQueue)
 	values.Commit(&err, c.cascadeDeliveryQueue)
 	values.Commit(&err, c.directory)
-	values.Commit(&err, c.stagedSources)
-	for _, v := range c.sequenced {
-		values.Commit(&err, v)
-	}
-	for _, v := range c.sighted {
-		values.Commit(&err, v)
-	}
-	for _, v := range c.stagedProofBlocks {
-		values.Commit(&err, v)
-	}
-	for _, v := range c.stagedProofs {
-		values.Commit(&err, v)
-	}
 	values.Commit(&err, c.directoryAnchorBlock)
-	for _, v := range c.collected {
-		values.Commit(&err, v)
-	}
 	values.Commit(&err, c.events)
 	for _, v := range c.blockLedger {
 		values.Commit(&err, v)
@@ -1160,9 +895,6 @@ func (c *Account) baseCommit() error {
 	values.Commit(&err, c.anchorSequenceChain)
 	values.Commit(&err, c.majorBlockChain)
 	for _, v := range c.syntheticSequenceChain {
-		values.Commit(&err, v)
-	}
-	for _, v := range c.syntheticReplica {
 		values.Commit(&err, v)
 	}
 	for _, v := range c.anchorChain {

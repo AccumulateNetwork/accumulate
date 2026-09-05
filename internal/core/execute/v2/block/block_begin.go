@@ -35,6 +35,7 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	block.Executor = x
 	block.Batch = x.Database.Begin(true)
 	block.cache = x.synthCache().Begin(params.Index)
+	block.staging = x.staging().Begin()
 
 	// Once, at the first block this executor opens: rebuild the cache for the
 	// recent blocks whose anchors have not returned (genesis produced them, or
