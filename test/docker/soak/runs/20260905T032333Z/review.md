@@ -122,3 +122,21 @@ Directory transaction 2,311 blocks old); 0 failed, 0 timed out, 0 refused.
 - Where the load's asymmetry comes from exactly (which accounts route to
   BVN2); inferred from the synthetic production ratio, not measured.
 - The API absence-walk fix is not made; only counted.
+
+## Erratum (2026-09-05, after run 20260905T051008Z)
+
+This review is wrong where it says the run had no stall and that heals 0
+meant a healthy network. `streams-final.txt` for this run shows every
+synthetic stream frozen from minute 5 of load: BVN1→Directory received 1,966
+of 26,315 produced, BVN2→BVN1 18,172 of 185,948. The node logs hold 20,496
+rejections of the Directory's anchors at the BVNs' submit validation,
+"receipt 0 is invalid: result does not match the anchor". No Directory receipt
+reached a BVN after that, so nothing was dispatched; heals were 0 because the
+requester (not yet built here) had nothing to ask with, and the two runs
+before this one (`20260904T180918Z`, `20260904T221627Z`) delivered every
+stream with zero such rejections. I did not read the stream summary. The
+cause is diagnosed in `20260905T051008Z/review.md`: mark-point states routed
+to the permanent layer read as absent past the window, and the chain rebuilt
+its state from nothing. The memory and history-read findings above stand; the
+throughput and BVN2-lag readings were taken on a network that was not
+delivering cross-partition traffic.
