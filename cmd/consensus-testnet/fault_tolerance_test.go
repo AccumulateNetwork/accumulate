@@ -613,14 +613,14 @@ func startCommitProcessor(ctx context.Context, wg *sync.WaitGroup, node *consens
 			select {
 			case <-ctx.Done():
 				return
-			case cert, ok := <-committed:
+			case group, ok := <-committed:
 				if !ok {
 					return
 				}
 				if stopped.Load() {
 					continue
 				}
-				if cert != nil {
+				for _, cert := range group {
 					batches := make(map[types.BatchDigest]*types.Batch)
 					digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
 					for _, entry := range cert.Header.Payload {

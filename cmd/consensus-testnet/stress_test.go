@@ -165,14 +165,14 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					return
-				case cert, ok := <-committed:
+				case group, ok := <-committed:
 					if !ok {
 						return
 					}
 					if nodeStopped[i].Load() {
 						continue
 					}
-					if cert != nil {
+					for _, cert := range group {
 						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
 						if !ok {
 							return
@@ -386,11 +386,11 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 			select {
 			case <-ctx.Done():
 				return
-			case cert, ok := <-committed:
+			case group, ok := <-committed:
 				if !ok {
 					return
 				}
-				if cert != nil {
+				for _, cert := range group {
 					batches, digests, ok := collectForCert(ctx, newNode, cert)
 					if !ok {
 						return
@@ -714,11 +714,11 @@ func TestStress_MemoryStability(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					return
-				case cert, ok := <-committed:
+				case group, ok := <-committed:
 					if !ok {
 						return
 					}
-					if cert != nil {
+					for _, cert := range group {
 						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
 						if !ok {
 							return
@@ -974,11 +974,11 @@ func TestStress_ConsensusStallDetection(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					return
-				case cert, ok := <-committed:
+				case group, ok := <-committed:
 					if !ok {
 						return
 					}
-					if cert != nil {
+					for _, cert := range group {
 						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
 						if !ok {
 							return

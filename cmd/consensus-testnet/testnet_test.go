@@ -319,26 +319,26 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 			select {
 			case <-ctx.Done():
 				return
-			case cert := <-committed:
-				if cert == nil {
-					continue
-				}
-				// Get batches for this certificate from workers
-				batches := make(map[types.BatchDigest]*types.Batch)
-				digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-				for _, entry := range cert.Header.Payload {
-					digests = append(digests, entry.Digest)
-					for _, w := range workers {
-						if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-							batches[entry.Digest] = batch
-							break
+			case group := <-committed:
+				// One executor block per committed leader group (#4164)
+				for _, cert := range group {
+					// Get batches for this certificate from workers
+					batches := make(map[types.BatchDigest]*types.Batch)
+					digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
+					for _, entry := range cert.Header.Payload {
+						digests = append(digests, entry.Digest)
+						for _, w := range workers {
+							if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
+								batches[entry.Digest] = batch
+								break
+							}
 						}
 					}
-				}
-				executor.ProcessCertificate(cert, batches)
-				// Prune batches after processing
-				for _, w := range workers {
-					w.PruneBatches(digests)
+					executor.ProcessCertificate(cert, batches)
+					// Prune batches after processing
+					for _, w := range workers {
+						w.PruneBatches(digests)
+					}
 				}
 			}
 		}
@@ -460,24 +460,23 @@ func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
 			select {
 			case <-ctx.Done():
 				return
-			case cert := <-committed:
-				if cert == nil {
-					continue
-				}
-				batches := make(map[types.BatchDigest]*types.Batch)
-				digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-				for _, entry := range cert.Header.Payload {
-					digests = append(digests, entry.Digest)
-					for _, w := range workers {
-						if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
-							batches[entry.Digest] = batch
-							break
+			case group := <-committed:
+				for _, cert := range group {
+					batches := make(map[types.BatchDigest]*types.Batch)
+					digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
+					for _, entry := range cert.Header.Payload {
+						digests = append(digests, entry.Digest)
+						for _, w := range workers {
+							if batch, err := w.GetBatch(entry.Digest); err == nil && batch != nil {
+								batches[entry.Digest] = batch
+								break
+							}
 						}
 					}
-				}
-				executor.ProcessCertificate(cert, batches)
-				for _, w := range workers {
-					w.PruneBatches(digests)
+					executor.ProcessCertificate(cert, batches)
+					for _, w := range workers {
+						w.PruneBatches(digests)
+					}
 				}
 			}
 		}
