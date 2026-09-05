@@ -346,8 +346,14 @@ Spec: executor.md "One chain per pair, one stage per chain"; healing.md
    `TestAnchorPlaceholder`, `TestReuseDirectoryAnchorSignatures` assert "not
    executed" instead of "recorded pending". `TestAnchorQuorumStuckRecovery`
    stays skipped: it needs the proof form (H9, narrowed).
-5. **Reproductions.** The store-backed receipt test and the lagging-destination
-   test on the new layout; a Docker run to compare.
+5. **Reproductions.** The store-backed receipt test
+   (`TestDirectoryReceiptsPastTheWindow`) and the lagging-destination test
+   (`TestRequester_LaggingDestination`) pass on the new layout (2026-09-05);
+   the Docker comparison is acceptance run #7, ninth start,
+   `test/docker/soak/runs/20260905T225751Z` (12 h, 500 tps, chaos off), which
+   answers heals == 0 and no answered requests with nothing dropped, every
+   stream at received == delivered, no 10 s blocks, memory plateau after the
+   cache horizon. Result pending.
 
 Fresh installs; no migration of the interleaved chain.
 
