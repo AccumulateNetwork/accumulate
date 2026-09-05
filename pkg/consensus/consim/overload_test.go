@@ -95,3 +95,69 @@ func TestOverload_BacklogComesBackAHeaderAtATime(t *testing.T) {
 		"without the cap the backlog comes back in one block")
 	require.Greater(t, capped.Heights["BVN1"], uint64(0))
 }
+
+// The soak's death, in five minutes. Two BVNs of four validators and the
+// Directory at the soak's pacing; BVN1 offered 400 user tx/s and BVN2 250,
+// each executor good for 400 tx/s; and the coupling the network has: every
+// accepted user transaction produces 1.5 synthetics for the other BVN, a
+// Directory round trip later, through the path nothing refuses. BVN1 keeps
+// accepting users because its own lag is fine, so BVN2 receives more
+// synthetics than it can execute and cannot refuse them; refusing its own
+// users changes nothing. Without a header cap the backlog comes back as one
+// block that doubles every cycle -- 512, 995, 1,329, 2,093, 3,261, 5,012
+// transactions, the last twelve seconds of execution -- and BVN2 stops
+// (soak 20260905T144928Z, forty-five minutes to the same place). With the cap
+// the blocks stay bounded and BVN2 keeps producing, but its lag still drifts
+// upward: the inflow exceeds its capacity, and only cross-partition
+// back-pressure can change that (DIFFERENCES C7).
+func asymmetricOverload(t *testing.T, maxHeaderBytes int) (*Result, error) {
+	t.Helper()
+	sim, err := New(Config{
+		BVNs:             2,
+		ValidatorsPerBVN: 4,
+		NumWorkers:       4,
+		TPS:              2,
+		TPSByPartition:   map[string]int{"BVN1": 400, "BVN2": 250},
+		UserLoad:         true,
+		SyntheticPerUser: 1.5,
+		ExecCostPerTx:    2500 * time.Microsecond,
+		MinRoundInterval: 500 * time.Millisecond,
+		BatchTimeout:     100 * time.Millisecond,
+		BatchSize:        50,
+		MaxExecutionLag:  8,
+		MaxHeaderBytes:   maxHeaderBytes,
+		Duration:         300 * time.Second,
+		StallAfter:       60 * time.Second,
+		Out:              os.Stdout,
+	})
+	require.NoError(t, err)
+	defer sim.Close()
+	r, err := sim.Run(context.Background())
+	t.Logf("ok=%v reason=%q heights=%v maxBlockTxs=%v maxLag=%v refused=%d/%d",
+		r.Ok, r.Reason, r.Heights, r.MaxBlockTxs, r.MaxLag, r.Refused, r.Submitted)
+	return r, err
+}
+
+func TestOverload_UncappedHeadersDoubleTheDumpUntilThePartitionStops(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the consensus stack for five minutes")
+	}
+	r, _ := asymmetricOverload(t, 1<<30)
+	require.Greater(t, r.MaxBlockTxs["BVN2"], uint64(2000), "the dumped blocks reach thousands of transactions")
+	require.Greater(t, r.MaxLag["BVN2"], 30, "and the lag runs far past the bound")
+}
+
+func TestOverload_CappedHeadersKeepThePartitionMoving(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the consensus stack for five minutes")
+	}
+	txs := make([][]byte, 50)
+	for i := range txs {
+		txs[i] = []byte(fmt.Sprintf("consim-synth-BVN2-%d", 100000+i))
+	}
+	oneBatch := types.NewBatch(txs).Size()
+	r, err := asymmetricOverload(t, 2*oneBatch+oneBatch/2)
+	require.NoError(t, err, "with the cap no partition is declared stalled")
+	require.LessOrEqual(t, r.MaxBlockTxs["BVN2"], uint64(4*2*50+50), "a block is bounded by validators x MaxHeaderBytes")
+	require.Greater(t, r.Heights["BVN2"], uint64(200), "and BVN2 keeps producing blocks under the same load")
+}

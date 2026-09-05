@@ -47,6 +47,8 @@ func main() {
 	system := flag.String("system", "", "per-partition system-path tps, never refused, e.g. BVN1=250,BVN2=250 — the synthetic packages and anchors that keep arriving while user work is refused")
 	flag.BoolVar(&cfg.UserLoad, "user", false, "submit the load through the user path, which the store budget and the execution-lag bound refuse (the load generator's path)")
 	flag.IntVar(&cfg.MaxExecutionLag, "max-lag", 0, "execution-lag bound in blocks (0 = primary default, 8)")
+	flag.Float64Var(&cfg.SyntheticPerUser, "synth-per-user", 0, "synthetic (system-path) transactions produced for the other BVN per accepted user transaction, delivered after -synth-delay — couples system traffic to accepted load as the network does")
+	flag.DurationVar(&cfg.SyntheticDelay, "synth-delay", 0, "delay before a synthetic reaches its destination (0 = three round intervals, the Directory round trip)")
 	flag.IntVar(&cfg.MaxHeaderBytes, "max-header", 0, "bytes of batches one header may carry (0 = primary default; large = no cap)")
 	flag.Parse()
 	if *system != "" {

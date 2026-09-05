@@ -283,7 +283,41 @@ is closed.
 
 ## Consensus
 
-No recorded differences.
+### C7. Nothing refuses the synthetics a partition cannot execute
+
+*(no issue yet — a design decision)*
+
+**Spec** ([consensus.md](consensus.md), invariant 9): a partition whose
+executor lags its consensus past the bound proposes empty headers and refuses
+**user** work until it catches up. Synthetic packages and anchors from other
+partitions are system traffic and are never refused (invariant 4).
+
+**Code**: as specified — and it is not enough. A BVN's user work produces
+synthetics for the *other* BVN, about one and a half per accepted transaction
+under the soak's load, and the destination can neither refuse them nor execute
+them faster than they arrive when the source keeps accepting. Refusing the
+destination's own users changes nothing about that inflow. consim reproduces
+it in five minutes (`pkg/consensus/consim`,
+`TestOverload_UncappedHeadersDoubleTheDumpUntilThePartitionStops`, and the
+command line in PLAN.md "Simulation first"): BVN1 offered 400 user tx/s and
+BVN2 250, each executor good for 400 tx/s, 1.5 synthetics per accepted user
+transaction; BVN2's lag runs to 42 and its dumped blocks double every cycle
+until it stops. With the header cap (`MaxHeaderBytes`, 455a82ee1) the blocks
+stay bounded and BVN2 keeps producing, but its lag still drifts upward — the
+inflow exceeds its capacity. Soak `20260905T144928Z` is the same curve in
+forty-five minutes: BVN2 produced twice BVN1's synthetics (#4220), both BVNs
+oscillated on the bound, load accepted fell to 392 tps.
+
+**What is missing** is back-pressure across partitions: a source must stop
+accepting user work when a destination of its synthetics is behind. The
+signal exists in principle — what a source has produced for a destination
+that the destination has not yet executed (the producer cache's "in play",
+healing.md "The cache", whose clearing signal is also H1's open item) — and
+the refusal is the one invariant 9 already has. What must be decided is the
+signal (a bound on undelivered synthetics per destination, carried back by the
+destination's anchors or by the Directory) and the bound.
+
+**Size**: medium; a spec decision first.
 
 ## Healing
 

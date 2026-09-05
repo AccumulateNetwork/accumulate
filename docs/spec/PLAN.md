@@ -23,6 +23,7 @@ what the next item hunts.
 
 ```
 E8 #4217 (done) ─▶ H1 #4193 (DONE) ─▶ E10 (DONE: staging is memory, `execute.Staging`, a block transaction that commits with the block) ─▶ C6 #4215 (DONE: execution lag bounded at 8 blocks; empty headers and refusal by reason past it) ─▶ H8 #4216 (DONE as a pull by span from staging; push and hash set are DIFFERENCES H8) ─▶ acceptance run #7
+C7 cross-partition back-pressure (DIFFERENCES C7)      the death reproduction's finding; a spec decision first
 R #4219 ─▶ S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86   cost: first the reads that prove an absence, then the rest
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3               correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back
@@ -316,9 +317,13 @@ discovery loop. Reproductions so far:
 |---|---|---|
 | Directory anchors rejected once a mark point is behind the store's window; every stream frozen (runs 032333Z–051008Z) | `test/e2e` `TestDirectoryReceiptsPastTheWindow` on the BlockchainDB-backed store (`simulator.BcdbDbOpener`); `pkg/database/keyvalue/bcdb` `TestReceiptReachesPastTheWindow` | 2 min; 4 s |
 | the backlog after a refusal window comes back as one block, lag oscillates on the bound (run 144928Z) | `pkg/consensus/consim` `TestOverload_BacklogComesBackAHeaderAtATime`: user and system load, slow executor, cap off and on | 60 s |
+| the network dies: one BVN's dumped blocks double every cycle until it stops, while the other keeps accepting the users that feed it (run 144928Z, "we are dead") | `pkg/consensus/consim` `TestOverload_UncappedHeadersDoubleTheDumpUntilThePartitionStops` / `..._CappedHeadersKeepThePartitionMoving`; from the command line: `go run ./cmd/consim -bvns 2 -vals 4 -workers 4 -round 500ms -batch-timeout 100ms -batch-size 50 -user -skew BVN1=400,BVN2=250,Directory=2 -synth-per-user 1.5 -exec-cost BVN1=2.5ms,BVN2=2.5ms -max-header 1073741824 -duration 300s -height 0 -stall-after 40s` | 5 min |
 | the requester pulls entries sitting in the destination's own backlog; heals with nothing dropped (runs 134346Z–142724Z) | `test/e2e` `TestRequester_LaggingDestination`: a block hook holds the destination's envelopes thirty blocks, the conductor reads the depth as its lag; nothing dropped and one package dropped | 3 s |
 
-Each fails on the code before its fix (checked by reverting the fix), and the
+The death reproduction is what names the next design item: the header cap
+bounds the blocks but not the inflow, and only cross-partition back-pressure
+does (DIFFERENCES C7). Each of the others fails on the code before its fix
+(checked by reverting the fix), and the
 existing dropped-entry tests (`TestMissingSynthTxn`, `TestRangeRecovery`, ...)
 stay green with it.
 

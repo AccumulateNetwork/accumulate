@@ -105,6 +105,18 @@ type Config struct {
 	// a header drains when the lag clears.
 	SystemTPSByPartition map[string]int
 
+	// SyntheticPerUser couples the system traffic to the user traffic the
+	// network accepts, as the real network does: every accepted user
+	// transaction on a BVN produces this many synthetic transactions for the
+	// OTHER BVN (or the Directory when there is one BVN), submitted through
+	// the system path SyntheticDelay later -- the Directory round trip. With
+	// this, refusing user work reduces the system traffic that follows, the
+	// feedback that makes the execution-lag bound a shedding mechanism rather
+	// than a pause. SystemTPSByPartition is constant load with no such
+	// feedback.
+	SyntheticPerUser float64
+	SyntheticDelay   time.Duration
+
 	// MaxExecutionLag and MaxHeaderBytes are the two knobs of invariant 9:
 	// how far execution may lag before headers go empty, and how much of the
 	// backlog one header may carry back. Zero uses the primary's defaults.
@@ -193,6 +205,15 @@ type Sim struct {
 	submitted   atomic.Uint64
 	refused     atomic.Uint64
 	refusedOnce sync.Once
+
+	synthQ chan synthDue // synthetics owed to another partition, with when they are due
+}
+
+// synthDue is a batch of synthetic transactions one partition owes another.
+type synthDue struct {
+	to    string
+	count int
+	due   time.Time
 }
 
 // logf writes to the configured output, if any.
@@ -500,6 +521,7 @@ func (s *Sim) load(ctx context.Context, part string) {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	var n uint64
+	var owed float64 // synthetic transactions owed for accepted user work
 	for {
 		select {
 		case <-ctx.Done():
@@ -533,6 +555,70 @@ func (s *Sim) load(ctx context.Context, part string) {
 				s.refusedOnce.Do(func() {
 					s.logf("REFUSED: %s refused a submission: %v", part, err)
 				})
+				continue
+			}
+			if s.synthQ != nil {
+				owed += s.cfg.SyntheticPerUser
+				if owed >= 1 {
+					k := int(owed)
+					owed -= float64(k)
+					delay := s.cfg.SyntheticDelay
+					if delay == 0 {
+						delay = 3 * s.cfg.MinRoundInterval
+					}
+					select {
+					case s.synthQ <- synthDue{to: s.counterpart(part), count: k, due: time.Now().Add(delay)}:
+					default: // the queue is a bound, not a promise
+					}
+				}
+			}
+		}
+	}
+}
+
+// counterpart is where a partition's synthetic output goes: the other BVN,
+// round-robin over BVNs when there are several, the Directory when there is
+// only one.
+func (s *Sim) counterpart(part string) string {
+	var bvns []string
+	for _, p := range s.parts {
+		if p != "Directory" && p != part {
+			bvns = append(bvns, p)
+		}
+	}
+	if len(bvns) == 0 {
+		return "Directory"
+	}
+	return bvns[int(s.submitted.Load())%len(bvns)]
+}
+
+// syntheticLoad submits what the partitions owe each other, when it is due.
+func (s *Sim) syntheticLoad(ctx context.Context) {
+	defer s.wg.Done()
+	var n uint64
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case d := <-s.synthQ:
+			if wait := time.Until(d.due); wait > 0 {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(wait):
+				}
+			}
+			nodes := s.byPart[d.to]
+			if len(nodes) == 0 {
+				continue
+			}
+			for i := 0; i < d.count; i++ {
+				n++
+				tx := []byte(fmt.Sprintf("consim-synth-%s-%d", d.to, n))
+				s.submitted.Add(1)
+				if err := nodes[int(n)%len(nodes)].node.SubmitTransaction(tx); err != nil {
+					s.refused.Add(1)
+				}
 			}
 		}
 	}
@@ -604,6 +690,11 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 			s.wg.Add(1)
 			go s.systemLoad(ctx, part)
 		}
+	}
+	if s.cfg.SyntheticPerUser > 0 {
+		s.synthQ = make(chan synthDue, 1<<16)
+		s.wg.Add(1)
+		go s.syntheticLoad(ctx)
 	}
 
 	logf := s.logf
