@@ -163,6 +163,55 @@ no batches past the bound, the batches wait, and proposal resumes when the
 lag falls. Proof outstanding: a soak in which BVN2's lag stays under the bound
 and its anchor leg stays near its floor.
 
+### E11 #4205 — a node syncs from the running protocol
+
+Spec: executor.md "Sync". A node that joins or restarts pulls the state of the
+chains from the running protocol, verified against the anchored root, while
+collecting from consensus, and executes nothing until the state matches and
+staging holds what its peers hold. Validator and follower alike. What exists
+today: genesis or a snapshot *file*, and consensus catch-up from peers'
+retention (`pkg/consensus/recovery.go`); nothing pulls chain state.
+
+1. **State as of a block, served by peers.** A partition-scoped p2p protocol
+   (list / fetch / chunk, modelled on `pkg/consensus/snapshot`, which does this
+   for the DAG's own state): a joiner asks a peer for the state at the peer's
+   last committed block; the peer collects it with the database's collector
+   (`db.Collect`, what genesis bootstrap uses) from a view pinned at that
+   block and streams it in chunks; the header names the block and the BPT
+   root. One collection per block is kept for its duration, so several
+   joiners cost one collection. Test: the joiner's restored BPT root equals
+   the peer's at that block.
+2. **Verified against the anchored root.** The joiner checks the restored BPT
+   root against the partition's `StateTreeAnchor` for that block as the
+   Directory anchored it, read from a Directory node through the API; a
+   mismatch discards the state and asks another peer. Test: a corrupted chunk
+   is refused, the next peer is asked.
+3. **Listening first.** Before asking for state the joiner subscribes to
+   consensus and buffers committed groups by round; consensus recovery follows
+   the DAG from the current round; the executor runs nothing. Test: commits
+   that arrive during the transfer are held, in order, none lost.
+4. **Resume.** With the state at block N verified, groups above N execute in
+   order and groups at or below N are dropped; a group the buffer never saw is
+   fetched from retention, and a gap past retention sends the node back to
+   step 1 for a newer state. Staging fills from the stream it executes and
+   from healing (H8) for what was in flight before it listened. Test: a
+   validator killed under 500 tps rejoins and votes within a bounded number of
+   blocks, with block hashes equal to its peers'.
+5. **Followers take the same path** with voting off; the follower mode uses it
+   in place of a snapshot file. Test: a follower started against a running
+   Docker network reaches the network's height.
+6. **The snapshot file stays for genesis and archives**, not for joining.
+
+Two decisions for Paul before step 1 is built: whether a whole-state transfer
+is acceptable at the target state size, or the pull must be incremental (by
+account, walking the BPT); and retention — the transfer must finish inside
+what peers keep (`stagedCommits`, 18 on a BVN today), or peers must serve
+"state at N plus the commits after N" on request.
+
+Done when: a soak with chaos restarts under load keeps every restarted
+validator voting within the bound, and #4205 closes. Required before chaos
+returns to the acceptance run.
+
 ### #4214 — resolved: there was no loss
 
 The no-healer run (`20260904T180918Z`) delivered every stream to received ==
@@ -251,8 +300,8 @@ account's chain heights and anchors, and all element-index records):
   backend contract (absence is now reported, D4).
 - **H3 #4192** — proof extension, when measurement shows a destination must
   reach further back than one proof.
-- **#4205** — a restarted validator rejoins from retention or a snapshot;
-  required before chaos returns.
+- **#4205 (E11)** — a restarted validator rejoins by syncing from the running
+  protocol (plan above); required before chaos returns.
 
 ## Acceptance criteria
 
