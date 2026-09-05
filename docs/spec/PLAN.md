@@ -24,7 +24,7 @@ what the next item hunts.
 ```
 E8 #4217 (done) ─▶ H1 #4193 (DONE: dispatch and the sequencer read the cache, never the store) ─▶ E10 (staging in memory) ─▶ C6 #4215 ─▶ R2 #4219 (first-write reads) ─▶ H8 #4216 ─▶ acceptance run #7
 R #4219 ─▶ S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86   cost: first the reads that prove an absence, then the rest
-E5 #4197, E4 #4198, E6, D1 #4199, D2, D3 ─▶ D4       correctness debt, parallel or after
+E5 #4197, E4 #4198, E6, D1 #4199, D2, D3               correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back
 #4205 restart recovery                                before chaos returns to a soak
 ```
@@ -197,14 +197,14 @@ BVN executor's segment-store reads were ~95% such asks.
   chain's element-index check (D8) and the dead `Transaction.Main` read of a
   v1 shape v2 never writes. Proof: the e2e duplicate assertion, the A/B golden
   run, `fallbackWalks` near zero.
-- **R3 — no fallback.** The run found exactly two readers reaching back, and
-  both are H1's: dispatch reading bodies by hash (442,652 hits, once each) and
-  the root-index search (424,392 hits on 6,720 keys). With the cache built
-  and read by dispatch, and staging in memory (E10), the executor has one
-  deep reader left — a signature for a pending transaction older than the
-  window — which takes `BeginDeep`. Then the permanent-shape fallback goes,
-  a history read is a counted failure, and D4 closes. Proof: `ShallowMisses`
-  zero for every permanent shape over 12 h; `historyReads` zero.
+- **R3 — no fallback.** DONE. Dispatch and healing read the cache (H1); the
+  one deep reader left — a transaction a signature or remote copy refers to,
+  pending for longer than the window — takes a deep reader; the adapter
+  reports absence for every other shallow miss and never walks permanent
+  history. D4 and D6 closed with it. `historyReads` in `stats.json` now
+  attributes the deep reads, and `shallowMisses` by shape shows any reader
+  that should have been deep. Proof outstanding: a soak with `historyReads`
+  near zero and BVN2's block time flat.
 
 Then, as cost work rather than correctness (each still proven by the suite's
 duplicate assertion and an A/B golden run — same envelope stream under two
@@ -240,8 +240,8 @@ account's chain heights and anchors, and all element-index records):
 - **E6** — `CascadeDeliveryQueue` deleted from the hashed state.
 - **D1 #4199** — record placement derived from the record model, or divergence
   detectable without a soak.
-- **D2, D3 ─▶ D4** — isolation verified for every backend; the window part of
-  the backend contract; absence reported.
+- **D2, D3** — isolation verified for every backend; the window part of the
+  backend contract (absence is now reported, D4).
 - **H3 #4192** — proof extension, when measurement shows a destination must
   reach further back than one proof.
 - **#4205** — a restarted validator rejoins from retention or a snapshot;

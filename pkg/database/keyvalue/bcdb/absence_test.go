@@ -39,34 +39,39 @@ func TestMutableMissStopsAtTheDynamicLayer(t *testing.T) {
 	require.ErrorAs(t, err, &nf)
 
 	require.Equal(t, uint64(1), d.ShallowMisses()[keyShape(pending)], "the miss is counted by shape")
-	require.Zero(t, d.FallbackWalks(), "a mutable miss must not walk history")
-	require.Empty(t, d.DeepFallbacks())
+	require.Empty(t, d.HistoryReads(), "no deep read was made")
 }
 
-// A miss on a PERMANENT shape still walks history through the fallback,
-// because readers that legitimately reach past the window -- a pending
-// transaction's message, dispatch after the anchor returns -- do not yet
-// take a deep batch (DIFFERENCES E9).  The miss is counted so the soak
-// can name those readers; the walk is counted so its removal shows.
-func TestPermanentMissIsCountedAndStillWalks(t *testing.T) {
+// A miss on a PERMANENT shape is the answer: the window is the protocol's
+// horizon, nothing walks history for a shallow reader, and the miss is
+// counted so a reader that should have been deep shows in the numbers.
+func TestPermanentMissIsAbsent(t *testing.T) {
 	d, err := Open(filepath.Join(t.TempDir(), "db"))
 	require.NoError(t, err)
 	defer func() { require.NoError(t, d.Close()) }()
 
-	put(t, d, record.NewKey("Message", [32]byte{1}, "Main"), "message")
+	old := record.NewKey("Message", [32]byte{1}, "Main")
+	put(t, d, old, "old")
+	for i := 0; i < 3*int(d.MergeLag); i++ {
+		put(t, d, record.NewKey("Account", fmt.Sprintf("a%d", i), "Main"), "x")
+	}
 
-	missing := record.NewKey("Message", [32]byte{2}, "Main")
-	require.True(t, isWriteOnce(missing))
-
+	// Past the window, a shallow reader is told the key is absent even
+	// though history has it -- that is the contract -- and the miss counts
 	batch := d.Begin(nil, false)
 	defer batch.Discard()
-	_, err = batch.Get(missing)
+	_, err = batch.Get(old)
 	var nf *database.NotFoundError
 	require.ErrorAs(t, err, &nf)
+	require.Equal(t, uint64(1), d.ShallowMisses()[keyShape(old)])
+	require.Empty(t, d.HistoryReads(), "nothing walked")
 
-	require.Equal(t, uint64(1), d.ShallowMisses()[keyShape(missing)])
-	require.Equal(t, uint64(1), d.FallbackWalks(), "a permanent miss walks, until its readers are deep")
-	require.Empty(t, d.DeepFallbacks(), "nothing was there to find")
+	// A deep reader finds it
+	deep := d.BeginDeep(nil, false)
+	defer deep.Discard()
+	v, err := deep.Get(old)
+	require.NoError(t, err)
+	require.Equal(t, "old", string(v))
 }
 
 // A DEEP reader's miss is the reader's own business: it asked for
@@ -80,16 +85,16 @@ func TestDeepReaderMissIsNotAShallowMiss(t *testing.T) {
 
 	batch := d.BeginDeep(nil, false)
 	defer batch.Discard()
-	_, err = batch.Get(record.NewKey("Message", [32]byte{2}, "Main"))
+	missing := record.NewKey("Message", [32]byte{2}, "Main")
+	_, err = batch.Get(missing)
 	var nf *database.NotFoundError
 	require.ErrorAs(t, err, &nf)
 	require.Empty(t, d.ShallowMisses())
-	require.Zero(t, d.FallbackWalks())
+	require.Equal(t, uint64(1), d.HistoryReads()[keyShape(missing)].Misses, "a deep miss is a deep read that found nothing")
 }
 
-// A permanent record older than the window is found by the fallback, and
-// the read is attributed: shape, hit, whether the key was asked before,
-// and who asked.  Two reads of one key are two hits and one distinct key
+// A deep reader's reads are attributed: shape, hit, whether the key was
+// asked before, and who asked.  Two reads of one key are two hits and one distinct key
 // -- the pattern a cache would serve; one read each of many keys is the
 // pattern where the reader should carry the record instead.
 func TestHistoryReadsAreAttributed(t *testing.T) {
@@ -105,8 +110,15 @@ func TestHistoryReadsAreAttributed(t *testing.T) {
 		put(t, d, record.NewKey("Account", fmt.Sprintf("a%d", i), "Main"), "x")
 	}
 
-	require.Equal(t, "old", get(t, d, old))
-	require.Equal(t, "old", get(t, d, old))
+	getDeep := func() string {
+		batch := d.BeginDeep(nil, false)
+		defer batch.Discard()
+		v, err := batch.Get(old)
+		require.NoError(t, err)
+		return string(v)
+	}
+	require.Equal(t, "old", getDeep())
+	require.Equal(t, "old", getDeep())
 
 	hr := d.HistoryReads()
 	shape := keyShape(old)
@@ -116,10 +128,9 @@ func TestHistoryReadsAreAttributed(t *testing.T) {
 	require.Zero(t, hr[shape].Misses)
 	require.NotEmpty(t, hr[shape].HitCallers, "the first read is sampled")
 	require.Empty(t, hr[shape].MissCallers)
-	require.Equal(t, uint64(2), d.DeepFallbacks()[shape])
 
-	// A miss on a permanent shape walks, finds nothing, and is a miss
-	batch := d.Begin(nil, false)
+	// A deep miss is a deep read that found nothing
+	batch := d.BeginDeep(nil, false)
 	_, err = batch.Get(record.NewKey("Message", [32]byte{9}, "Main"))
 	batch.Discard()
 	require.Error(t, err)

@@ -90,7 +90,7 @@ func (x SequencedMessage) check(batch *database.Batch, ctx *MessageContext) (*me
 	// Load the transaction
 	if !ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
 		if txn, ok := seq.Message.(*messaging.TransactionMessage); ok {
-			_, err := x.resolveTransaction(batch, txn)
+			_, err := x.resolveTransaction(batch, ctx, txn)
 			if err != nil {
 				return nil, errors.UnknownError.Wrap(err)
 			}

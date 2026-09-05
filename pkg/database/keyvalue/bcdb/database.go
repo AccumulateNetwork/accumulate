@@ -142,24 +142,15 @@ type Database struct {
 	last   map[[32]byte][32]byte
 
 	// Background maintenance (see maintain).
-	// deepFallbacks counts, by record shape, the reads a SHALLOW batch
-	// could only answer from history: the evidence for whether the
-	// window can be enforced without a fallback (see getAt).  Under
-	// fallbackMu, a leaf lock -- the counter is bumped while getAt
-	// holds d.mu shared, and it must not reach for that lock.
-	deepFallbacks map[string]uint64
 	// shallowMisses counts, by shape, every shallow read the window
-	// could not answer -- found in history or not -- and fallbackWalks
-	// how many of those walked history.  A mutable shape never walks
-	// (database spec, "Duplicates are caught at entry"); the count for
-	// a permanent shape names the reader that still needs BeginDeep.
+	// could not answer. The miss is the answer (getAt); the count is
+	// what shows a reader that should have been deep. Under fallbackMu,
+	// a leaf lock -- bumped while getAt holds d.mu shared, and it must
+	// not reach for that lock.
 	shallowMisses map[string]uint64
-	fallbackWalks uint64
-	// history is the detail behind DeepFallbacks: for every shape a
-	// shallow reader needed history for, how many reads hit, how many
-	// walked and found nothing, how many DISTINCT keys the hits were,
-	// and a sample of who asked.  Repeats say a cache would pay;
-	// single reads say the reader should carry the record instead.
+	// history attributes the reads DEEP batches make: per shape, how
+	// many hit, how many missed, how many distinct keys the hits were,
+	// and a sample of who asked. It names who reaches past the window.
 	history     map[string]*HistoryShape
 	historyKeys map[string]map[[32]byte]struct{}
 	historySeq  uint64
@@ -690,15 +681,6 @@ func (d *Database) Shapes() map[string]ShapeCount {
 	return shapes
 }
 
-// DeepFallbacks reports, by key shape, the reads that the permanent
-// layer's window could not answer and that GetDeep had to walk history
-// for.  It is the read-side counterpart to Shapes: a shape that appears
-// here in quantity is one whose PLACEMENT is wrong, whatever its write
-// classification says (see route.go's Url case).
-func (d *Database) DeepFallbacks() map[string]uint64 {
-	return d.fallbackSnapshot()
-}
-
 // ShallowMisses reports, by key shape, every read a SHALLOW batch made
 // that the window could not answer, whether or not history then had it.
 // A mutable shape here is normal -- a first write's absence, a set that
@@ -719,16 +701,8 @@ func (d *Database) ShallowMisses() map[string]uint64 {
 	return out
 }
 
-// FallbackWalks reports how many shallow misses walked history: the
-// permanent-shape misses.  A mutable miss never does.
-func (d *Database) FallbackWalks() uint64 {
-	d.fallbackMu.Lock()
-	defer d.fallbackMu.Unlock()
-	return d.fallbackWalks
-}
-
-// HistoryShape is what one record shape cost in history reads: Hits
-// found the key below the window, Misses walked and found nothing,
+// HistoryShape is what one record shape cost in DEEP reads: Hits found
+// the key, in the window or below it, Misses found nothing anywhere,
 // Distinct is how many different keys the hits were for (Capped when
 // the set stopped growing), and the callers are a 1-in-historySample
 // sample of the code that asked, by its first frame above the database
@@ -753,7 +727,7 @@ const (
 	historyKeysCap = 200_000
 )
 
-// recordHistoryRead books a shallow read that reached history.  The
+// recordHistoryRead books a deep read.  The
 // stack is captured outside the leaf lock; everything else under it.
 func (d *Database) recordHistoryRead(shape string, h [32]byte, hit bool) {
 	var caller string
@@ -845,8 +819,8 @@ func shortFrame(fn string, line int) string {
 	return fn
 }
 
-// HistoryReads reports, by shape, what the shallow reads that reached
-// history cost and who made them.  The map and its inner maps are copies.
+// HistoryReads reports, by shape, the reads deep batches made and who
+// made them.  The map and its inner maps are copies.
 func (d *Database) HistoryReads() map[string]HistoryShape {
 	d.fallbackMu.Lock()
 	defer d.fallbackMu.Unlock()
@@ -869,20 +843,6 @@ func copyCounts(m map[string]uint64) map[string]uint64 {
 	}
 	out := make(map[string]uint64, len(m))
 	for k, v := range m {
-		out[k] = v
-	}
-	return out
-}
-
-// fallbackSnapshot copies the deep-fallback counters for a report
-func (d *Database) fallbackSnapshot() map[string]uint64 {
-	d.fallbackMu.Lock()
-	defer d.fallbackMu.Unlock()
-	if len(d.deepFallbacks) == 0 {
-		return nil
-	}
-	out := make(map[string]uint64, len(d.deepFallbacks))
-	for k, v := range d.deepFallbacks {
 		out[k] = v
 	}
 	return out
@@ -945,60 +905,34 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 
 	value, err := d.kv.Get(h)
 	if err != nil && deep {
-		// This reader asked to reach past the window (BeginDeep)
+		// This reader asked to reach past the window (BeginDeep). Its
+		// reads are attributed, hits and misses, so a soak names who
+		// reaches back and for what.
 		value, err = d.kv.GetDeep(h)
+		d.recordHistoryRead(keyShape(key), h, err == nil)
 	} else if err != nil {
-		// A shallow reader missed.  Which layer answered decides what
-		// happens next (database spec, "Duplicates are caught at
-		// entry").
+		// A shallow reader missed, and the miss IS the answer (database
+		// spec, "Windowed stores", "Duplicates are caught at entry"). A
+		// mutable shape lives in the dynamic layer and nowhere else, and
+		// the dynamic layer's Get already walked its own history; a
+		// permanent shape is answered from the window, which is the
+		// protocol's horizon. Nothing here walks permanent history: that
+		// walk ran on every miss before #4219 -- 113.8 million times on
+		// eight BVN stores in forty minutes, 99.2% of them proving a key
+		// absent before its first write. The miss is counted by shape so
+		// a reader that should have been deep shows in the numbers rather
+		// than as a silent not-found.
 		//
-		// A MUTABLE shape lives in the dynamic layer and nowhere else
-		// (commit routes it there without exception), and the dynamic
-		// layer's Get already walked its own history.  The miss IS the
-		// answer, and walking the permanent history for it could only
-		// find a key that cannot be there.  Before this rule that walk
-		// ran on every miss -- about 95% of a BVN's segment-store reads
-		// at 500 tps, none of them finding anything (#4219).
-		//
-		// A PERMANENT shape is answered from the window, and the window
-		// is meant to be the horizon -- but a reader that legitimately
-		// reaches further (a pending transaction's message, dispatch
-		// after the anchor returns, a receipt through the root chain)
-		// has no deep batch yet.  Until every one of them does, the
-		// fallback runs for permanent shapes only, and every miss is
-		// counted by shape: ShallowMisses names the readers that still
-		// need BeginDeep, DeepFallbacks says how often history had the
-		// answer.  Zero permanent misses over a soak is the evidence
-		// that this branch can go.
-		//
-		// The counters take their own leaf lock, NOT d.mu: this runs
-		// while getAt holds d.mu shared, and a Go RWMutex is not
-		// reentrant (#4175).
+		// The counter takes its own leaf lock, NOT d.mu: this runs while
+		// getAt holds d.mu shared, and a Go RWMutex is not reentrant
+		// (#4175).
 		shape := keyShape(key)
 		d.fallbackMu.Lock()
 		if d.shallowMisses == nil {
 			d.shallowMisses = map[string]uint64{}
 		}
 		d.shallowMisses[shape]++
-		walk := isWriteOnce(key)
-		if walk {
-			d.fallbackWalks++
-		}
 		d.fallbackMu.Unlock()
-
-		if walk {
-			v2, err2 := d.kv.GetDeep(h)
-			if err2 == nil {
-				d.fallbackMu.Lock()
-				if d.deepFallbacks == nil {
-					d.deepFallbacks = map[string]uint64{}
-				}
-				d.deepFallbacks[shape]++
-				d.fallbackMu.Unlock()
-				value, err = v2, nil
-			}
-			d.recordHistoryRead(shape, h, err2 == nil)
-		}
 	}
 	if err != nil || len(value) == 0 {
 		// A zero-length value is a deletion, reported the same way a
@@ -1369,29 +1303,18 @@ func (d *Database) reportStats() {
 		MaintenanceErrors uint64 `json:"maintenanceErrors"`
 		MaintenanceLast   string `json:"maintenanceLastError,omitempty"`
 
-		// DeepFallbacks is what a SHALLOW batch -- the executor's --
-		// could only answer from history, by record shape.  The store
-		// answers a permanent read from its window and calls anything
-		// older absent; a reader that means to look back takes a deep
-		// batch (BeginDeep).  Empty means every deep reader has one and
-		// the fallback in getAt can go, leaving the window enforced.
-		// Anything here NAMES the call sites that still need one.
-		DeepFallbacks map[string]uint64 `json:"deepFallbacks,omitempty"`
-
 		// ShallowMisses is every shallow read the window could not
-		// answer, by shape, found or not; FallbackWalks how many of them
-		// walked history (the permanent shapes).  See ShallowMisses.
+		// answer, by shape. The miss is the answer; a permanent shape in
+		// quantity here is a reader that should have been deep.
 		ShallowMisses map[string]uint64 `json:"shallowMisses,omitempty"`
-		FallbackWalks uint64            `json:"fallbackWalks"`
 
-		// HistoryReads is the detail behind DeepFallbacks: hits, misses,
-		// distinct keys and sampled callers per shape.  See HistoryShape.
+		// HistoryReads attributes the reads DEEP batches made: hits,
+		// misses, distinct keys and sampled callers per shape.
 		HistoryReads map[string]HistoryShape `json:"historyReads,omitempty"`
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
-		DeepFallbacks: d.fallbackSnapshot(),
-		ShallowMisses: d.ShallowMisses(), FallbackWalks: d.FallbackWalks(),
-		HistoryReads: d.HistoryReads(),
-		Staged:       len(d.undoVersions), TallySample: d.TallySample,
+		ShallowMisses: d.ShallowMisses(),
+		HistoryReads:  d.HistoryReads(),
+		Staged:        len(d.undoVersions), TallySample: d.TallySample,
 		TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
 		MaintenanceErrors: d.maintErrs}
 	if d.maintErr != nil {

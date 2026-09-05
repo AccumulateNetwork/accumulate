@@ -247,9 +247,16 @@ func (b *bundle) getTransaction(batch *database.Batch, hash [32]byte) (*protocol
 		}
 	}
 
-	// Look in the database
+	// Look in the database. A transaction referenced by a signature may be
+	// pending for longer than the store's window, so a miss there is asked
+	// again of a deep reader (database spec, "Windowed stores").
 	var txn messaging.MessageWithTransaction
 	err := batch.Message(hash).Main().GetAs(&txn)
+	if err != nil && errors.Is(err, errors.NotFound) {
+		err = b.Executor.deepView(func(deep *database.Batch) error {
+			return deep.Message(hash).Main().GetAs(&txn)
+		})
+	}
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -267,9 +274,14 @@ func (b *bundle) GetSignatureAs(batch *database.Batch, hash [32]byte) (protocol.
 		}
 	}
 
-	// Look in the database
+	// Look in the database, then past the window (see getTransaction)
 	var txn messaging.MessageWithSignature
 	err := batch.Message(hash).Main().GetAs(&txn)
+	if err != nil && errors.Is(err, errors.NotFound) {
+		err = b.Executor.deepView(func(deep *database.Batch) error {
+			return deep.Message(hash).Main().GetAs(&txn)
+		})
+	}
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

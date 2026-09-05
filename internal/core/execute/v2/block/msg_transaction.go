@@ -174,7 +174,7 @@ func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, re
 
 	// Resolve a remote transaction to the locally stored copy (or not)
 	if resolve {
-		_, err := x.resolveTransaction(batch, txn)
+		_, err := x.resolveTransaction(batch, ctx, txn)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -281,9 +281,18 @@ func (x TransactionMessage) Process(batch *database.Batch, ctx *MessageContext) 
 	return status, nil
 }
 
-func (TransactionMessage) resolveTransaction(batch *database.Batch, msg *messaging.TransactionMessage) (bool, error) {
+func (TransactionMessage) resolveTransaction(batch *database.Batch, ctx *MessageContext, msg *messaging.TransactionMessage) (bool, error) {
 	isRemote := msg.GetTransaction().Body.Type() == protocol.TransactionTypeRemote
 	s, err := batch.Message(msg.ID().Hash()).Main().Get()
+	if isRemote && errors.Is(err, errors.NotFound) {
+		// The local copy a remote transaction refers to may be older than
+		// the store's window (database spec, "Windowed stores")
+		err = ctx.Executor.deepView(func(deep *database.Batch) error {
+			var e error
+			s, e = deep.Message(msg.ID().Hash()).Main().Get()
+			return e
+		})
+	}
 	s2, isTxn := s.(*messaging.TransactionMessage)
 	switch {
 	case errors.Is(err, errors.NotFound) && !isRemote:

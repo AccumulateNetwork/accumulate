@@ -202,9 +202,16 @@ func TestMergeBelow_BoundsThePermanentSegmentCount(t *testing.T) {
 	require.LessOrEqualf(t, after, 2*(2*20)+2*12+16,
 		"files beyond the active window and its unfolded merged blocks must have been merged (got %d)", after)
 
-	// And nothing merged away is lost.
+	// And nothing merged away is lost — to a reader that asks for history.
+	// A shallow reader is told a key past the window is absent; that is the
+	// window's contract (database spec, "Windowed stores"), not a loss.
 	for i := 0; i < blocks; i++ {
-		require.Equal(t, "v", get(t, db, record.NewKey("Message", [32]byte{byte(i), byte(i >> 8), 1}, "Main")))
+		key := record.NewKey("Message", [32]byte{byte(i), byte(i >> 8), 1}, "Main")
+		deep := db.BeginDeep(nil, false)
+		v, err := deep.Get(key)
+		deep.Discard()
+		require.NoError(t, err)
+		require.Equal(t, "v", string(v))
 	}
 }
 

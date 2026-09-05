@@ -480,7 +480,7 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
 # stats.json every 50 commits, so only the last snapshot survives a run — and
 # stagedCommits, the D5 instrument, had no history. One row per (node,
 # database) a minute, the few counters that move.
-echo "time,node,database,commits,stagedCommits,deepFallbacks,maintenanceErrors,permPutTotal,dynaPutTotal,dynaLiveHit,historyHits,historyMisses,fallbackWalks" > "$rd/storage-stats.csv"
+echo "time,node,database,commits,stagedCommits,shallowMisses,maintenanceErrors,permPutTotal,dynaPutTotal,dynaLiveHit,deepHits,deepMisses" > "$rd/storage-stats.csv"
 ( while kill -0 $DRIVER 2>/dev/null; do
     ts=$(date -u +%FT%TZ)
     # Every container mounts the whole network's config volume, so any one
@@ -504,11 +504,10 @@ for part in blob.split("== ")[1:]:
     node = parts[-5] if len(parts) >= 5 else "?"      # e.g. bvn2-4
     perm, dyna = d.get("perm") or {}, d.get("dyna") or {}
     print(",".join(str(x) for x in [ts, node, db, d.get("commits", ""), d.get("stagedCommits", ""),
-          sum((d.get("deepFallbacks") or {}).values()), d.get("maintenanceErrors", ""),
+          sum((d.get("shallowMisses") or {}).values()), d.get("maintenanceErrors", ""),
           perm.get("PutTotal", ""), dyna.get("PutTotal", ""), dyna.get("LiveHit", ""),
           sum(v.get("hits", 0) for v in (d.get("historyReads") or {}).values()),
-          sum(v.get("misses", 0) for v in (d.get("historyReads") or {}).values()),
-          d.get("fallbackWalks", "")]))
+          sum(v.get("misses", 0) for v in (d.get("historyReads") or {}).values())]))
 ' "$ts" >> "$rd/storage-stats.csv" 2>/dev/null
     done
     sleep ${STORAGE_STATS_INTERVAL:-60}

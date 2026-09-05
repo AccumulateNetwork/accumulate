@@ -137,29 +137,31 @@ durably only when it cannot execute this block; the gap questions by index
 ("proven and missing", "held and unproven") and the retirement of the
 reconcile-by-`Produced` path, which land with H8's request set.
 
-### E9. The executor reads permanent records past the window with no deep reader, and appends a transaction's hash from two sites
+### E9. The transaction hash is appended from two sites, and the observer reads a v1 record
 
 *[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
 
-**Spec**: a reader that reaches past the window takes a deep reader; a message's
-hash is appended to a chain once, from one site (database spec, "Duplication").
+**Spec**: a message's hash is appended to a chain once, from one site
+(database spec, "Duplicates are caught at entry"); a reader that reaches past
+the window takes a deep reader.
 
-**Code**: `Message.Main` is read for pending transactions for up to
-`PendingMajorBlocks` (14 major blocks) through an ordinary batch —
-`BeginDeep` exists in the adapter and nothing in `internal/` calls it.
-(Dispatch's reads are H1's, not a deep reader's.) The
-observer reads the v1 `Transaction(h).Main` record for every pending txid
-(`observer_prod.go:121`), a permanent shape never written by v2.
-`clearActiveSignatures` writes `Signatures` of every signer in the book, absent
-or not. `SyntheticIndexIndex` is write-once and read after the window on every
-dispatch. The transaction hash reaches the principal's main chain from the
-state cache (`state_cache.go:207`) and again from the success path
+**Code**: the executor's one legitimate deep read — a transaction a signature
+or a remote copy refers to, pending for longer than the window — now takes a
+deep reader (`Executor.deepView`, in `getTransaction`, `GetSignatureAs` and
+`resolveTransaction`), and the adapter reports absence for every other
+shallow miss. The transaction hash still reaches the principal's main chain
+from the state cache (`state_cache.go:207`) and again from the success path
 (`transaction.go:581`); the chain's uniqueness check absorbs the second, and a
-lost append would be swallowed as `ErrNotFound` at `transaction.go:582`.
+lost append would be swallowed as `ErrNotFound` at `transaction.go:582`. The
+observer reads the v1 `Transaction(h).Main` record for every pending txid
+(`observer_prod.go:121`), a shape v2 never writes; inside the window that is
+now a cheap miss, and a v1 record older than the window reads as absent.
+`clearActiveSignatures` writes `Signatures` of every signer in the book,
+absent or not.
 
-**Size**: medium; the deep-reader plumbing is the larger part. The
-single-site append is small and state-neutral when the state-cache append is
-the one skipped (the success path runs for every type that reaches it).
+**Size**: small. The single-site append is state-neutral when the state-cache
+append is the one skipped (the success path runs for every type that reaches
+it); after it the main-chain uniqueness read (D8) goes too.
 
 ---
 
@@ -264,56 +266,6 @@ windowed backend answers a deep read correctly, or that an ordinary read reports
 absence rather than guessing.
 
 **Size**: small. A conformance test.
-
-### D4. The bcdb window is advisory, so absence is never reported
-
-*[#4200](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4200)*
-
-**Spec**: an ordinary read is answered from the window; a read that needs
-history requires a deep reader. A backend that cannot answer must say so.
-
-**Code**: `getAt` (`bcdb/database.go:717`) falls back to `GetDeep` when a
-**shallow** reader misses, counting the fallback rather than returning
-not-found. So no shallow read ever reports absence, and the window is a
-performance property rather than a contract.
-
-This is deliberate and is documented in place: enforcing the window blind would
-turn any read the adapter has not accounted for into a silent not-found, which
-in the executor is a consensus fault. `DeepFallbacks` in `stats.json` is the
-instrument — zero over a soak is the evidence that the fallback can be removed.
-
-**Where it stands**: `Account(U).Url` was the only shape falling back (96,303
-over 200 commits, ~482 history walks a block); routing it to the dynamic layer
-took the count to none. So the evidence for enforcement now exists and has not
-been acted on.
-
-**Size**: small, and it depends on D3 — enforcement without a conformance test
-for `BeginDeep` swaps a measured fallback for an unverified one.
-
----
-
-### D6. The adapter walks permanent history for a permanent shape's miss
-
-*[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
-
-**Spec**: a mutable record is answered by the dynamic layer alone; a permanent
-record from the window; nothing reaches into history to prove an absence.
-
-**Code**: `getAt` (`bcdb/database.go`) no longer walks history for a mutable
-shape — the dynamic layer's miss is the answer — and counts every shallow miss
-by shape (`ShallowMisses`, `FallbackWalks` in `stats.json`). For a permanent
-shape it still falls back to `GetDeep`, because the readers that legitimately
-reach past the window have no deep batch (E9). Run 20260904T221627Z, with
-the rule in: 113.8 M walks over eight BVN stores in 40 minutes, 99.2% of
-them proving a key absent before its first write (D7, D8, and a dead read of
-the v1 `Transaction.Main`), ~6,300 a block a node; the reads history actually
-answered were dispatch's (once per key) and the root-index search (63 reads
-per key).
-
-**Size**: the rest is E9: once those readers take `BeginDeep`, the branch goes
-and the permanent misses must read zero over a soak.
-
----
 
 ### D7. A first write no longer reads the store; one store cannot say a version
 

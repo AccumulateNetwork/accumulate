@@ -63,6 +63,20 @@ func (x *Executor) synthCache() *synthcache.Cache {
 	return x.cacheDefault
 }
 
+// deepView runs fn against a reader that reaches past the store's window,
+// for the one read the executor legitimately makes there: a transaction a
+// signature or a remote copy refers to, pending for longer than the window
+// (database spec, "Windowed stores"). On a store with no window it is an
+// ordinary read.
+func (x *Executor) deepView(fn func(*database.Batch) error) error {
+	if d, ok := x.Database.(interface{ Deep() *database.Database }); ok {
+		return d.Deep().View(fn)
+	}
+	batch := x.Database.Begin(false)
+	defer batch.Discard()
+	return fn(batch)
+}
+
 type ExecutorOptions = execute.Options
 type Dispatcher = execute.Dispatcher
 
