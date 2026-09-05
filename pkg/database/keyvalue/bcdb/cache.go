@@ -133,10 +133,11 @@ func cacheKindOf(k *record.Key) cacheKind {
 			return cacheURL
 		}
 
-	case "Element", "ElementIndex", "States":
-		// A chain entry: the I'th element, where element H landed, or
-		// the mark point covering I. All facts about a position in an
-		// append-only log, so none of them move.
+	case "Element", "ElementIndex":
+		// A chain entry: the I'th element, or where element H landed.
+		// Facts about a position in an append-only log, so neither
+		// moves. Mark points (States) live in the dynamic layer (see
+		// route.go) and need no window-side cache.
 		//
 		// Restricted to the synthetic ledger and the anchor pool. Every
 		// chain element is immutable and would be safe to cache, but

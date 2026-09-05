@@ -180,14 +180,19 @@ func (m *Chain) StateAt(element int64) (ms *State, err error) {
 		return nil, errors.BadRequest.With("element out of range")
 	}
 	MIPrev := element&(^m.markMask) - 1 //               Calculate the index of the prior markpoint
-	cState := m.getState(MIPrev)        //               Use state at the prior mark point to compute what we need
+	var cState *State
 	if MIPrev < 0 {
 		cState = new(State)
-	}
-	if cState == nil {
-		// In a truncated chain, the previous mark point may not exist.
-		// Start with an empty state and we'll build it from the next available mark point.
-		cState = new(State)
+	} else if cState = m.getState(MIPrev); cState == nil {
+		// The state at an element is the prior mark point's state plus
+		// the hashes since. Without that mark point there is nothing to
+		// build from: an empty state in its place is a different chain,
+		// and a receipt built on it ends at a root nobody else holds. This
+		// used to fall back to an empty state for the sake of truncated
+		// chains, and a store that answered "absent" for a mark point older
+		// than its window (soak 20260905T032333Z and after) got receipts
+		// that every destination rejected, silently, for hours.
+		return nil, errors.NotFound.WithFormat("mark point %d of %v is missing; cannot compute the state at %d", MIPrev, m.key, element)
 	}
 	cState.HashList = cState.HashList[:0] //             element is past the previous mark, so clear the HashList
 

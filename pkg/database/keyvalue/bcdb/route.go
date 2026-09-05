@@ -72,13 +72,25 @@ import (
 func isWriteOnce(k *record.Key) bool {
 	last, prev, trailing := tail(k)
 	switch last {
-	case "Element", "ElementIndex", "States":
-		// A merkle chain is a log.  Element(I) is the I'th entry,
-		// ElementIndex(H) is where entry H landed, and States(I) is
-		// the mark point covering I -- all of them facts about a
+	case "Element", "ElementIndex":
+		// A merkle chain is a log.  Element(I) is the I'th entry and
+		// ElementIndex(H) is where entry H landed -- facts about a
 		// position in the log, which does not move.  Head is the log's
 		// current end and is excluded by requiring the parameter.
 		return trailing == 1
+	case "States":
+		// States(I) is the mark point covering I: the merkle state every
+		// later state of the chain is computed FROM.  Written once, like
+		// Url below, and read by every receipt the chain ever builds --
+		// a receipt over a slow chain (the Directory's root chain, an
+		// anchor chain at one entry a block) reaches for a mark point
+		// written hundreds of blocks ago.  Behind the window that read is
+		// "absent", and the chain code used to take absent for a
+		// truncated chain and rebuild from an empty state: from soak
+		// 20260905T032333Z on, every Directory anchor carried receipts to
+		// a root no BVN held, every BVN rejected them, and nothing was
+		// dispatched for hours.  Mark points are state, not history.
+		return false
 
 	case "Main":
 		// A message, a transaction and a block summary (BSN) are named

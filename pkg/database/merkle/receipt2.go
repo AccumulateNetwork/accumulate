@@ -8,6 +8,7 @@ package merkle
 
 import (
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // getReceipt
@@ -52,8 +53,11 @@ func getReceipt(manager *Chain, element []byte, anchor []byte) (r *Receipt, err 
 // takes the values collected by GetReceipt and flushes out the data structures
 // in the receipt to represent a fully populated version.
 func (m *Chain) buildReceipt(r *Receipt) error {
-	state, _ := m.StateAt(r.EndIndex) // Get the state at the Anchor Index
-	state.trim()                      // If Pending has any trailing nils, remove them.
+	state, err := m.StateAt(r.EndIndex) // Get the state at the Anchor Index
+	if err != nil {
+		return errors.UnknownError.WithFormat("load state at %d: %w", r.EndIndex, err)
+	}
+	state.trim() // If Pending has any trailing nils, remove them.
 	return r.build(func(element, height int64) ([]byte, []byte, error) {
 		return m.getIntermediate(element, height)
 	}, state)

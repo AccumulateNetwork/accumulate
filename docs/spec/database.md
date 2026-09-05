@@ -105,6 +105,16 @@ them is the writer's bug, not the chain's to absorb.
 - A mutable record is answered by the dynamic layer alone. It is routed there
   without exception, so a miss there is the answer, and the permanent history
   is never searched for it.
+- A chain's **mark-point states** are dynamic, not permanent. A mark point is
+  the merkle state every later state of the chain is computed from; it is
+  written once and read by every receipt the chain ever builds, and a receipt
+  over a slow chain — the Directory's root chain, an anchor chain at one entry
+  a block — reaches for a mark point written hundreds of blocks ago. Behind
+  the window that read is "absent", and a chain that treats an absent mark
+  point as a truncated chain builds a different chain: soak
+  `20260905T032333Z` and every run after it had the Directory's anchors
+  carrying receipts to a root no BVN held, every anchor rejected, nothing
+  dispatched. A missing mark point is an error, never an empty state.
 - A permanent record is answered from the window. The one reader that
   legitimately reaches further — a signature or reference arriving for a
   pending transaction whose body is older than the window — takes a deep

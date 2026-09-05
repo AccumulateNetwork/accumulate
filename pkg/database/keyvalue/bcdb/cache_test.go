@@ -37,7 +37,7 @@ func TestCacheKind_NamesOnlyImmutableShapes(t *testing.T) {
 
 		{cacheChain, record.NewKey("Account", synth, "MainChain", "Element", uint64(5)), "a position in an append-only log"},
 		{cacheChain, record.NewKey("Account", synth, "MainChain", "ElementIndex", [32]byte{1}), "where an element landed"},
-		{cacheChain, record.NewKey("Account", anchors, "AnchorSequenceChain", "States", uint64(9)), "a mark point"},
+		{cacheNone, record.NewKey("Account", anchors, "AnchorSequenceChain", "States", uint64(9)), "a mark point lives in the dynamic layer, not the window cache"},
 
 		// Not cached, and each for a reason that matters.
 		{cacheNone, record.NewKey("Account", alice, "MainChain", "Element", uint64(5)), "a chain, but not synthetic or anchor"},
