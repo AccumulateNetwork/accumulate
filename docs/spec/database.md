@@ -52,8 +52,10 @@ This is visible in the abstraction rather than hidden by it, because a reader
 that means to look back must say so:
 
 - The **executor** reads recent state and takes an ordinary change set.
-- A reader that knowingly reaches into history — the API, healing, a tool
-  walking the chain — takes a **deep** change set.
+- A reader that knowingly reaches into history — the API, a tool walking the
+  chain — takes a **deep** change set. Dispatch and healing are not such
+  readers: they read the producer's cache (healing.md, "The cache"), and a
+  read of history by either is a failure.
 
 A store with no window ignores the distinction: its ordinary reads already see
 everything.
@@ -103,11 +105,12 @@ them is the writer's bug, not the chain's to absorb.
 - A mutable record is answered by the dynamic layer alone. It is routed there
   without exception, so a miss there is the answer, and the permanent history
   is never searched for it.
-- A permanent record is answered from the window. The readers that
-  legitimately reach further — a pending transaction's message and payments,
-  a block's synthetics dispatched after its anchor returns, a receipt through
-  the root chain — take a deep reader ("Windowed stores"). Nothing else reaches
-  into history to prove an absence.
+- A permanent record is answered from the window. The one reader that
+  legitimately reaches further — a signature or reference arriving for a
+  pending transaction whose body is older than the window — takes a deep
+  reader ("Windowed stores"). Dispatch and healing never touch the store for
+  an entry or a proof; the cache holds what they need. Nothing else reaches
+  into history, and nothing reaches into it to prove an absence.
 
 **How it is tested.** The chain records every append of a hash it already
 holds, in test builds, and the executor suites assert that the only ones are
@@ -125,7 +128,7 @@ not the same cache:
 | cache | serves | shape | layer behind it |
 |---|---|---|---|
 | **hash-to-URL mapping** | reads that resolve a hash to the account it belongs to | two-level, cycled: a lookup tries the hot level then the cold one and promotes a hit; when hot fills it becomes cold and a new hot starts | dynamic |
-| **synthetic/anchor entries** | healing requests for entries a destination lacks ([healing.md](healing.md), "The cache") | indexed by partition and index and by hash; holds only the entries in play; cleared as the destination delivers | permanent — every entry is persisted through execution |
+| **synthetic/anchor entries** | dispatch, and healing requests for entries a destination lacks ([healing.md](healing.md), "The cache") | indexed by partition and index and by hash; holds only the entries in play; cleared as the destination delivers | permanent — every entry is persisted through execution |
 
 Hash-to-URL mappings live in the **dynamic** layer: they are read constantly and
 churn with the working set. Synthetic and anchor entries are persisted to the

@@ -22,7 +22,7 @@ healer is gone; a lost entry now shows as a stalled stream, and that gap is
 what the next item hunts.
 
 ```
-E8 #4217 (done, proven set extends backwards) ─▶ C6 #4215 ─▶ S4 #4211, S5, BlockchainDB#86 (what slows blocks in hour one) ─▶ H8 #4216 (healing in staging, for dropped entries; with H1 #4193) ─▶ acceptance run #7
+E8 #4217 (done) ─▶ H1 #4193 (the cache: dispatch and healing read it, never the store) + E10 (staging in memory) ─▶ C6 #4215 ─▶ R2 #4219 (first-write reads) ─▶ H8 #4216 ─▶ acceptance run #7
 R #4219 ─▶ S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86   cost: first the reads that prove an absence, then the rest
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3 ─▶ D4       correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back
@@ -196,15 +196,14 @@ BVN executor's segment-store reads were ~95% such asks.
   pre-read (D7) and the chain's element-index check (D8) — and the dead
   `Transaction.Main` read of a v1 shape v2 never writes. Proof: the e2e
   duplicate assertion, the A/B golden run, `fallbackWalks` near zero.
-- **R3 — the readers that reach back, then no fallback.** The run found two:
-  dispatch reading a block's synthetics once their anchor is past the window
-  (442,652 hits, every key read once — carry the block's messages; C6 keeps
-  the leg under the window) and `getRootReceiptForBlock`'s binary search over
-  the root index chain (424,392 hits on 6,720 keys, 63 reads each — record
-  the root index position per block instead of searching). `SyntheticIndexIndex`
-  moves to the dynamic layer. `BeginDeep` exposed for the pending-transaction
-  loads. Then the permanent-shape fallback goes and D4 closes. Proof:
-  `ShallowMisses` zero for every permanent shape over 12 h.
+- **R3 — no fallback.** The run found exactly two readers reaching back, and
+  both are H1's: dispatch reading bodies by hash (442,652 hits, once each) and
+  the root-index search (424,392 hits on 6,720 keys). With the cache built
+  and read by dispatch, and staging in memory (E10), the executor has one
+  deep reader left — a signature for a pending transaction older than the
+  window — which takes `BeginDeep`. Then the permanent-shape fallback goes,
+  a history read is a counted failure, and D4 closes. Proof: `ShallowMisses`
+  zero for every permanent shape over 12 h; `historyReads` zero.
 
 Then, as cost work rather than correctness (each still proven by the suite's
 duplicate assertion and an A/B golden run — same envelope stream under two

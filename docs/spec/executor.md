@@ -156,55 +156,30 @@ The predecessor of this design re-read the ledger after every single delivery,
 which is where its O(n²) came from. One evaluation per stream per block reads
 the position once.
 
-### Restart
+### Sync
 
-**Staging survives a restart.** It is durable, and a node that has lost it has
-not lost performance — it has lost agreement.
+**Staging is a state that builds up after a node syncs with the protocol.** It
+is memory: what the node has received and not yet executed, the proofs waiting
+for their anchors, and the index ranges those proofs have proven. Nothing in
+it is written to the database. What is written is what executes, at the
+block's single commit, and `Delivered` — how far each stream has executed —
+is block output and is hashed with the rest.
 
-The reason is that staging decides what executes. A block delivers the
-contiguous run starting at `Delivered + 1`, taken from this block's arrivals
-*and from what is already held*; so two nodes holding different things execute
-different runs from the same block. Suppose peers hold 5 through 9 and a
-restarted node holds nothing. Number 4 arrives. The peers deliver 4 through 9;
-the restarted node delivers 4 alone. Different `Delivered`, different account
-state, different BPT root — a divergent block hash. That is a consensus fault,
-not a node that is briefly behind, and healing cannot repair it because healing
-is asynchronous and the divergence is immediate.
+Staging decides what executes: a block delivers the contiguous run starting at
+`Delivered + 1`, taken from this block's arrivals and from what is held. Two
+nodes holding different things execute different runs from the same block, so
+staging must be the same everywhere, and it is, because it is a deterministic
+function of the consensus stream. A node that starts from a snapshot or
+restarts does not begin with empty staging and hope: it **replays the
+committed stream** from its last executed block to the head, rebuilding
+staging exactly as its peers built it, and it executes nothing as a validator
+until it has caught up. Retention and the snapshot are what make that replay
+possible (consensus.md, "Retention"; #4205).
 
-So "empty on restart, refilled by healing" is not available. It would be sound
-only if staging were an optimisation, and it is not: it is an input to what the
-block does.
-
-The two halves are therefore both durable, and they are durable in different
-ways because they answer to different things:
-
-- **`Delivered` is block output and is hashed.** What a block executed is part
-  of what the block agreed. It lives in the stream's ledger, in an account, in
-  the BPT.
-- **What is HELD is durable and NOT hashed.** It is a deterministic function of
-  the consensus stream — every node is fed the same messages and holds the same
-  set — so it does not need to be hashed to be agreed. Hashing it is what forced
-  it into an account, and being in an account is what forced it to be bounded.
-
-Not hashing it is the whole of the fix. The bound existed because the held set
-was an array in a record rewritten and hashed every block; a record written per
-entry and outside the BPT has no such limit.
-
-Two consequences follow, and both are requirements rather than remarks:
-
-- **Staging is part of a snapshot.** A snapshot is what a new node starts from,
-  so a snapshot without staging produces exactly the divergence above on the
-  first block the new node executes.
-- **Nothing derived from staging is written into hashed state** unless it is
-  derived through execution. `Delivered` qualifies: it is what executed. A
-  convenience copy of "how far this stream has been sighted" does not — a node
-  restoring from an older snapshot would write a different number than its
-  peers, for a field nothing needs.
-
-The message bodies were never the problem: they are recorded when they are
-accepted, before the stream advances, and they are already durable. What was
-lost across a restart was only the INDEX of which numbers are held — which is
-precisely what the old bound discarded, and what this makes durable instead.
+Nothing derived from staging is written into hashed state unless it is derived
+through execution. `Delivered` qualifies. A copy of how far a stream has been
+sighted does not: it is per-node and transient, and it is exactly what a
+restarted node rebuilds.
 
 ### A block does not begin with an empty slate
 
@@ -288,16 +263,18 @@ one thing a per-block record must never do. An empty block has no entry.
    bounded only by the sanity horizon: about an hour of the source's
    production ahead of `Delivered`. Within it a message that cannot be dropped
    and cannot yet execute is kept.
-4. **A message that reaches staging has been accepted, and accepted means
-   recorded.** There is no state in which the node holds a message and reports
-   not holding it.
+4. **A message that reaches staging is held in memory until it executes or
+   is tossed.** Nothing is written until it executes: staging is the state
+   before any persistence.
 5. **Block state never feeds back into staging.** The only thing the executor
    reads from a stream's ledger is `Delivered` — what has been processed.
    Nothing else about an inbound stream lives there.
 6. **Staging is identical on every node.** It is fed only by consensus, so it
-   is a deterministic function of the same input everywhere; it is durable so a
-   restart cannot make it otherwise. A node whose staging differs from its
-   peers' will execute a different run and produce a different block hash.
+   is a deterministic function of the same input everywhere. A node that joins
+   or restarts syncs first — it replays the committed stream from its last
+   executed block and rebuilds staging as it goes — and executes nothing until
+   it has caught up. A node whose staging differs from its peers' will execute
+   a different run and produce a different block hash.
 7. **State changes only as a side effect of execution**, and become durable only
    at the block's single commit.
 8. **A ready message executes; a not-ready message executes nothing.**
@@ -426,30 +403,26 @@ A collection proof names the directory anchor it terminates in:
 carries the proof's root (`directoryAnchorMetadata`, filled on both dispatch
 paths), the same block index the destination records on each entry of its
 Directory anchor chain. On intake (`Block.intakeProof`, from `classify`) the
-proof is written to anchor staging under that block: `StagedProofs(source,
-block)` on the synthetic ledger, with `StagedProofBlocks(source)` naming the
-blocks waited on so snapshots enumerate them. `DirectoryAnchorBlock` on the
-anchor pool is the newest Directory anchor executed here, written as a
-`DirectoryAnchor` executes; a proof naming a block at or below it that the
-chain does not carry is disproved at intake. `validateStagedProofs` runs after
+proof is held in anchor staging, in memory, under its source and that block.
+`DirectoryAnchorBlock` on the anchor pool is the newest Directory anchor
+executed here, written as a `DirectoryAnchor` executes — execution output,
+like `Delivered`; a proof naming a block at or below it that the chain does
+not carry is disproved at intake. `validateStagedProofs` runs after
 the anchor group, over the Directory anchors the block executed. A validated
-proof's hashes go into the stream's proven set, the `synthetic-replica:<stream>`
-mirror chain (index to hash), which is excluded from the account hash
-(`isProvenSetChain`); a proof that contradicts an index already proven is
-refused (`errors.Conflict`). A proof for a span below the set's origin — the
-set was seeded from a later proof's state — records its elements and their
-indexes directly below the origin, so what it proves is proven wherever it
-lands and a later contradiction there is still a conflict. Outcomes are
+proof's hashes go into the stream's **proven set**, an in-memory map from index
+to hash; a proof that contradicts an index already proven is refused
+(`errors.Conflict`). A proof for a span below the set's earliest index extends
+the set backwards, so what it proves is proven wherever it lands and a later
+contradiction there is still a conflict. Outcomes are
 `accumulate_exec_staged_proofs_total{outcome}`: staged, validated, disproved,
 conflict, invalid.
 
 ### Collection — an unproven entry is held, never parked
 
 `SyntheticMessage.process`: an entry whose proof's anchor is not here yet is
-collected (`collect`): the message is stored under its own hash with the
-transaction it belongs to, and held in staging at its number (`execute.Hold`,
-first sighting wins) with its sequenced hash recorded in `Collected(source,
-number)`. Nothing else is recorded. The run builder never takes a collected
+collected (`collect`): the message and the transaction it belongs to are held
+in staging at the entry's number (first sighting wins), marked collected until
+a proof covers the hash. Nothing is written. The run builder never takes a collected
 number until the proven set covers that hash (`streamPosition.runnable`), and
 staging judges an arriving proof-less entry the same way (`syntheticIsProven`);
 an entry held by the sequenced layer carries no `Collected` mark because it
@@ -462,7 +435,7 @@ An entry at or below the delivered point is tossed on arrival
 a proven arrival is superseded — the arrival executes, the stream advances
 past the collected mark, and the collected entry is never consulted again.
 
-Staging is testable in isolation: `staging_sim_test.go` drives both stores
+Staging is testable in isolation: `staging_sim_test.go` drives both halves
 event by event — a package arrives, a Directory anchor executes, a block runs
 — against a source chain of real sequenced messages, with the sequenced layer
 replaced by a fake that only moves the stream position. Each rule above is one
@@ -512,11 +485,12 @@ from the ledger's `Delivered` and advanced in place, and at close **only
 held set — a copy is a snapshot, and a snapshot of what the node holds
 disagreeing with what the node holds is the whole defect.
 
-### Staging is a store, and this is what it answers
+### Staging is one structure, and this is what it answers
 
-Staging is one store per node, shared by everything that needs it. It is not the
-block's, and it is not the healer's: both ask the same store, because two views
-of what the node holds is exactly the disagreement that livelocked the network.
+Staging is one in-memory structure per node, shared by everything that needs
+it. It is not the block's, and it is not the healer's: both ask the same
+structure, because two views of what the node holds is exactly the
+disagreement that livelocked the network.
 
 A stream is named by the account whose ledger tracks it and the partition the
 messages come from. Anchors and synthetics between the same pair of partitions
@@ -526,8 +500,8 @@ synthetic's.
 
 | question | asked by | answer |
 |---|---|---|
-| hold this entry at index *n* | intake | recorded; the first sighting of an index wins |
-| hold this proof for anchor *a* | intake | recorded; validated when *a* executes, or now if it has |
+| hold this entry at index *n* | intake | held; the first sighting of an index wins |
+| hold this proof for anchor *a* | intake | held; validated when *a* executes, or now if it has |
 | is index *n* proven, and do we hold it | the executor, building a run | proven and held: executes; proven and missing: a gap; held and unproven: waits |
 | which proven indexes are missing, which held indexes are unproven | healing, after the block | the two kinds of gap, by index, oldest first |
 | which anchors are missing below the newest held | healing | requested at once |
@@ -554,40 +528,20 @@ delivery has not happened. Dropping a staged message for a block that is then
 discarded makes the node fetch back across the network something it still holds,
 which is the failure this whole change removes, reintroduced from the other end.
 
-### Staging in a snapshot
+### Staging and a snapshot
 
-A snapshot is what a new node starts from, so staging has to be in it — a node
-restored without it holds nothing and executes a shorter run than its peers on
-the first block where a gap closes.
+A snapshot carries executed state and nothing of staging. A node restored from
+one has the `Delivered` of every stream and none of what its peers hold above
+it, so it does not execute as a validator until it has replayed the committed
+stream from the snapshot's block to the head ("Sync"). Putting staging in the
+snapshot would only move the same problem: a snapshot is a moment, and the
+node needs the moment its peers are at.
 
-Two mechanics make that true, and both fail SILENTLY when they are not:
-
-- The records are **account state, not an index.** Snapshot collection walks
-  with indices ignored, so an index record is simply absent from the snapshot,
-  with nothing said about it.
-- A parameterised record is walked only if it can be **enumerated**, so each
-  carries a function listing its keys. Without one it is skipped, again
-  silently. Enumeration comes from a small set of the sources staging holds
-  anything from — bounded by the number of peers — and, for each, the numbers
-  between that stream's `Delivered` and how far it has been sighted.
-
-Both stores are collected: the entries synthetic staging holds, the **proven
-index ranges** above `Delivered`, and the proofs anchor staging holds by anchor
-sequence number. Only what is HELD is collected. A record below `Delivered` is
-a message that has executed; nothing consults it, and carrying every stream's
-whole history into every snapshot would restore state that answers no
-question. A node restored without any of the three diverges on the first block
-where a gap closes.
-
-A snapshot carries a chain's entries and not its hash index, and the hash index
-is how a node asks whether a Directory anchor or a proven hash is on a chain.
-Restore rebuilds every chain's index from its entries before the node runs;
-without that a restored node judges every proof inadmissible and every entry
-unproven, silently.
-
-Both mechanics are the kind that a test has to pin, because neither announces
-itself: the snapshot is written, the restore succeeds, and the node diverges a
-block later.
+One thing a snapshot must carry that is not an account's hashed state: a
+chain's entries are in it and its hash index is not, and the hash index is how
+a node asks whether a Directory anchor is on a chain. Restore rebuilds every
+chain's index from its entries before the node runs; without that a restored
+node judges every proof inadmissible, silently.
 
 ### What the stream ledger is for
 
@@ -840,6 +794,11 @@ that terminates in a Directory root the destination will hold. The receipt for
 the block itself is the normal case; a receipt for any later block also covers
 it, because the later root chain contains the earlier root, and that is what a
 healed proof is built under.
+
+**Everything a package needs comes from the cache** ([healing.md](healing.md),
+"The cache"): the bodies, the transactions they belong to, and the positions
+the proof is built from. Nothing is read from the historical record to build a
+package or its proof. Such a read is a failure, and it is counted.
 
 **The leader sends.** Every validator builds the packages; only the block's
 leader (consensus.md, "The DAG facts") submits them, through the dispatcher,

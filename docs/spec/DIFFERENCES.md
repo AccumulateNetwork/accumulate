@@ -145,9 +145,9 @@ reconcile-by-`Produced` path, which land with H8's request set.
 hash is appended to a chain once, from one site (database spec, "Duplication").
 
 **Code**: `Message.Main` is read for pending transactions for up to
-`PendingMajorBlocks` (14 major blocks) and by dispatch after the Directory
-anchor returns (`block_begin.go` dispatch reads), through an ordinary batch —
-`BeginDeep` exists in the adapter and nothing in `internal/` calls it. The
+`PendingMajorBlocks` (14 major blocks) through an ordinary batch —
+`BeginDeep` exists in the adapter and nothing in `internal/` calls it.
+(Dispatch's reads are H1's, not a deep reader's.) The
 observer reads the v1 `Transaction(h).Main` record for every pending txid
 (`observer_prod.go:121`), a permanent shape never written by v2.
 `clearActiveSignatures` writes `Signatures` of every signer in the book, absent
@@ -160,6 +160,33 @@ lost append would be swallowed as `ErrNotFound` at `transaction.go:582`.
 **Size**: medium; the deep-reader plumbing is the larger part. The
 single-site append is small and state-neutral when the state-cache append is
 the one skipped (the success path runs for every type that reaches it).
+
+---
+
+### E10. Staging is written to the database and snapshotted
+
+*[#4217](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4217), [#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
+
+**Spec** ([executor.md](executor.md), "Sync", invariants 4 and 6): staging is
+memory, the state before any persistence; a node that joins or restarts
+replays the committed stream from its last executed block and rebuilds it,
+executing nothing until it has caught up. A snapshot carries executed state
+only.
+
+**Code**: E8 built staging as durable, unhashed records — `Sequenced`,
+`Sighted`, `StagedSources`, `StagedProofs`, `StagedProofBlocks`, `Collected`
+and the `synthetic-replica:<stream>` chain — written at intake, enumerated for
+snapshots (`snapshot_anchor_staging_test.go`) and restored with them. Every
+one of those writes is a first write paying the absence proofs of D7 and D8,
+and the collected message body is written twice: at intake and again at
+execution. The spec text that justified durability ("Restart", "Staging in a
+snapshot") was written with E8, not agreed, and is withdrawn.
+
+**Size**: medium. The staging structures move to memory behind the same
+questions (`Hold`, proven set, anchor staging); the durable records and their
+snapshot enumeration go; a joining node's replay of the committed stream from
+its last executed block is #4205's restart recovery, which becomes the
+precondition for executing.
 
 ---
 
@@ -374,7 +401,12 @@ defect.
 **Code**: no cache on either side. The sequencer rebuilds message, receipt and
 signature from the database on every request (`getSynth`,
 `getDirectoryReceiptForBlock`): 35% of a source's CPU at hour one of run
-`20260904T012004Z`. One cache was built earlier in the BlockchainDB adapter and
+`20260904T012004Z`. Dispatch reads every body and companion by hash and
+searches the root index chain for the block's position
+(`sendSyntheticTransactionsForBlock`, `getRootReceiptForBlock`) — the reads
+the cache exists to prevent. Run `20260904T221627Z`: 442,652 body reads and
+424,392 root-index reads answered from history on eight BVN nodes in 40
+minutes, the only history reads that found anything. One cache was built earlier in the BlockchainDB adapter and
 removed — on the storage read path it answered 0.40% of lookups, because it
 cached the executor's reads rather than what healing asks for.
 

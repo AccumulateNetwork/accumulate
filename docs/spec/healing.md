@@ -49,8 +49,9 @@ Nothing at or below `Delivered` is a gap. An index further ahead than about an
 hour of the source's production is refused on arrival, not healed: a partition
 that far ahead is a fault to be dealt with elsewhere.
 
-A restart changes nothing. Staging is durable, so a restarted node holds what it
-held and has the gaps it had.
+A node that restarts syncs first: it replays the committed stream and rebuilds
+staging as its peers built it, so when it has caught up it holds what they
+hold and has the gaps they have (executor.md, "Sync").
 
 ### Who asks, and when
 
@@ -187,8 +188,8 @@ against its own state and receipt.
 
 Whether fragments must outlive the activation that fetched them is decided by
 measurement — how far back a destination actually has to reach against the
-per-request bound. If they must, they live where staging lives: durable and
-outside the account hash.
+per-request bound. If they must, they live where staging lives: in memory,
+outside anything hashed or written.
 
 ### The cache
 
@@ -204,8 +205,16 @@ two-level cycled cache in the dynamic layer and serves reads, not healing.
   synthetic chain or builds the anchor: the earliest point at which the entry
   is final, one write on a path the block already takes, a mirror of
   production.
+- **Read by dispatch and by healing.** The executor builds every package from
+  it (executor.md, "Dispatch"); the sequencer builds every bundle from it.
+  Neither reads the historical record for anything: **any read of the
+  historical record while building a package, a bundle or a proof is a
+  failure**, and it is counted.
 - **Contents.** The sequenced message and, when it has one, the transaction it
-  belongs to. No proofs; proofs are read from the chains.
+  belongs to; and, per block, the positions a proof is built from — the
+  block's span on the synthetic chain and its root chain position — so the
+  proof is built from the cache and the chains' recent entries, never by
+  searching.
 - **Cleared as gaps close.** Because it is indexed by partition and index, every
   entry the destination is known to have delivered can be dropped: the cache
   holds the entries in play, not a window of history. It is sized for the
@@ -288,10 +297,11 @@ hash is a deterministic answer and is counted as a miss.
 
 ### Landing
 
-The block's sort (`exec_stage.go`, `classify`) writes every sequenced entry to
-synthetic staging at its index and every collection proof to anchor staging
-under its anchor's Directory block index, bundles and packages alike, before the anchor
-group is evaluated. Nothing is recorded for an envelope. `stageRuns` then
+The block's sort (`exec_stage.go`, `classify`) places every sequenced entry in
+synthetic staging at its index and every collection proof in anchor staging
+under its anchor's Directory block index, bundles and packages alike, before
+the anchor group is evaluated. Nothing is written for an envelope, and nothing
+is written for an entry until it executes. `stageRuns` then
 computes runs from what is proven and held, and executed entries and the proven
 ranges at or below `Delivered` are released when the block commits.
 
