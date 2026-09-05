@@ -169,11 +169,17 @@ Staging decides what executes: a block delivers the contiguous run starting at
 `Delivered + 1`, taken from this block's arrivals and from what is held. Two
 nodes holding different things execute different runs from the same block, so
 staging must be the same everywhere, and it is, because it is a deterministic
-function of the consensus stream. A node that joins or restarts does not begin
-with empty staging and hope: it **replays the committed stream** from its last
-executed block to the head, rebuilding staging exactly as its peers built it,
-and it executes nothing as a validator until it has caught up. Retention is
-what makes that replay possible (consensus.md, "Retention"; #4205).
+function of the consensus stream.
+
+A node that joins or restarts does two things at once. It **pulls the state
+of the chains down from the running protocol** — the accounts and chains as
+of a block, verified against the root the protocol has anchored — and it
+**collects messages from consensus** into staging from the moment it starts
+listening. When the pulled state matches the protocol and staging holds what
+the node's peers hold above `Delivered` — anything collected before it started
+listening arrives the way any other gap does, through healing — the node picks
+up processing transactions at the next block, and not before. Until then it is
+not a validator; it is a node building the state to become one (#4205).
 
 Nothing derived from staging is written into hashed state unless it is derived
 through execution. `Delivered` qualifies. A copy of how far a stream has been
