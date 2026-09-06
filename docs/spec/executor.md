@@ -559,6 +559,15 @@ covers one chain, its element at position *i* is the entry at index *i*.
 | fewer entries than validated hashes; entries beyond the validated hashes | healing, on its cadence | a gap of entries; a gap of proof — the two spans it requests |
 | release through *n* | the block, on commit | every entry at or below *n* is dropped; proven ranges below *n* are dropped |
 
+What it holds is visible: per stream, the entries held and their encoded
+bytes are gauges (`accumulate_staging_held_entries`,
+`accumulate_staging_held_bytes`, labelled by ledger and source), updated when a
+block commits, and a stream holding more than several blocks' worth
+(`heldAlarmEntries`) is reported once and its clearing once (#4233). Staging
+has no byte budget of its own — it holds what consensus accepted and execution
+has not run, and what bounds it is the Directory's anchor latency, which is
+what a growing gauge points at.
+
 Four rules govern it, and each of them is a defect that has actually happened:
 
 **The first sighting of a number wins.** A number can be offered twice — a block

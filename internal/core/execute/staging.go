@@ -69,6 +69,8 @@ type Held struct {
 	Companion messaging.Message
 	Collected bool
 	Hash      [32]byte // the sequenced message's hash, what a proof proves
+
+	size int // the message's encoded size, measured once when it is held
 }
 
 // MaxStageSpan bounds how far above Delivered a stage grows: a number beyond
@@ -84,6 +86,12 @@ type streamState struct {
 	entries   []*Held
 	validated [][32]byte
 	sighted   uint64 // the highest number ever held, executed or not
+
+	// held and bytes are what the stream holds, for the gauges (#4233);
+	// alarmed is whether the backlog has been reported and not yet cleared.
+	held    int
+	bytes   int
+	alarmed bool
 }
 
 var zeroHash [32]byte
@@ -158,7 +166,7 @@ func (st *streamState) release(n uint64, s *Staging) {
 	drop := n - st.delivered
 	if drop > uint64(len(st.entries)) {
 		for _, h := range st.entries {
-			s.unindex(h)
+			st.forget(h, s)
 		}
 		// Released pointers are cleared, not merely cut off: a truncated
 		// slice keeps its backing array, and every *Held in it would stay
@@ -168,7 +176,7 @@ func (st *streamState) release(n uint64, s *Staging) {
 		st.entries = compactHeld(st.entries[:0])
 	} else {
 		for _, h := range st.entries[:drop] {
-			s.unindex(h)
+			st.forget(h, s)
 		}
 		clear(st.entries[:drop])
 		st.entries = compactHeld(st.entries[drop:])
@@ -179,6 +187,22 @@ func (st *streamState) release(n uint64, s *Staging) {
 		st.validated = compactHashes(st.validated[drop:])
 	}
 	st.delivered = n
+}
+
+// keep counts a newly held entry; forget uncounts and unindexes a dropped
+// one. The caller holds s.mu.
+func (st *streamState) keep(h *Held) {
+	st.held++
+	st.bytes += h.size
+}
+
+func (st *streamState) forget(h *Held, s *Staging) {
+	if h == nil {
+		return
+	}
+	st.held--
+	st.bytes -= h.size
+	s.unindex(h)
 }
 
 // index and unindex keep the by-ID and by-transaction lookups in step with
@@ -686,14 +710,16 @@ func (t *StagingTxn) Commit() {
 		}
 		return st
 	}
+	touched := map[string]bool{}
 	for k, m := range t.validated {
 		st := stream(k)
 		for n, h := range m {
 			st.validate(n, h)
 			if e := st.entry(n); e != nil && e.Collected && e.Hash != h {
 				// Contradicted by the proof: not the stream's entry
-				s.unindex(e)
+				st.forget(e, s)
 				st.entries[n-st.delivered-1] = nil
+				touched[k] = true
 			}
 		}
 	}
@@ -706,8 +732,11 @@ func (t *StagingTxn) Commit() {
 			if v, ok := st.hash(n); ok && h.Collected && v != h.Hash {
 				continue
 			}
+			h.size = heldSize(h)
 			st.hold(n, h)
+			st.keep(h)
 			s.index(h)
+			touched[k] = true
 		}
 	}
 	for k, n := range t.sighted {
@@ -735,7 +764,11 @@ func (t *StagingTxn) Commit() {
 	for k, n := range t.released {
 		if st := s.streams[k]; st != nil {
 			st.release(n, s)
+			touched[k] = true
 		}
+	}
+	for k := range touched {
+		s.streams[k].observe(k)
 	}
 	t.reset()
 }
