@@ -8,6 +8,7 @@ package block
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -164,6 +165,28 @@ func (b *Block) proofValidated(source *url.URL, proof *protocol.AnnotatedReceipt
 	}
 	mExecStagedProofs.WithLabelValues("validated").Inc()
 	return nil
+}
+
+// noteAnchorDelivered takes an anchor copy's word on what its source has
+// executed of this partition's anchor stream to it, and releases those
+// anchors from the producer cache when the block commits (healing spec, "The
+// cache"). Called where the copy's signature is recorded, so the signer has
+// already been checked as a current validator of the source and the signature
+// verified (BlockAnchor.check): the word is taken on the signer's authority,
+// as a synthetic's Delivered is. A produced anchor goes to every destination
+// under one number, so the cache releases it when the last of them has said
+// so: one destination for a BVN, every partition for the Directory.
+func noteAnchorDelivered(ctx *MessageContext, seq *messaging.SequencedMessage, delivered uint64) {
+	if ctx.Block == nil || ctx.Block.cache == nil || seq == nil || seq.Source == nil || delivered == 0 {
+		return
+	}
+	fanout := 1
+	if ctx.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory {
+		if g := ctx.GetActiveGlobals(); g != nil && g.Network != nil {
+			fanout = len(g.Network.Partitions)
+		}
+	}
+	ctx.Block.cache.ReleaseAnchors(seq.Source, delivered, fanout)
 }
 
 // directoryAnchorBlock is the Directory block of the newest Directory anchor

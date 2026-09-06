@@ -881,7 +881,13 @@ has executed, which tells the destination what it may drop from its own
 producer cache (healing.md, "The cache"). The proof's hashes
 are the destination's entries in order, so the proof's index is the sequence
 number and the stage aligns the two by position. A group of one is sent with an
-individual receipt instead. At the destination the members go to synthetic
+individual receipt instead. **Each anchor copy carries the same word for the
+anchor stream**: `BlockAnchor.Delivered` is the sender's `Delivered` on the
+destination's anchor stream to it, set beside the signature (the signature is
+over the sequenced anchor, not the copy) and taken at the destination where
+the copy's validator signature is recorded, so the destination's cache drops
+the anchors it produced that the sender has executed (healing.md, "The
+cache"). At the destination the members go to synthetic
 staging by index and the proof to anchor staging by its anchor's sequence
 number (Collection), whichever arrives first.
 

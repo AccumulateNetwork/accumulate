@@ -40,7 +40,9 @@ type BlockAnchor struct {
 	Signature protocol.KeySignature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Anchor    Message               `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
 	// Proof authorizes a healed anchor with a collection proof under a known directory root instead of a validator signature quorum (#4056).
-	Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof"`
+	Proof *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof"`
+	// Delivered is the sender's Delivered on the destination's anchor stream to the sender; the destination may drop the anchors it produced at or below it from its cache.
+	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered"`
 	extraData []byte
 }
 
@@ -238,6 +240,7 @@ func (v *BlockAnchor) Copy() *BlockAnchor {
 	if v.Proof != nil {
 		u.Proof = (v.Proof).Copy()
 	}
+	u.Delivered = v.Delivered
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -597,6 +600,9 @@ func (v *BlockAnchor) Equal(u *BlockAnchor) bool {
 	case v.Proof == nil || u.Proof == nil:
 		return false
 	case !((v.Proof).Equal(u.Proof)):
+		return false
+	}
+	if !(v.Delivered == u.Delivered) {
 		return false
 	}
 
@@ -1004,6 +1010,7 @@ var fieldNames_BlockAnchor = []string{
 	2: "Signature",
 	3: "Anchor",
 	4: "Proof",
+	5: "Delivered",
 }
 
 func (v *BlockAnchor) MarshalBinary() ([]byte, error) {
@@ -1025,6 +1032,9 @@ func (v *BlockAnchor) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Proof == nil) {
 		writer.WriteValue(4, v.Proof.MarshalBinary)
+	}
+	if !(v.Delivered == 0) {
+		writer.WriteUint(5, v.Delivered)
 	}
 
 	_, _, err := writer.Reset(fieldNames_BlockAnchor)
@@ -2120,6 +2130,9 @@ func (v *BlockAnchor) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Proof = x
 	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.Delivered = x
+	}
 
 	seen, err := reader.Reset(fieldNames_BlockAnchor)
 	if err != nil {
@@ -2733,6 +2746,7 @@ func init() {
 		encoding.NewTypeField("signature", "protocol.KeySignature"),
 		encoding.NewTypeField("anchor", "Message"),
 		encoding.NewTypeField("proof", "protocol.AnnotatedReceipt"),
+		encoding.NewTypeField("delivered", "uint64"),
 	}, "BlockAnchor", "blockAnchor")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -2870,6 +2884,7 @@ func (v *BlockAnchor) MarshalJSON() ([]byte, error) {
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Anchor    *encoding.JsonUnmarshalWith[Message]               `json:"anchor,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		Delivered uint64                                             `json:"delivered,omitempty"`
 		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -2881,6 +2896,9 @@ func (v *BlockAnchor) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Proof == nil) {
 		u.Proof = v.Proof
+	}
+	if !(v.Delivered == 0) {
+		u.Delivered = v.Delivered
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -3250,12 +3268,14 @@ func (v *BlockAnchor) UnmarshalJSON(data []byte) error {
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Anchor    *encoding.JsonUnmarshalWith[Message]               `json:"anchor,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		Delivered uint64                                             `json:"delivered,omitempty"`
 		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	u.Anchor = &encoding.JsonUnmarshalWith[Message]{Value: v.Anchor, Func: UnmarshalMessageJSON}
 	u.Proof = v.Proof
+	u.Delivered = v.Delivered
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -3272,6 +3292,7 @@ func (v *BlockAnchor) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Proof = u.Proof
+	v.Delivered = u.Delivered
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

@@ -333,17 +333,20 @@ cleared as the destination delivers; a miss is refused and counted.
 **Code**: built (`internal/core/synthcache`). Dispatch and the sequencer's
 answers are built from it alone; the e2e suite fails on a dispatch miss.
 Synthetic entries are released by the destination's `Delivered`, carried on
-every dispatched message and package (2026-09-06). Remaining: the signal
-travels only with synthetic dispatch, so a stream whose reverse direction is
-idle shrinks only at the horizon; produced anchors are still held by the
-horizon alone (the anchor cache is one transaction per block, small); the v1
+every dispatched message and package (2026-09-06); produced anchors by the
+`Delivered` carried on every anchor copy, once every destination has spoken
+(#4232); blocks with nothing left to prove are dropped; the horizon backstop
+is ten minutes. Remaining: a synthetic stream whose reverse direction is idle
+shrinks only at the horizon (anchors say nothing about synthetics); the v1
 simulator's sequencer still reads the store, since the v1 executor has no
 cache; the Directory receipt a block was dispatched under is
 the only anchor a bundle can be proven under (`ProveAgainstAnchor` for any
 other is `NotReady`), which is H3. The requester exists (H8) and asks the
-sequencer by span.
+sequencer by span. The stage bound for a collected entry (`maxSequenceAhead`)
+is a constant, not the source's produced count: the destination learns that
+count on no wire path (#4243).
 
-**Size**: small; the delivery signal is the open design point.
+**Size**: small.
 
 ---
 

@@ -230,11 +230,23 @@ func (c *Conductor) sendAnchorForLastBlock(e execute.WillBeginBlock, batch *data
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// Every copy carries this partition's Delivered on the destination's
+	// anchor stream to it: the latest of the destination's anchors executed
+	// here, which tells the destination what it may drop from its producer
+	// cache (healing spec, "The cache"). The anchor ledger is execution
+	// output, read once per send.
+	var anchors *protocol.AnchorLedger
+	err = batch.Account(c.Url(protocol.AnchorPool)).Main().GetAs(&anchors)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load anchor ledger: %w", err)
+	}
+	delivered := func(dst *url.URL) uint64 { return anchors.Partition(dst).Delivered }
+
 	switch c.Partition.Type {
 	case protocol.PartitionTypeDirectory:
 		// DN -> all partitions
 		for _, part := range c.Globals.Load().Network.Partitions {
-			err = c.sendBlockAnchor(e.Context, anchor, sequenceNumber, part.ID)
+			err = c.sendBlockAnchor(e.Context, anchor, sequenceNumber, part.ID, delivered(protocol.PartitionUrl(part.ID)))
 			if err != nil {
 				return errors.UnknownError.WithFormat("send anchor: %w", err)
 			}
@@ -242,7 +254,7 @@ func (c *Conductor) sendAnchorForLastBlock(e execute.WillBeginBlock, batch *data
 
 	case protocol.PartitionTypeBlockValidator:
 		// BVN -> DN
-		err = c.sendBlockAnchor(e.Context, anchor, sequenceNumber, protocol.Directory)
+		err = c.sendBlockAnchor(e.Context, anchor, sequenceNumber, protocol.Directory, delivered(protocol.DnUrl()))
 		if err != nil {
 			return errors.UnknownError.WithFormat("send anchor: %w", err)
 		}
@@ -250,7 +262,7 @@ func (c *Conductor) sendAnchorForLastBlock(e execute.WillBeginBlock, batch *data
 	return nil
 }
 
-func (c *Conductor) sendBlockAnchor(ctx context.Context, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
+func (c *Conductor) sendBlockAnchor(ctx context.Context, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string, delivered uint64) error {
 	destination := protocol.PartitionUrl(destPart)
 	// Info, not Debug, and with the sequence number: tracing one lost anchor
 	// signature (#4111) requires seeing every validator's send for a given seq.
@@ -269,6 +281,15 @@ func (c *Conductor) sendBlockAnchor(ctx context.Context, anchor protocol.AnchorB
 	}.PrepareAnchorSubmission(ctx, anchor, sequenceNumber, destination)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
+	}
+
+	// The signature is over the sequenced anchor, not the copy, so the
+	// Delivered rides beside it: the destination takes it on the signer's
+	// authority, as it takes a synthetic's (executor spec, "Dispatch")
+	for _, m := range env.Messages {
+		if blk, ok := m.(*messaging.BlockAnchor); ok {
+			blk.Delivered = delivered
+		}
 	}
 
 	// Submit it

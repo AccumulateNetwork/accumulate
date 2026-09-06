@@ -105,6 +105,9 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) err
 			// A system error occurred
 			return errors.UnknownError.Wrap(err)
 		}
+		if ctx.blockAnchor.Proof == nil {
+			noteAnchorDelivered(ctx.MessageContext, ctx.sequenced, ctx.blockAnchor.Delivered) // the signer is a verified validator here (check)
+		}
 	}
 
 	// Add the signature to the signature chain

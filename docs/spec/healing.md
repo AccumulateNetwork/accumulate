@@ -250,13 +250,20 @@ two-level cycled cache in the dynamic layer and serves reads, not healing.
   latest sequence number the sender has executed *from* that destination. A
   partition that reads it knows the sender will never ask for anything at or
   below it, and drops those entries, and the block segments that held them,
-  from its cache at once. So the cache holds the entries in play — what the
-  other side has not yet said it executed — not a window of history. A stream
-  with no reverse traffic hears nothing and falls back to the horizon, which
-  is the backstop, not the mechanism. The value is taken only from a message
-  that has validated (its proof anchored, or the message executing): a
-  collected entry's word is not trusted, since dropping what a source still
-  needs would leave it a gap no one can fill.
+  from its cache at once; a block with nothing left to prove goes with them.
+  **Every anchor copy carries the same word for the anchor stream**: the
+  sender's `Delivered` on the destination's anchor stream to it, and the
+  destination drops the anchors it produced at or below it — once every
+  destination it anchors to has said so, since one anchor goes to all of them
+  under one number: one for a BVN, every partition for the Directory. Anchors
+  say nothing about synthetics; each stream is released by its own word. So
+  the cache holds the entries in play — what the other side has not yet said
+  it executed — not a window of history. A stream with no reverse traffic
+  hears nothing and falls back to the horizon, which is the backstop, not the
+  mechanism. The value is taken only from a message whose signer is a current
+  validator of the sender (a synthetic about to execute, an anchor copy whose
+  signature is recorded): a collected entry's word is not trusted, since
+  dropping what a source still needs would leave it a gap no one can fill.
 - **Never served from storage.** Every entry is also persisted to the
   permanent layer through execution; that is the record, not a fallback. A
   request for an entry the cache does not hold is refused and **counted as a
@@ -384,9 +391,14 @@ Dispatch (`sendSyntheticTransactionsForBlock`) and the sequencer service
 `NotFound` and counted (`accumulate_synthcache_misses_total{kind}`). Released by
 the destination's `Delivered` carried on every dispatched `SyntheticProof`
 and `SyntheticMessage` (`Txn.Release` at the destination's block close, applied
-at commit: the stream's entries at or below it, and the block segments that
-held them, go; `accumulate_synthcache_released_total`); a horizon of blocks
-(`DefaultHorizon`, an hour) remains as the backstop for a stream with no
+at commit: the stream's entries at or below it, the block segments that held
+them, and a block left with nothing to prove, go;
+`accumulate_synthcache_released_total`), and on every dispatched
+`BlockAnchor` for the anchor stream (`Txn.ReleaseAnchors`, taken where the
+copy's validator signature is recorded, applied at commit once every
+destination of the anchor has spoken; `anchors_released_total`); a block that
+produced nothing is dropped when it is dispatched. A horizon of blocks
+(`DefaultHorizon`, ten minutes) remains as the backstop for a stream with no
 reverse traffic. At the first block an executor opens, the cache is seeded from the
 node's own chains by position for the recent blocks whose anchors have not
 returned (`seedSynthCache`): genesis produces through another executor, and a
