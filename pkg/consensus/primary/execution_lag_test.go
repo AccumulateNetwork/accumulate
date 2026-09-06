@@ -106,3 +106,43 @@ func TestCreateHeader_MetersTheBacklog(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, header.Payload, 1)
 }
+
+// The byte bound is per block, not per header: a block executes the headers
+// of every validator over two rounds, so each header gets one share of
+// MaxBlockBytes, and eight validators cannot each fill a header to
+// MaxHeaderBytes (#4230). A single validator's share is the whole block,
+// still capped by MaxHeaderBytes.
+func TestCreateHeader_BudgetIsPerBlock(t *testing.T) {
+	one := types.NewBatch([][]byte{make([]byte, 300)}).Size()
+	require.Equal(t, one, headerBudget(100*one, 16*one, 8), "eight validators, two rounds: a sixteenth of the block")
+	require.Equal(t, 8*one, headerBudget(100*one, 16*one, 1), "one validator: half the block, two rounds")
+	require.Equal(t, 3*one, headerBudget(3*one, 16*one, 1), "and never more than the header cap")
+	require.Equal(t, 1, headerBudget(3*one, 1, 8), "a share smaller than a byte still moves one batch")
+
+	// Through the header builder: eight validators, a block of sixteen
+	// batches, so one batch per header where the header cap alone allowed
+	// all five.
+	var validators []*testValidator
+	for i := 0; i < 8; i++ {
+		validators = append(validators, newTestValidator(t))
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+	w := worker.New(worker.Config{ID: 1, Partition: "test", MaxStoredBatchBytes: 1 << 24}, nil)
+	var digests []types.BatchDigest
+	for i := 0; i < 5; i++ {
+		b := types.NewBatch([][]byte{make([]byte, 300)})
+		b.Transactions[0][0] = byte(i)
+		require.NoError(t, w.StoreBatch(b))
+		digests = append(digests, b.Digest())
+	}
+	w.RequeueBatches(digests)
+
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv, MaxHeaderBytes: 100 * one, MaxBlockBytes: 16 * one}, committee, nil, d, []*worker.Worker{w})
+	for i := 0; i < 5; i++ {
+		header, err := p.CreateHeader()
+		require.NoError(t, err)
+		require.Len(t, header.Payload, 1, "header %d carries one share of the block", i)
+	}
+	require.Empty(t, w.AvailableBatches())
+}

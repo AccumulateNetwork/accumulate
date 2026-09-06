@@ -99,7 +99,25 @@ type Config struct {
 	// the executor takes many seconds over. Zero means
 	// DefaultMaxHeaderBytes.
 	MaxHeaderBytes int
+
+	// MaxBlockBytes bounds the batches one block carries. A block executes
+	// every validator's header over roundsPerBlock rounds, so each header's
+	// budget is its share, MaxBlockBytes / (roundsPerBlock x validators),
+	// capped by MaxHeaderBytes: N validators cannot each fill a header
+	// (#4230). Zero means DefaultMaxBlockBytes.
+	MaxBlockBytes int
 }
+
+// roundsPerBlock is the rounds of headers one committed leader group spans:
+// Bullshark commits a leader every other round, and the leader's uncommitted
+// causal history is its own round and the one before.
+const roundsPerBlock = 2
+
+// DefaultMaxBlockBytes is the bound on the batches one block carries, whatever
+// the number of validators. It is a few block intervals of the executor's
+// capacity: with eight validators each header gets 64 KiB, with four 128 KiB,
+// and a single validator's header is still capped by DefaultMaxHeaderBytes.
+const DefaultMaxBlockBytes = 1 << 20
 
 // DefaultMaxExecutionLag is the bound, in blocks, on how far execution may
 // lag the DAG's commits before proposal stops carrying batches: a few seconds
@@ -121,6 +139,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MaxHeaderBytes <= 0 {
 		c.MaxHeaderBytes = DefaultMaxHeaderBytes
+	}
+	if c.MaxBlockBytes <= 0 {
+		c.MaxBlockBytes = DefaultMaxBlockBytes
 	}
 	if c.RoundAdvanceInterval <= 0 {
 		c.RoundAdvanceInterval = DefaultRoundAdvanceInterval

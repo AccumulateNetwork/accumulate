@@ -122,6 +122,7 @@ type Config struct {
 	// backlog one header may carry back. Zero uses the primary's defaults.
 	MaxExecutionLag int
 	MaxHeaderBytes  int
+	MaxBlockBytes   int // per block, shared by the validators' headers (#4230)
 }
 
 // execCost reports the per-transaction execution cost for one partition.
@@ -330,6 +331,7 @@ func New(cfg Config) (*Sim, error) {
 			BatchCollectTimeout: cfg.BatchCollect,
 			MaxExecutionLag:     cfg.MaxExecutionLag,
 			MaxHeaderBytes:      cfg.MaxHeaderBytes,
+			MaxBlockBytes:       cfg.MaxBlockBytes,
 		}, committee, s.hosts[val], pss[val])
 		if err != nil {
 			return nil, err

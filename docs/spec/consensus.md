@@ -92,6 +92,12 @@ So a validator holds batches in four places, for four reasons:
    the backlog into one header made one block the executor took ten to
    seventeen seconds over, which re-crossed the bound and refused user work
    again — an oscillation, not a recovery (run `20260905T144928Z`).
+   **The bound is per block, not per header.** A block executes every
+   validator's header over two rounds, so a per-header cap alone lets N
+   validators carry N × 2 × `MaxHeaderBytes` in one block — 4 MiB for a
+   Directory of eight. Each header therefore gets its share of a per-block
+   budget, `MaxBlockBytes / (2 × validators)`, capped by `MaxHeaderBytes`; a
+   block is bounded whatever the number of validators.
 10. **A refusal says why.** Refusing for a full own store (consensus is not
    committing this validator's batches) and refusing for execution lag (commits
    are fine, the executor is behind) are the same `NotReady` to the submitter
@@ -114,6 +120,7 @@ Per partition, per node:
 | retention | `DefaultMaxRetainedBatchBytes` = 32 MB | the same |
 | inbound queue | `DefaultMaxInboundBatchBytes` = 32 MB | one queue per partition |
 | pending | `MaxPendingSize` = 10 MB, `MaxPendingCount` = 10,000 | per worker |
+| a block's batches | `DefaultMaxBlockBytes` = 1 MiB | `headerBudget`: budget / (2 × validators), capped by `DefaultMaxHeaderBytes` = 256 KiB, floor one batch |
 
 A node running a Directory and a BVN validator holds two of each. The
 per-worker share must include the wire buffer a stored batch aliases
