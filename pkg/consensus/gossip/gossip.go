@@ -303,7 +303,7 @@ func (g *GossipLayer) publish(ctx context.Context, pattern string, data []byte) 
 		return fmt.Errorf("topic not joined: %s", g.topics.TopicName(pattern))
 	}
 	if peers := topic.ListPeers(); len(peers) == 0 {
-		slog.Info("Publishing to topic with no peers",
+		slog.Debug("Publishing to topic with no peers",
 			"topic", g.topics.TopicName(pattern),
 			"partition", g.partition)
 	}
@@ -388,10 +388,12 @@ func (g *GossipLayer) handleHeaderMessage(data []byte) {
 			"partition", g.partition)
 		return
 	}
-	slog.Info("Received header via gossip",
-		"partition", g.partition,
-		"round", header.Round,
-		"author", fmt.Sprintf("%x", header.Author[:8]))
+	if debugEnabled() {
+		slog.Debug("Received header via gossip",
+			"partition", g.partition,
+			"round", header.Round,
+			"author", fmt.Sprintf("%x", header.Author[:8]))
+	}
 
 	select {
 	case g.headers <- header:
@@ -399,6 +401,12 @@ func (g *GossipLayer) handleHeaderMessage(data []byte) {
 		slog.Warn("Header channel full, dropping message",
 			"partition", g.partition)
 	}
+}
+
+// debugEnabled gates the construction of per-message log arguments on the
+// level, so a line that is not emitted costs nothing (#4231).
+func debugEnabled() bool {
+	return slog.Default().Enabled(context.Background(), slog.LevelDebug)
 }
 
 // handleVoteMessage deserializes and queues a vote message.
@@ -410,10 +418,12 @@ func (g *GossipLayer) handleVoteMessage(data []byte) {
 			"partition", g.partition)
 		return
 	}
-	slog.Info("Received vote via gossip",
-		"partition", g.partition,
-		"round", vote.Round,
-		"author", fmt.Sprintf("%x", vote.Author[:8]))
+	if debugEnabled() {
+		slog.Debug("Received vote via gossip",
+			"partition", g.partition,
+			"round", vote.Round,
+			"author", fmt.Sprintf("%x", vote.Author[:8]))
+	}
 
 	select {
 	case g.votes <- vote:

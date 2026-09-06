@@ -499,11 +499,13 @@ func (n *Node) CollectBatches(ctx context.Context, cert *types.Certificate) ([]*
 				// waiting for something this node deliberately retired.
 				if n.executedBefore(entry.Digest, cert) {
 					metrics.CertificatesRedeliveredTotal.Inc()
-					slog.Info("Skipping re-delivered certificate: already executed here",
-						"partition", n.config.Partition,
-						"round", cert.Header.Round,
-						"cert", cert.Digest().String()[:16],
-						"digest", entry.Digest.String()[:16])
+					if slog.Default().Enabled(ctx, slog.LevelDebug) {
+						slog.Debug("Skipping re-delivered certificate: already executed here",
+							"partition", n.config.Partition,
+							"round", cert.Header.Round,
+							"cert", cert.Digest().String()[:16],
+							"digest", entry.Digest.String()[:16])
+					}
 					return nil, ErrAlreadyExecuted
 				}
 				if missing == 0 {

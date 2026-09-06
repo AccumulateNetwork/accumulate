@@ -265,7 +265,7 @@ func (s *CertSyncer) RequestRounds(rounds []types.Round) {
 			"error", err, "start", rounds[0], "end", rounds[len(rounds)-1])
 		return
 	}
-	slog.Info("Requested certificates by round",
+	slog.Debug("Requested certificates by round",
 		"start", rounds[0], "end", rounds[len(rounds)-1], "count", len(rounds))
 }
 
@@ -330,7 +330,7 @@ func (s *CertSyncer) sendBatchRequest() {
 		RequestID: s.nextReqID.Add(1),
 	}
 
-	slog.Info("Requesting missing certificates",
+	slog.Debug("Requesting missing certificates",
 		"count", len(toRequest))
 
 	// Skip if no gossip layer available
@@ -433,7 +433,7 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 			// A round request that matches nothing means the requester is
 			// asking for rounds we do not have — that is load-bearing
 			// diagnosis for round catch-up (#4057), not noise.
-			slog.Info("Sync request matched nothing",
+			slog.Debug("Sync request matched nothing",
 				"rounds", len(req.Rounds),
 				"firstRound", req.Rounds[0],
 				"lastRound", req.Rounds[len(req.Rounds)-1],
@@ -459,7 +459,7 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 		return
 	}
 
-	slog.Info("Sent sync response",
+	slog.Debug("Sent sync response",
 		"certificates", len(certs),
 		"missing", len(missing),
 		"rounds", len(req.Rounds),
@@ -528,7 +528,7 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 		s.certificatesRecv.Add(1)
 	}
 
-	slog.Info("Received sync response",
+	slog.Debug("Received sync response",
 		"certificates", len(resp.Certificates),
 		"requestID", resp.RequestID)
 }
@@ -647,7 +647,7 @@ func (s *CertSyncer) rescanPendingCertificates() {
 	s.inFlightMu.Unlock()
 
 	if len(toRequest) > 0 {
-		slog.Info("Re-requesting missing certificates from pending rescan",
+		slog.Debug("Re-requesting missing certificates from pending rescan",
 			"count", len(toRequest),
 			"totalPending", s.pending.Size())
 		s.RequestMissing(toRequest)

@@ -701,7 +701,7 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 		certBatches, err := s.node.CollectBatches(s.ctx, cert)
 		if err != nil {
 			if stderrors.Is(err, consensus.ErrAlreadyExecuted) {
-				slog.Info("Ignoring re-delivered certificate",
+				slog.Debug("Ignoring re-delivered certificate",
 					"round", cert.Header.Round,
 					"partition", s.config.Partition.ID)
 				continue
