@@ -289,6 +289,10 @@ this.
 
 ## Plan (ranked by expected gain; each says what it breaks)
 
+Issues: umbrella #4258 (this review in full). P1 #4249 + BlockchainDB#88; P2 #4250;
+P3 #4236 + #4251; P4 #4252; P5 #4149; P6 #4253 (spec decision); P7 #4254; P8 #4255;
+P9 #4256; P10 #4257; P11 #4248 (corrected).
+
 | # | change | where | expected gain | breaks / needs |
 |---|---|---|---|---|
 | P1 | **Store misses stop walking history.** BlockchainDB: keep dyna-history blooms (or a resident key filter) so a miss is memory-only; add an fsync-duration histogram. Accumulate: `getCurrent` routes write-once shapes to perm first; a per-block negative cache; drop the dead `Transaction.Main` probe; no `checkStatus` for block-produced messages; `unique` probe only where a duplicate is possible; `GetBptRootHash` must not run `UpdateBPT` twice. | BlockchainDB (issue there) + `internal/database`, `pkg/database/keyvalue/bcdb`, `internal/core/execute/v2/block` | −2.2 of 3.2 s store-read CPU (≈ −20% executor CPU), −35–55 k syscalls/s; the block-time tail is mostly this | store memory for blooms (~19 KB per dyna segment); routing must match the key classifier exactly or reads go stale |

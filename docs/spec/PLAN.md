@@ -381,6 +381,19 @@ constant because no wire path tells a destination the source's produced count
 (H1); a stranded stream leaves that state only by sync. Acceptance is the
 twelve-hour soak on BlockchainDB at 500 tps, not the tests.
 
+## Throughput and latency review (2026-09-06)
+
+[docs/reviews/throughput-latency-2026-09-06.md](../reviews/throughput-latency-2026-09-06.md)
+— why 500 tps does not hold on the acceptance soak and why latency is high.
+Consensus makes a block a second; a loaded block executes in ~1.4 s because
+the executor waits on ~31 k store lookups per block (dyna-history walks with
+blooms freed), runs serially, executes eleven messages and writes 73 records
+per user transaction; at eight blocks behind a validator refuses its users
+with no hysteresis and stays refusing 52–58% of the time. Cross-partition
+latency is two Directory round trips plus lag. Memory is bounded. Umbrella
+#4258; P1 #4249/BlockchainDB#88, P2 #4250, P3 #4236/#4251, P4 #4252, P5 #4149,
+P6 #4253 (spec decision for Paul), P7 #4254, P8 #4255, P9 #4256, P10 #4257.
+
 ## Simulation first
 
 Every failure a soak finds gets an in-process reproduction before its fix, and
