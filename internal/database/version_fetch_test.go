@@ -74,10 +74,10 @@ func TestPut_FirstWriteReadsNothing(t *testing.T) {
 	child := batch.Begin(true)
 	require.NoError(t, child.Account(foo).Main().Put(&protocol.UnknownSigner{Url: foo, Version: 2}))
 	require.Equal(t, int64(1), store.gets.Load(), "the child's first write read nothing: %v", store.keys)
-	// Committing the child merges the account's chain set: one more merge
-	// read, not an existence check
+	// Committing the child touched no chain, so the account's chains index
+	// is not read to be merged into (#4244): nothing to add, nothing read
 	require.NoError(t, child.Commit())
-	require.Equal(t, int64(2), store.gets.Load(), "reads: %v", store.keys)
+	require.Equal(t, int64(1), store.gets.Load(), "reads: %v", store.keys)
 }
 
 // The conflict check between concurrent children still works without the

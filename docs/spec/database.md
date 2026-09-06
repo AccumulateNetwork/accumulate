@@ -139,6 +139,12 @@ them is the writer's bug, not the chain's to absorb.
   own records (mark points, elements, element indexes) is the store's
   business; mark points are in the dynamic layer because queries reach them
   at any age, and a missing one is an error, never an empty state.
+- **A record is written when it changes.** An index that already holds what
+  a block would add to it is not rewritten to hold it again: an account's
+  `Chains` index lists a chain once, when the chain is first appended to,
+  and a block that appends to chains the index lists writes no `Chains`
+  record. The same holds for any collection a commit "ensures" — the check
+  is a read of the record in hand, and the write happens only on a change.
 - **The head is Count and Pending; the open mark set is chunked.** A chain's
   head is rewritten on every append, so it holds only what every append
   changes: the count and the pending roots (log₂ n hashes). The hashes of
