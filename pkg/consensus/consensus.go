@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/persist"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
@@ -862,6 +863,34 @@ func (n *Node) Rejoin(round types.Round) {
 
 func (n *Node) LastCommitRound() types.Round {
 	return n.bullshark.LastCommitRound()
+}
+
+// Checkpoint is this node's consensus position: the primary's round and
+// epoch, Bullshark's last committed leader round and its per-author commit
+// watermarks. The service saves one per block so a restart can resume where
+// the executor's state is (#4238).
+func (n *Node) Checkpoint() *persist.Checkpoint {
+	return persist.NewCheckpoint(n.config.Partition,
+		n.primary.CurrentRound(), n.primary.CurrentEpoch(),
+		n.bullshark.LastCommitRound(), n.bullshark.GetLastCommitted())
+}
+
+// Restore seeds the consensus position from a checkpoint, before Start: the
+// primary participates from the checkpoint's round, Bullshark orders nothing
+// at or below its last commit and knows what each author had committed, and
+// the DAG accepts certificates at the commit floor without their pruned
+// parents. Certificate catch-up covers the rounds between the checkpoint and
+// the live frontier, up to DAGGCDepth.
+func (n *Node) Restore(cp *persist.Checkpoint) {
+	n.primary.SetRound(cp.CurrentRound)
+	n.primary.SetEpoch(cp.CurrentEpoch)
+	n.bullshark.SetLastCommitRound(cp.LastCommitRound)
+	for author, round := range cp.LastCommitted {
+		n.bullshark.SetLastCommittedForAuthor(author, round)
+	}
+	n.dag.SetLastCommitRound(cp.LastCommitRound)
+	slog.Info("Restored consensus position", "partition", n.config.Partition,
+		"round", cp.CurrentRound, "lastCommit", cp.LastCommitRound, "block", cp.BlockIndex)
 }
 
 // Metrics returns node metrics.

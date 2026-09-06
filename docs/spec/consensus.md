@@ -241,6 +241,23 @@ are outside every peer's retention, so it could not have executed them
 frontier, and the round advance collects nothing the commit path would not.
 Collection walks only the rounds the cutoff moved over, never the whole DAG.
 
+### Restart
+
+A validator's consensus position is **checkpointed per block, before the
+block is produced**: the primary's round and epoch, Bullshark's last committed
+leader round and its per-author watermarks, and the block index the position
+belongs to (`persist.Checkpoint`, `Service.saveCheckpoint`, two files under
+the node's `consensus/<partition>/` directory — the position for the block
+about to be produced and the one before it). On restart the service restores
+the checkpoint whose block is the executor's last block
+(`Service.seedFromCheckpoint`, `Node.Restore`), so the node participates from
+that round and certificate catch-up bridges the gap to the live frontier,
+within `DAGGCDepth`. A node with state but no matching checkpoint starts at
+round zero, says so, and cannot catch a live network. What a restarted node
+still lacks — the state and staging its peers hold, and the certificates
+below its checkpoint that a later leader commits — is the sync mechanism
+(E11, [DIFFERENCES.md](DIFFERENCES.md)).
+
 ### Retention
 
 `retain` keeps executed batches up to `DefaultMaxRetainedBatchBytes` and
