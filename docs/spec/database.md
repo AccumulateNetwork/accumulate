@@ -36,10 +36,43 @@ Four operations, and no more: get, put, delete, iterate.
 3. **A nested change set is atomic within its parent.** Committing it moves its
    changes to the parent, not to disk.
 4. **A prefix scopes a change set.** Keys are relative to it.
-5. **Durability is the commit of the outermost change set.** Nothing below that
-   is a durability point.
+5. **Durability is the committed log; the state store seals behind it.** The
+   commit of the outermost change set makes a block's state visible and
+   hands it to the store; what makes the block survive a crash is its entry in
+   the consensus log (consensus.md, "The committed log"), which is on disk
+   before the commit returns. The store seals the block's writes later, on
+   its own goroutine, and a block's log entry may be deleted only once the
+   store has sealed it. Nothing below the outermost commit is a visibility
+   point, and nothing but the log is a durability point.
 6. **A backend that cannot answer a read must say so, never guess.** Reporting
    not-found for data that exists is a consensus fault, not a cache miss.
+
+### The seal lags the commit
+
+A block's writes reach the store when its outermost change set commits; the
+store's *seal* — the barriers that make a block's segments durable and mark
+the height — runs behind, at the merge watermark (`MergeLag`, 20 blocks) or
+later if the disk is slow. Three consequences the rest of the system relies
+on:
+
+- **A restart replays.** On open the store holds every sealed block and
+  whatever of the unsealed tail reached disk; the node re-executes from the
+  last sealed height through the committed log to the log's head. Execution
+  is deterministic, so the state it rebuilds is the state it lost.
+- **The gap is bounded by refusal, not by a constant.** How far the seal may
+  lag is an operational bound: past it the node refuses user work, because a
+  store that cannot keep up with the network is the condition back-pressure
+  exists to detect. A slow disk is a growing gap, not a stopped partition.
+- **The log's retention is the gap.** The committed log deletes an entry when
+  the seal passes its block, so the log is exactly as long as the replay a
+  restart would need, plus whatever peers may still ask for
+  (consensus.md, "Retention").
+
+Why (2026-09-06, soak 20260906T134054Z, #4259): with the seal on the block
+path every commit waited for ~40 fsyncs per node, and with sixteen stores on
+one disk the run stalled for four minutes in those barriers while consensus
+went on. An append to a log is one sequential write and one sync; that is
+what LevelDB's write-ahead log does, and the committed log already exists.
 
 ### Windowed stores
 

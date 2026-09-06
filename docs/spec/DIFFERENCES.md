@@ -578,3 +578,22 @@ and the HEAL path has none, which is the actual hole.
 **Size**: medium, and **not urgent until measured**. A message type, a request
 path, and assembly at the destination. Build it when a run shows a proof-length
 rejection, which names the real trigger rather than a supposed one.
+
+## Durability: the seal is still on the block path; the committed log is not on disk
+
+The spec (database.md invariant 5, consensus.md "The committed log") makes the
+consensus log the durability point and lets the store seal behind the commit.
+The code does neither yet: `bcdb.(*Database).writeThrough` calls
+`KVShard.SealBlock` on the block goroutine before the commit returns (the
+~40-fsync barrier that stalled soak 20260906T134054Z for four minutes,
+#4259), and the committed groups exist only in memory — the worker's batch
+store and retention, the DAG's certificates — with only the consensus
+*position* checkpointed (`persist.Checkpoint`). Restart therefore cannot
+replay unsealed blocks, which is also why nothing may be lost today. The
+store question — sealing several blocks in one call while writes continue
+into the next tail — is BlockchainDB#88. Decided by Paul 2026-09-06: "If the
+DAG has a log, use that."
+
+**Size**: medium. The log append and its replay are new code on the block
+production path; the lagging seal is a scheduler in the bcdb adapter; the
+store change is a BlockchainDB release.

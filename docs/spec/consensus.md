@@ -244,6 +244,25 @@ are outside every peer's retention, so it could not have executed them
 frontier, and the round advance collects nothing the commit path would not.
 Collection walks only the rounds the cutoff moved over, never the whole DAG.
 
+### The committed log
+
+The DAG's committed leader groups are the network's ordered record of what
+to execute: each group is the certificates Bullshark committed and the
+batches they name, in execution order, and execution is deterministic. **That
+record, on disk, is the durability point** (database.md, invariant 5). Before
+a committed group is handed to the executor, the node appends it to a
+per-partition log file — one record per block, the certificates and the
+batches' transactions as they were committed — and syncs the file once. The
+commit of the block's state to the store then returns without waiting for the
+store's seal.
+
+The log is deleted from the front, never rewritten: an entry is removed once
+the store has sealed the block it produced (the seal watermark) **and** the
+block is older than what a peer may still ask this node for (the batch
+retention below). It therefore grows only when the seal falls behind, and
+its length is the replay a restart needs. It carries nothing the DAG does not
+already hold in memory; it is the same data, made durable.
+
 ### Restart
 
 A validator's consensus position is **checkpointed per block, before the
@@ -251,8 +270,10 @@ block is produced**: the primary's round and epoch, Bullshark's last committed
 leader round and its per-author watermarks, and the block index the position
 belongs to (`persist.Checkpoint`, `Service.saveCheckpoint`, two files under
 the node's `consensus/<partition>/` directory — the position for the block
-about to be produced and the one before it). On restart the service restores
-the checkpoint whose block is the executor's last block
+about to be produced and the one before it). On restart the node first
+re-executes from the store's last sealed height through the committed log to
+its head — the blocks whose state the seal had not yet made durable — then
+restores the checkpoint whose block is the executor's last block
 (`Service.seedFromCheckpoint`, `Node.Restore`), so the node participates from
 that round and certificate catch-up bridges the gap to the live frontier,
 within `DAGGCDepth`. A node with state but no matching checkpoint starts at
@@ -266,6 +287,9 @@ below its checkpoint that a later leader commits — is the sync mechanism
 `retain` keeps executed batches up to `DefaultMaxRetainedBatchBytes` and
 `RetainCommittedFor`; there is no count. A peer that asks for a batch outside
 the window is told so (`absence=no-record`) and must resync (#4205, E11).
+The committed log keeps a block's batches at least until the store has
+sealed that block, whatever the byte budget says: retention may forget a
+batch a peer wants, never one this node still needs to replay.
 
 ---
 

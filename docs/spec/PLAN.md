@@ -381,6 +381,36 @@ constant because no wire path tells a destination the source's produced count
 (H1); a stranded stream leaves that state only by sync. Acceptance is the
 twelve-hour soak on BlockchainDB at 500 tps, not the tests.
 
+## E13. Durability moves to the committed log; the seal lags
+
+Decided 2026-09-06 (Paul: "If the DAG has a log, use that"; #4259). Spec:
+database.md invariant 5 and "The seal lags the commit"; consensus.md "The
+committed log", "Restart", "Retention". Steps, each with its reproduction
+first:
+
+1. **Store question answered** (BlockchainDB#88): `SealBlock(h)` called for
+   h = last sealed + k with writes already in the next tails — confirm the
+   height tags and the dyna window age correctly, or add a seal-range call.
+   Test in BlockchainDB.
+2. **The log** (`internal/node/dagbft`): append the committed group — its
+   certificates and batches — to `consensus/<partition>/log` as one record
+   per block, one `fsync`, before `processCommittedGroup` executes it. Test:
+   the record round-trips and the file is synced before execution begins.
+3. **The seal off the block path** (`pkg/database/keyvalue/bcdb`):
+   `writeThrough` puts and returns; a sealer goroutine calls `SealBlock` for
+   the newest version at or below (committed − MergeLag), records the seal
+   watermark, and exports the gap as a gauge. Refusal above a bound (the
+   `execution-lagging` machinery, with a `seal-lagging` reason). Test with a
+   store whose fsync takes a configurable time: block production continues,
+   the gap grows, refusal engages at the bound.
+4. **Replay on restart**: from the store's sealed height, re-execute the log
+   to its head before seeding consensus (#4238). Test: kill between commit
+   and seal; the restarted node's state hash matches its peers'.
+5. **Log deletion** at min(seal watermark, retention floor). Test: the log
+   never holds a block below the watermark and never drops one above it.
+6. Soak on BlockchainDB with an induced fsync stall (chaos hook): no stall
+   in block production.
+
 ## Throughput and latency review (2026-09-06)
 
 [docs/reviews/throughput-latency-2026-09-06.md](../reviews/throughput-latency-2026-09-06.md)
