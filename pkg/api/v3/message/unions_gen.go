@@ -56,18 +56,6 @@ func New(typ Type) (Message, error) {
 		return new(NodeInfoRequest), nil
 	case TypeNodeInfoResponse:
 		return new(NodeInfoResponse), nil
-	case TypePrivateMajorHeaderRangeRequest:
-		return new(PrivateMajorHeaderRangeRequest), nil
-	case TypePrivateMajorHeaderRangeResponse:
-		return new(PrivateMajorHeaderRangeResponse), nil
-	case TypePrivateMinorRootRangeRequest:
-		return new(PrivateMinorRootRangeRequest), nil
-	case TypePrivateMinorRootRangeResponse:
-		return new(PrivateMinorRootRangeResponse), nil
-	case TypePrivatePartitionRootRangeRequest:
-		return new(PrivatePartitionRootRangeRequest), nil
-	case TypePrivatePartitionRootRangeResponse:
-		return new(PrivatePartitionRootRangeResponse), nil
 	case TypePrivateSequenceRangeRequest:
 		return new(PrivateSequenceRangeRequest), nil
 	case TypePrivateSequenceRangeResponse:
@@ -76,10 +64,6 @@ func New(typ Type) (Message, error) {
 		return new(PrivateSequenceRequest), nil
 	case TypePrivateSequenceResponse:
 		return new(PrivateSequenceResponse), nil
-	case TypePrivateSnapshotRangeRequest:
-		return new(PrivateSnapshotRangeRequest), nil
-	case TypePrivateSnapshotRangeResponse:
-		return new(PrivateSnapshotRangeResponse), nil
 	case TypeQueryRequest:
 		return new(QueryRequest), nil
 	case TypeRecordResponse:
@@ -211,42 +195,6 @@ func Equal(a, b Message) bool {
 		}
 		b, ok := b.(*NodeInfoResponse)
 		return ok && a.Equal(b)
-	case *PrivateMajorHeaderRangeRequest:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*PrivateMajorHeaderRangeRequest)
-		return ok && a.Equal(b)
-	case *PrivateMajorHeaderRangeResponse:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*PrivateMajorHeaderRangeResponse)
-		return ok && a.Equal(b)
-	case *PrivateMinorRootRangeRequest:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*PrivateMinorRootRangeRequest)
-		return ok && a.Equal(b)
-	case *PrivateMinorRootRangeResponse:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*PrivateMinorRootRangeResponse)
-		return ok && a.Equal(b)
-	case *PrivatePartitionRootRangeRequest:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*PrivatePartitionRootRangeRequest)
-		return ok && a.Equal(b)
-	case *PrivatePartitionRootRangeResponse:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*PrivatePartitionRootRangeResponse)
-		return ok && a.Equal(b)
 	case *PrivateSequenceRangeRequest:
 		if a == nil {
 			return b == nil
@@ -270,18 +218,6 @@ func Equal(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*PrivateSequenceResponse)
-		return ok && a.Equal(b)
-	case *PrivateSnapshotRangeRequest:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*PrivateSnapshotRangeRequest)
-		return ok && a.Equal(b)
-	case *PrivateSnapshotRangeResponse:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*PrivateSnapshotRangeResponse)
 		return ok && a.Equal(b)
 	case *QueryRequest:
 		if a == nil {
@@ -372,18 +308,6 @@ func Copy(v Message) Message {
 		return v.Copy()
 	case *NodeInfoResponse:
 		return v.Copy()
-	case *PrivateMajorHeaderRangeRequest:
-		return v.Copy()
-	case *PrivateMajorHeaderRangeResponse:
-		return v.Copy()
-	case *PrivateMinorRootRangeRequest:
-		return v.Copy()
-	case *PrivateMinorRootRangeResponse:
-		return v.Copy()
-	case *PrivatePartitionRootRangeRequest:
-		return v.Copy()
-	case *PrivatePartitionRootRangeResponse:
-		return v.Copy()
 	case *PrivateSequenceRangeRequest:
 		return v.Copy()
 	case *PrivateSequenceRangeResponse:
@@ -391,10 +315,6 @@ func Copy(v Message) Message {
 	case *PrivateSequenceRequest:
 		return v.Copy()
 	case *PrivateSequenceResponse:
-		return v.Copy()
-	case *PrivateSnapshotRangeRequest:
-		return v.Copy()
-	case *PrivateSnapshotRangeResponse:
 		return v.Copy()
 	case *QueryRequest:
 		return v.Copy()

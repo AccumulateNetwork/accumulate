@@ -51,13 +51,6 @@ type ServiceConfig struct {
 	// Genesis is the path to the genesis file/snapshot.
 	Genesis string
 
-	// Rejoin seeds the consensus position after a fast sync (#4058). The
-	// executor database was restored to a block committed at Rejoin.Round in
-	// committee epoch Rejoin.Epoch; consensus resumes from there instead of
-	// round zero, which would wedge once the network's age exceeds the DAG
-	// GC depth.
-	Rejoin *RejoinSeed
-
 	// Host is the libp2p host for networking (optional, enables multi-node).
 	Host host.Host
 
@@ -163,12 +156,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 	// The committee epoch is the network definition version, which is part
 	// of executed state — a rejoining node derives it from its restored
-	// globals (InitialNetworkVersion), so the seed epoch normally matches.
-	// Prefer the seed only if it is ahead (a version bump between the
-	// snapshot pin and the epoch block the seed was cut from).
-	if s.config.Rejoin != nil && s.config.Rejoin.Epoch > committee.Epoch {
-		committee = types.NewCommittee(committee.Validators, s.config.Rejoin.Epoch)
-	}
+	// globals (InitialNetworkVersion).
 	s.committee = committee
 
 	// Create consensus node with optional libp2p networking
@@ -184,16 +172,6 @@ func (s *Service) Start(ctx context.Context) error {
 	// Initialize genesis if needed
 	if err := s.initializeGenesis(); err != nil {
 		return errors.UnknownError.WithFormat("initialize genesis: %w", err)
-	}
-
-	// Seed the consensus position for a fast-sync rejoin
-	if s.config.Rejoin != nil && s.config.Rejoin.Round > 0 {
-		s.node.Rejoin(types.Round(s.config.Rejoin.Round))
-		s.logger.Info("Seeded consensus for fast-sync rejoin",
-			"partition", s.config.Partition.ID,
-			"round", s.config.Rejoin.Round,
-			"epoch", s.config.Rejoin.Epoch,
-			"block", s.lastBlockIndex)
 	}
 
 	// Start consensus node

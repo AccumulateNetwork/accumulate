@@ -174,15 +174,13 @@ staging holds what its peers hold. Validator and follower alike. What exists
 today: genesis or a snapshot *file*, and consensus catch-up from peers'
 retention (`pkg/consensus/recovery.go`); nothing pulls chain state.
 
-1. **State as of a block, served by peers.** A partition-scoped p2p protocol
-   (list / fetch / chunk, modelled on `pkg/consensus/snapshot`, which does this
-   for the DAG's own state): a joiner asks a peer for the state at the peer's
-   last committed block; the peer collects it with the database's collector
-   (`db.Collect`, what genesis bootstrap uses) from a view pinned at that
-   block and streams it in chunks; the header names the block and the BPT
-   root. One collection per block is kept for its duration, so several
-   joiners cost one collection. Test: the joiner's restored BPT root equals
-   the peer's at that block.
+1. **State as of a block, served by peers — NOT by snapshot.** Paul
+   (2026-09-06): "We intend to move to a different mechanism for syncing than
+   snapshots." The snapshot-based fast sync (#4058: `internal/fastsync`, the
+   sequencer's pinned provable view and `SnapshotRange`, the major-header,
+   minor-root and partition-root ranges, `pkg/consensus/snapshot`) is removed.
+   The mechanism is to be designed against executor.md "Sync"; until then a
+   node behind the retention window has no way back but genesis.
 2. **Verified against the anchored root.** The joiner checks the restored BPT
    root against the partition's `StateTreeAnchor` for that block as the
    Directory anchored it, read from a Directory node through the API; a
@@ -282,8 +280,6 @@ account's chain heights and anchors, and all element-index records):
   Spec: executor invariant 9.
 - **S5** — both caches sized in bytes and reporting their size. Spec: database
   "Caches".
-- **S2 follow-up** — capture the provable view only when a snapshot is about
-  to be pinned. Spec: database invariant 5.
 - **S7** — every warning that can fire per message is rate-limited; log
   volume is a metric.
 - **BlockchainDB#86** — history lookups indexed rather than bloom-walked.

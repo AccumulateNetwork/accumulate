@@ -64,8 +64,8 @@ So a validator holds batches in four places, for four reasons:
    second, which is itself a resource.
 6. **Retention is a window in seconds of traffic, bounded in bytes.** A peer
    that is further behind than the window cannot recover by fetching batches
-   and must recover by snapshot (see the healing and fast-sync parts). The
-   window is not made longer to cover that case.
+   and must resync (E11; the mechanism is not snapshots — Paul, 2026-09-06).
+   The window is not made longer to cover that case.
 7. **A batch is proposed once.** Re-proposal exists for a batch no header has
    certified — the author's own recovery from a lost broadcast. A batch that
    is in a certified header is never proposed again, whatever the executor
@@ -222,7 +222,7 @@ they are, these are the facts the executor and healing parts depend on:
 
 `retain` keeps executed batches up to `DefaultMaxRetainedBatchBytes` and
 `RetainCommittedFor`; there is no count. A peer that asks for a batch outside
-the window is told so (`absence=no-record`) and must snapshot-sync (#4205).
+the window is told so (`absence=no-record`) and must resync (#4205, E11).
 
 ---
 

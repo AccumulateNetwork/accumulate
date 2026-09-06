@@ -396,13 +396,6 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			"validators", len(initialValidators))
 	}
 
-	// Apply a fast-sync rejoin seed if one was written by `accumulated
-	// fastsync` (#4058) — consumed once, on the first start after the sync
-	rejoin, err := dagbft.LoadRejoinSeed(inst.path(), s.Partition.ID)
-	if err != nil {
-		slog.Error("Failed to load fast-sync rejoin seed — starting without it", "partition", s.Partition.ID, "error", err)
-	}
-
 	// Create the service
 	svcConfig := dagbft.ServiceConfig{
 		Partition:         s.Partition,
@@ -412,7 +405,6 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Logger:            logger.With("module", "dagbft"),
 		Genesis:           inst.path(s.Genesis),
 		InitialValidators: initialValidators,
-		Rejoin:            rejoin,
 	}
 	if globals != nil && globals.Network != nil {
 		// The committee epoch is the network definition version (state-derived)
