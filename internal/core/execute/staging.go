@@ -160,15 +160,21 @@ func (st *streamState) release(n uint64, s *Staging) {
 		for _, h := range st.entries {
 			s.unindex(h)
 		}
-		st.entries = st.entries[:0]
+		// Released pointers are cleared, not merely cut off: a truncated
+		// slice keeps its backing array, and every *Held in it would stay
+		// reachable until overwritten — a drained backlog pinned for good
+		// (review 2026-09-06, finding 3)
+		clear(st.entries)
+		st.entries = compactHeld(st.entries[:0])
 	} else {
 		for _, h := range st.entries[:drop] {
 			s.unindex(h)
 		}
+		clear(st.entries[:drop])
 		st.entries = compactHeld(st.entries[drop:])
 	}
 	if drop > uint64(len(st.validated)) {
-		st.validated = st.validated[:0]
+		st.validated = compactHashes(st.validated[:0])
 	} else {
 		st.validated = compactHashes(st.validated[drop:])
 	}

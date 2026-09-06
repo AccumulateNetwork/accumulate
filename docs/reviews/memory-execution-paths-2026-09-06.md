@@ -369,3 +369,98 @@ BlockchainDB at all — every Docker run of 2026-09-05 was on leveldb.
 
 Each becomes an issue with the finding's text; none is started from this
 document.
+
+---
+
+## Plan (2026-09-06, after Paul's review of the short version)
+
+Paul's responses, and what follows from each.
+
+**1. The producer cache.** DONE the same day (ccb80592e): every dispatched
+synthetic carries the sender's `Delivered` for the reverse stream and the
+destination releases what it holds at or below it. Forty transfers each way
+leave three entries in each cache, not forty. Remaining: the signal rides only
+on synthetic dispatch, so an idle reverse stream falls back to the horizon;
+produced anchors still go by the horizon (one transaction per block, small).
+Follow-up: carry the same word on anchors so the anchor cache and an idle
+stream's tail clear too; then shrink `DefaultHorizon` from an hour to a few
+minutes, since it is a backstop.
+
+**2. Staging under lag — Paul: "We only stage what hasn't been executed. Once
+executed, messages are removed from staging."** Correct, and the finding was
+overstated. What staging holds is exactly what consensus has accepted and
+execution has not yet run; it is emptied by execution. The size question is
+therefore "how far can accepted outrun executed", and that is already bounded
+on the consensus side: the execution-lag bound (C6, eight blocks) stops
+headers carrying batches when the executor is behind. The one part not bounded
+by C6 is the *collected* set — synthetics that arrived before the Directory
+anchor that proves them — which grows with Directory-anchor latency times the
+inbound rate. Plan: no byte budget on staging; instead (a) a gauge of held
+entries and bytes per stream so the collected set is visible, (b) an alarm
+when it exceeds a few blocks' worth, because that means anchors are late, and
+(c) the anchor-latency work itself (anchors through the stage, issue 4222's
+dispatch fix) is what keeps it small.
+
+**3. Staging release pins a drained backlog — Paul: "This needs fixing."**
+FIXED the same day: `release` clears the dropped pointers and compacts in both
+branches; `TestStaging_ReleaseReturnsTheBacklog` holds 5000, releases them,
+and checks the capacity is returned and nothing stays indexed.
+
+**4. The dispatcher — Paul: "The dispatcher needs to be isolated from the data
+being dispatched. On a failure, a write should be retried."** Plan, as issue
+4222's fix: the dispatcher owns an outbound queue per destination that is
+independent of the block that produced the envelopes — the block hands
+envelopes over and is done. Each destination's queue is sent on its own
+stream with its own deadline (a few block intervals), so one unreachable
+partition never blocks another. A request that fails for any reason other
+than the destination refusing it as invalid is kept and retried with a
+bounded back-off; a refusal is settled and counted; a request that exhausts
+its retries is counted and logged with its destination and kind. Metrics:
+queued, sent, retried, dropped, per destination. Acceptance: a simulator hook
+that fails the first send to one partition for N blocks; every anchor and
+synthetic still arrives, and the drop counter stays zero. Second acceptance:
+the four-validator Docker topology with one node's submit path cut for a
+minute shows no lost anchor copies.
+
+**5. The sequencer's read view — Paul: "I have no idea what the sequencer means
+here."** The sequencer is the API service that answers healing requests
+(`Sequence`, `SequenceRange`) and the snapshot endpoint
+(`internal/api/v3/sequencer.go`). For the snapshot endpoint it wants a
+database view at a provable block, so at every block commit it opens a
+read-only database transaction and keeps it open until the next commit
+replaces it. BlockchainDB must keep a consistent view for any open reader, so
+while that transaction is open every commit reads back the old value of every
+record it changes and keeps those old values until the reader closes. At 500
+tps that is four to six thousand extra reads per block, always, and a slow
+snapshot pins several blocks' worth of old values. Plan: the sequencer records
+only the provable block index at commit and opens the view when a snapshot is
+actually requested, checking the index still matches; and BlockchainDB expires
+any reader view older than a fixed number of blocks. Acceptance: with no
+snapshot in progress, `preImages` is never called (a counter), and a snapshot
+request still produces a provable snapshot.
+
+**6. Anchor copies — Paul: "Explain more clearly?"** A Directory anchor is one
+transaction, but each of the eight Directory validators sends its own signed
+copy of it to each BVN, and the BVN needs six of those signatures before it
+executes the anchor. Today the BVN treats each copy as a separate message: it
+stores the whole anchor body — the `DirectoryAnchor` with a receipt for every
+BVN, several kilobytes — eight times under eight different hashes, appends
+each copy to the transaction's signature chain, reads and rewrites the
+validator-signature set for each, and logs each at Info twice. So one anchor
+costs eight bodies on disk per block per BVN (roughly a gigabyte per twelve
+hours), eight chain appends, eight set rewrites and sixteen log lines, and on
+the Directory about twenty of each per block. Plan: store the anchor body
+once, keyed by the transaction hash, when the first copy arrives; record every
+later copy as its signature only, against that transaction; keep one chain
+append per distinct signer (that is the signature chain's purpose) but write
+the set once per block from the copies the block brought, not once per copy;
+move the per-copy log lines to Debug once issue 4222 is closed. Acceptance:
+the anchor transaction is stored once per BVN block, the signature set is
+written once per block per anchor, and `TestAnchorThreshold` still executes on
+the second distinct signer.
+
+**7 onward.** Filed as separate issues from this document: the
+`AddChainEntry2` scan (finding 10), DAG garbage collection cadence (11),
+nested batch depth (7), the requester's duplicate storm and probe accounting
+(9), the per-header byte bound (13), per-message Info logging (14), root
+receipt replay (12), and the smaller items (16).

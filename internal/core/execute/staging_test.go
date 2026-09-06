@@ -267,3 +267,35 @@ func TestStaging_Proofs(t *testing.T) {
 	tx.Commit()
 	require.Equal(t, []uint64{9}, s.Begin().ProofBlocks(testSource))
 }
+
+// A drained backlog does not stay pinned: releasing everything held returns
+// the lists' capacity and drops every reference.
+func TestStaging_ReleaseReturnsTheBacklog(t *testing.T) {
+	s := NewStaging()
+	tx := s.Begin()
+	const backlog = 5000
+	for n := uint64(1); n <= backlog; n++ {
+		tx.Hold(testStream, n, held(n))
+	}
+	tx.Commit()
+	st := s.streams[testStream.key()]
+	require.GreaterOrEqual(t, cap(st.entries), backlog)
+
+	tx = s.Begin()
+	tx.Release(testStream, backlog)
+	tx.Commit()
+	require.Len(t, st.entries, 0)
+	require.Less(t, cap(st.entries), 2048, "the backing array of a drained backlog is returned")
+	require.Less(t, cap(st.validated), 2048)
+	require.Empty(t, s.byID, "no released entry stays indexed")
+
+	// A partial release clears what it drops
+	tx = s.Begin()
+	for n := uint64(backlog + 1); n <= backlog+100; n++ {
+		tx.Hold(testStream, n, held(n))
+	}
+	tx.Release(testStream, backlog+50)
+	tx.Commit()
+	require.Len(t, st.entries, 50)
+	require.Len(t, s.byID, 50)
+}
