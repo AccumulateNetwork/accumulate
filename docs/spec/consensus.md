@@ -61,7 +61,10 @@ So a validator holds batches in four places, for four reasons:
 5. **A full store is reported once, not once per submission.** The condition
    is a state, and a state is logged when it changes and counted while it
    holds. A warning per refused submission at 500 tps is 500 warnings a
-   second, which is itself a resource.
+   second, which is itself a resource. The same rule sets log levels:
+   lifecycle events and state transitions are `Info`; anything that happens
+   per header, vote, certificate, sync request or transaction is `Debug`, and
+   the arguments of such a line are not built unless the level is enabled.
 6. **Retention is a window in seconds of traffic, bounded in bytes.** A peer
    that is further behind than the window cannot recover by fetching batches
    and must resync (E11; the mechanism is not snapshots — Paul, 2026-09-06).
