@@ -26,20 +26,30 @@ staging, staging packs them with the one anchor and evaluates quorum or proof,
 and the anchor executes once with no further checking.
 
 **Code**: each validator sends a full `BlockAnchor` carrying the whole payload
-and its own signature. Each is a complete message execution — writes
-`recordMessageAndStatus` and `RecordHistory`, adds one signature to
-`ValidatorSignatures()` — and the copy that crosses `ValidatorThreshold`
-executes the anchor. For an N-validator partition, N−1 deliveries exist only to
-deposit a signature. Copies cannot deduplicate because each embeds a different
-signature and therefore hashes differently.
+and its own signature. Each is a complete message execution with its own
+status, and the copy that crosses `ValidatorThreshold` executes the anchor. For
+an N-validator partition, N−1 deliveries exist only to deposit a signature.
+Copies cannot deduplicate because each embeds a different signature and
+therefore hashes differently.
 
-Staging already asks the right question — `admissibilityOf` calls
-`anchorIsAdmissible`, the same rule `txnIsReady` uses at execution, shared
-deliberately (#4169 step 3b) — but has nothing to collect, so the rule is
-evaluated twice over state that execution had to write first.
+What a copy writes is now bounded by what it adds (#4224, executor.md "What a
+copy costs"): the body once under the transaction's hash, the copy as a
+signature over a reference, one signature-chain entry per distinct signer, the
+signature set once per block from the block's view of it
+(`anchor_signatures.go`). What remains of this difference is the shape:
+copies are still messages with statuses, and the quorum is still evaluated by
+execution rather than collected by staging. Staging already asks the right
+question — `admissibilityOf` calls `Block.anchorIsAdmissible`, the same rule
+`txnIsReady` uses (#4169 step 3b) — but has nothing to collect.
 
-**Size**: medium. Cost is O(validators) per anchor: 445 anchors against 180,997
-synthetics in run `20260902T132651Z`, so small today, linear in validator count.
+One consequence of storing a copy as a reference: the API renders a signature
+chain entry by loading the message under the entry's hash and recomputing its
+ID (`load.go`), so an anchor copy's ID in the signature set differs from the
+chain entry that names it. The signature itself is what the set is for, and it
+is intact.
+
+**Size**: medium. Cost is O(validators) per anchor in statuses and chain
+entries; bodies and set writes are O(1) per anchor per block.
 
 ### E5. Staging is re-evaluated in a loop
 
@@ -158,6 +168,45 @@ path is known to produce.
 **Size**: small.
 
 ---
+
+### E12. What a transaction still writes beyond one body, one status, one set
+
+*[#4236](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4236)*
+
+**Spec** ([database.md](database.md), "A record is written once per thing it
+records"; [executor.md](executor.md), "The database write"): one body per
+transaction, wrappers referring to it by hash; a status per message with an
+outcome; `Produced` one set under the transaction; `Cause` kept as its
+inverse.
+
+**Code**: the destination now writes, keyed by a synthetic transaction's hash,
+six records — `Message.Main`, `Transaction.Status`, `Message.Cause`,
+`Transaction.Chains`, `Account.Payments`, `Account.Votes`
+(`TestUserTransactionWrites`) — and the wrapper's own `Main` and `Status`
+under the wrapper's hash. What remains beyond the spec's shape:
+
+- **The source stores the sequenced message with the full body**
+  (`buildSynthTxn`). The sequencer serves healing answers from that record
+  (`sequencer.go getSynth`, `getSynthRange`) and the cache seed rebuilds from
+  it, so a reference there would make every answer resolve a second record.
+  Removing it is H1's work (the cache serves, the store does not), not a
+  write-path change.
+- **Wrapper statuses stay.** Each `SequencedMessage`, `SyntheticMessage`,
+  `BlockAnchor`, `CreditPayment` and `SignatureRequest` writes its own status,
+  because `checkStatus` reads it: a sequenced message re-run from staging and a
+  copy landing in two blocks are caught by it. Whether staging's delivered
+  index can carry that dedup alone — the spec's table already names it for
+  sequenced entries — is the open question; until it does, the status is the
+  record.
+- **`History` and `Signers`** are written per signature (`RecordHistory`) and
+  read by the API's signature-set view (`load.go`); the review proposed
+  deriving them from the signature chain. Not done here.
+- **`Payments` and `Votes`** are written per transaction by the transaction
+  path and read by the account hash (`observer_prod.hashPendingV2`) for
+  pending transactions; a delivered synthetic writes both for nothing.
+
+**Size**: measured on run `20260905T153920Z` before this work, 72 records per
+user transaction; the items above are the ones still to measure after it.
 
 ### E11. A node cannot sync from the running protocol
 
@@ -377,6 +426,16 @@ cache; the Directory receipt a block was dispatched under is
 the only anchor a bundle can be proven under (`ProveAgainstAnchor` for any
 other is `NotReady`), which is H3. The requester exists (H8) and asks the
 sequencer by span.
+
+The destination's `Delivered` of this stream — the release signal — lives only
+in the cache. A restart therefore cannot seed "what the destination has not
+delivered"; it seeds what the Directory has not receipted plus the in-flight
+tail (healing.md, "The cache"; #4241). A destination lagging more than
+`InFlightBlocks` of the source's blocks at the source's restart heals from a
+cache that lacks its entries, and the miss is counted. The fix is to persist
+the release watermark per stream as a node-local record — it is per-node
+state and must not enter the hashed ledger (executor.md, "Sync") — which is
+the cache's to do.
 
 **Size**: small; the delivery signal is the open design point.
 

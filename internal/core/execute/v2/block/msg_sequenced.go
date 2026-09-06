@@ -196,14 +196,16 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 
 	var st *protocol.TransactionStatus
 	if ready {
-		// Copy to avoid issues with resolving remote transactions. If the
-		// transaction is a placeholder (a remote transaction), the executor
-		// will resolve the full transaction and replace the placeholder. If we
-		// don't copy, that causes the sequenced message to change, which
-		// changes its hash, which causes problems with recording it in the
-		// database.
+		// If the transaction is a placeholder (a remote transaction), the
+		// executor will resolve the full transaction and replace the
+		// placeholder. Copy so that does not change the sequenced message,
+		// and with it its hash and how it is recorded. Only a placeholder
+		// needs the copy; deep-copying every executed body was a per-message
+		// allocation for nothing (#4245).
 		msg := seq.Message
-		if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+		if txn, ok := msg.(*messaging.TransactionMessage); ok &&
+			txn.Transaction.Body.Type() == protocol.TransactionTypeRemote &&
+			ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
 			msg = msg.CopyAsInterface().(messaging.Message)
 		}
 

@@ -561,6 +561,15 @@ covers one chain, its element at position *i* is the entry at index *i*.
 | fewer entries than validated hashes; entries beyond the validated hashes | healing, on its cadence | a gap of entries; a gap of proof — the two spans it requests |
 | release through *n* | the block, on commit | every entry at or below *n* is dropped; proven ranges below *n* are dropped |
 
+What it holds is visible: per stream, the entries held and their encoded
+bytes are gauges (`accumulate_staging_held_entries`,
+`accumulate_staging_held_bytes`, labelled by ledger and source), updated when a
+block commits, and a stream holding more than several blocks' worth
+(`heldAlarmEntries`) is reported once and its clearing once (#4233). Staging
+has no byte budget of its own — it holds what consensus accepted and execution
+has not run, and what bounds it is the Directory's anchor latency, which is
+what a growing gauge points at.
+
 Four rules govern it, and each of them is a defect that has actually happened:
 
 **The first sighting of a number wins.** A number can be offered twice — a block
@@ -633,7 +642,10 @@ depends on the last:
 8. Record pending transactions; process chain updates; record the block
    ledger (below).
 9. Add each synthetic chain that changed to the root chain, index the root
-   chain, update the transaction-chain index.
+   chain, update the transaction-chain index — from the hashes the block
+   appended, kept with the record of each append (`ChainUpdates.Hashes`);
+   only a chain appended to outside that record (the signature chain, the
+   BPT chain) is read back for its hash (#4245).
 10. Update major index chains if this is a major block.
 11. Execute post-update actions.
 12. **Update the BPT**, and only then active globals.
@@ -774,6 +786,23 @@ This also removes an asymmetry. An anchor authorized by proof executes on first
 arrival; one authorized by quorum takes as many executions as it takes
 signatures. Under this shape both are a staging decision followed by one
 execution.
+
+**What a copy costs.** Until the copies collapse in staging, each one is a
+message the executor sees, and what it writes is bounded by what the copy adds
+(#4224):
+
+- The anchor transaction is stored **once**, under its own hash, by the first
+  copy to arrive. Every copy is stored as its signature over a reference to the
+  transaction by hash ("The database write"), never as another body.
+- The signature chain receives one entry **per distinct signer** — that is the
+  chain's purpose. A second copy from the same validator, under a different
+  hash, adds no signature and no entry.
+- The validator signature set is read once per anchor per block and written
+  **once**: with the execution it authorizes when the quorum is reached, or at
+  the block's close for an anchor still below it. The quorum is counted from
+  the block's view of the set, so copies arriving in the same block reach it in
+  that block (`anchorSignatures`, `Block.anchorIsAdmissible`).
+- A copy is one Debug line; the anchor's execution is the one Info line.
 
 ### There is no cascade
 
@@ -920,6 +949,30 @@ executor takes a sub-batch and commits it into its parent on success or discards
 it on failure, so a failed message leaves nothing. The block's batch reaches
 disk exactly once, at `state.Commit()` in `ProduceBlock`. `state.Hash()` is
 taken before the commit, and a failure to hash discards rather than commits.
+
+**One body per transaction.** A transaction reaches the executor inside
+wrappers — a `SequencedMessage`, a `SyntheticMessage`, a `BlockAnchor` copy —
+and each wrapper is a message of its own, recorded under its own hash. The
+transaction's own executor stores the transaction under the transaction's
+hash; once it has, every wrapper recorded in the same bundle is stored
+referring to it by hash — a `RemoteTransaction` placeholder where the body
+was, as an envelope carries one — so the store holds one body per transaction
+rather than one per wrapper (`storedForm`, #4236). A wrapper whose transaction
+was not stored — the transaction was refused before it was recorded — keeps
+the body, because it is the only copy. The record's key is the wrapper's hash
+as it arrived; a reader that recomputes the hash of what it loads gets the
+reference's, and resolves the transaction as it would a placeholder
+(`getTransaction`).
+
+**One status per outcome.** A status is written for every message that has an
+outcome of its own — the transaction, the signature, the payment, and each
+wrapper — because the status is what stops a message that is delivered twice
+([database.md](database.md), "Duplicates are caught at entry"): a sequenced
+message re-run from staging, a signature resubmitted, an anchor copy landing
+in two blocks are each caught by their own status. What is not written is a
+status nothing reads: the source keeps no status for the sequenced messages it
+produces (the chain entry is their record; the destination's status is the
+outcome), and nothing records a status for a message it did not execute.
 
 ---
 

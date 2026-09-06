@@ -63,7 +63,7 @@ type streamPosition struct {
 	// called from buildRun, which is pure and total by design. The caller
 	// checks it once, after the run is built.
 	err  error
-	exec *Executor
+	block *Block
 }
 
 // next is the number this stream is waiting for.
@@ -115,10 +115,10 @@ func (p *streamPosition) runnable(n uint64) bool {
 	// An anchor is also validated by a validator signature quorum, which
 	// builds as its copies arrive (executor spec, "One chain per pair, one
 	// stage per chain").
-	if p.stream.kind == streamAnchor && p.exec != nil {
+	if p.stream.kind == streamAnchor && p.block != nil {
 		if seq, ok := h.Message.(*messaging.SequencedMessage); ok {
 			if txn, ok := seq.Message.(*messaging.TransactionMessage); ok {
-				ok, err := p.exec.anchorIsAdmissible(p.batch, nil, txn.Transaction, p.stream.source)
+				ok, err := p.block.anchorIsAdmissible(p.batch, nil, txn.Transaction, p.stream.source)
 				return err == nil && ok
 			}
 		}
@@ -202,7 +202,7 @@ func (b *Block) positionOfLocked(s stream) (*streamPosition, error) {
 		delivered: delivered,
 		batch:     b.Batch,
 		staging:   b.staging,
-		exec:      b.Executor,
+		block:     b,
 	}
 	if b.positions.m == nil {
 		b.positions.m = map[string]*streamPosition{}

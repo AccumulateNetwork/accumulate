@@ -38,6 +38,10 @@ type Block struct {
 	// (healing spec, "The cache"). Serial: synthetics never shard.
 	remoteDelivered map[string]remoteAck
 
+	// anchorSigs is the block's view of each anchor's validator signatures:
+	// read once per anchor, counted in memory, written once (#4224).
+	anchorSigs map[[32]byte]*anchorSignatures
+
 	// staging is this block's view of the partition's staging: what is held,
 	// proven and waiting, plus what this block adds; it commits with the
 	// block (executor spec, "Sync").

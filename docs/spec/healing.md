@@ -353,10 +353,17 @@ at commit: the stream's entries at or below it, and the block segments that
 held them, go; `accumulate_synthcache_released_total`); a horizon of blocks
 (`DefaultHorizon`, an hour) remains as the backstop for a stream with no
 reverse traffic. At the first block an executor opens, the cache is seeded from the
-node's own chains by position for the recent blocks whose anchors have not
-returned (`seedSynthCache`): genesis produces through another executor, and a
-node that starts has produced blocks not yet anchored — a start-up step, not a
-runtime path. The store path in the sequencer remains only for the v1
+node's own chains by position (`seedSynthCache`, #4241): genesis produces
+through another executor, and a node that starts has produced blocks whose
+anchors have not returned — a start-up step, not a runtime path. What is
+seeded is decided by what the store durably knows: every own block the
+Directory has not receipted, found from the Directory anchors executed here
+(nothing from those blocks was dispatched), and the in-flight tail
+(`InFlightBlocks`) below the newest receipt, marked dispatched so healing is
+answered from it; capped by the horizon. The receipted blocks the newest
+anchor carried are dispatched again by the leader — the list of anchors
+awaiting dispatch is memory, and the block that would have dispatched them
+may not have run; a destination tosses what it has delivered. The store path in the sequencer remains only for the v1
 simulator, which has no cache; the node never wires it. Hits, misses, miss depth and construction failures are counters
 on the node's metrics endpoint, as are every row of the counting table above.
 

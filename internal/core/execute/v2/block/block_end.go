@@ -51,6 +51,12 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.WithFormat("flush streams: %w", err)
 	}
 
+	// Write each anchor's validator signature set, once per anchor (#4224).
+	err = block.flushAnchorSignatures()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("flush anchor signatures: %w", err)
+	}
+
 	// Is it time for a major block?
 	err = block.shouldOpenMajorBlock()
 	if err != nil {
@@ -165,13 +171,19 @@ func (block *Block) Close() (execute.BlockState, error) {
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("resolve chain %v of %v: %w", entry.Chain, entry.Account, err)
 		}
-		chain2, err := chain.Get()
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load chain %v of %v: %w", entry.Chain, entry.Account, err)
-		}
-		hash, err := chain2.Entry(int64(entry.Index))
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load entry %d of chain %v of %v: %w", entry.Index, entry.Chain, entry.Account, err)
+		// The hash at the entry was known when it was appended; a chain
+		// appended to outside the block's record (the signature chain, the
+		// BPT chain) is read back for it (#4245).
+		hash, ok := block.State.ChainUpdates.EntryHash(entry.Account, entry.Chain, entry.Index)
+		if !ok {
+			chain2, err := chain.Get()
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("load chain %v of %v: %w", entry.Chain, entry.Account, err)
+			}
+			hash, err = chain2.Entry(int64(entry.Index))
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("load entry %d of chain %v of %v: %w", entry.Index, entry.Chain, entry.Account, err)
+			}
 		}
 		u.Txns = append(u.Txns, hash)
 

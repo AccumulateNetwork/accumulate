@@ -92,6 +92,12 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 type ChainUpdates struct {
 	Entries []*protocol.BlockEntry
 
+	// Hashes holds, for each chain appended to through this record, the
+	// hash at the index the block last appended: what the block close needs
+	// for the transaction-chain index, known at append and kept so the chain
+	// is not read back to recover it (#4245). Keyed by SegmentKey.
+	Hashes map[string]ChainEntryHash
+
 	// Segments holds, for each anchor chain this block appended to, the
 	// chain's state before the block's first append and the hashes appended
 	// since: what a receipt over this block's appends is built from, without
@@ -113,7 +119,7 @@ type ChainUpdates struct {
 	indexed int
 }
 
-// SegmentKey names a chain for ChainUpdates.Segments.
+// SegmentKey names a chain for ChainUpdates.Segments and Hashes.
 func SegmentKey(account *url.URL, chain string) string {
 	return strings.ToLower(account.String()) + ";" + chain
 }
@@ -151,9 +157,45 @@ func (c *ChainUpdates) reindex() {
 	c.indexed = len(c.Entries)
 }
 
+// ChainEntryHash is the hash appended to a chain at an index.
+type ChainEntryHash struct {
+	Index uint64
+	Hash  []byte
+}
+
+// EntryHash returns the hash the block appended to the chain at the index, if
+// it was appended through this record.
+func (c *ChainUpdates) EntryHash(account *url.URL, chain string, index uint64) ([]byte, bool) {
+	h, ok := c.Hashes[SegmentKey(account, chain)]
+	if !ok || h.Index != index {
+		return nil, false
+	}
+	return h.Hash, true
+}
+
+func (c *ChainUpdates) didAppend(account *url.URL, chain string, index uint64, hash []byte) {
+	if c.Hashes == nil {
+		c.Hashes = map[string]ChainEntryHash{}
+	}
+	key := SegmentKey(account, chain)
+	if cur, ok := c.Hashes[key]; ok && cur.Index > index {
+		return
+	}
+	c.Hashes[key] = ChainEntryHash{Index: index, Hash: hash}
+}
+
 func (c *ChainUpdates) Merge(d *ChainUpdates) {
 	for _, u := range d.Entries {
 		c.DidUpdateChain(u)
+	}
+	for k, h := range d.Hashes {
+		if cur, ok := c.Hashes[k]; ok && cur.Index > h.Index {
+			continue
+		}
+		if c.Hashes == nil {
+			c.Hashes = map[string]ChainEntryHash{}
+		}
+		c.Hashes[k] = h
 	}
 	for k, seg := range d.Segments {
 		if c.Segments == nil {
@@ -193,6 +235,7 @@ func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name 
 	update.Chain = name
 	update.Index = index
 	c.DidUpdateChain(&update)
+	c.didAppend(u, name, index, entry)
 	return nil
 }
 

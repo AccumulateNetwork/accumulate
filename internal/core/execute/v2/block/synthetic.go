@@ -115,22 +115,8 @@ func (x *Executor) produceSyntheticInto(batch *database.Batch, produced []*Produ
 		}
 		blk.Entries = append(blk.Entries, entry)
 		tx.Add(entry)
-
-		if p.Producer == nil {
-			continue
-		}
-
-		// Record message -> produced synthetic message
-		ph := p.Producer.Hash()
-		err = batch.Message(ph).Produced().Add(seq.Message.ID())
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("add produced: %w", err)
-		}
-
-		err = batch.Transaction(ph[:]).Produced().Add(seq.Message.ID())
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("add produced: %w", err)
-		}
+		// The producer's Produced set was written when the message was
+		// produced (didProduce), with the ID it carries here.
 	}
 
 	err := batch.Commit()
@@ -181,16 +167,11 @@ func adjust64(prod *ProducedMessage) error {
 		return nil
 	}
 
-	// Are the body or header exactly 64 bytes?
-	body, err := txn.Transaction.Body.MarshalBinary()
-	if err != nil {
-		return errors.EncodingError.WithFormat("marshal body: %w", err)
-	}
-	header, err := txn.Transaction.Header.MarshalBinary()
-	if err != nil {
-		return errors.EncodingError.WithFormat("marshal header: %w", err)
-	}
-	if len(body) != 64 && len(header) != 64 {
+	// Are the body or header exactly 64 bytes? The transaction's hash
+	// computation already measures both, and the hash is needed anyway, so
+	// nothing is marshaled to find out (#4245).
+	body64, header64 := txn.Transaction.BodyIs64Bytes(), txn.Transaction.HeaderIs64Bytes()
+	if !body64 && !header64 {
 		return nil
 	}
 
@@ -198,14 +179,22 @@ func adjust64(prod *ProducedMessage) error {
 	txn = txn.Copy()
 
 	// Pad the header and/or body
-	if len(body) == 64 {
+	if body64 {
+		body, err := txn.Transaction.Body.MarshalBinary()
+		if err != nil {
+			return errors.EncodingError.WithFormat("marshal body: %w", err)
+		}
 		body = append(body, 0)
 		txn.Transaction.Body, err = protocol.UnmarshalTransactionBody(body)
 		if err != nil {
 			return errors.EncodingError.WithFormat("unmarshal body: %w", err)
 		}
 	}
-	if len(header) == 64 {
+	if header64 {
+		header, err := txn.Transaction.Header.MarshalBinary()
+		if err != nil {
+			return errors.EncodingError.WithFormat("marshal header: %w", err)
+		}
 		header = append(header, 0)
 		txn.Transaction.Header = protocol.TransactionHeader{}
 		err = txn.Transaction.Header.UnmarshalBinary(header)
@@ -261,14 +250,13 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		return nil, 0, nil, err
 	}
 
-	// Store the transaction, its status, and the initiator
-	err = putMessageWithStatus(
-		batch, seq,
-		&protocol.TransactionStatus{
-			Code: errors.Remote,
-		})
+	// Store the sequenced message: the chain entry names it, and the
+	// sequencer serves it from here (H1). No status — the outcome is the
+	// destination's, and nothing here reads one (executor spec, "One status
+	// per outcome").
+	err = batch.Message(seq.Hash()).Main().Put(seq)
 	if err != nil {
-		return nil, 0, nil, err
+		return nil, 0, nil, errors.UnknownError.WithFormat("store sequenced message: %w", err)
 	}
 
 	// Add the transaction to the destination's own synthetic chain: entry n-1
