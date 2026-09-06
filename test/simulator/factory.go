@@ -57,6 +57,7 @@ type simFactory struct {
 	dropInitialAnchor           bool
 	disableAnchorHealing        bool
 	interceptDispatchedMessages DispatchInterceptor
+	bptHistoryDepth             uint64
 
 	// State
 	logger           log.Logger
@@ -559,15 +560,16 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 	// Set up the executor options
 	execOpts := block.ExecutorOptions{
-		Logger:        f.getLogger(),
-		Database:      f.getDatabase(),
-		Key:           f.network.PrivValKey,
-		Router:        f.getRouter(),
-		EventBus:      f.getEventBus(),
-		NewDispatcher: f.getDispatcherFunc(),
-		Sequencer:     f.getServices().Private(),
-		Querier:       f.getServices(),
-		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
+		Logger:          f.getLogger(),
+		Database:        f.getDatabase(),
+		Key:             f.network.PrivValKey,
+		Router:          f.getRouter(),
+		EventBus:        f.getEventBus(),
+		NewDispatcher:   f.getDispatcherFunc(),
+		Sequencer:       f.getServices().Private(),
+		Querier:         f.getServices(),
+		Describe:        execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
+		BPTHistoryDepth: f.bptHistoryDepth,
 	}
 
 	// Add background tasks to the block's error group. The simulator must call

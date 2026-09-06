@@ -299,6 +299,7 @@ type CoreConsensusApp struct {
 	Partition            *protocol.PartitionInfo
 	EnableDirectDispatch *bool
 	MaxEnvelopesPerBlock *uint64
+	BPTHistoryDepth      *uint64
 }
 
 func (CoreConsensusApp) Type() ConsensusAppType { return ConsensusAppTypeCore }

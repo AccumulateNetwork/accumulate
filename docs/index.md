@@ -19,6 +19,7 @@ This index provides organized access to all Accumulate project documentation.
 ## Protocol
 
 - [Key Books and Delegation](protocol/key-books-and-delegation.md) - Key page entries, side keys, page priority, and which changes a delegate can make on its own authority
+- [Historical Account State Proofs](protocol/historical-account-state.md) - What a ForHeight proof commits to, what it does not, and what an operator must enable to serve one
 
 ## Architecture
 

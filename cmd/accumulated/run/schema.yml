@@ -381,6 +381,9 @@ Service:
                   - name: MaxEnvelopesPerBlock
                     type: '*uint'
                     optional: true
+                  - name: BPTHistoryDepth
+                    type: '*uint'
+                    optional: true
 
 
     - name: Querier
