@@ -99,6 +99,31 @@ type Config struct {
 	// the executor takes many seconds over. Zero means
 	// DefaultMaxHeaderBytes.
 	MaxHeaderBytes int
+
+	// MaxBlockBytes bounds the batches one block carries. A block executes
+	// every validator's header over roundsPerBlock rounds, so each header's
+	// budget is its share, MaxBlockBytes / (roundsPerBlock x validators),
+	// capped by MaxHeaderBytes: N validators cannot each fill a header
+	// (#4230). Zero means DefaultMaxBlockBytes.
+	MaxBlockBytes int
+}
+
+// roundsPerBlock is the rounds of headers one committed leader group spans:
+// Bullshark commits a leader every other round, and the leader's uncommitted
+// causal history is its own round and the one before.
+const roundsPerBlock = 2
+
+// DefaultMaxBlockBytes is the bound on the batches one block carries, whatever
+// the number of validators. It is a few block intervals of the executor's
+// capacity: with eight validators each header gets 64 KiB, with four 128 KiB,
+// and a single validator's header is still capped by DefaultMaxHeaderBytes.
+const DefaultMaxBlockBytes = 1 << 20
+
+// debugEnabled gates the construction of per-message log arguments -- hex
+// digests and the like -- on the level, so a line that is not emitted costs
+// nothing (#4231).
+func debugEnabled() bool {
+	return slog.Default().Enabled(context.Background(), slog.LevelDebug)
 }
 
 // DefaultMaxExecutionLag is the bound, in blocks, on how far execution may
@@ -121,6 +146,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MaxHeaderBytes <= 0 {
 		c.MaxHeaderBytes = DefaultMaxHeaderBytes
+	}
+	if c.MaxBlockBytes <= 0 {
+		c.MaxBlockBytes = DefaultMaxBlockBytes
 	}
 	if c.RoundAdvanceInterval <= 0 {
 		c.RoundAdvanceInterval = DefaultRoundAdvanceInterval
@@ -513,7 +541,7 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	header, err := p.createHeaderLockedWithRound(currentRound, currentEpoch)
 	if err != nil {
 		p.pendingMu.Unlock()
-		slog.Info("Cannot create header",
+		slog.Debug("Cannot create header",
 			"partition", p.config.Partition,
 			"error", err,
 			"round", currentRound)
@@ -529,11 +557,13 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 
 	p.headersCreated.Add(1)
 
-	slog.Info("Created header",
-		"digest", digest.String(),
-		"round", header.Round,
-		"payload", len(header.Payload),
-		"parents", len(header.Parents))
+	if debugEnabled() {
+		slog.Debug("Created header",
+			"digest", digest.String(),
+			"round", header.Round,
+			"payload", len(header.Payload),
+			"parents", len(header.Parents))
+	}
 
 	// Add our own vote (self-vote)
 	pubKey := p.config.KeyPair.Public().(ed25519.PublicKey)

@@ -39,6 +39,12 @@ type Checkpoint struct {
 	// Partition is the network partition this checkpoint is for.
 	Partition string `json:"partition"`
 
+	// BlockIndex is the executor block this consensus position belongs to:
+	// the block whose leader group LastCommitRound ordered. On restart the
+	// checkpoint whose BlockIndex is the executor's last block is the one
+	// to restore (#4238).
+	BlockIndex uint64 `json:"block_index,omitempty"`
+
 	// CurrentRound is the consensus round at checkpoint time.
 	CurrentRound types.Round `json:"current_round"`
 

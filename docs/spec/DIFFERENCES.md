@@ -227,6 +227,17 @@ validator restarted under load could not rejoin and stalled its partition
 verifies it against an anchored root, and nothing gates execution on staging
 being complete.
 
+**Seeding (#4238, done)**: the service checkpoints its consensus position
+per block and restores the one matching the executor's last block on restart
+(consensus.md, "Restart"), so a restarted validator starts at its own round
+rather than zero and certificate catch-up can reach the frontier within
+`DAGGCDepth` (2,000 rounds, about eight minutes at four rounds a second). Not
+done: a node down longer than that is beyond catch-up and only sync can bring
+it back; certificates at or below the checkpoint's round that a later leader
+commits are not pulled by catch-up, so the first block after a rejoin can
+still differ from its peers' — sync must deliver staging and the DAG floor
+together; the stranded condition is a Warn a minute, not a state.
+
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.
 

@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -404,6 +405,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		EventBus:          s.eventBus,
 		Logger:            logger.With("module", "dagbft"),
 		Genesis:           inst.path(s.Genesis),
+		DataDir:           inst.path("consensus", strings.ToLower(s.Partition.ID)),
 		InitialValidators: initialValidators,
 	}
 	if globals != nil && globals.Network != nil {

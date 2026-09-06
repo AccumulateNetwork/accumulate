@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/persist"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -47,6 +48,10 @@ type ServiceConfig struct {
 
 	// Logger is the logger to use.
 	Logger logging.Logger
+
+	// DataDir is where the service keeps its consensus checkpoint, the
+	// position it resumes from after a restart (#4238). Empty keeps none.
+	DataDir string
 
 	// Genesis is the path to the genesis file/snapshot.
 	Genesis string
@@ -89,6 +94,13 @@ type Service struct {
 	// Block production state
 	lastBlockIndex uint64
 	lastBlockTime  time.Time
+
+	// Consensus checkpoints: the position for the block about to be produced
+	// and the one before it, so whichever block the executor actually holds
+	// after a crash has a matching position (#4238).
+	checkpoint     *persist.Store
+	prevCheckpoint *persist.Store
+	lastSaved      *persist.Checkpoint
 
 	// Liveness watchdog. lastBlockAt is the local wall clock; lastBlockTime
 	// carries the certificate author's timestamp, which is executed state and
@@ -173,6 +185,9 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.initializeGenesis(); err != nil {
 		return errors.UnknownError.WithFormat("initialize genesis: %w", err)
 	}
+
+	// Resume the consensus position the executor's state was produced at
+	s.seedFromCheckpoint()
 
 	// Start consensus node
 	if err := s.node.Start(s.ctx); err != nil {
@@ -378,6 +393,67 @@ func (s *Service) initializeCommittee() (*types.Committee, error) {
 
 	committee := types.NewCommittee(validators, s.config.InitialNetworkVersion)
 	return committee, nil
+}
+
+// The checkpoint files under DataDir.
+const (
+	checkpointFile     = "consensus-checkpoint.json"
+	prevCheckpointFile = "consensus-checkpoint.prev.json"
+)
+
+// saveCheckpoint writes the node's consensus position for blockIndex, keeping
+// the previous block's position as well. A failure to write is reported, not
+// fatal: the next block writes again.
+func (s *Service) saveCheckpoint(blockIndex uint64) {
+	if s.config.DataDir == "" {
+		return
+	}
+	if s.checkpoint == nil {
+		s.checkpoint = persist.NewStore(s.config.DataDir)
+		s.checkpoint.SetFilename(checkpointFile)
+		s.prevCheckpoint = persist.NewStore(s.config.DataDir)
+		s.prevCheckpoint.SetFilename(prevCheckpointFile)
+	}
+	cp := s.node.Checkpoint()
+	cp.BlockIndex = blockIndex
+	if s.lastSaved != nil {
+		if err := s.prevCheckpoint.Save(s.lastSaved); err != nil {
+			s.logger.Error("Saving previous consensus checkpoint", "error", err, "block", s.lastSaved.BlockIndex)
+		}
+	}
+	if err := s.checkpoint.Save(cp); err != nil {
+		s.logger.Error("Saving consensus checkpoint", "error", err, "block", blockIndex)
+		return
+	}
+	s.lastSaved = cp
+}
+
+// seedFromCheckpoint restores the consensus position that produced the
+// executor's last block, so a restarted validator rejoins at the live round
+// instead of round zero (#4238). Of the two checkpoints kept, the one whose
+// block is the executor's last block is the position to resume; a node with
+// state but no matching checkpoint starts at round zero and cannot catch a
+// live network (DIFFERENCES E11).
+func (s *Service) seedFromCheckpoint() {
+	if s.config.DataDir == "" || s.lastBlockIndex == 0 {
+		return
+	}
+	for _, file := range []string{checkpointFile, prevCheckpointFile} {
+		store := persist.NewStore(s.config.DataDir)
+		store.SetFilename(file)
+		cp, err := store.Load()
+		if err != nil {
+			continue
+		}
+		if cp.BlockIndex != s.lastBlockIndex || cp.Partition != s.config.Partition.ID {
+			continue
+		}
+		s.node.Restore(cp)
+		s.lastSaved = cp
+		return
+	}
+	slog.Warn("No consensus checkpoint matches the executor's last block; starting at round zero",
+		"partition", s.config.Partition.ID, "lastBlock", s.lastBlockIndex)
 }
 
 // initializeGenesis initializes the DAG with genesis certificates.
@@ -625,7 +701,7 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 		certBatches, err := s.node.CollectBatches(s.ctx, cert)
 		if err != nil {
 			if stderrors.Is(err, consensus.ErrAlreadyExecuted) {
-				slog.Info("Ignoring re-delivered certificate",
+				slog.Debug("Ignoring re-delivered certificate",
 					"round", cert.Header.Round,
 					"partition", s.config.Partition.ID)
 				continue
@@ -674,6 +750,11 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 		Certificate: leader,
 		Batches:     batches,
 	}
+
+	// Record the consensus position this block is produced at, before it is
+	// produced: a crash on either side of ProduceBlock leaves a checkpoint
+	// that matches the executor's last block (#4238).
+	s.saveCheckpoint(blockIndex)
 
 	hash, err := s.adapter.ProduceBlock(s.ctx, params)
 	if err != nil {

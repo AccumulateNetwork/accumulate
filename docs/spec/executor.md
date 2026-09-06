@@ -928,9 +928,27 @@ cache"). At the destination the members go to synthetic
 staging by index and the proof to anchor staging by its anchor's sequence
 number (Collection), whichever arrives first.
 
+**The dispatcher is isolated from the data it dispatches.** The block hands
+its envelopes to the dispatcher (`Submit`) and is done; nothing in the block
+waits on a send, and the block's own `Send` only marks the block boundary. The
+dispatcher owns **one outbound queue per destination partition**, drained by
+its own goroutine on its own stream with its own per-attempt deadline, so one
+unreachable partition never delays another and one failed dial never loses the
+envelopes queued behind it. **A write that fails is retried**: an attempt that
+fails at the transport, or that the destination answers "not now" (worker
+back-pressure, a full store, any server-side error), keeps the envelope queued
+and tries again after a back-off, until the envelope's retry deadline — a few
+blocks' worth — passes. A destination that refuses an envelope as invalid
+settles it: it is counted and not retried. The queue is bounded in **blocks**:
+envelopes from more than `dispatchQueueBlocks` blocks ago are dropped, oldest
+first, when a new block begins. Every outcome is a counter per destination —
+queued, sent, retried, refused, dropped (by reason: deadline or queue-full) —
+so that what left the leader can be compared with what arrived
+(`accumulate_dispatcher_*`, `internal/node/daemon/dispatcher.go`).
+
 **Failure has one fallback.** A dispatch the leader never makes — its executor
-behind, the receipt lost, the submission refused — is not retried by the
-executor. The destination sees the gap and healing fills it
+behind, the receipt lost — or that the dispatcher drops after its retries is
+not retried by the executor. The destination sees the gap and healing fills it
 ([healing.md](healing.md)). The executor counts packages built, packages
 dispatched and submission errors so that the two can be compared.
 

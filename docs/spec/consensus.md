@@ -61,7 +61,10 @@ So a validator holds batches in four places, for four reasons:
 5. **A full store is reported once, not once per submission.** The condition
    is a state, and a state is logged when it changes and counted while it
    holds. A warning per refused submission at 500 tps is 500 warnings a
-   second, which is itself a resource.
+   second, which is itself a resource. The same rule sets log levels:
+   lifecycle events and state transitions are `Info`; anything that happens
+   per header, vote, certificate, sync request or transaction is `Debug`, and
+   the arguments of such a line are not built unless the level is enabled.
 6. **Retention is a window in seconds of traffic, bounded in bytes.** A peer
    that is further behind than the window cannot recover by fetching batches
    and must resync (E11; the mechanism is not snapshots — Paul, 2026-09-06).
@@ -92,6 +95,12 @@ So a validator holds batches in four places, for four reasons:
    the backlog into one header made one block the executor took ten to
    seventeen seconds over, which re-crossed the bound and refused user work
    again — an oscillation, not a recovery (run `20260905T144928Z`).
+   **The bound is per block, not per header.** A block executes every
+   validator's header over two rounds, so a per-header cap alone lets N
+   validators carry N × 2 × `MaxHeaderBytes` in one block — 4 MiB for a
+   Directory of eight. Each header therefore gets its share of a per-block
+   budget, `MaxBlockBytes / (2 × validators)`, capped by `MaxHeaderBytes`; a
+   block is bounded whatever the number of validators.
 10. **A refusal says why.** Refusing for a full own store (consensus is not
    committing this validator's batches) and refusing for execution lag (commits
    are fine, the executor is behind) are the same `NotReady` to the submitter
@@ -114,6 +123,7 @@ Per partition, per node:
 | retention | `DefaultMaxRetainedBatchBytes` = 32 MB | the same |
 | inbound queue | `DefaultMaxInboundBatchBytes` = 32 MB | one queue per partition |
 | pending | `MaxPendingSize` = 10 MB, `MaxPendingCount` = 10,000 | per worker |
+| a block's batches | `DefaultMaxBlockBytes` = 1 MiB | `headerBudget`: budget / (2 × validators), capped by `DefaultMaxHeaderBytes` = 256 KiB, floor one batch |
 
 A node running a Directory and a BVN validator holds two of each. The
 per-worker share must include the wire buffer a stored batch aliases
@@ -217,6 +227,39 @@ they are, these are the facts the executor and healing parts depend on:
   history. A certificate no header ever references is never executed and its
   batches are lost; the weak-link window is what makes that impossible in
   practice, and the count of orphaned certificates is a metric.
+
+### DAG retention
+
+The DAG keeps `DAGGCDepth` (2,000) rounds of certificates behind **whichever
+is further ahead, the last commit or the latest round**. Collection runs from
+the commit path, as before, and from the round advance: when a certificate
+for a new round is inserted, rounds more than `DAGGCDepth` behind it are
+collected. A node whose executor has halted therefore does not grow its DAG
+while the network goes on — the rounds it never committed are collected once
+the frontier is more than the depth ahead of its last commit, counted
+(`accumulate_dagbft_dag_uncommitted_rounds_dropped_total`) and reported once,
+because such a node is stranded, not lagging: the batches those rounds name
+are outside every peer's retention, so it could not have executed them
+(invariant 6, E11). A healthy node commits within a few rounds of the
+frontier, and the round advance collects nothing the commit path would not.
+Collection walks only the rounds the cutoff moved over, never the whole DAG.
+
+### Restart
+
+A validator's consensus position is **checkpointed per block, before the
+block is produced**: the primary's round and epoch, Bullshark's last committed
+leader round and its per-author watermarks, and the block index the position
+belongs to (`persist.Checkpoint`, `Service.saveCheckpoint`, two files under
+the node's `consensus/<partition>/` directory — the position for the block
+about to be produced and the one before it). On restart the service restores
+the checkpoint whose block is the executor's last block
+(`Service.seedFromCheckpoint`, `Node.Restore`), so the node participates from
+that round and certificate catch-up bridges the gap to the live frontier,
+within `DAGGCDepth`. A node with state but no matching checkpoint starts at
+round zero, says so, and cannot catch a live network. What a restarted node
+still lacks — the state and staging its peers hold, and the certificates
+below its checkpoint that a later leader commits — is the sync mechanism
+(E11, [DIFFERENCES.md](DIFFERENCES.md)).
 
 ### Retention
 
