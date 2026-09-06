@@ -29,6 +29,7 @@ type Chain struct {
 
 	head         values.Value[*State]
 	states       map[chainStatesMapKey]values.Value[*State]
+	tail         map[chainTailMapKey]values.Value[*TailChunk]
 	elementIndex map[chainElementIndexMapKey]values.Value[uint64]
 	element      map[chainElementMapKey]values.Value[[]byte]
 }
@@ -45,6 +46,18 @@ type chainStatesMapKey struct {
 
 func (k chainStatesKey) ForMap() chainStatesMapKey {
 	return chainStatesMapKey{k.Index}
+}
+
+type chainTailKey struct {
+	Index uint64
+}
+
+type chainTailMapKey struct {
+	Index uint64
+}
+
+func (k chainTailKey) ForMap() chainTailMapKey {
+	return chainTailMapKey{k.Index}
 }
 
 type chainElementIndexKey struct {
@@ -87,6 +100,14 @@ func (c *Chain) newStates(k chainStatesKey) values.Value[*State] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("States", k.Index), false, values.Struct[State]())
 }
 
+func (c *Chain) Tail(index uint64) values.Value[*TailChunk] {
+	return values.GetOrCreateMap(c, &c.tail, chainTailKey{index}, (*Chain).newTail)
+}
+
+func (c *Chain) newTail(k chainTailKey) values.Value[*TailChunk] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Tail", k.Index), true, values.Struct[TailChunk]())
+}
+
 func (c *Chain) ElementIndex(hash []byte) values.Value[uint64] {
 	return values.GetOrCreateMap(c, &c.elementIndex, chainElementIndexKey{hash}, (*Chain).newElementIndex)
 }
@@ -121,28 +142,38 @@ func (c *Chain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		}
 		v := c.States(index)
 		return v, key.SliceI(2), nil
-	case "ElementIndex":
+	case "Tail":
 		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for chain (4)")
 		}
+		index, okIndex := key.Get(1).(uint64)
+		if !okIndex {
+			return nil, nil, errors.InternalError.With("bad key for chain (5)")
+		}
+		v := c.Tail(index)
+		return v, key.SliceI(2), nil
+	case "ElementIndex":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for chain (6)")
+		}
 		hash, okHash := key.Get(1).([]byte)
 		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for chain (5)")
+			return nil, nil, errors.InternalError.With("bad key for chain (7)")
 		}
 		v := c.ElementIndex(hash)
 		return v, key.SliceI(2), nil
 	case "Element":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for chain (6)")
+			return nil, nil, errors.InternalError.With("bad key for chain (8)")
 		}
 		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
-			return nil, nil, errors.InternalError.With("bad key for chain (7)")
+			return nil, nil, errors.InternalError.With("bad key for chain (9)")
 		}
 		v := c.Element(index)
 		return v, key.SliceI(2), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for chain (8)")
+		return nil, nil, errors.InternalError.With("bad key for chain (10)")
 	}
 }
 
@@ -155,6 +186,11 @@ func (c *Chain) IsDirty() bool {
 		return true
 	}
 	for _, v := range c.states {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.tail {
 		if v.IsDirty() {
 			return true
 		}
@@ -184,6 +220,7 @@ func (c *Chain) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	}
 	values.WalkField(&err, c.head, c.newHead, opts, fn)
 	values.WalkMap(&err, c.states, c.newStates, c.getMarkPoints, opts, fn)
+	values.WalkMap(&err, c.tail, c.newTail, c.getTailChunks, opts, fn)
 	if !opts.IgnoreIndices {
 		values.WalkMap(&err, c.elementIndex, c.newElementIndex, nil, opts, fn)
 	}
@@ -201,6 +238,9 @@ func (c *Chain) Commit() error {
 	var err error
 	values.Commit(&err, c.head)
 	for _, v := range c.states {
+		values.Commit(&err, v)
+	}
+	for _, v := range c.tail {
 		values.Commit(&err, v)
 	}
 	for _, v := range c.elementIndex {

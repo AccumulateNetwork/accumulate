@@ -856,7 +856,12 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 		if head.Count == 0 {
 			return nil
 		}
-		for _, h := range head.HashList {
+		// The open mark set: every entry since the last mark point
+		for i := head.Count &^ c.Inner().MarkMask(); i < head.Count; i++ {
+			h, err := c.Entry(i)
+			if err != nil {
+				return errors.UnknownError.WithFormat("load %s chain entry %d: %w", c.Name(), i, err)
+			}
 			err = collectMessageHash(a, c.Name()+" chain", hashes, opts, *(*[32]byte)(h))
 			if err != nil {
 				return errors.UnknownError.Wrap(err)

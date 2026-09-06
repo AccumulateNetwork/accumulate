@@ -139,6 +139,21 @@ them is the writer's bug, not the chain's to absorb.
   own records (mark points, elements, element indexes) is the store's
   business; mark points are in the dynamic layer because queries reach them
   at any age, and a missing one is an error, never an empty state.
+- **The head is Count and Pending; the open mark set is chunked.** A chain's
+  head is rewritten on every append, so it holds only what every append
+  changes: the count and the pending roots (log₂ n hashes). The hashes of
+  the *open* mark set — the entries since the last mark point, which a
+  receipt, a state or a range inside that set replays — are kept in
+  `Tail(k)` records of at most eight hashes, reused every set and identified
+  by the index of their first hash, so an append rewrites one chunk and not
+  the set; the mark point that closes the set is assembled from them and
+  holds the whole set, as it always has. The tail is mutable state in the
+  dynamic layer for the same reason mark points are: the open set of a slow
+  chain (an anchor chain at one entry a block, the major-block chain) is
+  older than the permanent window, and its readers — the executor's last
+  major block, a state or range for the API — must find it at any age. A
+  head written before the tail records carries the set itself and is read
+  as such until its next append moves the set over.
 - **A layer exception is for a permanent shape only.** The dynamic layer is
   read first, so a tombstone there shadows a later write of the same key to
   the permanent layer; a windowed store therefore remembers a deleted
