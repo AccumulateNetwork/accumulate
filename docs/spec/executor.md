@@ -73,7 +73,9 @@ read the ledger record the block writes at its close.
 against a read-only batch that is always discarded, so it writes nothing and
 changes nothing. It exists so a node can refuse a malformed or unpayable
 envelope before it is gossiped and sequenced, not to decide anything about
-execution.
+execution. The batch is **unisolated**: validation judges against the latest
+committed state, so it pins no version and no block commit takes pre-images
+on its account ([database.md](database.md), "Isolation has a price").
 
 A message that reaches execution is validated again on the path above, by the
 gates that can only be evaluated with block state in hand.
