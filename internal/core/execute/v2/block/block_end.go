@@ -250,6 +250,27 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Retain what this block's BPT update is about to overwrite. A no-op at
+	// the default depth of zero, and it never changes the BPT root, so it
+	// needs no executor-version gate.
+	block.Batch.SetBPTHistory(block.Index, m.BPTHistoryDepth)
+
+	// If retention was off for a state-changing block since the last one it
+	// ran at, the history before that block is gone and the horizon must say
+	// so. The last state-changing block is the ledger's, not this block's
+	// index: a partition does not execute a block at every height, so height
+	// arithmetic cannot tell idleness from a gap in retention.
+	if m.BPTHistoryDepth > 0 && block.Index > 1 {
+		prev, _, err := indexing.ResolveBlockAtOrBefore(m.Describe.PartitionUrl(), block.Batch, block.Index-1)
+		if err != nil && !errors.Is(err, errors.NotFound) {
+			return nil, errors.UnknownError.WithFormat("resolve the previous state-changing block: %w", err)
+		}
+		err = block.Batch.NoteBPTBlock(block.Index, m.BPTHistoryDepth, prev)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
 	// Update the BPT
 	err = block.Batch.UpdateBPT()
 	if err != nil {

@@ -72,6 +72,15 @@ type BlockQuery struct {
 	extraData []byte
 }
 
+type BlockRange struct {
+	fieldsSet []bool
+	// Earliest is the lowest block in the range.
+	Earliest uint64 `json:"earliest,omitempty" form:"earliest" query:"earliest" validate:"required"`
+	// Latest is the highest block in the range.
+	Latest    uint64 `json:"latest,omitempty" form:"latest" query:"latest" validate:"required"`
+	extraData []byte
+}
+
 type ChainEntryRecord[T Record] struct {
 	fieldsSet []bool
 	// Account is the account (omitted if unambiguous).
@@ -133,7 +142,9 @@ type ConsensusStatus struct {
 	SyntheticHeals uint64 `json:"syntheticHeals,omitempty" form:"syntheticHeals" query:"syntheticHeals"`
 	// AnchorHeals counts anchors recovered by healing.
 	AnchorHeals uint64 `json:"anchorHeals,omitempty" form:"anchorHeals" query:"anchorHeals"`
-	extraData   []byte
+	// RetainedBlocks is the range of minor blocks this node can produce historical account state proofs for; absent means none.
+	RetainedBlocks *BlockRange `json:"retainedBlocks,omitempty" form:"retainedBlocks" query:"retainedBlocks"`
+	extraData      []byte
 }
 
 type ConsensusStatusOptions struct {
@@ -387,7 +398,9 @@ type Receipt struct {
 	LocalBlock     uint64    `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
 	LocalBlockTime time.Time `json:"localBlockTime,omitempty" form:"localBlockTime" query:"localBlockTime" validate:"required"`
 	MajorBlock     uint64    `json:"majorBlock,omitempty" form:"majorBlock" query:"majorBlock" validate:"required"`
-	extraData      []byte
+	// ForHeight is the minor block height this receipt was produced against; zero means the current state.
+	ForHeight uint64 `json:"forHeight,omitempty" form:"forHeight" query:"forHeight"`
+	extraData []byte
 }
 
 type ReceiptOptions struct {
@@ -627,6 +640,21 @@ func (v *BlockQuery) Copy() *BlockQuery {
 
 func (v *BlockQuery) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *BlockRange) Copy() *BlockRange {
+	u := new(BlockRange)
+
+	u.Earliest = v.Earliest
+	u.Latest = v.Latest
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BlockRange) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *ChainEntryRecord[T]) Copy() *ChainEntryRecord[T] {
 	u := new(ChainEntryRecord[T])
 
@@ -777,6 +805,9 @@ func (v *ConsensusStatus) Copy() *ConsensusStatus {
 	}
 	u.SyntheticHeals = v.SyntheticHeals
 	u.AnchorHeals = v.AnchorHeals
+	if v.RetainedBlocks != nil {
+		u.RetainedBlocks = (v.RetainedBlocks).Copy()
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1410,6 +1441,7 @@ func (v *Receipt) Copy() *Receipt {
 	u.LocalBlock = v.LocalBlock
 	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
+	u.ForHeight = v.ForHeight
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1755,6 +1787,17 @@ func (v *BlockQuery) Equal(u *BlockQuery) bool {
 	return true
 }
 
+func (v *BlockRange) Equal(u *BlockRange) bool {
+	if !(v.Earliest == u.Earliest) {
+		return false
+	}
+	if !(v.Latest == u.Latest) {
+		return false
+	}
+
+	return true
+}
+
 func (v *ChainEntryRecord[T]) Equal(u *ChainEntryRecord[T]) bool {
 	switch {
 	case v.Account == u.Account:
@@ -1939,6 +1982,14 @@ func (v *ConsensusStatus) Equal(u *ConsensusStatus) bool {
 		return false
 	}
 	if !(v.AnchorHeals == u.AnchorHeals) {
+		return false
+	}
+	switch {
+	case v.RetainedBlocks == u.RetainedBlocks:
+		// equal
+	case v.RetainedBlocks == nil || u.RetainedBlocks == nil:
+		return false
+	case !((v.RetainedBlocks).Equal(u.RetainedBlocks)):
 		return false
 	}
 
@@ -2592,6 +2643,9 @@ func (v *Receipt) Equal(u *Receipt) bool {
 	if !(v.MajorBlock == u.MajorBlock) {
 		return false
 	}
+	if !(v.ForHeight == u.ForHeight) {
+		return false
+	}
 
 	return true
 }
@@ -3075,6 +3129,64 @@ func (v *BlockQuery) baseIsValid() error {
 	}
 }
 
+var fieldNames_BlockRange = []string{
+	1: "Earliest",
+	2: "Latest",
+}
+
+func (v *BlockRange) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Earliest == 0) {
+		writer.WriteUint(1, v.Earliest)
+	}
+	if !(v.Latest == 0) {
+		writer.WriteUint(2, v.Latest)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockRange)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *BlockRange) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Earliest is missing")
+	} else if v.Earliest == 0 {
+		errs = append(errs, "field Earliest is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Latest is missing")
+	} else if v.Latest == 0 {
+		errs = append(errs, "field Latest is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_ChainEntryRecord = []string{
 	1:  "RecordType",
 	2:  "Account",
@@ -3445,6 +3557,7 @@ var fieldNames_ConsensusStatus = []string{
 	10: "Peers",
 	11: "SyntheticHeals",
 	12: "AnchorHeals",
+	13: "RetainedBlocks",
 }
 
 func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
@@ -3494,6 +3607,9 @@ func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.AnchorHeals == 0) {
 		writer.WriteUint(12, v.AnchorHeals)
+	}
+	if !(v.RetainedBlocks == nil) {
+		writer.WriteValue(13, v.RetainedBlocks.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ConsensusStatus)
@@ -5509,6 +5625,7 @@ var fieldNames_Receipt = []string{
 	2: "LocalBlock",
 	3: "LocalBlockTime",
 	4: "MajorBlock",
+	5: "ForHeight",
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
@@ -5530,6 +5647,9 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.MajorBlock == 0) {
 		writer.WriteUint(4, v.MajorBlock)
+	}
+	if !(v.ForHeight == 0) {
+		writer.WriteUint(5, v.ForHeight)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Receipt)
@@ -6385,6 +6505,32 @@ func (v *BlockQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *BlockRange) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockRange) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Earliest = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Latest = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockRange)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *ChainEntryRecord[T]) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -6628,6 +6774,9 @@ func (v *ConsensusStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadUint(12); ok {
 		v.AnchorHeals = x
+	}
+	if x := new(BlockRange); reader.ReadValue(13, x.UnmarshalBinaryFrom) {
+		v.RetainedBlocks = x
 	}
 
 	seen, err := reader.Reset(fieldNames_ConsensusStatus)
@@ -7732,6 +7881,9 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(4); ok {
 		v.MajorBlock = x
 	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.ForHeight = x
+	}
 
 	seen, err := reader.Reset(fieldNames_Receipt)
 	if err != nil {
@@ -8129,6 +8281,11 @@ func init() {
 	}, "BlockQuery", "blockQuery")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("earliest", "uint64"),
+		encoding.NewTypeField("latest", "uint64"),
+	}, "BlockRange", "blockRange")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("recordType", "string"),
 		encoding.NewTypeField("account", "string"),
 		encoding.NewTypeField("name", "string"),
@@ -8179,6 +8336,7 @@ func init() {
 		encoding.NewTypeField("peers", "ConsensusPeerInfo[]"),
 		encoding.NewTypeField("syntheticHeals", "uint64"),
 		encoding.NewTypeField("anchorHeals", "uint64"),
+		encoding.NewTypeField("retainedBlocks", "BlockRange"),
 	}, "ConsensusStatus", "consensusStatus")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -8383,6 +8541,7 @@ func init() {
 		encoding.NewTypeField("localBlock", "uint64"),
 		encoding.NewTypeField("localBlockTime", "string"),
 		encoding.NewTypeField("majorBlock", "uint64"),
+		encoding.NewTypeField("forHeight", "uint64"),
 	}, "Receipt", "receipt")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -8686,6 +8845,7 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
 		SyntheticHeals   uint64                                `json:"syntheticHeals,omitempty"`
 		AnchorHeals      uint64                                `json:"anchorHeals,omitempty"`
+		RetainedBlocks   *BlockRange                           `json:"retainedBlocks,omitempty"`
 		ExtraData        *string                               `json:"$epilogue,omitempty"`
 	}{}
 	if !(!v.Ok) {
@@ -8723,6 +8883,9 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.AnchorHeals == 0) {
 		u.AnchorHeals = v.AnchorHeals
+	}
+	if !(v.RetainedBlocks == nil) {
+		u.RetainedBlocks = v.RetainedBlocks
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -9243,6 +9406,7 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 		LocalBlock     uint64                                  `json:"localBlock,omitempty"`
 		LocalBlockTime time.Time                               `json:"localBlockTime,omitempty"`
 		MajorBlock     uint64                                  `json:"majorBlock,omitempty"`
+		ForHeight      uint64                                  `json:"forHeight,omitempty"`
 		ExtraData      *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Receipt.Start) == 0) {
@@ -9271,6 +9435,9 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.MajorBlock == 0) {
 		u.MajorBlock = v.MajorBlock
+	}
+	if !(v.ForHeight == 0) {
+		u.ForHeight = v.ForHeight
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -9650,6 +9817,7 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
 		SyntheticHeals   uint64                                `json:"syntheticHeals,omitempty"`
 		AnchorHeals      uint64                                `json:"anchorHeals,omitempty"`
+		RetainedBlocks   *BlockRange                           `json:"retainedBlocks,omitempty"`
 		ExtraData        *string                               `json:"$epilogue,omitempty"`
 	}{}
 	u.Ok = v.Ok
@@ -9664,6 +9832,7 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	u.Peers = v.Peers
 	u.SyntheticHeals = v.SyntheticHeals
 	u.AnchorHeals = v.AnchorHeals
+	u.RetainedBlocks = v.RetainedBlocks
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -9688,6 +9857,7 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	v.Peers = u.Peers
 	v.SyntheticHeals = u.SyntheticHeals
 	v.AnchorHeals = u.AnchorHeals
+	v.RetainedBlocks = u.RetainedBlocks
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -10385,6 +10555,7 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 		LocalBlock     uint64                                  `json:"localBlock,omitempty"`
 		LocalBlockTime time.Time                               `json:"localBlockTime,omitempty"`
 		MajorBlock     uint64                                  `json:"majorBlock,omitempty"`
+		ForHeight      uint64                                  `json:"forHeight,omitempty"`
 		ExtraData      *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
@@ -10396,6 +10567,7 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	u.LocalBlock = v.LocalBlock
 	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
+	u.ForHeight = v.ForHeight
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -10421,6 +10593,7 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	v.LocalBlock = u.LocalBlock
 	v.LocalBlockTime = u.LocalBlockTime
 	v.MajorBlock = u.MajorBlock
+	v.ForHeight = u.ForHeight
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

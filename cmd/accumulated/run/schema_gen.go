@@ -378,6 +378,14 @@ func init() {
 					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
 				},
 			},
+			{
+				Name:     "BPTHistoryDepth",
+				Optional: true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
+				},
+			},
 		},
 	}).SetGoType()
 
