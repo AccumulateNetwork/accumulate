@@ -473,3 +473,281 @@ cadence #4227 (11); nested batches #4228 (7); requester under lag #4229 (9);
 per-header byte bound #4230 (13); Info logging #4231 (14); cache and block-close
 residue #4232 (1, 8, 12); staging visibility #4233 (2); dispatcher #4222 (4).
 Done: finding 1 (ccb80592e), finding 3 (4ff104e6f).
+
+---
+
+# Second pass (2026-09-06, later): what the first pass missed
+
+Four more reviews, from angles the layer-by-layer pass did not take: an
+adversarial re-check of everything the first pass called bounded plus this
+week's new code; what is written and kept on disk and in the store's dynamic
+layer (measured on run 20260905T153920Z's storage statistics, not estimated);
+lifecycle and scaling paths (restart, resync, major blocks, partitions,
+validators, metrics cardinality, goroutines, log volume); and a repo-wide
+sweep for growth patterns. Everything marked verified was re-read in the
+source by the author. Numbers are for one BVN at 500 tps unless said.
+
+## The short version
+
+1. **The dynamic layer, not the heap, is where the write path grows without
+   end.** 72 records per user transaction, 57 % of them in the dynamic layer,
+   which nothing prunes: eight statuses per transaction (one per wrapper),
+   eight copies of the transaction body, Produced and Cause sets written
+   twice, and the chain head rewritten with up to 256 hashes on every append.
+   Roughly 25 to 55 bytes written per byte of input; about 85 % avoidable.
+2. **Every cleared set becomes a tombstone exception the adapter keeps in a
+   map for the life of the process** — three per delivered transaction,
+   roughly 350–450 MB of heap per hour at 500 tps, plus a file re-read whole
+   at open. Neither pass had seen this. It is a candidate for the BlockchainDB
+   soak growth the first pass could not place.
+3. **Pre-images run on nearly every commit anyway.** Removing the sequencer's
+   pinned view was not enough: every CheckTx opens a read view, so a reader is
+   almost always registered while a block commits, and a pre-image for a key
+   the window does not hold walks the dynamic history.
+4. **A restarted validator has no way back into consensus.** It starts at
+   round zero, can bridge at most 2000 rounds (about eight minutes), and past
+   that logs forever. The rejoin hook exists and nothing calls it.
+5. **A disconnected event subscriber leaves the API loading every block's
+   ledger forever**, one leaked goroutine per disconnect.
+6. **Two defects in this week's code**, both fixed the same day (978b8eac6):
+   the cache release walked the claimed number line (endless at the maximum)
+   and a list-proven copy's Delivered was unauthenticated.
+
+## Findings, ranked
+
+### 17. Chain heads carry up to 256 hashes and are rewritten per append — VERIFIED, MEASURED
+
+- **Where**: `pkg/database/merkle/chain.go:106-123` — `Head().Put(head)` on
+  every `AddEntry`, and `head.HashList` holds the current mark set (up to
+  `markFreq` = 256 hashes, average ~128 → ~4.4 KB) until the set closes.
+  Every hash in it is also stored as `Element(i)`. Measured 800 head writes
+  per block at 188 tx (main, signature and both index chains' heads).
+- **Grows with**: per (chain, block) after write collapse; bytes with the
+  mark set's fill.
+- **Magnitude**: 17–34 GB per hour written to the dynamic layer, garbage until
+  compaction folds it after it leaves the window; ~85 % of dynamic-layer bytes.
+- **Remedy**: keep `Pending` (log n hashes) in the head and rebuild the mark
+  set from `Element(mark..count)` when a receipt needs it, or keep it in
+  memory. Head becomes ~500 B.
+
+### 18. Cleared sets leave tombstone exceptions in memory forever — VERIFIED
+
+- **Where**: `pkg/database/values/set.go:195-203` (an empty set marshals to
+  zero bytes) → `pkg/database/keyvalue/bcdb/database.go:974-979` (`if
+  len(value) == 0 { d.except(h) }`) → `:448-453` (`d.dyna[h] = true`,
+  appended to `pendingDyna`) → `:411-426` (`persistExceptions` appends 32 B
+  to the exceptions file) → `:391-405` (`loadExceptions` reads the whole file
+  into the map at open). Cleared per delivered transaction: `Payments`,
+  `Votes` (`msg_transaction.go:437-442`) and `Signatures`
+  (`sig_common.go:296-300`) — three exceptions per transaction. Measured
+  734 K clears in 37 minutes on run 153920Z.
+- **Grows with**: per transaction, for the process lifetime and across
+  restarts (the file).
+- **Magnitude**: 5.4 M entries per hour → **~350–450 MB of heap per hour**
+  (32-byte key plus map overhead), 173 MB per hour of file, and a start-up
+  that reads it all. Neither pass had this; it is the first candidate for the
+  memory growth of the earlier BlockchainDB soaks that the first pass could
+  not place.
+- **Remedy**: clearing a set nobody will read again should write nothing
+  (delete the key rather than write an empty value), or these shapes are
+  classified so a tombstone needs no exception; bound the exceptions map.
+
+### 19. Eight statuses and eight bodies per user transaction; Produced and Cause written twice — VERIFIED, MEASURED
+
+- **Where**: statuses — `msg_common.go:416`, `msg_transaction.go:276`,
+  `synthetic.go:316`, `transaction.go:511`: a `Transaction.(hash).Status` for
+  every wrapper (transaction, signature, credit payment, authority signature,
+  synthetic transaction, sequenced message; the destination writes three
+  more), 2.95 M in 37 minutes, dynamic layer, never deleted, and a status read
+  for an old transaction walks all of dynamic history
+  (BlockchainDB `segstore.go:1785-1797`). Bodies — `msg_common.go:385`,
+  `msg_transaction.go:245`, `transaction.go:497`, `synthetic.go:310`: the
+  transaction body is stored inside `TransactionMessage`, again inside
+  `SequencedMessage`, again inside `SyntheticMessage`, and the same three at
+  the destination, 8.2 per transaction, ~3.3 KB for ~540 B of input. Sets —
+  `msg_common.go:391-413`, `synthetic.go:125-131`: `Cause` 4.4, `Message.Produced`
+  4.3 and `Transaction.Produced` 2.7 per transaction, each a whole-set
+  read-modify-write; `Produced` is written under both the message and the
+  transaction.
+- **Magnitude**: statuses 3.7 GB/h live and unpruned; bodies 6.6 GB/h
+  permanent; sets 3.9 GB/h live. Per transaction: 72 records, 31.5 permanent
+  and 41 dynamic; 14–31 KB written per 540 B input.
+- **Remedy**: one status per message that has an outcome of its own (the
+  transaction, the outer message) — a spec decision, since database.md names
+  statuses as the dedup record; the transaction body stored once and referenced
+  by hash from the wrappers; `Produced` written once, `Cause` derived from it.
+
+### 20. Pre-images on nearly every commit; a mutable-key miss walks history — VERIFIED
+
+- **Where**: `bcdb/database.go:477-480` (every read batch, including the
+  one `exec_validate.go:22` opens per CheckTx, registers a view), `:1003`
+  (`readers := len(d.views) > 0`), `:1043-1058` (`preImages`: a `GetDyna`
+  per non-permanent entry of the commit); BlockchainDB
+  `segstore.go:1794-1797`: a mutable key that is not in the window does not
+  short-circuit, so the pre-image of a *new* dynamic key (every fresh status,
+  produced set, signature set) falls to `lookupHistory`, a bloom probe per
+  history segment.
+- **Grows with**: entries per commit × dynamic history segments.
+- **Magnitude**: ~5 K `GetDyna` per block × 5–10 segments ≈ 10⁵ page reads per
+  block, on every node, always. Removing the sequencer's pinned view (finding
+  5) did not remove this; #4225 was closed too early on that count.
+- **Remedy**: CheckTx reads "latest", not a snapshot — it should not register
+  an isolated view; and pre-image only keys the window holds (a BlockchainDB
+  change: a window-only `GetDyna` for pre-images).
+
+### 21. A restarted validator cannot rejoin consensus after ~8 minutes down — VERIFIED (code), not run
+
+- **Where**: `internal/node/dagbft/service.go:384-397` (`initializeGenesis`
+  restores the block index and nothing else), `pkg/consensus/primary/primary.go:287`
+  (`currentRound: 0`), `vote_handler.go:333-337, 535-550` (a header more than
+  `DefaultDAGGCDepth` = 2000 rounds ahead strands the node with one Warn per
+  minute and an Info per header), `consensus.go:850` (`Rejoin` — uncalled
+  since the fast-sync seed was removed today), `service.go:1035-1053`
+  (`RequestStateSync` logs and returns nil).
+- **What happens**: catch-up is 64 rounds per second within 2000 rounds; at
+  ~4 rounds per second a node down longer than about eight minutes never
+  rejoins and logs ~32 lines per second forever.
+- **Remedy**: seed the round from the executor's own last block (the hook
+  exists), or persist the checkpoint `pkg/consensus/recovery.go` already
+  models; measure catch-up in blocks, not rounds. Part of E11.
+
+### 22. DAG garbage collection stops when the executor halts — VERIFIED
+
+- **Where**: `internal/node/dagbft/service.go:471-474` (the production loop
+  returns on unrecoverable batches and nothing drains `committed`),
+  `pkg/consensus/consensus.go:908-915` (the flush blocks on the 5000-group
+  channel), `:931-934` (`GarbageCollect` runs only after a flush).
+- **Grows with**: rounds after the channel fills (~2.8 h at one round per
+  second); ~90–130 MB per hour per partition, two per dual node.
+- **Remedy**: collect on round advance, not on flush; or stop consensus with
+  the executor.
+
+### 23. A disconnected event subscriber pins the pump and per-block ledger loading — VERIFIED
+
+- **Where**: `internal/api/v3/event.go:172-173` (`subscribers.Add(1)`,
+  deferred `Add(-1)`), `:192, :195, :214` (bare `ch <- ...` sends on a
+  one-slot channel, no `select` on `ctx.Done`), consumer
+  `pkg/api/v3/message/events.go:38-42` (returns on a failed write without
+  draining), `event.go:101-103` (`if s.subscribers.Load() > 0 {
+  s.loadBlockInfo(e) }`).
+- **What happens**: one disconnect parks the producer on its second send
+  forever; the counter never decrements; `loadBlockInfo` (a database view,
+  the block ledger, one entry load per chain entry — thousands per block at
+  500 tps) runs on every block with nobody listening.
+- **Remedy**: `select` on `ctx.Done()` at every send; drain on exit.
+
+### 24. The cache is seeded for 32 blocks but healing is served for 3600 — VERIFIED
+
+- **Where**: `synth_cache_seed.go:22` (`seedCacheBlocks = 32`),
+  `sequencer_cache.go:117-123` (past the seed: `NotFound`, "a miss is a
+  defect"). Also lost at restart: `cache.received`, the Directory anchors
+  executed but not yet dispatched, so their blocks' synthetics are never
+  dispatched and only healing can fill them — from a cache that no longer
+  holds them.
+- **Remedy**: seed to the smallest remote `Delivered` (the release signal now
+  gives it), or rebuild a block on a miss by position (the seed code already
+  does it per block).
+
+### 25. Behind the retention window the requester asks forever — VERIFIED
+
+- **Where**: `requester.go:351-363` (empty stage asks the whole span),
+  `:313-321` (`NotFound` is a miss), `:452-460` (back-off caps at 32 blocks).
+- **What happens**: past the cache horizon a stream is `NotFound` every 32
+  blocks forever; execution never passes the hole; everything above it is
+  held. No halt, no state, one Error per stream per 32 blocks. E11's
+  territory, now with no path but genesis.
+- **Remedy**: a "stranded" state that stops asking and says so once.
+
+### 26. A forged sequence number sizes the stage — VERIFIED
+
+- **Where**: `msg_synthetic.go:149, 195` (a signature is required but
+  verified only for own-proof copies), `:405` (`maxSequenceAhead` =
+  2,000,000), `staging.go:126-138` (`hold` appends nils to the offset).
+- **What it costs**: one list-proven copy re-wrapped with a forged number
+  appends up to 2 M slots (16 MB) per stream, kept until the number passes
+  (~an hour at 500 tps), plus a first-sighting squat costing one heal round.
+- **Remedy**: verify the signer for every synthetic (the fix for the
+  Delivered claim does this for that field; the hold should demand it too);
+  size the stage by the source's produced count.
+
+### 27. `Account.Chains` rewritten for every dirty account every block — VERIFIED
+
+- **Where**: `internal/database/account.go:132-143` (`Chains().Add(...)`
+  unconditionally; `set.Add` always `Put`s). ~270 per block, ~1 GB/h of
+  dynamic-layer churn, entirely avoidable.
+
+### 28. Requester re-asks collected-unvalidated entries; proofs stack under one block — VERIFIED
+
+- **Where**: `requester.go:384-387` (the "staged proof is not a gap" guard
+  was removed by 8d90814c0), `staging.go:527-541` (proofs appended per block,
+  no dedup), `anchor_staging.go:80-84` (refusal counts blocks, not proofs).
+- **Magnitude**: under Directory-anchor lag L: L/12 × ≤16 spans × ≤128 KB
+  per source ≈ 43 MB at L = 256, then refusal and a heal storm. Adds to #4229.
+
+### 29. Log volume ~490 MB per hour per node; the container cap keeps ~50 minutes — MEASURED (09-04 build)
+
+- 650 lines per second per node, 99.6 % Info; "Received vote via gossip" is
+  39 %; a twelve-hour run keeps only its last 50 minutes on the box
+  (`docker-compose.yml:27-31`, 2 × 200 MB). Adds to #4231.
+
+### 30. Smaller, real
+
+- The dispatcher's `retries` map pins an envelope whose retry cycle then
+  fails at the transport (`dispatcher.go:36, 125-139, 203-205`). Adds to #4222.
+- Every executed sequenced message is deep-copied whether or not it carries a
+  placeholder (`msg_sequenced.go:205-208`); `adjust64` marshals every produced
+  synthetic twice to measure it (`synthetic.go:185-192`); the submit path
+  builds a per-message ID string for an ungated Debug line
+  (`internal/node/dagbft/api.go:196-202`).
+- Info lines not in #4231: "Directory receipt for own block" per receipt per
+  block (`block_begin.go:412`, added 2026-09-06), "Ignoring re-delivered
+  certificate" per certificate (`service.go:628-630`), "Missing parent for
+  header" per parent (`vote_handler.go:366-368`).
+- Bootstrap server metrics label `http_requests_total` with the request
+  path (`cmd/accumulated-bootstrap/info_server.go:686-696`): unbounded
+  cardinality against any caller. No node-side vector has an unbounded label.
+- Bootstrap reconnect spawns an undeadlined dial per peer every 15 s
+  (`p2p/discovery.go:85-103`).
+- Websocket handler: unsynchronised map and bare sends (`websocket/handler.go:121-158`); cold.
+- `anchorRecord` opens a deep view and reads a signature set per answered
+  anchor (`sequencer_cache.go:225-245`): 4096 views per restart-gap span.
+  Keep the signatures in the cache's anchor entry instead.
+- Released cache blocks keep their `Block`, `Streams` header and Directory
+  receipt until the horizon (~20 MB per node, bounded); a stream whose
+  destination produces nothing back is never released. Adds to #4232.
+- `Events.Major.Pending` grows for the major period under multi-signature
+  load (`block_end.go:431-433`); the backlog drain rewrites the whole record
+  per block (`msg_transaction.go:632`). Zero under the load generator.
+- Chain entries are re-read at block close to recover a hash known at append
+  (`block_end.go:163-176`).
+- Own batches have no byte cap and stale ones re-broadcast whole every 15 s
+  (`worker.go:479, 739-759, 1165-1184, 1265-1273`); bounded by the queue.
+
+## Fixed the same day
+
+- The cache release walk is clamped to the highest held number and walks the
+  held set when the claim outruns it; a `Delivered` is taken only from a
+  message whose validator signature verifies (978b8eac6).
+
+## First-pass claims re-confirmed as bounded
+
+Stream positions; `buildRun` caps; anchor staging's block bounds (proofs per
+block are not bounded — finding 28); the cache seed's cost (its coverage is
+finding 24); `getDnHeight` (only for `HoldUntil` transactions); block ledger;
+`Chain2.Get` registration (miss-only); index-chain search and `StateAt` (off
+the block path); BPT pending per batch; retention and active stores; primary
+per-header maps; cert-sync maps; Bullshark dedup; tombstones ring; publish
+goroutines; no lock across I/O in cache or staging; bcdb caches (two
+generations of 200 K, ~120 MB); the dynamic in-memory index sealed per shard;
+`received` drained per block; validator set changes retain nothing; all
+node-side metric vectors have bounded labels; timers and tickers are stopped
+under context-checked loops.
+
+## Not verified
+
+Average mark-set fill (drives finding 17's range); dynamic-layer bytes on disk
+(counts only in the run's statistics); whether the load generator's flow is
+bidirectional per partition pair (finding 30, one-way streams); that a
+restarted node sits at round zero in a running Docker network (read, not
+run); the current build's log rate (the sample is the 09-04 build);
+BlockchainDB's per-segment probe cost.
