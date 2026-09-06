@@ -269,6 +269,22 @@ question of whether validation should have refused them at submit.
 See "Memory" above: bounded, oscillating with GC headroom, in-use falling
 between two profiles.
 
+### Addendum at 3 h 50 (measured): the laggards diverge
+
+Execution lag per node at 17:32Z: bvn1-val1 **202** blocks, bvn1-val4 96,
+bvn2-val1 39, bvn2-val2 29, bvn2-val4 45, the other three 3–4. Same partition,
+same load, same disk: two BVN1 validators are minutes behind while two keep up.
+The 202-block node's block goroutine, sampled, is in `pread` inside
+`SegmentStore.lookupHistory` → `segment.readValue` (F1, live). Its RSS is
+1.43 GiB of 2 GiB (heap in use ~950 MiB; the consensus worker holds 92 MB of
+its own unexecuted batches, `batch_store_bytes{kind="own"}`), so a laggard
+also converts lag into memory. Load 331 tps. Why two nodes diverge from their
+peers is not determined here (not the heal volume: val1 healed 160 k, val4
+33 k); the per-partition block timer and seal-duration histogram of P10 are
+what would show it. Relevance to the plan: lag compounds — a node that falls
+behind keeps refusing its users (P2) and probes more history (P1) — so the
+fixes are not optional for steady state.
+
 ## Why, in one paragraph
 
 Consensus makes a block every second. Executing a loaded block takes about
