@@ -171,7 +171,7 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "| chaos | $CHAOS_ENABLED |"
   echo "| target duration | $DURATION |"
   echo "| target TPS | $TPS |"
-  echo "| storage | ${ACC_STORAGE:-leveldb} |"
+  echo "| storage | $(sed -nE 's/^database: *([a-z]+).*/\1/p' "$here/../docker-network.yml" | head -1) (docker-network.yml) |"
   echo "| block interval | ${ACC_BLOCK_INTERVAL:-1s} |"
   echo "| memory budget | mem_limit ${ACC_MEM_LIMIT:-1536m}, GOMEMLIMIT ${GOMEMLIMIT:-1200MiB} |"
   echo

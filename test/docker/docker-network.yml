@@ -1,5 +1,9 @@
 id: "DAGBFTTest"
 
+# The storage backend every node runs on. BlockchainDB is the backend (#4165);
+# a run on anything else is not comparable and must say so in its manifest.
+database: BlockchainDB
+
 # Bootstrap node configuration for Docker peer discovery
 bootstrap:
   peerAddress: "acc-bootstrap"

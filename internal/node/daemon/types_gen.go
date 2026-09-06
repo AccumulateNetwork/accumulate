@@ -32,6 +32,8 @@ type NetworkInit struct {
 	Id           string                `json:"id,omitempty" form:"id" query:"id" validate:"required"`
 	Globals      *network.GlobalValues `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
 	OperatorKeys [][]byte              `json:"operatorKeys,omitempty" form:"operatorKeys" query:"operatorKeys" validate:"required"`
+	// Database is the storage backend every generated node runs on (BlockchainDB, LevelDB, Badger, Memory); the --database flag overrides it.
+	Database string `json:"database,omitempty" form:"database" query:"database" validate:"required"`
 	// Template is a TOML template for the node configuration.
 	Template  string     `json:"template,omitempty" form:"template" query:"template" validate:"required"`
 	Bootstrap *NodeInit  `json:"bootstrap,omitempty" form:"bootstrap" query:"bootstrap" validate:"required"`
@@ -320,6 +322,7 @@ func init() {
 		encoding.NewTypeField("id", "string"),
 		encoding.NewTypeField("globals", "network.GlobalValues"),
 		encoding.NewTypeField("operatorKeys", "bytes[]"),
+		encoding.NewTypeField("database", "string"),
 		encoding.NewTypeField("template", "string"),
 		encoding.NewTypeField("bootstrap", "NodeInit"),
 		encoding.NewTypeField("bvns", "BvnInit[]"),
@@ -361,6 +364,7 @@ func (v *NetworkInit) MarshalJSON() ([]byte, error) {
 		Id           string                      `json:"id,omitempty"`
 		Globals      *network.GlobalValues       `json:"globals,omitempty"`
 		OperatorKeys encoding.JsonList[*string]  `json:"operatorKeys,omitempty"`
+		Database     string                      `json:"database,omitempty"`
 		Template     string                      `json:"template,omitempty"`
 		Bootstrap    *NodeInit                   `json:"bootstrap,omitempty"`
 		Bvns         encoding.JsonList[*BvnInit] `json:"bvns,omitempty"`
@@ -377,6 +381,9 @@ func (v *NetworkInit) MarshalJSON() ([]byte, error) {
 		for i, x := range v.OperatorKeys {
 			u.OperatorKeys[i] = encoding.BytesToJSON(x)
 		}
+	}
+	if !(len(v.Database) == 0) {
+		u.Database = v.Database
 	}
 	if !(len(v.Template) == 0) {
 		u.Template = v.Template
@@ -470,6 +477,7 @@ func (v *NetworkInit) UnmarshalJSON(data []byte) error {
 		Id           string                      `json:"id,omitempty"`
 		Globals      *network.GlobalValues       `json:"globals,omitempty"`
 		OperatorKeys encoding.JsonList[*string]  `json:"operatorKeys,omitempty"`
+		Database     string                      `json:"database,omitempty"`
 		Template     string                      `json:"template,omitempty"`
 		Bootstrap    *NodeInit                   `json:"bootstrap,omitempty"`
 		Bvns         encoding.JsonList[*BvnInit] `json:"bvns,omitempty"`
@@ -481,6 +489,7 @@ func (v *NetworkInit) UnmarshalJSON(data []byte) error {
 	for i, x := range v.OperatorKeys {
 		u.OperatorKeys[i] = encoding.BytesToJSON(x)
 	}
+	u.Database = v.Database
 	u.Template = v.Template
 	u.Bootstrap = v.Bootstrap
 	u.Bvns = v.Bvns
@@ -499,6 +508,7 @@ func (v *NetworkInit) UnmarshalJSON(data []byte) error {
 			v.OperatorKeys[i] = x
 		}
 	}
+	v.Database = u.Database
 	v.Template = u.Template
 	v.Bootstrap = u.Bootstrap
 	v.Bvns = u.Bvns

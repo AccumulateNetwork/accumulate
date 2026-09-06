@@ -111,12 +111,18 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		networkReset()
 	}
 
-	// The storage backend every generated node is pinned to. Resolved once,
-	// up front, so a typo fails before any directory is written.
+	// The storage backend every generated node is pinned to: the network
+	// file says it, the --database flag overrides it. Resolved once, up
+	// front, so a typo fails before any directory is written.
 	storageType := run.DefaultStorageType
-	if flagInitNetwork.Database != "" {
+	switch {
+	case flagInitNetwork.Database != "":
 		if !storageType.SetByName(flagInitNetwork.Database) {
 			fatalf("--database: %q is not a valid storage type", flagInitNetwork.Database)
+		}
+	case network.Database != "":
+		if !storageType.SetByName(network.Database) {
+			fatalf("database: %q in the network file is not a valid storage type", network.Database)
 		}
 	}
 
