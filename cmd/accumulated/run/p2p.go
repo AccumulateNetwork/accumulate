@@ -23,14 +23,24 @@ func (p *P2P) start(inst *Instance) error {
 	}
 
 	setDefaultPtr(&p.PeerDB, "")
-	node, err := p2p.New(p2p.Options{
+	opts := p2p.Options{
 		Key:               sk,
 		Network:           inst.config.Network,
 		Listen:            p.Listen,
 		BootstrapPeers:    p.BootstrapPeers,
 		PeerDatabase:      *p.PeerDB,
 		EnablePeerTracker: p.EnablePeerTracking,
-	})
+	}
+	// Pass the configured DHT mode through (#4065). Without this, nodes always
+	// run dht.ModeAuto, which AutoNAT demotes to client-only on private
+	// networks — then no node stores provider records and acc-svc service
+	// discovery between nodes never resolves. Every generated configuration
+	// asks for ModeAutoServer (cmd_init_network.go, netsim.go); on this line
+	// that request was dropped on the floor.
+	if p.DiscoveryMode != nil {
+		opts.DiscoveryMode = dht.ModeOpt(*p.DiscoveryMode)
+	}
+	node, err := p2p.New(opts)
 	if err != nil {
 		return err
 	}
