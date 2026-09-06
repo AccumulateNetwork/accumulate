@@ -501,14 +501,27 @@ func (c *Cache) Servable(b *Block) bool {
 	return b.Dispatched && c.Newest() >= b.DispatchedAt+InFlightBlocks
 }
 
-// Entry answers one produced entry by stream and number.
+// Entry answers one produced entry by stream and number. A miss is counted.
 func (c *Cache) Entry(stream *url.URL, number uint64) (*Entry, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	e, ok := c.entries[streamKey(stream)][number]
+	e, ok := c.Peek(stream, number)
 	count("entry", ok)
 	return e, ok
 }
+
+// Peek answers one produced entry by stream and number without counting the
+// outcome: for a reader that knows a number may not have been produced yet,
+// and counts the miss itself only when it was (healing spec, "The answer":
+// asked too soon is "not yet", not a miss).
+func (c *Cache) Peek(stream *url.URL, number uint64) (*Entry, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	e, ok := c.entries[streamKey(stream)][number]
+	return e, ok
+}
+
+// Count records a hit or a miss of the given kind, for a reader that looked
+// with Peek and has decided what the outcome was.
+func Count(kind string, hit bool) { count(kind, hit) }
 
 // ByHash answers one produced entry by its hash, the healing request's
 // vocabulary.
@@ -521,12 +534,18 @@ func (c *Cache) ByHash(hash [32]byte) (*Entry, bool) {
 }
 
 // Anchor answers a produced anchor by sequence number, and the block that
-// recorded it.
+// recorded it. A miss is counted.
 func (c *Cache) Anchor(number uint64) (*protocol.Transaction, uint64, bool) {
+	txn, block, ok := c.PeekAnchor(number)
+	count("anchor", ok)
+	return txn, block, ok
+}
+
+// PeekAnchor is Anchor without counting the outcome; see Peek.
+func (c *Cache) PeekAnchor(number uint64) (*protocol.Transaction, uint64, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	a, ok := c.anchors[number]
-	count("anchor", ok)
 	if !ok {
 		return nil, 0, false
 	}

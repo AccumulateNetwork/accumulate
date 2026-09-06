@@ -81,7 +81,12 @@ func (b *Block) intakeProof(source *url.URL, proof *protocol.AnnotatedReceipt, s
 		mExecStagedProofs.WithLabelValues("refused").Inc()
 		return errors.BadRequest.WithFormat("anchor staging for %v already waits on %d blocks", source, len(blocks))
 	}
-	b.staging.StageProof(source, proof.Anchor.SourceBlock, proof)
+	if !b.staging.StageProof(source, proof.Anchor.SourceBlock, proof) {
+		// The same proof already waits under that block: every copy of a
+		// package's members carries it, and one is enough
+		mExecStagedProofs.WithLabelValues("duplicate").Inc()
+		return nil
+	}
 	mExecStagedProofs.WithLabelValues("staged").Inc()
 	return nil
 }

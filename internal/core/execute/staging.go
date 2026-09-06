@@ -523,14 +523,28 @@ func (t *StagingTxn) Validated(id StreamID, n uint64) ([32]byte, bool) {
 }
 
 // StageProof holds a collection proof from a source under the Directory
-// anchor block it terminates in, until that anchor executes here.
-func (t *StagingTxn) StageProof(source *url.URL, block uint64, proof *protocol.AnnotatedReceipt) {
+// anchor block it terminates in, until that anchor executes here. A proof
+// identical to one already waiting under that block — the same first index
+// and the same element count — is not held twice: under Directory-anchor lag
+// the same package proof arrives with every copy of its members, and stacking
+// them is memory for nothing (review 2026-09-06, finding 28). Answers whether
+// the proof was held.
+func (t *StagingTxn) StageProof(source *url.URL, block uint64, proof *protocol.AnnotatedReceipt) bool {
 	if t == nil {
-		return
+		return false
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	k := sourceKey(source)
+	if t.dropped[k][block] {
+		return false
+	}
+	t.s.mu.Lock()
+	dup := hasSameProof(t.s.proofs[k][block], proof)
+	t.s.mu.Unlock()
+	if dup || hasSameProof(t.proofs[k][block], proof) {
+		return false
+	}
 	if t.proofs[k] == nil {
 		t.proofs[k] = map[uint64][]*protocol.AnnotatedReceipt{}
 	}
@@ -538,6 +552,59 @@ func (t *StagingTxn) StageProof(source *url.URL, block uint64, proof *protocol.A
 	if _, ok := t.sources[k]; !ok {
 		t.sources[k] = source
 	}
+	return true
+}
+
+// hasSameProof reports whether the list holds a proof over the same span as
+// this one: the same starting count and the same number of elements.
+func hasSameProof(list []*protocol.AnnotatedReceipt, proof *protocol.AnnotatedReceipt) bool {
+	if proof == nil || proof.ReceiptList == nil || proof.ReceiptList.MerkleState == nil {
+		return false
+	}
+	for _, p := range list {
+		if p == nil || p.ReceiptList == nil || p.ReceiptList.MerkleState == nil {
+			continue
+		}
+		if p.ReceiptList.MerkleState.Count == proof.ReceiptList.MerkleState.Count &&
+			len(p.ReceiptList.Elements) == len(proof.ReceiptList.Elements) {
+			return true
+		}
+	}
+	return false
+}
+
+// StagedProofSpans lists the number spans [first, last] the proofs waiting
+// for their Directory anchor from a source cover, in no particular order. A
+// proof starting at chain count s with k elements covers numbers s+1..s+k.
+// An entry under such a span is not a gap: its proof has arrived and its
+// anchor is on its way (healing spec, "Deciding, in staging").
+func (t *StagingTxn) StagedProofSpans(source *url.URL) [][2]uint64 {
+	if t == nil {
+		return nil
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	k := sourceKey(source)
+	var spans [][2]uint64
+	add := func(m map[uint64][]*protocol.AnnotatedReceipt) {
+		for b, ps := range m {
+			if t.dropped[k][b] {
+				continue
+			}
+			for _, p := range ps {
+				if p == nil || p.ReceiptList == nil || p.ReceiptList.MerkleState == nil || len(p.ReceiptList.Elements) == 0 {
+					continue
+				}
+				start := uint64(p.ReceiptList.MerkleState.Count)
+				spans = append(spans, [2]uint64{start + 1, start + uint64(len(p.ReceiptList.Elements))})
+			}
+		}
+	}
+	t.s.mu.Lock()
+	add(t.s.proofs[k])
+	t.s.mu.Unlock()
+	add(t.proofs[k])
+	return spans
 }
 
 // ProofBlocks lists the Directory anchor blocks a source has proofs waiting

@@ -299,3 +299,32 @@ func TestStaging_ReleaseReturnsTheBacklog(t *testing.T) {
 	require.Len(t, st.entries, 50)
 	require.Len(t, s.byID, 50)
 }
+
+// The same proof arriving twice under one anchor block is held once: every
+// copy of a package's members carries the package's proof, and under
+// Directory-anchor lag the copies keep coming (review 2026-09-06, finding 28).
+// A different span under the same block is a different proof.
+func TestStaging_DuplicateProofsAreNotStacked(t *testing.T) {
+	s := NewStaging()
+	proofOver := func(start int64, elements int) *protocol.AnnotatedReceipt {
+		list := merkle.NewReceiptList()
+		list.MerkleState = &merkle.State{Count: start}
+		for i := 0; i < elements; i++ {
+			list.Elements = append(list.Elements, held(uint64(start) + uint64(i) + 1).Hash[:])
+		}
+		return &protocol.AnnotatedReceipt{Anchor: &protocol.AnchorMetadata{SourceBlock: 7}, ReceiptList: list}
+	}
+	tx := s.Begin()
+	require.True(t, tx.StageProof(testSource, 7, proofOver(0, 3)))
+	require.False(t, tx.StageProof(testSource, 7, proofOver(0, 3)), "the same span, the same block: not held again")
+	require.True(t, tx.StageProof(testSource, 7, proofOver(3, 2)), "a different span is a different proof")
+	require.Len(t, tx.Proofs(testSource, 7), 2)
+	tx.Commit()
+
+	tx = s.Begin()
+	require.False(t, tx.StageProof(testSource, 7, proofOver(0, 3)), "nor across blocks: the committed one stands")
+	require.Len(t, tx.Proofs(testSource, 7), 2)
+	require.ElementsMatch(t, [][2]uint64{{1, 3}, {4, 5}}, tx.StagedProofSpans(testSource), "the numbers the waiting proofs cover")
+	tx.DropProofs(testSource, 7)
+	require.Empty(t, tx.StagedProofSpans(testSource), "dropped proofs cover nothing")
+}
