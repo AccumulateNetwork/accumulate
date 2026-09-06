@@ -661,7 +661,9 @@ on any other account).
 Both are written once. The record is never rewritten, which is what a layered
 backend's permanent layer holds ([database.md](database.md), "Backends"); the
 chain's element, element-index and mark-state records already qualify. Only the
-chain head, a few hundred bytes, is rewritten.
+chain head and the tail chunk of its open mark set, a few hundred bytes
+together, are rewritten ([database.md](database.md), "The head is Count and
+Pending").
 
 **Commitment.** The ledger's chains are not added to the root chain in the
 chain-update loop (the root chain and the BPT chain live on the same account and
