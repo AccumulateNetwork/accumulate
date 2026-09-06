@@ -857,7 +857,11 @@ many envelopes as fit `synthPackageBudget`. Each envelope is one
 synthetic chain** from the package's first member to the block's last element,
 continued through the root chain to the Directory root, and carrying that
 Directory anchor's **sequence number** — followed by the members as proof-less
-sequenced messages, each with the transaction it belongs to. The proof's hashes
+sequenced messages, each with the transaction it belongs to. The proof and
+every member also carry the sender's **`Delivered`** on the destination's
+stream to the sender: the latest of the destination's synthetics the sender
+has executed, which tells the destination what it may drop from its own
+producer cache (healing.md, "The cache"). The proof's hashes
 are the destination's entries in order, so the proof's index is the sequence
 number and the stage aligns the two by position. A group of one is sent with an
 individual receipt instead. At the destination the members go to synthetic

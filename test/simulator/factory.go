@@ -169,6 +169,7 @@ func (f *nodeFactory) Build(p *Partition) *Node {
 		n.database = f.getDatabase()
 	}
 	n.staging = f.getStaging()
+	n.synthCache = f.getSynthCache()
 	n.heals = f.getHeals()
 
 	// Register services

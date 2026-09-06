@@ -9,6 +9,8 @@ package block
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -30,6 +32,11 @@ type Block struct {
 	// at close (healing spec, "The cache").
 	cache      *synthcache.Txn
 	cacheBlock *synthcache.Block
+	// remoteDelivered is, per source, the highest Delivered a validated
+	// message from that source carried this block: what the source has
+	// executed of ours, so what our cache may drop for it at commit
+	// (healing spec, "The cache"). Serial: synthetics never shard.
+	remoteDelivered map[string]remoteAck
 
 	// staging is this block's view of the partition's staging: what is held,
 	// proven and waiting, plus what this block adds; it commits with the
@@ -139,4 +146,24 @@ func (s *closedBlock) Discard() {
 	s.Batch.Discard()
 	s.cache.Discard()
 	s.staging.Discard()
+}
+
+type remoteAck struct {
+	source    *url.URL
+	delivered uint64
+}
+
+// noteRemoteDelivered records what a validated synthetic message from source
+// says the source has executed of this partition's stream to it.
+func (b *Block) noteRemoteDelivered(source *url.URL, delivered uint64) {
+	if source == nil || delivered == 0 {
+		return
+	}
+	k := strings.ToLower(source.String())
+	if b.remoteDelivered == nil {
+		b.remoteDelivered = map[string]remoteAck{}
+	}
+	if a, ok := b.remoteDelivered[k]; !ok || delivered > a.delivered {
+		b.remoteDelivered[k] = remoteAck{source, delivered}
+	}
 }

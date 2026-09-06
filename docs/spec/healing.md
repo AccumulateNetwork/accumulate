@@ -224,10 +224,19 @@ two-level cycled cache in the dynamic layer and serves reads, not healing.
   the block's span on that destination's synthetic chain and the receipt to
   the Directory root the block was dispatched under — so a package's or a bundle's proof is built from the
   cache alone.
-- **Cleared as gaps close.** Because it is indexed by partition and index, every
-  entry the destination is known to have delivered can be dropped: the cache
-  holds the entries in play, not a window of history. It is sized for the
-  entries in play, and sizing it is a separate matter decided from measurement.
+- **Cleared by the destination's word, carried on the traffic already
+  flowing.** Every synthetic message or package a partition dispatches to a
+  destination carries the sender's **`Delivered`** for the reverse stream — the
+  latest sequence number the sender has executed *from* that destination. A
+  partition that reads it knows the sender will never ask for anything at or
+  below it, and drops those entries, and the block segments that held them,
+  from its cache at once. So the cache holds the entries in play — what the
+  other side has not yet said it executed — not a window of history. A stream
+  with no reverse traffic hears nothing and falls back to the horizon, which
+  is the backstop, not the mechanism. The value is taken only from a message
+  that has validated (its proof anchored, or the message executing): a
+  collected entry's word is not trusted, since dropping what a source still
+  needs would leave it a gap no one can fill.
 - **Never served from storage.** Every entry is also persisted to the
   permanent layer through execution; that is the record, not a fallback. A
   request for an entry the cache does not hold is refused and **counted as a
@@ -337,9 +346,13 @@ block appended; the Directory receipt and anchor the
 block was dispatched under, recorded at dispatch (`MarkDispatched`).
 Dispatch (`sendSyntheticTransactionsForBlock`) and the sequencer service
 (`sequencer_cache.go`) read it and nothing else; a miss is refused as
-`NotFound` and counted (`accumulate_synthcache_misses_total{kind}`). Trimmed by
-a horizon of blocks (`DefaultHorizon`, an hour) until a delivery signal
-exists. At the first block an executor opens, the cache is seeded from the
+`NotFound` and counted (`accumulate_synthcache_misses_total{kind}`). Released by
+the destination's `Delivered` carried on every dispatched `SyntheticProof`
+and `SyntheticMessage` (`Txn.Release` at the destination's block close, applied
+at commit: the stream's entries at or below it, and the block segments that
+held them, go; `accumulate_synthcache_released_total`); a horizon of blocks
+(`DefaultHorizon`, an hour) remains as the backstop for a stream with no
+reverse traffic. At the first block an executor opens, the cache is seeded from the
 node's own chains by position for the recent blocks whose anchors have not
 returned (`seedSynthCache`): genesis produces through another executor, and a
 node that starts has produced blocks not yet anchored — a start-up step, not a

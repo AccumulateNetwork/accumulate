@@ -143,6 +143,7 @@ type Cache struct {
 	anchors  map[uint64]*anchorEntry // produced anchors by sequence number
 	received []*ReceivedAnchor
 	newest   uint64
+	released map[string]uint64 // per stream, the number the destination has said it executed through
 
 	// the newest anchor produced, by sequence number, and the block it
 	// anchored: what the next block's open asks before producing another
@@ -213,6 +214,29 @@ type Txn struct {
 	anchorNumbers []uint64
 	anchorBlocks  []uint64 // the block each anchor anchors
 	received      []*ReceivedAnchor
+	released      map[string]release
+}
+
+type release struct {
+	stream  *url.URL
+	through uint64
+}
+
+// Release records that the destination has executed this partition's stream
+// to it through number `through`: it will never ask for anything at or below,
+// so the entries and the block segments that held them go at commit (healing
+// spec, "The cache").
+func (t *Txn) Release(stream *url.URL, through uint64) {
+	if t == nil || stream == nil {
+		return
+	}
+	if t.released == nil {
+		t.released = map[string]release{}
+	}
+	k := streamKey(stream)
+	if r, ok := t.released[k]; !ok || through > r.through {
+		t.released[k] = release{stream, through}
+	}
 }
 
 // Begin starts the additions of block index.
@@ -289,6 +313,9 @@ func (t *Txn) Commit() {
 	if t.block > c.newest {
 		c.newest = t.block
 	}
+	for k, r := range t.released {
+		c.releaseLocked(k, r.through)
+	}
 	c.trimLocked()
 	mEntries.Set(float64(len(c.byHash)))
 	mBlocks.Set(float64(len(c.blocks)))
@@ -300,6 +327,54 @@ func (t *Txn) Discard() {
 		return
 	}
 	*t = Txn{}
+}
+
+// releaseLocked drops a stream's entries through number n and the block
+// segments that held only released entries. Numbers are dense per stream, so
+// the walk is over what is newly released, not over what is held.
+func (c *Cache) releaseLocked(k string, n uint64) {
+	if c.released == nil {
+		c.released = map[string]uint64{}
+	}
+	from := c.released[k] + 1
+	if n < from {
+		return
+	}
+	c.released[k] = n
+	m := c.entries[k]
+	if m == nil {
+		return
+	}
+	touched := map[uint64]bool{}
+	var dropped int
+	for num := from; num <= n; num++ {
+		e, ok := m[num]
+		if !ok {
+			continue
+		}
+		delete(m, num)
+		delete(c.byHash, e.Hash)
+		touched[e.Block] = true
+		dropped++
+	}
+	for idx := range touched {
+		b := c.blocks[idx]
+		if b == nil {
+			continue
+		}
+		kept := b.Entries[:0]
+		for _, e := range b.Entries {
+			if streamKey(e.Stream) != k || e.Number > n {
+				kept = append(kept, e)
+			}
+		}
+		clear(b.Entries[len(kept):])
+		b.Entries = kept
+		if st := b.Streams[k]; st != nil && st.Segment != nil && uint64(st.Segment.Last())+1 <= n {
+			delete(b.Streams, k) // its last entry is released: nothing is proven from it again
+		}
+	}
+	mReleased.Add(float64(dropped))
 }
 
 func (c *Cache) trimLocked() {
@@ -495,6 +570,12 @@ var (
 		Namespace: "accumulate", Subsystem: "synthcache", Name: "misses_total",
 		Help: "Reads the producer's synthetic/anchor cache could not answer. A miss is a defect: the cache is undersized or the request is stale",
 	}, []string{"kind"})
+	mReleased = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "accumulate",
+		Subsystem: "synthcache",
+		Name:      "released_total",
+		Help:      "Entries dropped because the destination said it had executed them (the Delivered carried on its dispatch)",
+	})
 	mEntries = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "accumulate", Subsystem: "synthcache", Name: "entries",
 		Help: "Produced entries held",

@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -38,6 +39,7 @@ type Node struct {
 	database   *database.Database
 	services   *message.Handler
 	staging    *execute.Staging
+	synthCache *synthcache.Cache
 	heals      *crosschain.HealCounters
 }
 

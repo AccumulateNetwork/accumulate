@@ -79,7 +79,7 @@ func TestSynthOwnProof_NamesTheDirectoryAnchor(t *testing.T) {
 	}}
 	seg, err := merkle.NewSegment(f.chain2.Inner(), 0)
 	require.NoError(t, err)
-	require.NoError(t, f.x.sendSynthWithOwnProof(o, seg, rootReceipt, nil, 2, 42))
+	require.NoError(t, f.x.sendSynthWithOwnProof(o, seg, rootReceipt, nil, 2, 42, 0))
 	require.Len(t, d.envelopes, 1)
 	syn, ok := d.envelopes[0].Messages[0].(*messaging.SyntheticMessage)
 	require.True(t, ok)

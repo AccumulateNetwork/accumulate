@@ -304,6 +304,7 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 	// proof was checked, anchored, and absorbed into the replica when it
 	// first arrived.
 	if syn.Proof == nil {
+		x.noteRemoteDelivered(ctx, syn)
 		_, err = ctx.callMessageExecutor(batch, syn.Message)
 		return errors.UnknownError.Wrap(err)
 	}
@@ -350,6 +351,7 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 	}
 
 	// Execute the inner message
+	x.noteRemoteDelivered(ctx, syn)
 	_, err = ctx.callMessageExecutor(batch, syn.Message)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -427,4 +429,17 @@ func (x SyntheticMessage) collect(batch *database.Batch, ctx *MessageContext, se
 	ctx.Block.staging.Hold(str.id(), seq.Number, held)
 	mExecSyntheticAnchor.WithLabelValues("collected").Inc()
 	return errCollected
+}
+
+// noteRemoteDelivered takes a validated message's word on what its source
+// has executed of this partition's stream to it (healing spec, "The cache").
+// Only a message that is about to execute is heard: a collected entry's value
+// is not trusted, since dropping what a source still needs would leave it a
+// gap no one can fill.
+func (SyntheticMessage) noteRemoteDelivered(ctx *MessageContext, syn *messaging.SynthFields) {
+	seq, ok := syn.Message.(*messaging.SequencedMessage)
+	if !ok || ctx.Block == nil {
+		return
+	}
+	ctx.Block.noteRemoteDelivered(seq.Source, syn.Delivered)
 }

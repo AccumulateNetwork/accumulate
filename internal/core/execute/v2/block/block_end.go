@@ -900,6 +900,11 @@ func (block *Block) completeCacheBlock(rootChain *database.Chain, rootSeg *merkl
 			block.cache.AddReceived(da)
 		}
 	}
+	// What each source said it has executed of ours: released from the cache
+	// when the block commits (healing spec, "The cache")
+	for _, a := range block.remoteDelivered {
+		block.cache.Release(a.source, a.delivered)
+	}
 	block.cache.SetBlock(blk)
 	return nil
 }

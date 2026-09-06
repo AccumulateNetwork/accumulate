@@ -77,6 +77,9 @@ SynthFields:
       type: protocol.AnnotatedReceipt
       marshal-as: reference
       pointer: true
+    - name: Delivered
+      description: is the sender's Delivered on the destination's synthetic stream to the sender; the destination may drop what it holds for the sender at or below it
+      type: uint
 
 BadSyntheticMessage:
   union: { type: message }
@@ -99,6 +102,9 @@ SyntheticProof:
       type: protocol.AnnotatedReceipt
       marshal-as: reference
       pointer: true
+    - name: Delivered
+      description: is the sender's Delivered on the destination's synthetic stream to the sender; the destination may drop what it holds for the sender at or below it
+      type: uint
 
 SyntheticMessage:
   union: { type: message }

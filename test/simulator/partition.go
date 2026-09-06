@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"io"
 	"sort"
 	"sync"
@@ -46,6 +47,9 @@ func (p *Partition) Staging() *coreexec.Staging { return p.nodes[0].staging }
 // Heals is the partition's healing counters as its first node's conductor
 // keeps them: entries pulled by the requester, requests, misses.
 func (p *Partition) Heals() *crosschain.HealCounters { return p.nodes[0].heals }
+
+// SynthCache is the partition's producer cache (node 0's).
+func (p *Partition) SynthCache() *synthcache.Cache { return p.nodes[0].synthCache }
 
 func (p *Partition) Update(fn func(*database.Batch) error) error {
 	for i, n := range p.nodes {
