@@ -56,6 +56,24 @@ A node that restarts syncs first: it replays the committed stream and rebuilds
 staging as its peers built it, so when it has caught up it holds what they
 hold and has the gaps they have (executor.md, "Sync").
 
+### Stranded streams
+
+A source answers a span from its cache or not at all. A destination whose
+oldest gap is behind the source's cache — a node down longer than the cache
+keeps, a stream idle so long its entries were released — asks and is told
+"not found", and asking again will not change the answer: the source has
+nothing to give, and healing has no other place to look. Such a stream is
+**stranded**. The requester says so once, shows it (`stranded_streams`, by
+destination and source), and stops asking; execution on the stream is stuck at
+the hole, and everything above it stays held. A stream is stranded when every
+request for it has come back "not found" for `strandedAfter` consecutive
+activations — the per-source back-off doubles to its cap over the first four,
+and three more at the cap say the answer is final. It leaves the state when
+`Delivered` moves past where it was stranded: something filled the hole that
+a request could not, and that is **sync** (executor.md, "Sync"; E11 in
+[DIFFERENCES.md](DIFFERENCES.md)) — the only exit. A "not yet" or an answer
+for the stream, even one, resets the count: the source is still serving it.
+
 ### Who asks, and when
 
 Healing **activates every few blocks**, not every block. A request goes to
@@ -141,7 +159,9 @@ the entries complete drain in the same block.
 
 A proof an anchor disproves is discarded and counted. Two proofs for the same
 indexes with different hashes are an attack, counted; a validator signature on
-proofs is the eventual answer.
+proofs is the eventual answer. The same proof arriving again — the same span
+under the same anchor block, as every copy of a package's members carries it —
+is a duplicate, counted and not held twice.
 
 When a run executes, its entries and the proven ranges at or below `Delivered`
 are released from staging at commit. Staging holds only what is above
@@ -230,13 +250,20 @@ two-level cycled cache in the dynamic layer and serves reads, not healing.
   latest sequence number the sender has executed *from* that destination. A
   partition that reads it knows the sender will never ask for anything at or
   below it, and drops those entries, and the block segments that held them,
-  from its cache at once. So the cache holds the entries in play — what the
-  other side has not yet said it executed — not a window of history. A stream
-  with no reverse traffic hears nothing and falls back to the horizon, which
-  is the backstop, not the mechanism. The value is taken only from a message
-  that has validated (its proof anchored, or the message executing): a
-  collected entry's word is not trusted, since dropping what a source still
-  needs would leave it a gap no one can fill.
+  from its cache at once; a block with nothing left to prove goes with them.
+  **Every anchor copy carries the same word for the anchor stream**: the
+  sender's `Delivered` on the destination's anchor stream to it, and the
+  destination drops the anchors it produced at or below it — once every
+  destination it anchors to has said so, since one anchor goes to all of them
+  under one number: one for a BVN, every partition for the Directory. Anchors
+  say nothing about synthetics; each stream is released by its own word. So
+  the cache holds the entries in play — what the other side has not yet said
+  it executed — not a window of history. A stream with no reverse traffic
+  hears nothing and falls back to the horizon, which is the backstop, not the
+  mechanism. The value is taken only from a message whose signer is a current
+  validator of the sender (a synthetic about to execute, an anchor copy whose
+  signature is recorded): a collected entry's word is not trusted, since
+  dropping what a source still needs would leave it a gap no one can fill.
 - **Never served from storage.** Every entry is also persisted to the
   permanent layer through execution; that is the record, not a fallback. A
   request for an entry the cache does not hold is refused and **counted as a
@@ -260,6 +287,7 @@ Per node and per stream, so healing is judged from data:
 | staging depth, entries truncated | that staging is a buffer, not a store |
 | proof requests, spans per request, proofs disproved, duplicate proofs | proof loss, and attempts to lie about hashes |
 | anchor requests | anchors lost, requested at once |
+| stranded streams (gauge) | streams whose oldest gap the source cannot serve; only sync moves them |
 
 ### Invariants
 
@@ -296,11 +324,20 @@ how far the validated hashes reach, and how far the held entries match them.
 Fewer entries than validated hashes is a gap of entries; entries beyond the
 validated hashes is a gap of proof. Those spans are the request set, coalesced,
 oldest first, at most `MaxRequestSpans`; an index asked within the last
-`healPatience` activations is not asked again. A stage holding nothing above
+`healPatience` activations is not asked again. **A held entry whose proof has
+arrived and is staged, waiting for its Directory anchor, is not unproven**
+(`StagedProofSpans`): the anchor is on its way, late when this partition's
+executor lags, and asking for the entry again lands it twice — the storm of
+run 20260905T134346Z, 22,642 heals with nothing dropped. It becomes a gap only
+when the proof is dropped. A stage holding nothing above
 `Delivered` is missing every validating hash above it and asks for the span
 above `Delivered` whole; the source answers with what it has dispatched, or
-that it has produced nothing there yet. Nothing is timed and nothing is
-inferred from the source's ledger, and the walks allocate nothing per entry.
+that it has produced nothing there yet. A "not yet" is remembered like an
+answer, so a quiet stream is probed once per patience window, not every
+activation, and the source counts no miss for it: a miss is a number its
+ledger says it produced and its cache does not hold. Nothing is timed and
+nothing is inferred from the source's ledger, and the walks allocate nothing
+per entry; the asked-once memory is one record per span, not per index.
 Anchors are a stage like any other (executor.md, "One chain per pair, one
 stage per chain"): a missing anchor below a validated one is a gap of entries
 and is requested the same way. Sender selection is a function
@@ -320,7 +357,12 @@ the requesting partition through the dispatcher
 (`internal/node/daemon/dispatcher.go`), the same path `sendSyntheticTransactions`
 uses. The requester's call is bounded by `HealTimeout`; a transport failure is
 retried a few times because routing picks a peer per attempt; a `NotFound` for a
-hash is a deterministic answer and is counted as a miss.
+hash is a deterministic answer and is counted as a miss. An anchor span is
+answered with every signature the source holds for each anchor, and the
+requester submits them as `BlockAnchor`s in **one envelope** — as many anchors
+as fit the envelope budget — since the block processes every message of the
+envelope it sorts under the anchor's number; one envelope per signature was
+thousands of envelopes of full anchor bodies after a restart.
 
 ### Landing
 
@@ -349,9 +391,14 @@ Dispatch (`sendSyntheticTransactionsForBlock`) and the sequencer service
 `NotFound` and counted (`accumulate_synthcache_misses_total{kind}`). Released by
 the destination's `Delivered` carried on every dispatched `SyntheticProof`
 and `SyntheticMessage` (`Txn.Release` at the destination's block close, applied
-at commit: the stream's entries at or below it, and the block segments that
-held them, go; `accumulate_synthcache_released_total`); a horizon of blocks
-(`DefaultHorizon`, an hour) remains as the backstop for a stream with no
+at commit: the stream's entries at or below it, the block segments that held
+them, and a block left with nothing to prove, go;
+`accumulate_synthcache_released_total`), and on every dispatched
+`BlockAnchor` for the anchor stream (`Txn.ReleaseAnchors`, taken where the
+copy's validator signature is recorded, applied at commit once every
+destination of the anchor has spoken; `anchors_released_total`); a block that
+produced nothing is dropped when it is dispatched. A horizon of blocks
+(`DefaultHorizon`, ten minutes) remains as the backstop for a stream with no
 reverse traffic. At the first block an executor opens, the cache is seeded from the
 node's own chains by position (`seedSynthCache`, #4241): genesis produces
 through another executor, and a node that starts has produced blocks whose

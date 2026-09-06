@@ -147,12 +147,17 @@ func TestAnchorPlaceholder(t *testing.T) {
 	// Capture anchors
 	var captured []*messaging.BlockAnchor
 	opts = append(opts, simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+		// A dispatched anchor is one BlockAnchor per envelope; a healed span
+		// carries every signature of every anchor in one envelope (healing
+		// spec, "Requesting and answering"). Either way, every copy of the
+		// anchor under test is captured, one per signer, and its envelope
+		// is dropped.
+		drop := false
 		for _, m := range env.Messages {
 			blk, ok := m.(*messaging.BlockAnchor)
 			if !ok {
 				continue
 			}
-			require.Len(t, env.Messages, 1)
 			require.IsType(t, (*messaging.SequencedMessage)(nil), blk.Anchor)
 			seq := blk.Anchor.(*messaging.SequencedMessage)
 			require.IsType(t, (*messaging.TransactionMessage)(nil), seq.Message)
@@ -161,17 +166,20 @@ func TestAnchorPlaceholder(t *testing.T) {
 			if !ok || anchor.MinorBlockIndex <= 10 {
 				continue
 			}
+			drop = true
 
 			// One copy per signer (see TestAnchorThreshold)
+			seen := false
 			for _, have := range captured {
 				if bytes.Equal(have.Signature.GetPublicKey(), blk.Signature.GetPublicKey()) {
-					return false, nil
+					seen = true
 				}
 			}
-			captured = append(captured, blk)
-			return false, nil
+			if !seen {
+				captured = append(captured, blk)
+			}
 		}
-		return true, nil
+		return !drop, nil
 	}))
 
 	// Init

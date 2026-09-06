@@ -60,7 +60,21 @@ const (
 	// maxSourceBackoff bounds, in activations, how long a source whose
 	// requests all failed is left alone.
 	maxSourceBackoff = 8
+
+	// strandedAfter is how many consecutive activations a stream's requests
+	// must all come back NotFound — the span is past the source's cache —
+	// before the stream is stranded: the back-off doubles to its cap over
+	// the first four, and three more at the cap say the answer will not
+	// change (healing spec, "Stranded streams").
+	strandedAfter = 7
 )
+
+var mStrandedStreams = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Namespace: "accumulate",
+	Subsystem: "conductor",
+	Name:      "stranded_streams",
+	Help:      "Streams whose oldest gap the source cannot serve (past its cache) and which are no longer asked for; sync is the way out",
+}, []string{"destination", "source"})
 
 var mHealRequests = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
@@ -76,18 +90,41 @@ var mHealEntries = promauto.NewCounter(prometheus.CounterOpts{
 	Help:      "Synthetic entries received in answer to span requests",
 })
 
-// gapMemory is what the requester remembers about one asked index: the block
-// it asked at. Node state, not consensus state; a restart empties it at the
-// cost of one duplicate request.
-type gapMemory struct {
-	askedAt uint64
+// askedSpan is what the requester remembers about a span it asked for: the
+// block it asked at. One record per span, not per index — a span is up to
+// MaxReceiptListElements indexes, and a heap object per index was the
+// requester's largest allocation (review 2026-09-06, finding 9). Node state,
+// not consensus state; a restart empties it at the cost of one duplicate
+// request.
+type askedSpan struct {
+	first, last, at uint64
 }
 
 type healRequester struct {
 	mu       sync.Mutex
-	gaps     map[string]map[uint64]*gapMemory // stream -> index
-	backoff  map[string]uint64                // source -> block before which it is not asked
+	asks     map[string][]askedSpan // stream -> spans asked within patience
+	backoff  map[string]uint64      // source -> block before which it is not asked
 	failures map[string]uint
+	misses   map[string]uint       // stream -> consecutive activations answered only NotFound
+	stranded map[string]strandedAt // stream -> where it was stranded
+}
+
+// strandedAt is where a stream stood when it was stranded: Delivered then.
+// The stream leaves the state when Delivered moves past it — something
+// arrived that healing could not fetch, which is sync (E11).
+type strandedAt struct {
+	delivered uint64
+}
+
+// askedRecently reports whether n was asked within the last healPatience
+// activations; the caller holds r.mu.
+func askedRecently(asks []askedSpan, n, blockIndex uint64) bool {
+	for _, a := range asks {
+		if n >= a.first && n <= a.last && blockIndex-a.at < healPatience*healCadence {
+			return true
+		}
+	}
+	return false
 }
 
 func streamKey(id execute.StreamID) string {
@@ -277,15 +314,22 @@ type streamAsk struct {
 // records each outcome. backoff names the source for the per-source back-off;
 // a source's two streams back off independently.
 func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTxn, blockIndex uint64, backoff *url.URL, a streamAsk) {
+	source := a.stream.Source
+	if left := c.requester.strandedStream(a.stream, a.delivered); left == strandedStill {
+		return
+	} else if left == strandedLeft {
+		mStrandedStreams.WithLabelValues(c.Partition.ID, partitionLabel(source)).Set(0)
+		slog.WarnContext(ctx, "Stream is no longer stranded", "module", "conductor",
+			"source", source, "destination", c.Url(), "what", a.what, "delivered", a.delivered, "block", blockIndex)
+	}
 	if c.requester.backedOff(backoff, blockIndex) {
 		return
 	}
-	source := a.stream.Source
 	spans := c.requester.decide(staged, a.stream, a.delivered, blockIndex)
 	if len(spans) == 0 {
 		return
 	}
-	asked, failed := 0, 0
+	asked, failed, missed := 0, 0, 0
 	for _, span := range spans {
 		if ctx.Err() != nil {
 			break
@@ -306,7 +350,10 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 		case errors.Is(err, errors.NotReady):
 			// The source has not dispatched the span, or dispatched it
 			// within the last few blocks: the entries are on their way.
-			// Not a gap yet, not a failure.
+			// Not a gap yet, not a failure. Remembered like an answer, so a
+			// quiet stream's probe fires once per patience window rather
+			// than every activation.
+			c.requester.asked(a.stream, span, blockIndex)
 			mHealRequests.WithLabelValues("not-yet", c.Partition.ID, partitionLabel(source)).Inc()
 			slog.InfoContext(ctx, "Missing "+a.what+" are still in flight at the source", "module", "conductor",
 				"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "error", err)
@@ -314,6 +361,7 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 			// The source's cache does not hold the span. Deterministic:
 			// asking again does not help. A miss is a defect at the source.
 			failed++
+			missed++
 			mHealRequests.WithLabelValues("miss", c.Partition.ID, partitionLabel(source)).Inc()
 			if c.Heals != nil {
 				c.Heals.Requests.Add(1)
@@ -332,6 +380,80 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 		}
 	}
 	c.requester.outcome(backoff, blockIndex, asked, failed)
+	if c.requester.streamOutcome(a.stream, a.delivered, missed, missed == failed && asked == 0) {
+		mStrandedStreams.WithLabelValues(c.Partition.ID, partitionLabel(source)).Set(1)
+		slog.WarnContext(ctx, "Stream is stranded: the source cannot serve its oldest gap and will not be asked again; sync is the way out", "module", "conductor",
+			"source", source, "destination", c.Url(), "what", a.what, "delivered", a.delivered, "block", blockIndex)
+	}
+}
+
+// strandedState is what strandedStream answers about a stream.
+type strandedState int
+
+const (
+	notStranded   strandedState = iota
+	strandedStill               // stranded, and nothing has moved: not asked
+	strandedLeft                // was stranded, and Delivered has moved past it
+)
+
+// strandedStream answers whether a stream is stranded, and takes it out of
+// the state when its Delivered has moved past where it was stranded: the hole
+// was filled by something other than a request, which is sync.
+func (r *healRequester) strandedStream(stream execute.StreamID, delivered uint64) strandedState {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	k := streamKey(stream)
+	at, ok := r.stranded[k]
+	switch {
+	case !ok:
+		return notStranded
+	case delivered > at.delivered:
+		delete(r.stranded, k)
+		delete(r.misses, k)
+		return strandedLeft
+	default:
+		return strandedStill
+	}
+}
+
+// streamOutcome counts an activation whose every request for the stream came
+// back NotFound, and strands the stream once strandedAfter of them are
+// consecutive. Anything else the source answers for the stream — entries, or
+// "not yet" — resets the count. Answers whether the stream was stranded by
+// this call, so the caller says so once.
+func (r *healRequester) streamOutcome(stream execute.StreamID, delivered uint64, missed int, onlyMissed bool) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.misses == nil {
+		r.misses = map[string]uint{}
+		r.stranded = map[string]strandedAt{}
+	}
+	k := streamKey(stream)
+	if missed == 0 || !onlyMissed {
+		delete(r.misses, k)
+		return false
+	}
+	r.misses[k]++
+	if r.misses[k] < strandedAfter {
+		return false
+	}
+	if _, ok := r.stranded[k]; ok {
+		return false
+	}
+	r.stranded[k] = strandedAt{delivered}
+	return true
+}
+
+// Stranded lists the streams the requester has given up asking for, by key.
+func (r *healRequester) Stranded() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]string, 0, len(r.stranded))
+	for k := range r.stranded {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // decide walks one stream from Delivered to the highest entry held and
@@ -348,16 +470,16 @@ func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.Stream
 	if reach := staged.Reach(stream); reach > sighted {
 		sighted = reach
 	}
+	r.forget(stream, delivered)
 	if sighted <= delivered {
 		// Nothing held above Delivered: every validating hash above it is
 		// missing, so the span above Delivered is asked for whole. The source
 		// answers with what it has dispatched, or that it has produced
 		// nothing there yet. A lost package -- entries and proof together --
 		// leaves exactly this, and nothing else would ever see it.
-		r.forget(stream, delivered)
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		if g := r.gaps[streamKey(stream)][delivered+1]; g != nil && blockIndex-g.askedAt < healPatience*healCadence {
+		if askedRecently(r.asks[streamKey(stream)], delivered+1, blockIndex) {
 			return nil
 		}
 		return [][2]uint64{{delivered + 1, delivered + protocol.MaxReceiptListElements}}
@@ -367,26 +489,35 @@ func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.Stream
 		through = delivered + healHorizon
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.gaps == nil {
-		r.gaps = map[string]map[uint64]*gapMemory{}
+	// A collected entry whose proof has arrived and waits for its Directory
+	// anchor is not a gap: the anchor is on its way, late when this
+	// partition's executor lags, and asking the source again lands the entry
+	// twice (run 20260905T134346Z: 22,642 heals with nothing dropped; the
+	// C6/H6 storm). Proofs wait per source and cover the synthetic chain, so
+	// only the synthetic stream reads them.
+	var waiting [][2]uint64
+	if isSyntheticStream(stream) {
+		waiting = staged.StagedProofSpans(stream.Source)
 	}
-	key := streamKey(stream)
-	mem := r.gaps[key]
-	for n := range mem {
-		if n <= delivered {
-			delete(mem, n)
+	proofWaiting := func(n uint64) bool {
+		for _, w := range waiting {
+			if n >= w[0] && n <= w[1] {
+				return true
+			}
 		}
+		return false
 	}
 
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	asks := r.asks[streamKey(stream)]
 	var spans [][2]uint64
 	for n := delivered + 1; n <= through; n++ {
 		h, held := staged.IDOf(stream, n)
-		if held && (!h.Collected || staged.IsValidated(stream, n, h.Hash)) {
-			continue // held and validated: runnable, nothing to ask
+		if held && (!h.Collected || staged.IsValidated(stream, n, h.Hash) || proofWaiting(n)) {
+			continue // held and validated, or its proof is waiting for its anchor: nothing to ask
 		}
-		if g := mem[n]; g != nil && g.askedAt != 0 && blockIndex-g.askedAt < healPatience*healCadence {
+		if askedRecently(asks, n, blockIndex) {
 			continue // asked; its answer can still land
 		}
 		if k := len(spans); k > 0 && spans[k-1][1]+1 == n && n-spans[k-1][0]+1 <= protocol.MaxReceiptListElements {
@@ -401,33 +532,54 @@ func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.Stream
 	return spans
 }
 
-// forget drops what a stream's memory holds at or below Delivered; what was
-// asked above it keeps its asked-at.
+// isSyntheticStream reports whether a stream is a synthetic stream, as
+// opposed to an anchor stream: the ledger that tracks it is the partition's
+// synthetic ledger.
+func isSyntheticStream(id execute.StreamID) bool {
+	return id.Ledger != nil && strings.EqualFold(strings.Trim(id.Ledger.Path, "/"), protocol.Synthetic)
+}
+
+// forget drops what a stream's memory holds at or below Delivered, and what
+// has aged past patience; what was asked above Delivered keeps its asked-at.
 func (r *healRequester) forget(stream execute.StreamID, delivered uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for n := range r.gaps[streamKey(stream)] {
-		if n <= delivered {
-			delete(r.gaps[streamKey(stream)], n)
-		}
+	k := streamKey(stream)
+	if len(r.asks[k]) == 0 {
+		return
 	}
+	kept := r.asks[k][:0]
+	for _, a := range r.asks[k] {
+		if a.last <= delivered {
+			continue
+		}
+		if a.first <= delivered {
+			a.first = delivered + 1
+		}
+		kept = append(kept, a)
+	}
+	clear(r.asks[k][len(kept):])
+	r.asks[k] = kept
 }
 
-// asked records that every index of the span was asked on this block.
+// asked records that the span was asked on this block. Spans that can no
+// longer answer "asked recently" are dropped, so the memory holds at most a
+// patience window of spans per stream.
 func (r *healRequester) asked(stream execute.StreamID, span [2]uint64, blockIndex uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.gaps == nil {
-		r.gaps = map[string]map[uint64]*gapMemory{}
+	if r.asks == nil {
+		r.asks = map[string][]askedSpan{}
 	}
-	mem := r.gaps[streamKey(stream)]
-	if mem == nil {
-		mem = map[uint64]*gapMemory{}
-		r.gaps[streamKey(stream)] = mem
+	k := streamKey(stream)
+	kept := r.asks[k][:0]
+	for _, a := range r.asks[k] {
+		if blockIndex-a.at < healPatience*healCadence {
+			kept = append(kept, a)
+		}
 	}
-	for n := span[0]; n <= span[1]; n++ {
-		mem[n] = &gapMemory{askedAt: blockIndex}
-	}
+	clear(r.asks[k][len(kept):])
+	r.asks[k] = append(kept, askedSpan{first: span[0], last: span[1], at: blockIndex})
 }
 
 func (r *healRequester) backedOff(source *url.URL, blockIndex uint64) bool {
@@ -551,10 +703,14 @@ func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRang
 }
 
 // requestAnchorSpan asks the source for anchors [first, last] of its stream to
-// this partition and submits each as a BlockAnchor carrying the answering
-// validator's signature: one attestation towards the anchor's quorum, the
-// same thing the validator's own dispatch would have carried. The source
-// may answer a prefix; the number it served through is returned.
+// this partition and submits them as BlockAnchors, one per signature the
+// source holds: together they are the quorum, and each is what that
+// validator's own dispatch carried. An anchor's signatures travel in ONE
+// envelope, and as many anchors as fit the envelope budget share it — the
+// block sorts the envelope under the anchor's number and processes every
+// message in it, so each copy records its signature (review 2026-09-06,
+// finding 9: one envelope per signature per record). The source may answer a
+// prefix; the number it served through is returned.
 func (c *Conductor) requestAnchorSpan(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64) (int, uint64, error) {
 	records, err := ranger.SequenceRange(ctx, source.JoinPath(protocol.AnchorPool), c.Url(), first, last, private.SequenceOptions{})
 	if err != nil {
@@ -562,6 +718,17 @@ func (c *Conductor) requestAnchorSpan(ctx context.Context, ranger private.Sequen
 	}
 	if len(records) == 0 {
 		return 0, 0, errors.InvalidRecord.With("empty answer")
+	}
+	budget := dagconfig.DefaultMaxBatchBytes - dagconfig.DefaultMaxBatchBytes/4
+	var msgs []messaging.Message
+	size := 0
+	flush := func() error {
+		if len(msgs) == 0 {
+			return nil
+		}
+		err := c.submit(ctx, c.Url(), &messaging.Envelope{Messages: msgs})
+		msgs, size = nil, 0
+		return err
 	}
 	var served uint64
 	for _, r := range records {
@@ -572,16 +739,28 @@ func (c *Conductor) requestAnchorSpan(ctx context.Context, ranger private.Sequen
 		if len(sigs) == 0 {
 			return 0, 0, errors.InvalidRecord.WithFormat("answer for anchor %v→%v #%d is not signed", source, c.Url(), r.Sequence.Number)
 		}
-		// One copy per signature the source holds: together they are the
-		// quorum, and each is what that validator's own dispatch carried
+		var add []messaging.Message
+		n := 0
 		for _, sig := range sigs {
-			env := &messaging.Envelope{Messages: []messaging.Message{&messaging.BlockAnchor{Anchor: r.Sequence, Signature: sig}}}
-			err := c.submit(ctx, c.Url(), env)
+			m := &messaging.BlockAnchor{Anchor: r.Sequence, Signature: sig}
+			k, err := marshalledSize(m)
 			if err != nil {
-				return 0, 0, errors.UnknownError.WithFormat("submit anchor from %v: %w", source, err)
+				return 0, 0, err
+			}
+			add = append(add, m)
+			n += k
+		}
+		if len(msgs) > 0 && size+n > budget {
+			if err := flush(); err != nil {
+				return 0, 0, errors.UnknownError.WithFormat("submit anchors from %v: %w", source, err)
 			}
 		}
+		msgs = append(msgs, add...)
+		size += n
 		served = r.Sequence.Number
+	}
+	if err := flush(); err != nil {
+		return 0, 0, errors.UnknownError.WithFormat("submit anchors from %v: %w", source, err)
 	}
 	return len(records), served, nil
 }

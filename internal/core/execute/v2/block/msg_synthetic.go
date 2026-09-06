@@ -28,7 +28,7 @@ type SyntheticMessage struct{}
 
 func (x SyntheticMessage) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	// Check the wrapper
-	syn, err := x.check(batch, ctx)
+	syn, _, err := x.check(batch, ctx)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -62,7 +62,15 @@ func findProofInBundle(ctx *MessageContext, h [32]byte) *protocol.AnnotatedRecei
 	return nil
 }
 
-func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SynthFields, error) {
+// check verifies the wrapper. It answers the fields, whether the copy is
+// attested — signed by a current validator of its source — and an error.
+// Attestation is what lets a copy be HELD: a collected entry's number is not
+// yet proven, and whatever is held at a number sizes the stream's stage, so
+// only the source's own validators may make this node hold one (#4243). It is
+// not what lets a copy EXECUTE: a validated collection proof authenticates the
+// sequenced message, and requiring a current validator there wedged recovery
+// of historical ranges after validator churn (#4056).
+func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SynthFields, bool, error) {
 	// Using messaging.SynthFields is safer than converting one message type
 	// into the other because that could lead to issues with the different Hash
 	// method implementations
@@ -70,7 +78,7 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	if !ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
 		msg, ok := ctx.message.(*messaging.BadSyntheticMessage)
 		if !ok {
-			return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeBadSynthetic, ctx.message.Type())
+			return nil, false, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeBadSynthetic, ctx.message.Type())
 		}
 		syn = msg.Data()
 	} else {
@@ -80,22 +88,22 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		case *messaging.SyntheticMessage:
 			syn = msg.Data()
 		default:
-			return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeSynthetic, ctx.message.Type())
+			return nil, false, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeSynthetic, ctx.message.Type())
 		}
 	}
 
 	// Basic validation
 	if syn.Message == nil {
-		return nil, errors.BadRequest.With("missing message")
+		return nil, false, errors.BadRequest.With("missing message")
 	}
 
 	// A synthetic message must be sequenced (may change in the future)
 	seq, ok := syn.Message.(*messaging.SequencedMessage)
 	if !ok {
-		return nil, errors.BadRequest.With("a synthetic message must be sequenced")
+		return nil, false, errors.BadRequest.With("a synthetic message must be sequenced")
 	}
 	if seq.Source == nil {
-		return nil, errors.BadRequest.With("a synthetic message must name its source")
+		return nil, false, errors.BadRequest.With("a synthetic message must name its source")
 	}
 
 	// A message the destination's replica already contains needs no proof and
@@ -118,10 +126,10 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	if ctx.Block.staging.IsValidated(ctx.Executor.synthStream(seq.Source), seq.Number, syn.Message.Hash()) {
 		err := checkSyntheticInnerType(seq)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		syn.Proof = nil
-		return syn, nil
+		return syn, true, nil
 	}
 
 	// A synthetic message may omit its own proof when a SyntheticProof travels
@@ -144,13 +152,13 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		// No proof in hand and not yet proven. In an envelope that is a
 		// refusal; re-run from staging it means the entry is still collected
 		// and must stay so — a terminal status here would wedge the stream.
-		return nil, errUnproven
+		return nil, false, errUnproven
 	}
 	if syn.Signature == nil {
-		return nil, errors.BadRequest.With("missing signature")
+		return nil, false, errors.BadRequest.With("missing signature")
 	}
 	if syn.Proof.Anchor == nil || syn.Proof.Anchor.Account == nil {
-		return nil, errors.BadRequest.With("missing proof metadata")
+		return nil, false, errors.BadRequest.With("missing proof metadata")
 	}
 
 	// A proof carries either an individual receipt or a collection proof
@@ -160,68 +168,60 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	switch {
 	case syn.Proof.ReceiptList != nil:
 		if !ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
-			return nil, errors.BadRequest.With("collection proofs are not enabled")
+			return nil, false, errors.BadRequest.With("collection proofs are not enabled")
 		}
 		if syn.Proof.Receipt != nil {
-			return nil, errors.BadRequest.With("proof must carry a receipt or a receipt list, not both")
+			return nil, false, errors.BadRequest.With("proof must carry a receipt or a receipt list, not both")
 		}
 		if len(syn.Proof.ReceiptList.Elements) > protocol.MaxReceiptListElements {
-			return nil, errors.BadRequest.WithFormat("collection proof exceeds %d elements", protocol.MaxReceiptListElements)
+			return nil, false, errors.BadRequest.WithFormat("collection proof exceeds %d elements", protocol.MaxReceiptListElements)
 		}
 		// Validated once per envelope (#4152) — a package's members share
 		// ONE proof, and rehashing it per member is a CheckTx DoS.
 		if !ctx.bundle.listIsValid(syn.Proof.ReceiptList) {
-			return nil, errors.BadRequest.With("proof is invalid")
+			return nil, false, errors.BadRequest.With("proof is invalid")
 		}
 	case syn.Proof.Receipt != nil:
 		if !syn.Proof.Receipt.Validate(nil) {
-			return nil, errors.BadRequest.With("proof is invalid")
+			return nil, false, errors.BadRequest.With("proof is invalid")
 		}
 	default:
-		return nil, errors.BadRequest.With("missing proof receipt")
+		return nil, false, errors.BadRequest.With("missing proof receipt")
 	}
 
-	// Verify the signature — but only when the proof is an individual receipt.
-	// A collection proof is the authorization by itself: it proves this exact
-	// message hash under an anchor the destination checks against its own
-	// directory root at delivery. Once we have a collection proof no other
-	// signature is required — the hashes cannot be forged, so it does not
-	// matter who served the message. The signature still rides along for
-	// identity and recording, but it must never be a reason to reject a
-	// proven message: requiring the signer to be a CURRENTLY active validator
-	// wedged recovery of historical ranges after validator churn, exactly the
-	// failure the anchor path documents (#4056).
+	// Every copy's signer is checked: the signature must verify and the key
+	// must be a current validator of the SOURCE partition. What the outcome
+	// means depends on the proof. With an individual receipt the signature is
+	// the authorization and a failure is a refusal. With a collection proof
+	// the proof is the authorization by itself — it proves this exact message
+	// hash under an anchor the destination checks against its own directory
+	// root at delivery — so a failure must never reject a proven message:
+	// requiring the signer to be a CURRENTLY active validator wedged recovery
+	// of historical ranges after validator churn (#4056). It does decide
+	// whether the copy may be HELD while its anchor is still to come: the
+	// number of a collected entry is unproven, and a stranger's self-consistent
+	// list over a forged number would otherwise size the stage (#4243).
 	h := syn.Message.Hash()
-	if syn.Proof.ReceiptList == nil {
+	attested, err := signerIsSourceValidator(ctx, seq, syn.Signature)
+	if err != nil {
+		return nil, false, err
+	}
+	if !attested && syn.Proof.ReceiptList == nil {
 		if !syn.Signature.Verify(nil, syn.Message) {
-			return nil, errors.BadRequest.With("invalid signature")
+			return nil, false, errors.BadRequest.With("invalid signature")
 		}
-
-		// Verify the signer is a validator of this partition
-		partition, ok := protocol.ParsePartitionUrl(seq.Source)
-		if !ok {
-			return nil, errors.BadRequest.WithFormat("signature source is not a partition")
-		}
-
-		// TODO: Consider checking the version. However this can get messy
-		// because it takes some time for changes to propagate, so we'd need an
-		// activation height or something.
-
-		signer := core.AnchorSigner(&ctx.Executor.globals().Active, partition)
-		_, _, ok = signer.EntryByKeyHash(syn.Signature.GetPublicKeyHash())
-		if !ok {
-			return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
-		}
+		partition, _ := protocol.ParsePartitionUrl(seq.Source)
+		return nil, false, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
 	}
 
 	// Verify the proof covers the transaction hash: an individual receipt must
 	// start with it, a collection proof must include it as an element
 	if syn.Proof.ReceiptList != nil {
 		if !syn.Proof.ReceiptList.Included(h[:]) {
-			return nil, errors.BadRequest.WithFormat("collection proof does not include %x", h)
+			return nil, false, errors.BadRequest.WithFormat("collection proof does not include %x", h)
 		}
 	} else if !bytes.Equal(h[:], syn.Proof.Receipt.Start) {
-		return nil, errors.BadRequest.WithFormat("invalid proof start: expected %x, got %x", h, syn.Proof.Receipt.Start)
+		return nil, false, errors.BadRequest.WithFormat("invalid proof start: expected %x, got %x", h, syn.Proof.Receipt.Start)
 	}
 
 	// Don't check the anchor during validation. If we check the anchor during
@@ -234,12 +234,37 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	// anchor before it processes the synthetic message.
 
 	// Verify the message within the sequenced message is an allowed type
-	err := checkSyntheticInnerType(seq)
+	err = checkSyntheticInnerType(seq)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return syn, nil
+	return syn, attested, nil
+}
+
+// signerIsSourceValidator answers whether a signature over a sequenced message
+// was made by a current validator of the message's source partition: the key
+// is in the source's active validator set and the signature verifies. One
+// statement of the rule, shared by the hold and by the Delivered claim. There
+// is no version check, as on the anchor path: a version change takes time to
+// propagate and would need an activation height.
+func signerIsSourceValidator(ctx *MessageContext, seq *messaging.SequencedMessage, sig protocol.KeySignature) (bool, error) {
+	if sig == nil || seq == nil || seq.Source == nil {
+		return false, nil
+	}
+	partition, ok := protocol.ParsePartitionUrl(seq.Source)
+	if !ok {
+		return false, errors.BadRequest.WithFormat("signature source is not a partition")
+	}
+	globals := ctx.Executor.globals()
+	if globals == nil || globals.Active.Network == nil {
+		return false, nil // no validator set to be a member of
+	}
+	signer := core.AnchorSigner(&globals.Active, partition)
+	if _, _, ok := signer.EntryByKeyHash(sig.GetPublicKeyHash()); !ok {
+		return false, nil
+	}
+	return sig.Verify(nil, seq), nil
 }
 
 // checkSyntheticInnerType verifies the message within the sequenced message
@@ -295,7 +320,7 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 
 func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) error {
 	// Validate
-	syn, err := x.check(batch, ctx)
+	syn, attested, err := x.check(batch, ctx)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -322,8 +347,14 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 		// held in staging at its number, where it executes once a validated
 		// proof covers it (executor spec, "Collection"). Nothing is recorded
 		// pending outside staging — that was the hole the healer had to fill.
+		// Only on a source validator's word: an unanchored proof proves
+		// nothing yet, and the number it would be held at sizes the stage.
 		if seq, ok := syn.Message.(*messaging.SequencedMessage); ok &&
 			ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
+			if !attested {
+				mExecSyntheticAnchor.WithLabelValues("refused").Inc()
+				return errors.BadRequest.WithFormat("%v #%d cannot be held: its proof is not anchored here and its signer is not a validator of %v", seq.Source, seq.Number, seq.Source)
+			}
 			return x.collect(batch, ctx, seq)
 		}
 		anchor := syn.Proof.TerminalAnchor()
@@ -379,8 +410,11 @@ var errUnproven = errors.Pending.With("not yet proven")
 // maxSequenceAhead is the sanity horizon (executor spec, "Validity"): an entry
 // numbered further ahead of the stream's delivery point than the source could
 // plausibly have produced in about an hour is refused, not collected. A
-// partition that far ahead is a fault, and the bound caps what a peer can make
-// this node hold.
+// partition that far ahead is a fault, and the bound caps what a source
+// validator can make this node hold — only a source validator can, since a
+// collected entry is held on its signer's word (check). The destination does
+// not learn the source's produced count on any wire path, so the bound is a
+// constant, not the count.
 const maxSequenceAhead = 2_000_000
 
 // collect stores an unproven entry and holds it in staging at its number.
@@ -433,26 +467,17 @@ func (x SyntheticMessage) collect(batch *database.Batch, ctx *MessageContext, se
 
 // noteRemoteDelivered takes a message's word on what its source has executed
 // of this partition's stream to it (healing spec, "The cache"). Heard only
-// from a message that is about to execute AND whose validator signature
-// verifies: a collection proof authenticates the sequenced message, not the
-// fields beside it, so the word is taken on the signer's authority alone.
-// Dropping what a source still needs would leave it a gap no one can fill.
+// from a message that is about to execute AND whose signer is a current
+// validator of the source: a collection proof authenticates the sequenced
+// message, not the fields beside it, so the word is taken on the signer's
+// authority alone. Dropping what a source still needs would leave it a gap no
+// one can fill.
 func (SyntheticMessage) noteRemoteDelivered(ctx *MessageContext, syn *messaging.SynthFields) {
 	seq, ok := syn.Message.(*messaging.SequencedMessage)
-	if !ok || ctx.Block == nil || syn.Delivered == 0 || syn.Signature == nil || seq.Source == nil {
+	if !ok || ctx.Block == nil || syn.Delivered == 0 {
 		return
 	}
-	// The signer must be a current validator of the source: a signature that
-	// merely verifies is anyone's key. Same rule as an anchor signature.
-	partition, ok := protocol.ParsePartitionUrl(seq.Source)
-	if !ok {
-		return
-	}
-	signer := core.AnchorSigner(&ctx.Executor.globals().Active, partition)
-	if _, _, ok := signer.EntryByKeyHash(syn.Signature.GetPublicKeyHash()); !ok {
-		return
-	}
-	if !syn.Signature.Verify(nil, syn.Message) {
+	if ok, _ := signerIsSourceValidator(ctx, seq, syn.Signature); !ok {
 		return
 	}
 	ctx.Block.noteRemoteDelivered(seq.Source, syn.Delivered)

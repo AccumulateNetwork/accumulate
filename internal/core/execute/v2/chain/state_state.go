@@ -207,10 +207,22 @@ func (c *ChainUpdates) Merge(d *ChainUpdates) {
 			c.Segments[k] = seg
 		case seg.First == cur.Last()+1:
 			cur.Elements = append(cur.Elements, seg.Elements...)
+		case cur.First == seg.Last()+1:
+			// The incoming span precedes the one held. Per-message states
+			// merge in hash order, not execution order (the bundle's state
+			// map is sorted by key), so when two anchors of one partition
+			// execute in one envelope — a healed span carrying several
+			// anchors and their signatures — the later append can merge
+			// first. The segment must start where the chain's first append
+			// of the block did, or a receipt for that entry says it is
+			// outside the segment.
+			merged := &merkle.Segment{First: seg.First, Before: seg.Before, MarkMask: seg.MarkMask}
+			merged.Elements = append(append(make([][]byte, 0, len(seg.Elements)+len(cur.Elements)), seg.Elements...), cur.Elements...)
+			c.Segments[k] = merged
 		default:
-			// Two transactions appended to the same chain out of order
-			// within one block, which the executor's sort does not do.
-			// Keep the earlier span; a receipt outside it will say so.
+			// Two non-adjacent spans of one chain within one block, which
+			// the executor does not produce. Keep the span held; a receipt
+			// outside it will say so.
 		}
 	}
 }

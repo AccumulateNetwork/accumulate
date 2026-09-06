@@ -25,11 +25,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// DefaultHorizon is how many blocks a produced entry is kept: about an hour
-// at one block a second, the sanity horizon the rest of the specification
-// uses. Entries a destination is known to have delivered can go sooner;
-// until that signal exists this bound is what clears the cache.
-const DefaultHorizon = 3600
+// DefaultHorizon is how many blocks a produced entry is kept at most: ten
+// minutes at one block a second. It is the backstop, not the mechanism: the
+// destination's Delivered, carried on every synthetic and every anchor it
+// dispatches, releases what it has executed as soon as the word arrives
+// (healing spec, "The cache"), so the horizon only binds a stream whose
+// destination says nothing — one that produces neither synthetics nor
+// anchors back — and bounds what such a stream can cost.
+const DefaultHorizon = 600
 
 // An Entry is one produced synthetic message: the sequenced message, the
 // transaction it belongs to when it has one, and where it sits on the
@@ -145,6 +148,11 @@ type Cache struct {
 	newest   uint64
 	released map[string]uint64 // per stream, the number the destination has said it executed through
 
+	// per destination of this partition's anchors, the anchor number it has
+	// said it executed through; an anchor every destination has executed is
+	// released
+	anchorAcks map[string]uint64
+
 	// the newest anchor produced, by sequence number, and the block it
 	// anchored: what the next block's open asks before producing another
 	lastAnchorNumber uint64
@@ -215,11 +223,38 @@ type Txn struct {
 	anchorBlocks  []uint64 // the block each anchor anchors
 	received      []*ReceivedAnchor
 	released      map[string]release
+	anchorAcks    map[string]anchorAck
 }
 
 type release struct {
 	stream  *url.URL
 	through uint64
+}
+
+// anchorAck is a destination's word on this partition's anchors: it has
+// executed them through number `through`. fanout is how many destinations
+// this partition anchors to — one for a BVN, every partition for the
+// Directory — since an anchor goes to all of them under one number and is
+// released only when the last of them has executed it.
+type anchorAck struct {
+	through uint64
+	fanout  int
+}
+
+// ReleaseAnchors records that destination dst has executed this partition's
+// anchors through `through` (healing spec, "The cache"). At commit, anchors
+// every one of the fanout destinations has executed are dropped.
+func (t *Txn) ReleaseAnchors(dst *url.URL, through uint64, fanout int) {
+	if t == nil || dst == nil || through == 0 || fanout <= 0 {
+		return
+	}
+	if t.anchorAcks == nil {
+		t.anchorAcks = map[string]anchorAck{}
+	}
+	k := streamKey(dst)
+	if a, ok := t.anchorAcks[k]; !ok || through > a.through {
+		t.anchorAcks[k] = anchorAck{through, fanout}
+	}
 }
 
 // Release records that the destination has executed this partition's stream
@@ -316,9 +351,41 @@ func (t *Txn) Commit() {
 	for k, r := range t.released {
 		c.releaseLocked(k, r.through)
 	}
+	for k, a := range t.anchorAcks {
+		c.releaseAnchorsLocked(k, a)
+	}
 	c.trimLocked()
 	mEntries.Set(float64(len(c.byHash)))
 	mBlocks.Set(float64(len(c.blocks)))
+}
+
+// releaseAnchorsLocked records a destination's word and drops every anchor
+// all fanout destinations have executed. The walk is over the anchors held,
+// never over the number line, so a claim costs what the cache holds.
+func (c *Cache) releaseAnchorsLocked(k string, a anchorAck) {
+	if c.anchorAcks == nil {
+		c.anchorAcks = map[string]uint64{}
+	}
+	if a.through > c.anchorAcks[k] {
+		c.anchorAcks[k] = a.through
+	}
+	if len(c.anchorAcks) < a.fanout {
+		return // a destination has not spoken yet; nothing is safe to drop
+	}
+	through := a.through
+	for _, n := range c.anchorAcks {
+		if n < through {
+			through = n
+		}
+	}
+	var dropped int
+	for n := range c.anchors {
+		if n <= through {
+			delete(c.anchors, n)
+			dropped++
+		}
+	}
+	mAnchorsReleased.Add(float64(dropped))
 }
 
 // Discard drops the block's additions.
@@ -399,6 +466,13 @@ func (c *Cache) releaseLocked(k string, n uint64) {
 		b.Entries = kept
 		if st := b.Streams[k]; st != nil && st.Segment != nil && uint64(st.Segment.Last())+1 <= n {
 			delete(b.Streams, k) // its last entry is released: nothing is proven from it again
+		}
+		if len(b.Entries) == 0 && len(b.Streams) == 0 {
+			// Nothing left to prove: the block's header and its Directory
+			// receipt have no reader (Proof and Continuation go through a
+			// stream), and kept to the horizon they were the residue
+			// (review 2026-09-06, finding 30)
+			delete(c.blocks, idx)
 		}
 	}
 	mReleased.Add(float64(dropped))
@@ -485,7 +559,14 @@ func (c *Cache) MarkDispatched(index, anchorBlock uint64, receipt *protocol.Part
 	if !ok {
 		return
 	}
-	b.Dispatched, b.DispatchedAt, b.AnchorBlock, b.DirectoryReceipt = true, c.newest, anchorBlock, receipt
+	b.Dispatched, b.DispatchedAt, b.AnchorBlock = true, c.newest, anchorBlock
+	if len(b.Entries) > 0 || len(b.Streams) > 0 {
+		// The receipt is what a proof continues through; a block that
+		// produced nothing has nothing to prove, and its receipt kept to the
+		// horizon was the residue (review 2026-09-06, finding 30). The header
+		// itself stays: dispatch looks the block up, on the Directory twice.
+		b.DirectoryReceipt = receipt
+	}
 }
 
 // Newest is the newest block committed to the cache.
@@ -501,14 +582,27 @@ func (c *Cache) Servable(b *Block) bool {
 	return b.Dispatched && c.Newest() >= b.DispatchedAt+InFlightBlocks
 }
 
-// Entry answers one produced entry by stream and number.
+// Entry answers one produced entry by stream and number. A miss is counted.
 func (c *Cache) Entry(stream *url.URL, number uint64) (*Entry, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	e, ok := c.entries[streamKey(stream)][number]
+	e, ok := c.Peek(stream, number)
 	count("entry", ok)
 	return e, ok
 }
+
+// Peek answers one produced entry by stream and number without counting the
+// outcome: for a reader that knows a number may not have been produced yet,
+// and counts the miss itself only when it was (healing spec, "The answer":
+// asked too soon is "not yet", not a miss).
+func (c *Cache) Peek(stream *url.URL, number uint64) (*Entry, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	e, ok := c.entries[streamKey(stream)][number]
+	return e, ok
+}
+
+// Count records a hit or a miss of the given kind, for a reader that looked
+// with Peek and has decided what the outcome was.
+func Count(kind string, hit bool) { count(kind, hit) }
 
 // ByHash answers one produced entry by its hash, the healing request's
 // vocabulary.
@@ -521,12 +615,18 @@ func (c *Cache) ByHash(hash [32]byte) (*Entry, bool) {
 }
 
 // Anchor answers a produced anchor by sequence number, and the block that
-// recorded it.
+// recorded it. A miss is counted.
 func (c *Cache) Anchor(number uint64) (*protocol.Transaction, uint64, bool) {
+	txn, block, ok := c.PeekAnchor(number)
+	count("anchor", ok)
+	return txn, block, ok
+}
+
+// PeekAnchor is Anchor without counting the outcome; see Peek.
+func (c *Cache) PeekAnchor(number uint64) (*protocol.Transaction, uint64, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	a, ok := c.anchors[number]
-	count("anchor", ok)
 	if !ok {
 		return nil, 0, false
 	}
@@ -573,6 +673,13 @@ func (c *Cache) Len() (entries, blocks int) {
 	return len(c.byHash), len(c.blocks)
 }
 
+// AnchorLen reports how many produced anchors are held.
+func (c *Cache) AnchorLen() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.anchors)
+}
+
 func count(kind string, hit bool) {
 	countMu.Lock()
 	if hit {
@@ -602,6 +709,12 @@ var (
 		Subsystem: "synthcache",
 		Name:      "released_total",
 		Help:      "Entries dropped because the destination said it had executed them (the Delivered carried on its dispatch)",
+	})
+	mAnchorsReleased = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "accumulate",
+		Subsystem: "synthcache",
+		Name:      "anchors_released_total",
+		Help:      "Produced anchors dropped because every destination said it had executed them (the Delivered carried on its anchors)",
 	})
 	mEntries = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "accumulate", Subsystem: "synthcache", Name: "entries",

@@ -110,18 +110,22 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 	var last *synthcache.Block
 	var lastIndex uint64
 	for num := start; num <= end; num++ {
-		e, ok := s.cache.Entry(dst, num)
+		e, ok := s.cache.Peek(dst, num)
 		if !ok {
 			if num > start {
 				break // the range ends where production has so far
 			}
 			// The first number asked for is not in the cache. Not produced
-			// yet is "not yet"; produced and gone is a miss, and a defect.
+			// yet is "not yet", and no miss: a quiet stream is probed every
+			// patience window and nothing is missing. Produced and gone is
+			// a miss, and a defect.
 			if produced, err := s.producedFor(dst); err == nil && num > produced {
 				return nil, errors.NotReady.WithFormat("synthetic %d for %v is not produced yet (%d so far)", num, dst, produced)
 			}
+			synthcache.Count("entry", false)
 			return nil, errors.NotFound.WithFormat("synthetic %d for %v is not in the cache", num, dst)
 		}
+		synthcache.Count("entry", true)
 		if last == nil || last.Index != e.Block {
 			blk, ok := s.cache.Block(e.Block)
 			if !ok {
@@ -263,7 +267,7 @@ func (s *Sequencer) getAnchorFromCache(globals *core.GlobalValues, dst *url.URL,
 func (s *Sequencer) getAnchorRangeFromCache(globals *core.GlobalValues, dst *url.URL, start, end uint64) ([]*api.MessageRecord[messaging.Message], error) {
 	var records []*api.MessageRecord[messaging.Message]
 	for num := start; num <= end; num++ {
-		txn, block, ok := s.cache.Anchor(num)
+		txn, block, ok := s.cache.PeekAnchor(num)
 		if !ok {
 			if len(records) > 0 {
 				return records, nil
@@ -271,8 +275,10 @@ func (s *Sequencer) getAnchorRangeFromCache(globals *core.GlobalValues, dst *url
 			if last, ok := s.cache.LastAnchorNumber(); !ok || num > last {
 				return nil, errors.NotReady.WithFormat("anchor %d is not produced yet", num)
 			}
+			synthcache.Count("anchor", false)
 			return nil, errors.NotFound.WithFormat("anchor %d is not in the cache", num)
 		}
+		synthcache.Count("anchor", true)
 		if age := s.cache.Newest() - block; age < synthcache.InFlightBlocks {
 			if len(records) > 0 {
 				return records, nil

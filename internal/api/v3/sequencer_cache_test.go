@@ -143,3 +143,47 @@ func TestSequencer_AnswersFromTheCache(t *testing.T) {
 	_, err = svc.Sequence(context.Background(), protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool), protocol.DnUrl(), 4, private.SequenceOptions{})
 	require.ErrorIs(t, err, errors.NotFound)
 }
+
+// A span asked for before the source has produced it is "not yet", and no
+// miss: a quiet stream is probed every patience window and nothing is
+// missing. A number the source's ledger says it produced, and the cache does
+// not hold, is the miss (#4229).
+func TestSequencer_MissOnlyWhenProduced(t *testing.T) {
+	cache := synthcache.New(0)
+	cache.Begin(1).Commit()
+	_, key, _ := ed25519.GenerateKey(nil)
+	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = protocol.ExecutorVersionLatest
+	globals.Network = &protocol.NetworkDefinition{Version: 1}
+	db := database.OpenInMemory(nil)
+	svc := NewSequencer(SequencerParams{Database: db, EventBus: events.NewBus(nil), Globals: globals, Partition: "BVN0", ValidatorKey: key, Cache: cache})
+	src := protocol.PartitionUrl("BVN0").JoinPath(protocol.Synthetic)
+	bvn1 := protocol.PartitionUrl("BVN1")
+	setProduced := func(n uint64) {
+		batch := db.Begin(true)
+		defer batch.Discard()
+		ledger := new(protocol.SyntheticLedger)
+		ledger.Url = src
+		ledger.Partition(bvn1).Produced = n
+		require.NoError(t, batch.Account(src).Main().Put(ledger))
+		require.NoError(t, batch.Commit())
+	}
+
+	setProduced(0)
+	before := synthcache.Stats().Misses["entry"]
+	_, err := svc.SequenceRange(context.Background(), src, bvn1, 1, 8, private.SequenceOptions{})
+	require.ErrorIs(t, err, errors.NotReady, "nothing produced for BVN1 yet")
+	require.Equal(t, before, synthcache.Stats().Misses["entry"], "not yet is not a miss")
+
+	// The ledger says three were produced; the cache holds none of them
+	setProduced(3)
+	_, err = svc.SequenceRange(context.Background(), src, bvn1, 1, 8, private.SequenceOptions{})
+	require.ErrorIs(t, err, errors.NotFound)
+	require.Equal(t, before+1, synthcache.Stats().Misses["entry"], "produced and gone is the miss")
+
+	// Anchors the same way
+	before = synthcache.Stats().Misses["anchor"]
+	_, err = svc.SequenceRange(context.Background(), protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool), protocol.DnUrl(), 1, 2, private.SequenceOptions{})
+	require.ErrorIs(t, err, errors.NotReady)
+	require.Equal(t, before, synthcache.Stats().Misses["anchor"])
+}

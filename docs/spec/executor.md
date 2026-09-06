@@ -489,9 +489,26 @@ event by event — a package arrives, a Directory anchor executes, a block runs
 replaced by a fake that only moves the stream position. Each rule above is one
 simulation there. An
 entry numbered more than `maxSequenceAhead` past the delivery point is refused
-(`BadRequest`), not collected. Counted as
+(`BadRequest`), not collected.
+
+**An entry is collected only on a source validator's word.** Every copy's
+signer is checked — the signature over the sequenced message must verify and
+the key must be in the source partition's current validator set
+(`signerIsSourceValidator`). Whether that decides anything depends on the
+proof. A copy proven by a validated proof, or by a collection proof whose
+anchor is here, executes on the proof alone, whoever signed it: the proof
+authenticates the sequenced message, and requiring a current validator there
+wedged recovery of historical ranges after validator churn (#4056). A copy
+whose proof is NOT yet anchored proves nothing yet, and the number it would be
+held at sizes the stream's stage — a self-consistent receipt list over a
+re-wrapped message with a forged number is cheap to build — so it is
+collected only when its signer is a current validator of its source; anyone
+else's copy is refused (`BadRequest`, counted `refused`), and nothing is held
+(#4243). The destination does not learn how many entries the source has
+produced on any wire path, so `maxSequenceAhead` is a constant bound on what
+a source validator can make it hold, not the count. Counted as
 `accumulate_exec_synthetic_anchor_total{applied}`: proven, unproven,
-collected. When
+collected, refused. When
 that anchor executes, every proof waiting on it is validated against the
 anchor's root: a match marks the proof's index range proven in synthetic
 staging; a mismatch discards the proof and increments a counter. A proof whose
@@ -901,7 +918,13 @@ has executed, which tells the destination what it may drop from its own
 producer cache (healing.md, "The cache"). The proof's hashes
 are the destination's entries in order, so the proof's index is the sequence
 number and the stage aligns the two by position. A group of one is sent with an
-individual receipt instead. At the destination the members go to synthetic
+individual receipt instead. **Each anchor copy carries the same word for the
+anchor stream**: `BlockAnchor.Delivered` is the sender's `Delivered` on the
+destination's anchor stream to it, set beside the signature (the signature is
+over the sequenced anchor, not the copy) and taken at the destination where
+the copy's validator signature is recorded, so the destination's cache drops
+the anchors it produced that the sender has executed (healing.md, "The
+cache"). At the destination the members go to synthetic
 staging by index and the proof to anchor staging by its anchor's sequence
 number (Collection), whichever arrives first.
 

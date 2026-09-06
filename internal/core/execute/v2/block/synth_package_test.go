@@ -158,7 +158,7 @@ func TestPackageMember_AcceptedViaBundleProof(t *testing.T) {
 		messages: []messaging.Message{proofMsg, member}}
 	ctx := &MessageContext{bundle: d, message: member}
 
-	syn, err := SyntheticMessage{}.check(f.batch, ctx)
+	syn, _, err := SyntheticMessage{}.check(f.batch, ctx)
 	require.NoError(t, err, "a package member resolves its proof from the bundle")
 	require.NotNil(t, syn.Proof)
 	assert.Same(t, list, syn.Proof.ReceiptList, "the bundle's proof, not a rebuilt one")
@@ -168,7 +168,7 @@ func TestPackageMember_AcceptedViaBundleProof(t *testing.T) {
 	// never borrowed across envelopes.
 	d2 := &bundle{Block: &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}, batch: f.batch,
 		messages: []messaging.Message{member}}
-	_, err = SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d2, message: member})
+	_, _, err = SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d2, message: member})
 	require.ErrorContains(t, err, "not yet proven")
 }
 
@@ -225,7 +225,7 @@ func TestReplicaMember_AcceptedEvenWhenTheEnvelopeCarriesAProof(t *testing.T) {
 
 	d := &bundle{Block: f.b, batch: f.batch,
 		messages: []messaging.Message{proofMsg, member}}
-	syn, err := SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d, message: member})
+	syn, _, err := SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d, message: member})
 	require.NoError(t, err, "the replica path must win for signature-less messages")
 	require.NotNil(t, syn)
 	assert.Nil(t, syn.Proof, "accepted via the replica, not the bundle proof")
@@ -260,7 +260,7 @@ func TestProvenMember_AcceptedRegardlessOfItsOwnProof(t *testing.T) {
 		Signature: &protocol.ED25519Signature{PublicKey: make([]byte, 32), Signer: protocol.DnUrl().JoinPath(protocol.Network)},
 	}
 	d := &bundle{Block: f.b, batch: f.batch, messages: []messaging.Message{member}}
-	syn, err := SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d, message: member})
+	syn, _, err := SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d, message: member})
 	require.NoError(t, err, "the proven set vouches for it")
 	require.Nil(t, syn.Proof, "its own proof is not consulted")
 }

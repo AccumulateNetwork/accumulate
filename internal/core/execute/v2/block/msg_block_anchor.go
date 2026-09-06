@@ -124,6 +124,12 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) err
 	newSigner := ctx.blockAnchor.Signature == nil
 	if ctx.blockAnchor.Signature != nil {
 		newSigner = sigs.add(ctx.blockAnchor.Signature)
+		if ctx.blockAnchor.Proof == nil {
+			// The copy's word on what its sender has delivered of our anchors
+			// releases the anchor cache (#4232); the signer was verified by
+			// check
+			noteAnchorDelivered(ctx.MessageContext, ctx.sequenced, ctx.blockAnchor.Delivered)
+		}
 	}
 
 	// One signature-chain entry per distinct signer: that is the chain's

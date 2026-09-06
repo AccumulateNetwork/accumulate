@@ -7,6 +7,8 @@
 package block
 
 import (
+	"crypto/ed25519"
+	"crypto/sha256"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -48,21 +50,28 @@ type stagingSim struct {
 	root   *database.Chain
 	roots  [][]byte // roots[k] is the root chain's anchor at height k
 	str    stream
+	key    ed25519.PrivateKey // a validator of the source: a collected entry is held on its word
 }
 
 func newStagingSim(t *testing.T, entries int) *stagingSim {
 	t.Helper()
+	seed := sha256.Sum256([]byte("source validator"))
+	key := ed25519.NewKeyFromSeed(seed[:])
 	x := new(Executor)
 	x.Describe = execute.DescribeShim{NetworkType: protocol.PartitionTypeBlockValidator, PartitionId: "BVN0"}
 	x.globalsPtr.Store(&Globals{Active: core.GlobalValues{
 		ExecutorVersion: protocol.ExecutorVersionLatest,
-		Network:         &protocol.NetworkDefinition{Version: 1},
+		Network: &protocol.NetworkDefinition{Version: 1, Validators: []*protocol.ValidatorInfo{{
+			PublicKey:     key[32:],
+			PublicKeyHash: sha256.Sum256(key[32:]),
+			Partitions:    []*protocol.ValidatorPartitionInfo{{ID: "BVN1", Active: true}},
+		}}},
 	}})
 	db := database.OpenInMemory(nil)
 	batch := db.Begin(true)
 	t.Cleanup(batch.Discard)
 
-	s := &stagingSim{t: t, x: x, batch: batch}
+	s := &stagingSim{t: t, x: x, batch: batch, key: key}
 	s.str = stream{kind: streamSynthetic, ledger: x.Describe.Synthetic(), source: protocol.PartitionUrl("BVN1")}
 
 	// The sequenced layer, reduced to what staging sees of it: next executes
@@ -151,8 +160,16 @@ func (s *stagingSim) proof(first, last int, anchorBlock uint64) *protocol.Annota
 }
 
 func (s *stagingSim) member(i int) *messaging.SyntheticMessage {
-	return &messaging.SyntheticMessage{Message: s.seqs[i],
-		Signature: &protocol.ED25519Signature{PublicKey: make([]byte, 32), Signer: protocol.DnUrl().JoinPath(protocol.Network)}}
+	return &messaging.SyntheticMessage{Message: s.seqs[i], Signature: s.sign(s.seqs[i])}
+}
+
+// sign is the source validator's signature over a sequenced message, what a
+// dispatched copy carries.
+func (s *stagingSim) sign(seq *messaging.SequencedMessage) protocol.KeySignature {
+	h := seq.Hash()
+	sig := &protocol.ED25519Signature{PublicKey: s.key[32:], Signer: s.str.source.JoinPath(protocol.Network), SignerVersion: 1, TransactionHash: h}
+	protocol.SignED25519(sig, s.key, nil, h[:])
+	return sig
 }
 
 // packageArrives is a package envelope reaching this block: the proof goes
@@ -387,15 +404,17 @@ func TestStaging_EntriesAboveTheLastValidatedAreHeld_WithinTheHorizon(t *testing
 	require.Equal(t, uint64(6), s.delivered())
 
 	// Beyond the horizon is refused, not held.
+	farSeq := &messaging.SequencedMessage{
+		Message:     &messaging.TransactionMessage{Transaction: s.seqs[0].Message.(*messaging.TransactionMessage).Transaction},
+		Source:      s.str.source,
+		Destination: protocol.PartitionUrl("BVN0"),
+		Number:      6 + maxSequenceAhead + 1,
+	}
+	farHash := farSeq.Hash()
 	far := &messaging.SyntheticMessage{
-		Message: &messaging.SequencedMessage{
-			Message:     &messaging.TransactionMessage{Transaction: s.seqs[0].Message.(*messaging.TransactionMessage).Transaction},
-			Source:      s.str.source,
-			Destination: protocol.PartitionUrl("BVN0"),
-			Number:      6 + maxSequenceAhead + 1,
-		},
-		Proof:     &protocol.AnnotatedReceipt{Anchor: directoryAnchorMetadata(99), Receipt: &merkle.Receipt{Start: make([]byte, 32), Anchor: make([]byte, 32)}},
-		Signature: &protocol.ED25519Signature{PublicKey: make([]byte, 32), Signer: protocol.DnUrl().JoinPath(protocol.Network)},
+		Message:   farSeq,
+		Proof:     &protocol.AnnotatedReceipt{Anchor: directoryAnchorMetadata(99), Receipt: &merkle.Receipt{Start: farHash[:], Anchor: farHash[:]}},
+		Signature: s.sign(farSeq), // a validator's word, so the horizon is what refuses it
 	}
 	d := &bundle{Block: s.b, batch: s.batch, messages: []messaging.Message{far}}
 	_, err := SyntheticMessage{}.Process(s.batch, &MessageContext{bundle: d, message: far})

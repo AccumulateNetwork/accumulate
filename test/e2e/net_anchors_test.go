@@ -83,40 +83,49 @@ func TestReuseDirectoryAnchorSignatures(t *testing.T) {
 	anchorTrap := func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
 		trapMu.Lock()
 		defer trapMu.Unlock()
-		if trapBlock == 0 || len(env.Messages) != 1 {
+		if trapBlock == 0 {
 			return true, nil
 		}
 
-		// Is the envelope a DN anchor signature for the target block?
-		blk, ok := env.Messages[0].(*messaging.BlockAnchor)
-		if !ok {
-			return true, nil
-		}
-		seq, ok := blk.Anchor.(*messaging.SequencedMessage)
-		if !ok {
-			return true, nil
-		}
-		txn, ok := seq.Message.(*messaging.TransactionMessage)
-		if !ok {
-			return true, nil
-		}
-		body, ok := txn.Transaction.Body.(*DirectoryAnchor)
-		if !ok || body.MinorBlockIndex != trapBlock {
-			return true, nil
-		}
+		// A dispatched anchor is one BlockAnchor per envelope; a healed span
+		// carries every signature of every anchor in one envelope (healing
+		// spec, "Requesting and answering"), and must be dropped like the
+		// dispatched copies it repeats, or the quorum the test withholds
+		// arrives by the back door.
+		for _, m := range env.Messages {
+			// Is the message a DN anchor signature for the target block?
+			blk, ok := m.(*messaging.BlockAnchor)
+			if !ok {
+				continue
+			}
+			seq, ok := blk.Anchor.(*messaging.SequencedMessage)
+			if !ok {
+				continue
+			}
+			txn, ok := seq.Message.(*messaging.TransactionMessage)
+			if !ok {
+				continue
+			}
+			body, ok := txn.Transaction.Body.(*DirectoryAnchor)
+			if !ok || body.MinorBlockIndex != trapBlock {
+				continue
+			}
 
-		// Capture signatures sent to the DN but don't drop them
-		if DnUrl().Equal(seq.Destination) {
-			dnSigs = append(dnSigs, blk.Signature)
-			return true, nil
-		}
+			// Capture signatures sent to the DN but don't drop them
+			if DnUrl().Equal(seq.Destination) {
+				dnSigs = append(dnSigs, blk.Signature)
+				continue
+			}
 
-		// Let the first signature sent to the BVN through and drop the rest
-		if toBVN == nil {
-			toBVN = seq
-			return true, nil
+			// Let the first signature sent to the BVN through and drop the
+			// rest
+			if toBVN == nil && len(env.Messages) == 1 {
+				toBVN = seq
+				continue
+			}
+			return false, nil
 		}
-		return false, nil
+		return true, nil
 	}
 
 	// Initialize
