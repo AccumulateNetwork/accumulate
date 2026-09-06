@@ -60,7 +60,21 @@ const (
 	// maxSourceBackoff bounds, in activations, how long a source whose
 	// requests all failed is left alone.
 	maxSourceBackoff = 8
+
+	// strandedAfter is how many consecutive activations a stream's requests
+	// must all come back NotFound — the span is past the source's cache —
+	// before the stream is stranded: the back-off doubles to its cap over
+	// the first four, and three more at the cap say the answer will not
+	// change (healing spec, "Stranded streams").
+	strandedAfter = 7
 )
+
+var mStrandedStreams = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Namespace: "accumulate",
+	Subsystem: "conductor",
+	Name:      "stranded_streams",
+	Help:      "Streams whose oldest gap the source cannot serve (past its cache) and which are no longer asked for; sync is the way out",
+}, []string{"destination", "source"})
 
 var mHealRequests = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
@@ -91,6 +105,15 @@ type healRequester struct {
 	asks     map[string][]askedSpan // stream -> spans asked within patience
 	backoff  map[string]uint64      // source -> block before which it is not asked
 	failures map[string]uint
+	misses   map[string]uint       // stream -> consecutive activations answered only NotFound
+	stranded map[string]strandedAt // stream -> where it was stranded
+}
+
+// strandedAt is where a stream stood when it was stranded: Delivered then.
+// The stream leaves the state when Delivered moves past it — something
+// arrived that healing could not fetch, which is sync (E11).
+type strandedAt struct {
+	delivered uint64
 }
 
 // askedRecently reports whether n was asked within the last healPatience
@@ -291,15 +314,22 @@ type streamAsk struct {
 // records each outcome. backoff names the source for the per-source back-off;
 // a source's two streams back off independently.
 func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTxn, blockIndex uint64, backoff *url.URL, a streamAsk) {
+	source := a.stream.Source
+	if left := c.requester.strandedStream(a.stream, a.delivered); left == strandedStill {
+		return
+	} else if left == strandedLeft {
+		mStrandedStreams.WithLabelValues(c.Partition.ID, partitionLabel(source)).Set(0)
+		slog.WarnContext(ctx, "Stream is no longer stranded", "module", "conductor",
+			"source", source, "destination", c.Url(), "what", a.what, "delivered", a.delivered, "block", blockIndex)
+	}
 	if c.requester.backedOff(backoff, blockIndex) {
 		return
 	}
-	source := a.stream.Source
 	spans := c.requester.decide(staged, a.stream, a.delivered, blockIndex)
 	if len(spans) == 0 {
 		return
 	}
-	asked, failed := 0, 0
+	asked, failed, missed := 0, 0, 0
 	for _, span := range spans {
 		if ctx.Err() != nil {
 			break
@@ -331,6 +361,7 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 			// The source's cache does not hold the span. Deterministic:
 			// asking again does not help. A miss is a defect at the source.
 			failed++
+			missed++
 			mHealRequests.WithLabelValues("miss", c.Partition.ID, partitionLabel(source)).Inc()
 			if c.Heals != nil {
 				c.Heals.Requests.Add(1)
@@ -349,6 +380,80 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 		}
 	}
 	c.requester.outcome(backoff, blockIndex, asked, failed)
+	if c.requester.streamOutcome(a.stream, a.delivered, missed, missed == failed && asked == 0) {
+		mStrandedStreams.WithLabelValues(c.Partition.ID, partitionLabel(source)).Set(1)
+		slog.WarnContext(ctx, "Stream is stranded: the source cannot serve its oldest gap and will not be asked again; sync is the way out", "module", "conductor",
+			"source", source, "destination", c.Url(), "what", a.what, "delivered", a.delivered, "block", blockIndex)
+	}
+}
+
+// strandedState is what strandedStream answers about a stream.
+type strandedState int
+
+const (
+	notStranded   strandedState = iota
+	strandedStill               // stranded, and nothing has moved: not asked
+	strandedLeft                // was stranded, and Delivered has moved past it
+)
+
+// strandedStream answers whether a stream is stranded, and takes it out of
+// the state when its Delivered has moved past where it was stranded: the hole
+// was filled by something other than a request, which is sync.
+func (r *healRequester) strandedStream(stream execute.StreamID, delivered uint64) strandedState {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	k := streamKey(stream)
+	at, ok := r.stranded[k]
+	switch {
+	case !ok:
+		return notStranded
+	case delivered > at.delivered:
+		delete(r.stranded, k)
+		delete(r.misses, k)
+		return strandedLeft
+	default:
+		return strandedStill
+	}
+}
+
+// streamOutcome counts an activation whose every request for the stream came
+// back NotFound, and strands the stream once strandedAfter of them are
+// consecutive. Anything else the source answers for the stream — entries, or
+// "not yet" — resets the count. Answers whether the stream was stranded by
+// this call, so the caller says so once.
+func (r *healRequester) streamOutcome(stream execute.StreamID, delivered uint64, missed int, onlyMissed bool) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.misses == nil {
+		r.misses = map[string]uint{}
+		r.stranded = map[string]strandedAt{}
+	}
+	k := streamKey(stream)
+	if missed == 0 || !onlyMissed {
+		delete(r.misses, k)
+		return false
+	}
+	r.misses[k]++
+	if r.misses[k] < strandedAfter {
+		return false
+	}
+	if _, ok := r.stranded[k]; ok {
+		return false
+	}
+	r.stranded[k] = strandedAt{delivered}
+	return true
+}
+
+// Stranded lists the streams the requester has given up asking for, by key.
+func (r *healRequester) Stranded() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]string, 0, len(r.stranded))
+	for k := range r.stranded {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // decide walks one stream from Delivered to the highest entry held and

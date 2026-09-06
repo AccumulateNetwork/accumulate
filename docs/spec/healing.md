@@ -56,6 +56,24 @@ A node that restarts syncs first: it replays the committed stream and rebuilds
 staging as its peers built it, so when it has caught up it holds what they
 hold and has the gaps they have (executor.md, "Sync").
 
+### Stranded streams
+
+A source answers a span from its cache or not at all. A destination whose
+oldest gap is behind the source's cache — a node down longer than the cache
+keeps, a stream idle so long its entries were released — asks and is told
+"not found", and asking again will not change the answer: the source has
+nothing to give, and healing has no other place to look. Such a stream is
+**stranded**. The requester says so once, shows it (`stranded_streams`, by
+destination and source), and stops asking; execution on the stream is stuck at
+the hole, and everything above it stays held. A stream is stranded when every
+request for it has come back "not found" for `strandedAfter` consecutive
+activations — the per-source back-off doubles to its cap over the first four,
+and three more at the cap say the answer is final. It leaves the state when
+`Delivered` moves past where it was stranded: something filled the hole that
+a request could not, and that is **sync** (executor.md, "Sync"; E11 in
+[DIFFERENCES.md](DIFFERENCES.md)) — the only exit. A "not yet" or an answer
+for the stream, even one, resets the count: the source is still serving it.
+
 ### Who asks, and when
 
 Healing **activates every few blocks**, not every block. A request goes to
@@ -262,6 +280,7 @@ Per node and per stream, so healing is judged from data:
 | staging depth, entries truncated | that staging is a buffer, not a store |
 | proof requests, spans per request, proofs disproved, duplicate proofs | proof loss, and attempts to lie about hashes |
 | anchor requests | anchors lost, requested at once |
+| stranded streams (gauge) | streams whose oldest gap the source cannot serve; only sync moves them |
 
 ### Invariants
 

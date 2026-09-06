@@ -10,6 +10,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -134,4 +136,47 @@ func TestRequestAnchorSpan_OneEnvelope(t *testing.T) {
 	for _, m := range envelopes[0].Messages {
 		require.IsType(t, &messaging.BlockAnchor{}, m)
 	}
+}
+
+// A stream whose oldest gap the source answers NotFound for, activation after
+// activation through the back-off's cap, is stranded: the requester stops
+// asking, says so once, and shows it on a gauge. It leaves the state when
+// Delivered moves past where it was stranded — sync filled the hole (#4242).
+func TestRequester_StrandedStream(t *testing.T) {
+	s := execute.NewStaging()
+	c := testConductor()
+	asks := 0
+	ask := streamAsk{stream: reqStream, what: "synthetics", healed: func(int) {},
+		ask: func(first, last uint64) (int, uint64, error) {
+			asks++
+			return 0, 0, errors.NotFound.With("not in the cache")
+		}}
+	staged := s.Begin()
+	defer staged.Discard()
+
+	// Enough activations for the back-off to reach its cap and stay there
+	block := uint64(0)
+	for i := 0; i < 400; i++ {
+		block += healCadence
+		c.requestStream(context.Background(), staged, block, reqSource, ask)
+	}
+	require.Equal(t, strandedAfter, asks, "asked through the back-off, then never again")
+	require.Equal(t, []string{streamKey(reqStream)}, c.requester.Stranded())
+	g, err := mStrandedStreams.GetMetricWithLabelValues("BVN0", "BVN1")
+	require.NoError(t, err)
+	require.Equal(t, 1.0, gaugeValue(t, g))
+
+	// The stream moves: sync delivered past the hole
+	ask.delivered = 100
+	c.requestStream(context.Background(), staged, block+healCadence, reqSource, ask)
+	require.Empty(t, c.requester.Stranded(), "Delivered moved past the stranded point")
+	require.Equal(t, 0.0, gaugeValue(t, g))
+	require.Equal(t, strandedAfter+1, asks, "asked again once it moved")
+}
+
+func gaugeValue(t *testing.T, g prometheus.Gauge) float64 {
+	t.Helper()
+	m := new(dto.Metric)
+	require.NoError(t, g.Write(m))
+	return m.GetGauge().GetValue()
 }
