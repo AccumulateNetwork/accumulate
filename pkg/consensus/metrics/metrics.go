@@ -152,6 +152,16 @@ var (
 		Name:      "dag_gc_rounds_removed_total",
 		Help:      "Total rounds removed by garbage collection",
 	})
+
+	// DAGUncommittedRoundsDroppedTotal counts rounds the round advance
+	// collected that this node never committed: the frontier ran more than
+	// the DAG depth ahead of the last commit (#4239).
+	DAGUncommittedRoundsDroppedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "dag_uncommitted_rounds_dropped_total",
+		Help:      "Rounds collected by the round advance that this node never committed",
+	})
 )
 
 // Network metrics

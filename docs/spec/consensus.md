@@ -218,6 +218,22 @@ they are, these are the facts the executor and healing parts depend on:
   batches are lost; the weak-link window is what makes that impossible in
   practice, and the count of orphaned certificates is a metric.
 
+### DAG retention
+
+The DAG keeps `DAGGCDepth` (2,000) rounds of certificates behind **whichever
+is further ahead, the last commit or the latest round**. Collection runs from
+the commit path, as before, and from the round advance: when a certificate
+for a new round is inserted, rounds more than `DAGGCDepth` behind it are
+collected. A node whose executor has halted therefore does not grow its DAG
+while the network goes on — the rounds it never committed are collected once
+the frontier is more than the depth ahead of its last commit, counted
+(`accumulate_dagbft_dag_uncommitted_rounds_dropped_total`) and reported once,
+because such a node is stranded, not lagging: the batches those rounds name
+are outside every peer's retention, so it could not have executed them
+(invariant 6, E11). A healthy node commits within a few rounds of the
+frontier, and the round advance collects nothing the commit path would not.
+Collection walks only the rounds the cutoff moved over, never the whole DAG.
+
 ### Retention
 
 `retain` keeps executed batches up to `DefaultMaxRetainedBatchBytes` and
