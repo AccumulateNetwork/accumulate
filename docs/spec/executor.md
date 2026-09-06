@@ -749,6 +749,16 @@ So a user signature is not special: it is an ordinary message carrying a
 signature, and the second dispatch exists only because the signature's type
 decides how it is verified.
 
+**Buying credits costs the signer nothing.** A local, direct `AddCredits` is
+how an identity gets its first credits, so its signature fee is waived in
+full — the base fee and any oversize surcharge alike (an ECDSA or RSA
+signature record is over 256 bytes and would otherwise owe 0.01 credits an
+unfunded identity cannot have; #4218). Kourou. Before it the surcharge stands,
+and validation refuses a signer that cannot pay it. **Validation refuses what
+execution would fail for lack of credits**: a signature that validates and
+then fails at the debit is recorded as a failed signature the client never
+asked about, which is the silence #4218 reported.
+
 ### Anchor signatures are not that path
 
 A block anchor is a **message** executor, `BlockAnchor` in `messageExecutors`,

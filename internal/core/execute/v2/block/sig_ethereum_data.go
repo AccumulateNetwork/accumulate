@@ -208,6 +208,16 @@ func (EthereumDataSignatureExecutor) verifyCanPay(batch *database.Batch, ctx *et
 		ctx.fee += txnFee - protocol.FeeSignature
 	}
 
+	// Buying credits is how an identity gets its first credits, so a local,
+	// direct AddCredits costs the signer nothing, whatever the signature's
+	// size (#4218; the same rule as UserSignature.verifyCanPay)
+	if _, ok := ctx.transaction.Body.(*protocol.AddCredits); ok &&
+		ctx.signer.GetUrl().LocalTo(ctx.transaction.Header.Principal) &&
+		ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
+		ctx.fee = 0
+		return nil
+	}
+
 	// Verify the signer has at least 0.01 credits
 	minFee := protocol.FeeSignature.GetEnumValue()
 	if !ctx.signer.CanDebitCredits(minFee) {

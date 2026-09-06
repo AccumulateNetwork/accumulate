@@ -308,6 +308,22 @@ func (x UserSignature) verifyCanPay(batch *database.Batch, ctx *userSigContext) 
 	if isLocal && isDirect {
 		switch body := ctx.transaction.Body.(type) {
 		case *protocol.AddCredits:
+			// Buying credits is how an identity gets its first credits, so
+			// the purchase must not itself cost credits. The signature fee is
+			// waived in full: the base fee was already subtracted, but an
+			// oversize signature (an ECDSA or RSA record is over 256 bytes)
+			// kept its surcharge, and an unfunded identity with such a key
+			// could never bootstrap (#4218). Before Kourou the surcharge
+			// stands, so a signer that cannot pay it is refused here, where
+			// the client sees why, instead of at execution.
+			if ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
+				ctx.fee = 0
+			} else if ctx.fee > 0 && !ctx.signer.CanDebitCredits(ctx.fee.AsUInt64()) {
+				return errors.InsufficientCredits.WithFormat(
+					"insufficient credits for an oversize signature: have %s, want %s",
+					protocol.FormatAmount(ctx.signer.GetCreditBalance(), protocol.CreditPrecisionPower),
+					protocol.FormatAmount(ctx.fee.AsUInt64(), protocol.CreditPrecisionPower))
+			}
 			return x.verifyTokenBalance(batch, ctx, &body.Amount)
 
 		case *protocol.BurnCredits:
