@@ -373,9 +373,16 @@ commit take pre-images. Issues: umbrella #4223 with the whole review; per
 finding #4224–#4233; the dispatcher is #4222. Done the same day: the cache is
 released by the destination's Delivered carried on every dispatch (ccb80592e);
 staging release returns a drained backlog (4ff104e6f). The second pass added
-#4234–#4246. All of #4222, #4224 and #4226–#4246 are worked on
+#4234–#4246. Commits for all of #4222, #4224 and #4226–#4246 landed on
 `issue-4193-producer-cache` (2026-09-06, one `Issue #N:` commit each; #4225
-was moot). What each fix does not do is in DIFFERENCES: a restarted validator
+was moot), but a code verification the same evening found only **seven
+complete**: #4224, #4226, #4229, #4234, #4240, #4242, #4246. The other
+fourteen are PARTIAL, and the remainder of each is recorded on its issue —
+some knowingly deferred (E11, H1, BlockchainDB), some silently incomplete
+(#4230's worker bound, #4232's three residues, #4235's unbounded map,
+#4239's channel wedge, #4244's `set.Add`, #4245's submit-path Join).
+"Worked" is not "done": the claim above was made from the implementing
+agents' reports, and verifying against the code corrected it. What each fix does not do is in DIFFERENCES: a restarted validator
 resumes its round but pulls nothing it missed (E11); the stage's span bound is
 constant because no wire path tells a destination the source's produced count
 (H1); a stranded stream leaves that state only by sync. Acceptance is the
