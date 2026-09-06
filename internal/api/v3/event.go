@@ -172,6 +172,19 @@ func (s *EventService) Subscribe(ctx context.Context, opts api.SubscribeOptions)
 		s.subscribers.Add(1)
 		defer s.subscribers.Add(-1)
 
+		// Every send yields to cancellation: a subscriber that went away
+		// must release this goroutine, its slot in the subscriber count and
+		// the block loading the count gates, not park it on a channel nobody
+		// reads (#4240).
+		send := func(e api.Event) bool {
+			select {
+			case ch <- e:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+
 		s.eventMu.RLock()
 		ready := s.eventReady        // Get the initial broadcast channel
 		lastBlock := s.lastBlock     // Get the last block
@@ -189,10 +202,12 @@ func (s *EventService) Subscribe(ctx context.Context, opts api.SubscribeOptions)
 				lastBlock = copyBlockEvent(lastBlock)
 				s.loadBlockInfo(lastBlock)
 			}
-			ch <- lastBlock
+			if !send(lastBlock) {
+				return
+			}
 		}
-		if lastGlobals != nil {
-			ch <- lastGlobals
+		if lastGlobals != nil && !send(lastGlobals) {
+			return
 		}
 
 		for {
@@ -211,7 +226,9 @@ func (s *EventService) Subscribe(ctx context.Context, opts api.SubscribeOptions)
 			s.eventMu.RUnlock()
 
 			// Send the block
-			ch <- lastEvent
+			if !send(lastEvent) {
+				return
+			}
 		}
 	}()
 
