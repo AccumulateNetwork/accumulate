@@ -365,6 +365,17 @@ Spec: executor.md "One chain per pair, one stage per chain"; healing.md
 
 Fresh installs; no migration of the interleaved chain.
 
+## Memory and execution review (2026-09-06)
+
+[docs/reviews/memory-execution-paths-2026-09-06.md](../reviews/memory-execution-paths-2026-09-06.md)
+— what grows and with what, across the executor, staging and the cache, the
+API and store, and consensus. Top of the list: the producer cache keeps every
+synthetic with its transaction for an hour (2–5 GB per node at 500 tps); the
+dispatcher drops the rest of a send cycle on the first transport error (issue
+4222's mechanism); a sequencer read view held across blocks makes every
+commit take pre-images. Proposed order of work is in the document; nothing
+there is started.
+
 ## Simulation first
 
 Every failure a soak finds gets an in-process reproduction before its fix, and
