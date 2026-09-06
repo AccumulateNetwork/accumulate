@@ -118,6 +118,17 @@ them is the writer's bug, not the chain's to absorb.
   own records (mark points, elements, element indexes) is the store's
   business; mark points are in the dynamic layer because queries reach them
   at any age, and a missing one is an error, never an empty state.
+- **A layer exception is for a permanent shape only.** The dynamic layer is
+  read first, so a tombstone there shadows a later write of the same key to
+  the permanent layer; a windowed store therefore remembers a deleted
+  permanent key as an exception — in memory for the process lifetime and in
+  a file read whole at open — and sends its later writes to the dynamic
+  layer. A mutable shape needs no such memory: it is routed to the dynamic
+  layer with or without a tombstone. Clearing a set is a tombstone on a
+  mutable shape, three per delivered transaction, and adds nothing to the
+  exception set. The set's size is published
+  (`accumulate_bcdb_dyna_exceptions`, `dynaExceptions` in `stats.json`); a
+  count that grows with the transaction rate is a misclassified shape.
 - A permanent record is answered from the window. The one reader that
   legitimately reaches further — a signature or reference arriving for a
   pending transaction whose body is older than the window — takes a deep

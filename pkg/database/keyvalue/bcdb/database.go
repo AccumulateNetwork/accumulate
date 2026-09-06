@@ -401,7 +401,18 @@ func (d *Database) loadExceptions() error {
 		copy(h[:], b)
 		d.dyna[h] = true
 	}
+	exceptionsGauge.WithLabelValues(d.metricLabel).Set(float64(len(d.dyna)))
 	return nil
+}
+
+// Exceptions is how many keys are held in the dynamic layer against their
+// shape's classification: deleted permanent keys and refused writes. It is
+// memory the process keeps for its lifetime and a file read whole at open,
+// so a count that grows with the transaction rate is a defect (#4235).
+func (d *Database) Exceptions() int {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return len(d.dyna)
 }
 
 // persistExceptions appends the exceptions recorded since the last
@@ -451,6 +462,7 @@ func (d *Database) except(h [32]byte) {
 	}
 	d.dyna[h] = true
 	d.pendingDyna = append(d.pendingDyna, h)
+	exceptionsGauge.WithLabelValues(d.metricLabel).Set(float64(len(d.dyna)))
 }
 
 // Begin begins a change set that reads the database as it stands now,
@@ -967,13 +979,17 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 			value = []byte{} // Tombstone
 		}
 
-		// A deletion is a mutation whatever the record is, and a key
-		// the dynamic layer already holds has to stay there: it is
-		// read first, so a later write to the permanent layer would be
-		// shadowed by what the dynamic layer already has -- by a
-		// tombstone, that means reading as deleted while holding a
-		// value.
-		if len(value) == 0 {
+		// A tombstone lands in the dynamic layer, which is read first, so
+		// a LATER write of the same key to the permanent layer would be
+		// shadowed by it -- reading as deleted while holding a value.
+		// Only a key whose shape routes permanent can be written there,
+		// so only that key needs excepting. A mutable shape goes to the
+		// dynamic layer with or without a tombstone, and every delivered
+		// transaction clears three sets (Payments, Votes, Signatures):
+		// excepting those grew d.dyna and the exceptions file by 5.4 M
+		// entries an hour at 500 tps, for keys that were never going
+		// anywhere else (#4235).
+		if len(value) == 0 && isWriteOnce(key) {
 			d.except(h)
 		}
 		perm := len(value) > 0 && !d.dyna[h] && isWriteOnce(key)
@@ -1139,6 +1155,10 @@ var (
 		Namespace: "accumulate", Subsystem: "bcdb", Name: "oldest_view_age_seconds",
 		Help: "Age of the oldest open read view; zero when none is open",
 	}, []string{"database"})
+	exceptionsGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "accumulate", Subsystem: "bcdb", Name: "dyna_exceptions",
+		Help: "Keys held in the dynamic layer against their classification (deleted permanent keys, refused writes); in memory for the process lifetime and read whole at open",
+	}, []string{"database"})
 )
 
 // observeStaging publishes how many commit overlays open readers are holding
@@ -1292,6 +1312,10 @@ func (d *Database) reportStats() {
 		// bound means a reader was never closed (D5).
 		Staged int `json:"stagedCommits"`
 
+		// Exceptions is the dynamic-layer exception set: memory for the
+		// process lifetime, and a file read whole at open (#4235).
+		Exceptions int `json:"dynaExceptions"`
+
 		// TallySample is the rate New/Duplicate/Rewritten were sampled
 		// at: multiply by it to estimate, or read them as ratios.
 		TallySample uint8 `json:"tallySample"`
@@ -1314,7 +1338,7 @@ func (d *Database) reportStats() {
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
 		ShallowMisses: d.ShallowMisses(),
 		HistoryReads:  d.HistoryReads(),
-		Staged:        len(d.undoVersions), TallySample: d.TallySample,
+		Staged:        len(d.undoVersions), Exceptions: len(d.dyna), TallySample: d.TallySample,
 		TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
 		MaintenanceErrors: d.maintErrs}
 	if d.maintErr != nil {
