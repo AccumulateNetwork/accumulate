@@ -57,4 +57,3 @@ func (x *Executor) provingAnchorIndex(batch *database.Batch, proof *protocol.Ann
 		return -1, false, errors.UnknownError.WithFormat("search for directory anchor %x: %w", anchor, err)
 	}
 }
-

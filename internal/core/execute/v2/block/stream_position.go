@@ -62,7 +62,7 @@ type streamPosition struct {
 	// err is the first failure from a read that could not report one — idOf is
 	// called from buildRun, which is pure and total by design. The caller
 	// checks it once, after the run is built.
-	err  error
+	err   error
 	block *Block
 }
 

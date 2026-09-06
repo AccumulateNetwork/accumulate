@@ -20,8 +20,8 @@ import (
 // ownReceipt is a Directory receipt for one of this partition's blocks,
 // carried by a Directory anchor this partition executed.
 type ownReceipt struct {
-	block       uint64                          // the own block receipted
-	anchorBlock uint64                          // the Directory block whose anchor carried it
+	block       uint64                           // the own block receipted
+	anchorBlock uint64                           // the Directory block whose anchor carried it
 	receipt     *protocol.PartitionAnchorReceipt // nil on the Directory, whose own anchor receipts its own block
 }
 
