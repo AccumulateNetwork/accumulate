@@ -393,7 +393,7 @@ func (x *Executor) sendSyntheticTransactions(block *Block, isLeader bool) error 
 	// proof — but only the leader submits.
 	received := x.synthCache().TakeReceived()
 	if len(received) > 0 {
-		x.logger.Info("Dispatching for received Directory anchors", "module", "synthetic", "anchors", len(received), "leader", isLeader)
+		x.logger.Debug("Dispatching for received Directory anchors", "module", "synthetic", "anchors", len(received), "leader", isLeader)
 	}
 	for _, r := range received {
 		anchor := r.Anchor
@@ -409,7 +409,7 @@ func (x *Executor) sendSyntheticTransactions(block *Block, isLeader bool) error 
 			if !x.Describe.PartitionUrl().URL.LocalTo(receipt.Anchor.Source) {
 				continue
 			}
-			x.logger.Info("Directory receipt for own block", "module", "synthetic", "block", receipt.Anchor.MinorBlockIndex, "directory-block", anchor.MinorBlockIndex)
+			x.logger.Debug("Directory receipt for own block", "module", "synthetic", "block", receipt.Anchor.MinorBlockIndex, "directory-block", anchor.MinorBlockIndex)
 
 			err := x.sendSyntheticTransactionsForBlock(receipt.Anchor.MinorBlockIndex, receipt, anchor.MinorBlockIndex, isLeader, deliveredFrom)
 			if err != nil {

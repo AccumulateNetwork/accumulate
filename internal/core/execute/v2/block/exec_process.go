@@ -208,7 +208,12 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 	var statuses []*protocol.TransactionStatus
 	b := d.Block
 
+	// Every line below is Debug; nothing is built for it unless it is written
+	// (#4231).
 	for _, msg := range d.messages {
+		if !b.Executor.logger.Enabled(b.Context, slog.LevelDebug) {
+			break
+		}
 		if m, ok := msg.(*internal.PseudoSynthetic); ok {
 			msg = m.Message
 		}
