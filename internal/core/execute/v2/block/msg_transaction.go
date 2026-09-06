@@ -246,6 +246,7 @@ func (x TransactionMessage) Process(batch *database.Batch, ctx *MessageContext) 
 			if err != nil {
 				return nil, errors.UnknownError.WithFormat("store message: %w", err)
 			}
+			ctx.markTransactionRecorded(ctx.message.Hash())
 		}
 
 		// Execute if it's time

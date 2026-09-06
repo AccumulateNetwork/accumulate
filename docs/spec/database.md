@@ -81,6 +81,18 @@ is to learn that a key is absent before writing it is a defect: on a windowed
 store it is a search of all history to confirm what recent state already
 settled.
 
+**A record is written once per thing it records.** The rows above are the
+records a repeat consults, and they are why nothing else needs to be written
+more than once. A transaction's body is stored once, under the transaction's
+hash; a wrapper that carried it — sequenced, synthetic, an anchor copy — is
+stored referring to it by hash ([executor.md](executor.md), "The database
+write"). An anchor's validator signature set is written once per block, from
+what the block's copies brought, not once per copy. What a message produced
+is one set, `Transaction(hash).Produced`, written as it is produced; `Cause`
+is its inverse and is kept because the API answers from it. A status is
+written for a message that has an outcome — it is the dedup record — and for
+nothing else.
+
 **Chains are logs.** A chain is an append-only sequence of hashes. Its element
 index maps a hash to the position it was **last written** at, live and after
 a restore alike, and no reader relies on which occurrence it names: a receipt,

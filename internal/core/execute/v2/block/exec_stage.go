@@ -239,7 +239,7 @@ func (b *Block) admissibilityOf(str stream, outer messaging.Message, seq *messag
 		if !ok {
 			return false, errors.BadRequest.With("anchor does not carry a transaction")
 		}
-		return b.Executor.anchorIsAdmissible(b.Batch, m.Proof, txn.Transaction, seq.Source)
+		return b.anchorIsAdmissible(b.Batch, m.Proof, txn.Transaction, seq.Source)
 
 	case *messaging.SyntheticMessage:
 		return b.syntheticIsProven(m.Proof, seq)
@@ -257,7 +257,7 @@ func (b *Block) admissibilityOf(str stream, outer messaging.Message, seq *messag
 			if !ok {
 				return false, errors.BadRequest.With("anchor does not carry a transaction")
 			}
-			return b.Executor.anchorIsAdmissible(b.Batch, nil, txn.Transaction, seq.Source)
+			return b.anchorIsAdmissible(b.Batch, nil, txn.Transaction, seq.Source)
 		}
 		return b.Executor.isAdmissible(b.Batch, nil)
 	}

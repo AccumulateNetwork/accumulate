@@ -26,20 +26,30 @@ staging, staging packs them with the one anchor and evaluates quorum or proof,
 and the anchor executes once with no further checking.
 
 **Code**: each validator sends a full `BlockAnchor` carrying the whole payload
-and its own signature. Each is a complete message execution — writes
-`recordMessageAndStatus` and `RecordHistory`, adds one signature to
-`ValidatorSignatures()` — and the copy that crosses `ValidatorThreshold`
-executes the anchor. For an N-validator partition, N−1 deliveries exist only to
-deposit a signature. Copies cannot deduplicate because each embeds a different
-signature and therefore hashes differently.
+and its own signature. Each is a complete message execution with its own
+status, and the copy that crosses `ValidatorThreshold` executes the anchor. For
+an N-validator partition, N−1 deliveries exist only to deposit a signature.
+Copies cannot deduplicate because each embeds a different signature and
+therefore hashes differently.
 
-Staging already asks the right question — `admissibilityOf` calls
-`anchorIsAdmissible`, the same rule `txnIsReady` uses at execution, shared
-deliberately (#4169 step 3b) — but has nothing to collect, so the rule is
-evaluated twice over state that execution had to write first.
+What a copy writes is now bounded by what it adds (#4224, executor.md "What a
+copy costs"): the body once under the transaction's hash, the copy as a
+signature over a reference, one signature-chain entry per distinct signer, the
+signature set once per block from the block's view of it
+(`anchor_signatures.go`). What remains of this difference is the shape:
+copies are still messages with statuses, and the quorum is still evaluated by
+execution rather than collected by staging. Staging already asks the right
+question — `admissibilityOf` calls `Block.anchorIsAdmissible`, the same rule
+`txnIsReady` uses (#4169 step 3b) — but has nothing to collect.
 
-**Size**: medium. Cost is O(validators) per anchor: 445 anchors against 180,997
-synthetics in run `20260902T132651Z`, so small today, linear in validator count.
+One consequence of storing a copy as a reference: the API renders a signature
+chain entry by loading the message under the entry's hash and recomputing its
+ID (`load.go`), so an anchor copy's ID in the signature set differs from the
+chain entry that names it. The signature itself is what the set is for, and it
+is intact.
+
+**Size**: medium. Cost is O(validators) per anchor in statuses and chain
+entries; bodies and set writes are O(1) per anchor per block.
 
 ### E5. Staging is re-evaluated in a loop
 

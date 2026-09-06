@@ -51,6 +51,12 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.WithFormat("flush streams: %w", err)
 	}
 
+	// Write each anchor's validator signature set, once per anchor (#4224).
+	err = block.flushAnchorSignatures()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("flush anchor signatures: %w", err)
+	}
+
 	// Is it time for a major block?
 	err = block.shouldOpenMajorBlock()
 	if err != nil {

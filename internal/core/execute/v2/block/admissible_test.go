@@ -141,17 +141,17 @@ func TestAnchorIsAdmissible_SignatureQuorum(t *testing.T) {
 	x, batch, _, txn := anchorFixture(t)
 	src := protocol.PartitionUrl("BVN1")
 
-	ok, err := x.anchorIsAdmissible(batch, nil, txn, src)
+	ok, err := (&Block{Executor: x, Batch: batch}).anchorIsAdmissible(batch, nil, txn, src)
 	require.NoError(t, err)
 	assert.False(t, ok, "no signatures at all is below the threshold")
 
 	addAnchorSigs(t, batch, txn, 1)
-	ok, err = x.anchorIsAdmissible(batch, nil, txn, src)
+	ok, err = (&Block{Executor: x, Batch: batch}).anchorIsAdmissible(batch, nil, txn, src)
 	require.NoError(t, err)
 	assert.False(t, ok, "one of two is still below")
 
 	addAnchorSigs(t, batch, txn, 2)
-	ok, err = x.anchorIsAdmissible(batch, nil, txn, src)
+	ok, err = (&Block{Executor: x, Batch: batch}).anchorIsAdmissible(batch, nil, txn, src)
 	require.NoError(t, err)
 	assert.True(t, ok, "at the threshold the anchor is authorized")
 }
@@ -161,7 +161,7 @@ func TestAnchorIsAdmissible_SignatureQuorum(t *testing.T) {
 func TestAnchorIsAdmissible_CollectionProofAuthorizesAlone(t *testing.T) {
 	x, batch, known, txn := anchorFixture(t)
 
-	ok, err := x.anchorIsAdmissible(batch, &protocol.AnnotatedReceipt{
+	ok, err := (&Block{Executor: x, Batch: batch}).anchorIsAdmissible(batch, &protocol.AnnotatedReceipt{
 		Receipt: &merkle.Receipt{Anchor: known},
 	}, txn, protocol.PartitionUrl("BVN1"))
 	require.NoError(t, err)
@@ -178,19 +178,19 @@ func TestAnchorIsAdmissible_UnarrivedProofFallsThroughToTheQuorum(t *testing.T) 
 	unknown[0] = 0x77
 	proof := &protocol.AnnotatedReceipt{Receipt: &merkle.Receipt{Anchor: unknown}}
 
-	ok, err := x.anchorIsAdmissible(batch, proof, txn, src)
+	ok, err := (&Block{Executor: x, Batch: batch}).anchorIsAdmissible(batch, proof, txn, src)
 	require.NoError(t, err)
 	assert.False(t, ok, "not authorized yet — but by the quorum, not by rejecting the proof")
 
 	addAnchorSigs(t, batch, txn, 2)
-	ok, err = x.anchorIsAdmissible(batch, proof, txn, src)
+	ok, err = (&Block{Executor: x, Batch: batch}).anchorIsAdmissible(batch, proof, txn, src)
 	require.NoError(t, err)
 	assert.True(t, ok, "the quorum still authorizes it despite the unarrived proof")
 }
 
 func TestAnchorIsAdmissible_SourceMustBeAPartition(t *testing.T) {
 	x, batch, _, txn := anchorFixture(t)
-	_, err := x.anchorIsAdmissible(batch, nil, txn, protocol.AccountUrl("alice"))
+	_, err := (&Block{Executor: x, Batch: batch}).anchorIsAdmissible(batch, nil, txn, protocol.AccountUrl("alice"))
 	require.Error(t, err, "a non-partition source has no threshold to compare against")
 }
 
@@ -220,7 +220,7 @@ func TestAnchorAdmissibility_OneAnswerForBothCallers(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			_, b2, _, txn2 := anchorFixture(t)
 			addAnchorSigs(t, b2, txn2, c.sigs)
-			got, err := x.anchorIsAdmissible(b2, c.proof, txn2, src)
+			got, err := (&Block{Executor: x, Batch: b2}).anchorIsAdmissible(b2, c.proof, txn2, src)
 			require.NoError(t, err)
 			assert.Equal(t, c.want, got)
 		})

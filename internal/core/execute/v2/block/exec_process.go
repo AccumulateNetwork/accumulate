@@ -57,6 +57,11 @@ type bundle struct {
 	// object in the same envelope, so the memo can never cross envelopes.
 	validatedLists map[*merkle.ReceiptList]bool
 
+	// recordedTxns are the transactions this bundle stored under their own
+	// hash. A wrapper recorded after one of them refers to it by hash instead
+	// of carrying the body again (storedForm).
+	recordedTxns map[[32]byte]bool
+
 	// stateOps defers the pending/delivered marks the same way (#4149):
 	// execution may be running in a shard goroutine, and a direct write to
 	// Block.State's maps is a data race. Ops apply in execution order at
@@ -78,6 +83,15 @@ func (d *bundle) listIsValid(list *merkle.ReceiptList) bool {
 	}
 	d.validatedLists[list] = v
 	return v
+}
+
+// markTransactionRecorded notes that the transaction is stored under its own
+// hash, by this bundle or before it.
+func (d *bundle) markTransactionRecorded(hash [32]byte) {
+	if d.recordedTxns == nil {
+		d.recordedTxns = map[[32]byte]bool{}
+	}
+	d.recordedTxns[hash] = true
 }
 
 func (d *bundle) markTransactionPending(txn *protocol.Transaction) {
@@ -219,7 +233,6 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 			kv = append(kv, "txn-type", msg.Transaction.Body.Type())
 
 		case *messaging.BlockAnchor:
-			fn = b.Executor.logger.Info
 			kv = append(kv, "module", "anchoring")
 
 		case *messaging.BadSyntheticMessage:
