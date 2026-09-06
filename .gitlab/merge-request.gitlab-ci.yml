@@ -1,6 +1,12 @@
 mr bott:
   stage: test
   needs: []
+  # The bot runs in core/gitlab-bot, whose main is protected to Maintainers;
+  # a Developer's merge request cannot start that pipeline and the bridge
+  # fails with insufficient permissions, which blocked every one of a
+  # Developer's merge requests from merging (2026-09-06). The review bot is
+  # advisory: its failure must not gate a merge.
+  allow_failure: true
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
   variables:
