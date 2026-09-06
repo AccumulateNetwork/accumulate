@@ -431,14 +431,18 @@ func (x SyntheticMessage) collect(batch *database.Batch, ctx *MessageContext, se
 	return errCollected
 }
 
-// noteRemoteDelivered takes a validated message's word on what its source
-// has executed of this partition's stream to it (healing spec, "The cache").
-// Only a message that is about to execute is heard: a collected entry's value
-// is not trusted, since dropping what a source still needs would leave it a
-// gap no one can fill.
+// noteRemoteDelivered takes a message's word on what its source has executed
+// of this partition's stream to it (healing spec, "The cache"). Heard only
+// from a message that is about to execute AND whose validator signature
+// verifies: a collection proof authenticates the sequenced message, not the
+// fields beside it, so the word is taken on the signer's authority alone.
+// Dropping what a source still needs would leave it a gap no one can fill.
 func (SyntheticMessage) noteRemoteDelivered(ctx *MessageContext, syn *messaging.SynthFields) {
 	seq, ok := syn.Message.(*messaging.SequencedMessage)
-	if !ok || ctx.Block == nil {
+	if !ok || ctx.Block == nil || syn.Delivered == 0 || syn.Signature == nil {
+		return
+	}
+	if !syn.Signature.Verify(nil, syn.Message) {
 		return
 	}
 	ctx.Block.noteRemoteDelivered(seq.Source, syn.Delivered)

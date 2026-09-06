@@ -149,3 +149,28 @@ func TestCache_ReleaseOnDelivered(t *testing.T) {
 	entries, _ = c.Len()
 	require.Equal(t, 2, entries)
 }
+
+// A claim past what is held releases what is held and stops; a claim at the
+// maximum does not walk the number line.
+func TestCache_ReleaseIsBoundedByWhatIsHeld(t *testing.T) {
+	c := New(0)
+	bvn1 := protocol.PartitionUrl("BVN1")
+	tx := c.Begin(3)
+	blk := &Block{Index: 3, Streams: map[string]*Stream{streamKey(bvn1): {Destination: bvn1, Segment: &merkle.Segment{First: 0}}}}
+	for n := uint64(1); n <= 3; n++ {
+		seq := &messaging.SequencedMessage{Number: n, Source: protocol.PartitionUrl("BVN0"), Destination: bvn1}
+		e := &Entry{Stream: bvn1, Number: n, Index: int64(n - 1), Block: 3, Hash: seq.Hash(), Seq: seq}
+		tx.Add(e)
+		blk.Entries = append(blk.Entries, e)
+		blk.Streams[streamKey(bvn1)].Segment.Append(e.Hash[:])
+	}
+	tx.SetBlock(blk)
+	tx.Commit()
+
+	tx = c.Begin(4)
+	tx.Release(bvn1, ^uint64(0))
+	tx.Commit() // must return
+	entries, _ := c.Len()
+	require.Zero(t, entries)
+	require.Equal(t, uint64(3), c.released[streamKey(bvn1)], "clamped to the highest held number")
+}

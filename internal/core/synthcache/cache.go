@@ -340,22 +340,50 @@ func (c *Cache) releaseLocked(k string, n uint64) {
 	if n < from {
 		return
 	}
-	c.released[k] = n
 	m := c.entries[k]
 	if m == nil {
+		c.released[k] = n
 		return
 	}
+	// The claim is the destination's word, not ours to trust with the walk:
+	// it is clamped to what is held, and when it outruns the held set the
+	// held set is walked instead, so a forged or post-restart value costs
+	// what the cache holds, never what the number says (second-pass review
+	// 2026-09-06). A claim past the highest held number releases everything
+	// held; nothing above it exists to release.
+	var highest uint64
+	for num := range m {
+		if num > highest {
+			highest = num
+		}
+	}
+	if n > highest {
+		n = highest
+	}
+	c.released[k] = n
 	touched := map[uint64]bool{}
 	var dropped int
-	for num := from; num <= n; num++ {
-		e, ok := m[num]
-		if !ok {
-			continue
-		}
+	drop := func(num uint64, e *Entry) {
 		delete(m, num)
 		delete(c.byHash, e.Hash)
 		touched[e.Block] = true
 		dropped++
+	}
+	if n < from {
+		return
+	}
+	if n-from+1 > uint64(len(m)) {
+		for num, e := range m {
+			if num >= from && num <= n {
+				drop(num, e)
+			}
+		}
+	} else {
+		for num := from; num <= n; num++ {
+			if e, ok := m[num]; ok {
+				drop(num, e)
+			}
+		}
 	}
 	for idx := range touched {
 		b := c.blocks[idx]
