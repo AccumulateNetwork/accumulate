@@ -650,7 +650,11 @@ on any other account).
    `block.State.ChainUpdates.Entries` as collected before this step: the
    `BlockEntry` list of every (account, chain, index) the block changed. The
    block-ledger chain's own append happens after that list is collected and is
-   not registered as a chain update, so the record never lists itself.
+   not registered as a chain update, so the record never lists itself. The list
+   is also how an append learns the block already holds an entry for its chain
+   (a transaction appends to a chain once); it is indexed by (account, chain)
+   for that, and the index is never consulted blind — the list is the record,
+   and the index follows it.
 2. `Account(ledger).BlockLedgerChain()` — a chain named `block-ledger`. The
    block appends one entry: the hash of the marshaled record above.
 

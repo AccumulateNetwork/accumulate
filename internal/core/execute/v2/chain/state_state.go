@@ -101,11 +101,54 @@ type ChainUpdates struct {
 	// its own in the producer cache, and a main chain's receipts are never
 	// built here.
 	Segments map[string]*merkle.Segment
+
+	// byChain is the position in Entries of the first entry for each
+	// (account, chain), so AddChainEntry2 finds a chain's entry without
+	// scanning the block -- E compares per append was O(E²) per block,
+	// 1-3 M URL compares at 500 tps (#4226). The slice is the source of
+	// truth: the block rebuilds and sorts it directly, so a hit is checked
+	// against the slice and the index is rebuilt when the slice has changed
+	// under it (indexed is the length it was built for).
+	byChain map[string]int
+	indexed int
 }
 
 // SegmentKey names a chain for ChainUpdates.Segments.
 func SegmentKey(account *url.URL, chain string) string {
 	return strings.ToLower(account.String()) + ";" + chain
+}
+
+// entryFor returns the block entry recorded for a chain, if there is one:
+// the first, as the scan it replaces returned.
+func (c *ChainUpdates) entryFor(account *url.URL, chain string) (*protocol.BlockEntry, bool) {
+	key := SegmentKey(account, chain)
+	if c.byChain == nil || c.indexed != len(c.Entries) {
+		c.reindex()
+	}
+	i, ok := c.byChain[key]
+	if !ok {
+		return nil, false
+	}
+	if e := c.Entries[i]; e.Chain == chain && e.Account.Equal(account) {
+		return e, true
+	}
+	// The slice was reordered or replaced under the index
+	c.reindex()
+	if i, ok = c.byChain[key]; ok {
+		return c.Entries[i], true
+	}
+	return nil, false
+}
+
+func (c *ChainUpdates) reindex() {
+	c.byChain = make(map[string]int, len(c.Entries))
+	for i, e := range c.Entries {
+		key := SegmentKey(e.Account, e.Chain)
+		if _, ok := c.byChain[key]; !ok {
+			c.byChain[key] = i
+		}
+	}
+	c.indexed = len(c.Entries)
 }
 
 func (c *ChainUpdates) Merge(d *ChainUpdates) {
@@ -133,6 +176,14 @@ func (c *ChainUpdates) Merge(d *ChainUpdates) {
 // DidUpdateChain records a chain update.
 func (c *ChainUpdates) DidUpdateChain(update *protocol.BlockEntry) {
 	c.Entries = append(c.Entries, update)
+	if c.byChain == nil || c.indexed != len(c.Entries)-1 {
+		return // Not built, or stale: the next lookup rebuilds it
+	}
+	key := SegmentKey(update.Account, update.Chain)
+	if _, ok := c.byChain[key]; !ok {
+		c.byChain[key] = len(c.Entries) - 1
+	}
+	c.indexed = len(c.Entries)
 }
 
 // DidAddChainEntry records a chain update in the block state.
@@ -165,10 +216,8 @@ func (u *ChainUpdates) AddChainEntry2(batch *database.Batch, chain *database.Cha
 	// principal; when both name the same chain, this record — the
 	// transaction's own — says so, and nothing is read from the chain to find
 	// out.
-	for _, e := range u.Entries {
-		if e.Chain == chain.Name() && e.Account.Equal(chain.Account()) {
-			return int64(e.Index), nil
-		}
+	if e, ok := u.entryFor(chain.Account(), chain.Name()); ok {
+		return int64(e.Index), nil
 	}
 
 	index := c.Height()
