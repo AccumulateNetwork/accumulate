@@ -500,22 +500,35 @@ source by the author. Numbers are for one BVN at 500 tps unless said.
    `Main`) — about 6.6 GB per hour. Roughly 25 to 55 bytes written per byte of
    input; about 85 % avoidable.
 2. **Every cleared set becomes a tombstone exception the adapter keeps in a
-   map for the life of the process** — three per delivered transaction,
-   roughly 350–450 MB of heap per hour at 500 tps, plus a file re-read whole
-   at open. Neither pass had seen this. It is a candidate for the BlockchainDB
-   soak growth the first pass could not place.
-3. **Pre-images run on nearly every commit anyway.** Removing the sequencer's
-   pinned view was not enough: every CheckTx opens a read view, so a reader is
-   almost always registered while a block commits, and a pre-image for a key
-   the window does not hold walks the dynamic history.
+   map for the life of the process** — two per delivered transaction
+   (`Payments`, `Votes`, both `Put(nil)`) plus one per signer's `Signatures`
+   set; the Payments count is measured (367 K clears in 37 minutes), the
+   others are read from the code. Roughly 300–450 MB of heap per hour at 500
+   tps, plus a file re-read whole at open. Neither pass had seen this. It is a
+   candidate for the BlockchainDB soak growth the first pass could not place.
+3. **Pre-images run on every commit that finds a read batch open**, and under
+   load that is most of them: every CheckTx opens one, so did the sequencer's
+   pinned view (now removed) and every API read. A pre-image for a key the
+   dynamic layer does not hold walks the dynamic history, because a mutable
+   store never short-circuits a miss (BlockchainDB `segstore.go:1794-1797`,
+   read in the module source). How often a batch is open at commit under 500
+   tps is inferred from CheckTx duration, not measured.
 4. **A restarted validator has no way back into consensus.** It starts at
-   round zero, can bridge at most 2000 rounds (about eight minutes), and past
-   that logs forever. The rejoin hook exists and nothing calls it.
+   round zero (`primary.go:287`, read); the catch-up window is the DAG GC depth
+   of 2000 rounds; the "64 rounds per second" pull rate and the "about eight
+   minutes" are the reviewer's, from `cert_sync.go:33` and a 09-04 log sample,
+   not re-measured. Past the window it logs forever. The rejoin hook exists
+   and nothing calls it; the recovery manager has no caller.
 5. **A disconnected event subscriber leaves the API loading every block's
    ledger forever**, one leaked goroutine per disconnect.
-6. **Two defects in this week's code**, both fixed the same day (978b8eac6):
-   the cache release walked the claimed number line (endless at the maximum)
-   and a list-proven copy's Delivered was unauthenticated.
+6. **Two defects in this week's code**, fixed the same day in two steps
+   (978b8eac6, then the correction below): the cache release walked the
+   claimed number line (endless at the maximum) and a list-proven copy's
+   Delivered was unauthenticated. The first fix verified the signature but
+   not the signer — any key would do — and recorded a claim over an empty
+   stream, which would have suppressed every later release. Both corrected:
+   the signer must be a current validator of the source, and a claim over
+   nothing is not recorded.
 
 ## Findings, ranked
 

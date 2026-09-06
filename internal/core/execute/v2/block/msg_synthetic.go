@@ -439,7 +439,17 @@ func (x SyntheticMessage) collect(batch *database.Batch, ctx *MessageContext, se
 // Dropping what a source still needs would leave it a gap no one can fill.
 func (SyntheticMessage) noteRemoteDelivered(ctx *MessageContext, syn *messaging.SynthFields) {
 	seq, ok := syn.Message.(*messaging.SequencedMessage)
-	if !ok || ctx.Block == nil || syn.Delivered == 0 || syn.Signature == nil {
+	if !ok || ctx.Block == nil || syn.Delivered == 0 || syn.Signature == nil || seq.Source == nil {
+		return
+	}
+	// The signer must be a current validator of the source: a signature that
+	// merely verifies is anyone's key. Same rule as an anchor signature.
+	partition, ok := protocol.ParsePartitionUrl(seq.Source)
+	if !ok {
+		return
+	}
+	signer := core.AnchorSigner(&ctx.Executor.globals().Active, partition)
+	if _, _, ok := signer.EntryByKeyHash(syn.Signature.GetPublicKeyHash()); !ok {
 		return
 	}
 	if !syn.Signature.Verify(nil, syn.Message) {

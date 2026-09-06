@@ -342,8 +342,7 @@ func (c *Cache) releaseLocked(k string, n uint64) {
 	}
 	m := c.entries[k]
 	if m == nil {
-		c.released[k] = n
-		return
+		return // nothing held for the stream: a claim over nothing is not recorded
 	}
 	// The claim is the destination's word, not ours to trust with the walk:
 	// it is clamped to what is held, and when it outruns the held set the
