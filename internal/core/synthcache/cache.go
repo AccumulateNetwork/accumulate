@@ -447,6 +447,13 @@ func (c *Cache) LastAnchoredBlock() (uint64, bool) {
 	return c.lastAnchorBlock, c.lastAnchorOK
 }
 
+// ReceivedPending is how many Directory anchors wait to be taken.
+func (c *Cache) ReceivedPending() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.received)
+}
+
 // TakeReceived drains the Directory anchors executed since the last call, in
 // execution order. Dispatch at a block's open takes them.
 func (c *Cache) TakeReceived() []*ReceivedAnchor {

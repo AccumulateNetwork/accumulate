@@ -113,6 +113,15 @@ func TestAnchorThreshold(t *testing.T) {
 	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
 	sim.StepN(20)
 	requireNotExecuted(t, sim, txid)
+	// The signature it carried is state: a block that recorded only that is
+	// not an empty block (soak 20260905T225751Z: copies arriving one per
+	// block never accumulated a quorum)
+	View(t, sim.DatabaseFor(txid.Account()), func(batch *database.Batch) {
+		hash := txid.Hash()
+		sigs, err := batch.Account(txid.Account()).Transaction(hash).ValidatorSignatures().Get()
+		require.NoError(t, err)
+		require.Len(t, sigs, 1, "the first copy's signature must survive its block")
+	})
 
 	// Re-submit the first signature and verify it still does not execute
 	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})

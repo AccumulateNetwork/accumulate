@@ -568,14 +568,18 @@ func (c *Conductor) requestAnchorSpan(ctx context.Context, ranger private.Sequen
 		if r.Sequence == nil {
 			return 0, 0, errors.InvalidRecord.With("answer carries an unsequenced message")
 		}
-		keySig := keySignatureOf(r)
-		if keySig == nil {
+		sigs := keySignaturesOf(r)
+		if len(sigs) == 0 {
 			return 0, 0, errors.InvalidRecord.WithFormat("answer for anchor %v→%v #%d is not signed", source, c.Url(), r.Sequence.Number)
 		}
-		env := &messaging.Envelope{Messages: []messaging.Message{&messaging.BlockAnchor{Anchor: r.Sequence, Signature: keySig}}}
-		err := c.submit(ctx, c.Url(), env)
-		if err != nil {
-			return 0, 0, errors.UnknownError.WithFormat("submit anchor from %v: %w", source, err)
+		// One copy per signature the source holds: together they are the
+		// quorum, and each is what that validator's own dispatch carried
+		for _, sig := range sigs {
+			env := &messaging.Envelope{Messages: []messaging.Message{&messaging.BlockAnchor{Anchor: r.Sequence, Signature: sig}}}
+			err := c.submit(ctx, c.Url(), env)
+			if err != nil {
+				return 0, 0, errors.UnknownError.WithFormat("submit anchor from %v: %w", source, err)
+			}
 		}
 		served = r.Sequence.Number
 	}
@@ -593,9 +597,20 @@ func marshalledSize(m messaging.Message) (int, error) {
 // keySignatureOf finds the source validator's signature over the sequenced
 // message in a sequencer record.
 func keySignatureOf(r *api.MessageRecord[messaging.Message]) protocol.KeySignature {
+	sigs := keySignaturesOf(r)
+	if len(sigs) == 0 {
+		return nil
+	}
+	return sigs[0]
+}
+
+// keySignaturesOf lists every key signature an answer carries, one per signer.
+func keySignaturesOf(r *api.MessageRecord[messaging.Message]) []protocol.KeySignature {
 	if r.Signatures == nil {
 		return nil
 	}
+	var sigs []protocol.KeySignature
+	seen := map[string]bool{}
 	for _, set := range r.Signatures.Records {
 		if set == nil || set.Signatures == nil {
 			continue
@@ -605,12 +620,15 @@ func keySignatureOf(r *api.MessageRecord[messaging.Message]) protocol.KeySignatu
 			if !ok {
 				continue
 			}
-			if ks, ok := sm.Signature.(protocol.KeySignature); ok {
-				return ks
+			ks, ok := sm.Signature.(protocol.KeySignature)
+			if !ok || seen[string(ks.GetPublicKey())] {
+				continue
 			}
+			seen[string(ks.GetPublicKey())] = true
+			sigs = append(sigs, ks)
 		}
 	}
-	return nil
+	return sigs
 }
 
 func partitionLabel(u *url.URL) string {

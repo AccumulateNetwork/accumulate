@@ -7,6 +7,7 @@
 package api
 
 import (
+	"bytes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
@@ -212,6 +213,36 @@ func (s *Sequencer) anchorRecord(globals *core.GlobalValues, dst *url.URL, num u
 		return nil, errors.InternalError.Wrap(err)
 	}
 	r.Signatures = signatureSet(keySig, r.ID)
+
+	// The quorum the source already holds. A partition delivers its own
+	// anchor to itself with every validator's signature; the destination
+	// accepts a signature made over the source's own copy on the copy sent
+	// to it (BlockAnchor.checkSignature, signature reuse). One answer then
+	// carries the quorum, instead of one signature from whichever node
+	// answered — copies lost in dispatch are not re-sent (run
+	// 20260905T225751Z: fewer than the threshold arrived, nothing re-sent,
+	// every stream waited on the anchor).
+	own := new(protocol.Transaction)
+	own.Header.Principal = s.partition.URL.JoinPath(protocol.AnchorPool)
+	own.Body = produced.Body
+	var held []protocol.KeySignature
+	err = s.db.View(func(batch *database.Batch) error {
+		var err error
+		held, err = batch.Account(own.Header.Principal).Transaction(own.ID().Hash()).ValidatorSignatures().Get()
+		return err
+	})
+	if err != nil && !errors.Is(err, errors.NotFound) {
+		return nil, errors.UnknownError.WithFormat("load held anchor signatures: %w", err)
+	}
+	ownKey, _ := keySig.(protocol.KeySignature)
+	for _, sig := range held {
+		if ownKey != nil && bytes.Equal(sig.GetPublicKey(), ownKey.GetPublicKey()) {
+			continue
+		}
+		set := signatureSet(sig, r.ID)
+		r.Signatures.Records = append(r.Signatures.Records, set.Records...)
+		r.Signatures.Total++
+	}
 	return r, nil
 }
 

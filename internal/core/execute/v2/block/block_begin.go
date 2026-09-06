@@ -252,6 +252,9 @@ func (x *Executor) finalizeBlock(block *Block) error {
 
 		// Did anything happen last block?
 		if ledger.Index < block.Index-1 {
+			if n := x.synthCache().ReceivedPending(); n > 0 {
+				x.logger.Info("Finalize skipped after an empty block with Directory anchors waiting for dispatch", "module", "synthetic", "block", block.Index, "ledger-index", ledger.Index, "received", n)
+			}
 			return nil
 		}
 	} else {
@@ -378,6 +381,9 @@ func (x *Executor) sendSyntheticTransactions(isLeader bool) error {
 	// its sequencer answer a healing request for the block's entries with a
 	// proof — but only the leader submits.
 	received := x.synthCache().TakeReceived()
+	if len(received) > 0 {
+		x.logger.Info("Dispatching for received Directory anchors", "module", "synthetic", "anchors", len(received), "leader", isLeader)
+	}
 	for _, r := range received {
 		anchor := r.Anchor
 		if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
@@ -392,6 +398,7 @@ func (x *Executor) sendSyntheticTransactions(isLeader bool) error {
 			if !x.Describe.PartitionUrl().URL.LocalTo(receipt.Anchor.Source) {
 				continue
 			}
+			x.logger.Info("Directory receipt for own block", "module", "synthetic", "block", receipt.Anchor.MinorBlockIndex, "directory-block", anchor.MinorBlockIndex)
 
 			err := x.sendSyntheticTransactionsForBlock(receipt.Anchor.MinorBlockIndex, receipt, anchor.MinorBlockIndex, isLeader)
 			if err != nil {

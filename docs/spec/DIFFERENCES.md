@@ -408,9 +408,15 @@ transaction by hash resolves against the held one. The requester walks the
 anchor streams with the synthetic ones and asks the source for gaps
 (`requestAnchorSpan`); the source answers from its cache, a prefix at a time,
 `NotReady` for anchors still in flight. The source-side re-send (`healAnchors`)
-is deleted. What remains: an answer carries only the answering validator's
-signature, so a quorum is gathered one answer at a time, over activations, as
-the pair rotates; the proof form — a `BlockAnchor` with a collection proof over
+is deleted. An answer for a Directory anchor carries every validator
+signature the Directory holds on its own copy of that anchor — the quorum,
+accepted on the BVN's copy by the signature-reuse rule — so one pull restores
+an anchor whose dispatched copies were lost (soak 20260905T225751Z: fewer
+copies than the threshold arrived at a BVN, nothing re-sent them, and every
+stream waited on the anchor). What remains: a BVN does not execute its own
+anchors, so an answer for a BVN anchor carries only the answering node's
+signature and the Directory gathers a quorum one answer at a time, from
+whichever node the client dials, which does not rotate; the proof form — a `BlockAnchor` with a collection proof over
 the source's anchor chain, continued to a root the destination already holds —
 needs the root chain's span across blocks, which the cache does not keep, and
 is what `TestAnchorQuorumStuckRecovery` expects (skipped with this reason).

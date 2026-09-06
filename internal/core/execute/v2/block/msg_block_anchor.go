@@ -8,6 +8,7 @@ package block
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -118,6 +119,12 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) err
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
+	sigs, _ := batch.Account(ctx.transaction.Header.Principal).Transaction(ctx.transaction.ID().Hash()).ValidatorSignatures().Get()
+	var signer []byte
+	if ctx.blockAnchor.Signature != nil {
+		signer = ctx.blockAnchor.Signature.GetPublicKey()
+	}
+	ctx.Executor.logger.Info("Anchor signature", "module", "anchoring", "block", ctx.Block.Index, "source", ctx.sequenced.Source, "seq", ctx.sequenced.Number, "signatures", len(sigs), "ready", ready, "signer", logging.AsHex(signer).Slice(0, 4), "txid", ctx.transaction.ID())
 	if !ready {
 		// Below its quorum: an entry in the anchor stream's stage at its
 		// number, collected, runnable once the signatures reach the threshold
