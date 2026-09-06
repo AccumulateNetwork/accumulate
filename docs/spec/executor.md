@@ -631,7 +631,10 @@ depends on the last:
 8. Record pending transactions; process chain updates; record the block
    ledger (below).
 9. Add each synthetic chain that changed to the root chain, index the root
-   chain, update the transaction-chain index.
+   chain, update the transaction-chain index — from the hashes the block
+   appended, kept with the record of each append (`ChainUpdates.Hashes`);
+   only a chain appended to outside that record (the signature chain, the
+   BPT chain) is read back for its hash (#4245).
 10. Update major index chains if this is a major block.
 11. Execute post-update actions.
 12. **Update the BPT**, and only then active globals.
