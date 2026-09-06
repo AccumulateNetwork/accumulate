@@ -25,7 +25,11 @@ func LoadFactomAddressesAndBalances(file io.Reader) ([]*GenesisAddressAndBalance
 	if err != nil {
 		return nil, err
 	}
-	datas := strings.Split(string(factomData), "\n")
+	// Tolerate CRLF. This is a text file, so it may arrive with either ending
+	// depending on how it was checked out, and a trailing carriage return makes
+	// ParseInt reject the balance with a syntax error that says nothing about
+	// line endings.
+	datas := strings.Split(strings.ReplaceAll(string(factomData), "\r\n", "\n"), "\n")
 	var genesisFactomData []*GenesisAddressAndBalances
 	for _, combinedData := range datas {
 		if strings.Contains(combinedData, ":") {
@@ -36,7 +40,7 @@ func LoadFactomAddressesAndBalances(file io.Reader) ([]*GenesisAddressAndBalance
 				return nil, err
 			}
 			genesisData.Address = address
-			balance, err := strconv.ParseInt(strings.Trim(addressAndBalance[1], " "), 10, 64)
+			balance, err := strconv.ParseInt(strings.TrimSpace(addressAndBalance[1]), 10, 64)
 			if err != nil {
 				return nil, err
 			}

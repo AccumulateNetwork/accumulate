@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -59,6 +60,24 @@ func preRunMigrate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--work-dir and [node] argument are mutually exclusive")
 	}
 	return nil
+}
+
+// cfgPath joins path elements for a value that will be WRITTEN INTO A CONFIG
+// FILE, always with forward slashes.
+//
+// filepath.Join is wrong here. On Windows it produces backslashes, so a
+// migrated config differs from the same migration on Linux, and — worse — a
+// comparison against a path read from a config file fails, silently taking a
+// different branch. Go accepts forward slashes on Windows, so config files stay
+// portable.
+func cfgPath(elem ...string) string {
+	// Normalise each element too: the values being joined come from an existing
+	// config and may already carry the local separator.
+	s := make([]string, len(elem))
+	for i, e := range elem {
+		s[i] = filepath.ToSlash(e)
+	}
+	return path.Join(s...)
 }
 
 func migrate(_ *cobra.Command, args []string) {
@@ -168,7 +187,7 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 	cfg.Network = old.Accumulate.Network.Id
 	cfg.P2P.Listen = addAddrs(cfg.P2P.Listen, old.Accumulate.P2P.Listen)
 	cfg.P2P.BootstrapPeers = addAddrs(cfg.P2P.BootstrapPeers, old.Accumulate.P2P.BootstrapPeers)
-	cfg.P2P.Key = &run.CometNodeKeyFile{Path: filepath.Join(dir, old.NodeKey)}
+	cfg.P2P.Key = &run.CometNodeKeyFile{Path: cfgPath(dir, old.NodeKey)}
 
 	var offset int
 	if old.Accumulate.NetworkType == protocol.PartitionTypeBlockValidator {
@@ -177,7 +196,7 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 	cvc.Listen = urlToListen("{tendermint} [p2p].laddr", old.P2P.ListenAddress, offset)
 
 	if key := (&run.CometPrivValFile{
-		Path: filepath.Join(dir, old.PrivValidatorKey),
+		Path: cfgPath(dir, old.PrivValidatorKey),
 	}); cvc.ValidatorKey == nil {
 		cvc.ValidatorKey = key
 	} else if other := cvc.ValidatorKey.(*run.CometPrivValFile); !other.Equal(key) {
@@ -195,13 +214,13 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 	case config.MemoryStorage:
 		cvc.StorageType = run.Ptr(run.StorageTypeMemory)
 	case config.BadgerStorage:
-		if old.Accumulate.Storage.Path == filepath.Join("data", "accumulate.db") {
+		if cfgPath(old.Accumulate.Storage.Path) == cfgPath("data", "accumulate.db") {
 			cvc.StorageType = run.Ptr(run.StorageTypeBadger)
 		} else {
 			cfg.Services = append(cfg.Services, &run.StorageService{
 				Name: old.Accumulate.PartitionId,
 				Storage: &run.BadgerStorage{
-					Path: filepath.Join(dir, old.Accumulate.Storage.Path),
+					Path: cfgPath(dir, old.Accumulate.Storage.Path),
 				},
 			})
 		}
@@ -255,7 +274,7 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 	switch old.Accumulate.NetworkType {
 	case protocol.PartitionTypeBlockValidator:
 		cvc.BVN = old.Accumulate.PartitionId
-		cvc.BvnGenesis = filepath.Join(dir, old.Genesis)
+		cvc.BvnGenesis = cfgPath(dir, old.Genesis)
 		if len(old.P2P.PersistentPeers) == 0 {
 			break
 		}
@@ -268,7 +287,7 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 		}
 
 	case protocol.PartitionTypeDirectory:
-		cvc.DnGenesis = filepath.Join(dir, old.Genesis)
+		cvc.DnGenesis = cfgPath(dir, old.Genesis)
 		if len(old.P2P.PersistentPeers) == 0 {
 			break
 		}

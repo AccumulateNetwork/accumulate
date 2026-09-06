@@ -61,8 +61,12 @@ func TestSnapshot(t *testing.T) {
 	bobKey := acctesting.GenerateKey(bob)
 
 	dir := t.TempDir()
+	badgerOpt, closeDbs := simulator.BadgerDatabaseFromDirectoryAndCloser(dir, func(err error) { require.NoError(t, err) })
+	// Registered after t.TempDir, so it runs before the directory is removed.
+	// Windows will not delete a directory containing an open file.
+	t.Cleanup(func() { require.NoError(t, closeDbs()) })
 	sim := NewSim(t,
-		simulator.BadgerDatabaseFromDirectory(dir, func(err error) { require.NoError(t, err) }),
+		badgerOpt,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -109,8 +113,12 @@ func TestSnapshotRestore(t *testing.T) {
 	bobKey := acctesting.GenerateKey(bob)
 
 	dir := t.TempDir()
+	badgerOpt, closeDbs := simulator.BadgerDatabaseFromDirectoryAndCloser(dir, func(err error) { require.NoError(t, err) })
+	// Registered after t.TempDir, so it runs before the directory is removed.
+	// Windows will not delete a directory containing an open file.
+	t.Cleanup(func() { require.NoError(t, closeDbs()) })
 	sim := NewSim(t,
-		simulator.BadgerDatabaseFromDirectory(dir, func(err error) { require.NoError(t, err) }),
+		badgerOpt,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)

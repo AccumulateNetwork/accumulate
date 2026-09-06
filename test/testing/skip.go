@@ -56,3 +56,19 @@ func SkipWithoutTool(t testing.TB, toolName string) {
 		t.Skip("Cannot locate node binary")
 	}
 }
+
+// ShellScript returns a command that runs a shell script, skipping the test if
+// the platform cannot run one.
+//
+// A script cannot be exec'd directly on Windows — the kernel reports "%1 is not
+// a valid Win32 application" — and handing it to sh.exe does not rescue it:
+// Go builds a single command line, sh re-parses it, and a large JSON argument
+// containing quotes does not survive the round trip. The signing harness these
+// tests use is Unix-shell based, so on Windows they skip rather than fail with
+// an error that names the script instead of the cause.
+func ShellScript(t testing.TB, script string, args ...string) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		t.Skip("Cannot run " + script + ": the signing harness needs a Unix shell")
+	}
+	return exec.Command(script, args...)
+}
