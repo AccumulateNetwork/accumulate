@@ -491,10 +491,14 @@ source by the author. Numbers are for one BVN at 500 tps unless said.
 
 1. **The dynamic layer, not the heap, is where the write path grows without
    end.** 72 records per user transaction, 57 % of them in the dynamic layer,
-   which nothing prunes: eight statuses per transaction (one per wrapper),
-   eight copies of the transaction body, Produced and Cause sets written
-   twice, and the chain head rewritten with up to 256 hashes on every append.
-   Roughly 25 to 55 bytes written per byte of input; about 85 % avoidable.
+   which nothing prunes: eight statuses per transaction (one per wrapper,
+   mutable until Delivered), the Produced, Cause, History and Signers sets
+   rewritten whole on every add, the chain head rewritten with up to 256
+   hashes on every append, and `Account.Chains` per dirty account. The eight
+   copies of the transaction body are a separate, permanent-layer cost —
+   content-addressed records are routed there and written once each (route.go,
+   `Main`) — about 6.6 GB per hour. Roughly 25 to 55 bytes written per byte of
+   input; about 85 % avoidable.
 2. **Every cleared set becomes a tombstone exception the adapter keeps in a
    map for the life of the process** — three per delivered transaction,
    roughly 350–450 MB of heap per hour at 500 tps, plus a file re-read whole
