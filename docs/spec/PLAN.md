@@ -373,8 +373,10 @@ API and store, and consensus. Top of the list: the producer cache keeps every
 synthetic with its transaction for an hour (2–5 GB per node at 500 tps); the
 dispatcher drops the rest of a send cycle on the first transport error (issue
 4222's mechanism); a sequencer read view held across blocks makes every
-commit take pre-images. Proposed order of work is in the document; nothing
-there is started.
+commit take pre-images. Issues: umbrella #4223 with the whole review; per
+finding #4224–#4233; the dispatcher is #4222. Done the same day: the cache is
+released by the destination's Delivered carried on every dispatch (ccb80592e);
+staging release returns a drained backlog (4ff104e6f).
 
 ## Simulation first
 

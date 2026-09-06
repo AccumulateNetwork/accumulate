@@ -464,3 +464,12 @@ the second distinct signer.
 nested batch depth (7), the requester's duplicate storm and probe accounting
 (9), the per-header byte bound (13), per-message Info logging (14), root
 receipt replay (12), and the smaller items (16).
+
+## Issues
+
+Umbrella (this document in full): #4223. Per finding: anchor copies #4224 (6);
+sequencer snapshot view #4225 (5); `AddChainEntry2` scan #4226 (10); DAG GC
+cadence #4227 (11); nested batches #4228 (7); requester under lag #4229 (9);
+per-header byte bound #4230 (13); Info logging #4231 (14); cache and block-close
+residue #4232 (1, 8, 12); staging visibility #4233 (2); dispatcher #4222 (4).
+Done: finding 1 (ccb80592e), finding 3 (4ff104e6f).
