@@ -281,6 +281,41 @@ is closed.
 
 ---
 
+### D10. A pre-image for a new dynamic key walks the store's history
+
+*[#4237](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4237)*
+
+**Spec** ([database.md](database.md), "Isolation has a price"): a commit made
+while a reader is pinned reads a pre-image per dynamic entry; a first write
+never searches history to learn a key is absent.
+
+**Code**: the adapter (`bcdb/database.go`, `preImages`) skips the read for a
+permanent shape and answers it from its own cache for `Account(U).Url`, and
+`Validate` no longer pins a reader at all, so under load with no API reader
+open no pre-image is read. When a reader IS pinned — an API query, a snapshot
+— every dynamic entry of an unaccounted shape is read with `GetDyna`, and
+most of them are **new** keys (a fresh status, produced set or signature set
+per message): BlockchainDB's `SegmentStore.Get` (`segstore.go:1794-1797`) does
+not stop at the window for a dynamic key it does not hold, so each of those
+reads is a bloom probe per history segment — ~5 K keys × 5–10 segments per
+block. The adapter cannot tell a new dynamic key from an old one without
+asking, and this repository cannot change what asking costs.
+
+**What the store needs** (to be filed against BlockchainDB; recorded here so
+the text is not lost): a *window-only* dynamic read for pre-images —
+`GetDynaRecent(key)` or a `Get` option — that answers from the active tier and
+reports absent without consulting history. A key the window does not hold
+either is new (no pre-image) or was last written before the window, and a
+reader pinned that far back is already a fault the adapter warns about
+(`warnOldView`); neither case is worth a history walk on the block producer's
+commit path. With it, `preImages` becomes one active-tier lookup per dynamic
+entry and `preImageReads` ≈ pre-existing dynamic keys touched.
+
+**Size**: small here (swap the call once the store has it); the store-side
+change is the work.
+
+---
+
 ## Consensus
 
 ### C7. Nothing refuses the synthetics a partition cannot execute

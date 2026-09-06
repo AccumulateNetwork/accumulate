@@ -60,6 +60,27 @@ that means to look back must say so:
 A store with no window ignores the distinction: its ordinary reads already see
 everything.
 
+### Isolation has a price, and one reader declines it
+
+A windowed store has no versions of its own. It keeps invariant 2 for a
+change set by remembering, for every commit made while the change set is
+open, what each rewritten key held before — one store read per dynamic
+entry per commit, held in memory until the last older reader closes. That is
+paid only while a reader is open, so **who holds a reader while blocks commit
+decides what every commit costs.**
+
+One reader wants the opposite of isolation: **validation** (CheckTx) judges a
+submission against the latest committed state, and a snapshot from when it
+began is only staler. It takes an **unisolated** change set — reads see the
+store as it stands at each read, the change set pins no version, and a commit
+made while it is open takes no pre-images on its account. A read may fall
+inside a commit's write-through and see part of it; validation tolerates that
+because the block re-executes what it admits. Nothing else takes one: a
+reader that must see a consistent state takes an ordinary change set and pays
+for it.
+
+A store with no window ignores this too: its readers cost nothing to isolate.
+
 ### Duplicates are caught at entry
 
 There is no rule that a hash appears once in the store. What there is, is a
@@ -193,6 +214,11 @@ type DeepBeginner interface {   // optional; only a windowed store implements it
     Beginner
     BeginDeep(prefix *database.Key, writable bool) ChangeSet
 }
+
+type UnisolatedBeginner interface {   // optional; only a store that isolates by pre-image
+    Beginner
+    BeginUnisolated(prefix *database.Key, writable bool) ChangeSet
+}
 ```
 
 `keyvalue.Deep(b Beginner) Beginner` returns a beginner whose change sets read
@@ -200,6 +226,11 @@ the whole history if the store distinguishes, and the store unchanged if it does
 not — so a caller that needs history says so once, at construction, and every
 batch it begins reaches history without any call site changing.
 `internal/database.Database.Deep()` is the same idea one layer up.
+`keyvalue.Unisolated` and `internal/database.Database.Unisolated()` are the
+same shape for the reader that declines isolation; the executor's `Validate`
+begins its batch through it. The store publishes what isolation cost —
+`preImageReads` in `stats.json`, the reads commits made for pinned readers —
+so a reader that should have been unisolated shows in the numbers.
 
 ### Adapting to the record model
 

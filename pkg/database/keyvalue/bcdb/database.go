@@ -156,6 +156,10 @@ type Database struct {
 	historySeq  uint64
 	fallbackMu  sync.Mutex
 
+	// preImageReads counts the store reads commits made for isolation;
+	// see PreImageReads.
+	preImageReads atomic.Uint64
+
 	maintaining  atomic.Bool
 	maintWG      sync.WaitGroup
 	maintErr     error  // the last maintenance run's outcome
@@ -206,6 +210,12 @@ type entry struct {
 	value []byte // A zero-length value is a deletion
 	perm  bool   // Write-once: goes to the permanent layer
 	shape string // The key's shape, so a refusal can be attributed
+
+	// pre is what the key held before this commit, when the adapter
+	// knows without asking the store: a record it caches as immutable is
+	// its cached value, or new. preKnown says so; empty pre means new.
+	pre      []byte
+	preKnown bool
 }
 
 var _ keyvalue.Beginner = (*Database)(nil)
@@ -484,6 +494,33 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 // lands on the callers that need it instead of on every block.
 func (d *Database) BeginDeep(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 	return d.begin(prefix, writable, true)
+}
+
+// BeginUnisolated begins a change set that reads the database as it
+// stands at each read, not as it stood when the change set began. It
+// pins no version: no commit takes pre-images on its account and none
+// are held for it (#4237).
+//
+// This is for a reader that wants the LATEST state and would be wrong
+// with anything older -- CheckTx, which validates a submission against
+// what has been committed so far. Every CheckTx used to take an
+// ordinary batch, so a reader was almost always registered while a
+// block committed and every commit paid a GetDyna per dynamic entry to
+// keep isolation nobody needed. A read here may fall inside a commit's
+// write-through and see part of it; a reader that cannot tolerate that
+// takes Begin.
+func (d *Database) BeginUnisolated(prefix *record.Key, writable bool) keyvalue.ChangeSet {
+	return memory.NewChangeSet(memory.ChangeSetOptions{
+		Prefix: prefix,
+		Get:    d.getLatest,
+		Commit: d.commit,
+		ForEach: func(fn func(*record.Key, []byte) error) error {
+			d.mu.RLock()
+			at := d.version
+			d.mu.RUnlock()
+			return d.forEachAt(at, fn)
+		},
+	})
 }
 
 func (d *Database) begin(prefix *record.Key, writable, deep bool) keyvalue.ChangeSet {
@@ -883,6 +920,19 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 		return pre, nil
 	}
 
+	return d.getCurrent(key, h, deep)
+}
+
+// getLatest reads a key as the store holds it now, for an unisolated
+// batch: no version, so no pre-image, and no lock shared with the
+// committer -- the caches and the store have their own.
+func (d *Database) getLatest(key *record.Key) ([]byte, error) {
+	key = d.prefix.AppendKey(key)
+	return d.getCurrent(key, key.Hash(), false)
+}
+
+// getCurrent reads what the caches and the store hold for h now.
+func (d *Database) getCurrent(key *record.Key, h [32]byte, deep bool) ([]byte, error) {
 	// Cached shapes first, and on a miss go straight to the layer that
 	// holds them (#4165). Both caches hold records that cannot change,
 	// which is why they need no invalidation -- see cache.go.
@@ -995,7 +1045,7 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 		perm := len(value) > 0 && !d.dyna[h] && isWriteOnce(key)
 
 		shape := d.tally(key, perm)
-		staged.entries[h] = entry{value: value, perm: perm, shape: shape}
+		e := entry{value: value, perm: perm, shape: shape}
 
 		// Write through to the caches. They hold records that cannot
 		// change, so this should never overwrite a different value --
@@ -1004,17 +1054,26 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 		// and silently. Writing through costs one map store on a path
 		// that is already walking every entry, and means the caches
 		// cannot disagree with the store whatever the shapes do.
+		//
+		// The cache also answers the pre-image question for these
+		// shapes, before the write-through: cached is the value it held,
+		// not cached is new. A record that cannot change is never
+		// rewritten, so the only thing a store read could add is a
+		// history walk to confirm a new key is new (#4237).
 		if kind := cacheKindOf(key); kind != cacheNone {
 			c := d.urls
 			if kind == cacheChain {
 				c = d.chains
 			}
+			e.pre, _ = c.peek(h)
+			e.preKnown = true
 			if len(value) == 0 {
 				c.drop(h) // A tombstone is not a value to serve
 			} else {
 				c.put(h, value)
 			}
 		}
+		staged.entries[h] = e
 	}
 	readers := len(d.views) > 0
 	d.mu.Unlock()
@@ -1052,17 +1111,34 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 
 // preImages reads what the store holds for every key a batch rewrites,
 // before the batch is written. A key classified write-once has no
-// pre-image by definition -- it is being written for the first time -- so
-// only the dynamic layer is consulted, which is where every rewritable key
-// lives. Runs under writeMu with mu released; the store is at the previous
-// version because commits are serialized.
+// pre-image by definition -- it is being written for the first time -- and
+// a record the adapter caches as immutable was answered by the cache at
+// commit; only the dynamic layer is consulted for the rest, which is where
+// every rewritable key lives. Runs under writeMu with mu released; the
+// store is at the previous version because commits are serialized.
+//
+// Every read here is counted. A dynamic key that is NEW -- every fresh
+// status, produced set, signature set -- has no pre-image either, but the
+// adapter cannot tell a new dynamic key from an old one without asking, and
+// the store answers a miss by walking its history (DIFFERENCES D10). The
+// count is what shows how much that costs.
 func (d *Database) preImages(s *staged) map[[32]byte][]byte {
 	pre := make(map[[32]byte][]byte, len(s.entries))
+	var reads uint64
 	for h, e := range s.entries {
-		if e.perm {
+		switch {
+		case e.perm:
 			pre[h] = []byte{}
 			continue
+		case e.preKnown:
+			if len(e.pre) == 0 {
+				pre[h] = []byte{}
+			} else {
+				pre[h] = e.pre
+			}
+			continue
 		}
+		reads++
 		v, err := d.kv.GetDyna(h)
 		if err != nil || len(v) == 0 {
 			pre[h] = []byte{}
@@ -1070,8 +1146,16 @@ func (d *Database) preImages(s *staged) map[[32]byte][]byte {
 		}
 		pre[h] = v
 	}
+	d.preImageReads.Add(reads)
 	return pre
 }
+
+// PreImageReads is how many store reads commits have made to keep isolation
+// for readers begun before them: one per dynamic key of an unaccounted
+// shape per commit made while a reader was pinned. With no pinned reader
+// it does not move; a count that grows every block names a reader that
+// should be unisolated (#4237).
+func (d *Database) PreImageReads() uint64 { return d.preImageReads.Load() }
 
 // preImageAt returns what key h held at version at, if a commit after at
 // rewrote it: the pre-image recorded by the EARLIEST such commit. The
@@ -1316,6 +1400,10 @@ func (d *Database) reportStats() {
 		// process lifetime, and a file read whole at open (#4235).
 		Exceptions int `json:"dynaExceptions"`
 
+		// PreImageReads is the store reads commits made to keep isolation
+		// for pinned readers (#4237).
+		PreImageReads uint64 `json:"preImageReads"`
+
 		// TallySample is the rate New/Duplicate/Rewritten were sampled
 		// at: multiply by it to estimate, or read them as ratios.
 		TallySample uint8 `json:"tallySample"`
@@ -1338,7 +1426,7 @@ func (d *Database) reportStats() {
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
 		ShallowMisses: d.ShallowMisses(),
 		HistoryReads:  d.HistoryReads(),
-		Staged:        len(d.undoVersions), Exceptions: len(d.dyna), TallySample: d.TallySample,
+		Staged:        len(d.undoVersions), Exceptions: len(d.dyna), PreImageReads: d.preImageReads.Load(), TallySample: d.TallySample,
 		TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
 		MaintenanceErrors: d.maintErrs}
 	if d.maintErr != nil {
