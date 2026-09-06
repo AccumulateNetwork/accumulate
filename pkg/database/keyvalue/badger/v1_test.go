@@ -100,7 +100,11 @@ func TestVersions(t *testing.T) {
 	dir := t.TempDir()
 	db, err := New(dir)
 	require.NoError(t, err)
-	defer db.Close()
+	// Closes whichever database db names when the test ends. `defer
+	// db.Close()` would bind the FIRST one, which is closed explicitly
+	// below, and leave the reopened one open — which Unix tolerates and
+	// Windows does not: t.TempDir then fails to remove the directory.
+	defer func() { _ = db.Close() }()
 
 	// Write a value 100 times
 	for i := 0; i < 100; i++ {

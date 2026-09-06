@@ -7,6 +7,7 @@
 package e2e2
 
 import (
+	"bytes"
 	"go/ast"
 	"go/printer"
 	"go/token"
@@ -120,6 +121,13 @@ func parseTestMd(t *testing.T, fset *token.FileSet, filename string) ([]ast.Spec
 	// Read the file
 	src, err := os.ReadFile(filename)
 	require.NoError(t, err)
+	// The markdown parser is sensitive to line endings. With CRLF input the
+	// code blocks are not extracted and the generated test comes out EMPTY --
+	// a valid Go file containing nothing -- so the generator appears to
+	// succeed while the test it was meant to produce silently stops existing.
+	// These files are checked out with the platform ending, so normalise here
+	// rather than depending on how the working tree was configured.
+	src = bytes.ReplaceAll(src, []byte("\r\n"), []byte("\n"))
 
 	// Parse the markdown
 	parser := blackfriday.New(blackfriday.WithExtensions(blackfriday.FencedCode))

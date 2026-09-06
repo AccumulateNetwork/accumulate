@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"os"
-	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -138,7 +137,7 @@ func TestEIP712ExternalWallet(t *testing.T) {
 	require.NoError(t, err)
 	sk, _ := aliceKey.GetPrivateKey()
 
-	cmd := exec.Command("../cmd/eth_signTypedData/execute.sh", hex.EncodeToString(sk), string(b))
+	cmd := acctesting.ShellScript(t, "../cmd/eth_signTypedData/execute.sh", hex.EncodeToString(sk), string(b))
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	require.NoError(t, err)

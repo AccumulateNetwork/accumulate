@@ -11,7 +11,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"os/exec"
 	"testing"
 
 	eth "github.com/ethereum/go-ethereum/crypto"
@@ -59,7 +58,7 @@ func TestEIP712Arrays(t *testing.T) {
 			require.NoError(t, err)
 			fmt.Printf("%s\n", b)
 
-			cmd := exec.Command("../../../test/cmd/eth_signTypedData/execute.sh", hex.EncodeToString(priv.Serialize()), string(b))
+			cmd := acctesting.ShellScript(t, "../../../test/cmd/eth_signTypedData/execute.sh", hex.EncodeToString(priv.Serialize()), string(b))
 			cmd.Stderr = os.Stderr
 			out, err := cmd.Output()
 			require.NoError(t, err)

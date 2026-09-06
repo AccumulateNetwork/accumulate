@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"os/exec"
 	"testing"
 	"time"
 
@@ -582,7 +581,7 @@ func TestEIP712MessageForWallet(t *testing.T) {
 	require.NoError(t, err)
 	fmt.Printf("%s\n", b)
 
-	cmd := exec.Command("../test/cmd/eth_signTypedData/execute.sh", hex.EncodeToString(altcrypto.SerializePrivateKey((*ecdsa.PrivateKey)(priv))), string(b))
+	cmd := acctesting.ShellScript(t, "../test/cmd/eth_signTypedData/execute.sh", hex.EncodeToString(altcrypto.SerializePrivateKey((*ecdsa.PrivateKey)(priv))), string(b))
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	require.NoError(t, err)

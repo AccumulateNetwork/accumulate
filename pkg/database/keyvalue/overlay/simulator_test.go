@@ -26,7 +26,9 @@ func TestOverlay(t *testing.T) {
 	aliceKey := alice.Book("book").Page(1).
 		GenerateKey(SignatureTypeED25519)
 
-	badger := simulator.BadgerDbOpener(t.TempDir(), func(err error) { require.NoError(t, err) })
+	badger, closeDbs := simulator.BadgerDbOpenerAndCloser(t.TempDir(), func(err error) { require.NoError(t, err) })
+	// Registered after t.TempDir, so it runs before the directory is removed
+	t.Cleanup(func() { require.NoError(t, closeDbs()) })
 	simOpts := []simulator.Option{
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime).With(alice).WithVersion(ExecutorVersionV2Vandenberg),

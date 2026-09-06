@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
@@ -214,9 +215,31 @@ func MemoryDbOpener(partition *protocol.PartitionInfo, node int, logger log.Logg
 	return memory.New(nil)
 }
 
+// BadgerDbOpener returns an opener for badger databases under dir.
+//
+// The databases it opens are never closed. That is invisible on Unix, where
+// removing an open file succeeds, and fatal on Windows, where it does not — a
+// test using t.TempDir fails in cleanup with "The process cannot access the file
+// because it is being used by another process", after its body has passed. Any
+// caller that will delete the directory must use [BadgerDbOpenerAndCloser].
 func BadgerDbOpener(dir string, onErr func(error)) OpenDatabaseFunc {
-	dbs := map[string]keyvalue.Beginner{}
-	return func(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+	fn, _ := BadgerDbOpenerAndCloser(dir, onErr)
+	return fn
+}
+
+// BadgerDbOpenerAndCloser returns an opener for badger databases under dir, and
+// a function that closes every database the opener opened.
+//
+// Call the closer before deleting dir. In a test that means registering it AFTER
+// the t.TempDir call it will outlive, since cleanups run in reverse order.
+func BadgerDbOpenerAndCloser(dir string, onErr func(error)) (OpenDatabaseFunc, func() error) {
+	var mu sync.Mutex
+	dbs := map[string]*badger.Database{}
+
+	open := func(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+		mu.Lock()
+		defer mu.Unlock()
+
 		file := fmt.Sprintf("%s-%d.db", partition.ID, node)
 		if db, ok := dbs[file]; ok {
 			return db
@@ -237,6 +260,22 @@ func BadgerDbOpener(dir string, onErr func(error)) OpenDatabaseFunc {
 		dbs[file] = db
 		return db
 	}
+
+	closeAll := func() error {
+		mu.Lock()
+		defer mu.Unlock()
+
+		var errs []error
+		for file, db := range dbs {
+			if err := db.Close(); err != nil {
+				errs = append(errs, fmt.Errorf("close %s: %w", file, err))
+			}
+			delete(dbs, file)
+		}
+		return errors.Join(errs...)
+	}
+
+	return open, closeAll
 }
 
 func OverlayDatabase(a, b OpenDatabaseFunc) Option {
@@ -250,6 +289,13 @@ func OverlayDatabase(a, b OpenDatabaseFunc) Option {
 
 func BadgerDatabaseFromDirectory(dir string, onErr func(error)) Option {
 	return WithDatabase(BadgerDbOpener(dir, onErr))
+}
+
+// BadgerDatabaseFromDirectoryAndCloser is [BadgerDatabaseFromDirectory] with a
+// function that closes the databases, for a caller that will delete dir.
+func BadgerDatabaseFromDirectoryAndCloser(dir string, onErr func(error)) (Option, func() error) {
+	open, closeAll := BadgerDbOpenerAndCloser(dir, onErr)
+	return WithDatabase(open), closeAll
 }
 
 func SnapshotFromDirectory(dir string) Option {
