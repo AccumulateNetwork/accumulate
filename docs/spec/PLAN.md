@@ -372,7 +372,14 @@ dispatcher drops the rest of a send cycle on the first transport error (issue
 commit take pre-images. Issues: umbrella #4223 with the whole review; per
 finding #4224–#4233; the dispatcher is #4222. Done the same day: the cache is
 released by the destination's Delivered carried on every dispatch (ccb80592e);
-staging release returns a drained backlog (4ff104e6f).
+staging release returns a drained backlog (4ff104e6f). The second pass added
+#4234–#4246. All of #4222, #4224 and #4226–#4246 are worked on
+`issue-4193-producer-cache` (2026-09-06, one `Issue #N:` commit each; #4225
+was moot). What each fix does not do is in DIFFERENCES: a restarted validator
+resumes its round but pulls nothing it missed (E11); the stage's span bound is
+constant because no wire path tells a destination the source's produced count
+(H1); a stranded stream leaves that state only by sync. Acceptance is the
+twelve-hour soak on BlockchainDB at 500 tps, not the tests.
 
 ## Simulation first
 
