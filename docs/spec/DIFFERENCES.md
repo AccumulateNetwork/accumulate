@@ -169,6 +169,45 @@ path is known to produce.
 
 ---
 
+### E12. What a transaction still writes beyond one body, one status, one set
+
+*[#4236](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4236)*
+
+**Spec** ([database.md](database.md), "A record is written once per thing it
+records"; [executor.md](executor.md), "The database write"): one body per
+transaction, wrappers referring to it by hash; a status per message with an
+outcome; `Produced` one set under the transaction; `Cause` kept as its
+inverse.
+
+**Code**: the destination now writes, keyed by a synthetic transaction's hash,
+six records — `Message.Main`, `Transaction.Status`, `Message.Cause`,
+`Transaction.Chains`, `Account.Payments`, `Account.Votes`
+(`TestUserTransactionWrites`) — and the wrapper's own `Main` and `Status`
+under the wrapper's hash. What remains beyond the spec's shape:
+
+- **The source stores the sequenced message with the full body**
+  (`buildSynthTxn`). The sequencer serves healing answers from that record
+  (`sequencer.go getSynth`, `getSynthRange`) and the cache seed rebuilds from
+  it, so a reference there would make every answer resolve a second record.
+  Removing it is H1's work (the cache serves, the store does not), not a
+  write-path change.
+- **Wrapper statuses stay.** Each `SequencedMessage`, `SyntheticMessage`,
+  `BlockAnchor`, `CreditPayment` and `SignatureRequest` writes its own status,
+  because `checkStatus` reads it: a sequenced message re-run from staging and a
+  copy landing in two blocks are caught by it. Whether staging's delivered
+  index can carry that dedup alone — the spec's table already names it for
+  sequenced entries — is the open question; until it does, the status is the
+  record.
+- **`History` and `Signers`** are written per signature (`RecordHistory`) and
+  read by the API's signature-set view (`load.go`); the review proposed
+  deriving them from the signature chain. Not done here.
+- **`Payments` and `Votes`** are written per transaction by the transaction
+  path and read by the account hash (`observer_prod.hashPendingV2`) for
+  pending transactions; a delivered synthetic writes both for nothing.
+
+**Size**: measured on run `20260905T153920Z` before this work, 72 records per
+user transaction; the items above are the ones still to measure after it.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*

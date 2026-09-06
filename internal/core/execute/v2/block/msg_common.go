@@ -10,7 +10,6 @@ import (
 	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -192,15 +191,18 @@ func (m *MessageContext) didProduce(batch *database.Batch, dest *url.URL, msg me
 	if dest == nil {
 		panic("nil destination for produced message")
 	}
+
+	// Pad a 64-byte body or header now, so the ID recorded below is the ID
+	// of what is sequenced and dispatched
+	err := adjust64(p)
+	if err != nil {
+		return errors.UnknownError.WithFormat("pad produced message: %w", err)
+	}
 	m.produced = append(m.produced, p)
 
-	err := batch.Message(m.message.Hash()).Produced().Add(msg.ID())
-	if err != nil {
-		return errors.UnknownError.WithFormat("store message cause: %w", err)
-	}
-
-	// Backwards compatibility
-	err = batch.Transaction2(m.message.Hash()).Produced().Add(msg.ID())
+	// What this message produced: one set, written as it is produced
+	// (database spec, "A record is written once per thing it records")
+	err = batch.Transaction2(m.message.Hash()).Produced().Add(p.Message.ID())
 	if err != nil {
 		return errors.UnknownError.WithFormat("store message cause: %w", err)
 	}
@@ -297,47 +299,6 @@ func (b *bundle) GetSignatureAs(batch *database.Batch, hash [32]byte) (protocol.
 	return txn.GetSignature(), nil
 }
 
-func (ctx *MessageContext) recordPending(batch *database.Batch) (*protocol.TransactionStatus, error) {
-	// Store the message
-	msg := ctx.message
-	h := msg.Hash()
-	err := batch.Message(h).Main().Put(msg)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store message: %w", err)
-	}
-
-	// Add it to the principal's pending list
-	if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
-		err = batch.Account(msg.ID().Account()).Pending().Add(msg.ID())
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("update pending list: %w", err)
-		}
-	}
-
-	// Update the status
-	status, err := batch.Transaction(h[:]).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-	status.TxID = msg.ID()
-	status.Code = errors.Pending
-	if status.Received == 0 {
-		status.Received = ctx.Block.Index
-	}
-	err = batch.Transaction(h[:]).Status().Put(status)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store status: %w", err)
-	}
-
-	// Add a transaction state
-	_, ok := ctx.state.Get(msg.Hash())
-	if !ok {
-		ctx.state.Set(msg.Hash(), new(chain.ProcessTransactionState))
-	}
-
-	return status, nil
-}
-
 func commitOrDiscard(batch *database.Batch, err *error) {
 	if *err != nil {
 		batch.Discard()
@@ -401,7 +362,7 @@ func (m *MessageContext) recordMessageAndStatus(batch *database.Batch, status *p
 	// If this message produced other messages, record that
 	if msg, ok := m.message.(messaging.MessageWithProduced); ok {
 		for _, produced := range msg.GetProduced() {
-			err = batch.Message(msg.Hash()).Produced().Add(produced)
+			err = batch.Transaction2(msg.Hash()).Produced().Add(produced)
 			if err != nil {
 				return errors.UnknownError.WithFormat("add produced: %w", err)
 			}
