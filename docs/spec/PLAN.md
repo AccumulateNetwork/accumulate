@@ -349,11 +349,19 @@ Spec: executor.md "One chain per pair, one stage per chain"; healing.md
 5. **Reproductions.** The store-backed receipt test
    (`TestDirectoryReceiptsPastTheWindow`) and the lagging-destination test
    (`TestRequester_LaggingDestination`) pass on the new layout (2026-09-05);
-   the Docker comparison is acceptance run #7, ninth start,
-   `test/docker/soak/runs/20260905T225751Z` (12 h, 500 tps, chaos off), which
-   answers heals == 0 and no answered requests with nothing dropped, every
-   stream at received == delivered, no 10 s blocks, memory plateau after the
-   cache horizon. Result pending.
+   the Docker comparison, acceptance run #7 ninth start
+   (`runs/20260905T225751Z`), STALLED at minute 5 of load: copies of the
+   Directory's anchors were lost between dispatch and the BVN executors, fewer
+   than the six-signature threshold arrived, and nothing re-sent them once the
+   source-side re-send was deleted in step 4 — the pull's answer carried one
+   signature from the same node every time. Found by three short Docker
+   diagnostics (`233002Z`, `234434Z`, `235425Z`), not in-process: the
+   simulator lands every validator's copy in one block. Fix committed
+   (723637686): the Directory's answer carries every signature it holds on
+   its own copy. Those five runs also ran on leveldb by omission (the
+   harness now takes the backend from `docker-network.yml`), so their memory
+   numbers say nothing about the network; the acceptance run on BlockchainDB
+   is next.
 
 Fresh installs; no migration of the interleaved chain.
 
@@ -371,6 +379,7 @@ discovery loop. Reproductions so far:
 | Directory anchors rejected once a mark point is behind the store's window; every stream frozen (runs 032333Z–051008Z) | `test/e2e` `TestDirectoryReceiptsPastTheWindow` on the BlockchainDB-backed store (`simulator.BcdbDbOpener`); `pkg/database/keyvalue/bcdb` `TestReceiptReachesPastTheWindow` | 2 min; 4 s |
 | the backlog after a refusal window comes back as one block, lag oscillates on the bound (run 144928Z) | `pkg/consensus/consim` `TestOverload_BacklogComesBackAHeaderAtATime`: user and system load, slow executor, cap off and on | 60 s |
 | the network dies: one BVN's dumped blocks double every cycle until it stops, while the other keeps accepting the users that feed it (run 144928Z, "we are dead") | `pkg/consensus/consim` `TestOverload_UncappedHeadersDoubleTheDumpUntilThePartitionStops` / `..._CappedHeadersKeepThePartitionMoving`; from the command line: `go run ./cmd/consim -bvns 2 -vals 4 -workers 4 -round 500ms -batch-timeout 100ms -batch-size 50 -user -skew BVN1=400,BVN2=250,Directory=2 -synth-per-user 1.5 -exec-cost BVN1=2.5ms,BVN2=2.5ms -max-header 1073741824 -duration 300s -height 0 -stall-after 40s` | 5 min |
+| Directory anchors never reach a quorum at a BVN when dispatched copies are lost; every stream waits (run 225751Z) | none in-process yet: the simulator delivers every validator's copy in the same block, so a quorum always forms. Needs a simulator hook that drops a validator's dispatched copies; until then `TestAnchorAnswerCarriesQuorum` covers the answer's shape only | — |
 | the requester pulls entries sitting in the destination's own backlog; heals with nothing dropped (runs 134346Z–142724Z) | `test/e2e` `TestRequester_LaggingDestination`: a block hook holds the destination's envelopes thirty blocks, the conductor reads the depth as its lag; nothing dropped and one package dropped | 3 s |
 
 The death reproduction is what names the next design item: the header cap
