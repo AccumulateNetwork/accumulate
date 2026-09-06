@@ -751,3 +751,13 @@ bidirectional per partition pair (finding 30, one-way streams); that a
 restarted node sits at round zero in a running Docker network (read, not
 run); the current build's log rate (the sample is the 09-04 build);
 BlockchainDB's per-segment probe cost.
+
+## Issues (second pass)
+
+Chain heads #4234 (17); tombstone exceptions #4235 (18); write amplification
+#4236 (19); pre-images per commit #4237 (20); restart cannot rejoin #4238 (21);
+DAG GC on halt #4239 (22); event subscriber leak #4240 (23); cache seed vs
+horizon #4241 (24); stranded requester #4242 (25); forged sequence number and
+unverified signer #4243 (26); `Account.Chains` rewrite #4244 (27); per-message
+churn #4245 (30); bootstrap metrics cardinality #4246 (30). Notes added to
+#4222, #4229, #4231, #4232. The umbrella #4223 carries this whole document.
