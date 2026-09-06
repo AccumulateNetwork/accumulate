@@ -285,6 +285,43 @@ what would show it. Relevance to the plan: lag compounds — a node that falls
 behind keeps refusing its users (P2) and probes more history (P1) — so the
 fixes are not optional for steady state.
 
+### The run's end at 4 h 26 (measured): a stall, in the seal
+
+At 18:03Z BVN2 stopped producing blocks; the stall guard stopped the run at
+18:06:50Z after 241 s (BVN1 had also stalled 120 s at 18:04, wedge capture
+`wedge-20260906T180450Z`). Every node's block goroutine was inside
+`closedBlock.Commit → bcdb.commit → writeThrough → KVShard.SealBlock`, in
+`sync.WaitGroup.Wait` for the shards' `KV2.Seal` goroutines, which were all in
+`syscall.Fsync` (`pendingSync.finish`, `pendingSeal.promote → writeIndexTmp`):
+16 fsync goroutines on bvn2-val1, 24 on bvn1-val1, 27 on bvn1-val2, 12 on
+bvn1-val4 — of the order of a hundred concurrent fsyncs against one LUKS NVMe,
+none returning for minutes. Consensus kept going (round counters identical on
+all four BVN2 nodes, 61 588; "proposing headers without batches") and lag was
+small on three of them (2–6 blocks): this was not the executor and not
+consensus, it was the store's commit barrier. No kernel message, no trim job
+(fstrim next due Monday), no host process on the disk at that time; BlockchainDB
+stats show every store's commit rate dipping together only in the 18:04
+interval. What is missing is exactly P10's seal-duration histogram: the seal's
+fsync wall is not measured anywhere, so whether the disk degraded under
+sixteen stores' seals or a single seal stalled the rest cannot be separated
+here. Streams at the kill: BVN2→BVN1 2 453 undelivered, BVN1→BVN2 1 213,
+BVN2→DN 420 — the in-flight backlog, nothing older.
+
+Consequence for the plan: **F2 is not a 10–15% item.** A commit that waits on
+~40 fsyncs per node per block, across sixteen stores on one device, is a stall
+waiting to happen once the disk queue is deep enough; the block-time tail of F1
+and the seal of F2 are the same wall from two sides. The seal must either
+leave the block path (durability acknowledged after the state hash is
+broadcast — a spec decision against database.md invariant 5) or cost one
+barrier, not five waves. Filed as #4259 here and on BlockchainDB#88.
+
+Also seen at the end: laggards asking sources for anchors they have not
+executed yet ("Source cannot serve missing anchors: 12220 is not in the
+cache"): a node hundreds of blocks behind consensus asks for entries that sit
+in its own committed, unexecuted backlog, and the source has released them on
+the partition's Delivered claim. The requester should not ask while execution
+lags consensus (#4260).
+
 ## Why, in one paragraph
 
 Consensus makes a block every second. Executing a loaded block takes about
