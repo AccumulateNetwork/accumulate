@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 // The persisted head is Count and Pending. It used to carry the current
@@ -152,13 +153,14 @@ func TestLegacyHeadIsMigratedOnAppend(t *testing.T) {
 	require.Equal(t, rh.List[5:20], hashes)
 }
 
-// A tail chunk whose index says it belongs to this mark set but whose length
-// does not is corruption, and the append says so rather than closing a mark
-// point with the wrong hashes.
-func TestInconsistentTailChunkIsAnError(t *testing.T) {
+// A tail chunk that falls short of the head is refilled from the elements
+// (appendTail); only when an element is missing too is the append refused,
+// rather than closing a mark point with the wrong hashes.
+func TestShortTailChunkWithoutElementsIsAnError(t *testing.T) {
 	var rh common.RandHash
-	store := begin()
-	m := testChain(store, 4, "try")
+	kv := memory.New(nil).Begin(nil, true)
+	key := record.NewKey("try")
+	m := testChain(keyvalue.RecordStore{Store: kv}, 4, "try")
 	for i := 0; i < 3; i++ {
 		require.NoError(t, m.AddEntry(rh.NextList(), false))
 	}
@@ -166,7 +168,19 @@ func TestInconsistentTailChunkIsAnError(t *testing.T) {
 	require.NoError(t, err)
 	c0.Hashes = c0.Hashes[:1]
 	require.NoError(t, m.Tail(0).Put(c0))
+	require.NoError(t, m.Commit())
 
+	// With the elements there, the chunk is repaired
+	m = testChain(keyvalue.RecordStore{Store: kv}, 4, "try")
+	require.NoError(t, m.AddEntry(rh.NextList(), false))
+	c0, err = m.Tail(0).Get()
+	require.NoError(t, err)
+	require.Equal(t, rh.List[:4], c0.Hashes)
+
+	// Without them, the append is refused
+	require.NoError(t, kv.Delete(key.Append("Element", uint64(2))))
+	require.NoError(t, kv.Delete(key.Append("Tail", uint64(0))))
+	m = testChain(keyvalue.RecordStore{Store: kv}, 4, "try")
 	err = m.AddEntry(rh.NextList(), false)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, errors.InvalidRecord), "got %v", err)

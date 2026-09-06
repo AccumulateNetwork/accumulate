@@ -111,8 +111,16 @@ func (c *Chain) getTailChunks() ([]chainTailKey, error) {
 
 // appendTail records the entry at index in its Tail chunk. The chunk it
 // lands in held the previous set's hashes at that position, or nothing,
-// and is started over; otherwise it must hold exactly the set's hashes
-// before index, or the mark point built from it would be wrong.
+// and is started over.
+//
+// The head is the chain's authority and Element(i) its record; a chunk is
+// derived from them and is reconciled to them, never trusted over them. A
+// chunk that runs past the head is cut back to it, and one that falls short
+// is refilled from the elements -- a store that gives a batch no snapshot
+// (the memory store) lets a reader see the head from before a commit and
+// the chunk from after it, and a discarded validation batch used to read
+// such pairs without noticing, because nothing compared two chain records.
+// Only an element that is missing too is an error.
 func (m *Chain) appendTail(index int64, hash []byte) error {
 	c := m.chunkSize()
 	base := index &^ (c - 1)
@@ -121,11 +129,19 @@ func (m *Chain) appendTail(index int64, hash []byte) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("load tail chunk %d: %w", k, err)
 	}
-	switch {
-	case int64(chunk.Index) != base || len(chunk.Hashes) == 0:
+	if int64(chunk.Index) != base {
 		chunk = &TailChunk{Index: uint64(base)}
-	case int64(chunk.Index)+int64(len(chunk.Hashes)) != index:
-		return errors.InvalidRecord.WithFormat("tail chunk %d of %v: expected %d hashes before entry %d, got %d", k, m.key, index-base, index, len(chunk.Hashes))
+	}
+	if have := int64(len(chunk.Hashes)); have > index-base {
+		chunk.Hashes = chunk.Hashes[:index-base]
+	} else {
+		for i := base + have; i < index; i++ {
+			h, err := m.Element(uint64(i)).Get()
+			if err != nil {
+				return errors.InvalidRecord.WithFormat("tail chunk %d of %v holds %d hashes before entry %d and element %d is missing: %w", k, m.key, have, index, i, err)
+			}
+			chunk.Hashes = append(chunk.Hashes, copyHash(h))
+		}
 	}
 	chunk.Hashes = append(chunk.Hashes, hash)
 	return m.Tail(k).Put(chunk)
@@ -171,7 +187,7 @@ func (m *Chain) tailHashes(head *State, from, to int64) ([][]byte, error) {
 			return nil, errors.UnknownError.WithFormat("load tail chunk %d: %w", k, err)
 		}
 		if int64(chunk.Index) != base || int64(len(chunk.Hashes)) < end-base {
-			return m.legacyTail(head, from, to)
+			return m.tailFallback(head, from, to)
 		}
 		hashes = append(hashes, chunk.Hashes[i-base:end-base]...)
 		i = end
@@ -179,14 +195,23 @@ func (m *Chain) tailHashes(head *State, from, to int64) ([][]byte, error) {
 	return hashes, nil
 }
 
-// legacyTail answers [from, to) from a head that still carries its open
-// mark set.
-func (m *Chain) legacyTail(head *State, from, to int64) ([][]byte, error) {
+// tailFallback answers [from, to) when the Tail records do not: from a
+// head that still carries its open mark set, or else from the elements,
+// which are the record the chunks are derived from (see appendTail).
+func (m *Chain) tailFallback(head *State, from, to int64) ([][]byte, error) {
 	lastMark := head.Count &^ m.markMask
-	if from < lastMark || to > head.Count || int64(len(head.HashList)) != head.Count-lastMark {
-		return nil, errors.NotFound.WithFormat("entries %d..%d of %v are not in the tail", from, to-1, m.key)
+	if from >= lastMark && to <= head.Count && int64(len(head.HashList)) == head.Count-lastMark {
+		return head.HashList[from-lastMark : to-lastMark], nil
 	}
-	return head.HashList[from-lastMark : to-lastMark], nil
+	hashes := make([][]byte, 0, to-from)
+	for i := from; i < to; i++ {
+		h, err := m.Element(uint64(i)).Get()
+		if err != nil {
+			return nil, errors.NotFound.WithFormat("entry %d of %v is not in the tail and its element is missing: %w", i, m.key, err)
+		}
+		hashes = append(hashes, h)
+	}
+	return hashes, nil
 }
 
 // AddEntry adds a Hash to the Chain controlled by the ChainManager. If unique is
