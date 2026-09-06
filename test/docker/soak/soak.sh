@@ -2,7 +2,13 @@
 # Chaos soak: 3 BVNs x 4 validators + bootstrap, cross-partition load, induced
 # drops. Chaos restarts re-arm each node's drop hooks, so drops recur throughout.
 #
-#   DURATION=24h TPS=2 ./soak.sh "why I am running this"
+#   ./soak.sh "why I am running this"              # every knob from soak.conf
+#   ./soak.sh -c my.conf "why I am running this"   # soak.conf, then my.conf on top
+#
+# Knobs live in soak.conf, a checked-in file frozen into every run directory —
+# not in the launching shell. (Five runs on 2026-09-05 silently built a leveldb
+# network because ACC_STORAGE happened to be unset; the storage backend now
+# lives in ../docker-network.yml and nothing is read from the environment.)
 #
 # EVERY RUN WRITES TO ITS OWN DIRECTORY under runs/<UTC timestamp>/ and NOTHING
 # IS EVER OVERWRITTEN. Earlier versions of this script truncated soak.log and
@@ -13,6 +19,21 @@
 # long after the tree has moved on.
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"; repo="$(cd "$here/../../.." && pwd)"
+
+# Configuration comes from files, not the launching shell: soak.conf beside
+# this script holds every knob with its default, and `-c <file>` layers a
+# second file on top. Both are frozen into the run directory. The purpose
+# text is the one positional argument.
+conf_override=""
+if [ "${1:-}" = "-c" ]; then
+  conf_override="$2"; shift 2
+  [ -f "$conf_override" ] || { echo "no such config file: $conf_override"; exit 1; }
+fi
+# shellcheck source=soak.conf
+. "$here/soak.conf"
+[ -n "$conf_override" ] && . "$conf_override"
+# The knobs the compose file and the node containers read
+export COMPOSE_PROJECT_NAME ACC_BLOCK_INTERVAL ACC_MEM_LIMIT GOMEMLIMIT ACC_EXECUTION_SHARDS ACC_TX_TRACE
 DURATION="${DURATION:-24h}"; TPS="${TPS:-2}"
 
 # Parse Go-style durations so short runs work. The old parser did
@@ -146,7 +167,8 @@ fi
 
 # Freeze the exact config. A diff against these is the only reliable way to know
 # what changed between two runs.
-cp "$compose_file" "$here/../docker-network.yml" "$0" "$rd/config/" 2>/dev/null
+cp "$compose_file" "$here/../docker-network.yml" "$0" "$here/soak.conf" "$rd/config/" 2>/dev/null
+[ -n "$conf_override" ] && cp "$conf_override" "$rd/config/override.conf" 2>/dev/null
 git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
 
 {
@@ -175,7 +197,7 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "| block interval | ${ACC_BLOCK_INTERVAL:-1s} |"
   echo "| memory budget | mem_limit ${ACC_MEM_LIMIT:-1536m}, GOMEMLIMIT ${GOMEMLIMIT:-1200MiB} |"
   echo
-  echo "Config as run is frozen in \`config/\`. Results appended below on exit."
+  echo "Config as run is frozen in \`config/\` (soak.conf${conf_override:+ + override.conf}, the compose and network files). Results appended below on exit."
 } > "$manifest"
 
 printf '{"runId":"%s","startedUtc":"%s","image":"%s","imageId":"%s","commit":"%s","describe":"%s","branch":"%s","uncommittedFiles":%s,"executorVersion":"%s","healing":"%s","dropSynthetic":"%s","dropAnchor":"%s","bvns":%s,"nodes":%s,"partitions":"%s","chaos":"%s","duration":"%s","tps":"%s","note":"%s"}\n' \
