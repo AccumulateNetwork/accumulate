@@ -13,26 +13,58 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// seedCacheBlocks is how many recent blocks the cache is rebuilt for at
-// start: more than the Directory round trip, so every block whose anchor has
-// not yet returned is held; far less than the horizon, so a start reads
-// little. Older blocks are healing's to fill.
-const seedCacheBlocks = 32
+// ownReceipt is a Directory receipt for one of this partition's blocks,
+// carried by a Directory anchor this partition executed.
+type ownReceipt struct {
+	block       uint64                          // the own block receipted
+	anchorBlock uint64                          // the Directory block whose anchor carried it
+	receipt     *protocol.PartitionAnchorReceipt // nil on the Directory, whose own anchor receipts its own block
+}
 
-// seedSynthCache rebuilds the producer's cache for the recent blocks from the
-// node's own chains, once, at the first block open (healing spec, "The
-// cache"). Genesis produces its synthetics through another executor, and a
-// node that starts has produced blocks whose anchors have not returned; both
-// would otherwise miss at dispatch. This is the one place the cache is filled
-// from the store, by position, and it is a start-up step, not a runtime path.
-func (x *Executor) seedSynthCache(batch *database.Batch, current uint64) error {
-	from := uint64(1)
-	if current > seedCacheBlocks {
-		from = current - seedCacheBlocks
+// seedSynthCache rebuilds the producer's cache at start, once, at the first
+// block open (healing spec, "The cache"). What it holds is decided by what the
+// store durably knows (#4241):
+//
+//   - Every own block the Directory has not receipted yet. Nothing from it
+//     has been dispatched, so every entry it produced is still to send; a
+//     restart with a lagging Directory holds them all, up to the horizon.
+//   - The blocks in flight below the newest receipt: dispatched, and what a
+//     destination may still be executing or asking healing for. The
+//     destination's own Delivered of this stream is not durable here, so
+//     this is the bound (DIFFERENCES, H1).
+//
+// The receipts come from the Directory anchors executed here, the same
+// anchors whose dispatch the block after them performs. That list is memory
+// and a restart loses it, so what the newest anchor receipted is marked
+// dispatched again — healing serves only dispatched blocks — and sent again
+// by the leader. A destination tosses what it has delivered, so the resend
+// costs a package, never a duplicate execution.
+//
+// This is the one place the cache is filled from the store, by position, and
+// it is a start-up step, not a runtime path.
+func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeader bool) error {
+	oldest := uint64(1)
+	if current > synthcache.DefaultHorizon {
+		oldest = current - synthcache.DefaultHorizon
 	}
+
+	// What the Directory has receipted of ours, newest first
+	receipts, err := x.ownReceipts(batch, oldest)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load Directory receipts: %w", err)
+	}
+	from := oldest
+	if len(receipts) > 0 {
+		newest := receipts[0].block
+		if newest > synthcache.InFlightBlocks && newest-synthcache.InFlightBlocks > from {
+			from = newest - synthcache.InFlightBlocks
+		}
+	}
+
 	var blocks []*synthcache.Block
 	for b := from; b < current; b++ {
 		blk, err := x.rebuildCacheBlock(batch, b)
@@ -43,9 +75,98 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64) error {
 	}
 	x.synthCache().Seed(blocks)
 	if len(blocks) > 0 {
-		x.logger.Info("Seeded the synthetic cache from the chains", "module", "synthetic", "from", from, "to", current-1, "blocks", len(blocks))
+		x.logger.Info("Seeded the synthetic cache from the chains", "module", "synthetic", "from", from, "to", current-1, "blocks", len(blocks), "receipted", len(receipts))
+	}
+	if len(receipts) == 0 {
+		return nil
+	}
+
+	// The receipted blocks are dispatched; the newest anchor's are dispatched
+	// again, in case the block that would have done it never ran
+	var ledger *protocol.SyntheticLedger
+	err = batch.Account(x.Describe.Synthetic()).Main().GetAs(&ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
+	}
+	deliveredFrom := func(dst *url.URL) uint64 { return ledger.Partition(dst).Delivered }
+	for _, r := range receipts {
+		if r.block < from {
+			continue
+		}
+		if r.anchorBlock == receipts[0].anchorBlock {
+			err = x.sendSyntheticTransactionsForBlock(r.block, r.receipt, r.anchorBlock, isLeader, deliveredFrom)
+			if err != nil {
+				return errors.UnknownError.WithFormat("dispatch block %d: %w", r.block, err)
+			}
+			continue
+		}
+		x.synthCache().MarkDispatched(r.block, r.anchorBlock, r.receipt)
 	}
 	return nil
+}
+
+// ownReceipts walks the Directory anchors this partition executed, newest
+// first, and returns their receipts for this partition's blocks down to the
+// in-flight tail below the newest, or to oldest.
+func (x *Executor) ownReceipts(batch *database.Batch, oldest uint64) ([]ownReceipt, error) {
+	c := batch.Account(x.Describe.AnchorPool()).MainChain()
+	head, err := c.Head().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load anchor pool main chain head: %w", err)
+	}
+	own := x.Describe.PartitionUrl().URL
+	var receipts []ownReceipt
+	bound := oldest
+	for i := head.Count - 1; i >= 0; i-- {
+		entry, err := c.Entry(i)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load anchor pool main chain entry %d: %w", i, err)
+		}
+		var msg *messaging.TransactionMessage
+		err = batch.Message2(entry).Main().GetAs(&msg)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load anchor pool main chain entry %d: %w", i, err)
+		}
+		body, ok := msg.Transaction.Body.(*protocol.DirectoryAnchor)
+		if !ok {
+			continue
+		}
+		var found []ownReceipt
+		if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
+			found = append(found, ownReceipt{block: body.MinorBlockIndex, anchorBlock: body.MinorBlockIndex})
+		}
+		for _, r := range body.Receipts {
+			if own.LocalTo(r.Anchor.Source) {
+				found = append(found, ownReceipt{block: r.Anchor.MinorBlockIndex, anchorBlock: body.MinorBlockIndex, receipt: r})
+			}
+		}
+		if len(found) == 0 {
+			continue
+		}
+		if len(receipts) == 0 {
+			// The newest receipt sets the tail
+			newest := found[0].block
+			for _, r := range found {
+				if r.block > newest {
+					newest = r.block
+				}
+			}
+			if newest > synthcache.InFlightBlocks && newest-synthcache.InFlightBlocks > bound {
+				bound = newest - synthcache.InFlightBlocks
+			}
+		}
+		receipts = append(receipts, found...)
+		below := true
+		for _, r := range found {
+			if r.block >= bound {
+				below = false
+			}
+		}
+		if below {
+			break
+		}
+	}
+	return receipts, nil
 }
 
 // rebuildCacheBlock reads what block b produced and what its proofs are built

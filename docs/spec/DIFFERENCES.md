@@ -392,6 +392,16 @@ the only anchor a bundle can be proven under (`ProveAgainstAnchor` for any
 other is `NotReady`), which is H3. The requester exists (H8) and asks the
 sequencer by span.
 
+The destination's `Delivered` of this stream — the release signal — lives only
+in the cache. A restart therefore cannot seed "what the destination has not
+delivered"; it seeds what the Directory has not receipted plus the in-flight
+tail (healing.md, "The cache"; #4241). A destination lagging more than
+`InFlightBlocks` of the source's blocks at the source's restart heals from a
+cache that lacks its entries, and the miss is counted. The fix is to persist
+the release watermark per stream as a node-local record — it is per-node
+state and must not enter the hashed ledger (executor.md, "Sync") — which is
+the cache's to do.
+
 **Size**: small; the delivery signal is the open design point.
 
 ---
