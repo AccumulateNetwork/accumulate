@@ -181,7 +181,7 @@ func TestResolveBlockAtOrBefore_BeforeGenesis(t *testing.T) {
 	for _, height := range []uint64{1, 2, 3} {
 		_, _, err := ResolveBlockAtOrBefore(testPartition, batch, height)
 		require.Errorf(t, err, "height %d", height)
-		require.Equalf(t, errors.NotFound, errors.Code(err), "height %d", height)
+		require.Equalf(t, errors.IncompleteChain, errors.Code(err), "height %d", height)
 		require.Containsf(t, err.Error(), "precedes this node's earliest indexed block 4", "height %d", height)
 	}
 }
@@ -195,7 +195,7 @@ func TestResolveBlockAtOrBefore_NotReached(t *testing.T) {
 
 	_, _, err := ResolveBlockAtOrBefore(testPartition, batch, 18)
 	require.Error(t, err)
-	require.Equal(t, errors.NotFound, errors.Code(err))
+	require.Equal(t, errors.NotReady, errors.Code(err))
 	require.Contains(t, err.Error(), "is beyond this node's latest indexed block")
 	require.Contains(t, err.Error(), "latest indexed block 17")
 }
@@ -342,8 +342,8 @@ func TestResolveHistoricalAccountState_Refusals(t *testing.T) {
 		retain  bool
 		code    errors.Status
 	}{
-		{"before genesis", "present", 2, true, errors.NotFound},
-		{"not reached", "present", 99, true, errors.NotFound},
+		{"before genesis", "present", 2, true, errors.IncompleteChain},
+		{"not reached", "present", 99, true, errors.NotReady},
 		{"account absent", "absent", 9, true, errors.NotFound},
 		{"beyond retained range", "present", 9, false, errors.IncompleteChain},
 		{"zero height", "present", 0, true, errors.BadRequest},

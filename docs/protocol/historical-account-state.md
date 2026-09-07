@@ -109,8 +109,9 @@ A client can branch on the status code without parsing prose.
 
 | status | meaning |
 |---|---|
-| `IncompleteChain` (414, JSON-RPC `-33414`) | the height is indexed but no BPT history is retained for it; the message names the retained range |
-| `NotFound` | the height is below this node's earliest indexed block, or above its latest, or the account had no record at that height — the three read differently |
+| `IncompleteChain` (414, JSON-RPC `-33414`) | a capability limit: the height precedes this node's earliest indexed block, or is indexed but no BPT history is retained for it; the message names the boundary |
+| `NotReady` (504) | the height is beyond this node's latest indexed block — "not yet", not "never"; retry later |
+| `NotFound` | the account had no record at that height — proven absence, not a capability limit |
 | `BadRequest` | `ForHeight` was zero, which means the current state and is not a historical request |
 
 **A node that cannot prove the past says so.** There is no fallback to the

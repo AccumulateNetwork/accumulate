@@ -93,15 +93,17 @@ func TestHistoricalResolution_RealLedger(t *testing.T) {
 		}
 
 		// Below the horizon and past the tip are both refused, distinguishably
-		// from each other by message and from retention by status
+		// from each other and from proven absence by status: capability limits
+		// are IncompleteChain, "not yet" is NotReady, and NotFound is reserved
+		// for the account provably having no record
 		if indexed.Earliest > 1 {
 			_, _, err = indexing.ResolveBlockAtOrBefore(partition, batch, indexed.Earliest-1)
 			require.Error(t, err)
-			require.Equal(t, errors.NotFound, errors.Code(err))
+			require.Equal(t, errors.IncompleteChain, errors.Code(err))
 		}
 		_, _, err = indexing.ResolveBlockAtOrBefore(partition, batch, indexed.Latest+1)
 		require.Error(t, err)
-		require.Equal(t, errors.NotFound, errors.Code(err))
+		require.Equal(t, errors.NotReady, errors.Code(err))
 
 		// alice was created by a transaction, so it has an indexed main chain
 		account := batch.Account(alice)
