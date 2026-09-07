@@ -191,7 +191,7 @@ func ResolveBlockAtOrBefore(partition config.NetworkUrl, batch *database.Batch, 
 	// Below this node's horizon. Do not resolve backward past it — see
 	// IndexedBlockRange.
 	if height < indexed.Earliest {
-		return 0, nil, errors.NotFound.WithFormat(
+		return 0, nil, errors.IncompleteChain.WithFormat(
 			"block %d precedes this node's earliest indexed block %d", height, indexed.Earliest)
 	}
 
@@ -201,7 +201,7 @@ func ResolveBlockAtOrBefore(partition config.NetworkUrl, batch *database.Batch, 
 	// mean answering for a block that may not exist. This is "not yet", not
 	// "never".
 	if height > indexed.Latest {
-		return 0, nil, errors.NotFound.WithFormat(
+		return 0, nil, errors.NotReady.WithFormat(
 			"block %d is beyond this node's latest indexed block %d", height, indexed.Latest)
 	}
 
@@ -302,13 +302,16 @@ func BPTRootAt(partition config.NetworkUrl, batch *database.Batch, height uint64
 // minor block height, returning the root index chain entry of the block a
 // receipt would be produced against.
 //
-// It returns one of three distinguishable refusals, so a client can branch
+// It returns one of four distinguishable refusals, so a client can branch
 // without parsing prose:
 //
-//   - [errors.NotFound] — the height is outside what this node has indexed, or
-//     the account had no record at that height;
-//   - [errors.IncompleteChain] — the height is indexed but the node retains no
-//     BPT history for it. The message names the retained range.
+//   - [errors.NotFound] — the account had no record at that height. This is
+//     proven absence, not a capability limit.
+//   - [errors.IncompleteChain] — a capability limit: the height precedes what
+//     this node has indexed, or is indexed but the node retains no BPT history
+//     for it. The message names the boundary.
+//   - [errors.NotReady] — the height is beyond this node's latest indexed
+//     block: "not yet", not "never". The client should retry later.
 //   - [errors.BadRequest] — height is zero, which means the current state and
 //     must not reach here.
 //

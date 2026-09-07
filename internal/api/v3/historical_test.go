@@ -146,7 +146,7 @@ func TestForHeight_RefusesWithoutRetention(t *testing.T) {
 
 		// And the refusal must be the one a client can branch on
 		code := errors.Code(err)
-		require.Containsf(t, []errors.Status{errors.IncompleteChain, errors.NotFound}, code,
+		require.Containsf(t, []errors.Status{errors.IncompleteChain, errors.NotFound, errors.NotReady}, code,
 			"height %d refused with %v: %v", h, code, err)
 	}
 }
