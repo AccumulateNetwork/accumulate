@@ -177,6 +177,23 @@
         dataType: uint
         collection: set
 
+    # Retained so a historical proof can start where the current-state proof
+    # does: at the main state hash rather than the whole BPT entry. Written only
+    # when BPT retention is enabled, and pruned on the same window.
+    - name: RetainedStateReceipt
+      description: is the receipt from the main state hash to the BPT entry as of a retained block
+      type: state
+      parameters:
+      - name: Block
+        type: uint
+      dataType: merkle.Receipt
+      pointer: true
+    - name: RetainedStateReceiptBlocks
+      description: records the blocks for which a state receipt is retained, ascending
+      type: index
+      dataType: uint
+      collection: set
+
     # Chains
     - name: MainChain
       type: other

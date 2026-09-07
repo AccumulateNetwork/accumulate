@@ -8,6 +8,7 @@ package indexing
 
 import (
 	"bytes"
+	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -47,6 +48,17 @@ type HistoricalStateProof struct {
 	// caller knows which anchor chain to finish the binding against —
 	// anchor(<partition>)-bpt on the directory.
 	Partition string
+
+	// StartsAtMainState reports whether Receipt begins at a simple hash of the
+	// account's main state, as the current-state receipt does, rather than at
+	// the whole BPT entry — H(main, secondary, chains, pending).
+	//
+	// It matters because a verifier holds the account state and nothing else. If
+	// this is false the verifier cannot compute the receipt's starting point and
+	// must take the server's word for it, which is the trust this proof exists to
+	// remove. It is true when the node retained the account's state receipt for
+	// Block, which requires retention to have been on at the time.
+	StartsAtMainState bool
 }
 
 // HistoricalAccountStateProof proves what an account held at a past block.
@@ -110,11 +122,63 @@ func HistoricalAccountStateProof(partition config.NetworkUrl, batch *database.Ba
 		return nil, errors.UnknownError.WithFormat("combine membership and binding receipts: %w", err)
 	}
 
+	// Start at the main state hash where the node kept the receipt for it, so a
+	// verifier can recompute the starting point from the state it was handed.
+	startsAtMain := false
+	state, err := retainedStateReceipt(account, entry.BlockIndex)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if state != nil {
+		if !bytes.Equal(state.Anchor, full.Start) {
+			return nil, errors.InternalError.WithFormat(
+				"the retained state receipt reaches %x but the proof starts at %x",
+				state.Anchor, full.Start)
+		}
+		full, err = state.Combine(full)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("combine state and membership receipts: %w", err)
+		}
+		startsAtMain = true
+	}
+
 	return &HistoricalStateProof{
-		Receipt:        full,
-		Block:          block,
-		HistoricalRoot: root,
-		AnchorBound:    false,
-		Partition:      partition.PartitionID(),
+		Receipt:           full,
+		Block:             block,
+		HistoricalRoot:    root,
+		AnchorBound:       false,
+		Partition:         partition.PartitionID(),
+		StartsAtMainState: startsAtMain,
 	}, nil
+}
+
+// retainedStateReceipt returns the receipt from the account's main state hash
+// to its BPT entry as of the given block, or nil if the node did not retain one.
+//
+// Receipts are retained at the blocks where the account changed, so the one
+// covering a block is the newest retained at or before it — the same rule the
+// BPT uses for the entry itself.
+func retainedStateReceipt(account *database.Account, block uint64) (*merkle.Receipt, error) {
+	blocks, err := account.RetainedStateReceiptBlocks().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load retained state receipt blocks: %w", err)
+	}
+	if len(blocks) == 0 {
+		return nil, nil
+	}
+
+	i := sort.Search(len(blocks), func(i int) bool { return blocks[i] > block })
+	if i == 0 {
+		return nil, nil // Nothing retained at or before the block
+	}
+
+	r, err := account.RetainedStateReceipt(blocks[i-1]).Get()
+	switch {
+	case err == nil:
+		return r, nil
+	case errors.Is(err, errors.NotFound):
+		return nil, nil
+	default:
+		return nil, errors.UnknownError.WithFormat("load retained state receipt: %w", err)
+	}
 }
