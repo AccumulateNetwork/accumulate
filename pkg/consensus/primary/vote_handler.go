@@ -366,14 +366,36 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	}
 	p.pendingMu.Unlock()
 
-	// Check we have all parent certificates
+	// Check we have all parent certificates. Deferring alone is not enough,
+	// for exactly the reason the batch gate below spells out: the author's
+	// header rebroadcast re-tests a condition that only a re-sent certificate
+	// can make true, and a certificate missed once is never re-sent. So ask
+	// for it. Without this, one dropped certificate freezes a whole partition
+	// -- every validator holds the round's headers, defers every vote on a
+	// parent nobody will send again, and the round can never reach the quorum
+	// it needs to advance. That is #4182: all four validators of one partition
+	// stopped at one round with votes still arriving and nothing going out,
+	// while the other partitions ran on. RequestMissing dedupes against the
+	// DAG, the in-flight set and the retry bound, so calling it on every
+	// rebroadcast costs nothing.
+	var missingParents []types.CertificateDigest
 	for _, parentDigest := range header.Parents {
 		if p.dag.GetByDigest(parentDigest) == nil {
-			slog.Debug("Missing parent for header",
-				"headerDigest", headerDigest.String(),
-				"parentDigest", parentDigest.String())
-			return // missing parent, can't vote
+			missingParents = append(missingParents, parentDigest)
 		}
+	}
+	if len(missingParents) > 0 {
+		if debugEnabled() {
+			slog.Debug("Missing parents for header — deferring vote and fetching",
+				"partition", p.config.Partition,
+				"headerDigest", headerDigest.String(),
+				"round", header.Round,
+				"missing", len(missingParents))
+		}
+		if p.requestParents != nil {
+			p.requestParents(missingParents)
+		}
+		return // missing parents — asked for them; vote on a later rebroadcast
 	}
 
 	// Data availability: only vote once we hold every batch this header names

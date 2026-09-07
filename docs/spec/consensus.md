@@ -107,6 +107,18 @@ So a validator holds batches in four places, for four reasons:
    and different facts to the operator. Each is reported separately: a reason
    in the error, and a gauge per reason.
 
+11. **A vote deferred is a vote asked for.** A validator votes on a header only
+    when it holds everything that header names: every parent certificate and
+    every batch. When something is missing it must ASK for it, not merely
+    wait. The author rebroadcasts its header about once a second and each
+    rebroadcast re-tests the same condition, so anything broadcast once and
+    never re-sent — a certificate, a batch — leaves a condition that cannot
+    become true on its own. The cost of getting this wrong is a whole
+    partition: every validator sits on the round's headers refusing to vote,
+    no header reaches the quorum the round needs, the round never advances,
+    and the partition stops while its peers run on. Both halves have now cost
+    exactly that — batches in #4159, parent certificates in #4182.
+
 ## 2. Specification — how it is implemented
 
 `pkg/consensus/worker` (the worker, its pending list, active store and

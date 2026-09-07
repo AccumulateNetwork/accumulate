@@ -229,6 +229,12 @@ type Primary struct {
 	missingBatchAsked map[types.BatchDigest]time.Time
 	onMissingBatch    func(types.BatchDigest)
 
+	// requestParents asks for certificates a header names that we do not
+	// hold. It is the certificate syncer's RequestMissing in production and
+	// a recorder in tests; nil means no syncer, as in a unit test that never
+	// starts one (#4182).
+	requestParents func([]types.CertificateDigest)
+
 	// lastAuthoredRound is the highest round this primary has EVER authored
 	// a header for, valid only when hasAuthored is true (guarded by
 	// pendingMu). An author must never author one round twice: the resulting
@@ -333,6 +339,7 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 		p.certSyncer = NewCertSyncer(syncerConfig, d, g, pendingCerts)
 		// Set callback to process received certificates
 		p.certSyncer.SetCertReceivedCallback(p.OnCertificateReceived)
+		p.requestParents = p.certSyncer.RequestMissing
 	}
 
 	return p
