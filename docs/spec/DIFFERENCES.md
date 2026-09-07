@@ -597,3 +597,29 @@ DAG has a log, use that."
 **Size**: medium. The log append and its replay are new code on the block
 production path; the lagging seal is a scheduler in the bcdb adapter; the
 store change is a BlockchainDB release.
+
+## Proofs still recompute what is stored
+
+database.md ("Proofs are read, not searched") requires a proof to be reads and
+arithmetic. Two of the three positions now are. The third is not.
+
+`getIntermediate` (`pkg/database/merkle/chain.go:461`) reads the element and
+then calls `StateAt(element-1)`, which reads the two surrounding mark points
+and replays up to a mark frequency of entries to rebuild a Merkle state that
+already existed when the entry was added. A proof does that twice per level:
+measured, a chain of 262,144 produces 18 proof entries from 36 such lookups.
+The cascade values it recovers were each computed once and survive only inside
+a state's `Pending` list, and states are kept only every `2^markPower`
+entries, so recovering one costs a reconstruction rather than a read. Storing
+the cascade node when it is computed, keyed by index and level, makes the
+proof one read per level; it is one record per entry amortised, since adding N
+elements performs N-1 combines in total.
+
+The account state tree has the analogous gap in a different place: its blocks
+are read cold on every request, because loaded blocks are pinned to the batch
+and nothing caches them above it. Measured on 500,000 leaves, a proof is 4
+reads and ~70 KB, paid again for every query, while the top two levels are 257
+blocks (~8.7 MB) and would cover heights 0-16 outright.
+
+**Size**: medium for the cascade store (a format addition and a migration
+question); small for the block cache.
