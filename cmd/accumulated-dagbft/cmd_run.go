@@ -331,36 +331,38 @@ func (r *devnetRunner) runBlockProduction(running *runningNode) {
 		select {
 		case <-running.ctx.Done():
 			return
-		case cert, ok := <-committed:
+		case group, ok := <-committed:
 			if !ok {
 				return
 			}
-			if cert == nil {
-				continue
-			}
+			for _, cert := range group {
+				if cert == nil {
+					continue
+				}
 
-			// Simulate block production
-			running.lastBlock++
+				// Simulate block production
+				running.lastBlock++
 
-			// Update state hash (simple simulation)
-			for i := 0; i < 32; i++ {
-				stateHash[i] ^= byte(running.lastBlock >> (i % 8))
-			}
+				// Update state hash (simple simulation)
+				for i := 0; i < 32; i++ {
+					stateHash[i] ^= byte(running.lastBlock >> (i % 8))
+				}
 
-			slog.Debug("Block produced",
-				"node", running.config.ID,
-				"block", running.lastBlock,
-				"round", cert.Header.Round,
-				"batches", len(cert.Header.Payload),
-				"stateHash", hex.EncodeToString(stateHash[:8]))
+				slog.Debug("Block produced",
+					"node", running.config.ID,
+					"block", running.lastBlock,
+					"round", cert.Header.Round,
+					"batches", len(cert.Header.Payload),
+					"stateHash", hex.EncodeToString(stateHash[:8]))
 
-			// Prune batches
-			digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-			for _, e := range cert.Header.Payload {
-				digests = append(digests, e.Digest)
-			}
-			for _, w := range running.node.Workers() {
-				w.PruneBatches(digests)
+				// Prune batches
+				digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
+				for _, e := range cert.Header.Payload {
+					digests = append(digests, e.Digest)
+				}
+				for _, w := range running.node.Workers() {
+					w.PruneBatches(digests)
+				}
 			}
 		}
 	}

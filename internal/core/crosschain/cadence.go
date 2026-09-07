@@ -83,7 +83,7 @@ func (c *Conductor) selectedToSend(batch *database.Batch) (bool, error) {
 		return true, nil
 	}
 
-	me := ed25519.PrivateKey(c.ValidatorKey).Public().(ed25519.PublicKey)
+	me := c.ValidatorKey.Public().(ed25519.PublicKey)
 	mine := -1
 	for i, v := range validators {
 		if bytes.Equal(v, me) {

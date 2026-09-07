@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 

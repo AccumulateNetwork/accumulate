@@ -21,7 +21,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer dll.Release()
+	defer func() { _ = dll.Release() }()
 
 	pid, err := strconv.ParseInt(os.Args[1], 10, 32)
 	if err != nil {

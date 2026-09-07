@@ -46,7 +46,9 @@ type Block struct {
 	positions *positionCache
 
 	// staged is the execution order staging settled for this block (#4169
-	// step 5). Shadow only: nothing consults it to decide anything.
+	// step 5). Shadow only: nothing consults it to decide anything -- and
+	// nothing writes it either while stageBlock is absent from the tree.
+	//nolint:unused
 	staged *executionOrder
 
 	// dnAnchorsAtStart is the directory anchor chain's height when the block

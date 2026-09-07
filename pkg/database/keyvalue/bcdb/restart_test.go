@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -128,10 +128,17 @@ func TestCommit_ReportsItsOwnWriteThroughError(t *testing.T) {
 	// has to be a NEW permanent key, because rewriting an existing one
 	// with a different value moves it to the dynamic layer, which
 	// appends to a file it already holds open.
+	// Permission bits do not stop root, so this test cannot state its
+	// premise there -- and CI runs as root, where it failed for that reason
+	// and not for the store's behaviour.
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the permission bits this test makes the store fail with")
+	}
+
 	lost := record.NewKey("Message", [32]byte{10}, "Main")
 	perm := filepath.Join(db.kv.ShardDir(shardIndexOf(lost)), "perm")
 	require.NoError(t, os.Chmod(perm, 0o555))
-	defer os.Chmod(perm, 0o755)
+	defer func() { _ = os.Chmod(perm, 0o755) }()
 
 	batch := db.Begin(nil, true)
 	require.NoError(t, batch.Put(lost, []byte("lost")))

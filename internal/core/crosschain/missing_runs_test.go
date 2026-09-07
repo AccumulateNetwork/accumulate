@@ -28,8 +28,6 @@ import (
 // the newest hole — so a single scan must attempt every run, not one run per
 // heal window (#4163).
 
-func txid(b byte) *url.TxID { return protocol.PartitionUrl("BVN2").WithTxID([32]byte{b}) }
-
 // gapFixture builds a conductor and the ledger entry for one inbound stream:
 // delivered to `delivered`, with staging holding `hold`.
 //

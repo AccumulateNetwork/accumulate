@@ -100,22 +100,6 @@ type Conductor struct {
 	inflight sync.Map
 }
 
-// remoteHealth is one remote partition's circuit breaker state.
-type remoteHealth struct {
-	fails int       // consecutive pull/scan failures
-	until time.Time // circuit open (skip this remote) until this time
-}
-
-// breakerThreshold is how many consecutive failures against a remote open its
-// circuit, and breakerMax caps the backoff. Three failures is already three
-// multi-second RPC timeouts — a remote that fails that consistently is down or
-// drowning, and hammering it harder helps neither side.
-const (
-	breakerThreshold = 3
-	breakerBase      = 15 * time.Second
-	breakerMax       = 5 * time.Minute
-)
-
 // anchorRecoverySourceAllowed reports whether this conductor may recover
 // anchors from the given source partition. Anchors flow BVN<->DN only: a BVN
 // conductor "recovering" from another BVN pulls that BVN's ->dn anchors and

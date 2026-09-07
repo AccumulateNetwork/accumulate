@@ -8,8 +8,6 @@ package crosschain
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/binary"
 	"log/slog"
 	"sort"
 	"strconv"
@@ -593,20 +591,6 @@ func partitionLabel(u *url.URL) string {
 		return id
 	}
 	return u.ShortString()
-}
-
-// randDuration returns a uniform random duration in [0, max) drawn from
-// crypto/rand, so validators independently stagger their heal requests.
-func randDuration(max time.Duration) time.Duration {
-	if max <= 0 {
-		return 0
-	}
-	var b [8]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return 0
-	}
-	n := binary.BigEndian.Uint64(b[:]) % uint64(max)
-	return time.Duration(n)
 }
 
 // reconcileInterval is how often (in blocks) a partition asks its peers what

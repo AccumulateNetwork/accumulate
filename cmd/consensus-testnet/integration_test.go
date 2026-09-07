@@ -165,11 +165,14 @@ func TestConsensusTestnet_TwoNodeCommunication(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					return
-				case cert, ok := <-committed:
+				case group, ok := <-committed:
 					if !ok {
 						return
 					}
-					if cert != nil {
+					for _, cert := range group {
+						if cert == nil {
+							continue
+						}
 						// Track message exchange (certificate commits are GossipSub messages)
 						messagesExchanged.Add(1)
 
@@ -454,11 +457,14 @@ func TestConsensusTestnet_BasicConsensus(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					return
-				case cert, ok := <-committed:
+				case group, ok := <-committed:
 					if !ok {
 						return
 					}
-					if cert != nil {
+					for _, cert := range group {
+						if cert == nil {
+							continue
+						}
 						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
 						if !ok {
 							return
@@ -689,11 +695,14 @@ func TestConsensusTestnet_Throughput(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					return
-				case cert, ok := <-committed:
+				case group, ok := <-committed:
 					if !ok {
 						return
 					}
-					if cert != nil {
+					for _, cert := range group {
+						if cert == nil {
+							continue
+						}
 						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
 						if !ok {
 							return
@@ -921,14 +930,17 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					return
-				case cert, ok := <-committed:
+				case group, ok := <-committed:
 					if !ok {
 						return
 					}
 					if nodeStopped[i].Load() {
 						continue
 					}
-					if cert != nil {
+					for _, cert := range group {
+						if cert == nil {
+							continue
+						}
 						batches, digests, ok := collectForCert(ctx, nodes[i], cert)
 						if !ok {
 							return
@@ -1078,11 +1090,14 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 			select {
 			case <-ctx.Done():
 				return
-			case cert, ok := <-committed:
+			case group, ok := <-committed:
 				if !ok {
 					return
 				}
-				if cert != nil {
+				for _, cert := range group {
+					if cert == nil {
+						continue
+					}
 					batches, digests, ok := collectForCert(ctx, newNode, cert)
 					if !ok {
 						return
