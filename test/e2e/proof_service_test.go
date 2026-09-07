@@ -12,10 +12,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
-	"gitlab.com/accumulatenetwork/accumulate/internal/fastsync"
-	apiv3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/fastsync"
+	apiv3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
