@@ -32,7 +32,7 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 	p.committeeMu.RUnlock()
 
 	if !inCommittee {
-		slog.Info("Vote from unknown validator",
+		slog.Debug("Vote from unknown validator",
 			"author", hexEncode(vote.Author))
 		return
 	}
@@ -40,7 +40,7 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 	// EXPENSIVE CHECK SECOND: Signature verification (~29µs)
 	// Only verify signatures from committee members
 	if err := vote.Verify(); err != nil {
-		slog.Info("Invalid vote signature",
+		slog.Debug("Invalid vote signature",
 			"error", err,
 			"author", hexEncode(vote.Author))
 		return
@@ -59,14 +59,14 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 
 	// Check vote round/epoch matches
 	if vote.Round != header.Round {
-		slog.Info("Vote round mismatch",
+		slog.Debug("Vote round mismatch",
 			"voteRound", vote.Round,
 			"headerRound", header.Round)
 		return
 	}
 
 	if vote.Epoch != header.Epoch {
-		slog.Info("Vote epoch mismatch",
+		slog.Debug("Vote epoch mismatch",
 			"voteEpoch", vote.Epoch,
 			"headerEpoch", header.Epoch)
 		return
@@ -106,10 +106,12 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 	// Add the unique vote
 	p.pendingVotes[vote.HeaderDigest] = append(votes, vote)
 
-	slog.Info("Added vote",
-		"headerDigest", vote.HeaderDigest.String(),
-		"author", hexEncode(vote.Author),
-		"totalVotes", len(p.pendingVotes[vote.HeaderDigest]))
+	if debugEnabled() {
+		slog.Debug("Added vote",
+			"headerDigest", vote.HeaderDigest.String(),
+			"author", hexEncode(vote.Author),
+			"totalVotes", len(p.pendingVotes[vote.HeaderDigest]))
+	}
 
 	// Try to create certificate
 	p.tryCreateCertificateLocked(vote.HeaderDigest)
@@ -137,7 +139,7 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 
 	// Need 2f+1 stake
 	if !hasQuorum {
-		slog.Info("Not enough stake for certificate",
+		slog.Debug("Not enough stake for certificate",
 			"headerDigest", headerDigest.String(),
 			"totalStake", totalStake,
 			"threshold", quorumThreshold)
@@ -154,11 +156,13 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 	p.ourCerts[cert.Round()] = cert
 	p.certificatesCreated.Add(1)
 
-	slog.Info("Created certificate",
-		"partition", p.config.Partition,
-		"digest", cert.Digest().String(),
-		"round", cert.Round(),
-		"signers", len(cert.SignedAuthorities))
+	if debugEnabled() {
+		slog.Debug("Created certificate",
+			"partition", p.config.Partition,
+			"digest", cert.Digest().String(),
+			"round", cert.Round(),
+			"signers", len(cert.SignedAuthorities))
+	}
 
 	// Clean up pending state for this header
 	delete(p.pendingVotes, headerDigest)
@@ -254,14 +258,16 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return
 	}
 
-	slog.Info("Header handled by primary",
-		"partition", p.config.Partition,
-		"author", hexEncode(header.Author),
-		"round", header.Round)
+	if debugEnabled() {
+		slog.Debug("Header handled by primary",
+			"partition", p.config.Partition,
+			"author", hexEncode(header.Author),
+			"round", header.Round)
+	}
 
 	// Verify header signature
 	if err := header.Verify(); err != nil {
-		slog.Info("Invalid header signature",
+		slog.Debug("Invalid header signature",
 			"error", err,
 			"author", hexEncode(header.Author))
 		return
@@ -273,7 +279,7 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	p.committeeMu.RUnlock()
 
 	if !inCommittee {
-		slog.Info("Header from unknown validator",
+		slog.Debug("Header from unknown validator",
 			"author", hexEncode(header.Author))
 		return
 	}
@@ -292,7 +298,7 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 
 	// Check epoch matches
 	if header.Epoch != currentEpoch {
-		slog.Info("Header epoch mismatch",
+		slog.Debug("Header epoch mismatch",
 			"headerEpoch", header.Epoch,
 			"currentEpoch", currentEpoch)
 		return
@@ -308,7 +314,7 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	maxRound := currentRound + 1
 
 	if header.Round < minRound || header.Round > maxRound {
-		slog.Info("Header round out of range",
+		slog.Debug("Header round out of range",
 			"headerRound", header.Round,
 			"currentRound", currentRound,
 			"minRound", minRound,
@@ -360,14 +366,36 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	}
 	p.pendingMu.Unlock()
 
-	// Check we have all parent certificates
+	// Check we have all parent certificates. Deferring alone is not enough,
+	// for exactly the reason the batch gate below spells out: the author's
+	// header rebroadcast re-tests a condition that only a re-sent certificate
+	// can make true, and a certificate missed once is never re-sent. So ask
+	// for it. Without this, one dropped certificate freezes a whole partition
+	// -- every validator holds the round's headers, defers every vote on a
+	// parent nobody will send again, and the round can never reach the quorum
+	// it needs to advance. That is #4182: all four validators of one partition
+	// stopped at one round with votes still arriving and nothing going out,
+	// while the other partitions ran on. RequestMissing dedupes against the
+	// DAG, the in-flight set and the retry bound, so calling it on every
+	// rebroadcast costs nothing.
+	var missingParents []types.CertificateDigest
 	for _, parentDigest := range header.Parents {
 		if p.dag.GetByDigest(parentDigest) == nil {
-			slog.Info("Missing parent for header",
-				"headerDigest", headerDigest.String(),
-				"parentDigest", parentDigest.String())
-			return // missing parent, can't vote
+			missingParents = append(missingParents, parentDigest)
 		}
+	}
+	if len(missingParents) > 0 {
+		if debugEnabled() {
+			slog.Debug("Missing parents for header — deferring vote and fetching",
+				"partition", p.config.Partition,
+				"headerDigest", headerDigest.String(),
+				"round", header.Round,
+				"missing", len(missingParents))
+		}
+		if p.requestParents != nil {
+			p.requestParents(missingParents)
+		}
+		return // missing parents — asked for them; vote on a later rebroadcast
 	}
 
 	// Data availability: only vote once we hold every batch this header names
@@ -390,7 +418,7 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 			// livelock (#4165).
 			p.pinHeaderBatches(headerDigest, header)
 
-			slog.Info("Missing batch for header — deferring vote and fetching",
+			slog.Debug("Missing batch for header — deferring vote and fetching",
 				"partition", p.config.Partition,
 				"headerDigest", headerDigest.String(),
 				"batch", entry.Digest.String(),
@@ -427,11 +455,13 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 
 	p.votesSent.Add(1)
 
-	slog.Info("Voting on header",
-		"partition", p.config.Partition,
-		"headerDigest", headerDigest.String(),
-		"author", hexEncode(header.Author),
-		"round", header.Round)
+	if debugEnabled() {
+		slog.Debug("Voting on header",
+			"partition", p.config.Partition,
+			"headerDigest", headerDigest.String(),
+			"author", hexEncode(header.Author),
+			"round", header.Round)
+	}
 
 	// Broadcast vote
 	p.broadcastVoteAsync(vote, headerDigest)
@@ -617,7 +647,7 @@ func (p *Primary) pushCertsForStaleRound(stale, current types.Round) {
 		}
 	}
 	if pushed > 0 {
-		slog.Info("Pushed certificates for stale round",
+		slog.Debug("Pushed certificates for stale round",
 			"staleRound", stale, "certificates", pushed)
 	}
 }

@@ -85,6 +85,13 @@ type Config struct {
 	MinRoundInterval time.Duration
 }
 
+// debugEnabled gates the construction of per-message log arguments -- hex
+// digests and the like -- on the level, so a line that is not emitted costs
+// nothing (#4231).
+func debugEnabled() bool {
+	return slog.Default().Enabled(context.Background(), slog.LevelDebug)
+}
+
 // applyDefaults fills in default values for unset configuration fields.
 func (c *Config) applyDefaults() {
 	if c.RoundAdvanceInterval <= 0 {
@@ -163,6 +170,12 @@ type Primary struct {
 	missingBatchAsked map[types.BatchDigest]time.Time
 	onMissingBatch    func(types.BatchDigest)
 
+	// requestParents asks for certificates a header names that we do not
+	// hold. It is the certificate syncer's RequestMissing in production and
+	// a recorder in tests; nil means no syncer, as in a unit test that never
+	// starts one (#4182).
+	requestParents func([]types.CertificateDigest)
+
 	// lastAuthoredRound is the highest round this primary has EVER authored
 	// a header for, valid only when hasAuthored is true (guarded by
 	// pendingMu). An author must never author one round twice: the resulting
@@ -230,6 +243,7 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 		p.certSyncer = NewCertSyncer(syncerConfig, d, g, pendingCerts)
 		// Set callback to process received certificates
 		p.certSyncer.SetCertReceivedCallback(p.OnCertificateReceived)
+		p.requestParents = p.certSyncer.RequestMissing
 	}
 
 	return p
@@ -438,7 +452,7 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	header, err := p.createHeaderLockedWithRound(currentRound, currentEpoch)
 	if err != nil {
 		p.pendingMu.Unlock()
-		slog.Info("Cannot create header",
+		slog.Debug("Cannot create header",
 			"partition", p.config.Partition,
 			"error", err,
 			"round", currentRound)
@@ -454,11 +468,13 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 
 	p.headersCreated.Add(1)
 
-	slog.Info("Created header",
-		"digest", digest.String(),
-		"round", header.Round,
-		"payload", len(header.Payload),
-		"parents", len(header.Parents))
+	if debugEnabled() {
+		slog.Debug("Created header",
+			"digest", digest.String(),
+			"round", header.Round,
+			"payload", len(header.Payload),
+			"parents", len(header.Parents))
+	}
 
 	// Add our own vote (self-vote)
 	pubKey := p.config.KeyPair.Public().(ed25519.PublicKey)

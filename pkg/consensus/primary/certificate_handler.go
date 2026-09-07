@@ -67,11 +67,13 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) {
 			if len(missingParents) > 0 {
 				// Buffer the certificate
 				if p.pendingCerts.Add(cert, missingParents) {
-					slog.Info("Buffering certificate with missing parents",
-						"digest", cert.Digest().String(),
-						"round", cert.Round(),
-						"author", hexEncode(cert.Author()),
-						"missingParents", len(missingParents))
+					if debugEnabled() {
+						slog.Debug("Buffering certificate with missing parents",
+							"digest", cert.Digest().String(),
+							"round", cert.Round(),
+							"author", hexEncode(cert.Author()),
+							"missingParents", len(missingParents))
+					}
 
 					// Request missing certificates via sync protocol
 					if p.certSyncer != nil {
@@ -182,10 +184,12 @@ func (p *Primary) processPendingForParent(parentDigest types.CertificateDigest) 
 			continue
 		}
 
-		slog.Info("Inserted previously-pending certificate",
-			"digest", cert.Digest().String(),
-			"round", cert.Round(),
-			"author", hexEncode(cert.Author()))
+		if debugEnabled() {
+			slog.Debug("Inserted previously-pending certificate",
+				"digest", cert.Digest().String(),
+				"round", cert.Round(),
+				"author", hexEncode(cert.Author()))
+		}
 
 		// Clear from in-flight sync tracking
 		if p.certSyncer != nil {
