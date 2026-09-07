@@ -83,6 +83,24 @@ type SnapshotService interface {
 	ListSnapshots(ctx context.Context, opts ListSnapshotsOptions) ([]*SnapshotInfo, error)
 }
 
+// ProofService serves the directory's major-block spine (#4058) so a third
+// party can derive the validator set by induction instead of being handed it:
+// each major block's closing anchor with its archived quorum, and the binding
+// of minor blocks past the spine to it. Read-only, and only the directory
+// serves either method.
+//
+// It proves what the records said, not who was entitled to write them. The walk
+// must start at a genesis anchor pinned out of band; one fetched from the same
+// network is a consistency check, not a trust root. It cannot cross a network
+// restart.
+type ProofService interface {
+	// MajorHeaderRange returns a record per major block in [start, end].
+	MajorHeaderRange(ctx context.Context, opts MajorHeaderRangeOptions) ([]*MajorHeaderRecord, error)
+
+	// MinorRootRange binds minor blocks past the spine to it.
+	MinorRootRange(ctx context.Context, opts MinorRootRangeOptions) (*MinorRootRecord, error)
+}
+
 type MetricsService interface {
 	// Metrics returns network metrics such as transactions per second.
 	Metrics(ctx context.Context, opts MetricsOptions) (*Metrics, error)
