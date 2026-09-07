@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -23,7 +24,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	multiexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -35,6 +38,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	dagconfig "gitlab.com/accumulatenetwork/accumulate/pkg/consensus/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -128,6 +132,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
+	setDefaultPtr(&s.MaxExecutionLag, int64(primary.DefaultMaxExecutionLag))
 	setDefaultPtr(&s.BlockInterval, encoding.Duration(dagconfig.DefaultBlockInterval))
 
 	// Get the logger
@@ -218,15 +223,28 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// are two coincident constants that drift apart silently (#4151).
 	dagCfg := dagconfig.DefaultConfig()
 
+	// The producer's synthetic/anchor cache, shared by the executor that
+	// fills it and the sequencer that answers healing from it (healing spec,
+	// "The cache")
+	synthCache := synthcache.New(0)
+
+	// The partition's staging: memory, built up from consensus (executor
+	// spec, "Sync"); registered so the API can report how far each stream
+	// has been sighted
+	staging := execute.NewStaging()
+	execute.RegisterStaging(s.Partition.ID, staging)
+
 	// Create executor options
 	execOpts := multiexec.Options{
-		Logger:    logger.With("module", "executor"),
-		Database:  db,
-		Key:       validatorKey,
-		Router:    router,
-		EventBus:  s.eventBus,
-		Sequencer: client.Private(),
-		Querier:   client,
+		Logger:     logger.With("module", "executor"),
+		Database:   db,
+		SynthCache: synthCache,
+		Staging:    staging,
+		Key:        validatorKey,
+		Router:     router,
+		EventBus:   s.eventBus,
+		Sequencer:  client.Private(),
+		Querier:    client,
 		// Shard user-transaction execution by identity (#4145).
 		ExecutionShards: int(*s.ExecutionShards),
 		// A synthetic package must fit in one worker batch (#4141).
@@ -273,6 +291,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
 		Sequencer:    client.Private(),
+		Staging:      staging,
 		Heals:        healCounters,
 		RunTask:      execOpts.BackgroundTaskLauncher,
 		// Healing is the ONLY retry mechanism for anchors — the conductor's
@@ -281,7 +300,6 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		// ledgers stuck at height 2, #4054). The conductor paces healing
 		// scans internally (HealInterval), so this is safe even at DAG-BFT
 		// block rates.
-		EnableAnchorHealing: Ptr(true),
 	}
 	err = conductor.Start(s.eventBus)
 	if err != nil {
@@ -311,6 +329,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		NumWorkers:       int(*s.NumWorkers),
 		DAGGCDepth:       types.Round(*s.DAGGCDepth),
 		CommitBufferSize: int(*s.CommitBufferSize),
+		MaxExecutionLag:  int(*s.MaxExecutionLag),
 
 		// The same limit the executor's package budget derives from
 		// (#4151) — never let the two diverge.
@@ -378,13 +397,6 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			"validators", len(initialValidators))
 	}
 
-	// Apply a fast-sync rejoin seed if one was written by `accumulated
-	// fastsync` (#4058) — consumed once, on the first start after the sync
-	rejoin, err := dagbft.LoadRejoinSeed(inst.path(), s.Partition.ID)
-	if err != nil {
-		slog.Error("Failed to load fast-sync rejoin seed — starting without it", "partition", s.Partition.ID, "error", err)
-	}
-
 	// Create the service
 	svcConfig := dagbft.ServiceConfig{
 		Partition:         s.Partition,
@@ -393,8 +405,8 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		EventBus:          s.eventBus,
 		Logger:            logger.With("module", "dagbft"),
 		Genesis:           inst.path(s.Genesis),
+		DataDir:           inst.path("consensus", strings.ToLower(s.Partition.ID)),
 		InitialValidators: initialValidators,
-		Rejoin:            rejoin,
 	}
 	if globals != nil && globals.Network != nil {
 		// The committee epoch is the network definition version (state-derived)
@@ -430,7 +442,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 
 	// Register consensus API services
-	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters)
+	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache)
 	if err != nil {
 		return err
 	}
@@ -440,7 +452,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 }
 
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache) error {
 	logger := logging.NewSlogLogger(inst.logger)
 	// These are the SERVING side of the node: consensus queries, the
 	// sequencer answering a peer's healing request, the API.  They are
@@ -494,6 +506,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	sequencerSvc := api.NewSequencer(api.SequencerParams{
 		Logger:       logger.With("module", "api"),
 		Database:     db,
+		Cache:        synthCache,
 		EventBus:     s.eventBus,
 		Globals:      globals,
 		Partition:    s.Partition.ID,

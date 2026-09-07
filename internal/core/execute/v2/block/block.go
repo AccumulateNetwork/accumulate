@@ -7,6 +7,10 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -21,6 +25,36 @@ type Block struct {
 	State    BlockState
 	Batch    *database.Batch
 	Executor *Executor
+
+	// cache collects what this block produces for the producer's
+	// synthetic/anchor cache; it commits with the block. cacheBlock is what
+	// the block's proofs are built from, filled at production and completed
+	// at close (healing spec, "The cache").
+	cache      *synthcache.Txn
+	cacheBlock *synthcache.Block
+	// remoteDelivered is, per source, the highest Delivered a validated
+	// message from that source carried this block: what the source has
+	// executed of ours, so what our cache may drop for it at commit
+	// (healing spec, "The cache"). Serial: synthetics never shard.
+	remoteDelivered map[string]remoteAck
+
+	// anchorSigs is the block's view of each anchor's validator signatures:
+	// read once per anchor, counted in memory, written once (#4224).
+	anchorSigs map[[32]byte]*anchorSignatures
+
+	// staging is this block's view of the partition's staging: what is held,
+	// proven and waiting, plus what this block adds; it commits with the
+	// block (executor spec, "Sync").
+	staging *execute.StagingTxn
+
+	// rootSeg is this block's span of the root chain, and rootPosOf where
+	// each modified chain's anchor landed in it: what the Directory's
+	// receipts are built from, in memory.
+	rootSeg   *merkle.Segment
+	rootPosOf map[string]int64
+	// proofsValidatedThrough is how many of State.ReceivedAnchors anchor
+	// staging has already used to decide waiting proofs this block.
+	proofsValidatedThrough int
 
 	// produced accumulates every delivery's produced messages so they can be
 	// sequenced in ONE sorted pass at block end (#4144). Sequencing inline —
@@ -84,7 +118,14 @@ func (s *closedBlock) Hash() ([32]byte, error) {
 
 func (s *closedBlock) Commit() error {
 	if s.IsEmpty() {
-		s.Discard()
+		// Nothing executed, so nothing is written — but what the block
+		// received and holds in staging stays held, and so does what it
+		// noted for the cache. Staging is memory fed by consensus; a block
+		// that only collected is not a block that saw nothing (executor
+		// spec, "Sync").
+		s.Batch.Discard()
+		s.cache.Commit()
+		s.staging.Commit()
 		return nil
 	}
 
@@ -95,9 +136,40 @@ func (s *closedBlock) Commit() error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	return s.Batch.Commit()
+	err = s.Batch.Commit()
+	if err != nil {
+		return err
+	}
+	// The cache and staging commit after the store: an entry is in the cache
+	// only once the chain has it, and staging releases what the block
+	// delivered only once the delivery is durable.
+	s.cache.Commit()
+	s.staging.Commit()
+	return nil
 }
 
 func (s *closedBlock) Discard() {
 	s.Batch.Discard()
+	s.cache.Discard()
+	s.staging.Discard()
+}
+
+type remoteAck struct {
+	source    *url.URL
+	delivered uint64
+}
+
+// noteRemoteDelivered records what a validated synthetic message from source
+// says the source has executed of this partition's stream to it.
+func (b *Block) noteRemoteDelivered(source *url.URL, delivered uint64) {
+	if source == nil || delivered == 0 {
+		return
+	}
+	k := strings.ToLower(source.String())
+	if b.remoteDelivered == nil {
+		b.remoteDelivered = map[string]remoteAck{}
+	}
+	if a, ok := b.remoteDelivered[k]; !ok || delivered > a.delivered {
+		b.remoteDelivered[k] = remoteAck{source, delivered}
+	}
 }

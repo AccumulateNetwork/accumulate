@@ -43,15 +43,15 @@ func TestStreamAdvance_IsVisibleWithinTheBlock(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), p.next())
 
-	require.NoError(t, b.advanceStream(s, true, 1, txidFor(s, 1)))
+	require.NoError(t, b.advanceStream(s, true, 1, txidFor(s, 1), nil))
 	again, err := b.positionOf(s)
 	require.NoError(t, err)
 	require.Same(t, p, again, "the position is advanced, not replaced")
 	assert.Equal(t, uint64(2), p.next(), "delivering 1 makes 2 next")
 	assert.True(t, p.has(2), "the staged tail is still there")
 
-	require.NoError(t, b.advanceStream(s, true, 2, txidFor(s, 2)))
-	require.NoError(t, b.advanceStream(s, true, 3, txidFor(s, 3)))
+	require.NoError(t, b.advanceStream(s, true, 2, txidFor(s, 2), nil))
+	require.NoError(t, b.advanceStream(s, true, 3, txidFor(s, 3), nil))
 	assert.Equal(t, uint64(4), p.next())
 	assert.False(t, p.has(3), "delivered, so no longer staged")
 
@@ -69,7 +69,7 @@ func TestStreamAdvance_ARecordedMessageIsVisibleWithinTheBlock(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, p.has(2))
 
-	require.NoError(t, b.advanceStream(s, false, 2, txidFor(s, 2)))
+	require.NoError(t, b.advanceStream(s, false, 2, txidFor(s, 2), nil))
 	assert.True(t, p.has(2))
 	assert.False(t, p.has(1), "1 is a gap: known received, not held")
 	assert.Equal(t, uint64(2), p.received())
@@ -85,7 +85,7 @@ func TestStreamAdvance_FlushWritesTheWatermarkAndNothingElse(t *testing.T) {
 
 	b, s := positionBlock(t, 0, 2, 3)
 	for _, op := range ops {
-		require.NoError(t, b.advanceStream(s, op.delivered, op.number, txidFor(s, op.number)))
+		require.NoError(t, b.advanceStream(s, op.delivered, op.number, txidFor(s, op.number), nil))
 	}
 	require.NoError(t, b.flushStreams())
 
@@ -111,14 +111,14 @@ func TestStreamAdvance_FlushWritesTheWatermarkAndNothingElse(t *testing.T) {
 // close; the flush is a read-modify-write, not a put of the working copy.
 func TestStreamAdvance_FlushPreservesOtherWritesToTheRecord(t *testing.T) {
 	b, s := positionBlock(t, 0)
-	require.NoError(t, b.advanceStream(s, false, 2, txidFor(s, 2)))
+	require.NoError(t, b.advanceStream(s, false, 2, txidFor(s, 2), nil))
 
 	var ledger *protocol.SyntheticLedger
 	require.NoError(t, b.Batch.Account(s.ledger).Main().GetAs(&ledger))
 	ledger.Partition(s.source).Produced = 77
 	require.NoError(t, b.Batch.Account(s.ledger).Main().Put(ledger))
 
-	require.NoError(t, b.advanceStream(s, true, 1, txidFor(s, 1)))
+	require.NoError(t, b.advanceStream(s, true, 1, txidFor(s, 1), nil))
 	require.NoError(t, b.flushStreams())
 	part := partitionOf(t, b, s)
 	assert.Equal(t, uint64(77), part.Produced, "a write made between load and flush must survive")
@@ -142,7 +142,7 @@ func TestStreamAdvance_HoldsAFarFutureReceipt(t *testing.T) {
 	b, s := positionBlock(t, 10)
 
 	for _, far := range []uint64{10 + 4096, 10 + 4097, 10 + 100_000} {
-		require.NoError(t, b.advanceStream(s, false, far, txidFor(s, far)))
+		require.NoError(t, b.advanceStream(s, false, far, txidFor(s, far), nil))
 
 		p, err := b.positionOf(s)
 		require.NoError(t, err)
@@ -163,13 +163,13 @@ func TestStreamAdvance_HoldsAFarFutureReceipt(t *testing.T) {
 func TestStreamAdvance_RefusesAnOutOfOrderAdvance(t *testing.T) {
 	b, s := positionBlock(t, 10, 11, 12)
 
-	err := b.advanceStream(s, false, 10, txidFor(s, 10))
+	err := b.advanceStream(s, false, 10, txidFor(s, 10), nil)
 	require.Error(t, err, "recording as pending something already delivered")
 
-	err = b.advanceStream(s, true, 12, txidFor(s, 12))
+	err = b.advanceStream(s, true, 12, txidFor(s, 12), nil)
 	require.Error(t, err, "delivering 12 while 11 is next skips a message")
 
-	err = b.advanceStream(s, true, 10, txidFor(s, 10))
+	err = b.advanceStream(s, true, 10, txidFor(s, 10), nil)
 	require.Error(t, err, "re-delivering 10 would shift the pending window under 11")
 
 	p, err := b.positionOf(s)
@@ -205,7 +205,7 @@ func TestStreamAdvance_CostDoesNotScaleWithBacklog(t *testing.T) {
 		runtime.GC()
 		runtime.ReadMemStats(&before)
 		for i := uint64(1); i <= N; i++ {
-			require.NoError(t, b.advanceStream(s, true, i, txidFor(s, i)))
+			require.NoError(t, b.advanceStream(s, true, i, txidFor(s, i), nil))
 		}
 		runtime.ReadMemStats(&after)
 		return (after.TotalAlloc - before.TotalAlloc) / N

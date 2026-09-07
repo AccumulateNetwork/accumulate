@@ -15,6 +15,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -83,7 +84,40 @@ type Config struct {
 	// This prevents consensus from racing ahead of the execution layer.
 	// Defaults to DefaultMinRoundInterval.
 	MinRoundInterval time.Duration
+
+	// ExecutionLag reports how many committed leader groups the executor has
+	// not yet executed; MaxExecutionLag is how many it may fall behind before
+	// headers carry no batches and the workers refuse user work (consensus
+	// spec, invariant 9). Zero means DefaultMaxExecutionLag. Nil ExecutionLag
+	// disables the bound.
+	ExecutionLag    func() int
+	MaxExecutionLag int
+
+	// MaxHeaderBytes bounds the batches one header carries, so a backlog
+	// that built while the primary was not proposing (execution lag) is
+	// metered back in over several headers instead of becoming one block
+	// the executor takes many seconds over. Zero means
+	// DefaultMaxHeaderBytes.
+	MaxHeaderBytes int
+
+	// MaxBlockBytes bounds the batches one block carries. A block executes
+	// every validator's header over roundsPerBlock rounds, so each header's
+	// budget is its share, MaxBlockBytes / (roundsPerBlock x validators),
+	// capped by MaxHeaderBytes: N validators cannot each fill a header
+	// (#4230). Zero means DefaultMaxBlockBytes.
+	MaxBlockBytes int
 }
+
+// roundsPerBlock is the rounds of headers one committed leader group spans:
+// Bullshark commits a leader every other round, and the leader's uncommitted
+// causal history is its own round and the one before.
+const roundsPerBlock = 2
+
+// DefaultMaxBlockBytes is the bound on the batches one block carries, whatever
+// the number of validators. It is a few block intervals of the executor's
+// capacity: with eight validators each header gets 64 KiB, with four 128 KiB,
+// and a single validator's header is still capped by DefaultMaxHeaderBytes.
+const DefaultMaxBlockBytes = 1 << 20
 
 // debugEnabled gates the construction of per-message log arguments -- hex
 // digests and the like -- on the level, so a line that is not emitted costs
@@ -92,8 +126,30 @@ func debugEnabled() bool {
 	return slog.Default().Enabled(context.Background(), slog.LevelDebug)
 }
 
+// DefaultMaxExecutionLag is the bound, in blocks, on how far execution may
+// lag the DAG's commits before proposal stops carrying batches: a few seconds
+// of traffic, not a buffer.
+const DefaultMaxExecutionLag = 8
+
+// DefaultMaxHeaderBytes is the bound on the batches one header carries. It is
+// sized to about one block interval of the executor's capacity -- some 500
+// transactions at ~250 bytes -- so a backlog of several blocks is spread over
+// several headers and no single block takes many seconds to execute. A full
+// default batch (500 KiB) is already ~2,000 transactions, seconds of
+// execution; two of them per header was not a cap.
+const DefaultMaxHeaderBytes = 256 << 10
+
 // applyDefaults fills in default values for unset configuration fields.
 func (c *Config) applyDefaults() {
+	if c.MaxExecutionLag <= 0 {
+		c.MaxExecutionLag = DefaultMaxExecutionLag
+	}
+	if c.MaxHeaderBytes <= 0 {
+		c.MaxHeaderBytes = DefaultMaxHeaderBytes
+	}
+	if c.MaxBlockBytes <= 0 {
+		c.MaxBlockBytes = DefaultMaxBlockBytes
+	}
 	if c.RoundAdvanceInterval <= 0 {
 		c.RoundAdvanceInterval = DefaultRoundAdvanceInterval
 	}
@@ -108,6 +164,9 @@ func (c *Config) applyDefaults() {
 // Primary creates headers, collects votes, and produces certificates for DAG consensus.
 // It implements the "header proposal" layer in the Narwhal/Bullshark architecture.
 type Primary struct {
+	// lagging is whether the last header carried no batches because execution
+	// lagged consensus by more than the bound (consensus spec, invariant 9).
+	lagging atomic.Bool
 	config  Config
 	gossip  *gossip.GossipLayer
 	dag     *dag.DAG
@@ -209,6 +268,43 @@ type Primary struct {
 const DefaultPendingCertsGCDepth = 10
 
 // New creates a new Primary with the given configuration.
+// SetExecutionLagSource wires the bound on execution lag after construction:
+// lag reports committed-but-unexecuted leader groups, max is the bound in
+// blocks (zero for the default).
+func (p *Primary) SetExecutionLagSource(lag func() int, max int) {
+	p.config.ExecutionLag = lag
+	if max > 0 {
+		p.config.MaxExecutionLag = max
+	}
+}
+
+// executionLagging decides, once per header, whether the executor is more
+// than MaxExecutionLag blocks behind the DAG's commits. Reported and logged
+// on transition; the workers are told so they refuse user work meanwhile.
+func (p *Primary) executionLagging() bool {
+	if p.config.ExecutionLag == nil {
+		return false
+	}
+	lag := p.config.ExecutionLag()
+	metrics.ExecutionLagBlocks.WithLabelValues(p.config.Partition).Set(float64(lag))
+	on := lag > p.config.MaxExecutionLag
+	if p.lagging.Swap(on) != on {
+		if on {
+			metrics.ExecutionLagging.WithLabelValues(p.config.Partition).Set(1)
+			slog.Warn("Execution lags consensus: proposing headers without batches until it catches up",
+				"lag", lag, "max", p.config.MaxExecutionLag, "partition", p.config.Partition)
+		} else {
+			metrics.ExecutionLagging.WithLabelValues(p.config.Partition).Set(0)
+			slog.Info("Execution has caught up: proposing batches again",
+				"lag", lag, "max", p.config.MaxExecutionLag, "partition", p.config.Partition)
+		}
+		for _, w := range p.workers {
+			w.SetExecutionLagging(on)
+		}
+	}
+	return on
+}
+
 func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *dag.DAG, workers []*worker.Worker) *Primary {
 	config.applyDefaults()
 

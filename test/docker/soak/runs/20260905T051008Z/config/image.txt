@@ -1,0 +1,1 @@
+sha256:fe7777e1cd211adb0cd37e84d8e665db56d38817fe3699a327fae489653c39ed [disoak-bvn1-val1:latest]

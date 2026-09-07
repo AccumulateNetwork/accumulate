@@ -129,7 +129,7 @@ func TestFindProofInBundle_PicksTheCoveringProofWhenAnEnvelopeCarriesSeveral(t *
 // confined to that envelope. This also pins precedence: with a signature
 // present, the bundle proof path is used, not the replica's.
 func TestPackageMember_AcceptedViaBundleProof(t *testing.T) {
-	f := newReplicaFixture(t, 0)
+	f := newStagingFixture(t, 0)
 	f.x.globalsPtr.Store(&Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest}})
 
 	txn := new(protocol.Transaction)
@@ -154,11 +154,11 @@ func TestPackageMember_AcceptedViaBundleProof(t *testing.T) {
 		Signature: &protocol.ED25519Signature{PublicKey: make([]byte, 32), Signer: protocol.DnUrl().JoinPath(protocol.Network)},
 	}
 
-	d := &bundle{Block: &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}, batch: f.batch,
+	d := &bundle{Block: f.b, batch: f.batch,
 		messages: []messaging.Message{proofMsg, member}}
 	ctx := &MessageContext{bundle: d, message: member}
 
-	syn, err := SyntheticMessage{}.check(f.batch, ctx)
+	syn, _, err := SyntheticMessage{}.check(f.batch, ctx)
 	require.NoError(t, err, "a package member resolves its proof from the bundle")
 	require.NotNil(t, syn.Proof)
 	assert.Same(t, list, syn.Proof.ReceiptList, "the bundle's proof, not a rebuilt one")
@@ -168,8 +168,8 @@ func TestPackageMember_AcceptedViaBundleProof(t *testing.T) {
 	// never borrowed across envelopes.
 	d2 := &bundle{Block: &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}, batch: f.batch,
 		messages: []messaging.Message{member}}
-	_, err = SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d2, message: member})
-	require.ErrorContains(t, err, "missing proof")
+	_, _, err = SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d2, message: member})
+	require.ErrorContains(t, err, "not yet proven")
 }
 
 // #4150: the sender must apply the receiver's element bound. A package's
@@ -200,7 +200,7 @@ func TestSynthPackage_SpanBoundMatchesTheReceiver(t *testing.T) {
 // matter what else its envelope carries. Before the reorder, resolving a
 // sibling proof first sent it to the missing-signature refusal.
 func TestReplicaMember_AcceptedEvenWhenTheEnvelopeCarriesAProof(t *testing.T) {
-	f := newReplicaFixture(t, 0)
+	f := newStagingFixture(t, 0)
 	f.x.globalsPtr.Store(&Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest}})
 
 	txn := new(protocol.Transaction)
@@ -214,7 +214,7 @@ func TestReplicaMember_AcceptedEvenWhenTheEnvelopeCarriesAProof(t *testing.T) {
 	}
 	h := seq.Hash()
 	require.NoError(t, f.chain.AddEntry(h[:], false))
-	f.seed(t, 0, 0) // the replica vouches for the message
+	f.prove(t, 0, 0) // the replica vouches for the message
 
 	// The envelope also carries a proof covering the same hash.
 	proofMsg := &messaging.SyntheticProof{Proof: &protocol.AnnotatedReceipt{
@@ -223,10 +223,44 @@ func TestReplicaMember_AcceptedEvenWhenTheEnvelopeCarriesAProof(t *testing.T) {
 	}}
 	member := &messaging.SyntheticMessage{Message: seq} // NO signature
 
-	d := &bundle{Block: &Block{positions: new(positionCache), Executor: f.x, Batch: f.batch}, batch: f.batch,
+	d := &bundle{Block: f.b, batch: f.batch,
 		messages: []messaging.Message{proofMsg, member}}
-	syn, err := SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d, message: member})
+	syn, _, err := SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d, message: member})
 	require.NoError(t, err, "the replica path must win for signature-less messages")
 	require.NotNil(t, syn)
 	assert.Nil(t, syn.Proof, "accepted via the replica, not the bundle proof")
+}
+
+// Proven is proven. A message whose hash the proven set covers is accepted even
+// if it carries a proof of its own that cannot be checked here — a range
+// recovered from a source and later covered by the source's package proof, for
+// instance. The proof it carries is simply not needed (executor spec, "Proof").
+func TestProvenMember_AcceptedRegardlessOfItsOwnProof(t *testing.T) {
+	f := newStagingFixture(t, 0)
+	f.x.globalsPtr.Store(&Globals{Active: core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionLatest}})
+
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = protocol.AccountUrl("alice", "tokens")
+	txn.Body = &protocol.SyntheticDepositCredits{Amount: 1}
+	seq := &messaging.SequencedMessage{
+		Message:     &messaging.TransactionMessage{Transaction: txn},
+		Source:      protocol.PartitionUrl("BVN1"),
+		Destination: protocol.PartitionUrl("BVN0"),
+		Number:      1,
+	}
+	h := seq.Hash()
+	require.NoError(t, f.chain.AddEntry(h[:], false))
+	f.prove(t, 0, 0)
+
+	unknown := make([]byte, 32)
+	unknown[0] = 0x99
+	member := &messaging.SyntheticMessage{
+		Message:   seq,
+		Proof:     &protocol.AnnotatedReceipt{Anchor: &protocol.AnchorMetadata{Account: protocol.PartitionUrl("BVN1")}, Receipt: &merkle.Receipt{Start: h[:], Anchor: unknown}},
+		Signature: &protocol.ED25519Signature{PublicKey: make([]byte, 32), Signer: protocol.DnUrl().JoinPath(protocol.Network)},
+	}
+	d := &bundle{Block: f.b, batch: f.batch, messages: []messaging.Message{member}}
+	syn, _, err := SyntheticMessage{}.check(f.batch, &MessageContext{bundle: d, message: member})
+	require.NoError(t, err, "the proven set vouches for it")
+	require.Nil(t, syn.Proof, "its own proof is not consulted")
 }

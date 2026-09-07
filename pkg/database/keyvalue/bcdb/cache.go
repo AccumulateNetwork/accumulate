@@ -86,6 +86,19 @@ func (c *immutableCache) get(h [32]byte) ([]byte, bool) {
 	return v, ok
 }
 
+// peek reports what the cache holds for h without counting a hit or a
+// miss or promoting the entry: the commit path asks it what a key held
+// before the write-through, which is not a read the cache served.
+func (c *immutableCache) peek(h [32]byte) ([]byte, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	v, ok := c.hot[h]
+	if !ok {
+		v, ok = c.cold[h]
+	}
+	return v, ok
+}
+
 func (c *immutableCache) put(h [32]byte, v []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -133,10 +146,11 @@ func cacheKindOf(k *record.Key) cacheKind {
 			return cacheURL
 		}
 
-	case "Element", "ElementIndex", "States":
-		// A chain entry: the I'th element, where element H landed, or
-		// the mark point covering I. All facts about a position in an
-		// append-only log, so none of them move.
+	case "Element", "ElementIndex":
+		// A chain entry: the I'th element, or where element H landed.
+		// Facts about a position in an append-only log, so neither
+		// moves. Mark points (States) live in the dynamic layer (see
+		// route.go) and need no window-side cache.
 		//
 		// Restricted to the synthetic ledger and the anchor pool. Every
 		// chain element is immutable and would be safe to cache, but

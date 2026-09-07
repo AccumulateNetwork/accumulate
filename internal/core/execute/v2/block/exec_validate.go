@@ -16,10 +16,25 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// beginValidation begins the read-only batch a CheckTx validates against.
+// Validation wants the LATEST committed state, not a snapshot of the state
+// when it began, so on a store that keeps isolation by remembering
+// pre-images (BlockchainDB) the batch pins no version: every CheckTx used
+// to register a reader, so one was almost always open while a block
+// committed and every commit paid a store read per dynamic entry for an
+// isolation nobody needed (#4237, database spec "Windowed stores"). On any
+// other store this is an ordinary read batch.
+func (x *Executor) beginValidation() *database.Batch {
+	if u, ok := x.db.(interface{ Unisolated() *database.Database }); ok {
+		return u.Unisolated().Begin(false)
+	}
+	return x.db.Begin(false)
+}
+
 // Validate converts the message to a delivery and validates it. Validate
 // returns an error if the message is not a [message.LegacyMessage].
 func (x *Executor) Validate(envelope *messaging.Envelope, _ bool) ([]*protocol.TransactionStatus, error) {
-	batch := x.db.Begin(false)
+	batch := x.beginValidation()
 	defer batch.Discard()
 
 	messages, err := envelope.Normalize()
@@ -33,10 +48,13 @@ func (x *Executor) Validate(envelope *messaging.Envelope, _ bool) ([]*protocol.T
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Set up the bundle
+	// Set up the bundle. Validation reads staging the way a block does — a
+	// placeholder resolves against a held anchor — and adds nothing to it.
 	d := new(bundle)
 	d.Block = new(Block)
 	d.Block.Executor = x
+	d.Block.staging = x.staging().Begin()
+	defer d.Block.staging.Discard()
 	d.messages = messages
 	d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
 

@@ -207,23 +207,7 @@ func (m *RecoveryManager) restoreState(checkpoint *persist.Checkpoint) error {
 		"round", checkpoint.CurrentRound,
 		"epoch", checkpoint.CurrentEpoch)
 
-	// Restore primary state
-	m.node.primary.SetRound(checkpoint.CurrentRound)
-
-	// Restore Bullshark state
-	m.node.bullshark.SetLastCommitRound(checkpoint.LastCommitRound)
-	for author, round := range checkpoint.LastCommitted {
-		// Use SetLastCommittedForAuthor to restore per-author commit tracking
-		m.node.bullshark.SetLastCommittedForAuthor(author, round)
-	}
-
-	// Restore DAG commit round
-	m.node.dag.SetLastCommitRound(checkpoint.LastCommitRound)
-
-	slog.Info("State restored from checkpoint",
-		"round", checkpoint.CurrentRound,
-		"lastCommitRound", checkpoint.LastCommitRound)
-
+	m.node.Restore(checkpoint)
 	return nil
 }
 

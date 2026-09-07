@@ -75,6 +75,15 @@ type Value interface {
 }
 
 // A Store loads and stores values.
+// A VersionStore can say what version a value has without loading it. A
+// version is bookkeeping between a batch and its children — the store below
+// the outermost batch holds none — so a first write of a key learns its
+// version from the parent's record in memory and never asks the store whether
+// the key exists (database spec, "Duplicates are caught at entry").
+type VersionStore interface {
+	Version(key *record.Key) (int, error)
+}
+
 type Store interface {
 	// GetValue loads the value from the underlying store and writes it. Byte
 	// stores call LoadBytes(data) and value stores call LoadValue(v, false).

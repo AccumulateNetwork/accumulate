@@ -17,6 +17,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
+// OnDuplicate, when set, is called for every append of a hash the chain
+// already holds, with the chain's key and whether the append was asked
+// to be unique.  It is nil in production; tests install a recorder and
+// assert that the only duplicates are the permitted repeats (database
+// spec, "Duplicates are caught at entry").
+var OnDuplicate func(chain *record.Key, unique bool)
+
 func NewChain(logger logging.Logger, store record.Store, key *record.Key, markPower int64, typ ChainType, namefmt string) *Chain {
 	c := new(Chain)
 	c.logger.L = logger
@@ -59,6 +66,154 @@ func (c *Chain) getMarkPoints() ([]chainStatesKey, error) {
 	return keys, nil
 }
 
+// tailChunkSize is how many hashes one Tail record holds.
+//
+// The head is Count and Pending. The hashes of the OPEN mark set -- the
+// entries since the last mark point, up to markFreq of them -- are what a
+// receipt, a state or a range inside that set replays, and they used to be
+// carried in the head: up to 256 hashes rewritten on every append, 85% of
+// the bytes the dynamic layer was written (#4234). They are kept in Tail
+// records instead, markFreq/tailChunkSize of them, reused every set; an
+// append rewrites one chunk, and the mark point that closes the set is
+// assembled from all of them. The records are mutable and live in the
+// dynamic layer, so the open set is readable at any age, as it was in the
+// head -- which is what a windowed store needs of it: the mark point is
+// closed and the tail is read for slow chains whose elements have long
+// left the permanent window.
+const tailChunkSize = 8
+
+// chunkSize is tailChunkSize, or the mark set when that is smaller.
+func (c *Chain) chunkSize() int64 {
+	if c.markFreq < tailChunkSize {
+		return c.markFreq
+	}
+	return tailChunkSize
+}
+
+// getTailChunks names the Tail records the open mark set occupies, for
+// walking the chain's records. A chunk past the open set holds a previous
+// set's hashes and is not part of the chain's state.
+func (c *Chain) getTailChunks() ([]chainTailKey, error) {
+	head, err := c.Head().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load head: %w", err)
+	}
+	if len(head.HashList) > 0 {
+		return nil, nil // A head from before the tail records carries the set itself
+	}
+	n := (head.Count&c.markMask + c.chunkSize() - 1) / c.chunkSize()
+	keys := make([]chainTailKey, n)
+	for i := range keys {
+		keys[i] = chainTailKey{Index: uint64(i)}
+	}
+	return keys, nil
+}
+
+// appendTail records the entry at index in its Tail chunk. The chunk it
+// lands in held the previous set's hashes at that position, or nothing,
+// and is started over.
+//
+// The head is the chain's authority and Element(i) its record; a chunk is
+// derived from them and is reconciled to them, never trusted over them. A
+// chunk that runs past the head is cut back to it, and one that falls short
+// is refilled from the elements -- a store that gives a batch no snapshot
+// (the memory store) lets a reader see the head from before a commit and
+// the chunk from after it, and a discarded validation batch used to read
+// such pairs without noticing, because nothing compared two chain records.
+// Only an element that is missing too is an error.
+func (m *Chain) appendTail(index int64, hash []byte) error {
+	c := m.chunkSize()
+	base := index &^ (c - 1)
+	k := uint64((index & m.markMask) / c)
+	chunk, err := m.Tail(k).Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load tail chunk %d: %w", k, err)
+	}
+	if int64(chunk.Index) != base {
+		chunk = &TailChunk{Index: uint64(base)}
+	}
+	if have := int64(len(chunk.Hashes)); have > index-base {
+		chunk.Hashes = chunk.Hashes[:index-base]
+	} else {
+		for i := base + have; i < index; i++ {
+			h, err := m.Element(uint64(i)).Get()
+			if err != nil {
+				return errors.InvalidRecord.WithFormat("tail chunk %d of %v holds %d hashes before entry %d and element %d is missing: %w", k, m.key, have, index, i, err)
+			}
+			chunk.Hashes = append(chunk.Hashes, copyHash(h))
+		}
+	}
+	chunk.Hashes = append(chunk.Hashes, hash)
+	return m.Tail(k).Put(chunk)
+}
+
+// migrateTail moves the open mark set out of a head written before the
+// Tail records existed. Once per chain, on its first append after the
+// change; a chain that is never appended to again is read from its head as
+// before.
+func (m *Chain) migrateTail(head *State) error {
+	lastMark := head.Count &^ m.markMask
+	if int64(len(head.HashList)) != head.Count-lastMark {
+		return errors.InvalidRecord.WithFormat("head of %v: expected %d hashes since the last mark point, got %d", m.key, head.Count-lastMark, len(head.HashList))
+	}
+	for i, h := range head.HashList {
+		if err := m.appendTail(lastMark+int64(i), h); err != nil {
+			return err
+		}
+	}
+	head.HashList = nil
+	return nil
+}
+
+// tailHashes reads the entries [from, to) of the mark set the Tail records
+// hold: the open set, or -- from AddEntry, at the moment it closes -- the
+// set just completed. A head from before the tail records carries the open
+// set itself and is read when the records do not answer.
+func (m *Chain) tailHashes(head *State, from, to int64) ([][]byte, error) {
+	if from >= to {
+		return nil, nil
+	}
+	c := m.chunkSize()
+	hashes := make([][]byte, 0, to-from)
+	for i := from; i < to; {
+		base := i &^ (c - 1)
+		end := base + c
+		if end > to {
+			end = to
+		}
+		k := uint64((i & m.markMask) / c)
+		chunk, err := m.Tail(k).Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load tail chunk %d: %w", k, err)
+		}
+		if int64(chunk.Index) != base || int64(len(chunk.Hashes)) < end-base {
+			return m.tailFallback(head, from, to)
+		}
+		hashes = append(hashes, chunk.Hashes[i-base:end-base]...)
+		i = end
+	}
+	return hashes, nil
+}
+
+// tailFallback answers [from, to) when the Tail records do not: from a
+// head that still carries its open mark set, or else from the elements,
+// which are the record the chunks are derived from (see appendTail).
+func (m *Chain) tailFallback(head *State, from, to int64) ([][]byte, error) {
+	lastMark := head.Count &^ m.markMask
+	if from >= lastMark && to <= head.Count && int64(len(head.HashList)) == head.Count-lastMark {
+		return head.HashList[from-lastMark : to-lastMark], nil
+	}
+	hashes := make([][]byte, 0, to-from)
+	for i := from; i < to; i++ {
+		h, err := m.Element(uint64(i)).Get()
+		if err != nil {
+			return nil, errors.NotFound.WithFormat("entry %d of %v is not in the tail and its element is missing: %w", i, m.key, err)
+		}
+		hashes = append(hashes, h)
+	}
+	return hashes, nil
+}
+
 // AddEntry adds a Hash to the Chain controlled by the ChainManager. If unique is
 // true, the hash will not be added if it is already in the chain.
 func (m *Chain) AddEntry(hash []byte, unique bool) error {
@@ -67,35 +222,64 @@ func (m *Chain) AddEntry(hash []byte, unique bool) error {
 		return err
 	}
 
-	hash = copyHash(hash)                    // Just to make sure hash doesn't get changed
-	_, err = m.ElementIndex(hash).Get()      // See if this element is a duplicate
-	if errors.Is(err, storage.ErrNotFound) { // So only if the hash is not yet added to the Merkle Tree
-		err = m.ElementIndex(hash).Put(uint64(head.Count)) // Keep its index
-		if err != nil {
+	hash = copyHash(hash) // Just to make sure hash doesn't get changed
+
+	// The element index maps a hash to the position it was last written at.
+	// A chain that does not ask for uniqueness writes it without reading: a
+	// duplicate is caught where it enters the executor, by recent state, and
+	// a chain that repeats by construction (a root or signature chain) keeps
+	// every entry (database spec, "Duplicates are caught at entry"). Only a
+	// chain the writer still asks to deduplicate reads first; reaching the
+	// duplicate branch there is the writer appending the same hash twice,
+	// which test builds record so the suites can assert which.
+	if unique {
+		_, err = m.ElementIndex(hash).Get()
+		switch {
+		case err == nil:
+			if OnDuplicate != nil {
+				OnDuplicate(m.key, unique)
+			}
+			return nil // Don't add duplicates
+		case !errors.Is(err, storage.ErrNotFound):
 			return err
 		}
-	} else if err != nil {
+	}
+	err = m.ElementIndex(hash).Put(uint64(head.Count))
+	if err != nil {
 		return err
-	} else if unique {
-		return nil // Don't add duplicates
 	}
 
 	err = m.Element(uint64(head.Count)).Put(hash)
 	if err != nil {
 		return err
 	}
-	switch (head.Count + 1) & m.markMask {
-	case 0: // Is this the end of the Mark set, i.e. 0, ..., markFreq-1
-		head.AddEntry(hash)                                     // Add the hash to the Merkle Tree
-		err = m.States(uint64(head.Count) - 1).Put(head.Copy()) // Save Merkle State at n*MarkFreq-1
+
+	// The open mark set is kept in the Tail records, not the head. A head
+	// from before them carries the set itself; its first append moves the
+	// set over, so the mark point closing it is whole.
+	if len(head.HashList) > 0 {
+		if err := m.migrateTail(head); err != nil {
+			return err
+		}
+	}
+	if err := m.appendTail(head.Count, hash); err != nil {
+		return err
+	}
+
+	head.addPending(hash) // Count and Pending: the head carries no hash list
+	if head.Count&m.markMask == 0 {
+		// The end of the mark set: the mark point holds every hash of it,
+		// as it always has, for the readers that replay a set from it.
+		hashes, err := m.tailHashes(head, head.Count-m.markFreq, head.Count)
 		if err != nil {
 			return err
 		}
-	case 1: //                              After MarkFreq elements are written
-		head.HashList = head.HashList[:0] // then clear the HashList
-		fallthrough                       // then fall through as normal
-	default:
-		head.AddEntry(hash) // 0 to markFeq-2, always add to the merkle tree
+		mark := head.Copy()
+		mark.HashList = hashes
+		err = m.States(uint64(head.Count) - 1).Put(mark) // Save Merkle State at n*MarkFreq-1
+		if err != nil {
+			return err
+		}
 	}
 
 	err = m.Head().Put(head)
@@ -144,6 +328,11 @@ func (m *Chain) getState(element int64) *State {
 // StateAt
 // We only store the state at MarkPoints.  This function computes a missing
 // state even if one isn't stored for a particular element.
+//
+// The state carries the hashes since the mark point before element, as it
+// always has -- a chain seeded from it (a partial tree) must close the same
+// mark point -- read from the mark point that closed their set or, for the
+// open set, from the Tail records (#4234).
 func (m *Chain) StateAt(element int64) (ms *State, err error) {
 	if element == -1 { //                                A need exists for the state before adding the first element
 		ms = new(State) //                         In that case, just allocate a State
@@ -159,44 +348,49 @@ func (m *Chain) StateAt(element int64) (ms *State, err error) {
 		return nil, errors.BadRequest.With("element out of range")
 	}
 	MIPrev := element&(^m.markMask) - 1 //               Calculate the index of the prior markpoint
-	cState := m.getState(MIPrev)        //               Use state at the prior mark point to compute what we need
+	var cState *State
 	if MIPrev < 0 {
 		cState = new(State)
-	}
-	if cState == nil {
-		// In a truncated chain, the previous mark point may not exist.
-		// Start with an empty state and we'll build it from the next available mark point.
-		cState = new(State)
+	} else if cState = m.getState(MIPrev); cState == nil {
+		// The state at an element is the prior mark point's state plus
+		// the hashes since. Without that mark point there is nothing to
+		// build from: an empty state in its place is a different chain,
+		// and a receipt built on it ends at a root nobody else holds. This
+		// used to fall back to an empty state for the sake of truncated
+		// chains, and a store that answered "absent" for a mark point older
+		// than its window (soak 20260905T032333Z and after) got receipts
+		// that every destination rejected, silently, for hours.
+		return nil, errors.NotFound.WithFormat("mark point %d of %v is missing; cannot compute the state at %d", MIPrev, m.key, element)
 	}
 	cState.HashList = cState.HashList[:0] //             element is past the previous mark, so clear the HashList
 
 	MINext := element&(^m.markMask) - 1 + m.markFreq //            Calculate the following mark point
-	var NMark *State                                 //
+	var since [][]byte                               //             The hashes after the prior mark point
+	lastMark := head.Count &^ m.markMask             //
 	if MINext >= head.Count {                        //             If past the end of the chain, then
-		if NMark, err = m.Head().Get(); err != nil { //        read the chain state instead
-			return nil, err //                                        Should be in the database
+		since, err = m.tailHashes(head, lastMark, element+1) //   the open mark set holds them
+		if err != nil {
+			return nil, err
 		}
 	} else {
 		// Try to find the next available mark point (may be after MINext in a truncated chain)
-		NMark = m.getState(MINext)
+		NMark := m.getState(MINext)
 		if NMark == nil {
 			// Search for the next available mark point
-			lastMark := head.Count &^ m.markMask
 			for i := MINext + m.markFreq; i <= lastMark; i += m.markFreq {
 				NMark = m.getState(i)
 				if NMark != nil {
 					break
 				}
 			}
-			// If still not found, try the head
-			if NMark == nil {
-				if NMark, err = m.Head().Get(); err != nil {
-					return nil, err
-				}
-			}
+		}
+		if NMark != nil {
+			since = NMark.HashList
+		} else if since, err = m.tailHashes(head, lastMark, head.Count); err != nil { // If still not found, try the open set
+			return nil, err
 		}
 	}
-	for _, v := range NMark.HashList { //                           Now iterate and add to the cState
+	for _, v := range since { //                                    Now iterate and add to the cState
 		if element+1 == cState.Count { //                              until the loop adds the element
 			break
 		}
@@ -229,12 +423,12 @@ func (m *Chain) Entry(element int64) ([]byte, error) {
 	}
 
 	lastMark := head.Count &^ m.markMask // Last mark point
-	if element >= lastMark {             // Get element from head
-		i := element & m.markMask //        Index within the hash list
-		if i >= int64(len(head.HashList)) {
-			return nil, errors.InvalidRecord.WithFormat("head: expected %d elements, got %d", head.Count, len(head.HashList))
+	if element >= lastMark {             // Get element from the open mark set
+		hashes, err := m.tailHashes(head, element, element+1)
+		if err != nil {
+			return nil, err
 		}
-		return head.HashList[i], nil
+		return hashes[0], nil
 	}
 
 	elemMark := element&^m.markMask + m.markFreq // Mark point after element

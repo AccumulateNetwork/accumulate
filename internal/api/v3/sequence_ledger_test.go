@@ -37,13 +37,16 @@ func TestWithSighted_FillsReceivedFromStaging(t *testing.T) {
 	require.NoError(t, batch.Account(synthetic).Main().Put(ledger))
 
 	// Sighted 9: 6 through 9 arrived, 5 have executed. The backlog is 4.
+	staging := execute.NewStaging()
+	tx := staging.Begin()
 	for _, n := range []uint64{7, 9} {
-		require.NoError(t, execute.Hold(batch, id, n, source.WithTxID([32]byte{byte(n)})))
+		tx.Hold(id, n, &execute.Held{ID: source.WithTxID([32]byte{byte(n)})})
 	}
+	tx.Commit()
 
 	stored, err := batch.Account(synthetic).Main().Get()
 	require.NoError(t, err)
-	got := withSighted(batch, synthetic, stored).(*protocol.SyntheticLedger)
+	got := withSighted(staging, synthetic, stored).(*protocol.SyntheticLedger)
 
 	part := got.Partition(source)
 	require.Equal(t, uint64(9), part.Received, "sighted through 9")
@@ -77,7 +80,7 @@ func TestWithSighted_HealthyStreamReportsDelivered(t *testing.T) {
 
 	stored, err := batch.Account(synthetic).Main().Get()
 	require.NoError(t, err)
-	got := withSighted(batch, synthetic, stored).(*protocol.SyntheticLedger)
+	got := withSighted(execute.NewStaging(), synthetic, stored).(*protocol.SyntheticLedger)
 
 	part := got.Partition(source)
 	require.Equal(t, uint64(42), part.Received, "nothing staged means nothing outstanding")
@@ -99,11 +102,14 @@ func TestWithSighted_AnchorLedger(t *testing.T) {
 	ledger.Url = anchors
 	ledger.Partition(source).Delivered = 3
 	require.NoError(t, batch.Account(anchors).Main().Put(ledger))
-	require.NoError(t, execute.Hold(batch, id, 6, source.WithTxID([32]byte{6})))
+	staging := execute.NewStaging()
+	tx := staging.Begin()
+	tx.Hold(id, 6, &execute.Held{ID: source.WithTxID([32]byte{6})})
+	tx.Commit()
 
 	stored, err := batch.Account(anchors).Main().Get()
 	require.NoError(t, err)
-	got := withSighted(batch, anchors, stored).(*protocol.AnchorLedger)
+	got := withSighted(staging, anchors, stored).(*protocol.AnchorLedger)
 
 	require.Equal(t, uint64(6), got.Partition(source).Received)
 }

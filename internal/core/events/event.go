@@ -30,7 +30,7 @@ type DidCommitBlock struct {
 
 	// Round and Epoch are the DAG-BFT leader round and committee epoch that
 	// committed this block. Zero under CometBFT, which has no such concepts.
-	// A fast-syncing node needs them to rejoin consensus (#4058).
+	// Recorded for the node's own bookkeeping.
 	Round uint64
 	Epoch uint64
 }

@@ -30,6 +30,23 @@ func (s RecordStore) GetValue(key *database.Key, dst database.Value) error {
 }
 
 // PutValue implements database.Store.
+// Version resolves the parent's record for key and reports its version
+// without loading its value: what LoadValue(src, false) would have copied
+// down, minus the read.
+func (s RecordStore) Version(key *database.Key) (int, error) {
+	src, err := Resolve[database.Value](s.Record, key)
+	if err != nil {
+		return 0, errors.UnknownError.Wrap(err)
+	}
+	if v, ok := src.(interface{ Version() (int, error) }); ok {
+		return v.Version()
+	}
+	_, version, err := src.GetValue()
+	return version, errors.UnknownError.Wrap(err)
+}
+
+var _ database.VersionStore = RecordStore{}
+
 func (s RecordStore) PutValue(key *database.Key, src database.Value) error {
 	dst, err := Resolve[database.Value](s.Record, key)
 	if err != nil {

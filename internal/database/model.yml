@@ -85,44 +85,12 @@
       pointer: true
       emptyIfMissing: true
 
-    # Staging (#4189). Used on the accounts that track ordered cross-partition
-    # streams: the synthetic ledger and the anchor pool.
-    #
-    # NOT hashed. Staging decides what a block executes, so every node must hold
-    # the same thing -- but it is a deterministic function of the consensus
-    # stream, so it is agreed without being hashed, and hashing it is what
-    # forced it into main state and forced main state to be bounded. It is
-    # `state` rather than `index` so that snapshots collect it: a snapshot is
-    # what a new node starts from, and one without staging diverges on the new
-    # node's first block.
-    - name: StagedSources
-      description: lists the partitions staging holds anything from. Bounded by the number of peers, and the reason the staged records can be enumerated for a snapshot at all (#4189)
+    # Execution output, like Delivered: written as a Directory anchor
+    # executes. Staging itself is memory (executor spec, "Sync").
+    - name: DirectoryAnchorBlock
+      description: is the Directory block index of the newest Directory anchor executed here. Anchor staging compares a proof's anchor block against it to tell "not yet" from "never"
       type: state
-      dataType: url
-      pointer: true
-      collection: set
-      emptyIfMissing: true
-    - name: Sequenced
-      description: is the message received for a sequence number of an inbound stream, whether or not it has been executed. A number is HELD if this exists and the number is above the stream's Delivered watermark (#4189)
-      type: state
-      index: getSequencedKeys # Indexed by source and number, so snapshots collect it
-      dataType: txid
-      pointer: true
-      parameters:
-      - name: Source
-        type: url
-        pointer: true
-      - name: Number
-        type: uint
-    - name: Sighted
-      description: is the highest sequence number received from a source, whether or not it has been executed. It is what says a stream is behind (#4189)
-      type: state
-      index: getSightedKeys # Indexed by source, so snapshots collect it
       dataType: uint
-      parameters:
-      - name: Source
-        type: url
-        pointer: true
 
     - name: Events
       description: tracks scheduled events. Should only be used on the system ledger
@@ -185,10 +153,19 @@
         pointer: true
 
     - name: BlockLedger
-      description: indexes entries of a block. Should only be used on the system ledger
+      description: records which chains a block changed. One per non-empty block, keyed by block index, written once and never rewritten. Only the system ledger may hold it (executor spec, "The block ledger")
+      type: state
+      dataType: BlockLedger
+      pointer: true
+      index: getBlockLedgerKeys # Indexed by block, so snapshots carry them: a restored node rebuilds its account indices from them (tools/cmd/repair-indices), as it could from the per-block accounts this replaces
+      parameters:
+      - name: Index
+        type: uint
+    - name: BlockLedgerChain
+      description: takes the hash of each block's ledger record, so the ledger account's hash commits to what every block changed (executor spec, "The block ledger")
       type: other
-      dataType: indexing.Log[*BlockLedger]
-      constructor: newBlockEntryLog
+      dataType: Chain2
+      hasChains: true
       pointer: true
 
     - name: Transaction
@@ -276,16 +253,16 @@
       parameters: # Indexed by chains
       - name: Partition
         type: string
-    - name: SyntheticReplica
-      description: is the destination's replica of a source's synthetic sequence, keyed on stream identity (#4140)
+    - name: SyntheticChain
+      description: the synthetic messages this partition produced for one destination, in sequence order (executor spec, "One chain per pair, one stage per chain")
       type: other
       dataType: Chain2
       hasChains: true
       pointer: true
       private: true
-      index: getSyntheticReplicaKeys
+      index: getSyntheticChainKeys
       parameters: # Indexed by chains
-      - name: Stream
+      - name: Partition
         type: string
     - name: AnchorChain
       type: entity

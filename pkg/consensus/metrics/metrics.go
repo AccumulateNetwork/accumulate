@@ -152,6 +152,16 @@ var (
 		Name:      "dag_gc_rounds_removed_total",
 		Help:      "Total rounds removed by garbage collection",
 	})
+
+	// DAGUncommittedRoundsDroppedTotal counts rounds the round advance
+	// collected that this node never committed: the frontier ran more than
+	// the DAG depth ahead of the last commit (#4239).
+	DAGUncommittedRoundsDroppedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "dag_uncommitted_rounds_dropped_total",
+		Help:      "Rounds collected by the round advance that this node never committed",
+	})
 )
 
 // Network metrics
@@ -574,4 +584,39 @@ var (
 		Name:      "blocks_empty_total",
 		Help:      "Blocks produced from a certificate with an empty payload (an idle network)",
 	})
+)
+
+// The batch plane's memory (consensus spec, invariants 1 and 4).
+var (
+	BatchStoreBytes = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "batch_store_bytes",
+		Help:      "Bytes held in a worker's active batch store, own (uncommitted, never evicted) and peer",
+	}, []string{"partition", "worker", "kind"})
+
+	BatchStoreRefusing = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "batch_store_refusing",
+		Help:      "1 while a worker refuses user submissions, by reason: store-full (own uncommitted batches fill its share) or execution-lagging (the executor is more than MaxExecutionLag blocks behind the DAG's commits)",
+	}, []string{"partition", "worker", "reason"})
+
+	// ExecutionLagBlocks is how many committed leader groups the executor has
+	// not yet executed (consensus spec, invariant 9).
+	ExecutionLagBlocks = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "execution_lag_blocks",
+		Help:      "Committed leader groups the executor has not yet executed",
+	}, []string{"partition"})
+
+	// ExecutionLagging is 1 while the primary proposes empty headers because
+	// execution is more than MaxExecutionLag blocks behind.
+	ExecutionLagging = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "execution_lagging",
+		Help:      "1 while headers carry no batches because execution lags the DAG's commits by more than MaxExecutionLag blocks",
+	}, []string{"partition"})
 )

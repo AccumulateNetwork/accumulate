@@ -71,8 +71,14 @@ func (b *Block) executeRuns(runs []streamRun, results []*execute.ProcessResult, 
 				// delivered — 40 per block against 40 arriving, a backlog
 				// that could not close. Found by asking the ledger whether it
 				// had moved instead of asking the statuses.
-				statuses, bundles, err = b.processMessages(b.Batch,
-					[]messaging.Message{&internal.MessageIsReady{TxID: entry.staged}}, 1)
+				// The held message runs from staging; the transaction that
+				// travels with it, when it has one, rides in the same bundle
+				// so it resolves without a store read
+				msgs := []messaging.Message{&internal.MessageIsReady{TxID: entry.staged}}
+				if h, ok := b.staging.HeldByID(entry.staged); ok && h.Companion != nil {
+					msgs = append(msgs, h.Companion)
+				}
+				statuses, bundles, err = b.processMessages(b.Batch, msgs, 1)
 			}
 			if err == nil {
 				for _, d := range bundles {

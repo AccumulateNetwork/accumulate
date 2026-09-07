@@ -102,14 +102,12 @@ func (m *Chain) Entries(begin, end int64) ([][]byte, error) {
 		return hashes[first:last], nil
 	}
 
-	// End extends into head, append head.HashList
-
-	expected := head.Count & m.markMask // Calculate the number of expected hashes in the current state
-	if int64(len(head.HashList)) != expected {
-		return nil, errors.IncompleteChain.WithFormat("head: expected %d entries, got %d", expected, len(head.HashList))
+	// End extends into the open mark set, append its hashes
+	tail, err := m.tailHashes(head, lastMark, head.Count)
+	if err != nil {
+		return nil, errors.IncompleteChain.WithFormat("open mark set: %w", err)
 	}
-
-	hashes = append(hashes, head.HashList...) // Append the current hash list
+	hashes = append(hashes, tail...)
 
 	// If first=-1, the range is entirely in head, recalculate the offset
 	if first == -1 {

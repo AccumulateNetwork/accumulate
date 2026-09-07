@@ -25,6 +25,15 @@
     parameters:
     - name: Index
       type: uint
+  - name: Tail
+    type: state
+    emptyIfMissing: true
+    dataType: TailChunk
+    pointer: true
+    index: getTailChunks # Indexed by head
+    parameters:
+    - name: Index
+      type: uint
   - name: ElementIndex
     type: index
     dataType: uint

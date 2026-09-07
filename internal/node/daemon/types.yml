@@ -18,6 +18,9 @@ NetworkInit:
   - name: OperatorKeys
     type: bytes
     repeatable: true
+  - name: Database
+    description: is the storage backend every generated node runs on (BlockchainDB, LevelDB, Badger, Memory); the --database flag overrides it
+    type: string
   - name: Template
     description: is a TOML template for the node configuration
     type: string

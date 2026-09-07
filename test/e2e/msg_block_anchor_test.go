@@ -7,6 +7,7 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"testing"
@@ -14,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -34,7 +34,6 @@ func TestAnchorThreshold(t *testing.T) {
 	opts := []simulator.Option{
 		simulator.SimpleNetwork(t.Name(), bvnCount, valCount),
 		simulator.Genesis(GenesisTime),
-		simulator.DisableAnchorHealing(),
 	}
 
 	// Capture the BVN's anchors and verify they're the same
@@ -62,6 +61,14 @@ func TestAnchorThreshold(t *testing.T) {
 				continue
 			}
 
+			// One copy per signer: the destination's requester pulls the
+			// dropped anchor back, signed by whichever validator answers,
+			// and a second copy under the same key is no second signature
+			for _, have := range anchors {
+				if bytes.Equal(have.Signature.GetPublicKey(), blk.Signature.GetPublicKey()) {
+					return false, nil
+				}
+			}
 			anchors = append(anchors, blk)
 			return false, nil
 		}
@@ -100,14 +107,26 @@ func TestAnchorThreshold(t *testing.T) {
 		require.True(t, v.Equal(new(TransactionStatus)))
 	})
 
-	// Submit one signature and verify it is pending
+	// Submit one signature and verify the anchor does not execute: below its
+	// quorum it is held in the anchor stream's stage, not recorded pending
+	// (executor spec, "One chain per pair, one stage per chain")
 	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
-	sim.StepUntil(Txn(txid).IsPending())
+	sim.StepN(20)
+	requireNotExecuted(t, sim, txid)
+	// The signature it carried is state: a block that recorded only that is
+	// not an empty block (soak 20260905T225751Z: copies arriving one per
+	// block never accumulated a quorum)
+	View(t, sim.DatabaseFor(txid.Account()), func(batch *database.Batch) {
+		hash := txid.Hash()
+		sigs, err := batch.Account(txid.Account()).Transaction(hash).ValidatorSignatures().Get()
+		require.NoError(t, err)
+		require.Len(t, sigs, 1, "the first copy's signature must survive its block")
+	})
 
-	// Re-submit the first signature and verify it is still pending
+	// Re-submit the first signature and verify it still does not execute
 	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
 	sim.StepN(50)
-	require.True(t, sim.QueryTransaction(txid, nil).Status == errors.Pending)
+	requireNotExecuted(t, sim, txid)
 
 	// Submit a second signature and verify it is delivered
 	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[1]}})
@@ -120,7 +139,6 @@ func TestAnchorPlaceholder(t *testing.T) {
 
 	opts := []simulator.Option{
 		simulator.Genesis(GenesisTime),
-		simulator.DisableAnchorHealing(),
 	}
 
 	// One BVN, two nodes
@@ -129,12 +147,17 @@ func TestAnchorPlaceholder(t *testing.T) {
 	// Capture anchors
 	var captured []*messaging.BlockAnchor
 	opts = append(opts, simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+		// A dispatched anchor is one BlockAnchor per envelope; a healed span
+		// carries every signature of every anchor in one envelope (healing
+		// spec, "Requesting and answering"). Either way, every copy of the
+		// anchor under test is captured, one per signer, and its envelope
+		// is dropped.
+		drop := false
 		for _, m := range env.Messages {
 			blk, ok := m.(*messaging.BlockAnchor)
 			if !ok {
 				continue
 			}
-			require.Len(t, env.Messages, 1)
 			require.IsType(t, (*messaging.SequencedMessage)(nil), blk.Anchor)
 			seq := blk.Anchor.(*messaging.SequencedMessage)
 			require.IsType(t, (*messaging.TransactionMessage)(nil), seq.Message)
@@ -143,11 +166,20 @@ func TestAnchorPlaceholder(t *testing.T) {
 			if !ok || anchor.MinorBlockIndex <= 10 {
 				continue
 			}
+			drop = true
 
-			captured = append(captured, blk)
-			return false, nil
+			// One copy per signer (see TestAnchorThreshold)
+			seen := false
+			for _, have := range captured {
+				if bytes.Equal(have.Signature.GetPublicKey(), blk.Signature.GetPublicKey()) {
+					seen = true
+				}
+			}
+			if !seen {
+				captured = append(captured, blk)
+			}
 		}
-		return true, nil
+		return !drop, nil
 	}))
 
 	// Init
@@ -178,13 +210,11 @@ func TestAnchorPlaceholder(t *testing.T) {
 	// Submit the first one
 	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{captured[0]}})
 
-	// Verify it appears on the pending list
-	sim.StepUntil(
-		Txn(txn.ID()).IsPending())
-
-	pending := sim.QueryPendingIds(txn.ID().Account(), nil).Records
-	require.Len(t, pending, 1)
-	require.Equal(t, pending[0].Value.String(), txn.ID().String())
+	// Verify it does not execute on one signature: held in the stage, not
+	// on any pending list
+	sim.StepN(20)
+	requireNotExecuted(t, sim, txn.ID())
+	require.Empty(t, sim.QueryPendingIds(txn.ID().Account(), nil).Records, "a held anchor is not recorded pending")
 
 	// Submit the second one
 	st := sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{captured[1]}})
@@ -224,4 +254,16 @@ func adjustStatusIDs(messages []messaging.Message, st []*TransactionStatus) {
 			st.TxID = id
 		}
 	}
+}
+
+// requireNotExecuted asserts a transaction has no delivered status: it may be
+// held in a stage, but nothing about it has executed.
+func requireNotExecuted(t *testing.T, sim *Sim, id *url.TxID) {
+	t.Helper()
+	View(t, sim.DatabaseFor(id.Account()), func(batch *database.Batch) {
+		hash := id.Hash()
+		v, err := batch.Transaction(hash[:]).Status().Get()
+		require.NoError(t, err)
+		require.False(t, v.Delivered(), "the anchor executed with %v", v.Code)
+	})
 }

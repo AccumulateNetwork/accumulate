@@ -7,7 +7,9 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"sort"
+	"strings"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -41,6 +43,10 @@ import (
 type streamPosition struct {
 	stream    stream
 	delivered uint64
+	// proven answers whether the proven set covers a hash; nil means every
+	// held entry is runnable (tests without an executor).
+	// staging is the block's view of what is held and proven
+	staging *execute.StagingTxn
 
 	// batch is where held messages actually live — the block's own batch, so a
 	// receipt recorded here commits with the block and is discarded with it.
@@ -56,7 +62,8 @@ type streamPosition struct {
 	// err is the first failure from a read that could not report one — idOf is
 	// called from buildRun, which is pure and total by design. The caller
 	// checks it once, after the run is built.
-	err error
+	err   error
+	block *Block
 }
 
 // next is the number this stream is waiting for.
@@ -71,11 +78,20 @@ func (p *streamPosition) idOf(n uint64) (*url.TxID, bool) {
 	if n <= p.delivered {
 		return nil, false
 	}
-	id, ok, err := execute.IDOf(p.batch, p.stream.id(), n)
-	if err != nil && p.err == nil {
-		p.err = err
+	h, ok := p.staging.IDOf(p.stream.id(), n)
+	if !ok {
+		return nil, false
 	}
-	return id, ok
+	return h.ID, true
+}
+
+// heldAt is what staging holds at n, if anything.
+func (p *streamPosition) heldAt(n uint64) *execute.Held {
+	if n <= p.delivered {
+		return nil
+	}
+	h, _ := p.staging.IDOf(p.stream.id(), n)
+	return h
 }
 
 // has reports whether we hold a staged message for this number.
@@ -84,14 +100,36 @@ func (p *streamPosition) has(n uint64) bool {
 	return ok
 }
 
+// runnable reports whether a held number may be taken into a run. An entry
+// held by the sequenced layer passed its proof when it was held; an entry
+// COLLECTED without one is runnable only once the hash validated at its
+// number is its own (executor spec, "Collection").
+func (p *streamPosition) runnable(n uint64) bool {
+	h := p.heldAt(n)
+	if h == nil || !h.Collected {
+		return true
+	}
+	if p.staging.IsValidated(p.stream.id(), n, h.Hash) {
+		return true
+	}
+	// An anchor is also validated by a validator signature quorum, which
+	// builds as its copies arrive (executor spec, "One chain per pair, one
+	// stage per chain").
+	if p.stream.kind == streamAnchor && p.block != nil {
+		if seq, ok := h.Message.(*messaging.SequencedMessage); ok {
+			if txn, ok := seq.Message.(*messaging.TransactionMessage); ok {
+				ok, err := p.block.anchorIsAdmissible(p.batch, nil, txn.Transaction, p.stream.source)
+				return err == nil && ok
+			}
+		}
+	}
+	return false
+}
+
 // received is the largest number this stream has ever seen. It says the stream
 // is behind; it does not say what is missing, which is execute.Missing.
 func (p *streamPosition) received() uint64 {
-	h, err := execute.Sighted(p.batch, p.stream.id())
-	if err != nil && p.err == nil {
-		p.err = err
-	}
-	if h > p.delivered {
+	if h := p.staging.Sighted(p.stream.id()); h > p.delivered {
 		return h
 	}
 	return p.delivered
@@ -104,7 +142,11 @@ type positionCache struct {
 	m  map[string]*streamPosition
 }
 
-func (s stream) key() string { return s.ledger.String() + "|" + s.source.String() }
+// key names the stream case-insensitively, as URLs are: one stream, one
+// position, however its source was spelled.
+func (s stream) key() string {
+	return strings.ToLower(s.ledger.String()) + "|" + strings.ToLower(s.source.String())
+}
 
 // id is this stream's name in the executor's staging store.
 func (s stream) id() execute.StreamID {
@@ -142,19 +184,25 @@ func (b *Block) positionOfLocked(s stream) (*streamPosition, error) {
 		return p, nil
 	}
 
-	var ledger protocol.SequenceLedger
-	err := b.Batch.Account(s.ledger).Main().GetAs(&ledger)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load %v: %w", s.ledger, err)
-	}
-
 	// Only Delivered. The rest of the entry is the source's Produced count and
 	// the residue of the old design, and neither says anything about what this
-	// node is holding right now.
+	// node is holding right now. A stream whose ledger does not exist yet has
+	// delivered nothing: zero is the answer, not an error.
+	var delivered uint64
+	var ledger protocol.SequenceLedger
+	switch err := b.Batch.Account(s.ledger).Main().GetAs(&ledger); {
+	case errors.Is(err, errors.NotFound):
+	case err != nil:
+		return nil, errors.UnknownError.WithFormat("load %v: %w", s.ledger, err)
+	default:
+		delivered = ledger.Partition(s.source).Delivered
+	}
 	p := &streamPosition{
 		stream:    s,
-		delivered: ledger.Partition(s.source).Delivered,
+		delivered: delivered,
 		batch:     b.Batch,
+		staging:   b.staging,
+		block:     b,
 	}
 	if b.positions.m == nil {
 		b.positions.m = map[string]*streamPosition{}
@@ -179,7 +227,7 @@ func (b *Block) positionOfLocked(s stream) (*streamPosition, error) {
 // only the INDEX of what the node held, and healing spent the network fetching
 // it back. Staging is not hashed and not written, so there is nothing left to
 // bound.
-func (b *Block) advanceStream(s stream, delivered bool, n uint64, id *url.TxID) error {
+func (b *Block) advanceStream(s stream, delivered bool, n uint64, id *url.TxID, msg messaging.Message) error {
 	b.positions.mu.Lock()
 	defer b.positions.mu.Unlock()
 
@@ -197,12 +245,11 @@ func (b *Block) advanceStream(s stream, delivered bool, n uint64, id *url.TxID) 
 	}
 
 	if !delivered {
-		// Into the block's batch, so it commits with the block. A receipt
-		// recorded by a block that is then discarded is discarded with it,
-		// which is what makes "the node holds it" and "the node says it holds
-		// it" the same statement.
-		err = execute.Hold(b.Batch, s.id(), n, id)
-		return errors.UnknownError.Wrap(err)
+		// Held in memory, with the message itself — what runs when the
+		// number is next — through the block's staging transaction, so a
+		// discarded block leaves nothing behind (executor spec, "Sync")
+		b.staging.Hold(s.id(), n, &execute.Held{ID: id, Message: msg})
+		return nil
 	}
 
 	p.delivered = n
@@ -250,6 +297,8 @@ func (b *Block) flushStreams() error {
 		if err != nil {
 			return errors.UnknownError.WithFormat("store %v: %w", p.stream.ledger, err)
 		}
+		// Release what this block delivered — applied when the block commits
+		b.staging.Release(p.stream.id(), p.highest)
 	}
 	return nil
 }

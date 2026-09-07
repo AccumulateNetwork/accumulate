@@ -52,10 +52,7 @@ func streamLag(t *testing.T, sim *Sim, dst *url.URL, src *url.URL) (received, de
 		}
 		delivered = ledger.Partition(src).Delivered
 
-		received, err = execute.Sighted(batch, execute.StreamID{Ledger: ledgerUrl, Source: src})
-		if err != nil {
-			return err
-		}
+		received = sim.S.StagingFor(dst).SightedOn(execute.StreamID{Ledger: ledgerUrl, Source: src})
 		if received < delivered {
 			received = delivered
 		}
@@ -241,10 +238,7 @@ func TestNoLaggingChannels(t *testing.T) {
 				// Sighted, not the ledger: how far a stream has been seen is
 				// staging's to say (#4189). A stream that never fell behind has
 				// staged nothing and reports 0, which is not a lag.
-				seen, err := execute.Sighted(batch, execute.StreamID{Ledger: ledgerUrl, Source: part.Url})
-				if err != nil {
-					return err
-				}
+				seen := sim.S.Partition(dp).Staging().SightedOn(execute.StreamID{Ledger: ledgerUrl, Source: part.Url})
 				if seen > part.Delivered {
 					sick = append(sick, fmt.Sprintf("%v -> %s: sighted=%d delivered=%d",
 						part.Url, dp, seen, part.Delivered))

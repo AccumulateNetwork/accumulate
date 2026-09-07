@@ -14,6 +14,16 @@ State:
       type: bytes
       repeatable: true
 
+TailChunk:
+  fields:
+    - name: Index
+      description: is the chain index of the first hash in the chunk
+      type: uint
+    - name: Hashes
+      description: are the entries at Index, Index+1, ...
+      type: bytes
+      repeatable: true
+
 Receipt:
   fields:
     - name: Start

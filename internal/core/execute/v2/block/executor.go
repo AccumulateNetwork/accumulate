@@ -8,6 +8,9 @@ package block
 
 import (
 	"crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"sync"
 	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -43,9 +46,53 @@ type Executor struct {
 	signatureExecutors map[protocol.SignatureType]ExecutorFactory2[protocol.SignatureType, *SignatureContext]
 	logger             logging.OptionalLogger
 	db                 database.Beginner
+	cacheOnce          sync.Once
+	cacheDefault       *synthcache.Cache
+	cacheSeedOnce      sync.Once
+	stagingOnce        sync.Once
+	stagingDefault     *execute.Staging
 	isValidator        bool
 	isGenesis          bool
 	mainDispatcher     Dispatcher
+}
+
+// synthCache is the producer's synthetic/anchor cache: the one the node
+// shares with its sequencer, or a private one.
+func (x *Executor) synthCache() *synthcache.Cache {
+	if x.SynthCache != nil {
+		return x.SynthCache
+	}
+	x.cacheOnce.Do(func() { x.cacheDefault = synthcache.New(0) })
+	return x.cacheDefault
+}
+
+// staging is the partition's in-memory staging: the one the node shares with
+// its API, or a private one.
+func (x *Executor) staging() *execute.Staging {
+	if x.Staging != nil {
+		return x.Staging
+	}
+	x.stagingOnce.Do(func() { x.stagingDefault = execute.NewStaging() })
+	return x.stagingDefault
+}
+
+// synthStream names the inbound synthetic stream from a source partition.
+func (x *Executor) synthStream(source *url.URL) execute.StreamID {
+	return execute.StreamID{Ledger: x.Describe.Synthetic(), Source: source}
+}
+
+// deepView runs fn against a reader that reaches past the store's window,
+// for the one read the executor legitimately makes there: a transaction a
+// signature or a remote copy refers to, pending for longer than the window
+// (database spec, "Windowed stores"). On a store with no window it is an
+// ordinary read.
+func (x *Executor) deepView(fn func(*database.Batch) error) error {
+	if d, ok := x.Database.(interface{ Deep() *database.Database }); ok {
+		return d.Deep().View(fn)
+	}
+	batch := x.Database.Begin(false)
+	defer batch.Discard()
+	return fn(batch)
 }
 
 type ExecutorOptions = execute.Options

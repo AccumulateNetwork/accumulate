@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -81,6 +82,16 @@ type Options struct {
 	// budget (#4141) is DERIVED from it, because a package is one envelope
 	// and an envelope must fit in one batch. Zero uses the DAG-BFT default.
 	MaxEnvelopeSize int
+
+	// SynthCache is the producer's synthetic/anchor cache, shared with the
+	// sequencer that answers healing requests (healing spec, "The cache").
+	// Nil makes the executor keep a private one.
+	SynthCache *synthcache.Cache
+
+	// Staging is the partition's in-memory staging (executor spec, "Sync"),
+	// shared with the API that reports how far a stream has been sighted.
+	// Nil makes the executor keep a private one.
+	Staging *Staging
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.

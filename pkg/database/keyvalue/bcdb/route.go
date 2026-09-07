@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -64,20 +64,33 @@ import (
 //	<chain>.States(I)                 every set and counted collection
 //	Account(U).Data.Entry(I)          Account(U).Data.Entry (the count)
 //	SystemData(P).SyntheticIndexIndex(B)   Account(U).Data.Transaction(H)
-//	Summary(H).Main (BSN)             Events, BlockLedger, Log blocks
+//	Summary(H).Main (BSN)             Events, Log blocks
+//	Account(U).BlockLedger(I)
 //
 // Anything not named here is treated as mutable, which is the direction
 // that fails quietly rather than loudly.
 func isWriteOnce(k *record.Key) bool {
 	last, prev, trailing := tail(k)
 	switch last {
-	case "Element", "ElementIndex", "States":
-		// A merkle chain is a log.  Element(I) is the I'th entry,
-		// ElementIndex(H) is where entry H landed, and States(I) is
-		// the mark point covering I -- all of them facts about a
+	case "Element", "ElementIndex":
+		// A merkle chain is a log.  Element(I) is the I'th entry and
+		// ElementIndex(H) is where entry H landed -- facts about a
 		// position in the log, which does not move.  Head is the log's
 		// current end and is excluded by requiring the parameter.
 		return trailing == 1
+	case "States":
+		// States(I) is the mark point covering I: the merkle state every
+		// later state of the chain is computed FROM.  Written once, like
+		// Url below, and read by every receipt the chain ever builds --
+		// a receipt over a slow chain (the Directory's root chain, an
+		// anchor chain at one entry a block) reaches for a mark point
+		// written hundreds of blocks ago.  Behind the window that read is
+		// "absent", and the chain code used to take absent for a
+		// truncated chain and rebuild from an empty state: from soak
+		// 20260905T032333Z on, every Directory anchor carried receipts to
+		// a root no BVN held, every BVN rejected them, and nothing was
+		// dispatched for hours.  Mark points are state, not history.
+		return false
 
 	case "Main":
 		// A message, a transaction and a block summary (BSN) are named
@@ -123,6 +136,11 @@ func isWriteOnce(k *record.Key) bool {
 	case "SyntheticIndexIndex":
 		// Which synthetic index chain entry covers a given block.
 		return trailing == 1
+
+	case "BlockLedger":
+		// Account(ledger).BlockLedger(I): one record per non-empty block,
+		// written once (executor spec, "The block ledger").
+		return trailing == 1 && prev == "Account"
 	}
 
 	return false

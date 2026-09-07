@@ -10,12 +10,12 @@ import (
 	"context"
 	"log/slog"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -32,35 +32,12 @@ import (
 type Sequencer struct {
 	logger      logging.OptionalLogger
 	db          database.Viewer
+	cache       *synthcache.Cache
 	partitionID string
 	partition   config.NetworkUrl
 	valKey      []byte
 	globals     atomic.Value
-
-	// The pinned sync-epoch snapshot (#4058)
-	snapMu sync.Mutex
-	snap   *pinnedSnapshot
-
-	// The latest provable state view, captured synchronously at commit
-	viewMu        sync.Mutex
-	provable      *database.Batch
-	provableBlock uint64
-
-	// Recent block → (consensus round, committee epoch), from DidCommitBlock
-	// events. A fast-syncing node needs its epoch block's round and epoch to
-	// rejoin consensus; nothing else records the mapping (#4058).
-	commitMu     sync.Mutex
-	commitRounds map[uint64]blockCommit
-	commitOldest uint64
 }
-
-type blockCommit struct {
-	round uint64
-	epoch uint64
-}
-
-// commitRoundRetention bounds how many block→round mappings are kept.
-const commitRoundRetention = 1 << 14
 
 var _ private.Sequencer = (*Sequencer)(nil)
 
@@ -71,12 +48,19 @@ type SequencerParams struct {
 	Globals      *core.GlobalValues
 	Partition    string
 	ValidatorKey []byte
+
+	// Cache is the producer's synthetic/anchor cache the executor fills.
+	// With it, every answer is built from the cache and a miss is refused
+	// and counted (healing spec, "The cache"). Without it — only the v1
+	// simulator, which has no cache — answers are read from the store.
+	Cache *synthcache.Cache
 }
 
 func NewSequencer(params SequencerParams) *Sequencer {
 	s := new(Sequencer)
 	s.logger.L = params.Logger
 	s.db = params.Database
+	s.cache = params.Cache
 	s.partitionID = params.Partition
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	s.valKey = params.ValidatorKey
@@ -85,34 +69,7 @@ func NewSequencer(params SequencerParams) *Sequencer {
 		s.globals.Store(e.New.Copy())
 		return nil
 	})
-	s.commitRounds = map[uint64]blockCommit{}
-	events.SubscribeSync(params.EventBus, func(e events.DidCommitBlock) error {
-		if e.Round == 0 {
-			return nil // CometBFT — no rounds
-		}
-		s.captureProvableView(e.Index)
-		s.commitMu.Lock()
-		defer s.commitMu.Unlock()
-		s.commitRounds[e.Index] = blockCommit{round: e.Round, epoch: e.Epoch}
-		if s.commitOldest == 0 {
-			s.commitOldest = e.Index
-		}
-		for e.Index-s.commitOldest > commitRoundRetention {
-			delete(s.commitRounds, s.commitOldest)
-			s.commitOldest++
-		}
-		return nil
-	})
 	return s
-}
-
-// commitRoundFor returns the consensus round and committee epoch that
-// committed the given block, if known.
-func (s *Sequencer) commitRoundFor(block uint64) (blockCommit, bool) {
-	s.commitMu.Lock()
-	defer s.commitMu.Unlock()
-	c, ok := s.commitRounds[block]
-	return c, ok
 }
 
 func (s *Sequencer) Type() api.ServiceType { return private.ServiceTypeSequencer }
@@ -151,12 +108,18 @@ func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64,
 	var err error
 	switch {
 	case s.partition.Synthetic().Equal(src):
+		if s.cache != nil {
+			return s.getSynthFromCache(globals, dst, num)
+		}
 		return r, s.db.View(func(batch *database.Batch) error {
 			r, err = s.getSynth(batch, globals, dst, num)
 			return err
 		})
 
 	case s.partition.AnchorPool().Equal(src):
+		if s.cache != nil {
+			return s.getAnchorFromCache(globals, dst, num)
+		}
 		return r, s.db.View(func(batch *database.Batch) error {
 			r, err = s.getAnchor(batch, globals, dst, num)
 			return err
@@ -258,27 +221,33 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 	if !ok {
 		return nil, errors.UnknownError.WithFormat("destination is not a partition")
 	}
+	// The destination's own chain: sequence number n is entry n-1 (executor
+	// spec, "One chain per pair, one stage per chain"). The v1 executor
+	// interleaved every destination on the main chain and mapped sequence
+	// numbers through an index chain.
 	ledger := batch.Account(s.partition.Synthetic())
-	sequenceChain, err := ledger.SyntheticSequenceChain(partition).Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic sequence chain: %w", err)
+	synthChain := ledger.SyntheticChain(partition)
+	entry := int64(num) - 1
+	if !globals.ExecutorVersion.V2Enabled() {
+		synthChain = ledger.MainChain()
+		sequenceChain, err := ledger.SyntheticSequenceChain(partition).Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load synthetic sequence chain: %w", err)
+		}
+		sequenceEntry := new(protocol.IndexEntry)
+		err = sequenceChain.EntryAs(int64(num)-1, sequenceEntry)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load synthetic sequence chain entry %d: %w", num-1, err)
+		}
+		entry = int64(sequenceEntry.Source)
 	}
-
-	// Load the Nth sequence chain entry
-	sequenceEntry := new(protocol.IndexEntry)
-	err = sequenceChain.EntryAs(int64(num)-1, sequenceEntry)
+	chain, err := synthChain.Get()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic sequence chain entry %d: %w", num-1, err)
+		return nil, errors.UnknownError.WithFormat("load synthetic chain for %v: %w", dst, err)
 	}
-
-	// Load the corresponding main chain entry
-	mainChain, err := ledger.MainChain().Get()
+	hash, err := chain.Entry(entry)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic main chain: %w", err)
-	}
-	hash, err := mainChain.Entry(int64(sequenceEntry.Source))
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d: %w", sequenceEntry.Source, err)
+		return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d for %v: %w", entry, dst, err)
 	}
 
 	r := new(api.MessageRecord[messaging.Message])
@@ -330,7 +299,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 	}
 
 	// Get the synthetic main chain receipt
-	synthReceipt, mainAnchorEntry, err := s.getReceiptForChainEntry(ledger.MainChain(), sequenceEntry.Source)
+	synthReceipt, mainAnchorEntry, err := s.getReceiptForChainEntry(synthChain, uint64(entry))
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -525,11 +494,17 @@ func (s *Sequencer) SequenceRange(ctx context.Context, src, dst *url.URL, start,
 	var err error
 	switch {
 	case s.partition.Synthetic().Equal(src):
+		if s.cache != nil {
+			return s.getSynthRangeFromCache(globals, dst, start, end, opts)
+		}
 		return r, s.db.View(func(batch *database.Batch) error {
 			r, err = s.getSynthRange(batch, globals, dst, start, end, opts)
 			return err
 		})
 	case s.partition.AnchorPool().Equal(src):
+		if s.cache != nil {
+			return s.getAnchorRangeFromCache(globals, dst, start, end)
+		}
 		return r, s.db.View(func(batch *database.Batch) error {
 			r, err = s.getAnchorRange(batch, globals, dst, start, end, opts)
 			return err
@@ -544,34 +519,21 @@ func (s *Sequencer) getSynthRange(batch *database.Batch, globals *core.GlobalVal
 	if !ok {
 		return nil, errors.UnknownError.WithFormat("destination is not a partition")
 	}
+	// The destination's own chain: sequence number n is entry n-1, so the
+	// proven span is exactly the requested messages (executor spec, "One chain
+	// per pair, one stage per chain").
 	ledger := batch.Account(s.partition.Synthetic())
-	sequenceChain, err := ledger.SyntheticSequenceChain(partition).Get()
+	synthChain := ledger.SyntheticChain(partition)
+	chain, err := synthChain.Get()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic sequence chain: %w", err)
+		return nil, errors.UnknownError.WithFormat("load synthetic chain for %v: %w", dst, err)
 	}
 
-	mainChain, err := ledger.MainChain().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic main chain: %w", err)
-	}
-
-	// Map sequence numbers to synthetic main chain indices and load each
-	// message. The main chain interleaves messages for all destinations, so
-	// the proven range may cover more entries than the requested messages -
-	// that is fine, extra elements are just proven hashes.
-	indices := make([]uint64, 0, end-start+1)
 	records := make([]*api.MessageRecord[messaging.Message], 0, end-start+1)
 	for num := start; num <= end; num++ {
-		sequenceEntry := new(protocol.IndexEntry)
-		err = sequenceChain.EntryAs(int64(num)-1, sequenceEntry)
+		hash, err := chain.Entry(int64(num) - 1)
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load synthetic sequence chain entry %d: %w", num-1, err)
-		}
-		indices = append(indices, sequenceEntry.Source)
-
-		hash, err := mainChain.Entry(int64(sequenceEntry.Source))
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d: %w", sequenceEntry.Source, err)
+			return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d for %v: %w", num-1, dst, err)
 		}
 
 		var seq *messaging.SequencedMessage
@@ -619,16 +581,16 @@ func (s *Sequencer) getSynthRange(batch *database.Batch, globals *core.GlobalVal
 
 	// Extend the proven range to the block-boundary anchor point covering the
 	// last message, so the proof can be continued to a directory-anchored root
-	indexChain, err := ledger.MainChain().Index().Get()
+	indexChain, err := synthChain.Index().Get()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic main index chain: %w", err)
+		return nil, errors.UnknownError.WithFormat("load synthetic index chain for %v: %w", dst, err)
 	}
 	if indexChain.Height() == 0 {
-		return nil, errors.Conflict.With("synthetic main index chain is empty")
+		return nil, errors.Conflict.WithFormat("synthetic index chain for %v is empty", dst)
 	}
-	_, mainAnchorEntry, err := indexing.SearchIndexChain(indexChain, uint64(indexChain.Height()-1), indexing.MatchAfter, indexing.SearchIndexChainBySource(indices[len(indices)-1]))
+	_, mainAnchorEntry, err := indexing.SearchIndexChain(indexChain, uint64(indexChain.Height()-1), indexing.MatchAfter, indexing.SearchIndexChainBySource(end-1))
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("locate index entry for synthetic chain entry %d: %w", indices[len(indices)-1], err)
+		return nil, errors.UnknownError.WithFormat("locate index entry for synthetic chain entry %d: %w", end-1, err)
 	}
 
 	// Prefer a continuation to our own root chain, under an anchor the
@@ -653,7 +615,7 @@ func (s *Sequencer) getSynthRange(batch *database.Batch, globals *core.GlobalVal
 		return nil, errors.NotReady.With("the directory has not receipted the block yet")
 	}
 
-	list, err := merkle.GetReceiptList(ledger.MainChain().Inner(), int64(indices[0]), int64(mainAnchorEntry.Source))
+	list, err := merkle.GetReceiptList(synthChain.Inner(), int64(start)-1, int64(mainAnchorEntry.Source))
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("build receipt list: %w", err)
 	}
