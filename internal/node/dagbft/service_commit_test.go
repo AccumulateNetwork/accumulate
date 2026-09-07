@@ -326,8 +326,9 @@ func TestProcessCommittedGroup_OneBlockPerLeaderGroup(t *testing.T) {
 	require.True(t, ca.blocks[0].Time.Equal(tL.UTC()), "block time comes from the LEADER's header")
 
 	// Every certificate's batches were pruned from the active stores.
-	for _, d := range []types.BatchDigest{bA.Digest(), bB.Digest(), bL.Digest()} {
-		require.False(t, w0.HasBatch(d) || w1.HasBatch(d), "committed batch %x must leave the active store", d[:4])
+	digests := []types.BatchDigest{bA.Digest(), bB.Digest(), bL.Digest()}
+	for i, d := range digests {
+		require.False(t, w0.HasBatch(d) || w1.HasBatch(d), "committed batch %x must leave the active store", digests[i][:4])
 	}
 
 	// A second group advances the index by exactly one.

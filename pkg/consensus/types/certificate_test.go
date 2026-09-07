@@ -8,7 +8,6 @@ package types_test
 
 import (
 	"crypto/ed25519"
-	"encoding/binary"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,20 +45,23 @@ func createCertificate(t *testing.T, header *types.Header, committee *types.Comm
 	t.Helper()
 
 	cert := types.NewCertificate(header, nil, nil)
-	headerDigest := header.Digest()
-
-	// Build voteContent (headerDigest + round + epoch) to match certificate verification expectations
-	voteContent := make([]byte, 32+8+8)
-	copy(voteContent[0:32], headerDigest[:])
-	binary.BigEndian.PutUint64(voteContent[32:40], uint64(header.Round))
-	binary.BigEndian.PutUint64(voteContent[40:48], header.Epoch)
 
 	for _, idx := range signerIndices {
-		sig := ed25519.Sign(privKeys[idx], voteContent)
-		cert.AddSignature(uint16(idx), sig)
+		cert.AddSignature(uint16(idx), voteSignature(t, header, committee, privKeys[idx], idx))
 	}
 
 	return cert
+}
+
+// voteSignature returns the signature validator idx contributes to a certificate over
+// header. It signs through the public Vote API rather than rebuilding the signed bytes
+// by hand, so these fixtures follow Vote.voteContent's encoding instead of restating it.
+func voteSignature(t *testing.T, header *types.Header, committee *types.Committee, key ed25519.PrivateKey, idx int) []byte {
+	t.Helper()
+
+	vote := types.NewVote(header.Digest(), header.Round, header.Epoch, committee.Validators[idx].PublicKey)
+	require.NoError(t, vote.Sign(key))
+	return vote.Signature
 }
 
 func TestCertificate_Digest(t *testing.T) {
@@ -166,19 +168,14 @@ func TestCertificate_Verify(t *testing.T) {
 
 	t.Run("duplicate signer", func(t *testing.T) {
 		header := createSignedHeader(t, pub, priv, 1, 0)
-		headerDigest := header.Digest()
 
-		// Build voteContent to match verification expectations
-		voteContent := make([]byte, 32+8+8)
-		copy(voteContent[0:32], headerDigest[:])
-		binary.BigEndian.PutUint64(voteContent[32:40], uint64(header.Round))
-		binary.BigEndian.PutUint64(voteContent[40:48], header.Epoch)
-
+		// Valid signatures, so Verify reaches the duplicate-signer check rather than
+		// rejecting these on signature validity first.
 		cert := types.NewCertificate(header,
 			[][]byte{
-				ed25519.Sign(privKeys[0], voteContent),
-				ed25519.Sign(privKeys[0], voteContent),
-				ed25519.Sign(privKeys[1], voteContent),
+				voteSignature(t, header, committee, privKeys[0], 0),
+				voteSignature(t, header, committee, privKeys[0], 0),
+				voteSignature(t, header, committee, privKeys[1], 1),
 			},
 			[]uint16{0, 0, 1}, // Duplicate 0
 		)

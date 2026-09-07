@@ -7,6 +7,9 @@
 package simulator
 
 import (
+	"sync"
+	"sync/atomic"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -14,8 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"sync"
-	"sync/atomic"
 )
 
 type Router struct {

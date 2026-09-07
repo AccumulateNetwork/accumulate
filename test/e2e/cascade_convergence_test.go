@@ -45,9 +45,22 @@ func TestCascadeConvergence(t *testing.T) {
 	var timestamp uint64
 	const transfers = 8
 
-	// Drop exactly the FIRST synthetic deposit, once. Every later deposit then
-	// arrives out of sequence and piles up pending behind the gap.
-	var didDrop bool
+	// Drop the FIRST synthetic deposit, and keep dropping healing's attempts to
+	// redeliver it until every transfer has been submitted. Every later deposit
+	// then arrives out of sequence and piles up pending behind the gap.
+	//
+	// Holding the gap open is what makes the measurement below mean anything.
+	// Healing is paced by WALL-CLOCK time (SyntheticHealWindow, see
+	// simulator/factory.go) while the simulator runs blocks as fast as the
+	// machine allows, so how much tail accumulates before the gap closes is a
+	// property of the host, not of the code under test. Left to chance the gap
+	// closes early on a slow runner, the tail drains while transfers are still
+	// being submitted, and the loop below sees only the in-order remainder
+	// arriving one per block -- maxJump of 1, which is also the bug's
+	// signature. The two are indistinguishable by this metric, so the tail has
+	// to be piled deliberately rather than hoped for.
+	var didDrop, submitted bool
+	var head [32]byte
 
 	globals := new(core.GlobalValues)
 	globals.ExecutorVersion = ExecutorVersionLatest
@@ -56,7 +69,7 @@ func TestCascadeConvergence(t *testing.T) {
 		simulator.GenesisWith(GenesisTime, globals),
 
 		simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (bool, error) {
-			if didDrop {
+			if didDrop && submitted {
 				return true, nil
 			}
 			messages, err := env.Normalize()
@@ -70,8 +83,16 @@ func TestCascadeConvergence(t *testing.T) {
 					msg = m.Unwrap()
 					goto again
 				case messaging.MessageWithTransaction:
-					if m.GetTransaction().Body.Type() == TransactionTypeSyntheticDepositTokens {
-						didDrop = true
+					txn := m.GetTransaction()
+					if txn.Body.Type() != TransactionTypeSyntheticDepositTokens {
+						continue
+					}
+					switch h := txn.ID().Hash(); {
+					case !didDrop:
+						didDrop, head = true, h
+						return false, nil
+					case h == head:
+						// Healing trying to close the gap. Not yet.
 						return false, nil
 					}
 				}
@@ -110,6 +131,9 @@ func TestCascadeConvergence(t *testing.T) {
 		sim.StepN(2)
 	}
 	sim.StepUntil(True(func(*Harness) bool { return didDrop }))
+
+	// The whole tail is pending now. Let healing close the gap.
+	submitted = true
 
 	bobBalance := func() int64 {
 		var bal int64

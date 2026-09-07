@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -398,8 +398,8 @@ func appendHashes(path string, hashes [][32]byte) error {
 	if err != nil {
 		return err
 	}
-	for _, h := range hashes {
-		if _, err := f.Write(h[:]); err != nil {
+	for i := range hashes {
+		if _, err := f.Write(hashes[i][:]); err != nil {
 			_ = f.Close()
 			return err
 		}

@@ -1,3 +1,9 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 // Command blockfile-sim measures whether moving immutable entries out of
 // LevelDB into append-only "major block files" reduces LevelDB overhead.
 //
@@ -175,7 +181,7 @@ func openLevelDB(path string) (*leveldb.DB, error) {
 
 func dirSize(path string) int64 {
 	var total int64
-	filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
 		if err == nil && !info.IsDir() {
 			total += info.Size()
 		}
@@ -184,6 +190,7 @@ func dirSize(path string) int64 {
 	return total
 }
 
+//nolint:noprint // blockfile-sim is a measurement CLI; its report on stdout is the product
 func main() {
 	flag.Parse()
 	switch {

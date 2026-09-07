@@ -26,6 +26,8 @@ import (
 )
 
 // runReal drives mode=real-leveldb or mode=real-blockdb.
+//
+//nolint:noprint // blockfile-sim is a measurement CLI; its report on stdout is the product
 func runReal(which string) {
 	os.RemoveAll(*dir)
 	check(os.MkdirAll(*dir, 0o755))
