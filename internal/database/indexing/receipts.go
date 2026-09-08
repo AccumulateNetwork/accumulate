@@ -185,6 +185,8 @@ func ReceiptForChainIndex(partition config.NetworkUrl, batch *database.Batch, c 
 	if c.Type() == merkle.ChainTypeIndex {
 		return nil, 0, nil, errors.BadRequest.WithFormat("cannot get a receipt for %s: index chains are not anchored", c.Name())
 	}
+	var entry, rootEntry *protocol.IndexEntry
+	var rootIndexIndex uint64
 	indexChain, err := c.Index().Get()
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("unable to load %s index chain: %w", c.Name(), err)
@@ -193,7 +195,19 @@ func ReceiptForChainIndex(partition config.NetworkUrl, batch *database.Batch, c 
 		return nil, 0, nil, fmt.Errorf("cannot create receipt for entry %d of %s chain: index chain is empty", index, c.Name())
 	}
 
-	_, entry, err := SearchIndexChain(indexChain, uint64(indexChain.Height())-1, MatchAfter, SearchIndexChainBySource(uint64(index)))
+	// The two positions this receipt needs -- which index-chain entry covers
+	// this entry, and which root index entry covers that -- were both recorded
+	// when the entry was written, in the transaction's chains index
+	// (TransactionChainEntry.ChainIndex and .AnchorIndex). Read them rather
+	// than search for them (#4263). Falls through to the search when the entry
+	// is not a transaction, or its record is absent, or the caller asked for a
+	// different height than the one the entry was anchored at.
+	entry, rootIndexIndex, rootEntry, ok := storedAnchorPositions(partition, batch, c, index, targetHeight)
+	if ok {
+		return finishChainReceipt(partition, batch, c, index, entry, rootIndexIndex, rootEntry)
+	}
+
+	_, entry, err = SearchIndexChain(indexChain, uint64(indexChain.Height())-1, MatchAfter, SearchIndexChainBySource(uint64(index)))
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("unable to locate index entry for entry %d of %s chain: %w", index, c.Name(), err)
 	}
@@ -218,9 +232,75 @@ func ReceiptForChainIndex(partition config.NetworkUrl, batch *database.Batch, c 
 
 	}
 
-	rootIndexIndex, rootEntry, err := SearchIndexChain(rootIndexChain, uint64(rootIndexChain.Height())-1, MatchAfter, SearchIndexChainBySource(*targetHeight))
+	rootIndexIndex, rootEntry, err = SearchIndexChain(rootIndexChain, uint64(rootIndexChain.Height())-1, MatchAfter, SearchIndexChainBySource(*targetHeight))
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("unable to locate index entry for entry %d of the minor root chain: %w", entry.Anchor, err)
+	}
+
+	_ = chain
+	return finishChainReceipt(partition, batch, c, index, entry, rootIndexIndex, rootEntry)
+}
+
+// storedAnchorPositions returns the index entries a receipt needs, read from
+// the transaction's chains index instead of searched for. The second return is
+// the root index entry's position, which the caller reports as
+// rootIndexIndex. ok is false when the positions are not available and the
+// caller must search.
+func storedAnchorPositions(partition config.NetworkUrl, batch *database.Batch, c *database.Chain2, index int64, targetHeight *uint64) (*protocol.IndexEntry, uint64, *protocol.IndexEntry, bool) {
+	// A receipt for a specific height is not the entry's own anchor, so the
+	// stored position does not answer it
+	if targetHeight != nil {
+		return nil, 0, nil, false
+	}
+
+	// The chains index is keyed by the entry's hash, so the entry must be one
+	chain, err := c.Get()
+	if err != nil {
+		return nil, 0, nil, false
+	}
+	hash, err := chain.Entry(index)
+	if err != nil {
+		return nil, 0, nil, false
+	}
+
+	entries, err := batch.Transaction(hash).Chains().Get()
+	if err != nil {
+		return nil, 0, nil, false
+	}
+	var rec *database.TransactionChainEntry
+	for _, e := range entries {
+		if e.Chain == c.Name() && e.Account.Equal(c.Account()) {
+			rec = e
+			break
+		}
+	}
+	if rec == nil {
+		return nil, 0, nil, false
+	}
+
+	entry, err := loadIndexEntry(c, rec.ChainIndex)
+	if err != nil {
+		return nil, 0, nil, false
+	}
+	// The recorded position must actually cover this entry; if it does not,
+	// the record is stale or wrong and the search is the safe answer
+	if entry.Source < uint64(index) {
+		return nil, 0, nil, false
+	}
+
+	rootEntry, err := loadIndexEntry(batch.Account(partition.Ledger()).RootChain(), rec.AnchorIndex)
+	if err != nil {
+		return nil, 0, nil, false
+	}
+	return entry, rec.AnchorIndex, rootEntry, true
+}
+
+// finishChainReceipt builds the receipt once both index entries are known,
+// however they were obtained.
+func finishChainReceipt(partition config.NetworkUrl, batch *database.Batch, c *database.Chain2, index int64, entry *protocol.IndexEntry, rootIndexIndex uint64, rootEntry *protocol.IndexEntry) (*protocol.IndexEntry, uint64, *merkle.Receipt, error) {
+	chain, err := c.Get()
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("unable to load %s chain: %w", c.Name(), err)
 	}
 
 	// Get a receipt from the account's chain
