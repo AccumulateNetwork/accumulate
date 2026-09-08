@@ -37,6 +37,16 @@
     parameters: # Not indexed directly
     - name: Index
       type: uint
+  # The pair the cascade combined at each height when an element was added.
+  # A proof reads these instead of replaying the state that held them (#4263).
+  - name: Intermediate
+    type: index
+    dataType: bytes
+    parameters:
+    - name: Index
+      type: uint
+    - name: Height
+      type: uint
 
 - name: ChainIndex
   type: entity

@@ -84,6 +84,13 @@ func (m *Chain) AddEntry(hash []byte, unique bool) error {
 	if err != nil {
 		return err
 	}
+	// The cascade about to run computes every intermediate hash a proof of
+	// this element will need. Record them, so the proof reads them instead of
+	// rebuilding the state that held them (#4263).
+	if err := m.putIntermediates(head, hash); err != nil {
+		return err
+	}
+
 	switch (head.Count + 1) & m.markMask {
 	case 0: // Is this the end of the Mark set, i.e. 0, ..., markFreq-1
 		head.AddEntry(hash)                                     // Add the hash to the Merkle Tree
@@ -243,7 +250,57 @@ func (m *Chain) Entry(element int64) ([]byte, error) {
 // Return the last two hashes that were combined to create the local
 // Merkle Root at the given index.  The element provided must be odd,
 // and the Pending List must be fully populated up to height specified.
+// putIntermediates records the pairs the cascade is about to combine, one per
+// height it carries through, so a proof reads them instead of replaying the
+// state that produced them. It mirrors State.AddEntry exactly: the pair at
+// height i+1 is (Pending[i], the hash accumulated so far).
+func (m *Chain) putIntermediates(head *State, hash []byte) error {
+	index := uint64(head.Count) // the element's index is the count before it is added
+	acc := copyHash(hash)
+	for i, v := range head.Pending {
+		if v == nil {
+			return nil // the cascade stops here
+		}
+		// getIntermediate(index, height) returns this pair for height i+1
+		pair := make([]byte, 0, 64)
+		pair = append(pair, v...)
+		pair = append(pair, acc...)
+		if err := m.Intermediate(index, uint64(i)+1).Put(pair); err != nil {
+			return err
+		}
+		acc = combineHashes(v, acc)
+	}
+	return nil
+}
+
+// trailingOnes counts the set bits at the bottom of v, which is the number of
+// heights the cascade carries through when element v is added.
+func trailingOnes(v uint64) int {
+	n := 0
+	for v&1 == 1 {
+		n++
+		v >>= 1
+	}
+	return n
+}
+
 func (m *Chain) getIntermediate(element, height int64) (Left, Right []byte, err error) {
+	// The cascade computed this pair when the element was added. Read it
+	// (#4263).
+	if pair, err := m.Intermediate(uint64(element), uint64(height)).Get(); err == nil && len(pair) == 64 {
+		return copyHash(pair[:32]), copyHash(pair[32:]), nil
+	}
+
+	// Nothing stored. Either the cascade never reached this height, or the
+	// chain predates the record. The first is arithmetic: adding element e
+	// carries through Pending[i] for each set bit of e from the bottom, so it
+	// produces intermediates for heights 1..trailingOnes(e) and no higher.
+	// Above that, Receipt.build expects the error it uses to change column,
+	// and there is no state worth rebuilding to discover that.
+	if element >= 0 && height > int64(trailingOnes(uint64(element))) {
+		return nil, nil, fmt.Errorf("no values found at height %d", height)
+	}
+
 	hash, e := m.Entry(element) // Get the element at this height
 	if e != nil {               // Error out if we can't
 		return nil, nil, e //

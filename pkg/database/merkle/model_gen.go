@@ -31,6 +31,7 @@ type Chain struct {
 	states       map[chainStatesMapKey]values.Value[*State]
 	elementIndex map[chainElementIndexMapKey]values.Value[uint64]
 	element      map[chainElementMapKey]values.Value[[]byte]
+	intermediate map[chainIntermediateMapKey]values.Value[[]byte]
 }
 
 func (c *Chain) Key() *record.Key { return c.key }
@@ -71,6 +72,20 @@ func (k chainElementKey) ForMap() chainElementMapKey {
 	return chainElementMapKey{k.Index}
 }
 
+type chainIntermediateKey struct {
+	Index  uint64
+	Height uint64
+}
+
+type chainIntermediateMapKey struct {
+	Index  uint64
+	Height uint64
+}
+
+func (k chainIntermediateKey) ForMap() chainIntermediateMapKey {
+	return chainIntermediateMapKey{k.Index, k.Height}
+}
+
 func (c *Chain) Head() values.Value[*State] {
 	return values.GetOrCreate(c, &c.head, (*Chain).newHead)
 }
@@ -101,6 +116,14 @@ func (c *Chain) Element(index uint64) values.Value[[]byte] {
 
 func (c *Chain) newElement(k chainElementKey) values.Value[[]byte] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("Element", k.Index), false, values.Wrapped(values.BytesWrapper))
+}
+
+func (c *Chain) Intermediate(index uint64, height uint64) values.Value[[]byte] {
+	return values.GetOrCreateMap(c, &c.intermediate, chainIntermediateKey{index, height}, (*Chain).newIntermediate)
+}
+
+func (c *Chain) newIntermediate(k chainIntermediateKey) values.Value[[]byte] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Intermediate", k.Index, k.Height), false, values.Wrapped(values.BytesWrapper))
 }
 
 func (c *Chain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -141,8 +164,19 @@ func (c *Chain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		}
 		v := c.Element(index)
 		return v, key.SliceI(2), nil
+	case "Intermediate":
+		if key.Len() < 3 {
+			return nil, nil, errors.InternalError.With("bad key for chain (8)")
+		}
+		index, okIndex := key.Get(1).(uint64)
+		height, okHeight := key.Get(2).(uint64)
+		if !okIndex || !okHeight {
+			return nil, nil, errors.InternalError.With("bad key for chain (9)")
+		}
+		v := c.Intermediate(index, height)
+		return v, key.SliceI(3), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for chain (8)")
+		return nil, nil, errors.InternalError.With("bad key for chain (10)")
 	}
 }
 
@@ -169,6 +203,11 @@ func (c *Chain) IsDirty() bool {
 			return true
 		}
 	}
+	for _, v := range c.intermediate {
+		if v.IsDirty() {
+			return true
+		}
+	}
 
 	return false
 }
@@ -190,6 +229,9 @@ func (c *Chain) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if !opts.IgnoreIndices {
 		values.WalkMap(&err, c.element, c.newElement, nil, opts, fn)
 	}
+	if !opts.IgnoreIndices {
+		values.WalkMap(&err, c.intermediate, c.newIntermediate, nil, opts, fn)
+	}
 	return err
 }
 
@@ -207,6 +249,9 @@ func (c *Chain) Commit() error {
 		values.Commit(&err, v)
 	}
 	for _, v := range c.element {
+		values.Commit(&err, v)
+	}
+	for _, v := range c.intermediate {
 		values.Commit(&err, v)
 	}
 
