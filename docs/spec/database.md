@@ -58,6 +58,42 @@ that means to look back must say so:
 A store with no window ignores the distinction: its ordinary reads already see
 everything.
 
+### Proofs are read, not searched
+
+A Merkle proof runs from an entry to the peaks of its tree. Which sibling it
+needs at each level follows from the entry's index, so a proof is arithmetic
+over addresses plus one read per address. Nothing about it requires a search,
+and nothing it needs has to be recomputed: every sibling is a subtree root
+that was calculated once, when the cascade that formed it ran, and every
+element is stored individually.
+
+Three positions are involved in a chain receipt, and each must be a read:
+
+1. **Entry hash to entry index.** A stored map, written on every append
+   (`ElementIndex`). One read.
+2. **Entry index to the positions that anchor it** — which index-chain entry
+   covers the entry, and which root index entry covers that. Both are recorded
+   when the entry is written (`TransactionChainEntry.ChainIndex` and
+   `.AnchorIndex`). Read them. A receipt that searches an index chain for
+   something already written down is a defect, however fast the search: the
+   linear form of it hung the v3 API past a three-minute client timeout on
+   entries with old anchors (#4263).
+3. **The sibling hashes themselves.** Stored, addressable, and chosen by
+   arithmetic on the index.
+
+A receipt asked for a *height other than the entry's own anchor* is the one
+case position 2 cannot answer from the record, because the root entry wanted
+is deliberately not the one the entry was anchored at. That case searches.
+
+The cost this buys is the criterion: **a proof for any entry in a chain of N
+costs on the order of log2(N) reads** — 32 for four billion — and no scan of
+any length appears in it.
+
+The same principle governs the account state tree: the BPT stores subtree
+blocks of `Power` levels, so a proof reads one block per `Power` levels rather
+than one record per level, and the blocks it reads already contain every
+sibling the upward walk needs.
+
 ## 2. Specification — how it is implemented
 
 ### Interfaces
