@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 // #4263: the cascade computes every intermediate a proof needs, so the proof
@@ -106,4 +108,116 @@ func TestIntermediate_ReceiptIsTheSameEitherWay(t *testing.T) {
 		}
 		require.True(t, fromStore.Validate(nil), "start %d: the receipt must verify", start)
 	}
+}
+
+// countingStore records which kinds of record a chain reads and writes, so a
+// test can assert what a proof costs rather than only what it returns.
+type countingStore struct {
+	inner database.Store
+	get   map[string]int
+	put   map[string]int
+	drop  string // a record kind to discard writes for, to model an old chain
+}
+
+func newCountingStore(inner database.Store) *countingStore {
+	return &countingStore{inner: inner, get: map[string]int{}, put: map[string]int{}}
+}
+
+func kindOf(k *record.Key) string {
+	for i := k.Len() - 1; i >= 0; i-- {
+		if s, ok := k.Get(i).(string); ok {
+			return s
+		}
+	}
+	return "?"
+}
+
+func (c *countingStore) GetValue(k *record.Key, v database.Value) error {
+	c.get[kindOf(k)]++
+	return c.inner.GetValue(k, v)
+}
+
+func (c *countingStore) PutValue(k *record.Key, v database.Value) error {
+	if kind := kindOf(k); kind == c.drop {
+		return nil
+	} else {
+		c.put[kind]++
+	}
+	return c.inner.PutValue(k, v)
+}
+
+// #4263: a proof must read the stored intermediates and rebuild nothing. The
+// rebuild reads States, so a proof that reads no States record did not rebuild.
+// This is the assertion the manual panic check was standing in for.
+func TestIntermediate_ProofReadsNoState(t *testing.T) {
+	const n = 4096
+	cs := newCountingStore(begin())
+	c := testChain(cs, 8, "test")
+	for i := 0; i < n; i++ {
+		d := sha256.Sum256([]byte(fmt.Sprint(i)))
+		require.NoError(t, c.AddEntry(d[:], false))
+	}
+
+	require.NoError(t, c.Commit())
+
+	// One record per element amortised: N elements produce N-1 combines
+	require.Equal(t, n-1, cs.put["Intermediate"], "one intermediate per combine")
+
+	// A fresh chain over the same store, so every read is a real one
+	cs.get = map[string]int{}
+	c = testChain(cs, 8, "test")
+	for _, start := range []int64{0, 1, 7, 100, 300, 1000, 2047, n - 1} {
+		r, err := c.Receipt(start, n-1)
+		require.NoError(t, err, "start %d", start)
+		require.True(t, r.Validate(nil), "start %d", start)
+	}
+	// A proof legitimately reads the state at its anchor -- those are the
+	// peaks it folds into -- and that is memoised, so eight proofs against
+	// the same anchor read it once. What must not appear is a state read per
+	// level, which is the rebuild this change removes.
+	require.NotZero(t, cs.get["Intermediate"], "a proof must read the stored intermediates")
+	require.LessOrEqual(t, cs.get["States"], 1,
+		"a proof reads the anchor state and no more; it read %d States records", cs.get["States"])
+	t.Logf("8 proofs over %d elements: %d intermediate reads, %d state reads", n, cs.get["Intermediate"], cs.get["States"])
+}
+
+// A chain written before the record existed has no intermediates. It must
+// still produce correct receipts, by falling back to the rebuild.
+func TestIntermediate_ChainWithoutThemStillProves(t *testing.T) {
+	const n = 512
+	cs := newCountingStore(begin())
+	c := testChain(cs, 8, "test")
+	for i := 0; i < n; i++ {
+		d := sha256.Sum256([]byte(fmt.Sprint(i)))
+		require.NoError(t, c.AddEntry(d[:], false))
+	}
+	require.NoError(t, c.Commit())
+	want, err := c.Receipt(7, n-1)
+	require.NoError(t, err)
+
+	// A second chain, with every intermediate write discarded — an old chain
+	old := newCountingStore(begin())
+	old.drop = "Intermediate"
+	c2 := testChain(old, 8, "test")
+	for i := 0; i < n; i++ {
+		d := sha256.Sum256([]byte(fmt.Sprint(i)))
+		require.NoError(t, c2.AddEntry(d[:], false))
+	}
+	require.NoError(t, c2.Commit())
+	require.Zero(t, old.put["Intermediate"], "the old chain must store none")
+
+	old.get = map[string]int{}
+	c2 = testChain(old, 8, "test")
+	got, err := c2.Receipt(7, n-1)
+	require.NoError(t, err)
+	require.Greater(t, old.get["States"], 1,
+		"without the intermediates the proof rebuilds state per level; it read %d", old.get["States"])
+	t.Logf("without the intermediates, one proof reads %d States records", old.get["States"])
+	require.Equal(t, want.Anchor, got.Anchor, "the receipt must be the same either way")
+	require.Equal(t, len(want.Entries), len(got.Entries))
+	for i := range want.Entries {
+		require.Equal(t, want.Entries[i].Hash, got.Entries[i].Hash, "entry %d", i)
+		require.Equal(t, want.Entries[i].Right, got.Entries[i].Right, "entry %d", i)
+	}
+	require.True(t, got.Validate(nil))
 }
