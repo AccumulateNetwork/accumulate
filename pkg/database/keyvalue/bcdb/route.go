@@ -58,6 +58,7 @@ import (
 //	Message(H).Main                   Account(U).Main
 //	Transaction(H).Main               Transaction(H).Status
 //	<chain>.Element(I)                Account(U).Url (written once; see below)
+//	<chain>.Intermediate(I,H)
 //	<chain>.ElementIndex(H)           Account(U).Pending, .Directory, .Chains
 //	                                  <chain>.Head
 //	                                  BPT nodes and BPT.Root
@@ -71,6 +72,13 @@ import (
 func isWriteOnce(k *record.Key) bool {
 	last, prev, trailing := tail(k)
 	switch last {
+	case "Intermediate":
+		// <chain>.Intermediate(I, H) is the pair the cascade combined at
+		// height H when element I was added -- a fact about a position in
+		// the log, fixed the moment it was written, like Element below
+		// (#4263).
+		return trailing == 2
+
 	case "Element", "ElementIndex", "States":
 		// A merkle chain is a log.  Element(I) is the I'th entry,
 		// ElementIndex(H) is where entry H landed, and States(I) is
