@@ -67,6 +67,11 @@ func TestClassification(t *testing.T) {
 		{true, "where an entry landed", record.NewKey("Account", alice, "MainChain", "ElementIndex", hash)},
 		{true, "mark point", record.NewKey("Account", alice, "MainChain", "States", uint64(64))},
 		{false, "the end of the log", record.NewKey("Account", alice, "MainChain", "Head")},
+		// The cascade pair combined at a height when an entry was added
+		// is fixed the moment it is written, like the entry (#4263)
+		{true, "cascade pair", record.NewKey("Account", alice, "MainChain", "Intermediate", uint64(5), uint64(1))},
+		{true, "cascade pair on an anchor chain", record.NewKey("Account", alice, "AnchorChain", "BVN1", "Root", "Intermediate", uint64(9), uint64(3))},
+		{false, "a cascade pair needs both parameters", record.NewKey("Account", alice, "MainChain", "Intermediate", uint64(5))},
 
 		// The same rules have to reach every chain, including the ones
 		// with a parameter of their own
