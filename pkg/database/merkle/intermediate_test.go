@@ -160,8 +160,9 @@ func TestIntermediate_ProofReadsNoState(t *testing.T) {
 
 	require.NoError(t, c.Commit())
 
-	// One record per element amortised: N elements produce N-1 combines
-	require.Equal(t, n-1, cs.put["Intermediate"], "one intermediate per combine")
+	// One record per combine; see TestIntermediate_OneWritePerCombine for the
+	// count in general, which is N minus the bits set in N
+	require.Equal(t, combines(n), cs.put["Intermediate"], "one intermediate per combine")
 
 	// A fresh chain over the same store, so every read is a real one
 	cs.get = map[string]int{}
