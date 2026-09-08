@@ -252,7 +252,15 @@ Three positions are involved in a chain receipt, and each must be a read:
    linear form of it hung the v3 API past a three-minute client timeout on
    entries with old anchors (#4263).
 3. **The sibling hashes themselves.** Stored, addressable, and chosen by
-   arithmetic on the index.
+   arithmetic on the index. A chain records each `(left, right)` pair as its
+   cascade combines it, keyed by the element's index and the height, so a
+   proof reads what was computed once rather than rebuilding the Merkle state
+   that held it. Where the cascade never reached a height there is nothing to
+   read and nothing to rebuild: adding element *e* carries through one level
+   per set bit at the bottom of *e*, so the heights that exist are 1 through
+   `trailingOnes(e)`, and a request above that is answered by arithmetic. The
+   cost is one record per element added, since N elements produce N-1
+   combines in total.
 
 A receipt asked for a *height other than the entry's own anchor* is the one
 case position 2 cannot answer from the record, because the root entry wanted
