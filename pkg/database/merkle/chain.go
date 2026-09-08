@@ -301,20 +301,22 @@ func trailingOnes(v uint64) int {
 }
 
 func (m *Chain) getIntermediate(element, height int64) (Left, Right []byte, err error) {
-	// The cascade computed this pair when the element was added. Read it
-	// (#4263).
-	if pair, err := m.Intermediate(uint64(element), uint64(height)).Get(); err == nil && len(pair) == 64 {
-		return copyHash(pair[:32]), copyHash(pair[32:]), nil
-	}
-
-	// Nothing stored. Either the cascade never reached this height, or the
-	// chain predates the record. The first is arithmetic: adding element e
-	// carries through Pending[i] for each set bit of e from the bottom, so it
-	// produces intermediates for heights 1..trailingOnes(e) and no higher.
-	// Above that, Receipt.build expects the error it uses to change column,
-	// and there is no state worth rebuilding to discover that.
+	// Whether a pair exists at all is arithmetic, and answering it first
+	// costs nothing: adding element e carries through Pending[i] for each set
+	// bit of e from the bottom, so the cascade produces intermediates for
+	// heights 1..trailingOnes(e) and no higher. Above that there is nothing
+	// stored and nothing to rebuild -- the replay would walk the whole of
+	// Pending and return this same error, which is what Receipt.build uses to
+	// change column. Asking the store first would spend a read per level to
+	// learn what the index already says (#4263).
 	if element >= 0 && height > int64(trailingOnes(uint64(element))) {
 		return nil, nil, fmt.Errorf("no values found at height %d", height)
+	}
+
+	// The pair exists. The cascade computed it when the element was added, so
+	// read it rather than rebuilding the state that held it.
+	if pair, err := m.Intermediate(uint64(element), uint64(height)).Get(); err == nil && len(pair) == 64 {
+		return copyHash(pair[:32]), copyHash(pair[32:]), nil
 	}
 
 	hash, e := m.Entry(element) // Get the element at this height
