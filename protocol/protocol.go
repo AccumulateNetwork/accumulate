@@ -83,7 +83,13 @@ const (
 	// operator does not state one. It is recorded in the network's globals
 	// like any other declared value -- what is not acceptable is a default
 	// that lives only in a binary and is never written down (#4267).
-	DefaultBlockInterval = time.Second
+	//
+	// It must equal the DAG-BFT pacing default (dagconfig.DefaultBlockInterval),
+	// which is the value that line's nodes run at: if the recorded default and
+	// the pacing default disagree, every node that states nothing is re-paced
+	// by the act of recording. A test asserts the two are equal, since the
+	// layering does not allow one to reference the other.
+	DefaultBlockInterval = 3 * time.Second
 
 	//AccountUrlMaxLength is the maximum size allowed for accumulate adi urls
 	AccountUrlMaxLength = 500
