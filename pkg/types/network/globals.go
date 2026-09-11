@@ -41,6 +41,18 @@ func NewGlobals(g *GlobalValues) *GlobalValues {
 	if g.Globals.MajorBlockSchedule == "" {
 		g.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
 	}
+
+	// A network runs at one cadence and the network must say what it is, so
+	// the value is recorded here whether or not the operator stated one. A
+	// default that lives only in a node's binary makes the rate an emergent
+	// property of whichever nodes form the quorum, which nothing can check a
+	// node against (#4267).
+	// Zero means the operator stated nothing. A negative value is not a
+	// statement of nothing, it is a wrong statement, and it is left alone so
+	// that deployment rejects it rather than silently substituting a default.
+	if g.Globals.BlockInterval == 0 {
+		g.Globals.BlockInterval = protocol.DefaultBlockInterval
+	}
 	if g.Globals.FeeSchedule == nil {
 		g.Globals.FeeSchedule = new(protocol.FeeSchedule)
 		g.Globals.FeeSchedule.CreateIdentitySliding = []protocol.Fee{
