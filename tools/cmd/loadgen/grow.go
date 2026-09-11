@@ -221,7 +221,11 @@ func (e *env) growIdentity(ctx context.Context) error {
 	data := adiURL.JoinPath("data")
 	ids, err = e.sign(ctx, page1.url, func() txBuilder {
 		return e.build(adi).
-			CreateDataAccount(data).
+			// An explicit authority, so the account carries the book in its
+			// OWN auth set. Without one it inherits the identity's authority
+			// and carries none, and update-account-auth against it is refused
+			// as "not an authority" — 81 of 81 in the run behind #4271.
+			CreateDataAccount(data).WithAuthority(book.url).
 			SignWith(page1.url).Version(page1.version).Timestamp(e.nonce.next()).PrivateKey(signerKey)
 	})
 	if err != nil {
@@ -501,7 +505,7 @@ func (e *env) growAccount(ctx context.Context, c *accountClaim) error {
 	u := adi.url.JoinPath("data" + itoa(c.seq))
 	ids, err := e.sign(ctx, signer.url, func() txBuilder {
 		return e.build(adi).
-			CreateDataAccount(u).
+			CreateDataAccount(u).WithAuthority(adi.books[0].url).
 			SignWith(signer.url).Version(signer.version).Timestamp(e.nonce.next()).PrivateKey(adi.key())
 	})
 	if err != nil {
