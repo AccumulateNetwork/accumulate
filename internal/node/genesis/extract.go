@@ -90,6 +90,14 @@ func Extract(db *coredb.Database, snap ioutil2.SectionReader, shouldKeep func(*u
 					// types. Is there a decent way to programmatically detect
 					// if `v` is a child of a chain?
 					switch e.Key.Get(3) {
+					case "Intermediate":
+						// The cascade pairs of the chain being discarded.
+						// They are keyed by index, and genesis rebuilds the
+						// chain with its own indices, so carrying them over
+						// would answer a proof with another element's
+						// siblings. The rebuild writes its own (#4263).
+						return false, nil
+
 					case "States":
 						// Discard mark points unless it's a data account
 						switch data.Main.(type) {

@@ -234,17 +234,10 @@ rejection, which names the real trigger rather than a supposed one.
 database.md ("Proofs are read, not searched") requires a proof to be reads and
 arithmetic. Two of the three positions now are. The third is not.
 
-`getIntermediate` (`pkg/database/merkle/chain.go:461`) reads the element and
-then calls `StateAt(element-1)`, which reads the two surrounding mark points
-and replays up to a mark frequency of entries to rebuild a Merkle state that
-already existed when the entry was added. A proof does that twice per level:
-measured, a chain of 262,144 produces 18 proof entries from 36 such lookups.
-The cascade values it recovers were each computed once and survive only inside
-a state's `Pending` list, and states are kept only every `2^markPower`
-entries, so recovering one costs a reconstruction rather than a read. Storing
-the cascade node when it is computed, keyed by index and level, makes the
-proof one read per level; it is one record per entry amortised, since adding N
-elements performs N-1 combines in total.
+~~`getIntermediate` rebuilds the Merkle state that held each sibling.~~ Done:
+the cascade pairs are stored as they are computed and the proof reads them,
+with the heights that do not exist answered by arithmetic. A chain written
+before the record exists has none, and falls back to the rebuild.
 
 The account state tree has the analogous gap in a different place: its blocks
 are read cold on every request, because loaded blocks are pinned to the batch
