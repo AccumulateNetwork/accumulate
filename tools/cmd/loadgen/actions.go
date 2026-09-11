@@ -106,7 +106,7 @@ var sendTokensLite = action{
 		// Cascade: a funded, ready lite distributes to another lite. The
 		// destination is NOT marked funded here: confirmFunding promotes it
 		// when the network shows the deposit (#4271).
-		if src := e.u.randSourceLite(); src != nil && src != to {
+		if src := e.u.randSourceLite(); src != nil && src != to && e.claimSend(src) {
 			return e.sign(ctx, src.id, func() txBuilder {
 				return e.build(src).
 					SendTokens(sendAmount, protocol.AcmePrecisionPower).To(to.acct).

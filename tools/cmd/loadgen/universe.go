@@ -7,6 +7,7 @@
 package main
 
 import (
+	"time"
 	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
@@ -61,6 +62,17 @@ type liteAccount struct {
 	// lites send to others, which become funded in turn — so sends originate
 	// from accounts on every partition rather than only the treasury's.
 	funded bool
+
+	// spendable is what the network was last OBSERVED to hold here, less what
+	// the generator has sent since. It rises only on observation, so a deposit
+	// that was submitted and never landed cannot make this account look
+	// solvent (#4271).
+	spendable int64
+
+	// lastSpend is when the generator last sent from this account. A balance
+	// read taken before that send lands still shows the money, so it is not
+	// trusted until the network has had time to execute it.
+	lastSpend time.Time
 }
 
 // identity is an ADI and everything created under it.

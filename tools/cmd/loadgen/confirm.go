@@ -8,6 +8,10 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"math"
+	"sort"
+	"sync"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -47,7 +51,57 @@ const (
 	// pageSyncSample bounds how many identities have their pages re-read per
 	// pass, for the same reason.
 	pageSyncSample = 4
+
+	// confirmSettle is how long a balance read is distrusted after the
+	// generator itself has spent from the account. A read taken while its own
+	// send is still in flight shows the money still there, and promoting on
+	// that number spends it twice — the same mistake as trusting a submission,
+	// one step further along.
+	confirmSettle = 8 * time.Second
 )
+
+// sendUnits is one transfer, in the smallest ACME unit.
+var sendUnits = int64(math.Round(sendAmount * protocol.AcmePrecision))
+
+// observeFunds records what the network showed the account holding, and makes
+// it a source if that covers a transfer.
+//
+// spendable only ever RISES from an observation and only ever falls by what
+// the generator itself has sent. The local mirror cannot be used for this: it
+// credits a recipient when a transfer is SUBMITTED, so deposits that never
+// landed inflate it — and an account funded only by failed sends looks solvent
+// forever. That is the same error as #4271 one level down, and it is why the
+// number an account is trusted for comes from the chain and nowhere else.
+func (e *env) observeFunds(l *liteAccount, units int64) {
+	e.u.mu.Lock()
+	defer e.u.mu.Unlock()
+	if time.Since(l.lastSpend) < confirmSettle {
+		return // its own send is still in flight; the read is stale
+	}
+	if units > l.spendable {
+		l.spendable = units
+	}
+	l.funded = l.spendable >= sendUnits
+}
+
+// claimSend reserves one transfer against what the account was last observed
+// to hold, and stops it being drawn as a source when nothing is left. The
+// account stays in the universe: confirmFunding promotes it again if a later
+// deposit lands.
+func (e *env) claimSend(l *liteAccount) bool {
+	e.u.mu.Lock()
+	defer e.u.mu.Unlock()
+	if l.spendable < sendUnits {
+		l.funded = false
+		return false
+	}
+	l.spendable -= sendUnits
+	l.lastSpend = time.Now()
+	if l.spendable < sendUnits {
+		l.funded = false
+	}
+	return true
+}
 
 // confirmLoop keeps the model's facts tied to what the network shows.
 func (e *env) confirmLoop(ctx context.Context) {
@@ -80,8 +134,8 @@ func (e *env) confirmFunding(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if e.holdsTokens(ctx, l.acct) {
-			e.u.markFunded(l)
+		if units, ok := e.tokenUnits(ctx, l.acct); ok {
+			e.observeFunds(l, units)
 		}
 	}
 }
@@ -104,11 +158,19 @@ func (e *env) retireDryLites(ctx context.Context) {
 			return
 		}
 		l := cand[e.u.intn(len(cand))]
-		if !e.holdsTokens(ctx, l.acct) {
-			e.u.mu.Lock()
-			l.funded = false
-			e.u.mu.Unlock()
+		units, ok := e.tokenUnits(ctx, l.acct)
+		if !ok {
+			units = 0
 		}
+		// Re-anchor on the chain's number: dead reckoning drifts, and this is
+		// the only place the figure is corrected downward. Skipped while the
+		// account's own send is in flight, for the same reason as above.
+		e.u.mu.Lock()
+		if time.Since(l.lastSpend) >= confirmSettle {
+			l.spendable = units
+			l.funded = units >= sendUnits
+		}
+		e.u.mu.Unlock()
 	}
 }
 
@@ -176,18 +238,25 @@ func (e *env) syncPage(ctx context.Context, p *keyPage) {
 
 // --- observers ------------------------------------------------------------
 
-// holdsTokens reports whether the account exists and holds a positive balance.
-func (e *env) holdsTokens(ctx context.Context, u *url.URL) bool {
+// tokenUnits reports the account's balance in the smallest ACME unit, and
+// whether it could be read at all.
+func (e *env) tokenUnits(ctx context.Context, u *url.URL) (int64, bool) {
 	r, err := e.Q.QueryAccount(ctx, u, nil)
 	if err != nil {
-		return false
+		return 0, false
 	}
 	a, ok := r.Account.(protocol.AccountWithTokens)
 	if !ok {
-		return false
+		return 0, false
 	}
 	b := a.TokenBalance()
-	return b != nil && b.Sign() > 0
+	if b == nil {
+		return 0, true
+	}
+	if !b.IsInt64() {
+		return math.MaxInt64, true
+	}
+	return b.Int64(), true
 }
 
 // accountHasAuthority reports whether the account carries auth in its OWN
@@ -205,4 +274,110 @@ func (e *env) accountHasAuthority(ctx context.Context, u, auth *url.URL) bool {
 	}
 	_, found := f.GetAuth().GetAuthority(auth)
 	return found
+}
+
+// --- outcomes -------------------------------------------------------------
+
+// reportOutcomes says how the followed transactions actually ENDED.
+//
+// The delivery report cannot answer that. It asks whether a transaction was
+// delivered, and protocol.TransactionStatus.Delivered() is defined as
+// "Code == Delivered OR Failed()" — a FAILED transaction is delivered. It
+// means "reached a final state", not "worked". So the run behind #4271
+// printed "OK: every followed transaction was delivered" over 736 transfers
+// while the node refused 741 of them for want of funds, and the same green
+// line appears on both lines: on the DAG-BFT line because nothing can be
+// followed at all (#4131 returns nil ids), and on the CometBFT line because
+// everything followed was "delivered".
+//
+// A load generator that cannot say what failed cannot be used to judge a
+// change, which is what #4256 asks for as offered / accepted / failed.
+func (e *env) reportOutcomes(ctx context.Context) {
+	e.track.mu.Lock()
+	roots := map[string][]*url.TxID{}
+	total := 0
+	for n, ids := range e.track.roots {
+		roots[n] = ids
+		total += len(ids)
+	}
+	e.track.mu.Unlock()
+
+	fmt.Println()
+	fmt.Println("== execution outcomes ==")
+	if total == 0 {
+		fmt.Println("  nothing could be followed: submission returned no transaction ids (#4131),")
+		fmt.Println("  so this run cannot say what succeeded. Read the node's executor log.")
+		return
+	}
+
+	type outcome struct {
+		ok, failed, unknown int
+		example             string
+	}
+	var mu sync.Mutex
+	out := map[string]*outcome{}
+
+	names := make([]string, 0, len(roots))
+	for n := range roots {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	for _, n := range names {
+		o := new(outcome)
+		out[n] = o
+
+		ids := roots[n]
+		ch := make(chan *url.TxID)
+		var wg sync.WaitGroup
+		for i := 0; i < 8; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for id := range ch {
+					r, err := e.Q.QueryMessage(ctx, id, nil)
+					mu.Lock()
+					switch {
+					case err != nil:
+						o.unknown++
+					case !r.Status.Success():
+						// Status.Delivered() would be TRUE here: it is
+						// "reached a final state", and an error code is final.
+						// Success() is the question that was never asked.
+						o.failed++
+						if o.example == "" && r.Error != nil {
+							o.example = r.Error.Message
+						}
+					default:
+						o.ok++
+					}
+					mu.Unlock()
+				}
+			}()
+		}
+		for _, id := range ids {
+			if ctx.Err() != nil {
+				break
+			}
+			ch <- id
+		}
+		close(ch)
+		wg.Wait()
+	}
+
+	totalFailed := 0
+	for _, n := range names {
+		o := out[n]
+		totalFailed += o.failed
+		mark := " "
+		if o.failed > 0 {
+			mark = "!"
+		}
+		line := fmt.Sprintf(" %s %-28s ok=%-6d failed=%-6d unknown=%d", mark, n, o.ok, o.failed, o.unknown)
+		if o.example != "" {
+			line += "  e.g. " + o.example
+		}
+		fmt.Println(line)
+	}
+	fmt.Printf("  %d of %d followed transactions FAILED after being accepted\n", totalFailed, total)
 }
