@@ -14,11 +14,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"golang.org/x/exp/slices"
 	"golang.org/x/term"
 )
@@ -57,7 +59,8 @@ func initDevNet(cmd *cobra.Command) *run.Config {
 		cmd.Flag("bvns").Changed && dev.Bvns != uint64(flagRunDevnet.NumBvns) ||
 		cmd.Flag("validators").Changed && dev.Validators != uint64(flagRunDevnet.NumValidators) ||
 		cmd.Flag("followers").Changed && dev.Followers != uint64(flagRunDevnet.NumFollowers) ||
-		cmd.Flag("globals").Changed && !flagRunDevnet.Globals.Equal(dev.Globals)
+		cmd.Flag("globals").Changed && !flagRunDevnet.Globals.Equal(dev.Globals) ||
+		cmd.Flag("block-interval").Changed && (dev.BlockInterval == nil || time.Duration(*dev.BlockInterval) != flagRunDevnet.BlockInterval)
 	if wantReset {
 		switch {
 		case flagMain.Reset:
@@ -99,6 +102,12 @@ func applyDevNetFlags(cmd *cobra.Command, cfg *run.Config, dev *run.NetSimConfig
 		cfg.P2P.Key = &run.RawPrivateKey{
 			Address: address.FromED25519PrivateKey(sk).String(),
 		}
+	}
+
+	// The cadence is the network's, recorded in genesis, so every node paces
+	// from one value rather than from its own configuration (#4267).
+	if cmd.Flag("block-interval").Changed {
+		dev.BlockInterval = run.Ptr(encoding.Duration(flagRunDevnet.BlockInterval))
 	}
 
 	if cmd.Flag("database").Changed {

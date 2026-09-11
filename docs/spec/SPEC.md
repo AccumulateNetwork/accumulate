@@ -20,6 +20,7 @@ the same two sections:
 | [Executor](executor.md) | How a block is produced: what runs, in what order, and what may be staged |
 | [Database abstraction](database.md) | The storage contract every backend satisfies, and how a backend is chosen |
 | [Healing](healing.md) | Filling gaps in sequenced cross-partition streams |
+| [Network parameters](network.md) | What a network declares about itself, and how a node is held to it |
 
 Alongside them, [DIFFERENCES.md](DIFFERENCES.md) records where the code departs
 from the specification, and [PLAN.md](PLAN.md) orders that work. It is kept separate on purpose: a spec that documents

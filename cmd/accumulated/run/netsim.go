@@ -174,10 +174,19 @@ func (d *NetSimConfiguration) buildGenesis(inst *Instance, cfg *Config, nodes []
 
 	// Set default globals
 	r2_3 := protocol.Rational{Numerator: 2, Denominator: 3}
-	g := setDefaultVal(&v.Globals, new(protocol.NetworkGlobals))  // *General*
-	setDefaultVal(&g.OperatorAcceptThreshold, r2_3)               //   Operator threshold        = 2/3
-	setDefaultVal(&g.ValidatorAcceptThreshold, r2_3)              //   Validator threshold       = 2/3
-	setDefaultVal(&g.MajorBlockSchedule, "0 */12 * * *")          //   Major blocks              = 0:00 and 12:00
+	g := setDefaultVal(&v.Globals, new(protocol.NetworkGlobals)) // *General*
+	setDefaultVal(&g.OperatorAcceptThreshold, r2_3)              //   Operator threshold        = 2/3
+	setDefaultVal(&g.ValidatorAcceptThreshold, r2_3)             //   Validator threshold       = 2/3
+	setDefaultVal(&g.MajorBlockSchedule, "0 */12 * * *")         //   Major blocks              = 0:00 and 12:00
+
+	// The cadence the network declares. Recorded here, in genesis, because
+	// that is what every node paces from -- a devnet that pinned it per node
+	// instead would have no network value for a node to be checked against
+	// (#4267). Unset means the protocol default is recorded by NewGlobals.
+	if d.BlockInterval != nil {
+		g.BlockInterval = time.Duration(*d.BlockInterval)
+	}
+
 	f := setDefaultVal(&g.FeeSchedule, new(protocol.FeeSchedule)) // *Fees*
 	setDefaultSlice(&f.CreateIdentitySliding, 500000)             //   1-letter ADI              = $50
 	setDefaultVal(&f.CreateSubIdentity, 10000)                    //   Sub-ADI                   = $1

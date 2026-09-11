@@ -39,7 +39,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -128,7 +127,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
-	setDefaultPtr(&s.BlockInterval, encoding.Duration(dagconfig.DefaultBlockInterval))
+	// BlockInterval is deliberately NOT defaulted here. The network declares
+	// the cadence and this node paces from it; leaving the pointer nil is how
+	// "the operator stated nothing" stays distinguishable from "the operator
+	// stated the default", which is what lets a real divergence be refused
+	// without refusing every node that simply did not set it (#4267).
 
 	// Get the logger
 	logger := logging.NewSlogLogger(inst.logger)
@@ -318,13 +321,13 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			MaxBatchBytes: dagCfg.Batching.MaxBatchBytes,
 		},
 
-		// Rounds pace at half the block interval: Bullshark commits a leader
-		// every other round, so blocks arrive at roughly 2x the round
-		// interval. Before this was wired, primary fell back to its 100ms
-		// default and the Directory ran at ~21 blocks/sec under load — and
-		// since every block emits an anchor, anchor traffic ran at block
-		// rate and drowned one-shot dispatch (#4098).
-		MinRoundInterval: time.Duration(*s.BlockInterval) / 2,
+		// MinRoundInterval is set below, once the network's block interval is
+		// known. Rounds pace at half of it: Bullshark commits a leader every
+		// other round, so blocks arrive at roughly 2x the round interval.
+		// Before this was wired, primary fell back to its 100ms default and
+		// the Directory ran at ~21 blocks/sec under load — and since every
+		// block emits an anchor, anchor traffic ran at block rate and drowned
+		// one-shot dispatch (#4098).
 	}
 
 	// Use the shared GossipSub for DAG-BFT certificate/batch dissemination.
@@ -346,6 +349,16 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		slog.Warn("Timeout waiting for initial globals, DAG-BFT may not reach quorum", "partition", s.Partition.ID)
 		globals = new(network.GlobalValues)
 	}
+
+	// The network declares the cadence; this node either paces from it or does
+	// not run (#4267).
+	blockInterval, err := resolveBlockInterval(s.BlockInterval, globals, s.Partition.ID)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	nodeConfig.MinRoundInterval = blockInterval / 2
+	slog.Info("Block interval", "partition", s.Partition.ID, "interval", blockInterval,
+		"minRoundInterval", nodeConfig.MinRoundInterval)
 
 	// Seed the conductor's globals directly. The conductor subscribes to
 	// WillChangeGlobals, but whether it observes the INITIAL event is a

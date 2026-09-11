@@ -34,6 +34,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	network2 "gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gopkg.in/yaml.v3"
@@ -106,6 +107,22 @@ func loadNetworkConfiguration(file ...string) *accumulated.NetworkInit {
 // load network config file
 func initNetwork(cmd *cobra.Command, args []string) {
 	network := loadNetworkConfiguration(args...)
+
+	// The block interval is the network's, not each node's, so --block-interval
+	// is recorded in the genesis globals as well as pinned into the node
+	// configurations below. Setting only the node configurations would deploy a
+	// network whose declared cadence is the default while every node is
+	// configured for something else, and every node would then refuse to start
+	// on the divergence (#4267).
+	if flagInitNetwork.BlockInterval > 0 {
+		if network.Globals == nil {
+			network.Globals = new(network2.GlobalValues)
+		}
+		if network.Globals.Globals == nil {
+			network.Globals.Globals = new(protocol.NetworkGlobals)
+		}
+		network.Globals.Globals.BlockInterval = flagInitNetwork.BlockInterval
+	}
 
 	if flagInit.Reset {
 		networkReset()
