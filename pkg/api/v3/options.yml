@@ -122,3 +122,27 @@ ReceiptOptions:
       type: bool
     - name: ForHeight
       type: uint
+
+MajorHeaderRangeOptions:
+  fields:
+    - name: Partition
+      description: is the partition to serve; only the directory serves this
+      type: string
+    - name: Start
+      description: is the first major block index
+      type: uint
+    - name: End
+      description: is the last major block index, inclusive
+      type: uint
+
+MinorRootRangeOptions:
+  fields:
+    - name: Partition
+      description: is the partition to serve; only the directory serves this
+      type: string
+    - name: Since
+      description: is the client's last verified minor block
+      type: uint
+    - name: Until
+      description: is the target minor block, or zero for as far as possible
+      type: uint
