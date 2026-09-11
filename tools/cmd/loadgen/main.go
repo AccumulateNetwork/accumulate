@@ -93,6 +93,13 @@ type env struct {
 
 	treasury *liteAccount // funds everything else
 	oracle   float64
+
+	// Cached answer to "does this network produce major blocks?". LockAccount
+	// takes a major block height, and a network that never produces one turns
+	// every lock into a permanent brick — see majorBlocksExist.
+	majorMu      sync.Mutex
+	majorSeen    bool
+	majorChecked time.Time
 	// locks holds HTLC locks between the send that creates them and the
 	// release that claims them (see htlc.go).
 	locks lockQueue
@@ -656,4 +663,38 @@ func (e *env) submit(ctx context.Context, b interface {
 	}
 	e.led.record(env) // observe-only local mirror; panic-safe
 	return ids, nil
+}
+
+// majorBlocksExist reports whether this network has ever produced a major
+// block, cached, and re-checked at most once a minute.
+//
+// LockAccount takes a MAJOR block height, not an ordinary one. A devnet's
+// default schedule produces one every twelve hours, so on any run shorter than
+// that "LockAccount(1)" locks an account until a moment that never comes: the
+// account is destroyed, not delayed. The generator then keeps drawing it as a
+// funding source, and every send from it fails "account is locked until major
+// block 1 (currently at 0)" — 676 of them in a 12 minute run at 10 tps, which
+// also breaks the funding chains that depend on those accounts.
+//
+// The DAG-BFT line fixed this as #4129; this is that guard, backported.
+func (e *env) majorBlocksExist(ctx context.Context) bool {
+	e.majorMu.Lock()
+	defer e.majorMu.Unlock()
+	if e.majorSeen {
+		return true // once true, always true
+	}
+	if time.Since(e.majorChecked) < time.Minute {
+		return false
+	}
+	e.majorChecked = time.Now()
+
+	u := protocol.DnUrl().JoinPath(protocol.Ledger)
+	r, err := e.Q.QueryAccount(ctx, u, nil)
+	if err != nil {
+		return false
+	}
+	if l, ok := r.Account.(interface{ GetMajorBlockIndex() uint64 }); ok && l.GetMajorBlockIndex() > 0 {
+		e.majorSeen = true
+	}
+	return e.majorSeen
 }
