@@ -195,6 +195,9 @@ NetworkGlobals:
       type: NetworkLimits
       marshal-as: reference
       pointer: true
+    - name: BlockInterval
+      type: duration
+      description: the cadence the network produces blocks at; declared when the network is deployed and recorded here, so a node paces from network state rather than its own configuration
 
 FeeSchedule:
   fields:

@@ -13,10 +13,23 @@ import (
 	"time"
 )
 
+// SplitDuration splits a duration into whole seconds and the nanoseconds
+// remaining, for the wire format that writes each as an unsigned integer.
+//
+// It must truncate, not round. Rounding a duration whose fractional part is at
+// least half a second rounds it UP, so the remainder is negative, and a
+// negative remainder wraps when it is written unsigned: 1.5s decoded as 500ms,
+// 2.5s as 1.5s, and 900ms as -100ms. Only durations with a fraction below half
+// a second survived the round trip (#4267).
+//
+// Negative durations have no meaning in any field that uses this and are not
+// representable in the wire format, so they encode as zero rather than as a
+// wrapped value.
 func SplitDuration(d time.Duration) (sec, ns uint64) {
-	sec = uint64(d.Seconds())
-	ns = uint64((d - d.Round(time.Second)).Nanoseconds())
-	return sec, ns
+	if d <= 0 {
+		return 0, 0
+	}
+	return uint64(d / time.Second), uint64(d % time.Second)
 }
 
 func BytesCopy(v []byte) []byte {
