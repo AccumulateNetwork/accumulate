@@ -346,6 +346,7 @@ func main() {
 	}
 
 	e.reportMix()
+	e.reportOutcomes(ctx)
 	if *reportParts {
 		e.reportPartitions(ctx)
 	}
