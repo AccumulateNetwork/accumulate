@@ -271,6 +271,10 @@ Configuration:
           optional: true
         - name: Globals
           type: '*network.GlobalValues'
+        - name: BlockInterval
+          description: the cadence the deployed network declares; recorded in the genesis globals, which every node then paces from (#4267)
+          type: '*encoding.Duration'
+          optional: true
         - name: StorageType
           type: '*StorageType'
           optional: true

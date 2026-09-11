@@ -865,12 +865,14 @@ func (v *Monitor) UnmarshalJSON(b []byte) error {
 type Multiaddr = multiaddr.Multiaddr
 
 type NetSimConfiguration struct {
-	Listen      Multiaddr
-	Bvns        uint64
-	Validators  uint64
-	Followers   uint64
-	Globals     *network.GlobalValues
-	StorageType *StorageType
+	Listen     Multiaddr
+	Bvns       uint64
+	Validators uint64
+	Followers  uint64
+	Globals    *network.GlobalValues
+	// BlockInterval the cadence the deployed network declares; recorded in the genesis globals, which every node then paces from (#4267).
+	BlockInterval *encoding.Duration
+	StorageType   *StorageType
 }
 
 func (NetSimConfiguration) Type() ConfigurationType { return ConfigurationTypeNetSim }
