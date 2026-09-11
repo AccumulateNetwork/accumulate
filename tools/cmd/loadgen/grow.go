@@ -447,6 +447,25 @@ func (e *env) growAccount(ctx context.Context, adi *identity) error {
 		if err := e.awaitAccount(ctx, u, 3*time.Minute); err != nil {
 			return err
 		}
+
+		// Fund it before advertising it. This account was advertised the
+		// moment it existed and never funded at all, so every action that
+		// reached for it found nothing — 82 of 556 send-tokens-adi failed
+		// "insufficient balance: have 0, want 10000" in a 12 minute run at
+		// 10 tps. The DAG-BFT line fixed this as #4130; this is that fix,
+		// backported. Existence is not solvency.
+		t := e.treasury
+		if _, err := e.sign(ctx, t.id, func() txBuilder {
+			return e.build(t).
+				SendTokens(fundTokenAccount, protocol.AcmePrecisionPower).To(u).
+				SignWith(t.id).Version(1).Timestamp(e.nonce.next()).PrivateKey(t.key)
+		}); err != nil {
+			return errors.UnknownError.WithFormat("fund token account: %w", err)
+		}
+		if err := e.awaitBalance(ctx, u, 3*time.Minute); err != nil {
+			return errors.UnknownError.WithFormat("fund token account %v: %w", u, err)
+		}
+
 		e.u.mu.Lock()
 		adi.tokens = append(adi.tokens, u)
 		e.u.mu.Unlock()

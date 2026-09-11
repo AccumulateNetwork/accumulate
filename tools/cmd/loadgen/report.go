@@ -673,6 +673,25 @@ func (e *env) hasCredits(ctx context.Context, u *url.URL) bool {
 	return ok && a.GetCreditBalance() > 0
 }
 
+func (e *env) awaitBalance(ctx context.Context, u *url.URL, limit time.Duration) error {
+	deadline := time.Now().Add(limit)
+	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		r, err := e.Q.QueryAccount(ctx, u, nil)
+		if err == nil {
+			if a, ok := r.Account.(interface{ TokenBalance() *big.Int }); ok {
+				if b := a.TokenBalance(); b != nil && b.Sign() > 0 {
+					return nil
+				}
+			}
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return errors.NotReady.WithFormat("timed out waiting for %v to hold tokens", u)
+}
+
 func (e *env) awaitCredits(ctx context.Context, u *url.URL, limit time.Duration) error {
 	deadline := time.Now().Add(limit)
 	for time.Now().Before(deadline) {
