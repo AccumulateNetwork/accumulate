@@ -10,6 +10,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
@@ -46,7 +48,58 @@ func (a *Account) putBpt() error {
 		return err
 	}
 
-	return a.parent.BPT().Insert(a.key, hasher.MerkleHash())
+	err = a.parent.BPT().Insert(a.key, hasher.MerkleHash())
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	return a.retainStateReceipt(hasher)
+}
+
+// retainStateReceipt keeps the receipt from the account's main state hash to
+// its BPT entry, for as long as the BPT retains history.
+//
+// Without it a historical proof starts at the whole BPT entry —
+// H(main, secondary, chains, pending) — which a verifier holding only the
+// account state cannot reconstruct, so it has to take the server's word for the
+// starting point. With it the historical path starts where [Account.StateReceipt]
+// starts, and the proof is checkable offline from the state the query returns.
+//
+// Nothing is written when retention is off, so a node running the default depth
+// of zero stores exactly as many bytes as before.
+func (a *Account) retainStateReceipt(hasher hash.Hasher) error {
+	height, depth, ok := a.parent.BPT().RetainedWindow()
+	if !ok {
+		return nil
+	}
+	if len(hasher) < 2 {
+		// The debug observer collapses the components into one hash, so there
+		// is no path from the main state to the entry to retain.
+		return nil
+	}
+
+	blocks, err := a.RetainedStateReceiptBlocks().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load retained state receipt blocks: %w", err)
+	}
+	if n := len(blocks); n > 0 && blocks[n-1] >= height {
+		return nil // Already retained for this block
+	}
+
+	err = a.RetainedStateReceipt(height).Put(hasher.Receipt(0, len(hasher)-1))
+	if err != nil {
+		return errors.UnknownError.WithFormat("retain state receipt: %w", err)
+	}
+
+	blocks = append(blocks, height)
+	keep, dropped := bpt.PruneHeights(blocks, height, depth)
+	for _, d := range dropped {
+		// Best effort: an unreferenced receipt leaks bytes, it does not
+		// corrupt anything.
+		_ = a.RetainedStateReceipt(d).Put(nil)
+	}
+	err = a.RetainedStateReceiptBlocks().Put(keep)
+	return errors.UnknownError.Wrap(err)
 }
 
 // BptReceipt builds a BPT receipt for the account.

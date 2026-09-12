@@ -81,6 +81,24 @@ func (b *BPT) RetainedHeight() (uint64, bool) {
 	return b.history.height, true
 }
 
+// RetainedWindow reports the height and depth retention is configured for, and
+// whether it is enabled. Callers that retain their own per-block data alongside
+// the BPT need the depth so they can prune on the same window.
+func (b *BPT) RetainedWindow() (height, depth uint64, ok bool) {
+	if b.history == nil {
+		return 0, 0, false
+	}
+	return b.history.height, b.history.depth, true
+}
+
+// PruneHeights applies the retention window to an ascending list of heights,
+// returning those to keep and those that have fallen out. It is exported so
+// that data retained alongside the BPT is pruned by the same rule rather than a
+// second implementation of it.
+func PruneHeights(heights []uint64, now, depth uint64) (keep, dropped []uint64) {
+	return pruneHeights(heights, now, depth)
+}
+
 // earliestKey addresses the earliest block this node can answer for.
 //
 // It is recorded rather than derived from configuration on purpose. Raising the
