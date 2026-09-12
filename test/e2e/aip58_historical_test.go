@@ -7,6 +7,7 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"math/big"
@@ -17,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -84,7 +86,7 @@ func TestAIP58_ProveAKeyPageAtItsOwnVersion(t *testing.T) {
 	// This is the state a verifier must be able to prove later.
 	var execBlock uint64
 	var wasVersion uint64
-	var wasHash [32]byte
+	var wasHash, wasStateHash [32]byte
 	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
 		var ledger *SystemLedger
 		require.NoError(t, batch.Account(PartitionUrl(partition).JoinPath(Ledger)).Main().GetAs(&ledger))
@@ -96,6 +98,13 @@ func TestAIP58_ProveAKeyPageAtItsOwnVersion(t *testing.T) {
 
 		wasHash, err = batch.Account(page).Hash()
 		require.NoError(t, err)
+
+		// The page exactly as a verifier would hold it. The receipt must start at
+		// a simple hash of this, so the verifier can compute the starting point
+		// instead of trusting the server for it.
+		encoded, err := kp.MarshalBinary()
+		require.NoError(t, err)
+		wasStateHash = sha256.Sum256(encoded)
 	})
 	require.Equal(t, uint64(1), wasVersion, "the page should still be at version 1")
 	t.Logf("page was version %d at block %d, hash %x", wasVersion, execBlock, wasHash[:8])
@@ -149,10 +158,16 @@ func TestAIP58_ProveAKeyPageAtItsOwnVersion(t *testing.T) {
 	require.NoError(t, err, "the historical query was refused")
 	require.NotNil(t, past.Receipt)
 
-	require.Equal(t, wasHash[:], past.Receipt.Start,
+	require.Equal(t, wasStateHash[:], past.Receipt.Start,
 		"the historical receipt does not start at the page as it was at the execution block")
 	require.NotEqual(t, nowHash[:], past.Receipt.Start,
 		"the historical receipt starts at the page as it is NOW — the past was answered with the present")
+
+	// And the verifier can reach the BPT entry the page had at that block, so
+	// the whole chain — page, entry, historical root, current root — is checkable
+	// from the page alone.
+	require.Truef(t, receiptPassesThrough(&past.Receipt.Receipt, wasHash),
+		"the receipt does not pass through the page's BPT entry at the execution block")
 	require.LessOrEqual(t, past.Receipt.ForHeight, execBlock)
 	require.NotZero(t, past.Receipt.ForHeight)
 
@@ -205,4 +220,31 @@ func TestAIP58_RefusesWhatItCannotProve(t *testing.T) {
 		require.Errorf(t, err, "block %d was answered by a node that retains nothing", h)
 		require.Nil(t, r)
 	}
+}
+
+// receiptPassesThrough folds a receipt from its start and reports whether the
+// given hash appears as one of the intermediate values. It is how the test
+// checks that the chain from the page runs through the page's BPT entry rather
+// than merely arriving at the right anchor by some other route.
+func receiptPassesThrough(r *merkle.Receipt, want [32]byte) bool {
+	v := r.Start
+	if bytes.Equal(v, want[:]) {
+		return true
+	}
+	for _, e := range r.Entries {
+		if e.Right {
+			v = doSha(append(append([]byte{}, v...), e.Hash...))
+		} else {
+			v = doSha(append(append([]byte{}, e.Hash...), v...))
+		}
+		if bytes.Equal(v, want[:]) {
+			return true
+		}
+	}
+	return false
+}
+
+func doSha(b []byte) []byte {
+	h := sha256.Sum256(b)
+	return h[:]
 }

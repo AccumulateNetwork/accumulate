@@ -104,8 +104,12 @@ func TestHistoricalStateProof_VerifiesOffline(t *testing.T) {
 				"height %d does not terminate at the current BPT root", h)
 			require.LessOrEqualf(t, proof.Block, h, "height %d resolved forward", h)
 
-			// The start must be alice's state hash at the block the proof names
-			if want, ok := valueAt[proof.Block]; ok {
+			// The start must correspond to alice's state at the block the proof
+			// names. With the state receipt retained the proof starts one step
+			// lower — at the main state hash — and reaches the BPT entry through
+			// it, so the entry is checked as an intermediate rather than as the
+			// start.
+			if want, ok := valueAt[proof.Block]; ok && !proof.StartsAtMainState {
 				require.Equalf(t, want[:], proof.Receipt.Start,
 					"the proof for height %d starts at the wrong account state", h)
 			}

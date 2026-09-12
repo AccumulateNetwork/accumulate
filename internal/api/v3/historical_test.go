@@ -206,19 +206,29 @@ func TestForHeight_StartsAtThePastState(t *testing.T) {
 	require.NoError(t, err)
 
 	var past *api.Receipt
+	var pastRec *api.AccountRecord
 	for h := uint64(1); h <= current.Receipt.LocalBlock; h++ {
 		r, err := f.query(t, h)
 		if err == nil && r.Receipt != nil {
-			past = r.Receipt
+			past, pastRec = r.Receipt, r
 			break
 		}
 	}
 	require.NotNil(t, past, "no height produced a receipt")
 
-	require.NotEqual(t, current.Receipt.Start, past.Start,
-		"the historical receipt starts at the account's BPT entry, not its main state hash")
+	// The receipt must start where a verifier can compute: a simple hash of the
+	// account state the query returned. Before the state receipt was retained it
+	// started at the whole BPT entry, which a verifier holding only the account
+	// state cannot reconstruct — so it had to trust the server for the starting
+	// point, which is the trust this proof exists to remove.
+	encoded, err := pastRec.Account.MarshalBinary()
+	require.NoError(t, err)
+	want := sha256.Sum256(encoded)
+	require.Equal(t, want[:], past.Start,
+		"the historical receipt does not start at the returned state's hash")
+
 	require.NotZero(t, past.ForHeight)
 	require.Zero(t, current.Receipt.ForHeight)
-	t.Logf("current start %x (main state), historical start %x (BPT entry) at height %d",
-		current.Receipt.Start[:6], past.Start[:6], past.ForHeight)
+	t.Logf("historical start %x recomputed from the returned state at height %d",
+		past.Start[:6], past.ForHeight)
 }
