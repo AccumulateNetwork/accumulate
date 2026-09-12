@@ -8,6 +8,7 @@ package block
 
 import (
 	"bytes"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -37,6 +38,7 @@ func (x *Executor) Validate(envelope *messaging.Envelope, _ bool) ([]*protocol.T
 	d := new(bundle)
 	d.Block = new(Block)
 	d.Block.Executor = x
+	d.Block.Time = time.Now().UTC() // Set wall-clock time so time-dependent checks work during validation
 	d.messages = messages
 	d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
 

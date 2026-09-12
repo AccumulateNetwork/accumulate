@@ -38,3 +38,9 @@ MessageType:
   SyntheticProof:
     value: 13
     description: carries one collection proof covering every synthetic message in the same envelope (#4090)
+  # AIP-50. The original branch claimed 13; #4090 took it first, so this is 14.
+  # A message type is on the wire, so the value cannot simply be the one the
+  # branch was written against.
+  FeeEscrowPayment:
+    value: 14
+    description: is a notification that tokens have been escrowed for a transaction fee (AIP-50)

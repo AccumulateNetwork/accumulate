@@ -176,6 +176,13 @@
         description: records the signature chain index of entries for the transaction
         dataType: uint
         collection: set
+      - name: FeeEscrows
+        description: records escrowed fee entries for this transaction (AIP-50)
+        type: state
+        dataType: protocol.FeeEscrowEntry
+        collection: set
+        pointer: true
+        comparator: compareFeeEscrowByIndex
 
     # Retained so a historical proof can start where the current-state proof
     # does: at the main state hash rather than the whole BPT entry. Written only

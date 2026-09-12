@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"strings"
 	"time"
 
@@ -82,6 +83,26 @@ type Envelope struct {
 	Transaction []*protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction"`
 	Messages    []Message               `json:"messages,omitempty" form:"messages" query:"messages"`
 	extraData   []byte
+}
+
+// FeeEscrowPayment notification that tokens have been escrowed for a transaction fee.
+type FeeEscrowPayment struct {
+	fieldsSet []bool
+	// Amount is the total amount escrowed.
+	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	// Token is the token type escrowed.
+	Token *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
+	// Payer is the account that paid the escrow.
+	Payer *url.URL `json:"payer,omitempty" form:"payer" query:"payer" validate:"required"`
+	// EscrowAccount is the system account holding the escrow.
+	EscrowAccount *url.URL `json:"escrowAccount,omitempty" form:"escrowAccount" query:"escrowAccount" validate:"required"`
+	// TxID is the transaction the escrow is for.
+	TxID *url.TxID `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	// Cause is the signature that triggered the escrow.
+	Cause *url.TxID `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
+	// FeeIndex is the index of the fee in the UserFees array.
+	FeeIndex  uint64 `json:"feeIndex,omitempty" form:"feeIndex" query:"feeIndex" validate:"required"`
+	extraData []byte
 }
 
 type MakeMajorBlock struct {
@@ -178,6 +199,8 @@ func (*BlockSummary) Type() MessageType { return MessageTypeBlockSummary }
 func (*CreditPayment) Type() MessageType { return MessageTypeCreditPayment }
 
 func (*DidUpdateExecutorVersion) Type() MessageType { return MessageTypeDidUpdateExecutorVersion }
+
+func (*FeeEscrowPayment) Type() MessageType { return MessageTypeFeeEscrowPayment }
 
 func (*MakeMajorBlock) Type() MessageType { return MessageTypeMakeMajorBlock }
 
@@ -343,6 +366,36 @@ func (v *Envelope) Copy() *Envelope {
 }
 
 func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *FeeEscrowPayment) Copy() *FeeEscrowPayment {
+	u := new(FeeEscrowPayment)
+
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+	if v.Token != nil {
+		u.Token = v.Token
+	}
+	if v.Payer != nil {
+		u.Payer = v.Payer
+	}
+	if v.EscrowAccount != nil {
+		u.EscrowAccount = v.EscrowAccount
+	}
+	if v.TxID != nil {
+		u.TxID = v.TxID
+	}
+	if v.Cause != nil {
+		u.Cause = v.Cause
+	}
+	u.FeeIndex = v.FeeIndex
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *FeeEscrowPayment) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *MakeMajorBlock) Copy() *MakeMajorBlock {
 	u := new(MakeMajorBlock)
@@ -694,6 +747,57 @@ func (v *Envelope) Equal(u *Envelope) bool {
 		if !(EqualMessage(v.Messages[i], u.Messages[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *FeeEscrowPayment) Equal(u *FeeEscrowPayment) bool {
+	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+		return false
+	}
+	switch {
+	case v.Token == u.Token:
+		// equal
+	case v.Token == nil || u.Token == nil:
+		return false
+	case !((v.Token).Equal(u.Token)):
+		return false
+	}
+	switch {
+	case v.Payer == u.Payer:
+		// equal
+	case v.Payer == nil || u.Payer == nil:
+		return false
+	case !((v.Payer).Equal(u.Payer)):
+		return false
+	}
+	switch {
+	case v.EscrowAccount == u.EscrowAccount:
+		// equal
+	case v.EscrowAccount == nil || u.EscrowAccount == nil:
+		return false
+	case !((v.EscrowAccount).Equal(u.EscrowAccount)):
+		return false
+	}
+	switch {
+	case v.TxID == u.TxID:
+		// equal
+	case v.TxID == nil || u.TxID == nil:
+		return false
+	case !((v.TxID).Equal(u.TxID)):
+		return false
+	}
+	switch {
+	case v.Cause == u.Cause:
+		// equal
+	case v.Cause == nil || u.Cause == nil:
+		return false
+	case !((v.Cause).Equal(u.Cause)):
+		return false
+	}
+	if !(v.FeeIndex == u.FeeIndex) {
+		return false
 	}
 
 	return true
@@ -1344,6 +1448,114 @@ func (v *Envelope) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_FeeEscrowPayment = []string{
+	1: "Type",
+	2: "Amount",
+	3: "Token",
+	4: "Payer",
+	5: "EscrowAccount",
+	6: "TxID",
+	7: "Cause",
+	8: "FeeIndex",
+}
+
+func (v *FeeEscrowPayment) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(2, &v.Amount)
+	}
+	if !(v.Token == nil) {
+		writer.WriteUrl(3, v.Token)
+	}
+	if !(v.Payer == nil) {
+		writer.WriteUrl(4, v.Payer)
+	}
+	if !(v.EscrowAccount == nil) {
+		writer.WriteUrl(5, v.EscrowAccount)
+	}
+	if !(v.TxID == nil) {
+		writer.WriteTxid(6, v.TxID)
+	}
+	if !(v.Cause == nil) {
+		writer.WriteTxid(7, v.Cause)
+	}
+	if !(v.FeeIndex == 0) {
+		writer.WriteUint(8, v.FeeIndex)
+	}
+
+	_, _, err := writer.Reset(fieldNames_FeeEscrowPayment)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *FeeEscrowPayment) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Amount is missing")
+	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
+		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Token is missing")
+	} else if v.Token == nil {
+		errs = append(errs, "field Token is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Payer is missing")
+	} else if v.Payer == nil {
+		errs = append(errs, "field Payer is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field EscrowAccount is missing")
+	} else if v.EscrowAccount == nil {
+		errs = append(errs, "field EscrowAccount is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field TxID is missing")
+	} else if v.TxID == nil {
+		errs = append(errs, "field TxID is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Cause is missing")
+	} else if v.Cause == nil {
+		errs = append(errs, "field Cause is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field FeeIndex is missing")
+	} else if v.FeeIndex == 0 {
+		errs = append(errs, "field FeeIndex is not set")
 	}
 
 	switch len(errs) {
@@ -2276,6 +2488,59 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *FeeEscrowPayment) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FeeEscrowPayment) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *FeeEscrowPayment) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBigInt(2); ok {
+		v.Amount = *x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Token = x
+	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Payer = x
+	}
+	if x, ok := reader.ReadUrl(5); ok {
+		v.EscrowAccount = x
+	}
+	if x, ok := reader.ReadTxid(6); ok {
+		v.TxID = x
+	}
+	if x, ok := reader.ReadTxid(7); ok {
+		v.Cause = x
+	}
+	if x, ok := reader.ReadUint(8); ok {
+		v.FeeIndex = x
+	}
+
+	seen, err := reader.Reset(fieldNames_FeeEscrowPayment)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *MakeMajorBlock) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2708,6 +2973,17 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("amount", "uint256"),
+		encoding.NewTypeField("token", "string"),
+		encoding.NewTypeField("payer", "string"),
+		encoding.NewTypeField("escrowAccount", "string"),
+		encoding.NewTypeField("txID", "string"),
+		encoding.NewTypeField("cause", "string"),
+		encoding.NewTypeField("feeIndex", "uint64"),
+	}, "FeeEscrowPayment", "feeEscrowPayment")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("majorBlockIndex", "uint64"),
 		encoding.NewTypeField("minorBlockIndex", "uint64"),
 		encoding.NewTypeField("majorBlockTime", "string"),
@@ -2919,6 +3195,44 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Messages) == 0) {
 		u.Messages = &encoding.JsonUnmarshalListWith[Message]{Value: v.Messages, Func: UnmarshalMessageJSON}
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *FeeEscrowPayment) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type          MessageType `json:"type"`
+		Amount        *string     `json:"amount,omitempty"`
+		Token         *url.URL    `json:"token,omitempty"`
+		Payer         *url.URL    `json:"payer,omitempty"`
+		EscrowAccount *url.URL    `json:"escrowAccount,omitempty"`
+		TxID          *url.TxID   `json:"txID,omitempty"`
+		Cause         *url.TxID   `json:"cause,omitempty"`
+		FeeIndex      uint64      `json:"feeIndex,omitempty"`
+		ExtraData     *string     `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		u.Amount = encoding.BigintToJSON(&v.Amount)
+	}
+	if !(v.Token == nil) {
+		u.Token = v.Token
+	}
+	if !(v.Payer == nil) {
+		u.Payer = v.Payer
+	}
+	if !(v.EscrowAccount == nil) {
+		u.EscrowAccount = v.EscrowAccount
+	}
+	if !(v.TxID == nil) {
+		u.TxID = v.TxID
+	}
+	if !(v.Cause == nil) {
+		u.Cause = v.Cause
+	}
+	if !(v.FeeIndex == 0) {
+		u.FeeIndex = v.FeeIndex
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -3333,6 +3647,51 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 			v.Messages[i] = x
 		}
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *FeeEscrowPayment) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type          MessageType `json:"type"`
+		Amount        *string     `json:"amount,omitempty"`
+		Token         *url.URL    `json:"token,omitempty"`
+		Payer         *url.URL    `json:"payer,omitempty"`
+		EscrowAccount *url.URL    `json:"escrowAccount,omitempty"`
+		TxID          *url.TxID   `json:"txID,omitempty"`
+		Cause         *url.TxID   `json:"cause,omitempty"`
+		FeeIndex      uint64      `json:"feeIndex,omitempty"`
+		ExtraData     *string     `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Token = v.Token
+	u.Payer = v.Payer
+	u.EscrowAccount = v.EscrowAccount
+	u.TxID = v.TxID
+	u.Cause = v.Cause
+	u.FeeIndex = v.FeeIndex
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	v.Token = u.Token
+	v.Payer = u.Payer
+	v.EscrowAccount = u.EscrowAccount
+	v.TxID = u.TxID
+	v.Cause = u.Cause
+	v.FeeIndex = u.FeeIndex
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

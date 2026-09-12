@@ -418,6 +418,26 @@ type FactomDataEntryWrapper struct {
 	extraData []byte
 }
 
+// FeeEscrowEntry records an escrowed fee for a pending transaction.
+type FeeEscrowEntry struct {
+	fieldsSet []bool
+	// Index is the index of this fee in the UserFees array.
+	Index uint64 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	// Amount is the amount of tokens escrowed.
+	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	// Token is the token type URL.
+	Token *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
+	// Payer is the account that paid the escrow.
+	Payer *url.URL `json:"payer,omitempty" form:"payer" query:"payer" validate:"required"`
+	// Recipient is the account to receive the fee on success.
+	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
+	// EscrowAccount is the system account holding the escrow.
+	EscrowAccount *url.URL `json:"escrowAccount,omitempty" form:"escrowAccount" query:"escrowAccount" validate:"required"`
+	// MessageHash is the hash of the FeeEscrowPayment message.
+	MessageHash [32]byte `json:"messageHash,omitempty" form:"messageHash" query:"messageHash" validate:"required"`
+	extraData   []byte
+}
+
 type FeeSchedule struct {
 	fieldsSet []bool
 	// CreateIdentitySliding is the sliding fee schedule for creating an ADI. The first entry is the cost of a one-character ADI, the second is the cost of a two-character ADI, etc.
@@ -1081,7 +1101,9 @@ type TransactionHeader struct {
 	// Authorities is a list of additional authorities that must approve the transaction.
 	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	// HashLock locks the synthetic output until preimage is revealed or expiration.
-	HashLock  *HashLockOptions `json:"hashLock,omitempty" form:"hashLock" query:"hashLock"`
+	HashLock *HashLockOptions `json:"hashLock,omitempty" form:"hashLock" query:"hashLock"`
+	// UserFees specifies optional fees to be paid to service providers on transaction success (AIP-50).
+	UserFees  []*UserFee `json:"userFees,omitempty" form:"userFees" query:"userFees"`
 	extraData []byte
 }
 
@@ -1188,6 +1210,20 @@ type UpdateKeyOperation struct {
 type UpdateKeyPage struct {
 	fieldsSet []bool
 	Operation []KeyPageOperation `json:"operation,omitempty" form:"operation" query:"operation" validate:"required"`
+	extraData []byte
+}
+
+// UserFee specifies a fee to be paid to a service provider on transaction success.
+type UserFee struct {
+	fieldsSet []bool
+	// Recipient is the account to receive the fee on transaction success.
+	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
+	// Amount is the amount of tokens to pay.
+	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	// Token is the token type URL (e.g., acc://ACME).
+	Token *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
+	// Payer is the account paying the fee (defaults to initiator's token account if nil).
+	Payer     *url.URL `json:"payer,omitempty" form:"payer" query:"payer"`
 	extraData []byte
 }
 
@@ -2313,6 +2349,34 @@ func (v *FactomDataEntryWrapper) Copy() *FactomDataEntryWrapper {
 }
 
 func (v *FactomDataEntryWrapper) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *FeeEscrowEntry) Copy() *FeeEscrowEntry {
+	u := new(FeeEscrowEntry)
+
+	u.Index = v.Index
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+	if v.Token != nil {
+		u.Token = v.Token
+	}
+	if v.Payer != nil {
+		u.Payer = v.Payer
+	}
+	if v.Recipient != nil {
+		u.Recipient = v.Recipient
+	}
+	if v.EscrowAccount != nil {
+		u.EscrowAccount = v.EscrowAccount
+	}
+	u.MessageHash = v.MessageHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *FeeEscrowEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *FeeSchedule) Copy() *FeeSchedule {
 	u := new(FeeSchedule)
@@ -3650,6 +3714,13 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 	if v.HashLock != nil {
 		u.HashLock = (v.HashLock).Copy()
 	}
+	u.UserFees = make([]*UserFee, len(v.UserFees))
+	for i, v := range v.UserFees {
+		v := v
+		if v != nil {
+			u.UserFees[i] = (v).Copy()
+		}
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -3921,6 +3992,29 @@ func (v *UpdateKeyPage) Copy() *UpdateKeyPage {
 }
 
 func (v *UpdateKeyPage) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *UserFee) Copy() *UserFee {
+	u := new(UserFee)
+
+	if v.Recipient != nil {
+		u.Recipient = v.Recipient
+	}
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+	if v.Token != nil {
+		u.Token = v.Token
+	}
+	if v.Payer != nil {
+		u.Payer = v.Payer
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *UserFee) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ValidatorInfo) Copy() *ValidatorInfo {
 	u := new(ValidatorInfo)
@@ -4918,6 +5012,52 @@ func (v *FactomDataEntry) Equal(u *FactomDataEntry) bool {
 
 func (v *FactomDataEntryWrapper) Equal(u *FactomDataEntryWrapper) bool {
 	if !v.FactomDataEntry.Equal(&u.FactomDataEntry) {
+		return false
+	}
+
+	return true
+}
+
+func (v *FeeEscrowEntry) Equal(u *FeeEscrowEntry) bool {
+	if !(v.Index == u.Index) {
+		return false
+	}
+	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+		return false
+	}
+	switch {
+	case v.Token == u.Token:
+		// equal
+	case v.Token == nil || u.Token == nil:
+		return false
+	case !((v.Token).Equal(u.Token)):
+		return false
+	}
+	switch {
+	case v.Payer == u.Payer:
+		// equal
+	case v.Payer == nil || u.Payer == nil:
+		return false
+	case !((v.Payer).Equal(u.Payer)):
+		return false
+	}
+	switch {
+	case v.Recipient == u.Recipient:
+		// equal
+	case v.Recipient == nil || u.Recipient == nil:
+		return false
+	case !((v.Recipient).Equal(u.Recipient)):
+		return false
+	}
+	switch {
+	case v.EscrowAccount == u.EscrowAccount:
+		// equal
+	case v.EscrowAccount == nil || u.EscrowAccount == nil:
+		return false
+	case !((v.EscrowAccount).Equal(u.EscrowAccount)):
+		return false
+	}
+	if !(v.MessageHash == u.MessageHash) {
 		return false
 	}
 
@@ -6333,6 +6473,14 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 	case !((v.HashLock).Equal(u.HashLock)):
 		return false
 	}
+	if len(v.UserFees) != len(u.UserFees) {
+		return false
+	}
+	for i := range v.UserFees {
+		if !((v.UserFees[i]).Equal(u.UserFees[i])) {
+			return false
+		}
+	}
 
 	return true
 }
@@ -6595,6 +6743,38 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 		if !(EqualKeyPageOperation(v.Operation[i], u.Operation[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *UserFee) Equal(u *UserFee) bool {
+	switch {
+	case v.Recipient == u.Recipient:
+		// equal
+	case v.Recipient == nil || u.Recipient == nil:
+		return false
+	case !((v.Recipient).Equal(u.Recipient)):
+		return false
+	}
+	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+		return false
+	}
+	switch {
+	case v.Token == u.Token:
+		// equal
+	case v.Token == nil || u.Token == nil:
+		return false
+	case !((v.Token).Equal(u.Token)):
+		return false
+	}
+	switch {
+	case v.Payer == u.Payer:
+		// equal
+	case v.Payer == nil || u.Payer == nil:
+		return false
+	case !((v.Payer).Equal(u.Payer)):
+		return false
 	}
 
 	return true
@@ -9630,6 +9810,109 @@ func (v *FactomDataEntryWrapper) IsValid() error {
 	}
 	if err := v.FactomDataEntry.IsValid(); err != nil {
 		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_FeeEscrowEntry = []string{
+	1: "Index",
+	2: "Amount",
+	3: "Token",
+	4: "Payer",
+	5: "Recipient",
+	6: "EscrowAccount",
+	7: "MessageHash",
+}
+
+func (v *FeeEscrowEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Index == 0) {
+		writer.WriteUint(1, v.Index)
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(2, &v.Amount)
+	}
+	if !(v.Token == nil) {
+		writer.WriteUrl(3, v.Token)
+	}
+	if !(v.Payer == nil) {
+		writer.WriteUrl(4, v.Payer)
+	}
+	if !(v.Recipient == nil) {
+		writer.WriteUrl(5, v.Recipient)
+	}
+	if !(v.EscrowAccount == nil) {
+		writer.WriteUrl(6, v.EscrowAccount)
+	}
+	if !(v.MessageHash == ([32]byte{})) {
+		writer.WriteHash(7, &v.MessageHash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_FeeEscrowEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *FeeEscrowEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Amount is missing")
+	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
+		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Token is missing")
+	} else if v.Token == nil {
+		errs = append(errs, "field Token is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Payer is missing")
+	} else if v.Payer == nil {
+		errs = append(errs, "field Payer is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Recipient is missing")
+	} else if v.Recipient == nil {
+		errs = append(errs, "field Recipient is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field EscrowAccount is missing")
+	} else if v.EscrowAccount == nil {
+		errs = append(errs, "field EscrowAccount is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field MessageHash is missing")
+	} else if v.MessageHash == ([32]byte{}) {
+		errs = append(errs, "field MessageHash is not set")
 	}
 
 	switch len(errs) {
@@ -14347,6 +14630,7 @@ var fieldNames_TransactionHeader = []string{
 	6: "HoldUntil",
 	7: "Authorities",
 	8: "HashLock",
+	9: "UserFees",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -14384,6 +14668,11 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.HashLock == nil) {
 		writer.WriteValue(8, v.HashLock.MarshalBinary)
+	}
+	if !(len(v.UserFees) == 0) {
+		for _, v := range v.UserFees {
+			writer.WriteValue(9, v.MarshalBinary)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionHeader)
@@ -15242,6 +15531,77 @@ func (v *UpdateKeyPage) IsValid() error {
 		errs = append(errs, "field Operation is missing")
 	} else if len(v.Operation) == 0 {
 		errs = append(errs, "field Operation is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_UserFee = []string{
+	1: "Recipient",
+	2: "Amount",
+	3: "Token",
+	4: "Payer",
+}
+
+func (v *UserFee) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Recipient == nil) {
+		writer.WriteUrl(1, v.Recipient)
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(2, &v.Amount)
+	}
+	if !(v.Token == nil) {
+		writer.WriteUrl(3, v.Token)
+	}
+	if !(v.Payer == nil) {
+		writer.WriteUrl(4, v.Payer)
+	}
+
+	_, _, err := writer.Reset(fieldNames_UserFee)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *UserFee) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Recipient is missing")
+	} else if v.Recipient == nil {
+		errs = append(errs, "field Recipient is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Amount is missing")
+	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
+		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Token is missing")
+	} else if v.Token == nil {
+		errs = append(errs, "field Token is not set")
 	}
 
 	switch len(errs) {
@@ -17324,6 +17684,47 @@ func (v *FactomDataEntryWrapper) UnmarshalFieldsFrom(reader *encoding.Reader) er
 	reader.ReadValue(2, v.FactomDataEntry.UnmarshalBinaryFrom)
 
 	seen, err := reader.Reset(fieldNames_FactomDataEntryWrapper)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *FeeEscrowEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FeeEscrowEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Index = x
+	}
+	if x, ok := reader.ReadBigInt(2); ok {
+		v.Amount = *x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Token = x
+	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Payer = x
+	}
+	if x, ok := reader.ReadUrl(5); ok {
+		v.Recipient = x
+	}
+	if x, ok := reader.ReadUrl(6); ok {
+		v.EscrowAccount = x
+	}
+	if x, ok := reader.ReadHash(7); ok {
+		v.MessageHash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_FeeEscrowEntry)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -19949,6 +20350,13 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(HashLockOptions); reader.ReadValue(8, x.UnmarshalBinaryFrom) {
 		v.HashLock = x
 	}
+	for {
+		if x := new(UserFee); reader.ReadValue(9, x.UnmarshalBinaryFrom) {
+			v.UserFees = append(v.UserFees, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_TransactionHeader)
 	if err != nil {
@@ -20462,6 +20870,38 @@ func (v *UpdateKeyPage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_UpdateKeyPage)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *UserFee) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *UserFee) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Recipient = x
+	}
+	if x, ok := reader.ReadBigInt(2); ok {
+		v.Amount = *x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Token = x
+	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Payer = x
+	}
+
+	seen, err := reader.Reset(fieldNames_UserFee)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -20987,6 +21427,16 @@ func init() {
 	}, "FactomDataEntryWrapper", "factomDataEntryWrapper")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("amount", "uint256"),
+		encoding.NewTypeField("token", "string"),
+		encoding.NewTypeField("payer", "string"),
+		encoding.NewTypeField("recipient", "string"),
+		encoding.NewTypeField("escrowAccount", "string"),
+		encoding.NewTypeField("messageHash", "bytes32"),
+	}, "FeeEscrowEntry", "feeEscrowEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("createIdentitySliding", "string[]"),
 		encoding.NewTypeField("createSubIdentity", "string"),
 		encoding.NewTypeField("bareIdentityDiscount", "string"),
@@ -21488,6 +21938,7 @@ func init() {
 		encoding.NewTypeField("holdUntil", "HoldUntilOptions"),
 		encoding.NewTypeField("authorities", "string[]"),
 		encoding.NewTypeField("hashLock", "HashLockOptions"),
+		encoding.NewTypeField("userFees", "UserFee[]"),
 	}, "TransactionHeader", "transactionHeader")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -21575,6 +22026,13 @@ func init() {
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("operation", "KeyPageOperation[]"),
 	}, "UpdateKeyPage", "updateKeyPage")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recipient", "string"),
+		encoding.NewTypeField("amount", "uint256"),
+		encoding.NewTypeField("token", "string"),
+		encoding.NewTypeField("payer", "string"),
+	}, "UserFee", "userFee")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("publicKey", "bytes"),
@@ -22539,6 +22997,42 @@ func (v *FactomDataEntryWrapper) MarshalJSON() ([]byte, error) {
 		for i, x := range v.FactomDataEntry.ExtIds {
 			u.ExtIds[i] = encoding.BytesToJSON(x)
 		}
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *FeeEscrowEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Index         uint64   `json:"index,omitempty"`
+		Amount        *string  `json:"amount,omitempty"`
+		Token         *url.URL `json:"token,omitempty"`
+		Payer         *url.URL `json:"payer,omitempty"`
+		Recipient     *url.URL `json:"recipient,omitempty"`
+		EscrowAccount *url.URL `json:"escrowAccount,omitempty"`
+		MessageHash   *string  `json:"messageHash,omitempty"`
+		ExtraData     *string  `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Index == 0) {
+		u.Index = v.Index
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		u.Amount = encoding.BigintToJSON(&v.Amount)
+	}
+	if !(v.Token == nil) {
+		u.Token = v.Token
+	}
+	if !(v.Payer == nil) {
+		u.Payer = v.Payer
+	}
+	if !(v.Recipient == nil) {
+		u.Recipient = v.Recipient
+	}
+	if !(v.EscrowAccount == nil) {
+		u.EscrowAccount = v.EscrowAccount
+	}
+	if !(v.MessageHash == ([32]byte{})) {
+		u.MessageHash = encoding.ChainToJSON(&v.MessageHash)
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -23929,6 +24423,7 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 		HoldUntil   *HoldUntilOptions           `json:"holdUntil,omitempty"`
 		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 		HashLock    *HashLockOptions            `json:"hashLock,omitempty"`
+		UserFees    encoding.JsonList[*UserFee] `json:"userFees,omitempty"`
 		ExtraData   *string                     `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Principal == nil) {
@@ -23954,6 +24449,9 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.HashLock == nil) {
 		u.HashLock = v.HashLock
+	}
+	if !(len(v.UserFees) == 0) {
+		u.UserFees = v.UserFees
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -24235,6 +24733,30 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(len(v.Operation) == 0) {
 		u.Operation = &encoding.JsonUnmarshalListWith[KeyPageOperation]{Value: v.Operation, Func: UnmarshalKeyPageOperationJSON}
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *UserFee) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Recipient *url.URL `json:"recipient,omitempty"`
+		Amount    *string  `json:"amount,omitempty"`
+		Token     *url.URL `json:"token,omitempty"`
+		Payer     *url.URL `json:"payer,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Recipient == nil) {
+		u.Recipient = v.Recipient
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		u.Amount = encoding.BigintToJSON(&v.Amount)
+	}
+	if !(v.Token == nil) {
+		u.Token = v.Token
+	}
+	if !(v.Payer == nil) {
+		u.Payer = v.Payer
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -25663,6 +26185,50 @@ func (v *FactomDataEntryWrapper) UnmarshalJSON(data []byte) error {
 		} else {
 			v.FactomDataEntry.ExtIds[i] = x
 		}
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *FeeEscrowEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Index         uint64   `json:"index,omitempty"`
+		Amount        *string  `json:"amount,omitempty"`
+		Token         *url.URL `json:"token,omitempty"`
+		Payer         *url.URL `json:"payer,omitempty"`
+		Recipient     *url.URL `json:"recipient,omitempty"`
+		EscrowAccount *url.URL `json:"escrowAccount,omitempty"`
+		MessageHash   *string  `json:"messageHash,omitempty"`
+		ExtraData     *string  `json:"$epilogue,omitempty"`
+	}{}
+	u.Index = v.Index
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Token = v.Token
+	u.Payer = v.Payer
+	u.Recipient = v.Recipient
+	u.EscrowAccount = v.EscrowAccount
+	u.MessageHash = encoding.ChainToJSON(&v.MessageHash)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Index = u.Index
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	v.Token = u.Token
+	v.Payer = u.Payer
+	v.Recipient = u.Recipient
+	v.EscrowAccount = u.EscrowAccount
+	if x, err := encoding.ChainFromJSON(u.MessageHash); err != nil {
+		return fmt.Errorf("error decoding MessageHash: %w", err)
+	} else {
+		v.MessageHash = *x
 	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
@@ -27576,6 +28142,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 		HoldUntil   *HoldUntilOptions           `json:"holdUntil,omitempty"`
 		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 		HashLock    *HashLockOptions            `json:"hashLock,omitempty"`
+		UserFees    encoding.JsonList[*UserFee] `json:"userFees,omitempty"`
 		ExtraData   *string                     `json:"$epilogue,omitempty"`
 	}{}
 	u.Principal = v.Principal
@@ -27586,6 +28153,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u.HoldUntil = v.HoldUntil
 	u.Authorities = v.Authorities
 	u.HashLock = v.HashLock
+	u.UserFees = v.UserFees
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -27606,6 +28174,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	v.HoldUntil = u.HoldUntil
 	v.Authorities = u.Authorities
 	v.HashLock = u.HashLock
+	v.UserFees = u.UserFees
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -28003,6 +28572,37 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 			v.Operation[i] = x
 		}
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *UserFee) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Recipient *url.URL `json:"recipient,omitempty"`
+		Amount    *string  `json:"amount,omitempty"`
+		Token     *url.URL `json:"token,omitempty"`
+		Payer     *url.URL `json:"payer,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
+	}{}
+	u.Recipient = v.Recipient
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Token = v.Token
+	u.Payer = v.Payer
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Recipient = u.Recipient
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	v.Token = u.Token
+	v.Payer = u.Payer
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

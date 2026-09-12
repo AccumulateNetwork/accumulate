@@ -431,7 +431,7 @@ func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
 
 		if len(errs) > 0 && (r == '.' || r == 65533) {
 			// Do not report "invalid character '.'" in addition to "identity contains a subdomain"
-			// Do not report "invalid character '�'" in addition to "not valid UTF-8"
+			// Do not report "invalid character" in addition to "not valid UTF-8"
 			continue
 		}
 
@@ -494,7 +494,7 @@ func IsValidAccountPath(s string) error {
 			}
 
 			if len(errs) > 0 && r == 65533 {
-				// Do not report "invalid character '�'" in addition to "not valid UTF-8"
+				// Do not report "invalid character" in addition to "not valid UTF-8"
 				continue
 			}
 
@@ -564,6 +564,16 @@ func PartitionUrl(partition string) *url.URL {
 		return DnUrl()
 	}
 	return &url.URL{Authority: bvnUrlPrefix + partition + TLD}
+}
+
+// Escrow is the path to a partition's fee escrow account (AIP-50).
+const Escrow = "escrow"
+
+// EscrowUrl returns the escrow account URL for a partition.
+// For example: `acc://bvn-00.acme/escrow` for BVN-00, or `acc://dn.acme/escrow` for the DN.
+// Each partition has its own escrow account to ensure atomic token lock operations.
+func EscrowUrl(partition string) *url.URL {
+	return PartitionUrl(partition).JoinPath(Escrow)
 }
 
 // IsBvnUrl checks if the URL is the BVN ADI URL.

@@ -53,6 +53,9 @@ const MessageTypeDidUpdateExecutorVersion MessageType = 12
 // MessageTypeSyntheticProof carries one collection proof covering every synthetic message in the same envelope (#4090).
 const MessageTypeSyntheticProof MessageType = 13
 
+// MessageTypeFeeEscrowPayment is a notification that tokens have been escrowed for a transaction fee (AIP-50).
+const MessageTypeFeeEscrowPayment MessageType = 14
+
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -60,7 +63,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeTransaction, MessageTypeSignature, MessageTypeBadSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary, MessageTypeSynthetic, MessageTypeNetworkUpdate, MessageTypeMakeMajorBlock, MessageTypeDidUpdateExecutorVersion, MessageTypeSyntheticProof:
+	case MessageTypeTransaction, MessageTypeSignature, MessageTypeBadSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary, MessageTypeSynthetic, MessageTypeNetworkUpdate, MessageTypeMakeMajorBlock, MessageTypeDidUpdateExecutorVersion, MessageTypeSyntheticProof, MessageTypeFeeEscrowPayment:
 		*v = u
 		return true
 	}
@@ -96,6 +99,8 @@ func (v MessageType) String() string {
 		return "didUpdateExecutorVersion"
 	case MessageTypeSyntheticProof:
 		return "syntheticProof"
+	case MessageTypeFeeEscrowPayment:
+		return "feeEscrowPayment"
 	}
 	return fmt.Sprintf("MessageType:%d", v)
 }
@@ -129,6 +134,8 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeDidUpdateExecutorVersion, true
 	case "syntheticproof":
 		return MessageTypeSyntheticProof, true
+	case "feeescrowpayment":
+		return MessageTypeFeeEscrowPayment, true
 	}
 	return 0, false
 }

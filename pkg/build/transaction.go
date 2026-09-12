@@ -59,6 +59,22 @@ func (b TransactionBuilder) AdditionalAuthority(signer any, path ...string) Tran
 	return b
 }
 
+// UserFee adds a user-specified fee to the transaction (AIP-50).
+// The fee will be escrowed when the transaction is initiated and
+// released to the recipient on successful execution.
+func (b TransactionBuilder) UserFee(recipient any, amount *big.Int, token any, payer any) TransactionBuilder {
+	fee := &protocol.UserFee{
+		Recipient: b.parseUrl(recipient),
+		Amount:    *amount,
+		Token:     b.parseUrl(token),
+	}
+	if payer != nil {
+		fee.Payer = b.parseUrl(payer)
+	}
+	b.t.Header.UserFees = append(b.t.Header.UserFees, fee)
+	return b
+}
+
 func (b TransactionBuilder) Body(body protocol.TransactionBody) TransactionBuilder {
 	b.t.Body = body
 	return b
@@ -549,7 +565,7 @@ func (b AddCreditsBuilder) Spend(amount float64) AddCreditsBuilder {
 }
 
 func (b AddCreditsBuilder) Purchase(amount float64) AddCreditsBuilder {
-	// ACME = credits ÷ oracle ÷ credits-per-dollar
+	// ACME = credits / oracle / credits-per-dollar
 	x := big.NewRat(b.t.parseAmount(amount, protocol.CreditPrecisionPower).Int64(), protocol.CreditPrecision)
 	x.Quo(x, big.NewRat(int64(b.body.Oracle), protocol.AcmeOraclePrecision))
 	x.Quo(x, big.NewRat(protocol.CreditsPerDollar, 1))

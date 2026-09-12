@@ -205,4 +205,15 @@ func (m *SyntheticMessage) Hash() [32]byte         { return encoding.Hash(m) }
 func (m *NetworkUpdate) Hash() [32]byte            { return encoding.Hash(m) }
 func (m *MakeMajorBlock) Hash() [32]byte           { return encoding.Hash(m) }
 func (m *DidUpdateExecutorVersion) Hash() [32]byte { return encoding.Hash(m) }
+
+// FeeEscrowPayment methods (AIP-50)
+func (m *FeeEscrowPayment) ID() *url.TxID {
+	return m.TxID.Account().WithTxID(m.Hash())
+}
+
+func (m *FeeEscrowPayment) Hash() [32]byte { return encoding.Hash(m) }
+
+func (m *FeeEscrowPayment) GetTxID() *url.TxID { return m.TxID }
+
+func (m *FeeEscrowPayment) GetCauses() []*url.TxID { return []*url.TxID{m.Cause} }
 func (m *SyntheticProof) Hash() [32]byte           { return encoding.Hash(m) }

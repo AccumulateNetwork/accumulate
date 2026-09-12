@@ -261,7 +261,12 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		messaging.MessageTypeCreditPayment,
 		messaging.MessageTypeNetworkUpdate,
 		messaging.MessageTypeMakeMajorBlock,
-		messaging.MessageTypeDidUpdateExecutorVersion:
+		messaging.MessageTypeDidUpdateExecutorVersion,
+		// AIP-50 moves an escrowed fee with a synthetic, the same shape as
+		// CreditPayment above. The allow-list was tightened after this feature
+		// was written, which is why it had to be added rather than simply
+		// working.
+		messaging.MessageTypeFeeEscrowPayment:
 		// Allowed
 
 	default:

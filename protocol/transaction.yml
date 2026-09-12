@@ -37,6 +37,17 @@ TransactionHeader:
       optional: true
       pointer: true
       marshal-as: reference
+    # AIP-50. Appended AFTER HashLock rather than in the position the original
+    # branch used: field numbers follow declaration order, so inserting ahead of
+    # HashLock would renumber it and change the encoding of every transaction
+    # header that carries one.
+    - name: UserFees
+      description: specifies optional fees to be paid to service providers on transaction success (AIP-50)
+      type: UserFee
+      optional: true
+      pointer: true
+      marshal-as: reference
+      repeatable: true
 
 Transaction:
   fields:

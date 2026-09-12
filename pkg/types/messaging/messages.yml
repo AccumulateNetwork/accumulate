@@ -227,3 +227,35 @@ StateTreeUpdate:
       pointer: true
     - name: Hash
       type: hash
+
+# AIP-50: Fee Escrow Payment
+FeeEscrowPayment:
+  union: { type: message }
+  description: notification that tokens have been escrowed for a transaction fee
+  fields:
+    - name: Amount
+      description: is the total amount escrowed
+      type: bigint
+    - name: Token
+      description: is the token type escrowed
+      type: url
+      pointer: true
+    - name: Payer
+      description: is the account that paid the escrow
+      type: url
+      pointer: true
+    - name: EscrowAccount
+      description: is the system account holding the escrow
+      type: url
+      pointer: true
+    - name: TxID
+      description: is the transaction the escrow is for
+      type: txid
+      pointer: true
+    - name: Cause
+      description: is the signature that triggered the escrow
+      type: txid
+      pointer: true
+    - name: FeeIndex
+      description: is the index of the fee in the UserFees array
+      type: uint

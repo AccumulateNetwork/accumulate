@@ -569,6 +569,12 @@ func (x *TransactionContext) recordSuccessfulTransaction(batch *database.Batch, 
 		return status, state, nil
 	}
 
+	// Release fee escrows to recipients (AIP-50)
+	err = x.releaseFeeEscrows(batch, delivery.Transaction, state)
+	if err != nil {
+		return nil, nil, errors.UnknownError.WithFormat("release fee escrows: %w", err)
+	}
+
 	// Remove the transaction from the principal's list of pending transactions
 	record := batch.Account(delivery.Transaction.Header.Principal)
 	err = record.Pending().Remove(delivery.Transaction.ID())
@@ -620,6 +626,12 @@ func (x *TransactionContext) recordFailedTransaction(batch *database.Batch, deli
 		}
 	}
 
+	// Refund fee escrows to payers (AIP-50)
+	err = x.refundFeeEscrows(batch, delivery.Transaction, state)
+	if err != nil {
+		return nil, nil, errors.UnknownError.WithFormat("refund fee escrows: %w", err)
+	}
+
 	// Execute the post-failure hook if the transaction executor defines one
 	if val, ok := getValidator[chain.TransactionExecutorCleanup](x.Executor, delivery.Transaction.Body.Type()); ok {
 		err = val.DidFail(state, delivery.Transaction)
@@ -656,4 +668,113 @@ func (x *TransactionContext) recordFailedTransaction(batch *database.Batch, deli
 	refund.Amount = (paid - protocol.FeeFailedMaximum).AsUInt64()
 	state.DidProduceTxn(initiator.Payer, refund)
 	return status, state, nil
+}
+
+// releaseFeeEscrows releases escrowed fees to recipients on transaction success (AIP-50).
+func (x *TransactionContext) releaseFeeEscrows(batch *database.Batch, txn *protocol.Transaction, state *chain.ProcessTransactionState) error {
+	// Only process user transactions
+	if !txn.Body.Type().IsUser() {
+		return nil
+	}
+
+	// Load escrow entries
+	acctTxn := batch.Account(txn.Header.Principal).Transaction(txn.ID().Hash())
+	escrows, err := acctTxn.FeeEscrows().Get()
+	if err != nil {
+		// If no escrows exist, that's fine
+		if errors.Is(err, errors.NotFound) {
+			return nil
+		}
+		return errors.UnknownError.WithFormat("load escrow entries: %w", err)
+	}
+
+	// No escrows to process
+	if len(escrows) == 0 {
+		return nil
+	}
+
+	for _, escrow := range escrows {
+		// Debit from escrow account (if on this partition)
+		// The escrow account may be on a different partition than the principal,
+		// so we attempt the debit but don't fail if the account doesn't exist locally.
+		escrowAcct, err := batch.Account(escrow.EscrowAccount).Main().Get()
+		if err == nil {
+			if tokenAcct, ok := escrowAcct.(protocol.AccountWithTokens); ok {
+				if tokenAcct.DebitTokens(&escrow.Amount) {
+					err = batch.Account(escrow.EscrowAccount).Main().Put(tokenAcct)
+					if err != nil {
+						return errors.UnknownError.WithFormat("save escrow account: %w", err)
+					}
+				}
+			}
+		}
+
+		// Create synthetic deposit to recipient
+		deposit := new(protocol.SyntheticDepositTokens)
+		deposit.Token = escrow.Token
+		deposit.Amount = escrow.Amount
+		state.DidProduceTxn(escrow.Recipient, deposit)
+	}
+
+	// Clear escrow records
+	err = acctTxn.FeeEscrows().Put(nil)
+	if err != nil {
+		return errors.UnknownError.WithFormat("clear escrow records: %w", err)
+	}
+
+	return nil
+}
+
+// refundFeeEscrows refunds escrowed fees to payers on transaction failure (AIP-50).
+func (x *TransactionContext) refundFeeEscrows(batch *database.Batch, txn *protocol.Transaction, state *chain.ProcessTransactionState) error {
+	// Only process user transactions
+	if !txn.Body.Type().IsUser() {
+		return nil
+	}
+
+	// Load escrow entries
+	acctTxn := batch.Account(txn.Header.Principal).Transaction(txn.ID().Hash())
+	escrows, err := acctTxn.FeeEscrows().Get()
+	if err != nil {
+		// If no escrows exist, that's fine
+		if errors.Is(err, errors.NotFound) {
+			return nil
+		}
+		return errors.UnknownError.WithFormat("load escrow entries: %w", err)
+	}
+
+	// No escrows to process
+	if len(escrows) == 0 {
+		return nil
+	}
+
+	for _, escrow := range escrows {
+		// Debit from escrow account (if on this partition)
+		escrowAcct, err := batch.Account(escrow.EscrowAccount).Main().Get()
+		if err == nil {
+			if tokenAcct, ok := escrowAcct.(protocol.AccountWithTokens); ok {
+				if tokenAcct.DebitTokens(&escrow.Amount) {
+					err = batch.Account(escrow.EscrowAccount).Main().Put(tokenAcct)
+					if err != nil {
+						return errors.UnknownError.WithFormat("save escrow account: %w", err)
+					}
+				}
+			}
+		}
+
+		// Create synthetic deposit refund back to payer
+		refund := new(protocol.SyntheticDepositTokens)
+		refund.Token = escrow.Token
+		refund.Amount = escrow.Amount
+		refund.IsRefund = true
+		state.DidProduceTxn(escrow.Payer, refund)
+	}
+
+	// Clear escrow records
+	err = acctTxn.FeeEscrows().Put(nil)
+	if err != nil {
+		return errors.UnknownError.WithFormat("clear escrow records: %w", err)
+	}
+
+	return nil
 }

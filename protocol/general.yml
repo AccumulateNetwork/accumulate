@@ -363,3 +363,54 @@ AnnotatedReceipt:
       type: merkle.ReceiptList
       marshal-as: reference
       pointer: true
+
+# AIP-50: User-Specified Transaction Fees
+
+UserFee:
+  description: specifies a fee to be paid to a service provider on transaction success
+  fields:
+    - name: Recipient
+      description: is the account to receive the fee on transaction success
+      type: url
+      pointer: true
+    - name: Amount
+      description: is the amount of tokens to pay
+      type: bigint
+    - name: Token
+      description: is the token type URL (e.g., acc://ACME)
+      type: url
+      pointer: true
+    - name: Payer
+      description: is the account paying the fee (defaults to initiator's token account if nil)
+      type: url
+      pointer: true
+      optional: true
+
+FeeEscrowEntry:
+  description: records an escrowed fee for a pending transaction
+  fields:
+    - name: Index
+      description: is the index of this fee in the UserFees array
+      type: uint
+    - name: Amount
+      description: is the amount of tokens escrowed
+      type: bigint
+    - name: Token
+      description: is the token type URL
+      type: url
+      pointer: true
+    - name: Payer
+      description: is the account that paid the escrow
+      type: url
+      pointer: true
+    - name: Recipient
+      description: is the account to receive the fee on success
+      type: url
+      pointer: true
+    - name: EscrowAccount
+      description: is the system account holding the escrow
+      type: url
+      pointer: true
+    - name: MessageHash
+      description: is the hash of the FeeEscrowPayment message
+      type: hash

@@ -30,6 +30,8 @@ func NewMessage(typ MessageType) (Message, error) {
 		return new(CreditPayment), nil
 	case MessageTypeDidUpdateExecutorVersion:
 		return new(DidUpdateExecutorVersion), nil
+	case MessageTypeFeeEscrowPayment:
+		return new(FeeEscrowPayment), nil
 	case MessageTypeMakeMajorBlock:
 		return new(MakeMajorBlock), nil
 	case MessageTypeNetworkUpdate:
@@ -85,6 +87,12 @@ func EqualMessage(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*DidUpdateExecutorVersion)
+		return ok && a.Equal(b)
+	case *FeeEscrowPayment:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*FeeEscrowPayment)
 		return ok && a.Equal(b)
 	case *MakeMajorBlock:
 		if a == nil {
@@ -150,6 +158,8 @@ func CopyMessage(v Message) Message {
 	case *CreditPayment:
 		return v.Copy()
 	case *DidUpdateExecutorVersion:
+		return v.Copy()
+	case *FeeEscrowPayment:
 		return v.Copy()
 	case *MakeMajorBlock:
 		return v.Copy()

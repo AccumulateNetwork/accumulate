@@ -154,3 +154,14 @@ func (m *Message) FindSigners(u *url.URL) ([]*url.URL, error) {
 	})
 	return signers[i:j], nil
 }
+
+// compareFeeEscrowByIndex compares FeeEscrowEntry by their Index field (AIP-50).
+func compareFeeEscrowByIndex(a, b *protocol.FeeEscrowEntry) int {
+	if a.Index < b.Index {
+		return -1
+	}
+	if a.Index > b.Index {
+		return 1
+	}
+	return 0
+}

@@ -1287,6 +1287,7 @@ type AccountTransaction struct {
 	signatures          values.Set[*SignatureSetEntry]
 	validatorSignatures values.Set[protocol.KeySignature]
 	history             values.Set[uint64]
+	feeEscrows          values.Set[*protocol.FeeEscrowEntry]
 }
 
 func (c *AccountTransaction) Key() *record.Key { return c.key }
@@ -1331,6 +1332,14 @@ func (c *AccountTransaction) newHistory() values.Set[uint64] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("History"), values.Wrapped(values.UintWrapper), values.CompareUint)
 }
 
+func (c *AccountTransaction) FeeEscrows() values.Set[*protocol.FeeEscrowEntry] {
+	return values.GetOrCreate(c, &c.feeEscrows, (*AccountTransaction).newFeeEscrows)
+}
+
+func (c *AccountTransaction) newFeeEscrows() values.Set[*protocol.FeeEscrowEntry] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("FeeEscrows"), values.Struct[protocol.FeeEscrowEntry](), compareFeeEscrowByIndex)
+}
+
 func (c *AccountTransaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for transaction (1)")
@@ -1347,6 +1356,8 @@ func (c *AccountTransaction) Resolve(key *record.Key) (record.Record, *record.Ke
 		return c.ValidatorSignatures(), key.SliceI(1), nil
 	case "History":
 		return c.History(), key.SliceI(1), nil
+	case "FeeEscrows":
+		return c.FeeEscrows(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for transaction (2)")
 	}
@@ -1372,6 +1383,9 @@ func (c *AccountTransaction) IsDirty() bool {
 	if values.IsDirty(c.history) {
 		return true
 	}
+	if values.IsDirty(c.feeEscrows) {
+		return true
+	}
 
 	return false
 }
@@ -1392,6 +1406,7 @@ func (c *AccountTransaction) Walk(opts record.WalkOptions, fn record.WalkFunc) e
 	if !opts.IgnoreIndices {
 		values.WalkField(&err, c.history, c.newHistory, opts, fn)
 	}
+	values.WalkField(&err, c.feeEscrows, c.newFeeEscrows, opts, fn)
 	return err
 }
 
@@ -1406,6 +1421,7 @@ func (c *AccountTransaction) Commit() error {
 	values.Commit(&err, c.signatures)
 	values.Commit(&err, c.validatorSignatures)
 	values.Commit(&err, c.history)
+	values.Commit(&err, c.feeEscrows)
 
 	return err
 }

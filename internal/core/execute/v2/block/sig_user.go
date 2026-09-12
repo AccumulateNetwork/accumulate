@@ -411,6 +411,11 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+	// Escrow user fees (AIP-50)
+	err = x.escrowUserFees(batch, ctx2)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 
 	// Don't send an authority signature if it's a suggestion
 	if ctx2.keySig.GetVote() == protocol.VoteTypeSuggest && ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() {
@@ -571,4 +576,128 @@ func (UserSignature) computeSignerFee(ctx *userSigContext) (protocol.Fee, error)
 	// Subtract the base signature fee, but not the oversize surcharge if there is one
 	fee += txnFee - protocol.FeeSignature
 	return fee, nil
+}
+
+// escrowUserFees processes user-specified transaction fees (AIP-50).
+// This is called when processing the initiator signature to lock tokens in escrow.
+func (UserSignature) escrowUserFees(batch *database.Batch, ctx *userSigContext) error {
+	// Only process fees for the initiator
+	if !ctx.isInitiator {
+		return nil
+	}
+
+	// Check if transaction has user fees
+	userFees := ctx.transaction.Header.UserFees
+	if len(userFees) == 0 {
+		return nil
+	}
+
+	// Get the partition escrow account URL
+	escrowUrl := protocol.EscrowUrl(ctx.Executor.Describe.PartitionId)
+
+	for i, fee := range userFees {
+		// Validate fee has required fields
+		if fee.Recipient == nil {
+			return errors.BadRequest.WithFormat("user fee %d: missing recipient", i)
+		}
+		if fee.Token == nil {
+			return errors.BadRequest.WithFormat("user fee %d: missing token", i)
+		}
+
+		// Validate amount is positive
+		if fee.Amount.Sign() <= 0 {
+			return errors.BadRequest.WithFormat("user fee %d: amount must be positive", i)
+		}
+
+		// Validate fee token is ACME only (for now)
+		if !protocol.AcmeUrl().Equal(fee.Token) {
+			return errors.BadRequest.WithFormat("user fee %d: only ACME tokens are allowed, got %v", i, fee.Token)
+		}
+
+		// Determine fee payer (defaults to signer's ACME token account)
+		var payerUrl *url.URL
+		if fee.Payer != nil {
+			payerUrl = fee.Payer
+		} else {
+			// Default to lite ACME account for the signer
+			payerUrl = ctx.signature.GetSigner().RootIdentity().JoinPath(protocol.ACME)
+		}
+
+		// Route the payer to ensure it's on this partition
+		partition, err := ctx.Executor.Router.RouteAccount(payerUrl)
+		if err != nil {
+			return errors.UnknownError.WithFormat("user fee %d: cannot route payer %v: %w", i, payerUrl, err)
+		}
+		if !strings.EqualFold(partition, ctx.Executor.Describe.PartitionId) {
+			return errors.BadRequest.WithFormat("user fee %d: payer %v is on partition %v, must be on %v for atomic escrow",
+				i, payerUrl, partition, ctx.Executor.Describe.PartitionId)
+		}
+
+		// Load fee payer's token account
+		var payerAcct protocol.AccountWithTokens
+		err = batch.Account(payerUrl).Main().GetAs(&payerAcct)
+		if err != nil {
+			return errors.UnknownError.WithFormat("user fee %d: load payer account %v: %w", i, payerUrl, err)
+		}
+
+		// Verify token type matches
+		if !fee.Token.Equal(payerAcct.GetTokenUrl()) {
+			return errors.BadRequest.WithFormat("user fee %d: payer account token mismatch: have %v, want %v",
+				i, payerAcct.GetTokenUrl(), fee.Token)
+		}
+
+		// Debit from payer
+		if !payerAcct.DebitTokens(&fee.Amount) {
+			return errors.InsufficientBalance.WithFormat("user fee %d: insufficient balance in %v: have %s, want %s",
+				i, payerUrl,
+				protocol.FormatBigAmount(payerAcct.TokenBalance(), protocol.AcmePrecisionPower),
+				protocol.FormatBigAmount(&fee.Amount, protocol.AcmePrecisionPower))
+		}
+
+		// Load or create escrow account
+		var escrowAcct protocol.AccountWithTokens
+		err = batch.Account(escrowUrl).Main().GetAs(&escrowAcct)
+		if err != nil {
+			// If escrow account doesn't exist, create it
+			if errors.Is(err, errors.NotFound) {
+				escrowAcct = &protocol.TokenAccount{
+					Url:      escrowUrl,
+					TokenUrl: protocol.AcmeUrl(),
+				}
+			} else {
+				return errors.UnknownError.WithFormat("load escrow account %v: %w", escrowUrl, err)
+			}
+		}
+
+		// Credit to escrow account
+		escrowAcct.CreditTokens(&fee.Amount)
+
+		// Save both accounts
+		err = batch.Account(payerUrl).Main().Put(payerAcct)
+		if err != nil {
+			return errors.UnknownError.WithFormat("user fee %d: save payer account: %w", i, err)
+		}
+
+		err = batch.Account(escrowUrl).Main().Put(escrowAcct)
+		if err != nil {
+			return errors.UnknownError.WithFormat("save escrow account: %w", err)
+		}
+
+		// Send FeeEscrowPayment to principal's partition
+		escrowMsg := &messaging.FeeEscrowPayment{
+			Amount:        fee.Amount,
+			Token:         fee.Token,
+			Payer:         payerUrl,
+			EscrowAccount: escrowUrl,
+			TxID:          ctx.transaction.ID(),
+			Cause:         ctx.message.ID(),
+			FeeIndex:      uint64(i),
+		}
+		err = ctx.didProduce(batch, ctx.transaction.Header.Principal, escrowMsg)
+		if err != nil {
+			return errors.UnknownError.WithFormat("user fee %d: send escrow payment: %w", i, err)
+		}
+	}
+
+	return nil
 }
