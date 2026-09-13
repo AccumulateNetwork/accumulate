@@ -382,16 +382,21 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 // current — reporting the resolved block there would make it disagree with the
 // root the receipt actually ends at.
 //
-// WHAT THE RECEIPT STARTS AT DIFFERS FROM THE CURRENT-STATE PATH, and a caller
-// that assumes otherwise will compare the wrong value. The current path starts
-// at the account's MAIN STATE hash: StateReceipt combines hasher.Receipt(0, …)
-// with the BPT receipt, proving element 0 of the account hash. This path cannot
-// do that — rebuilding the hasher at a past block needs the account's main
-// state at that block, and only BPT nodes are retained, not account state — so
-// it starts at the account's whole BPT entry: the merkle hash over main state,
-// secondary state, chain anchors and pending. Retaining the four components
-// would close the gap at 128 bytes per changed account per block; that is a
-// retention change and is not made here.
+// WHERE THE RECEIPT STARTS DEPENDS ON WHAT THE NODE RETAINED, and a caller must
+// read HistoricalStateProof.StartsAtMainState rather than assume.
+//
+// When the node retained the account's state receipt for the resolved block, the
+// proof starts at a simple hash of the MAIN STATE, as the current-state path
+// does — so a verifier recomputes the starting point from the state this
+// response carries, and the proof checks offline.
+//
+// When it did not — retention off, nothing retained at or before the block, or a
+// retained receipt that does not reach the entry — the proof starts at the
+// account's whole BPT entry: the merkle hash over main state, secondary state,
+// chain anchors and pending. That is still a correct proof, but a verifier
+// holding only the account state cannot compute its starting point, so
+// StartsAtMainState reports false rather than implying a start the node cannot
+// support.
 func (s *Querier) historicalStateReceipt(batch *database.Batch, record *database.Account, r *api.AccountRecord, height uint64) error {
 	proof, err := indexing.HistoricalAccountStateProof(s.partition, batch, record, height)
 	if err != nil {
