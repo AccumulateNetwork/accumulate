@@ -182,6 +182,30 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.WithFormat("store block ledger: %w", err)
 	}
 
+	// Anchor the BPT chain into the root chain (#4272).
+	//
+	// It cannot go through the loop above: that skips the ledger account
+	// outright, because the ledger owns the root chain and a chain cannot be
+	// anchored into itself. The bpt chain lives on the ledger, so it needs an
+	// explicit anchor here — the same treatment the synthetic chain gets below,
+	// and for the same reason.
+	//
+	// Without this the chain is written every block and never anchored, so it
+	// has no index chain, and a historical BPT root is asserted by the node
+	// rather than committed by the network.
+	if block.Executor.globals.Active.ExecutorVersion.V2KourouEnabled() {
+		head, err := ledger.BptChain().Inner().Head().Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load bpt chain head: %w", err)
+		}
+		if head.Count > 0 {
+			_, _, err = addChainAnchor(rootChain, ledger.BptChain(), block.Index)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("anchor the bpt chain: %w", err)
+			}
+		}
+	}
+
 	// Add the synthetic transaction chain to the root chain
 	var synthIndexIndex uint64
 	if block.State.Produced > 0 {
