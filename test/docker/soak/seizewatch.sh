@@ -15,7 +15,12 @@ try: d=json.load(sys.stdin)
 except Exception: print("NODATA"); sys.exit()
 h=d.get("heals") or {}
 mx=(d.get("matrix") or {}).get("flows",{}).get("synthetic",{})
-stuck=h.get("stuck",0) or 0
+# None means the node exports nothing for this, which is NOT zero: read
+# as 0 the trip below could never fire and the dashboard would call a
+# churning network healthy (REPORTING-SPEC 1). -1 says "not measured" and
+# the trip is skipped explicitly.
+stuck=h.get("stuck")
+stuck=-1 if stuck is None else stuck
 worst=None
 for s,row in mx.items():
   for dd,c in row.items():
@@ -29,10 +34,12 @@ for kind in ("synthetic","anchor"):
       if u>0 and (und is None or u>und[2]): und=(kind,"%s->%s"%(s,dd),u)
 ws="%s->%s gap=%d deliv=%s"%(worst[0],worst[1],worst[2],worst[3]) if worst else "none"
 us="%s %s undeliv=%d"%(und[0],und[1],und[2]) if und else "none"
-print("stuck=%d stuckStream=%s worst=%s undeliv=%s"%(stuck,h.get("stuckStream",""),ws,us))
+print("stuck=%s stuckStream=%s worst=%s undeliv=%s"%("n/a" if stuck<0 else stuck,h.get("stuckStream",""),ws,us))
 ' 2>/dev/null)"
   ts="$(date -u +%FT%T)"
   echo "$ts $verdict"
+  # `stuck=n/a` does not match, so stuck stays empty and defaults to 0 —
+  # which only ever means "do not trip on it", never "healthy".
   stuck="$(printf '%s' "$verdict" | grep -oE 'stuck=[0-9]+' | head -1 | cut -d= -f2)"
   wgap="$(printf '%s' "$verdict" | grep -oE 'gap=[0-9]+' | head -1 | cut -d= -f2)"
   undeliv="$(printf '%s' "$verdict" | grep -oE 'undeliv=[0-9]+' | head -1 | cut -d= -f2)"
@@ -44,6 +51,14 @@ print("stuck=%d stuckStream=%s worst=%s undeliv=%s"%(stuck,h.get("stuckStream","
   # recv==deliv==0 and every gap-based check reads healthy forever. Require
   # persistence so ordinary in-flight messages do not trip it.
   if [ "$undeliv" -gt 0 ]; then und_streak=$(( ${und_streak:-0} + 1 )); else und_streak=0; fi
+
+  case "$verdict" in
+    *stuck=n/a*)
+      if [ -z "${stuck_warned:-}" ]; then
+        echo "$ts seizewatch: no node exports a stuck-heal count; tripping on gap and undelivered only"
+        stuck_warned=1
+      fi ;;
+  esac
 
   if [ "$stuck" -ge "$STUCK_TRIP" ] || [ "$wgap" -ge "$GAP_TRIP" ]; then
     echo "SEIZED at $ts :: $verdict"
