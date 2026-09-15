@@ -23,3 +23,8 @@ reconcile-pulls.txt
 # for every run against an otherwise clean tree — which is precisely where the
 # dirty marker needed to mean something (#4126).
 latest
+
+# A store copy streamed live from a node (capture-*/Shard*/) is raw data:
+# tens of MB of segments, and crash-consistent at best. Its conclusions go in
+# the capture README; the copy stays on the machine that took it.
+Shard*/
