@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -46,7 +45,7 @@ func applyOps(t *testing.T, delivered uint64, hold []uint64, ops []advOp) (*Bloc
 	t.Helper()
 	b, s := positionBlock(t, delivered, hold...)
 	for _, op := range ops {
-		require.NoError(t, b.advanceStream(s, op.delivered, op.number, advTxid(op.number)))
+		require.NoError(t, b.advanceStream(s, op.delivered, op.number, advTxid(op.number), nil))
 	}
 	return b, s
 }
@@ -63,8 +62,7 @@ func heldNumbers(t *testing.T, b *Block, s stream, through uint64) []uint64 {
 
 	var held []uint64
 	for n := delivered + 1; n <= through; n++ {
-		_, ok, err := execute.IDOf(b.Batch, s.id(), n)
-		require.NoError(t, err)
+		_, ok := b.staging.IDOf(s.id(), n)
 		if ok {
 			held = append(held, n)
 		}
@@ -77,8 +75,7 @@ func seenNumbers(t *testing.T, b *Block, s stream, through uint64) []uint64 {
 	t.Helper()
 	var seen []uint64
 	for n := uint64(1); n <= through; n++ {
-		_, ok, err := execute.IDOf(b.Batch, s.id(), n)
-		require.NoError(t, err)
+		_, ok := b.staging.IDOf(s.id(), n)
 		if ok {
 			seen = append(seen, n)
 		}
@@ -113,8 +110,7 @@ func TestStreamAdvance_AReceiptDoesNotTouchTheLedger(t *testing.T) {
 	assert.Equal(t, uint64(0), part.Received)
 
 	assert.Equal(t, []uint64{5, 7, 9}, heldNumbers(t, b, s, 12), "staging has them")
-	high, err := execute.Sighted(b.Batch, s.id())
-	require.NoError(t, err)
+	high := b.staging.Sighted(s.id())
 	assert.Equal(t, uint64(9), high)
 }
 
@@ -171,8 +167,7 @@ func TestStreamAdvance_DrainingAnExistingWindow(t *testing.T) {
 	// records stay and simply stop counting as held — which is why there is no
 	// release step to get the timing of wrong.
 	assert.Equal(t, []uint64{11, 12, 13, 14, 15}, seenNumbers(t, b, s, 20))
-	high, err := execute.Sighted(b.Batch, s.id())
-	require.NoError(t, err)
+	high := b.staging.Sighted(s.id())
 	assert.Equal(t, uint64(15), high,
 		"the high-water mark stays: the stream WAS behind, and forgetting that says it never was")
 }

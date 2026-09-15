@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/persist"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
@@ -76,6 +77,21 @@ type NodeConfig struct {
 	// CommitBufferSize is the size of the committed certificates channel.
 	// Defaults to DefaultCommitBufferSize.
 	CommitBufferSize int
+
+	// MaxExecutionLag is how many committed leader groups the executor may
+	// fall behind before headers carry no batches and user work is refused
+	// (consensus spec, invariant 9). Zero means primary.DefaultMaxExecutionLag.
+	MaxExecutionLag int
+
+	// MaxHeaderBytes bounds the batches one header carries, so a backlog that
+	// built while headers were empty comes back a header at a time
+	// (consensus spec, invariant 9). Zero means primary.DefaultMaxHeaderBytes.
+	MaxHeaderBytes int
+
+	// MaxBlockBytes bounds the batches one block carries whatever the number
+	// of validators; each header gets its share (#4230). Zero means
+	// primary.DefaultMaxBlockBytes.
+	MaxBlockBytes int
 
 	// MinRoundInterval paces round advancement, and therefore block cadence:
 	// Bullshark commits a leader every other round, so blocks arrive at
@@ -165,6 +181,12 @@ type Node struct {
 	// Metrics
 	transactionsSubmitted atomic.Uint64
 	certificatesCommitted atomic.Uint64
+
+	// committedGroups counts leader groups handed to the executor's channel;
+	// executedGroups counts the blocks the executor has produced from them.
+	// Their difference is the execution lag (consensus spec, invariant 9).
+	committedGroups atomic.Uint64
+	executedGroups  atomic.Uint64
 }
 
 // NewNode creates a new consensus Node with the given configuration.
@@ -219,6 +241,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		wcfg.Partition = config.Partition
 		wcfg.MaxStoredBatchBytes = storedPerWorker
 		wcfg.MaxRetainedBatchBytes = retainedPerWorker
+		wcfg.Certified = d.HasCertifiedBatch
 		workers[i] = worker.New(wcfg, g)
 	}
 
@@ -227,6 +250,8 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		Partition:        config.Partition,
 		KeyPair:          config.KeyPair,
 		MinRoundInterval: config.MinRoundInterval,
+		MaxHeaderBytes:   config.MaxHeaderBytes,
+		MaxBlockBytes:    config.MaxBlockBytes,
 	}
 	p := primary.New(pcfg, committee, g, d, workers)
 
@@ -252,6 +277,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		bullshark: bs,
 		committed: make(chan []*types.Certificate, config.CommitBufferSize),
 	}
+	p.SetExecutionLagSource(n.ExecutionLag, config.MaxExecutionLag)
 
 	// The batch-fetch protocol backs CollectBatches and the vote gate's
 	// missing-batch pull: a committed certificate proves 2f+1 validators
@@ -688,6 +714,26 @@ func (n *Node) SubmitTransaction(tx []byte) error {
 // transaction in the network to worker 1, into 1/N of the batch-store budget
 // (#4179). Stability is worth nothing here; nothing about an unattributed
 // transaction needs to share a worker with the next one.
+// SubmitUserTransaction submits a user's transaction from the API. Unlike
+// SubmitTransaction it is refused with worker.ErrStoreFull while the worker's
+// own uncommitted batches fill its share (consensus spec, invariant 4).
+func (n *Node) SubmitUserTransaction(tx []byte) error {
+	if n.closed.Load() {
+		return ErrNodeClosed
+	}
+	n.mu.RLock()
+	started := n.ctx != nil
+	n.mu.RUnlock()
+	if !started {
+		return ErrNodeNotStarted
+	}
+	if len(n.workers) == 0 {
+		return errors.New("no workers available")
+	}
+	idx := int(n.transactionsSubmitted.Add(1)-1) % len(n.workers)
+	return n.workers[idx].SubmitUser(tx)
+}
+
 func (n *Node) SubmitTransactionFor(key string, tx []byte) error {
 	if n.closed.Load() {
 		return ErrNodeClosed
@@ -728,6 +774,21 @@ func (n *Node) WorkerFor(key string) int {
 // committee size (#4164) or depends on per-node arrival timing and diverges.
 func (n *Node) Committed() <-chan []*types.Certificate {
 	return n.committed
+}
+
+// ReportExecuted records that the executor produced a block from one
+// committed group. The primary reads the lag between commits and executions
+// from this (consensus spec, invariant 9).
+func (n *Node) ReportExecuted() { n.executedGroups.Add(1) }
+
+// ExecutionLag is how many committed leader groups the executor has not yet
+// executed.
+func (n *Node) ExecutionLag() int {
+	c, e := n.committedGroups.Load(), n.executedGroups.Load()
+	if e >= c {
+		return 0
+	}
+	return int(c - e)
 }
 
 // Committee returns the current committee.
@@ -806,6 +867,34 @@ func (n *Node) LastCommitRound() types.Round {
 	return n.bullshark.LastCommitRound()
 }
 
+// Checkpoint is this node's consensus position: the primary's round and
+// epoch, Bullshark's last committed leader round and its per-author commit
+// watermarks. The service saves one per block so a restart can resume where
+// the executor's state is (#4238).
+func (n *Node) Checkpoint() *persist.Checkpoint {
+	return persist.NewCheckpoint(n.config.Partition,
+		n.primary.CurrentRound(), n.primary.CurrentEpoch(),
+		n.bullshark.LastCommitRound(), n.bullshark.GetLastCommitted())
+}
+
+// Restore seeds the consensus position from a checkpoint, before Start: the
+// primary participates from the checkpoint's round, Bullshark orders nothing
+// at or below its last commit and knows what each author had committed, and
+// the DAG accepts certificates at the commit floor without their pruned
+// parents. Certificate catch-up covers the rounds between the checkpoint and
+// the live frontier, up to DAGGCDepth.
+func (n *Node) Restore(cp *persist.Checkpoint) {
+	n.primary.SetRound(cp.CurrentRound)
+	n.primary.SetEpoch(cp.CurrentEpoch)
+	n.bullshark.SetLastCommitRound(cp.LastCommitRound)
+	for author, round := range cp.LastCommitted {
+		n.bullshark.SetLastCommittedForAuthor(author, round)
+	}
+	n.dag.SetLastCommitRound(cp.LastCommitRound)
+	slog.Info("Restored consensus position", "partition", n.config.Partition,
+		"round", cp.CurrentRound, "lastCommit", cp.LastCommitRound, "block", cp.BlockIndex)
+}
+
 // Metrics returns node metrics.
 func (n *Node) Metrics() (txSubmitted, certsCommitted uint64) {
 	return n.transactionsSubmitted.Load(), n.certificatesCommitted.Load()
@@ -855,6 +944,7 @@ func (n *Node) processBullshark() {
 				// the DAG regardless.
 				select {
 				case n.committed <- group:
+					n.committedGroups.Add(1)
 					group = nil
 					return true
 				case <-n.ctx.Done():

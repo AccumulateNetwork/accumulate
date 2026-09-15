@@ -7,6 +7,7 @@
 package main
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -202,9 +203,39 @@ func (mc *MetricsCollector) updateDHTMetrics() {
 func (mc *MetricsCollector) updatePartitionMetrics() {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
+	mc.setPartitionGauges()
+}
 
+// Partition label values. A peer announces its partition name, and a metric
+// label that repeats it has a series per name any peer cares to announce, for
+// the life of the process (#4246). The label is the partition's role instead:
+// three values, whatever the peers say.
+const (
+	roleDirectory = "directory"
+	roleBVN       = "bvn"
+	roleUnknown   = "unknown"
+)
+
+// partitionRole reduces an announced partition name to its role.
+func partitionRole(partition string) string {
+	switch strings.ToLower(strings.TrimSpace(partition)) {
+	case "", PartitionUnknown:
+		return roleUnknown
+	case PartitionDN, "directory":
+		return roleDirectory
+	default:
+		return roleBVN
+	}
+}
+
+// setPartitionGauges sets the peer count per role. Called with mc.mu held.
+func (mc *MetricsCollector) setPartitionGauges() {
+	byRole := map[string]int{roleDirectory: 0, roleBVN: 0, roleUnknown: 0}
 	for partition, peers := range mc.partitions {
-		partitionPeers.WithLabelValues(partition).Set(float64(len(peers)))
+		byRole[partitionRole(partition)] += len(peers)
+	}
+	for role, n := range byRole {
+		partitionPeers.WithLabelValues(role).Set(float64(n))
 	}
 }
 
@@ -212,7 +243,11 @@ func (mc *MetricsCollector) updatePartitionMetrics() {
 func (mc *MetricsCollector) RecordDiscovery(operation string, duration time.Duration, peersFound int, partition string) {
 	discoveryDuration.WithLabelValues(operation).Observe(duration.Seconds())
 	if peersFound > 0 {
-		discoveryPeersFound.WithLabelValues(partition).Add(float64(peersFound))
+		label := partitionRole(partition)
+		if partition == "all" {
+			label = "all"
+		}
+		discoveryPeersFound.WithLabelValues(label).Add(float64(peersFound))
 	}
 }
 
@@ -236,7 +271,7 @@ func (mc *MetricsCollector) SetPartitionPeers(partition string, peers []peer.ID)
 		peerSet[p] = struct{}{}
 	}
 	mc.partitions[partition] = peerSet
-	partitionPeers.WithLabelValues(partition).Set(float64(len(peers)))
+	mc.setPartitionGauges()
 }
 
 // GetStats returns current metrics as a structured map

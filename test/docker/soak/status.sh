@@ -9,12 +9,16 @@ print("uptime      %dh%02dm   api=%s" % (up // 3600, (up % 3600) // 60, (d.get("
 print("heights     %s" % d.get("heights"))
 w = d.get("wedges") or {}
 h = d.get("heals") or {}
-print("dropped     synthetic=%s anchor=%s total=%s  byDest=%s" % (
-    w.get("synthetic"), w.get("anchor"), w.get("total"), w.get("byDest")))
-print("healed      synthetic=%s anchor=%s total=%s  stuck=%s errors=%s" % (
-    h.get("synthetic"), h.get("anchor"), h.get("total"), h.get("stuck"), h.get("errors")))
-if h.get("stuckStream"):
-    print("STUCK       %s" % h["stuckStream"])
+na = lambda v: "not measured" if v is None else v
+print("dropped     total=%s  byReason=%s  byDest=%s" % (
+    na(w.get("total")), w.get("byReason") or {}, w.get("byDest") or {}))
+hr = h.get("requests") or {}
+print("healed      entries=%s  requests answered=%s not-yet=%s miss=%s failed=%s" % (
+    na(h.get("entries")), na(hr.get("answered")), na(hr.get("not-yet")),
+    na(hr.get("miss")), na(hr.get("failed"))))
+hld = h.get("held")
+if hld:
+    print("held        %s entries, %s bytes" % (hld.get("entries"), hld.get("bytes")))
 c = d.get("chaos") or {}
 print("chaos       %s  recent=%s" % (c.get("counts"), (c.get("recent") or [])[-3:]))
 lg = d.get("loadgen") or {}

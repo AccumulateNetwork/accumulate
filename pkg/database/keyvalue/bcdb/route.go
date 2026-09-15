@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -65,13 +65,30 @@ import (
 //	<chain>.States(I)                 every set and counted collection
 //	Account(U).Data.Entry(I)          Account(U).Data.Entry (the count)
 //	SystemData(P).SyntheticIndexIndex(B)   Account(U).Data.Transaction(H)
-//	Summary(H).Main (BSN)             Events, BlockLedger, Log blocks
+//	Summary(H).Main (BSN)             Events, Log blocks
+//	Account(U).BlockLedger(I)
 //
 // Anything not named here is treated as mutable, which is the direction
 // that fails quietly rather than loudly.
 func isWriteOnce(k *record.Key) bool {
 	last, prev, trailing := tail(k)
 	switch last {
+	case "ElementIndex":
+		// ElementIndex(H) is where entry H landed -- but the index names
+		// the position a hash was LAST written at (database.md, "Chains
+		// are logs"), and two chains receive a hash more than once by
+		// construction: a root chain takes equal anchors from equal
+		// chains, and a signature chain records every signature message
+		// as it arrived. On those the index is rewritten, so it is
+		// mutable; on every other chain the writer appends each hash
+		// once and the index is written once.
+		//
+		// Anchoring the BPT chain into the root chain (#4272) is what
+		// made the root chain's repeats reachable in the simulator, and
+		// the misroute check caught the classification rather than the
+		// write (TestSimulatorRouting).
+		return trailing == 1 && !chainRepeats(prev)
+
 	case "Intermediate":
 		// <chain>.Intermediate(I, H) is the pair the cascade combined at
 		// height H when element I was added -- a fact about a position in
@@ -79,13 +96,24 @@ func isWriteOnce(k *record.Key) bool {
 		// (#4263).
 		return trailing == 2
 
-	case "Element", "ElementIndex", "States":
-		// A merkle chain is a log.  Element(I) is the I'th entry,
-		// ElementIndex(H) is where entry H landed, and States(I) is
-		// the mark point covering I -- all of them facts about a
-		// position in the log, which does not move.  Head is the log's
-		// current end and is excluded by requiring the parameter.
+	case "Element":
+		// A merkle chain is a log.  Element(I) is the I'th entry: a fact
+		// about a position in the log, which does not move.  Head is the
+		// log's current end and is excluded by requiring the parameter.
 		return trailing == 1
+	case "States":
+		// States(I) is the mark point covering I: the merkle state every
+		// later state of the chain is computed FROM.  Written once, like
+		// Url below, and read by every receipt the chain ever builds --
+		// a receipt over a slow chain (the Directory's root chain, an
+		// anchor chain at one entry a block) reaches for a mark point
+		// written hundreds of blocks ago.  Behind the window that read is
+		// "absent", and the chain code used to take absent for a
+		// truncated chain and rebuild from an empty state: from soak
+		// 20260905T032333Z on, every Directory anchor carried receipts to
+		// a root no BVN held, every BVN rejected them, and nothing was
+		// dispatched for hours.  Mark points are state, not history.
+		return false
 
 	case "Main":
 		// A message, a transaction and a block summary (BSN) are named
@@ -131,6 +159,11 @@ func isWriteOnce(k *record.Key) bool {
 	case "SyntheticIndexIndex":
 		// Which synthetic index chain entry covers a given block.
 		return trailing == 1
+
+	case "BlockLedger":
+		// Account(ledger).BlockLedger(I): one record per non-empty block,
+		// written once (executor spec, "The block ledger").
+		return trailing == 1 && prev == "Account"
 	}
 
 	return false
@@ -163,4 +196,16 @@ func tail(k *record.Key) (last, prev string, trailing int) {
 		}
 	}
 	return last, prev, trailing
+}
+
+// chainRepeats reports whether a chain receives the same hash more than once
+// by construction (database.md, "Chains are logs"). Only these two do; a
+// duplicate on any other chain is the writer's bug, not the chain's to
+// absorb, and its element index is written once.
+func chainRepeats(chain string) bool {
+	switch chain {
+	case "RootChain", "SignatureChain":
+		return true
+	}
+	return false
 }

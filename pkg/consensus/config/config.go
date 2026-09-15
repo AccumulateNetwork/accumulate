@@ -26,7 +26,7 @@ const (
 	DefaultBatchTimeout     = 100 * time.Millisecond
 	DefaultMaxBatchBytes    = 500 * 1024       // 500KB
 	DefaultMaxPendingSize   = 10 * 1024 * 1024 // 10MB
-	DefaultMaxStoredBatches = 10000
+	DefaultMaxStoredBatches = 0                // no count limit: the store is bounded in bytes
 
 	// Timing defaults
 	//

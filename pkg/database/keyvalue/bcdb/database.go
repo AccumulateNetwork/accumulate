@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -40,13 +40,19 @@ package bcdb
 import (
 	"encoding/json"
 	stderrors "errors"
+	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	bcdb "github.com/AccumulateNetwork/BlockchainDB/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -76,15 +82,33 @@ type Database struct {
 	// and reads as of that version; a commit produces the next one.
 	version uint64
 
-	// staged holds committed batches that have not been written
-	// through yet, oldest first.  A batch older than the oldest open
-	// view cannot be written through without becoming visible to that
-	// view, which is the thing isolation forbids.
-	staged []*staged
+	// undo holds, for each committed version, the value every key it
+	// rewrote had BEFORE that commit -- what a reader begun at an older
+	// version must go on seeing (database invariant 2). A commit reaches
+	// the store at commit (invariant 5); this is only the memory of what
+	// it replaced, kept while a reader that predates it is open and
+	// dropped when the last such reader closes (D5). An empty pre-image
+	// means the key did not exist before.
+	undo         map[uint64]map[[32]byte][]byte
+	undoVersions []uint64 // keys of undo, ascending
 
 	// views counts the open batches at each version, so flushing knows
-	// what the oldest reader can still see.
-	views map[uint64]int
+	// what the oldest reader can still see. viewOpened is when the first
+	// batch at each version was begun, so the age of the oldest open view
+	// can be reported: a view older than a block is what holds staged
+	// commits in memory and off disk (DIFFERENCES D5).
+	views      map[uint64]int
+	viewOpened map[uint64]time.Time
+	viewOpener map[uint64]string // who begun the first view at each version
+
+	// ViewWarnAfter is how old the oldest open view may get before a
+	// commit says who holds it. Zero disables the warning.
+	ViewWarnAfter time.Duration
+	lastViewWarn  time.Time
+
+	// metricLabel names this database in the staging gauges: the directory
+	// two above the store, "dnn" or "bvnn" on a node.
+	metricLabel string
 
 	// CompressEvery seals and compacts the dynamic layer after this
 	// many commits.  Zero leaves compaction to the caller.
@@ -118,13 +142,23 @@ type Database struct {
 	last   map[[32]byte][32]byte
 
 	// Background maintenance (see maintain).
-	// deepFallbacks counts, by record shape, the reads a SHALLOW batch
-	// could only answer from history: the evidence for whether the
-	// window can be enforced without a fallback (see getAt).  Under
-	// fallbackMu, a leaf lock -- the counter is bumped while getAt
-	// holds d.mu shared, and it must not reach for that lock.
-	deepFallbacks map[string]uint64
-	fallbackMu    sync.Mutex
+	// shallowMisses counts, by shape, every shallow read the window
+	// could not answer. The miss is the answer (getAt); the count is
+	// what shows a reader that should have been deep. Under fallbackMu,
+	// a leaf lock -- bumped while getAt holds d.mu shared, and it must
+	// not reach for that lock.
+	shallowMisses map[string]uint64
+	// history attributes the reads DEEP batches make: per shape, how
+	// many hit, how many missed, how many distinct keys the hits were,
+	// and a sample of who asked. It names who reaches past the window.
+	history     map[string]*HistoryShape
+	historyKeys map[string]map[[32]byte]struct{}
+	historySeq  uint64
+	fallbackMu  sync.Mutex
+
+	// preImageReads counts the store reads commits made for isolation;
+	// see PreImageReads.
+	preImageReads atomic.Uint64
 
 	maintaining  atomic.Bool
 	maintWG      sync.WaitGroup
@@ -163,7 +197,7 @@ type Database struct {
 	pendingDyna    [][32]byte // Exceptions not yet appended to the file
 }
 
-// staged is one committed batch that has not reached the store yet
+// staged is one committed batch on its way to the store
 type staged struct {
 	version uint64
 	entries map[[32]byte]entry
@@ -176,6 +210,12 @@ type entry struct {
 	value []byte // A zero-length value is a deletion
 	perm  bool   // Write-once: goes to the permanent layer
 	shape string // The key's shape, so a refusal can be attributed
+
+	// pre is what the key held before this commit, when the adapter
+	// knows without asking the store: a record it caches as immutable is
+	// its cached value, or new. preKnown says so; empty pre means new.
+	pre      []byte
+	preKnown bool
 }
 
 var _ keyvalue.Beginner = (*Database)(nil)
@@ -301,6 +341,8 @@ func Open(path string) (*Database, error) {
 		TallyKeys:      DefaultTallyKeys,
 		TallySample:    DefaultTallySample,
 		MergeLag:       DefaultMergeLag,
+		metricLabel:    metricLabelFor(path),
+		ViewWarnAfter:  10 * time.Second,
 	}
 
 	// A commit seals the permanent layer at its version, and the store
@@ -369,7 +411,18 @@ func (d *Database) loadExceptions() error {
 		copy(h[:], b)
 		d.dyna[h] = true
 	}
+	exceptionsGauge.WithLabelValues(d.metricLabel).Set(float64(len(d.dyna)))
 	return nil
+}
+
+// Exceptions is how many keys are held in the dynamic layer against their
+// shape's classification: deleted permanent keys and refused writes. It is
+// memory the process keeps for its lifetime and a file read whole at open,
+// so a count that grows with the transaction rate is a defect (#4235).
+func (d *Database) Exceptions() int {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return len(d.dyna)
 }
 
 // persistExceptions appends the exceptions recorded since the last
@@ -398,8 +451,8 @@ func appendHashes(path string, hashes [][32]byte) error {
 	if err != nil {
 		return err
 	}
-	for i := range hashes {
-		if _, err := f.Write(hashes[i][:]); err != nil {
+	for _, h := range hashes {
+		if _, err := f.Write(h[:]); err != nil {
 			_ = f.Close()
 			return err
 		}
@@ -419,6 +472,7 @@ func (d *Database) except(h [32]byte) {
 	}
 	d.dyna[h] = true
 	d.pendingDyna = append(d.pendingDyna, h)
+	exceptionsGauge.WithLabelValues(d.metricLabel).Set(float64(len(d.dyna)))
 }
 
 // Begin begins a change set that reads the database as it stands now,
@@ -442,10 +496,47 @@ func (d *Database) BeginDeep(prefix *record.Key, writable bool) keyvalue.ChangeS
 	return d.begin(prefix, writable, true)
 }
 
+// BeginUnisolated begins a change set that reads the database as it
+// stands at each read, not as it stood when the change set began. It
+// pins no version: no commit takes pre-images on its account and none
+// are held for it (#4237).
+//
+// This is for a reader that wants the LATEST state and would be wrong
+// with anything older -- CheckTx, which validates a submission against
+// what has been committed so far. Every CheckTx used to take an
+// ordinary batch, so a reader was almost always registered while a
+// block committed and every commit paid a GetDyna per dynamic entry to
+// keep isolation nobody needed. A read here may fall inside a commit's
+// write-through and see part of it; a reader that cannot tolerate that
+// takes Begin.
+func (d *Database) BeginUnisolated(prefix *record.Key, writable bool) keyvalue.ChangeSet {
+	return memory.NewChangeSet(memory.ChangeSetOptions{
+		Prefix: prefix,
+		Get:    d.getLatest,
+		Commit: d.commit,
+		ForEach: func(fn func(*record.Key, []byte) error) error {
+			d.mu.RLock()
+			at := d.version
+			d.mu.RUnlock()
+			return d.forEachAt(at, fn)
+		},
+	})
+}
+
 func (d *Database) begin(prefix *record.Key, writable, deep bool) keyvalue.ChangeSet {
 	d.mu.Lock()
 	at := d.version
 	d.views[at]++
+	if d.viewOpened == nil {
+		d.viewOpened = map[uint64]time.Time{}
+	}
+	if _, ok := d.viewOpened[at]; !ok {
+		d.viewOpened[at] = time.Now()
+		if d.viewOpener == nil {
+			d.viewOpener = map[uint64]string{}
+		}
+		d.viewOpener[at] = viewOpener()
+	}
 	d.mu.Unlock()
 
 	var once sync.Once
@@ -475,12 +566,15 @@ func (d *Database) closeView(at uint64) {
 	defer d.mu.Unlock()
 	if n := d.views[at]; n <= 1 {
 		delete(d.views, at)
+		delete(d.viewOpened, at)
+		delete(d.viewOpener, at)
+		d.pruneUndo()
+		// The gauges are otherwise refreshed only by a commit, and a store
+		// whose readers are all gone may not commit again for a while.
+		d.observeStaging()
 	} else {
 		d.views[at] = n - 1
 	}
-	// Releasing a view may unblock staged commits, but nothing is
-	// written here: the next commit (or Close) drains them, and reports
-	// the outcome to a caller that can act on it.
 }
 
 // oldestView is the earliest version any open batch is reading at, and
@@ -494,37 +588,6 @@ func (d *Database) oldestView() (uint64, bool) {
 		}
 	}
 	return oldest, found
-}
-
-// drain writes through every staged batch that is already visible to
-// every open reader, oldest first. Called WITHOUT the lock held; it takes
-// the lock only to look at the queue and to pop a batch once the store has
-// it. A batch under write-through is still in staged, so a reader that
-// should see it still does — from staging.
-func (d *Database) drain() error {
-	d.writeMu.Lock()
-	defer d.writeMu.Unlock()
-	for {
-		d.mu.Lock()
-		if len(d.staged) == 0 {
-			d.mu.Unlock()
-			return nil
-		}
-		s := d.staged[0]
-		if oldest, any := d.oldestView(); any && s.version > oldest {
-			d.mu.Unlock()
-			return nil // A reader predates this commit and must not see it
-		}
-		d.mu.Unlock()
-
-		if err := d.writeThrough(s); err != nil {
-			return err
-		}
-
-		d.mu.Lock()
-		d.staged = d.staged[1:]
-		d.mu.Unlock()
-	}
 }
 
 // writeThrough puts a staged batch into the store and seals it.  Runs
@@ -641,15 +704,9 @@ func (d *Database) Close() error {
 	d.StatsEvery = 1 // Force a final tally
 	d.reportStats()
 
-	// Everything staged is now unreachable by any reader
-	d.views = map[uint64]int{}
 	d.mu.Unlock()
-	err := d.drain()
 	d.maintWG.Wait() // a compaction or merge in flight finishes first
 	d.mu.Lock()
-	if err != nil {
-		return err
-	}
 	return d.kv.Close()
 }
 
@@ -676,24 +733,168 @@ func (d *Database) Shapes() map[string]ShapeCount {
 	return shapes
 }
 
-// DeepFallbacks reports, by key shape, the reads that the permanent
-// layer's window could not answer and that GetDeep had to walk history
-// for.  It is the read-side counterpart to Shapes: a shape that appears
-// here in quantity is one whose PLACEMENT is wrong, whatever its write
-// classification says (see route.go's Url case).
-func (d *Database) DeepFallbacks() map[string]uint64 {
-	return d.fallbackSnapshot()
-}
-
-// fallbackSnapshot copies the deep-fallback counters for a report
-func (d *Database) fallbackSnapshot() map[string]uint64 {
+// ShallowMisses reports, by key shape, every read a SHALLOW batch made
+// that the window could not answer, whether or not history then had it.
+// A mutable shape here is normal -- a first write's absence, a set that
+// is still empty -- and cost nothing beyond the dynamic layer's own
+// lookup.  A permanent shape here is a reader that reaches past the
+// window without BeginDeep, and the count is what says the fallback in
+// getAt is still needed.
+func (d *Database) ShallowMisses() map[string]uint64 {
 	d.fallbackMu.Lock()
 	defer d.fallbackMu.Unlock()
-	if len(d.deepFallbacks) == 0 {
+	if len(d.shallowMisses) == 0 {
 		return nil
 	}
-	out := make(map[string]uint64, len(d.deepFallbacks))
-	for k, v := range d.deepFallbacks {
+	out := make(map[string]uint64, len(d.shallowMisses))
+	for k, v := range d.shallowMisses {
+		out[k] = v
+	}
+	return out
+}
+
+// HistoryShape is what one record shape cost in DEEP reads: Hits found
+// the key, in the window or below it, Misses found nothing anywhere,
+// Distinct is how many different keys the hits were for (Capped when
+// the set stopped growing), and the callers are a 1-in-historySample
+// sample of the code that asked, by its first frame above the database
+// layers, hits and misses apart.
+type HistoryShape struct {
+	Hits     uint64 `json:"hits"`
+	Misses   uint64 `json:"misses"`
+	Distinct int    `json:"distinct"`
+	Capped   bool   `json:"capped,omitempty"`
+	// HitCallers asked for a record history had; MissCallers walked
+	// history for a record that was nowhere.  Kept apart because the
+	// misses outnumber the hits by orders of magnitude and would bury
+	// the readers that actually reach back.
+	HitCallers  map[string]uint64 `json:"hitCallers,omitempty"`
+	MissCallers map[string]uint64 `json:"missCallers,omitempty"`
+}
+
+// historySample is the caller sampling rate; historyKeysCap bounds the
+// distinct-key set per shape.
+const (
+	historySample  = 32
+	historyKeysCap = 200_000
+)
+
+// recordHistoryRead books a deep read.  The
+// stack is captured outside the leaf lock; everything else under it.
+func (d *Database) recordHistoryRead(shape string, h [32]byte, hit bool) {
+	var caller string
+	d.fallbackMu.Lock()
+	d.historySeq++
+	sample := d.historySeq%historySample == 1
+	d.fallbackMu.Unlock()
+	if sample {
+		caller = historyCaller()
+	}
+
+	d.fallbackMu.Lock()
+	defer d.fallbackMu.Unlock()
+	if d.history == nil {
+		d.history = map[string]*HistoryShape{}
+		d.historyKeys = map[string]map[[32]byte]struct{}{}
+	}
+	hs := d.history[shape]
+	if hs == nil {
+		hs = &HistoryShape{}
+		d.history[shape] = hs
+	}
+	if hit {
+		hs.Hits++
+		keys := d.historyKeys[shape]
+		if keys == nil {
+			keys = map[[32]byte]struct{}{}
+			d.historyKeys[shape] = keys
+		}
+		if _, seen := keys[h]; !seen {
+			if len(keys) < historyKeysCap {
+				keys[h] = struct{}{}
+				hs.Distinct = len(keys)
+			} else {
+				hs.Capped = true
+			}
+		}
+	} else {
+		hs.Misses++
+	}
+	if caller != "" {
+		callers := &hs.MissCallers
+		if hit {
+			callers = &hs.HitCallers
+		}
+		if *callers == nil {
+			*callers = map[string]uint64{}
+		}
+		if len(*callers) < 64 || (*callers)[caller] > 0 {
+			(*callers)[caller]++
+		}
+	}
+}
+
+// historyCaller names the first frame above the database layers: the
+// executor, the API, a tool -- whoever actually wanted the record.
+func historyCaller() string {
+	var pcs [40]uintptr
+	n := runtime.Callers(3, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	last := ""
+	for {
+		f, more := frames.Next()
+		fn := f.Function
+		if fn == "" {
+			break
+		}
+		last = fn
+		switch {
+		case strings.Contains(fn, "/pkg/database/"),
+			strings.Contains(fn, "/internal/database."),
+			strings.Contains(fn, "/internal/database/"),
+			strings.HasPrefix(fn, "runtime."):
+		default:
+			return shortFrame(fn, f.Line)
+		}
+		if !more {
+			break
+		}
+	}
+	return shortFrame(last, 0)
+}
+
+func shortFrame(fn string, line int) string {
+	fn = strings.TrimPrefix(fn, "gitlab.com/accumulatenetwork/accumulate/")
+	if line > 0 {
+		return fmt.Sprintf("%s:%d", fn, line)
+	}
+	return fn
+}
+
+// HistoryReads reports, by shape, the reads deep batches made and who
+// made them.  The map and its inner maps are copies.
+func (d *Database) HistoryReads() map[string]HistoryShape {
+	d.fallbackMu.Lock()
+	defer d.fallbackMu.Unlock()
+	if len(d.history) == 0 {
+		return nil
+	}
+	out := make(map[string]HistoryShape, len(d.history))
+	for shape, hs := range d.history {
+		c := *hs
+		c.HitCallers = copyCounts(hs.HitCallers)
+		c.MissCallers = copyCounts(hs.MissCallers)
+		out[shape] = c
+	}
+	return out
+}
+
+func copyCounts(m map[string]uint64) map[string]uint64 {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]uint64, len(m))
+	for k, v := range m {
 		out[k] = v
 	}
 	return out
@@ -712,18 +913,29 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	for i := len(d.staged) - 1; i >= 0; i-- {
-		if d.staged[i].version > at {
-			continue // Committed after this batch began
+	// A commit after this batch began may have rewritten the key. The
+	// earliest such commit remembers what the key held before it, which
+	// is the value at this batch's version.
+	if pre, ok := d.preImageAt(at, h); ok {
+		if len(pre) == 0 {
+			return nil, (*database.NotFoundError)(key)
 		}
-		if e, ok := d.staged[i].entries[h]; ok {
-			if len(e.value) == 0 {
-				return nil, (*database.NotFoundError)(key)
-			}
-			return e.value, nil
-		}
+		return pre, nil
 	}
 
+	return d.getCurrent(key, h, deep)
+}
+
+// getLatest reads a key as the store holds it now, for an unisolated
+// batch: no version, so no pre-image, and no lock shared with the
+// committer -- the caches and the store have their own.
+func (d *Database) getLatest(key *record.Key) ([]byte, error) {
+	key = d.prefix.AppendKey(key)
+	return d.getCurrent(key, key.Hash(), false)
+}
+
+// getCurrent reads what the caches and the store hold for h now.
+func (d *Database) getCurrent(key *record.Key, h [32]byte, deep bool) ([]byte, error) {
 	// Cached shapes first, and on a miss go straight to the layer that
 	// holds them (#4165). Both caches hold records that cannot change,
 	// which is why they need no invalidation -- see cache.go.
@@ -758,36 +970,34 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 
 	value, err := d.kv.Get(h)
 	if err != nil && deep {
-		// This reader asked to reach past the window (BeginDeep)
+		// This reader asked to reach past the window (BeginDeep). Its
+		// reads are attributed, hits and misses, so a soak names who
+		// reaches back and for what.
 		value, err = d.kv.GetDeep(h)
+		d.recordHistoryRead(keyShape(key), h, err == nil)
 	} else if err != nil {
-		// A shallow reader missed.  The window is the protocol's
-		// horizon and a miss here is meant to BE the answer -- but
-		// turning that on blind would turn any read this adapter has
-		// not accounted for into a silent not-found, which in the
-		// executor is a consensus fault. So the fallback still runs,
-		// and every use of it is counted and shaped: DeepFallbacks in
-		// stats.json says how often a shallow reader needed history,
-		// and for which kind of record.
+		// A shallow reader missed, and the miss IS the answer (database
+		// spec, "Windowed stores", "Duplicates are caught at entry"). A
+		// mutable shape lives in the dynamic layer and nowhere else, and
+		// the dynamic layer's Get already walked its own history; a
+		// permanent shape is answered from the window, which is the
+		// protocol's horizon. Nothing here walks permanent history: that
+		// walk ran on every miss before #4219 -- 113.8 million times on
+		// eight BVN stores in forty minutes, 99.2% of them proving a key
+		// absent before its first write. The miss is counted by shape so
+		// a reader that should have been deep shows in the numbers rather
+		// than as a silent not-found.
 		//
-		// Zero over a soak is the evidence that the fallback can be
-		// removed and the window enforced; anything else names the
-		// call sites that must use BeginDeep first.
-		if v2, err2 := d.kv.GetDeep(h); err2 == nil {
-			// Its own lock, NOT d.mu: this runs while getAt holds
-			// d.mu.RLock, and a Go RWMutex is not reentrant -- taking
-			// it exclusively here deadlocked the read path against
-			// itself.  A leaf mutex over one map is also what keeps a
-			// diagnostic counter off the commit lock, which is what
-			// #4175 took the read path off.
-			d.fallbackMu.Lock()
-			if d.deepFallbacks == nil {
-				d.deepFallbacks = map[string]uint64{}
-			}
-			d.deepFallbacks[keyShape(key)]++
-			d.fallbackMu.Unlock()
-			value, err = v2, nil
+		// The counter takes its own leaf lock, NOT d.mu: this runs while
+		// getAt holds d.mu shared, and a Go RWMutex is not reentrant
+		// (#4175).
+		shape := keyShape(key)
+		d.fallbackMu.Lock()
+		if d.shallowMisses == nil {
+			d.shallowMisses = map[string]uint64{}
 		}
+		d.shallowMisses[shape]++
+		d.fallbackMu.Unlock()
 	}
 	if err != nil || len(value) == 0 {
 		// A zero-length value is a deletion, reported the same way a
@@ -797,11 +1007,23 @@ func (d *Database) getAt(at uint64, key *record.Key, deep bool) ([]byte, error) 
 	return value, nil
 }
 
+// commit writes a batch through to the store and seals it, so that when
+// it returns the batch is durable (database invariant 5). Readers begun
+// before it are kept isolated (invariant 2) by remembering, under this
+// commit's version, what every key it rewrites held before -- see undo.
+//
+// Commits are serialized by writeMu. The version is bumped only after the
+// store has the batch, and the pre-images are installed before the store
+// is touched, so a reader that begins during the write-through is at the
+// previous version and sees a consistent state whichever keys have
+// landed. mu is held only around the shared maps, never across I/O.
 func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.writeMu.Lock()
+	defer d.writeMu.Unlock()
 
-	staged := &staged{version: d.version + 1, entries: make(map[[32]byte]entry, len(entries))}
+	d.mu.Lock()
+	version := d.version + 1
+	staged := &staged{version: version, entries: make(map[[32]byte]entry, len(entries))}
 	for _, e := range entries {
 		key := d.prefix.AppendKey(e.Key)
 		h := key.Hash()
@@ -810,19 +1032,23 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 			value = []byte{} // Tombstone
 		}
 
-		// A deletion is a mutation whatever the record is, and a key
-		// the dynamic layer already holds has to stay there: it is
-		// read first, so a later write to the permanent layer would be
-		// shadowed by what the dynamic layer already has -- by a
-		// tombstone, that means reading as deleted while holding a
-		// value.
-		if len(value) == 0 {
+		// A tombstone lands in the dynamic layer, which is read first, so
+		// a LATER write of the same key to the permanent layer would be
+		// shadowed by it -- reading as deleted while holding a value.
+		// Only a key whose shape routes permanent can be written there,
+		// so only that key needs excepting. A mutable shape goes to the
+		// dynamic layer with or without a tombstone, and every delivered
+		// transaction clears three sets (Payments, Votes, Signatures):
+		// excepting those grew d.dyna and the exceptions file by 5.4 M
+		// entries an hour at 500 tps, for keys that were never going
+		// anywhere else (#4235).
+		if len(value) == 0 && isWriteOnce(key) {
 			d.except(h)
 		}
 		perm := len(value) > 0 && !d.dyna[h] && isWriteOnce(key)
 
 		shape := d.tally(key, perm)
-		staged.entries[h] = entry{value: value, perm: perm, shape: shape}
+		e := entry{value: value, perm: perm, shape: shape}
 
 		// Write through to the caches. They hold records that cannot
 		// change, so this should never overwrite a different value --
@@ -831,29 +1057,218 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 		// and silently. Writing through costs one map store on a path
 		// that is already walking every entry, and means the caches
 		// cannot disagree with the store whatever the shapes do.
+		//
+		// The cache also answers the pre-image question for these
+		// shapes, before the write-through: cached is the value it held,
+		// not cached is new. A record that cannot change is never
+		// rewritten, so the only thing a store read could add is a
+		// history walk to confirm a new key is new (#4237).
 		if kind := cacheKindOf(key); kind != cacheNone {
 			c := d.urls
 			if kind == cacheChain {
 				c = d.chains
 			}
+			e.pre, _ = c.peek(h)
+			e.preKnown = true
 			if len(value) == 0 {
 				c.drop(h) // A tombstone is not a value to serve
 			} else {
 				c.put(h, value)
 			}
 		}
+		staged.entries[h] = e
 	}
-	d.version = staged.version
-	d.staged = append(d.staged, staged)
-	d.reportStats()
+	readers := len(d.views) > 0
 	d.mu.Unlock()
 
-	// Write through with the lock RELEASED, so readers proceed against
-	// staging while the store does its fsyncs; then re-take it for the
-	// deferred unlock.
-	err := d.drain()
+	// Isolation, only when someone needs it: with no reader open there is
+	// nobody to keep the old values for.
+	if readers {
+		pre := d.preImages(staged)
+		d.mu.Lock()
+		if d.undo == nil {
+			d.undo = map[uint64]map[[32]byte][]byte{}
+		}
+		d.undo[version] = pre
+		d.undoVersions = append(d.undoVersions, version)
+		d.mu.Unlock()
+	}
+
+	// Durability: the store has it, sealed, before this returns.
+	err := d.writeThrough(staged)
+
 	d.mu.Lock()
-	return err
+	defer d.mu.Unlock()
+	if err != nil {
+		// The store may hold part of the batch; the version does not move
+		// and the overlay stays for its readers. The caller stops the node.
+		return err
+	}
+	d.version = version
+	d.pruneUndo()
+	d.reportStats()
+	d.observeStaging()
+	d.warnOldView()
+	return nil
+}
+
+// preImages reads what the store holds for every key a batch rewrites,
+// before the batch is written. A key classified write-once has no
+// pre-image by definition -- it is being written for the first time -- and
+// a record the adapter caches as immutable was answered by the cache at
+// commit; only the dynamic layer is consulted for the rest, which is where
+// every rewritable key lives. Runs under writeMu with mu released; the
+// store is at the previous version because commits are serialized.
+//
+// Every read here is counted. A dynamic key that is NEW -- every fresh
+// status, produced set, signature set -- has no pre-image either, but the
+// adapter cannot tell a new dynamic key from an old one without asking, and
+// the store answers a miss by walking its history (DIFFERENCES D10). The
+// count is what shows how much that costs.
+func (d *Database) preImages(s *staged) map[[32]byte][]byte {
+	pre := make(map[[32]byte][]byte, len(s.entries))
+	var reads uint64
+	for h, e := range s.entries {
+		switch {
+		case e.perm:
+			pre[h] = []byte{}
+			continue
+		case e.preKnown:
+			if len(e.pre) == 0 {
+				pre[h] = []byte{}
+			} else {
+				pre[h] = e.pre
+			}
+			continue
+		}
+		reads++
+		v, err := d.kv.GetDyna(h)
+		if err != nil || len(v) == 0 {
+			pre[h] = []byte{}
+			continue
+		}
+		pre[h] = v
+	}
+	d.preImageReads.Add(reads)
+	return pre
+}
+
+// PreImageReads is how many store reads commits have made to keep isolation
+// for readers begun before them: one per dynamic key of an unaccounted
+// shape per commit made while a reader was pinned. With no pinned reader
+// it does not move; a count that grows every block names a reader that
+// should be unisolated (#4237).
+func (d *Database) PreImageReads() uint64 { return d.preImageReads.Load() }
+
+// preImageAt returns what key h held at version at, if a commit after at
+// rewrote it: the pre-image recorded by the EARLIEST such commit. The
+// caller must hold the lock (shared is enough).
+func (d *Database) preImageAt(at uint64, h [32]byte) ([]byte, bool) {
+	for _, v := range d.undoVersions {
+		if v <= at {
+			continue
+		}
+		if pre, ok := d.undo[v][h]; ok {
+			return pre, true
+		}
+	}
+	return nil, false
+}
+
+// pruneUndo drops the overlays no open reader can need: a reader at
+// version o needs the pre-images of every commit after o, so an overlay
+// for version v is needed only while a reader at some version below v is
+// open. The caller must hold the lock.
+func (d *Database) pruneUndo() {
+	oldest, any := d.oldestView()
+	kept := d.undoVersions[:0]
+	for _, v := range d.undoVersions {
+		if any && v > oldest {
+			kept = append(kept, v)
+			continue
+		}
+		delete(d.undo, v)
+	}
+	d.undoVersions = kept
+}
+
+// warnOldView names the reader that has held the oldest open version, once
+// it is older than ViewWarnAfter and at most once every 30 s. This is how
+// a soak says WHO is holding commits in memory rather than that someone is.
+// The caller must hold the lock.
+func (d *Database) warnOldView() {
+	if d.ViewWarnAfter <= 0 {
+		return
+	}
+	v, ok := d.oldestView()
+	if !ok {
+		return
+	}
+	opened, ok := d.viewOpened[v]
+	if !ok || time.Since(opened) < d.ViewWarnAfter || time.Since(d.lastViewWarn) < 30*time.Second {
+		return
+	}
+	d.lastViewWarn = time.Now()
+	slog.Warn("A reader is holding an old database version",
+		"module", "bcdb", "database", d.metricLabel, "version", v, "current", d.version,
+		"age", time.Since(opened).Round(time.Second).String(), "opener", d.viewOpener[v],
+		"overlays", len(d.undoVersions))
+}
+
+// viewOpener names the function that begun a view: the first caller above
+// the store and record-model wrappers.
+func viewOpener() string {
+	pcs := make([]uintptr, 16)
+	n := runtime.Callers(3, pcs)
+	frames := runtime.CallersFrames(pcs[:n])
+	for {
+		f, more := frames.Next()
+		fn := f.Function
+		if fn != "" && !isViewWrapper(fn) {
+			return fn
+		}
+		if !more {
+			return "unknown"
+		}
+	}
+}
+
+var (
+	stagedCommitsGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "accumulate", Subsystem: "bcdb", Name: "staged_commits",
+		Help: "Commit overlays held in memory for readers begun before them; every commit is on disk (D5)",
+	}, []string{"database"})
+	oldestViewAgeGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "accumulate", Subsystem: "bcdb", Name: "oldest_view_age_seconds",
+		Help: "Age of the oldest open read view, as of the last commit or view release; zero when none was open then. A store that has stopped committing reports the age its last commit saw, not the age now",
+	}, []string{"database"})
+	exceptionsGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "accumulate", Subsystem: "bcdb", Name: "dyna_exceptions",
+		Help: "Keys held in the dynamic layer against their classification (deleted permanent keys, refused writes); in memory for the process lifetime and read whole at open",
+	}, []string{"database"})
+)
+
+// observeStaging publishes how many commit overlays open readers are holding
+// and the oldest view's age. The caller must hold the lock.
+func (d *Database) observeStaging() {
+	stagedCommitsGauge.WithLabelValues(d.metricLabel).Set(float64(len(d.undoVersions)))
+	age := 0.0
+	if v, ok := d.oldestView(); ok {
+		if t, ok := d.viewOpened[v]; ok {
+			age = time.Since(t).Seconds()
+		}
+	}
+	oldestViewAgeGauge.WithLabelValues(d.metricLabel).Set(age)
+}
+
+// metricLabelFor names a database for the staging gauges by the directory
+// two above the store: /.../bvnn/data/accumulate.db -> "bvnn".
+func metricLabelFor(path string) string {
+	up := filepath.Dir(filepath.Dir(filepath.Clean(path)))
+	if b := filepath.Base(up); b != "." && b != string(filepath.Separator) && b != "" {
+		return b
+	}
+	return path
 }
 
 // tally counts a write against its key's shape.  It returns the shape,
@@ -979,10 +1394,18 @@ func (d *Database) reportStats() {
 		Misrouted    []string               `json:"misroutedShapes"`
 		Shapes       map[string]*ShapeCount `json:"shapes"`
 
-		// Staged is how many commits are waiting on an open reader
-		// before they can reach the store.  Growing without bound means
-		// a batch was never closed -- and nothing staged is on disk.
+		// Staged is how many commits' pre-images are held for readers
+		// that predate them. Every commit is on disk; growing without
+		// bound means a reader was never closed (D5).
 		Staged int `json:"stagedCommits"`
+
+		// Exceptions is the dynamic-layer exception set: memory for the
+		// process lifetime, and a file read whole at open (#4235).
+		Exceptions int `json:"dynaExceptions"`
+
+		// PreImageReads is the store reads commits made to keep isolation
+		// for pinned readers (#4237).
+		PreImageReads uint64 `json:"preImageReads"`
 
 		// TallySample is the rate New/Duplicate/Rewritten were sampled
 		// at: multiply by it to estimate, or read them as ratios.
@@ -995,17 +1418,18 @@ func (d *Database) reportStats() {
 		MaintenanceErrors uint64 `json:"maintenanceErrors"`
 		MaintenanceLast   string `json:"maintenanceLastError,omitempty"`
 
-		// DeepFallbacks is what a SHALLOW batch -- the executor's --
-		// could only answer from history, by record shape.  The store
-		// answers a permanent read from its window and calls anything
-		// older absent; a reader that means to look back takes a deep
-		// batch (BeginDeep).  Empty means every deep reader has one and
-		// the fallback in getAt can go, leaving the window enforced.
-		// Anything here NAMES the call sites that still need one.
-		DeepFallbacks map[string]uint64 `json:"deepFallbacks,omitempty"`
+		// ShallowMisses is every shallow read the window could not
+		// answer, by shape. The miss is the answer; a permanent shape in
+		// quantity here is a reader that should have been deep.
+		ShallowMisses map[string]uint64 `json:"shallowMisses,omitempty"`
+
+		// HistoryReads attributes the reads DEEP batches made: hits,
+		// misses, distinct keys and sampled callers per shape.
+		HistoryReads map[string]HistoryShape `json:"historyReads,omitempty"`
 	}{Commits: d.version, Perm: perm, Dyna: dyna, Shapes: d.shapes,
-		DeepFallbacks: d.fallbackSnapshot(),
-		Staged:        len(d.staged), TallySample: d.TallySample,
+		ShallowMisses: d.ShallowMisses(),
+		HistoryReads:  d.HistoryReads(),
+		Staged:        len(d.undoVersions), Exceptions: len(d.dyna), PreImageReads: d.preImageReads.Load(), TallySample: d.TallySample,
 		TallyKeys: len(d.last), TallyCapped: len(d.last) >= d.TallyKeys,
 		MaintenanceErrors: d.maintErrs}
 	if d.maintErr != nil {
@@ -1042,50 +1466,73 @@ func (d *Database) reportStats() {
 	}
 }
 
-// forEachAt visits every key as of a version: staged writes no later
-// than it, then the store, which holds nothing newer than the oldest
-// open view -- and the caller's own view is at least that old.
-//
-// The lock is not held across the callback (#4175).  Staged entries
-// are snapshotted under a read lock and visited after it is released,
-// so a callback may read the database and does not stall commits.  The
-// store's own ForEach does hold the store's mutex across the callback,
-// so a callback must not read the STORE (a staged hit is fine, a store
-// read deadlocks) -- BlockchainDB#31.
+// forEachAt iterates the store as it was at version at: keys rewritten by
+// a later commit yield the pre-image the earliest such commit recorded,
+// keys created later are skipped, and keys deleted later are yielded from
+// their pre-image.
 func (d *Database) forEachAt(at uint64, fn func(*record.Key, []byte) error) error {
-	type kv struct {
-		key   [32]byte
-		value []byte
-	}
+	// Pre-images a reader at this version must see, earliest commit first
+	// so the first recorded value for a key wins.
 	d.mu.RLock()
-	seen := map[[32]byte]bool{}
-	var snapshot []kv
-	for i := len(d.staged) - 1; i >= 0; i-- {
-		if d.staged[i].version > at {
-			continue // Committed after this batch began
+	pre := map[[32]byte][]byte{}
+	for _, v := range d.undoVersions {
+		if v <= at {
+			continue
 		}
-		for key, e := range d.staged[i].entries {
-			if seen[key] {
-				continue
+		for h, p := range d.undo[v] {
+			if _, seen := pre[h]; !seen {
+				pre[h] = p
 			}
-			seen[key] = true
-			if len(e.value) == 0 {
-				continue // Deleted
-			}
-			snapshot = append(snapshot, kv{key, e.value})
 		}
 	}
 	d.mu.RUnlock()
 
-	for _, e := range snapshot {
-		if err := fn(record.KeyFromHash(e.key), e.value); err != nil {
-			return err
+	yielded := map[[32]byte]bool{}
+	err := d.kv.ForEach(func(key [32]byte, value []byte) error {
+		if p, ok := pre[key]; ok {
+			yielded[key] = true
+			if len(p) == 0 {
+				return nil // Did not exist at this version
+			}
+			return fn(record.KeyFromHash(key), p)
 		}
-	}
-	return d.kv.ForEach(func(key [32]byte, value []byte) error {
-		if seen[key] || len(value) == 0 {
+		if len(value) == 0 {
 			return nil
 		}
 		return fn(record.KeyFromHash(key), value)
 	})
+	if err != nil {
+		return err
+	}
+	// Keys that existed at this version and have since been deleted are
+	// not in the store's iteration; they are here.
+	for h, p := range pre {
+		if yielded[h] || len(p) == 0 {
+			continue
+		}
+		if err := fn(record.KeyFromHash(h), p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// isViewWrapper reports whether fn is one of the layers a view passes
+// through on its way from the caller that wanted it: this store, the
+// keyvalue adapters, and the record model's Begin/View/Update.
+func isViewWrapper(fn string) bool {
+	for _, w := range []string{
+		"/keyvalue/bcdb.(*Database).",
+		"/keyvalue.deepBeginner",
+		"/keyvalue.Deep",
+		"/keyvalue/memory.",
+		"/internal/database.(*Database).Begin",
+		"/internal/database.(*Database).View",
+		"/internal/database.(*Database).Update",
+	} {
+		if strings.Contains(fn, w) {
+			return true
+		}
+	}
+	return false
 }

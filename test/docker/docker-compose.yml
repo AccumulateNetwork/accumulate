@@ -130,7 +130,6 @@ services:
           exit 0
         fi
         accumulated init network test/docker/docker-network.yml --reset --faucet-seed=FAUCET \
-          --database=${ACC_STORAGE-leveldb} \
           --block-interval=${ACC_BLOCK_INTERVAL-1s} \
           && touch /root/.accumulate/init-done
 

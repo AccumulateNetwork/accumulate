@@ -94,19 +94,29 @@ class BatchLifecycleTest(unittest.TestCase):
     """The numbers that separate an idle network from a wedged one, and that
     keep the #4125 re-delivery skip from hiding the bug it works around."""
 
-    def test_counters_sum_across_the_fleet(self):
+    def test_a_per_node_event_sums_but_a_partition_fact_does_not(self):
+        """This test used to require that blocks_produced SUM across the
+        fleet, and that was wrong: every validator produces the same blocks,
+        so the sum is the chain's block count multiplied by the node count.
+        The board read 687,160 blocks produced while the three partitions
+        stood at 111,869 (run 20260915T042428Z) — an impossible state under
+        REPORTING-SPEC 1a, asserted as correct here. A re-delivery, by
+        contrast, IS a per-node event and still sums."""
         per = {
             "acc-bvn1-val1": [
                 ("accumulate_dagbft_blocks_produced_total", "", 100),
+                ("accumulate_dagbft_blocks_empty_total", "", 40),
                 ("accumulate_dagbft_certificates_redelivered_total", "", 1),
             ],
             "acc-bvn1-val2": [
                 ("accumulate_dagbft_blocks_produced_total", "", 98),
+                ("accumulate_dagbft_blocks_empty_total", "", 39),
                 ("accumulate_dagbft_certificates_redelivered_total", "", 2),
             ],
         }
         life = soakmon.life_from(per)
-        self.assertEqual(198, life["blocks"])
+        self.assertEqual(100, life["blocks"], "the furthest-along node, not the sum")
+        self.assertEqual(40, life["blocksEmpty"])
         self.assertEqual(3, life["redelivered"],
                          "a re-delivery on any node is worth seeing")
 

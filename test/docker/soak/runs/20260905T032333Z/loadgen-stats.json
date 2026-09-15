@@ -1,0 +1,196 @@
+{
+  "updatedUnix": 1788581649,
+  "startUnix": 1788578828,
+  "elapsedSec": 2820,
+  "phase": "done",
+  "target": 1350000,
+  "generated": 1341890,
+  "rejected": 11,
+  "skipped": 65519,
+  "rate": 475.82253167601954,
+  "targetTps": 500,
+  "perType": {
+    "add-account": {
+      "generated": 138,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "add-credits-lite": {
+      "generated": 99076,
+      "rejected": 0,
+      "skipped": 7968
+    },
+    "add-credits-page": {
+      "generated": 98341,
+      "rejected": 0,
+      "skipped": 4204
+    },
+    "add-key-book": {
+      "generated": 69,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "add-page-key": {
+      "generated": 24571,
+      "rejected": 0,
+      "skipped": 568
+    },
+    "add-token": {
+      "generated": 12966,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "burn-credits": {
+      "generated": 24507,
+      "rejected": 0,
+      "skipped": 1006
+    },
+    "burn-tokens": {
+      "generated": 36859,
+      "rejected": 0,
+      "skipped": 2938
+    },
+    "burn-tokens-adi": {
+      "generated": 49265,
+      "rejected": 0,
+      "skipped": 2088
+    },
+    "burn-tokens-custom": {
+      "generated": 12532,
+      "rejected": 0,
+      "skipped": 213
+    },
+    "fail:data-to-void": {
+      "generated": 12153,
+      "rejected": 0,
+      "skipped": 511
+    },
+    "fail:overburn-tokens": {
+      "generated": 12190,
+      "rejected": 0,
+      "skipped": 513
+    },
+    "fail:overspend": {
+      "generated": 25642,
+      "rejected": 0,
+      "skipped": 1365
+    },
+    "fail:send-to-void": {
+      "generated": 25488,
+      "rejected": 1,
+      "skipped": 1349
+    },
+    "fail:sub-adi-on-void": {
+      "generated": 12237,
+      "rejected": 0,
+      "skipped": 501
+    },
+    "grow:add-credits": {
+      "generated": 26,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-data-account": {
+      "generated": 24,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-identity": {
+      "generated": 61,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-key-page": {
+      "generated": 23,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token": {
+      "generated": 50,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-account": {
+      "generated": 24,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-holder": {
+      "generated": 76,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:issue-tokens": {
+      "generated": 38,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:set-threshold": {
+      "generated": 19,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "issue-tokens": {
+      "generated": 24970,
+      "rejected": 0,
+      "skipped": 455
+    },
+    "remove-page-key": {
+      "generated": 24591,
+      "rejected": 0,
+      "skipped": 1014
+    },
+    "send-tokens-adi": {
+      "generated": 185296,
+      "rejected": 0,
+      "skipped": 8034
+    },
+    "send-tokens-custom": {
+      "generated": 37511,
+      "rejected": 0,
+      "skipped": 665
+    },
+    "send-tokens-lite": {
+      "generated": 228470,
+      "rejected": 10,
+      "skipped": 11987
+    },
+    "set-threshold": {
+      "generated": 49305,
+      "rejected": 0,
+      "skipped": 1903
+    },
+    "transfer-credits": {
+      "generated": 37044,
+      "rejected": 0,
+      "skipped": 1463
+    },
+    "update-account-auth": {
+      "generated": 24611,
+      "rejected": 0,
+      "skipped": 1082
+    },
+    "update-page-key": {
+      "generated": 36896,
+      "rejected": 0,
+      "skipped": 1429
+    },
+    "write-data-adi": {
+      "generated": 148057,
+      "rejected": 0,
+      "skipped": 6302
+    },
+    "write-data-lite": {
+      "generated": 98764,
+      "rejected": 0,
+      "skipped": 7961
+    }
+  },
+  "accounts": {
+    "identities": 23,
+    "keyBooks": 23,
+    "keyPages": 45,
+    "tokenIssuers": 38,
+    "accounts": 25123
+  }
+}

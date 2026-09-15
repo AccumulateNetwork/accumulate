@@ -17,6 +17,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -202,6 +203,12 @@ func (b *ExecutorBridge) SetValidators(validators []ValidatorInfo, version uint6
 // It extracts transactions from batches, converts them to envelopes,
 // and calls the executor to process them.
 func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) ([32]byte, error) {
+	// Wall time from the certificate's hand-over to the executor's commit.
+	// This is the histogram the soak's acceptance criteria read seconds per
+	// block from; it was declared and never observed (PLAN, S0).
+	start := time.Now()
+	defer func() { metrics.BlockProductionSeconds.Observe(time.Since(start).Seconds()) }()
+
 	// Create executor block params
 	// Note: We don't have CometBFT CommitInfo/Evidence, so we leave them nil
 	execParams := execute.BlockParams{
@@ -210,6 +217,19 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		Index:    params.Index,
 		Time:     params.Time,
 		// CommitInfo and Evidence are CometBFT-specific, not needed for DAG-BFT
+	}
+
+	// Every batch must be in hand before a block is begun. CollectBatches
+	// guarantees a complete set before a block is produced; a nil here
+	// means that invariant broke upstream, and executing a certificate
+	// without one of its batches silently diverges this node's state from
+	// its peers (#4116/#4119) -- fail the block instead. Before Begin, not
+	// after: refusing after Begin left the block's batch open, pinning its
+	// version of the store for the life of the process (#4279).
+	for _, batch := range params.Batches {
+		if batch == nil {
+			return [32]byte{}, fmt.Errorf("block %d: missing batch in certificate for round %d", params.Index, params.LeaderRound)
+		}
 	}
 
 	// Begin block
@@ -239,14 +259,6 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	}
 	var origins []origin
 	for _, batch := range params.Batches {
-		if batch == nil {
-			// CollectBatches guarantees a complete set before a block is
-			// produced. A nil here means that invariant broke upstream, and
-			// executing a certificate without one of its batches silently
-			// diverges this node's state from its peers (#4116/#4119) — fail
-			// the block instead.
-			return [32]byte{}, fmt.Errorf("block %d: missing batch in certificate for round %d", params.Index, params.LeaderRound)
-		}
 		digest := batch.Digest()
 		if txTraceEnabled {
 			slog.Info("TX executing", "batch", digest.String()[:12],

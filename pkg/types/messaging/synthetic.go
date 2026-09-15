@@ -11,6 +11,7 @@ func (s *BadSyntheticMessage) Data() *SynthFields {
 	d.Message = s.Message
 	d.Signature = s.Signature
 	d.Proof = s.Proof
+	d.Delivered = s.Delivered
 	return d
 }
 
@@ -19,5 +20,6 @@ func (s *SyntheticMessage) Data() *SynthFields {
 	d.Message = s.Message
 	d.Signature = s.Signature
 	d.Proof = s.Proof
+	d.Delivered = s.Delivered
 	return d
 }

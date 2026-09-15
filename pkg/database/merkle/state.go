@@ -46,7 +46,12 @@ func (m *State) UnmarshalBinaryFrom(rd io.Reader) error {
 }
 
 // Equal
-// Compares one State to another, and returns true if they are the same
+// Compares one State to another, and returns true if they describe the same
+// tree: the same Count and the same Pending roots. The hash list is a replay
+// buffer -- the entries since the last mark point, which a state carries
+// when it is read from a mark point or computed, and which the persisted
+// head no longer carries (#4234) -- and two states of the same tree are
+// equal whether or not either has it.
 func (m *State) Equal(m2 *State) (isEqual bool) {
 	// Any errors indicate at m is not the same as m2, or either m or m2 or both is malformed.
 	defer func() {
@@ -79,17 +84,6 @@ func (m *State) Equal(m2 *State) (isEqual bool) {
 		idx--
 	}
 
-	// Each must have the same number of elements in the HashList
-	if len(m.HashList) != len(m2.HashList) {
-		return false
-	} else {
-		// Each element in the HashLists must be equal
-		for i, v := range m.HashList {
-			if !bytes.Equal(v, m2.HashList[i]) {
-				return false
-			}
-		}
-	}
 	// If we made it here, all is golden.
 	return true
 }
@@ -170,11 +164,18 @@ func (m *State) unmarshal(MSBytes []byte) (err error) {
 // AddEntry a Hash to the merkle tree and incrementally build the ChainHead
 func (m *State) AddEntry(hash_ []byte) {
 	hash := copyHash(hash_)
-
 	m.HashList = append(m.HashList, hash) // Add the new Hash to the Hash List
-	m.Count++                             // Increment our total Hash Count
-	m.pad()                               // Pad Pending with a nil to remove corner cases
-	for i, v := range m.Pending {         // Adding the hash is like incrementing a variable
+	m.addPending(hash)
+}
+
+// addPending adds a hash to the tree -- Count and Pending -- without
+// recording it in the hash list. The chain head is kept this way: the
+// hashes of its open mark set live in the Tail records, not the head
+// (#4234). The hash must be the caller's own copy.
+func (m *State) addPending(hash []byte) {
+	m.Count++                     // Increment our total Hash Count
+	m.pad()                       // Pad Pending with a nil to remove corner cases
+	for i, v := range m.Pending { // Adding the hash is like incrementing a variable
 		if v == nil { //                     Look for an empty slot, and
 			m.Pending[i] = hash //               And put the Hash there if one is found
 			return              //          Mission complete, so return

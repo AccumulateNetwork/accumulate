@@ -327,6 +327,8 @@ type MessageRecord[T messaging.Message] struct {
 	Sequence          *messaging.SequencedMessage       `json:"sequence,omitempty" form:"sequence" query:"sequence"`
 	SourceReceipt     *merkle.Receipt                   `json:"sourceReceipt,omitempty" form:"sourceReceipt" query:"sourceReceipt" validate:"required"`
 	SourceReceiptList *merkle.ReceiptList               `json:"sourceReceiptList,omitempty" form:"sourceReceiptList" query:"sourceReceiptList"`
+	SourceAnchorBlock uint64                            `json:"sourceAnchorBlock,omitempty" form:"sourceAnchorBlock" query:"sourceAnchorBlock"`
+	Companion         messaging.Message                 `json:"companion,omitempty" form:"companion" query:"companion"`
 	LastBlockTime     *time.Time                        `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
 	extraData         []byte
 }
@@ -1301,6 +1303,10 @@ func (v *MessageRecord[T]) Copy() *MessageRecord[T] {
 	if v.SourceReceiptList != nil {
 		u.SourceReceiptList = (v.SourceReceiptList).Copy()
 	}
+	u.SourceAnchorBlock = v.SourceAnchorBlock
+	if v.Companion != nil {
+		u.Companion = messaging.CopyMessage(v.Companion)
+	}
 	if v.LastBlockTime != nil {
 		u.LastBlockTime = new(time.Time)
 		*u.LastBlockTime = *v.LastBlockTime
@@ -1339,6 +1345,8 @@ func MessageRecordAs[T2 messaging.Message, T1 messaging.Message](v *MessageRecor
 	u.Sequence = v.Sequence
 	u.SourceReceipt = v.SourceReceipt
 	u.SourceReceiptList = v.SourceReceiptList
+	u.SourceAnchorBlock = v.SourceAnchorBlock
+	u.Companion = v.Companion
 	u.LastBlockTime = v.LastBlockTime
 	return u, nil
 }
@@ -2652,6 +2660,12 @@ func (v *MessageRecord[T]) Equal(u *MessageRecord[T]) bool {
 	case v.SourceReceiptList == nil || u.SourceReceiptList == nil:
 		return false
 	case !((v.SourceReceiptList).Equal(u.SourceReceiptList)):
+		return false
+	}
+	if !(v.SourceAnchorBlock == u.SourceAnchorBlock) {
+		return false
+	}
+	if !(messaging.EqualMessage(v.Companion, u.Companion)) {
 		return false
 	}
 	switch {
@@ -5310,7 +5324,9 @@ var fieldNames_MessageRecord = []string{
 	12: "Sequence",
 	13: "SourceReceipt",
 	14: "SourceReceiptList",
-	15: "LastBlockTime",
+	15: "SourceAnchorBlock",
+	16: "Companion",
+	17: "LastBlockTime",
 }
 
 func (v *MessageRecord[T]) MarshalBinary() ([]byte, error) {
@@ -5363,8 +5379,14 @@ func (v *MessageRecord[T]) MarshalBinary() ([]byte, error) {
 	if !(v.SourceReceiptList == nil) {
 		writer.WriteValue(14, v.SourceReceiptList.MarshalBinary)
 	}
+	if !(v.SourceAnchorBlock == 0) {
+		writer.WriteUint(15, v.SourceAnchorBlock)
+	}
+	if !(messaging.EqualMessage(v.Companion, nil)) {
+		writer.WriteValue(16, v.Companion.MarshalBinary)
+	}
 	if !(v.LastBlockTime == nil) {
-		writer.WriteTime(15, *v.LastBlockTime)
+		writer.WriteTime(17, *v.LastBlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_MessageRecord)
@@ -5440,7 +5462,7 @@ func (v *MessageRecord[T]) IsValid() error {
 	} else if v.SourceReceipt == nil {
 		errs = append(errs, "field SourceReceipt is not set")
 	}
-	if len(v.fieldsSet) > 14 && !v.fieldsSet[14] {
+	if len(v.fieldsSet) > 16 && !v.fieldsSet[16] {
 		errs = append(errs, "field LastBlockTime is missing")
 	} else if v.LastBlockTime == nil {
 		errs = append(errs, "field LastBlockTime is not set")
@@ -8338,7 +8360,17 @@ func (v *MessageRecord[T]) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(merkle.ReceiptList); reader.ReadValue(14, x.UnmarshalBinaryFrom) {
 		v.SourceReceiptList = x
 	}
-	if x, ok := reader.ReadTime(15); ok {
+	if x, ok := reader.ReadUint(15); ok {
+		v.SourceAnchorBlock = x
+	}
+	reader.ReadValue(16, func(r io.Reader) error {
+		x, err := messaging.UnmarshalMessageFrom(r)
+		if err == nil {
+			v.Companion = x
+		}
+		return err
+	})
+	if x, ok := reader.ReadTime(17); ok {
 		v.LastBlockTime = &x
 	}
 
@@ -9456,6 +9488,8 @@ func init() {
 		encoding.NewTypeField("sequence", "messaging.SequencedMessage"),
 		encoding.NewTypeField("sourceReceipt", "merkle.Receipt"),
 		encoding.NewTypeField("sourceReceiptList", "merkle.ReceiptList"),
+		encoding.NewTypeField("sourceAnchorBlock", "uint64"),
+		encoding.NewTypeField("companion", "messaging.Message"),
 		encoding.NewTypeField("lastBlockTime", "string"),
 	}, "MessageRecord", "messageRecord")
 
@@ -10236,6 +10270,8 @@ func (v *MessageRecord[T]) MarshalJSON() ([]byte, error) {
 		Sequence          *messaging.SequencedMessage                             `json:"sequence,omitempty"`
 		SourceReceipt     *merkle.Receipt                                         `json:"sourceReceipt,omitempty"`
 		SourceReceiptList *merkle.ReceiptList                                     `json:"sourceReceiptList,omitempty"`
+		SourceAnchorBlock uint64                                                  `json:"sourceAnchorBlock,omitempty"`
+		Companion         *encoding.JsonUnmarshalWith[messaging.Message]          `json:"companion,omitempty"`
 		LastBlockTime     *time.Time                                              `json:"lastBlockTime,omitempty"`
 		ExtraData         *string                                                 `json:"$epilogue,omitempty"`
 	}{}
@@ -10281,6 +10317,12 @@ func (v *MessageRecord[T]) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.SourceReceiptList == nil) {
 		u.SourceReceiptList = v.SourceReceiptList
+	}
+	if !(v.SourceAnchorBlock == 0) {
+		u.SourceAnchorBlock = v.SourceAnchorBlock
+	}
+	if !(messaging.EqualMessage(v.Companion, nil)) {
+		u.Companion = &encoding.JsonUnmarshalWith[messaging.Message]{Value: v.Companion, Func: messaging.UnmarshalMessageJSON}
 	}
 	if !(v.LastBlockTime == nil) {
 		u.LastBlockTime = v.LastBlockTime
@@ -11424,6 +11466,8 @@ func (v *MessageRecord[T]) UnmarshalJSON(data []byte) error {
 		Sequence          *messaging.SequencedMessage                             `json:"sequence,omitempty"`
 		SourceReceipt     *merkle.Receipt                                         `json:"sourceReceipt,omitempty"`
 		SourceReceiptList *merkle.ReceiptList                                     `json:"sourceReceiptList,omitempty"`
+		SourceAnchorBlock uint64                                                  `json:"sourceAnchorBlock,omitempty"`
+		Companion         *encoding.JsonUnmarshalWith[messaging.Message]          `json:"companion,omitempty"`
 		LastBlockTime     *time.Time                                              `json:"lastBlockTime,omitempty"`
 		ExtraData         *string                                                 `json:"$epilogue,omitempty"`
 	}{}
@@ -11442,6 +11486,8 @@ func (v *MessageRecord[T]) UnmarshalJSON(data []byte) error {
 	u.Sequence = v.Sequence
 	u.SourceReceipt = v.SourceReceipt
 	u.SourceReceiptList = v.SourceReceiptList
+	u.SourceAnchorBlock = v.SourceAnchorBlock
+	u.Companion = &encoding.JsonUnmarshalWith[messaging.Message]{Value: v.Companion, Func: messaging.UnmarshalMessageJSON}
 	u.LastBlockTime = v.LastBlockTime
 	err := json.Unmarshal(data, &u)
 	if err != nil {
@@ -11469,6 +11515,11 @@ func (v *MessageRecord[T]) UnmarshalJSON(data []byte) error {
 	v.Sequence = u.Sequence
 	v.SourceReceipt = u.SourceReceipt
 	v.SourceReceiptList = u.SourceReceiptList
+	v.SourceAnchorBlock = u.SourceAnchorBlock
+	if u.Companion != nil {
+		v.Companion = u.Companion.Value
+	}
+
 	v.LastBlockTime = u.LastBlockTime
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {

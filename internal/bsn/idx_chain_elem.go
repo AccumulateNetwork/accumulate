@@ -61,23 +61,15 @@ func (c *chainElemIndexer) Apply(batch *ChangeSet, ctx *SummaryContext, r record
 		return errors.UnknownError.WithFormat("load new chain entries: %w", err)
 	}
 
-	// Index the new entries. A hash already indexed keeps its first
-	// position, as the node's own AddEntry does (pkg/database/merkle/
-	// chain.go): chains that admit duplicates would otherwise have the
-	// index rewritten with a later position -- a different value under
-	// the same key, which a write-once storage layer refuses (#4174).
+	// Index the new entries. The index is written, not read then written
+	// (database spec, "Duplicates are caught at entry"): it names the
+	// position a hash was last written at, and no reader relies on which
+	// occurrence -- any position holding the hash serves. On a store whose
+	// permanent layer is write-once the first position stands and the
+	// rewrite is declined; on one that overwrites, the last does. Both hold
+	// the hash. A read here to keep the first would be an absence proof.
 	for i, hash := range hashes {
-		index := chain.Inner().ElementIndex(hash)
-		_, err = index.Get()
-		switch {
-		case err == nil:
-			continue // Already indexed
-		case errors.Is(err, errors.NotFound):
-			// Not yet
-		default:
-			return errors.UnknownError.WithFormat("load index for chain entry: %w", err)
-		}
-		err = index.Put(c.oldHeight + uint64(i))
+		err = chain.Inner().ElementIndex(hash).Put(c.oldHeight + uint64(i))
 		if err != nil {
 			return errors.UnknownError.WithFormat("store index for new chain entry: %w", err)
 		}

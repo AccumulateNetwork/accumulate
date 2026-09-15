@@ -34,6 +34,7 @@ type commitAdapter struct {
 	mu     sync.Mutex
 	blocks []adapter.BlockParams
 	hash   [32]byte
+	last   uint64 // what LastBlock reports
 }
 
 func (a *commitAdapter) ProduceBlock(_ context.Context, params adapter.BlockParams) ([32]byte, error) {
@@ -43,7 +44,7 @@ func (a *commitAdapter) ProduceBlock(_ context.Context, params adapter.BlockPara
 	return a.hash, nil
 }
 func (a *commitAdapter) ValidateTransaction([]byte) error                           { return nil }
-func (a *commitAdapter) LastBlock() (uint64, [32]byte, error)                       { return 0, [32]byte{}, nil }
+func (a *commitAdapter) LastBlock() (uint64, [32]byte, error)                       { return a.last, a.hash, nil }
 func (a *commitAdapter) LastMajorBlock() (uint64, time.Time, bool)                  { return 0, time.Time{}, false }
 func (a *commitAdapter) StateHash() [32]byte                                        { return a.hash }
 func (a *commitAdapter) Validators() []adapter.ValidatorInfo                        { return nil }

@@ -26,20 +26,30 @@ staging, staging packs them with the one anchor and evaluates quorum or proof,
 and the anchor executes once with no further checking.
 
 **Code**: each validator sends a full `BlockAnchor` carrying the whole payload
-and its own signature. Each is a complete message execution — writes
-`recordMessageAndStatus` and `RecordHistory`, adds one signature to
-`ValidatorSignatures()` — and the copy that crosses `ValidatorThreshold`
-executes the anchor. For an N-validator partition, N−1 deliveries exist only to
-deposit a signature. Copies cannot deduplicate because each embeds a different
-signature and therefore hashes differently.
+and its own signature. Each is a complete message execution with its own
+status, and the copy that crosses `ValidatorThreshold` executes the anchor. For
+an N-validator partition, N−1 deliveries exist only to deposit a signature.
+Copies cannot deduplicate because each embeds a different signature and
+therefore hashes differently.
 
-Staging already asks the right question — `admissibilityOf` calls
-`anchorIsAdmissible`, the same rule `txnIsReady` uses at execution, shared
-deliberately (#4169 step 3b) — but has nothing to collect, so the rule is
-evaluated twice over state that execution had to write first.
+What a copy writes is now bounded by what it adds (#4224, executor.md "What a
+copy costs"): the body once under the transaction's hash, the copy as a
+signature over a reference, one signature-chain entry per distinct signer, the
+signature set once per block from the block's view of it
+(`anchor_signatures.go`). What remains of this difference is the shape:
+copies are still messages with statuses, and the quorum is still evaluated by
+execution rather than collected by staging. Staging already asks the right
+question — `admissibilityOf` calls `Block.anchorIsAdmissible`, the same rule
+`txnIsReady` uses (#4169 step 3b) — but has nothing to collect.
 
-**Size**: medium. Cost is O(validators) per anchor: 445 anchors against 180,997
-synthetics in run `20260902T132651Z`, so small today, linear in validator count.
+One consequence of storing a copy as a reference: the API renders a signature
+chain entry by loading the message under the entry's hash and recomputing its
+ID (`load.go`), so an anchor copy's ID in the signature set differs from the
+chain entry that names it. The signature itself is what the set is for, and it
+is intact.
+
+**Size**: medium. Cost is O(validators) per anchor in statuses and chain
+entries; bodies and set writes are O(1) per anchor per block.
 
 ### E5. Staging is re-evaluated in a loop
 
@@ -94,6 +104,145 @@ to the hash. One accidental writer from changing account hashes.
 
 ---
 
+### E8. Staging is one store, proofs are not keyed by their anchor, and an unproven entry is parked outside it
+
+*[#4217](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4217)*
+
+**Spec** ([executor.md](executor.md), "Collection", "Proof", "Anchor staging"):
+two stores — entries by stream and index, proofs by the Directory block of their anchor; a
+proof waits for its anchor and is validated or discarded by it; a validated
+proof marks its index range proven; an entry executes when proven and next;
+nothing is recorded pending outside staging; a gap is a proven index without
+an entry or a held index without a proof.
+
+**Code**: one store of held entries (`internal/core/execute/v2/block/staging.go`).
+A collection proof is staged under its anchor block since E8 step 2
+(`anchor_staging.go`), and since step 3 the proven set refuses conflicting
+proofs; since E10 both live in memory (`internal/core/execute/staging.go`) and
+are released as the stream delivers. A proof does not carry
+its anchor's block before E8 (`AnchorMetadata.SourceBlock`, filled and read since E8 steps 1–2); the destination tests the proof's terminal root
+against its directory anchor chain at execution (`admissible.go`). Since step 4 a
+package member whose anchor has not executed is collected — held in staging at
+its number — and staging judges proof-less entries by the proven set, so the
+hole the healer had to fill no longer opens (`test/e2e/collection_test.go`). The healer's reconcile path infers a lost tail from the
+source's `Produced`, which the spec no longer needs.
+
+**Evidence**: run `20260904T035906Z`: `exec_synthetic_anchor_total{applied="missing"}`
+outnumbered `earlier` nine to one on BVN2; a third of everything BVN1 received
+from BVN2 had been pulled by the healer; the lost numbers came in runs the size
+of one package.
+
+**Consequence**: the delivery race between a package and the anchor that proves
+it is decided by whichever executes first, and losing it costs a heal per entry.
+
+**Remaining**: release of the proven set and of held entries below the
+delivered point (`internal/core/execute/staging.go` deletes nothing); the
+sequenced layer still records a Pending status and an `Account.Pending()` entry
+for an out-of-order arrival (`msg_sequenced.go`, `recordPending`) beside the
+hold — a status outside staging the spec says must not exist; a proof that does
+not name its anchor block is left to its message executor rather than refused,
+until H8 retires the paths that produce such proofs; intake writes an entry
+durably only when it cannot execute this block; the gap questions by index
+("proven and missing", "held and unproven") and the retirement of the
+reconcile-by-`Produced` path, which land with H8's request set.
+
+### E9. The observer reads a v1 record, and every signer's set is cleared
+
+*[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
+
+**Spec**: a first write never reads; a reader that reaches past the window
+takes a deep reader.
+
+**Code**: the transaction hash now reaches a chain once per transaction —
+`AddChainEntry2` settles a second append to the same chain from the
+transaction's own chain-update record, not by reading the chain, and honours
+its `unique` argument (`test/e2e/single_append_test.go`, nine transaction
+types). What remains: the observer reads the v1 `Transaction(h).Main` record
+for every pending txid (`observer_prod.go:121`), a shape v2 never writes,
+which is a cheap in-window miss now; `clearActiveSignatures` writes
+`Signatures` of every signer in the book, absent or not; the main and scratch
+chains still read their element index on append (`unique == true` from
+`AddChainEntry`) as a guard against a repeat across transactions, which no
+path is known to produce.
+
+**Size**: small.
+
+---
+
+### E12. What a transaction still writes beyond one body, one status, one set
+
+*[#4236](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4236)*
+
+**Spec** ([database.md](database.md), "A record is written once per thing it
+records"; [executor.md](executor.md), "The database write"): one body per
+transaction, wrappers referring to it by hash; a status per message with an
+outcome; `Produced` one set under the transaction; `Cause` kept as its
+inverse.
+
+**Code**: the destination now writes, keyed by a synthetic transaction's hash,
+six records — `Message.Main`, `Transaction.Status`, `Message.Cause`,
+`Transaction.Chains`, `Account.Payments`, `Account.Votes`
+(`TestUserTransactionWrites`) — and the wrapper's own `Main` and `Status`
+under the wrapper's hash. What remains beyond the spec's shape:
+
+- **The source stores the sequenced message with the full body**
+  (`buildSynthTxn`). The sequencer serves healing answers from that record
+  (`sequencer.go getSynth`, `getSynthRange`) and the cache seed rebuilds from
+  it, so a reference there would make every answer resolve a second record.
+  Removing it is H1's work (the cache serves, the store does not), not a
+  write-path change.
+- **Wrapper statuses stay.** Each `SequencedMessage`, `SyntheticMessage`,
+  `BlockAnchor`, `CreditPayment` and `SignatureRequest` writes its own status,
+  because `checkStatus` reads it: a sequenced message re-run from staging and a
+  copy landing in two blocks are caught by it. Whether staging's delivered
+  index can carry that dedup alone — the spec's table already names it for
+  sequenced entries — is the open question; until it does, the status is the
+  record.
+- **`History` and `Signers`** are written per signature (`RecordHistory`) and
+  read by the API's signature-set view (`load.go`); the review proposed
+  deriving them from the signature chain. Not done here.
+- **`Payments` and `Votes`** are written per transaction by the transaction
+  path and read by the account hash (`observer_prod.hashPendingV2`) for
+  pending transactions; a delivered synthetic writes both for nothing.
+
+**Size**: measured on run `20260905T153920Z` before this work, 72 records per
+user transaction; the items above are the ones still to measure after it.
+
+### E11. A node cannot sync from the running protocol
+
+*[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
+
+**Spec** ([executor.md](executor.md), "Sync"): every node, validator or
+follower, pulls the state of the chains down from the running protocol,
+verified against the anchored root, while collecting messages from consensus
+into staging, and processes transactions only once the state matches and
+staging holds what its peers hold.
+
+**Code**: a node starts from genesis or from a snapshot file it was given, and
+consensus "catches up" by fetching batches from peers' retention
+(`pkg/consensus/recovery.go`, `DefaultCatchUpTimeout` 60 s). A peer further
+behind than retention is told `absence=no-record` and has no way back; a
+validator restarted under load could not rejoin and stalled its partition
+(#4205, run `20260903T202621Z`). Nothing pulls chain state from peers, nothing
+verifies it against an anchored root, and nothing gates execution on staging
+being complete.
+
+**Seeding (#4238, done)**: the service checkpoints its consensus position
+per block and restores the one matching the executor's last block on restart
+(consensus.md, "Restart"), so a restarted validator starts at its own round
+rather than zero and certificate catch-up can reach the frontier within
+`DAGGCDepth` (2,000 rounds, about eight minutes at four rounds a second). Not
+done: a node down longer than that is beyond catch-up and only sync can bring
+it back; certificates at or below the checkpoint's round that a later leader
+commits are not pulled by catch-up, so the first block after a rejoin can
+still differ from its peers' — sync must deliver staging and the DAG floor
+together; the stranded condition is a Warn a minute, not a state.
+
+**Size**: large; it is the precondition for a validator restarting under load and for
+chaos returning to a soak.
+
+---
+
 ## Database abstraction
 
 ### D1. Record placement is a second, hand-maintained model
@@ -145,48 +294,282 @@ absence rather than guessing.
 
 **Size**: small. A conformance test.
 
-### D4. The bcdb window is advisory, so absence is never reported
+### D7. A first write no longer reads the store; one store cannot say a version
 
-*[#4200](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4200)*
+*[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
 
-**Spec**: an ordinary read is answered from the window; a read that needs
-history requires a deep reader. A backend that cannot answer must say so.
+**Spec**: a first write never reads the store to learn a version.
 
-**Code**: `getAt` (`bcdb/database.go:717`) falls back to `GetDeep` when a
-**shallow** reader misses, counting the fallback rather than returning
-not-found. So no shallow read ever reports absence, and the window is a
-performance property rather than a contract.
+**Code**: done. `value.Put` asks its store for the version alone
+(`database.VersionStore`): the key-value store below the outermost batch
+answers zero, a batch answers from the parent's record in memory, a shard's
+child answers through the parent under its mutex. The read remains only as a
+fallback for a store that cannot say (the BPT's node records, which are in
+memory). Proven by: a counting store showing a first write reads nothing and a
+set merge reads once; the conflict cases a naive skip would break (a child
+writing a key its parent wrote, siblings, three levels, shards); and a
+differential run of accounts, chains, sets, child batches and shards under
+both paths committing byte-identical state and the same root
+(`internal/database/version_fetch_test.go`).
 
-This is deliberate and is documented in place: enforcing the window blind would
-turn any read the adapter has not accounted for into a silent not-found, which
-in the executor is a consensus fault. `DeepFallbacks` in `stats.json` is the
-instrument — zero over a soak is the evidence that the fallback can be removed.
-
-**Where it stands**: `Account(U).Url` was the only shape falling back (96,303
-over 200 commits, ~482 history walks a block); routing it to the dynamic layer
-took the count to none. So the evidence for enforcement now exists and has not
-been acted on.
-
-**Size**: small, and it depends on D3 — enforcement without a conformance test
-for `BeginDeep` swaps a measured fallback for an unverified one.
+**Size**: none remaining.
 
 ---
 
+### D8. The chain reads its element index only for the writer's deduplicated chains
+
+*[#4219](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4219)*
+
+**Spec**: the element index is written, not read then written; the writer
+deduplicates.
+
+**Code**: `merkle.Chain.AddEntry` writes the element index blind for every
+chain appended with `unique == false` — root, signature, index, synthetic,
+replica, anchor-sequence, block-ledger and BPT chains, the bulk of the
+appends — and reads it first only for `unique == true`: the account main and
+scratch chains through `AddChainEntry`. `AddChainEntry2` honours its argument,
+so the anchor root and BPT chains write blind, and a transaction's second
+append to the same chain is settled from its own chain-update record (E9).
+The remaining read is an in-window miss for a new hash, a guard against a
+repeat across transactions that no path is known to produce; it goes when
+the e2e duplicate assertion has run clean long enough to say so. The
+`Element` and `States` writes read nothing since D7. The element index names
+the last-written occurrence live as it does after a restore, so the former D9
+is closed.
+
+**Size**: none required; the guard read is a choice.
+
+---
+
+### D10. A pre-image for a new dynamic key walks the store's history
+
+*[#4237](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4237)*
+
+**Spec** ([database.md](database.md), "Isolation has a price"): a commit made
+while a reader is pinned reads a pre-image per dynamic entry; a first write
+never searches history to learn a key is absent.
+
+**Code**: the adapter (`bcdb/database.go`, `preImages`) skips the read for a
+permanent shape and answers it from its own cache for `Account(U).Url`, and
+`Validate` no longer pins a reader at all, so under load with no API reader
+open no pre-image is read. When a reader IS pinned — an API query, a snapshot
+— every dynamic entry of an unaccounted shape is read with `GetDyna`, and
+most of them are **new** keys (a fresh status, produced set or signature set
+per message): BlockchainDB's `SegmentStore.Get` (`segstore.go:1794-1797`) does
+not stop at the window for a dynamic key it does not hold, so each of those
+reads is a bloom probe per history segment — ~5 K keys × 5–10 segments per
+block. The adapter cannot tell a new dynamic key from an old one without
+asking, and this repository cannot change what asking costs.
+
+**What the store needs** (to be filed against BlockchainDB; recorded here so
+the text is not lost): a *window-only* dynamic read for pre-images —
+`GetDynaRecent(key)` or a `Get` option — that answers from the active tier and
+reports absent without consulting history. A key the window does not hold
+either is new (no pre-image) or was last written before the window, and a
+reader pinned that far back is already a fault the adapter warns about
+(`warnOldView`); neither case is worth a history walk on the block producer's
+commit path. With it, `preImages` becomes one active-tier lookup per dynamic
+entry and `preImageReads` ≈ pre-existing dynamic keys touched.
+
+**Size**: small here (swap the call once the store has it); the store-side
+change is the work.
+
+---
+
+## Consensus
+
+### C7. Nothing refuses the synthetics a partition cannot execute
+
+*(no issue yet — a design decision)*
+
+**Spec** ([consensus.md](consensus.md), invariant 9): a partition whose
+executor lags its consensus past the bound proposes empty headers and refuses
+**user** work until it catches up. Synthetic packages and anchors from other
+partitions are system traffic and are never refused (invariant 4).
+
+**Code**: as specified — and it is not enough. A BVN's user work produces
+synthetics for the *other* BVN, about one and a half per accepted transaction
+under the soak's load, and the destination can neither refuse them nor execute
+them faster than they arrive when the source keeps accepting. Refusing the
+destination's own users changes nothing about that inflow. consim reproduces
+it in five minutes (`pkg/consensus/consim`,
+`TestOverload_UncappedHeadersDoubleTheDumpUntilThePartitionStops`, and the
+command line in PLAN.md "Simulation first"): BVN1 offered 400 user tx/s and
+BVN2 250, each executor good for 400 tx/s, 1.5 synthetics per accepted user
+transaction; BVN2's lag runs to 42 and its dumped blocks double every cycle
+until it stops. With the header cap (`MaxHeaderBytes`, 455a82ee1) the blocks
+stay bounded and BVN2 keeps producing, but its lag still drifts upward — the
+inflow exceeds its capacity. Soak `20260905T144928Z` is the same curve in
+forty-five minutes: BVN2 produced twice BVN1's synthetics (#4220), both BVNs
+oscillated on the bound, load accepted fell to 392 tps.
+
+**What is missing** is back-pressure across partitions: a source must stop
+accepting user work when a destination of its synthetics is behind. The
+signal exists in principle — what a source has produced for a destination
+that the destination has not yet executed (the producer cache's "in play",
+healing.md "The cache", whose clearing signal is also H1's open item) — and
+the refusal is the one invariant 9 already has. What must be decided is the
+signal (a bound on undelivered synthetics per destination, carried back by the
+destination's anchors or by the Directory) and the bound.
+
+**Size**: medium; a spec decision first.
+
+### C8. A committed group that fails to execute is skipped, and the lag it leaves is permanent
+
+*(no issue yet — found working #4279)*
+
+**Spec** ([consensus.md](consensus.md), "Execution"): a committed
+certificate's batches are executed in canonical order and never skipped; a
+node that cannot execute a block its peers executed halts rather than
+diverge. Invariant 9 bounds the lag between commits and executions and
+expects it to clear when execution catches up.
+
+**Code**: `blockProductionLoop` halts only for `ErrBatchesUnrecoverable`. Any
+other failure of `ProduceBlock` — a block that fails to close, for whatever
+reason — is logged as `Failed to process committed group` and the loop takes
+the next group. The failed group's transactions are never executed, on this
+node or, if the failure is deterministic, on any; and `ReportExecuted` is
+never called for it, so the lag it adds to `ExecutionLag` never clears. On
+run `20260915T042428Z` nine Directory groups failed to close within a minute
+(one bug, deterministic, every node), the lag reached 9 against a bound of
+8 at 05:41:33Z, and the Directory proposed empty headers and refused every
+submission — including the BVNs' anchors — for the rest of the run. One bad
+block became a dead partition, with the partition reporting itself healthy
+in every liveness sense.
+
+**What must be decided** is what a deterministic execution failure does.
+Halting, as an unrecoverable batch does, stops every node at the same block
+and is honest about what happened; continuing past it can only be right if
+the failure is known to be node-local, which nothing here can know. Either
+way the lag accounting must not count a group that will never execute as
+"behind": a skipped group is not lag, it is loss, and should be its own
+counter and its own alarm.
+
+**Size**: small in code; a spec decision first.
+
 ## Healing
 
-### H1. The healing cache does not exist
+### H1. The producer cache exists; what it is not yet cleared by, and what still reads the store
 
 *[#4193](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4193)*
 
-**Spec** ([healing.md](healing.md)): healing caches what it fetches, keyed by
-source, destination and sequence number; only healing uses it; it lives in
-Accumulate and is indifferent to the storage backend.
+**Spec** ([healing.md](healing.md), "The cache"): the producer keeps every
+synthetic and anchor in play, keyed by hash and by stream position, with what
+its proofs are built from; dispatch and healing read it and nothing else;
+cleared as the destination delivers; a miss is refused and counted.
 
-**Code**: no such cache. One was built in the BlockchainDB adapter and removed —
-on the storage read path it answered 0.40% of lookups, because it cached the
-executor's reads rather than the healer's fetches.
+**Code**: built (`internal/core/synthcache`). Dispatch and the sequencer's
+answers are built from it alone; the e2e suite fails on a dispatch miss.
+Synthetic entries are released by the destination's `Delivered`, carried on
+every dispatched message and package (2026-09-06); produced anchors by the
+`Delivered` carried on every anchor copy, once every destination has spoken
+(#4232); blocks with nothing left to prove are dropped; the horizon backstop
+is ten minutes. Remaining: a synthetic stream whose reverse direction is idle
+shrinks only at the horizon (anchors say nothing about synthetics); the v1
+simulator's sequencer still reads the store, since the v1 executor has no
+cache; the Directory receipt a block was dispatched under is
+the only anchor a bundle can be proven under (`ProveAgainstAnchor` for any
+other is `NotReady`), which is H3. The requester exists (H8) and asks the
+sequencer by span. The stage bound for a collected entry (`maxSequenceAhead`)
+is a constant, not the source's produced count: the destination learns that
+count on no wire path (#4243).
 
-**Size**: small.
+The destination's `Delivered` of this stream — the release signal — lives only
+in the cache. A restart therefore cannot seed "what the destination has not
+delivered"; it seeds what the Directory has not receipted plus the in-flight
+tail (healing.md, "The cache"; #4241). A destination lagging more than
+`InFlightBlocks` of the source's blocks at the source's restart heals from a
+cache that lacks its entries, and the miss is counted. The fix is to persist
+the release watermark per stream as a node-local record — it is per-node
+state and must not enter the hashed ledger (executor.md, "Sync") — which is
+the cache's to do.
+
+**Size**: small; the delivery signal is the open design point.
+
+---
+
+### H8. Healing pulls spans and the requester submits; the spec says hashes, and the source submits
+
+*[#4216](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4216)*
+
+**Spec** ([healing.md](healing.md)): staging computes the gaps by index; a
+selected validator sends one request naming **hashes and index spans**; the
+**source** answers from its producer cache and **submits the bundle into the
+requesting network** through its dispatcher; intake takes it; the answer
+carries no signature.
+
+**Code**: the requesting side is built (`internal/core/crosschain/requester.go`).
+On an activation block a validator selected by the previous block's root
+anchor walks each stream of the executor's `execute.Staging` once, from
+`Delivered` to the highest entry held: an index not held, and a held entry no
+proof has validated, are the two gaps; consecutive ones coalesce into spans
+(at most `MaxRequestSpans`, each within `MaxReceiptListElements`); a span
+asked within `healPatience` activations is not asked again; a source whose
+requests all failed is backed off, doubling to eight activations. Nothing is
+timed and nothing is inferred from the source's ledger. Counted:
+`accumulate_conductor_heal_requests_total{outcome}`, `heal_entries_total`, and
+`HealCounters.Requests/Misses/Synthetic`. Seven of the nine dropped-entry
+acceptance tests run and pass; the two that drop an anchor are H9.
+
+Where it departs from the spec:
+
+- **Pull, not push.** The requester calls the source's `SequenceRange` and
+  submits the answer into its own partition itself, as a bundle shaped like a
+  package (`SyntheticProof` first, then the entries, each with its companion).
+  The source submits nothing. The push form needs a submit path from the
+  source into a foreign partition's consensus that the dispatcher does not have
+  today; the pull form uses the request's reply channel, which exists.
+- **Spans, not hashes.** There is no entries-by-hash-set method; a
+  proven-missing entry is asked for by its index inside a span, and the answer
+  carries the span's proof whether or not the requester already held it.
+- **A signature in the answer.** The sequencer signs each entry with the
+  answering validator's key; the executor requires a key signature on a
+  `SyntheticMessage`, so the requester copies it into the bundle. The spec's
+  "no signature" would need the executor to accept a proven entry unsigned.
+- **The answer names its anchor.** `MessageRecord.SourceAnchorBlock` and
+  `MessageRecord.Companion` were added to the API record so the requester can
+  build the proof's `AnchorMetadata` and include the companion without reading
+  the source's history; the spec has no wire format for these.
+
+**Size**: the push form and the hash method are each small once the executor
+accepts unsigned proven entries; not urgent.
+
+---
+
+### H9. A pulled anchor is re-attested, not proven
+
+*[#4056](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4056)*
+
+**Spec** ([executor.md](executor.md), "Proof"; [healing.md](healing.md),
+"Deciding, in staging"): an anchor is validated by a validator signature quorum
+or by a collection proof over the source's anchor chain; a missing or
+below-quorum anchor is requested from the source's cache like any other entry.
+
+**Code**, as of 2026-09-05: anchors go through the stage — an anchor below its
+quorum is held at its number, collected, and runs when the signatures reach
+the threshold; one at or below `Delivered` is tossed; a copy naming its
+transaction by hash resolves against the held one. The requester walks the
+anchor streams with the synthetic ones and asks the source for gaps
+(`requestAnchorSpan`); the source answers from its cache, a prefix at a time,
+`NotReady` for anchors still in flight. The source-side re-send (`healAnchors`)
+is deleted. An answer for a Directory anchor carries every validator
+signature the Directory holds on its own copy of that anchor — the quorum,
+accepted on the BVN's copy by the signature-reuse rule — so one pull restores
+an anchor whose dispatched copies were lost (soak 20260905T225751Z: fewer
+copies than the threshold arrived at a BVN, nothing re-sent them, and every
+stream waited on the anchor). What remains: a BVN does not execute its own
+anchors, so an answer for a BVN anchor carries only the answering node's
+signature and the Directory gathers a quorum one answer at a time, from
+whichever node the client dials, which does not rotate; the proof form — a `BlockAnchor` with a collection proof over
+the source's anchor chain, continued to a root the destination already holds —
+needs the root chain's span across blocks, which the cache does not keep, and
+is what `TestAnchorQuorumStuckRecovery` expects (skipped with this reason).
+`TestAnchorRangeRecovery` runs on the re-attestation form.
+
+**Size**: medium — the root chain span in the cache, bounded by the horizon,
+and the proof built from it.
+
+---
 
 ### H3. Proof extension does not exist
 
@@ -228,6 +611,25 @@ and the HEAL path has none, which is the actual hole.
 **Size**: medium, and **not urgent until measured**. A message type, a request
 path, and assembly at the destination. Build it when a run shows a proof-length
 rejection, which names the real trigger rather than a supposed one.
+
+## Durability: the seal is still on the block path; the committed log is not on disk
+
+The spec (database.md invariant 5, consensus.md "The committed log") makes the
+consensus log the durability point and lets the store seal behind the commit.
+The code does neither yet: `bcdb.(*Database).writeThrough` calls
+`KVShard.SealBlock` on the block goroutine before the commit returns (the
+~40-fsync barrier that stalled soak 20260906T134054Z for four minutes,
+#4259), and the committed groups exist only in memory — the worker's batch
+store and retention, the DAG's certificates — with only the consensus
+*position* checkpointed (`persist.Checkpoint`). Restart therefore cannot
+replay unsealed blocks, which is also why nothing may be lost today. The
+store question — sealing several blocks in one call while writes continue
+into the next tail — is BlockchainDB#88. Decided by Paul 2026-09-06: "If the
+DAG has a log, use that."
+
+**Size**: medium. The log append and its replay are new code on the block
+production path; the lagging seal is a scheduler in the bcdb adapter; the
+store change is a BlockchainDB release.
 
 ## Proofs still recompute what is stored
 

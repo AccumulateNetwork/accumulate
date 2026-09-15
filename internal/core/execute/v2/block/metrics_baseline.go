@@ -54,5 +54,24 @@ var mExecSyntheticAnchor = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
 	Subsystem: "exec",
 	Name:      "synthetic_anchor_total",
-	Help:      "Synthetics judged by staging, by when their proving anchor was applied: this_block, earlier, or missing (not yet anchored)",
+	Help:      "Synthetics judged by staging: proven or unproven (proof-less, by the proven set); this_block, earlier or missing (by their own receipt); collected (held in staging awaiting a proof); refused (no source validator signed the copy); anchor-tossed (already delivered)",
 }, []string{"applied"}) // this_block | earlier | missing
+
+// mExecTransactionFailed counts transactions that executed with an error, by
+// type: what the per-transaction Info line used to be for (#4231).
+var mExecTransactionFailed = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "exec",
+	Name:      "transaction_failed_total",
+	Help:      "Transactions that executed with an error, by transaction type",
+}, []string{"type"})
+
+// mExecStagedProofs counts collection proofs by what anchor staging did with
+// them (executor spec, "Anchor staging"): staged (waiting for their anchor),
+// validated, disproved, or invalid (refused at intake).
+var mExecStagedProofs = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "exec",
+	Name:      "staged_proofs_total",
+	Help:      "Collection proofs by anchor-staging outcome: staged, validated, disproved, conflict, invalid, unbound, refused, duplicate (identical proof already staged this block)",
+}, []string{"outcome"})

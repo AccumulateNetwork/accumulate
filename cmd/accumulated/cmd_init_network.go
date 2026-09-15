@@ -128,12 +128,18 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		networkReset()
 	}
 
-	// The storage backend every generated node is pinned to. Resolved once,
-	// up front, so a typo fails before any directory is written.
+	// The storage backend every generated node is pinned to: the network
+	// file says it, the --database flag overrides it. Resolved once, up
+	// front, so a typo fails before any directory is written.
 	storageType := run.DefaultStorageType
-	if flagInitNetwork.Database != "" {
+	switch {
+	case flagInitNetwork.Database != "":
 		if !storageType.SetByName(flagInitNetwork.Database) {
 			fatalf("--database: %q is not a valid storage type", flagInitNetwork.Database)
+		}
+	case network.Database != "":
+		if !storageType.SetByName(network.Database) {
+			fatalf("database: %q in the network file is not a valid storage type", network.Database)
 		}
 	}
 
@@ -269,15 +275,14 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			// number chosen for a reason, and `% 100` on a hash is not
 			// sharding (#4133).
 			//
-			// Measured (#4164): keyed worker routing is unwired (#4133), so
-			// every submission lands on ONE worker regardless of the count —
-			// the remaining 63 (×2 nodes per container) were idle batch-timer
-			// loops burning wakeups for nothing. A Narwhal worker is meant to
-			// be a separate machine contributing its own bandwidth, not 64
-			// goroutine-sets sharing one NIC and one disk. Four keeps the
-			// power-of-two sharding shape and real parallelism headroom for
-			// when #4133 wires the routing key.
-			cvc.NumWorkers = run.Ptr(int64(4))
+			// One worker per node. Workers are a parallelism decision that
+			// must not multiply the batch rate (consensus spec, invariant 2):
+			// with four per node a partition ran sixteen seal timers and
+			// emitted ~160 one-transaction batches a second at 250 tps, and
+			// every count downstream held seconds of traffic (C1, #4206). A
+			// Narwhal worker is a separate machine with its own bandwidth,
+			// not goroutine-sets sharing one NIC and one disk.
+			cvc.NumWorkers = run.Ptr(int64(1))
 
 			// Every node serves Prometheus metrics on :26670. Without this no
 			// DI node had a /metrics endpoint at all — the CometBFT lineage

@@ -6,9 +6,29 @@
 
 package logging
 
+import (
+	"context"
+	"log/slog"
+)
+
 // OptionalLogger wraps a Logger and provides nil-safe logging methods.
 type OptionalLogger struct {
 	L Logger
+}
+
+// Enabled reports whether the logger emits at the level, so a caller can skip
+// building the arguments of a line that would not be written. A logger that
+// cannot say is taken to emit everything.
+func (l OptionalLogger) Enabled(ctx context.Context, level slog.Level) bool {
+	if l.L == nil {
+		return false
+	}
+	if e, ok := l.L.(interface {
+		Enabled(context.Context, slog.Level) bool
+	}); ok {
+		return e.Enabled(ctx, level)
+	}
+	return true
 }
 
 // Set sets the logger, unwrapping any nested OptionalLoggers.

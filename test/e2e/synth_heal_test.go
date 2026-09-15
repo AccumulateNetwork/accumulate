@@ -147,15 +147,40 @@ func gatherHealCount(t testing.TB) float64 {
 	t.Helper()
 	mfs, err := prometheus.DefaultGatherer.Gather()
 	require.NoError(t, err)
+	// The families the node exports. This read
+	// accumulate_crosschain_heals_total, which no node has emitted since
+	// healing became receiver-pull: the test therefore reported zero heals
+	// whatever happened, which is a measurement of nothing (#4279 review,
+	// REPORTING-SPEC 1). Recovery is now visible as entries that came back
+	// in answer to a span request, and as the requests that were answered.
+	want := map[string]bool{
+		"accumulate_conductor_heal_entries_total":  true,
+		"accumulate_conductor_heal_requests_total": true,
+	}
 	var total float64
+	var found bool
 	for _, mf := range mfs {
-		if mf.GetName() != "accumulate_crosschain_heals_total" {
+		if !want[mf.GetName()] {
 			continue
 		}
 		for _, m := range mf.GetMetric() {
+			if mf.GetName() == "accumulate_conductor_heal_requests_total" {
+				answered := false
+				for _, l := range m.GetLabel() {
+					if l.GetName() == "outcome" && l.GetValue() == "answered" {
+						answered = true
+					}
+				}
+				if !answered {
+					continue // not-yet and miss are asks, not recoveries
+				}
+			}
+			found = true
 			total += m.GetCounter().GetValue()
 		}
 	}
+	require.True(t, found || total == 0,
+		"no node exported a healing counter: absent is not zero")
 	return total
 }
 

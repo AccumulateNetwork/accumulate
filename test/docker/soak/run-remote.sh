@@ -24,9 +24,11 @@ shift $(( $# > 3 ? 3 : $# )); note="${*:-unnamed run}"
 
 remote_dir='~/go/src/gitlab.com/AccumulateNetwork/accumulate/test/docker/soak'
 
+# The knobs travel as a config file layered on the remote's soak.conf, not as
+# environment variables: soak.sh reads nothing from its environment.
 echo "== starting soak on $host: DURATION=$duration TPS=$tps note='$note'"
 ssh -o BatchMode=yes -o ConnectTimeout=10 "$host" \
-  "bash -lc 'cd $remote_dir && setsid nohup env DURATION=$duration TPS=$tps ./soak.sh \"$note\" > /tmp/soak-launch.log 2>&1 < /dev/null &'" \
+  "bash -lc 'cd $remote_dir && printf \"DURATION=%s\\nTPS=%s\\n\" $duration $tps > /tmp/soak-override.conf && setsid nohup ./soak.sh -c /tmp/soak-override.conf \"$note\" > /tmp/soak-launch.log 2>&1 < /dev/null &'" \
   || { echo "launch failed"; exit 1; }
 
 echo "== opening tunnel"

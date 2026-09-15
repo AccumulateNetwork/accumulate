@@ -11,22 +11,22 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func LoadBlockLedger(ledger *database.Account, index uint64) (time.Time, []*protocol.BlockEntry, error) {
-	_, l1, err := ledger.BlockLedger().Find(record.NewKey(index)).Exact().Get()
+	// The block ledger record, written once per non-empty block since the
+	// chain form was activated (executor spec, "The block ledger")
+	l1, err := ledger.BlockLedger(index).Get()
 	switch {
-	case err != nil && !errors.Is(err, errors.NotFound):
-		return time.Time{}, nil, errors.UnknownError.Wrap(err)
-	case err != nil, l1.Index == 0:
-		// Not found or not populated
-	default:
+	case err == nil:
 		return l1.Time, l1.Entries, nil
+	case !errors.Is(err, errors.NotFound):
+		return time.Time{}, nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Before that: an account per block
 	var l2 *protocol.BlockLedger
 	err = ledger.Account(strconv.FormatUint(index, 10)).Main().GetAs(&l2)
 	switch {

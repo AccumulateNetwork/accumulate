@@ -216,8 +216,10 @@ func (s *QuerierTestSuite) TestQueryTransaction() {
 		s.IsType((*CreateIdentity)(nil), r.Message.Transaction.Body)
 	_ = s.NotNil(r.Status) &&
 		s.Equal(errors.Delivered, r.Status)
+	// One produced synthetic, listed once (#4236: the set used to be read
+	// from two records and the same ID returned twice)
 	_ = s.NotNil(r.Produced) &&
-		s.Len(r.Produced.Records, 2)
+		s.Len(r.Produced.Records, 1)
 	_ = s.NotNil(r.Signatures) &&
 		s.Len(r.Signatures.Records, 2)
 }

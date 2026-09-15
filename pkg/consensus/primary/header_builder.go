@@ -46,12 +46,28 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	// NewHeader sorts the payload into canonical (execution) order.
 	var payload []types.PayloadEntry
 	seen := make(map[types.BatchDigest]bool)
+	// Consensus does not outrun execution (consensus spec, invariant 9):
+	// while the executor is more than MaxExecutionLag blocks behind, the
+	// header carries parents and weak links but no batches — rounds continue,
+	// nothing new is certified, and the batches stay available for a later
+	// header.
+	lagging := p.executionLagging()
+	// One byte budget for the header, shared by the workers in order: what
+	// built up while the primary was not proposing comes back a header at a
+	// time, not as one block (consensus spec, invariant 9). The budget is
+	// this header's share of the block, so the block is bounded whatever the
+	// number of validators (#4230).
+	budget := p.headerBudget()
 	for _, w := range p.workers {
-		// Use ConsumeAvailableBatches to get and clear available batches.
+		if lagging || budget <= 0 {
+			break
+		}
 		// Dedup: the requeue (never-certified headers) and re-proposal
 		// (never-committed batches) paths can both re-enqueue a digest, and a
 		// header must not list the same batch twice.
-		for _, digest := range w.ConsumeAvailableBatches() {
+		digests, used := w.ConsumeAvailableBatchesWithin(budget)
+		budget -= used
+		for _, digest := range digests {
 			if seen[digest] {
 				continue
 			}
@@ -74,6 +90,33 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	}
 
 	return header, nil
+}
+
+// headerBudget is the bytes of batches this header may carry: its share of
+// MaxBlockBytes among the committee's headers in one block, capped by
+// MaxHeaderBytes.
+func (p *Primary) headerBudget() int {
+	p.committeeMu.RLock()
+	validators := p.committee.Len()
+	p.committeeMu.RUnlock()
+	return headerBudget(p.config.MaxHeaderBytes, p.config.MaxBlockBytes, validators)
+}
+
+// headerBudget divides maxBlock among the validators' headers of one block
+// and caps the share at maxHeader. The share is never less than one byte, so
+// a header always moves at least one batch.
+func headerBudget(maxHeader, maxBlock, validators int) int {
+	if validators < 1 {
+		validators = 1
+	}
+	share := maxBlock / (roundsPerBlock * validators)
+	if share < 1 {
+		share = 1
+	}
+	if share < maxHeader {
+		return share
+	}
+	return maxHeader
 }
 
 // getParentCertsLocked retrieves parent certificates from round-1.

@@ -72,7 +72,7 @@ func (a *Account) Commit() error {
 	}
 
 	// Prevent any accounts other than the system ledger from modifying events or the block ledger
-	if values.IsDirty(a.events) || values.IsDirty(a.blockLedger) {
+	if values.IsDirty(a.events) || a.blockLedgerDirty() {
 		u := a.Url()
 		if _, ok := protocol.ParsePartitionUrl(u); !ok {
 			return errors.InternalError.WithFormat("%v is not allowed to have events/blocks", u)
@@ -129,17 +129,29 @@ func (a *Account) Commit() error {
 		}
 	}
 
-	// Ensure chains are added to the Chains index
-	var chains []*protocol.ChainMetadata
+	// Ensure chains are added to the Chains index -- the ones it does not
+	// hold. A chain appended to in a block is dirty, and adding every dirty
+	// chain unconditionally rewrote the index of every dirty account every
+	// block to list chains it already listed (#4244).
+	var missing []*protocol.ChainMetadata
 	for _, c := range a.dirtyChains() {
-		chains = append(chains, &protocol.ChainMetadata{
-			Name: c.Name(),
-			Type: c.Type(),
-		})
+		meta := &protocol.ChainMetadata{Name: c.Name(), Type: c.Type()}
+		_, err := a.Chains().Index(meta)
+		switch {
+		case err == nil:
+			continue
+		case errors.Is(err, errors.NotFound):
+			missing = append(missing, meta)
+		default:
+			return errors.UnknownError.WithFormat("load chains index: %w", err)
+		}
 	}
-	err := a.Chains().Add(chains...)
-	if err != nil {
-		return errors.UnknownError.WithFormat("update chains index: %w", err)
+	var err error
+	if len(missing) > 0 {
+		err = a.Chains().Add(missing...)
+		if err != nil {
+			return errors.UnknownError.WithFormat("update chains index: %w", err)
+		}
 	}
 
 	// Ensure the synthetic anchors index is up to date
@@ -184,4 +196,15 @@ func (b *Batch) UpdateBPT() error {
 
 func compareSignatureByKey(a, b protocol.KeySignature) int {
 	return bytes.Compare(a.GetPublicKey(), b.GetPublicKey())
+}
+
+// blockLedgerDirty reports whether any block ledger record or the block ledger
+// chain has been written. Only the system ledger may write them.
+func (a *Account) blockLedgerDirty() bool {
+	for _, v := range a.blockLedger {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	return values.IsDirty(a.blockLedgerChain)
 }

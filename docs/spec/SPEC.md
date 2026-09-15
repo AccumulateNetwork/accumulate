@@ -19,7 +19,8 @@ the same two sections:
 |---|---|
 | [Executor](executor.md) | How a block is produced: what runs, in what order, and what may be staged |
 | [Database abstraction](database.md) | The storage contract every backend satisfies, and how a backend is chosen |
-| [Healing](healing.md) | Filling gaps in sequenced cross-partition streams |
+| [Healing](healing.md) | Filling gaps in sequenced cross-partition streams: gaps by index, hash-set requests, bundles from the producer cache |
+| [Consensus](consensus.md) | **Partial**: the batch plane's memory, execution lag, and the DAG facts the other parts rely on. Rounds, votes and certificates are still to be written |
 | [Network parameters](network.md) | What a network declares about itself, and how a node is held to it |
 
 Alongside them, [DIFFERENCES.md](DIFFERENCES.md) records where the code departs
@@ -28,10 +29,11 @@ its own exceptions stops being normative. The specification says what we are
 doing; the differences say what has yet to be brought into line, and issues are
 written from them once a part of the spec is settled.
 
-Parts still to be written: consensus (DAG-BFT), the protocol's account and
-transaction model, the API, and cross-partition messaging (synthetics and
-anchors). A missing part is a gap, not a statement that the subsystem has no
-rules.
+Parts still to be written: consensus (DAG-BFT) beyond what consensus.md
+covers, the protocol's account and transaction model, and the API.
+Cross-partition messaging is covered between the executor (production,
+dispatch, staging) and healing. A missing part is a gap, not a statement that
+the subsystem has no rules.
 
 ## Working against the spec
 

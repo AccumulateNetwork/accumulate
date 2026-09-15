@@ -9,6 +9,8 @@ package simulator
 import (
 	"context"
 	"fmt"
+	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"log/slog"
 	"math/big"
 	"sync"
@@ -54,7 +56,6 @@ type simFactory struct {
 	dropInitialAnchor           bool
 	executionShards             int
 	executionShardsPerNode      []int
-	disableAnchorHealing        bool
 	interceptDispatchedMessages DispatchInterceptor
 
 	// State
@@ -82,6 +83,9 @@ type networkFactory struct {
 
 type nodeFactory struct {
 	*networkFactory
+	staging *coreexec.Staging
+	cache   *synthcache.Cache
+	heals   *crosschain.HealCounters
 
 	// Options
 	id      int
@@ -164,6 +168,9 @@ func (f *nodeFactory) Build(p *Partition) *Node {
 	if f.typ != protocol.PartitionTypeBlockSummary {
 		n.database = f.getDatabase()
 	}
+	n.staging = f.getStaging()
+	n.synthCache = f.getSynthCache()
+	n.heals = f.getHeals()
 
 	// Register services
 	f.registerSvc(api.ServiceTypeNode, message.NodeService{NodeService: &nodeService{
@@ -507,12 +514,44 @@ func (f *nodeFactory) makeSummaryApp() *consensus.Node {
 	return f.makeConsensusNode(abci)
 }
 
+// getStaging is the node's staging, shared by its executor and its querier
+// (executor spec, "Sync"), created on first use from whichever path asks.
+func (f *nodeFactory) getStaging() *coreexec.Staging {
+	if f.staging == nil {
+		f.staging = coreexec.NewStaging()
+	}
+	return f.staging
+}
+
+// getHeals is the node's healing counters, shared by its conductor and the
+// tests that assert on them.
+func (f *nodeFactory) getHeals() *crosschain.HealCounters {
+	if f.heals == nil {
+		f.heals = new(crosschain.HealCounters)
+	}
+	return f.heals
+}
+
+// getSynthCache is the node's synthetic/anchor cache, shared by its executor
+// (which fills it and dispatches from it) and its sequencer (which answers
+// healing requests from it and nothing else).
+func (f *nodeFactory) getSynthCache() *synthcache.Cache {
+	if f.cache == nil {
+		f.cache = synthcache.New(0)
+	}
+	return f.cache
+}
+
 func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a querier service
+	// The API services read deep, as the node's do (cmd/accumulated/run,
+	// dagbft.go): a store with a window answers a shallow read of anything
+	// older than the window as absent, and an explorer or a harness asking
+	// about an old transaction must reach history.
 	f.registerSvc(api.ServiceTypeQuery, message.Querier{
 		Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{
 			Logger:    f.getLogger().With("module", "acc-rpc"),
-			Database:  f.getDatabase(),
+			Database:  f.getDatabase().Deep(),
 			Partition: f.networkFactory.id,
 		}),
 	})
@@ -521,7 +560,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	f.registerSvc(api.ServiceTypeEvent, message.EventService{
 		EventService: apiimpl.NewEventService(apiimpl.EventServiceParams{
 			Logger:    f.getLogger().With("module", "acc-rpc"),
-			Database:  f.getDatabase(),
+			Database:  f.getDatabase().Deep(),
 			Partition: f.networkFactory.id,
 			EventBus:  f.getEventBus(),
 		}),
@@ -531,7 +570,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	f.registerSvc(api.ServiceTypeNetwork, message.NetworkService{
 		NetworkService: apiimpl.NewNetworkService(apiimpl.NetworkServiceParams{
 			Logger:    f.getLogger().With("module", "acc-rpc"),
-			Database:  f.getDatabase(),
+			Database:  f.getDatabase().Deep(),
 			Partition: f.networkFactory.id,
 			EventBus:  f.getEventBus(),
 		}),
@@ -541,10 +580,11 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	f.registerSvc(private.ServiceTypeSequencer, &message.Sequencer{
 		Sequencer: apiimpl.NewSequencer(apiimpl.SequencerParams{
 			Logger:       f.getLogger().With("module", "acc-rpc"),
-			Database:     f.getDatabase(),
+			Database:     f.getDatabase().Deep(),
 			EventBus:     f.getEventBus(),
 			Partition:    f.networkFactory.id,
 			ValidatorKey: f.network.PrivValKey,
+			Cache:        f.getSynthCache(),
 		}),
 	})
 
@@ -559,6 +599,8 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Sequencer:     f.getServices().Private(),
 		Querier:       f.getServices(),
 		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
+		Staging:       f.getStaging(),
+		SynthCache:    f.getSynthCache(),
 
 		// Shard user-transaction execution by identity (#4145). Zero is the
 		// serial path; tests opt in via simulator.ExecutionShards, or give
@@ -580,17 +622,17 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 	// Create the conductor. This must happen before creating the executor since
 	// it needs to receive the initial WillChangeGlobals event.
-	enableAnchorHealing := !f.disableAnchorHealing
 	conductor := &crosschain.Conductor{
-		Partition:           &protocol.PartitionInfo{ID: f.networkFactory.id, Type: f.typ},
-		ValidatorKey:        execOpts.Key,
-		Database:            execOpts.Database,
-		Querier:             api.Querier2{Querier: f.getServices()},
-		Dispatcher:          execOpts.NewDispatcher(),
-		Sequencer:           f.getServices().Private(),
-		RunTask:             execOpts.BackgroundTaskLauncher,
-		DropInitialAnchor:   f.dropInitialAnchor,
-		EnableAnchorHealing: &enableAnchorHealing,
+		Partition:         &protocol.PartitionInfo{ID: f.networkFactory.id, Type: f.typ},
+		ValidatorKey:      execOpts.Key,
+		Database:          execOpts.Database,
+		Querier:           api.Querier2{Querier: f.getServices()},
+		Dispatcher:        execOpts.NewDispatcher(),
+		Sequencer:         f.getServices().Private(),
+		Staging:           f.getStaging(),
+		Heals:             f.getHeals(),
+		RunTask:           execOpts.BackgroundTaskLauncher,
+		DropInitialAnchor: f.dropInitialAnchor,
 
 		// Nothing to override here any more. Healing used to be paced by wall
 		// clock, which the simulator had to defeat because it runs dozens of

@@ -7,6 +7,10 @@
 package block
 
 import (
+	"crypto/sha256"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,13 +23,41 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Close ends the block and returns the block state.
+//
+// A block that fails to close is never committed, and until now nothing
+// released it either: the caller holds an execute.Block, which has no
+// Discard, so the batch stayed open, pinning its version of the store. On
+// run 20260915T042428Z the Directory held one open for ten hours on every
+// node after a receipt failed to build, with every commit since staging its
+// pre-images behind it (#4279). What the block holds is released here, on
+// the way out with the error.
 func (block *Block) Close() (execute.BlockState, error) {
+	state, err := block.close()
+	if err != nil {
+		block.discard()
+	}
+	return state, err
+}
+
+// discard releases what the block holds without committing any of it.
+func (block *Block) discard() {
+	if block.Batch != nil {
+		block.Batch.Discard()
+	}
+	if block.cache != nil {
+		block.cache.Discard()
+	}
+	if block.staging != nil {
+		block.staging.Discard()
+	}
+}
+
+func (block *Block) close() (execute.BlockState, error) {
 	if block.fatal != nil {
 		// A shard commit failure may have left a partial write in the
 		// block batch (#4149) — refuse to hash or commit it.
@@ -46,6 +78,13 @@ func (block *Block) Close() (execute.BlockState, error) {
 	err := block.flushStreams()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("flush streams: %w", err)
+	}
+	block.logStreams()
+
+	// Write each anchor's validator signature set, once per anchor (#4224).
+	err = block.flushAnchorSignatures()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("flush anchor signatures: %w", err)
 	}
 
 	// Is it time for a major block?
@@ -69,6 +108,15 @@ func (block *Block) Close() (execute.BlockState, error) {
 
 	// List all of the chains that have been modified. shouldPrepareAnchor
 	// relies on this list so this must be done first.
+	// The block's segment of the root chain begins before its first root
+	// append: every receipt this block builds ends in it (executor spec,
+	// "Dispatch"), and the ledger reads it back only from what it writes.
+	rootHead0, err := block.Batch.Account(m.Describe.Ledger()).RootChain().Inner().Head().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load root chain head: %w", err)
+	}
+	block.rootSeg = &merkle.Segment{First: rootHead0.Count, Before: rootHead0.Copy(), MarkMask: block.Batch.Account(m.Describe.Ledger()).RootChain().Inner().MarkMask()}
+
 	err = m.enumerateModifiedChains(block)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -121,6 +169,10 @@ func (block *Block) Close() (execute.BlockState, error) {
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
 	}
+	// The root chain's state before this block anchors anything: with the
+	// entries this block appends, it is the segment the block's root receipt
+	// is built from, in memory (healing spec, "The cache").
+	rootSeg := block.rootSeg
 
 	// Process chain updates
 	type chainUpdate struct {
@@ -149,13 +201,19 @@ func (block *Block) Close() (execute.BlockState, error) {
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("resolve chain %v of %v: %w", entry.Chain, entry.Account, err)
 		}
-		chain2, err := chain.Get()
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load chain %v of %v: %w", entry.Chain, entry.Account, err)
-		}
-		hash, err := chain2.Entry(int64(entry.Index))
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load entry %d of chain %v of %v: %w", entry.Index, entry.Chain, entry.Account, err)
+		// The hash at the entry was known when it was appended; a chain
+		// appended to outside the block's record (the signature chain, the
+		// BPT chain) is read back for it (#4245).
+		hash, ok := block.State.ChainUpdates.EntryHash(entry.Account, entry.Chain, entry.Index)
+		if !ok {
+			chain2, err := chain.Get()
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("load chain %v of %v: %w", entry.Chain, entry.Account, err)
+			}
+			hash, err = chain2.Entry(int64(entry.Index))
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("load entry %d of chain %v of %v: %w", entry.Index, entry.Chain, entry.Account, err)
+			}
 		}
 		u.Txns = append(u.Txns, hash)
 
@@ -169,15 +227,22 @@ func (block *Block) Close() (execute.BlockState, error) {
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("add anchor to root chain: %w", err)
 		}
+		if block.rootPosOf == nil {
+			block.rootPosOf = map[string]int64{}
+		}
+		block.rootPosOf[key] = rootChain.Height() - 1
 	}
 
-	// Record the block entries
+	// Record the block ledger: one record keyed by block index, and its hash
+	// on the block-ledger chain, so the ledger account's hash commits to what
+	// this block changed. Written once; the cost is the block's, not the
+	// chain's (executor spec, "The block ledger", invariant 9).
 	if block.Executor.globals().Active.ExecutorVersion.V2JiuquanEnabled() {
 		bl := new(database.BlockLedger)
 		bl.Index = block.Index
 		bl.Time = block.Time
 		bl.Entries = block.State.ChainUpdates.Entries
-		err = ledger.BlockLedger().Append(record.NewKey(block.Index), bl)
+		err = recordBlockLedger(ledger, bl)
 	} else {
 		bl := new(protocol.BlockLedger)
 		bl.Url = m.Describe.Ledger().JoinPath(strconv.FormatUint(block.Index, 10))
@@ -216,13 +281,23 @@ func (block *Block) Close() (execute.BlockState, error) {
 		}
 	}
 
-	// Add the synthetic transaction chain to the root chain
-	var synthIndexIndex uint64
+	// Anchor each destination's synthetic chain this block appended to into
+	// the root chain, and remember where (executor spec, "One chain per
+	// pair, one stage per chain").
 	if block.State.Produced > 0 {
-		synthIndexIndex, err = m.anchorSynthChain(block, rootChain)
+		err = m.anchorSynthChains(block, rootChain)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
+	}
+
+	// Complete the cache's block: the root chain is final, so the receipt
+	// from the synthetic chain's anchor to the block's root is built from the
+	// segment this block appended. A block that produced nothing is held too,
+	// so a later lookup distinguishes "nothing to send" from a miss.
+	err = block.completeCacheBlock(rootChain, rootSeg)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Index the root chain
@@ -253,16 +328,23 @@ func (block *Block) Close() (execute.BlockState, error) {
 		}
 	}
 
-	// Add transaction-chain index entries for synthetic transactions
-	for _, e := range block.State.ChainUpdates.SynthEntries {
-		err = indexing.TransactionChain(block.Batch, e.Transaction).Add(&database.TransactionChainEntry{
-			Account:     m.Describe.Synthetic(),
-			Chain:       protocol.MainChain,
-			ChainIndex:  synthIndexIndex,
-			AnchorIndex: rootIndexIndex,
-		})
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("store transaction chain index: %w", err)
+	// Add transaction-chain index entries for synthetic transactions: each
+	// names the destination's chain and that chain's index entry for the block.
+	if block.cacheBlock != nil {
+		for _, e := range block.cacheBlock.Entries {
+			st := block.cacheBlock.Stream(e.Stream)
+			if st == nil {
+				continue
+			}
+			err = indexing.TransactionChain(block.Batch, e.Hash[:]).Add(&database.TransactionChainEntry{
+				Account:     m.Describe.Synthetic(),
+				Chain:       st.ChainName,
+				ChainIndex:  st.IndexIndex,
+				AnchorIndex: rootIndexIndex,
+			})
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("store transaction chain index: %w", err)
+			}
 		}
 	}
 
@@ -332,40 +414,11 @@ func (b *Block) executePostUpdateActions() error {
 
 	switch version {
 	case protocol.ExecutorVersionV2Jiuquan:
-		// For each previously recorded block, add a placeholder to the new
-		// block ledger and delete the BPT entry for the old block ledger
-		// account
-		acct := b.Batch.Account(b.Executor.Describe.Ledger())
-		chain := acct.RootChain().Index()
-		head, err := chain.Head().Get()
-		if err != nil {
-			return errors.UnknownError.WithFormat("load root index chain head: %w", err)
-		}
-
-		var entry protocol.IndexEntry
-		for i := 0; i < int(head.Count); i += 256 {
-			entries, err := chain.Inner().Entries(int64(i), int64(i+256))
-			if err != nil {
-				return errors.UnknownError.WithFormat("load root index chain entries (%d, %d): %w", i, i+255, err)
-			}
-
-			for j, data := range entries {
-				entry = protocol.IndexEntry{}
-				err = entry.UnmarshalBinary(data)
-				if err != nil {
-					return errors.UnknownError.WithFormat("decode root index chain entry %d: %w", i+j, err)
-				}
-				err = acct.BlockLedger().Append(record.NewKey(entry.BlockIndex), &database.BlockLedger{})
-				if err != nil {
-					return errors.UnknownError.WithFormat("add ledger entry for block %d: %w", i+j, err)
-				}
-				blockLedgerAccount := b.Batch.Account(b.Executor.Describe.BlockLedger(entry.BlockIndex))
-				err = b.Batch.BPT().Delete(blockLedgerAccount.Key())
-				if err != nil {
-					return errors.UnknownError.WithFormat("delete BPT entry for block ledger %d: %w", i+j, err)
-				}
-			}
-		}
+		// Nothing to migrate. Blocks recorded before activation stay readable
+		// through LoadBlockLedger's fall-through to the per-block account, and
+		// their BPT entries are not touched here: removing them is a
+		// reorganization of the whole history, which is a separate problem
+		// (executor spec, "The block ledger", activation and history).
 	}
 	return nil
 }
@@ -476,25 +529,37 @@ func getMajorHeight(desc execute.DescribeShim, batch *database.Batch) (uint64, e
 	return entry.BlockIndex, nil
 }
 
-// anchorSynthChain anchors the synthetic transaction chain.
-func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (indexIndex uint64, err error) {
-	url := m.Describe.Synthetic()
-	indexIndex, _, err = addChainAnchor(rootChain, block.Batch.Account(url).MainChain(), block.Index)
-	if err != nil {
-		return 0, errors.UnknownError.Wrap(err)
+// anchorSynthChains anchors each destination's synthetic chain this block
+// appended to into the root chain, records the chain's index entry for the
+// block, and remembers the root position for the block's proofs.
+func (m *Executor) anchorSynthChains(block *Block, rootChain *database.Chain) error {
+	if block.cacheBlock == nil {
+		return nil
 	}
-
-	err = block.Batch.SystemData(m.Describe.PartitionId).SyntheticIndexIndex(block.Index).Put(indexIndex)
-	if err != nil {
-		return 0, errors.UnknownError.WithFormat("store synthetic transaction index index for block: %w", err)
+	record := block.Batch.Account(m.Describe.Synthetic())
+	keys := make([]string, 0, len(block.cacheBlock.Streams))
+	for k := range block.cacheBlock.Streams {
+		keys = append(keys, k)
 	}
-
-	block.State.ChainUpdates.DidUpdateChain(&protocol.BlockEntry{
-		Account: url,
-		Chain:   protocol.MainChain,
-	})
-
-	return indexIndex, nil
+	sort.Strings(keys) // one order on every node: the root chain is hashed
+	for _, k := range keys {
+		st := block.cacheBlock.Streams[k]
+		partition, ok := protocol.ParsePartitionUrl(st.Destination)
+		if !ok {
+			return errors.InternalError.WithFormat("destination %v is not a partition", st.Destination)
+		}
+		indexIndex, _, err := addChainAnchor(rootChain, record.SyntheticChain(partition), block.Index)
+		if err != nil {
+			return errors.UnknownError.WithFormat("anchor synthetic chain to %v: %w", st.Destination, err)
+		}
+		st.IndexIndex = indexIndex
+		st.RootPos = rootChain.Height() - 1 // the anchor just appended
+		block.State.ChainUpdates.DidUpdateChain(&protocol.BlockEntry{
+			Account: m.Describe.Synthetic(),
+			Chain:   st.ChainName,
+		})
+	}
+	return nil
 }
 
 func (b *Block) shouldSendAnchor() bool {
@@ -639,50 +704,50 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	}
 
 	// Load the root chain
-	rootChain, err := block.Batch.Account(x.Describe.Ledger()).RootChain().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
-	}
-
-	// TODO This is pretty inefficient; we're constructing a receipt for every
-	// anchor. If we were more intelligent about it, we could send just the
-	// Merkle state and a list of transactions, though we would need that for
-	// the root chain and each anchor chain.
-
+	// Each receipt is built from memory: this block's segment of the
+	// partition's anchor chain (chain package, ChainUpdates.Segments), from
+	// the received anchor to the chain's new head, joined to this block's
+	// segment of the root chain from where that head's anchor landed. Nothing
+	// is read back from the chains: a receipt built from storage depends on
+	// what the store still answers, and a store's window turned that into
+	// rejected anchors for every run from 20260905T032333Z to 051008Z.
 	anchorUrl := x.Describe.NodeUrl(protocol.AnchorPool)
+	if block.rootSeg == nil {
+		return nil, errors.InternalError.With("the block's root chain segment is missing")
+	}
 	record := block.Batch.Account(anchorUrl)
-
 	for _, received := range block.State.ReceivedAnchors {
-		entry, err := indexing.LoadIndexEntryFromEnd(record.AnchorChain(received.Partition).Root().Index(), 1)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load last entry of %s intermediate anchor index chain: %w", received.Partition, err)
+		name := record.AnchorChain(received.Partition).Root().Name()
+		key := chain.SegmentKey(anchorUrl, name)
+		seg := block.State.ChainUpdates.Segments[key]
+		if seg == nil {
+			return nil, errors.InternalError.WithFormat("no segment for %s anchor chain: the anchor was received without an append", received.Partition)
 		}
-
-		anchorChain, err := record.AnchorChain(received.Partition).Root().Get()
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load %s intermediate anchor chain: %w", received.Partition, err)
+		// This chain's spans folded out of order, so the segment has a hole
+		// and the receipt below would be built over the wrong span (#4279).
+		if err := block.State.ChainUpdates.SegmentError(key); err != nil {
+			return nil, errors.UnknownError.WithFormat("%s intermediate anchor chain: %w", received.Partition, err)
 		}
-
-		rootReceipt, err := rootChain.Receipt(int64(entry.Anchor), rootChain.Height()-1)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("build receipt for entry %d (to %d) of the root chain: %w", entry.Anchor, rootChain.Height()-1, err)
+		rootPos, ok := block.rootPosOf[key]
+		if !ok {
+			return nil, errors.InternalError.WithFormat("%s anchor chain was not anchored into the root chain this block", received.Partition)
 		}
-
-		anchorReceipt, err := anchorChain.Receipt(received.Index, int64(entry.Source))
+		anchorReceipt, err := seg.Receipt(received.Index, seg.Last())
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("build receipt for entry %d (to %d) of %s intermediate anchor chain: %w", received.Index, entry.Source, received.Partition, err)
+			return nil, errors.UnknownError.WithFormat("build receipt for entry %d (to %d) of %s intermediate anchor chain: %w", received.Index, seg.Last(), received.Partition, err)
 		}
-
+		rootReceipt, err := block.rootSeg.Receipt(rootPos, block.rootSeg.Last())
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("build receipt for entry %d (to %d) of the root chain: %w", rootPos, block.rootSeg.Last(), err)
+		}
 		receipt := new(protocol.PartitionAnchorReceipt)
 		receipt.Anchor = received.Body.GetPartitionAnchor()
 		receipt.RootChainReceipt, err = anchorReceipt.Combine(rootReceipt)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("combine receipt for entry %d of %s intermediate anchor chain: %w", received.Index, received.Partition, err)
 		}
-
 		anchor.Receipts = append(anchor.Receipts, receipt)
 	}
-
 	return anchor, nil
 }
 
@@ -781,11 +846,12 @@ func (b *Block) produceBlockMessages() error {
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	err = b.Executor.produceSynthetic(b.Batch, remote, b.Index)
+	b.cacheBlock, err = b.Executor.produceSyntheticInto(b.Batch, remote, b.Index, b.cache)
 	if err != nil {
 		return errors.UnknownError.WithFormat("sequence produced messages: %w", err)
 	}
 	b.State.Produced += len(remote)
+	b.logProduced()
 	b.produced = nil
 
 	return nil
@@ -849,5 +915,70 @@ func (x *Executor) enumerateModifiedChains(block *Block) error {
 	e := block.State.ChainUpdates.Entries
 	sort.Slice(e, func(i, j int) bool { return e[i].Compare(e[j]) < 0 })
 
+	return nil
+}
+
+// recordBlockLedger writes a block's ledger record and appends its hash to the
+// block-ledger chain.
+func recordBlockLedger(ledger *database.Account, bl *database.BlockLedger) error {
+	err := ledger.BlockLedger(bl.Index).Put(bl)
+	if err != nil {
+		return errors.UnknownError.WithFormat("store block ledger: %w", err)
+	}
+	data, err := bl.MarshalBinary()
+	if err != nil {
+		return errors.UnknownError.WithFormat("marshal block ledger: %w", err)
+	}
+	h := sha256.Sum256(data)
+	err = ledger.BlockLedgerChain().Inner().AddEntry(h[:], false)
+	if err != nil {
+		return errors.UnknownError.WithFormat("add block ledger chain entry: %w", err)
+	}
+	return nil
+}
+
+// completeCacheBlock finishes what the producer's cache holds for this block
+// (healing spec, "The cache"): the root receipt from the synthetic chain's
+// anchor to the block's root, built from the root chain segment this block
+// appended, in memory; the Directory anchors the block executed, for the
+// next block's dispatch; and the block record itself, present even when
+// nothing was produced so a lookup can tell "nothing to send" from a miss.
+func (block *Block) completeCacheBlock(rootChain *database.Chain, rootSeg *merkle.Segment) error {
+	blk := block.cacheBlock
+	if blk == nil {
+		blk = &synthcache.Block{Index: block.Index, Streams: map[string]*synthcache.Stream{}}
+		block.cacheBlock = blk
+	}
+	// Extend the block's root segment with what this block appended: its own
+	// writes, read back from the batch, never from history.
+	height := rootChain.Height()
+	for i := rootSeg.First + int64(len(rootSeg.Elements)); i < height; i++ {
+		h, err := rootChain.Entry(i)
+		if err != nil {
+			return errors.UnknownError.WithFormat("load root chain entry %d: %w", i, err)
+		}
+		rootSeg.Append(h)
+	}
+	// Each destination's chain was anchored into the root chain at its own
+	// position; the receipt from there to the block's root completes what a
+	// proof for that destination's entries is built from.
+	for _, st := range blk.Streams {
+		receipt, err := rootSeg.Receipt(st.RootPos, height-1)
+		if err != nil {
+			return errors.UnknownError.WithFormat("build root receipt %d..%d for %v: %w", st.RootPos, height-1, st.Destination, err)
+		}
+		st.RootReceipt = receipt
+	}
+	for _, r := range block.State.ReceivedAnchors {
+		if da, ok := r.Body.(*protocol.DirectoryAnchor); ok {
+			block.cache.AddReceived(da)
+		}
+	}
+	// What each source said it has executed of ours: released from the cache
+	// when the block commits (healing spec, "The cache")
+	for _, a := range block.remoteDelivered {
+		block.cache.Release(a.source, a.delivered)
+	}
+	block.cache.SetBlock(blk)
 	return nil
 }

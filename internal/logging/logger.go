@@ -6,7 +6,10 @@
 
 package logging
 
-import "log/slog"
+import (
+	"context"
+	"log/slog"
+)
 
 // Logger is a CometBFT-free logging interface. This allows packages to use
 // logging without depending on CometBFT. Use CometBFTLogger() to convert to
@@ -42,6 +45,11 @@ func (s *SlogLogger) Error(msg string, keyvals ...interface{}) {
 
 func (s *SlogLogger) With(keyvals ...interface{}) Logger {
 	return &SlogLogger{L: s.L.With(keyvals...)}
+}
+
+// Enabled reports whether the logger emits at the level.
+func (s *SlogLogger) Enabled(ctx context.Context, level slog.Level) bool {
+	return s.L.Enabled(ctx, level)
 }
 
 // Slog returns the underlying slog.Logger.

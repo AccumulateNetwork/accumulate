@@ -65,7 +65,9 @@ func TestStateAtBoundary_EqualsTheRealMarkPoint(t *testing.T) {
 			}
 
 			// And the check that is available on real data
-			require.True(t, VerifyAgainstHead(got, head),
+			open, err := c.OpenSet(head)
+			require.NoError(t, err)
+			require.True(t, VerifyAgainstHead(got, head, open),
 				"n=%d boundary=%d: replay does not reproduce the head", n, boundary)
 		})
 	}
@@ -75,11 +77,13 @@ func TestStateAtBoundary_EqualsTheRealMarkPoint(t *testing.T) {
 // nothing and a bad rebuild would be written to disk.
 func TestVerifyAgainstHead_RejectsAWrongState(t *testing.T) {
 	const markPower, markFreq = 8, 256
-	_, head := buildTo(t, 441, markPower)
+	c, head := buildTo(t, 441, markPower)
 	boundary := BoundaryFor(head.Count, markFreq)
+	open, err := c.OpenSet(head)
+	require.NoError(t, err)
 
 	good := StateAtBoundary(head, boundary)
-	require.True(t, VerifyAgainstHead(good, head))
+	require.True(t, VerifyAgainstHead(good, head, open))
 
 	// A peak corrupted by one bit
 	bad := good.Copy()
@@ -92,14 +96,14 @@ func TestVerifyAgainstHead_RejectsAWrongState(t *testing.T) {
 		}
 		_ = i
 	}
-	require.False(t, VerifyAgainstHead(bad, head), "a corrupted peak must not verify")
+	require.False(t, VerifyAgainstHead(bad, head, open), "a corrupted peak must not verify")
 
 	// The right peaks at the wrong count
 	bad = good.Copy()
 	bad.Count--
-	require.False(t, VerifyAgainstHead(bad, head), "the wrong count must not verify")
+	require.False(t, VerifyAgainstHead(bad, head, open), "the wrong count must not verify")
 
-	require.False(t, VerifyAgainstHead(nil, head))
+	require.False(t, VerifyAgainstHead(nil, head, open))
 }
 
 // A chain that never closed a mark set has nothing to reconstruct, and must
@@ -124,7 +128,9 @@ func TestStateAtBoundary_OtherMarkPowers(t *testing.T) {
 			want, err := c.States(boundary - 1).Get()
 			require.NoError(t, err)
 			require.Equal(t, want.Anchor(), got.Anchor())
-			require.True(t, VerifyAgainstHead(got, head))
+			open, err := c.OpenSet(head)
+			require.NoError(t, err)
+			require.True(t, VerifyAgainstHead(got, head, open))
 		})
 	}
 }

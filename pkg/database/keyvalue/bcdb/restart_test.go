@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -128,17 +128,10 @@ func TestCommit_ReportsItsOwnWriteThroughError(t *testing.T) {
 	// has to be a NEW permanent key, because rewriting an existing one
 	// with a different value moves it to the dynamic layer, which
 	// appends to a file it already holds open.
-	// Permission bits do not stop root, so this test cannot state its
-	// premise there -- and CI runs as root, where it failed for that reason
-	// and not for the store's behaviour.
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores the permission bits this test makes the store fail with")
-	}
-
 	lost := record.NewKey("Message", [32]byte{10}, "Main")
 	perm := filepath.Join(db.kv.ShardDir(shardIndexOf(lost)), "perm")
 	require.NoError(t, os.Chmod(perm, 0o555))
-	defer func() { _ = os.Chmod(perm, 0o755) }()
+	defer os.Chmod(perm, 0o755)
 
 	batch := db.Begin(nil, true)
 	require.NoError(t, batch.Put(lost, []byte("lost")))
@@ -209,9 +202,16 @@ func TestMergeBelow_BoundsThePermanentSegmentCount(t *testing.T) {
 	require.LessOrEqualf(t, after, 2*(2*20)+2*12+16,
 		"files beyond the active window and its unfolded merged blocks must have been merged (got %d)", after)
 
-	// And nothing merged away is lost.
+	// And nothing merged away is lost — to a reader that asks for history.
+	// A shallow reader is told a key past the window is absent; that is the
+	// window's contract (database spec, "Windowed stores"), not a loss.
 	for i := 0; i < blocks; i++ {
-		require.Equal(t, "v", get(t, db, record.NewKey("Message", [32]byte{byte(i), byte(i >> 8), 1}, "Main")))
+		key := record.NewKey("Message", [32]byte{byte(i), byte(i >> 8), 1}, "Main")
+		deep := db.BeginDeep(nil, false)
+		v, err := deep.Get(key)
+		deep.Discard()
+		require.NoError(t, err)
+		require.Equal(t, "v", string(v))
 	}
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2026 The Accumulate Authors
+// Copyright 2025 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -168,12 +168,12 @@ func TestSimulatorRouting(t *testing.T) {
 	// 96,303 times over 200 commits on every BVN engine.
 	deep := map[string]uint64{}
 	for _, db := range dbs {
-		for shape, n := range db.DeepFallbacks() {
+		for shape, n := range db.ShallowMisses() {
 			deep[shape] += n
 		}
 	}
 	for shape, n := range deep {
-		t.Logf("  deep fallback %-40s %d", shape, n)
+		t.Logf("  shallow miss %-40s %d", shape, n)
 	}
 	require.Zero(t, conflicts, "the permanent layer refused a write")
 
