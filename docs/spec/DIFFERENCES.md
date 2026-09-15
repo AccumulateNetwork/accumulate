@@ -247,3 +247,27 @@ blocks (~8.7 MB) and would cover heights 0-16 outright.
 
 **Size**: medium for the cascade store (a format addition and a migration
 question); small for the block cache.
+
+## The account proof API has no specification part
+
+An account proof takes two calls: the account query returns a receipt to its
+partition's state-tree root and says whether a second call is needed
+(`Receipt.Complete`, `Receipt.Partition`), and `ProofService.AnchorReceipt`
+extends that root through the partition's bpt chain to a root-chain anchor and
+binds it to a directory root. Neither is described in the specification,
+because the API part is not written — SPEC.md lists it as a gap.
+
+The rules the implementation holds to, pending that part:
+
+- A BPT is a tree of **current** state, so an account cannot be proved against
+  a past BPT. The proof is built against the current root.
+- On the directory the first call is already complete; elsewhere the root
+  reaches a directory root only after an anchor round trip.
+- `Anchored: false` means the anchor has not arrived yet, and the heartbeat
+  bounds that wait. It must never mean "never" — before the bpt chain was
+  anchored it could, which was the defect (#4276).
+- The default is the oldest receipt that works, so the answer is stable and a
+  caller can record it once.
+
+**Size**: the API part is large and covers far more than proofs. This entry
+exists so the two calls are not mistaken for unspecified behaviour.
