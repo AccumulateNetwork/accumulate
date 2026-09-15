@@ -53,6 +53,11 @@ var (
 	dagbftProvidesRouter    = ioc.Provides[routing.Router](func(s *DAGBFTService) string { return s.Partition.ID })
 
 	dagbftNeedsStorage = ioc.Needs[keyvalue.Beginner](func(s *DAGBFTService) string { return s.Partition.ID })
+
+	// The directory's storage, by name rather than by service, so a partition
+	// can reach it. Every Accumulate node runs the directory alongside its own
+	// BVN, and the proof service needs both halves (#4274).
+	dagbftNeedsDnStorage = ioc.Needs[keyvalue.Beginner, string](func(string) string { return protocol.Directory })
 )
 
 // Requires returns the IOC requirements for DAG-BFT.
@@ -517,6 +522,26 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	if err != nil {
 		return errors.UnknownError.WithFormat("register sequencer service: %w", err)
 	}
+
+	// Create the proof service. It is the public face of what the sequencer
+	// already serves node-to-node, plus the second of the two calls an account
+	// proof takes (#4272). Only the directory can answer that one -- a
+	// partition's BPT root is bound to a directory root, and the binding lives
+	// in the directory's anchor(P)-bpt chain -- but registering it everywhere
+	// keeps the address uniform and lets the service itself say so.
+	proofSvc := &api.ProofService{
+		Ranger:    sequencerSvc,
+		Database:  db,
+		Partition: config.NetworkUrl{URL: protocol.PartitionUrl(s.Partition.ID)},
+		Directory: newDirectoryResolver(s.Partition.ID, db, func() (database.Viewer, error) {
+			store, err := dagbftNeedsDnStorage.Get(inst.services, "")
+			if err != nil {
+				return nil, err
+			}
+			return database.New(store, logger).Deep(), nil
+		}),
+	}
+	registerRpcService(inst, proofSvc.Type().AddressFor(s.Partition.ID), message.ProofService{ProofService: proofSvc})
 
 	return nil
 }

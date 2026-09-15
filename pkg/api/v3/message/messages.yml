@@ -39,6 +39,24 @@ ListSnapshotsRequest:
     - type: api.ListSnapshotsOptions
       marshal-as: reference
 
+MajorHeaderRangeRequest:
+  union: { type: message }
+  fields:
+    - type: api.MajorHeaderRangeOptions
+      marshal-as: reference
+
+MinorRootRangeRequest:
+  union: { type: message }
+  fields:
+    - type: api.MinorRootRangeOptions
+      marshal-as: reference
+
+AnchorReceiptRequest:
+  union: { type: message }
+  fields:
+    - type: api.AnchorReceiptOptions
+      marshal-as: reference
+
 MetricsRequest:
   union: { type: message }
   fields:
@@ -141,6 +159,31 @@ ListSnapshotsResponse:
       repeatable: true
       pointer: true
       marshal-as: reference
+
+MajorHeaderRangeResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.MajorHeaderRecord
+      repeatable: true
+      pointer: true
+      marshal-as: reference
+
+MinorRootRangeResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.MinorRootRecord
+      marshal-as: reference
+      pointer: true
+
+AnchorReceiptResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.AnchorReceiptRecord
+      marshal-as: reference
+      pointer: true
 
 MetricsResponse:
   union: { type: message }

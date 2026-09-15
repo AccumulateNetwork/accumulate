@@ -8,6 +8,14 @@ Receipt:
       type: time
     - name: MajorBlock
       type: uint
+    - name: Complete
+      description: reports that the receipt terminates at a directory root, so there is no second call to make. A BPT is a tree of current state, so an account proof is built against the current BPT and its root reaches the directory only after an anchor round trip, except on the directory itself where it is already local
+      type: bool
+      optional: true
+    - name: Partition
+      description: names whose BPT root the receipt terminates at when it is not complete, so a caller knows what to bind against
+      type: string
+      optional: true
 
 LastBlock:
   fields:
@@ -48,3 +56,96 @@ ServiceAddress:
     - name: Argument
       type: string
       optional: true
+
+# Spine records (#4058 / AIP-59). Defined here so a public proof service can
+# return them; internal/api/private aliases these, so node-to-node callers and
+# the fastsync walker are unaffected.
+# MajorHeaderRecord is one entry of a MajorHeaderRange response (#4058): a
+# major block's index entry plus the quorum-signed anchor of the minor block
+# that closed it.
+MajorHeaderRecord:
+  fields:
+    - name: Index
+      description: is the major block index
+      type: uint
+    - name: Entry
+      description: is the major-block index chain entry
+      type: protocol.IndexEntry
+      marshal-as: reference
+      pointer: true
+    - name: Anchor
+      description: is the partition's self-anchor for the closing minor block
+      type: messaging.SequencedMessage
+      marshal-as: reference
+      pointer: true
+    - name: Signatures
+      description: is the archived validator quorum over the anchor
+      type: protocol.KeySignature
+      marshal-as: union
+      repeatable: true
+    - name: Updates
+      description: is the network-account transactions of this major block's window, proven into the anchor
+      type: NetworkUpdateProof
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+# NetworkUpdateProof is a network-account transaction (e.g. a validator-set
+# change) proven into a spine anchor's root chain anchor (#4058). The receipt
+# binds the transaction hash to the RootChainAnchor of the anchor that closes
+# the major block, so the update inherits the anchor's quorum trust without
+# its own quorum check.
+NetworkUpdateProof:
+  fields:
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+    - name: Receipt
+      type: merkle.Receipt
+      marshal-as: reference
+      pointer: true
+
+# MinorRootRecord binds a run of minor blocks to the verified spine (#4058):
+# the self-anchor covering the end of the run with its archived quorum, the
+# window's network-account updates, and a receipt list proving the root chain
+# extends the client's last verified root to this anchor's root.
+AnchorReceiptRecord:
+  fields:
+    - name: Receipt
+      description: proves the partition's BPT root into a directory root; nil while the anchor is still in flight
+      type: merkle.Receipt
+      marshal-as: reference
+      pointer: true
+      optional: true
+    - name: Anchored
+      description: reports whether the directory has committed the root yet. False is a wait, not a failure, since the anchor carrying it has not arrived
+      type: bool
+    - name: DirectoryBlock
+      description: is the directory block whose root the receipt terminates at, being the block that committed the anchor rather than the current one. The terminus is therefore stable, so the same root queried later returns the same receipt
+      type: uint
+      optional: true
+
+MinorRootRecord:
+  fields:
+    - name: Anchor
+      description: is the partition's self-anchor covering the end of the run
+      type: messaging.SequencedMessage
+      marshal-as: reference
+      pointer: true
+    - name: Signatures
+      description: is the archived validator quorum over the anchor
+      type: protocol.KeySignature
+      marshal-as: union
+      repeatable: true
+    - name: Updates
+      description: is the network-account transactions of the run, proven into the anchor
+      type: NetworkUpdateProof
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: RootProof
+      description: proves the root chain extends the previously verified root to this anchor's root
+      type: merkle.ReceiptList
+      marshal-as: reference
+      pointer: true

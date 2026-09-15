@@ -32,6 +32,7 @@ var _ api.ConsensusService = (*Client)(nil)
 var _ api.NetworkService = (*Client)(nil)
 var _ api.SnapshotService = (*Client)(nil)
 var _ api.MetricsService = (*Client)(nil)
+var _ api.ProofService = (*Client)(nil)
 var _ api.Querier = (*Client)(nil)
 var _ api.Submitter = (*Client)(nil)
 var _ api.Validator = (*Client)(nil)
@@ -63,6 +64,18 @@ func (c *Client) NetworkStatus(ctx context.Context, opts api.NetworkStatusOption
 
 func (c *Client) ListSnapshots(ctx context.Context, opts api.ListSnapshotsOptions) ([]*api.SnapshotInfo, error) {
 	return sendRequestUnmarshalAs[[]*api.SnapshotInfo](c, ctx, "list-snapshots", &message.ListSnapshotsRequest{ListSnapshotsOptions: opts})
+}
+
+func (c *Client) MajorHeaderRange(ctx context.Context, opts api.MajorHeaderRangeOptions) ([]*api.MajorHeaderRecord, error) {
+	return sendRequestUnmarshalAs[[]*api.MajorHeaderRecord](c, ctx, "major-header-range", &message.MajorHeaderRangeRequest{MajorHeaderRangeOptions: opts})
+}
+
+func (c *Client) MinorRootRange(ctx context.Context, opts api.MinorRootRangeOptions) (*api.MinorRootRecord, error) {
+	return sendRequestUnmarshalAs[*api.MinorRootRecord](c, ctx, "minor-root-range", &message.MinorRootRangeRequest{MinorRootRangeOptions: opts})
+}
+
+func (c *Client) AnchorReceipt(ctx context.Context, opts api.AnchorReceiptOptions) (*api.AnchorReceiptRecord, error) {
+	return sendRequestUnmarshalAs[*api.AnchorReceiptRecord](c, ctx, "anchor-receipt", &message.AnchorReceiptRequest{AnchorReceiptOptions: opts})
 }
 
 func (c *Client) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
