@@ -362,6 +362,13 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	if block.BlockTime != nil {
 		r.Receipt.LocalBlockTime = *block.BlockTime
 	}
+
+	// Whether there is a second call to make. The receipt terminates at this
+	// partition's current BPT root; on the directory that is already a
+	// directory root, elsewhere it reaches one only after an anchor round trip
+	// (#4274).
+	r.Receipt.Partition = s.partition.PartitionID()
+	r.Receipt.Complete = s.partition.URL.Equal(protocol.DnUrl())
 	return r, nil
 }
 

@@ -37,6 +37,7 @@ var _ api.NodeService = (*Client)(nil)
 var _ api.ConsensusService = (*Client)(nil)
 var _ api.NetworkService = (*Client)(nil)
 var _ api.SnapshotService = (*Client)(nil)
+var _ api.ProofService = (*Client)(nil)
 var _ api.MetricsService = (*Client)(nil)
 var _ api.Querier = (*Client)(nil)
 var _ api.Submitter = (*Client)(nil)
@@ -89,6 +90,21 @@ func (c *Client) NetworkStatus(ctx context.Context, opts api.NetworkStatusOption
 // ListSnapshots implements [api.SnapshotService.ListSnapshots].
 func (c *Client) ListSnapshots(ctx context.Context, opts api.ListSnapshotsOptions) ([]*api.SnapshotInfo, error) {
 	return c.ForAddress(nil).ListSnapshots(ctx, opts)
+}
+
+// MajorHeaderRange implements [api.ProofService.MajorHeaderRange].
+func (c *Client) MajorHeaderRange(ctx context.Context, opts api.MajorHeaderRangeOptions) ([]*api.MajorHeaderRecord, error) {
+	return c.ForAddress(nil).MajorHeaderRange(ctx, opts)
+}
+
+// MinorRootRange implements [api.ProofService.MinorRootRange].
+func (c *Client) MinorRootRange(ctx context.Context, opts api.MinorRootRangeOptions) (*api.MinorRootRecord, error) {
+	return c.ForAddress(nil).MinorRootRange(ctx, opts)
+}
+
+// AnchorReceipt implements [api.ProofService.AnchorReceipt].
+func (c *Client) AnchorReceipt(ctx context.Context, opts api.AnchorReceiptOptions) (*api.AnchorReceiptRecord, error) {
+	return c.ForAddress(nil).AnchorReceipt(ctx, opts)
 }
 
 // Metrics implements [api.MetricsService.Metrics].
@@ -149,6 +165,22 @@ func (c AddressedClient) ListSnapshots(ctx context.Context, opts api.ListSnapsho
 	// Wrap the request as a ListSnapshotsRequest and expect a
 	// ListSnapshotsResponse, which is unpacked into a ListSnapshots
 	return typedRequest[*ListSnapshotsResponse, []*api.SnapshotInfo](c, ctx, &ListSnapshotsRequest{ListSnapshotsOptions: opts})
+}
+
+// MajorHeaderRange implements [api.ProofService.MajorHeaderRange].
+func (c AddressedClient) MajorHeaderRange(ctx context.Context, opts api.MajorHeaderRangeOptions) ([]*api.MajorHeaderRecord, error) {
+	return typedRequest[*MajorHeaderRangeResponse, []*api.MajorHeaderRecord](c, ctx, &MajorHeaderRangeRequest{MajorHeaderRangeOptions: opts})
+}
+
+// MinorRootRange implements [api.ProofService.MinorRootRange].
+func (c AddressedClient) MinorRootRange(ctx context.Context, opts api.MinorRootRangeOptions) (*api.MinorRootRecord, error) {
+	return typedRequest[*MinorRootRangeResponse, *api.MinorRootRecord](c, ctx, &MinorRootRangeRequest{MinorRootRangeOptions: opts})
+}
+
+// AnchorReceipt implements [api.ProofService.AnchorReceipt] — the second of the
+// two calls an account proof takes.
+func (c AddressedClient) AnchorReceipt(ctx context.Context, opts api.AnchorReceiptOptions) (*api.AnchorReceiptRecord, error) {
+	return typedRequest[*AnchorReceiptResponse, *api.AnchorReceiptRecord](c, ctx, &AnchorReceiptRequest{AnchorReceiptOptions: opts})
 }
 
 // Metrics implements [api.MetricsService.Metrics].
@@ -234,11 +266,15 @@ func (r *ConsensusStatusResponse) rval() *api.ConsensusStatus { return r.Value }
 func (r *NetworkStatusResponse) rval() *api.NetworkStatus     { return r.Value }             //nolint:unused
 func (r *ListSnapshotsResponse) rval() []*api.SnapshotInfo    { return r.Value }             //nolint:unused
 func (r *MetricsResponse) rval() *api.Metrics                 { return r.Value }             //nolint:unused
-func (r *RecordResponse) rval() api.Record                    { return r.Value }             //nolint:unused
-func (r *SubmitResponse) rval() []*api.Submission             { return unNilArray(r.Value) } //nolint:unused
-func (r *ValidateResponse) rval() []*api.Submission           { return unNilArray(r.Value) } //nolint:unused
-func (r *FaucetResponse) rval() *api.Submission               { return r.Value }             //nolint:unused
-func (r *EventMessage) rval() []api.Event                     { return unNilArray(r.Value) } //nolint:unused
+func (r *MinorRootRangeResponse) rval() *api.MinorRootRecord  { return r.Value }             //nolint:unused
+
+func (r *MajorHeaderRangeResponse) rval() []*api.MajorHeaderRecord { return unNilArray(r.Value) } //nolint:unused
+func (r *AnchorReceiptResponse) rval() *api.AnchorReceiptRecord    { return r.Value }             //nolint:unused
+func (r *RecordResponse) rval() api.Record                         { return r.Value }             //nolint:unused
+func (r *SubmitResponse) rval() []*api.Submission                  { return unNilArray(r.Value) } //nolint:unused
+func (r *ValidateResponse) rval() []*api.Submission                { return unNilArray(r.Value) } //nolint:unused
+func (r *FaucetResponse) rval() *api.Submission                    { return r.Value }             //nolint:unused
+func (r *EventMessage) rval() []api.Event                          { return unNilArray(r.Value) } //nolint:unused
 
 func (r *PrivateSequenceResponse) rval() *api.MessageRecord[messaging.Message] { //nolint:unused
 	return r.Value
