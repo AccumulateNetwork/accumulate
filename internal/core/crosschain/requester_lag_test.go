@@ -171,7 +171,17 @@ func TestRequester_StrandedStream(t *testing.T) {
 	c.requestStream(context.Background(), staged, block+healCadence, reqSource, ask)
 	require.Empty(t, c.requester.Stranded(), "Delivered moved past the stranded point")
 	require.Equal(t, 0.0, gaugeValue(t, g))
-	require.Equal(t, strandedAfter+1, asks, "asked again once it moved")
+
+	// It does not ask on that activation. Delivered having just moved is
+	// what a draining stream looks like, and the catch-up probe is for the
+	// opposite case; it waits for the stream to go still again (probeAfter,
+	// #4280). Recovery is not lost, only deferred by a few activations.
+	require.Equal(t, strandedAfter, asks, "Delivered just moved: draining, not stuck")
+	for i := uint64(0); i < probeAfter; i++ {
+		block += healCadence
+		c.requestStream(context.Background(), staged, block+healCadence, reqSource, ask)
+	}
+	require.Equal(t, strandedAfter+1, asks, "still again at the new Delivered: asked")
 }
 
 func gaugeValue(t *testing.T, g prometheus.Gauge) float64 {

@@ -90,12 +90,74 @@ func TestDecide_TwoKindsOfGap(t *testing.T) {
 	require.Equal(t, [][2]uint64{{1, 2}}, r.decide(tx, reqStream, 0, 8+healPatience*healCadence), "patience over: asked again")
 
 	// Delivered past everything held: nothing above Delivered is known, so
-	// the span above it is asked for whole, once per patience.
-	probe := r.decide(tx, reqStream, 4, 8+(healPatience+1)*healCadence)
-	require.Equal(t, [][2]uint64{{5, 4 + protocol.MaxReceiptListElements}}, probe, "an empty stream asks for the span above Delivered")
-	r.asked(reqStream, [2]uint64{5, 5}, 8+(healPatience+1)*healCadence)
-	require.Empty(t, r.decide(tx, reqStream, 4, 8+(healPatience+2)*healCadence), "asked: patience")
-	require.NotEmpty(t, r.decide(tx, reqStream, 4, 8+(2*healPatience+2)*healCadence), "patience over: asked again")
+	// the span above it is asked for whole -- but only once the stream has
+	// been empty AND still for probeAfter activations (#4280). The first
+	// sightings are silent.
+	for i := uint64(0); i < probeAfter-1; i++ {
+		require.Empty(t, r.decide(tx, reqStream, 4, 8+(healPatience+1+i)*healCadence),
+			"empty but Delivered only just arrived there: drained, not stuck")
+	}
+	probe := r.decide(tx, reqStream, 4, 8+(healPatience+probeAfter)*healCadence)
+	require.Equal(t, [][2]uint64{{5, 4 + protocol.MaxReceiptListElements}}, probe, "a stuck empty stream asks for the span above Delivered")
+	r.asked(reqStream, [2]uint64{5, 5}, 8+(healPatience+probeAfter)*healCadence)
+	require.Empty(t, r.decide(tx, reqStream, 4, 8+(healPatience+probeAfter+1)*healCadence), "asked: patience")
+	require.NotEmpty(t, r.decide(tx, reqStream, 4, 8+(2*healPatience+probeAfter+1)*healCadence), "patience over: asked again")
+}
+
+// A stream that is merely draining never probes. Delivered moves on every
+// activation, which is what "the source is delivering" looks like, and the
+// catch-up probe is for the opposite case -- a package lost whole, which
+// stops Delivered dead.
+//
+// Run 20260915T211229Z probed on sight: with no faults induced and nothing
+// dropped, healing pulled 743,000 entries against 23,000 requests, 56% of
+// all traffic those streams had ever carried, to cover ~1% in flight and
+// arriving anyway (#4280).
+func TestDecide_ADrainingStreamNeverProbes(t *testing.T) {
+	s := reqStaging(t, map[uint64]bool{})
+	var r healRequester
+	tx := s.Begin()
+	defer tx.Discard()
+
+	// Twenty activations, Delivered advancing each time: nothing is asked.
+	for i := uint64(0); i < 20; i++ {
+		require.Empty(t, r.decide(tx, reqStream, 100+i, 8+i*healCadence),
+			"activation %d: Delivered is moving, so the stream is draining", i)
+	}
+
+	// It stops. Now the probe is due, and fires once it has been still
+	// for probeAfter activations.
+	stuck := uint64(120)
+	for i := uint64(0); i < probeAfter-1; i++ {
+		require.Empty(t, r.decide(tx, reqStream, stuck, 200+i*healCadence), "still settling")
+	}
+	require.Equal(t, [][2]uint64{{stuck + 1, stuck + protocol.MaxReceiptListElements}},
+		r.decide(tx, reqStream, stuck, 200+(probeAfter-1)*healCadence),
+		"Delivered has stopped: a lost package looks like this")
+}
+
+// Anything held above Delivered is not the empty case, so the idle run is
+// forgotten: a stream that fills again must serve out a fresh stillness
+// before it can probe.
+func TestDecide_HoldingSomethingResetsTheProbe(t *testing.T) {
+	var r healRequester
+	empty := reqStaging(t, map[uint64]bool{})
+	etx := empty.Begin()
+	defer etx.Discard()
+
+	for i := uint64(0); i < probeAfter-1; i++ {
+		require.Empty(t, r.decide(etx, reqStream, 4, 8+i*healCadence))
+	}
+
+	// An entry arrives above Delivered: not the empty case at all.
+	full := reqStaging(t, map[uint64]bool{6: false})
+	ftx := full.Begin()
+	defer ftx.Discard()
+	require.NotEmpty(t, r.decide(ftx, reqStream, 4, 8+probeAfter*healCadence), "the hole at 5 is a gap")
+
+	// Back to empty: the earlier stillness does not count.
+	require.Empty(t, r.decide(etx, reqStream, 4, 8+(probeAfter+1)*healCadence),
+		"the idle run restarts once the stream has held something")
 }
 
 // A validated entry whose proof arrived with it is not a gap even when it

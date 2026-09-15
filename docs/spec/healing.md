@@ -418,3 +418,30 @@ on the node's metrics endpoint, as are every row of the counting table above.
 
 Where the implementation departs from this specification, see
 [DIFFERENCES.md](DIFFERENCES.md).
+
+### A drained stream is not a lost package
+
+A stream holding nothing above `Delivered` is the signature of a package lost
+whole — entries and proof travel together, so losing both leaves nothing held
+and nothing else would ever see it. The requester therefore asks the source
+for the span above `Delivered`.
+
+**But a stream that has merely drained looks identical at that instant**, and
+on a network where delivery keeps up that is most of the time. Probing on
+sight made a healthy network heal continuously: run `20260915T211229Z`, with
+no faults induced and nothing dropped by the harness, pulled 743,000 entries
+against 23,000 requests — about 56% of all traffic those streams had ever
+carried, to cover the ~1% that was in flight and arriving anyway (#4280). The
+pulls consumed the capacity the lagging executor needed, which widened the
+window the next probe would pull.
+
+The two are told apart by what a lost package actually does: it stops
+`Delivered`. So the probe waits for the stream to be empty **and still** for
+`probeAfter` activations. A draining stream, whose `Delivered` moves, never
+probes; anything held above `Delivered` is not the empty case at all and
+forgets the run. A genuinely wedged stream is probed within a few activations,
+well inside the window a lost package needs.
+
+This is the same failure the waiting-proof exclusion above addresses, reached
+by a different path: healing that answers normal lag rather than loss, and
+whose answer makes the lag worse.

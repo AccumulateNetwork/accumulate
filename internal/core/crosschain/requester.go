@@ -61,6 +61,25 @@ const (
 	// requests all failed is left alone.
 	maxSourceBackoff = 8
 
+	// probeAfter is how many consecutive activations a stream must hold
+	// nothing above Delivered, WITHOUT Delivered moving, before the
+	// catch-up probe asks the source for the span above it.
+	//
+	// The probe exists for a package lost whole -- entries and proof
+	// together -- which leaves nothing held and which nothing else would
+	// ever see. But "nothing held above Delivered" is also the ordinary
+	// state of a stream that has just drained, so probing on sight made a
+	// healthy network heal continuously: run 20260915T211229Z, no faults
+	// induced and nothing dropped, pulled 743,000 entries against 23,000
+	// requests -- 56% of all traffic those streams had ever carried, to
+	// cover ~1% that was in flight and arriving anyway (#4280).
+	//
+	// A lost package leaves the stream STUCK, so Delivered stops. Waiting
+	// for that tells the two apart. Three activations is twelve blocks,
+	// well inside the window a lost package needs and far outside the
+	// moment a drained stream spends empty.
+	probeAfter = 3
+
 	// strandedAfter is how many consecutive activations a stream's requests
 	// must all come back NotFound — the span is past the source's cache —
 	// before the stream is stranded: the back-off doubles to its cap over
@@ -107,6 +126,16 @@ type healRequester struct {
 	failures map[string]uint
 	misses   map[string]uint       // stream -> consecutive activations answered only NotFound
 	stranded map[string]strandedAt // stream -> where it was stranded
+	idle     map[string]idleAt     // stream -> how long it has held nothing above Delivered
+}
+
+// idleAt is a stream that holds nothing above Delivered: where Delivered
+// stood when that began, and how many activations it has held since. A
+// stream whose Delivered moves is draining normally and starts over; one
+// whose Delivered sits still is a candidate for the catch-up probe (#4280).
+type idleAt struct {
+	delivered   uint64
+	activations uint
 }
 
 // strandedAt is where a stream stood when it was stranded: Delivered then.
@@ -472,18 +501,28 @@ func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.Stream
 	}
 	r.forget(stream, delivered)
 	if sighted <= delivered {
-		// Nothing held above Delivered: every validating hash above it is
-		// missing, so the span above Delivered is asked for whole. The source
-		// answers with what it has dispatched, or that it has produced
-		// nothing there yet. A lost package -- entries and proof together --
-		// leaves exactly this, and nothing else would ever see it.
+		// Nothing held above Delivered. A lost package -- entries and proof
+		// together -- leaves exactly this and nothing else would ever see
+		// it, so the span above Delivered is asked for whole. But a stream
+		// that has merely drained looks identical at this instant, so the
+		// probe waits for Delivered to STOP moving first (probeAfter,
+		// #4280); a lost package stops it, normal delivery does not.
 		r.mu.Lock()
 		defer r.mu.Unlock()
+		if !r.idleLongEnough(streamKey(stream), delivered) {
+			// Drained, not stuck: Delivered is still moving, so the source
+			// is delivering and there is nothing to ask for (#4280).
+			return nil
+		}
 		if askedRecently(r.asks[streamKey(stream)], delivered+1, blockIndex) {
 			return nil
 		}
 		return [][2]uint64{{delivered + 1, delivered + protocol.MaxReceiptListElements}}
 	}
+	// Something is held above Delivered, so this is not the empty case the
+	// probe is for; forget any idle run (#4280).
+	r.noLongerIdle(streamKey(stream))
+
 	through := sighted
 	if through > delivered+healHorizon {
 		through = delivered + healHorizon
@@ -541,6 +580,33 @@ func isSyntheticStream(id execute.StreamID) bool {
 
 // forget drops what a stream's memory holds at or below Delivered, and what
 // has aged past patience; what was asked above Delivered keeps its asked-at.
+// idleLongEnough counts one activation on which a stream held nothing above
+// Delivered, and reports whether it has done so probeAfter times running
+// without Delivered moving. Delivered moving resets the count: the stream is
+// draining, which is the opposite of the case the probe is for. The caller
+// holds r.mu.
+func (r *healRequester) idleLongEnough(key string, delivered uint64) bool {
+	if r.idle == nil {
+		r.idle = map[string]idleAt{}
+	}
+	at, ok := r.idle[key]
+	if !ok || at.delivered != delivered {
+		r.idle[key] = idleAt{delivered: delivered, activations: 1}
+		return false
+	}
+	at.activations++
+	r.idle[key] = at
+	return at.activations >= probeAfter
+}
+
+// noLongerIdle forgets a stream's idle count: something is held above
+// Delivered, so the stream is not the empty-and-stuck case at all.
+func (r *healRequester) noLongerIdle(key string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.idle, key)
+}
+
 func (r *healRequester) forget(stream execute.StreamID, delivered uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
