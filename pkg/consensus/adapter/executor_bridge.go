@@ -9,6 +9,7 @@ package adapter
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
 	"log/slog"
 	"os"
 	"strings"
@@ -349,7 +350,16 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	// One line per block that carried anything, so "what reached execution"
 	// can be compared against "what was submitted" without grepping. Silent
 	// when a block is empty, which is most of them on an idle network.
+	// Exported as well as logged: the log answers this for one block to
+	// someone grepping, the counters answer it for the run to anything
+	// watching (#4132, and the soak board that could not show it).
 	if arrived > 0 {
+		m := metrics.HandoffTotal.MustCurryWith(prometheus.Labels{"partition": b.partitionID})
+		m.WithLabelValues("arrived").Add(float64(arrived))
+		m.WithLabelValues("executed").Add(float64(txCount))
+		m.WithLabelValues("unmarshal-failed").Add(float64(unmarshalFailed))
+		m.WithLabelValues("process-failed").Add(float64(processFailed))
+		m.WithLabelValues("status-failed").Add(float64(statusFailed))
 		slog.Info("Block execution accounting",
 			"block", params.Index,
 			"round", params.LeaderRound,

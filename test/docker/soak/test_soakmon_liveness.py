@@ -68,9 +68,36 @@ class ProgressTest(unittest.TestCase):
         self.assertEqual("unknown", pg["BVN3"]["state"])
         self.assertEqual("degraded", soakmon.overall_status(True, pg))
 
-    def test_api_down_beats_everything(self):
+    def test_api_down_with_no_evidence_of_progress_is_down(self):
+        # One sample: the height was readable once, which is not progress.
+        # The progress tables are module state; a partition another test
+        # advanced would otherwise still count as advancing here.
+        soakmon._PROGRESS.clear()
+        soakmon._RATE.clear()
+        soakmon._FIRST.clear()
         pg = soakmon.assess_progress({"Directory": 121}, 1000.0)
         self.assertEqual("down", soakmon.overall_status(False, pg))
+
+    def test_api_down_over_advancing_partitions_is_degraded_not_down(self):
+        """The monitor probed a port nothing served -- topology.BASE_HOST_PORT
+        had moved -- and painted "network down" over three partitions
+        advancing at 0.9 s/block. A verdict the heights beside it disprove is
+        an impossible state (REPORTING-SPEC 1a); losing reach is degraded."""
+        soakmon._PROGRESS.clear()
+        soakmon._RATE.clear()
+        soakmon._FIRST.clear()
+        soakmon.assess_progress({"Directory": 100, "BVN1": 100}, 1000.0)
+        pg = soakmon.assess_progress({"Directory": 104, "BVN1": 104}, 1004.0)
+        self.assertTrue(all(v["blocksSeen"] for v in pg.values()))
+        self.assertEqual("degraded", soakmon.overall_status(False, pg))
+        self.assertEqual("up", soakmon.overall_status(True, pg))
+
+    def test_a_stalled_partition_is_stalled_even_when_unreachable(self):
+        soakmon._PROGRESS.clear()
+        soakmon.assess_progress({"Directory": 100}, 1000.0)
+        pg = soakmon.assess_progress({"Directory": 100}, 2000.0)
+        self.assertEqual("stalled", pg["Directory"]["state"])
+        self.assertEqual("stalled", soakmon.overall_status(False, pg))
 
     def test_stall_clock_reports_elapsed_time(self):
         soakmon.assess_progress({"Directory": 121}, 1000.0)

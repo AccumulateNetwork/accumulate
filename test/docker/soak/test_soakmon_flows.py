@@ -62,3 +62,39 @@ class RegressionGuard(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RunLongRates(unittest.TestCase):
+    """A window derivative says what the network is doing now; the run-long
+    average says what the run achieved, which is the figure a result is
+    quoted as. The two are stated separately, with what each is measured
+    over, so neither can be read as the other."""
+
+    def setUp(self):
+        soakmon._RATE_BASE.clear()
+
+    def test_totals_are_the_sum_and_say_what_they_are_over(self):
+        # First tick establishes the base for the produced counters.
+        soakmon.observe_rates(1000.0, 0, 100, 10, 0.0)
+        r = soakmon.observe_rates(1100.0, 50000, 20100, 2010, 100.0)
+        self.assertEqual(500.0, r["userAvg"], "generated over the loadgen's own clock")
+        self.assertEqual(200.0, r["synAvg"], "produced counted from the monitor's first look")
+        self.assertEqual(20.0, r["anchorAvg"])
+        self.assertEqual(720.0, r["totalAvg"], "total is what the network processes")
+        self.assertEqual(100.0, r["userOverSec"])
+        self.assertEqual(100.0, r["producedOverSec"])
+
+    def test_the_two_clocks_are_not_conflated(self):
+        # A monitor that restarts mid-run counts produced from its own
+        # start, while the loadgen's elapsed keeps running: the spans
+        # differ and both are reported.
+        soakmon.observe_rates(5000.0, 0, 1000, 100, 3600.0)
+        r = soakmon.observe_rates(5100.0, 1800000, 3000, 300, 3700.0)
+        self.assertEqual(3700.0, r["userOverSec"])
+        self.assertEqual(100.0, r["producedOverSec"])
+        self.assertEqual(20.0, r["synAvg"], "2000 produced over the 100s it watched")
+
+    def test_nothing_yet_is_not_zero(self):
+        r = soakmon.observe_rates(1000.0, 0, 0, 0, 0.0)
+        self.assertIsNone(r["userAvg"], "no elapsed time is not a rate of zero")
+        self.assertIsNone(r["totalAvg"])

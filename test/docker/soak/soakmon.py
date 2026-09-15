@@ -34,7 +34,14 @@ COMPOSE = os.path.join(HERE, "docker-compose.yml")
 RUN_DIR = os.environ.get("RUN_DIR") or HERE
 STATS = os.path.join(RUN_DIR, "loadgen-stats.json")
 CHAOS = os.path.join(RUN_DIR, "chaos.log")
-API = "http://localhost:26660/v3"
+# The API endpoint, from the topology rather than a constant. This was
+# hardcoded to 26660 while topology.BASE_HOST_PORT moved to 26680, so the
+# reachability probe hit a port nothing serves and the board reported
+# "network down" over three partitions advancing at 0.9 s/block
+# (REPORTING-SPEC 1: displayed means measured). Every other reading came
+# from topology-derived ports and was correct, which is what made the
+# contradiction visible.
+API = "http://localhost:%d/v3" % topology.node_ports()[0]
 PORT = int(os.environ.get("PORT", "8099"))
 
 # Say something on the way out.
@@ -122,8 +129,15 @@ MEM_METRICS = {
 }
 _MEM_LAST = {}   # node -> {field: value, "t": when}; for GC/s and GC-CPU rates
 _MEM_CSV_T = [0.0]
-HIST_MAX = 600  # ~10 min of 1s ticks kept for the sparklines' recent window
-FLOW_HIST_EVERY = 10  # samples between flow-matrix snapshots in the history
+# The rolling history: an hour at one sample a second. It was ten minutes,
+# which is shorter than most things worth watching -- a memory trend, a
+# healing burst after a chaos restart, the shape of a recovery -- and the
+# sparklines could not show them. Each sample is a handful of integers; the
+# flow matrix, which is ~20x the rest, is snapshotted every
+# FLOW_HIST_EVERY samples instead of every one, so the payload grows with
+# the window rather than with the window times the matrix.
+HIST_MAX = 3600
+FLOW_HIST_EVERY = 30
 # A partition whose height has not moved for this long is stalled. Matches the
 # node-side watchdog so the dashboard and the logs agree on the word.
 STALL_SECS = 10
@@ -143,7 +157,7 @@ def sh(args, timeout=25):
         return ""
 
 
-def query_all_nodes(params, ports=None):
+def query_all_nodes(params, ports=None, method="query"):
     """Ask EVERY node the same query, in parallel, and return each answer's
     `result`. A node that does not answer contributes nothing.
 
@@ -158,7 +172,7 @@ def query_all_nodes(params, ports=None):
     and a higher value (#4279)."""
     ports = ports or NODE_PORTS
     out, lock, threads = [], threading.Lock(), []
-    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "query", "params": params})
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
 
     def one(port):
         txt = sh(["curl", "-s", "-m", "6", "-X", "POST", "http://localhost:%d/v3" % port,
@@ -229,6 +243,33 @@ def sequence_regressions(prev, cur):
     return out
 
 
+def observe_rates(now, generated, syn, anc, elapsed):
+    """Rates per second: over the whole run, and the totals behind them.
+
+    `elapsed` is the load generator's own clock, which survives a monitor
+    restart; the monitor's own base is used for the produced counters,
+    which it can only count from when it started looking. Both are stated
+    so a reader can tell one from the other (REPORTING-SPEC 1).
+    """
+    if not _RATE_BASE:
+        _RATE_BASE.update({"t": now, "sProd": syn or 0, "aProd": anc or 0})
+    span = now - _RATE_BASE["t"]
+    def per_sec(delta, over):
+        return round(delta / over, 2) if over and over > 0 and delta >= 0 else None
+    user = per_sec(generated or 0, elapsed or 0)
+    s = per_sec((syn or 0) - _RATE_BASE["sProd"], span)
+    a = per_sec((anc or 0) - _RATE_BASE["aProd"], span)
+    total = None
+    if user is not None and s is not None and a is not None:
+        total = round(user + s + a, 2)
+    return {
+        "userAvg": user, "synAvg": s, "anchorAvg": a, "totalAvg": total,
+        # What the averages are over, so neither is mistaken for the other.
+        "userOverSec": round(elapsed or 0, 1), "producedOverSec": round(span, 1),
+        "generated": generated or 0, "synProduced": syn or 0, "anchorProduced": anc or 0,
+    }
+
+
 def compact_flows(flows):
     """The matrix as [sent, recv, deliv] per cell, for the history."""
     return {k: {s: {d: [c.get("sent", 0), c.get("recv", 0), c.get("deliv", 0)] for d, c in row.items()}
@@ -261,15 +302,22 @@ def read_stats():
 
 
 def collect_height():
-    r = curl_api("query", {"scope": "acc://dn.acme/ledger"})
+    """The DN height, and whether ANY node answers.
+
+    Reachability is asked of every node, not one: a single node that is
+    down, restarting under chaos, or paused is not the network being
+    unreachable, and reporting it as such put a red badge over a healthy
+    run. `nodes` says how many of them answered, so a thinning fleet is
+    visible rather than binary.
+    """
     h = None
     try:
-        # the DN system-ledger's index is the DN block height
-        h = int(r["result"]["account"]["index"])
+        h = int(curl_api("query", {"scope": "acc://dn.acme/ledger"})["result"]["account"]["index"])
     except Exception:
         pass
-    up = curl_api("network-status", {"partition": "Directory"}) is not None
-    return {"api": "up" if up else "down", "dnHeight": h}
+    answers = query_all_nodes({"partition": "Directory"}, method="network-status")
+    return {"api": "up" if answers else "down", "dnHeight": h,
+            "nodes": len(answers), "ofNodes": len(NODE_PORTS)}
 
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -325,6 +373,12 @@ _RATE = {}  # part -> [(t, height)] rolling window for the block-rate display
 _FIRST = {}  # part -> (t, height) at first sighting, for the run-long average
 _RSS_ALARM = {}  # last RSS-alarm time, rate-limited to one per 5 min
 _FLOW_HIST = {}  # (kind,src,dst) -> [(t, sent, recv)] for channel-lag rates
+# The first sample's cumulative counters and its time, so a rate can be
+# stated over the whole run and not only over the rolling window. A window
+# derivative answers "what is it doing now"; the run-long average answers
+# "what has this run achieved", which is the number a result is quoted as
+# and the one a restarted monitor must not lose.
+_RATE_BASE = {}
 
 
 def assess_progress(heights, now):
@@ -398,13 +452,21 @@ def overall_status(api_up, progress):
     which is how a dashboard showed "network up" over a Directory frozen at
     block 121 with zero anchors, zero synthetics and zero tx/s.
     """
-    if not api_up:
-        return "down"
     states = [v["state"] for v in progress.values()]
-    if not states or all(st == "unknown" for st in states):
-        return "down"
+    # A stalled partition is the finding, whether or not the API answers.
     if any(st == "stalled" for st in states):
         return "stalled"
+    if not api_up:
+        # No node answered. If partitions have been SEEN TO ADVANCE, the
+        # monitor has lost its reach, not the network its health -- and
+        # "down" beside three heights climbing at 0.9 s/block is an
+        # impossible state (REPORTING-SPEC 1a). Advancing, not merely
+        # sighted: one sample proves a height was readable once, which is
+        # no evidence of progress and no reason to soften the verdict.
+        advancing = any(v.get("blocksSeen") for v in progress.values())
+        return "degraded" if advancing else "down"
+    if not states or all(st == "unknown" for st in states):
+        return "down"
     if any(st == "unknown" for st in states):
         return "degraded"
     return "up"
@@ -750,6 +812,42 @@ def heals_from(per):
     return out
 
 
+HANDOFF = ("arrived", "executed", "unmarshal-failed", "process-failed", "status-failed")
+
+
+def handoff_from(per):
+    """What became of transactions at the consensus/execution hand-off.
+
+    `arrived` minus `executed` is what did not execute -- the question
+    #4132 exists to answer, and the one a board could not show while the
+    accounting lived only in a per-block log line. Summed over the fleet:
+    every validator executes the same block, so the ABSOLUTE numbers are
+    a fleet multiple, but the gap is what matters and it scales the same.
+    """
+    out = {o: 0 for o in HANDOFF}
+    seen = False
+    for rows in (per or {}).values():
+        for name, lab, v in rows or ():
+            if name != "accumulate_dagbft_handoff_transactions_total":
+                continue
+            try:
+                n = int(float(v))
+            except (TypeError, ValueError):
+                continue
+            o = (lab if isinstance(lab, dict) else {}).get("outcome", "")
+            out[o] = out.get(o, 0) + n
+            seen = True
+    if not seen:
+        return {"measured": False, "arrived": None, "executed": None, "unexecuted": None}
+    out["measured"] = True
+    out["unexecuted"] = max(0, out["arrived"] - out["executed"])
+    # Accounted for: the three failure outcomes. Anything left is loss with
+    # no recorded reason, which is the alarming case.
+    named = out["unmarshal-failed"] + out["process-failed"] + out["status-failed"]
+    out["unaccounted"] = max(0, out["unexecuted"] - max(0, named - out["status-failed"]))
+    return out
+
+
 def wedges_from(per):
     """Dropped cross-partition envelopes, from the dispatcher's own counter
     (reason: deadline or queue-full) and, when chaos is on, the debug drop
@@ -796,6 +894,7 @@ def collect_metrics():
 
     heals = heals_from(per)
     drops = wedges_from(per)
+    handoff = handoff_from(per)
 
     # Per-node RSS and goroutines, and the memory detail behind them. An
     # unbounded goroutine count is what #4089 looked like before anyone noticed
@@ -850,7 +949,7 @@ def collect_metrics():
     # weeks; it filled nothing and fell through every sample.
     flows, syn_prod, anc_prod = collect_flows_api()
 
-    return {"heals": heals, "wedges": drops, "flows": flows, "life": life, "exec": exec_from(per),
+    return {"heals": heals, "wedges": drops, "handoff": handoff, "flows": flows, "life": life, "exec": exec_from(per),
             "synProduced": syn_prod, "ancProduced": anc_prod, "nodeStats": nodes,
             "nodes": len(cs), "scraped": sum(1 for r in per.values() if r)}
 
@@ -1222,6 +1321,7 @@ def _collect_once(last, hist):
             m = collect_metrics()
             upd["heals"] = m["heals"]
             upd["wedges"] = m["wedges"]
+            upd["handoff"] = m.get("handoff", {})
             upd["synProduced"] = m["synProduced"]
             upd["ancProduced"] = m["ancProduced"]
             upd["life"] = m.get("life", {})
@@ -1262,6 +1362,9 @@ def _collect_once(last, hist):
             lg = STATE.get("loadgen") or {}
             w = STATE.get("wedges") or {}
             h = STATE.get("heals") or {}
+            STATE["rates"] = observe_rates(
+                now, lg.get("generated", 0), STATE.get("synProduced", 0),
+                STATE.get("ancProduced", 0), lg.get("elapsedSec", 0))
             hist.append({"t": int(now),
                          "generated": lg.get("generated", 0),
                          "wedges": w.get("total") or 0,
@@ -1380,11 +1483,19 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 <div class=panel style="padding:9px 12px">
   <div class=strip>
     <div class=sgrp><span class=sh>tx/s</span>
+      <b id=rtotal>—</b><span class=sl>total now</span>
       <b id=ruser>—</b><span class=sl>user</span>
       <span class=mut id=rtgt>—</span><span class=sl>target</span>
       <b id=rsyn>—</b><span class=sl>syn</span>
       <b id=ranc>—</b><span class=sl>anc</span>
       <span class=mut id=rratio>—</span><span class=sl>syn/user</span>
+    </div>
+    <div class=sgrp><span class=sh>run average</span>
+      <b id=ratotal>—</b><span class=sl>total</span>
+      <b id=rauser>—</b><span class=sl>user</span>
+      <span class=mut id=rasyn>—</span><span class=sl>syn</span>
+      <span class=mut id=raanc>—</span><span class=sl>anc</span>
+      <span class=sl id=raover></span>
     </div>
     <div class=sgrp><span class=sh>node RSS</span>
       <b id=nrssavg>—</b><span class=sl>avg</span>
@@ -1554,7 +1665,8 @@ async function tick(){
   const st=s.status||(nw.api==='up'?'up':'down');
   const STC={up:['var(--grn)','network up'],stalled:['var(--red)','network STALLED'],
              degraded:['var(--yel)','network degraded'],down:['var(--red)','network down']};
-  const [col,lbl]=STC[st]||['var(--red)','network ?'];
+  let [col,lbl]=STC[st]||['var(--red)','network ?'];
+  if(nw.nodes!=null&&nw.ofNodes&&nw.nodes<nw.ofNodes)lbl+=` (${nw.nodes}/${nw.ofNodes} answering)`;
   $('net').className='badge '+(st==='up'?'up':'down');
   $('net').innerHTML=`<span class=dot style="background:${col}"></span>${lbl}`;
   const tgt=lg.target||0,gen=lg.generated||0;
@@ -1566,15 +1678,20 @@ async function tick(){
   // added, and lumping them into one total hides whether it is doing anything.
   // Absent is not zero (REPORTING-SPEC 1): a family no node reported is
   // null on the wire and "— not measured" here.
-  const nm=v=>(v==null?'<span class=mut>— not measured</span>':fmt(v));
-  const hr=h.requests,hp=h.proofs,hld=h.held;
+  // A card's value slot is a number. An absent instrument shows a muted
+  // dash there and says "not measured" in the subtitle, where the words fit
+  // (REPORTING-SPEC 1 asks for absence to be distinguishable, not shouted).
+  const nm=v=>(v==null?'<span class=mut style="font-weight:400">—</span>':fmt(v));
+  const hr=h.requests,hp=h.proofs,hld=h.held,hf=s.handoff||{};
   $('cards').innerHTML=[
     card('DN height',fmt(nw.dnHeight),`${fmt(gen)} tx · ${pct.toFixed(0)}% of plan`),
-    card('Healed entries',`<span class=grn>${nm(h.entries)}</span>`,`received in answer to span requests`),
-    card('Heal requests',nm(hr&&hr.total),hr?`${fmt(hr.answered)} answered · ${fmt(hr['not-yet'])} not-yet`:'— not measured'),
-    card('Proofs',nm(hp&&hp.validated),hp?`${fmt(hp.staged)} staged · ${fmt(hp.disproved)} disproved`:'— not measured'),
-    card('Wedges',`<span class="${(w.total||0)?'yel':''}">${nm(w.total)}</span>`,w.measured?Object.entries(w.byReason||{}).map(([k,v])=>`${fmt(v)} ${k}`).join(' · ')||'none':'— not measured'),
-    card('Heal misses',`<span class="${(h.errors||0)?'red':''}">${nm(h.errors)}</span>`,hr?`${fmt(hr.miss)} miss · ${fmt(hr.failed)} failed`:'— not measured'),
+    card('Healed entries',`<span class=grn>${nm(h.entries)}</span>`,h.entries==null?'not measured':'received in answer to span requests'),
+    card('Heal requests',nm(hr&&hr.total),hr?`${fmt(hr.answered)} answered · ${fmt(hr['not-yet'])} not-yet`:'not measured'),
+    card('Proofs',nm(hp&&hp.validated),hp?`${fmt(hp.staged)} staged · ${fmt(hp.disproved)} disproved`:'not measured'),
+    card('Wedges',`<span class="${(w.total||0)?'yel':''}">${nm(w.total)}</span>`,w.measured?Object.entries(w.byReason||{}).map(([k,v])=>`${fmt(v)} ${k}`).join(' · ')||'none':'not measured — no node exports a drop counter'),
+    card('Heal misses',`<span class="${(h.errors||0)?'red':''}">${nm(h.errors)}</span>`,hr?`${fmt(hr.miss)} miss · ${fmt(hr.failed)} failed`:'not measured'),
+    card('Not executed',`<span class="${(hf.unexecuted||0)?'red':''}">${nm(hf.measured?hf.unexecuted:null)}</span>`,
+      hf.measured?`${fmt(hf.arrived)} arrived · ${fmt(hf.executed)} executed`:'not measured — needs a node built after #4279'),
     card('Rejected',`<span class="${(lg.rejected||0)?'red':''}">${fmt(lg.rejected||0)}</span>`,`${fmt(lg.skipped||0)} skipped`),
     card('Nodes',fmt(ns.count||0),`${fmt(ns.rssAvgMiB||0)} MiB avg · ${fmt(ns.rssMaxMiB||0)} max · heap ${fmt((ns.mem||{}).heapMaxMiB||0)} · GC ${(ns.mem||{}).gcPerSecMax!=null?(ns.mem||{}).gcPerSecMax.toFixed(1)+'/s':'—'} ${(ns.mem||{}).gcCoresSum!=null?'· '+(ns.mem||{}).gcCoresSum.toFixed(1)+' GC cores':''} · staged ${fmt((ns.mem||{}).stagedMax||0)}`),
   ].join('');
@@ -1611,6 +1728,18 @@ async function tick(){
   $('rsyn').textContent=(rs!=null)?rs.toFixed(2):'—';
   $('ranc').textContent=(ra!=null)?ra.toFixed(2):'—';
   $('rratio').textContent=(rs!=null&&ru>0.01)?(rs/ru).toFixed(1)+'×':'—';
+  // Total now: what the network is actually processing, user plus the
+  // synthetics and anchors the user load produces.
+  const rt=(ru!=null&&rs!=null&&ra!=null)?ru+rs+ra:null;
+  $('rtotal').textContent=(rt!=null)?rt.toFixed(2):'—';
+  // And over the whole run, which is the figure a result is quoted as.
+  const ra_=s.rates||{};
+  const num=v=>(v==null?'—':v.toFixed(2));
+  $('ratotal').textContent=num(ra_.totalAvg);
+  $('rauser').textContent=num(ra_.userAvg);
+  $('rasyn').textContent=num(ra_.synAvg);
+  $('raanc').textContent=num(ra_.anchorAvg);
+  $('raover').textContent=ra_.userOverSec?`over ${dur(ra_.userOverSec)} · produced counted for ${dur(ra_.producedOverSec||0)}`:'';
   spark($('spWedge'),deltas(hist,'wedges'),getComputedStyle(document.documentElement).getPropertyValue('--yel').trim());
   spark($('spHeal'),deltas(hist,'heals'),getComputedStyle(document.documentElement).getPropertyValue('--grn').trim());
   // wedge by dest

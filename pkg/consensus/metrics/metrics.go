@@ -619,4 +619,22 @@ var (
 		Name:      "execution_lagging",
 		Help:      "1 while headers carry no batches because execution lags the DAG's commits by more than MaxExecutionLag blocks",
 	}, []string{"partition"})
+
+	// HandoffTotal counts transactions at the seam where consensus hands to
+	// execution, by what became of them.
+	//
+	// ProduceBlock has always computed these and written them to a log line
+	// per block ("Block execution accounting"), added after 95 of 100
+	// submitted transactions vanished between acceptance and execution with
+	// no trace anywhere (#4132). A log line answers the question only for
+	// someone willing to grep gigabytes; nothing could chart it, alarm on
+	// it, or put it on a board, so "are we dropping transactions?" stayed a
+	// question you had to take on faith. `arrived` minus `executed` is the
+	// answer, and the three failure outcomes say which way they went.
+	HandoffTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "handoff_transactions_total",
+		Help:      "Transactions at the consensus/execution hand-off by outcome: arrived (in a committed batch), executed, unmarshal-failed, process-failed, status-failed. arrived minus executed is what did not execute.",
+	}, []string{"partition", "outcome"})
 )

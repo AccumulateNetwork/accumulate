@@ -87,3 +87,36 @@ class WedgesFromTheDispatcher(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HandoffAccounting(unittest.TestCase):
+    """arrived minus executed is what did not execute. The node computed it
+    per block and logged it; nothing could chart it, so "are we dropping
+    transactions?" had no answer on the board (#4132, #4279 review)."""
+
+    ROWS = [
+        ("accumulate_dagbft_handoff_transactions_total", {"partition": "BVN1", "outcome": "arrived"}, 1000.0),
+        ("accumulate_dagbft_handoff_transactions_total", {"partition": "BVN1", "outcome": "executed"}, 996.0),
+        ("accumulate_dagbft_handoff_transactions_total", {"partition": "BVN1", "outcome": "unmarshal-failed"}, 3.0),
+        ("accumulate_dagbft_handoff_transactions_total", {"partition": "BVN1", "outcome": "process-failed"}, 1.0),
+        ("accumulate_dagbft_handoff_transactions_total", {"partition": "BVN1", "outcome": "status-failed"}, 40.0),
+    ]
+
+    def test_the_gap_is_reported_and_accounted_for(self):
+        h = soakmon.handoff_from({"a": self.ROWS})
+        self.assertTrue(h["measured"])
+        self.assertEqual(1000, h["arrived"])
+        self.assertEqual(996, h["executed"])
+        self.assertEqual(4, h["unexecuted"], "arrived minus executed")
+        self.assertEqual(0, h["unaccounted"], "the four are named by the failure outcomes")
+
+    def test_loss_with_no_recorded_reason_is_surfaced(self):
+        rows = [r for r in self.ROWS if r[1]["outcome"] not in ("unmarshal-failed", "process-failed")]
+        h = soakmon.handoff_from({"a": rows})
+        self.assertEqual(4, h["unexecuted"])
+        self.assertEqual(4, h["unaccounted"], "nothing says where these went")
+
+    def test_absent_is_not_zero(self):
+        h = soakmon.handoff_from({"a": []})
+        self.assertFalse(h["measured"])
+        self.assertIsNone(h["unexecuted"])
