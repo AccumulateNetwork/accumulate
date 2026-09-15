@@ -547,8 +547,28 @@ func (b *Block) shouldSendAnchor() bool {
 		return true
 	}
 
-	// Send an anchor if a directory anchor was received and the flag is set
-	return didAnchorDirectory && b.Executor.globals().Active.Globals.AnchorEmptyBlocks
+	if !didAnchorDirectory {
+		return false
+	}
+
+	// The heartbeat. A block whose only content is a received directory anchor
+	// still moves the BPT root, and a reader who queries at that moment gets a
+	// receipt against a root nothing will ever carry -- so the second call of an
+	// account proof cannot be answered until someone happens to transact
+	// (#4277). Anchoring these blocks keeps the directory-anchor cascade
+	// running, which keeps every root reachable.
+	//
+	// From Kourou this is unconditional. It was AnchorEmptyBlocks, a network
+	// global, default false -- but a proof that only works on a busy network is
+	// not a proof anyone can rely on, and an operator should not have to know
+	// that. Measured: off, an idle network stops dead and the reader is stuck;
+	// on, the reader is answered with no transaction. The cost is that an idle
+	// network keeps producing blocks, which is the price of always being able to
+	// answer.
+	if b.Executor.globals().Active.ExecutorVersion.V2KourouEnabled() {
+		return true
+	}
+	return b.Executor.globals().Active.Globals.AnchorEmptyBlocks
 }
 
 func (x *Executor) prepareAnchor(block *Block) error {
