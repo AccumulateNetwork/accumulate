@@ -45,6 +45,7 @@ type Executor struct {
 	messageExecutors   map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]
 	signatureExecutors map[protocol.SignatureType]ExecutorFactory2[protocol.SignatureType, *SignatureContext]
 	logger             logging.OptionalLogger
+	streamLog          streamLogState
 	db                 database.Beginner
 	cacheOnce          sync.Once
 	cacheDefault       *synthcache.Cache

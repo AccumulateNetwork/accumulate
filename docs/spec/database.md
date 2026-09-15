@@ -340,7 +340,15 @@ batch it begins reaches history without any call site changing.
 same shape for the reader that declines isolation; the executor's `Validate`
 begins its batch through it. The store publishes what isolation cost —
 `preImageReads` in `stats.json`, the reads commits made for pinned readers —
-so a reader that should have been unisolated shows in the numbers.
+so a reader that should have been unisolated shows in the numbers. Two gauges
+say who is holding readers now: `accumulate_bcdb_staged_commits` (commit
+overlays kept for readers begun before them) and
+`accumulate_bcdb_oldest_view_age_seconds`, and a commit made while the oldest
+reader is older than `ViewWarnAfter` logs the function that began it. All
+three are computed when a commit or a reader's release happens, not at
+scrape: a store that has stopped committing reports the age its last commit
+saw. A reader held across many commits is not a store problem; it names a
+caller that opened a change set and lost it (#4279).
 
 ### Adapting to the record model
 

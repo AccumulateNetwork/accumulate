@@ -108,6 +108,10 @@ type ChainUpdates struct {
 	// built here.
 	Segments map[string]*merkle.Segment
 
+	// segmentErrs is, per anchor chain, the first span that arrived out of
+	// chain order; see addSegment.
+	segmentErrs map[string]error
+
 	// byChain is the position in Entries of the first entry for each
 	// (account, chain), so AddChainEntry2 finds a chain's entry without
 	// scanning the block -- E compares per append was O(E²) per block,
@@ -198,33 +202,64 @@ func (c *ChainUpdates) Merge(d *ChainUpdates) {
 		c.Hashes[k] = h
 	}
 	for k, seg := range d.Segments {
-		if c.Segments == nil {
-			c.Segments = map[string]*merkle.Segment{}
+		c.addSegment(k, seg)
+	}
+	for k, err := range d.segmentErrs {
+		if c.segmentErrs == nil {
+			c.segmentErrs = map[string]error{}
 		}
-		cur, ok := c.Segments[k]
-		switch {
-		case !ok:
-			c.Segments[k] = seg
-		case seg.First == cur.Last()+1:
-			cur.Elements = append(cur.Elements, seg.Elements...)
-		case cur.First == seg.Last()+1:
-			// The incoming span precedes the one held. Per-message states
-			// merge in hash order, not execution order (the bundle's state
-			// map is sorted by key), so when two anchors of one partition
-			// execute in one envelope — a healed span carrying several
-			// anchors and their signatures — the later append can merge
-			// first. The segment must start where the chain's first append
-			// of the block did, or a receipt for that entry says it is
-			// outside the segment.
-			merged := &merkle.Segment{First: seg.First, Before: seg.Before, MarkMask: seg.MarkMask}
-			merged.Elements = append(append(make([][]byte, 0, len(seg.Elements)+len(cur.Elements)), seg.Elements...), cur.Elements...)
-			c.Segments[k] = merged
-		default:
-			// Two non-adjacent spans of one chain within one block, which
-			// the executor does not produce. Keep the span held; a receipt
-			// outside it will say so.
+		if _, ok := c.segmentErrs[k]; !ok {
+			c.segmentErrs[k] = err
 		}
 	}
+}
+
+// addSegment joins one message's span of an anchor chain onto the block's.
+//
+// Spans arrive in chain order: messages execute in the order staging
+// released them, a bundle folds its states in that order (bundleStates),
+// and the bundles fold into the block in that order. So a span either
+// starts the block's segment of the chain or continues it. Any other span
+// means the order was lost upstream -- per-message states were once folded
+// in hash order, and the third of three anchors from one partition was
+// dropped on the floor, on every node (#4279, run 20260915T042428Z). It is
+// refused out loud, not dropped: the block will not build receipts over a
+// segment with a hole in it, and the error says where the hole is.
+func (c *ChainUpdates) addSegment(k string, seg *merkle.Segment) {
+	if c.Segments == nil {
+		c.Segments = map[string]*merkle.Segment{}
+	}
+	cur, ok := c.Segments[k]
+	switch {
+	case !ok:
+		c.Segments[k] = seg
+	case seg.First == cur.Last()+1:
+		cur.Elements = append(cur.Elements, seg.Elements...)
+	default:
+		if c.segmentErrs == nil {
+			c.segmentErrs = map[string]error{}
+		}
+		if _, ok := c.segmentErrs[k]; !ok {
+			c.segmentErrs[k] = errors.InternalError.WithFormat("chain %s: span [%d, %d] folded after [%d, %d]; appends are out of chain order", k, seg.First, seg.Last(), cur.First, cur.Last())
+		}
+	}
+}
+
+// SegmentError is the first span of the named anchor chain that folded out of
+// chain order this block, if any. A receipt must not be built over that
+// segment.
+//
+// Per chain, not per block: the fault belongs to the chain whose segment has
+// the hole, and a block carries segments for chains no receipt is built from
+// (an anchor's -bpt chain, a partition not in this block's ReceivedAnchors).
+// Failing the whole block on any of them turns one unbuildable receipt into a
+// partition that cannot close a block at all, which is how #4279 killed the
+// Directory in the first place.
+func (c *ChainUpdates) SegmentError(key string) error {
+	if c.segmentErrs == nil {
+		return nil
+	}
+	return c.segmentErrs[key]
 }
 
 // DidUpdateChain records a chain update.

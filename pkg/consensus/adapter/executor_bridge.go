@@ -219,6 +219,19 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		// CommitInfo and Evidence are CometBFT-specific, not needed for DAG-BFT
 	}
 
+	// Every batch must be in hand before a block is begun. CollectBatches
+	// guarantees a complete set before a block is produced; a nil here
+	// means that invariant broke upstream, and executing a certificate
+	// without one of its batches silently diverges this node's state from
+	// its peers (#4116/#4119) -- fail the block instead. Before Begin, not
+	// after: refusing after Begin left the block's batch open, pinning its
+	// version of the store for the life of the process (#4279).
+	for _, batch := range params.Batches {
+		if batch == nil {
+			return [32]byte{}, fmt.Errorf("block %d: missing batch in certificate for round %d", params.Index, params.LeaderRound)
+		}
+	}
+
 	// Begin block
 	block, err := b.executor.Begin(execParams)
 	if err != nil {
@@ -246,14 +259,6 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	}
 	var origins []origin
 	for _, batch := range params.Batches {
-		if batch == nil {
-			// CollectBatches guarantees a complete set before a block is
-			// produced. A nil here means that invariant broke upstream, and
-			// executing a certificate without one of its batches silently
-			// diverges this node's state from its peers (#4116/#4119) — fail
-			// the block instead.
-			return [32]byte{}, fmt.Errorf("block %d: missing batch in certificate for round %d", params.Index, params.LeaderRound)
-		}
 		digest := batch.Digest()
 		if txTraceEnabled {
 			slog.Info("TX executing", "batch", digest.String()[:12],

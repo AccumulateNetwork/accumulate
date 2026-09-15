@@ -569,6 +569,9 @@ func (d *Database) closeView(at uint64) {
 		delete(d.viewOpened, at)
 		delete(d.viewOpener, at)
 		d.pruneUndo()
+		// The gauges are otherwise refreshed only by a commit, and a store
+		// whose readers are all gone may not commit again for a while.
+		d.observeStaging()
 	} else {
 		d.views[at] = n - 1
 	}
@@ -1237,7 +1240,7 @@ var (
 	}, []string{"database"})
 	oldestViewAgeGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "accumulate", Subsystem: "bcdb", Name: "oldest_view_age_seconds",
-		Help: "Age of the oldest open read view; zero when none is open",
+		Help: "Age of the oldest open read view, as of the last commit or view release; zero when none was open then. A store that has stopped committing reports the age its last commit saw, not the age now",
 	}, []string{"database"})
 	exceptionsGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "accumulate", Subsystem: "bcdb", Name: "dyna_exceptions",

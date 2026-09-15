@@ -7,7 +7,6 @@
 package block
 
 import (
-	"bytes"
 	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
@@ -39,8 +38,8 @@ type bundle struct {
 	// after this one.
 	additional []messaging.Message
 
-	// state tracks transaction state objects.
-	state orderedMap[[32]byte, *chain.ProcessTransactionState]
+	// state holds each message's execution state, in execution order.
+	state bundleStates
 
 	// produced is other messages produced while processing the bundle.
 	produced []*ProducedMessage
@@ -187,7 +186,6 @@ func (b *Block) processMessages(batch *database.Batch, messages []messaging.Mess
 		d.batch = batch
 		d.pass = pass
 		d.messages = messages
-		d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
 
 		s, err := d.process()
 		if err != nil {
@@ -334,7 +332,8 @@ func (d *bundle) mergeIntoBlock() {
 	// order, and the block-end sort supplies the cross-producer order.
 	b.produced = append(b.produced, d.produced...)
 
-	// Update the block state (MUST BE ORDERED)
+	// Update the block state, in execution order: the chain segment
+	// bookkeeping downstream depends on appends folding in chain order.
 	_ = d.state.For(func(_ [32]byte, state *chain.ProcessTransactionState) error {
 		b.State.MergeTransaction(state)
 		return nil

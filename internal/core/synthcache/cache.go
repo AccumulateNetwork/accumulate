@@ -317,8 +317,8 @@ func (t *Txn) AddReceived(a *protocol.DirectoryAnchor) {
 // Commit makes the block's additions visible and trims what the horizon has
 // passed.
 func (t *Txn) Commit() {
-	if t == nil {
-		return
+	if t == nil || t.c == nil {
+		return // Already discarded: it has nothing to publish
 	}
 	c := t.c
 	c.mu.Lock()

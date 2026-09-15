@@ -41,6 +41,7 @@ import (
 type Staging struct {
 	mu      sync.Mutex
 	streams map[string]*streamState
+	ids     map[string]StreamID                                // the stream behind each key, for Streams()
 	proofs  map[string]map[uint64][]*protocol.AnnotatedReceipt // source -> anchor block
 	sources map[string]*url.URL                                // the source URL as received, by key
 	byID    map[[32]byte]*Held
@@ -257,7 +258,7 @@ func compactHashes(s [][32]byte) [][32]byte {
 
 // NewStaging returns empty staging.
 func NewStaging() *Staging {
-	return &Staging{streams: map[string]*streamState{}, proofs: map[string]map[uint64][]*protocol.AnnotatedReceipt{}, sources: map[string]*url.URL{}, byID: map[[32]byte]*Held{}, byTxn: map[[32]byte]*Held{}}
+	return &Staging{streams: map[string]*streamState{}, ids: map[string]StreamID{}, proofs: map[string]map[uint64][]*protocol.AnnotatedReceipt{}, sources: map[string]*url.URL{}, byID: map[[32]byte]*Held{}, byTxn: map[[32]byte]*Held{}}
 }
 
 // A StagingTxn is one block's view of staging: everything committed, plus
@@ -271,6 +272,7 @@ type StagingTxn struct {
 	held      map[string]map[uint64]*Held
 	validated map[string]map[uint64][32]byte
 	sighted   map[string]uint64
+	ids       map[string]StreamID // every stream this block touched
 	proofs    map[string]map[uint64][]*protocol.AnnotatedReceipt
 	sources   map[string]*url.URL
 	dropped   map[string]map[uint64]bool
@@ -297,6 +299,7 @@ func (t *StagingTxn) Hold(id StreamID, n uint64, h *Held) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	k := id.key()
+	t.ids[k] = id
 	if _, ok := t.held[k][n]; ok {
 		return
 	}
@@ -754,6 +757,7 @@ func (t *StagingTxn) Release(id StreamID, n uint64) {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.ids[id.key()] = id
 	if n > t.released[id.key()] {
 		t.released[id.key()] = n
 	}
@@ -812,6 +816,11 @@ func (t *StagingTxn) Commit() {
 			st.sighted = n
 		}
 	}
+	for k, id := range t.ids {
+		if _, ok := s.ids[k]; !ok {
+			s.ids[k] = id
+		}
+	}
 	for k, dropped := range t.dropped {
 		for b := range dropped {
 			delete(s.proofs[k], b)
@@ -855,6 +864,7 @@ func (t *StagingTxn) reset() {
 	t.held = map[string]map[uint64]*Held{}
 	t.validated = map[string]map[uint64][32]byte{}
 	t.sighted = map[string]uint64{}
+	t.ids = map[string]StreamID{}
 	t.proofs = map[string]map[uint64][]*protocol.AnnotatedReceipt{}
 	t.sources = map[string]*url.URL{}
 	t.dropped = map[string]map[uint64]bool{}
@@ -895,6 +905,102 @@ func (s *Staging) SightedOn(id StreamID) uint64 {
 		return st.sighted
 	}
 	return 0
+}
+
+// StreamStatus is where one stream stands, as a block logs it: what has
+// been delivered, the highest number sighted, how far validated hashes
+// reach, how many entries are held, and the first number above Delivered
+// that nothing is held for -- what the stream is waiting on.
+type StreamStatus struct {
+	ID        StreamID
+	Delivered uint64
+	Sighted   uint64
+	Reach     uint64
+	Held      int
+	Waiting   uint64 // first hole above Delivered, 0 when there is none
+}
+
+// Behind is whether anything sighted has not been delivered.
+func (s StreamStatus) Behind() bool { return s.Sighted > s.Delivered }
+
+// delivered is the stream's Delivered as this block sees it -- the committed
+// value or what the block has released -- and how many entries are held.
+func (t *StagingTxn) delivered(id StreamID) (uint64, int) {
+	k := id.key()
+	t.mu.Lock()
+	n := t.released[k]
+	t.mu.Unlock()
+	t.s.mu.Lock()
+	defer t.s.mu.Unlock()
+	var held int
+	if base := t.s.streams[k]; base != nil {
+		if base.delivered > n {
+			n = base.delivered
+		}
+		held = base.held
+	}
+	return n, held
+}
+
+// StatusScan bounds how far above Delivered Status looks for the first
+// hole.
+//
+// Missing walks number by number and takes staging's locks for each, and a
+// stage span may legitimately reach an hour of the source's production
+// (MaxStageSpan). Status is called once per stream per block to log it, so
+// an unbounded walk would put a cost on the block path that grows with the
+// backlog -- which is exactly the state it exists to report. Waiting is
+// therefore the first hole WITHIN the window; zero means there is no hole
+// in it, not that there is none anywhere. A behind stream with no hole is a
+// backlog, not a gap, and Held says how big it is.
+const StatusScan = 1024
+
+// Status reports where a stream stands as this block sees it.
+func (t *StagingTxn) Status(id StreamID) StreamStatus {
+	if t == nil {
+		return StreamStatus{ID: id}
+	}
+	delivered, held := t.delivered(id)
+	st := StreamStatus{ID: id, Delivered: delivered, Held: held, Sighted: t.Sighted(id), Reach: t.Reach(id)}
+	// Nothing above Delivered means no walk at all: Missing returns early.
+	through := st.Sighted
+	if through > st.Delivered+StatusScan {
+		through = st.Delivered + StatusScan
+	}
+	if runs := t.Missing(id, st.Delivered, through, 1); len(runs) > 0 {
+		st.Waiting = runs[0][0]
+	}
+	return st
+}
+
+// Streams is the status of every stream staging knows or this block
+// touched, in key order: the record a block logs at its close (executor
+// spec, "What a stream logs").
+func (t *StagingTxn) Streams() []StreamStatus {
+	if t == nil {
+		return nil
+	}
+	ids := map[string]StreamID{}
+	t.s.mu.Lock()
+	for k, id := range t.s.ids {
+		ids[k] = id
+	}
+	t.s.mu.Unlock()
+	t.mu.Lock()
+	for k, id := range t.ids {
+		ids[k] = id
+	}
+	t.mu.Unlock()
+	keys := make([]string, 0, len(ids))
+	for k := range ids {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]StreamStatus, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, t.Status(ids[k]))
+	}
+	return out
 }
 
 // countFromPending derives a merkle state's count from its pending list,

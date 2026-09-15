@@ -328,3 +328,67 @@ func TestStaging_DuplicateProofsAreNotStacked(t *testing.T) {
 	tx.DropProofs(testSource, 7)
 	require.Empty(t, tx.StagedProofSpans(testSource), "dropped proofs cover nothing")
 }
+
+// A block reads where every stream stands, to log it: delivered, sighted,
+// held, and the first number it is waiting on. This is the record a stall
+// is debugged from (executor spec, "What a stream logs").
+func TestStaging_Streams(t *testing.T) {
+	s := NewStaging()
+	tx := s.Begin()
+	tx.Hold(testStream, 1, held(1))
+	tx.Hold(testStream, 2, held(2))
+	tx.Hold(testStream, 3, held(3))
+	tx.Hold(testStream, 5, held(5))
+	tx.Release(testStream, 1)
+	tx.Commit()
+
+	all := s.Begin().Streams()
+	require.Len(t, all, 1)
+	st := all[0]
+	require.Equal(t, testStream, st.ID)
+	require.EqualValues(t, 1, st.Delivered)
+	require.EqualValues(t, 5, st.Sighted)
+	require.Equal(t, 3, st.Held, "2, 3 and 5")
+	require.EqualValues(t, 4, st.Waiting, "the first hole above Delivered")
+	require.True(t, st.Behind())
+
+	// A block that releases sees its own release before it commits
+	tx = s.Begin()
+	tx.Release(testStream, 3)
+	st = tx.Status(testStream)
+	require.EqualValues(t, 3, st.Delivered)
+	require.EqualValues(t, 4, st.Waiting)
+	tx.Discard()
+
+	// A stream nothing has touched has nothing to say
+	other := StreamID{Ledger: testLedger, Source: protocol.PartitionUrl("BVN9")}
+	require.Equal(t, StreamStatus{ID: other}, s.Begin().Status(other))
+}
+
+// Status walks for the first hole, and that walk is bounded: a stage may
+// legitimately hold an hour of a source's production, and Status runs once
+// per stream per block to log it. Waiting is the first hole WITHIN the
+// window; zero means there is none in it, which with Held says backlog
+// rather than gap.
+func TestStaging_StatusScanIsBounded(t *testing.T) {
+	s := NewStaging()
+	tx := s.Begin()
+	// A contiguous run well past the window, then a hole beyond it.
+	for n := uint64(1); n <= StatusScan+10; n++ {
+		tx.Hold(testStream, n, held(n))
+	}
+	tx.Hold(testStream, StatusScan+12, held(StatusScan+12)) // hole at +11
+	tx.Commit()
+
+	st := s.Begin().Status(testStream)
+	require.EqualValues(t, StatusScan+12, st.Sighted)
+	require.Zero(t, st.Waiting, "the hole is past the window: a backlog, not a gap")
+	require.Equal(t, int(StatusScan+11), st.Held)
+
+	// A hole inside the window is found.
+	s2 := NewStaging()
+	tx = s2.Begin()
+	tx.Hold(testStream, 2, held(2))
+	tx.Commit()
+	require.EqualValues(t, 1, s2.Begin().Status(testStream).Waiting)
+}

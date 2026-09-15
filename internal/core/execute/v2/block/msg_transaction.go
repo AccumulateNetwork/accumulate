@@ -7,7 +7,6 @@
 package block
 
 import (
-	"bytes"
 	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
@@ -636,10 +635,6 @@ func (b *Block) processEvents() error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("load expired transaction backlog: %w", err)
 	}
-
-	d := new(bundle)
-	d.Block = b
-	d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
 
 	// Process N items
 	msgs := make([]messaging.Message, n)

@@ -129,15 +129,24 @@ func (s *closedBlock) Commit() error {
 		return nil
 	}
 
+	// A commit that fails releases what the block holds, for the same reason
+	// Close does (#4279): the caller has an execute.BlockState, which offers
+	// no way to release it, and a batch left open pins a version of the store
+	// for the life of the process. Both paths below leave the batch open
+	// otherwise -- the publish runs before the batch is touched at all, and a
+	// Conflict from Commit returns before the change set is committed, which
+	// is where the store's view is released.
 	err := s.Executor.EventBus.Publish(execute.WillCommitBlock{
 		Block: s,
 	})
 	if err != nil {
+		s.Discard()
 		return errors.UnknownError.Wrap(err)
 	}
 
 	err = s.Batch.Commit()
 	if err != nil {
+		s.Discard()
 		return err
 	}
 	// The cache and staging commit after the store: an entry is in the cache

@@ -327,6 +327,13 @@ one thing a per-block record must never do. An empty block has no entry.
    step at block end re-reads or re-writes a record whose size grows with the
    height of the chain. A per-block record is written once and never touched
    again.
+10. **What a block records about its execution is recorded in execution
+    order.** Messages run in the order staging released them and the
+    chains are appended in that order; the per-message state that says what
+    was appended folds into the block in the same order. Nothing between
+    execution and the block reorders it, and nothing after has to put the
+    order back. A structure that loses the order — a map — is not used to
+    carry it.
 
 ### Versioning
 
@@ -335,6 +342,22 @@ nodes at different versions do not disagree about the same block — `V2Baikonur
 (6), `V2Jiuquan` (8), `V2Kourou` (10, collection proofs). A gate protects a
 network that is running; it is not ceremony for code that has never been
 deployed.
+
+**Ungated, and deliberately so: the order a bundle folds its states in.**
+Folding in execution order rather than transaction-hash order changes the
+order of `State.ReceivedAnchors`, which is the order of the receipts in the
+`DirectoryAnchor` the block builds. Under DagBFT nothing votes on a block
+hash — consensus is on certificates, and the state hash is stamped on the
+certificate after execution for comparison, not agreement — so the
+consequence is not a block the partition cannot agree on. It is two things:
+the anchor body is what every Directory validator signs, and validators
+that build it with receipts in different orders sign different
+transactions, so the BVN never gathers a quorum for it (the #4054 failure
+mode); and the body is stored on the system ledger, so the state trees
+diverge, which the next anchor's BPT hash exposes. It is ungated because
+`V2Kourou` has never run a network that outlives a run: every soak starts
+from genesis, and no deployed network executes this path. **If Kourou is
+ever activated on a live network before this lands, this needs a gate.**
 
 ## 2. Specification — how it is implemented
 
@@ -367,16 +390,27 @@ deployed.
 
 `pkg/consensus/adapter/executor_bridge.go`, `ProduceBlock`:
 
-1. `executor.Begin(BlockParams)` opens the block.
-2. Every batch named by the committed certificate is walked **in payload
-   order**. A nil batch is fatal: `CollectBatches` guarantees a complete set,
-   and executing a certificate without one of its batches silently diverges
-   state (#4116/#4119).
-3. Each transaction is unmarshalled into an envelope and processed —
-   `ProcessAll` when the block supports parallel execution (#4145), otherwise
-   `Process` per envelope.
+1. Every batch named by the committed certificate is checked to be in hand
+   **before the block is opened**. A nil batch is fatal: `CollectBatches`
+   guarantees a complete set, and executing a certificate without one of its
+   batches silently diverges state (#4116/#4119). Checking after `Begin` left
+   an opened block behind (#4279).
+2. `executor.Begin(BlockParams)` opens the block.
+3. The batches are walked **in payload order**, each transaction unmarshalled
+   into an envelope and processed — `ProcessAll` when the block supports
+   parallel execution (#4145), otherwise `Process` per envelope.
 4. `block.Close()` produces the block state; `state.Hash()` then
-   `state.Commit()`.
+   `state.Commit()`. **A `Close` or a `Commit` that fails releases the
+   block** — its batch, its cache view and its staging view — before
+   returning the error. The caller holds an `execute.Block` and then an
+   `execute.BlockState`, neither of which offers a way to release it, and a
+   block left open pins a version of the store for the life of the process:
+   the Directory held one open for ten hours on every node, every commit
+   since keeping its pre-images for a reader that would never read (#4279,
+   run `20260915T042428Z`). `Commit` has two such paths of its own — the
+   pre-commit event publish, and a `Conflict` from the batch, which returns
+   before the change set is committed and so before the store's view is
+   released.
 
 Accounting is emitted per non-empty block — arrived, executed, unmarshalFailed,
 processFailed, statusFailed, sharded, serial, shardsUsed — because 95 of 100
@@ -398,6 +432,16 @@ through a bundle whose block is a shell. The batch is discarded unconditionally.
   resulting bundles into block state. The merge is the caller's so that under
   parallel execution every touch of shared block state happens serially, in a
   deterministic order.
+- **A bundle folds its messages' states in execution order** (`bundleStates`,
+  a slice in the order the states were recorded), and the bundles fold into
+  the block in the order they ran. That order is deterministic on every node
+  — messages run in envelope order, bundles fold serially — so nothing is
+  sorted and nothing downstream reconstructs it. It was a map sorted by
+  message hash: every node folded in the same order, but not the order the
+  chains were appended in, and the block's segment bookkeeping (below,
+  "Dispatch") lost the span of one of three anchors from one partition
+  (#4279). Order that execution already has is kept as a slice; it is never
+  put through a map and sorted back.
 - `processMessages` runs the messages and every pass of additional messages they
   cascade into.
 - `bundle.callMessageExecutor` finds the executor registered for the message
@@ -667,6 +711,47 @@ depends on the last:
 11. Execute post-update actions.
 12. **Update the BPT**, and only then active globals.
 
+### What a stream logs
+
+A stall on a stream must be readable from the node's own log, after the
+fact, without a dashboard: when delivery stopped, what the stream was
+waiting on, what the source had produced by then, and whether any number
+ever went backwards. Nothing recorded that on run `20260915T042428Z`, so
+"delivered stopped at 32,469" was a reading off a board, with no record of
+when (#4279). Every block therefore writes, at Info, `module=stream`:
+
+- **`Stream position`**, per stream, after `flushStreams` has written
+  Delivered: `block`, `ledger` (synthetic or anchors), `source`,
+  `delivered`, `advanced` (by this block), `sighted` (the highest number
+  ever held), `reach` (how far validated hashes stand), `held` (entries in
+  staging), `waiting` (the first number above Delivered nothing is held
+  for, 0 when none).
+
+  **A line is written when something about the stream changed, and
+  otherwise no more often than `StreamLogEvery` blocks.** A stream in
+  trouble is worth a line a block; a caught-up stream ticking along is
+  worth one a minute; and a frozen stall must not write the same line
+  every block for as long as it lasts, which is how per-message logging
+  became the problem #4182 fixed. The cadence is also the liveness
+  evidence: a stream that stops logging altogether means the partition
+  stopped closing blocks, which is a different failure from a stream that
+  logs the same position forever.
+
+  `waiting` is the first hole within `StatusScan` numbers above Delivered.
+  Finding it walks the stage, and a stage may hold an hour of the source's
+  production, so the walk is bounded rather than growing with the backlog
+  it reports. Zero with a non-zero `held` is a backlog with no gap in the
+  window, not an empty stream.
+- **`Stream produced`**, once per destination the block sequenced
+  synthetics for: `block`, `destination`, `from`, `to`, `count`. One block's
+  `to` and the next block's `from` are contiguous; a gap or a step backwards
+  in the producer's own log is a defect in the producer, not in delivery.
+
+`test/docker/soak/streamlog.py` reads those lines back out of a run's node
+log and reports, per node and stream, where it stands, when it last
+advanced, how long it has waited and on what, every value that went
+backwards, and every gap in a producer's numbering.
+
 ### The block ledger
 
 Step 8 of closing a block records the block ledger. The records live on the
@@ -883,6 +968,17 @@ received are the anchor-chain segment from the received anchor to its new head
 joined to the root segment from where that head landed. The synthetic proofs
 come from the producer cache's segments the same way. Nothing reads a chain
 back to prove it (database.md, "Duplicates are caught at entry").
+
+A chain's segment is assembled from the spans each message appended, folded in
+execution order (invariant 10), so every span continues the one before it. A
+span that does not is not tolerated and not dropped: it is recorded against
+**that chain** (`ChainUpdates.SegmentError(key)`) and the receipt built over
+that chain's segment is refused, naming the span. The fault is per chain, not
+per block: a block carries segments for chains no receipt is built from, and
+failing the whole block on any of them turns one unbuildable receipt into a
+partition that cannot close a block at all — which is how #4279 killed the
+Directory. A segment with a hole would otherwise produce a receipt built over
+the wrong span, which is what the hash-order fold did.
 
 A block's synthetic messages do not leave when the block closes. They leave
 when a **Directory receipt covering that block comes back**: the block's

@@ -414,6 +414,39 @@ destination's anchors or by the Directory) and the bound.
 
 **Size**: medium; a spec decision first.
 
+### C8. A committed group that fails to execute is skipped, and the lag it leaves is permanent
+
+*(no issue yet — found working #4279)*
+
+**Spec** ([consensus.md](consensus.md), "Execution"): a committed
+certificate's batches are executed in canonical order and never skipped; a
+node that cannot execute a block its peers executed halts rather than
+diverge. Invariant 9 bounds the lag between commits and executions and
+expects it to clear when execution catches up.
+
+**Code**: `blockProductionLoop` halts only for `ErrBatchesUnrecoverable`. Any
+other failure of `ProduceBlock` — a block that fails to close, for whatever
+reason — is logged as `Failed to process committed group` and the loop takes
+the next group. The failed group's transactions are never executed, on this
+node or, if the failure is deterministic, on any; and `ReportExecuted` is
+never called for it, so the lag it adds to `ExecutionLag` never clears. On
+run `20260915T042428Z` nine Directory groups failed to close within a minute
+(one bug, deterministic, every node), the lag reached 9 against a bound of
+8 at 05:41:33Z, and the Directory proposed empty headers and refused every
+submission — including the BVNs' anchors — for the rest of the run. One bad
+block became a dead partition, with the partition reporting itself healthy
+in every liveness sense.
+
+**What must be decided** is what a deterministic execution failure does.
+Halting, as an unrecoverable batch does, stops every node at the same block
+and is honest about what happened; continuing past it can only be right if
+the failure is known to be node-local, which nothing here can know. Either
+way the lag accounting must not count a group that will never execute as
+"behind": a skipped group is not lag, it is loss, and should be its own
+counter and its own alarm.
+
+**Size**: small in code; a spec decision first.
+
 ## Healing
 
 ### H1. The producer cache exists; what it is not yet cleared by, and what still reads the store

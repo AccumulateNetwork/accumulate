@@ -7,9 +7,6 @@
 package block
 
 import (
-	"bytes"
-
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -56,7 +53,6 @@ func (x *Executor) Validate(envelope *messaging.Envelope, _ bool) ([]*protocol.T
 	d.Block.staging = x.staging().Begin()
 	defer d.Block.staging.Discard()
 	d.messages = messages
-	d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
 
 	// Process each message
 	statuses := make([]*protocol.TransactionStatus, len(messages))

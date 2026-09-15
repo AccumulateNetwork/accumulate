@@ -174,3 +174,15 @@ func TestCache_ReleaseIsBoundedByWhatIsHeld(t *testing.T) {
 	require.Zero(t, entries)
 	require.Equal(t, uint64(3), c.released[streamKey(bvn1)], "clamped to the highest held number")
 }
+
+// A discarded transaction has nothing to publish. Discard zeroes the
+// transaction, parent pointer included, and a Commit after it dereferenced
+// nil; it became reachable from a second call site once a block that fails
+// to close discards its cache view (#4279 review).
+func TestTxn_CommitAfterDiscardIsANoOp(t *testing.T) {
+	c := New(0)
+	tx := c.Begin(7)
+	tx.Discard()
+	require.NotPanics(t, tx.Commit)
+	tx.Discard() // and twice
+}

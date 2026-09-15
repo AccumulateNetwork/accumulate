@@ -28,7 +28,36 @@ import (
 )
 
 // Close ends the block and returns the block state.
+//
+// A block that fails to close is never committed, and until now nothing
+// released it either: the caller holds an execute.Block, which has no
+// Discard, so the batch stayed open, pinning its version of the store. On
+// run 20260915T042428Z the Directory held one open for ten hours on every
+// node after a receipt failed to build, with every commit since staging its
+// pre-images behind it (#4279). What the block holds is released here, on
+// the way out with the error.
 func (block *Block) Close() (execute.BlockState, error) {
+	state, err := block.close()
+	if err != nil {
+		block.discard()
+	}
+	return state, err
+}
+
+// discard releases what the block holds without committing any of it.
+func (block *Block) discard() {
+	if block.Batch != nil {
+		block.Batch.Discard()
+	}
+	if block.cache != nil {
+		block.cache.Discard()
+	}
+	if block.staging != nil {
+		block.staging.Discard()
+	}
+}
+
+func (block *Block) close() (execute.BlockState, error) {
 	if block.fatal != nil {
 		// A shard commit failure may have left a partial write in the
 		// block batch (#4149) — refuse to hash or commit it.
@@ -50,6 +79,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("flush streams: %w", err)
 	}
+	block.logStreams()
 
 	// Write each anchor's validator signature set, once per anchor (#4224).
 	err = block.flushAnchorSignatures()
@@ -667,6 +697,11 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 		if seg == nil {
 			return nil, errors.InternalError.WithFormat("no segment for %s anchor chain: the anchor was received without an append", received.Partition)
 		}
+		// This chain's spans folded out of order, so the segment has a hole
+		// and the receipt below would be built over the wrong span (#4279).
+		if err := block.State.ChainUpdates.SegmentError(key); err != nil {
+			return nil, errors.UnknownError.WithFormat("%s intermediate anchor chain: %w", received.Partition, err)
+		}
 		rootPos, ok := block.rootPosOf[key]
 		if !ok {
 			return nil, errors.InternalError.WithFormat("%s anchor chain was not anchored into the root chain this block", received.Partition)
@@ -790,6 +825,7 @@ func (b *Block) produceBlockMessages() error {
 		return errors.UnknownError.WithFormat("sequence produced messages: %w", err)
 	}
 	b.State.Produced += len(remote)
+	b.logProduced()
 	b.produced = nil
 
 	return nil
