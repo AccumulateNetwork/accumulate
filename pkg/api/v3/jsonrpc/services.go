@@ -123,6 +123,42 @@ func (s SnapshotService) listSnapshots(ctx context.Context, params json.RawMessa
 	return formatResponse(s.SnapshotService.ListSnapshots(ctx, req.ListSnapshotsOptions))
 }
 
+// ProofService is the public JSON-RPC face of the major-block spine (#4058)
+// and of the second of the two calls an account proof takes (#4274).
+type ProofService struct{ api.ProofService }
+
+func (s ProofService) methods() jsonrpc2.MethodMap {
+	return jsonrpc2.MethodMap{
+		"major-header-range": s.majorHeaderRange,
+		"minor-root-range":   s.minorRootRange,
+		"anchor-receipt":     s.anchorReceipt,
+	}
+}
+
+func (s ProofService) majorHeaderRange(ctx context.Context, params json.RawMessage) interface{} {
+	req, err := parseRequest[*message.MajorHeaderRangeRequest](params)
+	if err != nil {
+		return formatResponse(nil, err)
+	}
+	return formatResponse(s.ProofService.MajorHeaderRange(ctx, req.MajorHeaderRangeOptions))
+}
+
+func (s ProofService) minorRootRange(ctx context.Context, params json.RawMessage) interface{} {
+	req, err := parseRequest[*message.MinorRootRangeRequest](params)
+	if err != nil {
+		return formatResponse(nil, err)
+	}
+	return formatResponse(s.ProofService.MinorRootRange(ctx, req.MinorRootRangeOptions))
+}
+
+func (s ProofService) anchorReceipt(ctx context.Context, params json.RawMessage) interface{} {
+	req, err := parseRequest[*message.AnchorReceiptRequest](params)
+	if err != nil {
+		return formatResponse(nil, err)
+	}
+	return formatResponse(s.ProofService.AnchorReceipt(ctx, req.AnchorReceiptOptions))
+}
+
 type MetricsService struct{ api.MetricsService }
 
 func (s MetricsService) methods() jsonrpc2.MethodMap {

@@ -607,6 +607,19 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		Globals:      globals,
 		ValidatorKey: d.Key().Bytes(),
 	})
+	proofSvc := &api.ProofService{
+		Ranger:    sequencerSvc,
+		Database:  d.db,
+		Partition: config.NetworkUrl{URL: protocol.PartitionUrl(d.Config.Accumulate.PartitionId)},
+		Directory: func() (database.Viewer, error) {
+			// This daemon serves one partition, so it can bind only when it is
+			// itself the directory. AnchorReceipt says so rather than guessing.
+			if strings.EqualFold(d.Config.Accumulate.PartitionId, protocol.Directory) {
+				return d.db, nil
+			}
+			return nil, errors.NotReady.With("this node does not run the directory")
+		},
+	}
 	messageHandler, err := message.NewHandler(
 		&message.ConsensusService{ConsensusService: consensusSvc},
 		&message.MetricsService{MetricsService: metricsSvc},
@@ -616,6 +629,7 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		&message.Validator{Validator: validateSvc},
 		&message.EventService{EventService: eventSvc},
 		&message.Sequencer{Sequencer: sequencerSvc},
+		&message.ProofService{ProofService: proofSvc},
 	)
 	if err != nil {
 		return errors.UnknownError.WithFormat("initialize P2P handler: %w", err)

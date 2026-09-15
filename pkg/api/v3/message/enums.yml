@@ -32,6 +32,12 @@ Type:
     value: 0x0A
   ListSnapshotsRequest:
     value: 0x0B
+  MajorHeaderRangeRequest:
+    value: 0x0C
+  MinorRootRangeRequest:
+    value: 0x0D
+  AnchorReceiptRequest:
+    value: 0x0E
 
   ErrorResponse:
     value: 0x20
@@ -57,6 +63,12 @@ Type:
     value: 0x2A
   ListSnapshotsResponse:
     value: 0x2B
+  MajorHeaderRangeResponse:
+    value: 0x2C
+  MinorRootRangeResponse:
+    value: 0x2D
+  AnchorReceiptResponse:
+    value: 0x2E
 
   Event:
     value: 0x40

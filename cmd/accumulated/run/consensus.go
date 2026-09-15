@@ -54,6 +54,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -70,7 +71,12 @@ var (
 	consensusProvidesSubmitter = ioc.Provides[v3.Submitter](func(c ConsensusApp) string { return c.partition().ID })
 	consensusProvidesValidator = ioc.Provides[v3.Validator](func(c ConsensusApp) string { return c.partition().ID })
 
-	coreConsensusNeedsStorage      = ioc.Needs[keyvalue.Beginner](func(c *CoreConsensusApp) string { return c.Partition.ID })
+	coreConsensusNeedsStorage = ioc.Needs[keyvalue.Beginner](func(c *CoreConsensusApp) string { return c.Partition.ID })
+
+	// The directory's storage, by name rather than by service, so a partition
+	// can reach it. Every Accumulate node runs the directory alongside its own
+	// BVN, and the proof service needs both halves (#4274).
+	consensusNeedsDnStorage        = ioc.Needs[keyvalue.Beginner, string](func(string) string { return protocol.Directory })
 	coreConsensusProvidesSequencer = ioc.Provides[private.Sequencer](func(c *CoreConsensusApp) string { return c.Partition.ID })
 	coreConsensusProvidesRouter    = ioc.Provides[routing.Router](func(c *CoreConsensusApp) string { return c.Partition.ID })
 	coreConsensusProvidesClient    = ioc.Provides[client.Client](func(c *CoreConsensusApp) string { return c.Partition.ID })
@@ -876,6 +882,27 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
+
+	// Register the proof service. It is the public face of what the sequencer
+	// already serves node-to-node, plus the second of the two calls an account
+	// proof takes (#4272). Only the directory can answer that one -- a
+	// partition's BPT root is bound to a directory root, and the binding lives
+	// in the directory's anchor(P)-bpt chain -- but registering it everywhere
+	// keeps the address uniform and lets the service itself say so.
+	pdb := database.New(store, d.logger)
+	proofImpl := &api.ProofService{
+		Ranger:    seqImpl,
+		Database:  pdb,
+		Partition: config.NetworkUrl{URL: protocol.PartitionUrl(c.Partition.ID)},
+		Directory: newDirectoryResolver(c.Partition.ID, pdb, func() (database.Viewer, error) {
+			dnStore, err := consensusNeedsDnStorage.Get(inst.services, "")
+			if err != nil {
+				return nil, err
+			}
+			return database.New(dnStore, d.logger), nil
+		}),
+	}
+	registerRpcService(inst, proofImpl.Type().AddressFor(c.Partition.ID), message.ProofService{ProofService: proofImpl})
 
 	inst.logger.Info(color.HiBlueString("Running"), "partition", c.Partition.ID, "module", "run", "service", "consensus")
 	return nil

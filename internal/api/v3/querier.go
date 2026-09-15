@@ -362,6 +362,12 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	if block.BlockTime != nil {
 		r.Receipt.LocalBlockTime = *block.BlockTime
 	}
+
+	// Whether there is a second call to make. The receipt terminates at this
+	// partition's current BPT root; on the directory that is already a
+	// directory root, elsewhere it reaches one only after an anchor round trip.
+	r.Receipt.Partition = s.partition.PartitionID()
+	r.Receipt.Complete = s.partition.URL.Equal(protocol.DnUrl())
 	return r, nil
 }
 
@@ -423,6 +429,16 @@ func (s *Querier) historicalStateReceipt(batch *database.Batch, record *database
 	if block.BlockTime != nil {
 		r.Receipt.LocalBlockTime = *block.BlockTime
 	}
+
+	// Tell the caller whether there is a second call to make.
+	//
+	// A BPT is a tree of current state — every account that changes rewrites
+	// the path to the root — so an account cannot be proved against a past BPT.
+	// The proof is built against the current one, and that root reaches the
+	// directory only after an anchor round trip. On the directory it is already
+	// local, so the receipt is complete as it stands.
+	r.Receipt.Partition = proof.Partition
+	r.Receipt.Complete = protocol.PartitionUrl(proof.Partition).Equal(protocol.DnUrl())
 	return nil
 }
 

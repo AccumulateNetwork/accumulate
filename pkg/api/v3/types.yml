@@ -12,6 +12,14 @@ Receipt:
       description: is the minor block height this receipt was produced against; zero means the current state
       type: uint
       optional: true
+    - name: Complete
+      description: reports that the receipt terminates at a directory root, so there is no second call to make. A BPT is a tree of current state, so an account proof is built against the current BPT and its root reaches the directory only after an anchor round trip -- except on the directory itself, where it is already local
+      type: bool
+      optional: true
+    - name: Partition
+      description: names whose BPT root the receipt terminates at when it is not complete, so a caller knows what to bind against
+      type: string
+      optional: true
 
 LastBlock:
   fields:
@@ -106,6 +114,22 @@ NetworkUpdateProof:
 # the self-anchor covering the end of the run with its archived quorum, the
 # window's network-account updates, and a receipt list proving the root chain
 # extends the client's last verified root to this anchor's root.
+AnchorReceiptRecord:
+  fields:
+    - name: Receipt
+      description: proves the partition's BPT root into a directory root; nil while the anchor is still in flight
+      type: merkle.Receipt
+      marshal-as: reference
+      pointer: true
+      optional: true
+    - name: Anchored
+      description: reports whether the directory has committed the root yet. False is a wait, not a failure -- the anchor carrying it has not arrived
+      type: bool
+    - name: DirectoryBlock
+      description: is the directory block whose root the receipt terminates at, being the block that committed the anchor rather than the current one. The terminus is therefore stable, so the same root queried later returns the same receipt
+      type: uint
+      optional: true
+
 MinorRootRecord:
   fields:
     - name: Anchor

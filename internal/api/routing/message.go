@@ -83,6 +83,20 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 		return c1.Encapsulate(c2), nil
 
+	case *message.MajorHeaderRangeRequest, *message.MinorRootRangeRequest:
+		// The spine is served only for the directory (major_header.go,
+		// minor_root.go).
+		service.Type = api.ServiceTypeProof
+		service.Argument = protocol.Directory
+
+	case *message.AnchorReceiptRequest:
+		// Served by the partition, not the directory: extending a BPT root to a
+		// root-chain anchor reads the partition's bpt chain, and binding that
+		// anchor reads the directory's. Every node runs both, so the partition
+		// is the one place with each half (#4274).
+		service.Type = api.ServiceTypeProof
+		service.Argument = msg.Partition
+
 	case *message.ConsensusStatusRequest:
 		service.Type = api.ServiceTypeConsensus
 
