@@ -75,10 +75,10 @@ const (
 	// cover ~1% that was in flight and arriving anyway (#4280).
 	//
 	// A lost package leaves the stream STUCK, so Delivered stops. Waiting
-	// for that tells the two apart. Three activations is twelve blocks,
+	// for that tells the two apart. Four activations is sixteen blocks,
 	// well inside the window a lost package needs and far outside the
 	// moment a drained stream spends empty.
-	probeAfter = 3
+	probeAfter = 4
 
 	// strandedAfter is how many consecutive activations a stream's requests
 	// must all come back NotFound — the span is past the source's cache —

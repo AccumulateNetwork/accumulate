@@ -68,6 +68,10 @@ func TestRequester_LaggingDestination(t *testing.T) {
 // A quiet stream is probed — the span above Delivered asked for whole — and
 // the source answers "not yet". The probe is remembered like an answer, so it
 // fires once per patience window, not every activation (#4229).
+//
+// It also does not fire until the stream has been empty and still for
+// probeAfter activations (#4280), so the first probe is that many in and the
+// count is one per patience window thereafter.
 func TestRequester_ProbeOncePerPatience(t *testing.T) {
 	s := execute.NewStaging()
 	c := testConductor()
@@ -83,7 +87,9 @@ func TestRequester_ProbeOncePerPatience(t *testing.T) {
 	for i := uint64(1); i <= activations; i++ {
 		c.requestStream(context.Background(), staged, i*healCadence, reqSource, ask)
 	}
-	require.Equal(t, activations/healPatience, asks, "once per patience window")
+	// Probes land at activations probeAfter, +healPatience, +2*healPatience...
+	want := (activations-probeAfter)/healPatience + 1
+	require.Equal(t, want, asks, "once per patience window, starting after the stillness")
 	require.False(t, c.requester.backedOff(reqSource, activations*healCadence), "not yet is not a failure")
 }
 

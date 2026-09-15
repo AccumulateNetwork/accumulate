@@ -437,7 +437,7 @@ window the next probe would pull.
 
 The two are told apart by what a lost package actually does: it stops
 `Delivered`. So the probe waits for the stream to be empty **and still** for
-`probeAfter` activations. A draining stream, whose `Delivered` moves, never
+`probeAfter` (4) activations — sixteen blocks. A draining stream, whose `Delivered` moves, never
 probes; anything held above `Delivered` is not the empty case at all and
 forgets the run. A genuinely wedged stream is probed within a few activations,
 well inside the window a lost package needs.
