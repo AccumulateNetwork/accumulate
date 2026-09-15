@@ -104,8 +104,10 @@ type AnchorLedger struct {
 	// PendingMajorBlockAnchors is the list of partitions that have joined the open major block. If there is no open major block, this is unset.
 	PendingMajorBlockAnchors []*url.URL `json:"pendingMajorBlockAnchors,omitempty" form:"pendingMajorBlockAnchors" query:"pendingMajorBlockAnchors" validate:"required"`
 	// Sequence tracks sent and received anchors.
-	Sequence  []*PartitionSyntheticLedger `json:"sequence,omitempty" form:"sequence" query:"sequence" validate:"required"`
-	extraData []byte
+	Sequence []*PartitionSyntheticLedger `json:"sequence,omitempty" form:"sequence" query:"sequence" validate:"required"`
+	// LastAnchorBlock is the block index of the last anchor this partition sent. The heartbeat counts from it, so an idle network anchors at most once every anchorHeartbeatSkip+1 blocks rather than every block (#4277).
+	LastAnchorBlock uint64 `json:"lastAnchorBlock,omitempty" form:"lastAnchorBlock" query:"lastAnchorBlock"`
+	extraData       []byte
 }
 
 type AnchorMetadata struct {
@@ -1575,6 +1577,7 @@ func (v *AnchorLedger) Copy() *AnchorLedger {
 			u.Sequence[i] = (v).Copy()
 		}
 	}
+	u.LastAnchorBlock = v.LastAnchorBlock
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -4101,6 +4104,9 @@ func (v *AnchorLedger) Equal(u *AnchorLedger) bool {
 		if !((v.Sequence[i]).Equal(u.Sequence[i])) {
 			return false
 		}
+	}
+	if !(v.LastAnchorBlock == u.LastAnchorBlock) {
+		return false
 	}
 
 	return true
@@ -7139,6 +7145,7 @@ var fieldNames_AnchorLedger = []string{
 	5: "MajorBlockTime",
 	6: "PendingMajorBlockAnchors",
 	7: "Sequence",
+	8: "LastAnchorBlock",
 }
 
 func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
@@ -7173,6 +7180,9 @@ func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Sequence {
 			writer.WriteValue(7, v.MarshalBinary)
 		}
+	}
+	if !(v.LastAnchorBlock == 0) {
+		writer.WriteUint(8, v.LastAnchorBlock)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AnchorLedger)
@@ -15658,6 +15668,9 @@ func (v *AnchorLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 			break
 		}
 	}
+	if x, ok := reader.ReadUint(8); ok {
+		v.LastAnchorBlock = x
+	}
 
 	seen, err := reader.Reset(fieldNames_AnchorLedger)
 	if err != nil {
@@ -20344,6 +20357,7 @@ func init() {
 		encoding.NewTypeField("majorBlockTime", "string"),
 		encoding.NewTypeField("pendingMajorBlockAnchors", "string[]"),
 		encoding.NewTypeField("sequence", "PartitionSyntheticLedger[]"),
+		encoding.NewTypeField("lastAnchorBlock", "uint64"),
 	}, "AnchorLedger", "anchorLedger")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -21364,6 +21378,7 @@ func (v *AnchorLedger) MarshalJSON() ([]byte, error) {
 		MajorBlockTime           time.Time                                    `json:"majorBlockTime,omitempty"`
 		PendingMajorBlockAnchors encoding.JsonList[*url.URL]                  `json:"pendingMajorBlockAnchors,omitempty"`
 		Sequence                 encoding.JsonList[*PartitionSyntheticLedger] `json:"sequence,omitempty"`
+		LastAnchorBlock          uint64                                       `json:"lastAnchorBlock,omitempty"`
 		ExtraData                *string                                      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -21384,6 +21399,9 @@ func (v *AnchorLedger) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Sequence) == 0) {
 		u.Sequence = v.Sequence
+	}
+	if !(v.LastAnchorBlock == 0) {
+		u.LastAnchorBlock = v.LastAnchorBlock
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -24098,6 +24116,7 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 		MajorBlockTime           time.Time                                    `json:"majorBlockTime,omitempty"`
 		PendingMajorBlockAnchors encoding.JsonList[*url.URL]                  `json:"pendingMajorBlockAnchors,omitempty"`
 		Sequence                 encoding.JsonList[*PartitionSyntheticLedger] `json:"sequence,omitempty"`
+		LastAnchorBlock          uint64                                       `json:"lastAnchorBlock,omitempty"`
 		ExtraData                *string                                      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -24107,6 +24126,7 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 	u.MajorBlockTime = v.MajorBlockTime
 	u.PendingMajorBlockAnchors = v.PendingMajorBlockAnchors
 	u.Sequence = v.Sequence
+	u.LastAnchorBlock = v.LastAnchorBlock
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -24120,6 +24140,7 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 	v.MajorBlockTime = u.MajorBlockTime
 	v.PendingMajorBlockAnchors = u.PendingMajorBlockAnchors
 	v.Sequence = u.Sequence
+	v.LastAnchorBlock = u.LastAnchorBlock
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

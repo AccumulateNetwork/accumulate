@@ -37,24 +37,26 @@ func perpetual(t *testing.T, anchorEmpty bool) {
 		Version(1).Timestamp(1).PrivateKey(liteKey))
 	sim.StepUntil(Txn(st.TxID).Succeeds())
 
-	h := func() uint64 {
-		var n uint64
-		View(t, sim.Database(Directory), func(b *database.Batch) {
+	// Blocks and anchors are different costs. The heartbeat's rate limit caps
+	// anchors; blocks are driven by the cascade, so measure both.
+	stat := func() (blocks, anchors uint64) {
+		View(t, sim.Database("BVN0"), func(b *database.Batch) {
 			var l *SystemLedger
-			require.NoError(t, b.Account(DnUrl().JoinPath(Ledger)).Main().GetAs(&l))
-			n = l.Index
+			require.NoError(t, b.Account(PartitionUrl("BVN0").JoinPath(Ledger)).Main().GetAs(&l))
+			blocks = l.Index
+			var a *AnchorLedger
+			require.NoError(t, b.Account(PartitionUrl("BVN0").JoinPath(AnchorPool)).Main().GetAs(&a))
+			anchors = a.MinorBlockSequenceNumber
 		})
-		return n
+		return
 	}
 
 	sim.StepN(100)
-	a := h()
-	sim.StepN(100)
-	b := h()
+	b0, a0 := stat()
 	sim.StepN(200)
-	c := h()
-	t.Logf("AnchorEmptyBlocks=%v: DN height after settling %d -> %d -> %d (+%d then +%d)",
-		anchorEmpty, a, b, c, b-a, c-b)
+	b1, a1 := stat()
+	t.Logf("AnchorEmptyBlocks=%v: over 200 idle steps BVN0 produced %d blocks and sent %d anchors (%.2f anchors/block)",
+		anchorEmpty, b1-b0, a1-a0, float64(a1-a0)/float64(b1-b0))
 }
 
 func TestPerpetual_Default(t *testing.T)           { perpetual(t, false) }
