@@ -160,6 +160,51 @@ func (s SnapshotService) ListSnapshots(c *call[*ListSnapshotsRequest]) {
 	c.Write(&ListSnapshotsResponse{Value: res})
 }
 
+// ProofService forwards the proof requests to a [api.ProofService]. It is the
+// public face of the major-block spine (#4058) and of the second of the two
+// calls an account proof takes (#4274).
+type ProofService struct {
+	api.ProofService
+}
+
+func (s ProofService) methods() serviceMethodMap {
+	m := serviceMethodMap{}
+	typ, fn := makeServiceMethod(s.majorHeaderRange)
+	m[typ] = fn
+	typ, fn = makeServiceMethod(s.minorRootRange)
+	m[typ] = fn
+	typ, fn = makeServiceMethod(s.anchorReceipt)
+	m[typ] = fn
+	return m
+}
+
+func (s ProofService) majorHeaderRange(c *call[*MajorHeaderRangeRequest]) {
+	res, err := s.ProofService.MajorHeaderRange(c.context, c.params.MajorHeaderRangeOptions)
+	if err != nil {
+		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
+		return
+	}
+	c.Write(&MajorHeaderRangeResponse{Value: res})
+}
+
+func (s ProofService) minorRootRange(c *call[*MinorRootRangeRequest]) {
+	res, err := s.ProofService.MinorRootRange(c.context, c.params.MinorRootRangeOptions)
+	if err != nil {
+		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
+		return
+	}
+	c.Write(&MinorRootRangeResponse{Value: res})
+}
+
+func (s ProofService) anchorReceipt(c *call[*AnchorReceiptRequest]) {
+	res, err := s.ProofService.AnchorReceipt(c.context, c.params.AnchorReceiptOptions)
+	if err != nil {
+		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
+		return
+	}
+	c.Write(&AnchorReceiptResponse{Value: res})
+}
+
 // MetricsService forwards [MetricsRequest]s to a [api.MetricsService].
 type MetricsService struct {
 	api.MetricsService

@@ -14,12 +14,23 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 )
+
+type PartitionRootRecord struct {
+	fieldsSet []bool
+	// Receipt proves the state root entry into the directory root chain anchor.
+	Receipt *merkle.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	// DirectoryBlock is the directory block whose root chain anchor the receipt ends at.
+	DirectoryBlock uint64 `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
+	extraData      []byte
+}
 
 type SequenceOptions struct {
 	fieldsSet          []bool
@@ -27,6 +38,42 @@ type SequenceOptions struct {
 	ProveAgainstAnchor uint64     `json:"proveAgainstAnchor,omitempty" form:"proveAgainstAnchor" query:"proveAgainstAnchor" validate:"required"`
 	extraData          []byte
 }
+
+type SnapshotChunk struct {
+	fieldsSet []bool
+	// Block is the minor block the snapshot was taken at.
+	Block uint64 `json:"block,omitempty" form:"block" query:"block" validate:"required"`
+	// Total is the total size of the snapshot in bytes.
+	Total uint64 `json:"total,omitempty" form:"total" query:"total" validate:"required"`
+	// Offset is the offset of this chunk.
+	Offset uint64 `json:"offset,omitempty" form:"offset" query:"offset" validate:"required"`
+	// Data is the chunk data.
+	Data []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	// Round is the consensus round that committed the epoch block (zero if unknown).
+	Round uint64 `json:"round,omitempty" form:"round" query:"round" validate:"required"`
+	// Epoch is the committee epoch of that round (may be zero).
+	Epoch uint64 `json:"epoch,omitempty" form:"epoch" query:"epoch" validate:"required"`
+	// StateRoot is the state tree anchor of the pinned block's prepared anchor, for verification against a directory receipt (BVN sync,.
+	StateRoot [32]byte `json:"stateRoot,omitempty" form:"stateRoot" query:"stateRoot" validate:"required"`
+	extraData []byte
+}
+
+func (v *PartitionRootRecord) Copy() *PartitionRootRecord {
+	u := new(PartitionRootRecord)
+
+	if v.Receipt != nil {
+		u.Receipt = (v.Receipt).Copy()
+	}
+	u.DirectoryBlock = v.DirectoryBlock
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PartitionRootRecord) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SequenceOptions) Copy() *SequenceOptions {
 	u := new(SequenceOptions)
@@ -45,6 +92,42 @@ func (v *SequenceOptions) Copy() *SequenceOptions {
 
 func (v *SequenceOptions) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *SnapshotChunk) Copy() *SnapshotChunk {
+	u := new(SnapshotChunk)
+
+	u.Block = v.Block
+	u.Total = v.Total
+	u.Offset = v.Offset
+	u.Data = encoding.BytesCopy(v.Data)
+	u.Round = v.Round
+	u.Epoch = v.Epoch
+	u.StateRoot = v.StateRoot
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SnapshotChunk) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PartitionRootRecord) Equal(u *PartitionRootRecord) bool {
+	switch {
+	case v.Receipt == u.Receipt:
+		// equal
+	case v.Receipt == nil || u.Receipt == nil:
+		return false
+	case !((v.Receipt).Equal(u.Receipt)):
+		return false
+	}
+	if !(v.DirectoryBlock == u.DirectoryBlock) {
+		return false
+	}
+
+	return true
+}
+
 func (v *SequenceOptions) Equal(u *SequenceOptions) bool {
 	if !(p2p.EqualPeerID(v.NodeID, u.NodeID)) {
 		return false
@@ -54,6 +137,90 @@ func (v *SequenceOptions) Equal(u *SequenceOptions) bool {
 	}
 
 	return true
+}
+
+func (v *SnapshotChunk) Equal(u *SnapshotChunk) bool {
+	if !(v.Block == u.Block) {
+		return false
+	}
+	if !(v.Total == u.Total) {
+		return false
+	}
+	if !(v.Offset == u.Offset) {
+		return false
+	}
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+	if !(v.Round == u.Round) {
+		return false
+	}
+	if !(v.Epoch == u.Epoch) {
+		return false
+	}
+	if !(v.StateRoot == u.StateRoot) {
+		return false
+	}
+
+	return true
+}
+
+var fieldNames_PartitionRootRecord = []string{
+	1: "Receipt",
+	2: "DirectoryBlock",
+}
+
+func (v *PartitionRootRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Receipt == nil) {
+		writer.WriteValue(1, v.Receipt.MarshalBinary)
+	}
+	if !(v.DirectoryBlock == 0) {
+		writer.WriteUint(2, v.DirectoryBlock)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PartitionRootRecord)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PartitionRootRecord) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Receipt is missing")
+	} else if v.Receipt == nil {
+		errs = append(errs, "field Receipt is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field DirectoryBlock is missing")
+	} else if v.DirectoryBlock == 0 {
+		errs = append(errs, "field DirectoryBlock is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
 }
 
 var fieldNames_SequenceOptions = []string{
@@ -114,6 +281,135 @@ func (v *SequenceOptions) IsValid() error {
 	}
 }
 
+var fieldNames_SnapshotChunk = []string{
+	1: "Block",
+	2: "Total",
+	3: "Offset",
+	4: "Data",
+	5: "Round",
+	6: "Epoch",
+	7: "StateRoot",
+}
+
+func (v *SnapshotChunk) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Block == 0) {
+		writer.WriteUint(1, v.Block)
+	}
+	if !(v.Total == 0) {
+		writer.WriteUint(2, v.Total)
+	}
+	if !(v.Offset == 0) {
+		writer.WriteUint(3, v.Offset)
+	}
+	if !(len(v.Data) == 0) {
+		writer.WriteBytes(4, v.Data)
+	}
+	if !(v.Round == 0) {
+		writer.WriteUint(5, v.Round)
+	}
+	if !(v.Epoch == 0) {
+		writer.WriteUint(6, v.Epoch)
+	}
+	if !(v.StateRoot == ([32]byte{})) {
+		writer.WriteHash(7, &v.StateRoot)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SnapshotChunk)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *SnapshotChunk) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Block is missing")
+	} else if v.Block == 0 {
+		errs = append(errs, "field Block is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Total is missing")
+	} else if v.Total == 0 {
+		errs = append(errs, "field Total is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Offset is missing")
+	} else if v.Offset == 0 {
+		errs = append(errs, "field Offset is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Data is missing")
+	} else if len(v.Data) == 0 {
+		errs = append(errs, "field Data is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Round is missing")
+	} else if v.Round == 0 {
+		errs = append(errs, "field Round is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Epoch is missing")
+	} else if v.Epoch == 0 {
+		errs = append(errs, "field Epoch is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field StateRoot is missing")
+	} else if v.StateRoot == ([32]byte{}) {
+		errs = append(errs, "field StateRoot is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+func (v *PartitionRootRecord) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PartitionRootRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(merkle.Receipt); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Receipt = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.DirectoryBlock = x
+	}
+
+	seen, err := reader.Reset(fieldNames_PartitionRootRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SequenceOptions) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -144,12 +440,68 @@ func (v *SequenceOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *SnapshotChunk) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SnapshotChunk) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Block = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Total = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Offset = x
+	}
+	if x, ok := reader.ReadBytes(4); ok {
+		v.Data = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.Round = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.Epoch = x
+	}
+	if x, ok := reader.ReadHash(7); ok {
+		v.StateRoot = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_SnapshotChunk)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func init() {
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("receipt", "merkle.Receipt"),
+		encoding.NewTypeField("directoryBlock", "uint64"),
+	}, "PartitionRootRecord", "partitionRootRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("nodeID", "p2p.PeerID"),
 		encoding.NewTypeField("proveAgainstAnchor", "uint64"),
 	}, "SequenceOptions", "sequenceOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("block", "uint64"),
+		encoding.NewTypeField("total", "uint64"),
+		encoding.NewTypeField("offset", "uint64"),
+		encoding.NewTypeField("data", "bytes"),
+		encoding.NewTypeField("round", "uint64"),
+		encoding.NewTypeField("epoch", "uint64"),
+		encoding.NewTypeField("stateRoot", "bytes32"),
+	}, "SnapshotChunk", "snapshotChunk")
 
 }
 
@@ -164,6 +516,42 @@ func (v *SequenceOptions) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.ProveAgainstAnchor == 0) {
 		u.ProveAgainstAnchor = v.ProveAgainstAnchor
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *SnapshotChunk) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Block     uint64  `json:"block,omitempty"`
+		Total     uint64  `json:"total,omitempty"`
+		Offset    uint64  `json:"offset,omitempty"`
+		Data      *string `json:"data,omitempty"`
+		Round     uint64  `json:"round,omitempty"`
+		Epoch     uint64  `json:"epoch,omitempty"`
+		StateRoot *string `json:"stateRoot,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Block == 0) {
+		u.Block = v.Block
+	}
+	if !(v.Total == 0) {
+		u.Total = v.Total
+	}
+	if !(v.Offset == 0) {
+		u.Offset = v.Offset
+	}
+	if !(len(v.Data) == 0) {
+		u.Data = encoding.BytesToJSON(v.Data)
+	}
+	if !(v.Round == 0) {
+		u.Round = v.Round
+	}
+	if !(v.Epoch == 0) {
+		u.Epoch = v.Epoch
+	}
+	if !(v.StateRoot == ([32]byte{})) {
+		u.StateRoot = encoding.ChainToJSON(&v.StateRoot)
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -186,6 +574,50 @@ func (v *SequenceOptions) UnmarshalJSON(data []byte) error {
 	}
 
 	v.ProveAgainstAnchor = u.ProveAgainstAnchor
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *SnapshotChunk) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Block     uint64  `json:"block,omitempty"`
+		Total     uint64  `json:"total,omitempty"`
+		Offset    uint64  `json:"offset,omitempty"`
+		Data      *string `json:"data,omitempty"`
+		Round     uint64  `json:"round,omitempty"`
+		Epoch     uint64  `json:"epoch,omitempty"`
+		StateRoot *string `json:"stateRoot,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Block = v.Block
+	u.Total = v.Total
+	u.Offset = v.Offset
+	u.Data = encoding.BytesToJSON(v.Data)
+	u.Round = v.Round
+	u.Epoch = v.Epoch
+	u.StateRoot = encoding.ChainToJSON(&v.StateRoot)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Block = u.Block
+	v.Total = u.Total
+	v.Offset = u.Offset
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
+	}
+	v.Round = u.Round
+	v.Epoch = u.Epoch
+	if x, err := encoding.ChainFromJSON(u.StateRoot); err != nil {
+		return fmt.Errorf("error decoding StateRoot: %w", err)
+	} else {
+		v.StateRoot = *x
+	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

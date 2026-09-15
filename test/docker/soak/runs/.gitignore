@@ -28,3 +28,7 @@ latest
 # tens of MB of segments, and crash-consistent at best. Its conclusions go in
 # the capture README; the copy stays on the machine that took it.
 Shard*/
+
+# mem.csv is sampled every 30s for the length of a run: 1 MiB in twelve
+# hours, past GitLab's blob cap, and its reading belongs in the manifest.
+mem.csv

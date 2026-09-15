@@ -58,6 +58,7 @@ import (
 //	Message(H).Main                   Account(U).Main
 //	Transaction(H).Main               Transaction(H).Status
 //	<chain>.Element(I)                Account(U).Url (written once; see below)
+//	<chain>.Intermediate(I,H)
 //	<chain>.ElementIndex(H)           Account(U).Pending, .Directory, .Chains
 //	                                  <chain>.Head
 //	                                  BPT nodes and BPT.Root
@@ -72,11 +73,33 @@ import (
 func isWriteOnce(k *record.Key) bool {
 	last, prev, trailing := tail(k)
 	switch last {
-	case "Element", "ElementIndex":
-		// A merkle chain is a log.  Element(I) is the I'th entry and
-		// ElementIndex(H) is where entry H landed -- facts about a
-		// position in the log, which does not move.  Head is the log's
-		// current end and is excluded by requiring the parameter.
+	case "ElementIndex":
+		// ElementIndex(H) is where entry H landed -- but the index names
+		// the position a hash was LAST written at (database.md, "Chains
+		// are logs"), and two chains receive a hash more than once by
+		// construction: a root chain takes equal anchors from equal
+		// chains, and a signature chain records every signature message
+		// as it arrived. On those the index is rewritten, so it is
+		// mutable; on every other chain the writer appends each hash
+		// once and the index is written once.
+		//
+		// Anchoring the BPT chain into the root chain (#4272) is what
+		// made the root chain's repeats reachable in the simulator, and
+		// the misroute check caught the classification rather than the
+		// write (TestSimulatorRouting).
+		return trailing == 1 && !chainRepeats(prev)
+
+	case "Intermediate":
+		// <chain>.Intermediate(I, H) is the pair the cascade combined at
+		// height H when element I was added -- a fact about a position in
+		// the log, fixed the moment it was written, like Element below
+		// (#4263).
+		return trailing == 2
+
+	case "Element":
+		// A merkle chain is a log.  Element(I) is the I'th entry: a fact
+		// about a position in the log, which does not move.  Head is the
+		// log's current end and is excluded by requiring the parameter.
 		return trailing == 1
 	case "States":
 		// States(I) is the mark point covering I: the merkle state every
@@ -173,4 +196,16 @@ func tail(k *record.Key) (last, prev string, trailing int) {
 		}
 	}
 	return last, prev, trailing
+}
+
+// chainRepeats reports whether a chain receives the same hash more than once
+// by construction (database.md, "Chains are logs"). Only these two do; a
+// duplicate on any other chain is the writer's bug, not the chain's to
+// absorb, and its element index is written once.
+func chainRepeats(chain string) bool {
+	switch chain {
+	case "RootChain", "SignatureChain":
+		return true
+	}
+	return false
 }

@@ -24,6 +24,10 @@ func New(typ Type) (Message, error) {
 	switch typ {
 	case TypeAddressed:
 		return new(Addressed), nil
+	case TypeAnchorReceiptRequest:
+		return new(AnchorReceiptRequest), nil
+	case TypeAnchorReceiptResponse:
+		return new(AnchorReceiptResponse), nil
 	case TypeConsensusStatusRequest:
 		return new(ConsensusStatusRequest), nil
 	case TypeConsensusStatusResponse:
@@ -44,10 +48,18 @@ func New(typ Type) (Message, error) {
 		return new(ListSnapshotsRequest), nil
 	case TypeListSnapshotsResponse:
 		return new(ListSnapshotsResponse), nil
+	case TypeMajorHeaderRangeRequest:
+		return new(MajorHeaderRangeRequest), nil
+	case TypeMajorHeaderRangeResponse:
+		return new(MajorHeaderRangeResponse), nil
 	case TypeMetricsRequest:
 		return new(MetricsRequest), nil
 	case TypeMetricsResponse:
 		return new(MetricsResponse), nil
+	case TypeMinorRootRangeRequest:
+		return new(MinorRootRangeRequest), nil
+	case TypeMinorRootRangeResponse:
+		return new(MinorRootRangeResponse), nil
 	case TypeNetworkStatusRequest:
 		return new(NetworkStatusRequest), nil
 	case TypeNetworkStatusResponse:
@@ -56,6 +68,18 @@ func New(typ Type) (Message, error) {
 		return new(NodeInfoRequest), nil
 	case TypeNodeInfoResponse:
 		return new(NodeInfoResponse), nil
+	case TypePrivateMajorHeaderRangeRequest:
+		return new(PrivateMajorHeaderRangeRequest), nil
+	case TypePrivateMajorHeaderRangeResponse:
+		return new(PrivateMajorHeaderRangeResponse), nil
+	case TypePrivateMinorRootRangeRequest:
+		return new(PrivateMinorRootRangeRequest), nil
+	case TypePrivateMinorRootRangeResponse:
+		return new(PrivateMinorRootRangeResponse), nil
+	case TypePrivatePartitionRootRangeRequest:
+		return new(PrivatePartitionRootRangeRequest), nil
+	case TypePrivatePartitionRootRangeResponse:
+		return new(PrivatePartitionRootRangeResponse), nil
 	case TypePrivateSequenceRangeRequest:
 		return new(PrivateSequenceRangeRequest), nil
 	case TypePrivateSequenceRangeResponse:
@@ -64,6 +88,10 @@ func New(typ Type) (Message, error) {
 		return new(PrivateSequenceRequest), nil
 	case TypePrivateSequenceResponse:
 		return new(PrivateSequenceResponse), nil
+	case TypePrivateSnapshotRangeRequest:
+		return new(PrivateSnapshotRangeRequest), nil
+	case TypePrivateSnapshotRangeResponse:
+		return new(PrivateSnapshotRangeResponse), nil
 	case TypeQueryRequest:
 		return new(QueryRequest), nil
 	case TypeRecordResponse:
@@ -98,6 +126,18 @@ func Equal(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*Addressed)
+		return ok && a.Equal(b)
+	case *AnchorReceiptRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*AnchorReceiptRequest)
+		return ok && a.Equal(b)
+	case *AnchorReceiptResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*AnchorReceiptResponse)
 		return ok && a.Equal(b)
 	case *ConsensusStatusRequest:
 		if a == nil {
@@ -159,6 +199,18 @@ func Equal(a, b Message) bool {
 		}
 		b, ok := b.(*ListSnapshotsResponse)
 		return ok && a.Equal(b)
+	case *MajorHeaderRangeRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MajorHeaderRangeRequest)
+		return ok && a.Equal(b)
+	case *MajorHeaderRangeResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MajorHeaderRangeResponse)
+		return ok && a.Equal(b)
 	case *MetricsRequest:
 		if a == nil {
 			return b == nil
@@ -170,6 +222,18 @@ func Equal(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*MetricsResponse)
+		return ok && a.Equal(b)
+	case *MinorRootRangeRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MinorRootRangeRequest)
+		return ok && a.Equal(b)
+	case *MinorRootRangeResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MinorRootRangeResponse)
 		return ok && a.Equal(b)
 	case *NetworkStatusRequest:
 		if a == nil {
@@ -195,6 +259,42 @@ func Equal(a, b Message) bool {
 		}
 		b, ok := b.(*NodeInfoResponse)
 		return ok && a.Equal(b)
+	case *PrivateMajorHeaderRangeRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivateMajorHeaderRangeRequest)
+		return ok && a.Equal(b)
+	case *PrivateMajorHeaderRangeResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivateMajorHeaderRangeResponse)
+		return ok && a.Equal(b)
+	case *PrivateMinorRootRangeRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivateMinorRootRangeRequest)
+		return ok && a.Equal(b)
+	case *PrivateMinorRootRangeResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivateMinorRootRangeResponse)
+		return ok && a.Equal(b)
+	case *PrivatePartitionRootRangeRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivatePartitionRootRangeRequest)
+		return ok && a.Equal(b)
+	case *PrivatePartitionRootRangeResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivatePartitionRootRangeResponse)
+		return ok && a.Equal(b)
 	case *PrivateSequenceRangeRequest:
 		if a == nil {
 			return b == nil
@@ -218,6 +318,18 @@ func Equal(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*PrivateSequenceResponse)
+		return ok && a.Equal(b)
+	case *PrivateSnapshotRangeRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivateSnapshotRangeRequest)
+		return ok && a.Equal(b)
+	case *PrivateSnapshotRangeResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PrivateSnapshotRangeResponse)
 		return ok && a.Equal(b)
 	case *QueryRequest:
 		if a == nil {
@@ -276,6 +388,10 @@ func Copy(v Message) Message {
 	switch v := v.(type) {
 	case *Addressed:
 		return v.Copy()
+	case *AnchorReceiptRequest:
+		return v.Copy()
+	case *AnchorReceiptResponse:
+		return v.Copy()
 	case *ConsensusStatusRequest:
 		return v.Copy()
 	case *ConsensusStatusResponse:
@@ -296,9 +412,17 @@ func Copy(v Message) Message {
 		return v.Copy()
 	case *ListSnapshotsResponse:
 		return v.Copy()
+	case *MajorHeaderRangeRequest:
+		return v.Copy()
+	case *MajorHeaderRangeResponse:
+		return v.Copy()
 	case *MetricsRequest:
 		return v.Copy()
 	case *MetricsResponse:
+		return v.Copy()
+	case *MinorRootRangeRequest:
+		return v.Copy()
+	case *MinorRootRangeResponse:
 		return v.Copy()
 	case *NetworkStatusRequest:
 		return v.Copy()
@@ -308,6 +432,18 @@ func Copy(v Message) Message {
 		return v.Copy()
 	case *NodeInfoResponse:
 		return v.Copy()
+	case *PrivateMajorHeaderRangeRequest:
+		return v.Copy()
+	case *PrivateMajorHeaderRangeResponse:
+		return v.Copy()
+	case *PrivateMinorRootRangeRequest:
+		return v.Copy()
+	case *PrivateMinorRootRangeResponse:
+		return v.Copy()
+	case *PrivatePartitionRootRangeRequest:
+		return v.Copy()
+	case *PrivatePartitionRootRangeResponse:
+		return v.Copy()
 	case *PrivateSequenceRangeRequest:
 		return v.Copy()
 	case *PrivateSequenceRangeResponse:
@@ -315,6 +451,10 @@ func Copy(v Message) Message {
 	case *PrivateSequenceRequest:
 		return v.Copy()
 	case *PrivateSequenceResponse:
+		return v.Copy()
+	case *PrivateSnapshotRangeRequest:
+		return v.Copy()
+	case *PrivateSnapshotRangeResponse:
 		return v.Copy()
 	case *QueryRequest:
 		return v.Copy()

@@ -160,8 +160,9 @@ func TestIntermediate_ProofReadsNoState(t *testing.T) {
 
 	require.NoError(t, c.Commit())
 
-	// One record per element amortised: N elements produce N-1 combines
-	require.Equal(t, n-1, cs.put["Intermediate"], "one intermediate per combine")
+	// One record per combine; see TestIntermediate_OneWritePerCombine for the
+	// count in general, which is N minus the bits set in N
+	require.Equal(t, combines(n), cs.put["Intermediate"], "one intermediate per combine")
 
 	// A fresh chain over the same store, so every read is a real one
 	cs.get = map[string]int{}
@@ -178,7 +179,6 @@ func TestIntermediate_ProofReadsNoState(t *testing.T) {
 	require.NotZero(t, cs.get["Intermediate"], "a proof must read the stored intermediates")
 	require.LessOrEqual(t, cs.get["States"], 1,
 		"a proof reads the anchor state and no more; it read %d States records", cs.get["States"])
-	t.Logf("8 proofs over %d elements: %d intermediate reads, %d state reads", n, cs.get["Intermediate"], cs.get["States"])
 }
 
 // A chain written before the record existed has no intermediates. It must
@@ -212,7 +212,6 @@ func TestIntermediate_ChainWithoutThemStillProves(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, old.get["States"], 1,
 		"without the intermediates the proof rebuilds state per level; it read %d", old.get["States"])
-	t.Logf("without the intermediates, one proof reads %d States records", old.get["States"])
 	require.Equal(t, want.Anchor, got.Anchor, "the receipt must be the same either way")
 	require.Equal(t, len(want.Entries), len(got.Entries))
 	for i := range want.Entries {
@@ -220,4 +219,91 @@ func TestIntermediate_ChainWithoutThemStillProves(t *testing.T) {
 		require.Equal(t, want.Entries[i].Right, got.Entries[i].Right, "entry %d", i)
 	}
 	require.True(t, got.Validate(nil))
+}
+
+// What a proof costs, measured the same way in both arms: one chain size, one
+// set of proofs, run twice over identical chains -- one that stored the
+// cascade pairs and one that discarded them. Anything else is comparing two
+// different experiments.
+func TestIntermediate_WhatAProofCosts(t *testing.T) {
+	const n = 4096
+	starts := []int64{0, 1, 7, 100, 300, 1000, 2047, n - 1}
+
+	build := func(drop bool) *countingStore {
+		cs := newCountingStore(begin())
+		if drop {
+			cs.drop = "Intermediate"
+		}
+		c := testChain(cs, 8, "test")
+		for i := 0; i < n; i++ {
+			d := sha256.Sum256([]byte(fmt.Sprint(i)))
+			require.NoError(t, c.AddEntry(d[:], false))
+		}
+		require.NoError(t, c.Commit())
+
+		// A fresh chain over the same store, so every read is a real one
+		cs.get = map[string]int{}
+		c = testChain(cs, 8, "test")
+		for _, s := range starts {
+			r, err := c.Receipt(s, n-1)
+			require.NoError(t, err, "start %d", s)
+			require.True(t, r.Validate(nil), "start %d", s)
+		}
+		return cs
+	}
+
+	with, without := build(false), build(true)
+	p := len(starts)
+	t.Logf("%d proofs over %d elements, per proof:", p, n)
+	t.Logf("  with the record:    %5.1f intermediate, %5.1f state, %5.1f element reads",
+		float64(with.get["Intermediate"])/float64(p), float64(with.get["States"])/float64(p), float64(with.get["Element"])/float64(p))
+	t.Logf("  without it:         %5.1f intermediate, %5.1f state, %5.1f element reads",
+		float64(without.get["Intermediate"])/float64(p), float64(without.get["States"])/float64(p), float64(without.get["Element"])/float64(p))
+
+	// The point of the change: the per-level state rebuild is gone.
+	require.Greater(t, without.get["States"], with.get["States"],
+		"the rebuild must read more state than the read does")
+	require.LessOrEqual(t, with.get["States"], 1,
+		"with the record a proof reads the anchor state and no more; it read %d", with.get["States"])
+}
+
+func benchChain(b *testing.B, n int, drop bool) *Chain {
+	cs := newCountingStore(begin())
+	if drop {
+		cs.drop = "Intermediate"
+	}
+	c := testChain(cs, 8, "test")
+	for i := 0; i < n; i++ {
+		d := sha256.Sum256([]byte(fmt.Sprint(i)))
+		if err := c.AddEntry(d[:], false); err != nil {
+			b.Fatal(err)
+		}
+	}
+	if err := c.Commit(); err != nil {
+		b.Fatal(err)
+	}
+	return testChain(cs, 8, "test")
+}
+
+// The cost a proof actually pays. The read count understates the difference:
+// the rebuild's expense is StateAt replaying up to a mark frequency of entries
+// in CPU, not the reads it makes.
+func BenchmarkReceipt(b *testing.B) {
+	for _, n := range []int{4096, 65536} {
+		for _, arm := range []struct {
+			name string
+			drop bool
+		}{{"stored", false}, {"rebuilt", true}} {
+			b.Run(fmt.Sprintf("%d/%s", n, arm.name), func(b *testing.B) {
+				c := benchChain(b, n, arm.drop)
+				b.ResetTimer()
+				b.ReportAllocs()
+				for i := 0; i < b.N; i++ {
+					if _, err := c.Receipt(int64(i%(n-1)), int64(n-1)); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		}
+	}
 }

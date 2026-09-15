@@ -40,6 +40,9 @@ ServiceType:
   Snapshot:
     description: is the type of [SnapshotService]
     value: 10
+  Proof:
+    description: is the type of [ProofService]
+    value: 11
 
 QueryType:
   Default:

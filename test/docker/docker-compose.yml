@@ -11,7 +11,12 @@
 # host, 12 dual-engine validators left too little CPU per node, and every
 # rate above ~60 tx/s collapsed. The topology is still a real multi-partition
 # network — DN + BVN1 + BVN2 — so cross-partition synthetics and anchors are
-# still exercised in both directions. Ports are 26660..26667.
+# still exercised in both directions. Ports are 26680..26687.
+#
+# 2026-09-13: moved off 26660..26667. This host also runs a mainnet follower
+# that binds 127.0.0.1:26660, so publishing on 0.0.0.0:26660 fails to bind and
+# takes one validator down with it — silently, since the other seven come up.
+# topology.BASE_HOST_PORT must move with this.
 #
 # ⚠️  CRITICAL: Bootstrap server is REQUIRED - do not remove or disable it!
 # ⚠️  See README-DAGBFT.md for complete documentation
@@ -143,7 +148,7 @@ services:
       - -w=/root/.accumulate/bvn1-1
       - /root/.accumulate/bvn1-1/accumulate.toml
     ports:
-      - "26660:26660"
+      - "26680:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -164,7 +169,7 @@ services:
       - -w=/root/.accumulate/bvn1-2
       - /root/.accumulate/bvn1-2/accumulate.toml
     ports:
-      - "26661:26660"
+      - "26681:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -185,7 +190,7 @@ services:
       - -w=/root/.accumulate/bvn1-3
       - /root/.accumulate/bvn1-3/accumulate.toml
     ports:
-      - "26662:26660"
+      - "26682:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -206,7 +211,7 @@ services:
       - -w=/root/.accumulate/bvn1-4
       - /root/.accumulate/bvn1-4/accumulate.toml
     ports:
-      - "26663:26660"
+      - "26683:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -228,7 +233,7 @@ services:
       - -w=/root/.accumulate/bvn2-1
       - /root/.accumulate/bvn2-1/accumulate.toml
     ports:
-      - "26664:26660"
+      - "26684:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -249,7 +254,7 @@ services:
       - -w=/root/.accumulate/bvn2-2
       - /root/.accumulate/bvn2-2/accumulate.toml
     ports:
-      - "26665:26660"
+      - "26685:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -270,7 +275,7 @@ services:
       - -w=/root/.accumulate/bvn2-3
       - /root/.accumulate/bvn2-3/accumulate.toml
     ports:
-      - "26666:26660"
+      - "26686:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -291,7 +296,7 @@ services:
       - -w=/root/.accumulate/bvn2-4
       - /root/.accumulate/bvn2-4/accumulate.toml
     ports:
-      - "26667:26660"
+      - "26687:26660"
     depends_on:
       init:
         condition: service_completed_successfully

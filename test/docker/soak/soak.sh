@@ -237,7 +237,7 @@ $compose down -v --remove-orphans >/dev/null 2>&1
 # Preflight the host ports the compose publishes. A single stray process on one
 # of them makes `up` fail on ONLY that node — the rest come up, so the failure
 # looked like a random "up failed" and left a partial network behind (#4158).
-# A leaked `accumulated run devnet` squatting on 26660 cost an afternoon; name
+# A leaked `accumulated run devnet` squatting on 26680 cost an afternoon; name
 # the holder so the next person spends a second, not an afternoon.
 mapfile -t want_ports < <(grep -oE '"\s*[0-9]+\s*:\s*[0-9]+"|- [0-9]+:[0-9]+' "$compose_file" \
   | grep -oE '[0-9]+:' | tr -d ':' | sort -un)
@@ -292,7 +292,7 @@ nohup docker compose -f "$here/../docker-compose.yml" logs -f --no-color \
 LOGCAP=$!
 
 up=""; for _ in $(seq 1 90); do
-  curl -sf -X POST http://localhost:26660/v3 -H 'content-type: application/json' \
+  curl -sf -X POST http://localhost:26680/v3 -H 'content-type: application/json' \
     -d '{"jsonrpc":"2.0","id":1,"method":"network-status","params":{"partition":"Directory"}}' >/dev/null 2>&1 && { up=1; break; }
   sleep 5
 done
@@ -395,7 +395,7 @@ echo "   load starts now" | tee -a "$log"
 # an ever-growing account set. -faucet-seed FAUCET matches init's genesis faucet.
 # Rotate across all 12 nodes so one chaos-disrupted node neither rejects traffic
 # nor carries the whole load.
-# Endpoints come from the topology, not a literal port range. `seq 26660 26671`
+# Endpoints come from the topology, not a literal port range. `seq 26680 26691`
 # was correct for exactly one network shape; after the cut to 2 BVNs it would
 # have handed the loadgen four endpoints nothing is listening on. The generator
 # does not fail on those — it rotates onto them and the submissions time out,
@@ -474,15 +474,15 @@ fi
 # Monitor: heights + total heals every 5 min
 echo "time,dnHeight,heals,cpuPct" > "$mon"
 ( while kill -0 $DRIVER 2>/dev/null; do
-    h=$(curl -s -X POST http://localhost:26660/v3 -H 'content-type: application/json' \
+    h=$(curl -s -X POST http://localhost:26680/v3 -H 'content-type: application/json' \
       -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"scope":"acc://dn.acme/ledger"}}' \
       | grep -oE '"index":[0-9]+' | head -1 | cut -d: -f2)
     heals=0
     for c in $(docker ps --filter name=acc-bvn --format '{{.Names}}'); do
       x=$(docker exec -e PARTS="$PARTS" "$c" sh -c '
-        nid=$(curl -s -X POST http://localhost:26660/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"node-info\",\"params\":{}}" | grep -oE "\"peerID\":\"[^\"]+\"" | cut -d"\"" -f4)
+        nid=$(curl -s -X POST http://localhost:26680/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"node-info\",\"params\":{}}" | grep -oE "\"peerID\":\"[^\"]+\"" | cut -d"\"" -f4)
         for part in $PARTS; do
-          curl -s -X POST http://localhost:26660/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"consensus-status\",\"params\":{\"partition\":\"$part\",\"nodeID\":\"$nid\"}}" | grep -oE "\"(syntheticHeals|anchorHeals)\":[0-9]+" | cut -d: -f2
+          curl -s -X POST http://localhost:26680/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"consensus-status\",\"params\":{\"partition\":\"$part\",\"nodeID\":\"$nid\"}}" | grep -oE "\"(syntheticHeals|anchorHeals)\":[0-9]+" | cut -d: -f2
         done' 2>/dev/null | paste -sd+ - | bc 2>/dev/null)
       heals=$((heals + ${x:-0}))
     done

@@ -10,6 +10,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -37,9 +38,33 @@ type Sequencer struct {
 	partition   config.NetworkUrl
 	valKey      []byte
 	globals     atomic.Value
+
+	// The pinned sync-epoch snapshot (#4058)
+	snapMu sync.Mutex
+	snap   *pinnedSnapshot
+
+	// The latest provable state view, captured synchronously at commit
+	viewMu        sync.Mutex
+	provable      *database.Batch
+	provableBlock uint64
+
+	// Recent block -> (consensus round, committee epoch), from DidCommitBlock
+	// events. A fast-syncing node needs its epoch block's round and epoch to
+	// rejoin consensus; nothing else records the mapping (#4058).
+	commitMu     sync.Mutex
+	commitRounds map[uint64]blockCommit
+	commitOldest uint64
 }
 
 var _ private.Sequencer = (*Sequencer)(nil)
+
+type blockCommit struct {
+	round uint64
+	epoch uint64
+}
+
+// commitRoundRetention bounds how many block->round mappings are kept.
+const commitRoundRetention = 1 << 14
 
 type SequencerParams struct {
 	Logger       logging.Logger
@@ -67,6 +92,24 @@ func NewSequencer(params SequencerParams) *Sequencer {
 	s.globals.Store(params.Globals)
 	events.SubscribeSync(params.EventBus, func(e events.WillChangeGlobals) error {
 		s.globals.Store(e.New.Copy())
+		return nil
+	})
+	s.commitRounds = map[uint64]blockCommit{}
+	events.SubscribeSync(params.EventBus, func(e events.DidCommitBlock) error {
+		if e.Round == 0 {
+			return nil // CometBFT -- no rounds
+		}
+		s.captureProvableView(e.Index)
+		s.commitMu.Lock()
+		defer s.commitMu.Unlock()
+		s.commitRounds[e.Index] = blockCommit{round: e.Round, epoch: e.Epoch}
+		if s.commitOldest == 0 {
+			s.commitOldest = e.Index
+		}
+		for e.Index-s.commitOldest > commitRoundRetention {
+			delete(s.commitRounds, s.commitOldest)
+			s.commitOldest++
+		}
 		return nil
 	})
 	return s
@@ -917,4 +960,13 @@ func (s *Sequencer) getHeldAnchorContinuation(batch *database.Batch, fromRootInd
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	return receipt, nil
+}
+
+// commitRoundFor returns the consensus round and committee epoch that
+// committed the given block, if known.
+func (s *Sequencer) commitRoundFor(block uint64) (blockCommit, bool) {
+	s.commitMu.Lock()
+	defer s.commitMu.Unlock()
+	c, ok := s.commitRounds[block]
+	return c, ok
 }

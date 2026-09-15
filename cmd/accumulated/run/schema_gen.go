@@ -1047,6 +1047,15 @@ func init() {
 				},
 			},
 			{
+				Name:        "BlockInterval",
+				Description: "the cadence the deployed network declares; recorded in the genesis globals, which every node then paces from (#4267)",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[encoding.Duration](),
+				},
+			},
+			{
 				Name:     "StorageType",
 				Optional: true,
 				Type: (&schema.PointerType{

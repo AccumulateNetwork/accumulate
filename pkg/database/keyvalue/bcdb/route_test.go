@@ -65,8 +65,22 @@ func TestClassification(t *testing.T) {
 		// about a position, the head is where the log currently ends
 		{true, "chain entry", record.NewKey("Account", alice, "MainChain", "Element", uint64(5))},
 		{true, "where an entry landed", record.NewKey("Account", alice, "MainChain", "ElementIndex", hash)},
+		// The index names the position a hash was LAST written at, so on
+		// the two chains that receive a hash more than once by
+		// construction it is rewritten (database.md, "Chains are logs").
+		// Anchoring the BPT chain into the root chain (#4272) made the
+		// root chain's repeats reachable and TestSimulatorRouting caught
+		// this classified write-once.
+		{false, "root chain index: equal anchors from equal chains", record.NewKey("Account", alice, "RootChain", "ElementIndex", hash)},
+		{false, "signature chain index: every signature as it arrived", record.NewKey("Account", alice, "SignatureChain", "ElementIndex", hash)},
+		{true, "root chain entry is still a position", record.NewKey("Account", alice, "RootChain", "Element", uint64(5))},
 		{false, "mark point (state every later state is computed from; dynamic like Url)", record.NewKey("Account", alice, "MainChain", "States", uint64(64))},
 		{false, "the end of the log", record.NewKey("Account", alice, "MainChain", "Head")},
+		// The cascade pair combined at a height when an entry was added
+		// is fixed the moment it is written, like the entry (#4263)
+		{true, "cascade pair", record.NewKey("Account", alice, "MainChain", "Intermediate", uint64(5), uint64(1))},
+		{true, "cascade pair on an anchor chain", record.NewKey("Account", alice, "AnchorChain", "BVN1", "Root", "Intermediate", uint64(9), uint64(3))},
+		{false, "a cascade pair needs both parameters", record.NewKey("Account", alice, "MainChain", "Intermediate", uint64(5))},
 
 		// The same rules have to reach every chain, including the ones
 		// with a parameter of their own

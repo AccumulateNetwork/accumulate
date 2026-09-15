@@ -32,6 +32,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/rest"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/websocket"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Handler processes API requests.
@@ -107,6 +108,7 @@ func NewHandler(opts Options) (*Handler, error) {
 		jsonrpc.Validator{Validator: client},
 		jsonrpc.Faucet{Faucet: client},
 		jsonrpc.Sequencer{Sequencer: client.Private()},
+		jsonrpc.ProofService{ProofService: client},
 	)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize API v3: %w", err)
@@ -123,6 +125,7 @@ func NewHandler(opts Options) (*Handler, error) {
 		message.Validator{Validator: client},
 		message.Faucet{Faucet: client},
 		message.EventService{EventService: client},
+		message.ProofService{ProofService: client},
 	)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize websocket API: %w", err)
@@ -262,6 +265,20 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		if msg.Partition != "" {
 			service.Argument = msg.Partition
 		}
+
+	case *message.MajorHeaderRangeRequest, *message.MinorRootRangeRequest:
+		// The spine is served only for the directory (major_header.go,
+		// minor_root.go).
+		service.Type = api.ServiceTypeProof
+		service.Argument = protocol.Directory
+
+	case *message.AnchorReceiptRequest:
+		// Served by the partition, not the directory: extending a BPT root to a
+		// root-chain anchor reads the partition's bpt chain, and binding that
+		// anchor reads the directory's. Every node runs both, so the partition
+		// is the one place with each half (#4274).
+		service.Type = api.ServiceTypeProof
+		service.Argument = msg.Partition
 
 	case *message.MetricsRequest:
 		service.Type = api.ServiceTypeMetrics

@@ -34,6 +34,18 @@ type Addressed struct {
 	extraData []byte
 }
 
+type AnchorReceiptRequest struct {
+	fieldsSet []bool
+	api.AnchorReceiptOptions
+	extraData []byte
+}
+
+type AnchorReceiptResponse struct {
+	fieldsSet []bool
+	Value     *api.AnchorReceiptRecord `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type ConsensusStatusRequest struct {
 	fieldsSet []bool
 	api.ConsensusStatusOptions
@@ -95,6 +107,18 @@ type ListSnapshotsResponse struct {
 	extraData []byte
 }
 
+type MajorHeaderRangeRequest struct {
+	fieldsSet []bool
+	api.MajorHeaderRangeOptions
+	extraData []byte
+}
+
+type MajorHeaderRangeResponse struct {
+	fieldsSet []bool
+	Value     []*api.MajorHeaderRecord `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type MetricsRequest struct {
 	fieldsSet []bool
 	api.MetricsOptions
@@ -104,6 +128,18 @@ type MetricsRequest struct {
 type MetricsResponse struct {
 	fieldsSet []bool
 	Value     *api.Metrics `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
+type MinorRootRangeRequest struct {
+	fieldsSet []bool
+	api.MinorRootRangeOptions
+	extraData []byte
+}
+
+type MinorRootRangeResponse struct {
+	fieldsSet []bool
+	Value     *api.MinorRootRecord `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -128,6 +164,50 @@ type NodeInfoRequest struct {
 type NodeInfoResponse struct {
 	fieldsSet []bool
 	Value     *api.NodeInfo `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
+type PrivateMajorHeaderRangeRequest struct {
+	fieldsSet []bool
+	Partition *url.URL `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Start     uint64   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	End       uint64   `json:"end,omitempty" form:"end" query:"end" validate:"required"`
+	private.SequenceOptions
+	extraData []byte
+}
+
+type PrivateMajorHeaderRangeResponse struct {
+	fieldsSet []bool
+	Value     []*private.MajorHeaderRecord `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
+type PrivateMinorRootRangeRequest struct {
+	fieldsSet []bool
+	Partition *url.URL `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Since     uint64   `json:"since,omitempty" form:"since" query:"since" validate:"required"`
+	Until     uint64   `json:"until,omitempty" form:"until" query:"until" validate:"required"`
+	private.SequenceOptions
+	extraData []byte
+}
+
+type PrivateMinorRootRangeResponse struct {
+	fieldsSet []bool
+	Value     *private.MinorRootRecord `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
+type PrivatePartitionRootRangeRequest struct {
+	fieldsSet []bool
+	Partition *url.URL `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	StateRoot [32]byte `json:"stateRoot,omitempty" form:"stateRoot" query:"stateRoot" validate:"required"`
+	private.SequenceOptions
+	extraData []byte
+}
+
+type PrivatePartitionRootRangeResponse struct {
+	fieldsSet []bool
+	Value     *private.PartitionRootRecord `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -159,6 +239,21 @@ type PrivateSequenceRequest struct {
 type PrivateSequenceResponse struct {
 	fieldsSet []bool
 	Value     *api.MessageRecord[messaging.Message] `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
+type PrivateSnapshotRangeRequest struct {
+	fieldsSet []bool
+	Partition *url.URL `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Epoch     uint64   `json:"epoch,omitempty" form:"epoch" query:"epoch" validate:"required"`
+	Offset    uint64   `json:"offset,omitempty" form:"offset" query:"offset" validate:"required"`
+	private.SequenceOptions
+	extraData []byte
+}
+
+type PrivateSnapshotRangeResponse struct {
+	fieldsSet []bool
+	Value     *private.SnapshotChunk `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -214,6 +309,10 @@ type ValidateResponse struct {
 
 func (*Addressed) Type() Type { return TypeAddressed }
 
+func (*AnchorReceiptRequest) Type() Type { return TypeAnchorReceiptRequest }
+
+func (*AnchorReceiptResponse) Type() Type { return TypeAnchorReceiptResponse }
+
 func (*ConsensusStatusRequest) Type() Type { return TypeConsensusStatusRequest }
 
 func (*ConsensusStatusResponse) Type() Type { return TypeConsensusStatusResponse }
@@ -234,9 +333,17 @@ func (*ListSnapshotsRequest) Type() Type { return TypeListSnapshotsRequest }
 
 func (*ListSnapshotsResponse) Type() Type { return TypeListSnapshotsResponse }
 
+func (*MajorHeaderRangeRequest) Type() Type { return TypeMajorHeaderRangeRequest }
+
+func (*MajorHeaderRangeResponse) Type() Type { return TypeMajorHeaderRangeResponse }
+
 func (*MetricsRequest) Type() Type { return TypeMetricsRequest }
 
 func (*MetricsResponse) Type() Type { return TypeMetricsResponse }
+
+func (*MinorRootRangeRequest) Type() Type { return TypeMinorRootRangeRequest }
+
+func (*MinorRootRangeResponse) Type() Type { return TypeMinorRootRangeResponse }
 
 func (*NetworkStatusRequest) Type() Type { return TypeNetworkStatusRequest }
 
@@ -246,6 +353,18 @@ func (*NodeInfoRequest) Type() Type { return TypeNodeInfoRequest }
 
 func (*NodeInfoResponse) Type() Type { return TypeNodeInfoResponse }
 
+func (*PrivateMajorHeaderRangeRequest) Type() Type { return TypePrivateMajorHeaderRangeRequest }
+
+func (*PrivateMajorHeaderRangeResponse) Type() Type { return TypePrivateMajorHeaderRangeResponse }
+
+func (*PrivateMinorRootRangeRequest) Type() Type { return TypePrivateMinorRootRangeRequest }
+
+func (*PrivateMinorRootRangeResponse) Type() Type { return TypePrivateMinorRootRangeResponse }
+
+func (*PrivatePartitionRootRangeRequest) Type() Type { return TypePrivatePartitionRootRangeRequest }
+
+func (*PrivatePartitionRootRangeResponse) Type() Type { return TypePrivatePartitionRootRangeResponse }
+
 func (*PrivateSequenceRangeRequest) Type() Type { return TypePrivateSequenceRangeRequest }
 
 func (*PrivateSequenceRangeResponse) Type() Type { return TypePrivateSequenceRangeResponse }
@@ -253,6 +372,10 @@ func (*PrivateSequenceRangeResponse) Type() Type { return TypePrivateSequenceRan
 func (*PrivateSequenceRequest) Type() Type { return TypePrivateSequenceRequest }
 
 func (*PrivateSequenceResponse) Type() Type { return TypePrivateSequenceResponse }
+
+func (*PrivateSnapshotRangeRequest) Type() Type { return TypePrivateSnapshotRangeRequest }
+
+func (*PrivateSnapshotRangeResponse) Type() Type { return TypePrivateSnapshotRangeResponse }
 
 func (*QueryRequest) Type() Type { return TypeQueryRequest }
 
@@ -288,6 +411,36 @@ func (v *Addressed) Copy() *Addressed {
 }
 
 func (v *Addressed) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AnchorReceiptRequest) Copy() *AnchorReceiptRequest {
+	u := new(AnchorReceiptRequest)
+
+	u.AnchorReceiptOptions = *v.AnchorReceiptOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *AnchorReceiptRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AnchorReceiptResponse) Copy() *AnchorReceiptResponse {
+	u := new(AnchorReceiptResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *AnchorReceiptResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ConsensusStatusRequest) Copy() *ConsensusStatusRequest {
 	u := new(ConsensusStatusRequest)
@@ -456,6 +609,40 @@ func (v *ListSnapshotsResponse) Copy() *ListSnapshotsResponse {
 
 func (v *ListSnapshotsResponse) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *MajorHeaderRangeRequest) Copy() *MajorHeaderRangeRequest {
+	u := new(MajorHeaderRangeRequest)
+
+	u.MajorHeaderRangeOptions = *v.MajorHeaderRangeOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MajorHeaderRangeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MajorHeaderRangeResponse) Copy() *MajorHeaderRangeResponse {
+	u := new(MajorHeaderRangeResponse)
+
+	u.Value = make([]*api.MajorHeaderRecord, len(v.Value))
+	for i, v := range v.Value {
+		v := v
+		if v != nil {
+			u.Value[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MajorHeaderRangeResponse) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *MetricsRequest) Copy() *MetricsRequest {
 	u := new(MetricsRequest)
 
@@ -485,6 +672,36 @@ func (v *MetricsResponse) Copy() *MetricsResponse {
 }
 
 func (v *MetricsResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MinorRootRangeRequest) Copy() *MinorRootRangeRequest {
+	u := new(MinorRootRangeRequest)
+
+	u.MinorRootRangeOptions = *v.MinorRootRangeOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MinorRootRangeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MinorRootRangeResponse) Copy() *MinorRootRangeResponse {
+	u := new(MinorRootRangeResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MinorRootRangeResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NetworkStatusRequest) Copy() *NetworkStatusRequest {
 	u := new(NetworkStatusRequest)
@@ -545,6 +762,114 @@ func (v *NodeInfoResponse) Copy() *NodeInfoResponse {
 }
 
 func (v *NodeInfoResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivateMajorHeaderRangeRequest) Copy() *PrivateMajorHeaderRangeRequest {
+	u := new(PrivateMajorHeaderRangeRequest)
+
+	if v.Partition != nil {
+		u.Partition = v.Partition
+	}
+	u.Start = v.Start
+	u.End = v.End
+	u.SequenceOptions = *v.SequenceOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateMajorHeaderRangeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivateMajorHeaderRangeResponse) Copy() *PrivateMajorHeaderRangeResponse {
+	u := new(PrivateMajorHeaderRangeResponse)
+
+	u.Value = make([]*private.MajorHeaderRecord, len(v.Value))
+	for i, v := range v.Value {
+		v := v
+		if v != nil {
+			u.Value[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateMajorHeaderRangeResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivateMinorRootRangeRequest) Copy() *PrivateMinorRootRangeRequest {
+	u := new(PrivateMinorRootRangeRequest)
+
+	if v.Partition != nil {
+		u.Partition = v.Partition
+	}
+	u.Since = v.Since
+	u.Until = v.Until
+	u.SequenceOptions = *v.SequenceOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateMinorRootRangeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivateMinorRootRangeResponse) Copy() *PrivateMinorRootRangeResponse {
+	u := new(PrivateMinorRootRangeResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateMinorRootRangeResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivatePartitionRootRangeRequest) Copy() *PrivatePartitionRootRangeRequest {
+	u := new(PrivatePartitionRootRangeRequest)
+
+	if v.Partition != nil {
+		u.Partition = v.Partition
+	}
+	u.StateRoot = v.StateRoot
+	u.SequenceOptions = *v.SequenceOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivatePartitionRootRangeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivatePartitionRootRangeResponse) Copy() *PrivatePartitionRootRangeResponse {
+	u := new(PrivatePartitionRootRangeResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivatePartitionRootRangeResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PrivateSequenceRangeRequest) Copy() *PrivateSequenceRangeRequest {
 	u := new(PrivateSequenceRangeRequest)
@@ -624,6 +949,41 @@ func (v *PrivateSequenceResponse) Copy() *PrivateSequenceResponse {
 }
 
 func (v *PrivateSequenceResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivateSnapshotRangeRequest) Copy() *PrivateSnapshotRangeRequest {
+	u := new(PrivateSnapshotRangeRequest)
+
+	if v.Partition != nil {
+		u.Partition = v.Partition
+	}
+	u.Epoch = v.Epoch
+	u.Offset = v.Offset
+	u.SequenceOptions = *v.SequenceOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateSnapshotRangeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivateSnapshotRangeResponse) Copy() *PrivateSnapshotRangeResponse {
+	u := new(PrivateSnapshotRangeResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateSnapshotRangeResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *QueryRequest) Copy() *QueryRequest {
 	u := new(QueryRequest)
@@ -772,6 +1132,27 @@ func (v *Addressed) Equal(u *Addressed) bool {
 	return true
 }
 
+func (v *AnchorReceiptRequest) Equal(u *AnchorReceiptRequest) bool {
+	if !v.AnchorReceiptOptions.Equal(&u.AnchorReceiptOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AnchorReceiptResponse) Equal(u *AnchorReceiptResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
+	}
+
+	return true
+}
+
 func (v *ConsensusStatusRequest) Equal(u *ConsensusStatusRequest) bool {
 	if !v.ConsensusStatusOptions.Equal(&u.ConsensusStatusOptions) {
 		return false
@@ -890,6 +1271,27 @@ func (v *ListSnapshotsResponse) Equal(u *ListSnapshotsResponse) bool {
 	return true
 }
 
+func (v *MajorHeaderRangeRequest) Equal(u *MajorHeaderRangeRequest) bool {
+	if !v.MajorHeaderRangeOptions.Equal(&u.MajorHeaderRangeOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *MajorHeaderRangeResponse) Equal(u *MajorHeaderRangeResponse) bool {
+	if len(v.Value) != len(u.Value) {
+		return false
+	}
+	for i := range v.Value {
+		if !((v.Value[i]).Equal(u.Value[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 	if !v.MetricsOptions.Equal(&u.MetricsOptions) {
 		return false
@@ -899,6 +1301,27 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 }
 
 func (v *MetricsResponse) Equal(u *MetricsResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
+	}
+
+	return true
+}
+
+func (v *MinorRootRangeRequest) Equal(u *MinorRootRangeRequest) bool {
+	if !v.MinorRootRangeOptions.Equal(&u.MinorRootRangeOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *MinorRootRangeResponse) Equal(u *MinorRootRangeResponse) bool {
 	switch {
 	case v.Value == u.Value:
 		// equal
@@ -941,6 +1364,108 @@ func (v *NodeInfoRequest) Equal(u *NodeInfoRequest) bool {
 }
 
 func (v *NodeInfoResponse) Equal(u *NodeInfoResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
+	}
+
+	return true
+}
+
+func (v *PrivateMajorHeaderRangeRequest) Equal(u *PrivateMajorHeaderRangeRequest) bool {
+	switch {
+	case v.Partition == u.Partition:
+		// equal
+	case v.Partition == nil || u.Partition == nil:
+		return false
+	case !((v.Partition).Equal(u.Partition)):
+		return false
+	}
+	if !(v.Start == u.Start) {
+		return false
+	}
+	if !(v.End == u.End) {
+		return false
+	}
+	if !v.SequenceOptions.Equal(&u.SequenceOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *PrivateMajorHeaderRangeResponse) Equal(u *PrivateMajorHeaderRangeResponse) bool {
+	if len(v.Value) != len(u.Value) {
+		return false
+	}
+	for i := range v.Value {
+		if !((v.Value[i]).Equal(u.Value[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *PrivateMinorRootRangeRequest) Equal(u *PrivateMinorRootRangeRequest) bool {
+	switch {
+	case v.Partition == u.Partition:
+		// equal
+	case v.Partition == nil || u.Partition == nil:
+		return false
+	case !((v.Partition).Equal(u.Partition)):
+		return false
+	}
+	if !(v.Since == u.Since) {
+		return false
+	}
+	if !(v.Until == u.Until) {
+		return false
+	}
+	if !v.SequenceOptions.Equal(&u.SequenceOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *PrivateMinorRootRangeResponse) Equal(u *PrivateMinorRootRangeResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
+	}
+
+	return true
+}
+
+func (v *PrivatePartitionRootRangeRequest) Equal(u *PrivatePartitionRootRangeRequest) bool {
+	switch {
+	case v.Partition == u.Partition:
+		// equal
+	case v.Partition == nil || u.Partition == nil:
+		return false
+	case !((v.Partition).Equal(u.Partition)):
+		return false
+	}
+	if !(v.StateRoot == u.StateRoot) {
+		return false
+	}
+	if !v.SequenceOptions.Equal(&u.SequenceOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *PrivatePartitionRootRangeResponse) Equal(u *PrivatePartitionRootRangeResponse) bool {
 	switch {
 	case v.Value == u.Value:
 		// equal
@@ -1024,6 +1549,41 @@ func (v *PrivateSequenceRequest) Equal(u *PrivateSequenceRequest) bool {
 }
 
 func (v *PrivateSequenceResponse) Equal(u *PrivateSequenceResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
+	}
+
+	return true
+}
+
+func (v *PrivateSnapshotRangeRequest) Equal(u *PrivateSnapshotRangeRequest) bool {
+	switch {
+	case v.Partition == u.Partition:
+		// equal
+	case v.Partition == nil || u.Partition == nil:
+		return false
+	case !((v.Partition).Equal(u.Partition)):
+		return false
+	}
+	if !(v.Epoch == u.Epoch) {
+		return false
+	}
+	if !(v.Offset == u.Offset) {
+		return false
+	}
+	if !v.SequenceOptions.Equal(&u.SequenceOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *PrivateSnapshotRangeResponse) Equal(u *PrivateSnapshotRangeResponse) bool {
 	switch {
 	case v.Value == u.Value:
 		// equal
@@ -1182,6 +1742,110 @@ func (v *Addressed) IsValid() error {
 		errs = append(errs, "field Address is missing")
 	} else if p2p.EqualMultiaddr(v.Address, nil) {
 		errs = append(errs, "field Address is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AnchorReceiptRequest = []string{
+	1: "Type",
+	2: "AnchorReceiptOptions",
+}
+
+func (v *AnchorReceiptRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.AnchorReceiptOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_AnchorReceiptRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *AnchorReceiptRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.AnchorReceiptOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AnchorReceiptResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *AnchorReceiptResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AnchorReceiptResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *AnchorReceiptResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -1725,6 +2389,112 @@ func (v *ListSnapshotsResponse) IsValid() error {
 	}
 }
 
+var fieldNames_MajorHeaderRangeRequest = []string{
+	1: "Type",
+	2: "MajorHeaderRangeOptions",
+}
+
+func (v *MajorHeaderRangeRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.MajorHeaderRangeOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_MajorHeaderRangeRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *MajorHeaderRangeRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.MajorHeaderRangeOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MajorHeaderRangeResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *MajorHeaderRangeResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Value) == 0) {
+		for _, v := range v.Value {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_MajorHeaderRangeResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *MajorHeaderRangeResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_MetricsRequest = []string{
 	1: "Type",
 	2: "MetricsOptions",
@@ -1808,6 +2578,110 @@ func (v *MetricsResponse) MarshalBinary() ([]byte, error) {
 }
 
 func (v *MetricsResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MinorRootRangeRequest = []string{
+	1: "Type",
+	2: "MinorRootRangeOptions",
+}
+
+func (v *MinorRootRangeRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.MinorRootRangeOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_MinorRootRangeRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *MinorRootRangeRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.MinorRootRangeOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MinorRootRangeResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *MinorRootRangeResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_MinorRootRangeResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *MinorRootRangeResponse) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
@@ -2016,6 +2890,392 @@ func (v *NodeInfoResponse) MarshalBinary() ([]byte, error) {
 }
 
 func (v *NodeInfoResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivateMajorHeaderRangeRequest = []string{
+	1: "Type",
+	2: "Partition",
+	3: "Start",
+	4: "End",
+	5: "SequenceOptions",
+}
+
+func (v *PrivateMajorHeaderRangeRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Partition == nil) {
+		writer.WriteUrl(2, v.Partition)
+	}
+	if !(v.Start == 0) {
+		writer.WriteUint(3, v.Start)
+	}
+	if !(v.End == 0) {
+		writer.WriteUint(4, v.End)
+	}
+	writer.WriteValue(5, v.SequenceOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_PrivateMajorHeaderRangeRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateMajorHeaderRangeRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if v.Partition == nil {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Start is missing")
+	} else if v.Start == 0 {
+		errs = append(errs, "field Start is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field End is missing")
+	} else if v.End == 0 {
+		errs = append(errs, "field End is not set")
+	}
+	if err := v.SequenceOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivateMajorHeaderRangeResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *PrivateMajorHeaderRangeResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Value) == 0) {
+		for _, v := range v.Value {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_PrivateMajorHeaderRangeResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateMajorHeaderRangeResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivateMinorRootRangeRequest = []string{
+	1: "Type",
+	2: "Partition",
+	3: "Since",
+	4: "Until",
+	5: "SequenceOptions",
+}
+
+func (v *PrivateMinorRootRangeRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Partition == nil) {
+		writer.WriteUrl(2, v.Partition)
+	}
+	if !(v.Since == 0) {
+		writer.WriteUint(3, v.Since)
+	}
+	if !(v.Until == 0) {
+		writer.WriteUint(4, v.Until)
+	}
+	writer.WriteValue(5, v.SequenceOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_PrivateMinorRootRangeRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateMinorRootRangeRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if v.Partition == nil {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Since is missing")
+	} else if v.Since == 0 {
+		errs = append(errs, "field Since is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Until is missing")
+	} else if v.Until == 0 {
+		errs = append(errs, "field Until is not set")
+	}
+	if err := v.SequenceOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivateMinorRootRangeResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *PrivateMinorRootRangeResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PrivateMinorRootRangeResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateMinorRootRangeResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivatePartitionRootRangeRequest = []string{
+	1: "Type",
+	2: "Partition",
+	3: "StateRoot",
+	4: "SequenceOptions",
+}
+
+func (v *PrivatePartitionRootRangeRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Partition == nil) {
+		writer.WriteUrl(2, v.Partition)
+	}
+	if !(v.StateRoot == ([32]byte{})) {
+		writer.WriteHash(3, &v.StateRoot)
+	}
+	writer.WriteValue(4, v.SequenceOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_PrivatePartitionRootRangeRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivatePartitionRootRangeRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if v.Partition == nil {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field StateRoot is missing")
+	} else if v.StateRoot == ([32]byte{}) {
+		errs = append(errs, "field StateRoot is not set")
+	}
+	if err := v.SequenceOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivatePartitionRootRangeResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *PrivatePartitionRootRangeResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PrivatePartitionRootRangeResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivatePartitionRootRangeResponse) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
@@ -2289,6 +3549,137 @@ func (v *PrivateSequenceResponse) MarshalBinary() ([]byte, error) {
 }
 
 func (v *PrivateSequenceResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivateSnapshotRangeRequest = []string{
+	1: "Type",
+	2: "Partition",
+	3: "Epoch",
+	4: "Offset",
+	5: "SequenceOptions",
+}
+
+func (v *PrivateSnapshotRangeRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Partition == nil) {
+		writer.WriteUrl(2, v.Partition)
+	}
+	if !(v.Epoch == 0) {
+		writer.WriteUint(3, v.Epoch)
+	}
+	if !(v.Offset == 0) {
+		writer.WriteUint(4, v.Offset)
+	}
+	writer.WriteValue(5, v.SequenceOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_PrivateSnapshotRangeRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateSnapshotRangeRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if v.Partition == nil {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Epoch is missing")
+	} else if v.Epoch == 0 {
+		errs = append(errs, "field Epoch is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Offset is missing")
+	} else if v.Offset == 0 {
+		errs = append(errs, "field Offset is not set")
+	}
+	if err := v.SequenceOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivateSnapshotRangeResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *PrivateSnapshotRangeResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PrivateSnapshotRangeResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateSnapshotRangeResponse) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
@@ -2785,6 +4176,74 @@ func (v *Addressed) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *AnchorReceiptRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AnchorReceiptRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AnchorReceiptRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.AnchorReceiptOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_AnchorReceiptRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *AnchorReceiptResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AnchorReceiptResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AnchorReceiptResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(api.AnchorReceiptRecord); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AnchorReceiptResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *ConsensusStatusRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -3147,6 +4606,78 @@ func (v *ListSnapshotsResponse) UnmarshalFieldsFrom(reader *encoding.Reader) err
 	return nil
 }
 
+func (v *MajorHeaderRangeRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MajorHeaderRangeRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *MajorHeaderRangeRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.MajorHeaderRangeOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_MajorHeaderRangeRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *MajorHeaderRangeResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MajorHeaderRangeResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *MajorHeaderRangeResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(api.MajorHeaderRecord); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Value = append(v.Value, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_MajorHeaderRangeResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -3204,6 +4735,74 @@ func (v *MetricsResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_MetricsResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *MinorRootRangeRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MinorRootRangeRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *MinorRootRangeRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.MinorRootRangeOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_MinorRootRangeRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *MinorRootRangeResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MinorRootRangeResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *MinorRootRangeResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(api.MinorRootRecord); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_MinorRootRangeResponse)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -3340,6 +4939,238 @@ func (v *NodeInfoResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_NodeInfoResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PrivateMajorHeaderRangeRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateMajorHeaderRangeRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateMajorHeaderRangeRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Start = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.End = x
+	}
+	reader.ReadValue(5, v.SequenceOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_PrivateMajorHeaderRangeRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PrivateMajorHeaderRangeResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateMajorHeaderRangeResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateMajorHeaderRangeResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(private.MajorHeaderRecord); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Value = append(v.Value, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_PrivateMajorHeaderRangeResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PrivateMinorRootRangeRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateMinorRootRangeRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateMinorRootRangeRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Since = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Until = x
+	}
+	reader.ReadValue(5, v.SequenceOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_PrivateMinorRootRangeRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PrivateMinorRootRangeResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateMinorRootRangeResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateMinorRootRangeResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(private.MinorRootRecord); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_PrivateMinorRootRangeResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PrivatePartitionRootRangeRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivatePartitionRootRangeRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivatePartitionRootRangeRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadHash(3); ok {
+		v.StateRoot = *x
+	}
+	reader.ReadValue(4, v.SequenceOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_PrivatePartitionRootRangeRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PrivatePartitionRootRangeResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivatePartitionRootRangeResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivatePartitionRootRangeResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(private.PartitionRootRecord); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_PrivatePartitionRootRangeResponse)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -3501,6 +5332,83 @@ func (v *PrivateSequenceResponse) UnmarshalFieldsFrom(reader *encoding.Reader) e
 	}
 
 	seen, err := reader.Reset(fieldNames_PrivateSequenceResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PrivateSnapshotRangeRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateSnapshotRangeRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateSnapshotRangeRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Epoch = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Offset = x
+	}
+	reader.ReadValue(5, v.SequenceOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_PrivateSnapshotRangeRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PrivateSnapshotRangeResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateSnapshotRangeResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateSnapshotRangeResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(private.SnapshotChunk); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_PrivateSnapshotRangeResponse)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -3818,6 +5726,18 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("bptRoot", "bytes32"),
+		encoding.NewTypeField("atOrAfter", "uint64"),
+	}, "AnchorReceiptRequest", "anchorReceiptRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.AnchorReceiptRecord"),
+	}, "AnchorReceiptResponse", "anchorReceiptResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("nodeID", "string"),
 		encoding.NewTypeField("partition", "string"),
 		encoding.NewTypeField("includePeers", "bool"),
@@ -3877,6 +5797,18 @@ func init() {
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("end", "uint64"),
+	}, "MajorHeaderRangeRequest", "majorHeaderRangeRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.MajorHeaderRecord[]"),
+	}, "MajorHeaderRangeResponse", "majorHeaderRangeResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
 		encoding.NewTypeField("span", "uint64"),
 	}, "MetricsRequest", "metricsRequest")
 
@@ -3884,6 +5816,18 @@ func init() {
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("value", "api.Metrics"),
 	}, "MetricsResponse", "metricsResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("since", "uint64"),
+		encoding.NewTypeField("until", "uint64"),
+	}, "MinorRootRangeRequest", "minorRootRangeRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.MinorRootRecord"),
+	}, "MinorRootRangeResponse", "minorRootRangeResponse")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -3904,6 +5848,47 @@ func init() {
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("value", "api.NodeInfo"),
 	}, "NodeInfoResponse", "nodeInfoResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("end", "uint64"),
+		encoding.NewTypeField("nodeID", "p2p.PeerID"),
+		encoding.NewTypeField("proveAgainstAnchor", "uint64"),
+	}, "PrivateMajorHeaderRangeRequest", "privateMajorHeaderRangeRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "private.MajorHeaderRecord[]"),
+	}, "PrivateMajorHeaderRangeResponse", "privateMajorHeaderRangeResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("since", "uint64"),
+		encoding.NewTypeField("until", "uint64"),
+		encoding.NewTypeField("nodeID", "p2p.PeerID"),
+		encoding.NewTypeField("proveAgainstAnchor", "uint64"),
+	}, "PrivateMinorRootRangeRequest", "privateMinorRootRangeRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "private.MinorRootRecord"),
+	}, "PrivateMinorRootRangeResponse", "privateMinorRootRangeResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("stateRoot", "bytes32"),
+		encoding.NewTypeField("nodeID", "p2p.PeerID"),
+		encoding.NewTypeField("proveAgainstAnchor", "uint64"),
+	}, "PrivatePartitionRootRangeRequest", "privatePartitionRootRangeRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "private.PartitionRootRecord"),
+	}, "PrivatePartitionRootRangeResponse", "privatePartitionRootRangeResponse")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -3933,6 +5918,20 @@ func init() {
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("value", "api.MessageRecord[messaging.Message]"),
 	}, "PrivateSequenceResponse", "privateSequenceResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("epoch", "uint64"),
+		encoding.NewTypeField("offset", "uint64"),
+		encoding.NewTypeField("nodeID", "p2p.PeerID"),
+		encoding.NewTypeField("proveAgainstAnchor", "uint64"),
+	}, "PrivateSnapshotRangeRequest", "privateSnapshotRangeRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "private.SnapshotChunk"),
+	}, "PrivateSnapshotRangeResponse", "privateSnapshotRangeResponse")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -3993,6 +5992,42 @@ func (v *Addressed) MarshalJSON() ([]byte, error) {
 	}
 	if !(p2p.EqualMultiaddr(v.Address, nil)) {
 		u.Address = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Address, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *AnchorReceiptRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		BptRoot   *string `json:"bptRoot,omitempty"`
+		AtOrAfter uint64  `json:"atOrAfter,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.AnchorReceiptOptions.Partition) == 0) {
+		u.Partition = v.AnchorReceiptOptions.Partition
+	}
+	if !(v.AnchorReceiptOptions.BptRoot == ([32]byte{})) {
+		u.BptRoot = encoding.ChainToJSON(&v.AnchorReceiptOptions.BptRoot)
+	}
+	if !(v.AnchorReceiptOptions.AtOrAfter == 0) {
+		u.AtOrAfter = v.AnchorReceiptOptions.AtOrAfter
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *AnchorReceiptResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                     `json:"type"`
+		Value     *api.AnchorReceiptRecord `json:"value,omitempty"`
+		ExtraData *string                  `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
+		u.Value = v.Value
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -4166,6 +6201,42 @@ func (v *ListSnapshotsResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *MajorHeaderRangeRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		Start     uint64  `json:"start,omitempty"`
+		End       uint64  `json:"end,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.MajorHeaderRangeOptions.Partition) == 0) {
+		u.Partition = v.MajorHeaderRangeOptions.Partition
+	}
+	if !(v.MajorHeaderRangeOptions.Start == 0) {
+		u.Start = v.MajorHeaderRangeOptions.Start
+	}
+	if !(v.MajorHeaderRangeOptions.End == 0) {
+		u.End = v.MajorHeaderRangeOptions.End
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *MajorHeaderRangeResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                                      `json:"type"`
+		Value     encoding.JsonList[*api.MajorHeaderRecord] `json:"value,omitempty"`
+		ExtraData *string                                   `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Value) == 0) {
+		u.Value = v.Value
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      Type    `json:"type"`
@@ -4189,6 +6260,42 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 		Type      Type         `json:"type"`
 		Value     *api.Metrics `json:"value,omitempty"`
 		ExtraData *string      `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
+		u.Value = v.Value
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *MinorRootRangeRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		Since     uint64  `json:"since,omitempty"`
+		Until     uint64  `json:"until,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.MinorRootRangeOptions.Partition) == 0) {
+		u.Partition = v.MinorRootRangeOptions.Partition
+	}
+	if !(v.MinorRootRangeOptions.Since == 0) {
+		u.Since = v.MinorRootRangeOptions.Since
+	}
+	if !(v.MinorRootRangeOptions.Until == 0) {
+		u.Until = v.MinorRootRangeOptions.Until
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *MinorRootRangeResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                 `json:"type"`
+		Value     *api.MinorRootRecord `json:"value,omitempty"`
+		ExtraData *string              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
@@ -4245,6 +6352,134 @@ func (v *NodeInfoResponse) MarshalJSON() ([]byte, error) {
 		Type      Type          `json:"type"`
 		Value     *api.NodeInfo `json:"value,omitempty"`
 		ExtraData *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
+		u.Value = v.Value
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivateMajorHeaderRangeRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type               Type                                    `json:"type"`
+		Partition          *url.URL                                `json:"partition,omitempty"`
+		Start              uint64                                  `json:"start,omitempty"`
+		End                uint64                                  `json:"end,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Partition == nil) {
+		u.Partition = v.Partition
+	}
+	if !(v.Start == 0) {
+		u.Start = v.Start
+	}
+	if !(v.End == 0) {
+		u.End = v.End
+	}
+	if !(v.SequenceOptions.NodeID == ("")) {
+		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	if !(v.SequenceOptions.ProveAgainstAnchor == 0) {
+		u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivateMajorHeaderRangeResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                                          `json:"type"`
+		Value     encoding.JsonList[*private.MajorHeaderRecord] `json:"value,omitempty"`
+		ExtraData *string                                       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Value) == 0) {
+		u.Value = v.Value
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivateMinorRootRangeRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type               Type                                    `json:"type"`
+		Partition          *url.URL                                `json:"partition,omitempty"`
+		Since              uint64                                  `json:"since,omitempty"`
+		Until              uint64                                  `json:"until,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Partition == nil) {
+		u.Partition = v.Partition
+	}
+	if !(v.Since == 0) {
+		u.Since = v.Since
+	}
+	if !(v.Until == 0) {
+		u.Until = v.Until
+	}
+	if !(v.SequenceOptions.NodeID == ("")) {
+		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	if !(v.SequenceOptions.ProveAgainstAnchor == 0) {
+		u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivateMinorRootRangeResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                     `json:"type"`
+		Value     *private.MinorRootRecord `json:"value,omitempty"`
+		ExtraData *string                  `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
+		u.Value = v.Value
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivatePartitionRootRangeRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type               Type                                    `json:"type"`
+		Partition          *url.URL                                `json:"partition,omitempty"`
+		StateRoot          *string                                 `json:"stateRoot,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Partition == nil) {
+		u.Partition = v.Partition
+	}
+	if !(v.StateRoot == ([32]byte{})) {
+		u.StateRoot = encoding.ChainToJSON(&v.StateRoot)
+	}
+	if !(v.SequenceOptions.NodeID == ("")) {
+		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	if !(v.SequenceOptions.ProveAgainstAnchor == 0) {
+		u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivatePartitionRootRangeResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                         `json:"type"`
+		Value     *private.PartitionRootRecord `json:"value,omitempty"`
+		ExtraData *string                      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
@@ -4337,6 +6572,50 @@ func (v *PrivateSequenceResponse) MarshalJSON() ([]byte, error) {
 		Type      Type                                  `json:"type"`
 		Value     *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
 		ExtraData *string                               `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
+		u.Value = v.Value
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivateSnapshotRangeRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type               Type                                    `json:"type"`
+		Partition          *url.URL                                `json:"partition,omitempty"`
+		Epoch              uint64                                  `json:"epoch,omitempty"`
+		Offset             uint64                                  `json:"offset,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Partition == nil) {
+		u.Partition = v.Partition
+	}
+	if !(v.Epoch == 0) {
+		u.Epoch = v.Epoch
+	}
+	if !(v.Offset == 0) {
+		u.Offset = v.Offset
+	}
+	if !(v.SequenceOptions.NodeID == ("")) {
+		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	if !(v.SequenceOptions.ProveAgainstAnchor == 0) {
+		u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivateSnapshotRangeResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                   `json:"type"`
+		Value     *private.SnapshotChunk `json:"value,omitempty"`
+		ExtraData *string                `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
@@ -4495,6 +6774,62 @@ func (v *Addressed) UnmarshalJSON(data []byte) error {
 		v.Address = u.Address.Value
 	}
 
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *AnchorReceiptRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		BptRoot   *string `json:"bptRoot,omitempty"`
+		AtOrAfter uint64  `json:"atOrAfter,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.AnchorReceiptOptions.Partition
+	u.BptRoot = encoding.ChainToJSON(&v.AnchorReceiptOptions.BptRoot)
+	u.AtOrAfter = v.AnchorReceiptOptions.AtOrAfter
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.AnchorReceiptOptions.Partition = u.Partition
+	if x, err := encoding.ChainFromJSON(u.BptRoot); err != nil {
+		return fmt.Errorf("error decoding BptRoot: %w", err)
+	} else {
+		v.AnchorReceiptOptions.BptRoot = *x
+	}
+	v.AnchorReceiptOptions.AtOrAfter = u.AtOrAfter
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *AnchorReceiptResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                     `json:"type"`
+		Value     *api.AnchorReceiptRecord `json:"value,omitempty"`
+		ExtraData *string                  `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -4765,6 +7100,58 @@ func (v *ListSnapshotsResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *MajorHeaderRangeRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		Start     uint64  `json:"start,omitempty"`
+		End       uint64  `json:"end,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.MajorHeaderRangeOptions.Partition
+	u.Start = v.MajorHeaderRangeOptions.Start
+	u.End = v.MajorHeaderRangeOptions.End
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.MajorHeaderRangeOptions.Partition = u.Partition
+	v.MajorHeaderRangeOptions.Start = u.Start
+	v.MajorHeaderRangeOptions.End = u.End
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *MajorHeaderRangeResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                                      `json:"type"`
+		Value     encoding.JsonList[*api.MajorHeaderRecord] `json:"value,omitempty"`
+		ExtraData *string                                   `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      Type    `json:"type"`
@@ -4796,6 +7183,58 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 		Type      Type         `json:"type"`
 		Value     *api.Metrics `json:"value,omitempty"`
 		ExtraData *string      `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *MinorRootRangeRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		Since     uint64  `json:"since,omitempty"`
+		Until     uint64  `json:"until,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.MinorRootRangeOptions.Partition
+	u.Since = v.MinorRootRangeOptions.Since
+	u.Until = v.MinorRootRangeOptions.Until
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.MinorRootRangeOptions.Partition = u.Partition
+	v.MinorRootRangeOptions.Since = u.Since
+	v.MinorRootRangeOptions.Until = u.Until
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *MinorRootRangeResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                 `json:"type"`
+		Value     *api.MinorRootRecord `json:"value,omitempty"`
+		ExtraData *string              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
@@ -4891,6 +7330,190 @@ func (v *NodeInfoResponse) UnmarshalJSON(data []byte) error {
 		Type      Type          `json:"type"`
 		Value     *api.NodeInfo `json:"value,omitempty"`
 		ExtraData *string       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivateMajorHeaderRangeRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type               Type                                    `json:"type"`
+		Partition          *url.URL                                `json:"partition,omitempty"`
+		Start              uint64                                  `json:"start,omitempty"`
+		End                uint64                                  `json:"end,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.Start = v.Start
+	u.End = v.End
+	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	v.Start = u.Start
+	v.End = u.End
+	if u.NodeID != nil {
+		v.SequenceOptions.NodeID = u.NodeID.Value
+	}
+
+	v.SequenceOptions.ProveAgainstAnchor = u.ProveAgainstAnchor
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivateMajorHeaderRangeResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                                          `json:"type"`
+		Value     encoding.JsonList[*private.MajorHeaderRecord] `json:"value,omitempty"`
+		ExtraData *string                                       `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivateMinorRootRangeRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type               Type                                    `json:"type"`
+		Partition          *url.URL                                `json:"partition,omitempty"`
+		Since              uint64                                  `json:"since,omitempty"`
+		Until              uint64                                  `json:"until,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.Since = v.Since
+	u.Until = v.Until
+	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	v.Since = u.Since
+	v.Until = u.Until
+	if u.NodeID != nil {
+		v.SequenceOptions.NodeID = u.NodeID.Value
+	}
+
+	v.SequenceOptions.ProveAgainstAnchor = u.ProveAgainstAnchor
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivateMinorRootRangeResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                     `json:"type"`
+		Value     *private.MinorRootRecord `json:"value,omitempty"`
+		ExtraData *string                  `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivatePartitionRootRangeRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type               Type                                    `json:"type"`
+		Partition          *url.URL                                `json:"partition,omitempty"`
+		StateRoot          *string                                 `json:"stateRoot,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.StateRoot = encoding.ChainToJSON(&v.StateRoot)
+	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	if x, err := encoding.ChainFromJSON(u.StateRoot); err != nil {
+		return fmt.Errorf("error decoding StateRoot: %w", err)
+	} else {
+		v.StateRoot = *x
+	}
+	if u.NodeID != nil {
+		v.SequenceOptions.NodeID = u.NodeID.Value
+	}
+
+	v.SequenceOptions.ProveAgainstAnchor = u.ProveAgainstAnchor
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivatePartitionRootRangeResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                         `json:"type"`
+		Value     *private.PartitionRootRecord `json:"value,omitempty"`
+		ExtraData *string                      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
@@ -5016,6 +7639,67 @@ func (v *PrivateSequenceResponse) UnmarshalJSON(data []byte) error {
 		Type      Type                                  `json:"type"`
 		Value     *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
 		ExtraData *string                               `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivateSnapshotRangeRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type               Type                                    `json:"type"`
+		Partition          *url.URL                                `json:"partition,omitempty"`
+		Epoch              uint64                                  `json:"epoch,omitempty"`
+		Offset             uint64                                  `json:"offset,omitempty"`
+		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
+		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		ExtraData          *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.Epoch = v.Epoch
+	u.Offset = v.Offset
+	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
+	u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	v.Epoch = u.Epoch
+	v.Offset = u.Offset
+	if u.NodeID != nil {
+		v.SequenceOptions.NodeID = u.NodeID.Value
+	}
+
+	v.SequenceOptions.ProveAgainstAnchor = u.ProveAgainstAnchor
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivateSnapshotRangeResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                   `json:"type"`
+		Value     *private.SnapshotChunk `json:"value,omitempty"`
+		ExtraData *string                `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value

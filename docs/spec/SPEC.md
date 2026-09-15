@@ -21,6 +21,7 @@ the same two sections:
 | [Database abstraction](database.md) | The storage contract every backend satisfies, and how a backend is chosen |
 | [Healing](healing.md) | Filling gaps in sequenced cross-partition streams: gaps by index, hash-set requests, bundles from the producer cache |
 | [Consensus](consensus.md) | **Partial**: the batch plane's memory, execution lag, and the DAG facts the other parts rely on. Rounds, votes and certificates are still to be written |
+| [Network parameters](network.md) | What a network declares about itself, and how a node is held to it |
 
 Alongside them, [DIFFERENCES.md](DIFFERENCES.md) records where the code departs
 from the specification, and [PLAN.md](PLAN.md) orders that work. It is kept separate on purpose: a spec that documents

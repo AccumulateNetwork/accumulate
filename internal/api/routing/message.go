@@ -61,6 +61,20 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 			service.Argument = msg.Partition
 		}
 
+	case *message.MajorHeaderRangeRequest, *message.MinorRootRangeRequest:
+		// The spine is served only for the directory (major_header.go,
+		// minor_root.go).
+		service.Type = api.ServiceTypeProof
+		service.Argument = protocol.Directory
+
+	case *message.AnchorReceiptRequest:
+		// Served by the partition, not the directory: extending a BPT root to a
+		// root-chain anchor reads the partition's bpt chain, and binding that
+		// anchor reads the directory's. Every node runs both, so the partition
+		// is the one place with each half (#4274).
+		service.Type = api.ServiceTypeProof
+		service.Argument = msg.Partition
+
 	case *message.ConsensusStatusRequest:
 		service.Type = api.ServiceTypeConsensus
 
@@ -193,6 +207,94 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		service.Argument, ok = protocol.ParsePartitionUrl(msg.Source)
 		if !ok {
 			return nil, errors.BadRequest.WithFormat("%v is not a partition URL", msg.Source)
+		}
+
+		if msg.NodeID == "" {
+			return service.Multiaddr(), nil
+		}
+
+		// Send the request to /p2p/{id}/acc-svc/{service}:{partition}
+		c1, err := multiaddr.NewComponent("p2p", msg.NodeID.String())
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		c2 := service.Multiaddr()
+
+		return c1.Encapsulate(c2), nil
+
+	case *message.PrivateSnapshotRangeRequest:
+		// Served by the requested partition's sequencer (#4058)
+		service.Type = private.ServiceTypeSequencer
+
+		var ok bool
+		service.Argument, ok = protocol.ParsePartitionUrl(msg.Partition)
+		if !ok {
+			return nil, errors.BadRequest.WithFormat("%v is not a partition URL", msg.Partition)
+		}
+
+		if msg.NodeID == "" {
+			return service.Multiaddr(), nil
+		}
+
+		// Send the request to /p2p/{id}/acc-svc/{service}:{partition}
+		c1, err := multiaddr.NewComponent("p2p", msg.NodeID.String())
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		c2 := service.Multiaddr()
+
+		return c1.Encapsulate(c2), nil
+
+	case *message.PrivateMinorRootRangeRequest:
+		// Served by the requested partition's sequencer (#4058)
+		service.Type = private.ServiceTypeSequencer
+
+		var ok bool
+		service.Argument, ok = protocol.ParsePartitionUrl(msg.Partition)
+		if !ok {
+			return nil, errors.BadRequest.WithFormat("%v is not a partition URL", msg.Partition)
+		}
+
+		if msg.NodeID == "" {
+			return service.Multiaddr(), nil
+		}
+
+		// Send the request to /p2p/{id}/acc-svc/{service}:{partition}
+		c1, err := multiaddr.NewComponent("p2p", msg.NodeID.String())
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		c2 := service.Multiaddr()
+
+		return c1.Encapsulate(c2), nil
+
+	case *message.PrivatePartitionRootRangeRequest:
+		// Partition names the BVN whose root is proven, but the receipt lives
+		// on the directory — always served by the directory sequencer (#4058)
+		service.Type = private.ServiceTypeSequencer
+		service.Argument = protocol.Directory
+
+		if msg.NodeID == "" {
+			return service.Multiaddr(), nil
+		}
+
+		// Send the request to /p2p/{id}/acc-svc/{service}:{partition}
+		c1, err := multiaddr.NewComponent("p2p", msg.NodeID.String())
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		c2 := service.Multiaddr()
+
+		return c1.Encapsulate(c2), nil
+
+	case *message.PrivateMajorHeaderRangeRequest:
+		// Served by the requested partition's sequencer (#4058)
+		service.Type = private.ServiceTypeSequencer
+
+		var ok bool
+		service.Argument, ok = protocol.ParsePartitionUrl(msg.Partition)
+		if !ok {
+			return nil, errors.BadRequest.WithFormat("%v is not a partition URL", msg.Partition)
 		}
 
 		if msg.NodeID == "" {

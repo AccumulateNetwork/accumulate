@@ -24,8 +24,12 @@ compose="docker compose -f $here/docker-compose.yml"
 $compose build
 $compose up -d
 
-echo "waiting for health..."
-until [ "$(docker ps --filter name=acc- --filter health=healthy -q | wc -l)" -ge 13 ]; do sleep 5; done
+# How many containers to expect comes from the topology, not a literal. The
+# hardcoded 13 was written for the 3-BVN network; against the 2-BVN one it can
+# never be reached, so this loop span forever on a network that was already up.
+want=$(python3 -c 'import sys,json; sys.path.insert(0,"'"$here"'"); import topology; print(topology.node_count() + 1)')
+echo "waiting for health ($want containers)..."
+until [ "$(docker ps --filter name=acc- --filter health=healthy -q | wc -l)" -ge "$want" ]; do sleep 5; done
 docker ps --filter name=acc- --format '{{.Names}} {{.Status}}'
 
 # The monitor is not optional and not a separate step.

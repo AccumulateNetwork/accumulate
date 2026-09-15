@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -37,6 +38,7 @@ var flagRunDevnet = struct {
 	NumValidators int
 	NumFollowers  int
 	BasePort      int
+	BlockInterval time.Duration
 	Globals       network.GlobalValues
 	Logging       run.Logging
 	SoftReset     bool
@@ -64,6 +66,7 @@ func init() {
 	cmdRunDevnet.Flags().IntVarP(&flagRunDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes per partition to configure")
 	cmdRunDevnet.Flags().IntVar(&flagRunDevnet.BasePort, "port", 26656, "Base port to use for listeners")
 	cmdRunDevnet.Flags().StringVar(&flagRunDevnet.Database, "database", "", "The type of database to use")
+	cmdRunDevnet.Flags().DurationVar(&flagRunDevnet.BlockInterval, "block-interval", 0, "The cadence the deployed network declares; recorded in genesis and paced from by every node (default: the protocol default)")
 	cmdRunDevnet.Flags().Var(cmdutil.JsonFlagOf(&flagRunDevnet.Globals), "globals", "Override the default global values")
 	cmdRunDevnet.Flags().Var(cmdutil.JsonFlagOf(&flagRunDevnet.Logging), "logging", "Override the default logger configuration")
 	cmdRunDevnet.Flags().BoolVar(&flagRunDevnet.SoftReset, "soft-reset", false, "Reset only if necessary")
