@@ -24,6 +24,10 @@ func New(typ Type) (Message, error) {
 	switch typ {
 	case TypeAddressed:
 		return new(Addressed), nil
+	case TypeAnchorReceiptRequest:
+		return new(AnchorReceiptRequest), nil
+	case TypeAnchorReceiptResponse:
+		return new(AnchorReceiptResponse), nil
 	case TypeConsensusStatusRequest:
 		return new(ConsensusStatusRequest), nil
 	case TypeConsensusStatusResponse:
@@ -44,10 +48,18 @@ func New(typ Type) (Message, error) {
 		return new(ListSnapshotsRequest), nil
 	case TypeListSnapshotsResponse:
 		return new(ListSnapshotsResponse), nil
+	case TypeMajorHeaderRangeRequest:
+		return new(MajorHeaderRangeRequest), nil
+	case TypeMajorHeaderRangeResponse:
+		return new(MajorHeaderRangeResponse), nil
 	case TypeMetricsRequest:
 		return new(MetricsRequest), nil
 	case TypeMetricsResponse:
 		return new(MetricsResponse), nil
+	case TypeMinorRootRangeRequest:
+		return new(MinorRootRangeRequest), nil
+	case TypeMinorRootRangeResponse:
+		return new(MinorRootRangeResponse), nil
 	case TypeNetworkStatusRequest:
 		return new(NetworkStatusRequest), nil
 	case TypeNetworkStatusResponse:
@@ -106,6 +118,18 @@ func Equal(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*Addressed)
+		return ok && a.Equal(b)
+	case *AnchorReceiptRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*AnchorReceiptRequest)
+		return ok && a.Equal(b)
+	case *AnchorReceiptResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*AnchorReceiptResponse)
 		return ok && a.Equal(b)
 	case *ConsensusStatusRequest:
 		if a == nil {
@@ -167,6 +191,18 @@ func Equal(a, b Message) bool {
 		}
 		b, ok := b.(*ListSnapshotsResponse)
 		return ok && a.Equal(b)
+	case *MajorHeaderRangeRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MajorHeaderRangeRequest)
+		return ok && a.Equal(b)
+	case *MajorHeaderRangeResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MajorHeaderRangeResponse)
+		return ok && a.Equal(b)
 	case *MetricsRequest:
 		if a == nil {
 			return b == nil
@@ -178,6 +214,18 @@ func Equal(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*MetricsResponse)
+		return ok && a.Equal(b)
+	case *MinorRootRangeRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MinorRootRangeRequest)
+		return ok && a.Equal(b)
+	case *MinorRootRangeResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MinorRootRangeResponse)
 		return ok && a.Equal(b)
 	case *NetworkStatusRequest:
 		if a == nil {
@@ -308,6 +356,10 @@ func Copy(v Message) Message {
 	switch v := v.(type) {
 	case *Addressed:
 		return v.Copy()
+	case *AnchorReceiptRequest:
+		return v.Copy()
+	case *AnchorReceiptResponse:
+		return v.Copy()
 	case *ConsensusStatusRequest:
 		return v.Copy()
 	case *ConsensusStatusResponse:
@@ -328,9 +380,17 @@ func Copy(v Message) Message {
 		return v.Copy()
 	case *ListSnapshotsResponse:
 		return v.Copy()
+	case *MajorHeaderRangeRequest:
+		return v.Copy()
+	case *MajorHeaderRangeResponse:
+		return v.Copy()
 	case *MetricsRequest:
 		return v.Copy()
 	case *MetricsResponse:
+		return v.Copy()
+	case *MinorRootRangeRequest:
+		return v.Copy()
+	case *MinorRootRangeResponse:
 		return v.Copy()
 	case *NetworkStatusRequest:
 		return v.Copy()

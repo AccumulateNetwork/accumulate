@@ -34,6 +34,18 @@ type Addressed struct {
 	extraData []byte
 }
 
+type AnchorReceiptRequest struct {
+	fieldsSet []bool
+	api.AnchorReceiptOptions
+	extraData []byte
+}
+
+type AnchorReceiptResponse struct {
+	fieldsSet []bool
+	Value     *api.AnchorReceiptRecord `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type ConsensusStatusRequest struct {
 	fieldsSet []bool
 	api.ConsensusStatusOptions
@@ -95,6 +107,18 @@ type ListSnapshotsResponse struct {
 	extraData []byte
 }
 
+type MajorHeaderRangeRequest struct {
+	fieldsSet []bool
+	api.MajorHeaderRangeOptions
+	extraData []byte
+}
+
+type MajorHeaderRangeResponse struct {
+	fieldsSet []bool
+	Value     []*api.MajorHeaderRecord `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type MetricsRequest struct {
 	fieldsSet []bool
 	api.MetricsOptions
@@ -104,6 +128,18 @@ type MetricsRequest struct {
 type MetricsResponse struct {
 	fieldsSet []bool
 	Value     *api.Metrics `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
+type MinorRootRangeRequest struct {
+	fieldsSet []bool
+	api.MinorRootRangeOptions
+	extraData []byte
+}
+
+type MinorRootRangeResponse struct {
+	fieldsSet []bool
+	Value     *api.MinorRootRecord `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -244,6 +280,10 @@ type ValidateResponse struct {
 
 func (*Addressed) Type() Type { return TypeAddressed }
 
+func (*AnchorReceiptRequest) Type() Type { return TypeAnchorReceiptRequest }
+
+func (*AnchorReceiptResponse) Type() Type { return TypeAnchorReceiptResponse }
+
 func (*ConsensusStatusRequest) Type() Type { return TypeConsensusStatusRequest }
 
 func (*ConsensusStatusResponse) Type() Type { return TypeConsensusStatusResponse }
@@ -264,9 +304,17 @@ func (*ListSnapshotsRequest) Type() Type { return TypeListSnapshotsRequest }
 
 func (*ListSnapshotsResponse) Type() Type { return TypeListSnapshotsResponse }
 
+func (*MajorHeaderRangeRequest) Type() Type { return TypeMajorHeaderRangeRequest }
+
+func (*MajorHeaderRangeResponse) Type() Type { return TypeMajorHeaderRangeResponse }
+
 func (*MetricsRequest) Type() Type { return TypeMetricsRequest }
 
 func (*MetricsResponse) Type() Type { return TypeMetricsResponse }
+
+func (*MinorRootRangeRequest) Type() Type { return TypeMinorRootRangeRequest }
+
+func (*MinorRootRangeResponse) Type() Type { return TypeMinorRootRangeResponse }
 
 func (*NetworkStatusRequest) Type() Type { return TypeNetworkStatusRequest }
 
@@ -326,6 +374,36 @@ func (v *Addressed) Copy() *Addressed {
 }
 
 func (v *Addressed) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AnchorReceiptRequest) Copy() *AnchorReceiptRequest {
+	u := new(AnchorReceiptRequest)
+
+	u.AnchorReceiptOptions = *v.AnchorReceiptOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *AnchorReceiptRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AnchorReceiptResponse) Copy() *AnchorReceiptResponse {
+	u := new(AnchorReceiptResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *AnchorReceiptResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ConsensusStatusRequest) Copy() *ConsensusStatusRequest {
 	u := new(ConsensusStatusRequest)
@@ -494,6 +572,40 @@ func (v *ListSnapshotsResponse) Copy() *ListSnapshotsResponse {
 
 func (v *ListSnapshotsResponse) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *MajorHeaderRangeRequest) Copy() *MajorHeaderRangeRequest {
+	u := new(MajorHeaderRangeRequest)
+
+	u.MajorHeaderRangeOptions = *v.MajorHeaderRangeOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MajorHeaderRangeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MajorHeaderRangeResponse) Copy() *MajorHeaderRangeResponse {
+	u := new(MajorHeaderRangeResponse)
+
+	u.Value = make([]*api.MajorHeaderRecord, len(v.Value))
+	for i, v := range v.Value {
+		v := v
+		if v != nil {
+			u.Value[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MajorHeaderRangeResponse) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *MetricsRequest) Copy() *MetricsRequest {
 	u := new(MetricsRequest)
 
@@ -523,6 +635,36 @@ func (v *MetricsResponse) Copy() *MetricsResponse {
 }
 
 func (v *MetricsResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MinorRootRangeRequest) Copy() *MinorRootRangeRequest {
+	u := new(MinorRootRangeRequest)
+
+	u.MinorRootRangeOptions = *v.MinorRootRangeOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MinorRootRangeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MinorRootRangeResponse) Copy() *MinorRootRangeResponse {
+	u := new(MinorRootRangeResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MinorRootRangeResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NetworkStatusRequest) Copy() *NetworkStatusRequest {
 	u := new(NetworkStatusRequest)
@@ -884,6 +1026,27 @@ func (v *Addressed) Equal(u *Addressed) bool {
 	return true
 }
 
+func (v *AnchorReceiptRequest) Equal(u *AnchorReceiptRequest) bool {
+	if !v.AnchorReceiptOptions.Equal(&u.AnchorReceiptOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AnchorReceiptResponse) Equal(u *AnchorReceiptResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
+	}
+
+	return true
+}
+
 func (v *ConsensusStatusRequest) Equal(u *ConsensusStatusRequest) bool {
 	if !v.ConsensusStatusOptions.Equal(&u.ConsensusStatusOptions) {
 		return false
@@ -1002,6 +1165,27 @@ func (v *ListSnapshotsResponse) Equal(u *ListSnapshotsResponse) bool {
 	return true
 }
 
+func (v *MajorHeaderRangeRequest) Equal(u *MajorHeaderRangeRequest) bool {
+	if !v.MajorHeaderRangeOptions.Equal(&u.MajorHeaderRangeOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *MajorHeaderRangeResponse) Equal(u *MajorHeaderRangeResponse) bool {
+	if len(v.Value) != len(u.Value) {
+		return false
+	}
+	for i := range v.Value {
+		if !((v.Value[i]).Equal(u.Value[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 	if !v.MetricsOptions.Equal(&u.MetricsOptions) {
 		return false
@@ -1011,6 +1195,27 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 }
 
 func (v *MetricsResponse) Equal(u *MetricsResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
+	}
+
+	return true
+}
+
+func (v *MinorRootRangeRequest) Equal(u *MinorRootRangeRequest) bool {
+	if !v.MinorRootRangeOptions.Equal(&u.MinorRootRangeOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *MinorRootRangeResponse) Equal(u *MinorRootRangeResponse) bool {
 	switch {
 	case v.Value == u.Value:
 		// equal
@@ -1364,6 +1569,110 @@ func (v *Addressed) IsValid() error {
 		errs = append(errs, "field Address is missing")
 	} else if p2p.EqualMultiaddr(v.Address, nil) {
 		errs = append(errs, "field Address is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AnchorReceiptRequest = []string{
+	1: "Type",
+	2: "AnchorReceiptOptions",
+}
+
+func (v *AnchorReceiptRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.AnchorReceiptOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_AnchorReceiptRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *AnchorReceiptRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.AnchorReceiptOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AnchorReceiptResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *AnchorReceiptResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AnchorReceiptResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *AnchorReceiptResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -1907,6 +2216,112 @@ func (v *ListSnapshotsResponse) IsValid() error {
 	}
 }
 
+var fieldNames_MajorHeaderRangeRequest = []string{
+	1: "Type",
+	2: "MajorHeaderRangeOptions",
+}
+
+func (v *MajorHeaderRangeRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.MajorHeaderRangeOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_MajorHeaderRangeRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *MajorHeaderRangeRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.MajorHeaderRangeOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MajorHeaderRangeResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *MajorHeaderRangeResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Value) == 0) {
+		for _, v := range v.Value {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_MajorHeaderRangeResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *MajorHeaderRangeResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_MetricsRequest = []string{
 	1: "Type",
 	2: "MetricsOptions",
@@ -1990,6 +2405,110 @@ func (v *MetricsResponse) MarshalBinary() ([]byte, error) {
 }
 
 func (v *MetricsResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MinorRootRangeRequest = []string{
+	1: "Type",
+	2: "MinorRootRangeOptions",
+}
+
+func (v *MinorRootRangeRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.MinorRootRangeOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_MinorRootRangeRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *MinorRootRangeRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.MinorRootRangeOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MinorRootRangeResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *MinorRootRangeResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_MinorRootRangeResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *MinorRootRangeResponse) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
@@ -3231,6 +3750,74 @@ func (v *Addressed) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *AnchorReceiptRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AnchorReceiptRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AnchorReceiptRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.AnchorReceiptOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_AnchorReceiptRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *AnchorReceiptResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AnchorReceiptResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AnchorReceiptResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(api.AnchorReceiptRecord); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AnchorReceiptResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *ConsensusStatusRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -3593,6 +4180,78 @@ func (v *ListSnapshotsResponse) UnmarshalFieldsFrom(reader *encoding.Reader) err
 	return nil
 }
 
+func (v *MajorHeaderRangeRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MajorHeaderRangeRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *MajorHeaderRangeRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.MajorHeaderRangeOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_MajorHeaderRangeRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *MajorHeaderRangeResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MajorHeaderRangeResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *MajorHeaderRangeResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(api.MajorHeaderRecord); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Value = append(v.Value, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_MajorHeaderRangeResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -3650,6 +4309,74 @@ func (v *MetricsResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_MetricsResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *MinorRootRangeRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MinorRootRangeRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *MinorRootRangeRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.MinorRootRangeOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_MinorRootRangeRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *MinorRootRangeResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MinorRootRangeResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *MinorRootRangeResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(api.MinorRootRecord); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_MinorRootRangeResponse)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -4422,6 +5149,18 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("bptRoot", "bytes32"),
+		encoding.NewTypeField("atOrAfter", "uint64"),
+	}, "AnchorReceiptRequest", "anchorReceiptRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.AnchorReceiptRecord"),
+	}, "AnchorReceiptResponse", "anchorReceiptResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("nodeID", "string"),
 		encoding.NewTypeField("partition", "string"),
 		encoding.NewTypeField("includePeers", "bool"),
@@ -4481,6 +5220,18 @@ func init() {
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("end", "uint64"),
+	}, "MajorHeaderRangeRequest", "majorHeaderRangeRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.MajorHeaderRecord[]"),
+	}, "MajorHeaderRangeResponse", "majorHeaderRangeResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
 		encoding.NewTypeField("span", "uint64"),
 	}, "MetricsRequest", "metricsRequest")
 
@@ -4488,6 +5239,18 @@ func init() {
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("value", "api.Metrics"),
 	}, "MetricsResponse", "metricsResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("since", "uint64"),
+		encoding.NewTypeField("until", "uint64"),
+	}, "MinorRootRangeRequest", "minorRootRangeRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "api.MinorRootRecord"),
+	}, "MinorRootRangeResponse", "minorRootRangeResponse")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -4625,6 +5388,42 @@ func (v *Addressed) MarshalJSON() ([]byte, error) {
 	}
 	if !(p2p.EqualMultiaddr(v.Address, nil)) {
 		u.Address = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Address, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *AnchorReceiptRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		BptRoot   *string `json:"bptRoot,omitempty"`
+		AtOrAfter uint64  `json:"atOrAfter,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.AnchorReceiptOptions.Partition) == 0) {
+		u.Partition = v.AnchorReceiptOptions.Partition
+	}
+	if !(v.AnchorReceiptOptions.BptRoot == ([32]byte{})) {
+		u.BptRoot = encoding.ChainToJSON(&v.AnchorReceiptOptions.BptRoot)
+	}
+	if !(v.AnchorReceiptOptions.AtOrAfter == 0) {
+		u.AtOrAfter = v.AnchorReceiptOptions.AtOrAfter
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *AnchorReceiptResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                     `json:"type"`
+		Value     *api.AnchorReceiptRecord `json:"value,omitempty"`
+		ExtraData *string                  `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
+		u.Value = v.Value
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -4798,6 +5597,42 @@ func (v *ListSnapshotsResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *MajorHeaderRangeRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		Start     uint64  `json:"start,omitempty"`
+		End       uint64  `json:"end,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.MajorHeaderRangeOptions.Partition) == 0) {
+		u.Partition = v.MajorHeaderRangeOptions.Partition
+	}
+	if !(v.MajorHeaderRangeOptions.Start == 0) {
+		u.Start = v.MajorHeaderRangeOptions.Start
+	}
+	if !(v.MajorHeaderRangeOptions.End == 0) {
+		u.End = v.MajorHeaderRangeOptions.End
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *MajorHeaderRangeResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                                      `json:"type"`
+		Value     encoding.JsonList[*api.MajorHeaderRecord] `json:"value,omitempty"`
+		ExtraData *string                                   `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Value) == 0) {
+		u.Value = v.Value
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      Type    `json:"type"`
@@ -4821,6 +5656,42 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 		Type      Type         `json:"type"`
 		Value     *api.Metrics `json:"value,omitempty"`
 		ExtraData *string      `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
+		u.Value = v.Value
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *MinorRootRangeRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		Since     uint64  `json:"since,omitempty"`
+		Until     uint64  `json:"until,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.MinorRootRangeOptions.Partition) == 0) {
+		u.Partition = v.MinorRootRangeOptions.Partition
+	}
+	if !(v.MinorRootRangeOptions.Since == 0) {
+		u.Since = v.MinorRootRangeOptions.Since
+	}
+	if !(v.MinorRootRangeOptions.Until == 0) {
+		u.Until = v.MinorRootRangeOptions.Until
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *MinorRootRangeResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                 `json:"type"`
+		Value     *api.MinorRootRecord `json:"value,omitempty"`
+		ExtraData *string              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
@@ -5222,6 +6093,62 @@ func (v *Addressed) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *AnchorReceiptRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		BptRoot   *string `json:"bptRoot,omitempty"`
+		AtOrAfter uint64  `json:"atOrAfter,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.AnchorReceiptOptions.Partition
+	u.BptRoot = encoding.ChainToJSON(&v.AnchorReceiptOptions.BptRoot)
+	u.AtOrAfter = v.AnchorReceiptOptions.AtOrAfter
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.AnchorReceiptOptions.Partition = u.Partition
+	if x, err := encoding.ChainFromJSON(u.BptRoot); err != nil {
+		return fmt.Errorf("error decoding BptRoot: %w", err)
+	} else {
+		v.AnchorReceiptOptions.BptRoot = *x
+	}
+	v.AnchorReceiptOptions.AtOrAfter = u.AtOrAfter
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *AnchorReceiptResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                     `json:"type"`
+		Value     *api.AnchorReceiptRecord `json:"value,omitempty"`
+		ExtraData *string                  `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *ConsensusStatusRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type              Type    `json:"type"`
@@ -5485,6 +6412,58 @@ func (v *ListSnapshotsResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *MajorHeaderRangeRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		Start     uint64  `json:"start,omitempty"`
+		End       uint64  `json:"end,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.MajorHeaderRangeOptions.Partition
+	u.Start = v.MajorHeaderRangeOptions.Start
+	u.End = v.MajorHeaderRangeOptions.End
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.MajorHeaderRangeOptions.Partition = u.Partition
+	v.MajorHeaderRangeOptions.Start = u.Start
+	v.MajorHeaderRangeOptions.End = u.End
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *MajorHeaderRangeResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                                      `json:"type"`
+		Value     encoding.JsonList[*api.MajorHeaderRecord] `json:"value,omitempty"`
+		ExtraData *string                                   `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      Type    `json:"type"`
@@ -5516,6 +6495,58 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 		Type      Type         `json:"type"`
 		Value     *api.Metrics `json:"value,omitempty"`
 		ExtraData *string      `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *MinorRootRangeRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type    `json:"type"`
+		Partition string  `json:"partition,omitempty"`
+		Since     uint64  `json:"since,omitempty"`
+		Until     uint64  `json:"until,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.MinorRootRangeOptions.Partition
+	u.Since = v.MinorRootRangeOptions.Since
+	u.Until = v.MinorRootRangeOptions.Until
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.MinorRootRangeOptions.Partition = u.Partition
+	v.MinorRootRangeOptions.Since = u.Since
+	v.MinorRootRangeOptions.Until = u.Until
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *MinorRootRangeResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                 `json:"type"`
+		Value     *api.MinorRootRecord `json:"value,omitempty"`
+		ExtraData *string              `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value

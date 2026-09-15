@@ -42,6 +42,28 @@ type AccountRecord struct {
 	extraData     []byte
 }
 
+type AnchorReceiptOptions struct {
+	fieldsSet []bool
+	// Partition is the partition whose BPT root is being bound, from the first call's Receipt.Partition.
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	// BptRoot is where the first call's receipt terminates.
+	BptRoot [32]byte `json:"bptRoot,omitempty" form:"bptRoot" query:"bptRoot" validate:"required"`
+	// AtOrAfter asks for a receipt terminating at a directory root no older than this block. Zero, the default, returns the oldest receipt that works, which is the stable answer. A caller that already trusts a later directory root can name it here and get a receipt reaching that instead, rather than having to verify an older root separately.
+	AtOrAfter uint64 `json:"atOrAfter,omitempty" form:"atOrAfter" query:"atOrAfter"`
+	extraData []byte
+}
+
+type AnchorReceiptRecord struct {
+	fieldsSet []bool
+	// Receipt proves the partition's BPT root into a directory root; nil while the anchor is still in flight.
+	Receipt *merkle.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt"`
+	// Anchored reports whether the directory has committed the root yet. False is a wait, not a failure -- the anchor carrying it has not arrived.
+	Anchored bool `json:"anchored,omitempty" form:"anchored" query:"anchored" validate:"required"`
+	// DirectoryBlock is the directory block whose root the receipt terminates at, being the block that committed the anchor rather than the current one. The terminus is therefore stable, so the same root queried later returns the same receipt.
+	DirectoryBlock uint64 `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock"`
+	extraData      []byte
+}
+
 // AnchorSearchQuery queries {account}#anchor/{hash}.
 type AnchorSearchQuery struct {
 	fieldsSet      []bool
@@ -457,6 +479,10 @@ type Receipt struct {
 	MajorBlock     uint64    `json:"majorBlock,omitempty" form:"majorBlock" query:"majorBlock" validate:"required"`
 	// ForHeight is the minor block height this receipt was produced against; zero means the current state.
 	ForHeight uint64 `json:"forHeight,omitempty" form:"forHeight" query:"forHeight"`
+	// Complete reports that the receipt terminates at a directory root, so there is no second call to make. A BPT is a tree of current state, so an account proof is built against the current BPT and its root reaches the directory only after an anchor round trip -- except on the directory itself, where it is already local.
+	Complete bool `json:"complete,omitempty" form:"complete" query:"complete"`
+	// Partition names whose BPT root the receipt terminates at when it is not complete, so a caller knows what to bind against.
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition"`
 	extraData []byte
 }
 
@@ -624,6 +650,40 @@ func (v *AccountRecord) Copy() *AccountRecord {
 }
 
 func (v *AccountRecord) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AnchorReceiptOptions) Copy() *AnchorReceiptOptions {
+	u := new(AnchorReceiptOptions)
+
+	u.Partition = v.Partition
+	u.BptRoot = v.BptRoot
+	u.AtOrAfter = v.AtOrAfter
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *AnchorReceiptOptions) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AnchorReceiptRecord) Copy() *AnchorReceiptRecord {
+	u := new(AnchorReceiptRecord)
+
+	if v.Receipt != nil {
+		u.Receipt = (v.Receipt).Copy()
+	}
+	u.Anchored = v.Anchored
+	u.DirectoryBlock = v.DirectoryBlock
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *AnchorReceiptRecord) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AnchorSearchQuery) Copy() *AnchorSearchQuery {
 	u := new(AnchorSearchQuery)
@@ -1617,6 +1677,8 @@ func (v *Receipt) Copy() *Receipt {
 	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
 	u.ForHeight = v.ForHeight
+	u.Complete = v.Complete
+	u.Partition = v.Partition
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1867,6 +1929,39 @@ func (v *AccountRecord) Equal(u *AccountRecord) bool {
 	case v.LastBlockTime == nil || u.LastBlockTime == nil:
 		return false
 	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
+
+	return true
+}
+
+func (v *AnchorReceiptOptions) Equal(u *AnchorReceiptOptions) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	if !(v.BptRoot == u.BptRoot) {
+		return false
+	}
+	if !(v.AtOrAfter == u.AtOrAfter) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AnchorReceiptRecord) Equal(u *AnchorReceiptRecord) bool {
+	switch {
+	case v.Receipt == u.Receipt:
+		// equal
+	case v.Receipt == nil || u.Receipt == nil:
+		return false
+	case !((v.Receipt).Equal(u.Receipt)):
+		return false
+	}
+	if !(v.Anchored == u.Anchored) {
+		return false
+	}
+	if !(v.DirectoryBlock == u.DirectoryBlock) {
 		return false
 	}
 
@@ -2947,6 +3042,12 @@ func (v *Receipt) Equal(u *Receipt) bool {
 	if !(v.ForHeight == u.ForHeight) {
 		return false
 	}
+	if !(v.Complete == u.Complete) {
+		return false
+	}
+	if !(v.Partition == u.Partition) {
+		return false
+	}
 
 	return true
 }
@@ -3199,6 +3300,125 @@ func (v *AccountRecord) IsValid() error {
 		errs = append(errs, "field LastBlockTime is missing")
 	} else if v.LastBlockTime == nil {
 		errs = append(errs, "field LastBlockTime is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AnchorReceiptOptions = []string{
+	1: "Partition",
+	2: "BptRoot",
+	3: "AtOrAfter",
+}
+
+func (v *AnchorReceiptOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(1, v.Partition)
+	}
+	if !(v.BptRoot == ([32]byte{})) {
+		writer.WriteHash(2, &v.BptRoot)
+	}
+	if !(v.AtOrAfter == 0) {
+		writer.WriteUint(3, v.AtOrAfter)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AnchorReceiptOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *AnchorReceiptOptions) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field BptRoot is missing")
+	} else if v.BptRoot == ([32]byte{}) {
+		errs = append(errs, "field BptRoot is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AnchorReceiptRecord = []string{
+	1: "Receipt",
+	2: "Anchored",
+	3: "DirectoryBlock",
+}
+
+func (v *AnchorReceiptRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Receipt == nil) {
+		writer.WriteValue(1, v.Receipt.MarshalBinary)
+	}
+	if !(!v.Anchored) {
+		writer.WriteBool(2, v.Anchored)
+	}
+	if !(v.DirectoryBlock == 0) {
+		writer.WriteUint(3, v.DirectoryBlock)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AnchorReceiptRecord)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *AnchorReceiptRecord) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Anchored is missing")
+	} else if !v.Anchored {
+		errs = append(errs, "field Anchored is not set")
 	}
 
 	switch len(errs) {
@@ -6288,6 +6508,8 @@ var fieldNames_Receipt = []string{
 	3: "LocalBlockTime",
 	4: "MajorBlock",
 	5: "ForHeight",
+	6: "Complete",
+	7: "Partition",
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
@@ -6312,6 +6534,12 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.ForHeight == 0) {
 		writer.WriteUint(5, v.ForHeight)
+	}
+	if !(!v.Complete) {
+		writer.WriteBool(6, v.Complete)
+	}
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(7, v.Partition)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Receipt)
@@ -7017,6 +7245,64 @@ func (v *AccountRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AccountRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *AnchorReceiptOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AnchorReceiptOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.BptRoot = *x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.AtOrAfter = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AnchorReceiptOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *AnchorReceiptRecord) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AnchorReceiptRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(merkle.Receipt); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Receipt = x
+	}
+	if x, ok := reader.ReadBool(2); ok {
+		v.Anchored = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.DirectoryBlock = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AnchorReceiptRecord)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -8723,6 +9009,12 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(5); ok {
 		v.ForHeight = x
 	}
+	if x, ok := reader.ReadBool(6); ok {
+		v.Complete = x
+	}
+	if x, ok := reader.ReadString(7); ok {
+		v.Partition = x
+	}
 
 	seen, err := reader.Reset(fieldNames_Receipt)
 	if err != nil {
@@ -9095,6 +9387,18 @@ func init() {
 	}, "AccountRecord", "accountRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("bptRoot", "bytes32"),
+		encoding.NewTypeField("atOrAfter", "uint64"),
+	}, "AnchorReceiptOptions", "anchorReceiptOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("receipt", "merkle.Receipt"),
+		encoding.NewTypeField("anchored", "bool"),
+		encoding.NewTypeField("directoryBlock", "uint64"),
+	}, "AnchorReceiptRecord", "anchorReceiptRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("queryType", "string"),
 		encoding.NewTypeField("anchor", "bytes"),
 		encoding.NewTypeField("includeReceipt", "ReceiptOptions"),
@@ -9413,6 +9717,8 @@ func init() {
 		encoding.NewTypeField("localBlockTime", "string"),
 		encoding.NewTypeField("majorBlock", "uint64"),
 		encoding.NewTypeField("forHeight", "uint64"),
+		encoding.NewTypeField("complete", "bool"),
+		encoding.NewTypeField("partition", "string"),
 	}, "Receipt", "receipt")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -9501,6 +9807,26 @@ func (v *AccountRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.LastBlockTime == nil) {
 		u.LastBlockTime = v.LastBlockTime
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *AnchorReceiptOptions) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Partition string  `json:"partition,omitempty"`
+		BptRoot   *string `json:"bptRoot,omitempty"`
+		AtOrAfter uint64  `json:"atOrAfter,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
+	if !(v.BptRoot == ([32]byte{})) {
+		u.BptRoot = encoding.ChainToJSON(&v.BptRoot)
+	}
+	if !(v.AtOrAfter == 0) {
+		u.AtOrAfter = v.AtOrAfter
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -10330,6 +10656,8 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 		LocalBlockTime time.Time                               `json:"localBlockTime,omitempty"`
 		MajorBlock     uint64                                  `json:"majorBlock,omitempty"`
 		ForHeight      uint64                                  `json:"forHeight,omitempty"`
+		Complete       bool                                    `json:"complete,omitempty"`
+		Partition      string                                  `json:"partition,omitempty"`
 		ExtraData      *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Receipt.Start) == 0) {
@@ -10361,6 +10689,12 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.ForHeight == 0) {
 		u.ForHeight = v.ForHeight
+	}
+	if !(!v.Complete) {
+		u.Complete = v.Complete
+	}
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -10465,6 +10799,34 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 	v.Pending = u.Pending
 	v.Receipt = u.Receipt
 	v.LastBlockTime = u.LastBlockTime
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *AnchorReceiptOptions) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Partition string  `json:"partition,omitempty"`
+		BptRoot   *string `json:"bptRoot,omitempty"`
+		AtOrAfter uint64  `json:"atOrAfter,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Partition = v.Partition
+	u.BptRoot = encoding.ChainToJSON(&v.BptRoot)
+	u.AtOrAfter = v.AtOrAfter
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Partition = u.Partition
+	if x, err := encoding.ChainFromJSON(u.BptRoot); err != nil {
+		return fmt.Errorf("error decoding BptRoot: %w", err)
+	} else {
+		v.BptRoot = *x
+	}
+	v.AtOrAfter = u.AtOrAfter
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -11546,6 +11908,8 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 		LocalBlockTime time.Time                               `json:"localBlockTime,omitempty"`
 		MajorBlock     uint64                                  `json:"majorBlock,omitempty"`
 		ForHeight      uint64                                  `json:"forHeight,omitempty"`
+		Complete       bool                                    `json:"complete,omitempty"`
+		Partition      string                                  `json:"partition,omitempty"`
 		ExtraData      *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
@@ -11558,6 +11922,8 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
 	u.ForHeight = v.ForHeight
+	u.Complete = v.Complete
+	u.Partition = v.Partition
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -11584,6 +11950,8 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	v.LocalBlockTime = u.LocalBlockTime
 	v.MajorBlock = u.MajorBlock
 	v.ForHeight = u.ForHeight
+	v.Complete = u.Complete
+	v.Partition = u.Partition
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

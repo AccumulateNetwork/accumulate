@@ -135,6 +135,19 @@ MajorHeaderRangeOptions:
       description: is the last major block index, inclusive
       type: uint
 
+AnchorReceiptOptions:
+  fields:
+    - name: Partition
+      description: is the partition whose BPT root is being bound, from the first call's Receipt.Partition
+      type: string
+    - name: BptRoot
+      description: is where the first call's receipt terminates
+      type: hash
+    - name: AtOrAfter
+      description: asks for a receipt terminating at a directory root no older than this block. Zero, the default, returns the oldest receipt that works, which is the stable answer. A caller that already trusts a later directory root can name it here and get a receipt reaching that instead, rather than having to verify an older root separately
+      type: uint
+      optional: true
+
 MinorRootRangeOptions:
   fields:
     - name: Partition
