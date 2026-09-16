@@ -1501,13 +1501,17 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 .heights .n{font-size:20px;font-weight:680;font-variant-numeric:tabular-nums}
 .heights .l{color:var(--mut);font-size:11px;margin-left:4px}
 .legend{color:var(--mut);font-size:11px;margin-top:8px}
-.strip{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:baseline}
-.sgrp{display:flex;align-items:baseline;gap:5px;white-space:nowrap}
-.sgrp b{font-size:16px;font-weight:680;font-variant-numeric:tabular-nums}
-.sh{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-right:2px}
-.sl{color:var(--mut);font-size:10.5px;margin-right:5px}
-.strip .n{font-size:16px;font-weight:680;font-variant-numeric:tabular-nums}
-.strip .l{color:var(--mut);font-size:10.5px;margin-left:3px;margin-right:6px}
+/* The stats panel: one column per KIND of value, numbers right-aligned so a
+   column reads as a column. Every id is unchanged; only the arrangement is. */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 28px;align-items:start}
+.col h4{margin:0 0 2px;color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.col .sub{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-top:6px;opacity:.8}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:0 8px;align-items:baseline}
+.kv b,.kv .n{font-size:15px;font-weight:680;font-variant-numeric:tabular-nums;text-align:right}
+.kv .mut{font-size:13px;font-variant-numeric:tabular-nums;text-align:right}
+.kv .l,.kv .sl{color:var(--mut);font-size:10.5px}
+.kv .cap{grid-column:1/-1;color:var(--mut);font-size:10.5px;margin-top:1px}
+#heights{display:contents}
 </style></head><body><div class=wrap>
 <header>
   <h1>Synthetic-healing soak</h1>
@@ -1517,60 +1521,80 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 </header>
 <div class="grid cards" id=cards></div>
 <div class=panel style="padding:9px 12px">
-  <div class=strip>
-    <div class=sgrp><span class=sh>tx/s</span>
-      <b id=rtotal>—</b><span class=sl>total now</span>
-      <b id=ruser>—</b><span class=sl>user</span>
-      <span class=mut id=rtgt>—</span><span class=sl>target</span>
-      <b id=rsyn>—</b><span class=sl>syn</span>
-      <b id=ranc>—</b><span class=sl>anc</span>
-      <span class=mut id=rratio>—</span><span class=sl>syn/user</span>
+  <div class=stats>
+    <div class=col><h4>rates</h4>
+      <div class=sub>now</div>
+      <div class=kv>
+        <b id=rtotal>—</b><span class=sl>tx/s total</span>
+        <b id=ruser>—</b><span class=sl>user</span>
+        <span class=mut id=rtgt>—</span><span class=sl>target</span>
+        <b id=rsyn>—</b><span class=sl>synthetic</span>
+        <b id=ranc>—</b><span class=sl>anchor</span>
+        <span class=mut id=rratio>—</span><span class=sl>syn/user</span>
+      </div>
+      <div class=sub>run average</div>
+      <div class=kv>
+        <b id=ratotal>—</b><span class=sl>tx/s total</span>
+        <b id=rauser>—</b><span class=sl>user</span>
+        <span class=mut id=rasyn>—</span><span class=sl>synthetic</span>
+        <span class=mut id=raanc>—</span><span class=sl>anchor</span>
+        <span class=cap id=raover></span>
+      </div>
     </div>
-    <div class=sgrp><span class=sh>run average</span>
-      <b id=ratotal>—</b><span class=sl>total</span>
-      <b id=rauser>—</b><span class=sl>user</span>
-      <span class=mut id=rasyn>—</span><span class=sl>syn</span>
-      <span class=mut id=raanc>—</span><span class=sl>anc</span>
-      <span class=sl id=raover></span>
+    <div class=col><h4>chain</h4>
+      <div class=sub>heights</div>
+      <div class=kv><span id=heights></span></div>
+      <div class=sub>blocks</div>
+      <div class=kv>
+        <b id=lblocks>—</b><span class=sl>produced</span>
+        <b id=lempty>—</b><span class=sl>empty</span>
+        <span class=cap id=lidle></span>
+      </div>
     </div>
-    <div class=sgrp><span class=sh>node RSS</span>
-      <b id=nrssavg>—</b><span class=sl>avg</span>
-      <b id=nrssmax>—</b><span class=sl>max</span>
-      <span class=mut id=nrssmin>—</span><span class=sl>min</span>
-      <span class=sl id=nrssnode></span>
+    <div class=col><h4>nodes</h4>
+      <div class=sub>resident memory</div>
+      <div class=kv>
+        <b id=nrssavg>—</b><span class=sl>avg</span>
+        <b id=nrssmax>—</b><span class=sl>max</span>
+        <span class=mut id=nrssmin>—</span><span class=sl>min</span>
+        <span class=cap id=nrssnode></span>
+      </div>
+      <div class=sub>goroutines</div>
+      <div class=kv>
+        <b id=ngravg>—</b><span class=sl>avg</span>
+        <b id=ngrmax>—</b><span class=sl>max</span>
+        <span class=mut id=ngrmin>—</span><span class=sl>min</span>
+        <span class=cap id=ngrnode></span>
+      </div>
+      <div class=sub>database on disk</div>
+      <div class=kv>
+        <b id=ndbavg>—</b><span class=sl>avg per node</span>
+        <b id=ndbmax>—</b><span class=sl>max</span>
+        <span class=mut id=ndbgrow>—</span><span class=sl>growth</span>
+        <span class=cap id=ndbnode></span>
+      </div>
     </div>
-    <div class=sgrp><span class=sh>database on disk</span>
-      <b id=ndbavg>—</b><span class=sl>avg/node</span>
-      <b id=ndbmax>—</b><span class=sl>max</span>
-      <span class=mut id=ndbgrow>—</span><span class=sl>growth</span>
-      <span class=sl id=ndbnode></span>
+    <div class=col><h4>delivery</h4>
+      <div class=sub>retention</div>
+      <div class=kv>
+        <b id=lheld>—</b><span class=sl>held</span>
+        <b id=lhits>—</b><span class=sl>hits</span>
+        <span class=mut id=lexp>—</span><span class=sl>expired</span>
+      </div>
+      <div class=sub>re-delivered</div>
+      <div class=kv>
+        <b id=lredel>—</b><span class=sl id=lredelnote></span>
+      </div>
+      <div class=sub>batch waits</div>
+      <div class=kv><span class=cap id=lwaits>—</span></div>
     </div>
-    <div class=sgrp><span class=sh>goroutines</span>
-      <b id=ngravg>—</b><span class=sl>avg</span>
-      <b id=ngrmax>—</b><span class=sl>max</span>
-      <span class=mut id=ngrmin>—</span><span class=sl>min</span>
-      <span class=sl id=ngrnode></span>
-    </div>
-    <div class=sgrp><span class=sh>heights</span><span id=heights></span></div>
-    <div class=sgrp><span class=sh>blocks</span>
-      <b id=lblocks>—</b><span class=sl>produced</span>
-      <b id=lempty>—</b><span class=sl>empty</span>
-      <span class=sl id=lidle></span>
-    </div>
-    <div class=sgrp><span class=sh>retention</span>
-      <b id=lheld>—</b><span class=sl>held</span>
-      <b id=lhits>—</b><span class=sl>hits</span>
-      <span class=mut id=lexp>—</span><span class=sl>expired</span>
-    </div>
-    <div class=sgrp><span class=sh>re-delivered</span>
-      <b id=lredel>—</b><span class=sl id=lredelnote></span>
-    </div>
-    <div class=sgrp><span class=sh>batch waits</span><span id=lwaits>—</span></div>
-    <div class=sgrp><span class=sh>step 0 (#4169)</span>
-      <b id=x0a>—</b><span class=sl>serial share</span>
-      <b id=x0b>—</b><span class=sl>flushes/block</span>
-      <b id=x0c>—</b><span class=sl>anchor co-arrival</span>
-      <span class=sl id=x0note></span>
+    <div class=col><h4>execution &middot; step 0 (#4169)</h4>
+      <div class=kv>
+        <b id=x0a>—</b><span class=sl>serial share</span>
+        <b id=x0b>—</b><span class=sl>flushes per block</span>
+        <b id=x0c>—</b><span class=sl>anchor co-arrival</span>
+        <span class=cap id=x0note></span>
+      </div>
     </div>
   </div>
 </div>
