@@ -1018,6 +1018,34 @@ def collect_flows_api():
                 else:
                     anc_prod += produced
 
+    # Anchor "sent" from the source's anchor-sequence CHAIN height. The anchor
+    # ledger has no outbound `produced` writer on any lineage (checked 2026-08:
+    # no branch writes it), so reading it yields the impossible display
+    # "received 18 / sent 0" — received is PROOF of sent. The sequence chain is
+    # the actual bookkeeping: a BVN anchors only to the DN, and the DN sends
+    # the same sequence to every BVN, so the chain height IS the sent count.
+    for src in PARTITIONS:
+        h = 0
+        for r in query_all_nodes({"scope": "acc://%s.acme/anchors" % SCOPE[src],
+                                  "query": {"queryType": "chain", "name": "anchor-sequence"}}):
+            try:
+                h = max(h, int(r["count"]))
+            except Exception:
+                continue
+        if h <= 0:
+            continue
+        dsts = ["Directory"] if src != "Directory" else list(PARTITIONS)
+        for dst in dsts:
+            c = cell("anchor", src, dst)
+            c["sent"] = max(c["sent"], h)
+            anc_prod = max(anc_prod, h)
+
+    # ... and it has to be filled BEFORE anything is judged from `sent`: the
+    # undelivered count, the in-flight depth and the skew below all read it.
+    # Judged first, every anchor cell saw sent=0 and reported "skew: dst
+    # reports N more received than any source produced" over a healthy
+    # stream (run 20260916T160646Z).
+
     # undeliv = produced at the source minus received at the destination. This is
     # the ONLY signal that catches a missing PREFIX or a trailing drop: when the
     # very first messages of a stream are lost and nothing follows them, the
@@ -1108,7 +1136,10 @@ def collect_flows_api():
                         lag_s = 0.0
 
                 state, note = "ok", ""
-                if skew:
+                if skew > 1:
+                    # One unit is the two instruments read a tick apart (the
+                    # anchor chain height and the ledger are separate
+                    # queries); more than that is a stale or missing read.
                     note = "skew: dst reports %d more received than any source view produced (read over %s nodes)" % (skew, _FLOW_ANSWERS["cur"])
                 elif lag_s is not None and lag_s > 0:
                     note = "~%ds in flight" % min(lag_s, 999999)
@@ -1143,28 +1174,6 @@ def collect_flows_api():
                 c["state"] = state
                 c["note"] = note
                 c["expLagS"] = round(expected, 1)
-
-    # Anchor "sent" from the source's anchor-sequence CHAIN height. The anchor
-    # ledger has no outbound `produced` writer on any lineage (checked 2026-08:
-    # no branch writes it), so reading it yields the impossible display
-    # "received 18 / sent 0" — received is PROOF of sent. The sequence chain is
-    # the actual bookkeeping: a BVN anchors only to the DN, and the DN sends
-    # the same sequence to every BVN, so the chain height IS the sent count.
-    for src in PARTITIONS:
-        h = 0
-        for r in query_all_nodes({"scope": "acc://%s.acme/anchors" % SCOPE[src],
-                                  "query": {"queryType": "chain", "name": "anchor-sequence"}}):
-            try:
-                h = max(h, int(r["count"]))
-            except Exception:
-                continue
-        if h <= 0:
-            continue
-        dsts = ["Directory"] if src != "Directory" else list(PARTITIONS)
-        for dst in dsts:
-            c = cell("anchor", src, dst)
-            c["sent"] = max(c["sent"], h)
-            anc_prod = max(anc_prod, h)
 
     # No impossible states: delivery is proof of sending, so sent is bounded
     # below by both received and delivered (REPORTING-SPEC.md 1a). If an
