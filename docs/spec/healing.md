@@ -422,7 +422,7 @@ on the node's metrics endpoint, as are every row of the counting table above.
 Where the implementation departs from this specification, see
 [DIFFERENCES.md](DIFFERENCES.md).
 
-### Healing is for a stream that has stopped
+### Healing is for a synthetic stream that has stopped
 
 A stream holding nothing above `Delivered` is the signature of a package lost
 whole — entries and proof travel together, so losing both leaves nothing held
@@ -467,6 +467,17 @@ well inside the window a lost package needs.
 This is the same failure the waiting-proof exclusion above addresses, reached
 by a different path: healing that answers normal lag rather than loss, and
 whose answer makes the lag worse.
+
+**The rule is for synthetic streams, and only those.** Every measurement
+behind it came from one: the 743,000-entry storm, the runs averaging 49
+consecutive numbers, the 13.7-29.3 second in-flight times. An anchor stream
+is a different shape -- roughly one entry per block per partition, executed
+under a quorum, and without the constant drain that makes an empty synthetic
+stream ambiguous between "caught up" and "package lost". Extending the wait to
+anchors was a generalisation with no evidence under it, and it did not slow
+recovery of a lost block validator anchor so much as prevent it: the e2e case
+went from one failure in twenty runs to thirteen, and stayed broken when given
+a 600-block budget instead of fifty. **An anchor stream is asked on sight.**
 
 ### The in-flight window belongs to the sender
 

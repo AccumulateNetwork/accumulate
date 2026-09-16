@@ -227,3 +227,33 @@ func TestOutcome_Backoff(t *testing.T) {
 	r.outcome(reqSource, 300, 1, 1)
 	require.False(t, r.backedOff(reqSource, 300), "an answer clears the back-off")
 }
+
+// The stillness gate is for SYNTHETIC streams. Every measurement behind it
+// came from one: the 743,000-entry storm, the runs averaging 49 consecutive
+// numbers, the 13.7-29.3s in-flight times (#4280). An anchor stream is a
+// different shape -- roughly one entry per block per partition, executed
+// under a quorum -- and gating it made a lost block validator anchor
+// unrecoverable rather than merely slow: TestMissingBlockValidatorAnchorTxn
+// went from 1 failure in 20 runs to 13, and stayed broken at a 600-block
+// budget. An anchor stream is asked on sight.
+func TestDecide_AnAnchorStreamIsNotGatedByStillness(t *testing.T) {
+	anchorStream := execute.StreamID{
+		Ledger: protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool),
+		Source: reqSource,
+	}
+	s := execute.NewStaging()
+	var r healRequester
+	tx := s.Begin()
+	defer tx.Discard()
+
+	// The very first activation on a stalled anchor stream asks: there is no
+	// settling period to wait out.
+	require.Equal(t, [][2]uint64{{6, 5 + protocol.MaxReceiptListElements}},
+		r.decide(tx, anchorStream, 5, 8),
+		"an anchor stream is asked on sight, not after probeAfter activations")
+
+	// A synthetic stream at the same standing is still gated, so the two
+	// rules stay distinct.
+	require.Empty(t, r.decide(tx, reqStream, 5, 8),
+		"a synthetic stream still waits for its Delivered to sit still")
+}

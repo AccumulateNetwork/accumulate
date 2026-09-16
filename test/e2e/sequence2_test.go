@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -167,10 +168,23 @@ func TestMissingDirectoryAnchorTxn(t *testing.T) {
 		build.Transaction().For(faucet).
 			SendTokens(1, AcmeOraclePrecisionPower).To(lite).
 			SignWith(faucet).Timestamp(1).Version(1).PrivateKey(faucetKey))
-	sim.StepUntil(
+
+	// The lost anchor holes the Directory's anchor stream from that BVN, and
+	// a stream executes in order with no gaps, so nothing that BVN produces
+	// is anchored -- and no synthetic of its is provable -- until healing
+	// fills the hole. The budget is generous so that a failure here means
+	// recovery stopped working, not that it was slower than fifty blocks.
+	sim.StepUntilN(recoverAnchorHoleBlocks,
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 }
+
+// recoverAnchorHoleBlocks is how long this test waits for healing to fill a
+// hole in an anchor stream. Well past what recovery needs: the point is to
+// distinguish "recovery is broken" from "recovery is slow", and when the
+// stillness gate was applied to anchor streams it was broken -- 600 blocks
+// did not help (#4280).
+const recoverAnchorHoleBlocks = 120
 
 func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
 	// Initialize
@@ -191,30 +205,67 @@ func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
 	faucet := acctesting.AcmeLiteAddressStdPriv(faucetKey)
 	MakeLiteTokenAccount(t, sim.DatabaseFor(faucet), faucetKey[32:], AcmeUrl())
 
-	// Drop the next block validator anchor. The block hook is called per
-	// node, so both the counter and the envelopes it edits are shared (#4171).
-	var anchorsMu sync.Mutex
-	var anchors int
-	sim.SetBlockHook(Directory, func(_ execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
-		anchorsMu.Lock()
-		defer anchorsMu.Unlock()
+	// Lose ONE block validator anchor completely: every copy of a single
+	// (source, number), for a fixed number of blocks, and nothing else.
+	//
+	// The hook is called per node, and it edits shared envelopes (#4171), so
+	// a hook that drops whatever it sees until a shared counter trips drops a
+	// schedule-dependent amount: measured, this one removed eighty-one
+	// messages -- every copy of anchor 1 from all three BVNs -- where the
+	// counter said three. Two different faults, chosen by timing, and the
+	// test failed about half the time because only one of them was
+	// recoverable. Pinning the target to the first (source, number) seen
+	// makes the fault the one the test names.
+	lostAnchorSource := PartitionUrl("BVN0")
+	var dropMu sync.Mutex
+	var target *url.URL
+	var targetNum uint64
+	var dropUntil uint64
+	var dropped int
+	sim.SetBlockHook(Directory, func(params execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
+		dropMu.Lock()
+		defer dropMu.Unlock()
 		for _, env := range envelopes {
 			for i := len(env.Messages) - 1; i >= 0; i-- {
 				anchor, ok := env.Messages[i].(*messaging.BlockAnchor)
 				if !ok {
 					continue
 				}
-				txn := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.TransactionMessage)
-				if txn.Transaction.Body.Type() == TransactionTypeBlockValidatorAnchor {
-					anchors++
-					env.Messages = append(env.Messages[:i], env.Messages[i+1:]...)
+				seq, ok := anchor.Anchor.(*messaging.SequencedMessage)
+				if !ok {
+					continue
 				}
+				txn, ok := seq.Message.(*messaging.TransactionMessage)
+				if !ok || txn.Transaction.Body.Type() != TransactionTypeBlockValidatorAnchor {
+					continue
+				}
+				// A FIXED source, not the first one seen: which anchor
+				// arrives first varies by scheduling, and with it whether
+				// the lost anchor sits on the path the test's transaction
+				// needs. That choice alone was worth a coin flip.
+				if !seq.Source.Equal(lostAnchorSource) {
+					continue
+				}
+				if target == nil {
+					// The window closes a few blocks later so healing's
+					// answer is not dropped along with the anchor.
+					target, targetNum, dropUntil = seq.Source, seq.Number, params.Index+2
+				}
+				if seq.Number != targetNum {
+					continue
+				}
+				dropped++
+				env.Messages = append(env.Messages[:i], env.Messages[i+1:]...)
 			}
 		}
-		return envelopes, anchors < valCount
+		return envelopes, target == nil || params.Index <= dropUntil
 	})
 
-	sim.StepUntil(True(func(*Harness) bool { return anchors >= valCount }))
+	sim.StepUntil(True(func(*Harness) bool {
+		dropMu.Lock()
+		defer dropMu.Unlock()
+		return dropped > 0 && target != nil
+	}))
 
 	// Cause a synthetic transaction
 	st := sim.BuildAndSubmitTxnSuccessfully(

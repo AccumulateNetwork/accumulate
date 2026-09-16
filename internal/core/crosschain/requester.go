@@ -512,11 +512,24 @@ func (r *healRequester) Stranded() []string {
 // A span asked within the last healPatience activations is not asked again.
 // One pass, two map lookups per index, no allocation beyond the spans.
 func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.StreamID, delivered, blockIndex uint64) [][2]uint64 {
-	// Healing is for a stream that has STOPPED, not one that is moving.
-	// Delivery is in order, so a moving Delivered proves nothing below it
-	// is missing, and whatever is missing above it will stop Delivered
-	// when delivery reaches it (#4280). This gates everything below.
-	if !r.stillLongEnough(streamKey(stream), delivered) {
+	// Healing is for a synthetic stream that has STOPPED, not one that is
+	// moving. Delivery is in order, so a moving Delivered proves nothing
+	// below it is missing, and whatever is missing above it will stop
+	// Delivered when delivery reaches it (#4280). This gates everything
+	// below.
+	//
+	// SYNTHETIC streams only. Every measurement behind this rule came from
+	// one -- the 743,000-entry storm, the runs averaging 49 consecutive
+	// numbers, the 13.7-29.3s in-flight times -- and an anchor stream is a
+	// different shape: roughly one entry per block per partition, executed
+	// under a quorum, with none of the constant drain that makes an empty
+	// synthetic stream ambiguous. Gating anchors too was a generalisation
+	// with no evidence under it, and it did not merely slow recovery of a
+	// lost block validator anchor, it prevented it:
+	// TestMissingBlockValidatorAnchorTxn went from 1 failure in 20 runs to
+	// 13, and stayed broken with a 600-block budget. An anchor stream is
+	// asked on sight.
+	if isSyntheticStream(stream) && !r.stillLongEnough(streamKey(stream), delivered) {
 		return nil
 	}
 
