@@ -437,7 +437,16 @@ window the next probe would pull.
 
 The two are told apart by what a lost package actually does: it stops
 `Delivered`. So the requester asks for nothing until a stream's `Delivered`
-has sat still for `probeAfter` (4) activations — sixteen blocks.
+has sat still for `probeAfter` (8) activations — thirty-two blocks.
+
+**The wait must clear the time normal delivery takes.** A block's synthetics
+do not leave until a Directory receipt covering that block returns, so the
+path is the proof-path latency: roughly eight seconds plus seven block
+intervals. Measured at 500 tps, synthetic streams ran 13.7–29.3 seconds in
+flight. A sixteen-block wait sits inside that, and a clean network still
+healed ~300 entries a minute — the source answering from its cache with what
+it had produced and not yet dispatched, healing delivering what dispatch was
+about to. The wait is set beyond the measured path, not beside it.
 
 **That rule covers holes too, and for a stronger reason.** A stream executes
 in order, with no gaps ([executor.md](executor.md), invariant 1). So while

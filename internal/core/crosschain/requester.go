@@ -74,9 +74,21 @@ const (
 	// cover ~1% that was in flight and arriving anyway (#4280).
 	//
 	// A lost package leaves the stream STUCK, so Delivered stops. Waiting
-	// for that tells the two apart. Four activations is sixteen blocks,
-	// well inside the window a lost package needs and far outside the
-	// moment a drained stream spends empty.
+	// for that tells the two apart.
+	//
+	// The wait has to clear the time normal delivery takes, or the probe
+	// wakes inside the pipeline and asks for entries that are merely on
+	// their way. A block's synthetics do not leave until a Directory
+	// receipt covering that block comes back, so the path is the
+	// proof-path latency -- about eight seconds plus seven block
+	// intervals. Measured on run 20260916T004735Z at 500 tps: synthetic
+	// streams ran 13.7 to 29.3 seconds in flight. At four activations the
+	// probe fired at sixteen blocks, inside that, and a clean network
+	// still healed ~300 entries a minute: the source's cache held what it
+	// had produced and not yet dispatched, so it answered, and healing
+	// delivered what dispatch was about to. Eight activations is
+	// thirty-two blocks, clear of the measured path, and still starts
+	// real recovery inside a minute.
 	//
 	// The same rule answers holes, and for a stronger reason: **a stream
 	// executes in order, with no gaps** (executor spec, invariant 1). So
@@ -86,7 +98,7 @@ const (
 	// every transient reorder instead: after the probe was gated, a clean
 	// network still pulled ~1,500 entries a minute, in runs averaging 49
 	// consecutive numbers, all of them in flight (#4280).
-	probeAfter = 4
+	probeAfter = 8
 
 	// strandedAfter is how many consecutive activations a stream's requests
 	// must all come back NotFound — the span is past the source's cache —
