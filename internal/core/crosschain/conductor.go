@@ -75,12 +75,7 @@ type Conductor struct {
 	// being delivered.
 	Heals *HealCounters
 
-	// reconcileSeen is when a gap the SOURCE reported was first seen, so
-	// reconcile can wait for it to persist rather than race normal delivery
-	// (#4073). Not pacing: it is how long to disbelieve a remote's hint.
-	synthHealMu   sync.Mutex
-	reconcileSeen map[string]uint64
-	synthHeals    atomic.Uint64
+	synthHeals atomic.Uint64
 
 	// inflight is the per-task overlap guard (see runExclusive). It bounds what
 	// healing may cost when a scan outlives the block that started it: without
@@ -91,27 +86,12 @@ type Conductor struct {
 	// The per-remote circuit breaker that used to sit beside it is gone
 	// (#4201). It existed because every scan retried a failing remote at full
 	// rate; with an activation every few blocks and two senders, there is no
-	// rate to break.
+	// rate to break. A source that will not answer is backed off by the
+	// requester instead (healRequester.outcome).
 	inflight sync.Map
 
 	requester healRequester
 }
-
-// remoteHealth is one remote partition's circuit breaker state.
-type remoteHealth struct {
-	fails int       // consecutive pull/scan failures
-	until time.Time // circuit open (skip this remote) until this time
-}
-
-// breakerThreshold is how many consecutive failures against a remote open its
-// circuit, and breakerMax caps the backoff. Three failures is already three
-// multi-second RPC timeouts — a remote that fails that consistently is down or
-// drowning, and hammering it harder helps neither side.
-const (
-	breakerThreshold = 3
-	breakerBase      = 15 * time.Second
-	breakerMax       = 5 * time.Minute
-)
 
 // runExclusive runs the task like runTask, unless a task with the same key is
 // still running — then it does nothing. Healing scans are scheduled from every

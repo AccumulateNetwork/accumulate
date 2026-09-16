@@ -512,17 +512,17 @@ func (r *healRequester) Stranded() []string {
 // A span asked within the last healPatience activations is not asked again.
 // One pass, two map lookups per index, no allocation beyond the spans.
 func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.StreamID, delivered, blockIndex uint64) [][2]uint64 {
-	// The walk runs to whichever list reaches further: entries beyond the
-	// validated hashes are a gap of proof, validated hashes beyond the
-	// entries are a gap of entries.
 	// Healing is for a stream that has STOPPED, not one that is moving.
 	// Delivery is in order, so a moving Delivered proves nothing below it
 	// is missing, and whatever is missing above it will stop Delivered
-	// when delivery reaches it (#4280).
+	// when delivery reaches it (#4280). This gates everything below.
 	if !r.stillLongEnough(streamKey(stream), delivered) {
 		return nil
 	}
 
+	// The walk below runs to whichever list reaches further: entries beyond
+	// the validated hashes are a gap of proof, validated hashes beyond the
+	// entries are a gap of entries.
 	sighted := staged.Sighted(stream)
 	if reach := staged.Reach(stream); reach > sighted {
 		sighted = reach
@@ -566,14 +566,25 @@ func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.Stream
 		return false
 	}
 
+	// A number needs nothing from the source when staging already accounts
+	// for it, in any of the three ways it can: held by the sequenced layer
+	// rather than awaiting a proof, held with its hash already validated, or
+	// held with its proof staged and only its anchor outstanding.
+	accountedFor := func(n uint64) bool {
+		h, held := staged.IDOf(stream, n)
+		if !held {
+			return false
+		}
+		return !h.Collected || staged.IsValidated(stream, n, h.Hash) || proofWaiting(n)
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	asks := r.asks[streamKey(stream)]
 	var spans [][2]uint64
 	for n := delivered + 1; n <= through; n++ {
-		h, held := staged.IDOf(stream, n)
-		if held && (!h.Collected || staged.IsValidated(stream, n, h.Hash) || proofWaiting(n)) {
-			continue // held and validated, or its proof is waiting for its anchor: nothing to ask
+		if accountedFor(n) {
+			continue
 		}
 		if askedRecently(asks, n, blockIndex) {
 			continue // asked; its answer can still land
