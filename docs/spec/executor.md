@@ -973,10 +973,13 @@ to serial proves nothing, which is what the first one did until #4149. CI
 runs them under the race detector (`go test race (sharded)`); the data race
 on `Batch.nextChildId` was invisible without it.
 
-`ExecutionShards` defaults to 1. It is raised on a network (soak.conf,
-`ACC_EXECUTION_SHARDS`) only with those gates green under `-race`, and the
-node logs "Execution shards overridden" so a run that meant to shard and did
-not is visible (REPORTING-SPEC 1).
+`ExecutionShards` defaults to 1. It is raised on a network only with those
+gates green under `-race`, and only through the network definition
+(`executionShards` in the network file), which `init network` writes into
+every node's configuration: what a node runs is what its network was defined
+with, frozen with the run. There is no environment path -- one used to exist
+for shard sweeps, and a knob the environment can change is a run that can
+silently differ from its recorded config (BlockchainDB spec 1.10).
 
 Timing is booked as serial versus parallel share, so a run can say whether
 sharding helped or whether nothing was shardable.

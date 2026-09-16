@@ -283,6 +283,20 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			// Narwhal worker is a separate machine with its own bandwidth,
 			// not goroutine-sets sharing one NIC and one disk.
 			cvc.NumWorkers = run.Ptr(int64(1))
+			// Execution shards come from the network definition, pinned into
+			// the node's configuration here (#4149). They used to be an
+			// environment variable the node read at startup, which meant a
+			// run that MEANT to shard and did not was invisible, and a node
+			// could start with a count its network never agreed to. A
+			// network setting can be neither: it is frozen with the run's
+			// config, and an invalid one refuses here, before any node
+			// exists. Zero means the node default (serial).
+			if network.ExecutionShards > 1024 {
+				fatalf("executionShards: %d is out of range [0, 1024]", network.ExecutionShards)
+			}
+			if network.ExecutionShards > 0 {
+				cvc.ExecutionShards = run.Ptr(int64(network.ExecutionShards))
+			}
 
 			// Every node serves Prometheus metrics on :26670. Without this no
 			// DI node had a /metrics endpoint at all — the CometBFT lineage

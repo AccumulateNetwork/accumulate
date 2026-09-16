@@ -12,7 +12,6 @@ import (
 	"crypto/sha256"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -112,28 +111,18 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// fat-fingered count must be refused at startup, not at block time
 	// (#4151).
 	setDefaultPtr(&s.ExecutionShards, 1)
-	// ACC_EXECUTION_SHARDS overrides the configured count, so a shard sweep
-	// does not need a regenerated config (and therefore a new genesis) per
-	// data point. Same idiom as ACC_LEVELDB_CACHE_MB. An invalid value is
-	// REFUSED, not ignored: silently falling back to the configured count
-	// would make a sweep report the serial number under a parallel label,
-	// which is the one way this measurement can lie.
-	// An EMPTY value means "not set", not "invalid". Compose renders an unset
-	// variable as the empty string ("${ACC_EXECUTION_SHARDS-}"), so refusing
-	// it would refuse to start every node on every network that never set it
-	// — the default case. A non-empty value that is not a number is still a
-	// hard error.
-	if v, ok := os.LookupEnv("ACC_EXECUTION_SHARDS"); ok && v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return errors.BadRequest.WithFormat("ACC_EXECUTION_SHARDS %q is not a number", v)
-		}
-		s.ExecutionShards = Ptr(int64(n))
-		slog.Info("Execution shards overridden", "shards", n, "module", "dagbft")
-	}
+	// The count is configuration -- written by `init network` from the
+	// network definition's executionShards -- and nothing else. An
+	// environment override used to sit here for shard sweeps; it went with
+	// #4149's proof work, because a knob the environment can change is a
+	// run that can silently differ from its frozen config (spec 1.10).
 	if *s.ExecutionShards < 0 || *s.ExecutionShards > 1024 {
 		return errors.BadRequest.WithFormat("execution-shards %d is out of range [0, 1024]", *s.ExecutionShards)
 	}
+	// Said at startup, every time: a run that meant to shard and did not
+	// must be visible in the log, not inferred from a metric that stays at
+	// zero (REPORTING-SPEC 1).
+	slog.Info("Execution shards", "shards", *s.ExecutionShards, "serial", *s.ExecutionShards <= 1, "partition", s.Partition.ID, "module", "dagbft")
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
 	setDefaultPtr(&s.MaxExecutionLag, int64(primary.DefaultMaxExecutionLag))

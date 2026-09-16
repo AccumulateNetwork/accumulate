@@ -35,7 +35,7 @@ fi
 . "$here/soak.conf"
 [ -n "$conf_override" ] && . "$conf_override"
 # The knobs the compose file and the node containers read
-export COMPOSE_PROJECT_NAME ACC_BLOCK_INTERVAL ACC_MEM_LIMIT GOMEMLIMIT ACC_EXECUTION_SHARDS ACC_TX_TRACE
+export COMPOSE_PROJECT_NAME ACC_BLOCK_INTERVAL ACC_MEM_LIMIT GOMEMLIMIT ACC_TX_TRACE
 DURATION="${DURATION:-24h}"; TPS="${TPS:-2}"
 
 # Parse Go-style durations so short runs work. The old parser did

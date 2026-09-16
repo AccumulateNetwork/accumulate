@@ -3,6 +3,11 @@ id: "DAGBFTTest"
 # The storage backend every node runs on. BlockchainDB is the backend (#4165);
 # a run on anything else is not comparable and must say so in its manifest.
 database: BlockchainDB
+# Execution shards per node: user transactions execute across this many
+# identity shards; 1 is serial. 8 is the count TestShardEquivalence_Randomized
+# proves against 1 and 64 under -race (#4149). Pinned into every node's config
+# at init; there is no environment override.
+executionShards: 8
 
 # Bootstrap node configuration for Docker peer discovery
 bootstrap:
