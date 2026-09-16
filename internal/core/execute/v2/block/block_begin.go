@@ -391,14 +391,31 @@ func (x *Executor) sendSyntheticTransactions(block *Block, isLeader bool) error 
 	// which Directory block receipted each of its blocks — that is what lets
 	// its sequencer answer a healing request for the block's entries with a
 	// proof — but only the leader submits.
+	// SEND at begin(N+1), proven only as far as THIS partition's root
+	// (#4253). The destination completes the proof from the Directory anchor
+	// it executes anyway, so nothing here waits on the Directory round trip
+	// and the leader's execution lag is off the path entirely. A block whose
+	// send is missed -- a restart across the boundary -- is healed; that is
+	// what healing is for.
+	if block.Index > 1 {
+		err := x.sendSyntheticTransactionsForBlock(block.Index-1, nil, 0, isLeader, false, true, deliveredFrom)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	// MARK when the Directory receipt arrives. The entries have already
+	// gone; what the receipt adds is the anchor a HEALING answer is proven
+	// under, which is still a Directory-anchored proof (healing spec, "The
+	// cache"). Recorded on every node, and it no longer sends.
 	received := x.synthCache().TakeReceived()
 	if len(received) > 0 {
-		x.logger.Debug("Dispatching for received Directory anchors", "module", "synthetic", "anchors", len(received), "leader", isLeader)
+		x.logger.Debug("Recording received Directory anchors", "module", "synthetic", "anchors", len(received), "leader", isLeader)
 	}
 	for _, r := range received {
 		anchor := r.Anchor
 		if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
-			err := x.sendSyntheticTransactionsForBlock(anchor.MinorBlockIndex, nil, anchor.MinorBlockIndex, isLeader, deliveredFrom)
+			err := x.sendSyntheticTransactionsForBlock(anchor.MinorBlockIndex, nil, anchor.MinorBlockIndex, isLeader, true, false, deliveredFrom)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -411,7 +428,7 @@ func (x *Executor) sendSyntheticTransactions(block *Block, isLeader bool) error 
 			}
 			x.logger.Debug("Directory receipt for own block", "module", "synthetic", "block", receipt.Anchor.MinorBlockIndex, "directory-block", anchor.MinorBlockIndex)
 
-			err := x.sendSyntheticTransactionsForBlock(receipt.Anchor.MinorBlockIndex, receipt, anchor.MinorBlockIndex, isLeader, deliveredFrom)
+			err := x.sendSyntheticTransactionsForBlock(receipt.Anchor.MinorBlockIndex, receipt, anchor.MinorBlockIndex, isLeader, true, false, deliveredFrom)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -432,16 +449,19 @@ func (x *Executor) sendSyntheticTransactions(block *Block, isLeader bool) error 
 // and root receipt that its proofs are built from. Nothing is read from the
 // store. A block the cache does not hold is a counted miss; its synthetics
 // are not dispatched and healing fills them (healing spec, "The cache").
-func (x *Executor) sendSyntheticTransactionsForBlock(blockIndex uint64, blockReceipt *protocol.PartitionAnchorReceipt, anchorBlock uint64, send bool, deliveredFrom func(*url.URL) uint64) error {
+func (x *Executor) sendSyntheticTransactionsForBlock(blockIndex uint64, blockReceipt *protocol.PartitionAnchorReceipt, anchorBlock uint64, send, mark, sourceAnchored bool, deliveredFrom func(*url.URL) uint64) error {
 	blk, ok := x.synthCache().Block(blockIndex)
 	if !ok {
 		x.logger.Error("Synthetic cache does not hold the block; its synthetics are not dispatched", "module", "synthetic", "block", blockIndex, "anchor-block", anchorBlock)
 		return nil
 	}
-	// Healing proves its bundles under the same anchor this dispatch proves
-	// under (healing spec, "The cache"). Recorded on every node; sent by the
-	// leader.
-	x.synthCache().MarkDispatched(blockIndex, anchorBlock, blockReceipt)
+	// Healing proves its bundles under the same anchor a Directory-anchored
+	// dispatch proves under (healing spec, "The cache"). Recorded on every
+	// node when the Directory receipt arrives -- which is no longer when the
+	// entries are sent (#4253), so marking and sending are separate.
+	if mark {
+		x.synthCache().MarkDispatched(blockIndex, anchorBlock, blockReceipt)
+	}
 	if len(blk.Entries) > 0 {
 		// Info, not Debug: a block whose synthetics never leave is the
 		// failure a soak has to be able to see (run 20260905T225751Z)
@@ -494,16 +514,33 @@ func (x *Executor) sendSyntheticTransactionsForBlock(blockIndex uint64, blockRec
 		// pays forward — the destination absorbs it and later messages ride
 		// free — so this threshold is now a heuristic, not a hard rule. Left at
 		// 2 until the replica's effect is measured.
-		if len(group) < synthBundleMin || !x.globals().Active.ExecutorVersion.V2KourouEnabled() {
+		asPackage := len(group) >= synthBundleMin &&
+			x.globals().Active.ExecutorVersion.V2KourouEnabled() &&
+			packageSpanFits(group[0].index, to)
+
+		// Which pass sends this group (#4253). Only a collection proof can be
+		// sent early: it goes to anchor staging, which is what holds a proof
+		// that ends in the source's own root until a Directory receipt
+		// extends it. An INDIVIDUAL receipt has no such path — the
+		// destination checks its terminal against the Directory anchor chain
+		// on the spot — so a group that ships that way still waits for the
+		// Directory, exactly as before. The test is the same in both passes
+		// and reads only the cache, so the two never overlap and never both
+		// skip.
+		if asPackage != sourceAnchored {
+			continue
+		}
+
+		if !asPackage {
 			for _, o := range group {
-				err := x.sendSynthWithOwnProof(o, seg, st.RootReceipt, blockReceipt, to, anchorBlock, delivered)
+				err := x.sendSynthWithOwnProof(o, seg, st.RootReceipt, blockReceipt, to, anchorBlock, blockIndex, delivered)
 				if err != nil {
 					return errors.UnknownError.Wrap(err)
 				}
 			}
 			continue
 		}
-		err := x.sendSynthPackages(group, seg, st.RootReceipt, blockReceipt, to, anchorBlock, delivered)
+		err := x.sendSynthPackages(group, seg, st.RootReceipt, blockReceipt, to, anchorBlock, blockIndex, delivered)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -544,14 +581,14 @@ func (x *Executor) synthPackageBudget() int {
 
 // sendSynthWithOwnProof dispatches one synthetic message carrying its own
 // individual receipt — the pre-#4090 form, kept for single-message groups.
-func (x *Executor) sendSynthWithOwnProof(o *synthOutbound, seg *merkle.Segment, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock uint64, delivered uint64) error {
+func (x *Executor) sendSynthWithOwnProof(o *synthOutbound, seg *merkle.Segment, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock, srcBlock uint64, delivered uint64) error {
 	synthReceipt, err := seg.Receipt(o.index, to)
 	if err != nil {
 		return errors.UnknownError.WithFormat("get synthetic main chain receipt from %d to %d: %w", o.index, to, err)
 	}
 
 	receipt := new(protocol.AnnotatedReceipt)
-	receipt.Anchor = directoryAnchorMetadata(anchorBlock)
+	receipt.Anchor = x.proofAnchorMetadata(blockReceipt, anchorBlock, srcBlock)
 	if blockReceipt == nil {
 		receipt.Receipt, err = synthReceipt.Combine(rootReceipt)
 	} else {
@@ -587,7 +624,7 @@ func (x *Executor) sendSynthWithOwnProof(o *synthOutbound, seg *merkle.Segment, 
 // receipts use. Packages may therefore be delivered in any order, and losing one
 // does not block another — the property that would be given up by sending the
 // proof once and referring back to it from later packages.
-func (x *Executor) sendSynthPackages(group []*synthOutbound, seg *merkle.Segment, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock uint64, delivered uint64) error {
+func (x *Executor) sendSynthPackages(group []*synthOutbound, seg *merkle.Segment, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock, srcBlock uint64, delivered uint64) error {
 	budget := x.synthPackageBudget()
 	for len(group) > 0 {
 		// The receiver refuses a ReceiptList longer than
@@ -599,7 +636,7 @@ func (x *Executor) sendSynthPackages(group []*synthOutbound, seg *merkle.Segment
 		// index, so members taken after the first only shrink the distance:
 		// one check per package bounds the whole list.
 		if !packageSpanFits(group[0].index, to) {
-			err := x.sendSynthWithOwnProof(group[0], seg, rootReceipt, blockReceipt, to, anchorBlock, delivered)
+			err := x.sendSynthWithOwnProof(group[0], seg, rootReceipt, blockReceipt, to, anchorBlock, srcBlock, delivered)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -643,7 +680,7 @@ func (x *Executor) sendSynthPackages(group []*synthOutbound, seg *merkle.Segment
 			group = group[1:]
 		}
 
-		proof, err := x.buildSynthPackageProof(pkg, seg, rootReceipt, blockReceipt, to, anchorBlock)
+		proof, err := x.buildSynthPackageProof(pkg, seg, rootReceipt, blockReceipt, to, anchorBlock, srcBlock)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -686,7 +723,7 @@ func packageSpanFits(first, to int64) bool {
 // elements belonging to OTHER destinations, because the synthetic main chain
 // interleaves them — harmless, since extra elements are proven hashes and
 // nothing more, and it is what lets the span stay contiguous.
-func (x *Executor) buildSynthPackageProof(pkg []*synthOutbound, seg *merkle.Segment, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock uint64) (*protocol.AnnotatedReceipt, error) {
+func (x *Executor) buildSynthPackageProof(pkg []*synthOutbound, seg *merkle.Segment, rootReceipt *merkle.Receipt, blockReceipt *protocol.PartitionAnchorReceipt, to int64, anchorBlock, srcBlock uint64) (*protocol.AnnotatedReceipt, error) {
 	first := pkg[0].index
 
 	// The span runs to the block's LAST synthetic element, not to the package's
@@ -717,7 +754,7 @@ func (x *Executor) buildSynthPackageProof(pkg []*synthOutbound, seg *merkle.Segm
 
 	return &protocol.AnnotatedReceipt{
 		ReceiptList: list,
-		Anchor:      directoryAnchorMetadata(anchorBlock),
+		Anchor:      x.proofAnchorMetadata(blockReceipt, anchorBlock, srcBlock),
 	}, nil
 }
 
@@ -728,6 +765,37 @@ func (x *Executor) buildSynthPackageProof(pkg []*synthOutbound, seg *merkle.Segm
 // until that anchor has executed and validate it then.
 func directoryAnchorMetadata(anchorBlock uint64) *protocol.AnchorMetadata {
 	return &protocol.AnchorMetadata{Account: protocol.DnUrl(), SourceBlock: anchorBlock}
+}
+
+// proofAnchorMetadata names what a dispatched proof terminates in. A proof
+// carrying the Directory's receipt ends at a Directory root and is decided at
+// intake. Without it the proof ends at this partition's own root: on the
+// Directory that IS a Directory root, and on a BVN it is the source-anchored
+// form the destination must extend (#4253).
+func (x *Executor) proofAnchorMetadata(blockReceipt *protocol.PartitionAnchorReceipt, anchorBlock, srcBlock uint64) *protocol.AnchorMetadata {
+	switch {
+	case blockReceipt != nil:
+		return directoryAnchorMetadata(anchorBlock)
+	case x.Describe.NetworkType == protocol.PartitionTypeDirectory:
+		return directoryAnchorMetadata(srcBlock)
+	default:
+		return sourceAnchorMetadata(x.Describe.PartitionUrl().URL, srcBlock)
+	}
+}
+
+// sourceAnchorMetadata names the SOURCE partition and the source block a
+// proof terminates in, for a proof sent at begin(N+1) that stops at this
+// partition's own root (#4253). The destination holds it until it executes a
+// Directory anchor carrying a receipt for that block, appends that receipt,
+// and only then has a proof to a Directory root it can verify.
+//
+// The Account is what tells the two forms apart at intake: the Directory
+// means "terminal is a Directory root, decide it now", anything else means
+// "terminal is that partition's root, extend it first". They cannot be told
+// apart by the block number -- Directory and BVN block indices both start at
+// one and advance at the same cadence, so they collide constantly.
+func sourceAnchorMetadata(source *url.URL, srcBlock uint64) *protocol.AnchorMetadata {
+	return &protocol.AnchorMetadata{Account: source, SourceBlock: srcBlock}
 }
 
 // wrapSynthetic wraps a sequenced message for dispatch, signed by this node. A

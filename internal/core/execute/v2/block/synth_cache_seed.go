@@ -94,7 +94,7 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 			continue
 		}
 		if r.anchorBlock == receipts[0].anchorBlock {
-			err = x.sendSyntheticTransactionsForBlock(r.block, r.receipt, r.anchorBlock, isLeader, deliveredFrom)
+			err = x.sendSyntheticTransactionsForBlock(r.block, r.receipt, r.anchorBlock, isLeader, true, false, deliveredFrom)
 			if err != nil {
 				return errors.UnknownError.WithFormat("dispatch block %d: %w", r.block, err)
 			}

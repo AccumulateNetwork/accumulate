@@ -513,3 +513,21 @@ non-leaders learn of it adds a message and a trust question for a number the
 lag already estimates. Having every validator send, so that mark and send
 coincide, costs four times the dispatch bandwidth to produce copies the
 destination deduplicates anyway.
+
+**The estimate is a floor, not a fix, and the real answer is to remove the
+wait.** Widening by the answering node's own lag gives zero margin in exactly
+the case the defect names — the answerer caught up, the leader behind — so it
+reduces the amplification without ending it. Measured on soak
+20260916T032130Z at 500 tps with no faults: heals held at zero through twelve
+minutes and through lag's first appearance, then tracked lag to 1,811 entries
+by twenty-four minutes, against 7,493 at thirty-one minutes on the same
+conditions before the change.
+
+What ends it is not measuring the wait better but not waiting: a block's
+synthetics now leave at `begin(N+1)` proven to the source's own root, and the
+destination completes the proof from the Directory anchor it executes anyway
+([executor.md](executor.md), "Dispatch"). The leader's execution lag is off
+the send path entirely, so the gap the window was estimating does not exist
+for anything dispatched that way. The window still governs what remains on the
+Directory-receipt path — individual receipts, and a node catching up after a
+restart — and the rule above is what governs it there.

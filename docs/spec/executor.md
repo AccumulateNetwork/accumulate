@@ -343,6 +343,17 @@ nodes at different versions do not disagree about the same block — `V2Baikonur
 network that is running; it is not ceremony for code that has never been
 deployed.
 
+**Ungated, and deliberately so: sending at `begin(N+1)`.** Dispatching a
+block's synthetics with a proof to the source's own root, and completing it at
+the destination (#4253), changes the wire form of a proof and what the
+destination does with it. It is not gated, for the reason above: no deployed
+network runs it. It is confined to the collection-proof path, which is itself
+`V2Kourou` and later, so a network below that version dispatches exactly as
+it did — the older individual-receipt form still waits for the Directory
+receipt, and the code for it is unchanged. Before this reaches a running
+network it needs a version of its own, because a destination that does not
+know the source-root form cannot verify one.
+
 **Ungated, and deliberately so: the order a bundle folds its states in.**
 Folding in execution order rather than transaction-hash order changes the
 order of `State.ReceivedAnchors`, which is the order of the receipts in the
@@ -506,8 +517,33 @@ refused (`errors.Conflict`); a collected entry a proof contradicts is dropped,
 so its number is a hole healing asks for again. A proof below what is
 validated fills in behind, so what it proves is validated wherever it lands
 and a later contradiction there is still a conflict. Outcomes are
-`accumulate_exec_staged_proofs_total{outcome}`: staged, validated, disproved,
-conflict, invalid.
+`accumulate_exec_staged_proofs_total{outcome}`: staged, staged-source,
+extended, validated, disproved, conflict, invalid.
+
+**Two spaces, because there are two things a proof can terminate in.**
+`AnnotatedReceipt.Anchor.Account` says which: the **Directory** means the
+proof ends in a Directory root and is decided against the Directory anchor
+chain, as above. Anything else means the proof ends in that **partition's own
+root** — the `begin(N+1)` form ([Dispatch](#dispatch--when-a-blocks-synthetics-leave-and-who-sends-them)) — 
+and `SourceBlock` is the source block whose root it ends in, not a Directory
+block. The two are held apart and never share a key. They cannot be told
+apart by the number: Directory and BVN block indices both start at one and
+advance at the same cadence, so they coincide constantly, and a proof decided
+in the wrong space would be counted disproved and its entries silently left
+to healing.
+
+A source-root proof is **extended, not trusted**. It is held until this
+partition executes a `DirectoryAnchor` carrying a `PartitionAnchorReceipt`
+for that source and that block; that receipt runs from the block's root to the
+Directory root, so appending it to a proof ending in the same root yields a
+proof to a Directory root, which is then validated exactly as any other — the
+list must still validate, and its terminal must still be on the Directory
+anchor chain. The receipt comes from an anchor this node executed and checked
+itself, so completing the proof adds no trust the destination had not already
+placed in that anchor. A proof that does not continue from the receipt is
+disproved, not extended; one naming a partition other than the source the
+messages came from is refused at intake, since otherwise another partition's
+receipt could be made to complete it.
 
 ### Collection — an unproven entry is held, never parked
 
@@ -980,16 +1016,40 @@ partition that cannot close a block at all — which is how #4279 killed the
 Directory. A segment with a hole would otherwise produce a receipt built over
 the wrong span, which is what the hash-order fold did.
 
-A block's synthetic messages do not leave when the block closes. They leave
-when a **Directory receipt covering that block comes back**: the block's
-anchor goes to the Directory, the Directory anchors it and sends back a
-`DirectoryAnchor` carrying a receipt for that block, and the block that
-executes that `DirectoryAnchor` is the one whose `Begin` dispatches the
-synthetics of every block the receipts cover. Only then can a proof be built
-that terminates in a Directory root the destination will hold. The receipt for
-the block itself is the normal case; a receipt for any later block also covers
-it, because the later root chain contains the earlier root, and that is what a
-healed proof is built under.
+**A block's synthetics leave at `begin(N+1)`, proven as far as this
+partition's own root.** The proof stops at the source root because that is all
+the source can prove about its own block; the destination completes it from
+the `DirectoryAnchor` it executes anyway, which carries a receipt from that
+block's root to the Directory root ([Anchor
+staging](#anchor-staging--proofs-wait-for-their-anchor)). Nothing waits on the
+Directory round trip, and the send no longer sits behind the leader's
+execution lag — which is what made the in-flight window at the source a
+guess ([healing.md](healing.md), "The in-flight window belongs to the
+sender"). Cross-partition latency was two Directory round trips plus the lag
+at each end; it is now one hop plus the destination's own anchor cadence.
+
+**Only a collection proof may be sent early.** A package's proof goes to
+anchor staging, which is the machinery that holds a proof until an anchor
+decides it. An **individual** receipt has no such path — the destination
+checks its terminal against the Directory anchor chain on the spot — so a
+group that ships as individual receipts (below the package threshold, a span
+too long to lead a list, or a network below `V2Kourou`) still waits for the
+Directory receipt, exactly as before. Which pass sends a group is decided by
+the same test in both, read from the cache alone, so no group is sent twice
+and none is dropped between them.
+
+For those groups, and for a node catching up after a restart, the older rule
+still holds: they leave when a **Directory receipt covering that block comes
+back**, and the block that executes that `DirectoryAnchor` dispatches them.
+The receipt for the block itself is the normal case; a receipt for any later
+block also covers it, because the later root chain contains the earlier root,
+and that is what a healed proof is built under.
+
+**The Directory receipt still arrives, and still matters.** It no longer
+releases the entries — they have gone — but it records the anchor each of this
+partition's blocks was proven under, which is what a **healing** answer is
+built from. Marking and sending are therefore separate steps on separate
+triggers: sending at `begin(N+1)`, marking when the receipt returns.
 
 **Everything a package needs comes from the cache** ([healing.md](healing.md),
 "The cache"): the bodies, the transactions they belong to, and the positions

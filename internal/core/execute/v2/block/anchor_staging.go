@@ -53,6 +53,15 @@ func (b *Block) intakeProof(source *url.URL, proof *protocol.AnnotatedReceipt, s
 		return errors.BadRequest.WithFormat("proof covers no message from %v in its envelope", source)
 	}
 
+	// A proof that terminates in the SOURCE's own root, not a Directory
+	// root: sent at begin(N+1) without waiting for the Directory (#4253).
+	// It cannot be decided against the Directory anchor chain yet -- it has
+	// to be extended by the Directory's receipt for that source block
+	// first. Held under the SOURCE block, in its own space.
+	if !protocol.DnUrl().Equal(proof.Anchor.Account) {
+		return b.intakeSourceProof(source, proof)
+	}
+
 	_, ok, err := b.Executor.provingAnchorIndex(b.Batch, proof)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -92,6 +101,116 @@ func (b *Block) intakeProof(source *url.URL, proof *protocol.AnnotatedReceipt, s
 	return nil
 }
 
+// intakeSourceProof holds a proof that ends at the source's own root until a
+// Directory anchor receipting that source block arrives to extend it. The
+// proof is not verifiable yet -- its terminal is a value this partition has
+// no reason to know -- so nothing is decided here beyond the shape checks the
+// caller already made and the bound below.
+//
+// The annotation must name the partition the messages came from. A proof
+// claiming to end in some OTHER partition's root would be extended with that
+// partition's receipt, which is a proof of nothing about this source.
+func (b *Block) intakeSourceProof(source *url.URL, proof *protocol.AnnotatedReceipt) error {
+	if !source.LocalTo(proof.Anchor.Account) {
+		mExecStagedProofs.WithLabelValues("unbound").Inc()
+		return errors.BadRequest.WithFormat("proof from %v claims to be anchored in %v", source, proof.Anchor.Account)
+	}
+	if blocks := b.staging.SourceProofBlocks(source); len(blocks) >= maxStagedProofBlocks {
+		mExecStagedProofs.WithLabelValues("refused").Inc()
+		return errors.BadRequest.WithFormat("source-anchor staging for %v already waits on %d blocks", source, len(blocks))
+	}
+	if !b.staging.StageSourceProof(source, proof.Anchor.SourceBlock, proof) {
+		mExecStagedProofs.WithLabelValues("duplicate").Inc()
+		return nil
+	}
+	mExecStagedProofs.WithLabelValues("staged-source").Inc()
+	return nil
+}
+
+// extendSourceProofs completes the source-anchored proofs a Directory anchor
+// decides. The anchor carries one receipt per source block it anchored, from
+// that block's root to the Directory root; appending it to a proof that ends
+// at the same root yields a proof to the Directory root, which is what this
+// partition can verify (#4253).
+//
+// The receipt is taken from an anchor this node executed and validated
+// itself, so the completion adds no trust the destination did not already
+// place in that anchor.
+func (b *Block) extendSourceProofs(anchor *protocol.DirectoryAnchor) error {
+	for _, r := range anchor.Receipts {
+		src := r.Anchor.Source
+		if src == nil || r.RootChainReceipt == nil {
+			continue
+		}
+		srcBlock := r.Anchor.MinorBlockIndex
+		staged := b.staging.SourceProofs(src, srcBlock)
+		if len(staged) == 0 {
+			continue
+		}
+		for _, p := range staged {
+			done, err := b.completeSourceProof(p, r)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			if done == nil {
+				continue
+			}
+			err = b.proofValidated(src, done)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+		}
+		b.staging.DropSourceProofs(src, srcBlock)
+	}
+	return nil
+}
+
+// completeSourceProof appends the Directory's receipt for the source block to
+// a proof that ends at that block's root, and answers with the completed
+// proof when the result is valid and lands on an anchor this partition has
+// executed.
+//
+// It does NOT modify the staged proof. A staged proof may live in committed
+// staging, shared by every block that runs after it, and a block that is
+// discarded must leave nothing behind: an extension written in place would
+// survive the discard, and the next block's attempt to extend it would find
+// a proof that no longer continues from the receipt and disprove it -- losing
+// entries that were never in doubt. The extension is built on a copy.
+func (b *Block) completeSourceProof(p *protocol.AnnotatedReceipt, r *protocol.PartitionAnchorReceipt) (*protocol.AnnotatedReceipt, error) {
+	if p.ReceiptList == nil || p.ReceiptList.ContinuedReceipt == nil {
+		mExecStagedProofs.WithLabelValues("disproved").Inc()
+		return nil, nil
+	}
+	extended, err := p.ReceiptList.ContinuedReceipt.Combine(r.RootChainReceipt)
+	if err != nil {
+		// The proof does not continue from this receipt: it claimed a block
+		// whose root is not the one the Directory anchored.
+		mExecStagedProofs.WithLabelValues("disproved").Inc()
+		return nil, nil
+	}
+
+	list := *p.ReceiptList
+	list.ContinuedReceipt = extended
+	cp := &protocol.AnnotatedReceipt{ReceiptList: &list, Anchor: p.Anchor}
+	if !list.Validate(nil) {
+		mExecStagedProofs.WithLabelValues("disproved").Inc()
+		return nil, nil
+	}
+	// The extended proof must land on an anchor this partition has actually
+	// executed; the receipt came from one, so this is the check that the two
+	// are the same anchor.
+	_, ok, err := b.Executor.provingAnchorIndex(b.Batch, cp)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if !ok {
+		mExecStagedProofs.WithLabelValues("disproved").Inc()
+		return nil, nil
+	}
+	mExecStagedProofs.WithLabelValues("extended").Inc()
+	return cp, nil
+}
+
 // maxAnchorAhead bounds how far past the newest executed Directory anchor a
 // proof may claim to be anchored: about an hour of Directory blocks. Beyond it
 // the proof is refused rather than held.
@@ -117,12 +236,29 @@ func (b *Block) validateStagedProofs(c *classified) error {
 			continue
 		}
 		through := r.Body.GetPartitionAnchor().MinorBlockIndex
+
+		// Read the sources BEFORE anything is decided and dropped. A proof
+		// that validates here makes its stream runnable, and the stream is
+		// only re-evaluated this block if it is named now: deciding first
+		// would drop the proof, take the source off this list, and leave
+		// the entries it just proved held until something else happened to
+		// touch that stream.
 		sources := b.staging.ProofSources()
 		if c != nil {
 			// A validated proof can make a held stream runnable, so every
 			// stream with proofs waiting is evaluated this block
 			for _, source := range sources {
 				c.addStream(stream{kind: streamSynthetic, ledger: b.Executor.Describe.Synthetic(), source: source})
+			}
+		}
+
+		// This anchor carries a receipt for each source block it anchored;
+		// those receipts complete the source-anchored proofs waiting on
+		// them (#4253).
+		if da, ok := r.Body.(*protocol.DirectoryAnchor); ok {
+			err := b.extendSourceProofs(da)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
 			}
 		}
 		for _, source := range sources {

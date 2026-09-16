@@ -19,11 +19,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// A proof names the Directory anchor that proves it: the destination collects
-// the proof in anchor staging under that block until the anchor executes
-// (executor spec, "Anchor staging"). Both dispatch forms carry it.
+// A proof names what it terminates in, and the destination stages it under
+// that (executor spec, "Anchor staging"). Dispatch at begin(N+1) ends at the
+// SOURCE's own root and names the source and the source block, because the
+// Directory has not receipted it yet (#4253); a proof carrying the Directory
+// receipt ends at a Directory root and names the Directory block. Both
+// dispatch forms carry the annotation.
 
-func TestSynthPackageProof_NamesTheDirectoryAnchor(t *testing.T) {
+func TestSynthPackageProof_NamesWhatItTerminatesIn(t *testing.T) {
 	f := newStagingFixture(t, 3)
 	rootChain, err := f.batch.Account(protocol.PartitionUrl("BVN1").JoinPath(protocol.Ledger)).RootChain().Get()
 	require.NoError(t, err)
@@ -34,12 +37,15 @@ func TestSynthPackageProof_NamesTheDirectoryAnchor(t *testing.T) {
 	seg, err := merkle.NewSegment(f.chain2.Inner(), 0)
 	require.NoError(t, err)
 	pkg := []*synthOutbound{{index: 0}, {index: 1}}
-	proof, err := f.x.buildSynthPackageProof(pkg, seg, rootReceipt, nil, 2, 42)
+	// Sent at begin(N+1): no Directory receipt yet, so the proof stops at
+	// this partition's own root and says so.
+	proof, err := f.x.buildSynthPackageProof(pkg, seg, rootReceipt, nil, 2, 0, 7)
 	require.NoError(t, err)
 	require.True(t, proof.ReceiptList.Validate(nil))
 	require.NotNil(t, proof.Anchor)
-	require.Equal(t, protocol.DnUrl(), proof.Anchor.Account)
-	require.Equal(t, uint64(42), proof.Anchor.SourceBlock, "the Directory block whose anchor proves the package")
+	require.Equal(t, protocol.PartitionUrl("BVN0"), proof.Anchor.Account, "the source partition, whose root the proof ends in")
+	require.Equal(t, uint64(7), proof.Anchor.SourceBlock, "the source block the Directory must receipt to extend it")
+	require.NotEqual(t, protocol.DnUrl(), proof.Anchor.Account, "a source-root proof must not claim to be Directory-anchored")
 }
 
 type captureDispatcher struct{ envelopes []*messaging.Envelope }
@@ -79,10 +85,11 @@ func TestSynthOwnProof_NamesTheDirectoryAnchor(t *testing.T) {
 	}}
 	seg, err := merkle.NewSegment(f.chain2.Inner(), 0)
 	require.NoError(t, err)
-	require.NoError(t, f.x.sendSynthWithOwnProof(o, seg, rootReceipt, nil, 2, 42, 0))
+	require.NoError(t, f.x.sendSynthWithOwnProof(o, seg, rootReceipt, nil, 2, 0, 7, 0))
 	require.Len(t, d.envelopes, 1)
 	syn, ok := d.envelopes[0].Messages[0].(*messaging.SyntheticMessage)
 	require.True(t, ok)
 	require.NotNil(t, syn.Proof.Anchor)
-	require.Equal(t, uint64(42), syn.Proof.Anchor.SourceBlock)
+	require.Equal(t, protocol.PartitionUrl("BVN0"), syn.Proof.Anchor.Account)
+	require.Equal(t, uint64(7), syn.Proof.Anchor.SourceBlock)
 }

@@ -42,10 +42,17 @@ type Staging struct {
 	mu      sync.Mutex
 	streams map[string]*streamState
 	ids     map[string]StreamID                                // the stream behind each key, for Streams()
-	proofs  map[string]map[uint64][]*protocol.AnnotatedReceipt // source -> anchor block
+	proofs  map[string]map[uint64][]*protocol.AnnotatedReceipt // source -> Directory anchor block
 	sources map[string]*url.URL                                // the source URL as received, by key
-	byID    map[[32]byte]*Held
-	byTxn   map[[32]byte]*Held // held entries whose message carries a transaction, by its hash
+
+	// Proofs that terminate in the SOURCE's own root, keyed by the source
+	// block they prove, waiting for a Directory anchor that receipts that
+	// block to extend them (#4253). A separate space because the two keys
+	// are different numbers that collide constantly: Directory and BVN
+	// block indices both start at 1 and advance at the same cadence.
+	srcProofs map[string]map[uint64][]*protocol.AnnotatedReceipt
+	byID      map[[32]byte]*Held
+	byTxn     map[[32]byte]*Held // held entries whose message carries a transaction, by its hash
 }
 
 // A StreamID names an inbound stream: the ledger that tracks it and the
@@ -258,7 +265,7 @@ func compactHashes(s [][32]byte) [][32]byte {
 
 // NewStaging returns empty staging.
 func NewStaging() *Staging {
-	return &Staging{streams: map[string]*streamState{}, ids: map[string]StreamID{}, proofs: map[string]map[uint64][]*protocol.AnnotatedReceipt{}, sources: map[string]*url.URL{}, byID: map[[32]byte]*Held{}, byTxn: map[[32]byte]*Held{}}
+	return &Staging{streams: map[string]*streamState{}, ids: map[string]StreamID{}, proofs: map[string]map[uint64][]*protocol.AnnotatedReceipt{}, srcProofs: map[string]map[uint64][]*protocol.AnnotatedReceipt{}, sources: map[string]*url.URL{}, byID: map[[32]byte]*Held{}, byTxn: map[[32]byte]*Held{}}
 }
 
 // A StagingTxn is one block's view of staging: everything committed, plus
@@ -277,6 +284,10 @@ type StagingTxn struct {
 	sources   map[string]*url.URL
 	dropped   map[string]map[uint64]bool
 	released  map[string]uint64
+
+	// the source-root space (#4253), mirroring proofs/dropped
+	srcProofs  map[string]map[uint64][]*protocol.AnnotatedReceipt
+	srcDropped map[string]map[uint64]bool
 }
 
 // Begin starts a block's transaction.
@@ -631,6 +642,28 @@ func (t *StagingTxn) StagedProofSpans(source *url.URL) [][2]uint64 {
 	add(t.s.proofs[k])
 	t.s.mu.Unlock()
 	add(t.proofs[k])
+
+	// A source-root proof has also ARRIVED; only its extension is pending.
+	// Its span is not a gap either, or healing pulls what is already here
+	// (healing spec, "Deciding, in staging").
+	addSrc := func(m map[uint64][]*protocol.AnnotatedReceipt) {
+		for b, ps := range m {
+			if t.srcDropped[k][b] {
+				continue
+			}
+			for _, p := range ps {
+				if p == nil || p.ReceiptList == nil || p.ReceiptList.MerkleState == nil || len(p.ReceiptList.Elements) == 0 {
+					continue
+				}
+				start := uint64(p.ReceiptList.MerkleState.Count)
+				spans = append(spans, [2]uint64{start + 1, start + uint64(len(p.ReceiptList.Elements))})
+			}
+		}
+	}
+	t.s.mu.Lock()
+	addSrc(t.s.srcProofs[k])
+	t.s.mu.Unlock()
+	addSrc(t.srcProofs[k])
 	return spans
 }
 
@@ -702,6 +735,105 @@ func (t *StagingTxn) DropProofs(source *url.URL, block uint64) {
 	delete(t.proofs[k], block)
 }
 
+// StageSourceProof holds a proof that terminates in the SOURCE's own root,
+// under the source block it proves, until a Directory anchor that receipts
+// that block arrives to extend it (#4253). Dispatch sends at begin(N+1)
+// without waiting for the Directory, so the proof arrives before the anchor
+// that completes it. Answers whether the proof was held.
+func (t *StagingTxn) StageSourceProof(source *url.URL, srcBlock uint64, proof *protocol.AnnotatedReceipt) bool {
+	if t == nil {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	k := sourceKey(source)
+	if t.srcDropped[k][srcBlock] {
+		return false
+	}
+	t.s.mu.Lock()
+	dup := hasSameProof(t.s.srcProofs[k][srcBlock], proof)
+	t.s.mu.Unlock()
+	if dup || hasSameProof(t.srcProofs[k][srcBlock], proof) {
+		return false
+	}
+	if t.srcProofs[k] == nil {
+		t.srcProofs[k] = map[uint64][]*protocol.AnnotatedReceipt{}
+	}
+	t.srcProofs[k][srcBlock] = append(t.srcProofs[k][srcBlock], proof)
+	if _, ok := t.sources[k]; !ok {
+		t.sources[k] = source
+	}
+	return true
+}
+
+// SourceProofBlocks lists the source blocks a source has source-root proofs
+// waiting on, ascending.
+func (t *StagingTxn) SourceProofBlocks(source *url.URL) []uint64 {
+	if t == nil {
+		return nil
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	k := sourceKey(source)
+	set := map[uint64]bool{}
+	t.s.mu.Lock()
+	for b, ps := range t.s.srcProofs[k] {
+		if len(ps) > 0 {
+			set[b] = true
+		}
+	}
+	t.s.mu.Unlock()
+	for b, ps := range t.srcProofs[k] {
+		if len(ps) > 0 {
+			set[b] = true
+		}
+	}
+	for b := range t.srcDropped[k] {
+		delete(set, b)
+	}
+	out := make([]uint64, 0, len(set))
+	for b := range set {
+		out = append(out, b)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// SourceProofs lists the source-root proofs waiting on one source block.
+func (t *StagingTxn) SourceProofs(source *url.URL, srcBlock uint64) []*protocol.AnnotatedReceipt {
+	if t == nil {
+		return nil
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	k := sourceKey(source)
+	if t.srcDropped[k][srcBlock] {
+		return nil
+	}
+	var out []*protocol.AnnotatedReceipt
+	t.s.mu.Lock()
+	out = append(out, t.s.srcProofs[k][srcBlock]...)
+	t.s.mu.Unlock()
+	out = append(out, t.srcProofs[k][srcBlock]...)
+	return out
+}
+
+// DropSourceProofs forgets a source's source-root proofs for a source block,
+// once an anchor has decided them.
+func (t *StagingTxn) DropSourceProofs(source *url.URL, srcBlock uint64) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	k := sourceKey(source)
+	if t.srcDropped[k] == nil {
+		t.srcDropped[k] = map[uint64]bool{}
+	}
+	t.srcDropped[k][srcBlock] = true
+	delete(t.srcProofs[k], srcBlock)
+}
+
 // ProofSources lists the sources with proofs waiting, as their URLs were
 // received — a stream is keyed case-insensitively, but the URL handed back
 // must be the one the executor uses, or two positions are kept for one
@@ -723,19 +855,38 @@ func (t *StagingTxn) ProofSources() []*url.URL {
 			}
 		}
 	}
+	addSrc := func(k string, m map[uint64][]*protocol.AnnotatedReceipt, u *url.URL) {
+		for b, ps := range m {
+			if len(ps) == 0 || t.srcDropped[k][b] {
+				continue
+			}
+			if _, ok := seen[k]; !ok && u != nil {
+				seen[k] = u
+			}
+		}
+	}
 	t.s.mu.Lock()
 	for k, m := range t.s.proofs {
 		add(k, m, t.s.sources[k])
 	}
+	for k, m := range t.s.srcProofs {
+		addSrc(k, m, t.s.sources[k])
+	}
 	t.s.mu.Unlock()
-	for k, m := range t.proofs {
+	srcOf := func(k string) *url.URL {
 		u := t.sources[k]
 		if u == nil {
 			t.s.mu.Lock()
 			u = t.s.sources[k]
 			t.s.mu.Unlock()
 		}
-		add(k, m, u)
+		return u
+	}
+	for k, m := range t.proofs {
+		add(k, m, srcOf(k))
+	}
+	for k, m := range t.srcProofs {
+		addSrc(k, m, srcOf(k))
 	}
 	keys := make([]string, 0, len(seen))
 	for k := range seen {
@@ -837,6 +988,22 @@ func (t *StagingTxn) Commit() {
 			s.sources[k] = t.sources[k]
 		}
 	}
+	for k, dropped := range t.srcDropped {
+		for b := range dropped {
+			delete(s.srcProofs[k], b)
+		}
+	}
+	for k, m := range t.srcProofs {
+		if s.srcProofs[k] == nil {
+			s.srcProofs[k] = map[uint64][]*protocol.AnnotatedReceipt{}
+		}
+		for b, ps := range m {
+			s.srcProofs[k][b] = append(s.srcProofs[k][b], ps...)
+		}
+		if _, ok := s.sources[k]; !ok {
+			s.sources[k] = t.sources[k]
+		}
+	}
 	for k, n := range t.released {
 		if st := s.streams[k]; st != nil {
 			st.release(n, s)
@@ -869,6 +1036,8 @@ func (t *StagingTxn) reset() {
 	t.sources = map[string]*url.URL{}
 	t.dropped = map[string]map[uint64]bool{}
 	t.released = map[string]uint64{}
+	t.srcProofs = map[string]map[uint64][]*protocol.AnnotatedReceipt{}
+	t.srcDropped = map[string]map[uint64]bool{}
 }
 
 var (

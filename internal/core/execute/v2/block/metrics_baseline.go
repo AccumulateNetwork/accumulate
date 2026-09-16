@@ -68,10 +68,11 @@ var mExecTransactionFailed = promauto.NewCounterVec(prometheus.CounterOpts{
 
 // mExecStagedProofs counts collection proofs by what anchor staging did with
 // them (executor spec, "Anchor staging"): staged (waiting for their anchor),
-// validated, disproved, or invalid (refused at intake).
+// staged-source and extended (the source-root form and its completion,
+// #4253), validated, disproved, or invalid (refused at intake).
 var mExecStagedProofs = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
 	Subsystem: "exec",
 	Name:      "staged_proofs_total",
-	Help:      "Collection proofs by anchor-staging outcome: staged, validated, disproved, conflict, invalid, unbound, refused, duplicate (identical proof already staged this block)",
+	Help:      "Collection proofs by anchor-staging outcome: staged, staged-source (ends at the source's own root, awaiting the Directory receipt that extends it), extended (completed from that receipt), validated, disproved, conflict, invalid, unbound, refused, duplicate (identical proof already staged this block)",
 }, []string{"outcome"})
