@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Chaos soak: 3 BVNs x 4 validators + bootstrap, cross-partition load, induced
-# drops. Chaos restarts re-arm each node's drop hooks, so drops recur throughout.
+# Chaos soak: 3 BVNs x 4 validators + bootstrap, cross-partition load, and
+# container disturbance on a cadence (restart or pause one BVN node). That is
+# the fault model; nothing is dropped in-band. A restarted leader loses what it
+# was dispatching, which is the only message loss this harness produces.
 #
 #   ./soak.sh "why I am running this"              # every knob from soak.conf
 #   ./soak.sh -c my.conf "why I am running this"   # soak.conf, then my.conf on top
@@ -49,6 +51,8 @@ case "$DURATION" in
 esac
 # Chaos every ~10 min is meaningless in a 5-minute run; scale the interval so a
 # short run still exercises disruption.
+# CHAOS_MIN/CHAOS_JITTER come from soak.conf (sourced above, which overrides
+# anything in the environment); empty there means the duration-scaled default.
 if [ "$duration_seconds" -le 1800 ]; then
   CHAOS_MIN=${CHAOS_MIN:-25}; CHAOS_JITTER=${CHAOS_JITTER:-20}
 else
@@ -111,18 +115,15 @@ exec_ver=$(grep -E '^\s*executorVersion:' "$here/../docker-network.yml" | head -
 heal_flags=$(sed 's/#.*//' "$compose_file" \
   | grep -oE 'enable-[a-z-]*healing = [a-z]+' | sort -u | paste -sd'; ' -)
 heal_flags="${heal_flags:-unconditional (DI conductor, #4105)}"
-# The compose declares these as "${DROP_SYN-<default>}", so the value that
-# actually reaches the nodes depends on the environment. Record the EFFECTIVE
-# value — recording the template would make two differently-configured runs look
-# identical in the manifest.
-composed_default() { # $1=env var name, $2=compose key
-  # Strip only the leading "KEY: " — a greedy .*: would eat into the value,
-  # whose own patterns contain colons (e.g. "*:%499+3").
-  grep -oE "$2: *\"[^\"]*\"" "$compose_file" | head -1 \
-    | sed "s/^$2: *//; s/\"//g; s/^\${[A-Za-z_][A-Za-z0-9_]*-//; s/}$//"
-}
-drop_synth="${DROP_SYN:-$(composed_default DROP_SYN ACC_DEBUG_DROP_SYNTHETIC)}"
-drop_anchor="${DROP_ANC:-$(composed_default DROP_ANC ACC_DEBUG_DROP_ANCHOR)}"
+# The fault model, stated once for the manifest and run.json. There are no
+# drop hooks in the node (nothing reads ACC_DEBUG_DROP_*; git log -S finds the
+# name only in old manifests), so the only honest statement is the disturbance
+# cadence -- or "none".
+if [ "$CHAOS_ENABLED" = off ]; then
+  fault_model="none (CHAOS=off)"
+else
+  fault_model="restart or pause one BVN container every ${CHAOS_MIN}s + 0-${CHAOS_JITTER}s"
+fi
 # Compose names built images "<project>-<service>", and the project is pinned to
 # $COMPOSE_PROJECT_NAME above. This default was "docker-bvn1-val1", the name
 # from BEFORE the project was pinned (#4124) — so from that commit onward every
@@ -186,8 +187,7 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "| image id | \`$image_id\` |"
   echo "| executor version | **$exec_ver** |"
   echo "| healing | $heal_flags |"
-  echo "| synthetic drops | \`$drop_synth\` |"
-  echo "| anchor drops | \`${drop_anchor:-none}\` |"
+  echo "| fault model | $fault_model |"
   echo "| topology | $n_bvn BVNs, $n_node nodes + bootstrap |"
   echo "| partitions | $PARTS |"
   echo "| chaos | $CHAOS_ENABLED |"
@@ -200,9 +200,9 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "Config as run is frozen in \`config/\` (soak.conf${conf_override:+ + override.conf}, the compose and network files). Results appended below on exit."
 } > "$manifest"
 
-printf '{"runId":"%s","startedUtc":"%s","image":"%s","imageId":"%s","commit":"%s","describe":"%s","branch":"%s","uncommittedFiles":%s,"executorVersion":"%s","healing":"%s","dropSynthetic":"%s","dropAnchor":"%s","bvns":%s,"nodes":%s,"partitions":"%s","chaos":"%s","duration":"%s","tps":"%s","note":"%s"}\n' \
+printf '{"runId":"%s","startedUtc":"%s","image":"%s","imageId":"%s","commit":"%s","describe":"%s","branch":"%s","uncommittedFiles":%s,"executorVersion":"%s","healing":"%s","faultModel":"%s","bvns":%s,"nodes":%s,"partitions":"%s","chaos":"%s","duration":"%s","tps":"%s","note":"%s"}\n' \
   "$run_id" "$(date -u +%FT%TZ)" "$soak_image" "$image_id" "$git_head" "$git_desc" "$git_branch" "$git_dirty" \
-  "$exec_ver" "$heal_flags" "$drop_synth" "${drop_anchor:-none}" "$n_bvn" "$n_node" \
+  "$exec_ver" "$heal_flags" "$fault_model" "$n_bvn" "$n_node" \
   "$PARTS" "$CHAOS_ENABLED" "$DURATION" "$TPS" "$NOTE" > "$runjson"
 
 echo "== soak start $(date -u) duration=$DURATION tps=$TPS ==" | tee "$log"

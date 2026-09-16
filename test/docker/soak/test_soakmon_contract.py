@@ -86,5 +86,29 @@ class DashboardScriptParses(unittest.TestCase):
             os.unlink(path)
 
 
+
+
+class GapIsNeverNegative(unittest.TestCase):
+    """A flow cell's in-flight gap is sent minus received, and received can
+    exceed sent only when the source was read over fewer or staler nodes than
+    the destination. That is skew, not a negative lag: the board must never
+    show an impossible state (REPORTING-SPEC 1a) and must name the stale read
+    (1b)."""
+
+    def test_ordinary_gap(self):
+        self.assertEqual(soakmon.judge_gap(120, 100), (20, 0))
+
+    def test_caught_up(self):
+        self.assertEqual(soakmon.judge_gap(100, 100), (0, 0))
+
+    def test_recv_ahead_is_skew_not_negative(self):
+        gap, skew = soakmon.judge_gap(100, 130)
+        self.assertEqual(gap, 0, "never a negative depth")
+        self.assertEqual(skew, 30, "the excess is reported as skew")
+
+    def test_missing_fields(self):
+        self.assertEqual(soakmon.judge_gap(None, None), (0, 0))
+
+
 if __name__ == "__main__":
     unittest.main()

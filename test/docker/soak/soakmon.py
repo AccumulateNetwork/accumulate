@@ -270,6 +270,20 @@ def observe_rates(now, generated, syn, anc, elapsed):
     }
 
 
+def judge_gap(sent, recv):
+    """The sent-but-not-received depth of one flow, and the skew when the
+    numbers cannot both be true. `sent` is the source ledger's produced count,
+    `recv` the destination's received count, each merged by max over the
+    nodes that answered; a destination cannot have received more than any
+    source reports produced, so recv > sent is not a depth of -N, it is the
+    source read over fewer or staler nodes. Never a negative (REPORTING-SPEC
+    1a); the excess is reported as skew (1b)."""
+    gap = (sent or 0) - (recv or 0)
+    if gap < 0:
+        return 0, -gap
+    return gap, 0
+
+
 def compact_flows(flows):
     """The matrix as [sent, recv, deliv] per cell, for the history."""
     return {k: {s: {d: [c.get("sent", 0), c.get("recv", 0), c.get("deliv", 0)] for d, c in row.items()}
@@ -1066,6 +1080,17 @@ def collect_flows_api():
                 elif shrank:
                     c["fewerNodes"] = [_FLOW_ANSWERS["prev"], _FLOW_ANSWERS["cur"]]
                 gap = c.get("sent", 0) - c.get("recv", 0)
+                # `sent` is the SOURCE ledger's produced count and `recv` the
+                # DESTINATION ledger's received count -- two ledgers on two
+                # sets of nodes, each merged by max over whoever answered. A
+                # destination cannot have received more than any source
+                # reports produced, so a negative gap is not a measurement,
+                # it is the source read over fewer or staler nodes than the
+                # destination (REPORTING-SPEC 1a: no impossible states; 1b:
+                # one node is stale truth). Shown as skew, never as a
+                # negative lag.
+                gap, skew = judge_gap(c.get("sent", 0), c.get("recv", 0))
+                c["skew"] = skew
                 pending = max(0, c.get("recv", 0) - c.get("deliv", 0))
                 recv_rate = deliv_rate = 0.0
                 if len(hist) >= 2:
@@ -1083,7 +1108,9 @@ def collect_flows_api():
                         lag_s = 0.0
 
                 state, note = "ok", ""
-                if lag_s is not None and lag_s > 0:
+                if skew:
+                    note = "skew: dst reports %d more received than any source view produced (read over %s nodes)" % (skew, _FLOW_ANSWERS["cur"])
+                elif lag_s is not None and lag_s > 0:
                     note = "~%ds in flight" % min(lag_s, 999999)
                 if lag_s is not None:
                     if lag_s >= 4 * expected:
