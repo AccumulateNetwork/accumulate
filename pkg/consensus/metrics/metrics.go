@@ -211,14 +211,30 @@ var (
 		Buckets:   prometheus.ExponentialBuckets(0.0001, 2, 14), // 0.1ms to ~800ms
 	})
 
-	// BlockProductionSeconds is the time to produce a block (batch).
-	BlockProductionSeconds = promauto.NewHistogram(prometheus.HistogramOpts{
+	// BlockProductionSeconds is the wall time to produce one block, by
+	// partition. A process runs a Directory node and a BVN node, and one
+	// histogram for both said nothing about which executor was behind
+	// (#4257).
+	BlockProductionSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "block_production_seconds",
-		Help:      "Time to produce a block (batch) in seconds",
+		Help:      "Wall time to produce one block, by partition",
 		Buckets:   prometheus.ExponentialBuckets(0.0001, 2, 14), // 0.1ms to ~800ms
-	})
+	}, []string{"partition"})
+
+	// BlockPhaseSeconds is the wall time of each phase of producing a block
+	// -- begin, unmarshal, process, close, hash, commit -- by partition, so
+	// a review can say where a block's second goes without sampling
+	// goroutines (#4257). The phases are measured, not inferred: their sum
+	// is the block's production time less the bookkeeping between them.
+	BlockPhaseSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "block_phase_seconds",
+		Help:      "Wall time of one phase of producing a block, by partition and phase: begin, unmarshal, process, close, hash, commit",
+		Buckets:   prometheus.ExponentialBuckets(0.0001, 2, 14),
+	}, []string{"partition", "phase"})
 
 	// TransactionLatencySeconds is the end-to-end transaction latency.
 	TransactionLatencySeconds = promauto.NewHistogram(prometheus.HistogramOpts{
@@ -442,10 +458,10 @@ func (m *Metrics) ObserveCertificateCreation(seconds float64) {
 	}
 }
 
-// ObserveBlockProduction observes block production time.
-func (m *Metrics) ObserveBlockProduction(seconds float64) {
+// ObserveBlockProduction observes one block's production time for a partition.
+func (m *Metrics) ObserveBlockProduction(partition string, seconds float64) {
 	if m.enabled {
-		BlockProductionSeconds.Observe(seconds)
+		BlockProductionSeconds.WithLabelValues(partition).Observe(seconds)
 	}
 }
 

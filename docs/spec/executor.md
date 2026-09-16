@@ -981,6 +981,14 @@ with, frozen with the run. There is no environment path -- one used to exist
 for shard sweeps, and a knob the environment can change is a run that can
 silently differ from its recorded config (BlockchainDB spec 1.10).
 
+A block's production time is exported by partition
+(`accumulate_dagbft_block_production_seconds{partition}`) and each phase of it
+on its own -- begin, unmarshal, process, close, hash, commit
+(`accumulate_dagbft_block_phase_seconds{partition,phase}`) -- so a review can
+say where a block's second goes without sampling goroutines (#4257). One
+histogram per process for both partitions' blocks said nothing about which
+executor was behind.
+
 Timing is booked as serial versus parallel share, so a run can say whether
 sharding helped or whether nothing was shardable.
 

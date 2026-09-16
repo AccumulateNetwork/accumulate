@@ -208,7 +208,17 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	// This is the histogram the soak's acceptance criteria read seconds per
 	// block from; it was declared and never observed (PLAN, S0).
 	start := time.Now()
-	defer func() { metrics.BlockProductionSeconds.Observe(time.Since(start).Seconds()) }()
+	defer func() {
+		metrics.BlockProductionSeconds.WithLabelValues(b.partitionID).Observe(time.Since(start).Seconds())
+	}()
+	// Each phase is timed on its own (#4257): a block's second is begin,
+	// unmarshal, process, close, hash and commit, and which of them grew is
+	// the question every throughput review has had to answer by sampling
+	// goroutines.
+	phase := func(name string, since time.Time) {
+		metrics.BlockPhaseSeconds.WithLabelValues(b.partitionID, name).Observe(time.Since(since).Seconds())
+	}
+	t := time.Now()
 
 	// Create executor block params
 	// Note: We don't have CometBFT CommitInfo/Evidence, so we leave them nil
@@ -238,6 +248,8 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	if err != nil {
 		return [32]byte{}, fmt.Errorf("begin block: %w", err)
 	}
+	phase("begin", t)
+	t = time.Now()
 
 	// Process transactions from all batches. Batches arrive in the
 	// certificate's canonical payload order and MUST be executed in that
@@ -329,6 +341,8 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		txCount++
 	}
 	if pb, ok := block.(execute.ParallelBlock); ok {
+		phase("unmarshal", t)
+		t = time.Now()
 		for j, r := range pb.ProcessAll(envelopes) {
 			if r.Shard >= 0 {
 				shardedCount++
@@ -375,12 +389,16 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	}
 
 	// Close block
+	phase("process", t)
+	t = time.Now()
 	state, err := block.Close()
 	if err != nil {
 		return [32]byte{}, fmt.Errorf("close block: %w", err)
 	}
 
 	// Get block hash
+	phase("close", t)
+	t = time.Now()
 	hash, err := state.Hash()
 	if err != nil {
 		state.Discard()
@@ -388,9 +406,12 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	}
 
 	// Commit changes
+	phase("hash", t)
+	t = time.Now()
 	if err := state.Commit(); err != nil {
 		return [32]byte{}, fmt.Errorf("commit block: %w", err)
 	}
+	phase("commit", t)
 
 	// Update our tracking. DidCompleteMajorBlock is recorded here because the
 	// closed block state is the only thing that knows, and it does not outlive
