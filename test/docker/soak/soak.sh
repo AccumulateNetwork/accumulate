@@ -223,12 +223,12 @@ other=$(cat "$pidfile" 2>/dev/null)
 if [ -n "$other" ] && [ "$other" != "$$" ] && kill -0 "$other" 2>/dev/null \
    && grep -q "soak.sh" "/proc/$other/cmdline" 2>/dev/null; then
   echo "another soak is running (pid $other) — refusing to start." | tee -a "$log"
-  echo "  stop it first, or SOAK_FORCE=1 to take the network over deliberately." | tee -a "$log"
+  echo "  stop it first, or SOAK_FORCE=1 in a -c override file to take the network over deliberately (the environment is not read)." | tee -a "$log"
   [ "${SOAK_FORCE:-0}" = 1 ] || exit 1
 fi
 live=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c '^acc-')
 if [ "$live" -gt 0 ] && [ "${SOAK_FORCE:-0}" != 1 ]; then
-  echo "$live acc-* containers are up from something else — refusing to start (SOAK_FORCE=1 to take over)." | tee -a "$log"
+  echo "$live acc-* containers are up from something else — refusing to start (SOAK_FORCE=1 in a -c override file to take over; the environment is not read)." | tee -a "$log"
   exit 1
 fi
 echo $$ > "$pidfile"
