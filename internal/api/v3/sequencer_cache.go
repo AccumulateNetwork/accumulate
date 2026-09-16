@@ -141,7 +141,7 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 				if !blk.Dispatched {
 					return nil, errors.NotReady.With("the directory has not receipted the block yet")
 				}
-				return nil, errors.NotReady.WithFormat("block %d was dispatched %d blocks ago and is in flight", e.Block, s.cache.Newest()-blk.DispatchedAt)
+				return nil, errors.NotReady.WithFormat("block %d was dispatched %d blocks ago and is in flight: the window is %d, this node lags %d (#4248)", e.Block, s.cache.Newest()-blk.DispatchedAt, s.cache.InFlightWindow(), s.cache.ExecutionLag())
 			}
 			st := blk.Stream(dst)
 			if st == nil || st.Segment == nil {
@@ -279,7 +279,11 @@ func (s *Sequencer) getAnchorRangeFromCache(globals *core.GlobalValues, dst *url
 			return nil, errors.NotFound.WithFormat("anchor %d is not in the cache", num)
 		}
 		synthcache.Count("anchor", true)
-		if age := s.cache.Newest() - block; age < synthcache.InFlightBlocks {
+		// The window is the sender's, not this node's mark: it widens by
+		// how far this node's executor is behind consensus, because the
+		// leader that actually sent the anchor is behind by about as much
+		// (#4248).
+		if age := s.cache.Newest() - block; age < s.cache.InFlightWindow() {
 			if len(records) > 0 {
 				return records, nil
 			}
