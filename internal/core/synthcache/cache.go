@@ -16,6 +16,7 @@ package synthcache
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -152,6 +153,10 @@ type Cache struct {
 	// said it executed through; an anchor every destination has executed is
 	// released
 	anchorAcks map[string]uint64
+
+	// how far this node's executor is behind consensus, nil until wired.
+	// The in-flight window is measured against it (#4248).
+	executionLag atomic.Pointer[func() int]
 
 	// the newest anchor produced, by sequence number, and the block it
 	// anchored: what the next block's open asks before producing another
@@ -576,10 +581,50 @@ func (c *Cache) Newest() uint64 {
 	return c.newest
 }
 
+// SetExecutionLagSource tells the cache how to read how many committed
+// leader groups this node's executor has not yet executed. The in-flight
+// window is measured against it. Wired once, at startup; a cache with no
+// source behaves as though the node were caught up.
+func (c *Cache) SetExecutionLagSource(fn func() int) {
+	c.executionLag.Store(&fn)
+}
+
+// ExecutionLag is how far this node's executor is behind consensus, or zero
+// when no source is wired.
+func (c *Cache) ExecutionLag() uint64 {
+	fn := c.executionLag.Load()
+	if fn == nil || *fn == nil {
+		return 0
+	}
+	n := (*fn)()
+	if n < 0 {
+		return 0
+	}
+	return uint64(n)
+}
+
+// InFlightWindow is how many of this node's blocks must pass after a block's
+// dispatch mark before its entries may be served to a healing request.
+//
+// Every node marks a block dispatched when IT executes the block; only the
+// leader sends. So the mark is not the send, and a node that measures the
+// window against its own mark answers for entries the leader has not sent
+// yet. The gap between the two is the spread in how far the partition's
+// executors are behind consensus, and a node can see only its own -- but
+// executors in a partition run the same load on the same code and move
+// together, so this node's lag is the estimate it has of the leader's.
+//
+// Widening the window by that lag costs nothing when the partition is
+// healthy, which is when the lag is zero, and widens exactly when lag would
+// otherwise turn every late dispatch into a heal (#4248).
+func (c *Cache) InFlightWindow() uint64 {
+	return InFlightBlocks + c.ExecutionLag()
+}
+
 // Servable answers whether a block's entries may be served to a healing
-// request: dispatched, and not for the last InFlightBlocks blocks.
+// request: dispatched, and not within the in-flight window.
 func (c *Cache) Servable(b *Block) bool {
-	return b.Dispatched && c.Newest() >= b.DispatchedAt+InFlightBlocks
+	return b.Dispatched && c.Newest() >= b.DispatchedAt+c.InFlightWindow()
 }
 
 // Entry answers one produced entry by stream and number. A miss is counted.

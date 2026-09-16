@@ -128,9 +128,12 @@ and the receipt to a Directory root the cache keeps for the block those
 entries were dispatched under ([Proofs are
 extended](#proofs-are-extended-not-replaced)) — and only for
 spans the Directory has anchored back to it; a span above that is "not yet".
-Nor does it serve what it dispatched within the last few blocks
-(`InFlightBlocks`): those entries are on their way, and an answer must never
-duplicate a delivery in flight. A span that is partly ready is answered as
+Nor does it serve what it dispatched within the **in-flight window**: those
+entries are on their way, and an answer must never duplicate a delivery in
+flight. The window is `InFlightBlocks` plus the answering node's own
+execution lag, because the window belongs to the sender and the answering
+node is not it ([The in-flight window belongs to the
+sender](#the-in-flight-window-belongs-to-the-sender)). A span that is partly ready is answered as
 far as it is ready; the requester remembers only what it was given.
 It packs the entries into a **bundle** — as many anchors and synthetic transactions as fit the
 envelope budget, whatever their streams, each with the transaction it belongs to
@@ -464,3 +467,49 @@ well inside the window a lost package needs.
 This is the same failure the waiting-proof exclusion above addresses, reached
 by a different path: healing that answers normal lag rather than loss, and
 whose answer makes the lag worse.
+
+### The in-flight window belongs to the sender
+
+Every validator marks a block's synthetics dispatched when **it** executes
+the block. Only the leader **sends** them. So the mark is not the send, and a
+node that measures the in-flight window against its own mark is measuring the
+wrong clock. A node whose executor is `L` blocks behind consensus sends `L`
+blocks late; a node that is less behind answers as soon as its own mark is
+`InFlightBlocks` old, while the leader has not sent at all. When `L` exceeds
+`InFlightBlocks`, every synthetic of the leader's blocks is healed.
+
+The healed copies are deduplicated, so the ledger stays right, but the cost is
+not free and it compounds: the source's nodes, already behind, now also build
+collection-proof answers for their whole output, and the destination executes
+two copies' worth of intake. Lag grows, and heals grow with it. On soak
+20260906T134054Z — 500 tps, no faults, dispatcher drops zero on every node —
+heal entries went 123 → 7 493 → 75 936 over thirty-five minutes while BVN2's
+execution lag went 4 → 17 blocks.
+
+**The window is `InFlightBlocks` plus the answering node's execution lag.** A
+node cannot see the leader's lag, only its own, but executors in a partition
+run the same load on the same code and move together, so its own lag is the
+estimate it has. The rule costs nothing when the partition is healthy, which
+is exactly when the lag is zero, and widens precisely when lag would otherwise
+turn every late dispatch into a heal. It delays, it never refuses: a source
+that never catches up still serves, once its own height has moved far enough
+past the mark. The refusal is cheap and is the load shed: the window is
+checked before any proof is built, so a source that is behind spends a cache
+lookup on a healing request, not a collection proof. The destination remembers
+the "not yet" like an answer and does not ask for that span again for a
+patience window. Nothing new is exported: the window is `InFlightBlocks` plus
+`accumulate_dagbft_execution_lag_blocks`, which the node already publishes per
+partition.
+
+Two rules already in this spec cover the rest of the case, and are not
+restated by the window. A block the node has **not itself dispatched** is
+never served, whatever the node's lag — a lagging source answers "not yet" for
+its own undispatched output. And the destination does not ask at all while its
+stream is moving ([Healing is for a stream that has
+stopped](#healing-is-for-a-stream-that-has-stopped)).
+
+Two alternatives were rejected. Carrying the leader's send on the wire so
+non-leaders learn of it adds a message and a trust question for a number the
+lag already estimates. Having every validator send, so that mark and send
+coincide, costs four times the dispatch bandwidth to produce copies the
+destination deduplicates anyway.

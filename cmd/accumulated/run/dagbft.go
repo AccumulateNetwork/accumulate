@@ -448,6 +448,18 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("start DAG-BFT service: %w", err)
 	}
 
+	// The healing in-flight window is measured against the send, and the
+	// send is the leader's. A node can only see its own executor's lag, so
+	// that is what the window widens by (#4248). The consensus node is
+	// built inside Start, so this has to come after it; an unwired source
+	// would leave the window at InFlightBlocks and heal every late
+	// dispatch, silently, so a missing node is a failure and not a default.
+	node := s.service.Node()
+	if node == nil {
+		return errors.InternalError.WithFormat("DAG-BFT service started without a consensus node")
+	}
+	synthCache.SetExecutionLagSource(node.ExecutionLag)
+
 	// Register cleanup
 	inst.cleanup("dagbft service", func(ctx context.Context) error {
 		return s.service.Stop()
