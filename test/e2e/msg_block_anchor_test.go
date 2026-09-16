@@ -43,36 +43,51 @@ func TestAnchorThreshold(t *testing.T) {
 	// what it is testing (#4171).
 	var anchorsMu sync.Mutex
 	var anchors []*messaging.BlockAnchor
+	var captured *url.TxID // the one anchor this test is about
 	opts = append(opts, simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
 		anchorsMu.Lock()
 		defer anchorsMu.Unlock()
+		dropped := false
 		for _, m := range env.Messages {
 			blk, ok := m.(*messaging.BlockAnchor)
 			if !ok {
 				continue
 			}
-			require.Len(t, env.Messages, 1)
 			require.IsType(t, (*messaging.SequencedMessage)(nil), blk.Anchor)
 			seq := blk.Anchor.(*messaging.SequencedMessage)
 			require.IsType(t, (*messaging.TransactionMessage)(nil), seq.Message)
 			txn := seq.Message.(*messaging.TransactionMessage)
 			anchor, ok := txn.Transaction.Body.(*BlockValidatorAnchor)
 			if !ok || anchor.MinorBlockIndex <= 10 {
-				continue
+				continue // the early anchors go through, so the stream is in order up to the one we hold back
+			}
+			// Every copy of a later anchor is dropped, dispatch and healed
+			// alike. A healed envelope carries one BlockAnchor per distinct
+			// signer -- the requester gathers the quorum by node and submits
+			// it together (healing spec, "The request") -- so an envelope is
+			// walked, not assumed to hold one message.
+			dropped = true
+			if captured == nil {
+				captured = txn.ID()
+			}
+			if !captured.Equal(txn.ID()) {
+				continue // a later anchor in the same healed span
 			}
 
-			// One copy per signer: the destination's requester pulls the
-			// dropped anchor back, signed by whichever validator answers,
-			// and a second copy under the same key is no second signature
+			// One copy per signer: a second copy under the same key is no
+			// second signature
+			dup := false
 			for _, have := range anchors {
 				if bytes.Equal(have.Signature.GetPublicKey(), blk.Signature.GetPublicKey()) {
-					return false, nil
+					dup = true
+					break
 				}
 			}
-			anchors = append(anchors, blk)
-			return false, nil
+			if !dup {
+				anchors = append(anchors, blk)
+			}
 		}
-		return true, nil
+		return !dropped, nil
 	}))
 
 	sim := NewSim(t, opts...)
@@ -92,7 +107,7 @@ func TestAnchorThreshold(t *testing.T) {
 			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey)),
 	)
 
-	sim.StepUntil(True(func(*Harness) bool { return len(anchors) >= valCount }))
+	sim.StepUntil(True(func(*Harness) bool { anchorsMu.Lock(); defer anchorsMu.Unlock(); return len(anchors) >= valCount }))
 
 	txid := anchors[0].Anchor.(*messaging.SequencedMessage).Message.ID()
 	for _, anchor := range anchors[1:] {

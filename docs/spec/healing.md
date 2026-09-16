@@ -25,7 +25,10 @@ Anchors are the same two cases on their own stage (executor.md, "One chain
 per pair, one stage per chain"): a missing anchor is a gap of entries and is
 requested from the source like any other; an anchor held below its validator
 signature quorum is an unvalidated entry, and each answer to a request for it
-carries the answering validator's signature, one more towards the quorum. A
+carries the answering validator's signature, one more towards the quorum --
+so the requester asks the source's validators **one by one, by node**, until
+the anchor it is waiting on has a quorum of distinct signers, and submits them
+together ([The request](#the-request)). A
 raw past anchor that arrives or is held is also validated when a later proof
 over the source's anchor chain covers it. Nothing is pushed a second time
 from the source: dispatch sends an anchor once, and the destination asks for
@@ -91,11 +94,32 @@ an activation; two rather than all because a request is fungible — whoever ask
 the answer heals every validator — so further askers are only load. The pair
 rotates with every activation.
 
-Selection applies to every request, anchors included: the answer to an anchor
-request carries whichever validator answered, and the pair rotates, so
-successive activations gather distinct signatures towards the quorum. The
-test: does another node's action make mine unnecessary? If yes it is a pull
-and a pair is enough.
+Selection applies to every request, anchors included. The test: does another
+node's action make mine unnecessary? If yes it is a pull and a pair is enough.
+
+**An anchor request gathers its quorum in one activation, deliberately.** An
+anchor executes under a validator signature quorum, and one node's answer
+carries one signature: a BVN never holds its own anchor with the other
+validators' signatures, so it has nothing more to give (the Directory does,
+and its answers carry the quorum it executed). Relying on successive
+activations reaching different source nodes was relying on the transport: an
+unaddressed request dials whichever peer the dialer favours, and a completely
+lost block validator anchor stayed lost about one run in thirty -- the runs
+where every answer came from the same node. So the requester asks the
+source's sequencer peers **by node**, merging signatures per anchor, until
+the first anchor of the span -- the one the stream is stuck on -- has
+`ValidatorThreshold` distinct signers, then submits them as one envelope. A
+node with no way to find peers asks once.
+
+**A lagging node does not ask.** A node whose executor is behind consensus
+decides from a staging that is behind too: the numbers it thinks it lacks sit
+in its own committed, unexecuted blocks. Asking a source for them buys
+NotFound -- the source released them on the partition's Delivered -- and
+NotFound is a miss, and seven misses strand the stream, permanently, for
+entries that were never missing (#4260). While
+`accumulate_dagbft_execution_lag_blocks` is above zero the requester makes no
+request and counts the activation as `lagging`; the backlog executes, and what
+is still missing after that is asked for then.
 
 ### The request
 

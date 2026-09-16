@@ -299,6 +299,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
 		Sequencer:    client.Private(),
+		Peers:        client,
 		Staging:      staging,
 		Heals:        healCounters,
 		RunTask:      execOpts.BackgroundTaskLauncher,
@@ -459,6 +460,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		return errors.InternalError.WithFormat("DAG-BFT service started without a consensus node")
 	}
 	synthCache.SetExecutionLagSource(node.ExecutionLag)
+	conductor.SetExecutionLagSource(node.ExecutionLag)
 
 	// Register cleanup
 	inst.cleanup("dagbft service", func(ctx context.Context) error {

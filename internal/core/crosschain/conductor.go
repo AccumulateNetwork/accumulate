@@ -45,6 +45,14 @@ type Conductor struct {
 	// permanently (#4105).
 	Sequencer private.Sequencer
 
+	// Peers finds the nodes that serve a partition's sequencer. An anchor is
+	// validated by a signature quorum, and one node's answer carries one
+	// signature, so the requester puts an anchor request to each of the
+	// source's validators until it holds a quorum of distinct signers. Nil
+	// means one unaddressed request, which is what tests without a network
+	// get.
+	Peers api.NodeService
+
 	// Staging is the executor's synthetic staging. The requesting side of
 	// healing decides from it: an index above Delivered that staging does not
 	// hold, or holds unproven, is a gap (healing.md, "Deciding, in staging").
@@ -91,6 +99,23 @@ type Conductor struct {
 	inflight sync.Map
 
 	requester healRequester
+
+	// executionLag reads how far this node's executor is behind consensus
+	// (#4260). A lagging node's staging is behind too: the numbers it thinks
+	// it lacks sit in its own committed, unexecuted blocks, and asking a
+	// source for them buys a NotFound -- the source released them on the
+	// partition's Delivered -- that would be counted as a miss and strand the
+	// stream. Nil until wired; nil reads as caught up.
+	executionLag atomic.Pointer[func() int]
+}
+
+// SetExecutionLagSource wires how the conductor reads its executor's lag.
+func (c *Conductor) SetExecutionLagSource(fn func() int) { c.executionLag.Store(&fn) }
+
+// lagging reports whether this node's executor is behind consensus.
+func (c *Conductor) lagging() bool {
+	fn := c.executionLag.Load()
+	return fn != nil && *fn != nil && (*fn)() > 0
 }
 
 // runExclusive runs the task like runTask, unless a task with the same key is

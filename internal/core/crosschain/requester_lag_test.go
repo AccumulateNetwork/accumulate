@@ -10,6 +10,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -195,4 +197,118 @@ func gaugeValue(t *testing.T, g prometheus.Gauge) float64 {
 	m := new(dto.Metric)
 	require.NoError(t, g.Write(m))
 	return m.GetGauge().GetValue()
+}
+
+// A node whose executor is behind consensus asks for nothing: what it lacks
+// is in its own unexecuted blocks, and a source would answer NotFound for it
+// -- a miss that strands the stream for entries that were never missing
+// (#4260). Caught up again, it asks as before.
+func TestRequester_LaggingNodeDoesNotAsk(t *testing.T) {
+	anchorStream := execute.StreamID{Ledger: protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool), Source: reqSource}
+	lag := 3
+	c := testConductor()
+	c.SetExecutionLagSource(func() int { return lag })
+	asks := 0
+	ask := streamAsk{stream: anchorStream, what: "anchors", healed: func(int) {},
+		ask: func(first, last uint64) (int, uint64, error) { asks++; return int(last - first + 1), last, nil }}
+	staged := execute.NewStaging().Begin()
+	defer staged.Discard()
+
+	c.requestStream(context.Background(), staged, healCadence, reqSource, ask)
+	require.Zero(t, asks, "behind consensus: the gap is in our own backlog")
+
+	lag = 0
+	c.requestStream(context.Background(), staged, 2*healCadence, reqSource, ask)
+	require.Equal(t, 1, asks, "caught up: an anchor stream is asked on sight")
+}
+
+// A ranger that answers by node: unaddressed requests come from signer A;
+// each peer answers with its own signer. Records the nodes it was asked.
+type byNodeRanger struct {
+	asked   []string
+	signers map[string]byte // node id -> signer index; "" is unaddressed
+}
+
+func (r *byNodeRanger) Sequence(context.Context, *url.URL, *url.URL, uint64, private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	return nil, errors.NotFound
+}
+
+func (r *byNodeRanger) SequenceRange(_ context.Context, _, _ *url.URL, first, last uint64, opts private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
+	r.asked = append(r.asked, string(opts.NodeID))
+	who := r.signers[string(opts.NodeID)]
+	var out []*api.MessageRecord[messaging.Message]
+	for n := first; n <= last; n++ {
+		txn := &protocol.Transaction{Header: protocol.TransactionHeader{Principal: protocol.DnUrl().JoinPath(protocol.AnchorPool)},
+			Body: &protocol.BlockValidatorAnchor{PartitionAnchor: protocol.PartitionAnchor{Source: protocol.PartitionUrl("BVN1"), MinorBlockIndex: n}}}
+		sig := &protocol.ED25519Signature{PublicKey: append(make([]byte, 31), who), Signer: protocol.PartitionUrl("BVN1").JoinPath(protocol.Network), TransactionHash: txn.ID().Hash()}
+		out = append(out, &api.MessageRecord[messaging.Message]{
+			Sequence: &messaging.SequencedMessage{Message: &messaging.TransactionMessage{Transaction: txn}, Source: protocol.PartitionUrl("BVN1"), Destination: protocol.DnUrl(), Number: n},
+			Signatures: &api.RecordRange[*api.SignatureSetRecord]{Total: 1, Records: []*api.SignatureSetRecord{{
+				Signatures: &api.RecordRange[*api.MessageRecord[messaging.Message]]{Records: []*api.MessageRecord[messaging.Message]{{Message: &messaging.SignatureMessage{Signature: sig, TxID: txn.ID()}}}},
+			}}},
+		})
+	}
+	return out, nil
+}
+
+type fakePeers []string
+
+func (p fakePeers) NodeInfo(context.Context, api.NodeInfoOptions) (*api.NodeInfo, error) {
+	return nil, errors.NotAllowed
+}
+
+func (p fakePeers) FindService(context.Context, api.FindServiceOptions) ([]*api.FindServiceResult, error) {
+	var out []*api.FindServiceResult
+	for _, id := range p {
+		out = append(out, &api.FindServiceResult{PeerID: peer.ID(id)})
+	}
+	return out, nil
+}
+
+// An anchor answer is one signature from one node, and the anchor needs a
+// quorum. The requester asks the source's validators by node until the first
+// anchor of the span has enough distinct signers, and no further -- and
+// submits them as one envelope. A completely lost block validator anchor
+// used to stay lost when the transport kept dialing the same node.
+func TestRequestAnchorSpan_GathersAQuorumByNode(t *testing.T) {
+	c := testConductor()
+	c.Peers = fakePeers{"n1", "n2", "n3"}
+	g := new(network.GlobalValues)
+	g.Network = &protocol.NetworkDefinition{Partitions: []*protocol.PartitionInfo{{ID: "BVN1", Type: protocol.PartitionTypeBlockValidator}}}
+	for i := byte(1); i <= 3; i++ {
+		g.Network.Validators = append(g.Network.Validators, &protocol.ValidatorInfo{
+			PublicKey:  append(make([]byte, 31), i),
+			Partitions: []*protocol.ValidatorPartitionInfo{{ID: "BVN1", Active: true}},
+		})
+	}
+	g.Globals = &protocol.NetworkGlobals{ValidatorAcceptThreshold: protocol.Rational{Numerator: 2, Denominator: 3}}
+	c.Globals.Store(g)
+	require.Equal(t, uint64(2), g.ValidatorThreshold("BVN1"))
+
+	var envelopes []*messaging.Envelope
+	c.Intercept = func(_ context.Context, env *messaging.Envelope) (bool, error) {
+		envelopes = append(envelopes, env)
+		return false, nil
+	}
+	// Unaddressed and n1 both answer as signer 1 -- the "same node again"
+	// case; n2 is signer 2, n3 signer 3.
+	r := &byNodeRanger{signers: map[string]byte{"": 1, "n1": 1, "n2": 2, "n3": 3}}
+	n, served, err := c.requestAnchorSpan(context.Background(), r, protocol.PartitionUrl("BVN1"), 1, 2)
+	require.NoError(t, err)
+	require.Equal(t, 2, n)
+	require.Equal(t, uint64(2), served)
+	require.Equal(t, []string{"", "n1", "n2"}, r.asked, "asks by node until the quorum, then stops")
+
+	require.Len(t, envelopes, 1, "one envelope")
+	signers := map[uint64]map[string]bool{}
+	for _, m := range envelopes[0].Messages {
+		ba := m.(*messaging.BlockAnchor)
+		num := ba.Anchor.(*messaging.SequencedMessage).Number
+		if signers[num] == nil {
+			signers[num] = map[string]bool{}
+		}
+		signers[num][string(ba.Signature.GetPublicKey())] = true
+	}
+	require.Len(t, signers[1], 2, "anchor 1 carries a quorum of distinct signers")
+	require.Len(t, signers[2], 2, "and so does anchor 2, from the same answers")
 }

@@ -119,7 +119,7 @@ var mHealRequests = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
 	Subsystem: "conductor",
 	Name:      "heal_requests_total",
-	Help:      "Synthetic span requests by outcome: answered, not-yet (the span is in flight at the source), miss (the source's cache lacks the span), failed",
+	Help:      "Span requests by outcome: answered, not-yet (the span is in flight at the source), miss (the source's cache lacks the span), failed, lagging (not asked: this node's executor is behind consensus, so the span is in its own backlog, #4260)",
 }, []string{"outcome", "destination", "source"})
 
 var mHealEntries = promauto.NewCounter(prometheus.CounterOpts{
@@ -372,6 +372,16 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 			"source", source, "destination", c.Url(), "what", a.what, "delivered", a.delivered, "block", blockIndex)
 	}
 	if c.requester.backedOff(backoff, blockIndex) {
+		return
+	}
+	// A node whose executor is behind consensus decides from a staging that
+	// is behind too: what it lacks is in its own unexecuted blocks. Asking a
+	// source for those buys NotFound -- released on the partition's Delivered
+	// -- and NotFound is a miss, and seven misses strand the stream (#4260).
+	// Nothing is lost by waiting: the backlog executes, and whatever is still
+	// missing after that is asked for then.
+	if c.lagging() {
+		mHealRequests.WithLabelValues("lagging", c.Partition.ID, partitionLabel(source)).Inc()
 		return
 	}
 	spans := c.requester.decide(staged, a.stream, a.delivered, blockIndex)
@@ -814,7 +824,7 @@ func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRang
 // finding 9: one envelope per signature per record). The source may answer a
 // prefix; the number it served through is returned.
 func (c *Conductor) requestAnchorSpan(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64) (int, uint64, error) {
-	records, err := ranger.SequenceRange(ctx, source.JoinPath(protocol.AnchorPool), c.Url(), first, last, private.SequenceOptions{})
+	records, err := c.anchorAnswers(ctx, ranger, source, first, last)
 	if err != nil {
 		return 0, 0, errors.UnknownError.Wrap(err)
 	}
@@ -883,6 +893,109 @@ func keySignatureOf(r *api.MessageRecord[messaging.Message]) protocol.KeySignatu
 		return nil
 	}
 	return sigs[0]
+}
+
+// anchorAnswers gathers a quorum for an anchor span. An anchor executes at
+// the destination under a validator signature quorum, and one node's answer
+// carries that node's signature (a BVN never holds its own anchor with the
+// others' signatures, so it has nothing more to give). One unaddressed
+// request therefore yields one signer, and which signer is whatever the
+// transport happened to dial: the spec's "successive activations gather
+// distinct signatures" was true only by luck, and a completely lost block
+// validator anchor stayed lost about one run in thirty.
+//
+// So the requester asks the source's validators one by one, by node, and
+// merges their signatures per anchor until the first anchor in the span --
+// the one the stream is waiting on -- has a quorum of distinct signers. With
+// no way to find peers it asks once, as before.
+func (c *Conductor) anchorAnswers(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64) ([]*api.MessageRecord[messaging.Message], error) {
+	src := source.JoinPath(protocol.AnchorPool)
+	records, err := ranger.SequenceRange(ctx, src, c.Url(), first, last, private.SequenceOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if len(records) == 0 || c.Peers == nil {
+		return records, nil
+	}
+
+	threshold := 1
+	if g := c.Globals.Load(); g != nil {
+		if id, ok := protocol.ParsePartitionUrl(source); ok {
+			if t := g.ValidatorThreshold(id); t > 0 && t < 1<<20 {
+				threshold = int(t)
+			}
+		}
+	}
+	signers := func(r *api.MessageRecord[messaging.Message]) map[string]bool {
+		m := map[string]bool{}
+		for _, sig := range keySignaturesOf(r) {
+			m[string(sig.GetPublicKey())] = true
+		}
+		return m
+	}
+	if len(signers(records[0])) >= threshold {
+		return records, nil
+	}
+
+	peers, err := c.Peers.FindService(ctx, api.FindServiceOptions{Service: private.ServiceTypeSequencer.AddressFor(c.partitionOf(source))})
+	if err != nil {
+		slog.WarnContext(ctx, "Cannot find the source's sequencers; one answer will have to do", "module", "conductor", "source", source, "error", err)
+		return records, nil
+	}
+	byNumber := map[uint64]*api.MessageRecord[messaging.Message]{}
+	for _, r := range records {
+		if r.Sequence != nil {
+			byNumber[r.Sequence.Number] = r
+		}
+	}
+	have := signers(records[0])
+	for _, p := range peers {
+		if len(have) >= threshold {
+			break
+		}
+		more, err := ranger.SequenceRange(ctx, src, c.Url(), first, last, private.SequenceOptions{NodeID: p.PeerID})
+		if err != nil {
+			continue // one validator's silence is not the answer's
+		}
+		for _, r := range more {
+			if r.Sequence == nil {
+				continue
+			}
+			base, ok := byNumber[r.Sequence.Number]
+			if !ok {
+				byNumber[r.Sequence.Number] = r
+				records = append(records, r)
+				continue
+			}
+			seen := signers(base)
+			for _, set := range r.Signatures.Records {
+				for _, m := range set.Signatures.Records {
+					sm, ok := m.Message.(*messaging.SignatureMessage)
+					if !ok {
+						continue
+					}
+					ks, ok := sm.Signature.(protocol.KeySignature)
+					if !ok || seen[string(ks.GetPublicKey())] {
+						continue
+					}
+					seen[string(ks.GetPublicKey())] = true
+					base.Signatures.Records = append(base.Signatures.Records, set)
+					base.Signatures.Total++
+				}
+			}
+		}
+		have = signers(records[0])
+	}
+	return records, nil
+}
+
+// partitionOf is the partition ID a partition URL names, or the URL's
+// authority when it is not one.
+func (c *Conductor) partitionOf(u *url.URL) string {
+	if id, ok := protocol.ParsePartitionUrl(u); ok {
+		return id
+	}
+	return u.Authority
 }
 
 // keySignaturesOf lists every key signature an answer carries, one per signer.

@@ -629,6 +629,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Querier:           api.Querier2{Querier: f.getServices()},
 		Dispatcher:        execOpts.NewDispatcher(),
 		Sequencer:         f.getServices().Private(),
+		Peers:             f.getServices(),
 		Staging:           f.getStaging(),
 		Heals:             f.getHeals(),
 		RunTask:           execOpts.BackgroundTaskLauncher,

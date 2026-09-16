@@ -172,8 +172,13 @@ func TestMissingDirectoryAnchorTxn(t *testing.T) {
 	// The lost anchor holes the Directory's anchor stream from that BVN, and
 	// a stream executes in order with no gaps, so nothing that BVN produces
 	// is anchored -- and no synthetic of its is provable -- until healing
-	// fills the hole. The budget is generous so that a failure here means
-	// recovery stopped working, not that it was slower than fifty blocks.
+	// fills the hole. Filling it means rebuilding the anchor's signature
+	// QUORUM from answers: one node's answer carries one signature, so the
+	// requester has to ask the source's validators one by one until it holds
+	// enough distinct signers. Before it did, a completely lost anchor stayed
+	// lost about one run in thirty -- the runs where the transport happened
+	// to keep dialing the same source node. The budget is generous so that a
+	// failure here means recovery stopped working, not that it was slow.
 	sim.StepUntilN(recoverAnchorHoleBlocks,
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
@@ -247,9 +252,11 @@ func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
 					continue
 				}
 				if target == nil {
-					// The window closes a few blocks later so healing's
-					// answer is not dropped along with the anchor.
-					target, targetNum, dropUntil = seq.Source, seq.Number, params.Index+2
+					// Wide enough that EVERY dispatched copy is lost -- at
+					// two blocks a straggler sometimes got through and the
+					// test passed without healing doing anything. Healing's
+					// own answers land after the window, on re-ask.
+					target, targetNum, dropUntil = seq.Source, seq.Number, params.Index+8
 				}
 				if seq.Number != targetNum {
 					continue
