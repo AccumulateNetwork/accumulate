@@ -955,6 +955,29 @@ Claims are resolved rather than trusted: a remote stub's principal and a
 signature's TxID account are claims, and classifying by them would let a crafted
 envelope execute another identity's writes on the wrong shard (#4149).
 
+**What proves it.** Shard count is a local parallelism choice that cannot
+change the result, and the proof is not an argument but a gate: one simulated
+network whose nodes run at *different* shard counts, executing the same blocks
+from the same inputs, with the simulator's consensus comparing every node's
+deliver and commit results on every block. If shard count could change any
+result, the step fails on the block where it does. Four gates run it
+(`test/e2e/sharded_*_test.go`): identity-local and cross-partition transfers
+(`TestShardCountDoesNotChangeBlockHash`), the signature shapes the classifier
+must reason about -- a multisig completed by a later signature-only envelope,
+cross-ADI delegation, a held transaction (`TestShardEquivalence_MixedSignatureShapes`),
+a synthetic-heavy block (`TestShardEquivalence_SyntheticHeavy`), and randomized
+mixed traffic at 1/8/64 shards over many rounds
+(`TestShardEquivalence_Randomized`). Each asserts its own coverage -- the
+parallel lane must actually have run -- because a gate that compares serial
+to serial proves nothing, which is what the first one did until #4149. CI
+runs them under the race detector (`go test race (sharded)`); the data race
+on `Batch.nextChildId` was invisible without it.
+
+`ExecutionShards` defaults to 1. It is raised on a network (soak.conf,
+`ACC_EXECUTION_SHARDS`) only with those gates green under `-race`, and the
+node logs "Execution shards overridden" so a run that meant to shard and did
+not is visible (REPORTING-SPEC 1).
+
 Timing is booked as serial versus parallel share, so a run can say whether
 sharding helped or whether nothing was shardable.
 
