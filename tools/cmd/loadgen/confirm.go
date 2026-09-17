@@ -259,23 +259,6 @@ func (e *env) tokenUnits(ctx context.Context, u *url.URL) (int64, bool) {
 	return b.Int64(), true
 }
 
-// accountHasAuthority reports whether the account carries auth in its OWN
-// authority set. An account created without one inherits its identity's
-// authority and carries none of its own, which is why update-account-auth
-// against it is refused as "not an authority" (#4271).
-func (e *env) accountHasAuthority(ctx context.Context, u, auth *url.URL) bool {
-	r, err := e.Q.QueryAccount(ctx, u, nil)
-	if err != nil {
-		return false
-	}
-	f, ok := r.Account.(protocol.FullAccount)
-	if !ok {
-		return false
-	}
-	_, found := f.GetAuth().GetAuthority(auth)
-	return found
-}
-
 // --- outcomes -------------------------------------------------------------
 
 // reportOutcomes says how the followed transactions actually ENDED.

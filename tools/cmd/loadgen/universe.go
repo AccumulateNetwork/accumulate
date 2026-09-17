@@ -7,12 +7,12 @@
 package main
 
 import (
-	"time"
 	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
 	mrand "math/rand"
 	"sync"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
