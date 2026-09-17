@@ -103,9 +103,10 @@ var sendTokensLite = action{
 			e.u.addLite(to)
 		}
 
-		// Cascade: a funded, ready lite distributes to another lite.
-		if src := e.u.randSourceLite(); src != nil && src != to {
-			e.u.markFunded(to)
+		// Cascade: a funded, ready lite distributes to another lite. The
+		// destination is NOT marked funded here: confirmFunding promotes it
+		// when the network shows the deposit (#4271).
+		if src := e.u.randSourceLite(); src != nil && src != to && e.claimSend(src) {
 			return e.sign(ctx, src.id, func() txBuilder {
 				return e.build(src).
 					SendTokens(sendAmount, protocol.AcmePrecisionPower).To(to.acct).
@@ -118,7 +119,6 @@ var sendTokensLite = action{
 		if !e.canPay(treasuryFloorUnits) {
 			return nil, errors.NotReady.With("treasury is low on credits")
 		}
-		e.u.markFunded(to)
 		t := e.treasury
 		return e.submitAsTreasury(ctx, func() txBuilder {
 			return e.build(t).
@@ -140,8 +140,7 @@ var sendTokensADI = action{
 		if other := e.u.randIdentity(); other != nil && len(other.tokens) > 0 && other != from {
 			to = other.tokens[0] // prefer another token account — the cascade
 		} else if l := e.u.randLite(); l != nil {
-			to = l.acct
-			e.u.markFunded(l) // it now holds ACME and can relay
+			to = l.acct // confirmFunding promotes it once the deposit lands
 		} else {
 			return nil, errors.NotReady.With("nowhere to send")
 		}

@@ -141,8 +141,9 @@ func (e *env) bootstrapSubTreasuries(ctx context.Context, n int) error {
 			continue
 		}
 		e.u.addLite(l)
-		e.u.markFunded(l)
 		e.u.markReady(l)
+		// funded is left to confirmFunding, which observes the balance rather
+		// than assuming the seeding transfer landed (#4271).
 		ready++
 	}
 	log.Printf("== %d/%d sub-treasuries ready as funding sources ==", ready, n)

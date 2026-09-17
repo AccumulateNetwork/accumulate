@@ -423,6 +423,11 @@ func main() {
 	// sign as a lite identity always have a valid signer available.
 	go e.promoteLites(ctx)
 
+	// Tie the model's facts to what the network shows: a lite becomes a
+	// funding source when it is seen holding tokens, not when a transfer is
+	// aimed at it, and a key page's contents come from the page (#4271).
+	go e.confirmLoop(ctx)
+
 	// Keep the local balance mirror honest: sample and re-sync against the chain
 	// every few minutes (dead reckoning drifts on refunds/oracle moves).
 	go e.reconcile(ctx, 3*time.Minute, 20)
@@ -454,6 +459,7 @@ func main() {
 	}
 
 	e.reportMix()
+	e.reportOutcomes(ctx)
 	if *reportParts {
 		e.reportPartitions(ctx)
 	}
