@@ -395,6 +395,51 @@ _FLOW_HIST = {}  # (kind,src,dst) -> [(t, sent, recv)] for channel-lag rates
 _RATE_BASE = {}
 
 
+# Destination partition -> when an inbound synthetic flow first went red.
+_DELIVERY_RED = {}
+
+
+def stalled_by_delivery(flows, now):
+    """Per destination partition, how long any inbound synthetic flow has been
+    red, keyed by destination; a partition with no red inbound flow is absent.
+
+    Block height is not liveness. On run 20260917T184129Z nine of eleven
+    synthetic flows stopped delivering while every partition kept closing
+    blocks at 1/s, and neither watchdog fired for two hours and twenty minutes
+    because both classify a partition from its height. The flow matrix already
+    knew -- it marked those flows red and wrote "delivery STALLED" -- and this
+    is the wiring from that knowledge to the partition state the watchdogs
+    read (#4285). The first red reading starts a clock rather than condemning,
+    as assess_progress does for height.
+    """
+    red_now = set()
+    for src, dsts in ((flows or {}).get("synthetic") or {}).items():
+        for dst, c in (dsts or {}).items():
+            if c and c.get("sent") and c.get("state") == "red":
+                red_now.add(dst)
+    out = {}
+    for dst in red_now:
+        _DELIVERY_RED.setdefault(dst, now)
+        out[dst] = now - _DELIVERY_RED[dst]
+    for dst in list(_DELIVERY_RED):
+        if dst not in red_now:
+            del _DELIVERY_RED[dst]
+    return out
+
+
+def apply_delivery_stall(progress, red_for):
+    """A partition whose inbound delivery has been red for STALL_SECS is
+    stalled for the watchdogs, whatever its height is doing (#4285)."""
+    for dst, secs in (red_for or {}).items():
+        p = (progress or {}).get(dst)
+        if p is None or secs < STALL_SECS:
+            continue
+        p["state"] = "stalled"
+        p["stalledFor"] = max(p.get("stalledFor") or 0, round(secs, 1))
+        p["stalledBy"] = "delivery"
+    return progress
+
+
 def assess_progress(heights, now):
     """Classify each partition as live, stalled, or unknown.
 
@@ -1403,6 +1448,15 @@ def _collect_once(last, hist):
             STATE.update(upd)
             STATE["ok"] = True
             STATE["now"] = int(now)
+            # Delivery stalls reach the partition state the watchdogs read,
+            # after every merge, because assess_progress rebuilds that state
+            # from height alone on each height tick (#4285).
+            red = stalled_by_delivery((STATE.get("matrix") or {}).get("flows"), now)
+            STATE["deliveryStall"] = red
+            if STATE.get("progress"):
+                apply_delivery_stall(STATE["progress"], red)
+                STATE["status"] = overall_status(
+                    (STATE.get("network") or {}).get("api") == "up", STATE["progress"])
             lg = STATE.get("loadgen") or {}
             w = STATE.get("wedges") or {}
             h = STATE.get("heals") or {}

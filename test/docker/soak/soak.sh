@@ -59,8 +59,12 @@ else
   CHAOS_MIN=${CHAOS_MIN:-480}; CHAOS_JITTER=${CHAOS_JITTER:-240}
 fi
 # A 5m grace on a 5m run doubles the wall clock for no benefit; scale it.
+# The overall timeout is a ceiling on the load generator's context and MUST
+# exceed the duration plus bootstrap plus grace: a fixed 20m here cut every
+# thirty-minute run to twenty (20260917T212457Z stopped at 1171s of 1800 with
+# "waiting for delivery" and a clean exit, and the record called it done).
 if [ "$duration_seconds" -le 1800 ]; then
-  LG_GRACE=${LG_GRACE:-45s}; LG_TIMEOUT=${LG_TIMEOUT:-20m}
+  LG_GRACE=${LG_GRACE:-45s}; LG_TIMEOUT=${LG_TIMEOUT:-$(( duration_seconds + 900 ))s}
 else
   LG_GRACE=${LG_GRACE:-5m}; LG_TIMEOUT=${LG_TIMEOUT:-26h}
 fi

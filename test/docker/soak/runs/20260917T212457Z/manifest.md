@@ -65,7 +65,9 @@ larger than on the others (0) and is the one thing in that table worth a
 second look.
 
 **Why it does not meet the bar.** Twenty minutes, not thirty: the load
-generator stopped at 1171s of 1800 (cause under investigation, below). Two
+generator stopped at 1171s of 1800: soak.sh gave every run of 30m or less a fixed
+20m overall timeout (LG_TIMEOUT, written for 5m runs), and the generator's
+context expired. Fixed in the harness. Two
 real disturbances, not six: the fault model draws "skip" 20% of the time and
 three of five slots drew it. Both are harness, not network.
 
