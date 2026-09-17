@@ -1707,7 +1707,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       <div class=pill><div class="n" id=hheld>—</div><div class=l id=hheldl>held in staging</div></div>
     </div>
     <svg class=spark id=spHeal viewBox="0 0 300 44" preserveAspectRatio=none></svg>
-    <table id=hpart><thead><tr><th>stream (source → destination)</th><th>answered (#)</th><th>asked while in flight (#)</th><th>miss (#)</th><th>failed (#)</th></tr></thead><tbody></tbody></table>
+    <table id=hpart><thead><tr><th>stream (source → destination)</th><th>answered (#)</th><th>requests for txs in flight (#)</th><th>miss (#)</th><th>failed (#)</th></tr></thead><tbody></tbody></table>
     <table id=hheldt><thead><tr><th>held in staging</th><th>entries (#)</th><th>bytes (B)</th></tr></thead><tbody></tbody></table>
   </div>
 </div>
@@ -1821,7 +1821,7 @@ async function tick(){
   $('cards').innerHTML=[
     card('DN height',fmt(nw.dnHeight),`${fmt(gen)} tx · ${pct.toFixed(0)}% of plan`),
     card('Healed entries',`<span class=grn>${nm(h.entries)}</span>`,h.entries==null?'not measured':'received in answer to span requests'),
-    card('Heal requests',nm(hr&&hr.answered),hr?`answered · ${h.notYetPerMin!=null?h.notYetPerMin.toFixed(0):'—'}/min asked while in flight`:'not measured'),
+    card('Heal requests',nm(hr&&hr.answered),hr?`answered · ${h.notYetPerMin!=null?h.notYetPerMin.toFixed(0):'—'}/min requests for txs in flight`:'not measured'),
     card('Proofs',nm(hp&&hp.validated),hp?`${fmt(hp.staged)} staged · ${fmt(hp.disproved)} disproved`:'not measured'),
     card('Wedges',`<span class="${(w.total||0)?'yel':''}">${nm(w.total)}</span>`,w.measured?Object.entries(w.byReason||{}).map(([k,v])=>`${fmt(v)} ${k}`).join(' · ')||'none':'not measured — no node exports a drop counter'),
     card('Heal misses',`<span class="${(h.errors||0)?'red':''}">${nm(h.errors)}</span>`,hr?`${fmt(hr.miss)} miss · ${fmt(hr.failed)} failed`:'not measured'),
