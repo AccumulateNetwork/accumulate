@@ -1587,19 +1587,19 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
     <div class=col><h4>rates</h4>
       <div class=sub>Current tx Rates (last 30 s)</div>
       <div class=kv>
-        <b id=rtotal>—</b><span class=sl>tx/s total</span>
-        <b id=ruser>—</b><span class=sl>user</span>
-        <span class=mut id=rtgt>—</span><span class=sl>target</span>
-        <b id=rsyn>—</b><span class=sl>synthetic</span>
-        <b id=ranc>—</b><span class=sl>anchor</span>
+        <b id=rtotal>—</b><span class=sl>total tx/s</span>
+        <b id=ruser>—</b><span class=sl>user tx/s</span>
+        <span class=mut id=rtgt>—</span><span class=sl>target tx/s</span>
+        <b id=rsyn>—</b><span class=sl>synthetic tx/s</span>
+        <b id=ranc>—</b><span class=sl>anchors/s</span>
         <span class=mut id=rratio>—</span><span class=sl>synth+anchor share of total</span>
       </div>
       <div class=sub>Total Test Rates (whole run)</div>
       <div class=kv>
-        <b id=ratotal>—</b><span class=sl>tx/s total</span>
-        <b id=rauser>—</b><span class=sl>user</span>
-        <span class=mut id=rasyn>—</span><span class=sl>synthetic</span>
-        <span class=mut id=raanc>—</span><span class=sl>anchor</span>
+        <b id=ratotal>—</b><span class=sl>total tx/s</span>
+        <b id=rauser>—</b><span class=sl>user tx/s</span>
+        <span class=mut id=rasyn>—</span><span class=sl>synthetic tx/s</span>
+        <span class=mut id=raanc>—</span><span class=sl>anchors/s</span>
         <span class=mut id=rashare>—</span><span class=sl>synth+anchor share of total</span>
         <span class=cap id=raover></span>
       </div>
@@ -1609,8 +1609,8 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       <div class=kv><span id=heights></span></div>
       <div class=sub>blocks</div>
       <div class=kv>
-        <b id=lblocks>—</b><span class=sl>produced</span>
-        <b id=lempty>—</b><span class=sl>empty</span>
+        <b id=lblocks>—</b><span class=sl>blocks produced (#)</span>
+        <b id=lempty>—</b><span class=sl>empty blocks (#)</span>
         <span class=cap id=lidle></span>
       </div>
     </div>
@@ -1624,9 +1624,9 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       </div>
       <div class=sub>goroutines</div>
       <div class=kv>
-        <b id=ngravg>—</b><span class=sl>avg</span>
-        <b id=ngrmax>—</b><span class=sl>max</span>
-        <span class=mut id=ngrmin>—</span><span class=sl>min</span>
+        <b id=ngravg>—</b><span class=sl>avg (#)</span>
+        <b id=ngrmax>—</b><span class=sl>max (#)</span>
+        <span class=mut id=ngrmin>—</span><span class=sl>min (#)</span>
         <span class=cap id=ngrnode></span>
       </div>
       <div class=sub>database on disk</div>
@@ -1640,15 +1640,15 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
     <div class=col><h4>delivery</h4>
       <div class=sub>retention</div>
       <div class=kv>
-        <b id=lheld>—</b><span class=sl>held</span>
-        <b id=lhits>—</b><span class=sl>hits</span>
-        <span class=mut id=lexp>—</span><span class=sl>expired</span>
+        <b id=lheld>—</b><span class=sl>held (#)</span>
+        <b id=lhits>—</b><span class=sl>hits (#)</span>
+        <span class=mut id=lexp>—</span><span class=sl>expired (#)</span>
       </div>
       <div class=sub>re-delivered</div>
       <div class=kv>
         <b id=lredel>—</b><span class=sl id=lredelnote></span>
       </div>
-      <div class=sub>batch waits</div>
+      <div class=sub>batch waits (#, by reason)</div>
       <div class=kv><span class=cap id=lwaits>—</span></div>
     </div>
     <div class=col><h4>execution &middot; step 0 (#4169)</h4>
@@ -1682,7 +1682,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       <div class=pill><div class=n id=wtot>0</div><div class=l>total</div></div>
     </div>
     <svg class=spark id=spWedge viewBox="0 0 300 44" preserveAspectRatio=none></svg>
-    <table id=wdest><thead><tr><th>destination</th><th>drops</th></tr></thead><tbody></tbody></table>
+    <table id=wdest><thead><tr><th>dropped toward (destination)</th><th>drops by senders (#)</th></tr></thead><tbody></tbody></table>
   </div>
   <div class=panel>
     <h2>Healing — span requests and what came back</h2>
@@ -1695,13 +1695,13 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       <div class=pill><div class="n" id=hheld>—</div><div class=l id=hheldl>held in staging</div></div>
     </div>
     <svg class=spark id=spHeal viewBox="0 0 300 44" preserveAspectRatio=none></svg>
-    <table id=hpart><thead><tr><th>stream</th><th>answered</th><th>not-yet</th><th>miss</th><th>failed</th></tr></thead><tbody></tbody></table>
-    <table id=hheldt><thead><tr><th>held in staging</th><th>entries</th><th>bytes</th></tr></thead><tbody></tbody></table>
+    <table id=hpart><thead><tr><th>stream (source → destination)</th><th>answered (#)</th><th>not-yet (#)</th><th>miss (#)</th><th>failed (#)</th></tr></thead><tbody></tbody></table>
+    <table id=hheldt><thead><tr><th>held in staging</th><th>entries (#)</th><th>bytes (B)</th></tr></thead><tbody></tbody></table>
   </div>
 </div>
 <div class=panel>
   <h2>Transaction type mix (live)</h2>
-  <table id=mix><thead><tr><th>type</th><th>generated</th><th>rejected</th><th>skipped</th></tr></thead><tbody></tbody></table>
+  <table id=mix><thead><tr><th>type</th><th>generated (#)</th><th>rejected (#)</th><th>skipped (#)</th></tr></thead><tbody></tbody></table>
 </div>
 <div class=two>
   <div class=panel>
@@ -1774,7 +1774,7 @@ async function tick(){
     // what it has sustained. A partition that paces at target for four
     // minutes in every five reads healthy on the window alone.
     const now5=(st==='live'&&g.secPerBlock)?`${g.secPerBlock}s/blk`:'';
-    const avg=(st==='live'&&g.avgSecPerBlock)?` avg ${g.avgSecPerBlock}`:'';
+    const avg=(st==='live'&&g.avgSecPerBlock)?` avg ${g.avgSecPerBlock}s/blk`:'';
     const spb=now5?` ${now5}${avg}`:'';
     const note=st==='live'?spb:(st==='unknown'?' unreadable':` stalled ${Math.round(g.stalledFor||0)}s`);
     return `<span class=n ${col?`style="color:${col}"`:''}>${fmt(hh[p])}</span>`+
@@ -1906,7 +1906,7 @@ async function tick(){
   $('lhits').textContent=(lf.retentionHits??0).toLocaleString();
   $('lexp').textContent=(lf.retentionExpired??0).toLocaleString();
   const rd=lf.redelivered||0;
-  $('lredel').textContent=rd.toLocaleString();
+  $('lredel').textContent=rd.toLocaleString()+' entries';
   $('lredel').style.color = rd>0? 'var(--red)':'';
   // Zero is the only healthy value: a re-delivery is skipped safely, but it
   // means commit dedup is still wrong upstream (#4125).
