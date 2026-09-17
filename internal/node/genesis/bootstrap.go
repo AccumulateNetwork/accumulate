@@ -82,7 +82,10 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 		gg.Routing = new(protocol.RoutingTable)
 	}
 	if gg.Routing.Routes == nil {
-		gg.Routing.Routes = routing.BuildSimpleTable(bvns)
+		// Even by bucket, not by bit prefix: prefixes can only divide into
+		// powers of two, so three BVNs would be 50/25/25 (#4136). A network
+		// being created has no accounts to move, so it can start even.
+		gg.Routing.Routes = routing.BuildEvenTable(bvns)
 	}
 	gg.Routing.AddOverride(protocol.AcmeUrl(), protocol.Directory)
 	for _, partition := range gg.Network.Partitions {

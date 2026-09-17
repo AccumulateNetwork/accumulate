@@ -79,6 +79,12 @@ func TestMissingSynthTxn(t *testing.T) {
 		aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
 		bob := acctesting.GenerateKey("Bob")
 		bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
+		// The deposit this test drops only exists if the sender and the receiver
+		// are on different partitions, so say so instead of leaving it to where
+		// two hashes happen to land. Even bucket routing (#4136) moved them onto
+		// the same BVN, and the drop hook then had nothing to drop.
+		sim.SetRoute(aliceUrl, "BVN0")
+		sim.SetRoute(bobUrl, "BVN1")
 		MakeLiteTokenAccount(t, sim.DatabaseFor(aliceUrl), alice[32:], AcmeUrl())
 
 		// Execute. Step between submissions so each block produces ONE
