@@ -582,6 +582,62 @@ func (t *StagingTxn) StageProof(source *url.URL, block uint64, proof *protocol.A
 	return true
 }
 
+// StagedProofBytes is roughly what the proofs waiting for this source cost in
+// memory, committed and this block's together. The budget that bounds staging
+// is in bytes because that is what the node actually pays; a count of
+// Directory blocks is not, and a destination that has fallen behind waits on
+// many blocks while costing very little (#4282).
+func (t *StagingTxn) StagedProofBytes(source *url.URL) int {
+	if t == nil {
+		return 0
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	k := sourceKey(source)
+	n := 0
+	t.s.mu.Lock()
+	for b, ps := range t.s.proofs[k] {
+		if t.dropped[k][b] {
+			continue
+		}
+		for _, p := range ps {
+			n += proofSize(p)
+		}
+	}
+	t.s.mu.Unlock()
+	for b, ps := range t.proofs[k] {
+		if t.dropped[k][b] {
+			continue
+		}
+		for _, p := range ps {
+			n += proofSize(p)
+		}
+	}
+	return n
+}
+
+// proofSize is what one staged proof costs, near enough to bound it by: the
+// hashes dominate and everything else is a handful of fixed fields.
+func proofSize(p *protocol.AnnotatedReceipt) int {
+	if p == nil || p.ReceiptList == nil {
+		return 0
+	}
+	n := 128 // the anchor metadata and the fixed fields of the list
+	for _, e := range p.ReceiptList.Elements {
+		n += len(e)
+	}
+	for _, r := range []*merkle.Receipt{p.ReceiptList.Receipt, p.ReceiptList.ContinuedReceipt} {
+		if r == nil {
+			continue
+		}
+		n += len(r.Start) + len(r.End) + len(r.Anchor) + 64
+		for _, e := range r.Entries {
+			n += len(e.Hash) + 1
+		}
+	}
+	return n
+}
+
 // hasSameProof reports whether the list holds a proof over the same span as
 // this one: the same starting count and the same number of elements.
 func hasSameProof(list []*protocol.AnnotatedReceipt, proof *protocol.AnnotatedReceipt) bool {

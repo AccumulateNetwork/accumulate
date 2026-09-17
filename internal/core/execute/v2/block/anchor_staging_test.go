@@ -7,6 +7,7 @@
 package block
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -163,16 +164,70 @@ func TestAnchorStaging_ProofMustCoverAMessageFromItsSource(t *testing.T) {
 }
 
 // Anchor staging is bounded: a proof claiming an anchor further ahead than the
-// horizon, or a source already waiting on too many blocks, is refused.
+// horizon, or a source whose waiting proofs already cost more than the budget,
+// is refused. The budget is in bytes, so the bound binds on what a source
+// actually costs rather than on how far behind this node has fallen (#4282).
 func TestAnchorStaging_IsBounded(t *testing.T) {
 	f := newAnchorStagingFixture(t)
 	source := protocol.PartitionUrl("BVN1")
 	refused0 := count("refused")
 	require.Error(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, maxAnchorAhead+5), f.siblingsOf(0, 2)))
 	require.Equal(t, refused0+1, count("refused"))
-	for blk := uint64(1); blk <= maxStagedProofBlocks; blk++ {
-		require.NoError(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, blk), f.siblingsOf(0, 2)))
-	}
-	require.Error(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, maxStagedProofBlocks+1), f.siblingsOf(0, 2)))
+
+	restore := maxStagedProofBytes
+	defer func() { maxStagedProofBytes = restore }()
+	maxStagedProofBytes = 1 // any staged proof exceeds it
+
+	require.NoError(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 1), f.siblingsOf(0, 2)),
+		"the first proof is staged: the budget is measured before it, not after")
+	require.Error(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 2), f.siblingsOf(0, 2)))
 	require.Equal(t, refused0+2, count("refused"))
+}
+
+// A destination that has fallen behind holds proofs for many Directory blocks
+// at once. That is a backlog, not a flood: every one of them is bound to
+// entries this node has already accepted and is holding. Refusing them strands
+// those entries, because the proof travels with them and nothing re-sends it,
+// and the entries are then held with no gap for healing to find (#4282).
+func TestAnchorStaging_AnHonestBacklogIsNotRefused(t *testing.T) {
+	f := newAnchorStagingFixture(t)
+	source := protocol.PartitionUrl("BVN1")
+	refused0 := count("refused")
+
+	for b := uint64(1); b <= stagedProofBlockBacklog; b++ {
+		err := f.b.intakeProof(source, f.proofFor(t, 0, 2, b), f.siblingsOf(0, 2))
+		require.NoError(t, err, "proof for Directory block %d refused", b)
+	}
+	require.Equal(t, refused0, count("refused"),
+		"a proof bound to entries this node kept must not be refused")
+	require.Len(t, f.b.staging.ProofBlocks(source), int(stagedProofBlockBacklog))
+}
+
+// stagedProofBlockBacklog is how far behind this test drives the destination:
+// comfortably past the old 256-block cap, and well inside maxAnchorAhead.
+const stagedProofBlockBacklog = 1024
+
+// When the byte budget does bind, the package's entries must go with its
+// proof. Keeping the entries and dropping the proof is what stranded 80,552
+// of them on run 20260917T184129Z: the entry is recorded as received, so
+// there is no gap, so healing never asks, and nothing re-sends a proof.
+// Refused together, what is left is an ordinary hole the source still holds
+// (#4282).
+func TestAnchorStaging_BudgetRefusalMarksTheSource(t *testing.T) {
+	f := newAnchorStagingFixture(t)
+	source := protocol.PartitionUrl("BVN1")
+	require.False(t, f.b.proofBudgetBound[strings.ToLower(source.String())],
+		"nothing is bound before the budget binds")
+
+	restore := maxStagedProofBytes
+	defer func() { maxStagedProofBytes = restore }()
+	maxStagedProofBytes = 1
+
+	require.NoError(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 1), f.siblingsOf(0, 2)))
+	require.False(t, f.b.proofBudgetBound[strings.ToLower(source.String())],
+		"a proof that was staged does not mark its source")
+
+	require.Error(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 2), f.siblingsOf(0, 2)))
+	require.True(t, f.b.proofBudgetBound[strings.ToLower(source.String())],
+		"a source whose proof was refused for budget is marked, so its entries are refused with it")
 }
