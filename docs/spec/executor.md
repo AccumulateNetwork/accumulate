@@ -334,6 +334,11 @@ one thing a per-block record must never do. An empty block has no entry.
     execution and the block reorders it, and nothing after has to put the
     order back. A structure that loses the order — a map — is not used to
     carry it.
+11. **Every state-tree root the network produces can be proven to the
+    directory.** A root that an anchor never carried is still provable, because
+    the root is an entry on the partition's bpt chain and that chain is anchored
+    into the root chain. There is no root an account proof cannot be completed
+    against, and therefore no "not yet" that means "never".
 
 ### Versioning
 
@@ -710,6 +715,46 @@ depends on the last:
 10. Update major index chains if this is a major block.
 11. Execute post-update actions.
 12. **Update the BPT**, and only then active globals.
+
+### Anchor emission, and the heartbeat
+
+Step 5 above decides whether the block sends an anchor. It does, if any of:
+
+- the block completes a major block;
+- the block produced synthetic messages;
+- the block updated an account other than the system ledger and the anchor
+  pool — the system ledger changes every block, so counting it would make the
+  test vacuous;
+- the block received an anchor from another partition;
+- **the block received a directory anchor and the heartbeat is due.**
+
+The last is the heartbeat, and it exists because the first four are not enough
+to keep a proof answerable. Every block moves the state tree root, including a
+block whose only content is a received directory anchor. A reader who queries
+at that moment gets a receipt terminating at a root no anchor is going to
+carry, and before Kourou that reader waited forever: the directory-anchor
+cascade died out, the network stopped, and nothing would ever put that root
+within reach. Measured on an idle network: the reader's root never bound.
+
+So from Kourou a partition anchors such a block anyway, which keeps the
+cascade alive and every root reachable. It is **not a setting**. It was
+`AnchorEmptyBlocks`, a network global defaulting to false, and a proof that
+only works on a busy network is not a proof anyone can rely on — an external
+reader does not control whether the network is busy.
+
+It is rate limited. `AnchorLedger.LastAnchorBlock` records where the last
+anchor went out, and the heartbeat fires only when the current block is more
+than `anchorHeartbeatSkip` (3) beyond it — at most one anchor every fourth
+block, rather than one on every block. Measured over 200 idle steps on one BVN:
+67 anchors uncapped, 34 at skip 3, 23 at skip 7. The cap governs anchors, not
+blocks: block production on an idle multi-BVN network is driven by the cascade
+as a whole and stays at roughly one per block interval either way.
+
+**The consequence, stated plainly: a Kourou network does not quiesce.** An idle
+network keeps producing blocks and anchoring at the heartbeat rate, forever.
+That was a deliberate property before Kourou (#3453, #3520) and is deliberately
+given up, because a proof that cannot be completed is worth less than an idle
+network that stops.
 
 ### What a stream logs
 

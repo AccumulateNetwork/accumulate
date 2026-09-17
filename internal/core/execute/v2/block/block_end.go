@@ -612,9 +612,38 @@ func (b *Block) shouldSendAnchor() bool {
 		return true
 	}
 
-	// Send an anchor if a directory anchor was received and the flag is set
-	return didAnchorDirectory && b.Executor.globals().Active.Globals.AnchorEmptyBlocks
+	if !didAnchorDirectory {
+		return false
+	}
+
+	// The heartbeat. A block whose only content is a received directory anchor
+	// still moves the BPT root, and a reader who queries at that moment gets a
+	// receipt against a root nothing will ever carry -- so the second call of an
+	// account proof cannot be answered until someone happens to transact
+	// (#4277). Anchoring these blocks keeps the directory-anchor cascade
+	// running, which keeps every root reachable.
+	//
+	// From Kourou this is unconditional -- it was AnchorEmptyBlocks, a network
+	// global, default false, and a proof that only works on a busy network is
+	// not a proof anyone can rely on. But it is rate limited: anchoring every
+	// such block would run an idle network at full block rate forever, so at
+	// most one anchor per anchorHeartbeatSkip+1 blocks.
+	if b.Executor.globals().Active.ExecutorVersion.V2KourouEnabled() {
+		var anchorLedger *protocol.AnchorLedger
+		err := b.Batch.Account(b.Executor.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
+		if err != nil {
+			b.Executor.logger.Error("Failed to load the anchor ledger", "error", err)
+			return true // Anchoring too often beats not being able to prove
+		}
+		return b.Index > anchorLedger.LastAnchorBlock+anchorHeartbeatSkip
+	}
+	return b.Executor.globals().Active.Globals.AnchorEmptyBlocks
 }
+
+// anchorHeartbeatSkip is how many blocks the heartbeat may skip before
+// anchoring anyway: three, so an idle network anchors on at most every fourth
+// block instead of every one.
+const anchorHeartbeatSkip = 3
 
 func (x *Executor) prepareAnchor(block *Block) error {
 	// Determine if an anchor should be sent
@@ -625,6 +654,12 @@ func (x *Executor) prepareAnchor(block *Block) error {
 	// Update the anchor ledger
 	anchorLedger, err := database.UpdateAccount(block.Batch, x.Describe.AnchorPool(), func(ledger *protocol.AnchorLedger) error {
 		ledger.MinorBlockSequenceNumber++
+
+		// Where the heartbeat counts from (#4277)
+		if x.globals().Active.ExecutorVersion.V2KourouEnabled() {
+			ledger.LastAnchorBlock = block.Index
+		}
+
 		if block.State.MajorBlock == nil {
 			return nil
 		}

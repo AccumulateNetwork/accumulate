@@ -77,6 +77,11 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 	if len(blocks) > 0 {
 		x.logger.Info("Seeded the synthetic cache from the chains", "module", "synthetic", "from", from, "to", current-1, "blocks", len(blocks), "receipted", len(receipts))
 	}
+	err = x.seedProducedAnchors(batch, oldest)
+	if err != nil {
+		return errors.UnknownError.WithFormat("seed produced anchors: %w", err)
+	}
+
 	if len(receipts) == 0 {
 		return nil
 	}
@@ -276,4 +281,65 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 		}
 	}
 	return blk, nil
+}
+
+// seedProducedAnchors puts this partition's own anchors back in the cache at
+// start, down to the horizon (#4277).
+//
+// The anchor sequence chain is the durable record of what this partition
+// produced: entry i is the anchor with sequence number i+1. The cache that
+// answers for them is memory, filled a block at a time as each anchor is
+// produced, so without this a restart can serve nothing it produced before —
+// and a destination that is behind on the stream asks, is refused, and stays
+// behind, because there is no other place the anchor can come from. The
+// heartbeat makes that reachable: it produces enough anchors that a
+// destination is routinely behind by more than a restart can re-send.
+func (x *Executor) seedProducedAnchors(batch *database.Batch, oldest uint64) error {
+	record := batch.Account(x.Describe.AnchorPool()).AnchorSequenceChain()
+	head, err := record.Head().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load anchor sequence chain head: %w", err)
+	}
+	if head.Count == 0 {
+		return nil
+	}
+	chain, err := record.Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load anchor sequence chain: %w", err)
+	}
+
+	// Newest first, and stop at the horizon: an anchor for a block the cache
+	// no longer covers is not one this partition answers for.
+	var anchors []synthcache.SeededAnchor
+	for i := head.Count - 1; i >= 0; i-- {
+		hash, err := chain.Entry(i)
+		if err != nil {
+			return errors.UnknownError.WithFormat("load anchor sequence chain entry %d: %w", i, err)
+		}
+		var txn *messaging.TransactionMessage
+		err = batch.Message2(hash).Main().GetAs(&txn)
+		switch {
+		case err == nil:
+		case errors.Is(err, errors.NotFound):
+			continue // pruned; nothing to answer with
+		default:
+			return errors.UnknownError.WithFormat("load anchor %d: %w", i+1, err)
+		}
+		body, ok := txn.Transaction.Body.(protocol.AnchorBody)
+		if !ok {
+			continue
+		}
+		block := body.GetPartitionAnchor().MinorBlockIndex
+		if block < oldest {
+			break
+		}
+		anchors = append(anchors, synthcache.SeededAnchor{Number: uint64(i) + 1, Block: block, Txn: txn.Transaction})
+	}
+	if len(anchors) == 0 {
+		return nil
+	}
+	x.synthCache().SeedAnchors(anchors)
+	x.logger.Info("Seeded produced anchors from the sequence chain", "module", "synthetic",
+		"count", len(anchors), "from", anchors[len(anchors)-1].Number, "to", anchors[0].Number)
+	return nil
 }

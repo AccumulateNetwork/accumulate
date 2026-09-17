@@ -329,12 +329,15 @@ func nudge(t *testing.T, sim *Sim, lite *url.URL, liteKey []byte, ts uint64) {
 	sim.StepUntil(Txn(st.TxID).Succeeds())
 }
 
-// The residual, stated as a test rather than left to be discovered. On a
-// network that has genuinely stopped, the most recent root is not yet provable:
-// the bpt chain records a block's root in the following block, and there is no
-// following block. It is not permanent -- anything at all fixes it, which is
-// what the transaction is for (#4276).
-func TestTwoCallProof_QuiescentTailNeedsANudge(t *testing.T) {
+// There is no quiescent tail from Kourou, and this is the test that says so.
+//
+// Before the heartbeat, a network that had genuinely stopped left its most
+// recent root unprovable -- the bpt chain records a block's root in the
+// FOLLOWING block, and there was no following block -- so a reader had to
+// submit a transaction to get an answer (#4276). From Kourou the network keeps
+// anchoring, so the following block always arrives and the reader is answered
+// without transacting (#4277).
+func TestTwoCallProof_NoQuiescentTail(t *testing.T) {
 	sim, lite, liteKey := twoCallSim(t)
 	other := acctesting.AcmeLiteAddressStdPriv(acctesting.GenerateKey("tc-tail-other")).RootIdentity().JoinPath(ACME)
 
@@ -355,24 +358,18 @@ func TestTwoCallProof_QuiescentTailNeedsANudge(t *testing.T) {
 		return r
 	}
 
-	// Stepping a stopped network changes nothing, however long you wait
-	for i := 0; i < 100; i++ {
-		sim.Step()
-	}
-	require.False(t, ask().Anchored, "the last root of a stopped network is not yet provable")
-
-	// One transaction, and it is
-	nudge(t, sim, lite, liteKey, 500)
+	// No transaction, and no traffic -- just time
 	var rec *apiv3.AnchorReceiptRecord
-	for i := 0; i < 60 && (rec == nil || !rec.Anchored); i++ {
+	for i := 0; i < 100 && (rec == nil || !rec.Anchored); i++ {
 		sim.Step()
 		rec = ask()
 	}
-	require.True(t, rec.Anchored, "a nudge must make the tail provable")
+	require.True(t, rec.Anchored,
+		"a reader on an idle network must be answered without having to transact")
 	joined, err := first.Receipt.Receipt.Combine(rec.Receipt)
 	require.NoError(t, err)
 	require.True(t, joined.Validate(nil))
-	t.Logf("tail bound after a nudge, at DN block %d", rec.DirectoryBlock)
+	t.Logf("idle network, no transaction: bound at DN block %d", rec.DirectoryBlock)
 }
 
 // Below Kourou the bpt chain is written but never anchored, so there is no

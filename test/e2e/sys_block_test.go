@@ -86,13 +86,18 @@ func TestBptChain(t *testing.T) {
 	})
 }
 
+// Quiescence is a PRE-KOUROU property. From Kourou a partition anchors every
+// block that received a directory anchor, so the directory-anchor cascade is
+// self-sustaining and an idle network keeps producing blocks -- deliberately,
+// so that a reader on a quiet network can always complete an account proof
+// (#4277). TestPerpetual covers the Kourou behaviour.
 func TestQuiescence(t *testing.T) {
 	// Tests https://gitlab.com/accumulatenetwork/accumulate/-/issues/3453?work_item_iid=3520
 
 	// Initialize
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
+		simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2Jiuquan),
 	)
 
 	// Give the network time to stabilize
