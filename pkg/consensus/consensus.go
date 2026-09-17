@@ -791,6 +791,17 @@ func (n *Node) ExecutionLag() int {
 	return int(c - e)
 }
 
+// MaxExecutionLag is how many committed leader groups the executor may fall
+// behind before execution is lagging consensus (consensus spec, invariant 9):
+// the configured value, or primary.DefaultMaxExecutionLag. The healing
+// requester compares against the same number the primary does (#4284).
+func (n *Node) MaxExecutionLag() int {
+	if n.config.MaxExecutionLag > 0 {
+		return n.config.MaxExecutionLag
+	}
+	return primary.DefaultMaxExecutionLag
+}
+
 // Committee returns the current committee.
 func (n *Node) Committee() *types.Committee {
 	return n.committee

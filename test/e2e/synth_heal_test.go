@@ -32,18 +32,20 @@ import (
 // receiver-pull healing (#4064) recovers it: the destination detects the gap,
 // pulls the missing message from the source partition, resubmits it, and the
 // pending tail drains via the normal cascade.
-func TestSyntheticHealing(t *testing.T) {
-	// PORTED FROM MAIN, CURRENTLY FAILING ON THIS BRANCH.
-	//
-	// These tests were written against main's healing implementation and pass
-	// there. Run unchanged against the DAG-BFT branch they fail, which is the
-	// finding: this branch's healing does not do what main's does. They are
-	// kept, and skipped, as the acceptance criteria for the port (#4134) —
-	// un-skipping them is what "ported" means.
-	//
-	// Fails with: "expected synthetic healing to fire" — the heal count stays
-	// at zero, so synthetic healing never engages in this scenario.
+func TestSyntheticHealing(t *testing.T) { testSyntheticHealing(t) }
 
+// TestSyntheticHealing_OneBehindConsensus is the same wedge on a node that
+// stands where a working node stands: one committed group behind at the
+// block-begin hook where healing runs. The requester used to refuse any lag
+// above zero, so in production it never asked; the simulator never told it
+// about lag, so this scenario passed here and failed everywhere else (#4284).
+func TestSyntheticHealing_OneBehindConsensus(t *testing.T) {
+	testSyntheticHealing(t, simulator.WithExecutionLag(func() int { return 1 }))
+}
+
+// testSyntheticHealing is the wedge and its recovery; extra says what else
+// the node under test is told about itself.
+func testSyntheticHealing(t *testing.T, extra ...simulator.Option) {
 	var timestamp uint64
 
 	// Drop the first synthetic deposit exactly once. Every later deposit's
@@ -53,7 +55,7 @@ func TestSyntheticHealing(t *testing.T) {
 
 	globals := new(core.GlobalValues)
 	globals.ExecutorVersion = ExecutorVersionLatest
-	sim := NewSim(t,
+	sim := NewSim(t, append([]simulator.Option{
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.GenesisWith(GenesisTime, globals),
 		simulator.SkipProposalCheck(), // FIXME should not be necessary
@@ -93,7 +95,7 @@ func TestSyntheticHealing(t *testing.T) {
 			}
 			return true, nil
 		}),
-	)
+	}, extra...)...)
 
 	healsBefore := gatherHealCount(t)
 

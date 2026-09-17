@@ -54,6 +54,7 @@ type simFactory struct {
 	ignoreCommitResults         bool
 	deterministic               bool
 	dropInitialAnchor           bool
+	executionLag                func() int // what the conductor is told its executor lags consensus by; nil is caught up
 	executionShards             int
 	executionShardsPerNode      []int
 	interceptDispatchedMessages DispatchInterceptor
@@ -643,6 +644,15 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 		// Setting Intercept is not necessary because the dispatcher will
 		// intercept messages
+	}
+	// The daemon wires the consensus node's execution lag into the conductor
+	// (run/dagbft.go). The simulator has no DAG-BFT pipeline to measure, so
+	// without this a test never exercises the requester's lag guard -- which
+	// is how a guard that refused every request in production passed every
+	// test (#4284). A test that wants to stand where a working node stands,
+	// one behind at the block-begin hook, says so.
+	if f.executionLag != nil {
+		conductor.SetExecutionLagSource(f.executionLag, 0)
 	}
 	err := conductor.Start(f.getEventBus())
 	if err != nil {

@@ -96,6 +96,17 @@ func ExecutionShardsPerNode(counts ...int) Option {
 	})
 }
 
+// WithExecutionLag tells every conductor what its executor lags consensus by,
+// as the daemon does from the consensus node. A working node is one behind at
+// the block-begin hook where healing runs; a test of healing that does not
+// say so tests a guard that never fires (#4284).
+func WithExecutionLag(fn func() int) Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.executionLag = fn
+		return nil
+	})
+}
+
 // DropInitialAnchor drops anchors when they are initially submitted.
 func DropInitialAnchor() Option {
 	return optionFunc(func(opts *simFactory) error {

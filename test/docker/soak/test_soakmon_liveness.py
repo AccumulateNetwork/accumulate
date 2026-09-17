@@ -247,3 +247,50 @@ class DiskTests(unittest.TestCase):
 
     def test_empty_is_zero_not_a_crash(self):
         self.assertEqual(0, soakmon.disk_from({}, {}, 0)["avgMiB"])
+
+
+class DeliveryStallTest(unittest.TestCase):
+    """Block height is not liveness (#4285): a partition whose inbound
+    delivery has been red for STALL_SECS is stalled for the watchdogs even
+    while its height climbs."""
+
+    def setUp(self):
+        soakmon._DELIVERY_RED.clear()
+
+    def _flows(self, state):
+        return {"synthetic": {"BVN2": {"BVN3": {"sent": 100, "recv": 60, "deliv": 20,
+                                                "state": state, "note": "80 undelivered, delivery STALLED"}}}}
+
+    def _progress(self):
+        return {"BVN3": {"height": 10, "state": "live", "stalledFor": 0.0},
+                "BVN2": {"height": 10, "state": "live", "stalledFor": 0.0}}
+
+    def test_red_inbound_flow_marks_the_destination_stalled(self):
+        pg = self._progress()
+        red = soakmon.stalled_by_delivery(self._flows("red"), 1000.0)
+        soakmon.apply_delivery_stall(pg, red)
+        self.assertEqual("live", pg["BVN3"]["state"], "the first red reading starts the clock")
+
+        red = soakmon.stalled_by_delivery(self._flows("red"), 1000.0 + soakmon.STALL_SECS + 1)
+        soakmon.apply_delivery_stall(pg, red)
+        self.assertEqual("stalled", pg["BVN3"]["state"])
+        self.assertEqual("delivery", pg["BVN3"]["stalledBy"])
+        self.assertEqual("live", pg["BVN2"]["state"], "the source of the flow is not the one stalled")
+
+        # The reported case: height keeps climbing, delivery does not.
+        pg["BVN3"].update({"height": 50, "state": "live", "stalledFor": 0.0})
+        soakmon.apply_delivery_stall(pg, red)
+        self.assertEqual("stalled", pg["BVN3"]["state"], "block height is not liveness")
+        self.assertGreaterEqual(pg["BVN3"]["stalledFor"], soakmon.STALL_SECS)
+
+    def test_a_flow_going_green_clears_it(self):
+        soakmon.stalled_by_delivery(self._flows("red"), 1000.0)
+        red = soakmon.stalled_by_delivery(self._flows("ok"), 1000.0 + 60)
+        self.assertEqual({}, red)
+        pg = self._progress()
+        soakmon.apply_delivery_stall(pg, red)
+        self.assertEqual("live", pg["BVN3"]["state"])
+
+    def test_a_flow_that_never_sent_cannot_stall_anyone(self):
+        flows = {"synthetic": {"Directory": {"BVN3": {"sent": 0, "state": "red"}}}}
+        self.assertEqual({}, soakmon.stalled_by_delivery(flows, 1000.0))

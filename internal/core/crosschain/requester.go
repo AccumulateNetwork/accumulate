@@ -119,15 +119,20 @@ var mHealRequests = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
 	Subsystem: "conductor",
 	Name:      "heal_requests_total",
-	Help:      "Span requests by outcome: answered, not-yet (the span is in flight at the source), miss (the source's cache lacks the span), failed, lagging (not asked: this node's executor is behind consensus, so the span is in its own backlog, #4260)",
+	Help:      "Span requests by outcome: answered, not-yet (the span is in flight at the source), miss (the source's cache lacks the span and this node is caught up), lagging-miss (the source lacks it but this node is behind consensus, so it may be in its own backlog: asked again later, not a miss), failed, lagging (not asked: this node's executor is more than MaxExecutionLag behind consensus, #4260, #4284)",
 }, []string{"outcome", "destination", "source"})
 
-var mHealEntries = promauto.NewCounter(prometheus.CounterOpts{
+// An entryOutcome says what became of one entry an answer carried: whether it
+// filled a gap or was redundant. It is decided against the destination's own
+// position, so it is decided where that position is known (#4283).
+type entryOutcome func(number uint64) string
+
+var mHealEntries = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
 	Subsystem: "conductor",
 	Name:      "heal_entries_total",
-	Help:      "Synthetic entries received in answer to span requests",
-})
+	Help:      "Entries received in answer to span requests, by what became of them: applied (above the destination's delivered point and not already held, so the answer filled a gap) or not-required (at or below delivered, or already held, so the answer was redundant). A bare count of entries received cannot tell a repaired stream from a healer asking for what it already has, and cannot tell either from nothing to do (#4283)",
+}, []string{"outcome", "destination", "source"})
 
 // askedSpan is what the requester remembers about a span it asked for: the
 // block it asked at. One record per span, not per index — a span is up to
@@ -298,8 +303,8 @@ func (c *Conductor) requestGaps(ctx context.Context, batch *database.Batch, bloc
 			stream:    execute.StreamID{Ledger: c.Url(protocol.Synthetic), Source: source},
 			delivered: synth.Partition(source).Delivered,
 			what:      "synthetics",
-			ask: func(first, last uint64) (int, uint64, error) {
-				return c.requestSpan(ctx, ranger, source, first, last)
+			ask: func(first, last uint64, classify entryOutcome) (int, uint64, error) {
+				return c.requestSpan(ctx, ranger, source, first, last, classify)
 			},
 			healed: func(n int) {
 				if c.Heals != nil {
@@ -314,8 +319,8 @@ func (c *Conductor) requestGaps(ctx context.Context, batch *database.Batch, bloc
 			stream:    execute.StreamID{Ledger: c.Url(protocol.AnchorPool), Source: source},
 			delivered: anchors.Partition(source).Delivered,
 			what:      "anchors",
-			ask: func(first, last uint64) (int, uint64, error) {
-				return c.requestAnchorSpan(ctx, ranger, source, first, last)
+			ask: func(first, last uint64, classify entryOutcome) (int, uint64, error) {
+				return c.requestAnchorSpan(ctx, ranger, source, first, last, classify)
 			},
 			healed: func(n int) {
 				if c.Heals != nil {
@@ -355,8 +360,9 @@ type streamAsk struct {
 	stream    execute.StreamID
 	delivered uint64
 	what      string
-	ask       func(first, last uint64) (int, uint64, error)
-	healed    func(n int)
+	ask       func(first, last uint64, classify entryOutcome) (int, uint64, error)
+
+	healed func(n int)
 }
 
 // requestStream decides one stream's gaps from staging, asks for them, and
@@ -374,12 +380,13 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 	if c.requester.backedOff(backoff, blockIndex) {
 		return
 	}
-	// A node whose executor is behind consensus decides from a staging that
-	// is behind too: what it lacks is in its own unexecuted blocks. Asking a
-	// source for those buys NotFound -- released on the partition's Delivered
-	// -- and NotFound is a miss, and seven misses strand the stream (#4260).
-	// Nothing is lost by waiting: the backlog executes, and whatever is still
-	// missing after that is asked for then.
+	// A node whose executor is lagging consensus -- more than MaxExecutionLag
+	// groups behind, the node's one definition of lagging -- decides from a
+	// staging that is behind too: what it lacks is in its own unexecuted
+	// blocks, and nothing is lost by waiting for them to run (#4260). Within
+	// that window it asks; a real hole must be asked for or it is permanent,
+	// and a NotFound taken while behind is handled below as not-yet rather
+	// than as a miss (#4284).
 	if c.lagging() {
 		mHealRequests.WithLabelValues("lagging", c.Partition.ID, partitionLabel(source)).Inc()
 		return
@@ -393,13 +400,23 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 		if ctx.Err() != nil {
 			break
 		}
-		n, served, err := a.ask(span[0], span[1])
+		// What became of each entry is decided here, where the stream's
+		// delivered point and the stage are both in hand (#4283).
+		classify := func(number uint64) string {
+			if number <= a.delivered {
+				return "not-required" // already executed
+			}
+			if _, held := staged.IDOf(a.stream, number); held {
+				return "not-required" // already in the stage, just not run yet
+			}
+			return "applied"
+		}
+		n, served, err := a.ask(span[0], span[1], classify)
 		switch {
 		case err == nil:
 			asked++
 			c.requester.asked(a.stream, [2]uint64{span[0], served}, blockIndex)
 			mHealRequests.WithLabelValues("answered", c.Partition.ID, partitionLabel(source)).Inc()
-			mHealEntries.Add(float64(n))
 			if c.Heals != nil {
 				c.Heals.Requests.Add(1)
 			}
@@ -416,8 +433,22 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 			mHealRequests.WithLabelValues("not-yet", c.Partition.ID, partitionLabel(source)).Inc()
 			slog.InfoContext(ctx, "Missing "+a.what+" are still in flight at the source", "module", "conductor",
 				"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "error", err)
+		case errors.Is(err, errors.NotFound) && c.executionLagBlocks() > 0:
+			// The source does not hold the span, and this node's executor is
+			// behind consensus: the span may sit in its own committed,
+			// unexecuted blocks, released at the source on the partition's
+			// Delivered, which is ahead of this node (#4260). That is not
+			// evidence of a defect at the source. Remembered like an answer
+			// and asked again once the backlog has run; it does not count
+			// toward stranding, which is decided on misses taken while
+			// caught up (#4284).
+			c.requester.asked(a.stream, span, blockIndex)
+			mHealRequests.WithLabelValues("lagging-miss", c.Partition.ID, partitionLabel(source)).Inc()
+			slog.InfoContext(ctx, "Source does not hold missing "+a.what+" and this node is behind consensus; asking again after the backlog", "module", "conductor",
+				"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "lag", c.executionLagBlocks(), "error", err)
 		case errors.Is(err, errors.NotFound):
-			// The source's cache does not hold the span. Deterministic:
+			// The source's cache does not hold the span, and this node is
+			// caught up, so the span is not in its own backlog. Deterministic:
 			// asking again does not help. A miss is a defect at the source.
 			failed++
 			missed++
@@ -732,7 +763,7 @@ func sourceKey(u *url.URL) string { return strings.ToLower(u.String()) }
 // bundles within the envelope budget. The source may answer a prefix of the
 // span — what it has dispatched and is not still in flight — so the result
 // says how many entries were submitted and the last number among them.
-func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64) (int, uint64, error) {
+func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64, classify entryOutcome) (int, uint64, error) {
 	records, err := ranger.SequenceRange(ctx, source.JoinPath(protocol.Synthetic), c.Url(), first, last, private.SequenceOptions{})
 	if err != nil {
 		return 0, 0, errors.UnknownError.Wrap(err)
@@ -782,6 +813,7 @@ func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRang
 		if keySig == nil {
 			return 0, 0, errors.InvalidRecord.WithFormat("answer for %v→%v #%d is not signed", source, c.Url(), r.Sequence.Number)
 		}
+		mHealEntries.WithLabelValues(classify(r.Sequence.Number), c.Partition.ID, partitionLabel(source)).Inc()
 		var entry messaging.Message
 		if baikonur {
 			entry = &messaging.SyntheticMessage{Message: r.Sequence, Signature: keySig}
@@ -823,7 +855,7 @@ func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRang
 // message in it, so each copy records its signature (review 2026-09-06,
 // finding 9: one envelope per signature per record). The source may answer a
 // prefix; the number it served through is returned.
-func (c *Conductor) requestAnchorSpan(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64) (int, uint64, error) {
+func (c *Conductor) requestAnchorSpan(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64, classify entryOutcome) (int, uint64, error) {
 	records, err := c.anchorAnswers(ctx, ranger, source, first, last)
 	if err != nil {
 		return 0, 0, errors.UnknownError.Wrap(err)
@@ -851,6 +883,7 @@ func (c *Conductor) requestAnchorSpan(ctx context.Context, ranger private.Sequen
 		if len(sigs) == 0 {
 			return 0, 0, errors.InvalidRecord.WithFormat("answer for anchor %v→%v #%d is not signed", source, c.Url(), r.Sequence.Number)
 		}
+		mHealEntries.WithLabelValues(classify(r.Sequence.Number), c.Partition.ID, partitionLabel(source)).Inc()
 		var add []messaging.Message
 		n := 0
 		for _, sig := range sigs {

@@ -449,7 +449,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		return errors.InternalError.WithFormat("DAG-BFT service started without a consensus node")
 	}
 	synthCache.SetExecutionLagSource(node.ExecutionLag)
-	conductor.SetExecutionLagSource(node.ExecutionLag)
+	conductor.SetExecutionLagSource(node.ExecutionLag, node.MaxExecutionLag())
 
 	// Register cleanup
 	inst.cleanup("dagbft service", func(ctx context.Context) error {
