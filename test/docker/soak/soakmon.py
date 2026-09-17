@@ -1592,7 +1592,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <span class=mut id=rtgt>—</span><span class=sl>target</span>
         <b id=rsyn>—</b><span class=sl>synthetic</span>
         <b id=ranc>—</b><span class=sl>anchor</span>
-        <span class=mut id=rratio>—</span><span class=sl>syn/user</span>
+        <span class=mut id=rratio>—</span><span class=sl>synth+anchor share of total</span>
       </div>
       <div class=sub>Total Test Rates (whole run)</div>
       <div class=kv>
@@ -1600,6 +1600,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <b id=rauser>—</b><span class=sl>user</span>
         <span class=mut id=rasyn>—</span><span class=sl>synthetic</span>
         <span class=mut id=raanc>—</span><span class=sl>anchor</span>
+        <span class=mut id=rashare>—</span><span class=sl>synth+anchor share of total</span>
         <span class=cap id=raover></span>
       </div>
     </div>
@@ -1849,7 +1850,7 @@ async function tick(){
   $('ruser').textContent=(ru!=null)?ru.toFixed(2):'—';
   $('rsyn').textContent=(rs!=null)?rs.toFixed(2):'—';
   $('ranc').textContent=(ra!=null)?ra.toFixed(2):'—';
-  $('rratio').textContent=(rs!=null&&ru>0.01)?(rs/ru).toFixed(1)+'×':'—';
+  $('rratio').textContent=(ru!=null&&rs!=null&&ra!=null&&(ru+rs+ra)>0.01)?(100*(rs+ra)/(ru+rs+ra)).toFixed(0)+'%':'—';
   // Total now: what the network is actually processing, user plus the
   // synthetics and anchors the user load produces.
   const rt=(ru!=null&&rs!=null&&ra!=null)?ru+rs+ra:null;
@@ -1861,6 +1862,7 @@ async function tick(){
   $('rauser').textContent=num(ra_.userAvg);
   $('rasyn').textContent=num(ra_.synAvg);
   $('raanc').textContent=num(ra_.anchorAvg);
+  $('rashare').textContent=(ra_.totalAvg>0.01&&ra_.synAvg!=null&&ra_.anchorAvg!=null)?(100*(ra_.synAvg+ra_.anchorAvg)/ra_.totalAvg).toFixed(0)+'%':'—';
   $('raover').textContent=ra_.userOverSec?`over ${dur(ra_.userOverSec)} · produced counted for ${dur(ra_.producedOverSec||0)}`:'';
   spark($('spWedge'),deltas(hist,'wedges'),getComputedStyle(document.documentElement).getPropertyValue('--yel').trim());
   spark($('spHeal'),deltas(hist,'heals'),getComputedStyle(document.documentElement).getPropertyValue('--grn').trim());
