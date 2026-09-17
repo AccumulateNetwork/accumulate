@@ -267,21 +267,82 @@ func TestDAG_GarbageCollect(t *testing.T) {
 		}
 	}
 
-	assert.Equal(t, 44, d.Size()) // 11 rounds * 4 certs
+	// Nothing was committed, so the round advance alone bounded the DAG:
+	// rounds 7-10 remain (10 - 3 = 7), 4 rounds * 4 certs.
+	assert.Equal(t, 16, d.Size())
+	assert.Nil(t, d.GetRound(6))
+	assert.NotNil(t, d.GetRound(7))
 
-	// GC at round 8 should keep rounds 5-10 (8 - 3 = 5)
+	// A commit behind the round cutoff collects nothing more; a commit ahead
+	// of it moves the cutoff.
 	d.GarbageCollect(8)
-
-	// Should have rounds 5-10 = 6 rounds * 4 certs = 24 certs
-	assert.Equal(t, 24, d.Size())
-
-	// Verify old rounds are gone
-	assert.Nil(t, d.GetRound(0))
-	assert.Nil(t, d.GetRound(4))
-
-	// Verify new rounds still exist
-	assert.NotNil(t, d.GetRound(5))
+	assert.Equal(t, 16, d.Size())
+	d.GarbageCollect(12)
+	assert.Equal(t, 8, d.Size()) // rounds 9-10
+	assert.Nil(t, d.GetRound(8))
+	assert.NotNil(t, d.GetRound(9))
 	assert.NotNil(t, d.GetRound(10))
+}
+
+// insertRounds inserts a full round of certificates for rounds [from, to],
+// each round's certificates parented on the previous round's.
+func insertRounds(t *testing.T, d *dag.DAG, committee *types.Committee, privKeys []ed25519.PrivateKey, from, to types.Round, parents []types.CertificateDigest) []types.CertificateDigest {
+	for round := from; round <= to; round++ {
+		var next []types.CertificateDigest
+		for i := range privKeys {
+			cert := createTestCert(t, committee, privKeys, i, round, parents)
+			if round == 0 {
+				require.NoError(t, d.InsertGenesis(cert))
+			} else {
+				require.NoError(t, d.Insert(cert))
+			}
+			next = append(next, cert.Digest())
+		}
+		parents = next
+	}
+	return parents
+}
+
+// Rounds that advance without a commit — the executor halted, the network
+// went on — must not grow the DAG without bound: the round advance collects
+// what lies more than gcDepth rounds behind the latest round (#4239). The
+// uncommitted rounds it drops are counted, because a node that needs them
+// is stranded, not lagging.
+func TestDAG_GarbageCollectOnRoundAdvance(t *testing.T) {
+	committee, privKeys := makeTestCommittee(t, 4)
+	gcDepth := types.Round(10)
+	d := dag.NewDAG(gcDepth)
+
+	parents := insertRounds(t, d, committee, privKeys, 0, 10, nil)
+	d.GarbageCollect(10) // committed through round 10
+	require.Equal(t, 44, d.Size())
+
+	// The executor halts: 200 more rounds, no commits.
+	insertRounds(t, d, committee, privKeys, 11, 210, parents)
+
+	assert.Equal(t, int(gcDepth+1)*4, d.Size(), "the DAG holds gcDepth+1 rounds")
+	assert.Equal(t, 11, len(d.Rounds()))
+	assert.Nil(t, d.GetRound(199))
+	assert.NotNil(t, d.GetRound(200))
+	assert.NotNil(t, d.GetRound(210))
+	assert.Equal(t, types.Round(10), d.LastCommitRound(), "the round advance does not move the commit floor")
+	assert.Equal(t, types.Round(200-11), d.UncommittedRoundsDropped(), "rounds 11..199 were never committed")
+}
+
+// A healthy node commits within a few rounds of the frontier; the round
+// advance then collects only committed history, and nothing uncommitted.
+func TestDAG_RoundAdvanceKeepsUncommittedWithinDepth(t *testing.T) {
+	committee, privKeys := makeTestCommittee(t, 4)
+	d := dag.NewDAG(10)
+
+	parents := insertRounds(t, d, committee, privKeys, 0, 5, nil)
+	for round := types.Round(6); round <= 60; round++ {
+		parents = insertRounds(t, d, committee, privKeys, round, round, parents)
+		d.GarbageCollect(round - 2) // commits trail the frontier by two rounds
+	}
+	assert.Zero(t, d.UncommittedRoundsDropped())
+	assert.NotNil(t, d.GetRound(58), "the last committed round is retained")
+	assert.Equal(t, 11, len(d.Rounds()))
 }
 
 func TestDAG_Contains(t *testing.T) {
@@ -482,4 +543,32 @@ func TestDAG_EquivocationIsASentinel(t *testing.T) {
 	err := d.Insert(certB)
 	require.Error(t, err)
 	require.ErrorIs(t, err, dag.ErrEquivocation)
+}
+
+// The DAG answers "has a certified header named this batch?" so an author
+// never proposes a batch twice (consensus spec, invariant 7), and forgets the
+// answer with the rounds it garbage-collects.
+func TestDAG_HasCertifiedBatch(t *testing.T) {
+	committee, privKeys := makeTestCommittee(t, 4)
+	d := dag.NewDAG(2)
+
+	genesis := createTestCert(t, committee, privKeys, 0, 0, nil)
+	require.NoError(t, d.InsertGenesis(genesis))
+
+	batch := types.BatchDigest{1, 2, 3}
+	header := types.NewHeader(committee.Validators[1].PublicKey, 1, 0,
+		[]types.PayloadEntry{{Digest: batch, Worker: 0}}, []types.CertificateDigest{genesis.Digest()})
+	require.NoError(t, header.Sign(privKeys[1]))
+	cert := types.NewCertificate(header, nil, nil)
+	hd := header.Digest()
+	for i := 0; i < 3; i++ {
+		cert.AddSignature(uint16(i), ed25519.Sign(privKeys[i], hd[:]))
+	}
+
+	require.False(t, d.HasCertifiedBatch(batch), "nothing certified yet")
+	require.NoError(t, d.Insert(cert))
+	require.True(t, d.HasCertifiedBatch(batch), "a certified header names it")
+
+	d.GarbageCollect(10) // cutoff 8: round 1 is gone, and so is the answer
+	require.False(t, d.HasCertifiedBatch(batch))
 }

@@ -38,10 +38,11 @@ func runPos(t *testing.T, delivered uint64, hold ...uint64) *streamPosition {
 	t.Cleanup(batch.Discard)
 
 	s := stream{kind: streamSynthetic, ledger: protocol.PartitionUrl("BVN0").JoinPath(protocol.Synthetic), source: protocol.PartitionUrl("BVN0")}
+	st := execute.NewStaging().Begin()
 	for _, n := range hold {
-		require.NoError(t, execute.Hold(batch, s.id(), n, protocol.PartitionUrl("BVN0").WithTxID([32]byte{byte(n)})))
+		st.Hold(s.id(), n, &execute.Held{ID: protocol.PartitionUrl("BVN0").WithTxID([32]byte{byte(n)})})
 	}
-	return &streamPosition{stream: s, delivered: delivered, batch: batch}
+	return &streamPosition{stream: s, delivered: delivered, batch: batch, staging: st}
 }
 
 // arr builds arrivals, all admissible.

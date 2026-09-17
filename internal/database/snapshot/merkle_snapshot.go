@@ -39,10 +39,20 @@ func CollectChain(c *database.MerkleManager) (*Chain, error) {
 	s.Name = c.Name()
 	s.Type = c.Type()
 	s.MarkPower = uint64(c.MarkPower())
-	s.Head = head
+	s.Head = head.Copy()
+
+	// The snapshot's head carries the open mark set, as the chain's head did
+	// before #4234 moved it into the Tail records: the snapshot is restored
+	// by writing the head back, and its readers find the set there.
+	lastMark := head.Count &^ c.MarkMask()
+	if len(s.Head.HashList) == 0 && head.Count > lastMark {
+		s.Head.HashList, err = c.Entries(lastMark, head.Count)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load open mark set: %w", err)
+		}
+	}
 
 	// Collect the mark points
-	lastMark := head.Count &^ c.MarkMask()
 	for i := c.MarkFreq(); i <= lastMark; i += c.MarkFreq() {
 		state, err := c.States(uint64(i - 1)).Get()
 		switch {

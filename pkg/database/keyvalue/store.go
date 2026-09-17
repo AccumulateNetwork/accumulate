@@ -33,6 +33,11 @@ type RecordStore struct {
 }
 
 var _ database.Store = RecordStore{}
+var _ database.VersionStore = RecordStore{}
+
+// Version is zero: the store holds bytes, not batch bookkeeping. A first write
+// through the outermost batch therefore reads nothing.
+func (s RecordStore) Version(*record.Key) (int, error) { return 0, nil }
 
 // Unwrap returns the underlying store.
 func (s RecordStore) Unwrap() Store { return s.Store }

@@ -7,7 +7,6 @@
 package block
 
 import (
-	"bytes"
 	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
@@ -39,8 +38,8 @@ type bundle struct {
 	// after this one.
 	additional []messaging.Message
 
-	// state tracks transaction state objects.
-	state orderedMap[[32]byte, *chain.ProcessTransactionState]
+	// state holds each message's execution state, in execution order.
+	state bundleStates
 
 	// produced is other messages produced while processing the bundle.
 	produced []*ProducedMessage
@@ -56,6 +55,11 @@ type bundle struct {
 	// SHA-256 at CheckTx. Keyed by pointer: sharing requires being the same
 	// object in the same envelope, so the memo can never cross envelopes.
 	validatedLists map[*merkle.ReceiptList]bool
+
+	// recordedTxns are the transactions this bundle stored under their own
+	// hash. A wrapper recorded after one of them refers to it by hash instead
+	// of carrying the body again (storedForm).
+	recordedTxns map[[32]byte]bool
 
 	// stateOps defers the pending/delivered marks the same way (#4149):
 	// execution may be running in a shard goroutine, and a direct write to
@@ -78,6 +82,15 @@ func (d *bundle) listIsValid(list *merkle.ReceiptList) bool {
 	}
 	d.validatedLists[list] = v
 	return v
+}
+
+// markTransactionRecorded notes that the transaction is stored under its own
+// hash, by this bundle or before it.
+func (d *bundle) markTransactionRecorded(hash [32]byte) {
+	if d.recordedTxns == nil {
+		d.recordedTxns = map[[32]byte]bool{}
+	}
+	d.recordedTxns[hash] = true
 }
 
 func (d *bundle) markTransactionPending(txn *protocol.Transaction) {
@@ -173,7 +186,6 @@ func (b *Block) processMessages(batch *database.Batch, messages []messaging.Mess
 		d.batch = batch
 		d.pass = pass
 		d.messages = messages
-		d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
 
 		s, err := d.process()
 		if err != nil {
@@ -194,7 +206,12 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 	var statuses []*protocol.TransactionStatus
 	b := d.Block
 
+	// Every line below is Debug; nothing is built for it unless it is written
+	// (#4231).
 	for _, msg := range d.messages {
+		if !b.Executor.logger.Enabled(b.Context, slog.LevelDebug) {
+			break
+		}
 		if m, ok := msg.(*internal.PseudoSynthetic); ok {
 			msg = m.Message
 		}
@@ -219,7 +236,6 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 			kv = append(kv, "txn-type", msg.Transaction.Body.Type())
 
 		case *messaging.BlockAnchor:
-			fn = b.Executor.logger.Info
 			kv = append(kv, "module", "anchoring")
 
 		case *messaging.BadSyntheticMessage:
@@ -316,7 +332,8 @@ func (d *bundle) mergeIntoBlock() {
 	// order, and the block-end sort supplies the cross-producer order.
 	b.produced = append(b.produced, d.produced...)
 
-	// Update the block state (MUST BE ORDERED)
+	// Update the block state, in execution order: the chain segment
+	// bookkeeping downstream depends on appends folding in chain order.
 	_ = d.state.For(func(_ [32]byte, state *chain.ProcessTransactionState) error {
 		b.State.MergeTransaction(state)
 		return nil

@@ -171,6 +171,18 @@ MessageRecord[T messaging.Message]:
       marshal-as: reference
       pointer: true
       optional: true
+    # For synthetic messages served as part of a range - the Directory block
+    # the collection proof is provable under. Set beside SourceReceiptList.
+    - name: SourceAnchorBlock
+      type: uint
+      optional: true
+    # For a sequenced message that refers to a transaction (a credit payment,
+    # a signature request) - the transaction it refers to, so the requester
+    # does not have to query the source's history for it.
+    - name: Companion
+      type: messaging.Message
+      marshal-as: union
+      optional: true
 
     - name: LastBlockTime
       type: time

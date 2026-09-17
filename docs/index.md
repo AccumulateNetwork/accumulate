@@ -19,6 +19,7 @@ This index provides organized access to all Accumulate project documentation.
 ## Architecture
 
 - [Bootstrap Server Architecture](architecture/bootstrap-architecture.md) - Technical architecture of the bootstrap server system
+- [BVN Routing: Buckets](architecture/bvn-routing.md) - How accounts are assigned to BVNs, why bit prefixes gave three BVNs 50/25/25, and what buckets change (#4136)
 
 ## Design Documents
 

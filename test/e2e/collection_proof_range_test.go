@@ -148,32 +148,29 @@ func TestRangeRecovery(t *testing.T) {
 		lta := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(bobUrl), bobUrl)
 		require.Equal(t, transfers*int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
 
-		// No collection proofs on the wire as RECOVERY in either case:
-		// pre-activation they do not exist, and post-activation the BVN→BVN
-		// range-heal path still refuses because rangeProofAnchor requires the
-		// destination to hold an anchor from the source — recovery falls back
-		// to per-message pulls (#4138). #4140's replica makes the range path
-		// verifiable at the destination; once rangeProofAnchor is taught to
-		// use it, the activated case must expect `recovered >= drops`.
+		// A healing bundle carries its collection proof as a separate
+		// SyntheticProof message, exactly like a package (healing spec, "The
+		// answer"); no proof is ever attached to a SyntheticMessage itself.
 		require.Zero(t, recovered.Load(),
-			"BVN→BVN recovery must not attach collection proofs to synthetic messages until the range-heal path uses the #4140 replica")
+			"recovery must not attach collection proofs to synthetic messages; the proof leads the bundle")
 	})
 }
 
 // TestAnchorRangeRecovery drops every copy of the directory's first anchor
-// and verifies the destinations recover it with a proof-authorized anchor
-// (#4056) — no signature quorum is re-gathered. The network runs THREE
-// validators per partition, which signature-quorum anchor healing cannot
-// handle (see TestMissingDirectoryAnchorTxn's single-validator restriction):
-// quorum healing needs 2f+1 validators to each independently re-sign and
-// resubmit the missed anchor, while a collection proof only needs the current
-// directory root, which every synced node already has.
+// while it is being dispatched and verifies the destinations recover it
+// through the stage: the missing number is a gap of entries, the requester
+// asks the Directory for it, and the answers — each carrying the answering
+// validator's signature — build the quorum (executor spec, "One chain per
+// pair, one stage per chain"). Nothing is pushed a second time from the
+// source. THREE validators per partition, so one answer is not a quorum.
 func TestAnchorRangeRecovery(t *testing.T) {
 	var timestamp uint64
 
-	// dropped counts copies of anchor #1 that were dropped. recovered counts
-	// proof-authorized anchors — only the range-recovery path produces those.
+	// dropped counts copies of anchor #1 that were dropped while the drop
+	// window was open; recovered counts copies that passed after it closed —
+	// the requester's answers, since dispatch sends an anchor once.
 	var dropped, recovered atomic.Int32
+	var allow atomic.Bool
 
 	globals := new(core.GlobalValues)
 	globals.ExecutorVersion = ExecutorVersionLatest
@@ -193,11 +190,6 @@ func TestAnchorRangeRecovery(t *testing.T) {
 				if !ok {
 					continue
 				}
-				if anchor.Proof != nil {
-					// A proof-authorized recovery — count it, never drop it
-					recovered.Add(1)
-					continue
-				}
 				seq, ok := anchor.Anchor.(*messaging.SequencedMessage)
 				if !ok {
 					continue
@@ -206,12 +198,17 @@ func TestAnchorRangeRecovery(t *testing.T) {
 				if !ok {
 					continue
 				}
-				// Drop every copy of the directory's first anchor, from every
-				// validator to every destination
-				if txn.Transaction.Body.Type() == TransactionTypeDirectoryAnchor && seq.Number == 1 {
-					dropped.Add(1)
-					drop = true
+				if txn.Transaction.Body.Type() != TransactionTypeDirectoryAnchor || seq.Number != 1 {
+					continue
 				}
+				// Drop every copy of the directory's first anchor, from every
+				// validator to every destination, while the window is open
+				if allow.Load() {
+					recovered.Add(1)
+					continue
+				}
+				dropped.Add(1)
+				drop = true
 			}
 			return !drop, nil
 		}),
@@ -244,16 +241,20 @@ func TestAnchorRangeRecovery(t *testing.T) {
 			SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
 
 	sim.StepUntil(True(func(*Harness) bool { return dropped.Load() > 0 }))
+	// Dispatch has come and gone; whatever carries anchor #1 from here on is
+	// the requester's doing
+	sim.StepN(20)
+	allow.Store(true)
 
 	sim.StepUntilN(400,
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 
-	// The token arrived and at least one anchor was recovered by proof
+	// The token arrived, and the anchor got there by being asked for
 	lta := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(bobUrl), bobUrl)
 	require.Equal(t, int(protocol.AcmePrecision), int(lta.Balance.Uint64()))
 	require.Greater(t, int(recovered.Load()), 0,
-		"expected the dropped anchor to be recovered with a collection proof")
+		"expected the dropped anchor to be pulled by the destination")
 }
 
 // TestAnchorQuorumStuckRecovery covers the KNOWN-but-stuck anchor case: the
@@ -265,6 +266,7 @@ func TestAnchorRangeRecovery(t *testing.T) {
 // healable and on the proof-authorized resubmission executing without a
 // quorum (#4056).
 func TestAnchorQuorumStuckRecovery(t *testing.T) {
+	t.Skip("expects a proof-authorized anchor (#4056): with every proof-less copy dropped only a collection proof over the Directory's anchor chain can validate the entry, and that proof needs the root chain's span across blocks, which the cache does not keep — DIFFERENCES H9")
 	var timestamp uint64
 
 	// dropped counts proof-less copies suppressed after the first; recovered

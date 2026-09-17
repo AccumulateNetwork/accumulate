@@ -9,6 +9,7 @@ package adapter
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
 	"log/slog"
 	"os"
 	"strings"
@@ -17,6 +18,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -202,6 +204,22 @@ func (b *ExecutorBridge) SetValidators(validators []ValidatorInfo, version uint6
 // It extracts transactions from batches, converts them to envelopes,
 // and calls the executor to process them.
 func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) ([32]byte, error) {
+	// Wall time from the certificate's hand-over to the executor's commit.
+	// This is the histogram the soak's acceptance criteria read seconds per
+	// block from; it was declared and never observed (PLAN, S0).
+	start := time.Now()
+	defer func() {
+		metrics.BlockProductionSeconds.WithLabelValues(b.partitionID).Observe(time.Since(start).Seconds())
+	}()
+	// Each phase is timed on its own (#4257): a block's second is begin,
+	// unmarshal, process, close, hash and commit, and which of them grew is
+	// the question every throughput review has had to answer by sampling
+	// goroutines.
+	phase := func(name string, since time.Time) {
+		metrics.BlockPhaseSeconds.WithLabelValues(b.partitionID, name).Observe(time.Since(since).Seconds())
+	}
+	t := time.Now()
+
 	// Create executor block params
 	// Note: We don't have CometBFT CommitInfo/Evidence, so we leave them nil
 	execParams := execute.BlockParams{
@@ -212,11 +230,26 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		// CommitInfo and Evidence are CometBFT-specific, not needed for DAG-BFT
 	}
 
+	// Every batch must be in hand before a block is begun. CollectBatches
+	// guarantees a complete set before a block is produced; a nil here
+	// means that invariant broke upstream, and executing a certificate
+	// without one of its batches silently diverges this node's state from
+	// its peers (#4116/#4119) -- fail the block instead. Before Begin, not
+	// after: refusing after Begin left the block's batch open, pinning its
+	// version of the store for the life of the process (#4279).
+	for _, batch := range params.Batches {
+		if batch == nil {
+			return [32]byte{}, fmt.Errorf("block %d: missing batch in certificate for round %d", params.Index, params.LeaderRound)
+		}
+	}
+
 	// Begin block
 	block, err := b.executor.Begin(execParams)
 	if err != nil {
 		return [32]byte{}, fmt.Errorf("begin block: %w", err)
 	}
+	phase("begin", t)
+	t = time.Now()
 
 	// Process transactions from all batches. Batches arrive in the
 	// certificate's canonical payload order and MUST be executed in that
@@ -239,14 +272,6 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	}
 	var origins []origin
 	for _, batch := range params.Batches {
-		if batch == nil {
-			// CollectBatches guarantees a complete set before a block is
-			// produced. A nil here means that invariant broke upstream, and
-			// executing a certificate without one of its batches silently
-			// diverges this node's state from its peers (#4116/#4119) — fail
-			// the block instead.
-			return [32]byte{}, fmt.Errorf("block %d: missing batch in certificate for round %d", params.Index, params.LeaderRound)
-		}
 		digest := batch.Digest()
 		if txTraceEnabled {
 			slog.Info("TX executing", "batch", digest.String()[:12],
@@ -316,6 +341,8 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		txCount++
 	}
 	if pb, ok := block.(execute.ParallelBlock); ok {
+		phase("unmarshal", t)
+		t = time.Now()
 		for j, r := range pb.ProcessAll(envelopes) {
 			if r.Shard >= 0 {
 				shardedCount++
@@ -337,7 +364,16 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	// One line per block that carried anything, so "what reached execution"
 	// can be compared against "what was submitted" without grepping. Silent
 	// when a block is empty, which is most of them on an idle network.
+	// Exported as well as logged: the log answers this for one block to
+	// someone grepping, the counters answer it for the run to anything
+	// watching (#4132, and the soak board that could not show it).
 	if arrived > 0 {
+		m := metrics.HandoffTotal.MustCurryWith(prometheus.Labels{"partition": b.partitionID})
+		m.WithLabelValues("arrived").Add(float64(arrived))
+		m.WithLabelValues("executed").Add(float64(txCount))
+		m.WithLabelValues("unmarshal-failed").Add(float64(unmarshalFailed))
+		m.WithLabelValues("process-failed").Add(float64(processFailed))
+		m.WithLabelValues("status-failed").Add(float64(statusFailed))
 		slog.Info("Block execution accounting",
 			"block", params.Index,
 			"round", params.LeaderRound,
@@ -353,12 +389,16 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	}
 
 	// Close block
+	phase("process", t)
+	t = time.Now()
 	state, err := block.Close()
 	if err != nil {
 		return [32]byte{}, fmt.Errorf("close block: %w", err)
 	}
 
 	// Get block hash
+	phase("close", t)
+	t = time.Now()
 	hash, err := state.Hash()
 	if err != nil {
 		state.Discard()
@@ -366,9 +406,12 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	}
 
 	// Commit changes
+	phase("hash", t)
+	t = time.Now()
 	if err := state.Commit(); err != nil {
 		return [32]byte{}, fmt.Errorf("commit block: %w", err)
 	}
+	phase("commit", t)
 
 	// Update our tracking. DidCompleteMajorBlock is recorded here because the
 	// closed block state is the only thing that knows, and it does not outlive

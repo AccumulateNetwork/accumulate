@@ -62,6 +62,25 @@ go test 2/2:
   - export RECORD_FAILURE="${PWD}/failures"
   - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags no_mmap ./internal/util/indexing
 
+go test race (sharded):
+  # The shard-equivalence gates under the race detector (#4149). Execution
+  # shards are a parallelism choice that must not change the result; these
+  # tests run one network with nodes at different shard counts and let
+  # consensus compare every block. Nothing in the main job runs the parallel
+  # lane under -race, and the data race #4149 found (Batch.nextChildId) was
+  # invisible without it.
+  extends: .go test
+  variables:
+    GOMODCACHE: ''
+    GOLANGCI_LINT_CACHE: ''
+    ACC_ASSERT_IDENTITY_BOUNDARY: '1'
+  artifacts:
+    paths:
+      - failures/*
+  script:
+  - export RECORD_FAILURE="${PWD}/failures"
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -race -timeout 30m -tags testnet -run 'TestShardCountDoesNotChangeBlockHash|TestShardEquivalence' ./test/e2e/
+
 .go test x:
   # Full devnet validation test
   extends: .go test

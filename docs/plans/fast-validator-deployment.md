@@ -1,3 +1,5 @@
+**Superseded 2026-09-06.** Paul: snapshots are not the sync mechanism; the code this plan describes (`internal/fastsync`, the sequencer's snapshot, major-header, minor-root and partition-root ranges, `pkg/consensus/snapshot`) was removed. Kept for the record; see docs/spec/PLAN.md, E11.
+
 # Fast validator deployment — header-first sync with account-state proofs
 
 Status: design reviewed with Paul (2026-07-12), issue #4058. Decisions: trust

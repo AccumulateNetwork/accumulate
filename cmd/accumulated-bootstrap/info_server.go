@@ -693,7 +693,9 @@ func (s *InfoServer) handlePeersByPartition(w http.ResponseWriter, r *http.Reque
 
 	start := time.Now()
 	defer func() {
-		s.metrics.RecordHTTPRequest("/peers/"+partition, http.StatusOK, time.Since(start))
+		// The route, not the path: a label per requested partition name is a
+		// series per name any caller mints (#4246).
+		s.metrics.RecordHTTPRequest("/peers/{partition}", http.StatusOK, time.Since(start))
 	}()
 
 	// Get peers from partition tracker

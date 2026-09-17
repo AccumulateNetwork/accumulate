@@ -30,6 +30,8 @@ type BadSyntheticMessage struct {
 	Message   Message                    `json:"message,omitempty" form:"message" query:"message" validate:"required"`
 	Signature protocol.KeySignature      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	// Delivered is the sender's Delivered on the destination's synthetic stream to the sender; the destination may drop what it holds for the sender at or below it.
+	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
 	extraData []byte
 }
 
@@ -38,7 +40,9 @@ type BlockAnchor struct {
 	Signature protocol.KeySignature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Anchor    Message               `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
 	// Proof authorizes a healed anchor with a collection proof under a known directory root instead of a validator signature quorum (#4056).
-	Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof"`
+	Proof *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof"`
+	// Delivered is the sender's Delivered on the destination's anchor stream to the sender; the destination may drop the anchors it produced at or below it from its cache.
+	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered"`
 	extraData []byte
 }
 
@@ -147,6 +151,8 @@ type SynthFields struct {
 	Message   Message                    `json:"message,omitempty" form:"message" query:"message" validate:"required"`
 	Signature protocol.KeySignature      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	// Delivered is the sender's Delivered on the destination's synthetic stream to the sender; the destination may drop what it holds for the sender at or below it.
+	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
 }
 
 type SyntheticMessage struct {
@@ -154,12 +160,16 @@ type SyntheticMessage struct {
 	Message   Message                    `json:"message,omitempty" form:"message" query:"message" validate:"required"`
 	Signature protocol.KeySignature      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	// Delivered is the sender's Delivered on the destination's synthetic stream to the sender; the destination may drop what it holds for the sender at or below it.
+	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
 	extraData []byte
 }
 
 type SyntheticProof struct {
 	fieldsSet []bool
 	Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	// Delivered is the sender's Delivered on the destination's synthetic stream to the sender; the destination may drop what it holds for the sender at or below it.
+	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
 	extraData []byte
 }
 
@@ -207,6 +217,7 @@ func (v *BadSyntheticMessage) Copy() *BadSyntheticMessage {
 	if v.Proof != nil {
 		u.Proof = (v.Proof).Copy()
 	}
+	u.Delivered = v.Delivered
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -229,6 +240,7 @@ func (v *BlockAnchor) Copy() *BlockAnchor {
 	if v.Proof != nil {
 		u.Proof = (v.Proof).Copy()
 	}
+	u.Delivered = v.Delivered
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -490,6 +502,7 @@ func (v *SynthFields) Copy() *SynthFields {
 	if v.Proof != nil {
 		u.Proof = (v.Proof).Copy()
 	}
+	u.Delivered = v.Delivered
 
 	return u
 }
@@ -508,6 +521,7 @@ func (v *SyntheticMessage) Copy() *SyntheticMessage {
 	if v.Proof != nil {
 		u.Proof = (v.Proof).Copy()
 	}
+	u.Delivered = v.Delivered
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -524,6 +538,7 @@ func (v *SyntheticProof) Copy() *SyntheticProof {
 	if v.Proof != nil {
 		u.Proof = (v.Proof).Copy()
 	}
+	u.Delivered = v.Delivered
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -565,6 +580,9 @@ func (v *BadSyntheticMessage) Equal(u *BadSyntheticMessage) bool {
 	case !((v.Proof).Equal(u.Proof)):
 		return false
 	}
+	if !(v.Delivered == u.Delivered) {
+		return false
+	}
 
 	return true
 }
@@ -582,6 +600,9 @@ func (v *BlockAnchor) Equal(u *BlockAnchor) bool {
 	case v.Proof == nil || u.Proof == nil:
 		return false
 	case !((v.Proof).Equal(u.Proof)):
+		return false
+	}
+	if !(v.Delivered == u.Delivered) {
 		return false
 	}
 
@@ -845,6 +866,9 @@ func (v *SynthFields) Equal(u *SynthFields) bool {
 	case !((v.Proof).Equal(u.Proof)):
 		return false
 	}
+	if !(v.Delivered == u.Delivered) {
+		return false
+	}
 
 	return true
 }
@@ -864,6 +888,9 @@ func (v *SyntheticMessage) Equal(u *SyntheticMessage) bool {
 	case !((v.Proof).Equal(u.Proof)):
 		return false
 	}
+	if !(v.Delivered == u.Delivered) {
+		return false
+	}
 
 	return true
 }
@@ -875,6 +902,9 @@ func (v *SyntheticProof) Equal(u *SyntheticProof) bool {
 	case v.Proof == nil || u.Proof == nil:
 		return false
 	case !((v.Proof).Equal(u.Proof)):
+		return false
+	}
+	if !(v.Delivered == u.Delivered) {
 		return false
 	}
 
@@ -899,6 +929,7 @@ var fieldNames_BadSyntheticMessage = []string{
 	2: "Message",
 	3: "Signature",
 	4: "Proof",
+	5: "Delivered",
 }
 
 func (v *BadSyntheticMessage) MarshalBinary() ([]byte, error) {
@@ -920,6 +951,9 @@ func (v *BadSyntheticMessage) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Proof == nil) {
 		writer.WriteValue(4, v.Proof.MarshalBinary)
+	}
+	if !(v.Delivered == 0) {
+		writer.WriteUint(5, v.Delivered)
 	}
 
 	_, _, err := writer.Reset(fieldNames_BadSyntheticMessage)
@@ -955,6 +989,11 @@ func (v *BadSyntheticMessage) IsValid() error {
 	} else if v.Proof == nil {
 		errs = append(errs, "field Proof is not set")
 	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Delivered is missing")
+	} else if v.Delivered == 0 {
+		errs = append(errs, "field Delivered is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -971,6 +1010,7 @@ var fieldNames_BlockAnchor = []string{
 	2: "Signature",
 	3: "Anchor",
 	4: "Proof",
+	5: "Delivered",
 }
 
 func (v *BlockAnchor) MarshalBinary() ([]byte, error) {
@@ -992,6 +1032,9 @@ func (v *BlockAnchor) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Proof == nil) {
 		writer.WriteValue(4, v.Proof.MarshalBinary)
+	}
+	if !(v.Delivered == 0) {
+		writer.WriteUint(5, v.Delivered)
 	}
 
 	_, _, err := writer.Reset(fieldNames_BlockAnchor)
@@ -1806,6 +1849,7 @@ var fieldNames_SyntheticMessage = []string{
 	2: "Message",
 	3: "Signature",
 	4: "Proof",
+	5: "Delivered",
 }
 
 func (v *SyntheticMessage) MarshalBinary() ([]byte, error) {
@@ -1827,6 +1871,9 @@ func (v *SyntheticMessage) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Proof == nil) {
 		writer.WriteValue(4, v.Proof.MarshalBinary)
+	}
+	if !(v.Delivered == 0) {
+		writer.WriteUint(5, v.Delivered)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticMessage)
@@ -1862,6 +1909,11 @@ func (v *SyntheticMessage) IsValid() error {
 	} else if v.Proof == nil {
 		errs = append(errs, "field Proof is not set")
 	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Delivered is missing")
+	} else if v.Delivered == 0 {
+		errs = append(errs, "field Delivered is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -1876,6 +1928,7 @@ func (v *SyntheticMessage) IsValid() error {
 var fieldNames_SyntheticProof = []string{
 	1: "Type",
 	2: "Proof",
+	3: "Delivered",
 }
 
 func (v *SyntheticProof) MarshalBinary() ([]byte, error) {
@@ -1891,6 +1944,9 @@ func (v *SyntheticProof) MarshalBinary() ([]byte, error) {
 	writer.WriteEnum(1, v.Type())
 	if !(v.Proof == nil) {
 		writer.WriteValue(2, v.Proof.MarshalBinary)
+	}
+	if !(v.Delivered == 0) {
+		writer.WriteUint(3, v.Delivered)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticProof)
@@ -1915,6 +1971,11 @@ func (v *SyntheticProof) IsValid() error {
 		errs = append(errs, "field Proof is missing")
 	} else if v.Proof == nil {
 		errs = append(errs, "field Proof is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Delivered is missing")
+	} else if v.Delivered == 0 {
+		errs = append(errs, "field Delivered is not set")
 	}
 
 	switch len(errs) {
@@ -2017,6 +2078,9 @@ func (v *BadSyntheticMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error
 	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Proof = x
 	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.Delivered = x
+	}
 
 	seen, err := reader.Reset(fieldNames_BadSyntheticMessage)
 	if err != nil {
@@ -2065,6 +2129,9 @@ func (v *BlockAnchor) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	})
 	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Proof = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.Delivered = x
 	}
 
 	seen, err := reader.Reset(fieldNames_BlockAnchor)
@@ -2575,6 +2642,9 @@ func (v *SyntheticMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Proof = x
 	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.Delivered = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticMessage)
 	if err != nil {
@@ -2609,6 +2679,9 @@ func (v *SyntheticProof) UnmarshalBinaryFrom(rd io.Reader) error {
 func (v *SyntheticProof) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Proof = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Delivered = x
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticProof)
@@ -2665,6 +2738,7 @@ func init() {
 		encoding.NewTypeField("message", "Message"),
 		encoding.NewTypeField("signature", "protocol.KeySignature"),
 		encoding.NewTypeField("proof", "protocol.AnnotatedReceipt"),
+		encoding.NewTypeField("delivered", "uint64"),
 	}, "BadSyntheticMessage", "badSyntheticMessage")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -2672,6 +2746,7 @@ func init() {
 		encoding.NewTypeField("signature", "protocol.KeySignature"),
 		encoding.NewTypeField("anchor", "Message"),
 		encoding.NewTypeField("proof", "protocol.AnnotatedReceipt"),
+		encoding.NewTypeField("delivered", "uint64"),
 	}, "BlockAnchor", "blockAnchor")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -2753,6 +2828,7 @@ func init() {
 		encoding.NewTypeField("message", "Message"),
 		encoding.NewTypeField("signature", "protocol.KeySignature"),
 		encoding.NewTypeField("proof", "protocol.AnnotatedReceipt"),
+		encoding.NewTypeField("delivered", "uint64"),
 	}, "SynthFields", "synthFields")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -2760,11 +2836,13 @@ func init() {
 		encoding.NewTypeField("message", "Message"),
 		encoding.NewTypeField("signature", "protocol.KeySignature"),
 		encoding.NewTypeField("proof", "protocol.AnnotatedReceipt"),
+		encoding.NewTypeField("delivered", "uint64"),
 	}, "SyntheticMessage", "syntheticMessage")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("proof", "protocol.AnnotatedReceipt"),
+		encoding.NewTypeField("delivered", "uint64"),
 	}, "SyntheticProof", "syntheticProof")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -2780,6 +2858,7 @@ func (v *BadSyntheticMessage) MarshalJSON() ([]byte, error) {
 		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		Delivered uint64                                             `json:"delivered,omitempty"`
 		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -2792,6 +2871,9 @@ func (v *BadSyntheticMessage) MarshalJSON() ([]byte, error) {
 	if !(v.Proof == nil) {
 		u.Proof = v.Proof
 	}
+	if !(v.Delivered == 0) {
+		u.Delivered = v.Delivered
+	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
@@ -2802,6 +2884,7 @@ func (v *BlockAnchor) MarshalJSON() ([]byte, error) {
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Anchor    *encoding.JsonUnmarshalWith[Message]               `json:"anchor,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		Delivered uint64                                             `json:"delivered,omitempty"`
 		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -2813,6 +2896,9 @@ func (v *BlockAnchor) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Proof == nil) {
 		u.Proof = v.Proof
+	}
+	if !(v.Delivered == 0) {
+		u.Delivered = v.Delivered
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -3063,6 +3149,7 @@ func (v *SynthFields) MarshalJSON() ([]byte, error) {
 		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		Delivered uint64                                             `json:"delivered,omitempty"`
 	}{}
 	if !(EqualMessage(v.Message, nil)) {
 		u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
@@ -3073,6 +3160,9 @@ func (v *SynthFields) MarshalJSON() ([]byte, error) {
 	if !(v.Proof == nil) {
 		u.Proof = v.Proof
 	}
+	if !(v.Delivered == 0) {
+		u.Delivered = v.Delivered
+	}
 	return json.Marshal(&u)
 }
 
@@ -3082,6 +3172,7 @@ func (v *SyntheticMessage) MarshalJSON() ([]byte, error) {
 		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		Delivered uint64                                             `json:"delivered,omitempty"`
 		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -3094,6 +3185,9 @@ func (v *SyntheticMessage) MarshalJSON() ([]byte, error) {
 	if !(v.Proof == nil) {
 		u.Proof = v.Proof
 	}
+	if !(v.Delivered == 0) {
+		u.Delivered = v.Delivered
+	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
@@ -3102,11 +3196,15 @@ func (v *SyntheticProof) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      MessageType                `json:"type"`
 		Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty"`
+		Delivered uint64                     `json:"delivered,omitempty"`
 		ExtraData *string                    `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Proof == nil) {
 		u.Proof = v.Proof
+	}
+	if !(v.Delivered == 0) {
+		u.Delivered = v.Delivered
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -3132,12 +3230,14 @@ func (v *BadSyntheticMessage) UnmarshalJSON(data []byte) error {
 		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		Delivered uint64                                             `json:"delivered,omitempty"`
 		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	u.Proof = v.Proof
+	u.Delivered = v.Delivered
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -3154,6 +3254,7 @@ func (v *BadSyntheticMessage) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Proof = u.Proof
+	v.Delivered = u.Delivered
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -3167,12 +3268,14 @@ func (v *BlockAnchor) UnmarshalJSON(data []byte) error {
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Anchor    *encoding.JsonUnmarshalWith[Message]               `json:"anchor,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		Delivered uint64                                             `json:"delivered,omitempty"`
 		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	u.Anchor = &encoding.JsonUnmarshalWith[Message]{Value: v.Anchor, Func: UnmarshalMessageJSON}
 	u.Proof = v.Proof
+	u.Delivered = v.Delivered
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -3189,6 +3292,7 @@ func (v *BlockAnchor) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Proof = u.Proof
+	v.Delivered = u.Delivered
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -3540,10 +3644,12 @@ func (v *SynthFields) UnmarshalJSON(data []byte) error {
 		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		Delivered uint64                                             `json:"delivered,omitempty"`
 	}{}
 	u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	u.Proof = v.Proof
+	u.Delivered = v.Delivered
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -3557,6 +3663,7 @@ func (v *SynthFields) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Proof = u.Proof
+	v.Delivered = u.Delivered
 	return nil
 }
 
@@ -3566,12 +3673,14 @@ func (v *SyntheticMessage) UnmarshalJSON(data []byte) error {
 		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+		Delivered uint64                                             `json:"delivered,omitempty"`
 		ExtraData *string                                            `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	u.Proof = v.Proof
+	u.Delivered = v.Delivered
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -3588,6 +3697,7 @@ func (v *SyntheticMessage) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Proof = u.Proof
+	v.Delivered = u.Delivered
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -3599,10 +3709,12 @@ func (v *SyntheticProof) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      MessageType                `json:"type"`
 		Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty"`
+		Delivered uint64                     `json:"delivered,omitempty"`
 		ExtraData *string                    `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Proof = v.Proof
+	u.Delivered = v.Delivered
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -3611,6 +3723,7 @@ func (v *SyntheticProof) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Proof = u.Proof
+	v.Delivered = u.Delivered
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

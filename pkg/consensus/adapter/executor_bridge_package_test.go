@@ -446,6 +446,26 @@ func twoDestBurns(t *testing.T, keys [][]byte, ts uint64) *types.Batch {
 	return types.NewBatch(txs)
 }
 
+// oneDestBurns sends every transfer to ONE destination, so the whole batch
+// lands on a single synthetic chain. A proof covers one chain, so this is the
+// only shape that can build a span past the receiver's bound.
+func oneDestBurns(t *testing.T, keys [][]byte, ts uint64) *types.Batch {
+	t.Helper()
+	var txs [][]byte
+	for i, key := range keys {
+		from := protocol.LiteAuthorityForKey(key[32:], protocol.SignatureTypeED25519)
+		env, err := build.Transaction().For(from.JoinPath("ACME")).
+			SendTokens(uint64(i+1), 0).To(protocol.AccountUrl("bvn0-bound.acme", from.Hostname())).
+			SignWith(from).Version(1).Timestamp(ts).PrivateKey(key).
+			Done()
+		require.NoError(t, err)
+		b, err := env.MarshalBinary()
+		require.NoError(t, err)
+		txs = append(txs, b)
+	}
+	return types.NewBatch(txs)
+}
+
 // #4150: a package's collection proof spans from its first member to the
 // block's LAST synthetic element, so a block emitting more than
 // MaxReceiptListElements synthetics builds spans past the receiver's hard
@@ -459,7 +479,15 @@ func TestBridge_BlockOverMaxReceiptListElementsStaysAcceptable(t *testing.T) {
 		t.Skip("drives >4096 transfers through one block")
 	}
 
-	// Comfortably past the 4096-element bound, split across two destinations.
+	// Comfortably past the 4096-element bound, on ONE destination.
+	//
+	// A proof covers one chain and every destination has its own (executor
+	// spec, "One chain per pair, one stage per chain"), so the span the
+	// receiver bounds is the DESTINATION's, not the block's. This test used
+	// to split the batch across two destinations, which gives each chain half
+	// the entries -- comfortably inside the bound, so the fallback it asserts
+	// could never fire and it failed on `singles` for nine days (#4247). The
+	// split case is worth pinning too, and does so below.
 	n := protocol.MaxReceiptListElements + 128
 	keys := make([][]byte, n)
 	for i := range keys {
@@ -467,7 +495,7 @@ func TestBridge_BlockOverMaxReceiptListElementsStaysAcceptable(t *testing.T) {
 	}
 	r := newDnBridge(t, 2, 0, keys...)
 
-	_, err := r.produce(t, twoDestBurns(t, keys, 1))
+	_, err := r.produce(t, oneDestBurns(t, keys, 1))
 	require.NoError(t, err)
 	sent := r.deliverOwnAnchorAndCollect(t)
 
@@ -508,4 +536,55 @@ func TestBridge_BlockOverMaxReceiptListElementsStaysAcceptable(t *testing.T) {
 	assert.Zero(t, overBound, "no dispatched package may exceed the receiver's element bound")
 	assert.Positive(t, singles, "the over-span leaders must fall back to individual receipts")
 	assert.Equal(t, n, members, "every synthetic is dispatched exactly once — nothing stranded")
+	assert.Positive(t, packages, "the members inside the bound still travel as packages")
+}
+
+// The same volume split across two destinations exceeds the bound for the
+// BLOCK and for neither chain, so nothing falls back: the span that matters is
+// the destination's. This is the reading that makes the test above need one
+// destination, so it is pinned rather than assumed (#4247).
+func TestBridge_TheBoundIsPerDestinationNotPerBlock(t *testing.T) {
+	if testing.Short() {
+		t.Skip("drives >4096 transfers through one block")
+	}
+
+	n := protocol.MaxReceiptListElements + 128
+	keys := make([][]byte, n)
+	for i := range keys {
+		keys[i] = acctesting.GenerateKey("split", i)
+	}
+	r := newDnBridge(t, 2, 0, keys...)
+
+	_, err := r.produce(t, twoDestBurns(t, keys, 1))
+	require.NoError(t, err)
+	sent := r.deliverOwnAnchorAndCollect(t)
+
+	var members, singles, overBound int
+	for _, s := range sent {
+		if _, ok := s.env.Messages[0].(*messaging.BlockAnchor); ok {
+			continue
+		}
+		if proof, ok := s.env.Messages[0].(*messaging.SyntheticProof); ok {
+			list := proof.Proof.ReceiptList
+			require.NotNil(t, list)
+			if len(list.Elements) > protocol.MaxReceiptListElements {
+				overBound++
+			}
+			assert.True(t, list.Validate(nil))
+			for _, m := range s.env.Messages[1:] {
+				if _, ok := m.(*messaging.SyntheticMessage); ok {
+					members++
+				}
+			}
+			continue
+		}
+		if _, ok := s.env.Messages[0].(*messaging.SyntheticMessage); ok {
+			members++
+			singles++
+		}
+	}
+
+	assert.Zero(t, overBound, "no package may exceed the bound")
+	assert.Zero(t, singles, "neither chain's span exceeds the bound, so nothing falls back")
+	assert.Equal(t, n, members, "every synthetic is dispatched exactly once")
 }

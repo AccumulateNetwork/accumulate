@@ -90,7 +90,7 @@ func (x SequencedMessage) check(batch *database.Batch, ctx *MessageContext) (*me
 	// Load the transaction
 	if !ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
 		if txn, ok := seq.Message.(*messaging.TransactionMessage); ok {
-			_, err := x.resolveTransaction(batch, txn)
+			_, err := x.resolveTransaction(batch, ctx, txn)
 			if err != nil {
 				return nil, errors.UnknownError.Wrap(err)
 			}
@@ -196,14 +196,16 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 
 	var st *protocol.TransactionStatus
 	if ready {
-		// Copy to avoid issues with resolving remote transactions. If the
-		// transaction is a placeholder (a remote transaction), the executor
-		// will resolve the full transaction and replace the placeholder. If we
-		// don't copy, that causes the sequenced message to change, which
-		// changes its hash, which causes problems with recording it in the
-		// database.
+		// If the transaction is a placeholder (a remote transaction), the
+		// executor will resolve the full transaction and replace the
+		// placeholder. Copy so that does not change the sequenced message,
+		// and with it its hash and how it is recorded. Only a placeholder
+		// needs the copy; deep-copying every executed body was a per-message
+		// allocation for nothing (#4245).
 		msg := seq.Message
-		if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+		if txn, ok := msg.(*messaging.TransactionMessage); ok &&
+			txn.Transaction.Body.Type() == protocol.TransactionTypeRemote &&
+			ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
 			msg = msg.CopyAsInterface().(messaging.Message)
 		}
 
@@ -211,8 +213,10 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 		st, err = ctx.callMessageExecutor(batch, msg)
 	} else {
 		// Mark the message as pending
+		// Not next on its stream: held in memory by advanceStream below,
+		// nothing recorded until it executes (executor spec, invariant 4)
 		ctx.Executor.logger.Debug("Pending sequenced message", "hash", logging.AsHex(seq.Message.Hash()).Slice(0, 4), "module", "synthetic")
-		st, err = ctx.childWith(seq.Message).recordPending(batch)
+		st = &protocol.TransactionStatus{TxID: seq.Message.ID(), Code: errors.Pending, Received: ctx.Block.Index}
 	}
 	if err != nil {
 		return false, errors.UnknownError.Wrap(err)
@@ -264,7 +268,7 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 	// everything this message records has, and not on a path that discards.
 	delivered := !st.Pending()
 	ctx.advance = func() error {
-		return ctx.Block.advanceStream(str, delivered, seq.Number, seq.ID())
+		return ctx.Block.advanceStream(str, delivered, seq.Number, seq.ID(), seq)
 	}
 
 	if !st.Delivered() {

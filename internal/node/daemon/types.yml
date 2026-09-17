@@ -18,6 +18,12 @@ NetworkInit:
   - name: OperatorKeys
     type: bytes
     repeatable: true
+  - name: Database
+    description: is the storage backend every generated node runs on (BlockchainDB, LevelDB, Badger, Memory); the --database flag overrides it
+    type: string
+  - name: ExecutionShards
+    description: is the number of identity shards every generated node executes user transactions across; zero or one is serial. Written into each node's configuration at init, so a node runs what its network was defined with and no environment variable can change it
+    type: uint
   - name: Template
     description: is a TOML template for the node configuration
     type: string

@@ -64,6 +64,15 @@ type State struct {
 	HashList [][]byte `json:"hashList,omitempty" form:"hashList" query:"hashList" validate:"required"`
 }
 
+type TailChunk struct {
+	fieldsSet []bool
+	// Index is the chain index of the first hash in the chunk.
+	Index uint64 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	// Hashes are the entries at Index, Index+1, ....
+	Hashes    [][]byte `json:"hashes,omitempty" form:"hashes" query:"hashes" validate:"required"`
+	extraData []byte
+}
+
 type chainIndexBlock struct {
 	fieldsSet []bool
 	Level     uint64             `json:"level,omitempty" form:"level" query:"level" validate:"required"`
@@ -167,6 +176,25 @@ func (v *State) Copy() *State {
 }
 
 func (v *State) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TailChunk) Copy() *TailChunk {
+	u := new(TailChunk)
+
+	u.Index = v.Index
+	u.Hashes = make([][]byte, len(v.Hashes))
+	for i, v := range v.Hashes {
+		v := v
+		u.Hashes[i] = encoding.BytesCopy(v)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *TailChunk) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *chainIndexBlock) Copy() *chainIndexBlock {
 	u := new(chainIndexBlock)
@@ -278,6 +306,22 @@ func (v *ReceiptList) Equal(u *ReceiptList) bool {
 		return false
 	case !((v.ContinuedReceipt).Equal(u.ContinuedReceipt)):
 		return false
+	}
+
+	return true
+}
+
+func (v *TailChunk) Equal(u *TailChunk) bool {
+	if !(v.Index == u.Index) {
+		return false
+	}
+	if len(v.Hashes) != len(u.Hashes) {
+		return false
+	}
+	for i := range v.Hashes {
+		if !(bytes.Equal(v.Hashes[i], u.Hashes[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -550,6 +594,66 @@ func (v *ReceiptList) IsValid() error {
 	}
 }
 
+var fieldNames_TailChunk = []string{
+	1: "Index",
+	2: "Hashes",
+}
+
+func (v *TailChunk) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Index == 0) {
+		writer.WriteUint(1, v.Index)
+	}
+	if !(len(v.Hashes) == 0) {
+		for _, v := range v.Hashes {
+			writer.WriteBytes(2, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_TailChunk)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *TailChunk) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hashes is missing")
+	} else if len(v.Hashes) == 0 {
+		errs = append(errs, "field Hashes is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_chainIndexBlock = []string{
 	1: "Level",
 	2: "Index",
@@ -781,6 +885,36 @@ func (v *ReceiptList) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *TailChunk) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *TailChunk) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Index = x
+	}
+	for {
+		if x, ok := reader.ReadBytes(2); ok {
+			v.Hashes = append(v.Hashes, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_TailChunk)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *chainIndexBlock) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -868,6 +1002,11 @@ func init() {
 		encoding.NewTypeField("pending", "bytes[]"),
 		encoding.NewTypeField("hashList", "bytes[]"),
 	}, "State", "state")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("hashes", "bytes[]"),
+	}, "TailChunk", "tailChunk")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("level", "uint64"),
@@ -978,6 +1117,25 @@ func (v *State) MarshalJSON() ([]byte, error) {
 			u.HashList[i] = encoding.BytesToJSON(x)
 		}
 	}
+	return json.Marshal(&u)
+}
+
+func (v *TailChunk) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Index     uint64                     `json:"index,omitempty"`
+		Hashes    encoding.JsonList[*string] `json:"hashes,omitempty"`
+		ExtraData *string                    `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Index == 0) {
+		u.Index = v.Index
+	}
+	if !(len(v.Hashes) == 0) {
+		u.Hashes = make(encoding.JsonList[*string], len(v.Hashes))
+		for i, x := range v.Hashes {
+			u.Hashes[i] = encoding.BytesToJSON(x)
+		}
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
 
@@ -1143,6 +1301,37 @@ func (v *State) UnmarshalJSON(data []byte) error {
 		} else {
 			v.HashList[i] = x
 		}
+	}
+	return nil
+}
+
+func (v *TailChunk) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Index     uint64                     `json:"index,omitempty"`
+		Hashes    encoding.JsonList[*string] `json:"hashes,omitempty"`
+		ExtraData *string                    `json:"$epilogue,omitempty"`
+	}{}
+	u.Index = v.Index
+	u.Hashes = make(encoding.JsonList[*string], len(v.Hashes))
+	for i, x := range v.Hashes {
+		u.Hashes[i] = encoding.BytesToJSON(x)
+	}
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Index = u.Index
+	v.Hashes = make([][]byte, len(u.Hashes))
+	for i, x := range u.Hashes {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Hashes: %w", err)
+		} else {
+			v.Hashes[i] = x
+		}
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
 	}
 	return nil
 }

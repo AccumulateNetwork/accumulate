@@ -185,6 +185,9 @@ func TestConsensusTestnet_TwoNodeCommunication(t *testing.T) {
 							w.PruneBatches(digests)
 						}
 					}
+					// The executor reports each committed group back, or the execution-lag
+					// bound (consensus spec, invariant 9) empties every header after eight.
+					nodes[i].ReportExecuted()
 				}
 			}
 		}()
@@ -474,6 +477,9 @@ func TestConsensusTestnet_BasicConsensus(t *testing.T) {
 							w.PruneBatches(digests)
 						}
 					}
+					// The executor reports each committed group back, or the execution-lag
+					// bound (consensus spec, invariant 9) empties every header after eight.
+					nodes[i].ReportExecuted()
 				}
 			}
 		}()
@@ -712,6 +718,9 @@ func TestConsensusTestnet_Throughput(t *testing.T) {
 							w.PruneBatches(digests)
 						}
 					}
+					// The executor reports each committed group back, or the execution-lag
+					// bound (consensus spec, invariant 9) empties every header after eight.
+					nodes[i].ReportExecuted()
 				}
 			}
 		}()
@@ -950,6 +959,9 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 							w.PruneBatches(digests)
 						}
 					}
+					// The executor reports each committed group back, or the execution-lag
+					// bound (consensus spec, invariant 9) empties every header after eight.
+					nodes[i].ReportExecuted()
 				}
 			}
 		}()
@@ -1107,6 +1119,9 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 						w.PruneBatches(digests)
 					}
 				}
+				// The executor reports each committed group back, or the execution-lag
+				// bound (consensus spec, invariant 9) empties every header after eight.
+				newNode.ReportExecuted()
 			}
 		}
 	}()

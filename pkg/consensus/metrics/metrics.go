@@ -152,6 +152,16 @@ var (
 		Name:      "dag_gc_rounds_removed_total",
 		Help:      "Total rounds removed by garbage collection",
 	})
+
+	// DAGUncommittedRoundsDroppedTotal counts rounds the round advance
+	// collected that this node never committed: the frontier ran more than
+	// the DAG depth ahead of the last commit (#4239).
+	DAGUncommittedRoundsDroppedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "dag_uncommitted_rounds_dropped_total",
+		Help:      "Rounds collected by the round advance that this node never committed",
+	})
 )
 
 // Network metrics
@@ -201,14 +211,30 @@ var (
 		Buckets:   prometheus.ExponentialBuckets(0.0001, 2, 14), // 0.1ms to ~800ms
 	})
 
-	// BlockProductionSeconds is the time to produce a block (batch).
-	BlockProductionSeconds = promauto.NewHistogram(prometheus.HistogramOpts{
+	// BlockProductionSeconds is the wall time to produce one block, by
+	// partition. A process runs a Directory node and a BVN node, and one
+	// histogram for both said nothing about which executor was behind
+	// (#4257).
+	BlockProductionSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "block_production_seconds",
-		Help:      "Time to produce a block (batch) in seconds",
+		Help:      "Wall time to produce one block, by partition",
 		Buckets:   prometheus.ExponentialBuckets(0.0001, 2, 14), // 0.1ms to ~800ms
-	})
+	}, []string{"partition"})
+
+	// BlockPhaseSeconds is the wall time of each phase of producing a block
+	// -- begin, unmarshal, process, close, hash, commit -- by partition, so
+	// a review can say where a block's second goes without sampling
+	// goroutines (#4257). The phases are measured, not inferred: their sum
+	// is the block's production time less the bookkeeping between them.
+	BlockPhaseSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "block_phase_seconds",
+		Help:      "Wall time of one phase of producing a block, by partition and phase: begin, unmarshal, process, close, hash, commit",
+		Buckets:   prometheus.ExponentialBuckets(0.0001, 2, 14),
+	}, []string{"partition", "phase"})
 
 	// TransactionLatencySeconds is the end-to-end transaction latency.
 	TransactionLatencySeconds = promauto.NewHistogram(prometheus.HistogramOpts{
@@ -432,10 +458,10 @@ func (m *Metrics) ObserveCertificateCreation(seconds float64) {
 	}
 }
 
-// ObserveBlockProduction observes block production time.
-func (m *Metrics) ObserveBlockProduction(seconds float64) {
+// ObserveBlockProduction observes one block's production time for a partition.
+func (m *Metrics) ObserveBlockProduction(partition string, seconds float64) {
 	if m.enabled {
-		BlockProductionSeconds.Observe(seconds)
+		BlockProductionSeconds.WithLabelValues(partition).Observe(seconds)
 	}
 }
 
@@ -574,4 +600,57 @@ var (
 		Name:      "blocks_empty_total",
 		Help:      "Blocks produced from a certificate with an empty payload (an idle network)",
 	})
+)
+
+// The batch plane's memory (consensus spec, invariants 1 and 4).
+var (
+	BatchStoreBytes = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "batch_store_bytes",
+		Help:      "Bytes held in a worker's active batch store, own (uncommitted, never evicted) and peer",
+	}, []string{"partition", "worker", "kind"})
+
+	BatchStoreRefusing = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "batch_store_refusing",
+		Help:      "1 while a worker refuses user submissions, by reason: store-full (own uncommitted batches fill its share) or execution-lagging (the executor is more than MaxExecutionLag blocks behind the DAG's commits)",
+	}, []string{"partition", "worker", "reason"})
+
+	// ExecutionLagBlocks is how many committed leader groups the executor has
+	// not yet executed (consensus spec, invariant 9).
+	ExecutionLagBlocks = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "execution_lag_blocks",
+		Help:      "Committed leader groups the executor has not yet executed",
+	}, []string{"partition"})
+
+	// ExecutionLagging is 1 while the primary proposes empty headers because
+	// execution is more than MaxExecutionLag blocks behind.
+	ExecutionLagging = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "execution_lagging",
+		Help:      "1 while headers carry no batches because execution lags the DAG's commits by more than MaxExecutionLag blocks",
+	}, []string{"partition"})
+
+	// HandoffTotal counts transactions at the seam where consensus hands to
+	// execution, by what became of them.
+	//
+	// ProduceBlock has always computed these and written them to a log line
+	// per block ("Block execution accounting"), added after 95 of 100
+	// submitted transactions vanished between acceptance and execution with
+	// no trace anywhere (#4132). A log line answers the question only for
+	// someone willing to grep gigabytes; nothing could chart it, alarm on
+	// it, or put it on a board, so "are we dropping transactions?" stayed a
+	// question you had to take on faith. `arrived` minus `executed` is the
+	// answer, and the three failure outcomes say which way they went.
+	HandoffTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "handoff_transactions_total",
+		Help:      "Transactions at the consensus/execution hand-off by outcome: arrived (in a committed batch), executed, unmarshal-failed, process-failed, status-failed. arrived minus executed is what did not execute.",
+	}, []string{"partition", "outcome"})
 )

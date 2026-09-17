@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -133,12 +134,17 @@ func newExecService(x *ExecEntry, logger logging.Logger) *partService {
 		Database:  x,
 		Partition: x.Partition.Id,
 	})
+	// The sequencer answers from the producer cache and nothing else. The v1
+	// executor does not fill one, so this cache stays empty and sequencing
+	// answers NotFound -- the v1 simulator gets the same code a node runs,
+	// not a second implementation kept alive for it.
 	s.private = apiimpl.NewSequencer(apiimpl.SequencerParams{
 		Logger:       rpcLogger,
 		Database:     x,
 		EventBus:     x.Executor.EventBus,
 		Partition:    x.Partition.Id,
 		ValidatorKey: x.Executor.Key,
+		Cache:        synthcache.New(0),
 	})
 	return s
 }

@@ -66,11 +66,6 @@ x-node-env: &node-env
   # recordCache and buffer pools (~310MB/node), and the bcdb write tally
   # stopped keeping a digest per key (~190MB/node).
   GOMEMLIMIT: "${GOMEMLIMIT-1700MiB}"
-  # Execution sharding (#4145). Defaults to 1 = serial, which is what every
-  # generated network has silently run since the feature landed — the config
-  # plumbing is complete but cmd_init_network never sets it. Set
-  # ACC_EXECUTION_SHARDS to sweep it without regenerating genesis.
-  ACC_EXECUTION_SHARDS: "${ACC_EXECUTION_SHARDS-}"
 
 services:
   # CRITICAL: Bootstrap server is REQUIRED for peer discovery
@@ -130,7 +125,6 @@ services:
           exit 0
         fi
         accumulated init network test/docker/docker-network.yml --reset --faucet-seed=FAUCET \
-          --database=${ACC_STORAGE-leveldb} \
           --block-interval=${ACC_BLOCK_INTERVAL-1s} \
           && touch /root/.accumulate/init-done
 
@@ -298,6 +292,90 @@ services:
       - /root/.accumulate/bvn2-4/accumulate.toml
     ports:
       - "26687:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  bvn3-val1:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn3-val1
+    logging: *bounded-logging
+    environment: *node-env
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn3-1
+      - /root/.accumulate/bvn3-1/accumulate.toml
+    ports:
+      - "26688:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  bvn3-val2:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn3-val2
+    logging: *bounded-logging
+    environment: *node-env
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn3-2
+      - /root/.accumulate/bvn3-2/accumulate.toml
+    ports:
+      - "26689:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  bvn3-val3:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn3-val3
+    logging: *bounded-logging
+    environment: *node-env
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn3-3
+      - /root/.accumulate/bvn3-3/accumulate.toml
+    ports:
+      - "26690:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  bvn3-val4:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn3-val4
+    logging: *bounded-logging
+    environment: *node-env
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn3-4
+      - /root/.accumulate/bvn3-4/accumulate.toml
+    ports:
+      - "26691:26660"
     depends_on:
       init:
         condition: service_completed_successfully

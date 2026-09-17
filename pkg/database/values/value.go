@@ -161,18 +161,51 @@ func (v *value[T]) Put(u T) error {
 		slog.Debug("Put", "value", u, "module", "database")
 	}
 
-	// Required for proper versioning
+	// A first write needs the value's version, which is bookkeeping between a
+	// batch and its children and lives in the parent's record in memory. A
+	// store that can answer it is asked for that alone; the value is never
+	// read to learn that it is absent (database spec, "Duplicates are caught
+	// at entry"). A store that cannot falls back to the read.
 	if v.status == valueUndefined {
-		_, err := v.Get()
-		if err != nil && !errors.Is(err, storage.ErrNotFound) {
-			return errors.UnknownError.Wrap(err)
+		version, err := v.seedVersion()
+		if err != nil {
+			return err
 		}
+		v.version = version
 	}
 
 	v.value.setValue(u)
 	v.status = valueDirty
 	v.version++
 	return nil
+}
+
+// ReadBeforeWrite restores the read a first write used to make, for the
+// differential test that proves the two paths commit identical state.
+var ReadBeforeWrite bool
+
+func (v *value[T]) seedVersion() (int, error) {
+	if vs, ok := v.store.(database.VersionStore); ok && !ReadBeforeWrite {
+		version, err := vs.Version(v.key)
+		if err != nil {
+			return 0, errors.UnknownError.Wrap(err)
+		}
+		return version, nil
+	}
+	_, err := v.Get()
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return 0, errors.UnknownError.Wrap(err)
+	}
+	return v.version, nil
+}
+
+// Version reports the value's version without loading it when the store can
+// say; a loaded value answers from memory.
+func (v *value[T]) Version() (int, error) {
+	if v.status != valueUndefined {
+		return v.version, nil
+	}
+	return v.seedVersion()
 }
 
 // IsDirty implements Record.IsDirty.

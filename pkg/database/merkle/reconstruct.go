@@ -13,7 +13,7 @@ package merkle
 // entry hashes in those mark points and in the head. Dropping them therefore
 // discarded the hashes of every closed mark set, and the restore then carried
 // no message body that nothing referenced. What survives is the open mark set:
-// the head, its HashList, and the peaks (#4270).
+// the head, its open mark set, and the peaks (#4270).
 //
 // That is enough to recover the surviving tail. Every read of it currently
 // fails, because StateAt replays from the mark point that is gone.
@@ -28,7 +28,7 @@ package merkle
 // head has not reached the next power of two above B's largest peak.
 //
 // That proviso is not assumed. The reconstruction is a hypothesis, and
-// VerifyAgainstHead is how it is discharged: replaying the head's own HashList
+// VerifyAgainstHead is how it is discharged: replaying the head's own open set
 // onto the result must reproduce the head. Where it does, the state is
 // provably the one that was there; where it does not, the caller must leave
 // the account alone.
@@ -80,16 +80,20 @@ func CanReconstruct(count int64, boundary uint64) bool {
 	return boundary&^uint64(count) == 0
 }
 
-// VerifyAgainstHead replays the head's open mark set onto a reconstructed
-// state and reports whether it reproduces the head exactly. This is the proof
-// that a reconstruction is correct: it is checked against state the restore
-// did keep, so nothing has to be taken on trust.
-func VerifyAgainstHead(reconstructed, head *State) bool {
+// VerifyAgainstHead replays the open mark set onto a reconstructed state and
+// reports whether it reproduces the head exactly. This is the proof that a
+// reconstruction is correct: it is checked against state the restore did
+// keep, so nothing has to be taken on trust. The open set is passed in
+// because the head does not always carry it: since the Tail records
+// (database.md, "The head is Count and Pending; the open mark set is
+// chunked") it lives beside the head, and Chain.OpenSet reads it from
+// wherever it is.
+func VerifyAgainstHead(reconstructed, head *State, openSet [][]byte) bool {
 	if reconstructed == nil {
 		return false
 	}
 	s := reconstructed.Copy()
-	for _, h := range head.HashList {
+	for _, h := range openSet {
 		s.AddEntry(h)
 	}
 	if s.Count != head.Count {

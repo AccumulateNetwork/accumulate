@@ -36,6 +36,27 @@ display the diagonal, not delete it as "bookkeeping".
 "No stream entry yet", "zero traffic", and "instrument absent" are three
 different facts and MUST render distinguishably.
 
+## 1b. One node is one point of stale truth
+
+A validator answers a query from its own store, and its own store is only as
+current as its executor. A reading of a partition's ledger MUST be taken from
+every node that answers and reported as the **max across answers, per
+field**: every field of a sequence ledger is monotone on every node, so a
+lagging node can only under-report, and the max is what the network holds.
+Reading one node mixed a BVN1 ledger 348 blocks stale with a current
+Directory ledger from the same process and displayed BVN1 → Directory as
+produced 100,804 against received 102,177 (run `20260906T134054Z`) — the
+destination had received more than the source had sent. On a live board the
+same mixing shows as `sent` and `delivered` flickering between a lower and a
+higher reading as the router answers from different peers.
+
+A sequence number never decreases. A field that reads LOWER than its previous
+sample, after the max across nodes, is not lag — it is a value that went
+backwards in a store, and it MUST be surfaced as an alarm naming the stream
+and both readings, never absorbed by a high-water mark. The flow matrix's
+history MUST carry every cell's `sent`/`received`/`delivered` per sample, so
+"it was higher earlier" is a query, not a recollection (#4279).
+
 ## 2. The chain is the source of truth
 
 Every claim about network behaviour MUST be derived from chain state or node
@@ -56,18 +77,14 @@ This is the contract the soak monitor is written against:
 
 | family | kind | labels | meaning |
 |---|---|---|---|
-| `crosschain_heals_total` | counter | type, partition, remote | messages healed, by mechanism |
-| `crosschain_reconcile_pulls_total` | counter | partition, remote | "anything new?" pulls that recovered data |
-| `crosschain_heal_deferred_total` | counter | partition, remote | heals deferred by pacing |
-| `crosschain_heal_errors_total` | counter | partition, remote | heal attempts that failed |
-| `crosschain_heal_focus_total` | counter | partition, remote | focused-stream heal attempts |
-| `crosschain_heal_stuck_tries` | gauge | partition, remote | consecutive failed tries on the stuck head |
-| `crosschain_sequence` | gauge | partition, remote, kind={synthetic,anchor}, dir={produced,received,delivered} | per-stream sequence state — the flow matrix |
-| `debug_dropped_total` | counter | kind, partition | envelopes deliberately dropped by fault injection |
-| `exec_phase_seconds_total` | counter | phase={serial,parallel} | ProcessAll wall time by lane (#4169 step 0a) |
-| `exec_blocks_total` | counter | — | blocks closed by the executor (#4169 step 0b denominator) |
-| `exec_flushes_total` | counter | — | parallel runs flushed (#4169 step 0b) |
-| `exec_synthetic_anchor_total` | counter | applied={this_block,earlier,missing} | synthetics judged by staging, by when their proving anchor landed (#4169 step 0c) |
+| `conductor_heal_requests_total` | counter | source, destination, outcome={answered,not-yet,miss,failed} | span requests the receiver made, by what the source answered |
+| `conductor_heal_entries_total` | counter | — | entries received in answer to span requests |
+| `exec_staged_proofs_total` | counter | outcome={staged,validated,disproved,conflict,invalid,unbound,refused,duplicate} | collection proofs by anchor-staging outcome |
+| `exec_synthetic_anchor_total` | counter | applied={proven,unproven,collected,tossed,anchor-collected,anchor-tossed,this_block,earlier,missing} | synthetics as staging judged them |
+| `staging_held_entries`, `staging_held_bytes` | gauge | ledger, source | what a stream holds in staging |
+| `dispatcher_drops_total` | counter | destination, reason={deadline,queue-full} | envelopes dropped undelivered |
+| `bcdb_staged_commits`, `bcdb_oldest_view_age_seconds` | gauge | database | store isolation cost, as of the last commit or release |
+| `dagbft_execution_lag_blocks` | gauge | partition | committed groups the executor has not produced a block from |
 
 Exported: the first two, on both branches. **Missing: the remaining six — which
 is why the flow matrix and wedge panels have never shown a true value** (#4095).
@@ -121,10 +138,11 @@ was rewritten to purge previously committed raw data — do not reintroduce it.
 
 | clause | state |
 |---|---|
-| 1 displayed=measured | **violated** — soakmon renders absent metrics as 0 (#4093) |
+| 1 displayed=measured | met for healing and wedges as of #4279 — a family no node reports renders `— not measured`; the monitor had read `crosschain_*` families that no longer existed and shown 0 for every one of them |
 | 1a no impossible states | **violated** — anchor flow shows `sent 0` beside `18/18 received`; diagonal deleted (#4093, #4095) |
+| 1b one node is stale truth | met, as of #4279 — soakmon and streams.py read every node and keep the max; a decrease is logged as `SEQUENCE REGRESSION` and the cell goes red; the history carries the matrix |
 | 2 chain as truth | met by soak.sh/loadgen; violated by parallel-loadtest's recorded results |
-| 3 node exports | **6 of 8 families missing** (#4095); consensus-status fields missing on DI (#4075) |
+| 3 node exports | table above rewritten to the families the node exports (#4279); consensus-status fields missing on DI (#4075) |
 | 4 health=liveness | **violated** (#4108) |
 | 5 generator honesty | met by tools/cmd/loadgen; parallel-loadtest fails all three (#4102, #4104, #4107) |
 | 6 provenance | met |

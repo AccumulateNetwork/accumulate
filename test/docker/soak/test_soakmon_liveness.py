@@ -68,9 +68,36 @@ class ProgressTest(unittest.TestCase):
         self.assertEqual("unknown", pg["BVN3"]["state"])
         self.assertEqual("degraded", soakmon.overall_status(True, pg))
 
-    def test_api_down_beats_everything(self):
+    def test_api_down_with_no_evidence_of_progress_is_down(self):
+        # One sample: the height was readable once, which is not progress.
+        # The progress tables are module state; a partition another test
+        # advanced would otherwise still count as advancing here.
+        soakmon._PROGRESS.clear()
+        soakmon._RATE.clear()
+        soakmon._FIRST.clear()
         pg = soakmon.assess_progress({"Directory": 121}, 1000.0)
         self.assertEqual("down", soakmon.overall_status(False, pg))
+
+    def test_api_down_over_advancing_partitions_is_degraded_not_down(self):
+        """The monitor probed a port nothing served -- topology.BASE_HOST_PORT
+        had moved -- and painted "network down" over three partitions
+        advancing at 0.9 s/block. A verdict the heights beside it disprove is
+        an impossible state (REPORTING-SPEC 1a); losing reach is degraded."""
+        soakmon._PROGRESS.clear()
+        soakmon._RATE.clear()
+        soakmon._FIRST.clear()
+        soakmon.assess_progress({"Directory": 100, "BVN1": 100}, 1000.0)
+        pg = soakmon.assess_progress({"Directory": 104, "BVN1": 104}, 1004.0)
+        self.assertTrue(all(v["blocksSeen"] for v in pg.values()))
+        self.assertEqual("degraded", soakmon.overall_status(False, pg))
+        self.assertEqual("up", soakmon.overall_status(True, pg))
+
+    def test_a_stalled_partition_is_stalled_even_when_unreachable(self):
+        soakmon._PROGRESS.clear()
+        soakmon.assess_progress({"Directory": 100}, 1000.0)
+        pg = soakmon.assess_progress({"Directory": 100}, 2000.0)
+        self.assertEqual("stalled", pg["Directory"]["state"])
+        self.assertEqual("stalled", soakmon.overall_status(False, pg))
 
     def test_stall_clock_reports_elapsed_time(self):
         soakmon.assess_progress({"Directory": 121}, 1000.0)
@@ -94,19 +121,29 @@ class BatchLifecycleTest(unittest.TestCase):
     """The numbers that separate an idle network from a wedged one, and that
     keep the #4125 re-delivery skip from hiding the bug it works around."""
 
-    def test_counters_sum_across_the_fleet(self):
+    def test_a_per_node_event_sums_but_a_partition_fact_does_not(self):
+        """This test used to require that blocks_produced SUM across the
+        fleet, and that was wrong: every validator produces the same blocks,
+        so the sum is the chain's block count multiplied by the node count.
+        The board read 687,160 blocks produced while the three partitions
+        stood at 111,869 (run 20260915T042428Z) — an impossible state under
+        REPORTING-SPEC 1a, asserted as correct here. A re-delivery, by
+        contrast, IS a per-node event and still sums."""
         per = {
             "acc-bvn1-val1": [
                 ("accumulate_dagbft_blocks_produced_total", "", 100),
+                ("accumulate_dagbft_blocks_empty_total", "", 40),
                 ("accumulate_dagbft_certificates_redelivered_total", "", 1),
             ],
             "acc-bvn1-val2": [
                 ("accumulate_dagbft_blocks_produced_total", "", 98),
+                ("accumulate_dagbft_blocks_empty_total", "", 39),
                 ("accumulate_dagbft_certificates_redelivered_total", "", 2),
             ],
         }
         life = soakmon.life_from(per)
-        self.assertEqual(198, life["blocks"])
+        self.assertEqual(100, life["blocks"], "the furthest-along node, not the sum")
+        self.assertEqual(40, life["blocksEmpty"])
         self.assertEqual(3, life["redelivered"],
                          "a re-delivery on any node is worth seeing")
 

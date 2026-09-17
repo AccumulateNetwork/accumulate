@@ -8,6 +8,10 @@ package adapter
 
 import (
 	"context"
+	"github.com/prometheus/client_golang/prometheus"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"log/slog"
 	"strings"
 	"sync"
@@ -125,4 +129,53 @@ func TestProduceBlock_EmptyBlockIsSilent(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, logs.matching("Block execution accounting"))
+}
+
+// The hand-off accounting is exported, not only logged. It was computed per
+// block and written to a log line; nothing could chart "arrived minus
+// executed", which is the question #4132 exists to answer, so a soak could
+// not show whether transactions were being dropped (#4279 review).
+func TestProduceBlock_HandoffAccountingIsExported(t *testing.T) {
+	reg := prometheus.NewPedanticRegistry()
+	reg.MustRegister(metrics.HandoffTotal)
+	metrics.HandoffTotal.Reset()
+
+	f := new(fakeExec)
+	// statusFailed counts a status carrying an Error, not merely a code.
+	f.statuses = []*protocol.TransactionStatus{{Error: errors.BadRequest.With("refused")}}
+	bridge := newBridge(t, f)
+
+	_, err := bridge.ProduceBlock(context.Background(), BlockParams{
+		Index: 8, Time: time.Unix(100, 0),
+		Batches: []*types.Batch{types.NewBatch([][]byte{
+			envBytes(t, 1),
+			[]byte("not an envelope"), // unmarshal-failed
+			envBytes(t, 2),
+		})},
+	})
+	require.NoError(t, err)
+
+	got := map[string]float64{}
+	mfs, err := reg.Gather()
+	require.NoError(t, err)
+	for _, mf := range mfs {
+		if mf.GetName() != "accumulate_dagbft_handoff_transactions_total" {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			var outcome string
+			for _, l := range m.GetLabel() {
+				if l.GetName() == "outcome" {
+					outcome = l.GetValue()
+				}
+			}
+			got[outcome] = m.GetCounter().GetValue()
+		}
+	}
+	require.Equal(t, float64(3), got["arrived"], "every transaction in the batch arrived")
+	require.Equal(t, float64(2), got["executed"], "the garbage one did not execute")
+	require.Equal(t, float64(1), got["unmarshal-failed"])
+	require.Equal(t, float64(2), got["status-failed"], "a status error per executed envelope")
+	require.Equal(t, got["arrived"]-got["executed"], got["unmarshal-failed"],
+		"arrived minus executed is accounted for")
 }

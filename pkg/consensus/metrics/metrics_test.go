@@ -79,7 +79,7 @@ func TestMetrics_Enabled(t *testing.T) {
 	// Test histogram observations
 	m.ObserveRoundDuration(0.1)
 	m.ObserveCertificateCreation(0.01)
-	m.ObserveBlockProduction(0.05)
+	m.ObserveBlockProduction("test", 0.05)
 	m.ObserveTransactionLatency(0.2)
 }
 

@@ -113,3 +113,50 @@ func TestRequeueBatches_StampsLastQueued(t *testing.T) {
 	// And the digest is actually available again.
 	require.Equal(t, []types.BatchDigest{batch.Digest()}, w.ConsumeAvailableBatches())
 }
+
+// A batch a certified header names is never re-proposed, whatever its age
+// (consensus spec, invariant 7). Re-proposing it put one batch in two
+// certificates, and the second could not be served once the first had
+// retired it (run 20260903T222843Z, C5, #4210).
+func TestRepropose_SkipsBatchesTheDAGHasCertified(t *testing.T) {
+	certified := map[types.BatchDigest]bool{}
+	w := New(Config{
+		ID: 0, Partition: "test", ReproposeAfter: time.Second,
+		Certified: func(d types.BatchDigest) bool { return certified[d] },
+	}, nil)
+
+	a := types.NewBatch([][]byte{[]byte("in a certified header")})
+	b := types.NewBatch([][]byte{[]byte("still waiting")})
+	w.storeOwn(a)
+	w.storeOwn(b)
+	certified[a.Digest()] = true
+
+	long := time.Now().Add(time.Hour) // both are far past ReproposeAfter
+	stale, _ := w.staleOwnBatches(long)
+	require.Equal(t, []types.BatchDigest{b.Digest()}, stale,
+		"only the batch no certificate names is re-proposed")
+}
+
+// A digest that waited in the availability queue past its batch's commit is
+// not proposed: the batch is gone from the active store, or a certified
+// header names it. Run 20260904T012004Z put a batch retired 57 minutes
+// earlier into a new header this way (C5, #4210).
+func TestConsumeAvailableBatches_DropsRetiredAndCertifiedDigests(t *testing.T) {
+	certified := map[types.BatchDigest]bool{}
+	w := New(Config{ID: 0, Partition: "test",
+		Certified: func(d types.BatchDigest) bool { return certified[d] }}, nil)
+
+	live := types.NewBatch([][]byte{[]byte("live")})
+	retired := types.NewBatch([][]byte{[]byte("retired")})
+	named := types.NewBatch([][]byte{[]byte("named by a certificate")})
+	for _, b := range []*types.Batch{live, retired, named} {
+		w.storeOwn(b)
+		w.availableBatchQueue <- b.Digest()
+	}
+	w.PruneCommitted([]types.BatchDigest{retired.Digest()}, CommitInfo{Detail: "executed"})
+	certified[named.Digest()] = true
+
+	got := w.ConsumeAvailableBatches()
+	require.Equal(t, []types.BatchDigest{live.Digest()}, got,
+		"only a live, uncertified batch is proposable")
+}

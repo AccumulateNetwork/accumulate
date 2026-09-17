@@ -158,7 +158,15 @@ func TestEntriesWithIncompleteState(t *testing.T) {
 		})
 	}
 
-	for _, s := range []int64{s1.Count - 2, s2.Count - 2, s3.Count - 2} {
+	// A state below a mark point that is missing cannot be computed: an
+	// empty state in its place would be a different chain (soak
+	// 20260905T032333Z, receipts to a root nobody held). States above the
+	// mark points the chain holds are fine.
+	t.Run(fmt.Sprintf("State at %d", s2.Count-2), func(t *testing.T) {
+		_, err := c.StateAt(s2.Count - 2)
+		require.Error(t, err, "the mark point below it (the first) is missing")
+	})
+	for _, s := range []int64{s1.Count - 2, s3.Count - 2} {
 		t.Run(fmt.Sprintf("State at %d", s), func(t *testing.T) {
 			_, err := c.StateAt(s)
 			require.NoError(t, err)

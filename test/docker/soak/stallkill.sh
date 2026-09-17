@@ -109,7 +109,16 @@ while :; do
   # stood down for the whole run (#4160 sibling — the DN-4159 validation run
   # had no stall guard as a result). The [s] class keeps pgrep from matching
   # its own argument.
-  if ! pgrep -f '[s]oak\.sh' >/dev/null 2>&1; then
+  # Our own run's soak.sh, by PID when soak.sh told us (SOAK_PID): the name
+  # match sees the NEXT run's soak.sh too, and run 20260905T032333Z's
+  # watchdog outlived its run on that, found "its" monitor unreachable and
+  # took the next run's network down as it was starting (04:22Z).
+  if [ -n "${SOAK_PID:-}" ]; then
+    if ! kill -0 "$SOAK_PID" 2>/dev/null; then
+      log "stallkill: the run has ended (soak.sh $SOAK_PID is gone); standing down without touching anything"
+      exit 0
+    fi
+  elif ! pgrep -f '[s]oak\.sh' >/dev/null 2>&1; then
     log "stallkill: the run has ended; standing down without touching anything"
     exit 0
   fi
