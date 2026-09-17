@@ -1585,7 +1585,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 <div class=panel style="padding:9px 12px">
   <div class=stats>
     <div class=col><h4>rates</h4>
-      <div class=sub>now</div>
+      <div class=sub>Current tx Rates (last 30 s)</div>
       <div class=kv>
         <b id=rtotal>—</b><span class=sl>tx/s total</span>
         <b id=ruser>—</b><span class=sl>user</span>
@@ -1594,7 +1594,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <b id=ranc>—</b><span class=sl>anchor</span>
         <span class=mut id=rratio>—</span><span class=sl>syn/user</span>
       </div>
-      <div class=sub>run average</div>
+      <div class=sub>Total Test Rates (whole run)</div>
       <div class=kv>
         <b id=ratotal>—</b><span class=sl>tx/s total</span>
         <b id=rauser>—</b><span class=sl>user</span>
