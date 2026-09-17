@@ -579,7 +579,7 @@ func (x *TransactionContext) recordSuccessfulTransaction(batch *database.Batch, 
 	// Add the transaction to the principal's main or scratch chain
 	chain := selectTargetChain(record, delivery.Transaction.Body)
 	err = state.ChainUpdates.AddChainEntry(batch, chain, delivery.Transaction.GetHash(), 0, 0)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+	if err != nil {
 		return nil, nil, fmt.Errorf("add to chain: %v", err)
 	}
 

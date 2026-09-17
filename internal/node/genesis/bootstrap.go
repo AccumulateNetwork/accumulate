@@ -61,6 +61,16 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	gg := core.NewGlobals(opts.GenesisGlobals)
 	opts.GenesisGlobals = gg
 
+	// A network runs at one cadence, and the network has to say what it is.
+	// Deriving it from whatever each node happens to be configured with makes
+	// the rate an emergent property of the quorum, which nothing can check a
+	// node against and nothing downstream can rely on (#4267). A default is
+	// fine; an unrecorded one is not, so the caller states the value and it is
+	// written into genesis here.
+	if gg.Globals.BlockInterval <= 0 {
+		return errors.BadRequest.WithFormat("cannot deploy a network with a block interval of %v", gg.Globals.BlockInterval)
+	}
+
 	// Build the routing table
 	var bvns []string
 	for _, partition := range gg.Network.Partitions {
@@ -72,7 +82,10 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 		gg.Routing = new(protocol.RoutingTable)
 	}
 	if gg.Routing.Routes == nil {
-		gg.Routing.Routes = routing.BuildSimpleTable(bvns)
+		// Even by bucket, not by bit prefix: prefixes can only divide into
+		// powers of two, so three BVNs would be 50/25/25 (#4136). A network
+		// being created has no accounts to move, so it can start even.
+		gg.Routing.Routes = routing.BuildEvenTable(bvns)
 	}
 	gg.Routing.AddOverride(protocol.AcmeUrl(), protocol.Directory)
 	for _, partition := range gg.Network.Partitions {

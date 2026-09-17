@@ -9,6 +9,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"strings"
 	"time"
 
@@ -28,6 +29,7 @@ const defaultPageSize = 50
 const maxPageSize = 100
 
 type Querier struct {
+	staging   *execute.Staging
 	logger    logging.OptionalLogger
 	db        database.Viewer
 	partition config.NetworkUrl
@@ -41,12 +43,17 @@ type QuerierParams struct {
 	Database  database.Viewer
 	Partition string
 	Consensus api.ConsensusService
+
+	// Staging is the partition's staging, for reporting how far a stream
+	// has been sighted. Nil falls back to the registered one for Partition.
+	Staging *execute.Staging
 }
 
 func NewQuerier(params QuerierParams) *Querier {
 	s := new(Querier)
 	s.logger.L = params.Logger
 	s.db = params.Database
+	s.staging = params.Staging
 	s.consensus = params.Consensus
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	return s
@@ -324,7 +331,7 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	// A sequence ledger's Received is derived, not stored (#4189). Fill it in
 	// on the way out so every reader that asks an account how far a stream has
 	// been sighted still gets an answer. Nothing is written.
-	r.Account = withSighted(batch, record.Url(), state)
+	r.Account = withSighted(s.stagingFor(), record.Url(), state)
 
 	switch state.Type() {
 	case protocol.AccountTypeIdentity, protocol.AccountTypeKeyBook:
@@ -362,6 +369,13 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	if block.BlockTime != nil {
 		r.Receipt.LocalBlockTime = *block.BlockTime
 	}
+
+	// Whether there is a second call to make. The receipt terminates at this
+	// partition's current BPT root; on the directory that is already a
+	// directory root, elsewhere it reaches one only after an anchor round trip
+	// (#4274).
+	r.Receipt.Partition = s.partition.PartitionID()
+	r.Receipt.Complete = s.partition.URL.Equal(protocol.DnUrl())
 	return r, nil
 }
 

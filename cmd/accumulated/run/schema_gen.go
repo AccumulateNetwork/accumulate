@@ -473,6 +473,15 @@ func init() {
 				},
 			},
 			{
+				Name:        "MaxExecutionLag",
+				Description: "is how many committed blocks the executor may fall behind before headers carry no batches and user work is refused (consensus spec, invariant 9). Defaults to 8",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
 				Name:        "BlockInterval",
 				Description: "target time between blocks; rounds are paced at half this, since Bullshark commits every other round. Defaults to 3s (#4098)",
 				Optional:    true,
@@ -1035,6 +1044,15 @@ func init() {
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
 					Elem:     schema.TypeReferenceFor[network.GlobalValues](),
+				},
+			},
+			{
+				Name:        "BlockInterval",
+				Description: "the cadence the deployed network declares; recorded in the genesis globals, which every node then paces from (#4267)",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     schema.TypeReferenceFor[encoding.Duration](),
 				},
 			},
 			{

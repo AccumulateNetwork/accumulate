@@ -9,6 +9,8 @@ package block
 import (
 	"bytes"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
@@ -57,8 +59,18 @@ func sortProduced(produced []*ProducedMessage) {
 }
 
 func (x *Executor) produceSynthetic(batch *database.Batch, produced []*ProducedMessage, block uint64) error {
+	_, err := x.produceSyntheticInto(batch, produced, block, nil)
+	return err
+}
+
+// produceSyntheticInto sequences the block's produced messages onto the
+// synthetic chain and records each in the producer's cache as it is
+// produced: the entry itself, and the block's segment of the synthetic chain
+// that its proofs are built from (healing spec, "The cache"). The returned
+// block is completed with the root receipt at close.
+func (x *Executor) produceSyntheticInto(batch *database.Batch, produced []*ProducedMessage, block uint64, tx *synthcache.Txn) (*synthcache.Block, error) {
 	if len(produced) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	batch = batch.Begin(true)
@@ -67,36 +79,52 @@ func (x *Executor) produceSynthetic(batch *database.Batch, produced []*ProducedM
 	// Shouldn't this be recorded somewhere?
 	state := new(chain.ChainUpdates)
 
+	blk := &synthcache.Block{Index: block, Streams: map[string]*synthcache.Stream{}}
+
 	// Finalize the produced transactions
 	for _, p := range produced {
-		seq, err := x.buildSynthTxn(state, batch, p, block)
+		seq, index, before, err := x.buildSynthTxn(state, batch, p, block)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		if p.Producer == nil {
-			continue
+		h := seq.Hash()
+		// One segment per destination: the chain's state before this block's
+		// first entry for it, then the entries in order (executor spec, "One
+		// chain per pair, one stage per chain"). A proof over the segment is
+		// exactly the destination's entries, and its index is the sequence
+		// number less one.
+		st := blk.Stream(seq.Destination)
+		if st == nil {
+			partition, _ := protocol.ParsePartitionUrl(seq.Destination)
+			c := batch.Account(x.Describe.Synthetic()).SyntheticChain(partition)
+			st = &synthcache.Stream{Destination: seq.Destination, ChainName: c.Name(), Segment: &merkle.Segment{First: index, Before: before, MarkMask: c.Inner().MarkMask()}}
+			blk.Streams[synthcache.StreamKey(seq.Destination)] = st
 		}
-
-		// Record message -> produced synthetic message
-		h := p.Producer.Hash()
-		err = batch.Message(h).Produced().Add(seq.Message.ID())
-		if err != nil {
-			return errors.UnknownError.WithFormat("add produced: %w", err)
+		st.Segment.Append(h[:])
+		entry := &synthcache.Entry{Stream: seq.Destination, Number: seq.Number, Index: index, Block: block, Hash: h, Seq: seq}
+		// The transaction the message belongs to travels with it. It
+		// executed in this block or is pending here, so it is recent state.
+		if msg, ok := seq.Message.(messaging.MessageForTransaction); ok && seq.Message.Type() != messaging.MessageTypeBlockAnchor {
+			var txn messaging.MessageWithTransaction
+			err := batch.Message(msg.GetTxID().Hash()).Main().GetAs(&txn)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("load transaction for synthetic message: %w", err)
+			}
+			entry.Companion = txn
 		}
-
-		err = batch.Transaction(h[:]).Produced().Add(seq.Message.ID())
-		if err != nil {
-			return errors.UnknownError.WithFormat("add produced: %w", err)
-		}
+		blk.Entries = append(blk.Entries, entry)
+		tx.Add(entry)
+		// The producer's Produced set was written when the message was
+		// produced (didProduce), with the ID it carries here.
 	}
 
 	err := batch.Commit()
 	if err != nil {
-		return errors.UnknownError.WithFormat("commit batch: %w", err)
+		return nil, errors.UnknownError.WithFormat("commit batch: %w", err)
 	}
 
-	return nil
+	return blk, nil
 }
 
 // setSyntheticOrigin sets the synthetic origin data of the synthetic
@@ -139,16 +167,11 @@ func adjust64(prod *ProducedMessage) error {
 		return nil
 	}
 
-	// Are the body or header exactly 64 bytes?
-	body, err := txn.Transaction.Body.MarshalBinary()
-	if err != nil {
-		return errors.EncodingError.WithFormat("marshal body: %w", err)
-	}
-	header, err := txn.Transaction.Header.MarshalBinary()
-	if err != nil {
-		return errors.EncodingError.WithFormat("marshal header: %w", err)
-	}
-	if len(body) != 64 && len(header) != 64 {
+	// Are the body or header exactly 64 bytes? The transaction's hash
+	// computation already measures both, and the hash is needed anyway, so
+	// nothing is marshaled to find out (#4245).
+	body64, header64 := txn.Transaction.BodyIs64Bytes(), txn.Transaction.HeaderIs64Bytes()
+	if !body64 && !header64 {
 		return nil
 	}
 
@@ -156,14 +179,22 @@ func adjust64(prod *ProducedMessage) error {
 	txn = txn.Copy()
 
 	// Pad the header and/or body
-	if len(body) == 64 {
+	if body64 {
+		body, err := txn.Transaction.Body.MarshalBinary()
+		if err != nil {
+			return errors.EncodingError.WithFormat("marshal body: %w", err)
+		}
 		body = append(body, 0)
 		txn.Transaction.Body, err = protocol.UnmarshalTransactionBody(body)
 		if err != nil {
 			return errors.EncodingError.WithFormat("unmarshal body: %w", err)
 		}
 	}
-	if len(header) == 64 {
+	if header64 {
+		header, err := txn.Transaction.Header.MarshalBinary()
+		if err != nil {
+			return errors.EncodingError.WithFormat("marshal header: %w", err)
+		}
 		header = append(header, 0)
 		txn.Transaction.Header = protocol.TransactionHeader{}
 		err = txn.Transaction.Header.UnmarshalBinary(header)
@@ -176,13 +207,13 @@ func adjust64(prod *ProducedMessage) error {
 	return nil
 }
 
-func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batch, prod *ProducedMessage, block uint64) (*messaging.SequencedMessage, error) {
+func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batch, prod *ProducedMessage, block uint64) (*messaging.SequencedMessage, int64, *merkle.State, error) {
 	// Generate a synthetic tx and send to the router. Need to track txid to
 	// make sure they get processed.
 
 	err := adjust64(prod)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("pad synthetic message: %w", err)
+		return nil, 0, nil, errors.UnknownError.WithFormat("pad synthetic message: %w", err)
 	}
 
 	var ledger *protocol.SyntheticLedger
@@ -195,7 +226,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 
 	destPart, err := m.Router.RouteAccount(prod.Destination)
 	if err != nil {
-		return nil, err
+		return nil, 0, nil, err
 	}
 	destPartUrl := protocol.PartitionUrl(destPart)
 	destLedger := ledger.Partition(destPartUrl)
@@ -216,53 +247,49 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	// Update the ledger
 	err = record.Main().Put(ledger)
 	if err != nil {
-		return nil, err
+		return nil, 0, nil, err
 	}
 
-	// Store the transaction, its status, and the initiator
-	err = putMessageWithStatus(
-		batch, seq,
-		&protocol.TransactionStatus{
-			Code: errors.Remote,
-		})
+	// Store the sequenced message: the chain entry names it, and the
+	// sequencer serves it from here (H1). No status — the outcome is the
+	// destination's, and nothing here reads one (executor spec, "One status
+	// per outcome").
+	err = batch.Message(seq.Hash()).Main().Put(seq)
 	if err != nil {
-		return nil, err
+		return nil, 0, nil, errors.UnknownError.WithFormat("store sequenced message: %w", err)
 	}
 
-	// Add the transaction to the synthetic transaction chain
-	chain, err := record.MainChain().Get()
+	// Add the transaction to the destination's own synthetic chain: entry n-1
+	// is sequence number n, so a proof over a span of the chain is exactly the
+	// destination's entries in order (executor spec, "One chain per pair, one
+	// stage per chain").
+	chain2 := record.SyntheticChain(destPart)
+	before, err := chain2.Head().Get()
 	if err != nil {
-		return nil, err
+		return nil, 0, nil, errors.UnknownError.WithFormat("load synthetic chain head: %w", err)
+	}
+	before = before.Copy()
+	chain, err := chain2.Get()
+	if err != nil {
+		return nil, 0, nil, err
 	}
 
 	h := seq.Hash()
 	index := chain.Height()
+	if uint64(index)+1 != seq.Number {
+		return nil, 0, nil, errors.InternalError.WithFormat("synthetic chain to %v is at %d but the next sequence number is %d", seq.Destination, index, seq.Number)
+	}
 	err = chain.AddEntry(h[:], false)
 	if err != nil {
-		return nil, err
+		return nil, 0, nil, err
 	}
 
-	err = state.DidAddChainEntry(batch, m.Describe.Synthetic(), protocol.MainChain, protocol.ChainTypeTransaction, h[:], uint64(index), 0, 0)
+	err = state.DidAddChainEntry(batch, m.Describe.Synthetic(), chain2.Name(), protocol.ChainTypeTransaction, h[:], uint64(index), 0, 0)
 	if err != nil {
-		return nil, err
+		return nil, 0, nil, err
 	}
 
-	partition, ok := protocol.ParsePartitionUrl(seq.Destination)
-	if !ok {
-		return nil, errors.InternalError.WithFormat("destination URL is not a valid partition")
-	}
-
-	indexIndex, err := addIndexChainEntry(record.SyntheticSequenceChain(partition), &protocol.IndexEntry{
-		Source: uint64(index),
-	})
-	if err != nil {
-		return nil, err
-	}
-	if indexIndex+1 != seq.Number {
-		m.logger.Error("Sequence number does not match index chain index", "seq-num", seq.Number, "index", indexIndex, "source", seq.Source, "destination", seq.Destination)
-	}
-
-	return seq, nil
+	return seq, index, before, nil
 }
 
 func putMessageWithStatus(batch *database.Batch, message messaging.Message, status *protocol.TransactionStatus) error {

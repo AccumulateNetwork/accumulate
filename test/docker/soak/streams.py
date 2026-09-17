@@ -3,7 +3,7 @@
 received at destination. Names are normalised on BOTH sides — comparing a
 lowercased key against a mixed-case one silently reports 0 received and
 fabricates a stall."""
-import json, os, subprocess, sys
+import json, os, subprocess, sys, threading
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import topology
 # Read from docker-network.yml, never hardcoded: a stale partition here prints
@@ -11,12 +11,39 @@ import topology
 # stalled channel and would fail the run's final check for nothing.
 PARTS = [topology.scopes()[p] for p in topology.partitions()]
 def q(scope):
-    out = subprocess.run(["curl","-s","-m","8","-X","POST","http://localhost:26660/v3",
-        "-H","content-type: application/json",
-        "-d",json.dumps({"jsonrpc":"2.0","id":1,"method":"query","params":{"scope":scope}})],
-        capture_output=True, text=True).stdout
-    try: return json.loads(out).get("result",{}).get("account",{}) or {}
-    except Exception: return {}
+    """The ledger as the NETWORK holds it: every node is asked and each
+    field is the max across answers. One node is one point of stale truth
+    (REPORTING-SPEC 1b): run 20260906T134054Z read one node whose BVN1
+    executor was 348 blocks behind its siblings and reported BVN1 -> dn as
+    produced 100804 against received 102177 -- the destination had received
+    more than the source had sent, which is impossible, and it was the
+    reader's fault. A lagging node can only under-report, so the max is the
+    honest reading."""
+    # Concurrently: this runs at teardown, when nodes may be wedged and every
+    # one of them costs the full timeout. Serially that is nodes x timeout on
+    # the final check of a twelve-hour run.
+    views, lock, threads = [], threading.Lock(), []
+
+    def ask(port):
+        out = subprocess.run(["curl","-s","-m","8","-X","POST","http://localhost:%d/v3" % port,
+            "-H","content-type: application/json",
+            "-d",json.dumps({"jsonrpc":"2.0","id":1,"method":"query","params":{"scope":scope}})],
+            capture_output=True, text=True).stdout
+        try: seq = (json.loads(out).get("result",{}).get("account",{}) or {}).get("sequence") or []
+        except Exception: return
+        with lock: views.append(seq)
+
+    for port in topology.node_ports():
+        t = threading.Thread(target=ask, args=(port,)); t.start(); threads.append(t)
+    for t in threads: t.join()
+
+    merged = {}
+    for seq in views:
+        for e in seq:
+            m = merged.setdefault(norm(e.get("url")), dict(e))
+            for f in ("produced", "received", "delivered"):
+                m[f] = max(m.get(f) or 0, e.get(f) or 0)
+    return {"sequence": list(merged.values())}
 def norm(u): return (u or "").strip().lower().rstrip("/")
 led = {p: q("acc://%s.acme/synthetic" % p) for p in PARTS}
 def entry(ledger, other):

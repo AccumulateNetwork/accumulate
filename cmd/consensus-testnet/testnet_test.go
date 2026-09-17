@@ -320,6 +320,7 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 			case <-ctx.Done():
 				return
 			case group := <-committed:
+				// One executor block per committed leader group (#4164)
 				for _, cert := range group {
 					if cert == nil {
 						continue
@@ -342,6 +343,9 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 						w.PruneBatches(digests)
 					}
 				}
+				// The executor reports each committed group back, or the execution-lag
+				// bound (consensus spec, invariant 9) empties every header after eight.
+				node.ReportExecuted()
 			}
 		}
 	}()
@@ -483,6 +487,9 @@ func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
 						w.PruneBatches(digests)
 					}
 				}
+				// The executor reports each committed group back, or the execution-lag
+				// bound (consensus spec, invariant 9) empties every header after eight.
+				node.ReportExecuted()
 			}
 		}
 	}()

@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
@@ -24,6 +25,7 @@ import (
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/overlay"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -66,7 +68,6 @@ func DropDispatchedMessages() Option {
 	return optionFunc(func(opts *simFactory) error {
 		opts.dropDispatchedMessages = true
 		opts.dropInitialAnchor = true
-		opts.disableAnchorHealing = true
 		return nil
 	})
 }
@@ -99,15 +100,6 @@ func ExecutionShardsPerNode(counts ...int) Option {
 func DropInitialAnchor() Option {
 	return optionFunc(func(opts *simFactory) error {
 		opts.dropInitialAnchor = true
-		return nil
-	})
-}
-
-// DisableAnchorHealing disables healing of anchors after they are initially
-// submitted.
-func DisableAnchorHealing() Option {
-	return optionFunc(func(opts *simFactory) error {
-		opts.disableAnchorHealing = true
 		return nil
 	})
 }
@@ -248,6 +240,39 @@ func BadgerDbOpener(dir string, onErr func(error)) OpenDatabaseFunc {
 			panic(err)
 		}
 
+		dbs[file] = db
+		return db
+	}
+}
+
+// BcdbDbOpener opens each partition's database on the BlockchainDB-backed
+// store the node runs on -- a windowed permanent layer, a dynamic layer, and
+// the adapter's routing between them -- so a simulation reads and writes
+// through the same window the network does. The memory store answers every
+// read from all of history and cannot show a record that the executor needs
+// and the window no longer holds (soak 20260905T032333Z: mark-point states
+// past the window, every Directory anchor rejected).
+func BcdbDbOpener(dir string, onErr func(error)) OpenDatabaseFunc {
+	dbs := map[string]keyvalue.Beginner{}
+	var mu sync.Mutex
+	return func(partition *protocol.PartitionInfo, node int, logger logging.Logger) keyvalue.Beginner {
+		mu.Lock()
+		defer mu.Unlock()
+		file := fmt.Sprintf("%s-%d", partition.ID, node)
+		if db, ok := dbs[file]; ok {
+			return db
+		}
+		err := os.MkdirAll(dir, 0700)
+		if err != nil {
+			onErr(err)
+			panic(err)
+		}
+		db, err := bcdb.Open(filepath.Join(dir, file))
+		if err != nil {
+			onErr(err)
+			panic(err)
+		}
+		db.StatsEvery = 0
 		dbs[file] = db
 		return db
 	}

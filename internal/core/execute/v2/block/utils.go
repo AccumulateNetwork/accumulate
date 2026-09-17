@@ -11,49 +11,10 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-// orderedMap is an ordered map from K to V implemented with a builtin map,
-// slice of keys, and comparison function.
-type orderedMap[K comparable, V any] struct {
-	theMap map[K]V
-	keys   []K
-	cmp    func(u, v K) int
-}
-
-// Set sets the value of the given key to the given value.
-func (m *orderedMap[K, V]) Set(k K, v V) {
-	if m.theMap == nil {
-		m.theMap = map[K]V{}
-	}
-	m.theMap[k] = v
-	ptr, new := sortutil.BinaryInsert(&m.keys, func(l K) int { return m.cmp(l, k) })
-	if new {
-		*ptr = k
-	}
-}
-
-// Get retrieves the value of the given key.
-func (m *orderedMap[K, V]) Get(k K) (V, bool) {
-	v, ok := m.theMap[k]
-	return v, ok
-}
-
-// For iterates over the map in order.
-func (m *orderedMap[K, V]) For(fn func(k K, v V) error) error {
-	for _, k := range m.keys {
-		k := k // See docs/developer/rangevarref.md
-		err := fn(k, m.theMap[k])
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 // shouldIndexChain returns true if the given chain should be indexed.
 func shouldIndexChain(_ *url.URL, _ string, typ protocol.ChainType) (bool, error) {

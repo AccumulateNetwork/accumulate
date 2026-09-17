@@ -9,10 +9,8 @@ package crosschain
 import (
 	"bytes"
 	"crypto/ed25519"
-	"encoding/binary"
 	"sort"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -50,72 +48,6 @@ func healActivates(blockIndex uint64) bool {
 // extra answers are discarded anyway, since the block's sort keeps the first
 // sighting of a sequence number.
 const sendersPerActivation = 2
-
-// selectedToSend reports whether this node is one of the validators that sends
-// this activation's requests.
-//
-// The selection is over which node SENDS, not over what is requested. Every
-// validator computes the same request set from the same agreed state, so a node
-// that is not selected has already done the work and is ready to be selected at
-// the next activation without discovering anything new.
-//
-// # Why the previous block's hash
-//
-// It is already agreed — consensus settled it, and every node has it before
-// this block begins, so there is nothing new to distribute or to disagree
-// about. It changes every block, where a clock need not: a partition producing
-// several blocks a second would keep selecting the same pair while its stream
-// fell further behind. And it is not anyone's to choose — a validator can nudge
-// its own clock, and the node picking the senders should not be the node
-// deciding who they are.
-//
-// The pair rotates with every activation because the hash does, so a validator
-// that cannot reach a source stops being asked at the next activation and the
-// load spreads instead of settling on whoever was picked first.
-func (c *Conductor) selectedToSend(batch *database.Batch) (bool, error) {
-	validators, err := c.partitionValidators()
-	if err != nil {
-		return false, errors.UnknownError.Wrap(err)
-	}
-
-	// Nobody to choose between, or everybody is chosen anyway.
-	if len(validators) <= sendersPerActivation {
-		return true, nil
-	}
-
-	me := c.ValidatorKey.Public().(ed25519.PublicKey)
-	mine := -1
-	for i, v := range validators {
-		if bytes.Equal(v, me) {
-			mine = i
-			break
-		}
-	}
-	if mine < 0 {
-		// Not a validator of this partition. Healing is a validator's job:
-		// the answer re-enters through consensus, so a node that cannot
-		// participate has nothing to contribute by asking.
-		return false, nil
-	}
-
-	// The state hash the previous block committed. Reading it as this block
-	// begins gives the hash of the block before — agreed, and available without
-	// being distributed.
-	prev, err := batch.GetBptRootHash()
-	if err != nil {
-		return false, errors.UnknownError.WithFormat("load previous block hash: %w", err)
-	}
-
-	// Adjacent indices rather than two independent draws, which could pick the
-	// same validator twice and quietly leave one sender.
-	first := int(binary.BigEndian.Uint64(prev[:8]) % uint64(len(validators)))
-	for i := 0; i < sendersPerActivation; i++ {
-		if (first+i)%len(validators) == mine {
-			return true, nil
-		}
-	}
-	return false, nil
-}
 
 // partitionValidators returns this partition's active validator keys, sorted,
 // so every node derives the same list in the same order from the same globals.

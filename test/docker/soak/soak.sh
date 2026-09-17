@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-# Chaos soak: 3 BVNs x 4 validators + bootstrap, cross-partition load, induced
-# drops. Chaos restarts re-arm each node's drop hooks, so drops recur throughout.
+# Chaos soak: 3 BVNs x 4 validators + bootstrap, cross-partition load, and
+# container disturbance on a cadence (restart or pause one BVN node). That is
+# the fault model; nothing is dropped in-band. A restarted leader loses what it
+# was dispatching, which is the only message loss this harness produces.
 #
-#   DURATION=24h TPS=2 ./soak.sh "why I am running this"
+#   ./soak.sh "why I am running this"              # every knob from soak.conf
+#   ./soak.sh -c my.conf "why I am running this"   # soak.conf, then my.conf on top
+#
+# Knobs live in soak.conf, a checked-in file frozen into every run directory —
+# not in the launching shell. (Five runs on 2026-09-05 silently built a leveldb
+# network because ACC_STORAGE happened to be unset; the storage backend now
+# lives in ../docker-network.yml and nothing is read from the environment.)
 #
 # EVERY RUN WRITES TO ITS OWN DIRECTORY under runs/<UTC timestamp>/ and NOTHING
 # IS EVER OVERWRITTEN. Earlier versions of this script truncated soak.log and
@@ -13,6 +21,21 @@
 # long after the tree has moved on.
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"; repo="$(cd "$here/../../.." && pwd)"
+
+# Configuration comes from files, not the launching shell: soak.conf beside
+# this script holds every knob with its default, and `-c <file>` layers a
+# second file on top. Both are frozen into the run directory. The purpose
+# text is the one positional argument.
+conf_override=""
+if [ "${1:-}" = "-c" ]; then
+  conf_override="$2"; shift 2
+  [ -f "$conf_override" ] || { echo "no such config file: $conf_override"; exit 1; }
+fi
+# shellcheck source=soak.conf
+. "$here/soak.conf"
+[ -n "$conf_override" ] && . "$conf_override"
+# The knobs the compose file and the node containers read
+export COMPOSE_PROJECT_NAME ACC_BLOCK_INTERVAL ACC_MEM_LIMIT GOMEMLIMIT ACC_TX_TRACE
 DURATION="${DURATION:-24h}"; TPS="${TPS:-2}"
 
 # Parse Go-style durations so short runs work. The old parser did
@@ -28,6 +51,8 @@ case "$DURATION" in
 esac
 # Chaos every ~10 min is meaningless in a 5-minute run; scale the interval so a
 # short run still exercises disruption.
+# CHAOS_MIN/CHAOS_JITTER come from soak.conf (sourced above, which overrides
+# anything in the environment); empty there means the duration-scaled default.
 if [ "$duration_seconds" -le 1800 ]; then
   CHAOS_MIN=${CHAOS_MIN:-25}; CHAOS_JITTER=${CHAOS_JITTER:-20}
 else
@@ -90,18 +115,15 @@ exec_ver=$(grep -E '^\s*executorVersion:' "$here/../docker-network.yml" | head -
 heal_flags=$(sed 's/#.*//' "$compose_file" \
   | grep -oE 'enable-[a-z-]*healing = [a-z]+' | sort -u | paste -sd'; ' -)
 heal_flags="${heal_flags:-unconditional (DI conductor, #4105)}"
-# The compose declares these as "${DROP_SYN-<default>}", so the value that
-# actually reaches the nodes depends on the environment. Record the EFFECTIVE
-# value — recording the template would make two differently-configured runs look
-# identical in the manifest.
-composed_default() { # $1=env var name, $2=compose key
-  # Strip only the leading "KEY: " — a greedy .*: would eat into the value,
-  # whose own patterns contain colons (e.g. "*:%499+3").
-  grep -oE "$2: *\"[^\"]*\"" "$compose_file" | head -1 \
-    | sed "s/^$2: *//; s/\"//g; s/^\${[A-Za-z_][A-Za-z0-9_]*-//; s/}$//"
-}
-drop_synth="${DROP_SYN:-$(composed_default DROP_SYN ACC_DEBUG_DROP_SYNTHETIC)}"
-drop_anchor="${DROP_ANC:-$(composed_default DROP_ANC ACC_DEBUG_DROP_ANCHOR)}"
+# The fault model, stated once for the manifest and run.json. There are no
+# drop hooks in the node (nothing reads ACC_DEBUG_DROP_*; git log -S finds the
+# name only in old manifests), so the only honest statement is the disturbance
+# cadence -- or "none".
+if [ "$CHAOS_ENABLED" = off ]; then
+  fault_model="none (CHAOS=off)"
+else
+  fault_model="restart or pause one BVN container every ${CHAOS_MIN}s + 0-${CHAOS_JITTER}s"
+fi
 # Compose names built images "<project>-<service>", and the project is pinned to
 # $COMPOSE_PROJECT_NAME above. This default was "docker-bvn1-val1", the name
 # from BEFORE the project was pinned (#4124) — so from that commit onward every
@@ -146,7 +168,8 @@ fi
 
 # Freeze the exact config. A diff against these is the only reliable way to know
 # what changed between two runs.
-cp "$compose_file" "$here/../docker-network.yml" "$0" "$rd/config/" 2>/dev/null
+cp "$compose_file" "$here/../docker-network.yml" "$0" "$here/soak.conf" "$rd/config/" 2>/dev/null
+[ -n "$conf_override" ] && cp "$conf_override" "$rd/config/override.conf" 2>/dev/null
 git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
 
 {
@@ -164,23 +187,22 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "| image id | \`$image_id\` |"
   echo "| executor version | **$exec_ver** |"
   echo "| healing | $heal_flags |"
-  echo "| synthetic drops | \`$drop_synth\` |"
-  echo "| anchor drops | \`${drop_anchor:-none}\` |"
+  echo "| fault model | $fault_model |"
   echo "| topology | $n_bvn BVNs, $n_node nodes + bootstrap |"
   echo "| partitions | $PARTS |"
   echo "| chaos | $CHAOS_ENABLED |"
   echo "| target duration | $DURATION |"
   echo "| target TPS | $TPS |"
-  echo "| storage | ${ACC_STORAGE:-leveldb} |"
+  echo "| storage | $(sed -nE 's/^database: *([a-z]+).*/\1/p' "$here/../docker-network.yml" | head -1) (docker-network.yml) |"
   echo "| block interval | ${ACC_BLOCK_INTERVAL:-1s} |"
   echo "| memory budget | mem_limit ${ACC_MEM_LIMIT:-1536m}, GOMEMLIMIT ${GOMEMLIMIT:-1200MiB} |"
   echo
-  echo "Config as run is frozen in \`config/\`. Results appended below on exit."
+  echo "Config as run is frozen in \`config/\` (soak.conf${conf_override:+ + override.conf}, the compose and network files). Results appended below on exit."
 } > "$manifest"
 
-printf '{"runId":"%s","startedUtc":"%s","image":"%s","imageId":"%s","commit":"%s","describe":"%s","branch":"%s","uncommittedFiles":%s,"executorVersion":"%s","healing":"%s","dropSynthetic":"%s","dropAnchor":"%s","bvns":%s,"nodes":%s,"partitions":"%s","chaos":"%s","duration":"%s","tps":"%s","note":"%s"}\n' \
+printf '{"runId":"%s","startedUtc":"%s","image":"%s","imageId":"%s","commit":"%s","describe":"%s","branch":"%s","uncommittedFiles":%s,"executorVersion":"%s","healing":"%s","faultModel":"%s","bvns":%s,"nodes":%s,"partitions":"%s","chaos":"%s","duration":"%s","tps":"%s","note":"%s"}\n' \
   "$run_id" "$(date -u +%FT%TZ)" "$soak_image" "$image_id" "$git_head" "$git_desc" "$git_branch" "$git_dirty" \
-  "$exec_ver" "$heal_flags" "$drop_synth" "${drop_anchor:-none}" "$n_bvn" "$n_node" \
+  "$exec_ver" "$heal_flags" "$fault_model" "$n_bvn" "$n_node" \
   "$PARTS" "$CHAOS_ENABLED" "$DURATION" "$TPS" "$NOTE" > "$runjson"
 
 echo "== soak start $(date -u) duration=$DURATION tps=$TPS ==" | tee "$log"
@@ -201,12 +223,12 @@ other=$(cat "$pidfile" 2>/dev/null)
 if [ -n "$other" ] && [ "$other" != "$$" ] && kill -0 "$other" 2>/dev/null \
    && grep -q "soak.sh" "/proc/$other/cmdline" 2>/dev/null; then
   echo "another soak is running (pid $other) — refusing to start." | tee -a "$log"
-  echo "  stop it first, or SOAK_FORCE=1 to take the network over deliberately." | tee -a "$log"
+  echo "  stop it first, or SOAK_FORCE=1 in a -c override file to take the network over deliberately (the environment is not read)." | tee -a "$log"
   [ "${SOAK_FORCE:-0}" = 1 ] || exit 1
 fi
 live=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c '^acc-')
 if [ "$live" -gt 0 ] && [ "${SOAK_FORCE:-0}" != 1 ]; then
-  echo "$live acc-* containers are up from something else — refusing to start (SOAK_FORCE=1 to take over)." | tee -a "$log"
+  echo "$live acc-* containers are up from something else — refusing to start (SOAK_FORCE=1 in a -c override file to take over; the environment is not read)." | tee -a "$log"
   exit 1
 fi
 echo $$ > "$pidfile"
@@ -215,7 +237,7 @@ $compose down -v --remove-orphans >/dev/null 2>&1
 # Preflight the host ports the compose publishes. A single stray process on one
 # of them makes `up` fail on ONLY that node — the rest come up, so the failure
 # looked like a random "up failed" and left a partial network behind (#4158).
-# A leaked `accumulated run devnet` squatting on 26660 cost an afternoon; name
+# A leaked `accumulated run devnet` squatting on 26680 cost an afternoon; name
 # the holder so the next person spends a second, not an afternoon.
 mapfile -t want_ports < <(grep -oE '"\s*[0-9]+\s*:\s*[0-9]+"|- [0-9]+:[0-9]+' "$compose_file" \
   | grep -oE '[0-9]+:' | tr -d ':' | sort -un)
@@ -243,6 +265,18 @@ if ! $compose up -d >>"$log" 2>&1; then
   exit 1
 fi
 
+# The manifest's memory line above prints this script's defaults, which are
+# not compose's: run 20260903T121819Z recorded 1536m/1200MiB and ran at
+# 2048m/1700MiB. Replace it with what the containers actually got (PLAN S0/S6).
+eff_c=$(docker ps --format '{{.Names}}' | grep -E '^acc-bvn' | head -1)
+if [ -n "$eff_c" ]; then
+  eff_mem=$(docker inspect -f '{{.HostConfig.Memory}}' "$eff_c" 2>/dev/null)
+  eff_gml=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$eff_c" 2>/dev/null | sed -n 's/^GOMEMLIMIT=//p' | head -1)
+  eff_mem_h=$([ -n "$eff_mem" ] && [ "$eff_mem" -gt 0 ] 2>/dev/null && echo "$((eff_mem / 1048576))MiB" || echo "unlimited")
+  sed -i "s#^| memory budget | .*#| memory budget | mem_limit ${eff_mem_h}, GOMEMLIMIT ${eff_gml:-unset} (effective, from docker inspect) |#" "$manifest"
+  echo "$(date -u +%FT%TZ) effective memory budget: mem_limit ${eff_mem_h}, GOMEMLIMIT ${eff_gml:-unset}" | tee -a "$log"
+fi
+
 # Record the image actually running, so a rebuild later cannot be confused for this run.
 docker image inspect --format '{{.Id}} {{.RepoTags}}' "$soak_image" \
   > "$rd/config/image.txt" 2>/dev/null
@@ -258,7 +292,7 @@ nohup docker compose -f "$here/../docker-compose.yml" logs -f --no-color \
 LOGCAP=$!
 
 up=""; for _ in $(seq 1 90); do
-  curl -sf -X POST http://localhost:26660/v3 -H 'content-type: application/json' \
+  curl -sf -X POST http://localhost:26680/v3 -H 'content-type: application/json' \
     -d '{"jsonrpc":"2.0","id":1,"method":"network-status","params":{"partition":"Directory"}}' >/dev/null 2>&1 && { up=1; break; }
   sleep 5
 done
@@ -284,6 +318,15 @@ fi
 # costs the whole run for what may be a momentary loss. Restart it instead, and
 # record every exit in the log so a repeating death is visible rather than
 # silently papered over.
+# A monitor from an earlier run that outlived its teardown holds the port,
+# answers the gate below, and feeds every watcher a dead run's data: run
+# 20260903T222843Z ran 22 minutes with no mem.csv and stallkill reading run
+# 213153Z. A monitor that is not ours is a reason to stop, not to proceed.
+if stale=$(pgrep -f "$here/soakmon.py" 2>/dev/null) && [ -n "$stale" ]; then
+  echo "another soakmon is running (pid $stale) — an earlier run's monitor outlived its teardown; kill it and retry. Refusing to run against someone else's dashboard." | tee -a "$log"
+  $compose down -v --remove-orphans >/dev/null 2>&1
+  exit 1
+fi
 ( while kill -0 $$ 2>/dev/null; do
     env RUN_DIR="$rd" "$here/soakmon.py" >> "$rd/soakmon.log" 2>&1
     echo "$(date -u +%FT%TZ) soakmon exited rc=$? — restarting" >> "$rd/soakmon.log"
@@ -341,7 +384,7 @@ fi
 # loadgen, let this script write its verdict, then take the network down.
 # STALL_KILL_SECS=0 disables it for a run that is meant to sit in a stall.
 if [ -x "$here/stallkill.sh" ] && [ "${STALL_KILL_SECS:-240}" != "0" ]; then
-  nohup env RUN_DIR="$rd" STALL_KILL_SECS="${STALL_KILL_SECS:-240}" \
+  nohup env RUN_DIR="$rd" STALL_KILL_SECS="${STALL_KILL_SECS:-240}" SOAK_PID=$$ \
     "$here/stallkill.sh" > "$rd/stallkill.log" 2>&1 &
   STALLKILL=$!
   echo "   stallkill: armed (stop the run after ${STALL_KILL_SECS:-240}s stalled)" | tee -a "$log"
@@ -352,7 +395,7 @@ echo "   load starts now" | tee -a "$log"
 # an ever-growing account set. -faucet-seed FAUCET matches init's genesis faucet.
 # Rotate across all 12 nodes so one chaos-disrupted node neither rejects traffic
 # nor carries the whole load.
-# Endpoints come from the topology, not a literal port range. `seq 26660 26671`
+# Endpoints come from the topology, not a literal port range. `seq 26680 26691`
 # was correct for exactly one network shape; after the cut to 2 BVNs it would
 # have handed the loadgen four endpoints nothing is listening on. The generator
 # does not fail on those — it rotates onto them and the submissions time out,
@@ -431,15 +474,15 @@ fi
 # Monitor: heights + total heals every 5 min
 echo "time,dnHeight,heals,cpuPct" > "$mon"
 ( while kill -0 $DRIVER 2>/dev/null; do
-    h=$(curl -s -X POST http://localhost:26660/v3 -H 'content-type: application/json' \
+    h=$(curl -s -X POST http://localhost:26680/v3 -H 'content-type: application/json' \
       -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"scope":"acc://dn.acme/ledger"}}' \
       | grep -oE '"index":[0-9]+' | head -1 | cut -d: -f2)
     heals=0
     for c in $(docker ps --filter name=acc-bvn --format '{{.Names}}'); do
       x=$(docker exec -e PARTS="$PARTS" "$c" sh -c '
-        nid=$(curl -s -X POST http://localhost:26660/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"node-info\",\"params\":{}}" | grep -oE "\"peerID\":\"[^\"]+\"" | cut -d"\"" -f4)
+        nid=$(curl -s -X POST http://localhost:26680/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"node-info\",\"params\":{}}" | grep -oE "\"peerID\":\"[^\"]+\"" | cut -d"\"" -f4)
         for part in $PARTS; do
-          curl -s -X POST http://localhost:26660/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"consensus-status\",\"params\":{\"partition\":\"$part\",\"nodeID\":\"$nid\"}}" | grep -oE "\"(syntheticHeals|anchorHeals)\":[0-9]+" | cut -d: -f2
+          curl -s -X POST http://localhost:26680/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"consensus-status\",\"params\":{\"partition\":\"$part\",\"nodeID\":\"$nid\"}}" | grep -oE "\"(syntheticHeals|anchorHeals)\":[0-9]+" | cut -d: -f2
         done' 2>/dev/null | paste -sd+ - | bc 2>/dev/null)
       heals=$((heals + ${x:-0}))
     done
@@ -450,8 +493,63 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
     echo "$stats" | sed "s/^/$ts,/" >> "$rd/stats.csv"
     cpu=$(echo "$stats" | cut -d, -f2 | tr -d '%' | awk '{s+=$1} END {printf "%.0f", s}')
     echo "$ts,${h:-?},$heals,${cpu:-?}" >> "$mon"
-    sleep ${MON_INTERVAL:-$([ "$duration_seconds" -le 1800 ] && echo 20 || echo 300)}
+    # 30 s, not 5 min: run 20260903T121819Z climbed from 45 MiB to the
+    # GOMEMLIMIT in ten minutes and stats.csv had two points for it (PLAN S0).
+    sleep ${MON_INTERVAL:-$([ "$duration_seconds" -le 1800 ] && echo 20 || echo 30)}
   done ) &
+
+# Storage-backend counters over time (PLAN S0). BlockchainDB rewrites
+# stats.json every 50 commits, so only the last snapshot survives a run — and
+# stagedCommits, the D5 instrument, had no history. One row per (node,
+# database) a minute, the few counters that move.
+echo "time,node,database,commits,stagedCommits,shallowMisses,maintenanceErrors,permPutTotal,dynaPutTotal,dynaLiveHit,deepHits,deepMisses" > "$rd/storage-stats.csv"
+( while kill -0 $DRIVER 2>/dev/null; do
+    ts=$(date -u +%FT%TZ)
+    # Every container mounts the whole network's config volume, so any one
+    # of them sees every node's stats.json (run 20260903T173742Z had each
+    # row eight times). Ask one container, and take the node from the path.
+    c=$(docker ps --format '{{.Names}}' | grep -E '^acc-(dn|bvn)' | head -1)
+    [ -n "$c" ] && for once in 1; do
+      docker exec "$c" sh -c 'for f in $(find /root/.accumulate -name stats.json 2>/dev/null); do echo "== $f"; cat "$f"; done' 2>/dev/null \
+        | python3 -c '
+import sys, json
+ts = sys.argv[1]
+blob = sys.stdin.read()
+for part in blob.split("== ")[1:]:
+    path, _, body = part.partition("\n")
+    try:
+        d = json.loads(body)
+    except Exception:
+        continue
+    parts = path.split("/")
+    db = parts[-4] if len(parts) >= 4 else path      # dnn / bvnn
+    node = parts[-5] if len(parts) >= 5 else "?"      # e.g. bvn2-4
+    perm, dyna = d.get("perm") or {}, d.get("dyna") or {}
+    print(",".join(str(x) for x in [ts, node, db, d.get("commits", ""), d.get("stagedCommits", ""),
+          sum((d.get("shallowMisses") or {}).values()), d.get("maintenanceErrors", ""),
+          perm.get("PutTotal", ""), dyna.get("PutTotal", ""), dyna.get("LiveHit", ""),
+          sum(v.get("hits", 0) for v in (d.get("historyReads") or {}).values()),
+          sum(v.get("misses", 0) for v in (d.get("historyReads") or {}).values())]))
+' "$ts" >> "$rd/storage-stats.csv" 2>/dev/null
+    done
+    sleep ${STORAGE_STATS_INTERVAL:-60}
+  done ) &
+
+# Profiles on the hour (PLAN S0): the steady-state criteria compare the heap
+# profile at hour 12 with hour 1, and a capture taken only at the wedge shows
+# the corpse, not the growth. Same capture as wedgewatch, prefixed hourly-.
+if [ -x "$here/wedgewatch.sh" ]; then
+  ( while kill -0 $DRIVER 2>/dev/null; do
+      # Sleep in short steps so the loop dies with the driver instead of
+      # outliving the run by up to an hour (runs 173742Z and 213153Z).
+      waited=0
+      while [ "$waited" -lt "${PROFILE_INTERVAL:-3600}" ] && kill -0 $DRIVER 2>/dev/null; do
+        sleep 30; waited=$((waited + 30))
+      done
+      kill -0 $DRIVER 2>/dev/null || break
+      env RUN_DIR="$rd" "$here/wedgewatch.sh" --now hourly >> "$rd/wedgewatch.log" 2>&1
+    done ) &
+fi
 
 wait $DRIVER; rc=$?
 
@@ -488,14 +586,18 @@ reconcile_pulls=$(wc -l < "$rd/reconcile-pulls.txt" 2>/dev/null || echo 0)
 # database — permanent-layer duplicates and conflicts, per record shape — and
 # it dies with the volume. One file per (node, database).
 mkdir -p "$rd/storage-stats"
-for c in $(docker ps --format '{{.Names}}' | grep -E '^acc-(dn|bvn)'); do
-  for f in $(docker exec "$c" sh -c 'find /root/.accumulate -name stats.json 2>/dev/null'); do
-    # Every node runs TWO databases (dnn/ and bvnn/), both named accumulate.db —
-    # name the copy by the path under the node's directory or the second
-    # overwrites the first.
-    rel=$(printf '%s' "$f" | sed -E 's#^/root/.accumulate/[^/]+/##; s#/stats.json$##; s#/#-#g')
-    docker exec "$c" cat "$f" > "$rd/storage-stats/${c#acc-}-$rel.json" 2>/dev/null
-  done
+# Every container mounts the whole network's volume, so one container sees
+# every node's stats.json — and naming the copy by the CONTAINER wrote one
+# node's file under every node's name (run 20260904T180918Z: eight identical
+# bvnn files). Ask one container, name the copy by the node in the path.
+c=$(docker ps --format '{{.Names}}' | grep -E '^acc-(dn|bvn)' | head -1)
+[ -n "$c" ] && for f in $(docker exec "$c" sh -c 'find /root/.accumulate -name stats.json 2>/dev/null'); do
+  node=$(printf '%s' "$f" | sed -E 's#^/root/.accumulate/([^/]+)/.*#\1#')
+  # Every node runs TWO databases (dnn/ and bvnn/), both named accumulate.db —
+  # name the copy by the path under the node's directory or the second
+  # overwrites the first.
+  rel=$(printf '%s' "$f" | sed -E 's#^/root/.accumulate/[^/]+/##; s#/stats.json$##; s#/#-#g')
+  docker exec "$c" cat "$f" > "$rd/storage-stats/${node}-$rel.json" 2>/dev/null
 done
 rmdir "$rd/storage-stats" 2>/dev/null || true
 # Final produced-vs-received across every channel, the check that sees a stall.
@@ -557,6 +659,10 @@ if [ "${KEEP_UP:-0}" = 1 ]; then
 else
   $compose down -v --remove-orphans >/dev/null 2>&1
   echo "network torn down" | tee -a "$log"
+  # And the monitor, which otherwise keeps the port for the next run. The
+  # supervisor first, or it respawns a child between the two kills (run
+  # 20260905T032333Z left a soakmon.py serving :8099 into the next run).
+  kill "$MON" 2>/dev/null; sleep 1; pkill -P "$MON" 2>/dev/null; pkill -f "soakmon.py" 2>/dev/null
 fi
 
 echo

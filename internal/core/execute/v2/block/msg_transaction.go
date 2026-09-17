@@ -7,7 +7,6 @@
 package block
 
 import (
-	"bytes"
 	"log/slog"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
@@ -174,7 +173,7 @@ func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, re
 
 	// Resolve a remote transaction to the locally stored copy (or not)
 	if resolve {
-		_, err := x.resolveTransaction(batch, txn)
+		_, err := x.resolveTransaction(batch, ctx, txn)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -246,6 +245,7 @@ func (x TransactionMessage) Process(batch *database.Batch, ctx *MessageContext) 
 			if err != nil {
 				return nil, errors.UnknownError.WithFormat("store message: %w", err)
 			}
+			ctx.markTransactionRecorded(ctx.message.Hash())
 		}
 
 		// Execute if it's time
@@ -281,9 +281,28 @@ func (x TransactionMessage) Process(batch *database.Batch, ctx *MessageContext) 
 	return status, nil
 }
 
-func (TransactionMessage) resolveTransaction(batch *database.Batch, msg *messaging.TransactionMessage) (bool, error) {
+func (TransactionMessage) resolveTransaction(batch *database.Batch, ctx *MessageContext, msg *messaging.TransactionMessage) (bool, error) {
 	isRemote := msg.GetTransaction().Body.Type() == protocol.TransactionTypeRemote
 	s, err := batch.Message(msg.ID().Hash()).Main().Get()
+	if isRemote && errors.Is(err, errors.NotFound) && ctx.Block != nil && ctx.Block.staging != nil {
+		// A held anchor carries its transaction in staging, and a later
+		// copy may name it by hash alone; nothing about it is in the store
+		// until it executes (executor spec, "One chain per pair, one stage
+		// per chain")
+		if txn, ok := ctx.Block.staging.HeldTransaction(msg.ID().Hash()); ok {
+			msg.Transaction = txn
+			return false, nil
+		}
+	}
+	if isRemote && errors.Is(err, errors.NotFound) {
+		// The local copy a remote transaction refers to may be older than
+		// the store's window (database spec, "Windowed stores")
+		err = ctx.Executor.deepView(func(deep *database.Batch) error {
+			var e error
+			s, e = deep.Message(msg.ID().Hash()).Main().Get()
+			return e
+		})
+	}
 	s2, isTxn := s.(*messaging.TransactionMessage)
 	switch {
 	case errors.Is(err, errors.NotFound) && !isRemote:
@@ -340,38 +359,40 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 		return nil, err
 	}
 
-	kv := []interface{}{
-		"block", ctx.Block.Index,
-		"type", ctx.transaction.Body.Type(),
-		"code", status.Code,
-		"txn-hash", logging.AsHex(ctx.transaction.GetHash()).Slice(0, 4),
-		"principal", ctx.transaction.Header.Principal,
-	}
+	// A failed transaction is a counter, by type, and a Debug line; the one
+	// Info line per message is an anchor's execution (#4231). Nothing is
+	// built for a line that is not written.
 	if status.Error != nil {
-		kv = append(kv, "error", status.Error)
-		if ctx.pass > 0 {
-			ctx.Executor.logger.Info("Additional transaction failed", kv...)
-		} else {
-			ctx.Executor.logger.Info("Transaction failed", kv...)
+		mExecTransactionFailed.WithLabelValues(ctx.transaction.Body.Type().String()).Inc()
+	}
+	isAnchor := ctx.transaction.Body.Type().IsAnchor()
+	if isAnchor || ctx.Executor.logger.Enabled(ctx.Context, slog.LevelDebug) {
+		kv := []interface{}{
+			"block", ctx.Block.Index,
+			"type", ctx.transaction.Body.Type(),
+			"code", status.Code,
+			"txn-hash", logging.AsHex(ctx.transaction.GetHash()).Slice(0, 4),
+			"principal", ctx.transaction.Header.Principal,
 		}
-	} else if status.Pending() {
-		if ctx.pass > 0 {
-			ctx.Executor.logger.Debug("Additional transaction pending", kv...)
-		} else {
-			ctx.Executor.logger.Debug("Transaction pending", kv...)
-		}
-	} else {
 		fn := ctx.Executor.logger.Debug
-		switch ctx.transaction.Body.Type() {
-		case protocol.TransactionTypeDirectoryAnchor,
-			protocol.TransactionTypeBlockValidatorAnchor:
-			fn = ctx.Executor.logger.Info
-			kv = append(kv, "module", "anchoring")
+		var what string
+		switch {
+		case status.Error != nil:
+			kv = append(kv, "error", status.Error)
+			what = "failed"
+		case status.Pending():
+			what = "pending"
+		default:
+			what = "succeeded"
+			if isAnchor {
+				fn = ctx.Executor.logger.Info
+				kv = append(kv, "module", "anchoring")
+			}
 		}
 		if ctx.pass > 0 {
-			fn("Additional transaction succeeded", kv...)
+			fn("Additional transaction "+what, kv...)
 		} else {
-			fn("Transaction succeeded", kv...)
+			fn("Transaction "+what, kv...)
 		}
 	}
 
@@ -614,10 +635,6 @@ func (b *Block) processEvents() error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("load expired transaction backlog: %w", err)
 	}
-
-	d := new(bundle)
-	d.Block = b
-	d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
 
 	// Process N items
 	msgs := make([]messaging.Message, n)

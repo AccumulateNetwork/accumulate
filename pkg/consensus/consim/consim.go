@@ -90,6 +90,39 @@ type Config struct {
 	// that, and therefore cannot ask whether an overloaded partition stops or
 	// merely lags.
 	TPSByPartition map[string]int
+
+	// UserLoad submits the load through the user path, which the store's
+	// budget and the execution-lag bound refuse (consensus spec, invariants 4
+	// and 9), as the load generator's traffic is. The default system path is
+	// never refused, so a run that asks how the network sheds load must set
+	// this.
+	UserLoad bool
+
+	// SystemTPSByPartition adds load through the system path -- never
+	// refused, like synthetic packages and anchors arriving from other
+	// partitions -- on top of TPS. It is what keeps piling into the store
+	// while the user path is refused for execution lag, and therefore what
+	// a header drains when the lag clears.
+	SystemTPSByPartition map[string]int
+
+	// SyntheticPerUser couples the system traffic to the user traffic the
+	// network accepts, as the real network does: every accepted user
+	// transaction on a BVN produces this many synthetic transactions for the
+	// OTHER BVN (or the Directory when there is one BVN), submitted through
+	// the system path SyntheticDelay later -- the Directory round trip. With
+	// this, refusing user work reduces the system traffic that follows, the
+	// feedback that makes the execution-lag bound a shedding mechanism rather
+	// than a pause. SystemTPSByPartition is constant load with no such
+	// feedback.
+	SyntheticPerUser float64
+	SyntheticDelay   time.Duration
+
+	// MaxExecutionLag and MaxHeaderBytes are the two knobs of invariant 9:
+	// how far execution may lag before headers go empty, and how much of the
+	// backlog one header may carry back. Zero uses the primary's defaults.
+	MaxExecutionLag int
+	MaxHeaderBytes  int
+	MaxBlockBytes   int // per block, shared by the validators' headers (#4230)
 }
 
 // execCost reports the per-transaction execution cost for one partition.
@@ -152,6 +185,9 @@ type simNode struct {
 	height atomic.Uint64
 	txs    atomic.Uint64
 	fatal  atomic.Value // error that stopped this node's consumer, if any
+
+	maxBlockTxs atomic.Uint64 // the most transactions one executed block carried
+	maxLag      atomic.Int64  // the deepest execution lag observed after a block
 }
 
 // Sim is a running simulation.
@@ -170,6 +206,15 @@ type Sim struct {
 	submitted   atomic.Uint64
 	refused     atomic.Uint64
 	refusedOnce sync.Once
+
+	synthQ chan synthDue // synthetics owed to another partition, with when they are due
+}
+
+// synthDue is a batch of synthetic transactions one partition owes another.
+type synthDue struct {
+	to    string
+	count int
+	due   time.Time
 }
 
 // logf writes to the configured output, if any.
@@ -195,6 +240,13 @@ type Result struct {
 	// its own -- the network declined work it was healthy enough to take.
 	Submitted uint64
 	Refused   uint64
+
+	// MaxBlockTxs is, per partition, the most transactions one executed block
+	// carried; MaxLag the deepest execution lag observed. Together they say
+	// whether a backlog came back a header at a time or as one block
+	// (consensus spec, invariant 9).
+	MaxBlockTxs map[string]uint64
+	MaxLag      map[string]int
 }
 
 // ErrStalled is returned (wrapped) when a partition stops executing.
@@ -277,6 +329,9 @@ func New(cfg Config) (*Sim, error) {
 			},
 			MinRoundInterval:    cfg.MinRoundInterval,
 			BatchCollectTimeout: cfg.BatchCollect,
+			MaxExecutionLag:     cfg.MaxExecutionLag,
+			MaxHeaderBytes:      cfg.MaxHeaderBytes,
+			MaxBlockBytes:       cfg.MaxBlockBytes,
 		}, committee, s.hosts[val], pss[val])
 		if err != nil {
 			return nil, err
@@ -383,6 +438,12 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 					n += len(b.Transactions)
 				}
 				sn.txs.Add(uint64(n))
+				for {
+					cur := sn.maxBlockTxs.Load()
+					if uint64(n) <= cur || sn.maxBlockTxs.CompareAndSwap(cur, uint64(n)) {
+						break
+					}
+				}
 				if cost := s.cfg.execCost(sn.part); cost > 0 && n > 0 {
 					// Charge for the work on the goroutine that reads
 					// Committed() — where the real service pays it, and
@@ -403,12 +464,51 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 			if executedAny {
 				sn.height.Add(1)
 			}
+			// The node counts every committed group it hands over; the
+			// executor reports each one back when its block is done, and the
+			// difference is the execution lag the primary bounds (consensus
+			// spec, invariant 9). consim's executor is this loop.
+			sn.node.ReportExecuted()
+			if lag := int64(sn.node.ExecutionLag()); lag > sn.maxLag.Load() {
+				sn.maxLag.Store(lag)
+			}
 		}
 	}
 }
 
 // load submits cfg.TPS unique transactions per second to a partition,
 // round-robin across its nodes, mirroring the soak's per-partition load.
+// systemLoad submits SystemTPSByPartition transactions a second through the
+// system path, which nothing refuses.
+func (s *Sim) systemLoad(ctx context.Context, part string) {
+	defer s.wg.Done()
+	nodes := s.byPart[part]
+	tps := s.cfg.SystemTPSByPartition[part]
+	if tps <= 0 || len(nodes) == 0 {
+		return
+	}
+	interval := time.Second / time.Duration(tps)
+	if interval <= 0 {
+		interval = time.Millisecond
+	}
+	tick := time.NewTicker(interval)
+	defer tick.Stop()
+	var n uint64
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			n++
+			tx := []byte(fmt.Sprintf("consim-sys-%s-%d", part, n))
+			s.submitted.Add(1)
+			if err := nodes[int(n)%len(nodes)].node.SubmitTransaction(tx); err != nil {
+				s.refused.Add(1)
+			}
+		}
+	}
+}
+
 func (s *Sim) load(ctx context.Context, part string) {
 	defer s.wg.Done()
 	nodes := s.byPart[part]
@@ -423,6 +523,7 @@ func (s *Sim) load(ctx context.Context, part string) {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	var n uint64
+	var owed float64 // synthetic transactions owed for accepted user work
 	for {
 		select {
 		case <-ctx.Done():
@@ -447,11 +548,79 @@ func (s *Sim) load(ctx context.Context, part string) {
 			// Keep submitting after a refusal: the question is whether the
 			// network recovers, not whether the load backs off.
 			s.submitted.Add(1)
-			if err := nodes[int(n)%len(nodes)].node.SubmitTransaction(tx); err != nil {
+			submit := nodes[int(n)%len(nodes)].node.SubmitTransaction
+			if s.cfg.UserLoad {
+				submit = nodes[int(n)%len(nodes)].node.SubmitUserTransaction
+			}
+			if err := submit(tx); err != nil {
 				s.refused.Add(1)
 				s.refusedOnce.Do(func() {
 					s.logf("REFUSED: %s refused a submission: %v", part, err)
 				})
+				continue
+			}
+			if s.synthQ != nil {
+				owed += s.cfg.SyntheticPerUser
+				if owed >= 1 {
+					k := int(owed)
+					owed -= float64(k)
+					delay := s.cfg.SyntheticDelay
+					if delay == 0 {
+						delay = 3 * s.cfg.MinRoundInterval
+					}
+					select {
+					case s.synthQ <- synthDue{to: s.counterpart(part), count: k, due: time.Now().Add(delay)}:
+					default: // the queue is a bound, not a promise
+					}
+				}
+			}
+		}
+	}
+}
+
+// counterpart is where a partition's synthetic output goes: the other BVN,
+// round-robin over BVNs when there are several, the Directory when there is
+// only one.
+func (s *Sim) counterpart(part string) string {
+	var bvns []string
+	for _, p := range s.parts {
+		if p != "Directory" && p != part {
+			bvns = append(bvns, p)
+		}
+	}
+	if len(bvns) == 0 {
+		return "Directory"
+	}
+	return bvns[int(s.submitted.Load())%len(bvns)]
+}
+
+// syntheticLoad submits what the partitions owe each other, when it is due.
+func (s *Sim) syntheticLoad(ctx context.Context) {
+	defer s.wg.Done()
+	var n uint64
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case d := <-s.synthQ:
+			if wait := time.Until(d.due); wait > 0 {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(wait):
+				}
+			}
+			nodes := s.byPart[d.to]
+			if len(nodes) == 0 {
+				continue
+			}
+			for i := 0; i < d.count; i++ {
+				n++
+				tx := []byte(fmt.Sprintf("consim-synth-%s-%d", d.to, n))
+				s.submitted.Add(1)
+				if err := nodes[int(n)%len(nodes)].node.SubmitTransaction(tx); err != nil {
+					s.refused.Add(1)
+				}
 			}
 		}
 	}
@@ -519,6 +688,15 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 	for _, part := range s.parts {
 		s.wg.Add(1)
 		go s.load(ctx, part)
+		if s.cfg.SystemTPSByPartition[part] > 0 {
+			s.wg.Add(1)
+			go s.systemLoad(ctx, part)
+		}
+	}
+	if s.cfg.SyntheticPerUser > 0 {
+		s.synthQ = make(chan synthDue, 1<<16)
+		s.wg.Add(1)
+		go s.syntheticLoad(ctx)
 	}
 
 	logf := s.logf
@@ -568,7 +746,19 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 			if s.cfg.TargetHeight > 0 && maxH < s.cfg.TargetHeight {
 				allAtTarget = false
 			}
-			line = append(line, fmt.Sprintf("%s h=%d r=%d", part, maxH, maxR))
+			// Lag, the largest block so far and the refused count are what
+			// a stall looks like while it forms: lag climbing past the bound,
+			// one block many times the usual size, user work refused.
+			maxLag, maxBlk := 0, uint64(0)
+			for _, sn := range s.byPart[part] {
+				if l := int(sn.maxLag.Load()); l > maxLag {
+					maxLag = l
+				}
+				if b := sn.maxBlockTxs.Load(); b > maxBlk {
+					maxBlk = b
+				}
+			}
+			line = append(line, fmt.Sprintf("%s h=%d r=%d lag=%d blk=%d", part, maxH, maxR, maxLag, maxBlk))
 
 			if time.Since(lastProgress[part]) > s.cfg.StallAfter {
 				logf("STALL on %s: no executed-height progress for %s", part, s.cfg.StallAfter)
@@ -577,7 +767,7 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 					fmt.Errorf("%w: %s at height %d", ErrStalled, part, maxH)
 			}
 		}
-		logf("%8s  %s", time.Since(start).Truncate(time.Second), strings.Join(line, " | "))
+		logf("%8s  %s | refused=%d/%d", time.Since(start).Truncate(time.Second), strings.Join(line, " | "), s.refused.Load(), s.submitted.Load())
 
 		now := time.Now()
 		for _, sn := range s.nodes {
@@ -630,11 +820,18 @@ func (s *Sim) diagnose(logf func(string, ...any), prev map[*simNode]snapshot, mo
 
 func (s *Sim) finish(start time.Time, ok bool, reason string) *Result {
 	r := &Result{Ok: ok, Reason: reason, Heights: map[string]uint64{}, Elapsed: time.Since(start),
-		Submitted: s.submitted.Load(), Refused: s.refused.Load()}
+		Submitted: s.submitted.Load(), Refused: s.refused.Load(),
+		MaxBlockTxs: map[string]uint64{}, MaxLag: map[string]int{}}
 	for _, part := range s.parts {
 		for _, sn := range s.byPart[part] {
 			if h := sn.height.Load(); h > r.Heights[part] {
 				r.Heights[part] = h
+			}
+			if m := sn.maxBlockTxs.Load(); m > r.MaxBlockTxs[part] {
+				r.MaxBlockTxs[part] = m
+			}
+			if l := int(sn.maxLag.Load()); l > r.MaxLag[part] {
+				r.MaxLag[part] = l
 			}
 		}
 	}

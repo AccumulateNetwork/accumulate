@@ -85,6 +85,13 @@ func (h *Handler) Handle(s Stream) {
 				// Done
 				return
 
+			case errors.Is(err, context.DeadlineExceeded):
+				// A peer that opened a stream and did not send in time. Under
+				// load this is the common case and not ours to shout about:
+				// 1.7 million of these in forty minutes (run 20260904T012004Z).
+				slog.Debug("Peer request timed out before it was read", "error", err, "module", "api")
+				return
+
 			default:
 				slog.Error("Unable to decode request from peer", "error", err, "module", "api")
 				return

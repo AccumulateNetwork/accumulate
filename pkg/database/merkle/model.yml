@@ -25,6 +25,29 @@
     parameters:
     - name: Index
       type: uint
+  - name: Tail
+    type: state
+    emptyIfMissing: true
+    dataType: TailChunk
+    pointer: true
+    index: getTailChunks # Indexed by head
+    parameters:
+    - name: Index
+      type: uint
+  # Intermediate holds, for the element added at Index, the (left, right) pair
+  # the cascade combined at Height. The cascade computes these once, when the
+  # element is added; storing them means a proof reads them rather than
+  # rebuilding the Merkle state that held them (database.md, "Proofs are read,
+  # not searched"; #4263). Absent for chains written before this record
+  # existed, in which case the reader falls back to rebuilding.
+  - name: Intermediate
+    type: index
+    dataType: bytes
+    parameters:
+    - name: Index
+      type: uint
+    - name: Height
+      type: uint
   - name: ElementIndex
     type: index
     dataType: uint

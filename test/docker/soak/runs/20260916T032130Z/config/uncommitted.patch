@@ -1,0 +1,37 @@
+diff --git a/test/docker/soak/runs/20260902T221300Z/readprobe.csv b/test/docker/soak/runs/20260902T221300Z/readprobe.csv
+index 81c75b5dc..4f5c700cd 100644
+--- a/test/docker/soak/runs/20260902T221300Z/readprobe.csv
++++ b/test/docker/soak/runs/20260902T221300Z/readprobe.csv
+@@ -315,3 +315,19 @@ time,reads,p50,p95,max,maxKind,maxAge,maxPartition,failed,gated,timeouts,reservo
+ 2026-09-03T03:30:36Z,300,0.0,0.1,0.2,txn,421,Directory,300,0,0,435,421
+ 2026-09-03T03:31:37Z,300,0.0,0.1,0.1,txn,410,BVN1,300,0,0,435,421
+ 2026-09-03T03:32:37Z,300,0.0,0.0,0.1,chain,410,BVN1,300,0,0,435,421
++2026-09-03T04:10:29Z,300,1.9,92.7,451.5,txn,261,BVN2,0,0,0,573,334
++2026-09-03T04:11:26Z,300,2.3,8.8,358.7,txn,275,BVN2,0,0,0,582,354
++2026-09-03T04:12:28Z,300,1.7,49.1,693.9,txn,261,BVN1,0,0,0,591,374
++2026-09-03T04:13:30Z,300,2.6,61.1,711.1,txn,302,BVN2,0,0,0,600,394
++2026-09-03T04:14:31Z,300,1.8,106.2,588.6,txn,319,BVN2,0,0,0,600,415
++2026-09-03T04:15:27Z,300,1.9,3.7,363.2,txn,435,Directory,0,0,0,600,435
++2026-09-03T04:16:26Z,300,0.0,0.0,0.1,chain,435,Directory,300,0,0,600,435
++2026-09-03T04:17:26Z,300,0.0,0.0,0.0,txn,435,Directory,300,0,0,600,435
++2026-09-03T04:18:27Z,300,0.9,1.3,2.6,txn,2,Directory,0,0,0,600,2
++2026-09-03T04:19:27Z,300,0.0,0.0,0.0,txn,1,BVN2,300,0,0,600,2
++2026-09-03T04:20:28Z,300,0.0,0.0,0.1,chain,2,Directory,300,0,0,600,2
++2026-09-03T04:21:28Z,300,0.0,0.0,0.1,txn,2,Directory,300,0,0,600,2
++2026-09-03T04:22:28Z,300,0.0,0.0,0.1,chain,1,BVN2,300,0,0,600,2
++2026-09-03T04:23:29Z,300,0.0,0.0,0.1,txn,2,Directory,300,0,0,600,2
++2026-09-03T04:24:29Z,300,0.9,1.2,1.7,txn,9,BVN1,0,0,0,600,9
++2026-09-03T04:25:29Z,300,0.0,0.0,0.1,txn,9,BVN1,300,0,0,600,9
+diff --git a/test/docker/soak/soak.conf b/test/docker/soak/soak.conf
+index c1f0295f2..27b113545 100644
+--- a/test/docker/soak/soak.conf
++++ b/test/docker/soak/soak.conf
+@@ -13,7 +13,7 @@
+ # ../docker-network.yml (`database:`), read by `accumulated init network`.
+ 
+ # --- the run ---------------------------------------------------------------
+-DURATION=12h          # Go-style: 12h, 45m, 300s
++DURATION=1h           # Go-style: 12h, 45m, 300s
+ TPS=500               # load generator target, transactions per second
+ CHAOS=off             # on: restart nodes and re-arm drop hooks on a cadence; off: a throughput/footprint run
+ LG_BOOTSTRAP=100      # sub-treasuries funded up front (cross-partition traffic); 0 lets streams go quiet

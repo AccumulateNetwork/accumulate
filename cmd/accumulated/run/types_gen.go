@@ -327,6 +327,8 @@ type DAGBFTService struct {
 	ExecutionShards  *int64
 	DAGGCDepth       *int64
 	CommitBufferSize *int64
+	// MaxExecutionLag is how many committed blocks the executor may fall behind before headers carry no batches and user work is refused (consensus spec, invariant 9). Defaults to 8.
+	MaxExecutionLag *int64
 	// BlockInterval target time between blocks; rounds are paced at half this, since Bullshark commits every other round. Defaults to 3s (#4098).
 	BlockInterval        *encoding.Duration
 	EnableDirectDispatch *bool
@@ -865,12 +867,14 @@ func (v *Monitor) UnmarshalJSON(b []byte) error {
 type Multiaddr = multiaddr.Multiaddr
 
 type NetSimConfiguration struct {
-	Listen      Multiaddr
-	Bvns        uint64
-	Validators  uint64
-	Followers   uint64
-	Globals     *network.GlobalValues
-	StorageType *StorageType
+	Listen     Multiaddr
+	Bvns       uint64
+	Validators uint64
+	Followers  uint64
+	Globals    *network.GlobalValues
+	// BlockInterval the cadence the deployed network declares; recorded in the genesis globals, which every node then paces from (#4267).
+	BlockInterval *encoding.Duration
+	StorageType   *StorageType
 }
 
 func (NetSimConfiguration) Type() ConfigurationType { return ConfigurationTypeNetSim }

@@ -12,7 +12,7 @@ import (
 	"crypto/sha256"
 	"log/slog"
 	"os"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -23,7 +23,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	multiexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -35,11 +37,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	dagconfig "gitlab.com/accumulatenetwork/accumulate/pkg/consensus/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -54,6 +56,11 @@ var (
 	dagbftProvidesRouter    = ioc.Provides[routing.Router](func(s *DAGBFTService) string { return s.Partition.ID })
 
 	dagbftNeedsStorage = ioc.Needs[keyvalue.Beginner](func(s *DAGBFTService) string { return s.Partition.ID })
+
+	// The directory's storage, by name rather than by service, so a partition
+	// can reach it. Every Accumulate node runs the directory alongside its own
+	// BVN, and the proof service needs both halves (#4274).
+	dagbftNeedsDnStorage = ioc.Needs[keyvalue.Beginner, string](func(string) string { return protocol.Directory })
 )
 
 // Requires returns the IOC requirements for DAG-BFT.
@@ -104,31 +111,26 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// fat-fingered count must be refused at startup, not at block time
 	// (#4151).
 	setDefaultPtr(&s.ExecutionShards, 1)
-	// ACC_EXECUTION_SHARDS overrides the configured count, so a shard sweep
-	// does not need a regenerated config (and therefore a new genesis) per
-	// data point. Same idiom as ACC_LEVELDB_CACHE_MB. An invalid value is
-	// REFUSED, not ignored: silently falling back to the configured count
-	// would make a sweep report the serial number under a parallel label,
-	// which is the one way this measurement can lie.
-	// An EMPTY value means "not set", not "invalid". Compose renders an unset
-	// variable as the empty string ("${ACC_EXECUTION_SHARDS-}"), so refusing
-	// it would refuse to start every node on every network that never set it
-	// — the default case. A non-empty value that is not a number is still a
-	// hard error.
-	if v, ok := os.LookupEnv("ACC_EXECUTION_SHARDS"); ok && v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return errors.BadRequest.WithFormat("ACC_EXECUTION_SHARDS %q is not a number", v)
-		}
-		s.ExecutionShards = Ptr(int64(n))
-		slog.Info("Execution shards overridden", "shards", n, "module", "dagbft")
-	}
+	// The count is configuration -- written by `init network` from the
+	// network definition's executionShards -- and nothing else. An
+	// environment override used to sit here for shard sweeps; it went with
+	// #4149's proof work, because a knob the environment can change is a
+	// run that can silently differ from its frozen config (spec 1.10).
 	if *s.ExecutionShards < 0 || *s.ExecutionShards > 1024 {
 		return errors.BadRequest.WithFormat("execution-shards %d is out of range [0, 1024]", *s.ExecutionShards)
 	}
+	// Said at startup, every time: a run that meant to shard and did not
+	// must be visible in the log, not inferred from a metric that stays at
+	// zero (REPORTING-SPEC 1).
+	slog.Info("Execution shards", "shards", *s.ExecutionShards, "serial", *s.ExecutionShards <= 1, "partition", s.Partition.ID, "module", "dagbft")
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
-	setDefaultPtr(&s.BlockInterval, encoding.Duration(dagconfig.DefaultBlockInterval))
+	setDefaultPtr(&s.MaxExecutionLag, int64(primary.DefaultMaxExecutionLag))
+	// BlockInterval is deliberately NOT defaulted here. The network declares
+	// the cadence and this node paces from it; leaving the pointer nil is how
+	// "the operator stated nothing" stays distinguishable from "the operator
+	// stated the default", which is what lets a real divergence be refused
+	// without refusing every node that simply did not set it (#4267).
 
 	// Get the logger
 	logger := logging.NewSlogLogger(inst.logger)
@@ -218,15 +220,28 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// are two coincident constants that drift apart silently (#4151).
 	dagCfg := dagconfig.DefaultConfig()
 
+	// The producer's synthetic/anchor cache, shared by the executor that
+	// fills it and the sequencer that answers healing from it (healing spec,
+	// "The cache")
+	synthCache := synthcache.New(0)
+
+	// The partition's staging: memory, built up from consensus (executor
+	// spec, "Sync"); registered so the API can report how far each stream
+	// has been sighted
+	staging := execute.NewStaging()
+	execute.RegisterStaging(s.Partition.ID, staging)
+
 	// Create executor options
 	execOpts := multiexec.Options{
-		Logger:    logger.With("module", "executor"),
-		Database:  db,
-		Key:       validatorKey,
-		Router:    router,
-		EventBus:  s.eventBus,
-		Sequencer: client.Private(),
-		Querier:   client,
+		Logger:     logger.With("module", "executor"),
+		Database:   db,
+		SynthCache: synthCache,
+		Staging:    staging,
+		Key:        validatorKey,
+		Router:     router,
+		EventBus:   s.eventBus,
+		Sequencer:  client.Private(),
+		Querier:    client,
 		// Shard user-transaction execution by identity (#4145).
 		ExecutionShards: int(*s.ExecutionShards),
 		// A synthetic package must fit in one worker batch (#4141).
@@ -273,6 +288,8 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Querier:      v3.Querier2{Querier: client},
 		Dispatcher:   execOpts.NewDispatcher(),
 		Sequencer:    client.Private(),
+		Peers:        client,
+		Staging:      staging,
 		Heals:        healCounters,
 		RunTask:      execOpts.BackgroundTaskLauncher,
 		// Healing is the ONLY retry mechanism for anchors — the conductor's
@@ -281,7 +298,6 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		// ledgers stuck at height 2, #4054). The conductor paces healing
 		// scans internally (HealInterval), so this is safe even at DAG-BFT
 		// block rates.
-		EnableAnchorHealing: Ptr(true),
 	}
 	err = conductor.Start(s.eventBus)
 	if err != nil {
@@ -311,6 +327,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		NumWorkers:       int(*s.NumWorkers),
 		DAGGCDepth:       types.Round(*s.DAGGCDepth),
 		CommitBufferSize: int(*s.CommitBufferSize),
+		MaxExecutionLag:  int(*s.MaxExecutionLag),
 
 		// The same limit the executor's package budget derives from
 		// (#4151) — never let the two diverge.
@@ -318,13 +335,13 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			MaxBatchBytes: dagCfg.Batching.MaxBatchBytes,
 		},
 
-		// Rounds pace at half the block interval: Bullshark commits a leader
-		// every other round, so blocks arrive at roughly 2x the round
-		// interval. Before this was wired, primary fell back to its 100ms
-		// default and the Directory ran at ~21 blocks/sec under load — and
-		// since every block emits an anchor, anchor traffic ran at block
-		// rate and drowned one-shot dispatch (#4098).
-		MinRoundInterval: time.Duration(*s.BlockInterval) / 2,
+		// MinRoundInterval is set below, once the network's block interval is
+		// known. Rounds pace at half of it: Bullshark commits a leader every
+		// other round, so blocks arrive at roughly 2x the round interval.
+		// Before this was wired, primary fell back to its 100ms default and
+		// the Directory ran at ~21 blocks/sec under load — and since every
+		// block emits an anchor, anchor traffic ran at block rate and drowned
+		// one-shot dispatch (#4098).
 	}
 
 	// Use the shared GossipSub for DAG-BFT certificate/batch dissemination.
@@ -346,6 +363,16 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		slog.Warn("Timeout waiting for initial globals, DAG-BFT may not reach quorum", "partition", s.Partition.ID)
 		globals = new(network.GlobalValues)
 	}
+
+	// The network declares the cadence; this node either paces from it or does
+	// not run (#4267).
+	blockInterval, err := resolveBlockInterval(s.BlockInterval, globals, s.Partition.ID)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	nodeConfig.MinRoundInterval = blockInterval / 2
+	slog.Info("Block interval", "partition", s.Partition.ID, "interval", blockInterval,
+		"minRoundInterval", nodeConfig.MinRoundInterval)
 
 	// Seed the conductor's globals directly. The conductor subscribes to
 	// WillChangeGlobals, but whether it observes the INITIAL event is a
@@ -378,13 +405,6 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			"validators", len(initialValidators))
 	}
 
-	// Apply a fast-sync rejoin seed if one was written by `accumulated
-	// fastsync` (#4058) — consumed once, on the first start after the sync
-	rejoin, err := dagbft.LoadRejoinSeed(inst.path(), s.Partition.ID)
-	if err != nil {
-		slog.Error("Failed to load fast-sync rejoin seed — starting without it", "partition", s.Partition.ID, "error", err)
-	}
-
 	// Create the service
 	svcConfig := dagbft.ServiceConfig{
 		Partition:         s.Partition,
@@ -393,8 +413,8 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		EventBus:          s.eventBus,
 		Logger:            logger.With("module", "dagbft"),
 		Genesis:           inst.path(s.Genesis),
+		DataDir:           inst.path("consensus", strings.ToLower(s.Partition.ID)),
 		InitialValidators: initialValidators,
-		Rejoin:            rejoin,
 	}
 	if globals != nil && globals.Network != nil {
 		// The committee epoch is the network definition version (state-derived)
@@ -418,6 +438,19 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("start DAG-BFT service: %w", err)
 	}
 
+	// The healing in-flight window is measured against the send, and the
+	// send is the leader's. A node can only see its own executor's lag, so
+	// that is what the window widens by (#4248). The consensus node is
+	// built inside Start, so this has to come after it; an unwired source
+	// would leave the window at InFlightBlocks and heal every late
+	// dispatch, silently, so a missing node is a failure and not a default.
+	node := s.service.Node()
+	if node == nil {
+		return errors.InternalError.WithFormat("DAG-BFT service started without a consensus node")
+	}
+	synthCache.SetExecutionLagSource(node.ExecutionLag)
+	conductor.SetExecutionLagSource(node.ExecutionLag)
+
 	// Register cleanup
 	inst.cleanup("dagbft service", func(ctx context.Context) error {
 		return s.service.Stop()
@@ -430,7 +463,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 
 	// Register consensus API services
-	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters)
+	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache)
 	if err != nil {
 		return err
 	}
@@ -440,7 +473,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 }
 
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache) error {
 	logger := logging.NewSlogLogger(inst.logger)
 	// These are the SERVING side of the node: consensus queries, the
 	// sequencer answering a peer's healing request, the API.  They are
@@ -494,6 +527,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	sequencerSvc := api.NewSequencer(api.SequencerParams{
 		Logger:       logger.With("module", "api"),
 		Database:     db,
+		Cache:        synthCache,
 		EventBus:     s.eventBus,
 		Globals:      globals,
 		Partition:    s.Partition.ID,
@@ -504,6 +538,26 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	if err != nil {
 		return errors.UnknownError.WithFormat("register sequencer service: %w", err)
 	}
+
+	// Create the proof service. It is the public face of what the sequencer
+	// already serves node-to-node, plus the second of the two calls an account
+	// proof takes (#4272). Only the directory can answer that one -- a
+	// partition's BPT root is bound to a directory root, and the binding lives
+	// in the directory's anchor(P)-bpt chain -- but registering it everywhere
+	// keeps the address uniform and lets the service itself say so.
+	proofSvc := &api.ProofService{
+		Ranger:    sequencerSvc,
+		Database:  db,
+		Partition: config.NetworkUrl{URL: protocol.PartitionUrl(s.Partition.ID)},
+		Directory: newDirectoryResolver(s.Partition.ID, db, func() (database.Viewer, error) {
+			store, err := dagbftNeedsDnStorage.Get(inst.services, "")
+			if err != nil {
+				return nil, err
+			}
+			return database.New(store, logger).Deep(), nil
+		}),
+	}
+	registerRpcService(inst, proofSvc.Type().AddressFor(s.Partition.ID), message.ProofService{ProofService: proofSvc})
 
 	return nil
 }

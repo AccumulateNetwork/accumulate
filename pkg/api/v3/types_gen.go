@@ -42,6 +42,28 @@ type AccountRecord struct {
 	extraData     []byte
 }
 
+type AnchorReceiptOptions struct {
+	fieldsSet []bool
+	// Partition is the partition whose BPT root is being bound, from the first call's Receipt.Partition.
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	// BptRoot is where the first call's receipt terminates.
+	BptRoot [32]byte `json:"bptRoot,omitempty" form:"bptRoot" query:"bptRoot" validate:"required"`
+	// AtOrAfter asks for a receipt terminating at a directory root no older than this block. Zero, the default, returns the oldest receipt that works, which is the stable answer.
+	AtOrAfter uint64 `json:"atOrAfter,omitempty" form:"atOrAfter" query:"atOrAfter"`
+	extraData []byte
+}
+
+type AnchorReceiptRecord struct {
+	fieldsSet []bool
+	// Receipt proves the partition's BPT root into a directory root; nil while the anchor is still in flight.
+	Receipt *merkle.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt"`
+	// Anchored reports whether the directory has committed the root yet. False is a wait, not a failure, since the anchor carrying it has not arrived.
+	Anchored bool `json:"anchored,omitempty" form:"anchored" query:"anchored" validate:"required"`
+	// DirectoryBlock is the directory block whose root the receipt terminates at, being the block that committed the anchor rather than the current one. The terminus is therefore stable, so the same root queried later returns the same receipt.
+	DirectoryBlock uint64 `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock"`
+	extraData      []byte
+}
+
 // AnchorSearchQuery queries {account}#anchor/{hash}.
 type AnchorSearchQuery struct {
 	fieldsSet      []bool
@@ -257,6 +279,32 @@ type MajorBlockRecord struct {
 	extraData     []byte
 }
 
+type MajorHeaderRangeOptions struct {
+	fieldsSet []bool
+	// Partition is the partition to serve; only the directory serves this.
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	// Start is the first major block index.
+	Start uint64 `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	// End is the last major block index, inclusive.
+	End       uint64 `json:"end,omitempty" form:"end" query:"end" validate:"required"`
+	extraData []byte
+}
+
+type MajorHeaderRecord struct {
+	fieldsSet []bool
+	// Index is the major block index.
+	Index uint64 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	// Entry is the major-block index chain entry.
+	Entry *protocol.IndexEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	// Anchor is the partition's self-anchor for the closing minor block.
+	Anchor *messaging.SequencedMessage `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	// Signatures is the archived validator quorum over the anchor.
+	Signatures []protocol.KeySignature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	// Updates is the network-account transactions of this major block's window, proven into the anchor.
+	Updates   []*NetworkUpdateProof `json:"updates,omitempty" form:"updates" query:"updates" validate:"required"`
+	extraData []byte
+}
+
 type MessageHashSearchQuery struct {
 	fieldsSet []bool
 	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
@@ -279,6 +327,8 @@ type MessageRecord[T messaging.Message] struct {
 	Sequence          *messaging.SequencedMessage       `json:"sequence,omitempty" form:"sequence" query:"sequence"`
 	SourceReceipt     *merkle.Receipt                   `json:"sourceReceipt,omitempty" form:"sourceReceipt" query:"sourceReceipt" validate:"required"`
 	SourceReceiptList *merkle.ReceiptList               `json:"sourceReceiptList,omitempty" form:"sourceReceiptList" query:"sourceReceiptList"`
+	SourceAnchorBlock uint64                            `json:"sourceAnchorBlock,omitempty" form:"sourceAnchorBlock" query:"sourceAnchorBlock"`
+	Companion         messaging.Message                 `json:"companion,omitempty" form:"companion" query:"companion"`
 	LastBlockTime     *time.Time                        `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
 	extraData         []byte
 }
@@ -308,6 +358,30 @@ type MinorBlockRecord struct {
 	extraData     []byte
 }
 
+type MinorRootRangeOptions struct {
+	fieldsSet []bool
+	// Partition is the partition to serve; only the directory serves this.
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	// Since is the client's last verified minor block.
+	Since uint64 `json:"since,omitempty" form:"since" query:"since" validate:"required"`
+	// Until is the target minor block, or zero for as far as possible.
+	Until     uint64 `json:"until,omitempty" form:"until" query:"until" validate:"required"`
+	extraData []byte
+}
+
+type MinorRootRecord struct {
+	fieldsSet []bool
+	// Anchor is the partition's self-anchor covering the end of the run.
+	Anchor *messaging.SequencedMessage `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	// Signatures is the archived validator quorum over the anchor.
+	Signatures []protocol.KeySignature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	// Updates is the network-account transactions of the run, proven into the anchor.
+	Updates []*NetworkUpdateProof `json:"updates,omitempty" form:"updates" query:"updates" validate:"required"`
+	// RootProof proves the root chain extends the previously verified root to this anchor's root.
+	RootProof *merkle.ReceiptList `json:"rootProof,omitempty" form:"rootProof" query:"rootProof" validate:"required"`
+	extraData []byte
+}
+
 type NetworkStatus struct {
 	fieldsSet []bool
 	Oracle    *protocol.AcmeOracle        `json:"oracle,omitempty" form:"oracle" query:"oracle" validate:"required"`
@@ -332,6 +406,13 @@ type NetworkStatusOptions struct {
 	fieldsSet []bool
 	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 	extraData []byte
+}
+
+type NetworkUpdateProof struct {
+	fieldsSet   []bool
+	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	Receipt     *merkle.Receipt       `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	extraData   []byte
 }
 
 type NodeInfo struct {
@@ -387,7 +468,11 @@ type Receipt struct {
 	LocalBlock     uint64    `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
 	LocalBlockTime time.Time `json:"localBlockTime,omitempty" form:"localBlockTime" query:"localBlockTime" validate:"required"`
 	MajorBlock     uint64    `json:"majorBlock,omitempty" form:"majorBlock" query:"majorBlock" validate:"required"`
-	extraData      []byte
+	// Complete reports that the receipt terminates at a directory root, so there is no second call to make. A BPT is a tree of current state, so an account proof is built against the current BPT and its root reaches the directory only after an anchor round trip, except on the directory itself where it is already local.
+	Complete bool `json:"complete,omitempty" form:"complete" query:"complete"`
+	// Partition names whose BPT root the receipt terminates at when it is not complete, so a caller knows what to bind against.
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition"`
+	extraData []byte
 }
 
 type ReceiptOptions struct {
@@ -554,6 +639,40 @@ func (v *AccountRecord) Copy() *AccountRecord {
 }
 
 func (v *AccountRecord) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AnchorReceiptOptions) Copy() *AnchorReceiptOptions {
+	u := new(AnchorReceiptOptions)
+
+	u.Partition = v.Partition
+	u.BptRoot = v.BptRoot
+	u.AtOrAfter = v.AtOrAfter
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *AnchorReceiptOptions) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AnchorReceiptRecord) Copy() *AnchorReceiptRecord {
+	u := new(AnchorReceiptRecord)
+
+	if v.Receipt != nil {
+		u.Receipt = (v.Receipt).Copy()
+	}
+	u.Anchored = v.Anchored
+	u.DirectoryBlock = v.DirectoryBlock
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *AnchorReceiptRecord) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AnchorSearchQuery) Copy() *AnchorSearchQuery {
 	u := new(AnchorSearchQuery)
@@ -1084,6 +1203,56 @@ func (v *MajorBlockRecord) Copy() *MajorBlockRecord {
 
 func (v *MajorBlockRecord) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *MajorHeaderRangeOptions) Copy() *MajorHeaderRangeOptions {
+	u := new(MajorHeaderRangeOptions)
+
+	u.Partition = v.Partition
+	u.Start = v.Start
+	u.End = v.End
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MajorHeaderRangeOptions) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MajorHeaderRecord) Copy() *MajorHeaderRecord {
+	u := new(MajorHeaderRecord)
+
+	u.Index = v.Index
+	if v.Entry != nil {
+		u.Entry = (v.Entry).Copy()
+	}
+	if v.Anchor != nil {
+		u.Anchor = (v.Anchor).Copy()
+	}
+	u.Signatures = make([]protocol.KeySignature, len(v.Signatures))
+	for i, v := range v.Signatures {
+		v := v
+		if v != nil {
+			u.Signatures[i] = protocol.CopyKeySignature(v)
+		}
+	}
+	u.Updates = make([]*NetworkUpdateProof, len(v.Updates))
+	for i, v := range v.Updates {
+		v := v
+		if v != nil {
+			u.Updates[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MajorHeaderRecord) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *MessageHashSearchQuery) Copy() *MessageHashSearchQuery {
 	u := new(MessageHashSearchQuery)
 
@@ -1134,6 +1303,10 @@ func (v *MessageRecord[T]) Copy() *MessageRecord[T] {
 	if v.SourceReceiptList != nil {
 		u.SourceReceiptList = (v.SourceReceiptList).Copy()
 	}
+	u.SourceAnchorBlock = v.SourceAnchorBlock
+	if v.Companion != nil {
+		u.Companion = messaging.CopyMessage(v.Companion)
+	}
 	if v.LastBlockTime != nil {
 		u.LastBlockTime = new(time.Time)
 		*u.LastBlockTime = *v.LastBlockTime
@@ -1172,6 +1345,8 @@ func MessageRecordAs[T2 messaging.Message, T1 messaging.Message](v *MessageRecor
 	u.Sequence = v.Sequence
 	u.SourceReceipt = v.SourceReceipt
 	u.SourceReceiptList = v.SourceReceiptList
+	u.SourceAnchorBlock = v.SourceAnchorBlock
+	u.Companion = v.Companion
 	u.LastBlockTime = v.LastBlockTime
 	return u, nil
 }
@@ -1236,6 +1411,55 @@ func (v *MinorBlockRecord) Copy() *MinorBlockRecord {
 
 func (v *MinorBlockRecord) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *MinorRootRangeOptions) Copy() *MinorRootRangeOptions {
+	u := new(MinorRootRangeOptions)
+
+	u.Partition = v.Partition
+	u.Since = v.Since
+	u.Until = v.Until
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MinorRootRangeOptions) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MinorRootRecord) Copy() *MinorRootRecord {
+	u := new(MinorRootRecord)
+
+	if v.Anchor != nil {
+		u.Anchor = (v.Anchor).Copy()
+	}
+	u.Signatures = make([]protocol.KeySignature, len(v.Signatures))
+	for i, v := range v.Signatures {
+		v := v
+		if v != nil {
+			u.Signatures[i] = protocol.CopyKeySignature(v)
+		}
+	}
+	u.Updates = make([]*NetworkUpdateProof, len(v.Updates))
+	for i, v := range v.Updates {
+		v := v
+		if v != nil {
+			u.Updates[i] = (v).Copy()
+		}
+	}
+	if v.RootProof != nil {
+		u.RootProof = (v.RootProof).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MinorRootRecord) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *NetworkStatus) Copy() *NetworkStatus {
 	u := new(NetworkStatus)
 
@@ -1292,6 +1516,25 @@ func (v *NetworkStatusOptions) Copy() *NetworkStatusOptions {
 }
 
 func (v *NetworkStatusOptions) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NetworkUpdateProof) Copy() *NetworkUpdateProof {
+	u := new(NetworkUpdateProof)
+
+	if v.Transaction != nil {
+		u.Transaction = (v.Transaction).Copy()
+	}
+	if v.Receipt != nil {
+		u.Receipt = (v.Receipt).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *NetworkUpdateProof) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NodeInfo) Copy() *NodeInfo {
 	u := new(NodeInfo)
@@ -1410,6 +1653,8 @@ func (v *Receipt) Copy() *Receipt {
 	u.LocalBlock = v.LocalBlock
 	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
+	u.Complete = v.Complete
+	u.Partition = v.Partition
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1660,6 +1905,39 @@ func (v *AccountRecord) Equal(u *AccountRecord) bool {
 	case v.LastBlockTime == nil || u.LastBlockTime == nil:
 		return false
 	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
+
+	return true
+}
+
+func (v *AnchorReceiptOptions) Equal(u *AnchorReceiptOptions) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	if !(v.BptRoot == u.BptRoot) {
+		return false
+	}
+	if !(v.AtOrAfter == u.AtOrAfter) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AnchorReceiptRecord) Equal(u *AnchorReceiptRecord) bool {
+	switch {
+	case v.Receipt == u.Receipt:
+		// equal
+	case v.Receipt == nil || u.Receipt == nil:
+		return false
+	case !((v.Receipt).Equal(u.Receipt)):
+		return false
+	}
+	if !(v.Anchored == u.Anchored) {
+		return false
+	}
+	if !(v.DirectoryBlock == u.DirectoryBlock) {
 		return false
 	}
 
@@ -2242,6 +2520,60 @@ func (v *MajorBlockRecord) Equal(u *MajorBlockRecord) bool {
 	return true
 }
 
+func (v *MajorHeaderRangeOptions) Equal(u *MajorHeaderRangeOptions) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	if !(v.Start == u.Start) {
+		return false
+	}
+	if !(v.End == u.End) {
+		return false
+	}
+
+	return true
+}
+
+func (v *MajorHeaderRecord) Equal(u *MajorHeaderRecord) bool {
+	if !(v.Index == u.Index) {
+		return false
+	}
+	switch {
+	case v.Entry == u.Entry:
+		// equal
+	case v.Entry == nil || u.Entry == nil:
+		return false
+	case !((v.Entry).Equal(u.Entry)):
+		return false
+	}
+	switch {
+	case v.Anchor == u.Anchor:
+		// equal
+	case v.Anchor == nil || u.Anchor == nil:
+		return false
+	case !((v.Anchor).Equal(u.Anchor)):
+		return false
+	}
+	if len(v.Signatures) != len(u.Signatures) {
+		return false
+	}
+	for i := range v.Signatures {
+		if !(protocol.EqualKeySignature(v.Signatures[i], u.Signatures[i])) {
+			return false
+		}
+	}
+	if len(v.Updates) != len(u.Updates) {
+		return false
+	}
+	for i := range v.Updates {
+		if !((v.Updates[i]).Equal(u.Updates[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *MessageHashSearchQuery) Equal(u *MessageHashSearchQuery) bool {
 	if !(v.Hash == u.Hash) {
 		return false
@@ -2330,6 +2662,12 @@ func (v *MessageRecord[T]) Equal(u *MessageRecord[T]) bool {
 	case !((v.SourceReceiptList).Equal(u.SourceReceiptList)):
 		return false
 	}
+	if !(v.SourceAnchorBlock == u.SourceAnchorBlock) {
+		return false
+	}
+	if !(messaging.EqualMessage(v.Companion, u.Companion)) {
+		return false
+	}
 	switch {
 	case v.LastBlockTime == u.LastBlockTime:
 		// equal
@@ -2409,6 +2747,57 @@ func (v *MinorBlockRecord) Equal(u *MinorBlockRecord) bool {
 	return true
 }
 
+func (v *MinorRootRangeOptions) Equal(u *MinorRootRangeOptions) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	if !(v.Since == u.Since) {
+		return false
+	}
+	if !(v.Until == u.Until) {
+		return false
+	}
+
+	return true
+}
+
+func (v *MinorRootRecord) Equal(u *MinorRootRecord) bool {
+	switch {
+	case v.Anchor == u.Anchor:
+		// equal
+	case v.Anchor == nil || u.Anchor == nil:
+		return false
+	case !((v.Anchor).Equal(u.Anchor)):
+		return false
+	}
+	if len(v.Signatures) != len(u.Signatures) {
+		return false
+	}
+	for i := range v.Signatures {
+		if !(protocol.EqualKeySignature(v.Signatures[i], u.Signatures[i])) {
+			return false
+		}
+	}
+	if len(v.Updates) != len(u.Updates) {
+		return false
+	}
+	for i := range v.Updates {
+		if !((v.Updates[i]).Equal(u.Updates[i])) {
+			return false
+		}
+	}
+	switch {
+	case v.RootProof == u.RootProof:
+		// equal
+	case v.RootProof == nil || u.RootProof == nil:
+		return false
+	case !((v.RootProof).Equal(u.RootProof)):
+		return false
+	}
+
+	return true
+}
+
 func (v *NetworkStatus) Equal(u *NetworkStatus) bool {
 	switch {
 	case v.Oracle == u.Oracle:
@@ -2481,6 +2870,27 @@ func (v *NetworkStatus) Equal(u *NetworkStatus) bool {
 
 func (v *NetworkStatusOptions) Equal(u *NetworkStatusOptions) bool {
 	if !(v.Partition == u.Partition) {
+		return false
+	}
+
+	return true
+}
+
+func (v *NetworkUpdateProof) Equal(u *NetworkUpdateProof) bool {
+	switch {
+	case v.Transaction == u.Transaction:
+		// equal
+	case v.Transaction == nil || u.Transaction == nil:
+		return false
+	case !((v.Transaction).Equal(u.Transaction)):
+		return false
+	}
+	switch {
+	case v.Receipt == u.Receipt:
+		// equal
+	case v.Receipt == nil || u.Receipt == nil:
+		return false
+	case !((v.Receipt).Equal(u.Receipt)):
 		return false
 	}
 
@@ -2590,6 +3000,12 @@ func (v *Receipt) Equal(u *Receipt) bool {
 		return false
 	}
 	if !(v.MajorBlock == u.MajorBlock) {
+		return false
+	}
+	if !(v.Complete == u.Complete) {
+		return false
+	}
+	if !(v.Partition == u.Partition) {
 		return false
 	}
 
@@ -2844,6 +3260,125 @@ func (v *AccountRecord) IsValid() error {
 		errs = append(errs, "field LastBlockTime is missing")
 	} else if v.LastBlockTime == nil {
 		errs = append(errs, "field LastBlockTime is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AnchorReceiptOptions = []string{
+	1: "Partition",
+	2: "BptRoot",
+	3: "AtOrAfter",
+}
+
+func (v *AnchorReceiptOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(1, v.Partition)
+	}
+	if !(v.BptRoot == ([32]byte{})) {
+		writer.WriteHash(2, &v.BptRoot)
+	}
+	if !(v.AtOrAfter == 0) {
+		writer.WriteUint(3, v.AtOrAfter)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AnchorReceiptOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *AnchorReceiptOptions) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field BptRoot is missing")
+	} else if v.BptRoot == ([32]byte{}) {
+		errs = append(errs, "field BptRoot is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AnchorReceiptRecord = []string{
+	1: "Receipt",
+	2: "Anchored",
+	3: "DirectoryBlock",
+}
+
+func (v *AnchorReceiptRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Receipt == nil) {
+		writer.WriteValue(1, v.Receipt.MarshalBinary)
+	}
+	if !(!v.Anchored) {
+		writer.WriteBool(2, v.Anchored)
+	}
+	if !(v.DirectoryBlock == 0) {
+		writer.WriteUint(3, v.DirectoryBlock)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AnchorReceiptRecord)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *AnchorReceiptRecord) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Anchored is missing")
+	} else if !v.Anchored {
+		errs = append(errs, "field Anchored is not set")
 	}
 
 	switch len(errs) {
@@ -4564,6 +5099,162 @@ func (v *MajorBlockRecord) IsValid() error {
 	}
 }
 
+var fieldNames_MajorHeaderRangeOptions = []string{
+	1: "Partition",
+	2: "Start",
+	3: "End",
+}
+
+func (v *MajorHeaderRangeOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(1, v.Partition)
+	}
+	if !(v.Start == 0) {
+		writer.WriteUint(2, v.Start)
+	}
+	if !(v.End == 0) {
+		writer.WriteUint(3, v.End)
+	}
+
+	_, _, err := writer.Reset(fieldNames_MajorHeaderRangeOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *MajorHeaderRangeOptions) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Start is missing")
+	} else if v.Start == 0 {
+		errs = append(errs, "field Start is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field End is missing")
+	} else if v.End == 0 {
+		errs = append(errs, "field End is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MajorHeaderRecord = []string{
+	1: "Index",
+	2: "Entry",
+	3: "Anchor",
+	4: "Signatures",
+	5: "Updates",
+}
+
+func (v *MajorHeaderRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Index == 0) {
+		writer.WriteUint(1, v.Index)
+	}
+	if !(v.Entry == nil) {
+		writer.WriteValue(2, v.Entry.MarshalBinary)
+	}
+	if !(v.Anchor == nil) {
+		writer.WriteValue(3, v.Anchor.MarshalBinary)
+	}
+	if !(len(v.Signatures) == 0) {
+		for _, v := range v.Signatures {
+			writer.WriteValue(4, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Updates) == 0) {
+		for _, v := range v.Updates {
+			writer.WriteValue(5, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_MajorHeaderRecord)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *MajorHeaderRecord) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Entry is missing")
+	} else if v.Entry == nil {
+		errs = append(errs, "field Entry is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Anchor is missing")
+	} else if v.Anchor == nil {
+		errs = append(errs, "field Anchor is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Signatures is missing")
+	} else if len(v.Signatures) == 0 {
+		errs = append(errs, "field Signatures is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Updates is missing")
+	} else if len(v.Updates) == 0 {
+		errs = append(errs, "field Updates is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_MessageHashSearchQuery = []string{
 	1: "QueryType",
 	2: "Hash",
@@ -4633,7 +5324,9 @@ var fieldNames_MessageRecord = []string{
 	12: "Sequence",
 	13: "SourceReceipt",
 	14: "SourceReceiptList",
-	15: "LastBlockTime",
+	15: "SourceAnchorBlock",
+	16: "Companion",
+	17: "LastBlockTime",
 }
 
 func (v *MessageRecord[T]) MarshalBinary() ([]byte, error) {
@@ -4686,8 +5379,14 @@ func (v *MessageRecord[T]) MarshalBinary() ([]byte, error) {
 	if !(v.SourceReceiptList == nil) {
 		writer.WriteValue(14, v.SourceReceiptList.MarshalBinary)
 	}
+	if !(v.SourceAnchorBlock == 0) {
+		writer.WriteUint(15, v.SourceAnchorBlock)
+	}
+	if !(messaging.EqualMessage(v.Companion, nil)) {
+		writer.WriteValue(16, v.Companion.MarshalBinary)
+	}
 	if !(v.LastBlockTime == nil) {
-		writer.WriteTime(15, *v.LastBlockTime)
+		writer.WriteTime(17, *v.LastBlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_MessageRecord)
@@ -4763,7 +5462,7 @@ func (v *MessageRecord[T]) IsValid() error {
 	} else if v.SourceReceipt == nil {
 		errs = append(errs, "field SourceReceipt is not set")
 	}
-	if len(v.fieldsSet) > 14 && !v.fieldsSet[14] {
+	if len(v.fieldsSet) > 16 && !v.fieldsSet[16] {
 		errs = append(errs, "field LastBlockTime is missing")
 	} else if v.LastBlockTime == nil {
 		errs = append(errs, "field LastBlockTime is not set")
@@ -4976,6 +5675,153 @@ func (v *MinorBlockRecord) IsValid() error {
 	}
 }
 
+var fieldNames_MinorRootRangeOptions = []string{
+	1: "Partition",
+	2: "Since",
+	3: "Until",
+}
+
+func (v *MinorRootRangeOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(1, v.Partition)
+	}
+	if !(v.Since == 0) {
+		writer.WriteUint(2, v.Since)
+	}
+	if !(v.Until == 0) {
+		writer.WriteUint(3, v.Until)
+	}
+
+	_, _, err := writer.Reset(fieldNames_MinorRootRangeOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *MinorRootRangeOptions) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Since is missing")
+	} else if v.Since == 0 {
+		errs = append(errs, "field Since is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Until is missing")
+	} else if v.Until == 0 {
+		errs = append(errs, "field Until is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MinorRootRecord = []string{
+	1: "Anchor",
+	2: "Signatures",
+	3: "Updates",
+	4: "RootProof",
+}
+
+func (v *MinorRootRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Anchor == nil) {
+		writer.WriteValue(1, v.Anchor.MarshalBinary)
+	}
+	if !(len(v.Signatures) == 0) {
+		for _, v := range v.Signatures {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Updates) == 0) {
+		for _, v := range v.Updates {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
+	if !(v.RootProof == nil) {
+		writer.WriteValue(4, v.RootProof.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_MinorRootRecord)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *MinorRootRecord) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Anchor is missing")
+	} else if v.Anchor == nil {
+		errs = append(errs, "field Anchor is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Signatures is missing")
+	} else if len(v.Signatures) == 0 {
+		errs = append(errs, "field Signatures is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Updates is missing")
+	} else if len(v.Updates) == 0 {
+		errs = append(errs, "field Updates is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field RootProof is missing")
+	} else if v.RootProof == nil {
+		errs = append(errs, "field RootProof is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_NetworkStatus = []string{
 	1:  "Oracle",
 	2:  "Globals",
@@ -5130,6 +5976,64 @@ func (v *NetworkStatusOptions) IsValid() error {
 		errs = append(errs, "field Partition is missing")
 	} else if len(v.Partition) == 0 {
 		errs = append(errs, "field Partition is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_NetworkUpdateProof = []string{
+	1: "Transaction",
+	2: "Receipt",
+}
+
+func (v *NetworkUpdateProof) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Transaction == nil) {
+		writer.WriteValue(1, v.Transaction.MarshalBinary)
+	}
+	if !(v.Receipt == nil) {
+		writer.WriteValue(2, v.Receipt.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_NetworkUpdateProof)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *NetworkUpdateProof) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Transaction is missing")
+	} else if v.Transaction == nil {
+		errs = append(errs, "field Transaction is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Receipt is missing")
+	} else if v.Receipt == nil {
+		errs = append(errs, "field Receipt is not set")
 	}
 
 	switch len(errs) {
@@ -5509,6 +6413,8 @@ var fieldNames_Receipt = []string{
 	2: "LocalBlock",
 	3: "LocalBlockTime",
 	4: "MajorBlock",
+	5: "Complete",
+	6: "Partition",
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
@@ -5530,6 +6436,12 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.MajorBlock == 0) {
 		writer.WriteUint(4, v.MajorBlock)
+	}
+	if !(!v.Complete) {
+		writer.WriteBool(5, v.Complete)
+	}
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(6, v.Partition)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Receipt)
@@ -6235,6 +7147,64 @@ func (v *AccountRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AccountRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *AnchorReceiptOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AnchorReceiptOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.BptRoot = *x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.AtOrAfter = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AnchorReceiptOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *AnchorReceiptRecord) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AnchorReceiptRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(merkle.Receipt); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Receipt = x
+	}
+	if x, ok := reader.ReadBool(2); ok {
+		v.Anchored = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.DirectoryBlock = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AnchorReceiptRecord)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -7212,6 +8182,83 @@ func (v *MajorBlockRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *MajorHeaderRangeOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MajorHeaderRangeOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Start = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.End = x
+	}
+
+	seen, err := reader.Reset(fieldNames_MajorHeaderRangeOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *MajorHeaderRecord) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MajorHeaderRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Index = x
+	}
+	if x := new(protocol.IndexEntry); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Entry = x
+	}
+	if x := new(messaging.SequencedMessage); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+		v.Anchor = x
+	}
+	for {
+		ok := reader.ReadValue(4, func(r io.Reader) error {
+			x, err := protocol.UnmarshalKeySignatureFrom(r)
+			if err == nil {
+				v.Signatures = append(v.Signatures, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+	for {
+		if x := new(NetworkUpdateProof); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+			v.Updates = append(v.Updates, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_MajorHeaderRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *MessageHashSearchQuery) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7313,7 +8360,17 @@ func (v *MessageRecord[T]) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(merkle.ReceiptList); reader.ReadValue(14, x.UnmarshalBinaryFrom) {
 		v.SourceReceiptList = x
 	}
-	if x, ok := reader.ReadTime(15); ok {
+	if x, ok := reader.ReadUint(15); ok {
+		v.SourceAnchorBlock = x
+	}
+	reader.ReadValue(16, func(r io.Reader) error {
+		x, err := messaging.UnmarshalMessageFrom(r)
+		if err == nil {
+			v.Companion = x
+		}
+		return err
+	})
+	if x, ok := reader.ReadTime(17); ok {
 		v.LastBlockTime = &x
 	}
 
@@ -7428,6 +8485,80 @@ func (v *MinorBlockRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *MinorRootRangeOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MinorRootRangeOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Since = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Until = x
+	}
+
+	seen, err := reader.Reset(fieldNames_MinorRootRangeOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *MinorRootRecord) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MinorRootRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(messaging.SequencedMessage); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Anchor = x
+	}
+	for {
+		ok := reader.ReadValue(2, func(r io.Reader) error {
+			x, err := protocol.UnmarshalKeySignatureFrom(r)
+			if err == nil {
+				v.Signatures = append(v.Signatures, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+	for {
+		if x := new(NetworkUpdateProof); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+			v.Updates = append(v.Updates, x)
+		} else {
+			break
+		}
+	}
+	if x := new(merkle.ReceiptList); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
+		v.RootProof = x
+	}
+
+	seen, err := reader.Reset(fieldNames_MinorRootRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *NetworkStatus) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7494,6 +8625,32 @@ func (v *NetworkStatusOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkStatusOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *NetworkUpdateProof) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *NetworkUpdateProof) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(protocol.Transaction); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Transaction = x
+	}
+	if x := new(merkle.Receipt); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Receipt = x
+	}
+
+	seen, err := reader.Reset(fieldNames_NetworkUpdateProof)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -7731,6 +8888,12 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadUint(4); ok {
 		v.MajorBlock = x
+	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.Complete = x
+	}
+	if x, ok := reader.ReadString(6); ok {
+		v.Partition = x
 	}
 
 	seen, err := reader.Reset(fieldNames_Receipt)
@@ -8104,6 +9267,18 @@ func init() {
 	}, "AccountRecord", "accountRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("bptRoot", "bytes32"),
+		encoding.NewTypeField("atOrAfter", "uint64"),
+	}, "AnchorReceiptOptions", "anchorReceiptOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("receipt", "merkle.Receipt"),
+		encoding.NewTypeField("anchored", "bool"),
+		encoding.NewTypeField("directoryBlock", "uint64"),
+	}, "AnchorReceiptRecord", "anchorReceiptRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("queryType", "string"),
 		encoding.NewTypeField("anchor", "bytes"),
 		encoding.NewTypeField("includeReceipt", "ReceiptOptions"),
@@ -8279,6 +9454,20 @@ func init() {
 	}, "MajorBlockRecord", "majorBlockRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("start", "uint64"),
+		encoding.NewTypeField("end", "uint64"),
+	}, "MajorHeaderRangeOptions", "majorHeaderRangeOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("entry", "protocol.IndexEntry"),
+		encoding.NewTypeField("anchor", "messaging.SequencedMessage"),
+		encoding.NewTypeField("signatures", "protocol.KeySignature[]"),
+		encoding.NewTypeField("updates", "NetworkUpdateProof[]"),
+	}, "MajorHeaderRecord", "majorHeaderRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("queryType", "string"),
 		encoding.NewTypeField("hash", "bytes32"),
 	}, "MessageHashSearchQuery", "messageHashSearchQuery")
@@ -8299,6 +9488,8 @@ func init() {
 		encoding.NewTypeField("sequence", "messaging.SequencedMessage"),
 		encoding.NewTypeField("sourceReceipt", "merkle.Receipt"),
 		encoding.NewTypeField("sourceReceiptList", "merkle.ReceiptList"),
+		encoding.NewTypeField("sourceAnchorBlock", "uint64"),
+		encoding.NewTypeField("companion", "messaging.Message"),
 		encoding.NewTypeField("lastBlockTime", "string"),
 	}, "MessageRecord", "messageRecord")
 
@@ -8322,6 +9513,19 @@ func init() {
 	}, "MinorBlockRecord", "minorBlockRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("since", "uint64"),
+		encoding.NewTypeField("until", "uint64"),
+	}, "MinorRootRangeOptions", "minorRootRangeOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("anchor", "messaging.SequencedMessage"),
+		encoding.NewTypeField("signatures", "protocol.KeySignature[]"),
+		encoding.NewTypeField("updates", "NetworkUpdateProof[]"),
+		encoding.NewTypeField("rootProof", "merkle.ReceiptList"),
+	}, "MinorRootRecord", "minorRootRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("oracle", "protocol.AcmeOracle"),
 		encoding.NewTypeField("globals", "protocol.NetworkGlobals"),
 		encoding.NewTypeField("network", "protocol.NetworkDefinition"),
@@ -8337,6 +9541,11 @@ func init() {
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("partition", "string"),
 	}, "NetworkStatusOptions", "networkStatusOptions")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("transaction", "protocol.Transaction"),
+		encoding.NewTypeField("receipt", "merkle.Receipt"),
+	}, "NetworkUpdateProof", "networkUpdateProof")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("peerID", "p2p.PeerID"),
@@ -8383,6 +9592,8 @@ func init() {
 		encoding.NewTypeField("localBlock", "uint64"),
 		encoding.NewTypeField("localBlockTime", "string"),
 		encoding.NewTypeField("majorBlock", "uint64"),
+		encoding.NewTypeField("complete", "bool"),
+		encoding.NewTypeField("partition", "string"),
 	}, "Receipt", "receipt")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -8471,6 +9682,26 @@ func (v *AccountRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.LastBlockTime == nil) {
 		u.LastBlockTime = v.LastBlockTime
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *AnchorReceiptOptions) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Partition string  `json:"partition,omitempty"`
+		BptRoot   *string `json:"bptRoot,omitempty"`
+		AtOrAfter uint64  `json:"atOrAfter,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
+	if !(v.BptRoot == ([32]byte{})) {
+		u.BptRoot = encoding.ChainToJSON(&v.BptRoot)
+	}
+	if !(v.AtOrAfter == 0) {
+		u.AtOrAfter = v.AtOrAfter
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -8980,6 +10211,34 @@ func (v *MajorBlockRecord) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *MajorHeaderRecord) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Index      uint64                                                 `json:"index,omitempty"`
+		Entry      *protocol.IndexEntry                                   `json:"entry,omitempty"`
+		Anchor     *messaging.SequencedMessage                            `json:"anchor,omitempty"`
+		Signatures *encoding.JsonUnmarshalListWith[protocol.KeySignature] `json:"signatures,omitempty"`
+		Updates    encoding.JsonList[*NetworkUpdateProof]                 `json:"updates,omitempty"`
+		ExtraData  *string                                                `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Index == 0) {
+		u.Index = v.Index
+	}
+	if !(v.Entry == nil) {
+		u.Entry = v.Entry
+	}
+	if !(v.Anchor == nil) {
+		u.Anchor = v.Anchor
+	}
+	if !(len(v.Signatures) == 0) {
+		u.Signatures = &encoding.JsonUnmarshalListWith[protocol.KeySignature]{Value: v.Signatures, Func: protocol.UnmarshalKeySignatureJSON}
+	}
+	if !(len(v.Updates) == 0) {
+		u.Updates = v.Updates
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *MessageHashSearchQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		QueryType QueryType `json:"queryType"`
@@ -9011,6 +10270,8 @@ func (v *MessageRecord[T]) MarshalJSON() ([]byte, error) {
 		Sequence          *messaging.SequencedMessage                             `json:"sequence,omitempty"`
 		SourceReceipt     *merkle.Receipt                                         `json:"sourceReceipt,omitempty"`
 		SourceReceiptList *merkle.ReceiptList                                     `json:"sourceReceiptList,omitempty"`
+		SourceAnchorBlock uint64                                                  `json:"sourceAnchorBlock,omitempty"`
+		Companion         *encoding.JsonUnmarshalWith[messaging.Message]          `json:"companion,omitempty"`
 		LastBlockTime     *time.Time                                              `json:"lastBlockTime,omitempty"`
 		ExtraData         *string                                                 `json:"$epilogue,omitempty"`
 	}{}
@@ -9057,6 +10318,12 @@ func (v *MessageRecord[T]) MarshalJSON() ([]byte, error) {
 	if !(v.SourceReceiptList == nil) {
 		u.SourceReceiptList = v.SourceReceiptList
 	}
+	if !(v.SourceAnchorBlock == 0) {
+		u.SourceAnchorBlock = v.SourceAnchorBlock
+	}
+	if !(messaging.EqualMessage(v.Companion, nil)) {
+		u.Companion = &encoding.JsonUnmarshalWith[messaging.Message]{Value: v.Companion, Func: messaging.UnmarshalMessageJSON}
+	}
 	if !(v.LastBlockTime == nil) {
 		u.LastBlockTime = v.LastBlockTime
 	}
@@ -9093,6 +10360,30 @@ func (v *MinorBlockRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.LastBlockTime == nil) {
 		u.LastBlockTime = v.LastBlockTime
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *MinorRootRecord) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Anchor     *messaging.SequencedMessage                            `json:"anchor,omitempty"`
+		Signatures *encoding.JsonUnmarshalListWith[protocol.KeySignature] `json:"signatures,omitempty"`
+		Updates    encoding.JsonList[*NetworkUpdateProof]                 `json:"updates,omitempty"`
+		RootProof  *merkle.ReceiptList                                    `json:"rootProof,omitempty"`
+		ExtraData  *string                                                `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Anchor == nil) {
+		u.Anchor = v.Anchor
+	}
+	if !(len(v.Signatures) == 0) {
+		u.Signatures = &encoding.JsonUnmarshalListWith[protocol.KeySignature]{Value: v.Signatures, Func: protocol.UnmarshalKeySignatureJSON}
+	}
+	if !(len(v.Updates) == 0) {
+		u.Updates = v.Updates
+	}
+	if !(v.RootProof == nil) {
+		u.RootProof = v.RootProof
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -9243,6 +10534,8 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 		LocalBlock     uint64                                  `json:"localBlock,omitempty"`
 		LocalBlockTime time.Time                               `json:"localBlockTime,omitempty"`
 		MajorBlock     uint64                                  `json:"majorBlock,omitempty"`
+		Complete       bool                                    `json:"complete,omitempty"`
+		Partition      string                                  `json:"partition,omitempty"`
 		ExtraData      *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Receipt.Start) == 0) {
@@ -9271,6 +10564,12 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.MajorBlock == 0) {
 		u.MajorBlock = v.MajorBlock
+	}
+	if !(!v.Complete) {
+		u.Complete = v.Complete
+	}
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -9375,6 +10674,34 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 	v.Pending = u.Pending
 	v.Receipt = u.Receipt
 	v.LastBlockTime = u.LastBlockTime
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *AnchorReceiptOptions) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Partition string  `json:"partition,omitempty"`
+		BptRoot   *string `json:"bptRoot,omitempty"`
+		AtOrAfter uint64  `json:"atOrAfter,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Partition = v.Partition
+	u.BptRoot = encoding.ChainToJSON(&v.BptRoot)
+	u.AtOrAfter = v.AtOrAfter
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Partition = u.Partition
+	if x, err := encoding.ChainFromJSON(u.BptRoot); err != nil {
+		return fmt.Errorf("error decoding BptRoot: %w", err)
+	} else {
+		v.BptRoot = *x
+	}
+	v.AtOrAfter = u.AtOrAfter
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -10060,6 +11387,41 @@ func (v *MajorBlockRecord) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *MajorHeaderRecord) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Index      uint64                                                 `json:"index,omitempty"`
+		Entry      *protocol.IndexEntry                                   `json:"entry,omitempty"`
+		Anchor     *messaging.SequencedMessage                            `json:"anchor,omitempty"`
+		Signatures *encoding.JsonUnmarshalListWith[protocol.KeySignature] `json:"signatures,omitempty"`
+		Updates    encoding.JsonList[*NetworkUpdateProof]                 `json:"updates,omitempty"`
+		ExtraData  *string                                                `json:"$epilogue,omitempty"`
+	}{}
+	u.Index = v.Index
+	u.Entry = v.Entry
+	u.Anchor = v.Anchor
+	u.Signatures = &encoding.JsonUnmarshalListWith[protocol.KeySignature]{Value: v.Signatures, Func: protocol.UnmarshalKeySignatureJSON}
+	u.Updates = v.Updates
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Index = u.Index
+	v.Entry = u.Entry
+	v.Anchor = u.Anchor
+	if u.Signatures != nil && u.Signatures.Value != nil {
+		v.Signatures = make([]protocol.KeySignature, len(u.Signatures.Value))
+		for i, x := range u.Signatures.Value {
+			v.Signatures[i] = x
+		}
+	}
+	v.Updates = u.Updates
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *MessageHashSearchQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
 		QueryType QueryType `json:"queryType"`
@@ -10104,6 +11466,8 @@ func (v *MessageRecord[T]) UnmarshalJSON(data []byte) error {
 		Sequence          *messaging.SequencedMessage                             `json:"sequence,omitempty"`
 		SourceReceipt     *merkle.Receipt                                         `json:"sourceReceipt,omitempty"`
 		SourceReceiptList *merkle.ReceiptList                                     `json:"sourceReceiptList,omitempty"`
+		SourceAnchorBlock uint64                                                  `json:"sourceAnchorBlock,omitempty"`
+		Companion         *encoding.JsonUnmarshalWith[messaging.Message]          `json:"companion,omitempty"`
 		LastBlockTime     *time.Time                                              `json:"lastBlockTime,omitempty"`
 		ExtraData         *string                                                 `json:"$epilogue,omitempty"`
 	}{}
@@ -10122,6 +11486,8 @@ func (v *MessageRecord[T]) UnmarshalJSON(data []byte) error {
 	u.Sequence = v.Sequence
 	u.SourceReceipt = v.SourceReceipt
 	u.SourceReceiptList = v.SourceReceiptList
+	u.SourceAnchorBlock = v.SourceAnchorBlock
+	u.Companion = &encoding.JsonUnmarshalWith[messaging.Message]{Value: v.Companion, Func: messaging.UnmarshalMessageJSON}
 	u.LastBlockTime = v.LastBlockTime
 	err := json.Unmarshal(data, &u)
 	if err != nil {
@@ -10149,6 +11515,11 @@ func (v *MessageRecord[T]) UnmarshalJSON(data []byte) error {
 	v.Sequence = u.Sequence
 	v.SourceReceipt = u.SourceReceipt
 	v.SourceReceiptList = u.SourceReceiptList
+	v.SourceAnchorBlock = u.SourceAnchorBlock
+	if u.Companion != nil {
+		v.Companion = u.Companion.Value
+	}
+
 	v.LastBlockTime = u.LastBlockTime
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
@@ -10188,6 +11559,38 @@ func (v *MinorBlockRecord) UnmarshalJSON(data []byte) error {
 	v.Entries = u.Entries
 	v.Anchored = u.Anchored
 	v.LastBlockTime = u.LastBlockTime
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *MinorRootRecord) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Anchor     *messaging.SequencedMessage                            `json:"anchor,omitempty"`
+		Signatures *encoding.JsonUnmarshalListWith[protocol.KeySignature] `json:"signatures,omitempty"`
+		Updates    encoding.JsonList[*NetworkUpdateProof]                 `json:"updates,omitempty"`
+		RootProof  *merkle.ReceiptList                                    `json:"rootProof,omitempty"`
+		ExtraData  *string                                                `json:"$epilogue,omitempty"`
+	}{}
+	u.Anchor = v.Anchor
+	u.Signatures = &encoding.JsonUnmarshalListWith[protocol.KeySignature]{Value: v.Signatures, Func: protocol.UnmarshalKeySignatureJSON}
+	u.Updates = v.Updates
+	u.RootProof = v.RootProof
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Anchor = u.Anchor
+	if u.Signatures != nil && u.Signatures.Value != nil {
+		v.Signatures = make([]protocol.KeySignature, len(u.Signatures.Value))
+		for i, x := range u.Signatures.Value {
+			v.Signatures[i] = x
+		}
+	}
+	v.Updates = u.Updates
+	v.RootProof = u.RootProof
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -10385,6 +11788,8 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 		LocalBlock     uint64                                  `json:"localBlock,omitempty"`
 		LocalBlockTime time.Time                               `json:"localBlockTime,omitempty"`
 		MajorBlock     uint64                                  `json:"majorBlock,omitempty"`
+		Complete       bool                                    `json:"complete,omitempty"`
+		Partition      string                                  `json:"partition,omitempty"`
 		ExtraData      *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
@@ -10396,6 +11801,8 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	u.LocalBlock = v.LocalBlock
 	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
+	u.Complete = v.Complete
+	u.Partition = v.Partition
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -10421,6 +11828,8 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	v.LocalBlock = u.LocalBlock
 	v.LocalBlockTime = u.LocalBlockTime
 	v.MajorBlock = u.MajorBlock
+	v.Complete = u.Complete
+	v.Partition = u.Partition
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

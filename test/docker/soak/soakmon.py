@@ -34,7 +34,14 @@ COMPOSE = os.path.join(HERE, "docker-compose.yml")
 RUN_DIR = os.environ.get("RUN_DIR") or HERE
 STATS = os.path.join(RUN_DIR, "loadgen-stats.json")
 CHAOS = os.path.join(RUN_DIR, "chaos.log")
-API = "http://localhost:26660/v3"
+# The API endpoint, from the topology rather than a constant. This was
+# hardcoded to 26660 while topology.BASE_HOST_PORT moved to 26680, so the
+# reachability probe hit a port nothing serves and the board reported
+# "network down" over three partitions advancing at 0.9 s/block
+# (REPORTING-SPEC 1: displayed means measured). Every other reading came
+# from topology-derived ports and was correct, which is what made the
+# contradiction visible.
+API = "http://localhost:%d/v3" % topology.node_ports()[0]
 PORT = int(os.environ.get("PORT", "8099"))
 
 # Say something on the way out.
@@ -101,8 +108,36 @@ _SHFAIL = {"n": 0, "last": "", "calls": 0}
 
 
 # Refresh cadences (seconds): cheap things often, docker-heavy things rarely.
-I_STATS, I_HEIGHT, I_WEDGE, I_HEAL, I_CHAOS, I_FLOW = 1, 1, 5, 5, 5, 1
-HIST_MAX = 600  # ~10 min of 1s ticks kept for the sparklines' recent window
+# I_FLOW is 5, not 1: one flow read is a fan-out over every node for every
+# ledger and every anchor-sequence chain (REPORTING-SPEC 1b), which at 1 Hz
+# is ~70 curl subprocesses a second on the host running the soak. A flow
+# matrix does not change meaningfully inside five seconds.
+I_STATS, I_HEIGHT, I_WEDGE, I_HEAL, I_CHAOS, I_FLOW = 1, 1, 5, 5, 5, 5
+I_MEM = 30  # seconds between rows of mem.csv, the run-long memory/GC series (PLAN S0)
+# Per-node runtime series. process_* and go_memstats_* come from the default
+# Go collector; go_gc_cycles_* and go_cpu_classes_gc_* need the runtime-metrics
+# collector (S0/S6) and read as absent on an older image.
+MEM_METRICS = {
+    "process_resident_memory_bytes": "rss",
+    "process_cpu_seconds_total": "cpu",
+    "go_memstats_heap_alloc_bytes": "heapAlloc",
+    "go_memstats_heap_inuse_bytes": "heapInuse",
+    "go_memstats_next_gc_bytes": "nextGC",
+    "go_gc_duration_seconds_count": "gcCount",
+    "go_cpu_classes_gc_total_cpu_seconds_total": "gcCpu",
+    "go_goroutines": "goroutines",
+}
+_MEM_LAST = {}   # node -> {field: value, "t": when}; for GC/s and GC-CPU rates
+_MEM_CSV_T = [0.0]
+# The rolling history: an hour at one sample a second. It was ten minutes,
+# which is shorter than most things worth watching -- a memory trend, a
+# healing burst after a chaos restart, the shape of a recovery -- and the
+# sparklines could not show them. Each sample is a handful of integers; the
+# flow matrix, which is ~20x the rest, is snapshotted every
+# FLOW_HIST_EVERY samples instead of every one, so the payload grows with
+# the window rather than with the window times the matrix.
+HIST_MAX = 3600
+FLOW_HIST_EVERY = 30
 # A partition whose height has not moved for this long is stalled. Matches the
 # node-side watchdog so the dashboard and the logs agree on the word.
 STALL_SECS = 10
@@ -120,6 +155,139 @@ def sh(args, timeout=25):
         _SHFAIL["n"] += 1
         _SHFAIL["last"] = "%s: %s" % (type(e).__name__, str(e)[:160])
         return ""
+
+
+def query_all_nodes(params, ports=None, method="query"):
+    """Ask EVERY node the same query, in parallel, and return each answer's
+    `result`. A node that does not answer contributes nothing.
+
+    One node is one point of stale truth (REPORTING-SPEC 1b). The matrix used
+    to read one API endpoint: for its own partitions that node answered from
+    its own store, as current as its own executor, and for the others the
+    router picked a peer, a different one each time. Run 20260906T134054Z
+    ended with that node's BVN1 executor 348 blocks behind its siblings, so
+    the board showed BVN1 -> Directory as produced 100,804 against received
+    102,177 -- the destination had received more than the source had sent.
+    Live, the same mixing reads as sent/delivered flickering between a lower
+    and a higher value (#4279)."""
+    ports = ports or NODE_PORTS
+    out, lock, threads = [], threading.Lock(), []
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+
+    def one(port):
+        txt = sh(["curl", "-s", "-m", "6", "-X", "POST", "http://localhost:%d/v3" % port,
+                  "-H", "content-type: application/json", "-d", body], timeout=10)
+        try:
+            r = json.loads(txt)["result"]
+        except Exception:
+            return
+        with lock:
+            out.append(r)
+
+    for port in ports:
+        t = threading.Thread(target=one, args=(port,))
+        t.start(); threads.append(t)
+    for t in threads:
+        t.join()
+    return out
+
+
+def merge_sequence_views(views):
+    """Merge one ledger's `sequence` list as read from several nodes: per
+    remote, the max of each field. Every field is monotone on every node, so
+    a lagging node can only under-report and the max is what the network
+    holds. Pending keeps the longest list seen."""
+    merged, order = {}, []
+    for seq in views:
+        for e in seq or []:
+            url = e.get("url") or ""
+            if not url:
+                continue
+            m = merged.get(url)
+            if m is None:
+                m = merged[url] = {"url": url, "produced": 0, "received": 0, "delivered": 0, "pending": []}
+                order.append(url)
+            for f in ("produced", "received", "delivered"):
+                m[f] = max(m[f], int(e.get(f) or 0))
+            if len(e.get("pending") or []) > len(m["pending"]):
+                m["pending"] = e.get("pending") or []
+    return [merged[u] for u in order]
+
+
+# How many nodes answered the last flow read, so a drop in the merged max
+# can be told from a drop in the number of nodes it was taken over.
+_FLOW_ANSWERS = {"prev": None, "cur": None}
+
+
+def judge_regression(prev, sample, answered_prev, answered_cur):
+    """What to make of a sample against the previous one: the fields that
+    went backwards, and whether the alarm must be withheld because the
+    sample was read over fewer nodes than the last (a node that stopped
+    answering lowers the merged max; that is the monitor losing a node, not
+    a sequence number going backwards). Returns (regressions, shrank)."""
+    shrank = answered_prev is not None and answered_cur is not None and answered_cur < answered_prev
+    if prev is None or shrank:
+        return [], shrank
+    return sequence_regressions(prev, sample), shrank
+
+
+def sequence_regressions(prev, cur):
+    """Which of sent/recv/deliv went DOWN between two samples (t, sent, recv,
+    deliv). After the max across nodes a lower reading is not lag: a sequence
+    number never decreases, so it is a value that went backwards in a store,
+    and it is an alarm, never absorbed by a high-water mark."""
+    out = []
+    for name, i in (("sent", 1), ("recv", 2), ("deliv", 3)):
+        if cur[i] < prev[i]:
+            out.append((name, prev[i], cur[i]))
+    return out
+
+
+def observe_rates(now, generated, syn, anc, elapsed):
+    """Rates per second: over the whole run, and the totals behind them.
+
+    `elapsed` is the load generator's own clock, which survives a monitor
+    restart; the monitor's own base is used for the produced counters,
+    which it can only count from when it started looking. Both are stated
+    so a reader can tell one from the other (REPORTING-SPEC 1).
+    """
+    if not _RATE_BASE:
+        _RATE_BASE.update({"t": now, "sProd": syn or 0, "aProd": anc or 0})
+    span = now - _RATE_BASE["t"]
+    def per_sec(delta, over):
+        return round(delta / over, 2) if over and over > 0 and delta >= 0 else None
+    user = per_sec(generated or 0, elapsed or 0)
+    s = per_sec((syn or 0) - _RATE_BASE["sProd"], span)
+    a = per_sec((anc or 0) - _RATE_BASE["aProd"], span)
+    total = None
+    if user is not None and s is not None and a is not None:
+        total = round(user + s + a, 2)
+    return {
+        "userAvg": user, "synAvg": s, "anchorAvg": a, "totalAvg": total,
+        # What the averages are over, so neither is mistaken for the other.
+        "userOverSec": round(elapsed or 0, 1), "producedOverSec": round(span, 1),
+        "generated": generated or 0, "synProduced": syn or 0, "anchorProduced": anc or 0,
+    }
+
+
+def judge_gap(sent, recv):
+    """The sent-but-not-received depth of one flow, and the skew when the
+    numbers cannot both be true. `sent` is the source ledger's produced count,
+    `recv` the destination's received count, each merged by max over the
+    nodes that answered; a destination cannot have received more than any
+    source reports produced, so recv > sent is not a depth of -N, it is the
+    source read over fewer or staler nodes. Never a negative (REPORTING-SPEC
+    1a); the excess is reported as skew (1b)."""
+    gap = (sent or 0) - (recv or 0)
+    if gap < 0:
+        return 0, -gap
+    return gap, 0
+
+
+def compact_flows(flows):
+    """The matrix as [sent, recv, deliv] per cell, for the history."""
+    return {k: {s: {d: [c.get("sent", 0), c.get("recv", 0), c.get("deliv", 0)] for d, c in row.items()}
+                for s, row in m.items()} for k, m in (flows or {}).items()}
 
 
 def curl_api(method, params):
@@ -148,15 +316,22 @@ def read_stats():
 
 
 def collect_height():
-    r = curl_api("query", {"scope": "acc://dn.acme/ledger"})
+    """The DN height, and whether ANY node answers.
+
+    Reachability is asked of every node, not one: a single node that is
+    down, restarting under chaos, or paused is not the network being
+    unreachable, and reporting it as such put a red badge over a healthy
+    run. `nodes` says how many of them answered, so a thinning fleet is
+    visible rather than binary.
+    """
     h = None
     try:
-        # the DN system-ledger's index is the DN block height
-        h = int(r["result"]["account"]["index"])
+        h = int(curl_api("query", {"scope": "acc://dn.acme/ledger"})["result"]["account"]["index"])
     except Exception:
         pass
-    up = curl_api("network-status", {"partition": "Directory"}) is not None
-    return {"api": "up" if up else "down", "dnHeight": h}
+    answers = query_all_nodes({"partition": "Directory"}, method="network-status")
+    return {"api": "up" if answers else "down", "dnHeight": h,
+            "nodes": len(answers), "ofNodes": len(NODE_PORTS)}
 
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -169,6 +344,7 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 PARTITIONS = topology.partitions()
 SCOPE = topology.scopes()
 PROBE_PORTS = topology.probe_ports()
+NODE_PORTS = topology.node_ports()  # every node: a ledger is read from all of them (REPORTING-SPEC 1b)
 
 
 def _plabel(u):
@@ -211,6 +387,12 @@ _RATE = {}  # part -> [(t, height)] rolling window for the block-rate display
 _FIRST = {}  # part -> (t, height) at first sighting, for the run-long average
 _RSS_ALARM = {}  # last RSS-alarm time, rate-limited to one per 5 min
 _FLOW_HIST = {}  # (kind,src,dst) -> [(t, sent, recv)] for channel-lag rates
+# The first sample's cumulative counters and its time, so a rate can be
+# stated over the whole run and not only over the rolling window. A window
+# derivative answers "what is it doing now"; the run-long average answers
+# "what has this run achieved", which is the number a result is quoted as
+# and the one a restarted monitor must not lose.
+_RATE_BASE = {}
 
 
 def assess_progress(heights, now):
@@ -284,13 +466,21 @@ def overall_status(api_up, progress):
     which is how a dashboard showed "network up" over a Directory frozen at
     block 121 with zero anchors, zero synthetics and zero tx/s.
     """
-    if not api_up:
-        return "down"
     states = [v["state"] for v in progress.values()]
-    if not states or all(st == "unknown" for st in states):
-        return "down"
+    # A stalled partition is the finding, whether or not the API answers.
     if any(st == "stalled" for st in states):
         return "stalled"
+    if not api_up:
+        # No node answered. If partitions have been SEEN TO ADVANCE, the
+        # monitor has lost its reach, not the network its health -- and
+        # "down" beside three heights climbing at 0.9 s/block is an
+        # impossible state (REPORTING-SPEC 1a). Advancing, not merely
+        # sighted: one sample proves a height was readable once, which is
+        # no evidence of progress and no reason to soften the verdict.
+        advancing = any(v.get("blocksSeen") for v in progress.values())
+        return "degraded" if advancing else "down"
+    if not states or all(st == "unknown" for st in states):
+        return "down"
     if any(st == "unknown" for st in states):
         return "degraded"
     return "up"
@@ -388,6 +578,15 @@ LIFE_METRICS = {
     "accumulate_dagbft_blocks_empty_total": "blocksEmpty",
 }
 
+# Of those, the ones that are a fact about the PARTITION rather than an event
+# on the node. Every validator produces the same blocks, so summing them over
+# the fleet multiplies the chain's block count by the node count: the board
+# read 687,160 blocks produced while the three partitions stood at 111,869
+# (run 20260915T042428Z) -- a number no reader can act on, and an impossible
+# state under REPORTING-SPEC 1a. These take the max; the rest stay sums,
+# because a retained batch or a re-delivery IS a per-node event.
+LIFE_MAX = {"blocks", "blocksEmpty"}
+
 _REASON = re.compile(r'reason="([^"]+)"')
 
 # #4169 step 0 — the baseline that gates sharded execution (group 4) and the
@@ -404,6 +603,83 @@ EXEC_METRICS = {
     "accumulate_exec_blocks_total": "blocks",
     "accumulate_exec_flushes_total": "flushes",
 }
+
+
+def mem_from(per):
+    """Per-node memory and GC from one scrape, with rates against the previous
+    scrape. Feeds the dashboard's node table and mem.csv (PLAN S0)."""
+    now = time.time()
+    by = {}
+    for c, rows in (per or {}).items():
+        cur = {"t": now}
+        staged, view_age = 0.0, 0.0
+        for name, lab, v in rows or ():
+            key = MEM_METRICS.get(name)
+            try:
+                f = float(v)
+            except (TypeError, ValueError):
+                continue
+            if key:
+                cur[key] = f
+            elif name == "accumulate_bcdb_staged_commits":
+                staged = max(staged, f)
+            elif name == "accumulate_bcdb_oldest_view_age_seconds":
+                view_age = max(view_age, f)
+        if len(cur) == 1:
+            continue
+        prev = _MEM_LAST.get(c)
+        out = {"rssMiB": round(cur.get("rss", 0) / 1048576.0),
+               "heapAllocMiB": round(cur.get("heapAlloc", 0) / 1048576.0),
+               "heapInuseMiB": round(cur.get("heapInuse", 0) / 1048576.0),
+               "nextGCMiB": round(cur.get("nextGC", 0) / 1048576.0),
+               "gcCount": int(cur.get("gcCount", 0)),
+               "cpuSec": cur.get("cpu", 0.0),
+               "gcCpuSec": cur.get("gcCpu"),
+               "goroutines": int(cur.get("goroutines", 0)),
+               "staged": int(staged), "viewAgeS": round(view_age, 1),
+               "gcPerSec": None, "gcCores": None, "cpuCores": None}
+        if prev and now - prev["t"] > 0:
+            dt = now - prev["t"]
+            if "gcCount" in cur and "gcCount" in prev:
+                out["gcPerSec"] = round(max(0.0, cur["gcCount"] - prev["gcCount"]) / dt, 2)
+            if "gcCpu" in cur and "gcCpu" in prev:
+                out["gcCores"] = round(max(0.0, cur["gcCpu"] - prev["gcCpu"]) / dt, 2)
+            if "cpu" in cur and "cpu" in prev:
+                out["cpuCores"] = round(max(0.0, cur["cpu"] - prev["cpu"]) / dt, 2)
+        _MEM_LAST[c] = cur
+        by[c] = out
+    summary = {"byNode": by}
+    if by:
+        summary["heapMaxMiB"] = max(v["heapAllocMiB"] for v in by.values())
+        summary["heapMaxNode"] = max(by, key=lambda c: by[c]["heapAllocMiB"])
+        gcs = [v["gcPerSec"] for v in by.values() if v["gcPerSec"] is not None]
+        summary["gcPerSecMax"] = max(gcs) if gcs else None
+        cores = [v["gcCores"] for v in by.values() if v["gcCores"] is not None]
+        summary["gcCoresSum"] = round(sum(cores), 2) if cores else None
+        summary["stagedMax"] = max(v["staged"] for v in by.values())
+        summary["viewAgeMaxS"] = max(v["viewAgeS"] for v in by.values())
+    return summary
+
+
+def write_mem_csv(mem):
+    """Append one row per node to RUN_DIR/mem.csv every I_MEM seconds. The
+    dashboard's history keeps ten minutes; this is the twelve-hour series the
+    steady-state criteria are judged from."""
+    now = time.time()
+    if now - _MEM_CSV_T[0] < I_MEM or not mem.get("byNode"):
+        return
+    _MEM_CSV_T[0] = now
+    path = os.path.join(RUN_DIR, "mem.csv")
+    cols = ["rssMiB", "heapAllocMiB", "heapInuseMiB", "nextGCMiB", "gcCount", "gcPerSec",
+            "gcCores", "cpuSec", "cpuCores", "goroutines", "staged", "viewAgeS"]
+    new = not os.path.exists(path)
+    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+    with open(path, "a") as f:
+        if new:
+            f.write("time,node," + ",".join(cols) + "\n")
+        for c in sorted(mem["byNode"]):
+            v = mem["byNode"][c]
+            f.write(ts + "," + c + "," + ",".join("" if v.get(k) is None else str(v.get(k)) for k in cols) + "\n")
 
 
 def exec_from(per):
@@ -449,9 +725,12 @@ def life_from(per):
                 continue
             key = LIFE_METRICS.get(name)
             if key:
-                # Counters are per-node; the fleet total is what says whether
-                # this is happening at all.
-                life[key] += n
+                # A per-node event sums over the fleet; a partition fact does
+                # not (LIFE_MAX).
+                if key in LIFE_MAX:
+                    life[key] = max(life[key], n)
+                else:
+                    life[key] += n
             elif name == "accumulate_dagbft_batch_waits_total":
                 # Labels arrive as a parsed dict since the scrape refactor;
                 # the regex path is kept for raw-string rows. This crashed
@@ -470,6 +749,149 @@ def life_from(per):
     return life
 
 
+HEAL_OUTCOMES = ("answered", "not-yet", "miss", "failed")
+PROOF_OUTCOMES = ("validated", "staged", "disproved", "conflict", "invalid", "unbound", "refused", "duplicate")
+JUDGED = ("proven", "unproven", "collected", "tossed", "anchor-collected", "anchor-tossed", "this_block", "earlier", "missing")
+
+
+def heals_from(per):
+    """Healing, from the families the node EXPORTS.
+
+    The monitor read accumulate_crosschain_heals_total and five siblings for
+    weeks after the last of them left the tree, and rendered the absence as
+    0: a 12-hour run whose log held 4,028 span requests and 18,171 healed
+    entries showed HEALS 0, ANCHOR 0, SYNTHETIC 0, HEAL ERRORS 0 and a
+    healing panel reading "none yet" (#4279, run 20260915T042428Z). That is
+    the clause-1 violation REPORTING-SPEC records against #4093, still open.
+    A family that no node reported is None here and "not measured" on the
+    board; zero means zero.
+
+    Counters sum across nodes (each node's requester counts its own asks);
+    the staging gauges take the max per stream, since staging is identical
+    on every node (executor spec, invariant 6)."""
+    requests = {o: 0 for o in HEAL_OUTCOMES}
+    by_stream = {}
+    proofs = {o: 0 for o in PROOF_OUTCOMES}
+    judged = {o: 0 for o in JUDGED}
+    held = {}
+    seen = set()
+    entries = 0
+    for rows in (per or {}).values():
+        for name, lab, v in rows or ():
+            try:
+                n = int(float(v))
+            except (TypeError, ValueError):
+                continue
+            lab = lab if isinstance(lab, dict) else {}
+            if name == "accumulate_conductor_heal_requests_total":
+                seen.add("requests")
+                o = lab.get("outcome", "")
+                requests[o] = requests.get(o, 0) + n
+                key = "%s->%s" % (lab.get("source", "?"), lab.get("destination", "?"))
+                by_stream.setdefault(key, {o: 0 for o in HEAL_OUTCOMES})
+                by_stream[key][o] = by_stream[key].get(o, 0) + n
+            elif name == "accumulate_conductor_heal_entries_total":
+                seen.add("entries"); entries += n
+            elif name == "accumulate_exec_staged_proofs_total":
+                seen.add("proofs")
+                o = lab.get("outcome", ""); proofs[o] = proofs.get(o, 0) + n
+            elif name == "accumulate_exec_synthetic_anchor_total":
+                seen.add("judged")
+                o = lab.get("applied", ""); judged[o] = judged.get(o, 0) + n
+            elif name in ("accumulate_staging_held_entries", "accumulate_staging_held_bytes"):
+                seen.add("held")
+                key = (lab.get("ledger", "?"), lab.get("source", "?"))
+                h = held.setdefault(key, {"ledger": key[0], "source": key[1], "entries": 0, "bytes": 0})
+                f = "entries" if name.endswith("entries") else "bytes"
+                h[f] = max(h[f], n)
+    out = {
+        "measured": bool(seen),
+        "requests": dict(requests, total=sum(requests.values())) if "requests" in seen else None,
+        "byStream": by_stream if "requests" in seen else None,
+        "entries": entries if "entries" in seen else None,
+        "proofs": proofs if "proofs" in seen else None,
+        "judged": judged if "judged" in seen else None,
+        "held": None,
+        # What earlier readers keyed on. `total` feeds the sparkline and the
+        # index; `errors` the tile; `stuck` is what seizewatch trips on and
+        # no family reports it today, so it is not measured, not 0.
+        "total": entries if "entries" in seen else None,
+        "errors": (requests.get("failed", 0) + requests.get("miss", 0)) if "requests" in seen else None,
+        "stuck": None, "stuckStream": "",
+    }
+    if "held" in seen:
+        streams = sorted(held.values(), key=lambda h: (-h["entries"], h["ledger"], h["source"]))
+        out["held"] = {"entries": sum(h["entries"] for h in streams),
+                       "bytes": sum(h["bytes"] for h in streams), "streams": streams}
+    return out
+
+
+HANDOFF = ("arrived", "executed", "unmarshal-failed", "process-failed", "status-failed")
+
+
+def handoff_from(per):
+    """What became of transactions at the consensus/execution hand-off.
+
+    `arrived` minus `executed` is what did not execute -- the question
+    #4132 exists to answer, and the one a board could not show while the
+    accounting lived only in a per-block log line. Summed over the fleet:
+    every validator executes the same block, so the ABSOLUTE numbers are
+    a fleet multiple, but the gap is what matters and it scales the same.
+    """
+    out = {o: 0 for o in HANDOFF}
+    seen = False
+    for rows in (per or {}).values():
+        for name, lab, v in rows or ():
+            if name != "accumulate_dagbft_handoff_transactions_total":
+                continue
+            try:
+                n = int(float(v))
+            except (TypeError, ValueError):
+                continue
+            o = (lab if isinstance(lab, dict) else {}).get("outcome", "")
+            out[o] = out.get(o, 0) + n
+            seen = True
+    if not seen:
+        return {"measured": False, "arrived": None, "executed": None, "unexecuted": None}
+    out["measured"] = True
+    out["unexecuted"] = max(0, out["arrived"] - out["executed"])
+    # Accounted for: the three failure outcomes. Anything left is loss with
+    # no recorded reason, which is the alarming case.
+    named = out["unmarshal-failed"] + out["process-failed"] + out["status-failed"]
+    out["unaccounted"] = max(0, out["unexecuted"] - max(0, named - out["status-failed"]))
+    return out
+
+
+def wedges_from(per):
+    """Dropped cross-partition envelopes, from the dispatcher's own counter
+    (reason: deadline or queue-full) and, when chaos is on, the debug drop
+    counter. None when neither family was reported."""
+    by_dest = {p: 0 for p in PARTITIONS}
+    by_reason = {}
+    seen = False
+    for rows in (per or {}).values():
+        for name, lab, v in rows or ():
+            try:
+                n = int(float(v))
+            except (TypeError, ValueError):
+                continue
+            lab = lab if isinstance(lab, dict) else {}
+            if name in ("accumulate_dispatcher_drops_total", NS + "_debug_dropped_total"):
+                seen = True
+                d = lab.get("destination") or lab.get("dest") or "?"
+                by_dest[d] = by_dest.get(d, 0) + n
+                # `reason` on the dispatcher, `kind` on the chaos debug
+                # counter -- reading only the first put every injected drop
+                # in a bucket called "?".
+                r = lab.get("reason") or lab.get("kind") or lab.get("type") or "?"
+                by_reason[r] = by_reason.get(r, 0) + n
+    if not seen:
+        # Not {p: 0}: an absent instrument renders as absent, never as a
+        # column of zeros (REPORTING-SPEC 1).
+        return {"measured": False, "total": None, "byDest": {}, "byReason": {}}
+    return {"measured": True, "total": sum(by_reason.values()), "byDest": by_dest, "byReason": by_reason}
+
+
 def collect_metrics():
     # Scrape every node's /metrics and aggregate. Counters (heals/drops) sum
     # across a partition's validators; gauges (sequence) take the max, since all
@@ -484,67 +906,25 @@ def collect_metrics():
     for t in threads:
         t.join()
 
-    heals = {"synthetic": 0, "anchor": 0, "deferred": 0, "errors": 0, "focus": 0, "stuck": 0, "stuckStream": "", "byPartition": {}}
-    drops = {"synthetic": 0, "anchor": 0, "byDest": {p: 0 for p in PARTITIONS}}
-    heal_types = set()
-    seq = {}
+    heals = heals_from(per)
+    drops = wedges_from(per)
+    handoff = handoff_from(per)
 
-    def pslot(p):
-        return heals["byPartition"].setdefault(p, {"synthetic": 0, "anchor": 0, "deferred": 0, "errors": 0, "focus": 0})
-
-    def N(s):
-        return NS + "_" + s
-
-    for rows in per.values():
-        for name, lab, v in rows:
-            iv = int(v)
-            if name == N("crosschain_heals_total"):
-                # Tolerate heal types this script has never heard of. The label
-                # set is owned by the node, not by the monitor: #4087 added
-                # "synthetic-range" and "anchor-range", and indexing a fixed dict
-                # killed the collector thread outright with a KeyError. The
-                # dashboard then served its last good sample forever — reporting a
-                # frozen height and a frozen heal count while the network ran on,
-                # which reads exactly like a seizure and hides a real one.
-                t = lab.get("type", "")
-                heals[t] = heals.get(t, 0) + iv
-                heal_types.add(t)
-                s = pslot(lab.get("partition", ""))
-                s[t] = s.get(t, 0) + iv
-            elif name == N("crosschain_heal_deferred_total"):
-                heals["deferred"] += iv; pslot(lab.get("partition", ""))["deferred"] += iv
-            elif name == N("crosschain_heal_errors_total"):
-                heals["errors"] += iv; pslot(lab.get("partition", ""))["errors"] += iv
-            elif name == N("crosschain_heal_focus_total"):
-                heals["focus"] += iv; pslot(lab.get("partition", ""))["focus"] += iv
-            elif name == N("crosschain_heal_stuck_tries"):
-                if iv > heals["stuck"]:
-                    heals["stuck"] = iv
-                    heals["stuckStream"] = "%s<-%s" % (lab.get("partition", "?"), lab.get("remote", "?"))
-            elif name == N("debug_dropped_total"):
-                k = lab.get("kind", ""); drops[k] = drops.get(k, 0) + iv
-                d = lab.get("destination", "?"); drops["byDest"][d] = drops["byDest"].get(d, 0) + iv
-            elif name == N("crosschain_sequence"):
-                cell = seq.setdefault((lab.get("type"), lab.get("src"), lab.get("dst")), {})
-                f = lab.get("field", "")
-                cell[f] = max(cell.get(f, 0), iv)
-
-    # Per-node size. Reported as min/avg/max rather than a single number because
-    # the spread is the interesting part: nodes are restarted by chaos at
-    # different times, so a fleet average hides both the freshly-started node and
-    # the one that has been up longest. Goroutines ride along because an
+    # Per-node RSS and goroutines, and the memory detail behind them. An
     # unbounded goroutine count is what #4089 looked like before anyone noticed
-    # the memory — and it shows up there hours earlier than RSS does.
+    # the memory -- and it shows up there hours earlier than RSS does.
     nodes = {"count": 0, "rssMinMiB": 0, "rssAvgMiB": 0, "rssMaxMiB": 0, "rssMaxNode": "",
              "grMin": 0, "grAvg": 0, "grMax": 0, "grMaxNode": "", "byNode": {}}
     rss, gor = {}, {}
+    mem = mem_from(per)
+    nodes["mem"] = mem
     # Batch lifecycle, added after the 20260822 night. Each answers a question
     # that previously needed a grep over gigabytes of container log.
-    #   redelivered — keeps the #4125 skip honest: skipping a re-delivered
+    #   redelivered -- keeps the #4125 skip honest: skipping a re-delivered
     #     certificate is correct, but a nonzero rate means commit dedup is
     #     still wrong upstream and the fix is hiding it. Should be 0.
-    #   retention hits/expired/held — whether the #4128 window is sized right.
-    #   blocks vs empty — an idle network commits empty rounds forever, which
+    #   retention hits/expired/held -- whether the #4128 window is sized right.
+    #   blocks vs empty -- an idle network commits empty rounds forever, which
     #     reads as a stall to anything watching the ledger index and as health
     #     to anything watching block production. Neither says "idle".
     life = life_from(per)
@@ -568,52 +948,35 @@ def collect_metrics():
         nodes["grMaxNode"] = max(gor, key=gor.get)
     for c in sorted(set(rss) | set(gor)):
         nodes["byNode"][c] = {"rssMiB": round(rss.get(c, 0)), "goroutines": gor.get(c, 0)}
+        m = mem["byNode"].get(c)
+        if m:
+            nodes["byNode"][c].update({"heapMiB": m.get("heapAllocMiB"), "gcPerSec": m.get("gcPerSec"),
+                                       "gcCores": m.get("gcCores"), "staged": m.get("staged"),
+                                       "viewAgeS": m.get("viewAgeS")})
     with lock:
         nodes["disk"] = disk_from(dict(_DISK), _DISK_FIRST, time.time())
     for c, v in nodes["disk"]["byNode"].items():
         nodes["byNode"].setdefault(c, {}).update(v)
+    # The flow matrix comes from the ledgers over the API, read from every
+    # node (collect_flows_api). A metrics path used to sit here waiting for
+    # an accumulate_crosschain_sequence gauge that no node has exported for
+    # weeks; it filled nothing and fell through every sample.
+    flows, syn_prod, anc_prod = collect_flows_api()
 
-    # Sum the heal TYPES actually seen on heals_total, not a fixed pair, so a
-    # recovery path added later cannot go uncounted. Deliberately not a sum over
-    # `heals`, which also holds deferred/errors/focus/stuck — those are not heals.
-    heals["total"] = sum(heals.get(t, 0) for t in heal_types)
-    drops["total"] = drops["synthetic"] + drops["anchor"]
-    flows = {"synthetic": {}, "anchor": {}}
-    for (kind, src, dst), cell in seq.items():
-        if kind not in flows or src not in PARTITIONS or dst not in PARTITIONS:
-            continue
-        flows[kind].setdefault(src, {})[dst] = {
-            "sent": cell.get("produced", 0), "recv": cell.get("received", 0), "deliv": cell.get("delivered", 0)}
-    # Network-wide produced totals; their time-derivative is the tx production
-    # rate (synthetics/anchors emitted per second across all partition pairs).
-    syn_prod = sum(c.get("produced", 0) for (k, _, _), c in seq.items() if k == "synthetic")
-    anc_prod = sum(c.get("produced", 0) for (k, _, _), c in seq.items() if k == "anchor")
-
-    # The accumulate_crosschain_sequence gauge exists only on the dagbft
-    # lineage. On the release lineage the nodes serve heals_total and nothing
-    # else, so the flow matrix comes back EMPTY — and an empty matrix reads as
-    # "no gaps anywhere", which is indistinguishable from healthy and silently
-    # disarms seizewatch. Fall back to the ledgers over the API, which carry the
-    # same produced/received/delivered per source on every lineage.
-    if not flows["synthetic"] and not flows["anchor"]:
-        af, asp, aap = collect_flows_api()
-        if af["synthetic"] or af["anchor"]:
-            flows, syn_prod, anc_prod = af, asp, aap
-
-    return {"heals": heals, "wedges": drops, "flows": flows, "life": life, "exec": exec_from(per),
+    return {"heals": heals, "wedges": drops, "handoff": handoff, "flows": flows, "life": life, "exec": exec_from(per),
             "synProduced": syn_prod, "ancProduced": anc_prod, "nodeStats": nodes,
             "nodes": len(cs), "scraped": sum(1 for r in per.values() if r)}
 
 
 def collect_flows_api():
-    # Flow matrix from the ledgers, for lineages that do not emit the
-    # accumulate_crosschain_sequence gauge. Each partition's synthetic/anchor
+    # Flow matrix from the ledgers. Each partition's synthetic/anchor
     # ledger holds one entry per remote partition carrying BOTH directions:
     # `produced` counts what THIS partition sent to the remote, while
     # `received`/`delivered` count what the remote sent to THIS one. So a single
     # pass over all four ledgers fills every src->dst cell.
     flows = {"synthetic": {}, "anchor": {}}
     syn_prod = anc_prod = 0
+    answered = []  # nodes that answered each ledger read, for the regression guard
 
     def cell(kind, src, dst):
         return flows[kind].setdefault(src, {}).setdefault(
@@ -621,11 +984,16 @@ def collect_flows_api():
 
     for kind, path in (("synthetic", "synthetic"), ("anchor", "anchors")):
         for dst in PARTITIONS:
-            r = curl_api("query", {"scope": "acc://%s.acme/%s" % (SCOPE[dst], path)})
-            try:
-                seq = r["result"]["account"]["sequence"] or []
-            except Exception:
+            views = []
+            for r in query_all_nodes({"scope": "acc://%s.acme/%s" % (SCOPE[dst], path)}):
+                try:
+                    views.append(r["account"]["sequence"] or [])
+                except Exception:
+                    continue
+            answered.append(len(views))
+            if not views:
                 continue
+            seq = merge_sequence_views(views)
             for e in seq:
                 url = e.get("url") or ""
                 if not url:
@@ -650,6 +1018,34 @@ def collect_flows_api():
                 else:
                     anc_prod += produced
 
+    # Anchor "sent" from the source's anchor-sequence CHAIN height. The anchor
+    # ledger has no outbound `produced` writer on any lineage (checked 2026-08:
+    # no branch writes it), so reading it yields the impossible display
+    # "received 18 / sent 0" — received is PROOF of sent. The sequence chain is
+    # the actual bookkeeping: a BVN anchors only to the DN, and the DN sends
+    # the same sequence to every BVN, so the chain height IS the sent count.
+    for src in PARTITIONS:
+        h = 0
+        for r in query_all_nodes({"scope": "acc://%s.acme/anchors" % SCOPE[src],
+                                  "query": {"queryType": "chain", "name": "anchor-sequence"}}):
+            try:
+                h = max(h, int(r["count"]))
+            except Exception:
+                continue
+        if h <= 0:
+            continue
+        dsts = ["Directory"] if src != "Directory" else list(PARTITIONS)
+        for dst in dsts:
+            c = cell("anchor", src, dst)
+            c["sent"] = max(c["sent"], h)
+            anc_prod = max(anc_prod, h)
+
+    # ... and it has to be filled BEFORE anything is judged from `sent`: the
+    # undelivered count, the in-flight depth and the skew below all read it.
+    # Judged first, every anchor cell saw sent=0 and reported "skew: dst
+    # reports N more received than any source produced" over a healthy
+    # stream (run 20260916T160646Z).
+
     # undeliv = produced at the source minus received at the destination. This is
     # the ONLY signal that catches a missing PREFIX or a trailing drop: when the
     # very first messages of a stream are lost and nothing follows them, the
@@ -657,6 +1053,11 @@ def collect_flows_api():
     # recv-deliv gap stays 0 forever while the messages are gone. A 23h soak ran
     # with DN->BVN1 stuck at produced=2 received=0 and every gap-based check
     # reported healthy.
+    # The weakest read of this sample: every cell was merged over at least
+    # this many nodes. Carried so the judgement below can tell a value that
+    # fell from a node that stopped answering.
+    _FLOW_ANSWERS["prev"], _FLOW_ANSWERS["cur"] = _FLOW_ANSWERS["cur"], min(answered) if answered else 0
+
     for kind in flows:
         for src, row in flows[kind].items():
             for dst, c in row.items():
@@ -687,10 +1088,37 @@ def collect_flows_api():
             for dst, c in row.items():
                 key = (kind, src, dst)
                 hist = _FLOW_HIST.setdefault(key, [])
-                hist.append((now_t, c.get("sent", 0), c.get("recv", 0), c.get("deliv", 0)))
+                sample = (now_t, c.get("sent", 0), c.get("recv", 0), c.get("deliv", 0))
+                # A value can only be compared against one read over the same
+                # or a larger set of nodes. Chaos restarts and pauses nodes,
+                # and query_all_nodes drops one that does not answer, so the
+                # merged max falls when the node holding the high-water
+                # reading goes away. That is the monitor losing a node, not a
+                # sequence number going backwards, and it must not raise the
+                # alarm reserved for the latter.
+                regressed, shrank = judge_regression(hist[-1] if hist else None, sample,
+                                                     _FLOW_ANSWERS["prev"], _FLOW_ANSWERS["cur"])
+                hist.append(sample)
                 while hist and now_t - hist[0][0] > 90:
                     hist.pop(0)
+                if regressed:
+                    c["regressed"] = ["%s %d->%d" % r for r in regressed]
+                    log("SEQUENCE REGRESSION %s %s->%s: %s (%s nodes answered)"
+                        % (kind, src, dst, ", ".join(c["regressed"]), _FLOW_ANSWERS["cur"]))
+                elif shrank:
+                    c["fewerNodes"] = [_FLOW_ANSWERS["prev"], _FLOW_ANSWERS["cur"]]
                 gap = c.get("sent", 0) - c.get("recv", 0)
+                # `sent` is the SOURCE ledger's produced count and `recv` the
+                # DESTINATION ledger's received count -- two ledgers on two
+                # sets of nodes, each merged by max over whoever answered. A
+                # destination cannot have received more than any source
+                # reports produced, so a negative gap is not a measurement,
+                # it is the source read over fewer or staler nodes than the
+                # destination (REPORTING-SPEC 1a: no impossible states; 1b:
+                # one node is stale truth). Shown as skew, never as a
+                # negative lag.
+                gap, skew = judge_gap(c.get("sent", 0), c.get("recv", 0))
+                c["skew"] = skew
                 pending = max(0, c.get("recv", 0) - c.get("deliv", 0))
                 recv_rate = deliv_rate = 0.0
                 if len(hist) >= 2:
@@ -708,7 +1136,12 @@ def collect_flows_api():
                         lag_s = 0.0
 
                 state, note = "ok", ""
-                if lag_s is not None and lag_s > 0:
+                if skew > 1:
+                    # One unit is the two instruments read a tick apart (the
+                    # anchor chain height and the ledger are separate
+                    # queries); more than that is a stale or missing read.
+                    note = "skew: dst reports %d more received than any source view produced (read over %s nodes)" % (skew, _FLOW_ANSWERS["cur"])
+                elif lag_s is not None and lag_s > 0:
                     note = "~%ds in flight" % min(lag_s, 999999)
                 if lag_s is not None:
                     if lag_s >= 4 * expected:
@@ -732,31 +1165,15 @@ def collect_flows_api():
                             note = "%d healing, draining" % pending if state == "ok" else "%d undelivered (~%ds behind)" % (pending, drain_s)
                 if not note and lag_s == 0:
                     note = "caught up"
+                if regressed:
+                    # Not lag and not a display choice: a sequence number
+                    # went backwards after the max across nodes. Red, named.
+                    state = "red"
+                    note = "WENT BACKWARDS %s" % ", ".join(c["regressed"])
                 c["lagS"] = None if lag_s is None else (999999 if lag_s == float("inf") else round(lag_s, 1))
                 c["state"] = state
                 c["note"] = note
                 c["expLagS"] = round(expected, 1)
-
-    # Anchor "sent" from the source's anchor-sequence CHAIN height. The anchor
-    # ledger has no outbound `produced` writer on any lineage (checked 2026-08:
-    # no branch writes it), so reading it yields the impossible display
-    # "received 18 / sent 0" — received is PROOF of sent. The sequence chain is
-    # the actual bookkeeping: a BVN anchors only to the DN, and the DN sends
-    # the same sequence to every BVN, so the chain height IS the sent count.
-    for src in PARTITIONS:
-        r = curl_api("query", {"scope": "acc://%s.acme/anchors" % SCOPE[src],
-                               "query": {"queryType": "chain", "name": "anchor-sequence"}})
-        try:
-            h = int(r["result"]["count"])
-        except Exception:
-            continue
-        if h <= 0:
-            continue
-        dsts = ["Directory"] if src != "Directory" else list(PARTITIONS)
-        for dst in dsts:
-            c = cell("anchor", src, dst)
-            c["sent"] = max(c["sent"], h)
-            anc_prod = max(anc_prod, h)
 
     # No impossible states: delivery is proof of sending, so sent is bounded
     # below by both received and delivered (REPORTING-SPEC.md 1a). If an
@@ -940,12 +1357,17 @@ def _collect_once(last, hist):
             m = collect_metrics()
             upd["heals"] = m["heals"]
             upd["wedges"] = m["wedges"]
+            upd["handoff"] = m.get("handoff", {})
             upd["synProduced"] = m["synProduced"]
             upd["ancProduced"] = m["ancProduced"]
             upd["life"] = m.get("life", {})
             upd["exec"] = m.get("exec", {})
             upd["scrape"] = {"nodes": m["nodes"], "scraped": m["scraped"]}
             upd["nodeStats"] = m.get("nodeStats", {})
+            try:
+                write_mem_csv(upd["nodeStats"].get("mem", {}))
+            except Exception as e:
+                log("mem.csv: %s" % e)
             # OOM early warning. Run 20260824T065208Z grew from 146MiB to the
             # 4GiB cgroup limit and SEVEN containers were OOM-killed (exit
             # 137) before anything said a word — the death was reconstructed
@@ -976,12 +1398,25 @@ def _collect_once(last, hist):
             lg = STATE.get("loadgen") or {}
             w = STATE.get("wedges") or {}
             h = STATE.get("heals") or {}
+            STATE["rates"] = observe_rates(
+                now, lg.get("generated", 0), STATE.get("synProduced", 0),
+                STATE.get("ancProduced", 0), lg.get("elapsedSec", 0))
             hist.append({"t": int(now),
                          "generated": lg.get("generated", 0),
-                         "wedges": w.get("total", 0),
-                         "heals": h.get("total", 0),
+                         "wedges": w.get("total") or 0,
+                         "heals": h.get("total") or 0,
                          "sProd": STATE.get("synProduced", 0),
-                         "aProd": STATE.get("ancProduced", 0)})
+                         "aProd": STATE.get("ancProduced", 0),
+                         "heapMax": ((STATE.get("nodeStats") or {}).get("mem") or {}).get("heapMaxMiB", 0),
+                         "rssMax": (STATE.get("nodeStats") or {}).get("rssMaxMiB", 0),
+                         })
+            # The matrix, every FLOW_HIST_EVERY samples. It is ~20x the rest
+            # of a sample, and /data re-serializes the whole history on every
+            # hit (the dashboard polls at 1 Hz, three watchdogs besides); ten
+            # seconds of resolution is ample for "sent was higher earlier"
+            # (REPORTING-SPEC 1b).
+            if len(hist) % FLOW_HIST_EVERY == 0:
+                hist[-1]["flows"] = compact_flows((STATE.get("matrix") or {}).get("flows"))
             if len(hist) > HIST_MAX:
                 del hist[0:len(hist) - HIST_MAX]
             STATE["history"] = list(hist)
@@ -1066,13 +1501,17 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 .heights .n{font-size:20px;font-weight:680;font-variant-numeric:tabular-nums}
 .heights .l{color:var(--mut);font-size:11px;margin-left:4px}
 .legend{color:var(--mut);font-size:11px;margin-top:8px}
-.strip{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:baseline}
-.sgrp{display:flex;align-items:baseline;gap:5px;white-space:nowrap}
-.sgrp b{font-size:16px;font-weight:680;font-variant-numeric:tabular-nums}
-.sh{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-right:2px}
-.sl{color:var(--mut);font-size:10.5px;margin-right:5px}
-.strip .n{font-size:16px;font-weight:680;font-variant-numeric:tabular-nums}
-.strip .l{color:var(--mut);font-size:10.5px;margin-left:3px;margin-right:6px}
+/* The stats panel: one column per KIND of value, numbers right-aligned so a
+   column reads as a column. Every id is unchanged; only the arrangement is. */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 28px;align-items:start}
+.col h4{margin:0 0 2px;color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.col .sub{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-top:6px;opacity:.8}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:0 8px;align-items:baseline}
+.kv b,.kv .n{font-size:15px;font-weight:680;font-variant-numeric:tabular-nums;text-align:right}
+.kv .mut{font-size:13px;font-variant-numeric:tabular-nums;text-align:right}
+.kv .l,.kv .sl{color:var(--mut);font-size:10.5px}
+.kv .cap{grid-column:1/-1;color:var(--mut);font-size:10.5px;margin-top:1px}
+#heights{display:contents}
 </style></head><body><div class=wrap>
 <header>
   <h1>Synthetic-healing soak</h1>
@@ -1082,52 +1521,80 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 </header>
 <div class="grid cards" id=cards></div>
 <div class=panel style="padding:9px 12px">
-  <div class=strip>
-    <div class=sgrp><span class=sh>tx/s</span>
-      <b id=ruser>—</b><span class=sl>user</span>
-      <span class=mut id=rtgt>—</span><span class=sl>target</span>
-      <b id=rsyn>—</b><span class=sl>syn</span>
-      <b id=ranc>—</b><span class=sl>anc</span>
-      <span class=mut id=rratio>—</span><span class=sl>syn/user</span>
+  <div class=stats>
+    <div class=col><h4>rates</h4>
+      <div class=sub>now</div>
+      <div class=kv>
+        <b id=rtotal>—</b><span class=sl>tx/s total</span>
+        <b id=ruser>—</b><span class=sl>user</span>
+        <span class=mut id=rtgt>—</span><span class=sl>target</span>
+        <b id=rsyn>—</b><span class=sl>synthetic</span>
+        <b id=ranc>—</b><span class=sl>anchor</span>
+        <span class=mut id=rratio>—</span><span class=sl>syn/user</span>
+      </div>
+      <div class=sub>run average</div>
+      <div class=kv>
+        <b id=ratotal>—</b><span class=sl>tx/s total</span>
+        <b id=rauser>—</b><span class=sl>user</span>
+        <span class=mut id=rasyn>—</span><span class=sl>synthetic</span>
+        <span class=mut id=raanc>—</span><span class=sl>anchor</span>
+        <span class=cap id=raover></span>
+      </div>
     </div>
-    <div class=sgrp><span class=sh>node RSS</span>
-      <b id=nrssavg>—</b><span class=sl>avg</span>
-      <b id=nrssmax>—</b><span class=sl>max</span>
-      <span class=mut id=nrssmin>—</span><span class=sl>min</span>
-      <span class=sl id=nrssnode></span>
+    <div class=col><h4>chain</h4>
+      <div class=sub>heights</div>
+      <div class=kv><span id=heights></span></div>
+      <div class=sub>blocks</div>
+      <div class=kv>
+        <b id=lblocks>—</b><span class=sl>produced</span>
+        <b id=lempty>—</b><span class=sl>empty</span>
+        <span class=cap id=lidle></span>
+      </div>
     </div>
-    <div class=sgrp><span class=sh>database on disk</span>
-      <b id=ndbavg>—</b><span class=sl>avg/node</span>
-      <b id=ndbmax>—</b><span class=sl>max</span>
-      <span class=mut id=ndbgrow>—</span><span class=sl>growth</span>
-      <span class=sl id=ndbnode></span>
+    <div class=col><h4>nodes</h4>
+      <div class=sub>resident memory</div>
+      <div class=kv>
+        <b id=nrssavg>—</b><span class=sl>avg</span>
+        <b id=nrssmax>—</b><span class=sl>max</span>
+        <span class=mut id=nrssmin>—</span><span class=sl>min</span>
+        <span class=cap id=nrssnode></span>
+      </div>
+      <div class=sub>goroutines</div>
+      <div class=kv>
+        <b id=ngravg>—</b><span class=sl>avg</span>
+        <b id=ngrmax>—</b><span class=sl>max</span>
+        <span class=mut id=ngrmin>—</span><span class=sl>min</span>
+        <span class=cap id=ngrnode></span>
+      </div>
+      <div class=sub>database on disk</div>
+      <div class=kv>
+        <b id=ndbavg>—</b><span class=sl>avg per node</span>
+        <b id=ndbmax>—</b><span class=sl>max</span>
+        <span class=mut id=ndbgrow>—</span><span class=sl>growth</span>
+        <span class=cap id=ndbnode></span>
+      </div>
     </div>
-    <div class=sgrp><span class=sh>goroutines</span>
-      <b id=ngravg>—</b><span class=sl>avg</span>
-      <b id=ngrmax>—</b><span class=sl>max</span>
-      <span class=mut id=ngrmin>—</span><span class=sl>min</span>
-      <span class=sl id=ngrnode></span>
+    <div class=col><h4>delivery</h4>
+      <div class=sub>retention</div>
+      <div class=kv>
+        <b id=lheld>—</b><span class=sl>held</span>
+        <b id=lhits>—</b><span class=sl>hits</span>
+        <span class=mut id=lexp>—</span><span class=sl>expired</span>
+      </div>
+      <div class=sub>re-delivered</div>
+      <div class=kv>
+        <b id=lredel>—</b><span class=sl id=lredelnote></span>
+      </div>
+      <div class=sub>batch waits</div>
+      <div class=kv><span class=cap id=lwaits>—</span></div>
     </div>
-    <div class=sgrp><span class=sh>heights</span><span id=heights></span></div>
-    <div class=sgrp><span class=sh>blocks</span>
-      <b id=lblocks>—</b><span class=sl>produced</span>
-      <b id=lempty>—</b><span class=sl>empty</span>
-      <span class=sl id=lidle></span>
-    </div>
-    <div class=sgrp><span class=sh>retention</span>
-      <b id=lheld>—</b><span class=sl>held</span>
-      <b id=lhits>—</b><span class=sl>hits</span>
-      <span class=mut id=lexp>—</span><span class=sl>expired</span>
-    </div>
-    <div class=sgrp><span class=sh>re-delivered</span>
-      <b id=lredel>—</b><span class=sl id=lredelnote></span>
-    </div>
-    <div class=sgrp><span class=sh>batch waits</span><span id=lwaits>—</span></div>
-    <div class=sgrp><span class=sh>step 0 (#4169)</span>
-      <b id=x0a>—</b><span class=sl>serial share</span>
-      <b id=x0b>—</b><span class=sl>flushes/block</span>
-      <b id=x0c>—</b><span class=sl>anchor co-arrival</span>
-      <span class=sl id=x0note></span>
+    <div class=col><h4>execution &middot; step 0 (#4169)</h4>
+      <div class=kv>
+        <b id=x0a>—</b><span class=sl>serial share</span>
+        <b id=x0b>—</b><span class=sl>flushes per block</span>
+        <b id=x0c>—</b><span class=sl>anchor co-arrival</span>
+        <span class=cap id=x0note></span>
+      </div>
     </div>
   </div>
 </div>
@@ -1147,25 +1614,26 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
   <div class=panel>
     <h2>Wedges — dropped cross-partition messages</h2>
     <div class=pills>
-      <div class=pill><div class=n id=wsyn>0</div><div class=l>synthetic drops</div></div>
-      <div class=pill><div class=n id=wanc>0</div><div class=l>anchor drops</div></div>
+      <div class=pill><div class=n id=wsyn>—</div><div class=l>queue-full (block bound)</div></div>
+      <div class=pill><div class=n id=wanc>—</div><div class=l>deadline (retries exhausted)</div></div>
       <div class=pill><div class=n id=wtot>0</div><div class=l>total</div></div>
     </div>
     <svg class=spark id=spWedge viewBox="0 0 300 44" preserveAspectRatio=none></svg>
     <table id=wdest><thead><tr><th>destination</th><th>drops</th></tr></thead><tbody></tbody></table>
   </div>
   <div class=panel>
-    <h2>Healing — receiver-pull recoveries</h2>
+    <h2>Healing — span requests and what came back</h2>
     <div class=pills>
-      <div class=pill><div class="n grn" id=hsyn>0</div><div class=l>synthetic heals</div></div>
-      <div class=pill><div class="n grn" id=hanc>0</div><div class=l>anchor heals</div></div>
-      <div class=pill><div class="n yel" id=hdef>0</div><div class=l>deferred (unprovable)</div></div>
-      <div class=pill><div class="n" id=hfoc>0</div><div class=l>focus activations</div></div>
-      <div class=pill><div class="n red" id=herr>0</div><div class=l>pull errors</div></div>
-      <div class=pill><div class="n red" id=hstuck>0</div><div class=l id=hstuckl>stuck (churn)</div></div>
+      <div class=pill><div class="n grn" id=hent>—</div><div class=l>entries healed</div></div>
+      <div class=pill><div class="n grn" id=hans>—</div><div class=l>requests answered</div></div>
+      <div class=pill><div class="n yel" id=hnot>—</div><div class=l>not-yet (in flight at source)</div></div>
+      <div class=pill><div class="n red" id=hmiss>—</div><div class=l>miss (source cache lacks it)</div></div>
+      <div class=pill><div class="n red" id=hfail>—</div><div class=l>failed</div></div>
+      <div class=pill><div class="n" id=hheld>—</div><div class=l id=hheldl>held in staging</div></div>
     </div>
     <svg class=spark id=spHeal viewBox="0 0 300 44" preserveAspectRatio=none></svg>
-    <table id=hpart><thead><tr><th>partition</th><th>synthetic</th><th>anchor</th></tr></thead><tbody></tbody></table>
+    <table id=hpart><thead><tr><th>stream</th><th>answered</th><th>not-yet</th><th>miss</th><th>failed</th></tr></thead><tbody></tbody></table>
+    <table id=hheldt><thead><tr><th>held in staging</th><th>entries</th><th>bytes</th></tr></thead><tbody></tbody></table>
   </div>
 </div>
 <div class=panel>
@@ -1257,7 +1725,8 @@ async function tick(){
   const st=s.status||(nw.api==='up'?'up':'down');
   const STC={up:['var(--grn)','network up'],stalled:['var(--red)','network STALLED'],
              degraded:['var(--yel)','network degraded'],down:['var(--red)','network down']};
-  const [col,lbl]=STC[st]||['var(--red)','network ?'];
+  let [col,lbl]=STC[st]||['var(--red)','network ?'];
+  if(nw.nodes!=null&&nw.ofNodes&&nw.nodes<nw.ofNodes)lbl+=` (${nw.nodes}/${nw.ofNodes} answering)`;
   $('net').className='badge '+(st==='up'?'up':'down');
   $('net').innerHTML=`<span class=dot style="background:${col}"></span>${lbl}`;
   const tgt=lg.target||0,gen=lg.generated||0;
@@ -1267,17 +1736,24 @@ async function tick(){
   const ns=s.nodeStats||{};
   // Heals split by mechanism, not just by kind: range pulls are the path #4087
   // added, and lumping them into one total hides whether it is doing anything.
-  const hRange=(h['anchor-range']||0)+(h['synthetic-range']||0);
-  const hPer=(h.synthetic||0)+(h.anchor||0);
+  // Absent is not zero (REPORTING-SPEC 1): a family no node reported is
+  // null on the wire and "— not measured" here.
+  // A card's value slot is a number. An absent instrument shows a muted
+  // dash there and says "not measured" in the subtitle, where the words fit
+  // (REPORTING-SPEC 1 asks for absence to be distinguishable, not shouted).
+  const nm=v=>(v==null?'<span class=mut style="font-weight:400">—</span>':fmt(v));
+  const hr=h.requests,hp=h.proofs,hld=h.held,hf=s.handoff||{};
   $('cards').innerHTML=[
     card('DN height',fmt(nw.dnHeight),`${fmt(gen)} tx · ${pct.toFixed(0)}% of plan`),
-    card('Heals',`<span class=grn>${fmt(h.total||0)}</span>`,`${fmt(hRange)} range · ${fmt(hPer)} per-msg`),
-    card('Anchor',fmt((h.anchor||0)+(h['anchor-range']||0)),`${fmt(h['anchor-range']||0)} by range`),
-    card('Synthetic',fmt((h.synthetic||0)+(h['synthetic-range']||0)),`${fmt(h['synthetic-range']||0)} by range`),
-    card('Wedges',`<span class="${(w.total||0)?'yel':''}">${fmt(w.total||0)}</span>`,`${fmt(w.synthetic||0)} syn · ${fmt(w.anchor||0)} anc`),
-    card('Heal errors',`<span class="${(h.errors||0)?'red':''}">${fmt(h.errors||0)}</span>`,`stuck ${fmt(h.stuck||0)}`),
+    card('Healed entries',`<span class=grn>${nm(h.entries)}</span>`,h.entries==null?'not measured':'received in answer to span requests'),
+    card('Heal requests',nm(hr&&hr.total),hr?`${fmt(hr.answered)} answered · ${fmt(hr['not-yet'])} not-yet`:'not measured'),
+    card('Proofs',nm(hp&&hp.validated),hp?`${fmt(hp.staged)} staged · ${fmt(hp.disproved)} disproved`:'not measured'),
+    card('Wedges',`<span class="${(w.total||0)?'yel':''}">${nm(w.total)}</span>`,w.measured?Object.entries(w.byReason||{}).map(([k,v])=>`${fmt(v)} ${k}`).join(' · ')||'none':'not measured — no node exports a drop counter'),
+    card('Heal misses',`<span class="${(h.errors||0)?'red':''}">${nm(h.errors)}</span>`,hr?`${fmt(hr.miss)} miss · ${fmt(hr.failed)} failed`:'not measured'),
+    card('Not executed',`<span class="${(hf.unexecuted||0)?'red':''}">${nm(hf.measured?hf.unexecuted:null)}</span>`,
+      hf.measured?`${fmt(hf.arrived)} arrived · ${fmt(hf.executed)} executed`:'not measured — needs a node built after #4279'),
     card('Rejected',`<span class="${(lg.rejected||0)?'red':''}">${fmt(lg.rejected||0)}</span>`,`${fmt(lg.skipped||0)} skipped`),
-    card('Nodes',fmt(ns.count||0),`${fmt(ns.rssAvgMiB||0)} MiB avg · ${fmt(ns.rssMaxMiB||0)} max`),
+    card('Nodes',fmt(ns.count||0),`${fmt(ns.rssAvgMiB||0)} MiB avg · ${fmt(ns.rssMaxMiB||0)} max · heap ${fmt((ns.mem||{}).heapMaxMiB||0)} · GC ${(ns.mem||{}).gcPerSecMax!=null?(ns.mem||{}).gcPerSecMax.toFixed(1)+'/s':'—'} ${(ns.mem||{}).gcCoresSum!=null?'· '+(ns.mem||{}).gcCoresSum.toFixed(1)+' GC cores':''} · staged ${fmt((ns.mem||{}).stagedMax||0)}`),
   ].join('');
   const mib=v=>v?fmt(v)+' MiB':'—';
   $('nrssavg').textContent=mib(ns.rssAvgMiB); $('nrssmax').textContent=mib(ns.rssMaxMiB);
@@ -1296,10 +1772,11 @@ async function tick(){
   $('ngrmin').textContent=ns.grMin!=null?fmt(ns.grMin):'—';
   $('ngrnode').textContent=ns.grMaxNode?('max '+ns.grMaxNode):'';
   // wedges / heals pills
-  $('wsyn').textContent=fmt(w.synthetic||0);$('wanc').textContent=fmt(w.anchor||0);$('wtot').textContent=fmt(w.total||0);
-  $('hsyn').textContent=fmt(h.synthetic||0);$('hanc').textContent=fmt(h.anchor||0);
-  $('hdef').textContent=fmt(h.deferred||0);$('hfoc').textContent=fmt(h.focus||0);$('herr').textContent=fmt(h.errors||0);
-  $('hstuck').textContent=fmt(h.stuck||0);$('hstuckl').textContent=(h.stuck>0?('stuck: '+(h.stuckStream||'')):'stuck (churn)');
+  $('wsyn').innerHTML=w.measured?fmt((w.byReason||{})['queue-full']||0):nm(null);$('wanc').innerHTML=w.measured?fmt((w.byReason||{}).deadline||0):nm(null);$('wtot').innerHTML=nm(w.total);
+  $('hent').innerHTML=nm(h.entries);
+  $('hans').innerHTML=nm(hr&&hr.answered);$('hnot').innerHTML=nm(hr&&hr['not-yet']);
+  $('hmiss').innerHTML=nm(hr&&hr.miss);$('hfail').innerHTML=nm(hr&&hr.failed);
+  $('hheld').innerHTML=nm(hld&&hld.entries);$('hheldl').textContent=hld?('held in staging · '+fmt(hld.bytes)+' B'):'held in staging';
   // sparklines from history deltas
   const hist=s.history||[];
   // transaction rates: derivative of cumulative counters over ~30s of history
@@ -1311,14 +1788,30 @@ async function tick(){
   $('rsyn').textContent=(rs!=null)?rs.toFixed(2):'—';
   $('ranc').textContent=(ra!=null)?ra.toFixed(2):'—';
   $('rratio').textContent=(rs!=null&&ru>0.01)?(rs/ru).toFixed(1)+'×':'—';
+  // Total now: what the network is actually processing, user plus the
+  // synthetics and anchors the user load produces.
+  const rt=(ru!=null&&rs!=null&&ra!=null)?ru+rs+ra:null;
+  $('rtotal').textContent=(rt!=null)?rt.toFixed(2):'—';
+  // And over the whole run, which is the figure a result is quoted as.
+  const ra_=s.rates||{};
+  const num=v=>(v==null?'—':v.toFixed(2));
+  $('ratotal').textContent=num(ra_.totalAvg);
+  $('rauser').textContent=num(ra_.userAvg);
+  $('rasyn').textContent=num(ra_.synAvg);
+  $('raanc').textContent=num(ra_.anchorAvg);
+  $('raover').textContent=ra_.userOverSec?`over ${dur(ra_.userOverSec)} · produced counted for ${dur(ra_.producedOverSec||0)}`:'';
   spark($('spWedge'),deltas(hist,'wedges'),getComputedStyle(document.documentElement).getPropertyValue('--yel').trim());
   spark($('spHeal'),deltas(hist,'heals'),getComputedStyle(document.documentElement).getPropertyValue('--grn').trim());
   // wedge by dest
   const wd=Object.entries(w.byDest||{}).sort((a,b)=>b[1]-a[1]);
-  $('wdest').querySelector('tbody').innerHTML=wd.map(([k,v])=>`<tr><td class=name>${k}</td><td>${fmt(v)}</td></tr>`).join('')||'<tr><td class=mut colspan=2>none yet</td></tr>';
+  $('wdest').querySelector('tbody').innerHTML=!w.measured?'<tr><td class=mut colspan=2>— not measured</td></tr>':
+    wd.map(([k,v])=>`<tr><td class=name>${k}</td><td>${fmt(v)}</td></tr>`).join('')||'<tr><td class=mut colspan=2>none yet</td></tr>';
   // heal by partition
-  const hp=Object.entries(h.byPartition||{}).sort((a,b)=>(b[1].synthetic+b[1].anchor)-(a[1].synthetic+a[1].anchor));
-  $('hpart').querySelector('tbody').innerHTML=hp.map(([k,v])=>`<tr><td class=name>${k}</td><td class=grn>${fmt(v.synthetic)}</td><td class=grn>${fmt(v.anchor)}</td></tr>`).join('')||'<tr><td class=mut colspan=3>none yet</td></tr>';
+  const hs=Object.entries(h.byStream||{}).sort((a,b)=>(b[1].answered+b[1]['not-yet'])-(a[1].answered+a[1]['not-yet']));
+  $('hpart').querySelector('tbody').innerHTML=h.byStream==null?'<tr><td class=mut colspan=5>— not measured</td></tr>':
+    hs.map(([k,v])=>`<tr><td class=name>${k}</td><td class=grn>${fmt(v.answered)}</td><td class=yel>${fmt(v['not-yet'])}</td><td class=red>${fmt(v.miss)}</td><td class=red>${fmt(v.failed)}</td></tr>`).join('')||'<tr><td class=mut colspan=5>no requests yet</td></tr>';
+  $('hheldt').querySelector('tbody').innerHTML=hld==null?'<tr><td class=mut colspan=3>— not measured</td></tr>':
+    (hld.streams||[]).filter(x=>x.entries||x.bytes).map(x=>`<tr><td class=name>${x.source} → ${x.ledger}</td><td>${fmt(x.entries)}</td><td class=mut>${fmt(x.bytes)}</td></tr>`).join('')||'<tr><td class=mut colspan=3>nothing held</td></tr>';
   // mix table
   const pt=lg.perType||{};const rows=Object.entries(pt).sort((a,b)=>b[1].generated-a[1].generated);
   const mxv=Math.max(1,...rows.map(r=>r[1].generated));

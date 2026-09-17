@@ -104,8 +104,10 @@ type AnchorLedger struct {
 	// PendingMajorBlockAnchors is the list of partitions that have joined the open major block. If there is no open major block, this is unset.
 	PendingMajorBlockAnchors []*url.URL `json:"pendingMajorBlockAnchors,omitempty" form:"pendingMajorBlockAnchors" query:"pendingMajorBlockAnchors" validate:"required"`
 	// Sequence tracks sent and received anchors.
-	Sequence  []*PartitionSyntheticLedger `json:"sequence,omitempty" form:"sequence" query:"sequence" validate:"required"`
-	extraData []byte
+	Sequence []*PartitionSyntheticLedger `json:"sequence,omitempty" form:"sequence" query:"sequence" validate:"required"`
+	// LastAnchorBlock is the block index of the last anchor this partition sent. The heartbeat counts from it, so an idle network anchors at most once every anchorHeartbeatSkip+1 blocks rather than every block (#4277).
+	LastAnchorBlock uint64 `json:"lastAnchorBlock,omitempty" form:"lastAnchorBlock" query:"lastAnchorBlock"`
+	extraData       []byte
 }
 
 type AnchorMetadata struct {
@@ -628,7 +630,9 @@ type NetworkGlobals struct {
 	AnchorEmptyBlocks bool           `json:"anchorEmptyBlocks,omitempty" form:"anchorEmptyBlocks" query:"anchorEmptyBlocks" validate:"required"`
 	FeeSchedule       *FeeSchedule   `json:"feeSchedule,omitempty" form:"feeSchedule" query:"feeSchedule" validate:"required"`
 	Limits            *NetworkLimits `json:"limits,omitempty" form:"limits" query:"limits" validate:"required"`
-	extraData         []byte
+	// BlockInterval the cadence the network produces blocks at; declared when the network is deployed and recorded here, so a node paces from network state rather than its own configuration.
+	BlockInterval time.Duration `json:"blockInterval,omitempty" form:"blockInterval" query:"blockInterval" validate:"required"`
+	extraData     []byte
 }
 
 type NetworkLimits struct {
@@ -1573,6 +1577,7 @@ func (v *AnchorLedger) Copy() *AnchorLedger {
 			u.Sequence[i] = (v).Copy()
 		}
 	}
+	u.LastAnchorBlock = v.LastAnchorBlock
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2691,6 +2696,7 @@ func (v *NetworkGlobals) Copy() *NetworkGlobals {
 	if v.Limits != nil {
 		u.Limits = (v.Limits).Copy()
 	}
+	u.BlockInterval = v.BlockInterval
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -4099,6 +4105,9 @@ func (v *AnchorLedger) Equal(u *AnchorLedger) bool {
 			return false
 		}
 	}
+	if !(v.LastAnchorBlock == u.LastAnchorBlock) {
+		return false
+	}
 
 	return true
 }
@@ -5301,6 +5310,9 @@ func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
 	case v.Limits == nil || u.Limits == nil:
 		return false
 	case !((v.Limits).Equal(u.Limits)):
+		return false
+	}
+	if !(v.BlockInterval == u.BlockInterval) {
 		return false
 	}
 
@@ -7133,6 +7145,7 @@ var fieldNames_AnchorLedger = []string{
 	5: "MajorBlockTime",
 	6: "PendingMajorBlockAnchors",
 	7: "Sequence",
+	8: "LastAnchorBlock",
 }
 
 func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
@@ -7167,6 +7180,9 @@ func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Sequence {
 			writer.WriteValue(7, v.MarshalBinary)
 		}
+	}
+	if !(v.LastAnchorBlock == 0) {
+		writer.WriteUint(8, v.LastAnchorBlock)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AnchorLedger)
@@ -10932,6 +10948,7 @@ var fieldNames_NetworkGlobals = []string{
 	4: "AnchorEmptyBlocks",
 	5: "FeeSchedule",
 	6: "Limits",
+	7: "BlockInterval",
 }
 
 func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
@@ -10961,6 +10978,9 @@ func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Limits == nil) {
 		writer.WriteValue(6, v.Limits.MarshalBinary)
+	}
+	if !(v.BlockInterval == 0) {
+		writer.WriteDuration(7, v.BlockInterval)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkGlobals)
@@ -11007,6 +11027,11 @@ func (v *NetworkGlobals) IsValid() error {
 		errs = append(errs, "field Limits is missing")
 	} else if v.Limits == nil {
 		errs = append(errs, "field Limits is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field BlockInterval is missing")
+	} else if v.BlockInterval == 0 {
+		errs = append(errs, "field BlockInterval is not set")
 	}
 
 	switch len(errs) {
@@ -15643,6 +15668,9 @@ func (v *AnchorLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 			break
 		}
 	}
+	if x, ok := reader.ReadUint(8); ok {
+		v.LastAnchorBlock = x
+	}
 
 	seen, err := reader.Reset(fieldNames_AnchorLedger)
 	if err != nil {
@@ -17796,6 +17824,9 @@ func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x := new(NetworkLimits); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.Limits = x
+	}
+	if x, ok := reader.ReadDuration(7); ok {
+		v.BlockInterval = x
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkGlobals)
@@ -20326,6 +20357,7 @@ func init() {
 		encoding.NewTypeField("majorBlockTime", "string"),
 		encoding.NewTypeField("pendingMajorBlockAnchors", "string[]"),
 		encoding.NewTypeField("sequence", "PartitionSyntheticLedger[]"),
+		encoding.NewTypeField("lastAnchorBlock", "uint64"),
 	}, "AnchorLedger", "anchorLedger")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -20738,6 +20770,7 @@ func init() {
 		encoding.NewTypeField("anchorEmptyBlocks", "bool"),
 		encoding.NewTypeField("feeSchedule", "FeeSchedule"),
 		encoding.NewTypeField("limits", "NetworkLimits"),
+		encoding.NewTypeField("blockInterval", "string"),
 	}, "NetworkGlobals", "networkGlobals")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -21345,6 +21378,7 @@ func (v *AnchorLedger) MarshalJSON() ([]byte, error) {
 		MajorBlockTime           time.Time                                    `json:"majorBlockTime,omitempty"`
 		PendingMajorBlockAnchors encoding.JsonList[*url.URL]                  `json:"pendingMajorBlockAnchors,omitempty"`
 		Sequence                 encoding.JsonList[*PartitionSyntheticLedger] `json:"sequence,omitempty"`
+		LastAnchorBlock          uint64                                       `json:"lastAnchorBlock,omitempty"`
 		ExtraData                *string                                      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -21365,6 +21399,9 @@ func (v *AnchorLedger) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Sequence) == 0) {
 		u.Sequence = v.Sequence
+	}
+	if !(v.LastAnchorBlock == 0) {
+		u.LastAnchorBlock = v.LastAnchorBlock
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -22538,6 +22575,42 @@ func (v *NetworkDefinition) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Validators) == 0) {
 		u.Validators = v.Validators
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *NetworkGlobals) MarshalJSON() ([]byte, error) {
+	u := struct {
+		OperatorAcceptThreshold  Rational       `json:"operatorAcceptThreshold,omitempty"`
+		ValidatorAcceptThreshold Rational       `json:"validatorAcceptThreshold,omitempty"`
+		MajorBlockSchedule       string         `json:"majorBlockSchedule,omitempty"`
+		AnchorEmptyBlocks        bool           `json:"anchorEmptyBlocks,omitempty"`
+		FeeSchedule              *FeeSchedule   `json:"feeSchedule,omitempty"`
+		Limits                   *NetworkLimits `json:"limits,omitempty"`
+		BlockInterval            interface{}    `json:"blockInterval,omitempty"`
+		ExtraData                *string        `json:"$epilogue,omitempty"`
+	}{}
+	if !((v.OperatorAcceptThreshold).Equal(new(Rational))) {
+		u.OperatorAcceptThreshold = v.OperatorAcceptThreshold
+	}
+	if !((v.ValidatorAcceptThreshold).Equal(new(Rational))) {
+		u.ValidatorAcceptThreshold = v.ValidatorAcceptThreshold
+	}
+	if !(len(v.MajorBlockSchedule) == 0) {
+		u.MajorBlockSchedule = v.MajorBlockSchedule
+	}
+	if !(!v.AnchorEmptyBlocks) {
+		u.AnchorEmptyBlocks = v.AnchorEmptyBlocks
+	}
+	if !(v.FeeSchedule == nil) {
+		u.FeeSchedule = v.FeeSchedule
+	}
+	if !(v.Limits == nil) {
+		u.Limits = v.Limits
+	}
+	if !(v.BlockInterval == 0) {
+		u.BlockInterval = encoding.DurationToJSON(v.BlockInterval)
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -24043,6 +24116,7 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 		MajorBlockTime           time.Time                                    `json:"majorBlockTime,omitempty"`
 		PendingMajorBlockAnchors encoding.JsonList[*url.URL]                  `json:"pendingMajorBlockAnchors,omitempty"`
 		Sequence                 encoding.JsonList[*PartitionSyntheticLedger] `json:"sequence,omitempty"`
+		LastAnchorBlock          uint64                                       `json:"lastAnchorBlock,omitempty"`
 		ExtraData                *string                                      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -24052,6 +24126,7 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 	u.MajorBlockTime = v.MajorBlockTime
 	u.PendingMajorBlockAnchors = v.PendingMajorBlockAnchors
 	u.Sequence = v.Sequence
+	u.LastAnchorBlock = v.LastAnchorBlock
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -24065,6 +24140,7 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 	v.MajorBlockTime = u.MajorBlockTime
 	v.PendingMajorBlockAnchors = u.PendingMajorBlockAnchors
 	v.Sequence = u.Sequence
+	v.LastAnchorBlock = u.LastAnchorBlock
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -25716,6 +25792,46 @@ func (v *NetworkDefinition) UnmarshalJSON(data []byte) error {
 	v.Version = u.Version
 	v.Partitions = u.Partitions
 	v.Validators = u.Validators
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *NetworkGlobals) UnmarshalJSON(data []byte) error {
+	u := struct {
+		OperatorAcceptThreshold  Rational       `json:"operatorAcceptThreshold,omitempty"`
+		ValidatorAcceptThreshold Rational       `json:"validatorAcceptThreshold,omitempty"`
+		MajorBlockSchedule       string         `json:"majorBlockSchedule,omitempty"`
+		AnchorEmptyBlocks        bool           `json:"anchorEmptyBlocks,omitempty"`
+		FeeSchedule              *FeeSchedule   `json:"feeSchedule,omitempty"`
+		Limits                   *NetworkLimits `json:"limits,omitempty"`
+		BlockInterval            interface{}    `json:"blockInterval,omitempty"`
+		ExtraData                *string        `json:"$epilogue,omitempty"`
+	}{}
+	u.OperatorAcceptThreshold = v.OperatorAcceptThreshold
+	u.ValidatorAcceptThreshold = v.ValidatorAcceptThreshold
+	u.MajorBlockSchedule = v.MajorBlockSchedule
+	u.AnchorEmptyBlocks = v.AnchorEmptyBlocks
+	u.FeeSchedule = v.FeeSchedule
+	u.Limits = v.Limits
+	u.BlockInterval = encoding.DurationToJSON(v.BlockInterval)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.OperatorAcceptThreshold = u.OperatorAcceptThreshold
+	v.ValidatorAcceptThreshold = u.ValidatorAcceptThreshold
+	v.MajorBlockSchedule = u.MajorBlockSchedule
+	v.AnchorEmptyBlocks = u.AnchorEmptyBlocks
+	v.FeeSchedule = u.FeeSchedule
+	v.Limits = u.Limits
+	if x, err := encoding.DurationFromJSON(u.BlockInterval); err != nil {
+		return fmt.Errorf("error decoding BlockInterval: %w", err)
+	} else {
+		v.BlockInterval = x
+	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

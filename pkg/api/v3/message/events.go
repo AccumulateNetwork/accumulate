@@ -25,7 +25,11 @@ func (s EventService) methods() serviceMethodMap {
 }
 
 func (s EventService) Subscribe(c *call[*SubscribeRequest]) {
-	ch, err := s.EventService.Subscribe(c.context, c.params.SubscribeOptions)
+	// The producer is released when this loop ends, whether the stream's own
+	// context noticed the disconnect or a write simply failed (#4240).
+	ctx, cancel := context.WithCancel(c.context)
+	defer cancel()
+	ch, err := s.EventService.Subscribe(ctx, c.params.SubscribeOptions)
 	if err != nil {
 		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
 		return

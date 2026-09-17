@@ -76,6 +76,10 @@ AnchorLedger:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: LastAnchorBlock
+      description: is the block index of the last anchor this partition sent. The heartbeat counts from it, so an idle network anchors at most once every anchorHeartbeatSkip+1 blocks rather than every block (#4277)
+      type: uint
+      optional: true
 
 BlockLedger:
   union: { type: account }

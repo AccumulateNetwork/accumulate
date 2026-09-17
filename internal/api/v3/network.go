@@ -8,6 +8,7 @@ package api
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -128,6 +129,20 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusO
 }
 
 func (s *NetworkService) getDnHeight(batch *database.Batch) (uint64, error) {
+	// On the Directory itself the height is the system ledger's index: one
+	// read of mutable state. The anchor walk below loads anchor bodies by
+	// hash, which are write-once records, and a status poll per submission
+	// made it the largest reader of the Directory store's history (soak
+	// 20260905T032333Z: 2.4M reads per node in 45 minutes, all from here).
+	if strings.EqualFold(s.partition, protocol.Directory) {
+		var ledger *protocol.SystemLedger
+		err := batch.Account(protocol.DnUrl().JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
+		if err != nil {
+			return 0, errors.UnknownError.WithFormat("load system ledger: %w", err)
+		}
+		return ledger.Index, nil
+	}
+
 	c := batch.Account(protocol.PartitionUrl(s.partition).JoinPath(protocol.AnchorPool)).MainChain()
 	head, err := c.Head().Get()
 	if err != nil {

@@ -1,456 +1,550 @@
 # Healing — Specification
 
+Cross-partition messages — synthetic transactions and anchors — travel in
+sequenced streams and must be delivered in order. When one goes missing, the
+destination cannot advance past it. Healing is how the missing message is
+obtained. It is the retry mechanism for cross-partition delivery, so it needs no
+retry mechanism of its own.
+
 ## 1. Architecture — what we are doing
 
-Cross-partition messages — synthetic transactions and anchors — are sequenced
-and must be delivered in order. When one goes missing, the destination cannot
-proceed: the stream stops at the hole. Healing is what fills it.
+### Gaps
 
-Healing is a **destination-side pull**. The destination notices a gap in a
-stream it receives, fetches the missing message from the source partition, and
-submits it to itself. The source is not asked to track who is behind and does
-not retry on anyone's behalf.
+Staging is two stores ([executor.md](executor.md), "Collection"): entries by
+stream and index, and collection proofs by the Directory block index of the anchor
+each terminates in. Entries and indexes are one to one, and every index is
+eventually covered by a proof, so there are exactly two kinds of gap, both by
+index:
 
-### Finding the gaps
-
-A gap is a sequence number the node needs and does not hold. Three facts define
-it, and each has exactly one owner:
-
-| fact | owner | meaning |
+| gap | meaning | answer |
 |---|---|---|
-| `Delivered` | the ledger | the highest number this stream has executed. Block output, durable because the block is |
-| what is **held** | the executor's staging | numbers received and not yet executed |
-| `Produced` | the source | how far the source has gone |
+| **proven, missing** | a validated proof covers the index and no entry is held there | the entry, in a bundle |
+| **held or expected, unproven** | entries are held (or lower indexes are proven) and no validated proof covers the index | a proof extending the covered range |
 
-**The gaps are the numbers above `Delivered`, up to what the source produced,
-that staging does not hold.** Healing asks staging directly; it does not infer
-what the node has from anything the block wrote.
+Anchors are the same two cases on their own stage (executor.md, "One chain
+per pair, one stage per chain"): a missing anchor is a gap of entries and is
+requested from the source like any other; an anchor held below its validator
+signature quorum is an unvalidated entry, and each answer to a request for it
+carries the answering validator's signature, one more towards the quorum --
+so the requester asks the source's validators **one by one, by node**, until
+the anchor it is waiting on has a quorum of distinct signers, and submits them
+together ([The request](#the-request)). A
+raw past anchor that arrives or is held is also validated when a later proof
+over the source's anchor chain covers it. Nothing is pushed a second time
+from the source: dispatch sends an anchor once, and the destination asks for
+what it lacks.
 
-The ledger is opened for **`Delivered` and nothing else** — what has been
-processed. A number at or below it needs nothing done about it: it is not a gap,
-it is not re-requested, and it is not counted. Everything above it that the node
-is not holding is a gap, and everything above it that the node IS holding is
-already in hand.
+**Nothing is provable before the Directory has anchored it.** A synthetic or
+anchor a BVN produces in block N cannot leave, and cannot be proven to anyone,
+until the Directory has executed a BVN anchor that covers N — the anchor for N
+itself in the normal case, but any later block's anchor works, since the later
+root chain contains N's root — and sent the receipt back
+([executor.md](executor.md), "Dispatch"). So an index the destination has
+not sighted is not a gap until that round trip has had time to complete, and a
+source can serve a proof only for spans its Directory receipts already cover;
+asked sooner it answers "not yet", which is counted and is not a miss.
 
-**Which streams to consider comes from staging, not from the ledger.** A stream
-that has only staged has delivered nothing and therefore has no ledger entry —
-so a scan driven by the ledger's entries would never look at the stream most
-likely to be stuck. A stream staging holds nothing for has nothing for this scan
-to find: it is current, or it has lost a tail that no local evidence can reveal,
-which is the reconcile path's job and is answered by the source's `Produced`.
+**A gap is judged only after staging has finished the block** — intake,
+anchors, proofs, drains. A new gap is ignored until the next healing cycle. If
+it is still there at the second cycle, it is requested. Two cycles is the
+patience, counted in blocks, so every validator judges the same gaps; the
+cadence times two must exceed the Directory round trip above, or the healer
+asks for what is still on its way.
 
-That is the division between the two, and it is worth stating plainly because
-they look like the same mechanism:
+Nothing at or below `Delivered` is a gap. An index further ahead than about an
+hour of the source's production is refused on arrival, not healed: a partition
+that far ahead is a fault to be dealt with elsewhere.
 
-- **The gap scan** fills holes BELOW what the node has sighted. Its evidence is
-  local: holding a number proves the source produced everything under it.
-- **Reconcile** fills the tail ABOVE it. It has no local evidence at all — a
-  stream that lost its first messages, or its last, looks exactly like a stream
-  with nothing to do — so it asks the source what it produced.
+A node that restarts syncs first: it replays the committed stream and rebuilds
+staging as its peers built it, so when it has caught up it holds what they
+hold and has the gaps they have (executor.md, "Sync").
 
-That is the whole of it, and it is why staging must be askable. A healer that
-cannot see what the executor holds has only two options, and both are wrong:
-fetch everything above the watermark, which re-fetches what the node already
-has, or trust a record the block wrote, which is the coupling that made the
-executor read its own output.
+### Stranded streams
 
-It also gives H2's rule for free — skipping what is already staged is not a
-separate optimisation, it is what "gap" means.
+A source answers a span from its cache or not at all. A destination whose
+oldest gap is behind the source's cache — a node down longer than the cache
+keeps, a stream idle so long its entries were released — asks and is told
+"not found", and asking again will not change the answer: the source has
+nothing to give, and healing has no other place to look. Such a stream is
+**stranded**. The requester says so once, shows it (`stranded_streams`, by
+destination and source), and stops asking; execution on the stream is stuck at
+the hole, and everything above it stays held. A stream is stranded when every
+request for it has come back "not found" for `strandedAfter` consecutive
+activations — the per-source back-off doubles to its cap over the first four,
+and three more at the cap say the answer is final. It leaves the state when
+`Delivered` moves past where it was stranded: something filled the hole that
+a request could not, and that is **sync** (executor.md, "Sync"; E11 in
+[DIFFERENCES.md](DIFFERENCES.md)) — the only exit. A "not yet" or an answer
+for the stream, even one, resets the count: the source is still serving it.
 
-**A restart changes nothing here.** Staging is durable ([executor.md](executor.md),
-Restart), so a restarted node holds what it held and has the same gaps it had.
-That is not a convenience: staging decides what a block executes, so a node that
-came back holding less than its peers would execute a shorter run and produce a
-different block hash. Healing is not what covers a restart, and could not be —
-it is asynchronous, and the divergence would be immediate.
+### Who asks, and when
 
-### Generating requests
+Healing **activates every few blocks**, not every block. A request goes to
+another partition and its answer comes back through consensus, which takes
+blocks; activating every block would re-request what is already on its way.
 
-**Requests are computed from staging at a block boundary**, on the blocks where
-healing activates.
+**Every validator computes the same request set.** Both staging stores are
+deterministic functions of consensus input, so every node reaches an activation
+with the same gaps. Nothing is random and nothing is negotiated.
 
-A boundary is chosen because it is the moment the gap set is final: the anchors
-have executed, the synthetics have been judged against the chain those anchors
-extended, and every stream's run has been drained. What is still missing then is
-what is genuinely missing.
+**Two validators send**, selected by the previous block's hash over the
+validator set. The hash is already agreed, changes every block, and is nobody's
+to choose. Two rather than one so a dead or unreachable validator does not cost
+an activation; two rather than all because a request is fungible — whoever asks,
+the answer heals every validator — so further askers are only load. The pair
+rotates with every activation.
 
-Since staging is durable state ([executor.md](executor.md), Restart), the
-boundary can be read rather than intercepted: opening the committed state as a
-block begins sees exactly what the previous block finished with. So the
-computation does not have to live inside block execution, and it should not —
-sending a request is a network act, and the executor's business is what
-executes. What matters is not WHERE the set is computed but that it is a
-function of AGREED STATE rather than of local timing, and committed state is
-agreed by construction.
+Selection applies to every request, anchors included. The test: does another
+node's action make mine unnecessary? If yes it is a pull and a pair is enough.
 
-**Every validator therefore generates the same requests.** Staging is a
-deterministic function of consensus input and is durable, so every node reaches
-that boundary with the same streams, the same held set and the same watermarks,
-and computes the same gaps. Nothing is random, no node needs to know what another node is doing,
-and there is no coordination to get wrong.
+**An anchor request gathers its quorum in one activation, deliberately.** An
+anchor executes under a validator signature quorum, and one node's answer
+carries one signature: a BVN never holds its own anchor with the other
+validators' signatures, so it has nothing more to give (the Directory does,
+and its answers carry the quorum it executed). Relying on successive
+activations reaching different source nodes was relying on the transport: an
+unaddressed request dials whichever peer the dialer favours, and a completely
+lost block validator anchor stayed lost about one run in thirty -- the runs
+where every answer came from the same node. So the requester asks the
+source's sequencer peers **by node**, merging signatures per anchor, until
+the first anchor of the span -- the one the stream is stuck on -- has
+`ValidatorThreshold` distinct signers, then submits them as one envelope. A
+node with no way to find peers asks once.
 
-That is worth contrasting with the alternative, because it is the one a healer
-reaches for: if requests are generated outside staging, each node decides on its
-own and the design has to stop N validators asking for the same thing at once —
-usually with a random per-node delay and a back-off, tuned so the first answer
-lands before the others fire. That is a heuristic standing in for agreement the
-system already has. Generating in staging uses it instead of approximating it.
+**A lagging node does not ask.** A node whose executor is behind consensus
+decides from a staging that is behind too: the numbers it thinks it lacks sit
+in its own committed, unexecuted blocks. Asking a source for them buys
+NotFound -- the source released them on the partition's Delivered -- and
+NotFound is a miss, and seven misses strand the stream, permanently, for
+entries that were never missing (#4260). While
+`accumulate_dagbft_execution_lag_blocks` is above zero the requester makes no
+request and counts the activation as `lagging`; the backlog executes, and what
+is still missing after that is asked for then.
 
-**One request per gap.** Several things can reveal the same gap in one block —
-most obviously an anchor, where each signature independently reveals the same
-missing message. Computing the set once, from the gaps themselves rather than
-from whatever noticed them, makes the number of requests the number of gaps.
-There is nothing to deduplicate because nothing is counted twice.
+### The request
 
-**Two validators actually send, chosen by the previous block's hash** — which
-is the state hash the previous block committed, and is therefore available to
-every node as the next block begins, without being distributed or agreed
-separately.
-Every validator computes the same gaps; that does not mean every validator
-should ask for them. The previous block's hash selects the pair, so each node
-knows whether it is one of the two without being told and without negotiating
-anything.
+A request is an API call from a selected validator to a validator of the source
+partition. It carries the **destination partition and the set of hashes**
+wanted for proven-missing gaps, and the **index spans** for which a proof is
+wanted — nothing else. One request per source per activation, whatever the
+number of gaps; the several messages that reveal one gap collapse into one
+hash in the set.
 
-The hash rather than the clock, for three reasons. It is already agreed —
-consensus settled it, and every node has it before this block begins, so there
-is nothing new to distribute or to disagree about. It changes every block, where
-a clock need not: a partition producing several blocks a second would keep
-selecting the same pair while its stream fell further behind. And it is not
-anyone's to choose — a validator can nudge its own clock, and the node picking
-the senders should not be the node deciding who they are.
+A request is bounded in time and is sent at once, without waiting for the block
+to commit, because nothing in this partition's state depends on it. A lost
+request costs nothing: the gap is still a gap at the next activation. An
+activation ends when its time is up; the next activation is skipped while one
+is still running; a source whose requests all failed is asked less, not more,
+until it answers again.
 
-Two rather than one, because one is a single point of failure: if the chosen
-validator is down, or cannot reach the source, the gap goes unrequested for that
-activation and healing waits on a node that is not going to answer. Two covers
-that at a cost of two requests per gap rather than N.
+**A hash is asked for once.** The activation that asked is remembered with the
+hash, and the hash is not asked again while the answer can still arrive. It is
+asked again only when that many activations have passed without it landing.
+Asking twice for a hash is asking about an entry already held or already on its
+way — a bookkeeping defect, not traffic the stream requires.
 
-Two rather than all, because N validators asking for the same message is N−1
-wasted round trips at exactly the moment a stream is already behind — and the
-extra answers are discarded anyway, since the block's sort keeps the first
-sighting of a sequence number.
+### The answer
 
-The pair rotates with every activation, because the hash does, so a validator
-that cannot reach a source stops being asked at the next activation and the load
-spreads instead of settling on whoever was picked first.
+For hashes, the source answers **entirely from its cache** (below) and nothing
+else: no chain walk, no receipt, no signature, no database read. For index
+spans it answers with a proof built from the same cache — the span's hashes,
+and the receipt to a Directory root the cache keeps for the block those
+entries were dispatched under ([Proofs are
+extended](#proofs-are-extended-not-replaced)) — and only for
+spans the Directory has anchored back to it; a span above that is "not yet".
+Nor does it serve what it dispatched within the **in-flight window**: those
+entries are on their way, and an answer must never duplicate a delivery in
+flight. The window is `InFlightBlocks` plus the answering node's own
+execution lag, because the window belongs to the sender and the answering
+node is not it ([The in-flight window belongs to the
+sender](#the-in-flight-window-belongs-to-the-sender)). A span that is partly ready is answered as
+far as it is ready; the requester remembers only what it was given.
+It packs the entries into a **bundle** — as many anchors and synthetic transactions as fit the
+envelope budget, whatever their streams, each with the transaction it belongs to
+when it has one, and with no proof of its own — and **submits the bundle into
+the requesting network** through the same path a dispatch uses. A bundle below
+the minimum size waits for the next request to the same destination unless
+nothing else is pending.
 
-The selection is over which node *sends*, not over what is requested. Every
-validator computes the same request set, so one that is not selected has already
-done the work and is ready to be selected at the next activation without
-discovering anything new.
+A bundle is **not a transaction** and is never sent to the executor. It is the
+envelope that provides the missing synthetic and anchor messages. There is no
+healing message type, no executor for one, and nothing is recorded for the
+bundle itself. Its entries execute as what they are, in their streams.
 
-**Selection applies to a pull, never to a push.** The two look alike — both are
-a node acting to close a gap — and treating them alike breaks the network.
+### Where it lands
 
-A request is **fungible**. Whoever asks, the answer comes back through consensus
-and heals every validator at once, so the other N−2 askers add nothing but load.
-That is the whole argument for choosing a pair.
+A bundle arrives through the requesting network's consensus, never by a side
+door: staging decides what a block executes, and every validator must hold the
+same staging at the same block ([executor.md](executor.md), Restart).
 
-A signature is **not fungible**. Only validator N can produce validator N's
-signature, so a node re-sending its own anchor signature is contributing
-something no other node can contribute. Selecting a pair there does not save
-duplicate work, it WITHHOLDS the rest of the quorum — and a destination that
-lost an anchor then waits for signatures that are never coming.
+In the block it is **intake**, the first group of the sort
+([executor.md](executor.md), "Sort, then four groups"): entries go to synthetic
+staging at their index, where the proof that named them has already proven
+them, and a proof goes to anchor staging under its anchor's Directory block index.
+Nothing is evaluated for the envelope and nothing is recorded for it. The runs
+the entries complete drain in the same block.
 
-So the anchor push runs on the cadence for every validator, while every pull —
-a missing synthetic, an anchor range, a reconcile against what a source says it
-produced — runs on the cadence for the selected pair. The test for which one a
-piece of healing is: **does another node's action make mine unnecessary?** If
-yes it is a pull and a pair is enough; if no it is a contribution and everyone
-owes theirs.
+A proof an anchor disproves is discarded and counted. Two proofs for the same
+indexes with different hashes are an attack, counted; a validator signature on
+proofs is the eventual answer. The same proof arriving again — the same span
+under the same anchor block, as every copy of a package's members carries it —
+is a duplicate, counted and not held twice.
 
-A request is still not consensus: the node asks the source's sequencer, and the
-answer is submitted back and re-enters through consensus, sorted and staged and
-executed like any other message. What is deterministic is *which* requests are
-made, not the transport that carries them.
+When a run executes, its entries and the proven ranges at or below `Delivered`
+are released from staging at commit. Staging holds only what is above
+`Delivered`.
 
-### Cadence
+### Bounds
 
-Healing activates **every few blocks**, not every block. The number is small and
-not magic — two may be enough.
+- **A request carries at most `MaxRequestHashes` (1,024) hashes and
+  `MaxRequestSpans` (16) index spans.** What does not fit waits for the next
+  activation; the oldest indexes go first, because delivery is in order.
+- **An answer is as many bundles as the entries need**, each within the envelope
+  budget. A bundle is never held back to grow: the minimum size only coalesces
+  requests from the same destination that are pending in the same block, so a
+  lone missing entry is answered by the call that asked for it.
+- **A request needs no authentication.** It changes nothing at the source, its
+  answer is gated by the requesting network's consensus and proven by proofs
+  the destination already holds, and its cost to the source is bounded by the
+  request bounds and served from the cache. A hash the cache does not hold is
+  not served: the miss is counted, and it is a defect.
+- **The asked-once record and the per-source back-off are node state, not
+  consensus state.** They live in memory beside the healer, keyed by stream
+  and number and by source, with the block index of the activation that
+  asked. A restart
+  empties them; the cost is at most one duplicate request per gap.
+- **The synthetic/anchor cache holds entries in play**, indexed by partition and
+  index, cleared as the destination delivers ([The cache](#the-cache)). Its size is decided from measurement of how many
+  entries are in play at the target rate. The sanity horizon of about an hour
+  bounds what staging will hold, not what the cache keeps.
 
-The reason is the round trip. A request goes to another partition and its answer
-comes back through consensus, which takes blocks. Activating every block would
-re-request gaps whose answers are still in flight, so a stream that is behind
-would generate requests at the block rate for messages already on their way.
-Waiting a few blocks lets an answer arrive before the same gap is considered
-again.
+### Proofs are extended, not replaced
 
-That is the whole of the rate control. There is no back-off, no jitter and no
-per-source scheduling, because there is nothing to control: two requests a gap
-per activation is not a load worth managing. The earlier design spread requests
-in time to protect a source from N validators; with two senders and a cadence,
-the protection is already there and the machinery would only be a way to get it
-wrong.
+A collection proof is a merkle state at the start of its list, the elements, and
+a receipt anchoring the last element to a root. Its element count is bounded
+(`MaxReceiptListElements`) because a list is untrusted input that must be hashed
+before it can be known to be junk; the bound binds identically at the sender,
+the sequencer and the receiver.
 
-### Sending
+The bound does not limit how far back a destination can prove. Widening a proof
+backwards means an earlier merkle state and the elements in between; the replay
+ends at the same anchor, so **the same receipt keeps working**. A destination
+that needs to reach further back asks the source for **the merkle state at
+index `f` and the elements `[f, c)`** of the stream's chain, where `c` is where
+its current list begins. The source reads the hashes out of its cache — no
+chain walk, no rebuilding, no signing — and the destination validates the widened list
+against the receipt it already holds, so a wrong or dishonest extension fails
+to validate and is discarded.
 
-**A request is sent immediately.** It is a submission to another partition and
-changes nothing here, so it does not wait for the block to commit and is not
-part of what the block produces. Nothing in this partition's state depends on
-whether it was sent, when, or whether it succeeded.
+The same request fills interior holes: a counted merkle state binds every element
+to an absolute index, so a destination holding fragments of a range knows
+exactly which spans are missing and asks for each. Nothing already held is
+fetched again. A later proof does not invalidate an earlier one; each verifies
+against its own state and receipt.
 
-That is also why a lost request costs nothing. If it never goes out, or goes out
-and is never answered, the gap is still a gap at the next activation and is
-requested again. Healing does not need delivery guarantees because it is already
-the retry mechanism.
-
-Two things still matter when a request fails:
-
-- **A failure must not stop the batch.** Delivery is ordered, so failing to pull
-  one hole must not stop the others being pulled. A stream must never wedge
-  because one request failed.
-- **A request is bounded in time.** A hung call must not pin the goroutine, or
-  its read batch, indefinitely — and by the time the bound expires the next
-  activation is due anyway.
-
-### Order
-
-Two different things are fetched to close a gap, and only one of them has an
-order.
-
-**A receipt only needs the hashes.** So the proof is one fetch: ask for whatever
-hashes the proof requires, however far back they reach, and validate them
-against the newest receipt already held. There is no ordering question here
-because there is no sequence to advance — a proof is complete or it is not.
-
-Every receipt is a collection proof, and every receipt goes through staging, so
-a receipt that was dropped means the hashes for its range were never held. That
-is why the proof is never chased backwards through past receipts: drop twenty of
-them and the newest still proves everything behind it, once the hashes in
-between are supplied. The source achieves that by adding hashes to the next
-receipt it was going to send anyway — no per-destination bookkeeping, no special
-range, and no request path to serve. [Extending a proof](#extending-a-proof-rather-than-replacing-it)
-is the mechanism.
-
-**The entries are fetched from the oldest gap to the newest.** Delivery is in
-order, so the stream advances the moment the oldest run fills and keeps
-advancing as each next one lands. A fetch is bounded per activation, and that
-bound is exactly why the direction matters: filling the holes furthest from the
-watermark first would consume the budget on messages that unblock nothing, and a
-stream deep enough behind would never advance at all. In the run this work comes
-from the gap was 8,556 and a scan carries a few hundred.
-
-The two used to be conflated, and conflating them is what made "heal newest
-first" look necessary: if a proof could only come from the receipt that
-originally covered a range, healing the oldest hole would depend on the one
-receipt most likely to be missing. It cannot, because a receipt only needs the
-hashes.
-
-### Extending a proof rather than replacing it
-
-How far back a single proof reaches is bounded. `MaxReceiptListElements` (4,096)
-caps the elements a collection proof may carry, and it binds at three points
-that must agree: the sender will not build a package whose span exceeds it
-(`packageSpanFits`), the sequencer refuses a range request larger than it, and
-the receiver rejects a proof carrying more.
-
-The bound exists because a receipt list is untrusted input, and verifying one
-hashes every element before it can be known to be junk — unlike staging, which
-holds only what consensus already accepted. It limits what an attacker can make
-a validator do.
-
-It does **not** limit how far back a destination can prove, because a proof can
-be extended rather than replaced. A collection proof is a merkle state at the
-*start* of its list, the elements, and a receipt anchoring the *last* element to
-a root. Widening the range backwards means an earlier merkle state and the
-elements in between: the replay still ends at the same anchor, so **the same
-receipt keeps working**. Hashes can be added to a collection proof without
-another receipt.
-
-This is the hash fetch the [order](#order) names — the half of closing a gap
-that has no ordering, because a proof is complete or it is not. It moves hashes
-and nothing else: no message bodies, no signature, no new anchor.
-
-So a destination that needs to reach further back asks for an **extension**, not
-a new proof. The request carries:
-
-- the **last hash of the proof it already holds** — where the extension
-  attaches, and what lets the source confirm the two are continuous;
-- that hash's **index**, which the existing proof already establishes, because a
-  receipt list's merkle state is counted and therefore binds each element to an
-  absolute position;
-- **how far back is wanted**, or the maximum a single request may carry.
-
-The source answers with the earlier merkle state and the intervening elements —
-raw hashes, no signature, no new anchor. The destination prepends them and
-validates the wider list against the receipt it already had.
-
-The same request fills holes, not only the tail. A receipt list must be
-contiguous to validate — the replay runs from the merkle state through every
-element to the anchor — but a destination may hold **fragments** of a range:
-proofs that arrived, some spans dropped in between. Because a counted merkle
-state binds each element to an absolute index, a fragment's position is
-unambiguous, so what is missing is a set of index spans and each can be asked
-for on its own. The destination assembles the pieces it has with the hashes it
-receives, and once the list is contiguous from the earliest element it needs to
-the receipt's start, it validates.
-
-So a proof is built up rather than obtained: nothing already held is fetched
-again, and no fragment has to be discarded because it does not reach far enough
-by itself.
-
-This keeps every property the order relies on. A single message stays bounded,
-so the attacker's cost is unchanged. Reach becomes unbounded in increments, so
-an arbitrarily lagged destination converges. Only what is genuinely absent moves
-on the wire. And the expensive part of a proof — the anchored receipt — is
-transferred once and reused, rather than re-sent with every widening.
-
-A later collection proof does not invalidate an earlier one. Each verifies
-against its own merkle state and receipt, so work already done against the proof
-in hand stays valid when new proofs arrive — which is what lets a drain converge
-under load rather than restarting each time a proof lands.
+Whether fragments must outlive the activation that fetched them is decided by
+measurement — how far back a destination actually has to reach against the
+per-request bound. If they must, they live where staging lives: in memory,
+outside anything hashed or written.
 
 ### The cache
 
-Healing caches what it fetches, and **only healing uses that cache**.
+The synthetic/anchor cache is the **producer's**, and it holds only the entries
+**in play**: what this partition has produced that a destination may still ask
+for. It is one of two caches and must not be confused with the other
+([database.md](database.md), "Caches"): the hash-to-URL mapping cache is a
+two-level cycled cache in the dynamic layer and serves reads, not healing.
 
-The reason is what each reader does. The executor reads a record once per block
-and its reads do not repeat; a cache serves it nothing. Healing fetches the same
-message from the source over and over while a stream is behind — in soak
-`20260902T132651Z`, 53,011 fetches for 8,556 distinct sequence numbers, some
-41 times each. Those repeat, so they can be cached.
+- **Indexed by partition and index** — the stream and the sequence number —
+  and by entry hash, the request's vocabulary.
+- **Filled at production**, when the block sequences the entry onto the
+  synthetic chain or builds the anchor: the earliest point at which the entry
+  is final, one write on a path the block already takes, a mirror of
+  production.
+- **Read by dispatch and by healing.** The executor builds every package from
+  it (executor.md, "Dispatch"); the sequencer builds every bundle from it.
+  Neither reads the historical record for anything: **any read of the
+  historical record while building a package, a bundle or a proof is a
+  failure**, and it is counted.
+- **Contents.** The sequenced message and, when it has one, the transaction it
+  belongs to; and, per block and per destination, what a proof is built from —
+  the block's span on that destination's synthetic chain and the receipt to
+  the Directory root the block was dispatched under — so a package's or a bundle's proof is built from the
+  cache alone.
+- **Cleared by the destination's word, carried on the traffic already
+  flowing.** Every synthetic message or package a partition dispatches to a
+  destination carries the sender's **`Delivered`** for the reverse stream — the
+  latest sequence number the sender has executed *from* that destination. A
+  partition that reads it knows the sender will never ask for anything at or
+  below it, and drops those entries, and the block segments that held them,
+  from its cache at once; a block with nothing left to prove goes with them.
+  **Every anchor copy carries the same word for the anchor stream**: the
+  sender's `Delivered` on the destination's anchor stream to it, and the
+  destination drops the anchors it produced at or below it — once every
+  destination it anchors to has said so, since one anchor goes to all of them
+  under one number: one for a BVN, every partition for the Directory. Anchors
+  say nothing about synthetics; each stream is released by its own word. So
+  the cache holds the entries in play — what the other side has not yet said
+  it executed — not a window of history. A stream with no reverse traffic
+  hears nothing and falls back to the horizon, which is the backstop, not the
+  mechanism. The value is taken only from a message whose signer is a current
+  validator of the sender (a synthetic about to execute, an anchor copy whose
+  signature is recorded): a collected entry's word is not trusted, since
+  dropping what a source still needs would leave it a gap no one can fill.
+- **Never served from storage.** Every entry is also persisted to the
+  permanent layer through execution; that is the record, not a fallback. A
+  request for an entry the cache does not hold is refused and **counted as a
+  miss** with its depth — a miss means the cache is undersized or the request
+  is stale, and either is a defect worth a number. The historical record is
+  not read to build an answer.
+- **Nothing is invalidated.** An entry's content cannot change under its index
+  or its hash.
 
-The cache is therefore:
+### Counting
 
-- **In Accumulate, with the healer.** It caches what healing fetched, which is a
-  property of healing, not of any storage backend. It works the same whichever
-  database is configured, and no storage backend knows it exists.
-- **Keyed by what identifies a fetch** — source, destination and sequence
-  number.
-- **Two generations.** A lookup tries the hot map, then the cold one, and a hit
-  in cold is promoted. When hot fills it becomes cold and a new hot starts, so
-  entries leave by being unused for a whole generation and nothing is evicted
-  one at a time.
-- **Never invalidated.** A sequenced message is named by its position in a
-  stream and its content cannot change under that name. If it could, the
-  protocol would be broken and a stale cache entry would be the smallest
-  consequence.
+Per node and per stream, so healing is judged from data:
+
+| count | what it says |
+|---|---|
+| requests issued, hashes per request | how much is missing and how often we ask |
+| requests per hash | monotonicity; anything above one is a defect |
+| bundles received, entries per bundle | that answers are bulk, not per message |
+| cache hits, misses, miss depth, construction failures | at the source; a miss is a defect |
+| request to landing, in blocks | whether the cadence gives an answer time to arrive |
+| staging depth, entries truncated | that staging is a buffer, not a store |
+| proof requests, spans per request, proofs disproved, duplicate proofs | proof loss, and attempts to lie about hashes |
+| anchor requests | anchors lost, requested at once |
+| stranded streams (gauge) | streams whose oldest gap the source cannot serve; only sync moves them |
+
+### Invariants
+
+1. **A depth is healed once.** A hash is requested at most until it lands, and
+   a range healed to a depth is not healed to that depth again.
+2. **The source already has the answer.** Serving a request is handing back what
+   the producer cached at production; it is never rebuilt.
+3. **Every validator computes the same requests; a selected pair sends them.**
+   Signatures are contributions and are exempt from selection.
+4. **A bundle is an envelope, not a transaction.** Nothing is executed or
+   recorded for it; its entries execute in their streams.
+5. **Bundles land through consensus and go into staging at intake.** Staging is
+   the same on every validator at every block.
+6. **Staging is released as runs commit.** It holds only what is above
+   `Delivered`.
+7. **Healing is bounded per activation** in requests, in time, and to one
+   activation at a time.
+8. **Anchors are requested at once; entries and proofs after two cycles.**
 
 ## 2. Specification — how it is implemented
 
-Healing has two halves and they live in different places. **Deciding** is part
-of the block: staging computes the gaps and the request set, deterministically,
-as part of executing the block. **Fetching** is not: the transport lives in
-`internal/core/crosschain` and runs outside consensus, because a request changes
-no state here.
+Deciding is part of the block: staging computes the gaps and the request set as
+part of executing an activation block, deterministically. Transport is not: the
+API call, the bundle submission and the counters live in
+`internal/core/crosschain` and run outside consensus.
 
 ### Deciding, in staging
 
-On an activation block, after the anchor and synthetic groups have been
-evaluated, drained and executed, staging computes for each stream:
+On an activation block (`healActivates(index)`, every `healCadence` blocks),
+each stage is read as its two lists from `Delivered + 1` — the entries held,
+the hashes proofs have validated, aligned by index because a proof covers one
+chain (executor.md, "One chain per pair, one stage per chain"). Two walks:
+how far the validated hashes reach, and how far the held entries match them.
+Fewer entries than validated hashes is a gap of entries; entries beyond the
+validated hashes is a gap of proof. Those spans are the request set, coalesced,
+oldest first, at most `MaxRequestSpans`; an index asked within the last
+`healPatience` activations is not asked again. **A held entry whose proof has
+arrived and is staged, waiting for its Directory anchor, is not unproven**
+(`StagedProofSpans`): the anchor is on its way, late when this partition's
+executor lags, and asking for the entry again lands it twice — the storm of
+run 20260905T134346Z, 22,642 heals with nothing dropped. It becomes a gap only
+when the proof is dropped. A stage holding nothing above
+`Delivered` is missing every validating hash above it and asks for the span
+above `Delivered` whole; the source answers with what it has dispatched, or
+that it has produced nothing there yet. A "not yet" is remembered like an
+answer, so a quiet stream is probed once per patience window, not every
+activation, and the source counts no miss for it: a miss is a number its
+ledger says it produced and its cache does not hold. Nothing is timed and
+nothing is inferred from the source's ledger, and the walks allocate nothing
+per entry; the asked-once memory is one record per span, not per index.
+Anchors are a stage like any other (executor.md, "One chain per pair, one
+stage per chain"): a missing anchor below a validated one is a gap of entries
+and is requested the same way. Sender selection is a function
+of the previous block's hash over the validator set yielding two indices; a
+node compares them against its own position.
 
-- `Delivered`, read from the ledger — the highest number executed;
-- the **held** set, read from staging itself — numbers received, not executed;
-- `Produced`, the source's high-water mark as carried by the stream.
+### Requesting and answering
 
-The gaps are the numbers in `(Delivered, Produced]` that staging does not hold.
-Requests are made one per gap: several askers of the same gap — most often the
-signatures of one anchor — collapse to a single request.
+The private sequencer service (`internal/api/private`) carries three methods:
+one entry by stream and number (anchors), a **proof for index spans** of a
+stream, and **entries by hash set** for a destination. Entries and proofs are
+answered from the producer cache; nothing is read from the store.
 
-Selection of senders is a function of the previous block's hash over the
-validator set, yielding two indices. A node compares them against its own
-position; no message is exchanged to establish this.
+The source packs the entries into bundles under the envelope budget
+(`synthPackageBudget`) and above the minimum size, and submits each bundle to
+the requesting partition through the dispatcher
+(`internal/node/daemon/dispatcher.go`), the same path `sendSyntheticTransactions`
+uses. The requester's call is bounded by `HealTimeout`; a transport failure is
+retried a few times because routing picks a peer per attempt; a `NotFound` for a
+hash is a deterministic answer and is counted as a miss. An anchor span is
+answered with every signature the source holds for each anchor, and the
+requester submits them as `BlockAnchor`s in **one envelope** — as many anchors
+as fit the envelope budget — since the block processes every message of the
+envelope it sorts under the anchor's number; one envelope per signature was
+thousands of envelopes of full anchor bodies after a restart.
 
-### Fetching, outside the block
+### Landing
 
-A selected node sends its requests immediately, without waiting for the block to
-commit, because nothing in this partition's state depends on the send.
+The block's sort (`exec_stage.go`, `classify`) places every sequenced entry in
+synthetic staging at its index and every collection proof in anchor staging
+under its anchor's Directory block index, bundles and packages alike, before
+the anchor group is evaluated. Nothing is written for an envelope, and nothing
+is written for an entry until it executes. `stageRuns` then
+computes runs from what is proven and held, and executed entries and the proven
+ranges at or below `Delivered` are released when the block commits.
 
-`requestSyntheticFrom(ctx, source, num)` pulls one missing message from the
-source partition's sequencer: `c.Sequencer.Sequence(source, destination, num)`.
+### The cache
 
-- It retries a transient failure up to three times, because routing picks a peer
-  per attempt and one transient "no live peers" once wedged a stream
-  permanently (#4067).
-- A `NotFound` is a deterministic answer about the source's state and is **not**
-  retried (#4086, #4115).
-- The call is bounded in time, so a hung source cannot pin the goroutine or its
-  read batch. The bound need not be generous: the next activation is due
-  regardless, and an expired request is simply a gap that is still a gap.
-- A failure moves to the next hole rather than abandoning the batch. Delivery is
-  ordered, so one unfillable gap must not stop the others being pulled.
-
-`buildSyntheticSubmission` assembles the envelope from the sequencer's response
-— the sequenced message, the proof, and the source's signature.
-
-- A non-nil proof from the response overrides the per-message one: that is the
-  collection proof covering a whole range, which every record of the range
-  shares.
-- For a message belonging to a transaction, the transaction is bundled with it,
-  exactly as the normal outbound path does. Without it a healed message fails on
-  "load transaction" and the stream stays stuck (#4066).
-
-The envelope is submitted with `c.submit` and re-enters through consensus, where
-it is sorted, staged and executed like any other message — which is why the
-duplicate answer from the second sender costs nothing: the block's sort keeps
-the first sighting of a sequence number.
-
-The log line "Requested missing synthetic transaction" is emitted **after** the
-submit succeeds, so it records a completed heal, not an attempt.
-
-### Extension requests
-
-An extension is served from the source's **chain**, not from its outbox. That is
-the whole reason it is cheap: the source is not rebuilding a proof, signing
-anything, or tracking what any destination holds — it is reading hashes out of a
-merkle chain it already has.
-
-#### What a proof requires, and therefore what an extension is
-
-`ReceiptList.Validate` replays `MerkleState` through `Elements` and requires
-that the last element equals `Receipt.Start` and that the resulting anchor
-equals `Receipt.Anchor`. So a list must be **contiguous** from its merkle state
-to its receipt, and its reach backwards is decided entirely by where its merkle
-state sits.
-
-Widening backwards is therefore: an **earlier merkle state**, plus the
-**elements between** it and the state currently held. Replay then runs from the
-earlier state through the new elements into the existing ones and arrives at the
-same anchor — so the receipt is untouched and keeps working. This is why the
-expensive part of a proof is transferred once.
-
-#### The request
-
-A destination holding a list whose merkle state sits at count `c`, and needing
-to reach index `f` below it, asks the source for **the merkle state at `f` and
-the elements `[f, c)`** of the chain that carries this stream.
-
-That is the whole request: a stream, and two indices. It does not carry the hash
-it is attaching to, and does not need to — **the destination validates the
-widened list against the receipt it already holds**, so an extension that is
-wrong, stale, or dishonest fails to validate and is discarded. Continuity is
-self-checking, which is better than a continuity field the source could satisfy
-while being wrong about everything else.
-
-A request is bounded by `MaxReceiptListElements`, the same bound a proof carries,
-and for the same reason: it is untrusted input that must be hashed before it can
-be known to be junk. Reach is unbounded in increments rather than in one message.
-
-#### Fragments
-
-The same request fills interior holes, not only the tail. A destination may hold
-several disjoint pieces of one range — proofs that arrived, spans dropped in
-between — and because a counted merkle state binds element `j` to absolute index
-`Count + j`, every piece knows exactly where it sits. What is missing is a set of
-index spans, each of which is one request.
-
-**A fragment is worth keeping only if it outlives the activation that fetched
-it.** If assembly always completes within one activation there is nothing to
-store and no state to reason about; if it does not, fragments need somewhere to
-live, and that somewhere has the same two properties staging needed — durable,
-because losing them silently re-fetches, and unhashed, because they are a
-deterministic function of what the source served and prove themselves on
-validation. **This is the open question in this part of the design**, and it is
-answered by measurement rather than argument: how far back a real destination
-has to reach, against `MaxReceiptListElements` per request.
-
-#### Order, again
-
-None of this is ordered. The hashes are one fetch, complete or not; the entries
-are fetched oldest-first because delivery is. An extension moves hashes only —
-no message bodies, no signature, no anchor.
+`internal/core/synthcache`, filled by the executor as it produces
+(`produceSyntheticInto`, `recordAnchor`) through a per-block transaction that
+commits after the store commits, so the cache never holds an entry the chain
+does not; keyed by hash and by (stream, number); per block, a segment per
+destination chain (`merkle.Segment`: the chain's state before the block's
+first entry for that destination and the entries since, proving
+byte-identically to the stored chain) with the receipt from that chain's
+anchor to the block's root, built at close from the root chain segment the
+block appended; the Directory receipt and anchor the
+block was dispatched under, recorded at dispatch (`MarkDispatched`).
+Dispatch (`sendSyntheticTransactionsForBlock`) and the sequencer service
+(`sequencer_cache.go`) read it and nothing else; a miss is refused as
+`NotFound` and counted (`accumulate_synthcache_misses_total{kind}`). Released by
+the destination's `Delivered` carried on every dispatched `SyntheticProof`
+and `SyntheticMessage` (`Txn.Release` at the destination's block close, applied
+at commit: the stream's entries at or below it, the block segments that held
+them, and a block left with nothing to prove, go;
+`accumulate_synthcache_released_total`), and on every dispatched
+`BlockAnchor` for the anchor stream (`Txn.ReleaseAnchors`, taken where the
+copy's validator signature is recorded, applied at commit once every
+destination of the anchor has spoken; `anchors_released_total`); a block that
+produced nothing is dropped when it is dispatched. A horizon of blocks
+(`DefaultHorizon`, ten minutes) remains as the backstop for a stream with no
+reverse traffic. At the first block an executor opens, the cache is seeded from the
+node's own chains by position (`seedSynthCache`, #4241): genesis produces
+through another executor, and a node that starts has produced blocks whose
+anchors have not returned — a start-up step, not a runtime path. What is
+seeded is decided by what the store durably knows: every own block the
+Directory has not receipted, found from the Directory anchors executed here
+(nothing from those blocks was dispatched), and the in-flight tail
+(`InFlightBlocks`) below the newest receipt, marked dispatched so healing is
+answered from it; capped by the horizon. The receipted blocks the newest
+anchor carried are dispatched again by the leader — the list of anchors
+awaiting dispatch is memory, and the block that would have dispatched them
+may not have run; a destination tosses what it has delivered. The store path in the sequencer remains only for the v1
+simulator, which has no cache; the node never wires it. Hits, misses, miss depth and construction failures are counters
+on the node's metrics endpoint, as are every row of the counting table above.
 
 ---
 
 Where the implementation departs from this specification, see
 [DIFFERENCES.md](DIFFERENCES.md).
+
+### Healing is for a synthetic stream that has stopped
+
+A stream holding nothing above `Delivered` is the signature of a package lost
+whole — entries and proof travel together, so losing both leaves nothing held
+and nothing else would ever see it. The requester therefore asks the source
+for the span above `Delivered`.
+
+**But a stream that has merely drained looks identical at that instant**, and
+on a network where delivery keeps up that is most of the time. Probing on
+sight made a healthy network heal continuously: run `20260915T211229Z`, with
+no faults induced and nothing dropped by the harness, pulled 743,000 entries
+against 23,000 requests — about 56% of all traffic those streams had ever
+carried, to cover the ~1% that was in flight and arriving anyway (#4280). The
+pulls consumed the capacity the lagging executor needed, which widened the
+window the next probe would pull.
+
+The two are told apart by what a lost package actually does: it stops
+`Delivered`. So the requester asks for nothing until a stream's `Delivered`
+has sat still for `probeAfter` (8) activations — thirty-two blocks.
+
+**The wait must clear the time normal delivery takes.** A block's synthetics
+do not leave until a Directory receipt covering that block returns, so the
+path is the proof-path latency: roughly eight seconds plus seven block
+intervals. Measured at 500 tps, synthetic streams ran 13.7–29.3 seconds in
+flight. A sixteen-block wait sits inside that, and a clean network still
+healed ~300 entries a minute — the source answering from its cache with what
+it had produced and not yet dispatched, healing delivering what dispatch was
+about to. The wait is set beyond the measured path, not beside it.
+
+**That rule covers holes too, and for a stronger reason.** A stream executes
+in order, with no gaps ([executor.md](executor.md), invariant 1). So while
+`Delivered` is moving, nothing below it is missing, and a hole above it either
+fills before delivery reaches it or stops `Delivered` when it does — at which
+point the stream is still and the hole is asked for. Asking on sight instead
+healed every transient reorder: with the probe alone gated, a clean network
+still pulled ~1,500 entries a minute in runs averaging 49 consecutive numbers,
+every one of them in flight. Healing a stream that is delivering cannot help
+it, and the pulls cost the capacity that delivery needs. A draining stream, whose `Delivered` moves, never
+probes; anything held above `Delivered` is not the empty case at all and
+forgets the run. A genuinely wedged stream is probed within a few activations,
+well inside the window a lost package needs.
+
+This is the same failure the waiting-proof exclusion above addresses, reached
+by a different path: healing that answers normal lag rather than loss, and
+whose answer makes the lag worse.
+
+**The rule is for synthetic streams, and only those.** Every measurement
+behind it came from one: the 743,000-entry storm, the runs averaging 49
+consecutive numbers, the 13.7-29.3 second in-flight times. An anchor stream
+is a different shape -- roughly one entry per block per partition, executed
+under a quorum, and without the constant drain that makes an empty synthetic
+stream ambiguous between "caught up" and "package lost". Extending the wait to
+anchors was a generalisation with no evidence under it, and it did not slow
+recovery of a lost block validator anchor so much as prevent it: the e2e case
+went from one failure in twenty runs to thirteen, and stayed broken when given
+a 600-block budget instead of fifty. **An anchor stream is asked on sight.**
+
+### The in-flight window belongs to the sender
+
+Every validator marks a block's synthetics dispatched when **it** executes
+the block. Only the leader **sends** them. So the mark is not the send, and a
+node that measures the in-flight window against its own mark is measuring the
+wrong clock. A node whose executor is `L` blocks behind consensus sends `L`
+blocks late; a node that is less behind answers as soon as its own mark is
+`InFlightBlocks` old, while the leader has not sent at all. When `L` exceeds
+`InFlightBlocks`, every synthetic of the leader's blocks is healed.
+
+The healed copies are deduplicated, so the ledger stays right, but the cost is
+not free and it compounds: the source's nodes, already behind, now also build
+collection-proof answers for their whole output, and the destination executes
+two copies' worth of intake. Lag grows, and heals grow with it. On soak
+20260906T134054Z — 500 tps, no faults, dispatcher drops zero on every node —
+heal entries went 123 → 7 493 → 75 936 over thirty-five minutes while BVN2's
+execution lag went 4 → 17 blocks.
+
+**The window is `InFlightBlocks` plus the answering node's execution lag.** A
+node cannot see the leader's lag, only its own, but executors in a partition
+run the same load on the same code and move together, so its own lag is the
+estimate it has. The rule costs nothing when the partition is healthy, which
+is exactly when the lag is zero, and widens precisely when lag would otherwise
+turn every late dispatch into a heal. It delays, it never refuses: a source
+that never catches up still serves, once its own height has moved far enough
+past the mark. The refusal is cheap and is the load shed: the window is
+checked before any proof is built, so a source that is behind spends a cache
+lookup on a healing request, not a collection proof. The destination remembers
+the "not yet" like an answer and does not ask for that span again for a
+patience window. Nothing new is exported: the window is `InFlightBlocks` plus
+`accumulate_dagbft_execution_lag_blocks`, which the node already publishes per
+partition.
+
+Two rules already in this spec cover the rest of the case, and are not
+restated by the window. A block the node has **not itself dispatched** is
+never served, whatever the node's lag — a lagging source answers "not yet" for
+its own undispatched output. And the destination does not ask at all while its
+stream is moving ([Healing is for a stream that has
+stopped](#healing-is-for-a-stream-that-has-stopped)).
+
+Two alternatives were rejected. Carrying the leader's send on the wire so
+non-leaders learn of it adds a message and a trust question for a number the
+lag already estimates. Having every validator send, so that mark and send
+coincide, costs four times the dispatch bandwidth to produce copies the
+destination deduplicates anyway.

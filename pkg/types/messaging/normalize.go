@@ -70,9 +70,22 @@ func (e *Envelope) Normalize() ([]Message, error) {
 		}
 	}
 
-	// Ensure every signature hash a transaction hash and collect a set of all
-	// signed transaction hashes
-	missing := map[[32]byte]struct{}{}
+	// Ensure every signature has a transaction hash, and collect the signed
+	// hashes in the order the signatures name them. This was a set, and the
+	// placeholders below were appended by ranging it: a Go map, so an
+	// envelope carrying two signatures for absent transactions normalized to
+	// a different message order on every node, and on every run of the same
+	// node. Nothing downstream happened to depend on it -- a bare transaction
+	// message records no state -- but order that the envelope already has is
+	// kept as a slice, not thrown into a map and hoped for (#4279 review).
+	var missing [][32]byte
+	seen := map[[32]byte]bool{}
+	note := func(h [32]byte) {
+		if !seen[h] {
+			seen[h] = true
+			missing = append(missing, h)
+		}
+	}
 	for i, msg := range messages {
 		sig, ok := msg.(*SignatureMessage)
 		if !ok {
@@ -82,28 +95,29 @@ func (e *Envelope) Normalize() ([]Message, error) {
 		switch {
 		case sig.TxID != nil:
 			// Message specifies the transaction ID
-			missing[sig.TxID.Hash()] = struct{}{}
+			note(sig.TxID.Hash())
 
 		case sig.Signature.GetTransactionHash() != [32]byte{}:
 			// Signature specifies the transaction hash
 			sig.TxID = protocol.UnknownUrl().WithTxID(sig.Signature.GetTransactionHash())
-			missing[sig.Signature.GetTransactionHash()] = struct{}{}
+			note(sig.Signature.GetTransactionHash())
 
 		case defaultTxID != nil:
 			// Use the default hash
 			sig.TxID = defaultTxID
-			missing[defaultTxID.Hash()] = struct{}{}
+			note(defaultTxID.Hash())
 
 		default:
 			return nil, errors.BadRequest.WithFormat("signature %d: missing hash", i)
 		}
 	}
 
-	// Add a placeholder for any signed transactions that are not present
-	for hash := range unsigned {
-		delete(missing, hash)
-	}
-	for hash := range missing {
+	// Add a placeholder for any signed transactions that are not present, in
+	// the order they were signed for
+	for _, hash := range missing {
+		if _, present := unsigned[hash]; present {
+			continue
+		}
 		messages = append(messages, &TransactionMessage{
 			Transaction: &protocol.Transaction{
 				Body: &protocol.RemoteTransaction{

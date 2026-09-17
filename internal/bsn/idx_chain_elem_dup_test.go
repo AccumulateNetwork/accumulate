@@ -20,7 +20,10 @@ import (
 // AddEntry on that. Rewriting ElementIndex(H) with a later position is a
 // different value under the same key, which the BlockchainDB backend's
 // permanent layer refuses (#4174).
-func TestChainElemIndexer_DuplicateKeepsFirstIndex(t *testing.T) {
+// A chain that repeats a hash indexes a position that holds it; which one is
+// the store's business (database spec, "Chains are logs": no reader relies on
+// which occurrence). The other hash keeps its own position.
+func TestChainElemIndexer_DuplicateIndexesAPositionHoldingTheHash(t *testing.T) {
 	db := database.OpenInMemory(nil)
 	batch := db.Begin(true)
 	defer batch.Discard()
@@ -46,7 +49,10 @@ func TestChainElemIndexer_DuplicateKeepsFirstIndex(t *testing.T) {
 
 	i, err := chain.IndexOf(h)
 	require.NoError(t, err)
-	require.Equal(t, int64(0), i, "a duplicate hash keeps its first index")
+	require.Contains(t, []int64{0, 2}, i, "the index names a position that holds the hash")
+	got, err := inner.Entry(i)
+	require.NoError(t, err)
+	require.Equal(t, h, got)
 	i, err = chain.IndexOf(other)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), i)

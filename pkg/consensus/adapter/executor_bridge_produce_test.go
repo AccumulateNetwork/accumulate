@@ -40,6 +40,7 @@ type fakeExec struct {
 
 	failBegin, failProcess, failClose, failHash, failCommit bool
 	discarded                                               bool
+	begun                                                   int // blocks begun
 
 	major   uint64
 	majorOK bool
@@ -63,6 +64,7 @@ func (f *fakeExec) Begin(params execute.BlockParams) (execute.Block, error) {
 	if f.failBegin {
 		return nil, fmt.Errorf("begin refused")
 	}
+	f.begun++
 	return &fakeBlock{f: f, params: params}, nil
 }
 
@@ -216,6 +218,10 @@ func TestProduceBlock_NilBatchFailsTheBlock(t *testing.T) {
 		Batches: []*types.Batch{nil, types.NewBatch([][]byte{envBytes(t, 1)})},
 	})
 	require.Error(t, err, "a certificate must never execute without one of its batches")
+	// Refused BEFORE a block is begun: a block begun and then abandoned
+	// leaves the executor's batch open, pinning a version of the store for
+	// the life of the process (#4279).
+	require.Zero(t, f.begun, "a certificate missing a batch must be refused before a block is begun")
 }
 
 // TestProduceBlock_UnmarshalableTransactionSkipped: garbage inside a batch is

@@ -380,18 +380,9 @@ func (m *Manager) generateKey() (*KeyMetadata, error) {
 }
 
 // generateKeyID creates a unique key identifier.
-// generateKeyID names a key by the day it was minted and eight bytes of
-// entropy. The clock alone is not unique: two keys minted in the same tick
-// got the same ID, and on Windows the tick is coarse enough that consecutive
-// calls collide (#4183).
 func generateKeyID(t time.Time) string {
-	var nonce [8]byte
-	if _, err := rand.Read(nonce[:]); err != nil {
-		panic(fmt.Sprintf("read entropy for a key ID: %v", err))
-	}
 	h := sha256.New()
 	h.Write([]byte(t.Format(time.RFC3339Nano)))
-	h.Write(nonce[:])
 	hash := h.Sum(nil)
 	return fmt.Sprintf("key-%s-%s", t.Format("2006-01-02"), hex.EncodeToString(hash[:8]))
 }

@@ -16,23 +16,30 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
 // Default configuration values.
 const (
-	DefaultBatchSize        = 500                    // max transactions per batch
-	DefaultBatchTimeout     = 100 * time.Millisecond // max time to wait for full batch
-	DefaultMaxBatchBytes    = 500 * 1024             // 500KB max batch size
-	DefaultMaxPendingSize   = 10 * 1024 * 1024       // 10MB max pending transactions
-	DefaultMaxPendingCount  = 10000                  // max pending transaction count
-	DefaultMaxStoredBatches = 1000                   // max batches stored before eviction (reduced for memory safety)
+	DefaultBatchSize = 500 // max transactions per batch
+	// DefaultBatchTimeout is the latency floor for a quiet worker: how long
+	// a lone transaction waits before it is sealed without company. It is
+	// not the seal trigger under load -- that is BatchSize -- and at 100 ms
+	// it was: sixteen workers at 250 tps sealed one or two transactions a
+	// batch, ~160 batches a second, and every count downstream held seconds
+	// of traffic (C1, #4206). One second is the block interval.
+	DefaultBatchTimeout    = time.Second
+	DefaultMaxBatchBytes   = 500 * 1024       // 500KB max batch size
+	DefaultMaxPendingSize  = 10 * 1024 * 1024 // 10MB max pending transactions
+	DefaultMaxPendingCount = 10000            // max pending transaction count
 	// Byte caps. Batch COUNT caps do not bound memory: at 700 tx/s the
 	// gossip store filled to its count cap holding 728MB of batch bytes per
 	// node instance — two instances per 4GiB cgroup — and the fleet was
@@ -67,6 +74,21 @@ var ErrTransactionTooLarge = errors.New("transaction exceeds the batch size limi
 
 // ErrValidationFailed is returned when a transaction fails pre-batch validation.
 var ErrValidationFailed = errors.New("transaction validation failed")
+
+// ErrStoreFull is returned by SubmitUser when this worker's own uncommitted
+// batches and pending transactions fill its byte share. Own batches cannot
+// be evicted -- the worker is responsible for them reaching a certificate --
+// so the bound is refusing work, not growing (consensus spec, invariant 4).
+// The API returns it as NotReady: retry later. Internal traffic (Submit) is
+// never refused; it is what drains the store (#4165).
+var ErrStoreFull = errors.New("worker store full: own uncommitted batches fill the budget")
+
+// ErrExecutionLagging is returned by SubmitUser while the primary has stopped
+// proposing batches because the executor is more than MaxExecutionLag blocks
+// behind the DAG's commits (consensus spec, invariants 9 and 10). Commits are
+// fine; the executor is behind; accepting more user work would only pile it
+// into batches nothing will propose.
+var ErrExecutionLagging = errors.New("worker refusing user submissions: execution is lagging consensus")
 
 // TransactionValidator validates transactions before they are added to a batch.
 // This is equivalent to CometBFT's CheckTx.
@@ -122,7 +144,8 @@ type Config struct {
 	// MaxStoredBatches is the maximum number of batches to store.
 	// When exceeded, random batches are evicted to make room.
 	// This prevents unbounded memory growth from gossip batches.
-	// Defaults to DefaultMaxStoredBatches.
+	// Zero, the default, means no count limit: the store is bounded in bytes
+	// (consensus spec, invariant 1). A count is only for tests.
 	MaxStoredBatches int
 
 	// ReproposeAfter is how long an own batch may sit uncommitted before it
@@ -148,11 +171,18 @@ type Config struct {
 
 	// RetainCommittedFor is how long a committed batch stays fetchable for
 	// peers that fell behind, and MaxRetainedBatches caps how many are held.
-	// Defaults to DefaultRetainCommittedFor / DefaultMaxRetainedBatches.
+	// Defaults to DefaultRetainCommittedFor; a zero MaxRetainedBatches means
+	// no count limit, only bytes, and a negative one turns retention off.
 	// Negative disables retention, restoring the old delete-on-commit
 	// behaviour — which strands any node that misses the commit (#4128).
 	RetainCommittedFor time.Duration
 	MaxRetainedBatches int
+
+	// Certified reports whether a certified header names a batch. A batch it
+	// reports is never re-proposed (consensus spec, invariant 7): the DAG has
+	// it, and the executor will retire it when that certificate's block is
+	// produced. Nil means "unknown", and re-proposal falls back to age alone.
+	Certified func(types.BatchDigest) bool
 }
 
 // applyDefaults fills in default values for unset configuration fields.
@@ -171,9 +201,6 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MaxPendingCount <= 0 {
 		c.MaxPendingCount = DefaultMaxPendingCount
-	}
-	if c.MaxStoredBatches <= 0 {
-		c.MaxStoredBatches = DefaultMaxStoredBatches
 	}
 	if c.MaxStoredBatchBytes <= 0 {
 		c.MaxStoredBatchBytes = DefaultMaxStoredBatchBytes
@@ -195,9 +222,6 @@ func (c *Config) applyDefaults() {
 	}
 	if c.RetainCommittedFor == 0 {
 		c.RetainCommittedFor = DefaultRetainCommittedFor
-	}
-	if c.MaxRetainedBatches == 0 {
-		c.MaxRetainedBatches = DefaultMaxRetainedBatches
 	}
 }
 
@@ -282,9 +306,18 @@ type Worker struct {
 	// batch is absent everywhere halts the partition permanently (#4125), and
 	// without this the log cannot say whether it was pruned, evicted, or never
 	// held. Bounded by maxTombstones. Guarded by batchMu.
-	gone          map[types.BatchDigest]BatchGone
-	goneOrder     []types.BatchDigest
-	maxTombstones int
+	gone map[types.BatchDigest]BatchGone
+
+	// ownBytes is the byte size of own uncommitted batches in the store; with
+	// pendingSize it is what SubmitUser refuses against. Under batchMu.
+	ownBytes int
+	// overLimit is the full-store state, logged on transition and counted
+	// while it holds (invariant 5). overLimitChanges counts transitions.
+	overLimit        bool
+	overLimitChanges atomic.Uint64
+	lastEvictLog     time.Time
+	goneOrder        []types.BatchDigest
+	maxTombstones    int
 
 	// Committed batches kept fetchable for peers that fell behind (#4128).
 	// Separate from `batches` on purpose: `batches` is what this node still
@@ -296,9 +329,20 @@ type Worker struct {
 	retainFor     time.Duration
 	// storedBytes/retainedBytes track the byte size of the active and
 	// retention stores; guarded by batchMu.
-	storedBytes      int
-	retainedBytes    int
-	maxStoredBytes   int
+	storedBytes    int
+	retainedBytes  int
+	maxStoredBytes int
+	// maxOwnBytes bounds own uncommitted batches plus pending; SubmitUser
+	// refuses against it. It is separate from maxStoredBytes, which bounds
+	// the peer cache by eviction: a full own store must not empty the cache
+	// of what the next header's vote needs (consensus spec, invariant 8).
+	maxOwnBytes int
+	// refusing is the state SubmitUser is in, logged on transition.
+	refusing        bool
+	refusingChanges atomic.Uint64
+	// lagging is set by the primary while execution lags consensus by more
+	// than the bound; SubmitUser refuses with ErrExecutionLagging meanwhile.
+	lagging          atomic.Bool
 	maxRetainedBytes int
 
 	// Available batch digests (for header creation) - bounded queue with backpressure
@@ -346,6 +390,7 @@ func New(config Config, g *gossip.GossipLayer) *Worker {
 		maxRetained:         config.MaxRetainedBatches,
 		retainFor:           config.RetainCommittedFor,
 		maxStoredBytes:      config.MaxStoredBatchBytes,
+		maxOwnBytes:         config.MaxStoredBatchBytes,
 		maxRetainedBytes:    config.MaxRetainedBatchBytes,
 		availableBatchQueue: make(chan types.BatchDigest, config.MaxBatchQueueSize),
 		triggerBatch:        make(chan struct{}, 1),
@@ -358,7 +403,17 @@ func New(config Config, g *gossip.GossipLayer) *Worker {
 // that crossed it.
 // Returns ErrWorkerClosed if the worker has been closed.
 // Returns ErrValidationFailed (wrapped) if the transaction fails validation.
-func (w *Worker) Submit(tx []byte) error {
+// Submit accepts a transaction from an internal source -- a synthetic, an
+// anchor, a healer's re-submission -- and never refuses it for lack of room:
+// that traffic is what drains the store (#4165).
+func (w *Worker) Submit(tx []byte) error { return w.submit(tx, false) }
+
+// SubmitUser accepts a user's transaction from the API, and refuses with
+// ErrStoreFull while this worker's own uncommitted batches and pending
+// transactions fill its byte share (consensus spec, invariant 4).
+func (w *Worker) SubmitUser(tx []byte) error { return w.submit(tx, true) }
+
+func (w *Worker) submit(tx []byte, bounded bool) error {
 	if w.closed.Load() {
 		return ErrWorkerClosed
 	}
@@ -403,7 +458,34 @@ func (w *Worker) Submit(tx []byte) error {
 			"partition", w.config.Partition, "bytes", len(tx))
 	}
 
+	w.batchMu.Lock()
+	own := w.ownBytes
+	w.batchMu.Unlock()
+
 	w.mu.Lock()
+
+	// While execution lags consensus the primary proposes no batches, so
+	// user work is refused rather than piled into batches nothing will
+	// propose (consensus spec, invariant 9). System traffic passes.
+	if bounded && w.lagging.Load() {
+		w.mu.Unlock()
+		w.txnsRejected.Add(1)
+		return ErrExecutionLagging
+	}
+
+	// A user's transaction must fit beside own uncommitted batches and what
+	// is pending. When it does not, the answer is "not now", and the store
+	// stays within its budget however far commits lag.
+	if bounded && own+w.pendingSize+len(tx) > w.maxOwnBytes {
+		pending := w.pendingSize
+		w.mu.Unlock()
+		w.txnsRejected.Add(1)
+		w.setRefusing(true, own, pending)
+		return fmt.Errorf("%w: own %d + pending %d bytes of %d", ErrStoreFull, own, pending, w.maxOwnBytes)
+	}
+	if bounded && w.refusing {
+		w.setRefusing(false, own, w.pendingSize)
+	}
 
 	// Copy the transaction to avoid external modification
 	txCopy := make([]byte, len(tx))
@@ -569,7 +651,7 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 
 	// Trigger eviction if we're approaching the limit (non-blocking)
 	// Eviction is handled by dedicated goroutine to minimize lock contention
-	if len(w.batches) > w.config.MaxStoredBatches || w.storedBytes > w.maxStoredBytes {
+	if w.overStoreLimit() {
 		select {
 		case w.triggerEviction <- struct{}{}:
 		default:
@@ -584,8 +666,96 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 		element: element,
 	}
 	w.storedBytes += batchBytes(batch)
+	w.observeStore()
 
 	return nil
+}
+
+// overStoreLimit reports whether the active store exceeds its byte budget,
+// or its count limit if a test set one. The caller must hold batchMu.
+func (w *Worker) overStoreLimit() bool {
+	return w.peerBytes() > w.maxStoredBytes ||
+		(w.config.MaxStoredBatches > 0 && len(w.batches) > w.config.MaxStoredBatches)
+}
+
+// peerBytes is what the peer cache holds: the store less own batches, which
+// have their own budget (invariant 8). The caller must hold batchMu.
+func (w *Worker) peerBytes() int { return w.storedBytes - w.ownBytes }
+
+// setRefusing records whether SubmitUser is refusing, logging the transition
+// and counting it (invariant 5).
+func (w *Worker) setRefusing(on bool, own, pending int) {
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	if on == w.refusing {
+		return
+	}
+	w.refusing = on
+	w.refusingChanges.Add(1)
+	id := strconv.Itoa(int(w.config.ID))
+	if on {
+		metrics.BatchStoreRefusing.WithLabelValues(w.config.Partition, id, "store-full").Set(1)
+		slog.Warn("Refusing user submissions: own uncommitted batches fill the share (commit is lagging)",
+			"ownBytes", own, "pendingBytes", pending, "shareBytes", w.maxOwnBytes,
+			"workerID", w.config.ID, "partition", w.config.Partition)
+	} else {
+		metrics.BatchStoreRefusing.WithLabelValues(w.config.Partition, id, "store-full").Set(0)
+		slog.Info("Accepting user submissions again",
+			"ownBytes", own, "pendingBytes", pending, "shareBytes", w.maxOwnBytes,
+			"workerID", w.config.ID, "partition", w.config.Partition)
+	}
+}
+
+// SetExecutionLagging records whether the primary has stopped proposing
+// batches because execution lags consensus. While set, SubmitUser refuses with
+// ErrExecutionLagging; system traffic is never refused. Logged and reported
+// on transition only (consensus spec, invariants 5 and 10).
+func (w *Worker) SetExecutionLagging(on bool) {
+	if w.lagging.Swap(on) == on {
+		return
+	}
+	id := strconv.Itoa(int(w.config.ID))
+	if on {
+		metrics.BatchStoreRefusing.WithLabelValues(w.config.Partition, id, "execution-lagging").Set(1)
+		slog.Warn("Refusing user submissions: execution is lagging consensus",
+			"workerID", w.config.ID, "partition", w.config.Partition)
+	} else {
+		metrics.BatchStoreRefusing.WithLabelValues(w.config.Partition, id, "execution-lagging").Set(0)
+		slog.Info("Accepting user submissions again: execution has caught up",
+			"workerID", w.config.ID, "partition", w.config.Partition)
+	}
+}
+
+// observeStore publishes the store's own and peer bytes. The caller must
+// hold batchMu.
+func (w *Worker) observeStore() {
+	id := strconv.Itoa(int(w.config.ID))
+	metrics.BatchStoreBytes.WithLabelValues(w.config.Partition, id, "own").Set(float64(w.ownBytes))
+	metrics.BatchStoreBytes.WithLabelValues(w.config.Partition, id, "peer").Set(float64(w.storedBytes - w.ownBytes))
+}
+
+// storeOwn puts a batch this worker sealed into the store. Own batches are
+// never evicted; their bytes are what SubmitUser refuses against.
+func (w *Worker) storeOwn(batch *types.Batch) {
+	digest := batch.Digest()
+	w.batchMu.Lock()
+	if w.overStoreLimit() {
+		select {
+		case w.triggerEviction <- struct{}{}:
+		default:
+		}
+	}
+	element := w.lruList.PushFront(digest)
+	w.batches[digest] = &lruEntry{
+		batch:      batch,
+		element:    element,
+		own:        true,
+		lastQueued: time.Now(),
+	}
+	w.storedBytes += batchBytes(batch)
+	w.ownBytes += batchBytes(batch)
+	w.observeStore()
+	w.batchMu.Unlock()
 }
 
 // AvailableBatches returns all batch digests that are available for header creation.
@@ -609,7 +779,60 @@ func (w *Worker) AvailableBatches() []types.BatchDigest {
 
 // ConsumeAvailableBatches returns and clears all available batch digests.
 // This is used by the primary when creating a header.
+// ConsumeAvailableBatches drains the availability queue for a header. A digest
+// can wait in the queue for as long as headers are slow to take it, and by
+// then its batch may have been certified through an earlier re-queue and
+// retired by execution. Proposing it again puts one batch in two certificates
+// and the second cannot be served (run 20260904T012004Z: a header at round
+// 4524 named a batch retired 57 minutes earlier). So what is returned is
+// filtered to what is proposable: in the active store, and named by no
+// certified header (consensus spec, invariant 7).
 func (w *Worker) ConsumeAvailableBatches() []types.BatchDigest {
+	return w.proposable(w.drainAvailable())
+}
+
+// ConsumeAvailableBatchesWithin is ConsumeAvailableBatches under a byte
+// budget: it returns proposable batches, oldest first, while their sizes fit
+// the budget (always at least one when any is available), and requeues the
+// rest for a later header. It reports the bytes it consumed. The budget is
+// how a backlog is metered back in after the primary stopped proposing for
+// execution lag (consensus spec, invariant 9): draining everything into one
+// header made one block of ten to seventeen seconds and re-crossed the bound
+// (run 20260905T144928Z).
+func (w *Worker) ConsumeAvailableBatchesWithin(budget int) ([]types.BatchDigest, int) {
+	digests := w.proposable(w.drainAvailable())
+	if budget <= 0 || len(digests) == 0 {
+		return digests, w.sizeOf(digests)
+	}
+	used := 0
+	take := 0
+	for take < len(digests) {
+		size := w.sizeOf(digests[take : take+1])
+		if take > 0 && used+size > budget {
+			break
+		}
+		used += size
+		take++
+	}
+	if take < len(digests) {
+		w.RequeueBatches(digests[take:])
+	}
+	return digests[:take], used
+}
+
+func (w *Worker) sizeOf(digests []types.BatchDigest) int {
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	n := 0
+	for _, d := range digests {
+		if e, ok := w.batches[d]; ok && e.batch != nil {
+			n += e.batch.Size()
+		}
+	}
+	return n
+}
+
+func (w *Worker) drainAvailable() []types.BatchDigest {
 	var result []types.BatchDigest
 
 	// Drain all available batches from channel without blocking
@@ -688,6 +911,9 @@ func (w *Worker) PruneCommitted(committed []types.BatchDigest, info CommitInfo) 
 			w.lruList.Remove(entry.element)
 			delete(w.batches, digest)
 			w.storedBytes -= batchBytes(entry.batch)
+			if entry.own {
+				w.ownBytes -= batchBytes(entry.batch)
+			}
 			// Committed, so it leaves the active store and stops being
 			// re-proposed — but keep it fetchable for a while, because a peer
 			// that missed this commit has nowhere else to get it (#4128).
@@ -697,6 +923,7 @@ func (w *Worker) PruneCommitted(committed []types.BatchDigest, info CommitInfo) 
 		}
 	}
 
+	w.observeStore()
 	slog.Debug("Pruned committed batches",
 		"count", len(committed),
 		"pruned", pruned,
@@ -792,25 +1019,7 @@ func (w *Worker) createAndBroadcastBatch() {
 
 	// Store locally first (eviction is handled by dedicated goroutine)
 	digest := batch.Digest()
-	w.batchMu.Lock()
-	// Trigger eviction if we're approaching the limit (non-blocking)
-	if len(w.batches) > w.config.MaxStoredBatches || w.storedBytes > w.maxStoredBytes {
-		select {
-		case w.triggerEviction <- struct{}{}:
-		default:
-			// Eviction already triggered or in progress
-		}
-	}
-	// Add new batch to front of LRU list (most recently used)
-	element := w.lruList.PushFront(digest)
-	w.batches[digest] = &lruEntry{
-		batch:      batch,
-		element:    element,
-		own:        true,
-		lastQueued: time.Now(),
-	}
-	w.storedBytes += batchBytes(batch)
-	w.batchMu.Unlock()
+	w.storeOwn(batch)
 
 	// Update metrics immediately after creating the batch
 	// This must happen before enqueueing to ensure metrics are updated even if shutdown occurs
@@ -953,18 +1162,7 @@ func (w *Worker) reproposeLoop() {
 		case <-ticker.C:
 		}
 
-		var stale []types.BatchDigest
-		var staleBatches []*types.Batch
-		now := time.Now()
-		w.batchMu.Lock()
-		for digest, entry := range w.batches {
-			if entry.own && now.Sub(entry.lastQueued) > w.config.ReproposeAfter {
-				stale = append(stale, digest)
-				staleBatches = append(staleBatches, entry.batch)
-				entry.lastQueued = now
-			}
-		}
-		w.batchMu.Unlock()
+		stale, staleBatches := w.staleOwnBatches(time.Now())
 
 		// Re-BROADCAST the batch bytes, not just the digest (#4159). A batch
 		// is broadcast exactly once at creation; if that publish was lost
@@ -1036,16 +1234,23 @@ func (w *Worker) performEviction() {
 	w.batchMu.Lock()
 	defer w.batchMu.Unlock()
 
-	if len(w.batches) <= w.config.MaxStoredBatches && w.storedBytes <= w.maxStoredBytes {
+	if !w.overStoreLimit() {
+		w.setOverLimit(false, 0)
 		return // No eviction needed unless we exceed a limit
 	}
 
-	// Evict down to 90% of BOTH caps: the count cap and the byte cap. The
-	// byte cap is the one that actually bounds memory (#4164); the old
-	// count-only target also evicted to 110% of the cap, which parked the
-	// store permanently above its own limit.
-	targetCount := int(float64(w.config.MaxStoredBatches) * 0.9)
+	// Evict down to 90% of the byte cap, which is what bounds memory
+	// (#4164, consensus spec invariant 1), and of the count cap if a test
+	// set one. Evicting to 90% rather than to the cap keeps the store from
+	// parking permanently above its own limit.
+	targetCount := 0 // no count limit unless a test set one
+	if c := w.config.MaxStoredBatches; c > 0 {
+		targetCount = max(1, c*9/10)
+	}
 	targetBytes := int(float64(w.maxStoredBytes) * 0.9)
+	overTarget := func() bool {
+		return w.peerBytes() > targetBytes || (targetCount > 0 && len(w.batches) > targetCount)
+	}
 
 	// Never evict a batch this worker AUTHORED and has not yet seen committed.
 	// Bullshark commits leaders in causal order, so an early leader can be
@@ -1057,7 +1262,7 @@ func (w *Worker) performEviction() {
 	// moves them to `retained`. Walk from the LRU back (least-recently-used)
 	// toward the front, skipping own entries.
 	evicted, skippedOwn, skippedPinned := 0, 0, 0
-	for e := w.lruList.Back(); e != nil && (len(w.batches) > targetCount || w.storedBytes > targetBytes); {
+	for e := w.lruList.Back(); e != nil && overTarget(); {
 		prev := e.Prev()
 		lruDigest := e.Value.(types.BatchDigest)
 		entry, ok := w.batches[lruDigest]
@@ -1085,26 +1290,50 @@ func (w *Worker) performEviction() {
 		e = prev
 	}
 
+	w.observeStore()
 	if evicted > 0 {
-		slog.Warn("Evicted batches due to storage limit (LRU)",
+		// A summary at most once a second per worker; the rest is Debug.
+		// Run 20260903T173742Z logged 208,150 of these in nine minutes.
+		level := slog.LevelDebug
+		if time.Since(w.lastEvictLog) >= time.Second {
+			level, w.lastEvictLog = slog.LevelWarn, time.Now()
+		}
+		slog.Log(context.Background(), level, "Evicted batches due to storage limit (LRU)",
 			"evicted", evicted,
 			"remaining", len(w.batches),
 			"skippedOwnUncommitted", skippedOwn,
 			"skippedPinned", skippedPinned,
 			"workerID", w.config.ID)
 	}
-	// Could not reach the target because our own uncommitted batches are not
-	// evictable: the store is growing because OUR batches are not committing.
-	// That is the pressure that #4159 turned into a permanent wedge when these
-	// batches were silently dropped; surface it rather than lose data a late
-	// commit will need.
-	if (len(w.batches) > targetCount || w.storedBytes > targetBytes) && skippedOwn > 0 {
-		slog.Warn("Batch store over limit with un-evictable own uncommitted batches (commit is lagging)",
+	// The peer cache could not reach its target because what is left is
+	// pinned: headers are waiting on more than the budget holds. A state,
+	// logged when it changes and counted while it holds (invariant 5). Own
+	// batches have their own budget and are SubmitUser's to refuse on.
+	w.setOverLimit(overTarget() && skippedPinned > 0, skippedPinned)
+}
+
+// setOverLimit records whether the peer cache is over its budget with only
+// pinned batches left to evict, logging the transition and counting it. The
+// caller must hold batchMu.
+func (w *Worker) setOverLimit(over bool, pinned int) {
+	if over == w.overLimit {
+		return
+	}
+	w.overLimit = over
+	w.overLimitChanges.Add(1)
+	if over {
+		slog.Warn("Peer batch cache over budget with only pinned batches left (headers are waiting on more than it holds)",
 			"stored", len(w.batches),
-			"storedBytes", w.storedBytes,
-			"limit", w.config.MaxStoredBatches,
-			"limitBytes", w.maxStoredBytes,
-			"ownUncommitted", skippedOwn,
+			"peerBytes", w.peerBytes(),
+			"ownBytes", w.ownBytes,
+			"budgetBytes", w.maxStoredBytes,
+			"pinned", pinned,
+			"workerID", w.config.ID)
+	} else {
+		slog.Info("Peer batch cache back within budget",
+			"stored", len(w.batches),
+			"peerBytes", w.peerBytes(),
+			"budgetBytes", w.maxStoredBytes,
 			"workerID", w.config.ID)
 	}
 }
@@ -1200,4 +1429,60 @@ func (w *Worker) BatchDigests() []types.BatchDigest {
 // String returns a string representation of the worker.
 func (w *Worker) String() string {
 	return fmt.Sprintf("Worker{id=%d, partition=%s}", w.config.ID, w.config.Partition)
+}
+
+// staleOwnBatches returns the own batches that have waited longer than
+// ReproposeAfter without a certificate, and stamps them as re-queued. A
+// batch a certified header already names is not stale whatever its age: the
+// DAG has it, and proposing it again puts one batch in two certificates
+// (consensus spec, invariant 7; C5, #4210). The caller re-broadcasts and
+// re-queues what is returned.
+func (w *Worker) staleOwnBatches(now time.Time) (stale []types.BatchDigest, batches []*types.Batch) {
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	certified := 0
+	for digest, entry := range w.batches {
+		if !entry.own || now.Sub(entry.lastQueued) <= w.config.ReproposeAfter {
+			continue
+		}
+		if w.config.Certified != nil && w.config.Certified(digest) {
+			certified++
+			entry.lastQueued = now // ask again after another ReproposeAfter, not every tick
+			continue
+		}
+		stale = append(stale, digest)
+		batches = append(batches, entry.batch)
+		entry.lastQueued = now
+	}
+	if certified > 0 {
+		slog.Debug("Own batches already certified, not re-proposed", "count", certified, "worker", w.config.ID)
+	}
+	return stale, batches
+}
+
+// proposable filters digests down to those whose batch is still in the active
+// store and that no certified header names.
+func (w *Worker) proposable(digests []types.BatchDigest) []types.BatchDigest {
+	if len(digests) == 0 {
+		return digests
+	}
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	kept := digests[:0]
+	dropped := 0
+	for _, d := range digests {
+		if _, ok := w.batches[d]; !ok {
+			dropped++
+			continue
+		}
+		if w.config.Certified != nil && w.config.Certified(d) {
+			dropped++
+			continue
+		}
+		kept = append(kept, d)
+	}
+	if dropped > 0 {
+		slog.Debug("Queued batches no longer proposable", "dropped", dropped, "worker", w.config.ID)
+	}
+	return kept
 }

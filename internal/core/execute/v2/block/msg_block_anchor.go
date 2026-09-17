@@ -7,7 +7,11 @@
 package block
 
 import (
+	"log/slog"
 	"strings"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
@@ -74,33 +78,104 @@ func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (_ *pro
 }
 
 func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) error {
-	// Record the anchor signature (proof-authorized anchors may not have one)
-	if ctx.blockAnchor.Signature != nil {
-		err := batch.Account(ctx.transaction.Header.Principal).
-			Transaction(ctx.transaction.ID().Hash()).
-			ValidatorSignatures().
-			Add(ctx.blockAnchor.Signature)
+	// Where the anchor's stream stands. An anchor at or below Delivered is a
+	// copy of one that executed: tossed, nothing recorded, not an error — a
+	// re-sent anchor arrives beside ones that are new (executor spec, "One
+	// chain per pair, one stage per chain").
+	str, err := ctx.Executor.streamFor(ctx.sequenced, func(hash [32]byte) (*protocol.Transaction, error) {
+		return ctx.getTransaction(batch, hash) // the bundle, then staging, then the store
+	})
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	pos, err := ctx.Block.positionOf(str)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	txnHash := ctx.transaction.ID().Hash()
+	if ctx.sequenced.Number <= pos.delivered {
+		// Executed, so its transaction is stored: the copy is stored as a
+		// reference to it (storedForm)
+		ctx.markTransactionRecorded(txnHash)
+		mExecSyntheticAnchor.WithLabelValues("anchor-tossed").Inc()
+		return nil
+	}
+
+	// The block's view of the anchor's validator signatures: read once,
+	// counted in memory, written once (#4224)
+	sigs, err := ctx.Block.anchorSignaturesFor(batch, ctx.transaction)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// The anchor transaction is stored once, under its own hash, by the first
+	// copy to arrive. Every copy is stored as its signature over a reference
+	// to it (storedForm), so eight validators' copies cost one body.
+	if len(sigs.sigs) == 0 {
+		err = batch.Message(txnHash).Main().Put(&messaging.TransactionMessage{Transaction: ctx.transaction})
 		if err != nil {
-			// A system error occurred
-			return errors.UnknownError.Wrap(err)
+			return errors.UnknownError.WithFormat("store anchor: %w", err)
+		}
+	}
+	ctx.markTransactionRecorded(txnHash)
+
+	// Count the signature (proof-authorized anchors may not have one). A
+	// second copy from the same validator is no second signature.
+	newSigner := ctx.blockAnchor.Signature == nil
+	if ctx.blockAnchor.Signature != nil {
+		newSigner = sigs.add(ctx.blockAnchor.Signature)
+		if ctx.blockAnchor.Proof == nil {
+			// The copy's word on what its sender has delivered of our anchors
+			// releases the anchor cache (#4232); the signer was verified by
+			// check
+			noteAnchorDelivered(ctx.MessageContext, ctx.sequenced, ctx.blockAnchor.Delivered)
 		}
 	}
 
-	// Add the signature to the signature chain
-	err := batch.Account(ctx.transaction.Header.Principal).
-		Transaction(ctx.transaction.ID().Hash()).
-		RecordHistory(ctx.message)
-	if err != nil {
-		return errors.UnknownError.WithFormat("record history: %w", err)
+	// One signature-chain entry per distinct signer: that is the chain's
+	// purpose
+	if newSigner {
+		err = batch.Account(ctx.transaction.Header.Principal).
+			Transaction(txnHash).
+			RecordHistory(ctx.message)
+		if err != nil {
+			return errors.UnknownError.WithFormat("record history: %w", err)
+		}
 	}
 
 	ready, err := x.txnIsReady(batch, ctx)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
+	if ctx.Executor.logger.Enabled(ctx.Context, slog.LevelDebug) {
+		var signer []byte
+		if ctx.blockAnchor.Signature != nil {
+			signer = ctx.blockAnchor.Signature.GetPublicKey()
+		}
+		ctx.Executor.logger.Debug("Anchor signature", "module", "anchoring", "block", ctx.Block.Index, "source", ctx.sequenced.Source, "seq", ctx.sequenced.Number, "signatures", len(sigs.sigs), "ready", ready, "signer", logging.AsHex(signer).Slice(0, 4), "txid", ctx.transaction.ID())
+	}
 	if !ready {
-		// Mark the message as pending
-		_, err = ctx.childWith(ctx.sequenced.Message).recordPending(batch)
+		// Below its quorum: an entry in the anchor stream's stage at its
+		// number, collected, runnable once the signatures reach the threshold
+		// or a validated hash at its number is its own. Nothing is recorded
+		// pending (executor spec, "One chain per pair, one stage per chain").
+		// The hash a proof over the source's anchor chain validates is the
+		// transaction's canonical stored form, without a principal.
+		stored := new(protocol.Transaction)
+		stored.Body = ctx.transaction.Body
+		ctx.Block.staging.Hold(str.id(), ctx.sequenced.Number, &execute.Held{
+			ID:        ctx.sequenced.ID(),
+			Message:   ctx.sequenced,
+			Collected: true,
+			Hash:      *(*[32]byte)(stored.GetHash()),
+		})
+		mExecSyntheticAnchor.WithLabelValues("anchor-collected").Inc()
+		return nil
+	}
+
+	// At the quorum: the set is written with the execution it authorizes
+	err = sigs.write(batch)
+	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
@@ -274,5 +349,5 @@ func (x BlockAnchor) checkSignature(ctx *blockAnchorContext) error {
 
 func (x BlockAnchor) txnIsReady(batch *database.Batch, ctx *blockAnchorContext) (bool, error) {
 	// One statement of the rule, shared with staging (#4169 step 3b).
-	return ctx.Executor.anchorIsAdmissible(batch, ctx.blockAnchor.Proof, ctx.transaction, ctx.sequenced.Source)
+	return ctx.Block.anchorIsAdmissible(batch, ctx.blockAnchor.Proof, ctx.transaction, ctx.sequenced.Source)
 }

@@ -93,9 +93,10 @@ func buildRun(pos *streamPosition, arriving map[uint64]*arrival, limit uint64) (
 			taken[n] = true
 
 		default:
-			// Not in this block — is it already staged?
+			// Not in this block — is it already staged, and may it run? A
+			// collected entry waits here until the proven set covers it.
 			id, held := pos.idOf(n)
-			if !held {
+			if !held || !pos.runnable(n) {
 				goto done
 			}
 			run = append(run, runEntry{number: n, staged: id, envIdx: -1})

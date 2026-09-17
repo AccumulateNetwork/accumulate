@@ -44,16 +44,14 @@ func loadMessage(batch *database.Batch, txid *url.TxID) (*api.MessageRecord[mess
 	r.Result = status.Result
 	r.Received = status.Received
 
-	// Load produced and cause
-	p1, err := batch.Transaction2(txid.Hash()).Produced().Get()
+	// Load produced and cause. Produced is one set, written once per produced
+	// message (#4236); it used to be read from two records and returned
+	// twice.
+	produced, err := batch.Transaction2(txid.Hash()).Produced().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load produced: %w", err)
 	}
-	p2, err := batch.Message(txid.Hash()).Produced().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load produced: %w", err)
-	}
-	r.Produced, _ = api.MakeRange(append(p1, p2...), 0, 0, func(v *url.TxID) (*api.TxIDRecord, error) {
+	r.Produced, _ = api.MakeRange(produced, 0, 0, func(v *url.TxID) (*api.TxIDRecord, error) {
 		return &api.TxIDRecord{Value: v}, nil
 	})
 

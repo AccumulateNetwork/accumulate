@@ -12,8 +12,10 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -52,6 +54,19 @@ type DAG struct {
 	lastCommitRound types.Round
 	// latestRound is the highest round number seen.
 	latestRound types.Round
+	// certifiedBatches maps each batch digest a certified header names to
+	// the highest round that named it. A worker asks it before re-proposing:
+	// a batch in a certified header is never proposed again (consensus spec,
+	// invariant 7). Pruned with the rounds, by certifiedByRound.
+	certifiedBatches map[types.BatchDigest]types.Round
+	certifiedByRound map[types.Round][]types.BatchDigest
+	// gcCutoff is the round below which everything has been collected, so a
+	// collection walks only the rounds the cutoff moved over.
+	gcCutoff types.Round
+	// uncommittedDropped counts rounds collected by the round advance that
+	// were never committed here (#4239): the executor halted and the network
+	// went on. A node that needed them is stranded, not lagging.
+	uncommittedDropped types.Round
 }
 
 // NewDAG creates a new DAG with the specified garbage collection depth.
@@ -61,7 +76,10 @@ func NewDAG(gcDepth types.Round) *DAG {
 	return &DAG{
 		rounds:      make(map[types.Round]map[authorKey]*types.Certificate),
 		digestIndex: make(map[types.CertificateDigest]*types.Certificate),
-		gcDepth:     gcDepth,
+
+		certifiedBatches: make(map[types.BatchDigest]types.Round),
+		certifiedByRound: make(map[types.Round][]types.BatchDigest),
+		gcDepth:          gcDepth,
 	}
 }
 
@@ -124,13 +142,38 @@ func (d *DAG) Insert(cert *types.Certificate) error {
 
 	// Add to digest index for O(1) lookups
 	d.digestIndex[cert.Digest()] = cert
+	if cert.Header != nil {
+		for _, e := range cert.Header.Payload {
+			if r, ok := d.certifiedBatches[e.Digest]; !ok || round > r {
+				d.certifiedBatches[e.Digest] = round
+			}
+			d.certifiedByRound[round] = append(d.certifiedByRound[round], e.Digest)
+		}
+	}
 
-	// Update latest round
+	// Update latest round. The round advance is a collection point too: the
+	// DAG holds gcDepth rounds behind the frontier whether or not this node
+	// is committing, so a halted executor does not grow it without bound
+	// (#4239).
 	if round > d.latestRound {
 		d.latestRound = round
+		if round > d.gcDepth {
+			d.collectLocked(round - d.gcDepth)
+		}
 	}
 
 	return nil
+}
+
+// HasCertifiedBatch reports whether a certified header in the DAG names the
+// batch. Once it does, the batch's author must not propose it again
+// (consensus spec, invariant 7): the executor will need it when that
+// certificate's block is produced, and again is a duplicate.
+func (d *DAG) HasCertifiedBatch(digest types.BatchDigest) bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	_, ok := d.certifiedBatches[digest]
+	return ok
 }
 
 // InsertGenesis inserts a genesis certificate (round 0) without parent validation.
@@ -266,31 +309,66 @@ func (d *DAG) GCDepth() types.Round {
 	return d.gcDepth
 }
 
-// GarbageCollect removes rounds older than (commitRound - gcDepth).
-// This should be called periodically to prevent unbounded memory growth.
+// GarbageCollect records a commit at commitRound and removes rounds older
+// than (commitRound - gcDepth). The round advance collects too (Insert), so
+// the DAG is bounded whether or not commits continue.
 func (d *DAG) GarbageCollect(commitRound types.Round) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if commitRound <= d.gcDepth {
-		return
-	}
-
-	cutoff := commitRound - d.gcDepth
-
-	for round := range d.rounds {
-		if round < cutoff {
-			// Remove certificates from digest index before deleting round
-			for _, cert := range d.rounds[round] {
-				delete(d.digestIndex, cert.Digest())
-			}
-			delete(d.rounds, round)
-		}
-	}
-
 	if commitRound > d.lastCommitRound {
 		d.lastCommitRound = commitRound
 	}
+	if commitRound > d.gcDepth {
+		d.collectLocked(commitRound - d.gcDepth)
+	}
+}
+
+// collectLocked removes every round below cutoff, walking only the rounds
+// the cutoff moved over since the last collection. Rounds above the commit
+// floor that it removes were never committed here; they are counted, and the
+// first is reported, because the node that needed them is stranded.
+func (d *DAG) collectLocked(cutoff types.Round) {
+	if cutoff <= d.gcCutoff {
+		return
+	}
+	var removed, uncommitted types.Round
+	for round := d.gcCutoff; round < cutoff; round++ {
+		if certs, ok := d.rounds[round]; ok {
+			for _, cert := range certs {
+				delete(d.digestIndex, cert.Digest())
+			}
+			delete(d.rounds, round)
+			removed++
+			if round > d.lastCommitRound {
+				uncommitted++
+			}
+		}
+		for _, digest := range d.certifiedByRound[round] {
+			if d.certifiedBatches[digest] == round {
+				delete(d.certifiedBatches, digest)
+			}
+		}
+		delete(d.certifiedByRound, round)
+	}
+	d.gcCutoff = cutoff
+	metrics.DAGGCRoundsRemovedTotal.Add(float64(removed))
+	if uncommitted > 0 {
+		if d.uncommittedDropped == 0 {
+			slog.Warn("Collecting rounds this node never committed: the frontier is more than the DAG depth ahead of the last commit",
+				"lastCommit", d.lastCommitRound, "cutoff", cutoff, "gcDepth", d.gcDepth)
+		}
+		d.uncommittedDropped += uncommitted
+		metrics.DAGUncommittedRoundsDroppedTotal.Add(float64(uncommitted))
+	}
+}
+
+// UncommittedRoundsDropped is the number of rounds the round advance has
+// collected that this node never committed.
+func (d *DAG) UncommittedRoundsDropped() types.Round {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.uncommittedDropped
 }
 
 // RoundCount returns the number of certificates in a given round.

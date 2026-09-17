@@ -122,3 +122,40 @@ ReceiptOptions:
       type: bool
     - name: ForHeight
       type: uint
+
+MajorHeaderRangeOptions:
+  fields:
+    - name: Partition
+      description: is the partition to serve; only the directory serves this
+      type: string
+    - name: Start
+      description: is the first major block index
+      type: uint
+    - name: End
+      description: is the last major block index, inclusive
+      type: uint
+
+AnchorReceiptOptions:
+  fields:
+    - name: Partition
+      description: is the partition whose BPT root is being bound, from the first call's Receipt.Partition
+      type: string
+    - name: BptRoot
+      description: is where the first call's receipt terminates
+      type: hash
+    - name: AtOrAfter
+      description: asks for a receipt terminating at a directory root no older than this block. Zero, the default, returns the oldest receipt that works, which is the stable answer
+      type: uint
+      optional: true
+
+MinorRootRangeOptions:
+  fields:
+    - name: Partition
+      description: is the partition to serve; only the directory serves this
+      type: string
+    - name: Since
+      description: is the client's last verified minor block
+      type: uint
+    - name: Until
+      description: is the target minor block, or zero for as far as possible
+      type: uint

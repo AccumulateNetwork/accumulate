@@ -186,13 +186,14 @@ func (a *ExecutorApp) Execute(req *ExecuteRequest) (*ExecuteResponse, error) {
 func (a *ExecutorApp) Commit(req *CommitRequest) (*CommitResponse, error) {
 	s := req.Block.(execute.BlockState)
 
-	// Discard changes if the block is empty
-	if s.IsEmpty() {
-		s.Discard()
-		return &CommitResponse{}, nil
-	}
-
+	// An empty block still commits: the block's Commit discards the batch
+	// itself, and commits the cache and staging transactions the block
+	// began, as the node does. Discarding here left the cache's newest block
+	// and staging's releases behind on quiet partitions.
 	err := s.Commit()
+	if s.IsEmpty() {
+		return &CommitResponse{}, errors.UnknownError.Wrap(err)
+	}
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

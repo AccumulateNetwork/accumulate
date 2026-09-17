@@ -194,6 +194,11 @@ func TestRemoveLastAuthorityCantInherit(t *testing.T) {
 		}),
 	)
 
+	// This test reaches past the data model into BVN0's key-value store, so
+	// alice has to be on BVN0. Pin her there rather than depending on where
+	// her hash falls: even bucket routing (#4136) moved her off it.
+	sim.SetRoute(alice, "BVN0")
+
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e12)
 	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{

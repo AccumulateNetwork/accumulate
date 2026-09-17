@@ -14,40 +14,38 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// TestNewRouteTree spells out the conversion for seven partitions, where the
+// prefix table is ragged: one partition holds a 2-bit prefix and six hold 3-bit
+// prefixes, so the first gets twice the buckets of each of the others. That
+// skew is the thing #4136 is about, and phase 1 carries it over unchanged.
 func TestNewRouteTree(t *testing.T) {
+	const eighth = BucketCount / 8
+
 	routes := buildSimpleTable([]string{"A", "B", "C", "D", "E", "F", "G"}, 0, 0)
 	tree, err := NewRouteTree(&protocol.RoutingTable{Routes: routes})
 	require.NoError(t, err)
+
 	require.Equal(t, &RouteTree{
 		overrides: map[[32]uint8]string{},
-		root: prefixTreeBranch{
-			bits: 2,
-			children: []prefixTreeNode{
-				prefixTreeLeaf("A"),
-				prefixTreeBranch{
-					bits: 1,
-					children: []prefixTreeNode{
-						prefixTreeLeaf("B"),
-						prefixTreeLeaf("C"),
-					},
-				},
-				prefixTreeBranch{
-					bits: 1,
-					children: []prefixTreeNode{
-						prefixTreeLeaf("D"),
-						prefixTreeLeaf("E"),
-					},
-				},
-				prefixTreeBranch{
-					bits: 1,
-					children: []prefixTreeNode{
-						prefixTreeLeaf("F"),
-						prefixTreeLeaf("G"),
-					},
-				},
-			},
-		},
+		buckets: &bucketTable{ranges: []bucketRange{
+			{Start: 0 * eighth, End: 2 * eighth, Partition: "A"},
+			{Start: 2 * eighth, End: 3 * eighth, Partition: "B"},
+			{Start: 3 * eighth, End: 4 * eighth, Partition: "C"},
+			{Start: 4 * eighth, End: 5 * eighth, Partition: "D"},
+			{Start: 5 * eighth, End: 6 * eighth, Partition: "E"},
+			{Start: 6 * eighth, End: 7 * eighth, Partition: "F"},
+			{Start: 7 * eighth, End: 8 * eighth, Partition: "G"},
+		}},
 	}, tree)
+}
+
+func TestBucketOf(t *testing.T) {
+	// The bucket is the leading BucketBits, so the rest of the routing number
+	// must not reach it.
+	require.Equal(t, uint32(0), BucketOf(0))
+	require.Equal(t, uint32(0), BucketOf(1<<(64-BucketBits)-1))
+	require.Equal(t, uint32(1), BucketOf(1<<(64-BucketBits)))
+	require.Equal(t, uint32(BucketCount-1), BucketOf(^uint64(0)))
 }
 
 func FuzzRouteTree_Route(f *testing.F) {

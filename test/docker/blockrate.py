@@ -19,7 +19,7 @@ samples. Block production is bursty — a batch, then a pause — so an
 instantaneous rate says more about when you looked than about the network.
 
 Usage:
-    blockrate.py --api http://localhost:26660/v3 --duration 120 --interval 5
+    blockrate.py --api http://localhost:26680/v3 --duration 120 --interval 5
     blockrate.py --api ... --json baseline.json     # record for before/after
 """
 
@@ -79,7 +79,7 @@ def discover(api):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--api", default="http://localhost:26660/v3")
+    ap.add_argument("--api", default="http://localhost:26680/v3")
     ap.add_argument("--duration", type=int, default=120, help="seconds to sample")
     ap.add_argument("--interval", type=int, default=5, help="seconds between samples")
     ap.add_argument("--partitions", help="comma-separated; default: discovered")

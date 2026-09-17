@@ -7,7 +7,7 @@
 
 Every tool in this directory used to carry its own copy of the shape of the
 network: ``["Directory","BVN1","BVN2","BVN3"]`` in soakmon and streams, the
-host ports ``seq 26660 26671`` in soak.sh, a partition list in blockrate, an
+host ports ``seq 26680 26691`` in soak.sh, a partition list in blockrate, an
 explicit container roster in monitor.py and monitoring.py. Six copies of one
 fact.
 
@@ -27,7 +27,7 @@ install, and the file's shape is fixed by `accumulated init network`.
 
 The port mapping is the one thing NOT in docker-network.yml: the compose
 publishes each node's container port 26660 on a host port, allocated in the
-same order the nodes appear here, starting at 26660. That ordering is the
+same order the nodes appear here, starting at 26680. That ordering is the
 contract between the two files; `node_ports` encodes it, and
 `check_ports_against_compose` verifies it rather than trusting it.
 """
@@ -41,7 +41,11 @@ COMPOSE_YML = os.path.join(HERE, "docker-compose.yml")
 
 # The host port the first node is published on. Subsequent nodes take the
 # next port, in docker-network.yml order.
-BASE_HOST_PORT = 26660
+#
+# Not 26660: this host runs a mainnet follower on 127.0.0.1:26660, so a
+# container publishing 0.0.0.0:26660 cannot bind and that validator never
+# starts, while the rest of the network comes up looking healthy.
+BASE_HOST_PORT = 26680
 
 _ID = re.compile(r'^\s*-\s*id:\s*"?([A-Za-z0-9]+)"?\s*$')
 _NODE = re.compile(r'^\s*-\s*listenAddress:')
@@ -173,7 +177,7 @@ def check_ports_against_compose(net_path=None, compose_path=None):
     """Verify the derived host ports are the ones the compose actually publishes.
 
     `node_ports` encodes a convention (allocated in declaration order from
-    26660) that lives in a different file from the one it is derived from.
+    BASE_HOST_PORT) that lives in a different file from the one it is derived from.
     Conventions drift. Returning the mismatch lets a caller fail loudly at
     startup instead of polling dead ports for twelve hours; returns None when
     they agree.

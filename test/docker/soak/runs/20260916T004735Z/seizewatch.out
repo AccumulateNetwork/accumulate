@@ -1,0 +1,17 @@
+2026-09-16T00:52:32 stuck=n/a stuckStream= worst=none undeliv=none
+2026-09-16T00:52:32 seizewatch: no node exports a stuck-heal count; tripping on gap and undelivered only
+2026-09-16T00:53:17 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=2 undeliv=synthetic BVN2->BVN1 undeliv=1720
+2026-09-16T00:54:03 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=202 undeliv=synthetic BVN2->BVN1 undeliv=914
+2026-09-16T00:54:48 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=943 undeliv=synthetic BVN2->BVN1 undeliv=886
+2026-09-16T00:55:33 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=1463 undeliv=synthetic BVN2->BVN1 undeliv=885
+2026-09-16T00:56:18 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=1913 undeliv=synthetic BVN2->BVN1 undeliv=814
+2026-09-16T00:57:03 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=2229 undeliv=synthetic BVN2->BVN1 undeliv=889
+2026-09-16T00:57:48 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=2536 undeliv=synthetic BVN2->BVN1 undeliv=887
+2026-09-16T00:58:33 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=2883 undeliv=synthetic BVN2->BVN1 undeliv=819
+2026-09-16T00:59:18 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=3318 undeliv=synthetic BVN2->BVN1 undeliv=1032
+2026-09-16T01:00:03 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=3772 undeliv=synthetic BVN2->BVN1 undeliv=722
+2026-09-16T01:00:48 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=4159 undeliv=synthetic BVN2->BVN1 undeliv=605
+2026-09-16T01:01:33 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=4638 undeliv=synthetic BVN2->BVN1 undeliv=933
+2026-09-16T01:02:18 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=5024 undeliv=synthetic BVN2->BVN1 undeliv=908
+2026-09-16T01:03:03 stuck=n/a stuckStream= worst=BVN1->BVN2 gap=79 deliv=22400 undeliv=synthetic BVN2->BVN1 undeliv=1161
+SEIZED at 2026-09-16T01:03:03 :: stuck=n/a stuckStream= worst=BVN1->BVN2 gap=79 deliv=22400 undeliv=synthetic BVN2->BVN1 undeliv=1161

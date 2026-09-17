@@ -64,6 +64,23 @@ func (d *Database) Deep() *Database {
 	return &e
 }
 
+// Unisolated returns a view of this database whose batches read the
+// latest committed state and pin no version.
+//
+// BlockchainDB keeps isolation for a batch by remembering, for every
+// commit made while the batch is open, what each rewritten key held
+// before -- a store read per dynamic entry per commit. A reader that
+// wants the latest state gains nothing from that: CheckTx validates a
+// submission against whatever has been committed so far, and taking an
+// ordinary batch for it meant a reader was almost always open while a
+// block committed. On a store that keeps isolation for free this returns
+// an equivalent database.
+func (d *Database) Unisolated() *Database {
+	e := *d
+	e.store = keyvalue.Unisolated(d.store)
+	return &e
+}
+
 func OpenInMemory(logger logging.Logger) *Database {
 	store := memory.New(nil)
 	return New(store, logger)
