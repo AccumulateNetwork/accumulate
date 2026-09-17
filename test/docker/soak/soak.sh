@@ -477,13 +477,16 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
     h=$(curl -s -X POST http://localhost:26680/v3 -H 'content-type: application/json' \
       -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"scope":"acc://dn.acme/ledger"}}' \
       | grep -oE '"index":[0-9]+' | head -1 | cut -d: -f2)
+    # Heals = entries that came back in answer to a span request AND filled a
+    # gap (#4283). This used to read syntheticHeals/anchorHeals off
+    # consensus-status, which no node has reported since healing became
+    # receiver-pull, so every run's record said "heals 0 -> 0" -- including
+    # 20260917T212457Z, where 1,291 requests were answered and 2,231 entries
+    # applied. A run record that says zero over that is not a record.
     heals=0
     for c in $(docker ps --filter name=acc-bvn --format '{{.Names}}'); do
-      x=$(docker exec -e PARTS="$PARTS" "$c" sh -c '
-        nid=$(curl -s -X POST http://localhost:26680/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"node-info\",\"params\":{}}" | grep -oE "\"peerID\":\"[^\"]+\"" | cut -d"\"" -f4)
-        for part in $PARTS; do
-          curl -s -X POST http://localhost:26680/v3 -H "content-type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"consensus-status\",\"params\":{\"partition\":\"$part\",\"nodeID\":\"$nid\"}}" | grep -oE "\"(syntheticHeals|anchorHeals)\":[0-9]+" | cut -d: -f2
-        done' 2>/dev/null | paste -sd+ - | bc 2>/dev/null)
+      x=$(docker exec "$c" sh -c 'wget -q -O - http://127.0.0.1:26670/metrics 2>/dev/null' \
+        | grep -E '^accumulate_conductor_heal_entries_total\{[^}]*outcome="applied"' | awk '{s+=$NF} END {printf "%d", s}')
       heals=$((heals + ${x:-0}))
     done
     # Per-container stats alongside the fleet sum: the fleet CPU column dated
