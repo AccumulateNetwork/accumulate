@@ -1704,11 +1704,11 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       <div class=pill><div class="n yel" id=hnot>—</div><div class=l>not-yet (in flight at source)</div></div>
       <div class=pill><div class="n red" id=hmiss>—</div><div class=l>miss (source cache lacks it)</div></div>
       <div class=pill><div class="n red" id=hfail>—</div><div class=l>failed</div></div>
-      <div class=pill><div class="n" id=hheld>—</div><div class=l id=hheldl>held in staging</div></div>
+      <div class=pill><div class="n" id=hheld>—</div><div class=l id=hheldl>txs held in staging</div></div>
     </div>
     <svg class=spark id=spHeal viewBox="0 0 300 44" preserveAspectRatio=none></svg>
     <table id=hpart><thead><tr><th>stream (source → destination)</th><th>answered (#)</th><th>requests for txs in flight (#)</th><th>miss (#)</th><th>failed (#)</th></tr></thead><tbody></tbody></table>
-    <table id=hheldt><thead><tr><th>held in staging</th><th>entries (#)</th><th>bytes (B)</th></tr></thead><tbody></tbody></table>
+    <table id=hheldt><thead><tr><th>held in staging (source → ledger)</th><th>txs (#)</th><th>size</th></tr></thead><tbody></tbody></table>
   </div>
 </div>
 <div class=panel>
@@ -1831,6 +1831,7 @@ async function tick(){
     card('Nodes',fmt(ns.count||0),`${fmt(ns.rssAvgMiB||0)} MiB avg · ${fmt(ns.rssMaxMiB||0)} max · heap ${fmt((ns.mem||{}).heapMaxMiB||0)} · GC ${(ns.mem||{}).gcPerSecMax!=null?(ns.mem||{}).gcPerSecMax.toFixed(1)+'/s':'—'} ${(ns.mem||{}).gcCoresSum!=null?'· '+(ns.mem||{}).gcCoresSum.toFixed(1)+' GC cores':''} · staged ${fmt((ns.mem||{}).stagedMax||0)}`),
   ].join('');
   const mib=v=>v?fmt(v)+' MiB':'—';
+const bytes=v=>(v==null?'—':v<1024?fmt(v)+' B':v<1048576?(v/1024).toFixed(1)+' KiB':(v/1048576).toFixed(1)+' MiB');
   $('nrssavg').textContent=mib(ns.rssAvgMiB); $('nrssmax').textContent=mib(ns.rssMaxMiB);
   $('nrssmin').textContent=mib(ns.rssMinMiB);
   $('nrssnode').textContent=ns.rssMaxNode?('max '+ns.rssMaxNode):'';
@@ -1851,7 +1852,7 @@ async function tick(){
   $('hent').innerHTML=nm(h.entries);
   $('hans').innerHTML=nm(hr&&hr.answered);$('hnot').innerHTML=nm(hr&&hr['not-yet']);
   $('hmiss').innerHTML=nm(hr&&hr.miss);$('hfail').innerHTML=nm(hr&&hr.failed);
-  $('hheld').innerHTML=nm(hld&&hld.entries);$('hheldl').textContent=hld?('held in staging · '+fmt(hld.bytes)+' B'):'held in staging';
+  $('hheld').innerHTML=nm(hld&&hld.entries);$('hheldl').textContent=hld?('txs held in staging · '+bytes(hld.bytes)):'txs held in staging';
   // sparklines from history deltas
   const hist=s.history||[];
   // transaction rates: derivative of cumulative counters over ~30s of history
@@ -1887,7 +1888,7 @@ async function tick(){
   $('hpart').querySelector('tbody').innerHTML=h.byStream==null?'<tr><td class=mut colspan=5>— not measured</td></tr>':
     hs.map(([k,v])=>`<tr><td class=name>${k}</td><td class=grn>${fmt(v.answered)}</td><td class=yel>${fmt(v['not-yet'])}</td><td class=red>${fmt(v.miss)}</td><td class=red>${fmt(v.failed)}</td></tr>`).join('')||'<tr><td class=mut colspan=5>no requests yet</td></tr>';
   $('hheldt').querySelector('tbody').innerHTML=hld==null?'<tr><td class=mut colspan=3>— not measured</td></tr>':
-    (hld.streams||[]).filter(x=>x.entries||x.bytes).map(x=>`<tr><td class=name>${x.source} → ${x.ledger}</td><td>${fmt(x.entries)}</td><td class=mut>${fmt(x.bytes)}</td></tr>`).join('')||'<tr><td class=mut colspan=3>nothing held</td></tr>';
+    (hld.streams||[]).filter(x=>x.entries||x.bytes).map(x=>`<tr><td class=name>${x.source} → ${x.ledger}</td><td>${fmt(x.entries)}</td><td class=mut>${bytes(x.bytes)}</td></tr>`).join('')||'<tr><td class=mut colspan=3>nothing held</td></tr>';
   // mix table
   const pt=lg.perType||{};const rows=Object.entries(pt).sort((a,b)=>b[1].generated-a[1].generated);
   const mxv=Math.max(1,...rows.map(r=>r[1].generated));
