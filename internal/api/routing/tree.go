@@ -7,94 +7,40 @@
 package routing
 
 import (
-	"sort"
-
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// A RouteTree answers which partition an account belongs to. Per-account
+// overrides are checked first; everything else routes by bucket (see
+// bucket.go).
 type RouteTree struct {
 	overrides map[[32]byte]string
-	root      prefixTreeNode
+	buckets   *bucketTable
 }
 
-type prefixTreeNode interface {
-	route(rn uint64, pos uint16) (string, error)
-}
-
-type prefixTreeBranch struct {
-	bits     uint16
-	children []prefixTreeNode
-}
-
-type prefixTreeLeaf string
-
+// NewRouteTree builds a route tree from a routing table. It returns an error if
+// the table does not assign every bucket to exactly one partition.
+//
+// The table is not modified. An earlier version sorted table.Routes in place,
+// which reordered the caller's slice -- and that slice belongs to the network's
+// global values, shared with every other reader of them.
 func NewRouteTree(table *protocol.RoutingTable) (*RouteTree, error) {
 	tree := new(RouteTree)
 
-	// Build the override map
 	tree.overrides = make(map[[32]byte]string, len(table.Overrides))
 	for _, o := range table.Overrides {
 		tree.overrides[o.Account.IdentityAccountID32()] = o.Partition
 	}
 
-	// Sort routes by mask then by value
-	routes := table.Routes
-	sort.Slice(routes, func(i, j int) bool {
-		r, s := routes[i], routes[j]
-		v, u := r.Value<<(64-r.Length), s.Value<<(64-s.Length)
-		return v < u
-	})
-
-	// Build the prefix tree
 	var err error
-	tree.root, err = buildPrefixTree(routes, 0)
+	tree.buckets, err = newBucketTable(table.Routes)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return tree, nil
-}
-
-func buildPrefixTree(routes []protocol.Route, depth uint64) (prefixTreeNode, error) {
-	if len(routes) == 1 {
-		r := routes[0]
-		if r.Length != depth {
-			return nil, errors.InternalError.WithFormat("expected offset %d, got %d", depth, r.Length)
-		}
-		return prefixTreeLeaf(r.Partition), nil
-	}
-
-	// Get the minimum offset
-	offset := routes[0].Length
-	for _, r := range routes[1:] {
-		if r.Length < offset {
-			offset = r.Length
-		}
-	}
-
-	var tree prefixTreeBranch
-	var err error
-	tree.bits = uint16(offset - depth)
-	tree.children = make([]prefixTreeNode, 1<<tree.bits)
-	mask := uint64(1<<tree.bits - 1)
-	for i := range tree.children {
-		n := sort.Search(len(routes), func(j int) bool {
-			r := routes[j]
-			v := r.Value >> (r.Length - offset)
-			return v&mask > uint64(i)
-		})
-		if n == 0 {
-			return nil, errors.InternalError.WithFormat("expected values with %b at %d:%d, found none", i, offset, depth)
-		}
-		tree.children[i], err = buildPrefixTree(routes[:n], offset)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-		routes = routes[n:]
-	}
-	return tree, err
 }
 
 func (r *RouteTree) Route(u *url.URL) (string, error) {
@@ -107,19 +53,5 @@ func (r *RouteTree) Route(u *url.URL) (string, error) {
 }
 
 func (r *RouteTree) RouteNr(n uint64) (string, error) {
-	return r.root.route(n, 0)
-}
-
-func (b prefixTreeBranch) route(rn uint64, pos uint16) (string, error) {
-	npos := pos + b.bits
-	i := (rn >> uint64(64-npos)) & (1<<b.bits - 1)
-	if b.children[i] == nil {
-		return "", errors.InternalError.WithFormat("invalid routing table: no entry for %d at %d.%d", i, pos, b.bits)
-	}
-
-	return b.children[i].route(rn, npos)
-}
-
-func (b prefixTreeLeaf) route(_ uint64, _ uint16) (string, error) {
-	return string(b), nil
+	return r.buckets.route(BucketOf(n))
 }
