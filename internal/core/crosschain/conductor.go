@@ -106,16 +106,50 @@ type Conductor struct {
 	// source for them buys a NotFound -- the source released them on the
 	// partition's Delivered -- that would be counted as a miss and strand the
 	// stream. Nil until wired; nil reads as caught up.
-	executionLag atomic.Pointer[func() int]
+	executionLag    atomic.Pointer[func() int]
+	maxExecutionLag atomic.Int64 // the threshold lagging() compares against; see SetExecutionLagSource
 }
 
 // SetExecutionLagSource wires how the conductor reads its executor's lag.
-func (c *Conductor) SetExecutionLagSource(fn func() int) { c.executionLag.Store(&fn) }
+func (c *Conductor) SetExecutionLagSource(fn func() int, max int) {
+	c.executionLag.Store(&fn)
+	if max <= 0 {
+		max = defaultMaxExecutionLag
+	}
+	c.maxExecutionLag.Store(int64(max))
+}
+
+// defaultMaxExecutionLag is the threshold an unwired caller gets. The daemon
+// passes the consensus node's effective MaxExecutionLag, so this only stands
+// in for tests and for a conductor nothing configured; it must say what
+// primary.DefaultMaxExecutionLag says (consensus spec, invariant 9).
+const defaultMaxExecutionLag = 8
+
+// executionLagBlocks is how many committed leader groups this node's executor
+// has not executed, or zero with no source wired.
+func (c *Conductor) executionLagBlocks() int {
+	fn := c.executionLag.Load()
+	if fn == nil || *fn == nil {
+		return 0
+	}
+	return (*fn)()
+}
 
 // lagging reports whether this node's executor is behind consensus.
+// lagging is whether execution is lagging consensus by the one definition the
+// node has: more than MaxExecutionLag committed groups unexecuted, the same
+// test the primary makes before it stops proposing batches (consensus spec,
+// invariants 9 and 10). It used to be any lag at all, and healing runs at the
+// block-begin hook, where an executor about to run the next committed group
+// is one behind by construction -- so on a working network every request was
+// refused: 12,073 of 12,077 on run 20260917T203252Z, none answered, while two
+// one-entry holes stopped delivery into BVN3 for good (#4284).
 func (c *Conductor) lagging() bool {
-	fn := c.executionLag.Load()
-	return fn != nil && *fn != nil && (*fn)() > 0
+	max := c.maxExecutionLag.Load()
+	if max <= 0 {
+		max = defaultMaxExecutionLag
+	}
+	return int64(c.executionLagBlocks()) > max
 }
 
 // runExclusive runs the task like runTask, unless a task with the same key is

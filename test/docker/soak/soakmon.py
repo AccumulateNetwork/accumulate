@@ -749,7 +749,7 @@ def life_from(per):
     return life
 
 
-HEAL_OUTCOMES = ("answered", "not-yet", "miss", "failed")
+HEAL_OUTCOMES = ("answered", "not-yet", "miss", "failed", "lagging", "lagging-miss")
 PROOF_OUTCOMES = ("validated", "staged", "disproved", "conflict", "invalid", "unbound", "refused", "duplicate")
 JUDGED = ("proven", "unproven", "collected", "tossed", "anchor-collected", "anchor-tossed", "this_block", "earlier", "missing")
 
@@ -776,6 +776,7 @@ def heals_from(per):
     held = {}
     seen = set()
     entries = 0
+    entries_by = {}
     for rows in (per or {}).values():
         for name, lab, v in rows or ():
             try:
@@ -791,7 +792,12 @@ def heals_from(per):
                 by_stream.setdefault(key, {o: 0 for o in HEAL_OUTCOMES})
                 by_stream[key][o] = by_stream[key].get(o, 0) + n
             elif name == "accumulate_conductor_heal_entries_total":
+                # Split by what became of the entry, so a repaired stream can
+                # be told from a healer asking for what it already has, and
+                # both from nothing to do (#4283).
                 seen.add("entries"); entries += n
+                o = lab.get("outcome", "")
+                entries_by[o] = entries_by.get(o, 0) + n
             elif name == "accumulate_exec_staged_proofs_total":
                 seen.add("proofs")
                 o = lab.get("outcome", ""); proofs[o] = proofs.get(o, 0) + n
@@ -809,6 +815,8 @@ def heals_from(per):
         "requests": dict(requests, total=sum(requests.values())) if "requests" in seen else None,
         "byStream": by_stream if "requests" in seen else None,
         "entries": entries if "entries" in seen else None,
+        "applied": entries_by.get("applied", 0) if "entries" in seen else None,
+        "notRequired": entries_by.get("not-required", 0) if "entries" in seen else None,
         "proofs": proofs if "proofs" in seen else None,
         "judged": judged if "judged" in seen else None,
         "held": None,

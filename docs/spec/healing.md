@@ -111,15 +111,32 @@ the first anchor of the span -- the one the stream is stuck on -- has
 `ValidatorThreshold` distinct signers, then submits them as one envelope. A
 node with no way to find peers asks once.
 
-**A lagging node does not ask.** A node whose executor is behind consensus
-decides from a staging that is behind too: the numbers it thinks it lacks sit
-in its own committed, unexecuted blocks. Asking a source for them buys
-NotFound -- the source released them on the partition's Delivered -- and
-NotFound is a miss, and seven misses strand the stream, permanently, for
-entries that were never missing (#4260). While
-`accumulate_dagbft_execution_lag_blocks` is above zero the requester makes no
-request and counts the activation as `lagging`; the backlog executes, and what
-is still missing after that is asked for then.
+**A node lagging consensus does not ask, and lagging has one definition.** A
+node whose executor is behind consensus decides from a staging that is behind
+too: the numbers it thinks it lacks may sit in its own committed, unexecuted
+blocks. Asking a source for them buys NotFound -- the source released them on
+the partition's Delivered -- and NotFound is a miss, and seven misses strand
+the stream, permanently, for entries that were never missing (#4260).
+
+"Behind consensus" is what the consensus specification says it is: more than
+`MaxExecutionLag` committed leader groups unexecuted (8 blocks, invariant 9),
+the same test the primary makes before it proposes headers without batches.
+While `accumulate_dagbft_execution_lag_blocks` exceeds that, the requester
+makes no request and counts the activation as `lagging`; the backlog executes,
+and what is still missing after that is asked for then.
+
+It is not "any lag at all". Healing runs from the block-begin hook, where an
+executor about to run the next committed group is one behind by construction,
+so a threshold of zero refused every request on a working network -- 12,073
+of 12,077 on run 20260917T203252Z, none answered -- and a real one-entry hole
+stopped delivery into a partition for good (#4284). A hole that is never asked
+for is permanent; that is worse than a miss.
+
+Inside the window the node asks. A NotFound taken while its lag is above zero
+is `lagging-miss`, not a miss: the span may be in the node's own backlog, so it
+is remembered like a not-yet answer and asked again after the backlog has
+run. Stranding is decided on misses taken while caught up, where the answer
+means what it says.
 
 ### The request
 

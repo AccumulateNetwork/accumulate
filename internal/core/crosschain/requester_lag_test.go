@@ -25,6 +25,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// acceptAll is an entry classifier for tests that do not care what became of
+// an answer's entries.
+var acceptAll = entryOutcome(func(uint64) string { return "applied" })
+
 // A requester for tests: the partition it asks for, and nothing else.
 func testConductor() *Conductor {
 	return &Conductor{Partition: &protocol.PartitionInfo{ID: "BVN0", Type: protocol.PartitionTypeBlockValidator}}
@@ -53,7 +57,10 @@ func TestRequester_LaggingDestination(t *testing.T) {
 	c := testConductor()
 	asks := 0
 	ask := streamAsk{stream: reqStream, what: "synthetics", healed: func(int) {},
-		ask: func(first, last uint64) (int, uint64, error) { asks++; return int(last - first + 1), last, nil }}
+		ask: func(first, last uint64, _ entryOutcome) (int, uint64, error) {
+			asks++
+			return int(last - first + 1), last, nil
+		}}
 	staged := s.Begin()
 	defer staged.Discard()
 	for block := uint64(healCadence); block <= 30; block += healCadence {
@@ -79,7 +86,7 @@ func TestRequester_ProbeOncePerPatience(t *testing.T) {
 	c := testConductor()
 	asks := 0
 	ask := streamAsk{stream: reqStream, what: "synthetics", healed: func(int) {},
-		ask: func(first, last uint64) (int, uint64, error) {
+		ask: func(first, last uint64, _ entryOutcome) (int, uint64, error) {
 			asks++
 			return 0, 0, errors.NotReady.With("not produced yet")
 		}}
@@ -135,7 +142,7 @@ func TestRequestAnchorSpan_OneEnvelope(t *testing.T) {
 		}
 		records = append(records, r)
 	}
-	n, served, err := c.requestAnchorSpan(context.Background(), fakeRanger{records}, protocol.DnUrl(), 1, 2)
+	n, served, err := c.requestAnchorSpan(context.Background(), fakeRanger{records}, protocol.DnUrl(), 1, 2, acceptAll)
 	require.NoError(t, err)
 	require.Equal(t, 2, n)
 	require.Equal(t, uint64(2), served)
@@ -155,7 +162,7 @@ func TestRequester_StrandedStream(t *testing.T) {
 	c := testConductor()
 	asks := 0
 	ask := streamAsk{stream: reqStream, what: "synthetics", healed: func(int) {},
-		ask: func(first, last uint64) (int, uint64, error) {
+		ask: func(first, last uint64, _ entryOutcome) (int, uint64, error) {
 			asks++
 			return 0, 0, errors.NotFound.With("not in the cache")
 		}}
@@ -199,27 +206,37 @@ func gaugeValue(t *testing.T, g prometheus.Gauge) float64 {
 	return m.GetGauge().GetValue()
 }
 
-// A node whose executor is behind consensus asks for nothing: what it lacks
-// is in its own unexecuted blocks, and a source would answer NotFound for it
-// -- a miss that strands the stream for entries that were never missing
-// (#4260). Caught up again, it asks as before.
+// A node lagging consensus -- more than MaxExecutionLag groups behind, the
+// same test the primary makes -- asks for nothing: what it lacks is in its own
+// unexecuted blocks, and a source would answer NotFound for it, a miss that
+// strands the stream for entries that were never missing (#4260). Within the
+// window it asks: healing runs at the block-begin hook, where a working
+// executor is one behind by construction, and a threshold of zero refused
+// every request on a working network and left a real hole permanent (#4284).
 func TestRequester_LaggingNodeDoesNotAsk(t *testing.T) {
 	anchorStream := execute.StreamID{Ledger: protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool), Source: reqSource}
-	lag := 3
-	c := testConductor()
-	c.SetExecutionLagSource(func() int { return lag })
-	asks := 0
-	ask := streamAsk{stream: anchorStream, what: "anchors", healed: func(int) {},
-		ask: func(first, last uint64) (int, uint64, error) { asks++; return int(last - first + 1), last, nil }}
-	staged := execute.NewStaging().Begin()
-	defer staged.Discard()
-
-	c.requestStream(context.Background(), staged, healCadence, reqSource, ask)
-	require.Zero(t, asks, "behind consensus: the gap is in our own backlog")
-
-	lag = 0
-	c.requestStream(context.Background(), staged, 2*healCadence, reqSource, ask)
-	require.Equal(t, 1, asks, "caught up: an anchor stream is asked on sight")
+	const max = 8
+	// One activation on a fresh conductor, so the patience window from an
+	// earlier answer cannot hide an ask: how many requests a node at this lag
+	// makes on first sight of an empty anchor stream.
+	asksAt := func(lag int) int {
+		c := testConductor()
+		c.SetExecutionLagSource(func() int { return lag }, max)
+		asks := 0
+		ask := streamAsk{stream: anchorStream, what: "anchors", healed: func(int) {},
+			ask: func(first, last uint64, _ entryOutcome) (int, uint64, error) {
+				asks++
+				return int(last - first + 1), last, nil
+			}}
+		staged := execute.NewStaging().Begin()
+		defer staged.Discard()
+		c.requestStream(context.Background(), staged, healCadence, reqSource, ask)
+		return asks
+	}
+	require.Zero(t, asksAt(max+1), "beyond MaxExecutionLag: the gap is in our own backlog")
+	require.Equal(t, 1, asksAt(1), "one behind is what a working node looks like at the hook: asked")
+	require.Equal(t, 1, asksAt(max), "at the threshold, not beyond it: asked")
+	require.Equal(t, 1, asksAt(0), "caught up: an anchor stream is asked on sight")
 }
 
 // A ranger that answers by node: unaddressed requests come from signer A;
@@ -293,7 +310,7 @@ func TestRequestAnchorSpan_GathersAQuorumByNode(t *testing.T) {
 	// Unaddressed and n1 both answer as signer 1 -- the "same node again"
 	// case; n2 is signer 2, n3 signer 3.
 	r := &byNodeRanger{signers: map[string]byte{"": 1, "n1": 1, "n2": 2, "n3": 3}}
-	n, served, err := c.requestAnchorSpan(context.Background(), r, protocol.PartitionUrl("BVN1"), 1, 2)
+	n, served, err := c.requestAnchorSpan(context.Background(), r, protocol.PartitionUrl("BVN1"), 1, 2, acceptAll)
 	require.NoError(t, err)
 	require.Equal(t, 2, n)
 	require.Equal(t, uint64(2), served)
@@ -311,4 +328,41 @@ func TestRequestAnchorSpan_GathersAQuorumByNode(t *testing.T) {
 	}
 	require.Len(t, signers[1], 2, "anchor 1 carries a quorum of distinct signers")
 	require.Len(t, signers[2], 2, "and so does anchor 2, from the same answers")
+}
+
+// A NotFound taken while the node is behind consensus is not a miss: the span
+// may be in its own unexecuted blocks, released at the source on the
+// partition's Delivered (#4260). It is remembered like a not-yet answer and
+// does not count toward stranding. Caught up, a NotFound means what it says
+// and strands the stream as before (#4284).
+func TestRequester_MissWhileLaggingIsNotAMiss(t *testing.T) {
+	s := execute.NewStaging()
+	c := testConductor()
+	lag := 1
+	c.SetExecutionLagSource(func() int { return lag }, 8)
+	asks := 0
+	ask := streamAsk{stream: reqStream, what: "synthetics", healed: func(int) {},
+		ask: func(first, last uint64, _ entryOutcome) (int, uint64, error) {
+			asks++
+			return 0, 0, errors.NotFound.With("not in the cache")
+		}}
+	staged := s.Begin()
+	defer staged.Discard()
+
+	block := uint64(0)
+	for i := 0; i < 400; i++ {
+		block += healCadence
+		c.requestStream(context.Background(), staged, block, reqSource, ask)
+	}
+	require.NotZero(t, asks, "one behind is a working node: it asks")
+	require.Empty(t, c.requester.Stranded(), "NotFound while behind consensus does not strand")
+
+	lag = 0
+	before := asks
+	for i := 0; i < 400; i++ {
+		block += healCadence
+		c.requestStream(context.Background(), staged, block, reqSource, ask)
+	}
+	require.Equal(t, strandedAfter, asks-before, "caught up: misses count, and the stream strands")
+	require.Equal(t, []string{streamKey(reqStream)}, c.requester.Stranded())
 }
