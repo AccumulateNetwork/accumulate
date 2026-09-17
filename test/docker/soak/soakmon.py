@@ -1467,6 +1467,7 @@ def _collect_once(last, hist):
                          "generated": lg.get("generated", 0),
                          "wedges": w.get("total") or 0,
                          "heals": h.get("total") or 0,
+                         "notYet": ((h.get("requests") or {}).get("not-yet") or 0),
                          "sProd": STATE.get("synProduced", 0),
                          "aProd": STATE.get("ancProduced", 0),
                          "heapMax": ((STATE.get("nodeStats") or {}).get("mem") or {}).get("heapMaxMiB", 0),
@@ -1482,6 +1483,17 @@ def _collect_once(last, hist):
             if len(hist) > HIST_MAX:
                 del hist[0:len(hist) - HIST_MAX]
             STATE["history"] = list(hist)
+            # "not-yet" is a request answered "that is in flight, not
+            # missing": a cumulative count of it only climbs, and on the
+            # Directory's streams it climbs forever by construction, so the
+            # number that means something is the rate (#4288).
+            try:
+                old = next((e for e in hist if now - e["t"] <= 300), hist[0])
+                dt = now - old["t"]
+                if dt > 0 and "notYet" in old:
+                    STATE.setdefault("heals", {})["notYetPerMin"] = round(60.0 * (hist[-1]["notYet"] - old["notYet"]) / dt, 1)
+            except Exception:
+                pass
         time.sleep(I_STATS)
 
 
@@ -1695,7 +1707,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       <div class=pill><div class="n" id=hheld>—</div><div class=l id=hheldl>held in staging</div></div>
     </div>
     <svg class=spark id=spHeal viewBox="0 0 300 44" preserveAspectRatio=none></svg>
-    <table id=hpart><thead><tr><th>stream (source → destination)</th><th>answered (#)</th><th>not-yet (#)</th><th>miss (#)</th><th>failed (#)</th></tr></thead><tbody></tbody></table>
+    <table id=hpart><thead><tr><th>stream (source → destination)</th><th>answered (#)</th><th>asked while in flight (#)</th><th>miss (#)</th><th>failed (#)</th></tr></thead><tbody></tbody></table>
     <table id=hheldt><thead><tr><th>held in staging</th><th>entries (#)</th><th>bytes (B)</th></tr></thead><tbody></tbody></table>
   </div>
 </div>
@@ -1809,7 +1821,7 @@ async function tick(){
   $('cards').innerHTML=[
     card('DN height',fmt(nw.dnHeight),`${fmt(gen)} tx · ${pct.toFixed(0)}% of plan`),
     card('Healed entries',`<span class=grn>${nm(h.entries)}</span>`,h.entries==null?'not measured':'received in answer to span requests'),
-    card('Heal requests',nm(hr&&hr.total),hr?`${fmt(hr.answered)} answered · ${fmt(hr['not-yet'])} not-yet`:'not measured'),
+    card('Heal requests',nm(hr&&hr.answered),hr?`answered · ${h.notYetPerMin!=null?h.notYetPerMin.toFixed(0):'—'}/min asked while in flight`:'not measured'),
     card('Proofs',nm(hp&&hp.validated),hp?`${fmt(hp.staged)} staged · ${fmt(hp.disproved)} disproved`:'not measured'),
     card('Wedges',`<span class="${(w.total||0)?'yel':''}">${nm(w.total)}</span>`,w.measured?Object.entries(w.byReason||{}).map(([k,v])=>`${fmt(v)} ${k}`).join(' · ')||'none':'not measured — no node exports a drop counter'),
     card('Heal misses',`<span class="${(h.errors||0)?'red':''}">${nm(h.errors)}</span>`,hr?`${fmt(hr.miss)} miss · ${fmt(hr.failed)} failed`:'not measured'),
