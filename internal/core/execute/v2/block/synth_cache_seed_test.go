@@ -7,6 +7,7 @@
 package block_test
 
 import (
+	"fmt"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -161,4 +162,112 @@ func TestSeedHoldsWhatTheDirectoryHasNotReceipted(t *testing.T) {
 		entries += len(blk.Entries)
 	}
 	require.Greater(t, entries, 0, "the unreceipted blocks produced synthetics")
+}
+
+// A re-seeded block must answer for its entries the way the live block did:
+// its continuation receipt -- the root receipt from the stream's anchor to
+// the block's root, combined with the Directory's receipt for that block --
+// must chain. On run 20260917T212457Z every heal request that landed on a
+// freshly restarted validator failed with "continue receipt list: receipts
+// cannot be combined", 115 of them on the rerun, and requesters had to try
+// another node (#4287).
+//
+// This passes: one stream, one entry a block, receipts landed before the
+// restart, the seeded continuation chains for every receipted block. So the
+// production failure needs something this does not do -- several
+// destinations anchoring in one block, packages of several entries a block,
+// a major block inside the seeded window, or a Directory receipt that arrives
+// after the restart and is attached to a rebuilt block. It stays as the
+// fixture those cases are added to, and as the guard against the simple case
+// regressing.
+func TestSeedSynthCache_ContinuationCombines(t *testing.T) {
+	alice := url.MustParse("alice")
+	bob := url.MustParse("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
+
+	var mu sync.Mutex
+	stores := map[string]keyvalue.Beginner{}
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 2, 1),
+		simulator.Genesis(GenesisTime),
+		simulator.WithDatabase(func(p *PartitionInfo, node int, _ logging.Logger) keyvalue.Beginner {
+			s := memory.New(nil)
+			mu.Lock()
+			defer mu.Unlock()
+			if node == 0 {
+				stores[p.ID] = s
+			}
+			return s
+		}),
+	)
+	sim.SetRoute(alice, "BVN0")
+	sim.SetRoute(bob, "BVN1")
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1000))
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+
+	// Steady cross-partition traffic with the Directory answering, right up
+	// to the restart: the seed holds only the in-flight tail below the newest
+	// Directory receipt, so the blocks it rebuilds must be ones that produced
+	// synthetics and were receipted -- traffic that stopped earlier leaves
+	// the seed nothing but empty blocks, which carry no receipt to chain.
+	for i := uint64(1); i <= 60; i++ {
+		sim.BuildAndSubmitTxnSuccessfully(
+			build.Transaction().For(alice, "tokens").
+				SendTokens(1, 0).To(bob, "tokens").
+				SignWith(alice, "book", "1").Version(1).Timestamp(i).PrivateKey(aliceKey))
+		sim.Step()
+	}
+	sim.StepN(4)
+
+	// A restarted BVN0: a fresh cache seeded from its store
+	db := database.New(stores["BVN0"], nil)
+	cache := synthcache.New(0)
+	probe, err := block.NewSeedProbe(execute.DescribeShim{NetworkType: PartitionTypeBlockValidator, PartitionId: "BVN0"}, db, cache)
+	require.NoError(t, err)
+	current := sim.S.BlockIndex("BVN0") + 1
+	batch := db.Begin(false)
+	defer batch.Discard()
+	require.NoError(t, probe.SeedSynthCache(batch, current))
+
+	receipted, chained := 0, 0
+	var failures []string
+	for b := uint64(1); b < current; b++ {
+		blk, ok := cache.Block(b)
+		if !ok {
+			continue
+		}
+		roots := 0
+		for _, st := range blk.Streams {
+			if st.RootReceipt != nil {
+				roots++
+			}
+		}
+		t.Logf("seeded block %d: dispatched=%v directoryReceipt=%v streams=%d rootReceipts=%d entries=%d",
+			b, blk.Dispatched, blk.DirectoryReceipt != nil, len(blk.Streams), roots, len(blk.Entries))
+		if !blk.Dispatched || blk.DirectoryReceipt == nil {
+			continue
+		}
+		for _, st := range blk.Streams {
+			if st.RootReceipt == nil {
+				continue
+			}
+			receipted++
+			r, err := blk.Continuation(st.Destination)
+			if err != nil {
+				failures = append(failures, fmt.Sprintf("block %d -> %v: %v", b, st.Destination, err))
+				continue
+			}
+			require.NotNil(t, r, "block %d -> %v: a receipted block continues", b, st.Destination)
+			chained++
+		}
+	}
+	t.Logf("current %d: %d receipted streams seeded, %d chain", current, receipted, chained)
+	require.NotZero(t, receipted, "precondition: the Directory receipted seeded blocks")
+	require.Empty(t, failures, "a re-seeded block's continuation receipt must chain (#4287)")
 }
