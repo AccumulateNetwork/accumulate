@@ -538,6 +538,40 @@ func (c *Cache) Seed(blocks []*Block) {
 	mBlocks.Set(float64(len(c.blocks)))
 }
 
+// A SeededAnchor is one anchor this partition produced, rebuilt from the
+// anchor sequence chain at start.
+type SeededAnchor struct {
+	Number uint64 // sequence number on the anchor stream
+	Block  uint64 // the block it anchors
+	Txn    *protocol.Transaction
+}
+
+// SeedAnchors puts back the anchors this partition produced before a restart,
+// so a destination that is behind on this stream can still be answered
+// (#4277). The runtime path fills the cache as a block produces each anchor,
+// and that is memory: without this, a restart leaves the partition unable to
+// serve any anchor it produced before, and a destination asking for one is
+// refused for as long as the stream lives.
+//
+// The block recorded is the block the anchor anchors, not the block that
+// produced it. It is what the store durably knows, it is never later than the
+// producing block, and the only thing it feeds is the in-flight window — so
+// the error is always toward answering a request rather than withholding it,
+// which is the right way to be wrong at a restart.
+func (c *Cache) SeedAnchors(anchors []SeededAnchor) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, a := range anchors {
+		if _, held := c.anchors[a.Number]; held {
+			continue
+		}
+		c.anchors[a.Number] = &anchorEntry{a.Block, a.Txn}
+		if !c.lastAnchorOK || a.Number >= c.lastAnchorNumber {
+			c.lastAnchorNumber, c.lastAnchorBlock, c.lastAnchorOK = a.Number, a.Block, true
+		}
+	}
+}
+
 // Block answers what block index's proofs are built from and its entries, as
 // a copy whose slices are shared and never modified. A miss is counted: it
 // is a defect, an undersized cache or a request for a block older than the
