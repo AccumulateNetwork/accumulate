@@ -514,6 +514,33 @@ and a later contradiction there is still a conflict. Outcomes are
 `accumulate_exec_staged_proofs_total{outcome}`: staged, validated, disproved,
 conflict, invalid.
 
+**What bounds anchor staging, and in what currency.** A source's waiting
+proofs are bounded by what they cost in bytes (`maxStagedProofBytes`), not by
+how many distinct Directory blocks they wait on. The difference matters
+because the number of blocks a destination waits on is a measure of how far
+behind it has fallen, not of what it is holding, and a bound in that currency
+tightens exactly when the proofs become most valuable. A proof is one receipt
+list covering a whole package, while the entries it proves are held with no
+byte bound at all — so refusing the proof saves almost nothing and forfeits
+everything it would have proved.
+
+The flood such a bound exists to stop is already prevented, and still is: a
+proof must cover a message from its source in the same envelope, it may not
+name a Directory block more than `maxAnchorAhead` past the newest executed,
+and each list is capped at `MaxReceiptListElements` and must validate. Proof
+volume is therefore already proportional to traffic the destination agreed to
+accept; the byte budget bounds what remains.
+
+**A package and its proof share a fate.** When the budget does bind, the
+entries that travelled with the refused proof are refused too, rather than
+collected. A collected entry is recorded as received, which leaves no gap —
+and nothing re-sends a proof, so an entry collected without one waits for a
+proof that already arrived and was discarded. Refused together, what is left
+is an ordinary hole: the source still holds those entries as undelivered, and
+the destination asks for the span again once it has caught up and has budget.
+This is the rule the batch-bytes defect taught (#4159, #4282): a message with
+no recovery path must not be the one that is dropped.
+
 ### Collection — an unproven entry is held, never parked
 
 `SyntheticMessage.process`: an entry whose proof's anchor is not here yet is
