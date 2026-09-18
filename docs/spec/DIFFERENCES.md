@@ -272,7 +272,7 @@ reads it (#4294). Also not done: the refusal is "this node has
 executed no block", not the node state of step 5 — a node that is `BOOTING`
 will serve its stage until that lands (#4295). And a page is as of whatever
 block the validator had committed when the call arrived; nothing is pinned
-server side, so a reader whose pages straddle a commit starts over rather
+server side (#4302), so a reader whose pages straddle a commit starts over rather
 than being served a consistent version.
 
 **Caution — the page's `Block` is not "the state of that block" (#4291)**: it
@@ -290,8 +290,8 @@ trap said to read the ledger. This branch instead made block close release
 every stream the block positioned at the ledger's `Delivered`, so memory
 tracks the ledger for every stream a block has touched and the value is
 atomic with the rest of the page; a ledger read beside it would be a second,
-unpaired read. The residue: **a stream that no block has positioned since a
-restart keeps `Delivered: 0` in memory**, so a page may carry 0 for such a
+unpaired read. The residue (#4302): **a stream that no block has positioned
+since a restart keeps `Delivered: 0` in memory**, so a page may carry 0 for such a
 stream. It is safe, because the joining node releases through its own pulled
 ledger when it settles (#4292's `SettleStaging`), but it is not what the issue
 asked for.
@@ -340,15 +340,16 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   would mean a node that joined never answered anything again. What it cannot
   answer it refuses by the rule above, so the difference is which answer a
   peer gets, not whether it is misled.
-- **The state is not persisted** (`bootpersist` is not ported). A restart
-  joins again, which reaches the same answer.
-- **It is not advertised** in the node's service record, so `FindService`
-  still returns a joining node and the caller learns its state from the
-  refusal rather than from the listing. The `unavailable` outcome label the
-  issue asks for is therefore not added: the requester cannot tell a joining
-  node from a node whose entries are in flight, and both mean "ask again".
-- **The v3 querier is not gated.** A joining node still answers account
-  state and BPT pages from a store the pull has half filled. The hazard is
+- **The state is not persisted** (#4300; `bootpersist` is not ported). A
+  restart joins again, which reaches the same answer.
+- **It is not advertised** (#4300) in the node's service record, so
+  `FindService` still returns a joining node and the caller learns its state
+  from the refusal rather than from the listing. The `unavailable` outcome
+  label the issue asks for is therefore not added: the requester cannot tell a
+  joining node from a node whose entries are in flight, and both mean "ask
+  again".
+- **The v3 querier is not gated** (#4297)**.** A joining node still answers
+  account state and BPT pages from a store the pull has half filled. The hazard is
   another joining node pulling its unverified spine from it — `pull.Account`
   in `ModeFullSpine` is explicitly unverified, because it is what the verifier
   reads from — and then never pulling the spine again. Gating the querier
@@ -361,11 +362,16 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   flight" rather than as misses. Nothing is healed and nothing alarms; the
   node-state gauge is what shows it.
 
-**Not proven**: the join has not run on a real network. The Docker chaos run
+**Not proven, and the first attempt never engaged**: run
+`20260918T124530Z` (30 m, 100 tps, chaos, `0259684c5`) was the first Docker
+chaos run of the join and it tested the fallback rather than the join — no
+node found a peer to ask, on any partition, because of #4296 — so the join
+has still not run on a real network. The Docker chaos run
 (`30m-100tps-chaos.conf`, then 24 h) is the proof, and it is a human step. Two
 known holes will meet it first — an account carrying pending signature
-material cannot be verified at all (#4293's entry above), and a remote
-transaction stub the store cannot resolve is not collected (#4292's entry).
+material cannot be verified at all (#4293's entry above, filed as #4298), and
+a remote transaction stub the store cannot resolve is not collected (#4292's
+entry, filed as #4299).
 
 **State pull (#4293, partly done)**: the bootstrap-v3 packages are on this
 line — `internal/core/bootstrap/{pull,enumerate,bptproof,tracker,nodestate}`
@@ -389,23 +395,23 @@ reaches the root the Directory anchored for `Q`; the tracker then promotes.
 
 - Nothing is wired into node start-up. That is #4294; today the packages are
   reachable only from tests.
-- **An account's leaf is only reproduced for the state the pull fetches.**
-  The account hash covers a pending transaction's `ValidatorSignatures`,
-  `Payments`, `Votes` and `Signatures` (`observer_prod.hashPendingV2`;
-  `History` is *not* hashed), the scheduled-events BPT on a partition ledger,
-  and the delivery queues on the synthetic account; the pull fetches none of
-  them. An account carrying any of them cannot be verified, so it cannot be
-  pulled, so a partition holding one cannot be joined. The v3 API has no
-  surface for most of it.
+- **An account's leaf is only reproduced for the state the pull fetches**
+  (#4298)**.** The account hash covers a pending transaction's
+  `ValidatorSignatures`, `Payments`, `Votes` and `Signatures`
+  (`observer_prod.hashPendingV2`; `History` is *not* hashed), the scheduled-
+  events BPT on a partition ledger, and the delivery queues on the synthetic
+  account; the pull fetches none of them. An account carrying any of them
+  cannot be verified, so it cannot be pulled, so a partition holding one
+  cannot be joined. The v3 API has no surface for most of it.
 - **Per-account verification assumes accounts are independent, and they are
-  not.** A key page's hash covers the *book's* pending transactions and their
-  signature material (`hashPending`: a page walks `page.GetAuthority()`'s
-  pending too), so a page and its book must be pulled from the same block or
-  neither hashes to anything anchored, and the page must be re-derived after
-  the book moves. Scheduled events and the synthetic account's delivery
-  queues are the same shape. The pull has no notion of an ordering or a group
-  that must be fetched together; the e2e test pulls every stale account at one
-  frozen block, which hides it.
+  not** (#4298)**.** A key page's hash covers the *book's* pending
+  transactions and their signature material (`hashPending`: a page walks
+  `page.GetAuthority()`'s pending too), so a page and its book must be pulled
+  from the same block or neither hashes to anything anchored, and the page
+  must be re-derived after the book moves. Scheduled events and the synthetic
+  account's delivery queues are the same shape. The pull has no notion of an
+  ordering or a group that must be fetched together; the e2e test pulls every
+  stale account at one frozen block, which hides it.
 - **"The accounts a block names" is not read from the blocks.** The spec says
   the buffered blocks name what to re-pull; the code names them by diffing the
   peer's BPT pages against the local leaves (`enumerate.Run`), which is a
@@ -414,17 +420,18 @@ reaches the root the Directory anchored for `Q`; the tracker then promotes.
   principal of every transaction, the signer of every signature, the anchor
   pool for every anchor — and it is not wired.
 - **BPT paging is not a consistent snapshot, so a fresh node's enumeration is
-  incomplete by construction.** Pages are served by key order from a cursor
-  (`BPT.GetRange`), one batch each, and a leaf inserted *behind* the cursor
-  between two pages is never seen; on a live network that happens constantly.
-  This is why the design follows the blocks rather than trusting one
-  enumeration: a scan is a starting list, and what keeps it right is re-pulling
-  the accounts each observed block names, until a whole block's set is pulled
-  before the next anchor arrives. Until #4292 is wired, the diff is re-run per
-  round, which converges by repetition rather than by construction.
+  incomplete by construction** (#4302)**.** Pages are served by key order from
+  a cursor (`BPT.GetRange`), one batch each, and a leaf inserted *behind* the
+  cursor between two pages is never seen; on a live network that happens
+  constantly. This is why the design follows the blocks rather than trusting
+  one enumeration: a scan is a starting list, and what keeps it right is re-
+  pulling the accounts each observed block names, until a whole block's set is
+  pulled before the next anchor arrives. Until #4292 is wired, the diff is re-
+  run per round, which converges by repetition rather than by construction.
+  (#4294 wired it; #4302 section 5 records what that leaves.)
 - **The Directory's spine is pulled unverified, and so is the root everything
-  else is verified against.** The spine is what the verifier reads from, so
-  there is nothing to verify it against until it is there; and
+  else is verified against** (#4301)**.** The spine is what the verifier reads
+  from, so there is nothing to verify it against until it is there; and
   `pull.DirectoryAnchors` reads the `StateTreeAnchor` roots out of
   `acc://dn.acme/anchors` through the v3 API without checking a single
   `BlockAnchor` signature or counting a quorum. With one source, that source
@@ -436,21 +443,23 @@ reaches the root the Directory anchored for `Q`; the tracker then promotes.
   taken from independent sources and cross-checked before anything is
   verified against it. The spine's stated purpose is to close this circle and
   it does not yet.
-- **A peer serving a page is not held to it.** A BPT page carries no proof, so
-  a peer can omit a leaf and the puller will not know an account is missing
-  until its root fails to match.
+- **A peer serving a page is not held to it** (#4301)**.** A BPT page carries
+  no proof, so a peer can omit a leaf and the puller will not know an account
+  is missing until its root fails to match.
 - **`tracker.Observe` keeps the earliest block for a repeated root, so `Q` is
-  the first block with that root, not the last.** That is intended: a run of
-  blocks that change nothing all carry the same `StateTreeAnchor`, the state
-  behind the root is the state from the first of them, and executing from
-  `Q + 1` where `Q` is the earliest replays the blocks in between rather than
-  skipping them — the safe direction, because a block replayed from the state
-  it started at produces the same result and a block skipped does not.
+  the first block with that root, not the last** (#4302)**.** That is
+  intended: a run of blocks that change nothing all carry the same
+  `StateTreeAnchor`, the state behind the root is the state from the first of
+  them, and executing from `Q + 1` where `Q` is the earliest replays the
+  blocks in between rather than skipping them — the safe direction, because a
+  block replayed from the state it started at produces the same result and a
+  block skipped does not.
 - `orchestrator`, `anchorsrc`, `bootpersist`, `clientsrc` and `gossip` from
-  bootstrap-v3 are not ported; the first is #4294's, the rest are of the
-  rejected trust model.
+  bootstrap-v3 are not ported (#4302; `bootpersist` is #4300's, which settles
+  first whether a joining node's state need survive a restart at all); the
+  first is #4294's, the rest are of the rejected trust model.
 - The v3 `block` query's entry paging ignores `start`, so it cannot be used to
-  page through what a block touched. Untouched here.
+  page through what a block touched. Untouched here (#4302).
 
 **Decided (Paul, 2026-09-18)**: a starting node takes its staging from a
 running validator through an API, keeps it current from consensus while it
@@ -498,14 +507,32 @@ spec**, both deliberate:
   peers hold an entry. A block does not have this problem because anything
   the classifier drops still goes through its own message executor on the
   envelope pass; collecting has no second pass. #4294's join pulls the
-  accounts a block names before the block is collected, which closes it.
+  accounts a block names before the block is collected, which closes it —
+  but the wiring names a block's accounts *after* collecting it
+  (`dagbft/collect.go:385`, on the collect's output), so that closure is
+  contested; #4299 holds the citations and is where it is settled.
 - `intakeProof` discards a proof whose anchor block is at or below the newest
-  executed Directory anchor as "never, not not-yet". On a partially pulled
+  executed Directory anchor as "never, not not-yet" (#4302). On a partially pulled
   store the anchor pool's `DirectoryAnchorBlock` field and the Directory
   anchor chain can disagree, and a proof discarded that way is discarded for
   good. The pull writes an account's state and its chains together, so the
   two are consistent per pulled account; nothing enforces it across the
   window in which the pull runs.
+
+**Live-network defect (#4296), fixed on `issue-4296-join-finds-no-peers`,
+not merged**: a service is advertised under its network's key, and
+`FindService` searched the key the caller named, so the join's lookup — which
+named no network — matched nothing on every live network and the node
+executed from its own empty staging, the #4290 behaviour, silently (run
+`20260918T124530Z`: every node on both its partitions at genesis, and the one
+restarted node at Directory block 186 and BVN1 block 181). On that branch a
+lookup that names no network means the node's own network; the join names it
+as well; and finding no validator is no longer read as "every validator has
+nothing to give". The same omission had disabled the conductor's
+anchor-signature fan-out on every live network since it was written. It is
+not on `dagbft-integration` and it has not run under chaos, so the sentence
+above about what the wiring does when no peer can answer is still what a
+deployed node does.
 
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.

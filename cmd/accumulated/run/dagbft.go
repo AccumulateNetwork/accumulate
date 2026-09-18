@@ -484,7 +484,8 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			Buffer:    s.service,
 			Stage:     stage,
 			State:     state,
-			Peers:     &join.APIPeers{Partition: s.Partition.ID, Client: client},
+			Peers:     &join.APIPeers{Partition: s.Partition.ID, Client: client, Network: inst.config.Network},
+			Fresh:     lastBlock == 0,
 			Logger:    slog.Default(),
 		}
 		go func() {

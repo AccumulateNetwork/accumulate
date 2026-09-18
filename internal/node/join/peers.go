@@ -23,6 +23,12 @@ import (
 type APIPeers struct {
 	Partition string
 	Client    *message.Client
+
+	// Network is the network this node belongs to. A service is advertised
+	// under its network's key, so a search that does not name one finds
+	// nothing (#4296). The node service defaults it, and naming it here
+	// keeps a client that does not from searching the wrong key in silence.
+	Network string
 }
 
 // Validators lists the nodes serving this partition's sequencer.
@@ -31,6 +37,7 @@ func (p *APIPeers) Validators(ctx context.Context) ([]*api.FindServiceResult, er
 		return nil, errors.NotReady.With("no network client")
 	}
 	return p.Client.FindService(ctx, api.FindServiceOptions{
+		Network: p.Network,
 		Service: private.ServiceTypeSequencer.AddressFor(p.Partition),
 	})
 }
