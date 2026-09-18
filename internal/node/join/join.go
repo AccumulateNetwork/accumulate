@@ -91,6 +91,16 @@ type Peers interface {
 }
 
 // Options are what a join needs to run.
+//
+// There is no "fresh" option and there must not be one. Only a node that has
+// executed no block may execute without asking anyone (executor spec, "Sync",
+// step 2), and such a node does not join at all: the daemon does not call Run
+// for it (cmd/accumulated/run/dagbft.go, nodeMustJoin). A flag here saying
+// "execute anyway" was reachable from no caller for the whole of its life and
+// was true in one hand-written test, while the node it described sat in the
+// join asking its equally empty peers for staging (#4304). Everything that
+// reaches Run has executed a block, so finding no validator is never an
+// answer for it.
 type Options struct {
 	Partition string
 	Buffer    Buffer
@@ -106,15 +116,6 @@ type Options struct {
 	// Rounds is how many times every validator is asked for staging before
 	// the join answers ErrNoPeerHasStaging. Zero means DefaultRounds.
 	Rounds int
-
-	// Fresh is whether this node has executed no block at all -- a database
-	// created moments ago, at genesis. Only a fresh node may execute when it
-	// can find no validator to ask: it has nothing to be exact about, and
-	// the first node of a network has nobody to ask by definition. A node
-	// with blocks that cannot see its partition keeps collecting instead,
-	// however long that takes, because a node that cannot see its peers
-	// cannot know what they hold (#4296).
-	Fresh bool
 }
 
 // DefaultRetry is how long a join waits before asking again.
@@ -198,13 +199,11 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 				// and executing from its own stage is exactly the divergence
 				// the join exists to prevent (#4290, #4296). It keeps
 				// collecting, which is the safe state, and says so.
-				if !opts.Fresh {
-					return Joined, errors.NotReady.WithFormat(
-						"no validator of %s could be found to ask for staging; this node is collecting and not executing", opts.Partition)
-				}
-				// A node at genesis has nobody to ask and nothing to take.
-				log.Info("No validator was found to ask, and this node has executed no block: starting from genesis")
-				return NoPeerHasStaging, nil
+				//
+				// There is no exception. A node that has executed nothing
+				// never gets here — it does not join (#4304).
+				return Joined, errors.NotReady.WithFormat(
+					"no validator of %s could be found to ask for staging; this node is collecting and not executing", opts.Partition)
 			}
 			log.Info("No validator of this partition could serve its staging", "validatorsFound", found)
 			return NoPeerHasStaging, nil

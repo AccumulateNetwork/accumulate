@@ -306,6 +306,14 @@ func TestJoin_CollectsBeforeItAsks(t *testing.T) {
 // executed from its own empty staging -- the divergence of #4290, seen on a
 // live network in run 20260918T124530Z, where the lookup named no network
 // and so matched a key nobody advertises (#4296).
+//
+// There is no exception, and there used to appear to be one:
+// TestJoin_AFreshNodeStartsWithoutAsking stood here, passed Options.Fresh by
+// hand and asserted that such a node executes anyway. No caller could set
+// that flag -- the daemon computed it inside a branch where it was false by
+// construction -- so it proved the library and said nothing about any node
+// (#4304). The node it described does not join at all now, so everything
+// that reaches Run has executed a block and this rule is unconditional.
 func TestJoin_FindingNoValidatorIsNotAnAnswer(t *testing.T) {
 	buf := new(fakeBuffer)
 	stage := new(fakeStage)
@@ -318,17 +326,4 @@ func TestJoin_FindingNoValidatorIsNotAnAnswer(t *testing.T) {
 	require.NotEqual(t, NoPeerHasStaging, outcome, "finding nobody is not the whole-network-restart answer")
 	require.Zero(t, buf.handedOff)
 	require.Nil(t, stage.loaded)
-}
-
-// The exception is a node that has executed no block: the first node of a
-// network has nobody to ask, by definition, and nothing to be exact about.
-func TestJoin_AFreshNodeStartsWithoutAsking(t *testing.T) {
-	buf := new(fakeBuffer)
-	stage := new(fakeStage)
-	state := &fakeState{matchAt: 20, matchFrom: 0}
-	peers := &fakePeers{}
-
-	outcome, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers, Rounds: 2, Fresh: true})
-	require.NoError(t, err)
-	require.Equal(t, NoPeerHasStaging, outcome)
 }

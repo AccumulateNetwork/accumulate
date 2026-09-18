@@ -451,11 +451,31 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	//
 	// A node with nothing — genesis, or a fresh database — has nothing to join
 	// from and executes from its first block as it always has.
+	//
+	// GENESIS IS NOT AN EXECUTION. Loading the genesis snapshot writes the
+	// system ledger at protocol.GenesisBlock — `ledger.Index =
+	// protocol.GenesisBlock`, internal/node/genesis/bootstrap.go — and every
+	// node loads it before this point (loadGenesisIfNeeded, above). So
+	// `lastBlock > 0` is true of every node that has ever started, including
+	// the first node of a new network, and it sent all twelve nodes of a
+	// fresh network into the join to ask each other for a staging none of
+	// them had (#4304). What says a node must join is whether it has
+	// executed a block OF ITS OWN, and that is `lastBlock > GenesisBlock`.
 	lastBlock, err := lastExecutedBlock(db, s.Partition.ID)
 	if err != nil {
 		return errors.UnknownError.WithFormat("read this node's last block: %w", err)
 	}
-	joining := lastBlock > 0
+	joining := nodeMustJoin(lastBlock)
+	if !joining {
+		// Said out loud, because it is the one condition under which a node
+		// executes without asking anyone (executor spec, "Sync", step 2), and
+		// because it is wrong for a node being added to a network that is
+		// already running — which this node cannot tell apart from being the
+		// first node of a new one (#4340).
+		slog.Info("This node has executed no block beyond genesis: it is the first node of a network, "+
+			"so it executes from genesis without asking for staging",
+			"module", "join", "partition", s.Partition.ID, "block", lastBlock)
+	}
 
 	// The join's state is built first, because its node state is what the
 	// API services refuse by (#4295) and they are registered further down.
@@ -510,7 +530,6 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			Stage:     stage,
 			State:     state,
 			Peers:     &join.APIPeers{Partition: s.Partition.ID, Client: client, Network: inst.config.Network},
-			Fresh:     lastBlock == 0,
 			Logger:    slog.Default(),
 		}
 		go func() {
@@ -768,6 +787,23 @@ var (
 	_ Service    = (*DAGBFTService)(nil)
 	_ prestarter = (*DAGBFTService)(nil)
 )
+
+// nodeMustJoin reports whether this node must take a running validator's
+// staging before it executes anything (executor spec, "Sync").
+//
+// The block it is given is the system ledger's index, and the genesis
+// snapshot writes that ledger at protocol.GenesisBlock before any block is
+// executed. So "this node has executed nothing" is `lastBlock <=
+// GenesisBlock`, not `lastBlock == 0`, and the difference is the whole of
+// #4304: a fresh network's nodes all read 1, all joined, and all refused each
+// other the staging none of them had.
+//
+// The predicate is a function so that the daemon and the test that gates it
+// compute the same thing. A test that names the number itself proves nothing
+// about what the daemon does.
+func nodeMustJoin(lastBlock uint64) bool {
+	return lastBlock > protocol.GenesisBlock
+}
 
 // lastExecutedBlock is the block this node's state is, or zero when it has
 // executed none: what says whether a node is starting from genesis or coming

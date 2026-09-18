@@ -306,7 +306,31 @@ restart is a join. The simulator's `RestartNode` starts a join and
 `TestOneValidatorRestartDoesNotDiverge` passes by the join path, in both the
 variant where the proving anchor lands before the staging is taken and the one
 where it lands during the join. A node started by `cmd/accumulated/run` joins
-whenever it has executed a block before; a genesis-fresh node does not.
+whenever it has executed a block before; a genesis-fresh node does not — which
+is `nodeMustJoin(lastBlock) = lastBlock > GenesisBlock`, and was
+`lastBlock > 0` until #4304. Genesis is not an execution but it does write the
+ledger at block 1, so the old test was true of every node ever started.
+
+**The exception is entering the join, not a flag inside it (#4304)**. The spec
+says only a node that has executed no block may start without asking; on this
+line such a node does not ask, because the daemon does not run the join for
+it. `join.Options.Fresh` — a flag saying "execute even though you found
+nobody" — is **deleted**: the daemon computed it inside `if joining`, where
+`lastBlock == 0` was false by construction, so it was reachable from no caller
+and true only in a hand-written test. `Run`'s `found == 0` is now
+unconditionally `NotReady`, which is #4296's rule with nothing to switch it
+off.
+
+**A genesis-only node deployed into a running partition executes from block 1,
+and that is wrong (#4340)**. It reads the same `lastBlock == 1` as the first
+node of a new network and there is no local fact that separates them; the
+difference is whether the partition has moved on, which is a network fact the
+daemon does not ask for. Not reachable by any deployment path today —
+`init` and netsim create every node of a network at once — and filed rather
+than guessed at, because the obvious alternative (let a fresh node join and
+ask) is what #4304 removed: in a fresh network every node is then joining,
+every node refuses every other, and the network starts only when they all time
+out.
 
 **What the wiring does when no peer can answer**: every validator of the
 partition is asked for its staging, and if none can serve any — which is what
@@ -398,7 +422,10 @@ same run a fresh network could not start deterministically either:
 `Options.Fresh` is dead code — `dagbft.go:449` gates on `lastBlock > 0` and
 `:488` sets `Fresh: lastBlock == 0` inside it — so the escape #4296 added is
 unreachable in the daemon, and the network started on a 20-second timeout race
-won by one arbitrary node per partition (#4304). A joining node also rejected
+won by one arbitrary node per partition (#4304). **Fixed**: a node that has
+executed no block beyond genesis does not join, `Fresh` is deleted, and a
+fresh netsim reaches block 2 in 1 second against 18 for the timeout race
+(`TestAFreshNetworkStartsWithoutJoining`, `TestAGenesisLoadedNodeDoesNotJoin`). A joining node also rejected
 14,643 user transactions against its own un-executed store, because the
 submitter is not gated either (#4307). The Docker chaos run (`30m-100tps-
 chaos.conf`, then 24 h) is the proof, and it is a human step. Two known holes
