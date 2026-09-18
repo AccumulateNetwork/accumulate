@@ -233,28 +233,6 @@ func (block *Block) close() (execute.BlockState, error) {
 		block.rootPosOf[key] = rootChain.Height() - 1
 	}
 
-	// Record the block ledger: one record keyed by block index, and its hash
-	// on the block-ledger chain, so the ledger account's hash commits to what
-	// this block changed. Written once; the cost is the block's, not the
-	// chain's (executor spec, "The block ledger", invariant 9).
-	if block.Executor.globals().Active.ExecutorVersion.V2JiuquanEnabled() {
-		bl := new(database.BlockLedger)
-		bl.Index = block.Index
-		bl.Time = block.Time
-		bl.Entries = block.State.ChainUpdates.Entries
-		err = recordBlockLedger(ledger, bl)
-	} else {
-		bl := new(protocol.BlockLedger)
-		bl.Url = m.Describe.Ledger().JoinPath(strconv.FormatUint(block.Index, 10))
-		bl.Index = block.Index
-		bl.Time = block.Time
-		bl.Entries = block.State.ChainUpdates.Entries
-		err = block.Batch.Account(bl.Url).Main().Put(bl)
-	}
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store block ledger: %w", err)
-	}
-
 	// Anchor the BPT chain into the root chain (#4272).
 	//
 	// It cannot go through the loop above: that skips the ledger account
@@ -289,6 +267,37 @@ func (block *Block) close() (execute.BlockState, error) {
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
+	}
+
+	// Record the block ledger LAST, so it names everything this block
+	// changed. The synthetic chains are anchored above rather than by the
+	// loop over modified chains -- they are skipped there, because that loop
+	// also anchors, and anchoring them twice in one block would give the same
+	// chain two root-chain entries and invalidate the root position the
+	// proofs are built from. But anchorSynthChains registers them as block
+	// entries on its way past, and it runs after everything else that can,
+	// so the record is only complete once it has.
+	//
+	// One record keyed by block index, and its hash on the block-ledger
+	// chain, so the ledger account's hash commits to what this block changed.
+	// Written once; the cost is the block's, not the chain's (executor spec,
+	// "The block ledger", invariant 9).
+	if block.Executor.globals().Active.ExecutorVersion.V2JiuquanEnabled() {
+		bl := new(database.BlockLedger)
+		bl.Index = block.Index
+		bl.Time = block.Time
+		bl.Entries = block.State.ChainUpdates.Entries
+		err = recordBlockLedger(ledger, bl)
+	} else {
+		bl := new(protocol.BlockLedger)
+		bl.Url = m.Describe.Ledger().JoinPath(strconv.FormatUint(block.Index, 10))
+		bl.Index = block.Index
+		bl.Time = block.Time
+		bl.Entries = block.State.ChainUpdates.Entries
+		err = block.Batch.Account(bl.Url).Main().Put(bl)
+	}
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store block ledger: %w", err)
 	}
 
 	// Complete the cache's block: the root chain is final, so the receipt
