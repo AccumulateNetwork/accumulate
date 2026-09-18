@@ -303,12 +303,24 @@ all inside the block production loop, which is the only thing that produces
 blocks. `Conductor.Rejoin`, its metric and `Executor.Collect` are gone: a
 restart is a join. The simulator's `RestartNode` starts a join and
 `TakeStaging`/`CompleteJoin` complete it, so
-`TestOneValidatorRestartDoesNotDiverge` passes by the join path with nothing
-rebuilt from a source's cache. **Not done**: nothing in
-`cmd/accumulated/run/dagbft.go` starts a join yet, so on a real node the
-collecting mode is never entered and a restart still starts at its checkpoint
-and executes — which is the behaviour every diverging run of 2026-09-18 had.
-The Docker chaos proof is a human step after the wiring.
+`TestOneValidatorRestartDoesNotDiverge` passes by the join path, in both the
+variant where the proving anchor lands before the staging is taken and the one
+where it lands during the join. A node started by `cmd/accumulated/run` joins
+whenever it has executed a block before; a genesis-fresh node does not.
+
+**What the wiring does when no peer can answer**: every validator of the
+partition is asked for its staging, and if none can serve any — which is what
+a network that restarted as a whole looks like, since a node that has executed
+no block since it started holds nothing anyone should start from — the node
+executes from its own last block, producing what it buffered while it asked.
+That is safe for exactly the reason the join exists: no peer holds an entry
+this node lacks, because no peer holds anything.
+
+**Not proven**: the join has not run on a real network. The Docker chaos run
+(`30m-100tps-chaos.conf`, then 24 h) is the proof, and it is a human step. Two
+known holes will meet it first — an account carrying pending signature
+material cannot be verified at all (#4293's entry above), and a remote
+transaction stub the store cannot resolve is not collected (#4292's entry).
 
 **State pull (#4293, partly done)**: the bootstrap-v3 packages are on this
 line — `internal/core/bootstrap/{pull,enumerate,bptproof,tracker,nodestate}`

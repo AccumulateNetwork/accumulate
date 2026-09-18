@@ -98,10 +98,30 @@ type Options struct {
 	// Retry is how long to wait before asking again when no peer can serve a
 	// snapshot, or when the pull has not reached an anchored root.
 	Retry time.Duration
+
+	// Rounds is how many times every validator is asked for staging before
+	// the join answers ErrNoPeerHasStaging. Zero means DefaultRounds.
+	Rounds int
 }
 
 // DefaultRetry is how long a join waits before asking again.
 const DefaultRetry = 2 * time.Second
+
+// DefaultRounds is how many times a join asks every validator for staging
+// before it concludes that none of them has any to give.
+const DefaultRounds = 10
+
+// ErrNoPeerHasStaging is returned when every validator of the partition has
+// been asked and none could serve its staging.
+//
+// It is not a failure of the join so much as an answer: on a network that
+// restarted as a whole, every node's staging is empty and every node refuses,
+// because a node that has executed no block since it started holds nothing
+// anyone should start from. There is then nothing to take and nothing to be
+// exact about — no peer holds an entry this node lacks — and the caller may
+// execute from where it stands. A node restarting alone gets a real answer
+// from its peers instead.
+var ErrNoPeerHasStaging = errors.NotReady.With("no validator of this partition could serve its staging")
 
 // Run joins the partition. It returns when the node has handed off to block
 // production, or when the context is cancelled.
@@ -197,7 +217,14 @@ func Run(ctx context.Context, opts Options) error {
 // is that node's condition, not an answer about the snapshot, and the next
 // validator is asked.
 func takeStaging(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration) (uint64, error) {
+	rounds := opts.Rounds
+	if rounds <= 0 {
+		rounds = DefaultRounds
+	}
 	for attempt := 0; ; attempt++ {
+		if attempt >= rounds {
+			return 0, ErrNoPeerHasStaging
+		}
 		if err := ctx.Err(); err != nil {
 			return 0, errors.UnknownError.Wrap(err)
 		}

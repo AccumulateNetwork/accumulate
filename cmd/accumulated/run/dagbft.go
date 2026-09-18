@@ -32,6 +32,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
@@ -432,10 +433,78 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("create DAG-BFT service: %w", err)
 	}
 
+	// A node that has executed a block before does not execute the blocks it
+	// missed: it joins, from the block its state matches (executor spec,
+	// "Sync"; #4294). Collecting starts BEFORE consensus does, so every block
+	// committed from here is one this node has kept — which is what makes the
+	// staging it takes from a peer exact.
+	//
+	// A node with nothing — genesis, or a fresh database — has nothing to join
+	// from and executes from its first block as it always has.
+	joining := lastExecutedBlock(db, s.Partition.ID) > 0
+	if joining {
+		s.service.StartCollecting()
+	}
+
 	// Start the service
 	err = s.service.Start(inst.context)
 	if err != nil {
 		return errors.UnknownError.WithFormat("start DAG-BFT service: %w", err)
+	}
+
+	if joining {
+		stage, ok := exec.(join.Stage)
+		if !ok {
+			return errors.InternalError.With("this executor cannot join: it takes no staging from a peer")
+		}
+		state, err := join.NewState(join.StateOptions{
+			Partition: protocol.PartitionUrl(s.Partition.ID),
+			Database:  db,
+			Query:     client,
+			Logger:    slog.Default(),
+		})
+		if err != nil {
+			return errors.UnknownError.WithFormat("prepare the join: %w", err)
+		}
+		opts := join.Options{
+			Partition: s.Partition.ID,
+			Buffer:    s.service,
+			Stage:     stage,
+			State:     state,
+			Peers:     &join.APIPeers{Partition: s.Partition.ID, Client: client},
+			Logger:    slog.Default(),
+		}
+		lastBlock := lastExecutedBlock(db, s.Partition.ID)
+		go func() {
+			err := join.Run(inst.context, opts)
+			switch {
+			case err == nil:
+				return
+
+			case errors.Is(err, join.ErrNoPeerHasStaging):
+				// No validator of this partition has staging to give: they
+				// all restarted too, and an empty stage is what every one of
+				// them holds. There is nothing to take and nothing to be
+				// exact about, so this node executes from where it stands —
+				// the blocks it buffered while it was asking, in order, from
+				// its own last block on.
+				slog.Info("No peer had staging to give; executing from this node's own state",
+					"module", "join", "partition", s.Partition.ID, "block", lastBlock)
+				err := s.service.Handoff(lastBlock)
+				if err != nil {
+					slog.Error("This node could not start executing", "module", "join",
+						"partition", s.Partition.ID, "block", lastBlock, "error", err)
+				}
+
+			default:
+				// A join that cannot finish leaves the node collecting: it
+				// keeps up with consensus and executes nothing, which is the
+				// spec's answer and is safe. It is also an operator's
+				// problem, so it is an error and not a debug line.
+				slog.Error("The join did not complete; this node is not executing",
+					"module", "join", "partition", s.Partition.ID, "error", err)
+			}
+		}()
 	}
 
 	// The healing in-flight window is measured against the send, and the
@@ -625,3 +694,17 @@ var (
 	_ Service    = (*DAGBFTService)(nil)
 	_ prestarter = (*DAGBFTService)(nil)
 )
+
+// lastExecutedBlock is the block this node's state is, or zero when it has
+// executed none: what says whether a node is starting from genesis or coming
+// back to a network that has moved on (executor spec, "Sync").
+func lastExecutedBlock(db *database.Database, partition string) uint64 {
+	batch := db.Begin(false)
+	defer batch.Discard()
+	var ledger *protocol.SystemLedger
+	err := batch.Account(protocol.PartitionUrl(partition).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
+	if err != nil {
+		return 0
+	}
+	return ledger.Index
+}
