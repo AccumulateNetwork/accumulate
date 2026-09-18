@@ -317,10 +317,29 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 		return r, err
 
 	case *api.BptPageQuery:
-		return s.queryBptPage(batch, query)
+		return s.queryBptPage(batch, scope, query)
 
 	default:
 		return nil, errors.NotAllowed.WithFormat("unknown query type %v", query.QueryType())
+	}
+}
+
+const (
+	defaultBptPageSize = 256
+	maxBptPageSize     = 4096
+)
+
+// bptPageCount is the page size the server will serve for a client's asking.
+// An omitted count is the default; a count past the cap is the cap, not the
+// default — asking for more than the server serves gets the most it serves.
+func bptPageCount(requested uint64) int {
+	switch {
+	case requested == 0:
+		return defaultBptPageSize
+	case requested > maxBptPageSize:
+		return maxBptPageSize
+	default:
+		return int(requested)
 	}
 }
 
@@ -328,21 +347,23 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 // state (executor.md, "Sync"). The page says which accounts exist and what
 // their leaves hash to; it carries no proof, because each account is verified
 // on its own, when it is pulled, against the root the Directory anchored.
-func (s *Querier) queryBptPage(batch *database.Batch, query *api.BptPageQuery) (*api.BptPageRecord, error) {
-	const defaultBptPageSize = 256
-	const maxBptPageSize = 4096
-
-	count := query.Count
-	if count == 0 || count > maxBptPageSize {
-		count = defaultBptPageSize
+// The page is the partition's whole tree, so it is asked for by naming the
+// partition, not an account in it.
+func (s *Querier) queryBptPage(batch *database.Batch, scope *url.URL, query *api.BptPageQuery) (*api.BptPageRecord, error) {
+	if scope == nil || !s.partition.URL.Equal(scope) {
+		return nil, errors.BadRequest.WithFormat(
+			"a BPT page is the partition's tree: this node serves %v, and the query is scoped to %v",
+			s.partition.URL, scope)
 	}
+
+	count := bptPageCount(query.Count)
 
 	startKey := query.StartHash
 	if startKey == ([32]byte{}) {
 		startKey = bptproof.FullScanStart()
 	}
 
-	page, err := bptproof.GetPage(batch, startKey, int(count))
+	page, err := bptproof.GetPage(batch, startKey, count)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bptproof"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -102,10 +103,13 @@ func TestBptPageQueryOverTheWire(t *testing.T) {
 	require.True(t, page.Equal(back))
 }
 
-// TestBptPageQueryDefaultsAndCaps — an omitted start begins a fresh scan, and
-// a count past the server's cap is answered with the server's default rather
-// than letting a client ask for the whole tree in one call.
-func TestBptPageQueryDefaultsAndCaps(t *testing.T) {
+// TestBptPageQueryDefaultsAndScope — an omitted start begins a fresh scan; and
+// a page is the partition's whole tree, so a query scoped to anything but the
+// partition this node serves is refused rather than silently answered with
+// this partition's leaves. (The page-size cap is bptPageCount's rule, tested
+// in bpt_page_count_test.go: the simulator's tree is smaller than either the
+// cap or the default, so no wire test can tell them apart.)
+func TestBptPageQueryDefaultsAndScope(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
@@ -122,7 +126,13 @@ func TestBptPageQueryDefaultsAndCaps(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, fresh.Equal(explicit), "an omitted start hash did not begin a fresh scan")
 
-	huge, err := q.QueryBptPage(ctx, dn, &api.BptPageQuery{Count: 1 << 20})
+	// An account of the partition is not the partition.
+	_, err = q.QueryBptPage(ctx, dn.JoinPath(protocol.Ledger), &api.BptPageQuery{Count: 4})
+	require.Error(t, err, "a query scoped to an account was answered with the partition's tree")
+	require.True(t, errors.Is(err, errors.BadRequest), "%v", err)
+
+	// And the BVN's tree is the BVN's.
+	bvn, err := q.QueryBptPage(ctx, protocol.PartitionUrl("BVN0"), &api.BptPageQuery{Count: 1 << 20})
 	require.NoError(t, err)
-	require.LessOrEqual(t, len(huge.Entries), 4096)
+	require.NotEqual(t, fresh.BptRoot, bvn.BptRoot, "the BVN answered with the directory's root")
 }
