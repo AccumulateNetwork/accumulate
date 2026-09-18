@@ -332,20 +332,26 @@ at a time, which is what makes healing a bounded operation rather than a
 crawl. The proof is the authorization by itself: it needs no key book, no
 quorum and no signature, only the anchor the node already holds.
 
-**Entries are enumerated by the hashes the merkle tree names.** An entry whose
-hash the tree does not name is referenced by nothing. It is not wrong state —
-it is lost: it occupies storage and no valid structure can reach it. The same
-is true one level up, of any key-value pair an installed account no longer
-refers to. Healing therefore leaks storage and does not corrupt state, and the
-two must not be confused when weighing it.
+**What happens to the entries a healed chain leaves behind is UNRESOLVED, and
+this section must not be built on until it is settled.** The intent was that an
+entry the merkle tree no longer names is referenced by nothing — lost, costing
+storage and not correctness — and that such entries could therefore be tracked
+during the sync and purged at leisure. **That is not true of this store.** A
+chain entry is keyed by position, `Element(index)`
+(`pkg/database/merkle/model_gen.go:142-147`); nothing enumerates entries from a
+merkle anchor, and `Chain.Entry(i)` returns whatever occupies the position with
+no check against the head. A divergent entry beneath a restored head is
+therefore reachable and is served — by the restart cache seeding, by healing
+requests, by snapshot export, by `repair-indices`, and by the query API. Worse,
+`ElementIndex` maps a hash to a position and `AddEntry(hash, unique)` **skips
+the append when it finds one**, so a stale index makes a node omit an entry its
+peers record: one node executes a different block than its peers, which is
+divergence and not a leak. A purge that removes those index records is
+therefore immediate and mandatory, not deferred — the opposite of what was
+proposed.
 
-**Lost entries are tracked while syncing and purged later.** A node cannot
-safely decide an entry is dead while its own execution is still producing
-entries that may themselves be wrong. So a node records what it found not to
-match as it syncs and as it attempts execution, and acts on that record once it
-is executing correctly — marking, and removing from the database later. The
-decision is recorded when the evidence is in hand rather than re-derived after
-it is gone.
+Until that is designed, healing has no safe account of its own leavings, and
+the rest of this section describes a mechanism that is not yet buildable.
 
 **That record is node-local, and is never hashed into anything consensus
 sees.** Two nodes healing the same partition accumulate different garbage:
@@ -445,10 +451,11 @@ block index. Two things follow, and both are the point:
   through the leaf; it does not make a *past* span provable, because a leaf
   carries only the anchor the chain has now. So the block-ledger chain is
   anchored into the root chain every block it is appended to, the way the bpt
-  chain is (invariant 11) and for the same reason. The loop that anchors
-  changed chains skips the ledger account outright — the ledger owns the root
-  chain and a chain cannot be anchored into itself — so this chain, like the
-  bpt chain and the synthetic chains, is anchored explicitly. Without it the
+  chain is (invariant 11) and for the same reason: the chain's own append
+  happens after the block's list of changed chains is collected, so it never
+  appears in that list and the anchoring loop never sees it. That is an
+  ordering accident, the same one #4272 found for the bpt chain, and the remedy
+  is the same — an explicit anchor after the record is written. Without it the
   chain is written every block and never anchored, it has no index chain, and
   what a block changed can be proven no further than the node asserting it.
 
@@ -501,13 +508,17 @@ one thing a per-block record must never do. An empty block has no entry.
     the root is an entry on the partition's bpt chain and that chain is anchored
     into the root chain. There is no root an account proof cannot be completed
     against, and therefore no "not yet" that means "never".
-12. **What a block changed can be proven, for any block, to the directory.**
-    The block ledger's records are never taken on a peer's word. The record's
+12. **A block ledger record is never taken on a peer's word.** The record's
     hash is an entry on the block-ledger chain, that chain is anchored into the
     root chain, and a collection proof over a span of it proves every record in
     the span, each at its own index. A peer cannot serve a shortened set: the
     proof's counted state binds each element to an absolute index, so an
-    omission fails validation instead of passing as a quieter answer.
+    omission fails validation instead of passing as a quieter answer. This is
+    an invariant of the record, not of the block: what the record itself
+    *omits* — the chains of `<partition>/synthetic`, and the ledger's own bpt
+    and root chains, all of which change after the block's list is collected —
+    is outside it, and a proof over the chain proves what the record says and
+    no more. Blocks before the chain existed have no entry to prove.
 
 ### Versioning
 

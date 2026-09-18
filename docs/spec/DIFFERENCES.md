@@ -991,14 +991,23 @@ considered.
 
 `recordBlockLedger` (`block_end.go:958`) writes the block's record and appends
 its hash to `BlockLedgerChain()`, from `block_end.go:245`, gated on
-`V2JiuquanEnabled` — so the chain is live and has been since Jiuquan. But the
-loop that anchors a block's changed chains into the root chain skips the ledger
-account outright (`block_end.go:184-187`, "Do not create root chain or BPT
-entries for the ledger"), because the ledger owns the root chain and a chain
-cannot be anchored into itself. Three chains live on that account and are
-skipped by it. Two of them are anchored explicitly afterwards: the bpt chain
-(`block_end.go:258-283`, #4272) and each destination's synthetic chain
-(`anchorSynthChains`). The block-ledger chain was not.
+`V2JiuquanEnabled` — so the chain is live and has been since Jiuquan. The
+anchoring loop never sees it: `enumerateModifiedChains` collects the block's
+changed chains at `block_end.go:120`, the loop runs at `:185-233`, and the
+block-ledger append happens at `:245`, after both. The chain is therefore never
+in the list the loop iterates, which executor.md's implementation section
+already states — "the block-ledger chain's own append happens after that list
+is collected and is not registered as a chain update, so the record never lists
+itself". It is the same ordering accident #4272 found for the bpt chain, whose
+issue puts it the same way, and which was fixed by an explicit anchor after the
+fact (`block_end.go:258-283`). The block-ledger chain did not get one.
+
+(The ledger account is also skipped by the loop outright at `:184-187`, because
+the ledger owns the root chain and a chain cannot be anchored into itself — but
+that skip is not the reason here, and narrowing it would change nothing. The
+synthetic chains are anchored explicitly too, by `anchorSynthChains`, but they
+live on `<partition>/synthetic` rather than the ledger and are excluded by a
+different filter for an unrelated and undocumented reason.)
 
 The consequence is the one #4272's own comment states for the case it fixed:
 the chain "is written every block and never anchored, so it has no index chain,
