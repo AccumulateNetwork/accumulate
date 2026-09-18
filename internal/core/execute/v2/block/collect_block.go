@@ -147,44 +147,84 @@ func (b *Block) collectArrival(str stream, delivered uint64, a *arrival) (bool, 
 		return false, nil // first sighting wins, here as in a block
 	}
 
+	// The message's own executor decides whether it may be held at all, here
+	// as in a block. Collecting must not hold what a block refuses: an entry
+	// held at a number its peers hold nothing at is a number the peers' entry
+	// can never take — first sighting wins — so the stream stops there for
+	// good. It is also what keeps a stranger from sizing this node's stage
+	// with a forged number (#4243).
+	ctx := &MessageContext{bundle: &bundle{Block: b, batch: b.Batch, messages: a.bundle}, message: a.classifier}
+
 	if str.kind == streamAnchor {
-		// An anchor copy, held as BlockAnchor.process holds one below its
-		// quorum: the sequenced message, and the hash a proof over the
-		// source's anchor chain validates — the transaction's stored form,
-		// without a principal. Its signatures are in the store, which the
-		// pull fills; the quorum is decided when it runs.
-		txn, ok := a.seq.Message.(*messaging.TransactionMessage)
-		if !ok || txn.Transaction == nil {
-			return false, nil
+		return b.collectAnchor(str, ctx, a)
+	}
+	return b.collectSynthetic(str, ctx, a)
+}
+
+// collectSynthetic holds one synthetic arrival as SyntheticMessage.process
+// would leave it: executed or held by the sequenced layer when its proof is
+// anchored here, collected when it is not, refused when its own executor
+// refuses it.
+func (b *Block) collectSynthetic(str stream, ctx *MessageContext, a *arrival) (bool, error) {
+	if _, ok := a.classifier.(*messaging.SyntheticMessage); !ok {
+		if _, ok := a.classifier.(*messaging.BadSyntheticMessage); !ok {
+			// A bare sequenced message: the replica-accepted case (#4140),
+			// admissible on its own, held as the sequenced layer holds it.
+			ok, err := b.admissibilityOf(str, a.classifier, a.seq)
+			if err != nil || !ok {
+				return false, nil
+			}
+			b.staging.Hold(str.id(), a.seq.Number, &execute.Held{ID: a.seq.ID(), Message: a.seq})
+			return true, nil
 		}
-		stored := new(protocol.Transaction)
-		stored.Body = txn.Transaction.Body
-		b.staging.Hold(str.id(), a.seq.Number, &execute.Held{
-			ID:        a.seq.ID(),
-			Message:   a.seq,
-			Collected: true,
-			Hash:      *(*[32]byte)(stored.GetHash()),
-		})
+	}
+
+	syn, attested, err := SyntheticMessage{}.check(b.Batch, ctx)
+	if err != nil {
+		// Refused by the rule the block refuses it by, and not held.
+		return false, nil
+	}
+
+	if syn.Proof == nil {
+		// Replica-accepted, or already covered by a validated proof: the
+		// block executes it, and holds it by the sequenced layer if it is
+		// not next.
+		b.staging.Hold(str.id(), a.seq.Number, &execute.Held{ID: a.seq.ID(), Message: a.seq})
 		return true, nil
+	}
+
+	proven, err := b.Executor.isAdmissible(b.Batch, syn.Proof)
+	if err != nil {
+		return false, errors.UnknownError.Wrap(err)
+	}
+	if proven {
+		// The block absorbs an accepted collection proof into the stream's
+		// replica (#4140) before it executes the message; a collecting node
+		// must too, or the hashes it has validated are not the hashes its
+		// peers have validated.
+		if syn.Proof.ReceiptList != nil {
+			err := b.staging.Prove(b.Executor.synthStream(a.seq.Source), syn.Proof.ReceiptList)
+			if err != nil && !errors.Is(err, errors.Conflict) {
+				return false, errors.UnknownError.Wrap(err)
+			}
+		}
+		b.staging.Hold(str.id(), a.seq.Number, &execute.Held{ID: a.seq.ID(), Message: a.seq})
+		return true, nil
+	}
+
+	// Not anchored here: collected, and only on a source validator's word
+	// (#4243) — the same refusal the block makes.
+	if !attested {
+		return false, nil
 	}
 
 	// A source whose proof this block turned away for want of budget has its
 	// entries turned away with it, as collection does: nothing re-sends a
 	// proof, so holding the entry would strand it where no gap is left for
-	// healing to find (#4282).
+	// healing to find (#4282). Only on this path, because only this path
+	// holds an entry whose proof is still to come.
 	if b.proofBudgetBound[strings.ToLower(str.source.String())] {
 		return false, nil
-	}
-
-	ok, err := b.admissibilityOf(str, a.classifier, a.seq)
-	if err != nil {
-		// A message whose admissibility cannot be decided is skipped, as
-		// stageRuns skips it; the number stays a hole and is asked for.
-		return false, nil
-	}
-	if ok {
-		b.staging.Hold(str.id(), a.seq.Number, &execute.Held{ID: a.seq.ID(), Message: a.seq})
-		return true, nil
 	}
 
 	h := &execute.Held{ID: a.classifier.ID(), Message: a.classifier, Collected: true, Hash: a.seq.Hash()}
@@ -199,6 +239,45 @@ func (b *Block) collectArrival(str stream, delivered uint64, a *arrival) (bool, 
 		}
 	}
 	b.staging.Hold(str.id(), a.seq.Number, h)
+	return true, nil
+}
+
+// collectAnchor holds one anchor copy as BlockAnchor.process would leave it:
+// held by the sequenced layer once its signatures reach the threshold,
+// collected below it, refused when its own executor refuses it.
+func (b *Block) collectAnchor(str stream, ctx *MessageContext, a *arrival) (bool, error) {
+	txn, ok := a.seq.Message.(*messaging.TransactionMessage)
+	if !ok || txn.Transaction == nil {
+		return false, nil
+	}
+	if _, ok := a.classifier.(*messaging.BlockAnchor); ok {
+		if _, err := (BlockAnchor{}).check(ctx, b.Batch); err != nil {
+			// Refused by the rule the block refuses it by, and not held.
+			return false, nil
+		}
+	}
+
+	// At its quorum the block executes it, and the sequenced layer holds it
+	// if it is not next; below its quorum it is held as a copy below quorum
+	// is held — the sequenced message, and the hash a proof over the source's
+	// anchor chain validates, which is the transaction's stored form.
+	ready, err := b.anchorIsAdmissible(b.Batch, nil, txn.Transaction, str.source)
+	if err != nil {
+		return false, nil
+	}
+	if ready {
+		b.staging.Hold(str.id(), a.seq.Number, &execute.Held{ID: a.seq.ID(), Message: a.seq})
+		return true, nil
+	}
+
+	stored := new(protocol.Transaction)
+	stored.Body = txn.Transaction.Body
+	b.staging.Hold(str.id(), a.seq.Number, &execute.Held{
+		ID:        a.seq.ID(),
+		Message:   a.seq,
+		Collected: true,
+		Hash:      *(*[32]byte)(stored.GetHash()),
+	})
 	return true, nil
 }
 
@@ -262,7 +341,13 @@ func (x *Executor) SettleStaging(batch *database.Batch, q uint64) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("load %v: %w", x.Describe.Ledger(), err)
 	}
-	if ledger.Index != q {
+	// The ledger's index is the last block that WROTE something: an empty
+	// block writes nothing at all, not even its index, so the state at Q is
+	// the state the last non-empty block at or below Q left. A ledger AHEAD
+	// of Q is the error this exists to catch — staging settled against a
+	// later state than the block it is paired with executes a different block
+	// than its peers (#4290).
+	if ledger.Index > q {
 		return errors.Conflict.WithFormat("%s: cannot settle staging at block %d against state at block %d",
 			x.Describe.PartitionId, q, ledger.Index)
 	}
@@ -304,6 +389,10 @@ func (x *Executor) SettleStaging(batch *database.Batch, q uint64) error {
 		b.staging.Release(st.ID, delivered)
 	}
 
+	// Staging is now as of Q, and says so: a reader takes staging and the
+	// block it is as of together, and one that paired this stage with any
+	// other block would execute a different block (#4291).
+	b.staging.AtBlock(q)
 	b.staging.Commit()
 	x.logger.Info("Staging settled at the block the state is",
 		"module", "sync", "partition", x.Describe.PartitionId, "block", q,

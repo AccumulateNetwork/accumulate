@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -41,6 +42,8 @@ import (
 type stagingSim struct {
 	t      *testing.T
 	x      *Executor
+	store  *memory.Database
+	db     *database.Database
 	batch  *database.Batch
 	b      *Block
 	c      *classified
@@ -68,11 +71,13 @@ func newStagingSim(t *testing.T, entries int) *stagingSim {
 			Partitions:    []*protocol.ValidatorPartitionInfo{{ID: "BVN1", Active: true}},
 		}}},
 	}})
-	db := database.OpenInMemory(nil)
+	store := memory.New(nil)
+	db := database.New(store, nil)
+	x.Database = db
 	batch := db.Begin(true)
 	t.Cleanup(batch.Discard)
 
-	s := &stagingSim{t: t, x: x, batch: batch, key: key}
+	s := &stagingSim{t: t, x: x, store: store, db: db, batch: batch, key: key}
 	s.str = stream{kind: streamSynthetic, ledger: x.Describe.Synthetic(), source: protocol.PartitionUrl("BVN1")}
 
 	// The sequenced layer, reduced to what staging sees of it: next executes
@@ -89,6 +94,9 @@ func newStagingSim(t *testing.T, entries int) *stagingSim {
 	pool := new(protocol.AnchorLedger)
 	pool.Url = x.Describe.AnchorPool()
 	require.NoError(t, batch.Account(pool.Url).Main().Put(pool))
+	system := new(protocol.SystemLedger)
+	system.Url = x.Describe.Ledger()
+	require.NoError(t, batch.Account(system.Url).Main().Put(system))
 
 	// The source's synthetic chain: real sequenced messages, numbered 1..n.
 	s.chain2 = batch.Account(protocol.PartitionUrl("BVN1").JoinPath(protocol.Synthetic)).MainChain()
@@ -126,9 +134,21 @@ func newStagingSim(t *testing.T, entries int) *stagingSim {
 // carried over but the database — which is exactly what a real block sees.
 func (s *stagingSim) newBlock() {
 	if s.b != nil {
-		// Close the previous block: Delivered is written back to the ledger.
+		// Close the previous block: Delivered is written back to the ledger,
+		// and the batch commits, as a block's does. Committing is what lets a
+		// test take this node's state the way a joining node's pull does.
 		require.NoError(s.t, s.b.flushStreams())
 		s.b.staging.Commit()
+		// The block writes its index, as a real block does at Begin: what a
+		// node that pulls this state reads to know which block it is.
+		var system *protocol.SystemLedger
+		require.NoError(s.t, s.batch.Account(s.x.Describe.Ledger()).Main().GetAs(&system))
+		system.Index = s.block
+		require.NoError(s.t, s.batch.Account(system.Url).Main().Put(system))
+		require.NoError(s.t, s.batch.Commit())
+		s.batch = s.db.Begin(true)
+		s.t.Cleanup(s.batch.Discard)
+		s.reopen()
 	}
 	s.block++
 	s.b = &Block{positions: new(positionCache), Executor: s.x, Batch: s.batch, staging: s.x.staging().Begin()}
@@ -138,6 +158,18 @@ func (s *stagingSim) newBlock() {
 	s.b.staging.AtBlock(s.block)
 	s.c = &classified{streams: map[string]stream{}, arrivals: map[string]map[uint64]*arrival{}}
 	s.c.addStream(s.str)
+}
+
+// reopen re-acquires the chain handles after the batch commits: a handle
+// belongs to the batch it came from.
+func (s *stagingSim) reopen() {
+	s.chain2 = s.batch.Account(protocol.PartitionUrl("BVN1").JoinPath(protocol.Synthetic)).MainChain()
+	c, err := s.chain2.Get()
+	require.NoError(s.t, err)
+	s.chain = c
+	root, err := s.batch.Account(protocol.PartitionUrl("BVN1").JoinPath(protocol.Ledger)).RootChain().Get()
+	require.NoError(s.t, err)
+	s.root = root
 }
 
 // rootAt is the Directory root that anchor block k carries in this

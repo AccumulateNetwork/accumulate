@@ -7,27 +7,122 @@
 package block
 
 import (
+	"crypto/ed25519"
+	"crypto/sha256"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// newCollectingExecutor is a second executor over the same network and the
-// same store: a joining node, whose staging is its own and empty, reading the
-// state the pull has given it (#4292).
-func newCollectingExecutor(s *stagingSim) *Executor {
+// joiner is a second node of the same partition: its own staging, and its own
+// store, which starts empty and is filled by the pull. Collecting decides
+// what to hold against the store as it stands, so a test that gave it the
+// peer's live store would prove only that collect matches execute given
+// identical state — which is the one thing a joining node does not have
+// (#4292 review).
+type joiner struct {
+	x     *Executor
+	store *memory.Database
+	db    *database.Database
+	peer  *stagingSim
+}
+
+func newJoiner(t *testing.T, s *stagingSim) *joiner {
+	t.Helper()
 	x := new(Executor)
 	x.Describe = s.x.Describe
 	x.globalsPtr.Store(s.x.globals())
-	return x
+	store := memory.New(nil)
+	db := database.New(store, nil)
+	x.Database = db
+	return &joiner{x: x, store: store, db: db, peer: s}
+}
+
+// collect takes one of the peer's blocks into the joining node's staging,
+// against the joining node's own store.
+func (j *joiner) collect(t *testing.T, index uint64, envelopes ...*messaging.Envelope) *execute.CollectedBlock {
+	t.Helper()
+	batch := j.db.Begin(true)
+	defer batch.Discard()
+	out, err := j.x.CollectBlock(batch, execute.BlockParams{Index: index}, envelopes)
+	require.NoError(t, err)
+	require.False(t, batch.IsDirty(), "collecting a block writes nothing")
+	return out
+}
+
+// pull is what #4293 does, in one step: the joining node's store becomes the
+// peer's state. The peer commits at every block, so what is exported is the
+// state as of its last closed block.
+func (j *joiner) pull(t *testing.T) {
+	t.Helper()
+	entries, err := j.peer.store.Export()
+	require.NoError(t, err)
+	require.NoError(t, j.store.Import(entries))
+}
+
+// settle brings the joining node's staging to the block its pulled state is.
+func (j *joiner) settle(t *testing.T, q uint64) {
+	t.Helper()
+	batch := j.db.Begin(true)
+	defer batch.Discard()
+	require.NoError(t, j.x.SettleStaging(batch, q))
+	require.False(t, batch.IsDirty(), "settling staging writes nothing: it is memory")
+}
+
+// newAnchorFixture is a staging fixture whose globals carry a Directory
+// validator, so an anchor copy can be signed the way a real one is: an anchor
+// copy that its own executor would refuse must not be held (#4292 review).
+func newAnchorFixture(t *testing.T) (*stagingFixture, ed25519.PrivateKey) {
+	t.Helper()
+	f := newStagingFixture(t, 0)
+	seed := sha256.Sum256([]byte("directory validator"))
+	key := ed25519.NewKeyFromSeed(seed[:])
+	f.x.globalsPtr.Store(&Globals{Active: core.GlobalValues{
+		ExecutorVersion: protocol.ExecutorVersionLatest,
+		Globals:         &protocol.NetworkGlobals{ValidatorAcceptThreshold: protocol.Rational{Numerator: 2, Denominator: 3}},
+		Network: &protocol.NetworkDefinition{
+			Version: 1,
+			Partitions: []*protocol.PartitionInfo{
+				{ID: protocol.Directory, Type: protocol.PartitionTypeDirectory},
+				{ID: "BVN0", Type: protocol.PartitionTypeBlockValidator},
+			},
+			Validators: []*protocol.ValidatorInfo{{
+				PublicKey:     key[32:],
+				PublicKeyHash: sha256.Sum256(key[32:]),
+				Partitions:    []*protocol.ValidatorPartitionInfo{{ID: protocol.Directory, Active: true}},
+			}},
+		},
+	}})
+	return f, key
+}
+
+// signedAnchor is a Directory anchor copy as a validator of the Directory
+// sends it.
+func signedAnchor(key ed25519.PrivateKey, n uint64) *messaging.BlockAnchor {
+	dn := protocol.DnUrl()
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool)
+	txn.Body = &protocol.DirectoryAnchor{PartitionAnchor: protocol.PartitionAnchor{Source: dn, MinorBlockIndex: n}}
+	seq := &messaging.SequencedMessage{
+		Message:     &messaging.TransactionMessage{Transaction: txn},
+		Source:      dn,
+		Destination: protocol.PartitionUrl("BVN0"),
+		Number:      n,
+	}
+	h := seq.Hash()
+	sig := &protocol.ED25519Signature{PublicKey: key[32:], Signer: dn.JoinPath(protocol.Network), SignerVersion: 1, TransactionHash: h}
+	protocol.SignED25519(sig, key, nil, h[:])
+	return &messaging.BlockAnchor{Anchor: seq, Signature: sig}
 }
 
 // putSystemLedger makes the store say which block it is: what SettleStaging
@@ -110,15 +205,14 @@ func requireStagingEqual(t *testing.T, want, got *execute.Staging) {
 // thing (executor spec, "Sync"; #4292).
 func TestCollectBlock_HoldsWhatTheExecutingNodeHolds(t *testing.T) {
 	s := newStagingSim(t, 6)
-	col := newCollectingExecutor(s)
+	j := newJoiner(t, s)
 
 	// Block 1: a package covering entries 1..3 arrives ahead of the anchor
-	// that proves it. One node executes the block; the other collects it.
+	// that proves it. One node executes the block; the other collects it,
+	// against its own store, which the pull has not filled yet.
 	env1 := s.packageEnvelope(0, 2, 3)
 	s.packageArrives(0, 2, 3)
-	out, err := col.CollectBlock(s.batch, execute.BlockParams{Index: 1}, []*messaging.Envelope{env1})
-	require.NoError(t, err)
-	require.Equal(t, 3, out.Held, "three entries held, none executed")
+	require.Equal(t, 3, j.collect(t, 1, env1).Held, "three entries held, none executed")
 
 	// Block 2: the anchor lands. The executing node validates the proof and
 	// runs the entries; the collecting node executes nothing.
@@ -130,31 +224,28 @@ func TestCollectBlock_HoldsWhatTheExecutingNodeHolds(t *testing.T) {
 	s.newBlock()
 	env2 := s.packageEnvelope(3, 5, 6)
 	s.packageArrives(3, 5, 6)
-	out, err = col.CollectBlock(s.batch, execute.BlockParams{Index: 3}, []*messaging.Envelope{env2})
-	require.NoError(t, err)
-	require.Equal(t, 3, out.Held)
+	require.Equal(t, 3, j.collect(t, 3, env2).Held)
 	s.newBlock() // close block 3: Delivered is written back to the ledger
 
-	// Before the settle the collecting node holds what it has collected and
-	// still waits on the anchor the executing node has already seen. Its
-	// stage starts where the store it is pulling says the stream stands, not
-	// at zero: collecting a block releases what the store already delivered,
-	// as closing a block does.
+	// Before the settle the collecting node holds everything it collected —
+	// including what the executing node has already run, because its own
+	// store says nothing has been delivered — and waits on both anchors.
 	{
-		tx := col.staging().Begin()
+		tx := j.x.staging().Begin()
 		require.Equal(t, []uint64{3, 6}, tx.ProofBlocks(s.str.source), "both packages' proofs wait")
 		st := tx.Status(s.str.id())
-		require.Equal(t, uint64(3), st.Delivered, "the stage stands where the store says the stream does")
-		require.Equal(t, 3, st.Held)
+		require.Equal(t, uint64(0), st.Delivered, "its own store has delivered nothing")
+		require.Equal(t, 6, st.Held)
 		tx.Discard()
 	}
 
-	// The state pull has brought the store to block 3; staging is settled
-	// against it.
-	putSystemLedger(t, s.batch, col, 3)
-	require.NoError(t, col.SettleStaging(s.batch, 3))
+	// The pull brings its store to the peer's state at block 3.
+	j.pull(t)
 
-	requireStagingEqual(t, s.x.staging(), col.staging())
+	// Staging is settled against the state it pulled.
+	j.settle(t, 3)
+
+	requireStagingEqual(t, s.x.staging(), j.x.staging())
 }
 
 // The join, end to end at the executor: a node takes a peer's staging as of
@@ -163,7 +254,7 @@ func TestCollectBlock_HoldsWhatTheExecutingNodeHolds(t *testing.T) {
 // the snapshot, #4292 collects and settles).
 func TestLoadStaging_ThenCollectToQ(t *testing.T) {
 	s := newStagingSim(t, 6)
-	col := newCollectingExecutor(s)
+	j := newJoiner(t, s)
 
 	// Block 1 on the peer: a package arrives ahead of its anchor. The joining
 	// node is not listening yet.
@@ -173,9 +264,9 @@ func TestLoadStaging_ThenCollectToQ(t *testing.T) {
 	// P = 1: the joining node takes the peer's staging as of that block.
 	snap, _ := s.x.staging().Snapshot(&private.StagingSnapshotRequest{Partition: "BVN0"})
 	require.Equal(t, uint64(1), snap.Block, "the snapshot says which block it is as of")
-	require.NoError(t, col.LoadStaging(snap))
+	require.NoError(t, j.x.LoadStaging(snap))
 	{
-		tx := col.staging().Begin()
+		tx := j.x.staging().Begin()
 		for n := uint64(1); n <= 3; n++ {
 			h, ok := tx.IDOf(s.str.id(), n)
 			require.True(t, ok, "the peer's held entry %d came with the snapshot", n)
@@ -194,13 +285,12 @@ func TestLoadStaging_ThenCollectToQ(t *testing.T) {
 	// Block 3: a second package, whose anchor is not here.
 	env := s.packageEnvelope(3, 5, 6)
 	s.packageArrives(3, 5, 6)
-	_, err := col.CollectBlock(s.batch, execute.BlockParams{Index: 3}, []*messaging.Envelope{env})
-	require.NoError(t, err)
+	j.collect(t, 3, env)
 	s.newBlock()
 
-	putSystemLedger(t, s.batch, col, 3)
-	require.NoError(t, col.SettleStaging(s.batch, 3))
-	requireStagingEqual(t, s.x.staging(), col.staging())
+	j.pull(t)
+	j.settle(t, 3)
+	requireStagingEqual(t, s.x.staging(), j.x.staging())
 }
 
 // A snapshot from another partition's validator describes another partition's
@@ -221,7 +311,7 @@ func TestLoadStaging_RefusesAnotherPartitionsStreams(t *testing.T) {
 // The state is the pull's to provide; a collecting node that wrote anything
 // would be executing (executor spec, "Sync").
 func TestCollectBlock_WritesNothing(t *testing.T) {
-	f := newStagingFixture(t, 0)
+	f, key := newAnchorFixture(t)
 	dn := protocol.DnUrl()
 	pool := protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool)
 
@@ -233,11 +323,9 @@ func TestCollectBlock_WritesNothing(t *testing.T) {
 	require.NoError(t, f.batch.Account(pool).Main().Put(&ledger))
 	require.NoError(t, f.batch.Commit())
 
-	txn := new(protocol.Transaction)
-	txn.Header.Principal = pool
-	txn.Body = &protocol.DirectoryAnchor{PartitionAnchor: protocol.PartitionAnchor{Source: dn, MinorBlockIndex: 3}}
-	seq := &messaging.SequencedMessage{Message: &messaging.TransactionMessage{Transaction: txn}, Source: dn, Destination: protocol.PartitionUrl("BVN0"), Number: 3}
-	env := &messaging.Envelope{Messages: []messaging.Message{&messaging.BlockAnchor{Anchor: seq}}}
+	anchor := signedAnchor(key, 3)
+	seq := anchor.Anchor.(*messaging.SequencedMessage)
+	env := &messaging.Envelope{Messages: []messaging.Message{anchor}}
 
 	batch := f.db.Begin(true)
 	defer batch.Discard()
@@ -256,7 +344,7 @@ func TestCollectBlock_WritesNothing(t *testing.T) {
 // signature is NOT recorded: the store's signatures come from the pull, which
 // has what the peers recorded through Q (#4292).
 func TestCollectBlock_HoldsAnchorCopiesWithoutRecordingTheirSignatures(t *testing.T) {
-	f := newStagingFixture(t, 0)
+	f, key := newAnchorFixture(t)
 	dn := protocol.DnUrl()
 	pool := protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool)
 
@@ -265,18 +353,18 @@ func TestCollectBlock_HoldsAnchorCopiesWithoutRecordingTheirSignatures(t *testin
 	ledger.Partition(dn).Delivered = 2
 	require.NoError(t, f.batch.Account(pool).Main().Put(&ledger))
 
-	anchor := func(n uint64) *messaging.BlockAnchor {
-		txn := new(protocol.Transaction)
-		txn.Header.Principal = pool
-		txn.Body = &protocol.DirectoryAnchor{PartitionAnchor: protocol.PartitionAnchor{Source: dn, MinorBlockIndex: n}}
-		seq := &messaging.SequencedMessage{Message: &messaging.TransactionMessage{Transaction: txn}, Source: dn, Destination: protocol.PartitionUrl("BVN0"), Number: n}
-		return &messaging.BlockAnchor{Anchor: seq}
-	}
+	// One copy signed by nobody: a block refuses it, so collecting must too,
+	// or its number is taken by an entry the peers never held and the real
+	// one can never take it (first sighting wins).
+	unsigned := signedAnchor(key, 5)
+	unsigned.Signature = nil
 
 	out, err := f.x.CollectBlock(f.batch, execute.BlockParams{Index: 9},
-		[]*messaging.Envelope{{Messages: []messaging.Message{anchor(2), anchor(3), anchor(4), anchor(3)}}})
+		[]*messaging.Envelope{{Messages: []messaging.Message{
+			signedAnchor(key, 2), signedAnchor(key, 3), signedAnchor(key, 4), signedAnchor(key, 3), unsigned,
+		}}})
 	require.NoError(t, err)
-	require.Equal(t, 2, out.Held, "#2 is at Delivered, #3 twice is one entry")
+	require.Equal(t, 2, out.Held, "#2 is at Delivered, #3 twice is one entry, #5 is not signed")
 
 	tx := f.x.staging().Begin()
 	defer tx.Discard()
@@ -285,10 +373,12 @@ func TestCollectBlock_HoldsAnchorCopiesWithoutRecordingTheirSignatures(t *testin
 	require.False(t, ok, "at or below Delivered is not held")
 	h, ok := tx.IDOf(id, 3)
 	require.True(t, ok)
-	require.True(t, h.Collected, "an anchor copy is held collected: its quorum decides it")
+	require.True(t, h.Collected, "an anchor copy below its quorum is held collected")
 	require.Equal(t, messaging.MessageTypeSequenced, h.Message.Type())
 	_, ok = tx.IDOf(id, 4)
 	require.True(t, ok)
+	_, ok = tx.IDOf(id, 5)
+	require.False(t, ok, "an anchor copy its own executor refuses is not held")
 }
 
 // SettleStaging releases every stream through the Delivered the PULLED ledger
