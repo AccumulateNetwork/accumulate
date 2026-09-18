@@ -500,6 +500,50 @@ on the node's metrics endpoint, as are every row of the counting table above.
 Where the implementation departs from this specification, see
 [DIFFERENCES.md](DIFFERENCES.md).
 
+### Staging snapshot
+
+A running validator serves its staging as of its last committed block, so a
+node that joins or restarts starts from what its peers hold rather than from
+what a source produced (executor.md, "Sync" step 2). It is a private API
+call, `StagingSnapshot` (`internal/api/private`, served by the partition's
+sequencer): **one page** of `{Block, Streams, NextLedger, NextSource,
+NextNumber}`, where each stream is `{Ledger, Source, Delivered, Sighted,
+Entries, Validated, Proofs}`, an entry is `{Number, Message, Companion,
+Collected, Hash}`, a validated hash is `{Number, Hash}` and a staged proof is
+`{AnchorBlock, Proof}`. A held entry's ID is not carried: every place that
+holds one holds it under the message's own ID, so the reader derives it.
+Anchor streams are streams like any other; their entries are the held
+`SequencedMessage` copies, with `Hash` the transaction's stored form.
+
+**The page and the block index are read under one lock** — a block's commit
+publishes its index with its own additions — so a page is what the node held
+at one block and never a mixture of two. A reader that paired a page with a
+different block would execute a different block.
+
+**Paging is by stream and by sequence number**, because a stage may hold
+thousands of entries (run 20260918T023054Z: 290 and 551 on the Directory's
+streams). A page covers at most `MaxSnapshotSpan` numbers, counted across the
+entries and validated hashes together, and a nil `NextLedger` means it was
+the last. A source's proofs travel with the first page of the first stream of
+that source; a source that holds proofs and no stream gets a page of its own
+with a nil `Ledger`. **The block moves on between pages**: every page says
+which block it is as of, and a reader whose pages disagree discards what it
+has and starts over (`FetchStagingSnapshot`). The snapshot is not pinned
+server side — a validator does not keep a version of its stage alive for a
+reader that stalled.
+
+`Delivered` on a page is the ledger's, which is what the block released the
+stream at when it closed (executor.md, "What the stream ledger is for"), not
+a memory copy that a restart left at zero.
+
+A node that has executed no block holds nothing anyone should start from and
+refuses with `NotReady`; so will a node that is `BOOTING`, once node states
+land (executor.md, "Sync" step 5). Loading refuses staging that already holds
+something: a join starts from what its peer held, not from a mixture of that
+and whatever this node collected before it asked. Counted per partition in
+`accumulate_staging_snapshots_total` with the bytes served in
+`accumulate_staging_snapshot_bytes_total`.
+
 ### Rejoining (interim)
 
 `Conductor.Rejoin` (`internal/core/crosschain/rejoin.go`) is armed by `Start`

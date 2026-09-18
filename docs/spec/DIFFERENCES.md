@@ -265,6 +265,18 @@ committed-digest set, without which the first leader after every restart
 re-committed the whole rescue window below the floor (16 batches where the
 peers committed 3, run `20260918T014155Z`).
 
+**Serving staging (#4291, done)**: a running validator serves its staging as
+of its last committed block through the private API, paged by stream, with
+the block index on every page (healing.md, "Staging snapshot"). **Nothing
+reads it yet**: the pull a starting node makes is still `Conductor.Rejoin`
+from the source's cache, with the inexactness described above, until the join
+of step 2 is built on this call. Also not done: the refusal is "this node has
+executed no block", not the node state of step 5 — a node that is `BOOTING`
+will serve its stage until that lands (#4295). And a page is as of whatever
+block the validator had committed when the call arrived; nothing is pinned
+server side, so a reader whose pages straddle a commit starts over rather
+than being served a consistent version.
+
 **Decided (Paul, 2026-09-18)**: a starting node takes its staging from a
 running validator through an API, keeps it current from consensus while it
 pulls the state the buffered blocks name, and executes from the block after
