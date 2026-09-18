@@ -28,6 +28,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/persist"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -122,6 +123,11 @@ type Service struct {
 	// production loop serves it, because it is the only thing that produces
 	// blocks (#4294).
 	handoff chan handoffRequest
+	// named is every account the collected blocks have named and the state
+	// pull has not been told about yet; namedFull says the set stopped
+	// growing at its bound.
+	named     map[string]*url.URL
+	namedFull bool
 
 	// Validator synchronization
 	validatorUpdateHeight uint64 // Height at which validator update was detected

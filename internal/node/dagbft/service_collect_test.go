@@ -10,11 +10,13 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -29,11 +31,15 @@ type collectingAdapter struct {
 	collected []adapter.BlockParams
 }
 
-func (a *collectingAdapter) CollectBlock(_ context.Context, params adapter.BlockParams) (int, error) {
+func (a *collectingAdapter) CollectBlock(_ context.Context, params adapter.BlockParams) (*execute.CollectedBlock, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.collected = append(a.collected, params)
-	return len(params.Batches), nil
+	out := &execute.CollectedBlock{Held: len(params.Batches)}
+	for i := range params.Batches {
+		out.Accounts = append(out.Accounts, protocol.AccountUrl(fmt.Sprintf("alice%d", i)))
+	}
+	return out, nil
 }
 
 // newJoiningService is newCommitService with an adapter that can collect.

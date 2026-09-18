@@ -9,12 +9,16 @@ package dagbft
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // Collecting mode (executor spec, "Sync", step 1; #4292).
@@ -212,14 +216,14 @@ func (g *CollectedGroup) payloadEntries() int {
 // it had collected it.
 func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batch, leader *types.Certificate, isLeader bool) error {
 	collector, ok := s.adapter.(interface {
-		CollectBlock(ctx context.Context, params adapter.BlockParams) (int, error)
+		CollectBlock(ctx context.Context, params adapter.BlockParams) (*execute.CollectedBlock, error)
 	})
 	if !ok {
 		return errors.NotAllowed.WithFormat("%s: the adapter cannot collect a block without executing it",
 			s.config.Partition.ID)
 	}
 
-	held, err := collector.CollectBlock(s.ctx, adapter.BlockParams{
+	out, err := collector.CollectBlock(s.ctx, adapter.BlockParams{
 		// No index: a collecting node does not know which block this is
 		// until the join matches the root (#4294). Everything a collected
 		// block does is keyed on the stream and the number, not the block.
@@ -241,14 +245,58 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 			s.config.Partition.ID, len(s.buffer))
 	}
 	s.buffer = append(s.buffer, &CollectedGroup{Certs: certs, Batches: batches, Leader: leader, IsLeader: isLeader})
+	s.nameAccounts(out.Accounts)
 	s.logger.Debug("Collected a committed group while joining",
 		"partition", s.config.Partition.ID,
 		"round", leader.Header.Round,
 		"certs", len(certs),
 		"batches", len(batches),
-		"held", held,
+		"held", out.Held,
+		"accounts", len(out.Accounts),
 		"buffered", len(s.buffer))
 	return nil
+}
+
+// maxNamedAccounts bounds the set of accounts the collected blocks have named
+// and the pull has not yet been told about. It is large enough for the blocks
+// of a long pull and small enough that a joining node cannot be made to hold
+// the whole account tree in a map. Past it the names are dropped, and the
+// pull falls back to what it finds by comparing the peer's BPT pages with its
+// own — slower, and correct (#4293).
+const maxNamedAccounts = 1 << 16
+
+// nameAccounts records what a collected block named. The caller holds s.mu.
+func (s *Service) nameAccounts(accounts []*url.URL) {
+	if s.named == nil {
+		s.named = map[string]*url.URL{}
+	}
+	for _, u := range accounts {
+		if len(s.named) >= maxNamedAccounts {
+			if !s.namedFull {
+				s.namedFull = true
+				s.logger.Info("The accounts the collected blocks name no longer fit; the pull will find the rest by page",
+					"partition", s.config.Partition.ID, "limit", maxNamedAccounts)
+			}
+			return
+		}
+		s.named[strings.ToLower(u.String())] = u
+	}
+}
+
+// NamedAccounts is every account the blocks collected since the last call
+// named — what the state pull must fetch for those blocks (executor spec,
+// "Sync", step 3). It drains: a round pulls what that round's blocks named.
+func (s *Service) NamedAccounts() []*url.URL {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]*url.URL, 0, len(s.named))
+	for _, u := range s.named {
+		out = append(out, u)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Compare(out[j]) < 0 })
+	s.named = nil
+	s.namedFull = false
+	return out
 }
 
 // pruneCommitted retires the batches a committed group named from every
