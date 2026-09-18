@@ -211,6 +211,15 @@ this one; the staging half is new.
    by backfill. Test: a request for missing data routed to a `BOOTING` node
    is refused and answered by a `COMPLETE` one.
 
+Order and gates: 1 and 3 in parallel (they share nothing); 2 on 1; 4 on all
+three, gated on `TestOneValidatorRestartDoesNotDiverge` with the interim pull
+removed and no Docker chaos run before it passes; 5 after 4. Steps 3 and 4
+show a plan before code (a port across a five-month database-API gap; a
+rewiring of consensus start-up). The observations behind the order — three
+causes each sufficient alone, why a source's cache and consensus replay are
+both wrong, how to find the next divergence in minutes — are on #4205
+(2026-09-18).
+
 Done when: a soak with chaos restarts under load keeps every restarted
 validator agreeing on every anchor body, and #4205 closes. Required before
 chaos returns to the acceptance run.
