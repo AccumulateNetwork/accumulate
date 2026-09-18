@@ -9,6 +9,7 @@ package execute
 import (
 	"sync/atomic"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	v1 "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
@@ -221,6 +222,18 @@ func (m *Multi) CollectCommittedBlock(params execute.BlockParams, envelopes []*m
 		return nil, errors.NotAllowed.With("this executor cannot collect a block without executing it")
 	}
 	return c.CollectCommittedBlock(params, envelopes)
+}
+
+// LoadStaging takes a running validator's staging into the active executor's
+// own (executor spec, "Sync", step 2).
+func (m *Multi) LoadStaging(snap *private.StagingSnapshot) error {
+	c, ok := (*m.active.Load()).(interface {
+		LoadStaging(*private.StagingSnapshot) error
+	})
+	if !ok {
+		return errors.NotAllowed.With("this executor cannot take staging from a peer")
+	}
+	return c.LoadStaging(snap)
 }
 
 // SettleStagingAt brings the active executor's staging to the block its

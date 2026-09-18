@@ -50,6 +50,7 @@ type stagingSim struct {
 	root   *database.Chain
 	roots  [][]byte // roots[k] is the root chain's anchor at height k
 	str    stream
+	block  uint64
 	key    ed25519.PrivateKey // a validator of the source: a collected entry is held on its word
 }
 
@@ -129,7 +130,12 @@ func (s *stagingSim) newBlock() {
 		require.NoError(s.t, s.b.flushStreams())
 		s.b.staging.Commit()
 	}
+	s.block++
 	s.b = &Block{positions: new(positionCache), Executor: s.x, Batch: s.batch, staging: s.x.staging().Begin()}
+	// Staging carries the index of the block that publishes it, as Begin sets
+	// it on a real block (#4291): a snapshot taken here says which block it is
+	// as of.
+	s.b.staging.AtBlock(s.block)
 	s.c = &classified{streams: map[string]stream{}, arrivals: map[string]map[uint64]*arrival{}}
 	s.c.addStream(s.str)
 }

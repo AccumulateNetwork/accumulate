@@ -315,7 +315,9 @@ its root matches; a restart is the same path, not a consensus replay. PLAN
 E11 lists the five steps. The bootstrap-v3 state pull exists only on the
 CometBFT line.
 
-**Collecting (#4292, done)**: the executor takes a committed block into
+**Collecting (#4292, done)**: the executor takes a peer's staging
+(`Executor.LoadStaging`, from #4291's snapshot, refusing a stage that is not
+empty and streams that are not this partition's), takes a committed block into
 staging without executing it (`Executor.CollectBlock`), and settles staging
 at the block its pulled state is (`SettleStaging`): proofs decided against
 the anchors that state has executed, every stream released through the

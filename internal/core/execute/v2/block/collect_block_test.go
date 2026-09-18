@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -154,6 +155,66 @@ func TestCollectBlock_HoldsWhatTheExecutingNodeHolds(t *testing.T) {
 	require.NoError(t, col.SettleStaging(s.batch, 3))
 
 	requireStagingEqual(t, s.x.staging(), col.staging())
+}
+
+// The join, end to end at the executor: a node takes a peer's staging as of
+// block P, collects the blocks after P, and once its state is the state at Q
+// it holds exactly what the peer holds (executor spec, "Sync"; #4291 serves
+// the snapshot, #4292 collects and settles).
+func TestLoadStaging_ThenCollectToQ(t *testing.T) {
+	s := newStagingSim(t, 6)
+	col := newCollectingExecutor(s)
+
+	// Block 1 on the peer: a package arrives ahead of its anchor. The joining
+	// node is not listening yet.
+	s.packageArrives(0, 2, 3)
+	s.newBlock()
+
+	// P = 1: the joining node takes the peer's staging as of that block.
+	snap, _ := s.x.staging().Snapshot(&private.StagingSnapshotRequest{Partition: "BVN0"})
+	require.Equal(t, uint64(1), snap.Block, "the snapshot says which block it is as of")
+	require.NoError(t, col.LoadStaging(snap))
+	{
+		tx := col.staging().Begin()
+		for n := uint64(1); n <= 3; n++ {
+			h, ok := tx.IDOf(s.str.id(), n)
+			require.True(t, ok, "the peer's held entry %d came with the snapshot", n)
+			require.True(t, h.Collected)
+		}
+		require.Equal(t, []uint64{3}, tx.ProofBlocks(s.str.source), "and so did its waiting proof")
+		tx.Discard()
+	}
+
+	// Block 2: the anchor lands and the peer runs what it held. The joining
+	// node collects the same block and executes nothing.
+	s.anchorExecutes(3, s.rootAt(3))
+	require.Equal(t, []uint64{1, 2, 3}, s.run())
+	s.newBlock()
+
+	// Block 3: a second package, whose anchor is not here.
+	env := s.packageEnvelope(3, 5, 6)
+	s.packageArrives(3, 5, 6)
+	_, err := col.CollectBlock(s.batch, execute.BlockParams{Index: 3}, []*messaging.Envelope{env})
+	require.NoError(t, err)
+	s.newBlock()
+
+	putSystemLedger(t, s.batch, col, 3)
+	require.NoError(t, col.SettleStaging(s.batch, 3))
+	requireStagingEqual(t, s.x.staging(), col.staging())
+}
+
+// A snapshot from another partition's validator describes another partition's
+// stage. Loading it would hold entries on streams this node does not execute.
+func TestLoadStaging_RefusesAnotherPartitionsStreams(t *testing.T) {
+	f := newStagingFixture(t, 0)
+	foreign := protocol.PartitionUrl("BVN7").JoinPath(protocol.Synthetic)
+
+	err := f.x.LoadStaging(&private.StagingSnapshot{Block: 9, Streams: []*private.StagedStream{
+		{Ledger: foreign, Source: protocol.PartitionUrl("BVN1")},
+	}})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, errors.BadRequest), "got %v", err)
+	require.Contains(t, err.Error(), "BVN0", "the partition refusing is named")
 }
 
 // Collecting writes nothing: not the message, not a signature, not a ledger.

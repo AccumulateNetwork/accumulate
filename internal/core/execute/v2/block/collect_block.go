@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -199,6 +200,43 @@ func (b *Block) collectArrival(str stream, delivered uint64, a *arrival) (bool, 
 	}
 	b.staging.Hold(str.id(), a.seq.Number, h)
 	return true, nil
+}
+
+// LoadStaging takes a running validator's staging, as of the block the
+// snapshot names, into this executor's own (executor spec, "Sync", step 2;
+// #4291 serves it). It is the first thing a joining node does with staging,
+// and it refuses one that is not empty: a stage with anything in it is not a
+// peer's stage, and loading on top of it would hold entries no peer held.
+//
+// Every stream the snapshot carries must be one of THIS partition's inbound
+// streams. A snapshot answered by another partition's validator describes
+// another partition's stage, and holding it here would put entries on streams
+// this node does not execute — a whole-partition version of the one-entry
+// divergence the join exists to prevent (#4290). A page carrying only a
+// source's waiting proofs has no ledger and names no stream; it is taken as
+// it is.
+func (x *Executor) LoadStaging(snap *private.StagingSnapshot) error {
+	if snap == nil {
+		return errors.BadRequest.With("missing snapshot")
+	}
+	synth, anchors := x.Describe.Synthetic(), x.Describe.AnchorPool()
+	for _, st := range snap.Streams {
+		if st.Ledger == nil {
+			continue // a source's proofs, which stand on no stream
+		}
+		if !st.Ledger.Equal(synth) && !st.Ledger.Equal(anchors) {
+			return errors.BadRequest.WithFormat("%s: %v is not a stream of this partition",
+				x.Describe.PartitionId, st.Ledger)
+		}
+	}
+	err := x.staging().Load(snap)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	x.logger.Info("Staging taken from a peer",
+		"module", "sync", "partition", x.Describe.PartitionId,
+		"block", snap.Block, "streams", len(snap.Streams))
+	return nil
 }
 
 // SettleStaging brings staging to the block the pulled state is (executor
