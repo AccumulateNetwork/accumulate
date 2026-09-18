@@ -1158,3 +1158,64 @@ The rules the implementation holds to, pending that part:
 
 **Size**: the API part is large and covers far more than proofs. This entry
 exists so the two calls are not mistaken for unspecified behaviour.
+
+## A pulled account can only settle on a block the Directory anchored
+
+executor.md ("Sync", step 3) says a fetched account is held until the anchor
+for its block arrives. The implementation reads that literally:
+`pull.DirectoryAnchors.AnchoredRoot` is an **exact** lookup of
+`(partition, block)` against the `StateTreeAnchor` values carried by the
+anchors the Directory executed, and a peer serves an account at whatever block
+it is currently on.
+
+Only some blocks send an anchor. Measured on the live twelve-node network of
+2026-09-18, over a 500-block window per partition:
+
+| partition | blocks with an anchored root | stride |
+|---|---|---|
+| `acc://dn.acme` | 24.0% | 4.16 |
+| `acc://bvn-BVN1.acme` | 17.3% | 5.78 |
+| `acc://bvn-BVN2.acme` | 17.1% | 5.85 |
+| `acc://bvn-BVN3.acme` | 17.1% | 5.85 |
+
+Every account fetched in one round is served at nearly the same block, so a
+round settles wholesale or not at all: roughly five settle batches in six wait
+`maxSettleRounds` for an anchor that is never coming and are then discarded and
+re-fetched. The join still converges — it is a constant factor, not a wedge —
+but it is a six-fold one, and it was silent until #4295 gave the discard a log
+line.
+
+**Two obvious repairs do not work, and it is worth writing down why.**
+
+*Settle against the nearest anchored block at or after the one served.* The
+receipt the peer served terminates at the peer's BPT root **as of the block it
+served at**, and no other block's root equals it. Retrying the same receipt
+against a later anchored root fails the second check, not the third.
+
+*Have the peer serve the receipt at the most recent block it knows is
+anchored.* A BPT is a tree of current state — every account that changes
+rewrites the path to the root — so **an account cannot be proved against a past
+BPT** (see "The account proof API has no specification part", above). The peer
+has no past BPT to build that receipt from.
+
+**The repair that does work is already built, for a different caller.**
+`ProofService.AnchorReceipt` (#4274, #4276) extends a partition's *current*
+BPT root through the partition's `bpt` chain into a root-chain anchor the
+partition actually sent, and binds that anchor to a directory root. Every
+block's root is on the bpt chain, so **every** root is provable — which is
+exactly the property the stride denies the pull. Verifying a pulled account
+through the two-call proof instead of through an exact `StateTreeAnchor`
+lookup would remove the stride entirely.
+
+What that change has to settle first, and why it was not made along with
+#4295: the two-call proof terminates at a *directory root chain* anchor, not at
+a BPT root, so the joining node needs a trusted directory root-chain anchor to
+check it against, and today the only roots the pull trusts are the
+`StateTreeAnchor` values it reads out of the Directory's anchor pool. Choosing
+that trust anchor — and keeping `tracker.Matched`, which compares this node's
+own BPT root against an anchored one, working alongside it — is the design
+question. It is not a large change; it is a change that must not be guessed at.
+
+**Size**: medium. `pull.Verify` and `pull.DirectoryAnchors` on one side, the
+proof client and the trust anchor on the other; `tracker` unchanged if the
+final root match stays as it is.

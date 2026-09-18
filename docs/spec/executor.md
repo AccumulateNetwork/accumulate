@@ -312,7 +312,21 @@ nodes take the same path, in this order:
    account at; and it passes through the leaf the pulled state hashes to
    locally. The third is what makes the pull safe, because a peer can serve a
    true receipt for an account and a false body for it. Anything else is
-   refused, and the account is asked of another peer. The pull runs ahead of
+   refused, and the account is asked of another peer.
+
+   **A body served with a proof is the stored body, byte for byte.** Nothing
+   derived may be filled into an account on the way out of the API, because
+   the receipt served in the same call is built from what is stored: a body
+   with one synthesised field in it does not hash to the leaf its own receipt
+   proves, so the third check above refuses it every time, from every peer,
+   forever. That is not a theory — `Received` on a sequence ledger is derived
+   from staging and was filled into the body on read, and it left every
+   restarting node unable to pull `<partition>/anchors` from anybody (#4295).
+   A derived value travels **beside** the body, in its own field of the
+   record, and a reader that wants it merges it after it has checked the
+   proof.
+
+   The pull runs ahead of
    the anchors — a peer serves its current block and the Directory anchors
    that block a few blocks later — so a fetched account is held, unwritten,
    until the anchor for its block arrives, and is neither trusted early nor
@@ -322,6 +336,25 @@ nodes take the same path, in this order:
    which never settles anything. It is held across rounds, settled against the
    block it was served at, and only given up after a bounded wait — a block
    nobody ever anchors is a peer's claim, not a wait.
+
+   **`R` is the block this node's EXECUTOR last executed, and it is read
+   once.** It is not `<partition>/ledger`'s `Index` read again each round:
+   that ledger is an account, and it is one of the accounts the pull
+   overwrites with the peer's, so after the first round the store answers the
+   PEER's block. A joining node executes nothing (step 1), so `R` cannot move
+   while the join runs; reading it from the store made a node 853 blocks
+   behind believe it was 17 behind, which kept the span inside the walk's
+   limit, so the page diff never ran as the primary and the walk covered
+   seventeen blocks of the wrong end of the history (#4295).
+
+   **Giving up on a held account is said out loud.** The Directory anchors a
+   state-tree root for roughly one block in six of a BVN's and one in four of
+   its own, and the settle is an exact lookup on the block the peer served at,
+   so most batches wait out the bound and are discarded. That is the ordinary
+   case, not an exception, and a node that has thrown away a dozen accounts
+   after waiting for them must report how many, which block, and how long —
+   silently discarding them makes the dominant failure mode of a join
+   indistinguishable from a join with nothing to do.
 
    **What is pulled is written into the state tree, not only into the store.**
    Committing an account does not move the root by itself; the root is what
