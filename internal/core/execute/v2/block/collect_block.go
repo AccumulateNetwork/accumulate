@@ -96,6 +96,23 @@ func (x *Executor) CollectBlock(batch *database.Batch, params execute.BlockParam
 	return out, nil
 }
 
+// CollectCommittedBlock is CollectBlock for a caller with no batch of its own
+// — consensus, through the bridge. The batch is read-only in effect and is
+// discarded either way: collecting writes nothing, and a batch left open
+// would pin a version of the store for the life of the process (#4279).
+func (x *Executor) CollectCommittedBlock(params execute.BlockParams, envelopes []*messaging.Envelope) (*execute.CollectedBlock, error) {
+	batch := x.Database.Begin(false)
+	defer batch.Discard()
+	return x.CollectBlock(batch, params, envelopes)
+}
+
+// SettleStagingAt is SettleStaging for a caller with no batch of its own.
+func (x *Executor) SettleStagingAt(q uint64) error {
+	batch := x.Database.Begin(false)
+	defer batch.Discard()
+	return x.SettleStaging(batch, q)
+}
+
 // collectArrival holds one arrival the way the block that executes it would
 // hold it, and answers whether it was held.
 //

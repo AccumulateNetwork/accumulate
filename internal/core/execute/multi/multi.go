@@ -207,3 +207,28 @@ func (m *Multi) Collect(batch *database.Batch, envelopes []*messaging.Envelope) 
 	}
 	return 0, nil
 }
+
+// CollectCommittedBlock forwards a committed block to the active executor's
+// staging, without executing it: what a joining node does with every block it
+// receives while it pulls the state down (v2, executor spec "Sync"; #4292).
+// An executor that cannot collect refuses, because a node that executed
+// instead would execute from a staging its peers do not have (#4290).
+func (m *Multi) CollectCommittedBlock(params execute.BlockParams, envelopes []*messaging.Envelope) (*execute.CollectedBlock, error) {
+	c, ok := (*m.active.Load()).(interface {
+		CollectCommittedBlock(execute.BlockParams, []*messaging.Envelope) (*execute.CollectedBlock, error)
+	})
+	if !ok {
+		return nil, errors.NotAllowed.With("this executor cannot collect a block without executing it")
+	}
+	return c.CollectCommittedBlock(params, envelopes)
+}
+
+// SettleStagingAt brings the active executor's staging to the block its
+// pulled state is (executor spec, "Sync", step 4).
+func (m *Multi) SettleStagingAt(q uint64) error {
+	c, ok := (*m.active.Load()).(interface{ SettleStagingAt(uint64) error })
+	if !ok {
+		return errors.NotAllowed.With("this executor cannot settle staging")
+	}
+	return c.SettleStagingAt(q)
+}

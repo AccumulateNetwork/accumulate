@@ -263,44 +263,9 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	// is where the two candidate explanations separate: if the missing
 	// transactions never appear in `arrived`, they were lost in consensus; if
 	// they arrive and do not execute, they were lost here.
-	var arrived, unmarshalFailed, processFailed, statusFailed int
+	var processFailed, statusFailed int
 	txCount := 0
-	var envelopes []*messaging.Envelope
-	type origin struct {
-		batch string
-		index int
-	}
-	var origins []origin
-	for _, batch := range params.Batches {
-		digest := batch.Digest()
-		if txTraceEnabled {
-			slog.Info("TX executing", "batch", digest.String()[:12],
-				"block", params.Index, "round", params.LeaderRound,
-				"txs", len(batch.Transactions))
-		}
-
-		for i, txBytes := range batch.Transactions {
-			arrived++
-			// Unmarshal transaction to envelope
-			envelope := new(messaging.Envelope)
-			if err := envelope.UnmarshalBinary(txBytes); err != nil {
-				// Warn, not Debug. A committed transaction that cannot be
-				// parsed is data loss, and at Debug it was invisible — the
-				// same mistake the status-error log below was already fixed
-				// for. Whatever put it in a batch thought it was valid.
-				unmarshalFailed++
-				slog.Warn("Committed transaction could not be unmarshalled — dropping",
-					"error", err,
-					"batch", digest.String(),
-					"index", i,
-					"bytes", len(txBytes),
-					"block", params.Index)
-				continue
-			}
-			envelopes = append(envelopes, envelope)
-			origins = append(origins, origin{digest.String(), i})
-		}
-	}
+	envelopes, origins, arrived, unmarshalFailed := blockEnvelopes(params)
 
 	// Process the envelopes — sharded by identity when the executor supports
 	// it and shards are configured (#4145), a plain serial loop otherwise.
@@ -439,6 +404,98 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	}
 
 	return hash, nil
+}
+
+// origin names where an envelope came from, for the log line that says which
+// committed transaction the executor refused.
+type origin struct {
+	batch string
+	index int
+}
+
+// blockEnvelopes is a committed block's envelopes, in the certificate's
+// canonical payload order — the same order on every validator (#4054).
+//
+// One statement of it, because two nodes that build a block's envelopes
+// differently execute different blocks: a node that COLLECTS a block into
+// staging without executing it (#4292) must see exactly what a node that
+// executes it sees, down to the dropped malformed transaction.
+func blockEnvelopes(params BlockParams) (envelopes []*messaging.Envelope, origins []origin, arrived, unmarshalFailed int) {
+	for _, batch := range params.Batches {
+		digest := batch.Digest()
+		if txTraceEnabled {
+			slog.Info("TX executing", "batch", digest.String()[:12],
+				"block", params.Index, "round", params.LeaderRound,
+				"txs", len(batch.Transactions))
+		}
+
+		for i, txBytes := range batch.Transactions {
+			arrived++
+			envelope := new(messaging.Envelope)
+			if err := envelope.UnmarshalBinary(txBytes); err != nil {
+				// Warn, not Debug. A committed transaction that cannot be
+				// parsed is data loss, and at Debug it was invisible — the
+				// same mistake the status-error log was already fixed for.
+				// Whatever put it in a batch thought it was valid.
+				unmarshalFailed++
+				slog.Warn("Committed transaction could not be unmarshalled — dropping",
+					"error", err,
+					"batch", digest.String(),
+					"index", i,
+					"bytes", len(txBytes),
+					"block", params.Index)
+				continue
+			}
+			envelopes = append(envelopes, envelope)
+			origins = append(origins, origin{digest.String(), i})
+		}
+	}
+	return envelopes, origins, arrived, unmarshalFailed
+}
+
+// CollectBlock takes a committed block into the executor's staging WITHOUT
+// EXECUTING IT: what a joining node does with every block it receives while
+// it pulls the state down, and what a restart does (executor spec, "Sync";
+// #4292). It writes nothing and produces no block, so nothing here advances
+// the bridge's last block.
+//
+// It refuses rather than executes when the executor cannot collect: a node
+// that silently executed while joining would execute from a staging its peers
+// do not have, which is the divergence the join exists to prevent (#4290).
+func (b *ExecutorBridge) CollectBlock(ctx context.Context, params BlockParams) (int, error) {
+	collector, ok := b.executor.(interface {
+		CollectCommittedBlock(execute.BlockParams, []*messaging.Envelope) (*execute.CollectedBlock, error)
+	})
+	if !ok {
+		return 0, fmt.Errorf("executor cannot collect a block without executing it")
+	}
+
+	for _, batch := range params.Batches {
+		if batch == nil {
+			return 0, fmt.Errorf("block for round %d: missing batch in certificate", params.LeaderRound)
+		}
+	}
+
+	envelopes, _, arrived, unmarshalFailed := blockEnvelopes(params)
+	out, err := collector.CollectCommittedBlock(execute.BlockParams{
+		Context:  ctx,
+		IsLeader: params.IsLeader,
+		Index:    params.Index,
+		Time:     params.Time,
+	}, envelopes)
+	if err != nil {
+		return 0, fmt.Errorf("collect block: %w", err)
+	}
+
+	slog.Debug("Collected a committed block into staging",
+		"partition", b.partitionID,
+		"round", params.LeaderRound,
+		"batches", len(params.Batches),
+		"arrived", arrived,
+		"unmarshalFailed", unmarshalFailed,
+		"held", out.Held,
+		"accounts", len(out.Accounts))
+	return out.Held, nil
 }
 
 // ValidateTransaction validates a transaction before it is added to a batch.

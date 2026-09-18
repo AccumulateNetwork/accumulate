@@ -272,6 +272,33 @@ its root matches; a restart is the same path, not a consensus replay. PLAN
 E11 lists the five steps. The bootstrap-v3 state pull exists only on the
 CometBFT line.
 
+**Collecting (#4292, done)**: the executor takes a committed block into
+staging without executing it (`Executor.CollectBlock`), and settles staging
+at the block its pulled state is (`SettleStaging`): proofs decided against
+the anchors that state has executed, every stream released through the
+`Delivered` the pulled ledger names. The DAG service has a collecting mode —
+committed groups are collected and buffered, the block index does not move,
+no checkpoint is saved, no state hash recorded, no block event published, and
+the node does not report execution, so its primary reads as lagging and
+proposes no batches (consensus.md, invariant 9). **Differences from the
+spec**, both deliberate:
+
+- The spec says a joining node buffers *every* committed block from the
+  moment it listens. The buffer is bounded (`maxCollectedGroups`, 8,192
+  groups — about half an hour at four leader rounds a second) because the
+  node holds every batch of every buffered block, and an unbounded buffer is
+  a memory fault of the kind that ended runs `20260903T202621Z` and
+  `20260904T*`. Past the bound the buffer is marked overrun and the join must
+  start again from a newer snapshot; nothing yet does that restart (#4294).
+- A collected entry's `Collected` flag is decided against the store as it
+  stands when the block is collected, which on a joining node is the state
+  the pull has reached, not the state at that block. An entry its peers
+  admitted on a proof this node has not pulled yet is therefore held
+  collected, and after the handoff it runs only once a validated hash at its
+  number arrives. `SettleStaging` does not yet re-decide held entries against
+  the state at Q; it is a hole for an entry that is above a gap at Q, and it
+  is to be closed when the join is wired up (#4294).
+
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.
 
