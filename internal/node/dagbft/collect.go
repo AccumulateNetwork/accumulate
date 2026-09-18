@@ -93,6 +93,13 @@ func (s *Service) Buffered() []*CollectedGroup {
 	return out
 }
 
+// BufferedCount is how many groups are buffered, without copying them.
+func (s *Service) BufferedCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.buffer)
+}
+
 // BufferOverrun reports that more blocks were committed than the buffer
 // holds. The blocks between the snapshot and now are no longer all in hand,
 // so the join cannot be exact and must start again (#4294).

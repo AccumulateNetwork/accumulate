@@ -657,7 +657,7 @@ func (s *Service) checkBlockLiveness() {
 	// as one would put an error in the log for every join.
 	if s.Collecting() {
 		s.logger.Info("Joining: collecting committed blocks, executing none",
-			append(args, "buffered", len(s.Buffered()))...)
+			append(args, "buffered", s.BufferedCount())...)
 		return
 	}
 	if !produced {
