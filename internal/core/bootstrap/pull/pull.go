@@ -10,9 +10,11 @@
 // Two modes:
 //
 //   - ModeStateOnly: the account body, its secondary state (the Directory
-//     list, the Pending txid list) and its chain *heads* — no chain entries.
-//     That is enough to reproduce the account's BPT leaf, because the
-//     observer hashes a chain's head anchor, not its entries.
+//     list, the Pending txid list) and its chains' heads with their open mark
+//     sets — no history. The head reproduces the account's BPT leaf, because
+//     the observer hashes a chain's head anchor and not its entries; the open
+//     mark set is what makes the chain appendable, so the node can execute
+//     the next block.
 //
 //   - ModeFullSpine: the same, plus every chain entry replayed. Used for the
 //     spine — anchors, ledger, operators, operators/1 — where the node needs
@@ -25,6 +27,11 @@
 // (Verify, in verify.go). A peer whose state does not verify is refused and
 // another is asked — AccountFrom. Nothing is written into the caller's batch
 // until it verifies.
+//
+// What is pulled replaces what the node held for that account rather than
+// joining with it, and a re-pull of an account is the same account: a restart
+// re-pulls, and a pull that unions or appends leaves a node holding something
+// no peer holds, which never hashes into an anchored root again.
 //
 // Ported from bootstrap-v3 (issue #4293). Changed on this line: the pull
 // writes through a nested batch and verifies before committing it; the
@@ -52,9 +59,8 @@ import (
 type Mode int
 
 const (
-	// ModeStateOnly: head + secondary + chain heads (no entries).
-	// Used for the long tail and for accounts touched on demand by
-	// gossip.
+	// ModeStateOnly: head + secondary + chain heads with their open mark
+	// sets, and no history. Used for the long tail.
 	ModeStateOnly Mode = iota
 
 	// ModeFullSpine: head + secondary + every chain entry replayed
@@ -97,7 +103,9 @@ type Options struct {
 	Verify Verifier
 
 	// Partition is the partition whose blocks the account's state belongs to.
-	// Required when Verify is set.
+	// Required when Verify is set, and whenever a receipt is asked for: a
+	// receipt proves the state as of a block, and block numbers collide
+	// across partitions (#4205).
 	Partition *url.URL
 }
 
