@@ -456,20 +456,36 @@ else
 echo "$(date -u +%FT%TZ) armed: one disturbance every ${CHAOS_MIN}s + 0-${CHAOS_JITTER}s jitter" >> "$chaos"
 echo "   chaos: armed (every ~${CHAOS_MIN}s + jitter; first event follows the first interval)" | tee -a "$log"
 ( end=$(( $(date +%s) + duration_seconds ))
-  nodes=$(docker ps --filter name=acc-bvn --format '{{.Names}}')
+  # Every validator in turn, interleaved by partition -- bvn1-val1, bvn2-val1,
+  # bvn3-val1, bvn1-val2, ... -- so consecutive disturbances land on different
+  # partitions and every node gets its turn before any node gets a second. A
+  # random draw with replacement put three of four disturbances on BVN3 in
+  # the first hour of 20260917T223150Z and none on BVN1; Paul: "that isn't
+  # testing very much". Every validator runs the Directory as well, so the
+  # Directory is disturbed by every event. The kind alternates restart, pause,
+  # and flips on each full cycle so a node sees both over a run. A no-op slot
+  # is CHAOS_SKIP_ONE_IN=N (every Nth slot; 0, the default, never): it used to
+  # be a hidden one-in-five draw, which cost 20260917T212457Z three of its
+  # five slots.
+  mapfile -t nodes < <(docker ps --filter name=acc-bvn --format '{{.Names}}' \
+    | awk -F- '{print $3, $2, $0}' | sort -k1,1 -k2,2 | awk '{print $3}')
+  echo "$(date -u +%FT%TZ) order: ${nodes[*]}" >> "$chaos"
+  i=0; slot=0
   while [ "$(date +%s)" -lt "$end" ]; do
     w=$(( CHAOS_MIN + RANDOM % CHAOS_JITTER ))
     echo "$(date -u +%FT%TZ) sleeping ${w}s until the next disturbance" >> "$chaos"
     sleep "$w"
-    n=$(echo "$nodes" | shuf -n1); r=$((RANDOM % 10))
-    if [ "$r" -lt 4 ]; then
+    slot=$((slot+1))
+    if [ "${CHAOS_SKIP_ONE_IN:-0}" -gt 0 ] && [ $((slot % CHAOS_SKIP_ONE_IN)) -eq 0 ]; then
+      echo "$(date -u +%FT%TZ) skip (slot $slot, CHAOS_SKIP_ONE_IN=$CHAOS_SKIP_ONE_IN)" >> "$chaos"; continue
+    fi
+    n=${nodes[$((i % ${#nodes[@]}))]}; cyc=$((i / ${#nodes[@]})); kind=$(( (i + cyc) % 2 )); i=$((i+1))
+    if [ "$kind" -eq 0 ]; then
       echo "$(date -u +%FT%TZ) restart $n" >> "$chaos"; docker restart "$n" >/dev/null 2>&1
-    elif [ "$r" -lt 8 ]; then
+    else
       p=$((60 + RANDOM % 120))
       echo "$(date -u +%FT%TZ) pause $n ${p}s" >> "$chaos"
       docker pause "$n" >/dev/null 2>&1; sleep "$p"; docker unpause "$n" >/dev/null 2>&1
-    else
-      echo "$(date -u +%FT%TZ) skip" >> "$chaos"
     fi
   done ) &
 CHAOS=$!
