@@ -140,36 +140,50 @@ func (b *Block) validateStagedProofs(c *classified) error {
 		if r.Partition != protocol.Directory || r.Body == nil {
 			continue
 		}
-		through := r.Body.GetPartitionAnchor().MinorBlockIndex
-		sources := b.staging.ProofSources()
-		if c != nil {
-			// A validated proof can make a held stream runnable, so every
-			// stream with proofs waiting is evaluated this block
-			for _, source := range sources {
-				c.addStream(stream{kind: streamSynthetic, ledger: b.Executor.Describe.Synthetic(), source: source})
-			}
+		err := b.decideProofs(c, r.Body.GetPartitionAnchor().MinorBlockIndex)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
 		}
+	}
+	return nil
+}
+
+// decideProofs decides every proof waiting on a Directory anchor block at or
+// below `through`: validated against the anchor chain as it stands, or
+// discarded. It is the anchor group's work in a block, and the join's at the
+// block whose state it pulled (#4292, SettleStaging) -- one statement of the
+// rule, so the two cannot decide a proof differently.
+//
+// `c` is this block's classification, or nil outside a block: a validated
+// proof can make a held stream runnable, so a block re-evaluates every stream
+// with proofs waiting, and a join runs nothing at all.
+func (b *Block) decideProofs(c *classified, through uint64) error {
+	sources := b.staging.ProofSources()
+	if c != nil {
 		for _, source := range sources {
-			for _, blk := range b.staging.ProofBlocks(source) {
-				if blk > through {
+			c.addStream(stream{kind: streamSynthetic, ledger: b.Executor.Describe.Synthetic(), source: source})
+		}
+	}
+	for _, source := range sources {
+		for _, blk := range b.staging.ProofBlocks(source) {
+			if blk > through {
+				continue
+			}
+			for _, p := range b.staging.Proofs(source, blk) {
+				_, ok, err := b.Executor.provingAnchorIndex(b.Batch, p)
+				if err != nil {
+					return errors.UnknownError.Wrap(err)
+				}
+				if !ok {
+					mExecStagedProofs.WithLabelValues("disproved").Inc()
 					continue
 				}
-				for _, p := range b.staging.Proofs(source, blk) {
-					_, ok, err := b.Executor.provingAnchorIndex(b.Batch, p)
-					if err != nil {
-						return errors.UnknownError.Wrap(err)
-					}
-					if !ok {
-						mExecStagedProofs.WithLabelValues("disproved").Inc()
-						continue
-					}
-					err = b.proofValidated(source, p)
-					if err != nil {
-						return errors.UnknownError.Wrap(err)
-					}
+				err = b.proofValidated(source, p)
+				if err != nil {
+					return errors.UnknownError.Wrap(err)
 				}
-				b.staging.DropProofs(source, blk)
 			}
+			b.staging.DropProofs(source, blk)
 		}
 	}
 	return nil

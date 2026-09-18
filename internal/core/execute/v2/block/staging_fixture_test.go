@@ -25,6 +25,7 @@ import (
 // fake source chain whose entries proofs are cut from.
 type stagingFixture struct {
 	x      *Executor
+	db     *database.Database
 	batch  *database.Batch
 	b      *Block
 	src    [][]byte // entry hashes of the fake source chain
@@ -44,7 +45,7 @@ func newStagingFixture(t *testing.T, entries int) *stagingFixture {
 	chain2 := batch.Account(protocol.PartitionUrl("BVN1").JoinPath(protocol.Synthetic)).MainChain()
 	chain, err := chain2.Get()
 	require.NoError(t, err)
-	f := &stagingFixture{x: x, batch: batch, chain: chain, chain2: chain2, source: protocol.PartitionUrl("BVN1")}
+	f := &stagingFixture{x: x, db: db, batch: batch, chain: chain, chain2: chain2, source: protocol.PartitionUrl("BVN1")}
 	for i := 0; i < entries; i++ {
 		h := sha256.Sum256([]byte(fmt.Sprintf("synthetic message %d", i)))
 		f.src = append(f.src, h[:])

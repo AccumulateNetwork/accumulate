@@ -196,6 +196,19 @@ func (s *stagingSim) packageArrives(first, last int, anchorBlock uint64) []error
 	return codes
 }
 
+// packageEnvelope is the envelope a package travels in — the proof and the
+// members it covers — as a block's batches carry it. It is what
+// packageArrives feeds the executing node, for a test that feeds the same
+// block to a node that only collects it (#4292).
+func (s *stagingSim) packageEnvelope(first, last int, anchorBlock uint64) *messaging.Envelope {
+	s.t.Helper()
+	msgs := []messaging.Message{&messaging.SyntheticProof{Proof: s.proof(first, last, anchorBlock)}}
+	for i := first; i <= last; i++ {
+		msgs = append(msgs, s.member(i))
+	}
+	return &messaging.Envelope{Messages: msgs}
+}
+
 // process runs one message of an envelope through its executor, the way the
 // block (and MessageIsReady, for a staged one) dispatches by message type.
 func (s *stagingSim) process(env []messaging.Message, msg messaging.Message) errors.Status {
