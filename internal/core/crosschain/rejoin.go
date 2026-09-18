@@ -89,7 +89,20 @@ func (c *Conductor) rejoin(blockIndex uint64) {
 		slog.Error("Cannot rejoin: synthetic ledger", "module", "conductor", "destination", c.Url(), "error", err)
 		return
 	}
-	for _, source := range c.inboundSources(synth) {
+	// A node on which nothing has ever been delivered from anyone is a fresh
+	// network, and its peers are still finding each other: nothing to rebuild.
+	sources := c.inboundSources(synth)
+	fresh := true
+	for _, source := range sources {
+		if synth.Partition(source).Delivered > 0 {
+			fresh = false
+			break
+		}
+	}
+	if fresh {
+		return
+	}
+	for _, source := range sources {
 		delivered := synth.Partition(source).Delivered
 		first := delivered + 1
 		held, spans, retries := 0, 0, 0
