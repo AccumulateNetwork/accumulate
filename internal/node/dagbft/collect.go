@@ -405,7 +405,6 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 	return nil
 }
 
-
 // maxNamedAccounts bounds the set of accounts the collected blocks have named
 // and the pull has not yet been told about. It is large enough for the blocks
 // of a long pull and small enough that a joining node cannot be made to hold
