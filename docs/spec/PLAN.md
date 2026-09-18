@@ -263,13 +263,44 @@ three, gated on `TestOneValidatorRestartDoesNotDiverge` with the interim pull
 removed and no Docker chaos run before it passes; 5 after 4; then **#4296**,
 a gate before any chaos run: a joining node must be able to find a validator
 to ask, and must refuse to execute when it found none — *delivered and
-closed*. Then **#4304** (a fresh network must be able to start) and **#4303**
-(a join must reach a root match), which are the same kind of gate and are
-there for the same reason: run `20260918T131713Z` showed the join taking
-staging from a peer for the first time on a real network and then stalling
-before any node reached `Q`. Then `30m-100tps-chaos.conf`; then #4298 and
-#4299, provisionally, which that run may promote ahead of itself; then the
-24-hour run. Steps 3 and 4
+closed*. Then the defects that keep a join from completing at all, which the
+debug agent found in run `20260918T131713Z` and which are the same kind of
+gate for the same reason — the chaos gate cannot be met on a build where no
+join completes: **#4303** (a joining node pulls from itself, so nothing is
+ever pulled), **#4305** (the pull never updates the BPT, so the root cannot
+move), **#4306** (the ledger and synthetic accounts are named by no block and
+pulled once, so the set is structurally incomplete), **#4298** (and those two
+accounts cannot be verified anyway), **#4309** (a BVN's join wrote four
+`dn.acme` accounts into its own store, putting its root permanently beyond
+every anchored root — independent of the others and fatal on its own),
+**#4304** (a fresh network cannot start: `Fresh` is dead code), with
+**#4297** and **#4307** beside them as the un-gated services that made the
+first possible. All but #4298 and #4304 are fixed on
+`issue-4303-join-pulls-from-peers`, pushed and under review, none merged; the
+fix introduces one knowing contradiction with this spec — the block ledger is
+taken on the peer's word — which is **#4310**, and the reviewer judges it.
+
+**Ahead of any design work on #4298, one measurement** (lead, 2026-09-18):
+how often `<partition>/ledger`'s scheduled-events BPT and
+`<partition>/synthetic`'s delivery queues are actually non-empty at the block
+a peer serves. Both are skipped when empty
+(`internal/database/observer_prod.go:49-77`) and the local delivery queue
+drains at the next block's `Begin`, so if they are rarely non-empty then
+#4298 is a retry rather than a blocker. It has never been measured; it is a
+sample on a running soak, not a design. Then
+`30m-100tps-chaos.conf`; then #4299, provisionally, which that run may
+promote ahead of itself; then the 24-hour run.
+
+**The tests that passed do not exercise the mechanism.** This has to be said
+next to the order, because the order was built on them.
+`TestOneValidatorRestartDoesNotDiverge` replaces steps 3 and 4 with a store
+copy (`test/simulator/partition.go:96-116`, `memory.Database.Export`/`Import`);
+`TestPullReachesTheAnchoredRoot` sources from `api.Querier2{Querier:
+sim.S.Services()}` (`test/e2e/state_pull_test.go:128`), so there is no p2p, no
+routing and no self-dial to find, and it calls `batch.UpdateBPT()` by hand at
+`:161` and `:187` — the exact step the production pull omits. A test that
+performs by hand the step its production caller must perform proves the
+library and not the caller. Steps 3 and 4
 show a plan before code (a port across a five-month database-API gap; a
 rewiring of consensus start-up). The observations behind the order — three
 causes each sufficient alone, why a source's cache and consensus replay are
@@ -293,15 +324,19 @@ the same route, so the count is part of the gate and not an optimisation.
 #4298 (an account carrying pending signature material, scheduled events or a
 delivery queue cannot be verified, so a partition holding one cannot be
 joined) and #4299 (a message whose remote stub the store cannot resolve is
-dropped by collect) are the two holes DIFFERENCES E11 calls the ones that
-will meet the chaos run first. Run `20260918T131713Z` did not promote either
-and did not rule either out: it stalled before the state in which either
-would bite, on #4303 and #4304. They are placed after the 30-minute run
-deliberately: both are expensive to design for in the abstract and cheap to
-observe, and a live join that stalls on an unverifiable account says so in
-minutes with evidence no amount of reasoning produces. The 30-minute run
-decides whether either moves ahead of it; a stall on one is a promotion with
-evidence, which is the only kind to make.
+dropped by collect) are the two holes DIFFERENCES E11 calls the ones that will
+meet the chaos run first. Run `20260918T131713Z` did not promote either and
+did not rule either out: it stalled before the state in which either would
+bite, on #4303 and #4304. It did change what #4298 is — the accounts that
+cannot be verified are `<partition>/ledger` and `<partition>/synthetic`, which
+are in every join's required set, so it is not "a partition holding one cannot
+be joined" but "no partition can be joined" — which is why #4298 now sits with
+the blockers and #4299 alone stays provisional. They are placed after the
+30-minute run deliberately: both are expensive to design for in the abstract
+and cheap to observe, and a live join that stalls on an unverifiable account
+says so in minutes with evidence no amount of reasoning produces. The
+30-minute run decides whether either moves ahead of it; a stall on one is a
+promotion with evidence, which is the only kind to make.
 
 Done when: a soak with chaos restarts under load keeps every restarted
 validator agreeing on every anchor body, and #4205 closes. Required before

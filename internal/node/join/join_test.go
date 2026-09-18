@@ -21,14 +21,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // fakeBuffer stands for the DAG service's collecting mode.
 type fakeBuffer struct {
 	collecting bool
 	overrun    bool
-	accounts   []*url.URL
 	handedOff  uint64
 	handoffErr error
 	applied    int // how many blocks were applied to the staging that was taken
@@ -48,11 +46,6 @@ func (b *fakeBuffer) StartCollecting() {
 }
 func (b *fakeBuffer) Collecting() bool    { return b.collecting }
 func (b *fakeBuffer) BufferOverrun() bool { return b.overrun }
-func (b *fakeBuffer) NamedAccounts() []*url.URL {
-	out := b.accounts
-	b.accounts = nil
-	return out
-}
 func (b *fakeBuffer) ApplyStaging(load func() error) error {
 	err := load()
 	if err != nil {
@@ -88,17 +81,17 @@ func (s *fakeStage) SettleStagingAt(q uint64) error { s.settled = q; return nil 
 
 // fakeState stands for the state pull and its tracker.
 type fakeState struct {
-	pulls     [][]*url.URL
+	pulls     int
 	matchAt   uint64
 	matchFrom int // the pull round at which the root matches
 }
 
-func (s *fakeState) Pull(_ context.Context, accounts []*url.URL) error {
-	s.pulls = append(s.pulls, accounts)
+func (s *fakeState) Pull(context.Context) error {
+	s.pulls++
 	return nil
 }
 func (s *fakeState) Matched(context.Context) (uint64, bool, error) {
-	if len(s.pulls) < s.matchFrom {
+	if s.pulls < s.matchFrom {
 		return 0, false, nil
 	}
 	return s.matchAt, true, nil
@@ -177,7 +170,7 @@ func run(t *testing.T, opts Options) (Outcome, error) {
 // block at or above the snapshot's, settles there and hands off (executor
 // spec, "Sync").
 func TestJoin_TakesStagingPullsThenHandsOff(t *testing.T) {
-	buf := &fakeBuffer{accounts: []*url.URL{protocol.AccountUrl("alice")}}
+	buf := &fakeBuffer{}
 	stage := new(fakeStage)
 	state := &fakeState{matchAt: 20, matchFrom: 2}
 	peers := &fakePeers{
@@ -195,8 +188,8 @@ func TestJoin_TakesStagingPullsThenHandsOff(t *testing.T) {
 	require.Equal(t, uint64(20), stage.settled, "staging settles at the block the state is")
 	require.Equal(t, uint64(20), buf.handedOff, "and the handoff is at that block")
 	require.False(t, buf.collecting, "a node that has joined is not collecting")
-	require.Equal(t, [][]*url.URL{{protocol.AccountUrl("alice")}, nil}, state.pulls,
-		"the first pull is what the collected blocks named")
+	require.Equal(t, 2, state.pulls,
+		"the join pulls each round; what it pulls is the pull's own business now (#4306)")
 }
 
 // A validator that cannot serve its staging — because it is joining itself,
@@ -241,7 +234,7 @@ func TestJoin_WillNotHandOffBelowTheStagingItTook(t *testing.T) {
 	require.Error(t, err, "the join does not hand off; it runs until the context ends")
 	require.Zero(t, buf.handedOff)
 	require.Zero(t, stage.settled)
-	require.NotEmpty(t, state.pulls, "and it keeps pulling")
+	require.NotZero(t, state.pulls, "and it keeps pulling")
 }
 
 // If the buffer overran, the blocks since the snapshot are no longer all in

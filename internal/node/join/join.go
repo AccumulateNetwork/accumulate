@@ -26,7 +26,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // A Buffer is the consensus side of a join: the node collects every committed
@@ -42,12 +41,6 @@ type Buffer interface {
 	// BufferOverrun reports that more blocks were committed than the buffer
 	// holds, so the blocks since the snapshot are no longer all in hand.
 	BufferOverrun() bool
-
-	// NamedAccounts is every account the blocks collected since the last call
-	// name — what the pull must fetch for those blocks (executor spec,
-	// "Sync", step 3). Draining it, so a round pulls what the blocks of that
-	// round named.
-	NamedAccounts() []*url.URL
 
 	// ApplyStaging runs load — the executor taking a peer's staging — and
 	// then applies every block buffered since this node started collecting to
@@ -75,10 +68,12 @@ type Stage interface {
 // A State is the state half: it pulls what the node lacks and says when the
 // local root equals a root the Directory anchored (#4293).
 type State interface {
-	// Pull fetches what the node lacks of the accounts named, verified
-	// against the anchored root. Called once per round with the accounts the
-	// blocks collected since the last round named.
-	Pull(ctx context.Context, accounts []*url.URL) error
+	// Pull fetches what the node lacks, verified against the anchored root.
+	// It decides for itself what that is: the accounts the block ledger says
+	// the blocks changed, read from a peer, with the BPT page diff as the
+	// backstop (executor spec, "Sync", step 3). The caller does not supply a
+	// set, because a block's envelopes are not the set (#4306).
+	Pull(ctx context.Context) error
 
 	// Matched reports the block whose anchored root the local root equals,
 	// and whether it has been reached.
@@ -259,7 +254,7 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 				log.Info("The root matched below the staging taken; still pulling", "matched", q, "snapshotBlock", p)
 			}
 
-			err = opts.State.Pull(ctx, opts.Buffer.NamedAccounts())
+			err = opts.State.Pull(ctx)
 			if err != nil {
 				return Joined, errors.UnknownError.WithFormat("pull state: %w", err)
 			}

@@ -82,6 +82,31 @@ func (s State) CanServeHistory() bool {
 	return s == StateComplete
 }
 
+// Serving is what a service asks before it answers for the state this node
+// holds. A joining node must not answer: its store is what the pull is filling
+// and its ledgers are the ones it has not executed, so an answer from it is an
+// answer about nothing (#4297, #4307).
+//
+// It is an interface because the services that ask are wired separately from
+// the join that knows -- the querier is configured on its own, the submitter
+// under consensus -- and a registry keyed by partition would give every node
+// of a partition one node's state.
+type Serving interface {
+	// CanServeCurrent reports whether this node may answer for the state it
+	// holds.
+	CanServeCurrent() bool
+}
+
+// Always is a node that has always executed what it holds: it never joined, so
+// it answers for itself.
+type Always struct{}
+
+// CanServeCurrent implements [Serving].
+func (Always) CanServeCurrent() bool { return true }
+
+var _ Serving = Always{}
+var _ Serving = (*Machine)(nil)
+
 // Advertisement is the payload published to peer discovery.
 type Advertisement struct {
 	State State
@@ -203,6 +228,15 @@ func (m *Machine) Get() Advertisement {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.adLocked()
+}
+
+// CanServeCurrent implements [Serving]: this node may answer for the state it
+// holds once it has matched an anchored root.
+func (m *Machine) CanServeCurrent() bool {
+	if m == nil {
+		return true // no state of its own: it never joined
+	}
+	return m.State().CanServeCurrent()
 }
 
 // State returns the current state.

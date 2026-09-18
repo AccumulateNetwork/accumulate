@@ -362,26 +362,50 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   flight" rather than as misses. Nothing is healed and nothing alarms; the
   node-state gauge is what shows it.
 
-**Not proven: a join has taken staging on a real network, and none has
-completed on one.** Run `20260918T124530Z` (30 m, 100 tps, chaos,
-`0259684c5`) was the first Docker chaos run of the join and it tested the
-fallback rather than the join — no node found a peer to ask, on any
-partition, because of #4296. Run `20260918T131713Z`, on `0132b886c` with
-#4296 merged, went one step further and stopped: the join took staging from a
-peer 22 times, including on the restarted node eleven seconds after its
-restart (`Staging taken from a peer block=201 partition=Directory streams=4`,
-`block=198 partition=BVN1 streams=1`), and every spine pull behind those
-succeeded — but **not one block-named account was ever pulled** (2,171 pull
-rounds, `pulled=0` on all of them, #4303), so no node reached a root match
-and no join completed. In the same run a fresh network could not start at
-all: every node loads genesis, so `lastBlock == 1` and no node is `Fresh`,
-and all twelve joined and refused each other (#4304, a regression from
-#4296). The Docker chaos run (`30m-100tps-chaos.conf`, then 24 h) is the
-proof, and it is a human step. Two
-known holes will meet it first — an account carrying pending signature
-material cannot be verified at all (#4293's entry above, filed as #4298), and
-a remote transaction stub the store cannot resolve is not collected (#4292's
-entry, filed as #4299). Run `20260918T131713Z` met neither: its refusals are
+**Not proven, and the tests that pass do not exercise the mechanism**: a join
+has taken staging on a real network, and none has completed on one.
+`TestOneValidatorRestartDoesNotDiverge` replaces steps 3 and 4 with a store
+copy (`test/simulator/partition.go:96-116`), and
+`TestPullReachesTheAnchoredRoot` sources from `api.Querier2{Querier:
+sim.S.Services()}` (`test/e2e/state_pull_test.go:128`) — no p2p, no routing,
+no self-dial — and calls `batch.UpdateBPT()` by hand at `:161` and `:187`,
+which is the step the production pull omits. A test that performs by hand what
+its production caller must perform proves the library and not the caller. Run
+`20260918T124530Z` (30 m, 100 tps, chaos, `0259684c5`) was the first Docker
+chaos run of the join and it tested the fallback rather than the join — no
+node found a peer to ask, on any partition, because of #4296. Run
+`20260918T131713Z`, on `0132b886c` with #4296 merged, went one step further
+and stopped: the join took staging from a peer 22 times, including on the
+restarted node eleven seconds after its restart (`Staging taken from a peer
+block=201 partition=Directory streams=4`, `block=198 partition=BVN1
+streams=1`), and every spine pull behind those succeeded — but **not one
+block-named account was ever pulled** (2,171 pull rounds, `pulled=0` on all of
+them), so no node reached a root match and no join completed. **The cause was
+found and it is four independent defects, each sufficient alone**: the joining
+node's pull is served by *itself* — `dagbft.go:461` hands it the node's own
+routed client, `dial_network.go:44-45` ("Always use self-discovery") answers
+locally for any service the node provides, `api.go:71` registers the querier
+for every partition it serves, and the querier is not gated by node state, so
+the node's own genesis store answers instead of refusing (#4303, with #4297);
+the pull never calls `UpdateBPT`, so the local root cannot move however much
+is pulled (#4305); the partition's `ledger` and `synthetic` accounts change
+every block, are named by no envelope and are pulled once, while the page-diff
+backstop is unreachable because `s.refused` stays non-empty on a name that can
+never route (#4306); and those two accounts could not be verified anyway
+(#4298, which is therefore not an edge case but a precondition). **Zero
+verification failures in 22 MB of logs: the verifier never ran once.** In the
+same run a fresh network could not start deterministically either:
+`Options.Fresh` is dead code — `dagbft.go:449` gates on `lastBlock > 0` and
+`:488` sets `Fresh: lastBlock == 0` inside it — so the escape #4296 added is
+unreachable in the daemon, and the network started on a 20-second timeout race
+won by one arbitrary node per partition (#4304). A joining node also rejected
+14,643 user transactions against its own un-executed store, because the
+submitter is not gated either (#4307). The Docker chaos run (`30m-100tps-
+chaos.conf`, then 24 h) is the proof, and it is a human step. Two known holes
+will meet it first — an account carrying pending signature material cannot be
+verified at all (#4293's entry above, filed as #4298), and a remote
+transaction stub the store cannot resolve is not collected (#4292's entry,
+filed as #4299). Run `20260918T131713Z` met neither: its refusals are
 `notFound` and `badRequest` answered before verification is reached, so
 nothing in it exercised the verification path at all.
 
@@ -440,7 +464,12 @@ reaches the root the Directory anchored for `Q`; the tracker then promotes.
   pulling the accounts each observed block names, until a whole block's set is
   pulled before the next anchor arrives. Until #4292 is wired, the diff is re-
   run per round, which converges by repetition rather than by construction.
-  (#4294 wired it; #4302 section 5 records what that leaves.)
+  (#4294 wired it; #4302 section 5 records what that leaves. **And wiring it
+  turned the diff off**: the diff is the else-branch of "the blocks named
+  something" (`join/state.go:169-181`), and `s.refused` is sticky
+  (`:163-167`), so one name that can never route keeps the diff from ever
+  running — #4306. The design is blocks primary with the scan as the safety
+  net; the code is blocks only, with a scan in a case that no longer occurs.)
 - **The Directory's spine is pulled unverified, and so is the root everything
   else is verified against** (#4301)**.** The spine is what the verifier reads
   from, so there is nothing to verify it against until it is there; and
@@ -545,6 +574,105 @@ anchor-signature fan-out on every live network since it was written. It is
 not on `dagbft-integration` and it has not run under chaos, so the sentence
 above about what the wiring does when no peer can answer is still what a
 deployed node does.
+
+**The changed set comes from the block ledger (Paul, 2026-09-18)** — *done,
+2026-09-18*: the code derived it from a block's envelopes (`collect_block.go`,
+`accountsNamed`), which names principals, signers and anchor pools and
+therefore missed the system accounts every block changes and admitted
+`acc://unknown`. `accountsNamed`, `CollectedBlock.Accounts` and
+`Buffer.NamedAccounts` are deleted; `State.Pull` takes no account list, because
+the set is not the caller's to supply. The join reads the block ledger from a
+peer for `(R, Q]` and takes `join.ChangedAccounts` of it.
+
+**#4303, #4305, #4306, #4308, #4307 and #4297: what was fixed and what it
+leaves (2026-09-18)**. Six defects, each of which alone stopped a join, and a
+seventh nobody had named.
+
+- **The pull read from this node (#4303).** `join.StateOptions.Query` is gone.
+  It is `Sources` now: `join.QueryPeers` routes each account to a partition,
+  looks that partition's query service up under its network's key, drops this
+  node's own peer ID, and hands package pull one source per remaining peer,
+  addressed with `Client.ForPeer(id).ForAddress(query:<partition>)` — an
+  address carrying a service address, so the transport skips routing and the
+  dialer opens a stream to that peer. The Directory's anchors are read the same
+  way. There is no querier a join may be given, including its own.
+- **The fetch was thrown away and taken again (#4303, second half).** `Account`
+  discards on `ErrNotAnchored`, and the pull runs ahead of the anchors by
+  design, so the next round re-fetched at a newer block that was not anchored
+  either. `pull.FetchFrom` fetches without settling; the join holds the
+  `Pending` across rounds and settles it against the block it was served at,
+  for `maxSettleRounds` rounds, then gives up and asks again.
+- **The pull did not move the state root (#4305).** `UpdateBPT` before every
+  commit, in the pull and in the spine.
+- **The changed set could not match (#4306).** Above, plus: the page diff runs
+  on the first round, on a cadence, and whenever the walk cannot cover
+  `(R, Q]` — never gated on the set being empty — and a name that cannot be
+  routed is dropped rather than retried forever.
+- **A block's receipt was attributed to the puller's partition (#4308).**
+  `Pending.Partition` comes from `api.Receipt.Partition` when the peer names
+  one.
+- **A joining node was a black hole for user traffic (#4307)** and served the
+  two reads another node's pull takes (#4297). `Submit`, `Validate`,
+  `BptPageQuery` and an account read carrying a receipt answer `NotReady` while
+  the node is joining; plain reads stay open. The node state reaches the
+  querier, which is configured apart from consensus, through IOC
+  (`dagbftProvidesNodeState` / `querierWantsNodeState`), not a registry keyed by
+  partition — a process runs several nodes of one partition.
+- **The spine put another partition's accounts in this partition's tree**
+  (#4309) — found while fixing the above, not previously filed. `pullSpine` pulled
+  `dn.acme/{anchors,ledger,operators,operators/1}` into a BVN's store. A BVN's
+  BPT holds no `acc://dn.acme` account, so those four leaves put the local root
+  beyond every root the Directory ever anchored for that BVN, however perfectly
+  everything else was pulled — on its own enough to stop every BVN join. It now
+  pulls `SpineAccounts(<this partition>)` only; the Directory's spine is the
+  Directory's join's business, and the anchors are read through the API rather
+  than out of the local store. executor.md "Sync" step 3 is corrected to say so.
+
+**Differences that remain, from this change set**
+
+- **The block ledger records are taken on the peer's word** (#4310)**.** This
+  is the one place the code knowingly contradicts the spec text, and it has an
+  issue rather than only this paragraph so that the trade is decided rather
+  than absorbed. The spec says a
+  joining node "verifies each against the anchored root the way it verifies an
+  account". It does not: the records are read through `BlockQuery` with
+  `EntryRange.Expand` false, which answers from the block ledger with the
+  `(account, chain, index)` triples and no receipt. The exposure is liveness
+  and not safety — every account the set names is still verified against the
+  anchored root before it is written, and the root match is what admits the
+  node — so a lying peer can only keep a join from converging, which any peer
+  can do by refusing. A receipt is possible and is the remaining work: the
+  record's hash is an entry on the ledger account's `block-ledger` chain, and
+  that chain's anchor is part of the account's hash.
+- **The page diff runs on the first round of every join** (#4302 section 8)**.**
+  That is one full
+  BPT page scan of the partition, names only, before the node knows whether
+  its store is the state of `R`. On a large partition it is not cheap, and a
+  restarting node does not need it — its store *is* the state of `R` by
+  construction. Deciding that from the store rather than paying for the scan is
+  work not done.
+- **A held fetch keeps a batch open across rounds** (#4302 section 9)**.**
+  Each round's fetch holds
+  `db.Begin(true)` until everything in it settles or `maxSettleRounds` pass, so
+  a version of the store is pinned for a few rounds (#4279 is about the cost of
+  that). It is bounded by `maxSettleRounds` and by `pull.MaxHeld`; it is not
+  free.
+- **#4298 is untouched and is still a precondition.** `<partition>/ledger`
+  hashes the scheduled-events BPT and `<partition>/synthetic` hashes the
+  delivery queues (`observer_prod.go`), and the pull fetches neither, so those
+  two accounts verify only while both are empty. This change set makes them
+  **asked for** — which is #4306 — and does nothing to make them **verifiable**.
+  One observation for whoever takes #4298, offered as an observation and not a
+  finding: both are skipped when empty, and the local delivery queue is drained
+  at the next block's `Begin`, so how often either is actually non-empty at the
+  block a peer serves is a measurement nobody has made. That measurement now
+  stands ahead of any design work on #4298 in PLAN E11: it decides whether
+  #4298 is "no join completes" or "a join retries a few times".
+
+- **The simulator's `CompleteJoin` still copies the peer's store wholesale**
+  (#4302 section 7), left deliberately now that the e2e test covers what it
+  stood in for. It is recorded so that `TestOneValidatorRestartDoesNotDiverge`
+  passing is never again read as evidence that the join works.
 
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.

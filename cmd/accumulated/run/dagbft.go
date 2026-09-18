@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -57,6 +58,13 @@ var (
 	dagbftProvidesSequencer = ioc.Provides[private.Sequencer](func(s *DAGBFTService) string { return s.Partition.ID })
 	dagbftProvidesRouter    = ioc.Provides[routing.Router](func(s *DAGBFTService) string { return s.Partition.ID })
 
+	// This node's join state, for the services that are configured apart from
+	// consensus and must still refuse while it is joining -- the querier
+	// (#4297). It is handed over rather than looked up in a registry keyed by
+	// partition: a process can run several nodes of one partition, and each
+	// has its own.
+	dagbftProvidesNodeState = ioc.Provides[nodestate.Serving](func(s *DAGBFTService) string { return s.Partition.ID })
+
 	dagbftNeedsStorage = ioc.Needs[keyvalue.Beginner](func(s *DAGBFTService) string { return s.Partition.ID })
 
 	// The directory's storage, by name rather than by service, so a partition
@@ -81,6 +89,7 @@ func (s *DAGBFTService) Provides() []ioc.Provided {
 		dagbftProvidesValidator.Provided(s),
 		dagbftProvidesSequencer.Provided(s),
 		dagbftProvidesRouter.Provided(s),
+		dagbftProvidesNodeState.Provided(s),
 	}
 }
 
@@ -455,11 +464,27 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// partition would give them all one node's state.
 	var joinState *join.PulledState
 	if joining {
+		// The pull is addressed at NAMED PEERS, never at this node. The
+		// client above is routed, and a routed client answers locally for any
+		// service this node provides -- p2p.DialNetwork installs a
+		// self-discoverer unconditionally -- so a join given it reads the
+		// un-executed store it exists to fill, and every account is refused
+		// (#4303). QueryPeers looks the partition's query service up, drops
+		// this node's own peer ID, and addresses one peer at a time.
+		var self peer.ID
+		if inst.p2p != nil {
+			self = inst.p2p.ID()
+		}
 		joinState, err = join.NewState(join.StateOptions{
 			Partition: protocol.PartitionUrl(s.Partition.ID),
 			Database:  db,
-			Query:     client,
-			Logger:    slog.Default(),
+			Sources: &join.QueryPeers{
+				Client:  client,
+				Network: inst.config.Network,
+				Router:  router,
+				Self:    self,
+			},
+			Logger: slog.Default(),
 		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("prepare the join: %w", err)
@@ -566,6 +591,18 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	if joinState != nil {
 		nodeState = joinState.Machine()
 	}
+
+	// Registered whether or not this node joined: a node that never joined
+	// answers for itself, and a service that wants the state must get an
+	// answer rather than an absence.
+	var serving nodestate.Serving = nodestate.Always{}
+	if nodeState != nil {
+		serving = nodeState
+	}
+	err = dagbftProvidesNodeState.Register(inst.services, s, serving)
+	if err != nil {
+		return errors.UnknownError.WithFormat("register node state: %w", err)
+	}
 	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache, staging, nodeState)
 	if err != nil {
 		return err
@@ -606,8 +643,9 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 
 	// Create submitter service
 	submitterSvc := dagbft.NewSubmitterService(dagbft.SubmitterServiceParams{
-		Logger:  logger.With("module", "api"),
-		Service: s.service,
+		Logger:    logger.With("module", "api"),
+		Service:   s.service,
+		NodeState: nodeState,
 	})
 	registerRpcService(inst, submitterSvc.Type().AddressFor(s.Partition.ID), message.Submitter{Submitter: submitterSvc})
 	err = dagbftProvidesSubmitter.Register(inst.services, s, submitterSvc)
@@ -617,8 +655,9 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 
 	// Create validator service
 	validatorSvc := dagbft.NewValidatorService(dagbft.ValidatorServiceParams{
-		Logger:  logger.With("module", "api"),
-		Service: s.service,
+		Logger:    logger.With("module", "api"),
+		Service:   s.service,
+		NodeState: nodeState,
 	})
 	registerRpcService(inst, validatorSvc.Type().AddressFor(s.Partition.ID), message.Validator{Validator: validatorSvc})
 	err = dagbftProvidesValidator.Register(inst.services, s, validatorSvc)

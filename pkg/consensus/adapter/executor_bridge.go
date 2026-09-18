@@ -493,8 +493,7 @@ func (b *ExecutorBridge) CollectBlock(ctx context.Context, params BlockParams) (
 		"batches", len(params.Batches),
 		"arrived", arrived,
 		"unmarshalFailed", unmarshalFailed,
-		"held", out.Held,
-		"accounts", len(out.Accounts))
+		"held", out.Held)
 	return out, nil
 }
 

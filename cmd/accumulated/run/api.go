@@ -9,6 +9,7 @@ package run
 import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -19,6 +20,12 @@ import (
 
 var (
 	querierWantsConsensus = ioc.Wants[v3.ConsensusService](func(q *Querier) string { return q.Partition })
+
+	// The partition's join state, when there is one. A joining node must not
+	// answer a BPT page or an account read carrying a receipt: those are what
+	// another node's pull reads, and its store is the one the pull is filling
+	// (#4297).
+	querierWantsNodeState = ioc.Wants[nodestate.Serving](func(q *Querier) string { return q.Partition })
 	querierProvides       = ioc.Provides[v3.Querier](func(q *Querier) string { return q.Partition })
 
 	networkNeedsEvents  = ioc.Needs[*events.Bus](func(n *NetworkService) string { return n.Partition })
@@ -37,6 +44,7 @@ var (
 func (q *Querier) Requires() []ioc.Requirement {
 	desc := []ioc.Requirement{
 		querierWantsConsensus.Requirement(q),
+		querierWantsNodeState.Requirement(q),
 	}
 	desc = append(desc, q.Storage.Required(q.Partition)...)
 	return desc
@@ -59,6 +67,11 @@ func (q *Querier) start(inst *Instance) error {
 		return err
 	}
 
+	nodeState, err := querierWantsNodeState.Get(inst.services, q)
+	if err != nil {
+		return err
+	}
+
 	impl := api.NewQuerier(api.QuerierParams{
 		Logger:    logging.NewSlogLogger(inst.logger).With("module", "api"),
 		Partition: q.Partition,
@@ -67,6 +80,7 @@ func (q *Querier) start(inst *Instance) error {
 		// spec 1.3).  The executor keeps the windowed database.
 		Database:  database.New(store, logging.NewSlogLogger(inst.logger)).Deep(),
 		Consensus: consensus,
+		NodeState: nodeState,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(q.Partition), message.Querier{Querier: impl})
 	return querierProvides.Register(inst.services, q, impl)

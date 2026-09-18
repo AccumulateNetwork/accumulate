@@ -15,7 +15,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -104,7 +103,6 @@ func (x *Executor) CollectBlock(batch *database.Batch, params execute.BlockParam
 		}
 	}
 
-	out.Accounts = accountsNamed(envelopes)
 	b.staging.Commit()
 	return out, nil
 }
@@ -419,65 +417,4 @@ func deliveredFrom(batch *database.Batch, id execute.StreamID) (uint64, error) {
 		return 0, errors.UnknownError.WithFormat("load %v: %w", id.Ledger, err)
 	}
 	return ledger.Partition(id.Source).Delivered, nil
-}
-
-// accountsNamed is every account a block's envelopes name: what the state
-// pull must have for the block to execute (#4293). A transaction names its
-// principal, a signature names its signer and the transaction it signs, a
-// sequenced message names the principal of what it carries. Nothing here
-// decides anything; a name too many costs one pull.
-func accountsNamed(envelopes []*messaging.Envelope) []*url.URL {
-	seen := map[string]*url.URL{}
-	add := func(u *url.URL) {
-		if u == nil {
-			return
-		}
-		k := strings.ToLower(u.String())
-		if _, ok := seen[k]; !ok {
-			seen[k] = u
-		}
-	}
-	var addMsg func(msg messaging.Message)
-	addMsg = func(msg messaging.Message) {
-		switch m := msg.(type) {
-		case *messaging.TransactionMessage:
-			if m.Transaction != nil {
-				add(m.Transaction.Header.Principal)
-			}
-		case *messaging.SignatureMessage:
-			if m.TxID != nil {
-				add(m.TxID.Account())
-			}
-			if sig, ok := m.Signature.(protocol.Signature); ok {
-				add(sig.RoutingLocation())
-			}
-		case *messaging.SequencedMessage:
-			addMsg(m.Message)
-		case *messaging.SyntheticMessage:
-			addMsg(m.Message)
-		case *messaging.BadSyntheticMessage:
-			addMsg(m.Message)
-		case *messaging.BlockAnchor:
-			addMsg(m.Anchor)
-		}
-	}
-	for _, env := range envelopes {
-		messages, err := env.Normalize()
-		if err != nil {
-			continue // a malformed envelope names nothing
-		}
-		for _, msg := range messages {
-			addMsg(msg)
-		}
-	}
-	keys := make([]string, 0, len(seen))
-	for k := range seen {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	out := make([]*url.URL, 0, len(keys))
-	for _, k := range keys {
-		out = append(out, seen[k])
-	}
-	return out
 }
