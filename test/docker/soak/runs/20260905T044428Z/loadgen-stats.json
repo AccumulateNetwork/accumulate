@@ -1,0 +1,196 @@
+{
+  "updatedUnix": 1788584948,
+  "startUnix": 1788583691,
+  "elapsedSec": 1257,
+  "phase": "generating",
+  "target": 21600000,
+  "generated": 580829,
+  "rejected": 3,
+  "skipped": 315072,
+  "rate": 461.9482058797859,
+  "targetTps": 500,
+  "perType": {
+    "add-account": {
+      "generated": 102,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "add-credits-lite": {
+      "generated": 39746,
+      "rejected": 0,
+      "skipped": 27871
+    },
+    "add-credits-page": {
+      "generated": 42695,
+      "rejected": 0,
+      "skipped": 23189
+    },
+    "add-key-book": {
+      "generated": 51,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "add-page-key": {
+      "generated": 10623,
+      "rejected": 0,
+      "skipped": 5946
+    },
+    "add-token": {
+      "generated": 8268,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "burn-credits": {
+      "generated": 10578,
+      "rejected": 0,
+      "skipped": 5792
+    },
+    "burn-tokens": {
+      "generated": 14784,
+      "rejected": 0,
+      "skipped": 10437
+    },
+    "burn-tokens-adi": {
+      "generated": 21109,
+      "rejected": 0,
+      "skipped": 11488
+    },
+    "burn-tokens-custom": {
+      "generated": 6153,
+      "rejected": 0,
+      "skipped": 1737
+    },
+    "fail:data-to-void": {
+      "generated": 5336,
+      "rejected": 0,
+      "skipped": 2848
+    },
+    "fail:overburn-tokens": {
+      "generated": 5377,
+      "rejected": 0,
+      "skipped": 2895
+    },
+    "fail:overspend": {
+      "generated": 11130,
+      "rejected": 0,
+      "skipped": 5844
+    },
+    "fail:send-to-void": {
+      "generated": 10957,
+      "rejected": 1,
+      "skipped": 5684
+    },
+    "fail:sub-adi-on-void": {
+      "generated": 5333,
+      "rejected": 0,
+      "skipped": 2801
+    },
+    "grow:add-credits": {
+      "generated": 26,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-data-account": {
+      "generated": 17,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-identity": {
+      "generated": 49,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-key-page": {
+      "generated": 17,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token": {
+      "generated": 29,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-account": {
+      "generated": 21,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-holder": {
+      "generated": 49,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:issue-tokens": {
+      "generated": 24,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:set-threshold": {
+      "generated": 10,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "issue-tokens": {
+      "generated": 12616,
+      "rejected": 0,
+      "skipped": 3645
+    },
+    "remove-page-key": {
+      "generated": 10602,
+      "rejected": 0,
+      "skipped": 5868
+    },
+    "send-tokens-adi": {
+      "generated": 79477,
+      "rejected": 0,
+      "skipped": 43298
+    },
+    "send-tokens-custom": {
+      "generated": 19000,
+      "rejected": 0,
+      "skipped": 5236
+    },
+    "send-tokens-lite": {
+      "generated": 99434,
+      "rejected": 2,
+      "skipped": 53218
+    },
+    "set-threshold": {
+      "generated": 21048,
+      "rejected": 0,
+      "skipped": 11624
+    },
+    "transfer-credits": {
+      "generated": 15953,
+      "rejected": 0,
+      "skipped": 8653
+    },
+    "update-account-auth": {
+      "generated": 10726,
+      "rejected": 0,
+      "skipped": 5885
+    },
+    "update-page-key": {
+      "generated": 15977,
+      "rejected": 0,
+      "skipped": 8769
+    },
+    "write-data-adi": {
+      "generated": 63843,
+      "rejected": 0,
+      "skipped": 34334
+    },
+    "write-data-lite": {
+      "generated": 39669,
+      "rejected": 0,
+      "skipped": 28010
+    }
+  },
+  "accounts": {
+    "identities": 17,
+    "keyBooks": 17,
+    "keyPages": 34,
+    "tokenIssuers": 24,
+    "accounts": 19304
+  }
+}

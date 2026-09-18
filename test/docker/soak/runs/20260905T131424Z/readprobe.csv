@@ -1,0 +1,6 @@
+time,reads,p50,p95,max,maxKind,maxAge,maxPartition,failed,gated,timeouts,reservoir,oldestAge
+2026-09-05T13:17:54Z,6,1.8,2.4,2.4,txn,15,Directory,0,0,0,3,16
+2026-09-05T13:18:55Z,24,1.5,4.0,5.3,txn,93,BVN2,0,0,0,12,97
+2026-09-05T13:19:55Z,42,1.3,3.8,8.3,chain,157,Directory,0,0,0,21,157
+2026-09-05T13:20:56Z,60,1.4,16.5,28.5,txn,212,BVN2,0,0,0,30,217
+2026-09-05T13:21:56Z,78,1.5,3.6,12.2,txn,272,BVN1,0,0,0,39,277

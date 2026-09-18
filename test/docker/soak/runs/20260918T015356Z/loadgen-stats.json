@@ -1,0 +1,201 @@
+{
+  "updatedUnix": 1789697580,
+  "startUnix": 1789696571,
+  "elapsedSec": 1008,
+  "phase": "generating",
+  "target": 180000,
+  "generated": 81876,
+  "rejected": 4,
+  "skipped": 193,
+  "rate": 81.1859944188929,
+  "targetTps": 100,
+  "perType": {
+    "add-account": {
+      "generated": 384,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "add-credits-lite": {
+      "generated": 6276,
+      "rejected": 0,
+      "skipped": 15
+    },
+    "add-credits-page": {
+      "generated": 5714,
+      "rejected": 0,
+      "skipped": 7
+    },
+    "add-key-book": {
+      "generated": 190,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "add-page-key": {
+      "generated": 1964,
+      "rejected": 1,
+      "skipped": 1
+    },
+    "add-token": {
+      "generated": 714,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "burn-credits": {
+      "generated": 1438,
+      "rejected": 1,
+      "skipped": 2
+    },
+    "burn-tokens": {
+      "generated": 2273,
+      "rejected": 0,
+      "skipped": 5
+    },
+    "burn-tokens-adi": {
+      "generated": 2893,
+      "rejected": 0,
+      "skipped": 8
+    },
+    "burn-tokens-custom": {
+      "generated": 752,
+      "rejected": 0,
+      "skipped": 2
+    },
+    "fail:data-to-void": {
+      "generated": 730,
+      "rejected": 0,
+      "skipped": 2
+    },
+    "fail:overburn-tokens": {
+      "generated": 726,
+      "rejected": 0,
+      "skipped": 1
+    },
+    "fail:overspend": {
+      "generated": 1532,
+      "rejected": 0,
+      "skipped": 5
+    },
+    "fail:send-to-void": {
+      "generated": 1558,
+      "rejected": 0,
+      "skipped": 3
+    },
+    "fail:sub-adi-on-void": {
+      "generated": 715,
+      "rejected": 0,
+      "skipped": 1
+    },
+    "grow:add-credits": {
+      "generated": 67,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-data-account": {
+      "generated": 76,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-identity": {
+      "generated": 68,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-key-book": {
+      "generated": 15,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-key-page": {
+      "generated": 64,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token": {
+      "generated": 42,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-account": {
+      "generated": 85,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-holder": {
+      "generated": 84,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:issue-tokens": {
+      "generated": 41,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:set-threshold": {
+      "generated": 50,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "issue-tokens": {
+      "generated": 1444,
+      "rejected": 0,
+      "skipped": 2
+    },
+    "remove-page-key": {
+      "generated": 1440,
+      "rejected": 0,
+      "skipped": 2
+    },
+    "send-tokens-adi": {
+      "generated": 10979,
+      "rejected": 0,
+      "skipped": 9
+    },
+    "send-tokens-custom": {
+      "generated": 2134,
+      "rejected": 0,
+      "skipped": 4
+    },
+    "send-tokens-lite": {
+      "generated": 14059,
+      "rejected": 1,
+      "skipped": 25
+    },
+    "set-threshold": {
+      "generated": 2835,
+      "rejected": 1,
+      "skipped": 38
+    },
+    "transfer-credits": {
+      "generated": 2236,
+      "rejected": 0,
+      "skipped": 4
+    },
+    "update-account-auth": {
+      "generated": 1423,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "update-page-key": {
+      "generated": 2184,
+      "rejected": 0,
+      "skipped": 26
+    },
+    "write-data-adi": {
+      "generated": 8638,
+      "rejected": 0,
+      "skipped": 7
+    },
+    "write-data-lite": {
+      "generated": 6053,
+      "rejected": 0,
+      "skipped": 24
+    }
+  },
+  "accounts": {
+    "identities": 64,
+    "keyBooks": 79,
+    "keyPages": 143,
+    "tokenIssuers": 41,
+    "accounts": 2117
+  }
+}

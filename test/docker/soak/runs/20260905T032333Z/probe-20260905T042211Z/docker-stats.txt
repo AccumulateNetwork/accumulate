@@ -1,0 +1,8 @@
+asp-v006	1.17%	25.29MiB / 62.23GiB
+asp-v004	0.86%	25.48MiB / 62.23GiB
+asp-v003	1.45%	25.32MiB / 62.23GiB
+asp-v001	2.28%	25.87MiB / 62.23GiB
+asp-v007	1.44%	24.55MiB / 62.23GiB
+asp-v005	0.41%	25.27MiB / 62.23GiB
+asp-v002	1.42%	24.54MiB / 62.23GiB
+asp	0.03%	32.1MiB / 62.23GiB

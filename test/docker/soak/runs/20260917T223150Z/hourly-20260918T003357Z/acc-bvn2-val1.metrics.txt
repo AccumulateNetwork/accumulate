@@ -1,0 +1,1711 @@
+# HELP accumulate_badger_commit_duration Commit duration in seconds
+# TYPE accumulate_badger_commit_duration gauge
+accumulate_badger_commit_duration 0
+# HELP accumulate_badger_db_open Number of open databases
+# TYPE accumulate_badger_db_open gauge
+accumulate_badger_db_open 0
+# HELP accumulate_badger_gc_duration Garbage collection duration in seconds
+# TYPE accumulate_badger_gc_duration gauge
+accumulate_badger_gc_duration 0
+# HELP accumulate_badger_gc_run Number of times garbage collection has run
+# TYPE accumulate_badger_gc_run counter
+accumulate_badger_gc_run 0
+# HELP accumulate_badger_txn_open Number of open transactions
+# TYPE accumulate_badger_txn_open gauge
+accumulate_badger_txn_open 0
+# HELP accumulate_bcdb_dyna_exceptions Keys held in the dynamic layer against their classification (deleted permanent keys, refused writes); in memory for the process lifetime and read whole at open
+# TYPE accumulate_bcdb_dyna_exceptions gauge
+accumulate_bcdb_dyna_exceptions{database="bvnn"} 3440
+accumulate_bcdb_dyna_exceptions{database="dnn"} 1469
+# HELP accumulate_bcdb_oldest_view_age_seconds Age of the oldest open read view, as of the last commit or view release; zero when none was open then. A store that has stopped committing reports the age its last commit saw, not the age now
+# TYPE accumulate_bcdb_oldest_view_age_seconds gauge
+accumulate_bcdb_oldest_view_age_seconds{database="bvnn"} 3.4188e-05
+accumulate_bcdb_oldest_view_age_seconds{database="dnn"} 6.2782e-05
+# HELP accumulate_bcdb_staged_commits Commit overlays held in memory for readers begun before them; every commit is on disk (D5)
+# TYPE accumulate_bcdb_staged_commits gauge
+accumulate_bcdb_staged_commits{database="bvnn"} 0
+accumulate_bcdb_staged_commits{database="dnn"} 0
+# HELP accumulate_conductor_heal_entries_total Entries received in answer to span requests, by what became of them: applied (above the destination's delivered point and not already held, so the answer filled a gap) or not-required (at or below delivered, or already held, so the answer was redundant). A bare count of entries received cannot tell a repaired stream from a healer asking for what it already has, and cannot tell either from nothing to do (#4283)
+# TYPE accumulate_conductor_heal_entries_total counter
+accumulate_conductor_heal_entries_total{destination="BVN2",outcome="applied",source="BVN1"} 1140
+accumulate_conductor_heal_entries_total{destination="BVN2",outcome="not-required",source="Directory"} 154
+accumulate_conductor_heal_entries_total{destination="Directory",outcome="not-required",source="BVN1"} 47
+accumulate_conductor_heal_entries_total{destination="Directory",outcome="not-required",source="Directory"} 68
+# HELP accumulate_conductor_heal_requests_total Span requests by outcome: answered, not-yet (the span is in flight at the source), miss (the source's cache lacks the span and this node is caught up), lagging-miss (the source lacks it but this node is behind consensus, so it may be in its own backlog: asked again later, not a miss), failed, lagging (not asked: this node's executor is more than MaxExecutionLag behind consensus, #4260, #4284)
+# TYPE accumulate_conductor_heal_requests_total counter
+accumulate_conductor_heal_requests_total{destination="BVN2",outcome="answered",source="BVN1"} 186
+accumulate_conductor_heal_requests_total{destination="BVN2",outcome="answered",source="Directory"} 34
+accumulate_conductor_heal_requests_total{destination="BVN2",outcome="failed",source="BVN1"} 79
+accumulate_conductor_heal_requests_total{destination="BVN2",outcome="not-yet",source="BVN1"} 30
+accumulate_conductor_heal_requests_total{destination="BVN2",outcome="not-yet",source="BVN3"} 6
+accumulate_conductor_heal_requests_total{destination="BVN2",outcome="not-yet",source="Directory"} 1716
+accumulate_conductor_heal_requests_total{destination="Directory",outcome="answered",source="BVN1"} 3
+accumulate_conductor_heal_requests_total{destination="Directory",outcome="answered",source="Directory"} 3
+accumulate_conductor_heal_requests_total{destination="Directory",outcome="not-yet",source="BVN2"} 3
+accumulate_conductor_heal_requests_total{destination="Directory",outcome="not-yet",source="BVN3"} 3
+# HELP accumulate_dagbft_batch_retention_hits_total Batch fetches served from the post-commit retention window
+# TYPE accumulate_dagbft_batch_retention_hits_total counter
+accumulate_dagbft_batch_retention_hits_total 163
+# HELP accumulate_dagbft_batch_store_bytes Bytes held in a worker's active batch store, own (uncommitted, never evicted) and peer
+# TYPE accumulate_dagbft_batch_store_bytes gauge
+accumulate_dagbft_batch_store_bytes{kind="own",partition="BVN2",worker="0"} 21452
+accumulate_dagbft_batch_store_bytes{kind="own",partition="Directory",worker="0"} 12954
+accumulate_dagbft_batch_store_bytes{kind="peer",partition="BVN2",worker="0"} 127104
+accumulate_dagbft_batch_store_bytes{kind="peer",partition="Directory",worker="0"} 182823
+# HELP accumulate_dagbft_batches_retained Committed batches currently kept fetchable for lagging peers
+# TYPE accumulate_dagbft_batches_retained gauge
+accumulate_dagbft_batches_retained 6769
+# HELP accumulate_dagbft_batches_retention_expired_total Committed batches dropped when the retention window closed
+# TYPE accumulate_dagbft_batches_retention_expired_total counter
+accumulate_dagbft_batches_retention_expired_total 106328
+# HELP accumulate_dagbft_block_phase_seconds Wall time of one phase of producing a block, by partition and phase: begin, unmarshal, process, close, hash, commit
+# TYPE accumulate_dagbft_block_phase_seconds histogram
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.0001"} 8
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.0002"} 70
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.0004"} 117
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.0008"} 172
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.0016"} 1369
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.0032"} 4156
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.0064"} 5987
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.0128"} 6840
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.0256"} 7072
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.0512"} 7132
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.1024"} 7143
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.2048"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.4096"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="0.8192"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="begin",le="+Inf"} 7145
+accumulate_dagbft_block_phase_seconds_sum{partition="BVN2",phase="begin"} 30.625655019999993
+accumulate_dagbft_block_phase_seconds_count{partition="BVN2",phase="begin"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.0001"} 27
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.0002"} 32
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.0004"} 73
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.0008"} 117
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.0016"} 135
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.0032"} 153
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.0064"} 384
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.0128"} 2733
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.0256"} 4988
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.0512"} 6475
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.1024"} 7014
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.2048"} 7132
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.4096"} 7144
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="0.8192"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="close",le="+Inf"} 7145
+accumulate_dagbft_block_phase_seconds_sum{partition="BVN2",phase="close"} 173.58136526299967
+accumulate_dagbft_block_phase_seconds_count{partition="BVN2",phase="close"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.0001"} 28
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.0002"} 28
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.0004"} 28
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.0008"} 28
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.0016"} 28
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.0032"} 28
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.0064"} 28
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.0128"} 28
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.0256"} 28
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.0512"} 54
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.1024"} 3755
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.2048"} 6819
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.4096"} 7069
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="0.8192"} 7111
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="commit",le="+Inf"} 7144
+accumulate_dagbft_block_phase_seconds_sum{partition="BVN2",phase="commit"} 809.0776536530009
+accumulate_dagbft_block_phase_seconds_count{partition="BVN2",phase="commit"} 7144
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.0001"} 48
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.0002"} 88
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.0004"} 129
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.0008"} 149
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.0016"} 209
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.0032"} 628
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.0064"} 2005
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.0128"} 4813
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.0256"} 6636
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.0512"} 7059
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.1024"} 7140
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.2048"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.4096"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="0.8192"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="hash",le="+Inf"} 7145
+accumulate_dagbft_block_phase_seconds_sum{partition="BVN2",phase="hash"} 85.84538377099999
+accumulate_dagbft_block_phase_seconds_count{partition="BVN2",phase="hash"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.0001"} 33
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.0002"} 33
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.0004"} 35
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.0008"} 38
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.0016"} 46
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.0032"} 80
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.0064"} 112
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.0128"} 145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.0256"} 314
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.0512"} 3741
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.1024"} 6248
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.2048"} 7000
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.4096"} 7135
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="0.8192"} 7144
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="process",le="+Inf"} 7145
+accumulate_dagbft_block_phase_seconds_sum{partition="BVN2",phase="process"} 455.8173603069981
+accumulate_dagbft_block_phase_seconds_count{partition="BVN2",phase="process"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.0001"} 56
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.0002"} 111
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.0004"} 779
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.0008"} 5920
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.0016"} 7022
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.0032"} 7122
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.0064"} 7141
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.0128"} 7143
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.0256"} 7144
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.0512"} 7144
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.1024"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.2048"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.4096"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="0.8192"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="BVN2",phase="unmarshal",le="+Inf"} 7145
+accumulate_dagbft_block_phase_seconds_sum{partition="BVN2",phase="unmarshal"} 4.717359385999996
+accumulate_dagbft_block_phase_seconds_count{partition="BVN2",phase="unmarshal"} 7145
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.0001"} 2
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.0002"} 67
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.0004"} 74
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.0008"} 2156
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.0016"} 4988
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.0032"} 6278
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.0064"} 6894
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.0128"} 7067
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.0256"} 7107
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.0512"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.1024"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.2048"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.4096"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="0.8192"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="begin",le="+Inf"} 7113
+accumulate_dagbft_block_phase_seconds_sum{partition="Directory",phase="begin"} 12.311089400000007
+accumulate_dagbft_block_phase_seconds_count{partition="Directory",phase="begin"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.0001"} 18
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.0002"} 19
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.0004"} 48
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.0008"} 198
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.0016"} 4088
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.0032"} 6011
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.0064"} 6788
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.0128"} 7042
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.0256"} 7101
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.0512"} 7111
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.1024"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.2048"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.4096"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="0.8192"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="close",le="+Inf"} 7113
+accumulate_dagbft_block_phase_seconds_sum{partition="Directory",phase="close"} 15.998595737999993
+accumulate_dagbft_block_phase_seconds_count{partition="Directory",phase="close"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.0001"} 23
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.0002"} 23
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.0004"} 23
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.0008"} 23
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.0016"} 23
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.0032"} 23
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.0064"} 23
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.0128"} 23
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.0256"} 23
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.0512"} 197
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.1024"} 5875
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.2048"} 7051
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.4096"} 7107
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="0.8192"} 7110
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="commit",le="+Inf"} 7112
+accumulate_dagbft_block_phase_seconds_sum{partition="Directory",phase="commit"} 571.6076932100007
+accumulate_dagbft_block_phase_seconds_count{partition="Directory",phase="commit"} 7112
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.0001"} 82
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.0002"} 2170
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.0004"} 6330
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.0008"} 6933
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.0016"} 7051
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.0032"} 7094
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.0064"} 7112
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.0128"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.0256"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.0512"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.1024"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.2048"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.4096"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="0.8192"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="hash",le="+Inf"} 7113
+accumulate_dagbft_block_phase_seconds_sum{partition="Directory",phase="hash"} 2.1449822229999964
+accumulate_dagbft_block_phase_seconds_count{partition="Directory",phase="hash"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.0001"} 26
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.0002"} 26
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.0004"} 27
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.0008"} 31
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.0016"} 43
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.0032"} 71
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.0064"} 171
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.0128"} 2241
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.0256"} 5794
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.0512"} 6959
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.1024"} 7083
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.2048"} 7110
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.4096"} 7112
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="0.8192"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="process",le="+Inf"} 7113
+accumulate_dagbft_block_phase_seconds_sum{partition="Directory",phase="process"} 137.29537826199973
+accumulate_dagbft_block_phase_seconds_count{partition="Directory",phase="process"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.0001"} 78
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.0002"} 156
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.0004"} 1634
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.0008"} 5847
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.0016"} 6544
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.0032"} 6910
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.0064"} 7051
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.0128"} 7098
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.0256"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.0512"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.1024"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.2048"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.4096"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="0.8192"} 7113
+accumulate_dagbft_block_phase_seconds_bucket{partition="Directory",phase="unmarshal",le="+Inf"} 7113
+accumulate_dagbft_block_phase_seconds_sum{partition="Directory",phase="unmarshal"} 5.5889346439999965
+accumulate_dagbft_block_phase_seconds_count{partition="Directory",phase="unmarshal"} 7113
+# HELP accumulate_dagbft_block_production_seconds Wall time to produce one block, by partition
+# TYPE accumulate_dagbft_block_production_seconds histogram
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.0001"} 0
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.0002"} 4
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.0004"} 9
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.0008"} 27
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.0016"} 28
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.0032"} 28
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.0064"} 28
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.0128"} 28
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.0256"} 28
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.0512"} 36
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.1024"} 285
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.2048"} 4264
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.4096"} 6720
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="0.8192"} 7072
+accumulate_dagbft_block_production_seconds_bucket{partition="BVN2",le="+Inf"} 7144
+accumulate_dagbft_block_production_seconds_sum{partition="BVN2"} 1559.5655267850007
+accumulate_dagbft_block_production_seconds_count{partition="BVN2"} 7144
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.0001"} 0
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.0002"} 0
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.0004"} 17
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.0008"} 18
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.0016"} 23
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.0032"} 23
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.0064"} 23
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.0128"} 23
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.0256"} 23
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.0512"} 23
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.1024"} 3964
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.2048"} 6925
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.4096"} 7099
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="0.8192"} 7110
+accumulate_dagbft_block_production_seconds_bucket{partition="Directory",le="+Inf"} 7112
+accumulate_dagbft_block_production_seconds_sum{partition="Directory"} 744.9211968000006
+accumulate_dagbft_block_production_seconds_count{partition="Directory"} 7112
+# HELP accumulate_dagbft_blocks_empty_total Blocks produced from a certificate with an empty payload (an idle network)
+# TYPE accumulate_dagbft_blocks_empty_total counter
+accumulate_dagbft_blocks_empty_total 59
+# HELP accumulate_dagbft_blocks_produced_total Blocks produced from committed certificates
+# TYPE accumulate_dagbft_blocks_produced_total counter
+accumulate_dagbft_blocks_produced_total 14256
+# HELP accumulate_dagbft_cert_sync_certificates_received_total Total certificates received via sync
+# TYPE accumulate_dagbft_cert_sync_certificates_received_total counter
+accumulate_dagbft_cert_sync_certificates_received_total 0
+# HELP accumulate_dagbft_cert_sync_requests_sent_total Total certificate sync requests sent
+# TYPE accumulate_dagbft_cert_sync_requests_sent_total counter
+accumulate_dagbft_cert_sync_requests_sent_total 0
+# HELP accumulate_dagbft_cert_sync_responses_received_total Total certificate sync responses received
+# TYPE accumulate_dagbft_cert_sync_responses_received_total counter
+accumulate_dagbft_cert_sync_responses_received_total 0
+# HELP accumulate_dagbft_certificate_creation_seconds Time to create a certificate in seconds
+# TYPE accumulate_dagbft_certificate_creation_seconds histogram
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.0001"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.0002"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.0004"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.0008"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.0016"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.0032"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.0064"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.0128"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.0256"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.0512"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.1024"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.2048"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.4096"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="0.8192"} 0
+accumulate_dagbft_certificate_creation_seconds_bucket{le="+Inf"} 0
+accumulate_dagbft_certificate_creation_seconds_sum 0
+accumulate_dagbft_certificate_creation_seconds_count 0
+# HELP accumulate_dagbft_certificates_committed_total Total number of certificates committed
+# TYPE accumulate_dagbft_certificates_committed_total counter
+accumulate_dagbft_certificates_committed_total 0
+# HELP accumulate_dagbft_certificates_created_total Total number of certificates created
+# TYPE accumulate_dagbft_certificates_created_total counter
+accumulate_dagbft_certificates_created_total 0
+# HELP accumulate_dagbft_certificates_redelivered_total Committed certificates delivered again after already being executed (should be 0)
+# TYPE accumulate_dagbft_certificates_redelivered_total counter
+accumulate_dagbft_certificates_redelivered_total 0
+# HELP accumulate_dagbft_current_round Current consensus round
+# TYPE accumulate_dagbft_current_round gauge
+accumulate_dagbft_current_round 0
+# HELP accumulate_dagbft_dag_certificates Total number of certificates in the DAG
+# TYPE accumulate_dagbft_dag_certificates gauge
+accumulate_dagbft_dag_certificates 0
+# HELP accumulate_dagbft_dag_gc_rounds_removed_total Total rounds removed by garbage collection
+# TYPE accumulate_dagbft_dag_gc_rounds_removed_total counter
+accumulate_dagbft_dag_gc_rounds_removed_total 24664
+# HELP accumulate_dagbft_dag_rounds Number of rounds in the DAG
+# TYPE accumulate_dagbft_dag_rounds gauge
+accumulate_dagbft_dag_rounds 0
+# HELP accumulate_dagbft_dag_uncommitted_rounds_dropped_total Rounds collected by the round advance that this node never committed
+# TYPE accumulate_dagbft_dag_uncommitted_rounds_dropped_total counter
+accumulate_dagbft_dag_uncommitted_rounds_dropped_total 4
+# HELP accumulate_dagbft_execution_lag_blocks Committed leader groups the executor has not yet executed
+# TYPE accumulate_dagbft_execution_lag_blocks gauge
+accumulate_dagbft_execution_lag_blocks{partition="BVN2"} 0
+accumulate_dagbft_execution_lag_blocks{partition="Directory"} 0
+# HELP accumulate_dagbft_handoff_transactions_total Transactions at the consensus/execution hand-off by outcome: arrived (in a committed batch), executed, unmarshal-failed, process-failed, status-failed. arrived minus executed is what did not execute.
+# TYPE accumulate_dagbft_handoff_transactions_total counter
+accumulate_dagbft_handoff_transactions_total{outcome="arrived",partition="BVN2"} 473786
+accumulate_dagbft_handoff_transactions_total{outcome="arrived",partition="Directory"} 189581
+accumulate_dagbft_handoff_transactions_total{outcome="executed",partition="BVN2"} 473786
+accumulate_dagbft_handoff_transactions_total{outcome="executed",partition="Directory"} 189581
+accumulate_dagbft_handoff_transactions_total{outcome="process-failed",partition="BVN2"} 0
+accumulate_dagbft_handoff_transactions_total{outcome="process-failed",partition="Directory"} 0
+accumulate_dagbft_handoff_transactions_total{outcome="status-failed",partition="BVN2"} 0
+accumulate_dagbft_handoff_transactions_total{outcome="status-failed",partition="Directory"} 0
+accumulate_dagbft_handoff_transactions_total{outcome="unmarshal-failed",partition="BVN2"} 0
+accumulate_dagbft_handoff_transactions_total{outcome="unmarshal-failed",partition="Directory"} 0
+# HELP accumulate_dagbft_headers_created_total Total number of headers created
+# TYPE accumulate_dagbft_headers_created_total counter
+accumulate_dagbft_headers_created_total 0
+# HELP accumulate_dagbft_last_commit_round Last committed leader round
+# TYPE accumulate_dagbft_last_commit_round gauge
+accumulate_dagbft_last_commit_round 0
+# HELP accumulate_dagbft_leader_commits_total Total number of leader commits
+# TYPE accumulate_dagbft_leader_commits_total counter
+accumulate_dagbft_leader_commits_total 0
+# HELP accumulate_dagbft_peers_banned_current Current number of banned peers
+# TYPE accumulate_dagbft_peers_banned_current gauge
+accumulate_dagbft_peers_banned_current 0
+# HELP accumulate_dagbft_peers_banned_total Total number of peers banned for rate limiting violations
+# TYPE accumulate_dagbft_peers_banned_total counter
+accumulate_dagbft_peers_banned_total 0
+# HELP accumulate_dagbft_peers_connected Current number of connected peers
+# TYPE accumulate_dagbft_peers_connected gauge
+accumulate_dagbft_peers_connected 0
+# HELP accumulate_dagbft_round_duration_seconds Duration of consensus rounds in seconds
+# TYPE accumulate_dagbft_round_duration_seconds histogram
+accumulate_dagbft_round_duration_seconds_bucket{le="0.001"} 0
+accumulate_dagbft_round_duration_seconds_bucket{le="0.002"} 0
+accumulate_dagbft_round_duration_seconds_bucket{le="0.004"} 0
+accumulate_dagbft_round_duration_seconds_bucket{le="0.008"} 0
+accumulate_dagbft_round_duration_seconds_bucket{le="0.016"} 0
+accumulate_dagbft_round_duration_seconds_bucket{le="0.032"} 0
+accumulate_dagbft_round_duration_seconds_bucket{le="0.064"} 0
+accumulate_dagbft_round_duration_seconds_bucket{le="0.128"} 0
+accumulate_dagbft_round_duration_seconds_bucket{le="0.256"} 0
+accumulate_dagbft_round_duration_seconds_bucket{le="0.512"} 22033
+accumulate_dagbft_round_duration_seconds_bucket{le="1.024"} 28662
+accumulate_dagbft_round_duration_seconds_bucket{le="2.048"} 28662
+accumulate_dagbft_round_duration_seconds_bucket{le="4.096"} 28662
+accumulate_dagbft_round_duration_seconds_bucket{le="8.192"} 28662
+accumulate_dagbft_round_duration_seconds_bucket{le="16.384"} 28662
+accumulate_dagbft_round_duration_seconds_bucket{le="+Inf"} 28662
+accumulate_dagbft_round_duration_seconds_sum 14534.397837511005
+accumulate_dagbft_round_duration_seconds_count 28662
+# HELP accumulate_dagbft_transaction_latency_seconds End-to-end transaction latency in seconds
+# TYPE accumulate_dagbft_transaction_latency_seconds histogram
+accumulate_dagbft_transaction_latency_seconds_bucket{le="0.001"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="0.002"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="0.004"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="0.008"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="0.016"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="0.032"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="0.064"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="0.128"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="0.256"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="0.512"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="1.024"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="2.048"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="4.096"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="8.192"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="16.384"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="32.768"} 0
+accumulate_dagbft_transaction_latency_seconds_bucket{le="+Inf"} 0
+accumulate_dagbft_transaction_latency_seconds_sum 0
+accumulate_dagbft_transaction_latency_seconds_count 0
+# HELP accumulate_dagbft_votes_rate_limited_total Total number of votes rate limited
+# TYPE accumulate_dagbft_votes_rate_limited_total counter
+accumulate_dagbft_votes_rate_limited_total 0
+# HELP accumulate_dagbft_votes_received_total Total number of votes received
+# TYPE accumulate_dagbft_votes_received_total counter
+accumulate_dagbft_votes_received_total 0
+# HELP accumulate_dagbft_votes_sent_total Total number of votes sent
+# TYPE accumulate_dagbft_votes_sent_total counter
+accumulate_dagbft_votes_sent_total 0
+# HELP accumulate_dispatcher_drops_total Envelopes dropped undelivered, by reason: deadline (retries exhausted) or queue-full (block bound)
+# TYPE accumulate_dispatcher_drops_total counter
+accumulate_dispatcher_drops_total{destination="BVN3",reason="queue-full"} 12
+# HELP accumulate_dispatcher_queue_depth Envelopes queued for a destination partition, waiting to be sent or retried
+# TYPE accumulate_dispatcher_queue_depth gauge
+accumulate_dispatcher_queue_depth{destination="BVN1"} 0
+accumulate_dispatcher_queue_depth{destination="BVN2"} 0
+accumulate_dispatcher_queue_depth{destination="BVN3"} 0
+accumulate_dispatcher_queue_depth{destination="Directory"} 0
+# HELP accumulate_dispatcher_retries_total Envelope send attempts that failed and were retried
+# TYPE accumulate_dispatcher_retries_total counter
+accumulate_dispatcher_retries_total{destination="BVN2"} 4
+accumulate_dispatcher_retries_total{destination="BVN3"} 15
+# HELP accumulate_dispatcher_sent_total Envelopes the destination accepted
+# TYPE accumulate_dispatcher_sent_total counter
+accumulate_dispatcher_sent_total{destination="BVN1"} 8852
+accumulate_dispatcher_sent_total{destination="BVN2"} 7251
+accumulate_dispatcher_sent_total{destination="BVN3"} 8840
+accumulate_dispatcher_sent_total{destination="Directory"} 15896
+# HELP accumulate_exec_blocks_total Blocks closed by the executor
+# TYPE accumulate_exec_blocks_total counter
+accumulate_exec_blocks_total 14258
+# HELP accumulate_exec_flushes_total Parallel runs flushed (a run is consecutive single-identity user envelopes executed across shards)
+# TYPE accumulate_exec_flushes_total counter
+accumulate_exec_flushes_total 36945
+# HELP accumulate_exec_phase_seconds_total Wall time spent in ProcessAll by phase: serial (staging, drains, barrier envelopes) or parallel (shard flushes, including their serial commit)
+# TYPE accumulate_exec_phase_seconds_total counter
+accumulate_exec_phase_seconds_total{phase="parallel"} 368.4534959970004
+accumulate_exec_phase_seconds_total{phase="serial"} 223.4771156359998
+# HELP accumulate_exec_staged_proofs_total Collection proofs by anchor-staging outcome: staged, validated, disproved, conflict, invalid, unbound, refused, duplicate (identical proof already staged this block)
+# TYPE accumulate_exec_staged_proofs_total counter
+accumulate_exec_staged_proofs_total{outcome="duplicate"} 1
+accumulate_exec_staged_proofs_total{outcome="staged"} 249
+accumulate_exec_staged_proofs_total{outcome="validated"} 29001
+# HELP accumulate_exec_synthetic_anchor_total Synthetics judged by staging: proven or unproven (proof-less, by the proven set); this_block, earlier or missing (by their own receipt); collected (held in staging awaiting a proof); refused (no source validator signed the copy); anchor-tossed (already delivered)
+# TYPE accumulate_exec_synthetic_anchor_total counter
+accumulate_exec_synthetic_anchor_total{applied="anchor-collected"} 161743
+accumulate_exec_synthetic_anchor_total{applied="anchor-tossed"} 58640
+accumulate_exec_synthetic_anchor_total{applied="collected"} 999
+accumulate_exec_synthetic_anchor_total{applied="earlier"} 10674
+accumulate_exec_synthetic_anchor_total{applied="missing"} 134
+accumulate_exec_synthetic_anchor_total{applied="proven"} 234544
+accumulate_exec_synthetic_anchor_total{applied="this_block"} 10
+accumulate_exec_synthetic_anchor_total{applied="unproven"} 2624
+# HELP accumulate_exec_transaction_failed_total Transactions that executed with an error, by transaction type
+# TYPE accumulate_exec_transaction_failed_total counter
+accumulate_exec_transaction_failed_total{type="burnTokens"} 2312
+accumulate_exec_transaction_failed_total{type="createIdentity"} 2282
+accumulate_exec_transaction_failed_total{type="sendTokens"} 4701
+accumulate_exec_transaction_failed_total{type="syntheticDepositTokens"} 4321
+accumulate_exec_transaction_failed_total{type="updateKeyPage"} 61
+accumulate_exec_transaction_failed_total{type="writeData"} 2210
+# HELP accumulate_staging_held_bytes Encoded size of the entries held in staging for the stream
+# TYPE accumulate_staging_held_bytes gauge
+accumulate_staging_held_bytes{ledger="acc://bvn-bvn2.acme/anchors",source="acc://dn.acme"} 0
+accumulate_staging_held_bytes{ledger="acc://bvn-bvn2.acme/synthetic",source="acc://bvn-bvn1.acme"} 38815
+accumulate_staging_held_bytes{ledger="acc://bvn-bvn2.acme/synthetic",source="acc://bvn-bvn3.acme"} 0
+accumulate_staging_held_bytes{ledger="acc://dn.acme/anchors",source="acc://bvn-bvn1.acme"} 173
+accumulate_staging_held_bytes{ledger="acc://dn.acme/anchors",source="acc://bvn-bvn2.acme"} 173
+accumulate_staging_held_bytes{ledger="acc://dn.acme/anchors",source="acc://bvn-bvn3.acme"} 0
+accumulate_staging_held_bytes{ledger="acc://dn.acme/anchors",source="acc://dn.acme"} 0
+accumulate_staging_held_bytes{ledger="acc://dn.acme/synthetic",source="acc://bvn-bvn1.acme"} 15833
+accumulate_staging_held_bytes{ledger="acc://dn.acme/synthetic",source="acc://bvn-bvn2.acme"} 24729
+accumulate_staging_held_bytes{ledger="acc://dn.acme/synthetic",source="acc://bvn-bvn3.acme"} 0
+# HELP accumulate_staging_held_entries Entries held in staging for the stream: received and not yet executed
+# TYPE accumulate_staging_held_entries gauge
+accumulate_staging_held_entries{ledger="acc://bvn-bvn2.acme/anchors",source="acc://dn.acme"} 0
+accumulate_staging_held_entries{ledger="acc://bvn-bvn2.acme/synthetic",source="acc://bvn-bvn1.acme"} 133
+accumulate_staging_held_entries{ledger="acc://bvn-bvn2.acme/synthetic",source="acc://bvn-bvn3.acme"} 0
+accumulate_staging_held_entries{ledger="acc://dn.acme/anchors",source="acc://bvn-bvn1.acme"} 1
+accumulate_staging_held_entries{ledger="acc://dn.acme/anchors",source="acc://bvn-bvn2.acme"} 1
+accumulate_staging_held_entries{ledger="acc://dn.acme/anchors",source="acc://bvn-bvn3.acme"} 0
+accumulate_staging_held_entries{ledger="acc://dn.acme/anchors",source="acc://dn.acme"} 0
+accumulate_staging_held_entries{ledger="acc://dn.acme/synthetic",source="acc://bvn-bvn1.acme"} 98
+accumulate_staging_held_entries{ledger="acc://dn.acme/synthetic",source="acc://bvn-bvn2.acme"} 117
+accumulate_staging_held_entries{ledger="acc://dn.acme/synthetic",source="acc://bvn-bvn3.acme"} 0
+# HELP accumulate_synthcache_anchors_released_total Produced anchors dropped because every destination said it had executed them (the Delivered carried on its anchors)
+# TYPE accumulate_synthcache_anchors_released_total counter
+accumulate_synthcache_anchors_released_total 14053
+# HELP accumulate_synthcache_blocks Blocks held, each with what its proofs are built from
+# TYPE accumulate_synthcache_blocks gauge
+accumulate_synthcache_blocks 601
+# HELP accumulate_synthcache_entries Produced entries held
+# TYPE accumulate_synthcache_entries gauge
+accumulate_synthcache_entries 4029
+# HELP accumulate_synthcache_hits_total Reads the producer's synthetic/anchor cache answered, by what was asked: block, entry, hash, anchor
+# TYPE accumulate_synthcache_hits_total counter
+accumulate_synthcache_hits_total{kind="anchor"} 1427
+accumulate_synthcache_hits_total{kind="block"} 21105
+accumulate_synthcache_hits_total{kind="entry"} 508
+# HELP accumulate_synthcache_released_total Entries dropped because the destination said it had executed them (the Delivered carried on its dispatch)
+# TYPE accumulate_synthcache_released_total counter
+accumulate_synthcache_released_total 172277
+# HELP go_cpu_classes_gc_mark_assist_cpu_seconds_total Estimated total CPU time goroutines spent performing GC tasks to assist the GC and prevent it from falling behind the application. This metric is an overestimate, and not directly comparable to system CPU time measurements. Compare only with other /cpu/classes metrics.
+# TYPE go_cpu_classes_gc_mark_assist_cpu_seconds_total counter
+go_cpu_classes_gc_mark_assist_cpu_seconds_total 4.666804511
+# HELP go_cpu_classes_gc_mark_dedicated_cpu_seconds_total Estimated total CPU time spent performing GC tasks on processors (as defined by GOMAXPROCS) dedicated to those tasks. This metric is an overestimate, and not directly comparable to system CPU time measurements. Compare only with other /cpu/classes metrics.
+# TYPE go_cpu_classes_gc_mark_dedicated_cpu_seconds_total counter
+go_cpu_classes_gc_mark_dedicated_cpu_seconds_total 156.231877284
+# HELP go_cpu_classes_gc_mark_idle_cpu_seconds_total Estimated total CPU time spent performing GC tasks on spare CPU resources that the Go scheduler could not otherwise find a use for. This should be subtracted from the total GC CPU time to obtain a measure of compulsory GC CPU time. This metric is an overestimate, and not directly comparable to system CPU time measurements. Compare only with other /cpu/classes metrics.
+# TYPE go_cpu_classes_gc_mark_idle_cpu_seconds_total counter
+go_cpu_classes_gc_mark_idle_cpu_seconds_total 206.641750249
+# HELP go_cpu_classes_gc_pause_cpu_seconds_total Estimated total CPU time spent with the application paused by the GC. Even if only one thread is running during the pause, this is computed as GOMAXPROCS times the pause latency because nothing else can be executing. This is the exact sum of samples in /sched/pauses/total/gc:seconds if each sample is multiplied by GOMAXPROCS at the time it is taken. This metric is an overestimate, and not directly comparable to system CPU time measurements. Compare only with other /cpu/classes metrics.
+# TYPE go_cpu_classes_gc_pause_cpu_seconds_total counter
+go_cpu_classes_gc_pause_cpu_seconds_total 24.46541225
+# HELP go_cpu_classes_gc_total_cpu_seconds_total Estimated total CPU time spent performing GC tasks. This metric is an overestimate, and not directly comparable to system CPU time measurements. Compare only with other /cpu/classes metrics. Sum of all metrics in /cpu/classes/gc.
+# TYPE go_cpu_classes_gc_total_cpu_seconds_total counter
+go_cpu_classes_gc_total_cpu_seconds_total 392.005844294
+# HELP go_gc_cycles_automatic_gc_cycles_total Count of completed GC cycles generated by the Go runtime.
+# TYPE go_gc_cycles_automatic_gc_cycles_total counter
+go_gc_cycles_automatic_gc_cycles_total 2396
+# HELP go_gc_cycles_forced_gc_cycles_total Count of completed GC cycles forced by the application.
+# TYPE go_gc_cycles_forced_gc_cycles_total counter
+go_gc_cycles_forced_gc_cycles_total 0
+# HELP go_gc_cycles_total_gc_cycles_total Count of all completed GC cycles.
+# TYPE go_gc_cycles_total_gc_cycles_total counter
+go_gc_cycles_total_gc_cycles_total 2396
+# HELP go_gc_duration_seconds A summary of the pause duration of garbage collection cycles.
+# TYPE go_gc_duration_seconds summary
+go_gc_duration_seconds{quantile="0"} 4.5354e-05
+go_gc_duration_seconds{quantile="0.25"} 6.9666e-05
+go_gc_duration_seconds{quantile="0.5"} 9.6013e-05
+go_gc_duration_seconds{quantile="0.75"} 0.000173472
+go_gc_duration_seconds{quantile="1"} 0.022026531
+go_gc_duration_seconds_sum 1.334563687
+go_gc_duration_seconds_count 2396
+# HELP go_gc_gogc_percent Heap size target percentage configured by the user, otherwise 100. This value is set by the GOGC environment variable, and the runtime/debug.SetGCPercent function.
+# TYPE go_gc_gogc_percent gauge
+go_gc_gogc_percent 100
+# HELP go_gc_gomemlimit_bytes Go runtime memory limit configured by the user, otherwise math.MaxInt64. This value is set by the GOMEMLIMIT environment variable, and the runtime/debug.SetMemoryLimit function.
+# TYPE go_gc_gomemlimit_bytes gauge
+go_gc_gomemlimit_bytes 1.7825792e+09
+# HELP go_gc_heap_allocs_by_size_bytes Distribution of heap allocations by approximate size. Bucket counts increase monotonically. Note that this does not include tiny objects as defined by /gc/heap/tiny/allocs:objects, only tiny blocks.
+# TYPE go_gc_heap_allocs_by_size_bytes histogram
+go_gc_heap_allocs_by_size_bytes_bucket{le="8.999999999999998"} 1.48347407e+08
+go_gc_heap_allocs_by_size_bytes_bucket{le="24.999999999999996"} 4.250093852e+09
+go_gc_heap_allocs_by_size_bytes_bucket{le="64.99999999999999"} 7.71756289e+09
+go_gc_heap_allocs_by_size_bytes_bucket{le="144.99999999999997"} 8.841098143e+09
+go_gc_heap_allocs_by_size_bytes_bucket{le="320.99999999999994"} 9.065629514e+09
+go_gc_heap_allocs_by_size_bytes_bucket{le="704.9999999999999"} 9.156440118e+09
+go_gc_heap_allocs_by_size_bytes_bucket{le="1536.9999999999998"} 9.182080885e+09
+go_gc_heap_allocs_by_size_bytes_bucket{le="3200.9999999999995"} 9.192116315e+09
+go_gc_heap_allocs_by_size_bytes_bucket{le="6528.999999999999"} 9.210470731e+09
+go_gc_heap_allocs_by_size_bytes_bucket{le="13568.999999999998"} 9.212820622e+09
+go_gc_heap_allocs_by_size_bytes_bucket{le="27264.999999999996"} 9.214410186e+09
+go_gc_heap_allocs_by_size_bytes_bucket{le="+Inf"} 9.215633655e+09
+go_gc_heap_allocs_by_size_bytes_sum 6.8350907856e+11
+go_gc_heap_allocs_by_size_bytes_count 9.215633655e+09
+# HELP go_gc_heap_allocs_bytes_total Cumulative sum of memory allocated to the heap by the application.
+# TYPE go_gc_heap_allocs_bytes_total counter
+go_gc_heap_allocs_bytes_total 6.8350907856e+11
+# HELP go_gc_heap_allocs_objects_total Cumulative count of heap allocations triggered by the application. Note that this does not include tiny objects as defined by /gc/heap/tiny/allocs:objects, only tiny blocks.
+# TYPE go_gc_heap_allocs_objects_total counter
+go_gc_heap_allocs_objects_total 9.215633655e+09
+# HELP go_gc_heap_frees_by_size_bytes Distribution of freed heap allocations by approximate size. Bucket counts increase monotonically. Note that this does not include tiny objects as defined by /gc/heap/tiny/allocs:objects, only tiny blocks.
+# TYPE go_gc_heap_frees_by_size_bytes histogram
+go_gc_heap_frees_by_size_bytes_bucket{le="8.999999999999998"} 1.48315326e+08
+go_gc_heap_frees_by_size_bytes_bucket{le="24.999999999999996"} 4.248651515e+09
+go_gc_heap_frees_by_size_bytes_bucket{le="64.99999999999999"} 7.714526548e+09
+go_gc_heap_frees_by_size_bytes_bucket{le="144.99999999999997"} 8.837630393e+09
+go_gc_heap_frees_by_size_bytes_bucket{le="320.99999999999994"} 9.061934645e+09
+go_gc_heap_frees_by_size_bytes_bucket{le="704.9999999999999"} 9.152716833e+09
+go_gc_heap_frees_by_size_bytes_bucket{le="1536.9999999999998"} 9.178343311e+09
+go_gc_heap_frees_by_size_bytes_bucket{le="3200.9999999999995"} 9.188353575e+09
+go_gc_heap_frees_by_size_bytes_bucket{le="6528.999999999999"} 9.206697855e+09
+go_gc_heap_frees_by_size_bytes_bucket{le="13568.999999999998"} 9.209044972e+09
+go_gc_heap_frees_by_size_bytes_bucket{le="27264.999999999996"} 9.210632985e+09
+go_gc_heap_frees_by_size_bytes_bucket{le="+Inf"} 9.211854036e+09
+go_gc_heap_frees_by_size_bytes_sum 6.82944083056e+11
+go_gc_heap_frees_by_size_bytes_count 9.211854036e+09
+# HELP go_gc_heap_frees_bytes_total Cumulative sum of heap memory freed by the garbage collector.
+# TYPE go_gc_heap_frees_bytes_total counter
+go_gc_heap_frees_bytes_total 6.82944083056e+11
+# HELP go_gc_heap_frees_objects_total Cumulative count of heap allocations whose storage was freed by the garbage collector. Note that this does not include tiny objects as defined by /gc/heap/tiny/allocs:objects, only tiny blocks.
+# TYPE go_gc_heap_frees_objects_total counter
+go_gc_heap_frees_objects_total 9.211854036e+09
+# HELP go_gc_heap_goal_bytes Heap size target for the end of the GC cycle.
+# TYPE go_gc_heap_goal_bytes gauge
+go_gc_heap_goal_bytes 8.23669202e+08
+# HELP go_gc_heap_live_bytes Heap memory occupied by live objects that were marked by the previous GC.
+# TYPE go_gc_heap_live_bytes gauge
+go_gc_heap_live_bytes 4.11435792e+08
+# HELP go_gc_heap_objects_objects Number of objects, live or unswept, occupying heap memory.
+# TYPE go_gc_heap_objects_objects gauge
+go_gc_heap_objects_objects 3.779619e+06
+# HELP go_gc_heap_tiny_allocs_objects_total Count of small allocations that are packed together into blocks. These allocations are counted separately from other allocations because each individual allocation is not tracked by the runtime, only their block. Each block is already accounted for in allocs-by-size and frees-by-size.
+# TYPE go_gc_heap_tiny_allocs_objects_total counter
+go_gc_heap_tiny_allocs_objects_total 7.34287495e+08
+# HELP go_gc_limiter_last_enabled_gc_cycle GC cycle the last time the GC CPU limiter was enabled. This metric is useful for diagnosing the root cause of an out-of-memory error, because the limiter trades memory for CPU time when the GC's CPU time gets too high. This is most likely to occur with use of SetMemoryLimit. The first GC cycle is cycle 1, so a value of 0 indicates that it was never enabled.
+# TYPE go_gc_limiter_last_enabled_gc_cycle gauge
+go_gc_limiter_last_enabled_gc_cycle 0
+# HELP go_gc_pauses_seconds Deprecated. Prefer the identical /sched/pauses/total/gc:seconds.
+# TYPE go_gc_pauses_seconds histogram
+go_gc_pauses_seconds_bucket{le="6.399999999999999e-08"} 0
+go_gc_pauses_seconds_bucket{le="6.399999999999999e-07"} 0
+go_gc_pauses_seconds_bucket{le="7.167999999999999e-06"} 39
+go_gc_pauses_seconds_bucket{le="8.191999999999999e-05"} 3721
+go_gc_pauses_seconds_bucket{le="0.0009175039999999999"} 4529
+go_gc_pauses_seconds_bucket{le="0.010485759999999998"} 4774
+go_gc_pauses_seconds_bucket{le="0.11744051199999998"} 4792
+go_gc_pauses_seconds_bucket{le="+Inf"} 4792
+go_gc_pauses_seconds_sum 0.506141056
+go_gc_pauses_seconds_count 4792
+# HELP go_gc_scan_globals_bytes The total amount of global variable space that is scannable.
+# TYPE go_gc_scan_globals_bytes gauge
+go_gc_scan_globals_bytes 497370
+# HELP go_gc_scan_heap_bytes The total amount of heap space that is scannable.
+# TYPE go_gc_scan_heap_bytes gauge
+go_gc_scan_heap_bytes 2.13771968e+08
+# HELP go_gc_scan_stack_bytes The number of bytes of stack that were scanned last GC cycle.
+# TYPE go_gc_scan_stack_bytes gauge
+go_gc_scan_stack_bytes 300248
+# HELP go_gc_scan_total_bytes The total amount space that is scannable. Sum of all metrics in /gc/scan.
+# TYPE go_gc_scan_total_bytes gauge
+go_gc_scan_total_bytes 2.14569586e+08
+# HELP go_gc_stack_starting_size_bytes The stack size of new goroutines.
+# TYPE go_gc_stack_starting_size_bytes gauge
+go_gc_stack_starting_size_bytes 2048
+# HELP go_goroutines Number of goroutines that currently exist.
+# TYPE go_goroutines gauge
+go_goroutines 308
+# HELP go_info Information about the Go environment.
+# TYPE go_info gauge
+go_info{version="go1.25.14"} 1
+# HELP go_memstats_alloc_bytes Number of bytes allocated and still in use.
+# TYPE go_memstats_alloc_bytes gauge
+go_memstats_alloc_bytes 5.64995504e+08
+# HELP go_memstats_alloc_bytes_total Total number of bytes allocated, even if freed.
+# TYPE go_memstats_alloc_bytes_total counter
+go_memstats_alloc_bytes_total 6.8350907856e+11
+# HELP go_memstats_buck_hash_sys_bytes Number of bytes used by the profiling bucket hash table.
+# TYPE go_memstats_buck_hash_sys_bytes gauge
+go_memstats_buck_hash_sys_bytes 3.725715e+07
+# HELP go_memstats_frees_total Total number of frees.
+# TYPE go_memstats_frees_total counter
+go_memstats_frees_total 9.946141531e+09
+# HELP go_memstats_gc_sys_bytes Number of bytes used for garbage collection system metadata.
+# TYPE go_memstats_gc_sys_bytes gauge
+go_memstats_gc_sys_bytes 1.2114416e+07
+# HELP go_memstats_heap_alloc_bytes Number of heap bytes allocated and still in use.
+# TYPE go_memstats_heap_alloc_bytes gauge
+go_memstats_heap_alloc_bytes 5.64995504e+08
+# HELP go_memstats_heap_idle_bytes Number of heap bytes waiting to be used.
+# TYPE go_memstats_heap_idle_bytes gauge
+go_memstats_heap_idle_bytes 1.90529536e+08
+# HELP go_memstats_heap_inuse_bytes Number of heap bytes that are in use.
+# TYPE go_memstats_heap_inuse_bytes gauge
+go_memstats_heap_inuse_bytes 7.79665408e+08
+# HELP go_memstats_heap_objects Number of allocated objects.
+# TYPE go_memstats_heap_objects gauge
+go_memstats_heap_objects 3.779619e+06
+# HELP go_memstats_heap_released_bytes Number of heap bytes released to OS.
+# TYPE go_memstats_heap_released_bytes gauge
+go_memstats_heap_released_bytes 7.1114752e+07
+# HELP go_memstats_heap_sys_bytes Number of heap bytes obtained from system.
+# TYPE go_memstats_heap_sys_bytes gauge
+go_memstats_heap_sys_bytes 9.70194944e+08
+# HELP go_memstats_last_gc_time_seconds Number of seconds since 1970 of last garbage collection.
+# TYPE go_memstats_last_gc_time_seconds gauge
+go_memstats_last_gc_time_seconds 1.7896916387310503e+09
+# HELP go_memstats_lookups_total Total number of pointer lookups.
+# TYPE go_memstats_lookups_total counter
+go_memstats_lookups_total 0
+# HELP go_memstats_mallocs_total Total number of mallocs.
+# TYPE go_memstats_mallocs_total counter
+go_memstats_mallocs_total 9.94992115e+09
+# HELP go_memstats_mcache_inuse_bytes Number of bytes in use by mcache structures.
+# TYPE go_memstats_mcache_inuse_bytes gauge
+go_memstats_mcache_inuse_bytes 28992
+# HELP go_memstats_mcache_sys_bytes Number of bytes used for mcache structures obtained from system.
+# TYPE go_memstats_mcache_sys_bytes gauge
+go_memstats_mcache_sys_bytes 31408
+# HELP go_memstats_mspan_inuse_bytes Number of bytes in use by mspan structures.
+# TYPE go_memstats_mspan_inuse_bytes gauge
+go_memstats_mspan_inuse_bytes 1.006352e+07
+# HELP go_memstats_mspan_sys_bytes Number of bytes used for mspan structures obtained from system.
+# TYPE go_memstats_mspan_sys_bytes gauge
+go_memstats_mspan_sys_bytes 1.214208e+07
+# HELP go_memstats_next_gc_bytes Number of heap bytes when next garbage collection will take place.
+# TYPE go_memstats_next_gc_bytes gauge
+go_memstats_next_gc_bytes 8.23669202e+08
+# HELP go_memstats_other_sys_bytes Number of bytes used for other system allocations.
+# TYPE go_memstats_other_sys_bytes gauge
+go_memstats_other_sys_bytes 5.276554e+06
+# HELP go_memstats_stack_inuse_bytes Number of bytes in use by the stack allocator.
+# TYPE go_memstats_stack_inuse_bytes gauge
+go_memstats_stack_inuse_bytes 7.077888e+06
+# HELP go_memstats_stack_sys_bytes Number of bytes obtained from system for stack allocator.
+# TYPE go_memstats_stack_sys_bytes gauge
+go_memstats_stack_sys_bytes 7.077888e+06
+# HELP go_memstats_sys_bytes Number of bytes obtained from system.
+# TYPE go_memstats_sys_bytes gauge
+go_memstats_sys_bytes 1.04409444e+09
+# HELP go_threads Number of OS threads created.
+# TYPE go_threads gauge
+go_threads 64
+# HELP libp2p_autonat_next_probe_timestamp Time of next probe
+# TYPE libp2p_autonat_next_probe_timestamp gauge
+libp2p_autonat_next_probe_timestamp 1.78969164e+09
+# HELP libp2p_autonat_reachability_status Current node reachability
+# TYPE libp2p_autonat_reachability_status gauge
+libp2p_autonat_reachability_status 0
+# HELP libp2p_autonat_reachability_status_confidence Node reachability status confidence
+# TYPE libp2p_autonat_reachability_status_confidence gauge
+libp2p_autonat_reachability_status_confidence 0
+# HELP libp2p_eventbus_events_emitted_total Events Emitted
+# TYPE libp2p_eventbus_events_emitted_total counter
+libp2p_eventbus_events_emitted_total{event="EvtLocalAddressesUpdated"} 2
+libp2p_eventbus_events_emitted_total{event="EvtLocalProtocolsUpdated"} 30
+libp2p_eventbus_events_emitted_total{event="EvtPeerConnectednessChanged"} 31
+libp2p_eventbus_events_emitted_total{event="EvtPeerIdentificationCompleted"} 22
+libp2p_eventbus_events_emitted_total{event="EvtPeerProtocolsUpdated"} 168
+# HELP libp2p_eventbus_subscriber_event_queued Event Queued for subscriber
+# TYPE libp2p_eventbus_subscriber_event_queued counter
+libp2p_eventbus_subscriber_event_queued{subscriber_name="autonat"} 24
+libp2p_eventbus_subscriber_event_queued{subscriber_name="identify (loop)"} 24
+libp2p_eventbus_subscriber_event_queued{subscriber_name="libp2p/go-libp2p-kad-dht/subscriber_notifee.go-L37"} 223
+libp2p_eventbus_subscriber_event_queued{subscriber_name="pstoremanager"} 31
+# HELP libp2p_eventbus_subscriber_queue_full Subscriber Queue completely full
+# TYPE libp2p_eventbus_subscriber_queue_full gauge
+libp2p_eventbus_subscriber_queue_full{subscriber_name="autonat"} 0
+libp2p_eventbus_subscriber_queue_full{subscriber_name="identify (loop)"} 0
+libp2p_eventbus_subscriber_queue_full{subscriber_name="libp2p/go-libp2p-kad-dht/subscriber_notifee.go-L37"} 0
+libp2p_eventbus_subscriber_queue_full{subscriber_name="pstoremanager"} 0
+# HELP libp2p_eventbus_subscriber_queue_length Subscriber queue length
+# TYPE libp2p_eventbus_subscriber_queue_length gauge
+libp2p_eventbus_subscriber_queue_length{subscriber_name="autonat"} 1
+libp2p_eventbus_subscriber_queue_length{subscriber_name="identify (loop)"} 1
+libp2p_eventbus_subscriber_queue_length{subscriber_name="libp2p/go-libp2p-kad-dht/subscriber_notifee.go-L37"} 1
+libp2p_eventbus_subscriber_queue_length{subscriber_name="pstoremanager"} 1
+# HELP libp2p_eventbus_subscribers_total Number of subscribers for an event type
+# TYPE libp2p_eventbus_subscribers_total gauge
+libp2p_eventbus_subscribers_total{event="EvtLocalAddressesUpdated"} 3
+libp2p_eventbus_subscribers_total{event="EvtLocalProtocolsUpdated"} 1
+libp2p_eventbus_subscribers_total{event="EvtLocalReachabilityChanged"} 2
+libp2p_eventbus_subscribers_total{event="EvtPeerConnectednessChanged"} 2
+libp2p_eventbus_subscribers_total{event="EvtPeerIdentificationCompleted"} 2
+libp2p_eventbus_subscribers_total{event="EvtPeerProtocolsUpdated"} 1
+# HELP libp2p_holepunch_address_outcomes_total Hole Punch outcomes by Transport
+# TYPE libp2p_holepunch_address_outcomes_total counter
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="cancelled",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="cancelled",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="cancelled",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="cancelled",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="cancelled",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="cancelled",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="cancelled",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="cancelled",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="failed",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="failed",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="failed",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="failed",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="failed",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="failed",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="failed",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="failed",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="no_suitable_address",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="no_suitable_address",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="no_suitable_address",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="no_suitable_address",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="no_suitable_address",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="no_suitable_address",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="no_suitable_address",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="no_suitable_address",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="success",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="success",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="success",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="success",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="success",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="success",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="success",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="1",outcome="success",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="cancelled",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="cancelled",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="cancelled",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="cancelled",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="cancelled",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="cancelled",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="cancelled",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="cancelled",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="failed",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="failed",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="failed",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="failed",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="failed",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="failed",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="failed",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="failed",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="no_suitable_address",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="no_suitable_address",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="no_suitable_address",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="no_suitable_address",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="no_suitable_address",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="no_suitable_address",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="no_suitable_address",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="no_suitable_address",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="success",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="success",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="success",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="success",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="success",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="success",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="success",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="2",outcome="success",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="cancelled",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="cancelled",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="cancelled",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="cancelled",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="cancelled",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="cancelled",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="cancelled",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="cancelled",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="failed",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="failed",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="failed",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="failed",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="failed",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="failed",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="failed",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="failed",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="no_suitable_address",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="no_suitable_address",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="no_suitable_address",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="no_suitable_address",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="no_suitable_address",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="no_suitable_address",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="no_suitable_address",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="no_suitable_address",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="success",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="success",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="success",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="success",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="success",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="success",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="success",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="3",outcome="success",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="cancelled",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="cancelled",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="cancelled",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="cancelled",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="cancelled",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="cancelled",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="cancelled",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="cancelled",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="failed",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="failed",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="failed",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="failed",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="failed",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="failed",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="failed",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="failed",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="no_suitable_address",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="no_suitable_address",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="no_suitable_address",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="no_suitable_address",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="no_suitable_address",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="no_suitable_address",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="no_suitable_address",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="no_suitable_address",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="success",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="success",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="success",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="success",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="success",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="success",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="success",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip4",num_attempts="4",outcome="success",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="cancelled",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="cancelled",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="cancelled",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="cancelled",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="cancelled",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="cancelled",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="cancelled",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="cancelled",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="failed",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="failed",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="failed",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="failed",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="failed",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="failed",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="failed",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="failed",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="no_suitable_address",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="no_suitable_address",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="no_suitable_address",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="no_suitable_address",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="no_suitable_address",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="no_suitable_address",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="no_suitable_address",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="no_suitable_address",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="success",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="success",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="success",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="success",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="success",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="success",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="success",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="1",outcome="success",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="cancelled",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="cancelled",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="cancelled",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="cancelled",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="cancelled",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="cancelled",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="cancelled",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="cancelled",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="failed",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="failed",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="failed",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="failed",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="failed",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="failed",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="failed",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="failed",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="no_suitable_address",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="no_suitable_address",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="no_suitable_address",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="no_suitable_address",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="no_suitable_address",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="no_suitable_address",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="no_suitable_address",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="no_suitable_address",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="success",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="success",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="success",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="success",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="success",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="success",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="success",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="2",outcome="success",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="cancelled",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="cancelled",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="cancelled",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="cancelled",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="cancelled",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="cancelled",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="cancelled",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="cancelled",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="failed",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="failed",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="failed",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="failed",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="failed",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="failed",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="failed",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="failed",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="no_suitable_address",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="no_suitable_address",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="no_suitable_address",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="no_suitable_address",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="no_suitable_address",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="no_suitable_address",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="no_suitable_address",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="no_suitable_address",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="success",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="success",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="success",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="success",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="success",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="success",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="success",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="3",outcome="success",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="cancelled",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="cancelled",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="cancelled",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="cancelled",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="cancelled",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="cancelled",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="cancelled",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="cancelled",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="failed",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="failed",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="failed",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="failed",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="failed",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="failed",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="failed",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="failed",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="no_suitable_address",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="no_suitable_address",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="no_suitable_address",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="no_suitable_address",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="no_suitable_address",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="no_suitable_address",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="no_suitable_address",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="no_suitable_address",side="receiver",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="success",side="initiator",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="success",side="initiator",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="success",side="initiator",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="success",side="initiator",transport="webtransport"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="success",side="receiver",transport="quic"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="success",side="receiver",transport="quic-v1"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="success",side="receiver",transport="tcp"} 0
+libp2p_holepunch_address_outcomes_total{ipv="ip6",num_attempts="4",outcome="success",side="receiver",transport="webtransport"} 0
+# HELP libp2p_holepunch_outcomes_total Hole Punch outcomes overall
+# TYPE libp2p_holepunch_outcomes_total counter
+libp2p_holepunch_outcomes_total{num_attempts="1",outcome="failed",side="initiator"} 0
+libp2p_holepunch_outcomes_total{num_attempts="1",outcome="failed",side="receiver"} 0
+libp2p_holepunch_outcomes_total{num_attempts="1",outcome="no_suitable_address",side="initiator"} 0
+libp2p_holepunch_outcomes_total{num_attempts="1",outcome="no_suitable_address",side="receiver"} 0
+libp2p_holepunch_outcomes_total{num_attempts="1",outcome="success",side="initiator"} 0
+libp2p_holepunch_outcomes_total{num_attempts="1",outcome="success",side="receiver"} 0
+libp2p_holepunch_outcomes_total{num_attempts="2",outcome="failed",side="initiator"} 0
+libp2p_holepunch_outcomes_total{num_attempts="2",outcome="failed",side="receiver"} 0
+libp2p_holepunch_outcomes_total{num_attempts="2",outcome="no_suitable_address",side="initiator"} 0
+libp2p_holepunch_outcomes_total{num_attempts="2",outcome="no_suitable_address",side="receiver"} 0
+libp2p_holepunch_outcomes_total{num_attempts="2",outcome="success",side="initiator"} 0
+libp2p_holepunch_outcomes_total{num_attempts="2",outcome="success",side="receiver"} 0
+libp2p_holepunch_outcomes_total{num_attempts="3",outcome="failed",side="initiator"} 0
+libp2p_holepunch_outcomes_total{num_attempts="3",outcome="failed",side="receiver"} 0
+libp2p_holepunch_outcomes_total{num_attempts="3",outcome="no_suitable_address",side="initiator"} 0
+libp2p_holepunch_outcomes_total{num_attempts="3",outcome="no_suitable_address",side="receiver"} 0
+libp2p_holepunch_outcomes_total{num_attempts="3",outcome="success",side="initiator"} 0
+libp2p_holepunch_outcomes_total{num_attempts="3",outcome="success",side="receiver"} 0
+libp2p_holepunch_outcomes_total{num_attempts="4",outcome="failed",side="initiator"} 0
+libp2p_holepunch_outcomes_total{num_attempts="4",outcome="failed",side="receiver"} 0
+libp2p_holepunch_outcomes_total{num_attempts="4",outcome="no_suitable_address",side="initiator"} 0
+libp2p_holepunch_outcomes_total{num_attempts="4",outcome="no_suitable_address",side="receiver"} 0
+libp2p_holepunch_outcomes_total{num_attempts="4",outcome="success",side="initiator"} 0
+libp2p_holepunch_outcomes_total{num_attempts="4",outcome="success",side="receiver"} 0
+# HELP libp2p_identify_addrs_count Address Count
+# TYPE libp2p_identify_addrs_count gauge
+libp2p_identify_addrs_count 5
+# HELP libp2p_identify_addrs_received Number of addrs received
+# TYPE libp2p_identify_addrs_received histogram
+libp2p_identify_addrs_received_bucket{le="1"} 0
+libp2p_identify_addrs_received_bucket{le="2"} 0
+libp2p_identify_addrs_received_bucket{le="3"} 20
+libp2p_identify_addrs_received_bucket{le="4"} 20
+libp2p_identify_addrs_received_bucket{le="5"} 190
+libp2p_identify_addrs_received_bucket{le="6"} 190
+libp2p_identify_addrs_received_bucket{le="7"} 190
+libp2p_identify_addrs_received_bucket{le="8"} 190
+libp2p_identify_addrs_received_bucket{le="9"} 190
+libp2p_identify_addrs_received_bucket{le="10"} 190
+libp2p_identify_addrs_received_bucket{le="11"} 190
+libp2p_identify_addrs_received_bucket{le="12"} 190
+libp2p_identify_addrs_received_bucket{le="13"} 190
+libp2p_identify_addrs_received_bucket{le="14"} 190
+libp2p_identify_addrs_received_bucket{le="15"} 190
+libp2p_identify_addrs_received_bucket{le="16"} 190
+libp2p_identify_addrs_received_bucket{le="17"} 190
+libp2p_identify_addrs_received_bucket{le="18"} 190
+libp2p_identify_addrs_received_bucket{le="19"} 190
+libp2p_identify_addrs_received_bucket{le="20"} 190
+libp2p_identify_addrs_received_bucket{le="25"} 190
+libp2p_identify_addrs_received_bucket{le="30"} 190
+libp2p_identify_addrs_received_bucket{le="35"} 190
+libp2p_identify_addrs_received_bucket{le="40"} 190
+libp2p_identify_addrs_received_bucket{le="45"} 190
+libp2p_identify_addrs_received_bucket{le="50"} 190
+libp2p_identify_addrs_received_bucket{le="55"} 190
+libp2p_identify_addrs_received_bucket{le="60"} 190
+libp2p_identify_addrs_received_bucket{le="65"} 190
+libp2p_identify_addrs_received_bucket{le="70"} 190
+libp2p_identify_addrs_received_bucket{le="75"} 190
+libp2p_identify_addrs_received_bucket{le="80"} 190
+libp2p_identify_addrs_received_bucket{le="85"} 190
+libp2p_identify_addrs_received_bucket{le="90"} 190
+libp2p_identify_addrs_received_bucket{le="95"} 190
+libp2p_identify_addrs_received_bucket{le="100"} 190
+libp2p_identify_addrs_received_bucket{le="+Inf"} 190
+libp2p_identify_addrs_received_sum 910
+libp2p_identify_addrs_received_count 190
+# HELP libp2p_identify_conn_push_support_total Identify Connection Push Support
+# TYPE libp2p_identify_conn_push_support_total counter
+libp2p_identify_conn_push_support_total{support="supported"} 188
+# HELP libp2p_identify_identify_push_total Identify Push
+# TYPE libp2p_identify_identify_push_total counter
+libp2p_identify_identify_push_total{dir="inbound"} 168
+libp2p_identify_identify_push_total{dir="outbound"} 96
+# HELP libp2p_identify_identify_pushes_triggered_total Pushes Triggered
+# TYPE libp2p_identify_identify_pushes_triggered_total counter
+libp2p_identify_identify_pushes_triggered_total{trigger="addresses_updated"} 1
+libp2p_identify_identify_pushes_triggered_total{trigger="protocols_updated"} 14
+# HELP libp2p_identify_identify_total Identify
+# TYPE libp2p_identify_identify_total counter
+libp2p_identify_identify_total{dir="inbound"} 22
+libp2p_identify_identify_total{dir="outbound"} 22
+# HELP libp2p_identify_protocols_count Protocols Count
+# TYPE libp2p_identify_protocols_count gauge
+libp2p_identify_protocols_count 30
+# HELP libp2p_identify_protocols_received Number of Protocols received
+# TYPE libp2p_identify_protocols_received histogram
+libp2p_identify_protocols_received_bucket{le="1"} 0
+libp2p_identify_protocols_received_bucket{le="2"} 0
+libp2p_identify_protocols_received_bucket{le="3"} 0
+libp2p_identify_protocols_received_bucket{le="4"} 0
+libp2p_identify_protocols_received_bucket{le="5"} 0
+libp2p_identify_protocols_received_bucket{le="6"} 0
+libp2p_identify_protocols_received_bucket{le="7"} 0
+libp2p_identify_protocols_received_bucket{le="8"} 0
+libp2p_identify_protocols_received_bucket{le="9"} 14
+libp2p_identify_protocols_received_bucket{le="10"} 40
+libp2p_identify_protocols_received_bucket{le="11"} 40
+libp2p_identify_protocols_received_bucket{le="12"} 40
+libp2p_identify_protocols_received_bucket{le="13"} 52
+libp2p_identify_protocols_received_bucket{le="14"} 54
+libp2p_identify_protocols_received_bucket{le="15"} 64
+libp2p_identify_protocols_received_bucket{le="16"} 84
+libp2p_identify_protocols_received_bucket{le="17"} 89
+libp2p_identify_protocols_received_bucket{le="18"} 89
+libp2p_identify_protocols_received_bucket{le="19"} 98
+libp2p_identify_protocols_received_bucket{le="20"} 98
+libp2p_identify_protocols_received_bucket{le="25"} 130
+libp2p_identify_protocols_received_bucket{le="30"} 190
+libp2p_identify_protocols_received_bucket{le="35"} 190
+libp2p_identify_protocols_received_bucket{le="40"} 190
+libp2p_identify_protocols_received_bucket{le="45"} 190
+libp2p_identify_protocols_received_bucket{le="50"} 190
+libp2p_identify_protocols_received_bucket{le="55"} 190
+libp2p_identify_protocols_received_bucket{le="60"} 190
+libp2p_identify_protocols_received_bucket{le="65"} 190
+libp2p_identify_protocols_received_bucket{le="70"} 190
+libp2p_identify_protocols_received_bucket{le="75"} 190
+libp2p_identify_protocols_received_bucket{le="80"} 190
+libp2p_identify_protocols_received_bucket{le="85"} 190
+libp2p_identify_protocols_received_bucket{le="90"} 190
+libp2p_identify_protocols_received_bucket{le="95"} 190
+libp2p_identify_protocols_received_bucket{le="100"} 190
+libp2p_identify_protocols_received_bucket{le="+Inf"} 190
+libp2p_identify_protocols_received_sum 3727
+libp2p_identify_protocols_received_count 190
+# HELP libp2p_rcmgr_blocked_resources Number of blocked resources
+# TYPE libp2p_rcmgr_blocked_resources gauge
+libp2p_rcmgr_blocked_resources{dir="",resource="fd",scope="peer"} 1
+libp2p_rcmgr_blocked_resources{dir="outbound",resource="connection",scope="peer"} 1
+# HELP libp2p_rcmgr_conn_memory How many conns have reserved this bucket of memory, as reported to the Resource Manager
+# TYPE libp2p_rcmgr_conn_memory histogram
+libp2p_rcmgr_conn_memory_bucket{le="1024"} 0
+libp2p_rcmgr_conn_memory_bucket{le="4096"} 0
+libp2p_rcmgr_conn_memory_bucket{le="32768"} 0
+libp2p_rcmgr_conn_memory_bucket{le="1.048576e+06"} 8
+libp2p_rcmgr_conn_memory_bucket{le="3.3554432e+07"} 8
+libp2p_rcmgr_conn_memory_bucket{le="2.68435456e+08"} 8
+libp2p_rcmgr_conn_memory_bucket{le="5.36870912e+08"} 8
+libp2p_rcmgr_conn_memory_bucket{le="1.073741824e+09"} 8
+libp2p_rcmgr_conn_memory_bucket{le="2.147483648e+09"} 8
+libp2p_rcmgr_conn_memory_bucket{le="4.294967296e+09"} 8
+libp2p_rcmgr_conn_memory_bucket{le="+Inf"} 8
+libp2p_rcmgr_conn_memory_sum 6.291456e+06
+libp2p_rcmgr_conn_memory_count 8
+# HELP libp2p_rcmgr_connections Number of Connections
+# TYPE libp2p_rcmgr_connections gauge
+libp2p_rcmgr_connections{dir="inbound",scope="system"} 8
+libp2p_rcmgr_connections{dir="inbound",scope="transient"} 0
+libp2p_rcmgr_connections{dir="outbound",scope="system"} 3
+libp2p_rcmgr_connections{dir="outbound",scope="transient"} 0
+# HELP libp2p_rcmgr_fds Number of file descriptors reserved as reported to the Resource Manager
+# TYPE libp2p_rcmgr_fds gauge
+libp2p_rcmgr_fds{scope="system"} 5
+libp2p_rcmgr_fds{scope="transient"} 0
+# HELP libp2p_rcmgr_memory Amount of memory reserved as reported to the Resource Manager
+# TYPE libp2p_rcmgr_memory gauge
+libp2p_rcmgr_memory{protocol="",scope="system"} 1.3369344e+07
+libp2p_rcmgr_memory{protocol="/ipfs/id/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_memory{protocol="/ipfs/id/push/1.0.0",scope="protocol"} 0
+# HELP libp2p_rcmgr_peer_connections Number of connections this peer has
+# TYPE libp2p_rcmgr_peer_connections histogram
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="1"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="2"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="3"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="4"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="5"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="6"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="7"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="8"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="9"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="10"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="16"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="32"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="64"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="128"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="256"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="inbound",le="+Inf"} 13
+libp2p_rcmgr_peer_connections_sum{dir="inbound"} 13
+libp2p_rcmgr_peer_connections_count{dir="inbound"} 13
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="1"} 74
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="2"} 92
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="3"} 108
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="4"} 124
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="5"} 140
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="6"} 160
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="7"} 192
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="8"} 212
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="9"} 212
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="10"} 212
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="16"} 212
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="32"} 212
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="64"} 212
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="128"} 212
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="256"} 212
+libp2p_rcmgr_peer_connections_bucket{dir="outbound",le="+Inf"} 212
+libp2p_rcmgr_peer_connections_sum{dir="outbound"} 806
+libp2p_rcmgr_peer_connections_count{dir="outbound"} 212
+# HELP libp2p_rcmgr_peer_memory How many peers have reserved this bucket of memory, as reported to the Resource Manager
+# TYPE libp2p_rcmgr_peer_memory histogram
+libp2p_rcmgr_peer_memory_bucket{le="1024"} 0
+libp2p_rcmgr_peer_memory_bucket{le="4096"} 0
+libp2p_rcmgr_peer_memory_bucket{le="32768"} 104
+libp2p_rcmgr_peer_memory_bucket{le="1.048576e+06"} 714052
+libp2p_rcmgr_peer_memory_bucket{le="3.3554432e+07"} 1.392999e+06
+libp2p_rcmgr_peer_memory_bucket{le="2.68435456e+08"} 1.392999e+06
+libp2p_rcmgr_peer_memory_bucket{le="5.36870912e+08"} 1.392999e+06
+libp2p_rcmgr_peer_memory_bucket{le="1.073741824e+09"} 1.392999e+06
+libp2p_rcmgr_peer_memory_bucket{le="2.147483648e+09"} 1.392999e+06
+libp2p_rcmgr_peer_memory_bucket{le="4.294967296e+09"} 1.392999e+06
+libp2p_rcmgr_peer_memory_bucket{le="+Inf"} 1.392999e+06
+libp2p_rcmgr_peer_memory_sum 1.822823227392e+12
+libp2p_rcmgr_peer_memory_count 1.392999e+06
+# HELP libp2p_rcmgr_peer_streams Number of streams this peer has
+# TYPE libp2p_rcmgr_peer_streams histogram
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="1"} 1.083513e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="2"} 2.234415e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="3"} 2.302163e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="4"} 2.302524e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="5"} 2.302571e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="6"} 2.302584e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="7"} 2.302589e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="8"} 2.302592e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="9"} 2.302594e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="10"} 2.302596e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="16"} 2.302605e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="32"} 2.302605e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="64"} 2.302605e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="128"} 2.302605e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="256"} 2.302605e+06
+libp2p_rcmgr_peer_streams_bucket{dir="inbound",le="+Inf"} 2.302605e+06
+libp2p_rcmgr_peer_streams_sum{dir="inbound"} 3.59053e+06
+libp2p_rcmgr_peer_streams_count{dir="inbound"} 2.302605e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="1"} 502218
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="2"} 1.513211e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="3"} 2.022714e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="4"} 2.02344e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="5"} 2.023475e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="6"} 2.023499e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="7"} 2.023508e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="8"} 2.023511e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="9"} 2.023511e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="10"} 2.023511e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="16"} 2.023511e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="32"} 2.023511e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="64"} 2.023511e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="128"} 2.023511e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="256"} 2.023511e+06
+libp2p_rcmgr_peer_streams_bucket{dir="outbound",le="+Inf"} 2.023511e+06
+libp2p_rcmgr_peer_streams_sum{dir="outbound"} 4.056023e+06
+libp2p_rcmgr_peer_streams_count{dir="outbound"} 2.023511e+06
+# HELP libp2p_rcmgr_previous_conn_memory How many conns have previously reserved this bucket of memory, as reported to the Resource Manager
+# TYPE libp2p_rcmgr_previous_conn_memory histogram
+libp2p_rcmgr_previous_conn_memory_bucket{le="1024"} 0
+libp2p_rcmgr_previous_conn_memory_bucket{le="4096"} 0
+libp2p_rcmgr_previous_conn_memory_bucket{le="32768"} 0
+libp2p_rcmgr_previous_conn_memory_bucket{le="1.048576e+06"} 0
+libp2p_rcmgr_previous_conn_memory_bucket{le="3.3554432e+07"} 0
+libp2p_rcmgr_previous_conn_memory_bucket{le="2.68435456e+08"} 0
+libp2p_rcmgr_previous_conn_memory_bucket{le="5.36870912e+08"} 0
+libp2p_rcmgr_previous_conn_memory_bucket{le="1.073741824e+09"} 0
+libp2p_rcmgr_previous_conn_memory_bucket{le="2.147483648e+09"} 0
+libp2p_rcmgr_previous_conn_memory_bucket{le="4.294967296e+09"} 0
+libp2p_rcmgr_previous_conn_memory_bucket{le="+Inf"} 0
+libp2p_rcmgr_previous_conn_memory_sum 0
+libp2p_rcmgr_previous_conn_memory_count 0
+# HELP libp2p_rcmgr_previous_peer_connections Number of connections this peer previously had. This is used to get the current connection number per peer histogram by subtracting this from the peer_connections histogram
+# TYPE libp2p_rcmgr_previous_peer_connections histogram
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="1"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="2"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="3"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="4"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="5"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="6"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="7"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="8"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="9"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="10"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="16"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="32"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="64"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="128"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="256"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="inbound",le="+Inf"} 5
+libp2p_rcmgr_previous_peer_connections_sum{dir="inbound"} 5
+libp2p_rcmgr_previous_peer_connections_count{dir="inbound"} 5
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="1"} 71
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="2"} 89
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="3"} 105
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="4"} 121
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="5"} 137
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="6"} 157
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="7"} 189
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="8"} 209
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="9"} 209
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="10"} 209
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="16"} 209
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="32"} 209
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="64"} 209
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="128"} 209
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="256"} 209
+libp2p_rcmgr_previous_peer_connections_bucket{dir="outbound",le="+Inf"} 209
+libp2p_rcmgr_previous_peer_connections_sum{dir="outbound"} 803
+libp2p_rcmgr_previous_peer_connections_count{dir="outbound"} 209
+# HELP libp2p_rcmgr_previous_peer_memory How many peers have previously reserved this bucket of memory, as reported to the Resource Manager
+# TYPE libp2p_rcmgr_previous_peer_memory histogram
+libp2p_rcmgr_previous_peer_memory_bucket{le="1024"} 0
+libp2p_rcmgr_previous_peer_memory_bucket{le="4096"} 0
+libp2p_rcmgr_previous_peer_memory_bucket{le="32768"} 104
+libp2p_rcmgr_previous_peer_memory_bucket{le="1.048576e+06"} 714046
+libp2p_rcmgr_previous_peer_memory_bucket{le="3.3554432e+07"} 1.392988e+06
+libp2p_rcmgr_previous_peer_memory_bucket{le="2.68435456e+08"} 1.392988e+06
+libp2p_rcmgr_previous_peer_memory_bucket{le="5.36870912e+08"} 1.392988e+06
+libp2p_rcmgr_previous_peer_memory_bucket{le="1.073741824e+09"} 1.392988e+06
+libp2p_rcmgr_previous_peer_memory_bucket{le="2.147483648e+09"} 1.392988e+06
+libp2p_rcmgr_previous_peer_memory_bucket{le="4.294967296e+09"} 1.392988e+06
+libp2p_rcmgr_previous_peer_memory_bucket{le="+Inf"} 1.392988e+06
+libp2p_rcmgr_previous_peer_memory_sum 1.822809858048e+12
+libp2p_rcmgr_previous_peer_memory_count 1.392988e+06
+# HELP libp2p_rcmgr_previous_peer_streams Number of streams this peer has
+# TYPE libp2p_rcmgr_previous_peer_streams histogram
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="1"} 1.083501e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="2"} 2.234402e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="3"} 2.30215e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="4"} 2.302511e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="5"} 2.302558e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="6"} 2.302571e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="7"} 2.302576e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="8"} 2.302579e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="9"} 2.302581e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="10"} 2.302583e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="16"} 2.302592e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="32"} 2.302592e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="64"} 2.302592e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="128"} 2.302592e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="256"} 2.302592e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="inbound",le="+Inf"} 2.302592e+06
+libp2p_rcmgr_previous_peer_streams_sum{dir="inbound"} 3.590516e+06
+libp2p_rcmgr_previous_peer_streams_count{dir="inbound"} 2.302592e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="1"} 502210
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="2"} 1.5132e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="3"} 2.022703e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="4"} 2.023429e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="5"} 2.023464e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="6"} 2.023488e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="7"} 2.023497e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="8"} 2.0235e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="9"} 2.0235e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="10"} 2.0235e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="16"} 2.0235e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="32"} 2.0235e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="64"} 2.0235e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="128"} 2.0235e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="256"} 2.0235e+06
+libp2p_rcmgr_previous_peer_streams_bucket{dir="outbound",le="+Inf"} 2.0235e+06
+libp2p_rcmgr_previous_peer_streams_sum{dir="outbound"} 4.056009e+06
+libp2p_rcmgr_previous_peer_streams_count{dir="outbound"} 2.0235e+06
+# HELP libp2p_rcmgr_streams Number of Streams
+# TYPE libp2p_rcmgr_streams gauge
+libp2p_rcmgr_streams{dir="inbound",protocol="",scope="system"} 11
+libp2p_rcmgr_streams{dir="inbound",protocol="",scope="transient"} 0
+libp2p_rcmgr_streams{dir="inbound",protocol="/acc/consensus/BVN2/batch/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="inbound",protocol="/acc/consensus/Directory/batch/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="inbound",protocol="/acc/rpc/f001:bvn2/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="inbound",protocol="/acc/rpc/query:bvn2/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="inbound",protocol="/acc/rpc/submit:bvn2/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="inbound",protocol="/ipfs/id/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="inbound",protocol="/ipfs/id/push/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="inbound",protocol="/ipfs/kad/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="inbound",protocol="/meshsub/1.1.0",scope="protocol"} 11
+libp2p_rcmgr_streams{dir="outbound",protocol="",scope="system"} 14
+libp2p_rcmgr_streams{dir="outbound",protocol="",scope="transient"} 0
+libp2p_rcmgr_streams{dir="outbound",protocol="/acc/consensus/BVN2/batch/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="outbound",protocol="/acc/consensus/Directory/batch/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="outbound",protocol="/acc/rpc/f001:bvn1/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="outbound",protocol="/acc/rpc/f001:bvn3/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="outbound",protocol="/acc/rpc/query:bvn1/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="outbound",protocol="/acc/rpc/query:bvn3/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="outbound",protocol="/acc/rpc/submit:bvn1/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="outbound",protocol="/acc/rpc/submit:bvn3/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="outbound",protocol="/ipfs/id/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="outbound",protocol="/ipfs/id/push/1.0.0",scope="protocol"} 0
+libp2p_rcmgr_streams{dir="outbound",protocol="/ipfs/kad/1.0.0",scope="protocol"} 3
+libp2p_rcmgr_streams{dir="outbound",protocol="/meshsub/1.1.0",scope="protocol"} 11
+# HELP libp2p_swarm_connection_duration_seconds Duration of a Connection
+# TYPE libp2p_swarm_connection_duration_seconds histogram
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.0625"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.125"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.25"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.5"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="1"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="2"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="4"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="8"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="16"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="32"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="64"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="128"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="256"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="512"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="1024"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="2048"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="4096"} 1
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="8192"} 2
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="16384"} 2
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="32768"} 2
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="65536"} 2
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="131072"} 2
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="262144"} 2
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="524288"} 2
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="1.048576e+06"} 2
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="+Inf"} 2
+libp2p_swarm_connection_duration_seconds_sum{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1"} 9553.092018413001
+libp2p_swarm_connection_duration_seconds_count{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1"} 2
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.0625"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.125"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.25"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.5"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="1"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="2"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="4"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="8"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="16"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="32"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="64"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="128"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="256"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="512"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="1024"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="2048"} 2
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="4096"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="8192"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="16384"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="32768"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="65536"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="131072"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="262144"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="524288"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="1.048576e+06"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="+Inf"} 3
+libp2p_swarm_connection_duration_seconds_sum{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp"} 6193.504704102001
+libp2p_swarm_connection_duration_seconds_count{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.0625"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.125"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.25"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.5"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="1"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="2"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="4"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="8"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="16"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="32"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="64"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="128"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="256"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="512"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="1024"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="2048"} 1
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="4096"} 2
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="8192"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="16384"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="32768"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="65536"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="131072"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="262144"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="524288"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="1.048576e+06"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="+Inf"} 3
+libp2p_swarm_connection_duration_seconds_sum{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1"} 9835.373043999
+libp2p_swarm_connection_duration_seconds_count{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.0625"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.125"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.25"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.5"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="1"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="2"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="4"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="8"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="16"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="32"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="64"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="128"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="256"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="512"} 0
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="1024"} 1
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="2048"} 1
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="4096"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="8192"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="16384"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="32768"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="65536"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="131072"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="262144"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="524288"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="1.048576e+06"} 3
+libp2p_swarm_connection_duration_seconds_bucket{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="+Inf"} 3
+libp2p_swarm_connection_duration_seconds_sum{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp"} 4873.848343944001
+libp2p_swarm_connection_duration_seconds_count{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp"} 3
+# HELP libp2p_swarm_connections_closed_total Connections Closed
+# TYPE libp2p_swarm_connections_closed_total counter
+libp2p_swarm_connections_closed_total{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1"} 2
+libp2p_swarm_connections_closed_total{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp"} 3
+libp2p_swarm_connections_closed_total{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1"} 3
+libp2p_swarm_connections_closed_total{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp"} 3
+# HELP libp2p_swarm_connections_opened_total Connections Opened
+# TYPE libp2p_swarm_connections_opened_total counter
+libp2p_swarm_connections_opened_total{dir="inbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1"} 5
+libp2p_swarm_connections_opened_total{dir="inbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp"} 8
+libp2p_swarm_connections_opened_total{dir="outbound",early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1"} 6
+libp2p_swarm_connections_opened_total{dir="outbound",early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp"} 3
+# HELP libp2p_swarm_dial_errors_total Dial Error
+# TYPE libp2p_swarm_dial_errors_total counter
+libp2p_swarm_dial_errors_total{error="application canceled",ip_version="ip4",transport="quic-v1"} 2
+libp2p_swarm_dial_errors_total{error="application canceled",ip_version="ip4",transport="tcp"} 5
+libp2p_swarm_dial_errors_total{error="application canceled",ip_version="ip4",transport="webtransport"} 2
+libp2p_swarm_dial_errors_total{error="application canceled",ip_version="ip6",transport="quic-v1"} 3
+libp2p_swarm_dial_errors_total{error="application canceled",ip_version="ip6",transport="webtransport"} 1
+libp2p_swarm_dial_errors_total{error="connection refused",ip_version="ip4",transport="tcp"} 49
+libp2p_swarm_dial_errors_total{error="connection refused",ip_version="ip6",transport="tcp"} 8
+libp2p_swarm_dial_errors_total{error="deadline",ip_version="ip4",transport="quic-v1"} 7
+libp2p_swarm_dial_errors_total{error="deadline",ip_version="ip4",transport="tcp"} 17
+libp2p_swarm_dial_errors_total{error="deadline",ip_version="ip4",transport="webtransport"} 11
+libp2p_swarm_dial_errors_total{error="deadline",ip_version="ip6",transport="quic-v1"} 5
+libp2p_swarm_dial_errors_total{error="deadline",ip_version="ip6",transport="webtransport"} 4
+libp2p_swarm_dial_errors_total{error="other",ip_version="ip4",transport="quic-v1"} 2
+libp2p_swarm_dial_errors_total{error="other",ip_version="ip4",transport="tcp"} 1
+libp2p_swarm_dial_errors_total{error="other",ip_version="ip4",transport="webtransport"} 2
+libp2p_swarm_dial_errors_total{error="other",ip_version="ip6",transport="quic-v1"} 1
+libp2p_swarm_dial_errors_total{error="other",ip_version="ip6",transport="webtransport"} 1
+libp2p_swarm_dial_errors_total{error="timeout",ip_version="ip4",transport="quic-v1"} 5
+libp2p_swarm_dial_errors_total{error="timeout",ip_version="ip4",transport="webtransport"} 1
+libp2p_swarm_dial_errors_total{error="timeout",ip_version="ip6",transport="quic-v1"} 1
+libp2p_swarm_dial_errors_total{error="timeout",ip_version="ip6",transport="webtransport"} 2
+# HELP libp2p_swarm_dial_ranking_delay_seconds delay introduced by the dial ranking logic
+# TYPE libp2p_swarm_dial_ranking_delay_seconds histogram
+libp2p_swarm_dial_ranking_delay_seconds_bucket{le="0.001"} 8
+libp2p_swarm_dial_ranking_delay_seconds_bucket{le="0.01"} 8
+libp2p_swarm_dial_ranking_delay_seconds_bucket{le="0.05"} 8
+libp2p_swarm_dial_ranking_delay_seconds_bucket{le="0.1"} 8
+libp2p_swarm_dial_ranking_delay_seconds_bucket{le="0.2"} 8
+libp2p_swarm_dial_ranking_delay_seconds_bucket{le="0.3"} 8
+libp2p_swarm_dial_ranking_delay_seconds_bucket{le="0.4"} 8
+libp2p_swarm_dial_ranking_delay_seconds_bucket{le="0.5"} 8
+libp2p_swarm_dial_ranking_delay_seconds_bucket{le="0.75"} 8
+libp2p_swarm_dial_ranking_delay_seconds_bucket{le="1"} 8
+libp2p_swarm_dial_ranking_delay_seconds_bucket{le="2"} 8
+libp2p_swarm_dial_ranking_delay_seconds_bucket{le="+Inf"} 8
+libp2p_swarm_dial_ranking_delay_seconds_sum 2.8677e-05
+libp2p_swarm_dial_ranking_delay_seconds_count 8
+# HELP libp2p_swarm_dials_per_peer_total Number of addresses dialed per peer
+# TYPE libp2p_swarm_dials_per_peer_total counter
+libp2p_swarm_dials_per_peer_total{num_dials="0",outcome="failed"} 713
+libp2p_swarm_dials_per_peer_total{num_dials="1",outcome="failed"} 47
+libp2p_swarm_dials_per_peer_total{num_dials="1",outcome="success"} 7
+libp2p_swarm_dials_per_peer_total{num_dials="2",outcome="failed"} 1
+libp2p_swarm_dials_per_peer_total{num_dials=">=6",outcome="failed"} 7
+libp2p_swarm_dials_per_peer_total{num_dials=">=6",outcome="success"} 1
+# HELP libp2p_swarm_handshake_latency_seconds Duration of the libp2p Handshake
+# TYPE libp2p_swarm_handshake_latency_seconds histogram
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.001"} 0
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.0013000000000000002"} 1
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.0016900000000000003"} 1
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.0021970000000000006"} 1
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.0028561000000000007"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.003712930000000001"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.004826809000000001"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.006274851700000002"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.008157307210000003"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.010604499373000004"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.013785849184900006"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.01792160394037001"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.02329808512248101"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.030287510659225317"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.03937376385699291"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.05118589301409079"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.06654166091831802"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.08650415919381343"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.11245540695195747"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.14619202903754472"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.19004963774880815"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.2470645290734506"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.3211838877954858"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.41753905413413156"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.542800770374371"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.7056410014866824"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="0.9173333019326871"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="1.1925332925124934"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="1.5502932802662415"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="2.015381264346114"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="2.6199956436499483"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="3.405994336744933"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="4.427792637768413"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="5.7561304290989375"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="7.482969557828619"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1",le="+Inf"} 6
+libp2p_swarm_handshake_latency_seconds_sum{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1"} 0.014134317999999998
+libp2p_swarm_handshake_latency_seconds_count{early_muxer="false",ip_version="ip4",muxer="",security="",transport="quic-v1"} 6
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.001"} 0
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.0013000000000000002"} 0
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.0016900000000000003"} 0
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.0021970000000000006"} 0
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.0028561000000000007"} 1
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.003712930000000001"} 2
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.004826809000000001"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.006274851700000002"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.008157307210000003"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.010604499373000004"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.013785849184900006"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.01792160394037001"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.02329808512248101"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.030287510659225317"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.03937376385699291"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.05118589301409079"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.06654166091831802"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.08650415919381343"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.11245540695195747"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.14619202903754472"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.19004963774880815"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.2470645290734506"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.3211838877954858"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.41753905413413156"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.542800770374371"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.7056410014866824"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="0.9173333019326871"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="1.1925332925124934"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="1.5502932802662415"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="2.015381264346114"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="2.6199956436499483"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="3.405994336744933"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="4.427792637768413"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="5.7561304290989375"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="7.482969557828619"} 3
+libp2p_swarm_handshake_latency_seconds_bucket{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp",le="+Inf"} 3
+libp2p_swarm_handshake_latency_seconds_sum{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp"} 0.010336244
+libp2p_swarm_handshake_latency_seconds_count{early_muxer="true",ip_version="ip4",muxer="/yamux/1.0.0",security="/tls/1.0.0",transport="tcp"} 3
+# HELP libp2p_swarm_key_types_total key type
+# TYPE libp2p_swarm_key_types_total counter
+libp2p_swarm_key_types_total{dir="inbound",key_type="Ed25519"} 13
+libp2p_swarm_key_types_total{dir="outbound",key_type="Ed25519"} 9
+# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds.
+# TYPE process_cpu_seconds_total counter
+process_cpu_seconds_total 3080.52
+# HELP process_max_fds Maximum number of open file descriptors.
+# TYPE process_max_fds gauge
+process_max_fds 524287
+# HELP process_open_fds Number of open file descriptors.
+# TYPE process_open_fds gauge
+process_open_fds 581
+# HELP process_resident_memory_bytes Resident memory size in bytes.
+# TYPE process_resident_memory_bytes gauge
+process_resident_memory_bytes 9.81680128e+08
+# HELP process_start_time_seconds Start time of the process since unix epoch in seconds.
+# TYPE process_start_time_seconds gauge
+process_start_time_seconds 1.78968435955e+09
+# HELP process_virtual_memory_bytes Virtual memory size in bytes.
+# TYPE process_virtual_memory_bytes gauge
+process_virtual_memory_bytes 2.316353536e+09
+# HELP process_virtual_memory_max_bytes Maximum amount of virtual memory available in bytes.
+# TYPE process_virtual_memory_max_bytes gauge
+process_virtual_memory_max_bytes 1.8446744073709552e+19
+# HELP promhttp_metric_handler_requests_in_flight Current number of scrapes being served.
+# TYPE promhttp_metric_handler_requests_in_flight gauge
+promhttp_metric_handler_requests_in_flight 1
+# HELP promhttp_metric_handler_requests_total Total number of scrapes by HTTP status code.
+# TYPE promhttp_metric_handler_requests_total counter
+promhttp_metric_handler_requests_total{code="200"} 1425
+promhttp_metric_handler_requests_total{code="500"} 0
+promhttp_metric_handler_requests_total{code="503"} 0

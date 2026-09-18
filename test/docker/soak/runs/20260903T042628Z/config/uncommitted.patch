@@ -1,0 +1,34 @@
+diff --git a/test/docker/soak/runs/20260902T221300Z/readprobe.csv b/test/docker/soak/runs/20260902T221300Z/readprobe.csv
+index 81c75b5dc..4f5c700cd 100644
+--- a/test/docker/soak/runs/20260902T221300Z/readprobe.csv
++++ b/test/docker/soak/runs/20260902T221300Z/readprobe.csv
+@@ -315,3 +315,19 @@ time,reads,p50,p95,max,maxKind,maxAge,maxPartition,failed,gated,timeouts,reservo
+ 2026-09-03T03:30:36Z,300,0.0,0.1,0.2,txn,421,Directory,300,0,0,435,421
+ 2026-09-03T03:31:37Z,300,0.0,0.1,0.1,txn,410,BVN1,300,0,0,435,421
+ 2026-09-03T03:32:37Z,300,0.0,0.0,0.1,chain,410,BVN1,300,0,0,435,421
++2026-09-03T04:10:29Z,300,1.9,92.7,451.5,txn,261,BVN2,0,0,0,573,334
++2026-09-03T04:11:26Z,300,2.3,8.8,358.7,txn,275,BVN2,0,0,0,582,354
++2026-09-03T04:12:28Z,300,1.7,49.1,693.9,txn,261,BVN1,0,0,0,591,374
++2026-09-03T04:13:30Z,300,2.6,61.1,711.1,txn,302,BVN2,0,0,0,600,394
++2026-09-03T04:14:31Z,300,1.8,106.2,588.6,txn,319,BVN2,0,0,0,600,415
++2026-09-03T04:15:27Z,300,1.9,3.7,363.2,txn,435,Directory,0,0,0,600,435
++2026-09-03T04:16:26Z,300,0.0,0.0,0.1,chain,435,Directory,300,0,0,600,435
++2026-09-03T04:17:26Z,300,0.0,0.0,0.0,txn,435,Directory,300,0,0,600,435
++2026-09-03T04:18:27Z,300,0.9,1.3,2.6,txn,2,Directory,0,0,0,600,2
++2026-09-03T04:19:27Z,300,0.0,0.0,0.0,txn,1,BVN2,300,0,0,600,2
++2026-09-03T04:20:28Z,300,0.0,0.0,0.1,chain,2,Directory,300,0,0,600,2
++2026-09-03T04:21:28Z,300,0.0,0.0,0.1,txn,2,Directory,300,0,0,600,2
++2026-09-03T04:22:28Z,300,0.0,0.0,0.1,chain,1,BVN2,300,0,0,600,2
++2026-09-03T04:23:29Z,300,0.0,0.0,0.1,txn,2,Directory,300,0,0,600,2
++2026-09-03T04:24:29Z,300,0.9,1.2,1.7,txn,9,BVN1,0,0,0,600,9
++2026-09-03T04:25:29Z,300,0.0,0.0,0.1,txn,9,BVN1,300,0,0,600,9
+diff --git a/test/docker/soak/runs/INDEX.md b/test/docker/soak/runs/INDEX.md
+index f09cb9f4b..24be70dc1 100644
+--- a/test/docker/soak/runs/INDEX.md
++++ b/test/docker/soak/runs/INDEX.md
+@@ -55,3 +55,5 @@ Every run appends one row. Details in `<runId>/manifest.md`.
+ | [20260902T222155Z](20260902T222155Z/manifest.md) | `10k-tps-654-gd8d636b52-dirty` | v2-kourou | unconditional (DI conductor, #4105) | 0.14h | 143 | 8→114 | 0→402 | validate #4189 durable unhashed staging + #4201 heal cadence, at the same 12h/500tps as 20260902T132651Z which livelocked with recv-deliv pinned at exactly 4096. Includes d8d636b52: Received is answered from staging's sighted mark on read rather than stored, which is what the first attempt at this run got wrong -- every channel read 0 received and the dashboard called a healthy network STALLED. THE TEST: recv-deliv must never pin at 4096, heals must not climb into six figures against a stalled stream, and heights must keep moving. |
+ | [20260902T223532Z](20260902T223532Z/manifest.md) | `10k-tps-654-gd8d636b52-dirty` | v2-kourou | unconditional (DI conductor, #4105) | 0.22h | 143 | 8→214 | 2→99 | FIRST BCDB SOAK. Every previous run, including 20260902T132651Z which livelocked, ran goleveldb -- docker-compose.yml defaults --database to leveldb and nothing set ACC_STORAGE, so the backend this branch line is named for has never been soaked. Validates #4189 (durable unhashed staging; MaxPendingSequenced and its silent refusal deleted) + #4201 (heal cadence every 4 blocks, 2 senders for PULLS only) + d8d636b52 (Received answered from staging on read). Note two variables differ from the baseline: staging AND backend. Previous attempt 20260902T222155Z died at 11min -- stallkill, BVN1 stalled 193s -- with BVN2 nodes at 194-264% CPU sitting on the 1200MiB GOMEMLIMIT; a 30s profile showed scanobject at 29% and healing at ZERO, i.e. GC thrash from leveldb recordCache+BufferPool+memdb (~310MB/node), not healing. WATCH: does dropping leveldb clear the GC ceiling; recv-deliv must never pin at 4096; heals must not climb into six figures against a stalled stream. |
+ | [20260902T231641Z](20260902T231641Z/manifest.md) | `10k-tps-657-gbf6e3f4b6-dirty` | v2-kourou | unconditional (DI conductor, #4105) | 0.34h | 143 | 14→417 | 8→12621 | bcdb soak at 2048m/1700MiB with the two read caches. Carries: #4189 durable unhashed staging (MaxPendingSequenced and its silent refusal deleted), #4201 heal cadence (4 blocks, 2 senders for PULLS only), d8d636b52 (Received answered from staging on read), #4165 write tally reduced to counters (~190MB/node freed -- it was 38% of live heap), and #4165 two read caches: Account(U).Url served from the DYNAMIC layer and synthetic/anchor chain records from PERM, both written through on commit. Previous leveldb run died at 11min (BVN1 stalled 193s) with BVN2 on the GC ceiling; first bcdb run showed GetDeep at 32% of read time, which the URL cache targets. WATCH: recv-deliv must never pin at 4096; heals must not reach six figures against a stalled stream; deepFallbacks should fall. |
++| [20260903T041627Z](20260903T041627Z/manifest.md) | `10k-tps-660-g254dc6d07-dirty` | v2-kourou | unconditional (DI conductor, #4105) | ?h | 1 | ?→dnHeight | ?→heals | bcdb 12h/500tps. Submit no longer REFUSES work: crossing a pending boundary now seals a batch and keeps the envelope that crossed it, and the batch-store-full rejection is gone (accepting a tx does not grow the store; only sealing does). Replaces the two-watermark seal gate, which blocked sealing when the store was 75% full -- but ~60% of the store is peers' gossiped batches, so peers filling our cache stopped us producing, and sealing is the only path to the commits that drain it. Previous run 20260903T035139Z: BVN2 produced 46,428 for BVN1 while BVN1 received 10,378 with both watermarks frozen and BVN1 producing blocks at 6/s -- healing was pulling the right sequence numbers and its re-submissions were being refused. Also carries the batch pin (a header's deferred vote pins every batch it names; missing-batch asks/distinct went 4.5 -> 1.00 last run), #4189 durable staging, #4201 heal cadence, two bcdb read caches, tally reduced to counters. WATCH: BVN1 received-from-BVN2 must track BVN2's produced-for-BVN1; no ErrBackpressure refusals; asks/distinct near 1. |
++| [20260903T042200Z](20260903T042200Z/manifest.md) | `10k-tps-661-gdcc371e60-dirty` | v2-kourou | unconditional (DI conductor, #4105) | ?h | 1 | ?→dnHeight | ?→heals | bcdb 12h/500tps. Submit does not refuse work: crossing a pending boundary seals SYNCHRONOUSLY and keeps the envelope that crossed it. The previous attempt (254dc6d07) removed the refusals but only signalled the seal -- a non-blocking send that coalesces -- so pending grew without limit and the network seized in seconds. Sealing inline bounds the queue at one envelope past the boundary; it may block the submitter, which is the intended backpressure. Also carries the batch pin (asks/distinct 4.5 -> 1.00), #4189 durable staging, #4201 heal cadence, two bcdb read caches, tally as counters. WATCH FIRST: does it seize again. THEN: BVN1 received-from-BVN2 must track BVN2 produced-for-BVN1. |

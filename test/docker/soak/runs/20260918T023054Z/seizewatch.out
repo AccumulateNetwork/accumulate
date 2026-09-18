@@ -1,0 +1,8 @@
+2026-09-18T02:32:43 stuck=n/a stuckStream= worst=none undeliv=anchor Directory->BVN1 undeliv=1
+2026-09-18T02:32:43 seizewatch: no node exports a stuck-heal count; tripping on gap and undelivered only
+2026-09-18T02:33:28 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=2 undeliv=synthetic BVN2->BVN3 undeliv=224
+2026-09-18T02:34:13 stuck=n/a stuckStream= worst=BVN3->BVN2 gap=11 deliv=204 undeliv=synthetic BVN2->BVN1 undeliv=122
+2026-09-18T02:34:59 stuck=n/a stuckStream= worst=BVN3->BVN1 gap=17 deliv=344 undeliv=synthetic BVN2->BVN1 undeliv=127
+2026-09-18T02:35:44 stuck=n/a stuckStream= worst=BVN1->BVN3 gap=41 deliv=490 undeliv=synthetic BVN2->BVN1 undeliv=107
+2026-09-18T02:36:29 stuck=n/a stuckStream= worst=BVN1->BVN2 gap=98 deliv=600 undeliv=synthetic BVN2->BVN3 undeliv=88
+SEIZED at 2026-09-18T02:36:29 :: stuck=n/a stuckStream= worst=BVN1->BVN2 gap=98 deliv=600 undeliv=synthetic BVN2->BVN3 undeliv=88

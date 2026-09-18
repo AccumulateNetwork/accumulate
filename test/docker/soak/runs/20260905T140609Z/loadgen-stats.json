@@ -1,0 +1,196 @@
+{
+  "updatedUnix": 1788618390,
+  "startUnix": 1788617412,
+  "elapsedSec": 978,
+  "phase": "generating",
+  "target": 21600000,
+  "generated": 481930,
+  "rejected": 11,
+  "skipped": 47475,
+  "rate": 492.58348698571365,
+  "targetTps": 500,
+  "perType": {
+    "add-account": {
+      "generated": 346,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "add-credits-lite": {
+      "generated": 34461,
+      "rejected": 0,
+      "skipped": 5649
+    },
+    "add-credits-page": {
+      "generated": 35280,
+      "rejected": 0,
+      "skipped": 3071
+    },
+    "add-key-book": {
+      "generated": 173,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "add-page-key": {
+      "generated": 8931,
+      "rejected": 0,
+      "skipped": 1411
+    },
+    "add-token": {
+      "generated": 4845,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "burn-credits": {
+      "generated": 8853,
+      "rejected": 0,
+      "skipped": 753
+    },
+    "burn-tokens": {
+      "generated": 13071,
+      "rejected": 0,
+      "skipped": 2153
+    },
+    "burn-tokens-adi": {
+      "generated": 17446,
+      "rejected": 0,
+      "skipped": 1557
+    },
+    "burn-tokens-custom": {
+      "generated": 4337,
+      "rejected": 0,
+      "skipped": 399
+    },
+    "fail:data-to-void": {
+      "generated": 4426,
+      "rejected": 0,
+      "skipped": 382
+    },
+    "fail:overburn-tokens": {
+      "generated": 4408,
+      "rejected": 0,
+      "skipped": 383
+    },
+    "fail:overspend": {
+      "generated": 9445,
+      "rejected": 0,
+      "skipped": 775
+    },
+    "fail:send-to-void": {
+      "generated": 9313,
+      "rejected": 2,
+      "skipped": 717
+    },
+    "fail:sub-adi-on-void": {
+      "generated": 4436,
+      "rejected": 0,
+      "skipped": 400
+    },
+    "grow:add-credits": {
+      "generated": 60,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-data-account": {
+      "generated": 60,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-identity": {
+      "generated": 65,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-key-page": {
+      "generated": 56,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token": {
+      "generated": 62,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-account": {
+      "generated": 61,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-holder": {
+      "generated": 120,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:issue-tokens": {
+      "generated": 57,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:set-threshold": {
+      "generated": 44,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "issue-tokens": {
+      "generated": 8732,
+      "rejected": 0,
+      "skipped": 778
+    },
+    "remove-page-key": {
+      "generated": 8822,
+      "rejected": 0,
+      "skipped": 774
+    },
+    "send-tokens-adi": {
+      "generated": 66071,
+      "rejected": 0,
+      "skipped": 5740
+    },
+    "send-tokens-custom": {
+      "generated": 13241,
+      "rejected": 0,
+      "skipped": 1122
+    },
+    "send-tokens-lite": {
+      "generated": 84301,
+      "rejected": 9,
+      "skipped": 6496
+    },
+    "set-threshold": {
+      "generated": 17572,
+      "rejected": 0,
+      "skipped": 1540
+    },
+    "transfer-credits": {
+      "generated": 13400,
+      "rejected": 0,
+      "skipped": 1203
+    },
+    "update-account-auth": {
+      "generated": 8985,
+      "rejected": 0,
+      "skipped": 799
+    },
+    "update-page-key": {
+      "generated": 13184,
+      "rejected": 0,
+      "skipped": 1172
+    },
+    "write-data-adi": {
+      "generated": 52831,
+      "rejected": 0,
+      "skipped": 4698
+    },
+    "write-data-lite": {
+      "generated": 34435,
+      "rejected": 0,
+      "skipped": 5503
+    }
+  },
+  "accounts": {
+    "identities": 57,
+    "keyBooks": 57,
+    "keyPages": 113,
+    "tokenIssuers": 57,
+    "accounts": 11673
+  }
+}

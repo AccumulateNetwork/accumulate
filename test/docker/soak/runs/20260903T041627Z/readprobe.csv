@@ -1,0 +1,2 @@
+time,reads,p50,p95,max,maxKind,maxAge,maxPartition,failed,gated,timeouts,reservoir,oldestAge
+2026-09-03T04:19:00Z,6,1.7,2.2,2.2,txn,12,BVN1,0,0,0,3,13

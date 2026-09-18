@@ -1,0 +1,3 @@
+  src -> dst                produced  received  delivered  UNDELIVERED
+
+stalled channels: 0 

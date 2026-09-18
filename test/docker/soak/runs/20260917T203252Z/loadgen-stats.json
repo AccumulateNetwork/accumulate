@@ -1,0 +1,201 @@
+{
+  "updatedUnix": 1789679474,
+  "startUnix": 1789677308,
+  "elapsedSec": 2166,
+  "phase": "generating",
+  "target": 8640000,
+  "generated": 182008,
+  "rejected": 8392,
+  "skipped": 1836,
+  "rate": 83.99545497203387,
+  "targetTps": 100,
+  "perType": {
+    "add-account": {
+      "generated": 480,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "add-credits-lite": {
+      "generated": 13521,
+      "rejected": 0,
+      "skipped": 702
+    },
+    "add-credits-page": {
+      "generated": 13134,
+      "rejected": 759,
+      "skipped": 5
+    },
+    "add-key-book": {
+      "generated": 240,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "add-page-key": {
+      "generated": 3970,
+      "rejected": 376,
+      "skipped": 5
+    },
+    "add-token": {
+      "generated": 1833,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "burn-credits": {
+      "generated": 3403,
+      "rejected": 200,
+      "skipped": 2
+    },
+    "burn-tokens": {
+      "generated": 5190,
+      "rejected": 0,
+      "skipped": 285
+    },
+    "burn-tokens-adi": {
+      "generated": 6526,
+      "rejected": 401,
+      "skipped": 3
+    },
+    "burn-tokens-custom": {
+      "generated": 1623,
+      "rejected": 90,
+      "skipped": 1
+    },
+    "fail:data-to-void": {
+      "generated": 1619,
+      "rejected": 94,
+      "skipped": 0
+    },
+    "fail:overburn-tokens": {
+      "generated": 1595,
+      "rejected": 83,
+      "skipped": 1
+    },
+    "fail:overspend": {
+      "generated": 3424,
+      "rejected": 174,
+      "skipped": 4
+    },
+    "fail:send-to-void": {
+      "generated": 3365,
+      "rejected": 171,
+      "skipped": 2
+    },
+    "fail:sub-adi-on-void": {
+      "generated": 1653,
+      "rejected": 97,
+      "skipped": 1
+    },
+    "grow:add-credits": {
+      "generated": 80,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-data-account": {
+      "generated": 100,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-identity": {
+      "generated": 102,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-key-book": {
+      "generated": 8,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-key-page": {
+      "generated": 80,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token": {
+      "generated": 91,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-account": {
+      "generated": 96,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-holder": {
+      "generated": 180,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:issue-tokens": {
+      "generated": 90,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:set-threshold": {
+      "generated": 65,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "issue-tokens": {
+      "generated": 3284,
+      "rejected": 183,
+      "skipped": 1
+    },
+    "remove-page-key": {
+      "generated": 3267,
+      "rejected": 208,
+      "skipped": 1
+    },
+    "send-tokens-adi": {
+      "generated": 24652,
+      "rejected": 1367,
+      "skipped": 12
+    },
+    "send-tokens-custom": {
+      "generated": 4861,
+      "rejected": 280,
+      "skipped": 3
+    },
+    "send-tokens-lite": {
+      "generated": 30486,
+      "rejected": 1596,
+      "skipped": 11
+    },
+    "set-threshold": {
+      "generated": 6590,
+      "rejected": 369,
+      "skipped": 16
+    },
+    "transfer-credits": {
+      "generated": 4910,
+      "rejected": 293,
+      "skipped": 5
+    },
+    "update-account-auth": {
+      "generated": 3360,
+      "rejected": 206,
+      "skipped": 0
+    },
+    "update-page-key": {
+      "generated": 5054,
+      "rejected": 299,
+      "skipped": 24
+    },
+    "write-data-adi": {
+      "generated": 19779,
+      "rejected": 1146,
+      "skipped": 10
+    },
+    "write-data-lite": {
+      "generated": 13297,
+      "rejected": 0,
+      "skipped": 742
+    }
+  },
+  "accounts": {
+    "identities": 80,
+    "keyBooks": 88,
+    "keyPages": 168,
+    "tokenIssuers": 90,
+    "accounts": 4515
+  }
+}

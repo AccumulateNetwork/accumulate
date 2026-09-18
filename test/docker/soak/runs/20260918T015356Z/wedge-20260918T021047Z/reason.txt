@@ -1,0 +1,1 @@
+partitions stalled 147s: BVN2,BVN3,Directory

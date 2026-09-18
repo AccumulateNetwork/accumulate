@@ -1,0 +1,17 @@
+2026-09-17T20:34:43 stuck=n/a stuckStream= worst=none undeliv=anchor BVN1->Directory undeliv=1
+2026-09-17T20:34:43 seizewatch: no node exports a stuck-heal count; tripping on gap and undelivered only
+2026-09-17T20:35:28 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=2 undeliv=synthetic BVN2->BVN1 undeliv=230
+2026-09-17T20:36:13 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=59 undeliv=synthetic BVN2->BVN1 undeliv=180
+2026-09-17T20:36:58 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=210 undeliv=synthetic BVN2->BVN1 undeliv=130
+2026-09-17T20:37:43 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=321 undeliv=synthetic BVN2->BVN1 undeliv=137
+2026-09-17T20:38:28 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=421 undeliv=synthetic BVN2->BVN1 undeliv=116
+2026-09-17T20:39:13 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=526 undeliv=synthetic BVN2->BVN1 undeliv=114
+2026-09-17T20:39:58 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=630 undeliv=synthetic BVN2->BVN1 undeliv=135
+2026-09-17T20:40:43 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=704 undeliv=synthetic BVN2->BVN1 undeliv=104
+2026-09-17T20:41:28 stuck=n/a stuckStream= worst=BVN2->BVN1 gap=19 deliv=5272 undeliv=synthetic BVN2->BVN3 undeliv=93
+2026-09-17T20:42:13 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=909 undeliv=synthetic BVN2->BVN1 undeliv=130
+2026-09-17T20:42:58 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=1010 undeliv=synthetic BVN2->BVN1 undeliv=122
+2026-09-17T20:43:43 stuck=n/a stuckStream= worst=BVN1->Directory gap=0 deliv=1025 undeliv=synthetic BVN2->BVN1 undeliv=122
+2026-09-17T20:44:29 stuck=n/a stuckStream= worst=BVN1->BVN3 gap=7 deliv=1592 undeliv=synthetic BVN2->BVN1 undeliv=114
+2026-09-17T20:45:14 stuck=n/a stuckStream= worst=BVN2->BVN3 gap=620 deliv=5456 undeliv=synthetic BVN2->BVN3 undeliv=150
+SEIZED at 2026-09-17T20:45:14 :: stuck=n/a stuckStream= worst=BVN2->BVN3 gap=620 deliv=5456 undeliv=synthetic BVN2->BVN3 undeliv=150

@@ -1,0 +1,10 @@
+acc-bvn1-val2	Up 4 minutes (healthy)
+acc-bvn1-val1	Up 4 minutes (healthy)
+acc-bvn2-val2	Up 4 minutes (healthy)
+acc-bvn1-val4	Up 4 minutes (healthy)
+acc-bvn2-val1	Up 4 minutes (healthy)
+acc-bvn2-val3	Up 4 minutes (healthy)
+acc-bvn2-val4	Up 4 minutes (healthy)
+acc-bvn1-val3	Up 4 minutes (healthy)
+acc-init	Exited (0) 4 minutes ago
+acc-bootstrap	Up 4 minutes (healthy)

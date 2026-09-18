@@ -1,0 +1,17 @@
+acc-bvn1-val3	224.30%	1.023GiB / 2GiB
+acc-bvn1-val4	254.62%	901.4MiB / 2GiB
+acc-bvn2-val2	129.43%	973.3MiB / 2GiB
+acc-bvn2-val3	145.17%	892.8MiB / 2GiB
+acc-bvn2-val4	120.85%	1.035GiB / 2GiB
+acc-bvn2-val1	227.69%	949.5MiB / 2GiB
+acc-bvn1-val1	105.36%	987.7MiB / 2GiB
+acc-bvn1-val2	100.43%	991.5MiB / 2GiB
+acc-bootstrap	0.02%	14.54MiB / 2GiB
+asp	0.02%	32.12MiB / 62.23GiB
+asp-v003	1.36%	32.54MiB / 62.23GiB
+asp-v005	2.20%	32.73MiB / 62.23GiB
+asp-v002	0.11%	32.93MiB / 62.23GiB
+asp-v007	1.54%	26.65MiB / 62.23GiB
+asp-v006	0.90%	30.36MiB / 62.23GiB
+asp-v001	0.89%	32.62MiB / 62.23GiB
+asp-v004	0.84%	32.53MiB / 62.23GiB

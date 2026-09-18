@@ -1,0 +1,5 @@
+# processCommittedCertificate / batch-collection frames per node
+acc-bvn2-val1            0 frame(s); 232 goroutines
+acc-bvn2-val2            0 frame(s); 236 goroutines
+acc-bvn2-val3            1 frame(s); 236 goroutines
+acc-bvn2-val4            0 frame(s); 237 goroutines

@@ -1,0 +1,21 @@
+2026-09-03T12:11:46 stuck=0 stuckStream= worst=none undeliv=none
+2026-09-03T12:12:31 stuck=0 stuckStream= worst=BVN2->BVN1 gap=0 deliv=52 undeliv=synthetic BVN2->BVN1 undeliv=52
+2026-09-03T12:13:16 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=2 undeliv=synthetic BVN2->BVN1 undeliv=3403
+2026-09-03T12:14:01 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=9 undeliv=synthetic BVN2->BVN1 undeliv=3746
+2026-09-03T12:14:46 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=21 undeliv=synthetic BVN2->BVN1 undeliv=3670
+2026-09-03T12:15:31 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=35 undeliv=synthetic BVN2->BVN1 undeliv=3869
+2026-09-03T12:16:16 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=43 undeliv=synthetic BVN2->BVN1 undeliv=3076
+2026-09-03T12:17:01 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=51 undeliv=synthetic BVN2->BVN1 undeliv=3607
+2026-09-03T12:17:47 NODATA
+2026-09-03T12:18:32 NODATA
+2026-09-03T12:19:17 NODATA
+2026-09-03T12:20:02 NODATA
+2026-09-03T12:20:47 NODATA
+2026-09-03T12:21:32 stuck=0 stuckStream= worst=BVN2->Directory gap=0 deliv=2 undeliv=synthetic BVN2->BVN1 undeliv=191
+2026-09-03T12:22:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=17 undeliv=synthetic BVN2->BVN1 undeliv=1793
+2026-09-03T12:23:02 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=105 undeliv=synthetic BVN2->BVN1 undeliv=2130
+2026-09-03T12:23:47 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=365 undeliv=synthetic BVN2->BVN1 undeliv=1995
+2026-09-03T12:24:32 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=571 undeliv=synthetic BVN2->BVN1 undeliv=2252
+2026-09-03T12:25:17 stuck=0 stuckStream= worst=BVN1->Directory gap=0 deliv=781 undeliv=synthetic BVN2->BVN1 undeliv=2670
+2026-09-03T12:26:02 stuck=0 stuckStream= worst=BVN1->Directory gap=94 deliv=1094 undeliv=synthetic BVN2->BVN1 undeliv=3143
+SEIZED at 2026-09-03T12:26:02 :: stuck=0 stuckStream= worst=BVN1->Directory gap=94 deliv=1094 undeliv=synthetic BVN2->BVN1 undeliv=3143
