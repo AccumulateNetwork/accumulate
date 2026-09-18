@@ -257,6 +257,22 @@ type PrivateSnapshotRangeResponse struct {
 	extraData []byte
 }
 
+type PrivateStagingSnapshotRequest struct {
+	fieldsSet []bool
+	Partition string   `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Ledger    *url.URL `json:"ledger,omitempty" form:"ledger" query:"ledger" validate:"required"`
+	Source    *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	Number    uint64   `json:"number,omitempty" form:"number" query:"number" validate:"required"`
+	Limit     uint64   `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+	extraData []byte
+}
+
+type PrivateStagingSnapshotResponse struct {
+	fieldsSet []bool
+	Value     *private.StagingSnapshot `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type QueryRequest struct {
 	fieldsSet []bool
 	Scope     *url.URL  `json:"scope,omitempty" form:"scope" query:"scope" validate:"required"`
@@ -376,6 +392,10 @@ func (*PrivateSequenceResponse) Type() Type { return TypePrivateSequenceResponse
 func (*PrivateSnapshotRangeRequest) Type() Type { return TypePrivateSnapshotRangeRequest }
 
 func (*PrivateSnapshotRangeResponse) Type() Type { return TypePrivateSnapshotRangeResponse }
+
+func (*PrivateStagingSnapshotRequest) Type() Type { return TypePrivateStagingSnapshotRequest }
+
+func (*PrivateStagingSnapshotResponse) Type() Type { return TypePrivateStagingSnapshotResponse }
 
 func (*QueryRequest) Type() Type { return TypeQueryRequest }
 
@@ -985,6 +1005,44 @@ func (v *PrivateSnapshotRangeResponse) Copy() *PrivateSnapshotRangeResponse {
 
 func (v *PrivateSnapshotRangeResponse) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *PrivateStagingSnapshotRequest) Copy() *PrivateStagingSnapshotRequest {
+	u := new(PrivateStagingSnapshotRequest)
+
+	u.Partition = v.Partition
+	if v.Ledger != nil {
+		u.Ledger = v.Ledger
+	}
+	if v.Source != nil {
+		u.Source = v.Source
+	}
+	u.Number = v.Number
+	u.Limit = v.Limit
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateStagingSnapshotRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PrivateStagingSnapshotResponse) Copy() *PrivateStagingSnapshotResponse {
+	u := new(PrivateStagingSnapshotResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PrivateStagingSnapshotResponse) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *QueryRequest) Copy() *QueryRequest {
 	u := new(QueryRequest)
 
@@ -1584,6 +1642,49 @@ func (v *PrivateSnapshotRangeRequest) Equal(u *PrivateSnapshotRangeRequest) bool
 }
 
 func (v *PrivateSnapshotRangeResponse) Equal(u *PrivateSnapshotRangeResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
+	}
+
+	return true
+}
+
+func (v *PrivateStagingSnapshotRequest) Equal(u *PrivateStagingSnapshotRequest) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	switch {
+	case v.Ledger == u.Ledger:
+		// equal
+	case v.Ledger == nil || u.Ledger == nil:
+		return false
+	case !((v.Ledger).Equal(u.Ledger)):
+		return false
+	}
+	switch {
+	case v.Source == u.Source:
+		// equal
+	case v.Source == nil || u.Source == nil:
+		return false
+	case !((v.Source).Equal(u.Source)):
+		return false
+	}
+	if !(v.Number == u.Number) {
+		return false
+	}
+	if !(v.Limit == u.Limit) {
+		return false
+	}
+
+	return true
+}
+
+func (v *PrivateStagingSnapshotResponse) Equal(u *PrivateStagingSnapshotResponse) bool {
 	switch {
 	case v.Value == u.Value:
 		// equal
@@ -3701,6 +3802,150 @@ func (v *PrivateSnapshotRangeResponse) IsValid() error {
 	}
 }
 
+var fieldNames_PrivateStagingSnapshotRequest = []string{
+	1: "Type",
+	2: "Partition",
+	3: "Ledger",
+	4: "Source",
+	5: "Number",
+	6: "Limit",
+}
+
+func (v *PrivateStagingSnapshotRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
+	}
+	if !(v.Ledger == nil) {
+		writer.WriteUrl(3, v.Ledger)
+	}
+	if !(v.Source == nil) {
+		writer.WriteUrl(4, v.Source)
+	}
+	if !(v.Number == 0) {
+		writer.WriteUint(5, v.Number)
+	}
+	if !(v.Limit == 0) {
+		writer.WriteUint(6, v.Limit)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PrivateStagingSnapshotRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateStagingSnapshotRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Ledger is missing")
+	} else if v.Ledger == nil {
+		errs = append(errs, "field Ledger is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Source is missing")
+	} else if v.Source == nil {
+		errs = append(errs, "field Source is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Number is missing")
+	} else if v.Number == 0 {
+		errs = append(errs, "field Number is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Limit is missing")
+	} else if v.Limit == 0 {
+		errs = append(errs, "field Limit is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PrivateStagingSnapshotResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *PrivateStagingSnapshotResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PrivateStagingSnapshotResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PrivateStagingSnapshotResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_QueryRequest = []string{
 	1: "Type",
 	2: "Scope",
@@ -5420,6 +5665,88 @@ func (v *PrivateSnapshotRangeResponse) UnmarshalFieldsFrom(reader *encoding.Read
 	return nil
 }
 
+func (v *PrivateStagingSnapshotRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateStagingSnapshotRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateStagingSnapshotRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadString(2); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Ledger = x
+	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Source = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.Number = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.Limit = x
+	}
+
+	seen, err := reader.Reset(fieldNames_PrivateStagingSnapshotRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PrivateStagingSnapshotResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PrivateStagingSnapshotResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PrivateStagingSnapshotResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(private.StagingSnapshot); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_PrivateStagingSnapshotResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *QueryRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -5932,6 +6259,20 @@ func init() {
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("value", "private.SnapshotChunk"),
 	}, "PrivateSnapshotRangeResponse", "privateSnapshotRangeResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("ledger", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("number", "uint64"),
+		encoding.NewTypeField("limit", "uint64"),
+	}, "PrivateStagingSnapshotRequest", "privateStagingSnapshotRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "private.StagingSnapshot"),
+	}, "PrivateStagingSnapshotResponse", "privateStagingSnapshotResponse")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
@@ -6616,6 +6957,50 @@ func (v *PrivateSnapshotRangeResponse) MarshalJSON() ([]byte, error) {
 		Type      Type                   `json:"type"`
 		Value     *private.SnapshotChunk `json:"value,omitempty"`
 		ExtraData *string                `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
+		u.Value = v.Value
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivateStagingSnapshotRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type     `json:"type"`
+		Partition string   `json:"partition,omitempty"`
+		Ledger    *url.URL `json:"ledger,omitempty"`
+		Source    *url.URL `json:"source,omitempty"`
+		Number    uint64   `json:"number,omitempty"`
+		Limit     uint64   `json:"limit,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
+	if !(v.Ledger == nil) {
+		u.Ledger = v.Ledger
+	}
+	if !(v.Source == nil) {
+		u.Source = v.Source
+	}
+	if !(v.Number == 0) {
+		u.Number = v.Number
+	}
+	if !(v.Limit == 0) {
+		u.Limit = v.Limit
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PrivateStagingSnapshotResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type                     `json:"type"`
+		Value     *private.StagingSnapshot `json:"value,omitempty"`
+		ExtraData *string                  `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
@@ -7700,6 +8085,64 @@ func (v *PrivateSnapshotRangeResponse) UnmarshalJSON(data []byte) error {
 		Type      Type                   `json:"type"`
 		Value     *private.SnapshotChunk `json:"value,omitempty"`
 		ExtraData *string                `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivateStagingSnapshotRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type     `json:"type"`
+		Partition string   `json:"partition,omitempty"`
+		Ledger    *url.URL `json:"ledger,omitempty"`
+		Source    *url.URL `json:"source,omitempty"`
+		Number    uint64   `json:"number,omitempty"`
+		Limit     uint64   `json:"limit,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.Ledger = v.Ledger
+	u.Source = v.Source
+	u.Number = v.Number
+	u.Limit = v.Limit
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	v.Ledger = u.Ledger
+	v.Source = u.Source
+	v.Number = u.Number
+	v.Limit = u.Limit
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PrivateStagingSnapshotResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type                     `json:"type"`
+		Value     *private.StagingSnapshot `json:"value,omitempty"`
+		ExtraData *string                  `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
