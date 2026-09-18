@@ -185,6 +185,13 @@ this one; the staging half is new.
    proofs waiting by anchor block, anchor copies held. Served atomically at a
    block boundary. Test: a snapshot taken between two blocks equals what a
    fresh staging fed the same blocks holds.
+
+   *Landed (#4291).* Paged by stream and by sequence number, bounded in bytes
+   as well as span, with `More` saying whether there is another page and the
+   block index on every one. A failed `Load` leaves staging empty and
+   retryable. The page's block is the consensus index of the last block the
+   executor processed, which is not necessarily a block whose state was
+   written — DIFFERENCES E11 says why that is the safe direction.
 2. **Collect without executing.** The executor applies a committed block to
    staging only — classify, intake proofs, hold entries and anchor copies —
    and a joining node runs every buffered block through it from `P + 1`.
@@ -192,6 +199,14 @@ this one; the staging half is new.
    ledgers and decides proofs against the anchors executed by `Q`. Test: a
    node that collected blocks `P + 1 .. Q` on top of a peer's staging at `P`
    holds exactly what the peer holds at `Q`.
+
+   *Landed (#4292).* Collecting runs each arrival through its own executor's
+   check, so it holds what a block holds and refuses what a block refuses —
+   including absorbing an anchored collection proof into the stream's replica
+   — and writes nothing. The DAG service buffers committed groups while a node
+   is joining and applies them to the peer's staging once it has it, in order.
+   The collecting node in the tests has its own store, so the equality it
+   proves is not equality given identical state.
 3. **State pull on this line.** Port `pull`, `enumerate`, `tracker`,
    `bptproof` and `BptPageQuery` from bootstrap-v3; the spine first; the
    accounts named by buffered blocks next; verified against the Directory's
@@ -219,10 +234,29 @@ this one; the staging half is new.
    `RestartNode` takes this path and `TestOneValidatorRestartDoesNotDiverge`
    holds; a Docker chaos run keeps every restarted validator agreeing on the
    anchor body.
+
+   *Landed (#4294), except the Docker proof.* The handoff is served by the
+   block production loop, which is the only thing that produces blocks.
+   `Conductor.Rejoin`, its metric and `Executor.Collect` are gone. A node that
+   has executed a block before enters collecting mode before consensus starts
+   and joins; a node that finds no peer with staging to give — every validator
+   restarted — executes from its own state instead of waiting forever.
+   Runnability was made a question about the entry and the state rather than
+   about when the entry was held, or a joining node would hold collected what
+   its peers hold runnable and its stream would stop where theirs moved.
 5. **Serve last.** Node state `BOOTING → ACTIVE → COMPLETE`, advertised; the
    sequencer and the historical API refuse until `COMPLETE`; the cache fills
    by backfill. Test: a request for missing data routed to a `BOOTING` node
    is refused and answered by a `COMPLETE` one.
+
+   *Landed (#4295) with the departures in DIFFERENCES E11.* Every private
+   call the sequencer serves, and the staging snapshot, refuse while a node is
+   joining, counted per call, with the state as a gauge. A node that joined
+   answers `NotReady` — not `NotFound`, which strands a stream — for the
+   blocks it did not execute. Serving resumes when the node EXECUTES, not when
+   its history is backfilled: there is no backfill on this line, so `COMPLETE`
+   would mean a node that joined never answered again. The state is not
+   persisted and not advertised, and the v3 querier is not gated.
 
 Order and gates: 1 and 3 in parallel (they share nothing); 2 on 1; 4 on all
 three, gated on `TestOneValidatorRestartDoesNotDiverge` with the interim pull

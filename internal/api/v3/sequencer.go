@@ -8,8 +8,13 @@ package api
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -33,6 +38,7 @@ type Sequencer struct {
 	db          database.Viewer
 	cache       *synthcache.Cache
 	staging     *execute.Staging
+	nodeState   *nodestate.Machine
 	partitionID string
 	partition   config.NetworkUrl
 	valKey      []byte
@@ -80,6 +86,14 @@ type SequencerParams struct {
 	// the registry.
 	Staging *execute.Staging
 
+	// NodeState is this NODE's state, which decides what it may answer for
+	// (executor spec, "Sync", step 5). A process running several nodes of one
+	// partition — the simulator — must pass it, because the registry is keyed
+	// by partition and every node of that partition would otherwise share one
+	// node's state. Nil falls back to the registry, and a node with neither
+	// has not joined and serves.
+	NodeState *nodestate.Machine
+
 	// Cache is the producer's synthetic/anchor cache the executor fills.
 	// With it, every answer is built from the cache and a miss is refused
 	// and counted (healing spec, "The cache"). Without it — only the v1
@@ -101,6 +115,7 @@ func NewSequencer(params SequencerParams) *Sequencer {
 	s.db = params.Database
 	s.cache = params.Cache
 	s.staging = params.Staging
+	s.nodeState = params.NodeState
 	s.partitionID = params.Partition
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	s.valKey = params.ValidatorKey
@@ -133,6 +148,10 @@ func NewSequencer(params SequencerParams) *Sequencer {
 func (s *Sequencer) Type() api.ServiceType { return private.ServiceTypeSequencer }
 
 func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64, _ private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	if err := s.serving("sequence"); err != nil {
+		return nil, err
+	}
+
 	// Admission control — proof building is the most expensive query this
 	// node serves, and heal storms poll it hardest exactly when the node is
 	// slowest (#4164). See gate.go.
@@ -177,6 +196,10 @@ func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64,
 // destination, with a single collection proof (#4048) covering the whole
 // range, set as SourceReceiptList on the last record.
 func (s *Sequencer) SequenceRange(ctx context.Context, src, dst *url.URL, start, end uint64, opts private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
+	if err := s.serving("sequence-range"); err != nil {
+		return nil, err
+	}
+
 	// Admission control — see gate.go and the note on Sequence.
 	if err := sequenceGate.enter(ctx); err != nil {
 		return nil, err
@@ -273,4 +296,35 @@ func (s *Sequencer) getRootReceipt(batch *database.Batch, from, to uint64) (*mer
 		return nil, errors.UnknownError.WithFormat("get root chain receipt from %d to %d: %w", from, to, err)
 	}
 	return receipt, nil
+}
+
+// What a node refuses while it is joining, by the call it refused (#4295).
+var mNotServing = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "node",
+	Name:      "not_serving_total",
+	Help:      "Requests refused because this node is joining and does not hold what they ask for, by call",
+}, []string{"partition", "call"})
+
+// serving refuses a request for data this node does not hold.
+//
+// A node that is joining answers for nothing it did not execute: its producer
+// cache holds what it produced before it left and nothing of the blocks it
+// missed, so an answer from it is an answer from an empty cache — which
+// healing reads as "the source has nothing", strands the entry, and spends
+// the requester's retry budget on a node that cannot help (#4287). It says
+// NotReady instead, and the requester asks the next validator (executor spec,
+// "Sync", step 5).
+func (s *Sequencer) serving(call string) error {
+	// A node with no state of its own never joined: it has always executed
+	// what it holds, and it answers for itself.
+	if s.nodeState == nil {
+		return nil
+	}
+	switch s.nodeState.State() {
+	case nodestate.StateActive, nodestate.StateComplete:
+		return nil
+	}
+	mNotServing.WithLabelValues(strings.ToLower(s.partitionID), call).Inc()
+	return errors.NotReady.WithFormat("%s is joining and cannot answer for what it has not executed", s.partitionID)
 }

@@ -25,6 +25,12 @@ var _ private.PartitionRootRanger = (*Sequencer)(nil)
 // validator quorum: one receipt from that entry to the root chain anchor of a
 // quorum-anchored directory block, which the client binds its spine walk to.
 func (s *Sequencer) PartitionRootRange(ctx context.Context, partition *url.URL, stateRoot [32]byte, _ private.SequenceOptions) (*private.PartitionRootRecord, error) {
+	// A node that is joining reads a store the pull has half filled: what it
+	// would answer here is neither its own history nor its peers' (#4295).
+	if err := s.serving("partition-root-range"); err != nil {
+		return nil, err
+	}
+
 	if partition == nil {
 		return nil, errors.BadRequest.With("missing partition")
 	}

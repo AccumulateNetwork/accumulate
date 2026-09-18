@@ -21,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -446,7 +447,23 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("read this node's last block: %w", err)
 	}
 	joining := lastBlock > 0
+
+	// The join's state is built first, because its node state is what the
+	// API services refuse by (#4295) and they are registered further down.
+	// It is this node's, handed over rather than looked up: a process can run
+	// several nodes of one partition — devnet does — and a registry keyed by
+	// partition would give them all one node's state.
+	var joinState *join.PulledState
 	if joining {
+		joinState, err = join.NewState(join.StateOptions{
+			Partition: protocol.PartitionUrl(s.Partition.ID),
+			Database:  db,
+			Query:     client,
+			Logger:    slog.Default(),
+		})
+		if err != nil {
+			return errors.UnknownError.WithFormat("prepare the join: %w", err)
+		}
 		s.service.StartCollecting()
 	}
 
@@ -461,15 +478,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		if !ok {
 			return errors.InternalError.With("this executor cannot join: it takes no staging from a peer")
 		}
-		state, err := join.NewState(join.StateOptions{
-			Partition: protocol.PartitionUrl(s.Partition.ID),
-			Database:  db,
-			Query:     client,
-			Logger:    slog.Default(),
-		})
-		if err != nil {
-			return errors.UnknownError.WithFormat("prepare the join: %w", err)
-		}
+		state := joinState
 		opts := join.Options{
 			Partition: s.Partition.ID,
 			Buffer:    s.service,
@@ -498,7 +507,19 @@ func (s *DAGBFTService) start(inst *Instance) error {
 				// its own last block on.
 				slog.Info("No peer had staging to give; executing from this node's own state",
 					"module", "join", "partition", s.Partition.ID, "block", lastBlock)
-				err := s.service.Handoff(lastBlock)
+
+				// Its state is recorded as executing BEFORE it is, because
+				// the root recorded must be the root of the block named and
+				// one produced block changes it. A node that could not
+				// record it would refuse every request for the rest of its
+				// life (#4295), so that is a failure and not a log line.
+				err := state.Executing(lastBlock)
+				if err != nil {
+					slog.Error("This node cannot record that it is executing; it will refuse requests",
+						"module", "join", "partition", s.Partition.ID, "block", lastBlock, "error", err)
+					return
+				}
+				err = s.service.Handoff(lastBlock)
 				if err != nil {
 					slog.Error("This node could not start executing", "module", "join",
 						"partition", s.Partition.ID, "block", lastBlock, "error", err)
@@ -540,7 +561,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 
 	// Register consensus API services
-	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache, staging)
+	var nodeState *nodestate.Machine
+	if joinState != nil {
+		nodeState = joinState.Machine()
+	}
+	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache, staging, nodeState)
 	if err != nil {
 		return err
 	}
@@ -550,7 +575,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 }
 
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache, staging *execute.Staging) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache, staging *execute.Staging, nodeState *nodestate.Machine) error {
 	logger := logging.NewSlogLogger(inst.logger)
 	// These are the SERVING side of the node: consensus queries, the
 	// sequencer answering a peer's healing request, the API.  They are
@@ -606,6 +631,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		Database:     db,
 		Cache:        synthCache,
 		Staging:      staging,
+		NodeState:    nodeState,
 		EventBus:     s.eventBus,
 		Globals:      globals,
 		Partition:    s.Partition.ID,

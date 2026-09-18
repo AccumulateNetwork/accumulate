@@ -661,6 +661,14 @@ func (c *Cache) Block(index uint64) (*Block, bool) {
 	return &cp, true
 }
 
+// Joined is the block a node that joined stands at, or zero. Nothing at or
+// below it was this node's to produce.
+func (c *Cache) Joined() uint64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.joinedAt
+}
+
 // JoinedAt records the block a node that joined stands at: it executed no
 // block at or below it (executor spec, "Sync", step 4). Nothing of those
 // blocks was this node's to produce, so a request for one is not a miss and
