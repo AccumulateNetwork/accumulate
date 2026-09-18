@@ -159,6 +159,13 @@ type Cache struct {
 	// released
 	anchorAcks map[string]uint64
 
+	// joinedAt is the block a node that joined stands at: it executed no
+	// block at or below it, so it produced none of their synthetics and has
+	// none of their entries. A request for such a block is not a miss — those
+	// synthetics were produced and dispatched by the nodes that did execute
+	// them (executor spec, "Sync"; #4294).
+	joinedAt uint64
+
 	// how far this node's executor is behind consensus, nil until wired.
 	// The in-flight window is measured against it (#4248).
 	executionLag atomic.Pointer[func() int]
@@ -639,12 +646,31 @@ func (c *Cache) Block(index uint64) (*Block, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	b, ok := c.blocks[index]
+	if !ok && index <= c.joinedAt {
+		// A block this node did not execute, because it joined at or after
+		// it. The answer is the same — it holds nothing for that block — but
+		// it is not counted as a miss: a miss says the cache failed to hold
+		// what this node produced, and this node produced none of it.
+		return nil, false
+	}
 	count("block", ok)
 	if !ok {
 		return nil, false
 	}
 	cp := *b
 	return &cp, true
+}
+
+// JoinedAt records the block a node that joined stands at: it executed no
+// block at or below it (executor spec, "Sync", step 4). Nothing of those
+// blocks was this node's to produce, so a request for one is not a miss and
+// its absence is not a defect.
+func (c *Cache) JoinedAt(block uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if block > c.joinedAt {
+		c.joinedAt = block
+	}
 }
 
 // MarkDispatched records the Directory anchor block index's synthetics were

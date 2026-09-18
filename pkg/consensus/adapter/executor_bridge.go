@@ -462,17 +462,17 @@ func blockEnvelopes(params BlockParams) (envelopes []*messaging.Envelope, origin
 // It refuses rather than executes when the executor cannot collect: a node
 // that silently executed while joining would execute from a staging its peers
 // do not have, which is the divergence the join exists to prevent (#4290).
-func (b *ExecutorBridge) CollectBlock(ctx context.Context, params BlockParams) (int, error) {
+func (b *ExecutorBridge) CollectBlock(ctx context.Context, params BlockParams) (*execute.CollectedBlock, error) {
 	collector, ok := b.executor.(interface {
 		CollectCommittedBlock(execute.BlockParams, []*messaging.Envelope) (*execute.CollectedBlock, error)
 	})
 	if !ok {
-		return 0, fmt.Errorf("executor cannot collect a block without executing it")
+		return nil, fmt.Errorf("executor cannot collect a block without executing it")
 	}
 
 	for _, batch := range params.Batches {
 		if batch == nil {
-			return 0, fmt.Errorf("block for round %d: missing batch in certificate", params.LeaderRound)
+			return nil, fmt.Errorf("block for round %d: missing batch in certificate", params.LeaderRound)
 		}
 	}
 
@@ -484,7 +484,7 @@ func (b *ExecutorBridge) CollectBlock(ctx context.Context, params BlockParams) (
 		Time:     params.Time,
 	}, envelopes)
 	if err != nil {
-		return 0, fmt.Errorf("collect block: %w", err)
+		return nil, fmt.Errorf("collect block: %w", err)
 	}
 
 	slog.Debug("Collected a committed block into staging",
@@ -495,7 +495,7 @@ func (b *ExecutorBridge) CollectBlock(ctx context.Context, params BlockParams) (
 		"unmarshalFailed", unmarshalFailed,
 		"held", out.Held,
 		"accounts", len(out.Accounts))
-	return out.Held, nil
+	return out, nil
 }
 
 // ValidateTransaction validates a transaction before it is added to a batch.

@@ -28,6 +28,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/persist"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -116,9 +117,23 @@ type Service struct {
 	// staging and kept in the buffer instead of executed, and nothing here
 	// advances the block index. See collect.go.
 	collecting    bool
+	collectFrom   uint64
 	buffer        []*CollectedGroup
 	bufferBytes   int
 	bufferOverrun bool
+	// stagingReady says the peer's staging has been taken, so the blocks this
+	// node collects are applied to it; until then they are only buffered.
+	stagingReady bool
+	// handoff and applyStaging carry the join's requests; the block
+	// production loop serves both, because it is the only thing that
+	// produces blocks and the only thing that writes the buffer (#4294).
+	handoff      chan handoffRequest
+	applyStaging chan stagingRequest
+	// named is every account the collected blocks have named and the state
+	// pull has not been told about yet; namedFull says the set stopped
+	// growing at its bound.
+	named     map[string]*url.URL
+	namedFull bool
 
 	// Validator synchronization
 	validatorUpdateHeight uint64 // Height at which validator update was detected
@@ -146,6 +161,8 @@ func NewService(config ServiceConfig) (*Service, error) {
 		adapter:          config.Adapter,
 		eventBus:         config.EventBus,
 		stateHashTracker: types.NewStateHashTracker(100), // Track last 100 rounds
+		handoff:          make(chan handoffRequest, 1),
+		applyStaging:     make(chan stagingRequest, 1),
 	}
 	s.logger.L = config.Logger
 
@@ -532,6 +549,22 @@ func (s *Service) blockProductionLoop() {
 		case <-s.ctx.Done():
 			return
 
+		case req := <-s.applyStaging:
+			// The join has a peer's staging: load it and apply what has been
+			// buffered since, here, where the buffer is written (#4294).
+			req.done <- s.applyStagingNow(req.load)
+
+		case req := <-s.handoff:
+			// The join has matched the root and settled staging: leave
+			// collecting mode and produce what was buffered, here, where
+			// nothing else is producing blocks (#4294).
+			err := s.performHandoff(req.q)
+			if err != nil {
+				s.logger.Error("Handoff failed; this node must join again",
+					"partition", s.config.Partition.ID, "block", req.q, "error", err)
+			}
+			req.done <- err
+
 		case group, ok := <-committed:
 			if !ok {
 				return
@@ -690,8 +723,6 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 		return nil, fmt.Errorf("consensus halted due to state divergence: %w", s.haltReason)
 	}
 
-	// Capture state under lock, then release for I/O
-	blockIndex := s.lastBlockIndex + 1
 	s.mu.Unlock()
 
 	// The leader is last in canonical order: it is the unique maximum round
@@ -753,17 +784,46 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 		return nil, nil
 	}
 
-	// Produce block. The block time MUST be derived from the certificate,
-	// not the local clock: block time is part of executed state, so if each
-	// validator stamps its own wall clock the state trees diverge on the
-	// very first block and cross-partition anchors never gather a signature
-	// quorum — each validator signs a different version of the "same" anchor
-	// (#4054). The LEADER's header timestamp is the same on every validator,
-	// covered by the header signature; clamp it to be strictly increasing so
-	// a bad clock cannot move time backwards.
-	s.mu.RLock()
+	err := s.produceGroup(executedCerts, batches, leader, isLeader, payloadEntries)
+	if err != nil {
+		return leader, err
+	}
+	return nil, nil
+}
+
+// produceGroup produces one block from a committed group whose batches are in
+// hand: the block production half of processCommittedGroup, called there and
+// again by the handoff, which produces the groups a joining node buffered
+// (#4294). Every node must produce a group the same way whichever path it
+// arrived by.
+func (s *Service) produceGroup(certs []*types.Certificate, batches []*types.Batch, leader *types.Certificate, isLeader bool, payloadEntries int) error {
+	return s.produce(certs, batches, leader, isLeader, payloadEntries, true)
+}
+
+// produce is produceGroup with a say over the checkpoint. A buffered group is
+// produced with the consensus position as it is NOW, which is ahead of the
+// block being produced — the node collected while consensus ran on — so
+// writing a checkpoint for it would pair a block with a position that commits
+// certificates the executor has not executed. The handoff writes none; the
+// first live block after it writes one that is true (#4238, #4294).
+func (s *Service) produce(certs []*types.Certificate, batches []*types.Batch, leader *types.Certificate, isLeader bool, payloadEntries int, checkpoint bool) error {
+	s.mu.Lock()
+	if s.halted {
+		s.mu.Unlock()
+		return fmt.Errorf("consensus halted due to state divergence: %w", s.haltReason)
+	}
+	blockIndex := s.lastBlockIndex + 1
 	lastTime := s.lastBlockTime
-	s.mu.RUnlock()
+	s.mu.Unlock()
+
+	// The block time MUST be derived from the certificate, not the local
+	// clock: block time is part of executed state, so if each validator
+	// stamps its own wall clock the state trees diverge on the very first
+	// block and cross-partition anchors never gather a signature quorum —
+	// each validator signs a different version of the "same" anchor (#4054).
+	// The LEADER's header timestamp is the same on every validator, covered
+	// by the header signature; clamp it to be strictly increasing so a bad
+	// clock cannot move time backwards.
 	blockTime := time.Unix(0, leader.Header.Timestamp).UTC()
 	if !blockTime.After(lastTime) {
 		blockTime = lastTime.Add(time.Millisecond)
@@ -781,11 +841,13 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 	// Record the consensus position this block is produced at, before it is
 	// produced: a crash on either side of ProduceBlock leaves a checkpoint
 	// that matches the executor's last block (#4238).
-	s.saveCheckpoint(blockIndex)
+	if checkpoint {
+		s.saveCheckpoint(blockIndex)
+	}
 
 	hash, err := s.adapter.ProduceBlock(s.ctx, params)
 	if err != nil {
-		return leader, fmt.Errorf("produce block: %w", err)
+		return fmt.Errorf("produce block: %w", err)
 	}
 
 	s.mu.Lock()
@@ -808,12 +870,12 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 	// Record state hash for consistency verification. Every certificate in
 	// the group carries the block's resulting hash — the group IS the block.
 	stateHash := s.adapter.StateHash()
-	for _, cert := range executedCerts {
+	for _, cert := range certs {
 		cert.SetStateHash(types.StateHash(stateHash))
 	}
 	s.RecordStateHash(leader.Header.Round, blockIndex, types.StateHash(stateHash))
 
-	s.pruneCommitted(executedCerts, blockIndex)
+	s.pruneCommitted(certs, blockIndex)
 
 	// Emit block event.
 	//
@@ -838,12 +900,12 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 	s.logger.Debug("Produced block",
 		"index", blockIndex,
 		"leaderRound", leader.Header.Round,
-		"certs", len(executedCerts),
+		"certs", len(certs),
 		"hash", fmt.Sprintf("%x", hash[:8]),
 		"stateHash", fmt.Sprintf("%x", stateHash[:8]),
 		"batches", len(batches))
 
-	return nil, nil
+	return nil
 }
 
 // Status returns the current status of the DAG-BFT service.

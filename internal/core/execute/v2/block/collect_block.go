@@ -394,6 +394,12 @@ func (x *Executor) SettleStaging(batch *database.Batch, q uint64) error {
 	// other block would execute a different block (#4291).
 	b.staging.AtBlock(q)
 	b.staging.Commit()
+
+	// This node executed no block at or below Q, so it produced none of their
+	// synthetics: a Directory receipt for one of those blocks is not this
+	// node's to dispatch, and the cache must not count it as a miss
+	// (#4294).
+	x.synthCache().JoinedAt(q)
 	x.logger.Info("Staging settled at the block the state is",
 		"module", "sync", "partition", x.Describe.PartitionId, "block", q,
 		"streams", len(streams), "released", released, "directoryAnchorBlock", through)

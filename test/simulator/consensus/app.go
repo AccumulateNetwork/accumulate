@@ -76,6 +76,20 @@ type ExecutorApp struct {
 	Restore  RestoreFunc
 	EventBus *events.Bus
 	Record   Recorder
+
+	// Join, when it is set and says the node is joining, takes the blocks
+	// this node is handed instead of executing them: a node that has left and
+	// is coming back (executor spec, "Sync"; #4294). Collect keeps the block —
+	// buffered until the node has its peers' staging, applied to that staging
+	// after — exactly as the DAG service does.
+	Join Joining
+}
+
+// Joining is a node's join, as the DAG service keeps it: whether the node is
+// joining, and what it does with a block while it is.
+type Joining interface {
+	Joining() bool
+	Collect(execute.BlockParams, []*messaging.Envelope) error
 }
 
 type RestoreFunc func(ioutil.SectionReader) error
@@ -137,7 +151,22 @@ func (a *ExecutorApp) Init(req *InitRequest) (*InitResponse, error) {
 	return &InitResponse{Hash: root[:], Validators: val}, nil
 }
 
+// collected marks a block this node took into staging without executing it.
+// Commit does nothing with one: nothing was executed, so there is nothing to
+// commit and no hash to report but the one the node already stands at.
+type collected struct{}
+
 func (a *ExecutorApp) Execute(req *ExecuteRequest) (*ExecuteResponse, error) {
+	// A joining node keeps the block and executes nothing (executor spec,
+	// "Sync", step 1; #4292).
+	if a.Join != nil && a.Join.Joining() {
+		err := a.Join.Collect(req.Params, copyEnv(req.Envelopes))
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("collect block: %w", err)
+		}
+		return &ExecuteResponse{Block: collected{}}, nil
+	}
+
 	block, err := a.Executor.Begin(req.Params)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("begin block: %w", err)
@@ -184,6 +213,14 @@ func (a *ExecutorApp) Execute(req *ExecuteRequest) (*ExecuteResponse, error) {
 }
 
 func (a *ExecutorApp) Commit(req *CommitRequest) (*CommitResponse, error) {
+	if _, ok := req.Block.(collected); ok {
+		_, hash, err := a.Executor.LastBlock()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		return &CommitResponse{Hash: hash}, nil
+	}
+
 	s := req.Block.(execute.BlockState)
 
 	// An empty block still commits: the block's Commit discards the batch
