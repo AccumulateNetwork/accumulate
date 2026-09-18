@@ -12,6 +12,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -174,9 +175,9 @@ func TestAnchorStaging_IsBounded(t *testing.T) {
 	require.Error(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, maxAnchorAhead+5), f.siblingsOf(0, 2)))
 	require.Equal(t, refused0+1, count("refused"))
 
-	restore := maxStagedProofBytes
-	defer func() { maxStagedProofBytes = restore }()
-	maxStagedProofBytes = 1 // any staged proof exceeds it
+	restore := execute.MaxStagedProofBytes
+	defer func() { execute.MaxStagedProofBytes = restore }()
+	execute.MaxStagedProofBytes = 1 // any staged proof exceeds it
 
 	require.NoError(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 1), f.siblingsOf(0, 2)),
 		"the first proof is staged: the budget is measured before it, not after")
@@ -219,9 +220,9 @@ func TestAnchorStaging_BudgetRefusalMarksTheSource(t *testing.T) {
 	require.False(t, f.b.proofBudgetBound[strings.ToLower(source.String())],
 		"nothing is bound before the budget binds")
 
-	restore := maxStagedProofBytes
-	defer func() { maxStagedProofBytes = restore }()
-	maxStagedProofBytes = 1
+	restore := execute.MaxStagedProofBytes
+	defer func() { execute.MaxStagedProofBytes = restore }()
+	execute.MaxStagedProofBytes = 1
 
 	require.NoError(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 1), f.siblingsOf(0, 2)))
 	require.False(t, f.b.proofBudgetBound[strings.ToLower(source.String())],

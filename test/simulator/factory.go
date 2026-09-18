@@ -588,6 +588,11 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 			Partition:    f.networkFactory.id,
 			ValidatorKey: f.network.PrivValKey,
 			Cache:        f.getSynthCache(),
+			// The node serves what it holds unexecuted to a node that is
+			// joining (executor spec, "Sync" step 2). The simulator runs
+			// several networks in one process, so there is no registry to
+			// find it in: it is handed over.
+			Staging: f.getStaging(),
 		}),
 	})
 

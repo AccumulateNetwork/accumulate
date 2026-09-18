@@ -20,7 +20,10 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type PartitionRootRecord struct {
@@ -55,6 +58,77 @@ type SnapshotChunk struct {
 	Epoch uint64 `json:"epoch,omitempty" form:"epoch" query:"epoch" validate:"required"`
 	// StateRoot is the state tree anchor of the pinned block's prepared anchor, for verification against a directory receipt (BVN sync,.
 	StateRoot [32]byte `json:"stateRoot,omitempty" form:"stateRoot" query:"stateRoot" validate:"required"`
+	extraData []byte
+}
+
+type StagedEntry struct {
+	fieldsSet []bool
+	// Number is the entry's sequence number.
+	Number uint64 `json:"number,omitempty" form:"number" query:"number" validate:"required"`
+	// Message is the message as it arrived.
+	Message messaging.Message `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	// Companion is the transaction that travels with the message, if any.
+	Companion messaging.Message `json:"companion,omitempty" form:"companion" query:"companion"`
+	// Collected is whether the entry was collected without a validated proof.
+	Collected bool `json:"collected,omitempty" form:"collected" query:"collected" validate:"required"`
+	// Hash is the sequenced message's hash, what a proof proves.
+	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData []byte
+}
+
+type StagedHash struct {
+	fieldsSet []bool
+	// Number is the sequence number the hash stands at.
+	Number uint64 `json:"number,omitempty" form:"number" query:"number" validate:"required"`
+	// Hash is the validated hash.
+	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData []byte
+}
+
+type StagedProof struct {
+	fieldsSet []bool
+	// AnchorBlock is the Directory anchor block the proof waits on.
+	AnchorBlock uint64 `json:"anchorBlock,omitempty" form:"anchorBlock" query:"anchorBlock" validate:"required"`
+	// Proof is the proof itself.
+	Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	extraData []byte
+}
+
+type StagedStream struct {
+	fieldsSet []bool
+	// Ledger is the ledger that tracks the stream.
+	Ledger *url.URL `json:"ledger,omitempty" form:"ledger" query:"ledger" validate:"required"`
+	// Source is the partition the stream's messages come from.
+	Source *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	// Delivered is how far the stream has executed.
+	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	// Sighted is the highest number ever held on the stream, executed or not.
+	Sighted uint64 `json:"sighted,omitempty" form:"sighted" query:"sighted" validate:"required"`
+	// Entries is what the stream holds, unexecuted, ascending by number.
+	Entries []*StagedEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	// Validated is the hashes collection proofs have validated, ascending by number.
+	Validated []*StagedHash `json:"validated,omitempty" form:"validated" query:"validated" validate:"required"`
+	// Proofs is the collection proofs waiting for their Directory anchor, carried on the first page of the first stream of their source.
+	Proofs    []*StagedProof `json:"proofs,omitempty" form:"proofs" query:"proofs" validate:"required"`
+	extraData []byte
+}
+
+type StagingSnapshot struct {
+	fieldsSet []bool
+	// Block is the CONSENSUS block index of the last block the executor processed — the index the block was opened with, published when it committed — and not the index of the last block whose state was written: an empty block writes nothing, so the system ledger's index can lag this one. It is at or above every block whose intake this page reflects, which is the safe direction. A joining node must NOT pair it with "the state of that block". Which block's state the node converges on is decided by the anchored-root match (#4293), and that block must be at or above this one.
+	Block uint64 `json:"block,omitempty" form:"block" query:"block" validate:"required"`
+	// Streams is the streams, or parts of streams, this page carries.
+	Streams []*StagedStream `json:"streams,omitempty" form:"streams" query:"streams" validate:"required"`
+	// NextLedger is the ledger of the stream the next page starts at; nil when the next page starts at a source that holds proofs and no stream, so it does not say whether there is a next page — More does.
+	NextLedger *url.URL `json:"nextLedger,omitempty" form:"nextLedger" query:"nextLedger" validate:"required"`
+	// NextSource is the source of the stream the next page starts at, set whenever More is set.
+	NextSource *url.URL `json:"nextSource,omitempty" form:"nextSource" query:"nextSource" validate:"required"`
+	// NextNumber is the first sequence number the next page carries.
+	NextNumber uint64 `json:"nextNumber,omitempty" form:"nextNumber" query:"nextNumber" validate:"required"`
+	// NextProofOffset is how many of that source's waiting proofs the reader already has, so a source with more proofs than one page can carry is paged.
+	NextProofOffset uint64 `json:"nextProofOffset,omitempty" form:"nextProofOffset" query:"nextProofOffset" validate:"required"`
+	// More is whether the snapshot continues at the cursor, set explicitly because a nil NextLedger is a real cursor.
+	More      bool `json:"more,omitempty" form:"more" query:"more" validate:"required"`
 	extraData []byte
 }
 
@@ -112,6 +186,132 @@ func (v *SnapshotChunk) Copy() *SnapshotChunk {
 
 func (v *SnapshotChunk) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *StagedEntry) Copy() *StagedEntry {
+	u := new(StagedEntry)
+
+	u.Number = v.Number
+	if v.Message != nil {
+		u.Message = messaging.CopyMessage(v.Message)
+	}
+	if v.Companion != nil {
+		u.Companion = messaging.CopyMessage(v.Companion)
+	}
+	u.Collected = v.Collected
+	u.Hash = v.Hash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *StagedEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *StagedHash) Copy() *StagedHash {
+	u := new(StagedHash)
+
+	u.Number = v.Number
+	u.Hash = v.Hash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *StagedHash) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *StagedProof) Copy() *StagedProof {
+	u := new(StagedProof)
+
+	u.AnchorBlock = v.AnchorBlock
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *StagedProof) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *StagedStream) Copy() *StagedStream {
+	u := new(StagedStream)
+
+	if v.Ledger != nil {
+		u.Ledger = v.Ledger
+	}
+	if v.Source != nil {
+		u.Source = v.Source
+	}
+	u.Delivered = v.Delivered
+	u.Sighted = v.Sighted
+	u.Entries = make([]*StagedEntry, len(v.Entries))
+	for i, v := range v.Entries {
+		v := v
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+	u.Validated = make([]*StagedHash, len(v.Validated))
+	for i, v := range v.Validated {
+		v := v
+		if v != nil {
+			u.Validated[i] = (v).Copy()
+		}
+	}
+	u.Proofs = make([]*StagedProof, len(v.Proofs))
+	for i, v := range v.Proofs {
+		v := v
+		if v != nil {
+			u.Proofs[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *StagedStream) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *StagingSnapshot) Copy() *StagingSnapshot {
+	u := new(StagingSnapshot)
+
+	u.Block = v.Block
+	u.Streams = make([]*StagedStream, len(v.Streams))
+	for i, v := range v.Streams {
+		v := v
+		if v != nil {
+			u.Streams[i] = (v).Copy()
+		}
+	}
+	if v.NextLedger != nil {
+		u.NextLedger = v.NextLedger
+	}
+	if v.NextSource != nil {
+		u.NextSource = v.NextSource
+	}
+	u.NextNumber = v.NextNumber
+	u.NextProofOffset = v.NextProofOffset
+	u.More = v.More
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *StagingSnapshot) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *PartitionRootRecord) Equal(u *PartitionRootRecord) bool {
 	switch {
 	case v.Receipt == u.Receipt:
@@ -159,6 +359,145 @@ func (v *SnapshotChunk) Equal(u *SnapshotChunk) bool {
 		return false
 	}
 	if !(v.StateRoot == u.StateRoot) {
+		return false
+	}
+
+	return true
+}
+
+func (v *StagedEntry) Equal(u *StagedEntry) bool {
+	if !(v.Number == u.Number) {
+		return false
+	}
+	if !(messaging.EqualMessage(v.Message, u.Message)) {
+		return false
+	}
+	if !(messaging.EqualMessage(v.Companion, u.Companion)) {
+		return false
+	}
+	if !(v.Collected == u.Collected) {
+		return false
+	}
+	if !(v.Hash == u.Hash) {
+		return false
+	}
+
+	return true
+}
+
+func (v *StagedHash) Equal(u *StagedHash) bool {
+	if !(v.Number == u.Number) {
+		return false
+	}
+	if !(v.Hash == u.Hash) {
+		return false
+	}
+
+	return true
+}
+
+func (v *StagedProof) Equal(u *StagedProof) bool {
+	if !(v.AnchorBlock == u.AnchorBlock) {
+		return false
+	}
+	switch {
+	case v.Proof == u.Proof:
+		// equal
+	case v.Proof == nil || u.Proof == nil:
+		return false
+	case !((v.Proof).Equal(u.Proof)):
+		return false
+	}
+
+	return true
+}
+
+func (v *StagedStream) Equal(u *StagedStream) bool {
+	switch {
+	case v.Ledger == u.Ledger:
+		// equal
+	case v.Ledger == nil || u.Ledger == nil:
+		return false
+	case !((v.Ledger).Equal(u.Ledger)):
+		return false
+	}
+	switch {
+	case v.Source == u.Source:
+		// equal
+	case v.Source == nil || u.Source == nil:
+		return false
+	case !((v.Source).Equal(u.Source)):
+		return false
+	}
+	if !(v.Delivered == u.Delivered) {
+		return false
+	}
+	if !(v.Sighted == u.Sighted) {
+		return false
+	}
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
+	}
+	if len(v.Validated) != len(u.Validated) {
+		return false
+	}
+	for i := range v.Validated {
+		if !((v.Validated[i]).Equal(u.Validated[i])) {
+			return false
+		}
+	}
+	if len(v.Proofs) != len(u.Proofs) {
+		return false
+	}
+	for i := range v.Proofs {
+		if !((v.Proofs[i]).Equal(u.Proofs[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *StagingSnapshot) Equal(u *StagingSnapshot) bool {
+	if !(v.Block == u.Block) {
+		return false
+	}
+	if len(v.Streams) != len(u.Streams) {
+		return false
+	}
+	for i := range v.Streams {
+		if !((v.Streams[i]).Equal(u.Streams[i])) {
+			return false
+		}
+	}
+	switch {
+	case v.NextLedger == u.NextLedger:
+		// equal
+	case v.NextLedger == nil || u.NextLedger == nil:
+		return false
+	case !((v.NextLedger).Equal(u.NextLedger)):
+		return false
+	}
+	switch {
+	case v.NextSource == u.NextSource:
+		// equal
+	case v.NextSource == nil || u.NextSource == nil:
+		return false
+	case !((v.NextSource).Equal(u.NextSource)):
+		return false
+	}
+	if !(v.NextNumber == u.NextNumber) {
+		return false
+	}
+	if !(v.NextProofOffset == u.NextProofOffset) {
+		return false
+	}
+	if !(v.More == u.More) {
 		return false
 	}
 
@@ -384,6 +723,416 @@ func (v *SnapshotChunk) IsValid() error {
 	}
 }
 
+var fieldNames_StagedEntry = []string{
+	1: "Number",
+	2: "Message",
+	3: "Companion",
+	4: "Collected",
+	5: "Hash",
+}
+
+func (v *StagedEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Number == 0) {
+		writer.WriteUint(1, v.Number)
+	}
+	if !(messaging.EqualMessage(v.Message, nil)) {
+		writer.WriteValue(2, v.Message.MarshalBinary)
+	}
+	if !(messaging.EqualMessage(v.Companion, nil)) {
+		writer.WriteValue(3, v.Companion.MarshalBinary)
+	}
+	if !(!v.Collected) {
+		writer.WriteBool(4, v.Collected)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(5, &v.Hash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_StagedEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *StagedEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Number is missing")
+	} else if v.Number == 0 {
+		errs = append(errs, "field Number is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Message is missing")
+	} else if messaging.EqualMessage(v.Message, nil) {
+		errs = append(errs, "field Message is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Collected is missing")
+	} else if !v.Collected {
+		errs = append(errs, "field Collected is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_StagedHash = []string{
+	1: "Number",
+	2: "Hash",
+}
+
+func (v *StagedHash) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Number == 0) {
+		writer.WriteUint(1, v.Number)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(2, &v.Hash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_StagedHash)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *StagedHash) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Number is missing")
+	} else if v.Number == 0 {
+		errs = append(errs, "field Number is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_StagedProof = []string{
+	1: "AnchorBlock",
+	2: "Proof",
+}
+
+func (v *StagedProof) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.AnchorBlock == 0) {
+		writer.WriteUint(1, v.AnchorBlock)
+	}
+	if !(v.Proof == nil) {
+		writer.WriteValue(2, v.Proof.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_StagedProof)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *StagedProof) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field AnchorBlock is missing")
+	} else if v.AnchorBlock == 0 {
+		errs = append(errs, "field AnchorBlock is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Proof is missing")
+	} else if v.Proof == nil {
+		errs = append(errs, "field Proof is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_StagedStream = []string{
+	1: "Ledger",
+	2: "Source",
+	3: "Delivered",
+	4: "Sighted",
+	5: "Entries",
+	6: "Validated",
+	7: "Proofs",
+}
+
+func (v *StagedStream) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Ledger == nil) {
+		writer.WriteUrl(1, v.Ledger)
+	}
+	if !(v.Source == nil) {
+		writer.WriteUrl(2, v.Source)
+	}
+	if !(v.Delivered == 0) {
+		writer.WriteUint(3, v.Delivered)
+	}
+	if !(v.Sighted == 0) {
+		writer.WriteUint(4, v.Sighted)
+	}
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(5, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Validated) == 0) {
+		for _, v := range v.Validated {
+			writer.WriteValue(6, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Proofs) == 0) {
+		for _, v := range v.Proofs {
+			writer.WriteValue(7, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_StagedStream)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *StagedStream) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Ledger is missing")
+	} else if v.Ledger == nil {
+		errs = append(errs, "field Ledger is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Source is missing")
+	} else if v.Source == nil {
+		errs = append(errs, "field Source is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Delivered is missing")
+	} else if v.Delivered == 0 {
+		errs = append(errs, "field Delivered is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Sighted is missing")
+	} else if v.Sighted == 0 {
+		errs = append(errs, "field Sighted is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Validated is missing")
+	} else if len(v.Validated) == 0 {
+		errs = append(errs, "field Validated is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Proofs is missing")
+	} else if len(v.Proofs) == 0 {
+		errs = append(errs, "field Proofs is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_StagingSnapshot = []string{
+	1: "Block",
+	2: "Streams",
+	3: "NextLedger",
+	4: "NextSource",
+	5: "NextNumber",
+	6: "NextProofOffset",
+	7: "More",
+}
+
+func (v *StagingSnapshot) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Block == 0) {
+		writer.WriteUint(1, v.Block)
+	}
+	if !(len(v.Streams) == 0) {
+		for _, v := range v.Streams {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+	if !(v.NextLedger == nil) {
+		writer.WriteUrl(3, v.NextLedger)
+	}
+	if !(v.NextSource == nil) {
+		writer.WriteUrl(4, v.NextSource)
+	}
+	if !(v.NextNumber == 0) {
+		writer.WriteUint(5, v.NextNumber)
+	}
+	if !(v.NextProofOffset == 0) {
+		writer.WriteUint(6, v.NextProofOffset)
+	}
+	if !(!v.More) {
+		writer.WriteBool(7, v.More)
+	}
+
+	_, _, err := writer.Reset(fieldNames_StagingSnapshot)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *StagingSnapshot) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Block is missing")
+	} else if v.Block == 0 {
+		errs = append(errs, "field Block is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Streams is missing")
+	} else if len(v.Streams) == 0 {
+		errs = append(errs, "field Streams is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field NextLedger is missing")
+	} else if v.NextLedger == nil {
+		errs = append(errs, "field NextLedger is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field NextSource is missing")
+	} else if v.NextSource == nil {
+		errs = append(errs, "field NextSource is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field NextNumber is missing")
+	} else if v.NextNumber == 0 {
+		errs = append(errs, "field NextNumber is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field NextProofOffset is missing")
+	} else if v.NextProofOffset == 0 {
+		errs = append(errs, "field NextProofOffset is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field More is missing")
+	} else if !v.More {
+		errs = append(errs, "field More is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 func (v *PartitionRootRecord) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -481,6 +1230,199 @@ func (v *SnapshotChunk) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *StagedEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *StagedEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Number = x
+	}
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := messaging.UnmarshalMessageFrom(r)
+		if err == nil {
+			v.Message = x
+		}
+		return err
+	})
+	reader.ReadValue(3, func(r io.Reader) error {
+		x, err := messaging.UnmarshalMessageFrom(r)
+		if err == nil {
+			v.Companion = x
+		}
+		return err
+	})
+	if x, ok := reader.ReadBool(4); ok {
+		v.Collected = x
+	}
+	if x, ok := reader.ReadHash(5); ok {
+		v.Hash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_StagedEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *StagedHash) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *StagedHash) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Number = x
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.Hash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_StagedHash)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *StagedProof) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *StagedProof) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.AnchorBlock = x
+	}
+	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Proof = x
+	}
+
+	seen, err := reader.Reset(fieldNames_StagedProof)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *StagedStream) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *StagedStream) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Ledger = x
+	}
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Source = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Delivered = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Sighted = x
+	}
+	for {
+		if x := new(StagedEntry); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(StagedHash); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+			v.Validated = append(v.Validated, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(StagedProof); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
+			v.Proofs = append(v.Proofs, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_StagedStream)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *StagingSnapshot) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *StagingSnapshot) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Block = x
+	}
+	for {
+		if x := new(StagedStream); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Streams = append(v.Streams, x)
+		} else {
+			break
+		}
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.NextLedger = x
+	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.NextSource = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.NextNumber = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.NextProofOffset = x
+	}
+	if x, ok := reader.ReadBool(7); ok {
+		v.More = x
+	}
+
+	seen, err := reader.Reset(fieldNames_StagingSnapshot)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -502,6 +1444,44 @@ func init() {
 		encoding.NewTypeField("epoch", "uint64"),
 		encoding.NewTypeField("stateRoot", "bytes32"),
 	}, "SnapshotChunk", "snapshotChunk")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("number", "uint64"),
+		encoding.NewTypeField("message", "messaging.Message"),
+		encoding.NewTypeField("companion", "messaging.Message"),
+		encoding.NewTypeField("collected", "bool"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "StagedEntry", "stagedEntry")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("number", "uint64"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "StagedHash", "stagedHash")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("anchorBlock", "uint64"),
+		encoding.NewTypeField("proof", "protocol.AnnotatedReceipt"),
+	}, "StagedProof", "stagedProof")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("ledger", "string"),
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("delivered", "uint64"),
+		encoding.NewTypeField("sighted", "uint64"),
+		encoding.NewTypeField("entries", "StagedEntry[]"),
+		encoding.NewTypeField("validated", "StagedHash[]"),
+		encoding.NewTypeField("proofs", "StagedProof[]"),
+	}, "StagedStream", "stagedStream")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("block", "uint64"),
+		encoding.NewTypeField("streams", "StagedStream[]"),
+		encoding.NewTypeField("nextLedger", "string"),
+		encoding.NewTypeField("nextSource", "string"),
+		encoding.NewTypeField("nextNumber", "uint64"),
+		encoding.NewTypeField("nextProofOffset", "uint64"),
+		encoding.NewTypeField("more", "bool"),
+	}, "StagingSnapshot", "stagingSnapshot")
 
 }
 
@@ -552,6 +1532,122 @@ func (v *SnapshotChunk) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.StateRoot == ([32]byte{})) {
 		u.StateRoot = encoding.ChainToJSON(&v.StateRoot)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *StagedEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Number    uint64                                         `json:"number,omitempty"`
+		Message   *encoding.JsonUnmarshalWith[messaging.Message] `json:"message,omitempty"`
+		Companion *encoding.JsonUnmarshalWith[messaging.Message] `json:"companion,omitempty"`
+		Collected bool                                           `json:"collected,omitempty"`
+		Hash      *string                                        `json:"hash,omitempty"`
+		ExtraData *string                                        `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Number == 0) {
+		u.Number = v.Number
+	}
+	if !(messaging.EqualMessage(v.Message, nil)) {
+		u.Message = &encoding.JsonUnmarshalWith[messaging.Message]{Value: v.Message, Func: messaging.UnmarshalMessageJSON}
+	}
+	if !(messaging.EqualMessage(v.Companion, nil)) {
+		u.Companion = &encoding.JsonUnmarshalWith[messaging.Message]{Value: v.Companion, Func: messaging.UnmarshalMessageJSON}
+	}
+	if !(!v.Collected) {
+		u.Collected = v.Collected
+	}
+	if !(v.Hash == ([32]byte{})) {
+		u.Hash = encoding.ChainToJSON(&v.Hash)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *StagedHash) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Number    uint64  `json:"number,omitempty"`
+		Hash      *string `json:"hash,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Number == 0) {
+		u.Number = v.Number
+	}
+	if !(v.Hash == ([32]byte{})) {
+		u.Hash = encoding.ChainToJSON(&v.Hash)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *StagedStream) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Ledger    *url.URL                        `json:"ledger,omitempty"`
+		Source    *url.URL                        `json:"source,omitempty"`
+		Delivered uint64                          `json:"delivered,omitempty"`
+		Sighted   uint64                          `json:"sighted,omitempty"`
+		Entries   encoding.JsonList[*StagedEntry] `json:"entries,omitempty"`
+		Validated encoding.JsonList[*StagedHash]  `json:"validated,omitempty"`
+		Proofs    encoding.JsonList[*StagedProof] `json:"proofs,omitempty"`
+		ExtraData *string                         `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Ledger == nil) {
+		u.Ledger = v.Ledger
+	}
+	if !(v.Source == nil) {
+		u.Source = v.Source
+	}
+	if !(v.Delivered == 0) {
+		u.Delivered = v.Delivered
+	}
+	if !(v.Sighted == 0) {
+		u.Sighted = v.Sighted
+	}
+	if !(len(v.Entries) == 0) {
+		u.Entries = v.Entries
+	}
+	if !(len(v.Validated) == 0) {
+		u.Validated = v.Validated
+	}
+	if !(len(v.Proofs) == 0) {
+		u.Proofs = v.Proofs
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *StagingSnapshot) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Block           uint64                           `json:"block,omitempty"`
+		Streams         encoding.JsonList[*StagedStream] `json:"streams,omitempty"`
+		NextLedger      *url.URL                         `json:"nextLedger,omitempty"`
+		NextSource      *url.URL                         `json:"nextSource,omitempty"`
+		NextNumber      uint64                           `json:"nextNumber,omitempty"`
+		NextProofOffset uint64                           `json:"nextProofOffset,omitempty"`
+		More            bool                             `json:"more,omitempty"`
+		ExtraData       *string                          `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Block == 0) {
+		u.Block = v.Block
+	}
+	if !(len(v.Streams) == 0) {
+		u.Streams = v.Streams
+	}
+	if !(v.NextLedger == nil) {
+		u.NextLedger = v.NextLedger
+	}
+	if !(v.NextSource == nil) {
+		u.NextSource = v.NextSource
+	}
+	if !(v.NextNumber == 0) {
+		u.NextNumber = v.NextNumber
+	}
+	if !(v.NextProofOffset == 0) {
+		u.NextProofOffset = v.NextProofOffset
+	}
+	if !(!v.More) {
+		u.More = v.More
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -618,6 +1714,143 @@ func (v *SnapshotChunk) UnmarshalJSON(data []byte) error {
 	} else {
 		v.StateRoot = *x
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *StagedEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Number    uint64                                         `json:"number,omitempty"`
+		Message   *encoding.JsonUnmarshalWith[messaging.Message] `json:"message,omitempty"`
+		Companion *encoding.JsonUnmarshalWith[messaging.Message] `json:"companion,omitempty"`
+		Collected bool                                           `json:"collected,omitempty"`
+		Hash      *string                                        `json:"hash,omitempty"`
+		ExtraData *string                                        `json:"$epilogue,omitempty"`
+	}{}
+	u.Number = v.Number
+	u.Message = &encoding.JsonUnmarshalWith[messaging.Message]{Value: v.Message, Func: messaging.UnmarshalMessageJSON}
+	u.Companion = &encoding.JsonUnmarshalWith[messaging.Message]{Value: v.Companion, Func: messaging.UnmarshalMessageJSON}
+	u.Collected = v.Collected
+	u.Hash = encoding.ChainToJSON(&v.Hash)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Number = u.Number
+	if u.Message != nil {
+		v.Message = u.Message.Value
+	}
+
+	if u.Companion != nil {
+		v.Companion = u.Companion.Value
+	}
+
+	v.Collected = u.Collected
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = *x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *StagedHash) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Number    uint64  `json:"number,omitempty"`
+		Hash      *string `json:"hash,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Number = v.Number
+	u.Hash = encoding.ChainToJSON(&v.Hash)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Number = u.Number
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = *x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *StagedStream) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Ledger    *url.URL                        `json:"ledger,omitempty"`
+		Source    *url.URL                        `json:"source,omitempty"`
+		Delivered uint64                          `json:"delivered,omitempty"`
+		Sighted   uint64                          `json:"sighted,omitempty"`
+		Entries   encoding.JsonList[*StagedEntry] `json:"entries,omitempty"`
+		Validated encoding.JsonList[*StagedHash]  `json:"validated,omitempty"`
+		Proofs    encoding.JsonList[*StagedProof] `json:"proofs,omitempty"`
+		ExtraData *string                         `json:"$epilogue,omitempty"`
+	}{}
+	u.Ledger = v.Ledger
+	u.Source = v.Source
+	u.Delivered = v.Delivered
+	u.Sighted = v.Sighted
+	u.Entries = v.Entries
+	u.Validated = v.Validated
+	u.Proofs = v.Proofs
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Ledger = u.Ledger
+	v.Source = u.Source
+	v.Delivered = u.Delivered
+	v.Sighted = u.Sighted
+	v.Entries = u.Entries
+	v.Validated = u.Validated
+	v.Proofs = u.Proofs
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *StagingSnapshot) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Block           uint64                           `json:"block,omitempty"`
+		Streams         encoding.JsonList[*StagedStream] `json:"streams,omitempty"`
+		NextLedger      *url.URL                         `json:"nextLedger,omitempty"`
+		NextSource      *url.URL                         `json:"nextSource,omitempty"`
+		NextNumber      uint64                           `json:"nextNumber,omitempty"`
+		NextProofOffset uint64                           `json:"nextProofOffset,omitempty"`
+		More            bool                             `json:"more,omitempty"`
+		ExtraData       *string                          `json:"$epilogue,omitempty"`
+	}{}
+	u.Block = v.Block
+	u.Streams = v.Streams
+	u.NextLedger = v.NextLedger
+	u.NextSource = v.NextSource
+	u.NextNumber = v.NextNumber
+	u.NextProofOffset = v.NextProofOffset
+	u.More = v.More
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Block = u.Block
+	v.Streams = u.Streams
+	v.NextLedger = u.NextLedger
+	v.NextSource = u.NextSource
+	v.NextNumber = u.NextNumber
+	v.NextProofOffset = u.NextProofOffset
+	v.More = u.More
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

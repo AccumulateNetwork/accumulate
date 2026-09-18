@@ -745,6 +745,13 @@ And a message at or below `Delivered` requires nothing at all. It is not healed,
 not re-recorded, and not counted: it has been processed, and that is the end of
 it.
 
+**The ledger's `Delivered` is the one that counts**, and closing a block
+releases every stream it touched at that value, not only the streams it
+delivered into. Staging is memory: after a restart its own copy starts at
+zero while the ledger's does not, and a stage that said zero would report
+entries as held that the node executed blocks ago — which is exactly what a
+joining node would then take from it (healing.md, "Staging snapshot").
+
 **`Received` is answered, not stored.** Removing the field from the record does
 not remove the question, and the question is the one every operator surface
 asks: how far is this stream behind. The API fills it in on the way out from
