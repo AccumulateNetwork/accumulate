@@ -75,6 +75,9 @@ type Source interface {
 	QueryMessage(ctx context.Context, txid *url.TxID, query *api.DefaultQuery) (*api.MessageRecord[messaging.Message], error)
 }
 
+// The v3 client is a Source as it stands.
+var _ Source = api.Querier2{}
+
 // Options configures Account.
 type Options struct {
 	Mode Mode

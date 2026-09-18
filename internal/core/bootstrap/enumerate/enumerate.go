@@ -38,6 +38,9 @@ type Source interface {
 	QueryBptPage(ctx context.Context, scope *url.URL, query *api.BptPageQuery) (*api.BptPageRecord, error)
 }
 
+// The v3 client is a Source as it stands.
+var _ Source = api.Querier2{}
+
 // Result reports the outcome of a Run.
 type Result struct {
 	// PagesPulled counts the BptPageQuery requests issued.
