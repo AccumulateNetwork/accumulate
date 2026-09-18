@@ -250,7 +250,15 @@ func (m *Chain) RestoreHead(head *State, open [][]byte) error {
 	if head == nil {
 		return errors.BadRequest.WithFormat("%v: head required", m.key)
 	}
+	// The set to restore is the one the next append continues: the entries
+	// since the boundary at Count &^ markMask, which is what getTailChunks
+	// counts and appendTail refills from. At an exact mark point that set is
+	// empty; Chain.OpenSet answers with the set just closed instead, and a
+	// caller passing that is taken to mean the same chain.
 	lastMark := head.Count &^ m.markMask
+	if lastMark == head.Count && head.Count > 0 && int64(len(open)) == m.markFreq {
+		lastMark = head.Count - m.markFreq
+	}
 	if int64(len(open)) != head.Count-lastMark {
 		return errors.BadRequest.WithFormat(
 			"%v: the open mark set of a chain of height %d holds %d entries, got %d",

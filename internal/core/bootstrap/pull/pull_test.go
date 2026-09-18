@@ -365,8 +365,9 @@ func TestStateOnly_PullsTheOpenMarkSetOnly(t *testing.T) {
 // root chain never matches again (#4290).
 func TestStateOnly_ChainCanBeAppendedTo(t *testing.T) {
 	// 3: a chain whose whole set is open. 255: the append closes the mark
-	// set, which is assembled from every chunk of it. 260: past a mark point.
-	for _, height := range []int{3, 255, 260} {
+	// set, which is assembled from every chunk of it. 256: the set is closed
+	// and the open one is empty. 260: past a mark point.
+	for _, height := range []int{3, 255, 256, 260} {
 		t.Run(fmt.Sprint(height), func(t *testing.T) {
 			u := protocol.DnUrl().JoinPath("alice")
 
