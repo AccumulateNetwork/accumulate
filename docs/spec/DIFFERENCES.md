@@ -618,8 +618,8 @@ seventh nobody had named.
   querier, which is configured apart from consensus, through IOC
   (`dagbftProvidesNodeState` / `querierWantsNodeState`), not a registry keyed by
   partition — a process runs several nodes of one partition.
-- **The spine put another partition's accounts in this partition's tree** —
-  found while fixing the above, not previously filed. `pullSpine` pulled
+- **The spine put another partition's accounts in this partition's tree**
+  (#4309) — found while fixing the above, not previously filed. `pullSpine` pulled
   `dn.acme/{anchors,ledger,operators,operators/1}` into a BVN's store. A BVN's
   BPT holds no `acc://dn.acme` account, so those four leaves put the local root
   beyond every root the Directory ever anchored for that BVN, however perfectly
@@ -630,7 +630,10 @@ seventh nobody had named.
 
 **Differences that remain, from this change set**
 
-- **The block ledger records are taken on the peer's word.** The spec says a
+- **The block ledger records are taken on the peer's word** (#4310)**.** This
+  is the one place the code knowingly contradicts the spec text, and it has an
+  issue rather than only this paragraph so that the trade is decided rather
+  than absorbed. The spec says a
   joining node "verifies each against the anchored root the way it verifies an
   account". It does not: the records are read through `BlockQuery` with
   `EntryRange.Expand` false, which answers from the block ledger with the
@@ -641,13 +644,15 @@ seventh nobody had named.
   can do by refusing. A receipt is possible and is the remaining work: the
   record's hash is an entry on the ledger account's `block-ledger` chain, and
   that chain's anchor is part of the account's hash.
-- **The page diff runs on the first round of every join.** That is one full
+- **The page diff runs on the first round of every join** (#4302 section 8)**.**
+  That is one full
   BPT page scan of the partition, names only, before the node knows whether
   its store is the state of `R`. On a large partition it is not cheap, and a
   restarting node does not need it — its store *is* the state of `R` by
   construction. Deciding that from the store rather than paying for the scan is
   work not done.
-- **A held fetch keeps a batch open across rounds.** Each round's fetch holds
+- **A held fetch keeps a batch open across rounds** (#4302 section 9)**.**
+  Each round's fetch holds
   `db.Begin(true)` until everything in it settles or `maxSettleRounds` pass, so
   a version of the store is pinned for a few rounds (#4279 is about the cost of
   that). It is bounded by `maxSettleRounds` and by `pull.MaxHeld`; it is not
@@ -660,7 +665,14 @@ seventh nobody had named.
   One observation for whoever takes #4298, offered as an observation and not a
   finding: both are skipped when empty, and the local delivery queue is drained
   at the next block's `Begin`, so how often either is actually non-empty at the
-  block a peer serves is a measurement nobody has made.
+  block a peer serves is a measurement nobody has made. That measurement now
+  stands ahead of any design work on #4298 in PLAN E11: it decides whether
+  #4298 is "no join completes" or "a join retries a few times".
+
+- **The simulator's `CompleteJoin` still copies the peer's store wholesale**
+  (#4302 section 7), left deliberately now that the e2e test covers what it
+  stood in for. It is recorded so that `TestOneValidatorRestartDoesNotDiverge`
+  passing is never again read as evidence that the join works.
 
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.

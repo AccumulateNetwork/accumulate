@@ -270,9 +270,24 @@ join completes: **#4303** (a joining node pulls from itself, so nothing is
 ever pulled), **#4305** (the pull never updates the BPT, so the root cannot
 move), **#4306** (the ledger and synthetic accounts are named by no block and
 pulled once, so the set is structurally incomplete), **#4298** (and those two
-accounts cannot be verified anyway), **#4304** (a fresh network cannot start:
-`Fresh` is dead code), with **#4297** and **#4307** beside them as the
-un-gated services that make the first possible. Then
+accounts cannot be verified anyway), **#4309** (a BVN's join wrote four
+`dn.acme` accounts into its own store, putting its root permanently beyond
+every anchored root — independent of the others and fatal on its own),
+**#4304** (a fresh network cannot start: `Fresh` is dead code), with
+**#4297** and **#4307** beside them as the un-gated services that made the
+first possible. All but #4298 and #4304 are fixed on
+`issue-4303-join-pulls-from-peers`, pushed and under review, none merged; the
+fix introduces one knowing contradiction with this spec — the block ledger is
+taken on the peer's word — which is **#4310**, and the reviewer judges it.
+
+**Ahead of any design work on #4298, one measurement** (lead, 2026-09-18):
+how often `<partition>/ledger`'s scheduled-events BPT and
+`<partition>/synthetic`'s delivery queues are actually non-empty at the block
+a peer serves. Both are skipped when empty
+(`internal/database/observer_prod.go:49-77`) and the local delivery queue
+drains at the next block's `Begin`, so if they are rarely non-empty then
+#4298 is a retry rather than a blocker. It has never been measured; it is a
+sample on a running soak, not a design. Then
 `30m-100tps-chaos.conf`; then #4299, provisionally, which that run may
 promote ahead of itself; then the 24-hour run.
 
