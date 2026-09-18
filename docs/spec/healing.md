@@ -90,6 +90,10 @@ is a Merkle root over the history of block roots, its anchors never again
 matched its peers' (#4290: five restarts took a twelve-validator Directory
 below its quorum of eight).
 
+A joining node asks the validators it can find, and **finding none is not an
+answer**: it keeps collecting rather than executing from what it holds, since
+a node that cannot see its partition cannot know what its peers hold (#4296).
+
 **Healing does not rebuild a node's staging, and a source's cache cannot.**
 The cache holds what the source *produced*; the peers hold what they had
 *received* by a given block, and the two differ by whatever is in flight —

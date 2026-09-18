@@ -111,6 +111,15 @@ type Options struct {
 	// Rounds is how many times every validator is asked for staging before
 	// the join answers ErrNoPeerHasStaging. Zero means DefaultRounds.
 	Rounds int
+
+	// Fresh is whether this node has executed no block at all -- a database
+	// created moments ago, at genesis. Only a fresh node may execute when it
+	// can find no validator to ask: it has nothing to be exact about, and
+	// the first node of a network has nobody to ask by definition. A node
+	// with blocks that cannot see its partition keeps collecting instead,
+	// however long that takes, because a node that cannot see its peers
+	// cannot know what they hold (#4296).
+	Fresh bool
 }
 
 // DefaultRetry is how long a join waits before asking again.
@@ -182,12 +191,27 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		// #4295), and a peer too busy to finish a paged read says so. Either
 		// means ask the next validator, not give up. When every validator
 		// has been asked and none could answer, that IS the answer.
-		p, taken, err := takeStaging(ctx, opts, log, retry)
+		p, taken, found, err := takeStaging(ctx, opts, log, retry)
 		if err != nil {
 			return Joined, errors.UnknownError.Wrap(err)
 		}
 		if !taken {
-			log.Info("No validator of this partition could serve its staging")
+			if found == 0 {
+				// Nobody was found to ask. That is not an answer about
+				// staging and it must never be read as one: a node that
+				// cannot see its partition cannot know what its peers hold,
+				// and executing from its own stage is exactly the divergence
+				// the join exists to prevent (#4290, #4296). It keeps
+				// collecting, which is the safe state, and says so.
+				if !opts.Fresh {
+					return Joined, errors.NotReady.WithFormat(
+						"no validator of %s could be found to ask for staging; this node is collecting and not executing", opts.Partition)
+				}
+				// A node at genesis has nobody to ask and nothing to take.
+				log.Info("No validator was found to ask, and this node has executed no block: starting from genesis")
+				return NoPeerHasStaging, nil
+			}
+			log.Info("No validator of this partition could serve its staging", "validatorsFound", found)
 			return NoPeerHasStaging, nil
 		}
 		log.Info("Staging taken from a peer", "block", p)
@@ -254,22 +278,26 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 // cannot be read, or that has executed no block itself is passed over: that
 // is that node's condition, not an answer about the snapshot, and the next
 // validator is asked.
-func takeStaging(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration) (uint64, bool, error) {
+func takeStaging(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration) (uint64, bool, int, error) {
 	rounds := opts.Rounds
 	if rounds <= 0 {
 		rounds = DefaultRounds
 	}
+	// How many distinct validators were found and asked across every round.
+	// Zero means the node could not see its partition at all, which is a
+	// different thing from every validator having nothing to give (#4296).
+	asked := map[string]bool{}
 	for attempt := 0; ; attempt++ {
 		if attempt >= rounds {
-			return 0, false, nil
+			return 0, false, len(asked), nil
 		}
 		if err := ctx.Err(); err != nil {
-			return 0, false, errors.UnknownError.Wrap(err)
+			return 0, false, len(asked), errors.UnknownError.Wrap(err)
 		}
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():
-				return 0, false, errors.UnknownError.Wrap(ctx.Err())
+				return 0, false, len(asked), errors.UnknownError.Wrap(ctx.Err())
 			case <-time.After(retry):
 			}
 		}
@@ -279,7 +307,11 @@ func takeStaging(ctx context.Context, opts Options, log *slog.Logger, retry time
 			log.Info("Cannot find this partition's validators yet", "error", err)
 			continue
 		}
+		if len(peers) == 0 {
+			log.Info("No validator of this partition has been found yet", "attempt", attempt+1, "of", rounds)
+		}
 		for _, peer := range peers {
+			asked[peer.PeerID.String()] = true
 			snap, err := private.FetchStagingSnapshot(ctx, opts.Peers.Staging(peer), opts.Partition)
 			if err != nil {
 				log.Info("A validator did not serve its staging", "peer", peer.PeerID, "error", err)
@@ -300,7 +332,7 @@ func takeStaging(ctx context.Context, opts Options, log *slog.Logger, retry time
 				log.Info("A validator's staging could not be loaded", "peer", peer.PeerID, "block", snap.Block, "error", err)
 				continue
 			}
-			return snap.Block, true, nil
+			return snap.Block, true, len(asked), nil
 		}
 	}
 }

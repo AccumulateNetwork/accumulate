@@ -226,7 +226,12 @@ nodes take the same path, in this order:
    partition, through the API, for its staging as of its last committed block
    `P`: every stream's `Delivered`, held entries with their companions,
    validated hashes, proofs waiting by anchor block, anchor copies held. `P`
-   must be at or above the first buffered block; otherwise ask again. The
+   must be at or above the first buffered block; otherwise ask again.
+   **Finding no validator to ask is not an answer**: a node that cannot see
+   its partition cannot know what its peers hold, so it keeps collecting and
+   does not execute, however long that takes; only a node that has executed
+   no block may start without asking, because the first node of a network has
+   nobody to ask (#4296). The
    buffered blocks after `P` are then applied to that staging, so staging is
    what the peers hold as of every block from `P` on.
 3. **Pull the state.** The Directory's spine first — anchors, ledger and

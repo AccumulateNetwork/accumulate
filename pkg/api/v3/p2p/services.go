@@ -92,6 +92,18 @@ func (n *nodeService) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*
 
 func (n *nodeService) FindService(ctx context.Context, opts api.FindServiceOptions) ([]*api.FindServiceResult, error) {
 	var addr multiaddr.Multiaddr
+	// A node advertises a service under its network's key
+	// (peer_manager.go, MultiaddrFor), so a search that names no network
+	// searches a key nobody advertises and answers "nobody serves that",
+	// instantly and without an error. Every caller inside a node means its
+	// own network; the ones that did not say so got silence. The join took
+	// that silence for "the whole network restarted" and executed from its
+	// own empty staging -- the divergence of #4290 -- and the conductor took
+	// it for "this source has one validator" and never gathered a second
+	// anchor signature on any live network (#4296).
+	if opts.Network == "" {
+		opts.Network = n.peermgr.network
+	}
 	if opts.Network != "" {
 		c, err := multiaddr.NewComponent(api.N_ACC, opts.Network)
 		if err != nil {
