@@ -97,6 +97,19 @@ BlockQuery:
       type: bool
       optional: true
 
+BptPageQuery:
+  union: { type: query }
+  description: asks for one page of the addressed partition's BPT, for a node pulling the state (executor.md, "Sync")
+  fields:
+    - name: StartHash
+      description: is the key the previous page ended at; the all-FF key, or omitted, starts a fresh scan
+      type: hash
+      optional: true
+    - name: Count
+      description: is the number of leaves asked for; omitted takes the server's default
+      type: uint
+      optional: true
+
 AnchorSearchQuery:
   union: { type: query }
   description: queries {account}#anchor/{hash}
