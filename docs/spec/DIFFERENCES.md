@@ -455,8 +455,9 @@ reaches the root the Directory anchored for `Q`; the tracker then promotes.
   block replayed from the state it started at produces the same result and a
   block skipped does not.
 - `orchestrator`, `anchorsrc`, `bootpersist`, `clientsrc` and `gossip` from
-  bootstrap-v3 are not ported (#4302); the first is #4294's, the rest are of the
-  rejected trust model.
+  bootstrap-v3 are not ported (#4302; `bootpersist` is #4300's, which settles
+  first whether a joining node's state need survive a restart at all); the
+  first is #4294's, the rest are of the rejected trust model.
 - The v3 `block` query's entry paging ignores `start`, so it cannot be used to
   page through what a block touched. Untouched here (#4302).
 
