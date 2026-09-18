@@ -284,16 +284,15 @@ func (s *PulledState) changedAccounts(ctx context.Context) ([]*url.URL, error) {
 		return nil, nil
 	}
 
-	through := peer
-	if through-r > MaxLedgerSpan {
-		// Further behind than a walk is worth. The page diff enumerates the
-		// whole partition instead, which is what a node joining from genesis
-		// needs anyway.
-		through = r + MaxLedgerSpan
+	if peer-r > MaxLedgerSpan {
+		// Further behind than a walk is worth, and the walk would be wasted:
+		// the page diff runs instead and answers the same question in one
+		// scan. That is the case of a node joining from genesis.
 		s.wide = true
+		return nil, nil
 	}
 
-	entries, err := blockLedger(ctx, q, s.partition, r, through)
+	entries, err := blockLedger(ctx, q, s.partition, r, peer)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

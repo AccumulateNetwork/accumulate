@@ -278,8 +278,10 @@ nodes take the same path, in this order:
    every account behind a leaf that is missing or stale. The page diff is the
    **backstop and it must stay reachable**: it runs on the first round,
    because a node that has just started does not know whether the store it
-   holds is the state of `R`; on a cadence after that; and whenever the walk
-   cannot cover `(R, Q]`. Running it only when the ledger named nothing makes
+   holds is the state of `R`; on a cadence after that; and instead of the walk
+   whenever `(R, Q]` is wider than a walk is worth — a node joining from
+   genesis is behind by the whole history, and one scan answers what a walk of
+   half a million blocks would. Running it only when the ledger named nothing makes
    it unreachable, because one name that can never be satisfied keeps the set
    non-empty for the life of the process. A node that restarts with its store
    intact pulls only what changed after its last block.

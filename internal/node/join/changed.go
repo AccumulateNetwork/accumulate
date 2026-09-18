@@ -17,12 +17,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// MaxLedgerSpan is how many blocks of block ledger one round walks. A join
-// that is further behind than this pulls by the BPT page diff instead: the
-// walk is one call per block, so a node joining from genesis against a network
-// at block 35,000,000 would spend its life in the walk and never ask for an
-// account.
-const MaxLedgerSpan = 512
+// MaxLedgerSpan is how many blocks of block ledger one round walks. The walk
+// is one call per block, so a node joining from genesis against a network at
+// block 35,000,000 would spend its life in the walk and never ask for an
+// account. A join further behind than this takes the BPT page diff instead,
+// which answers the same question in one scan.
+const MaxLedgerSpan = 128
 
 // maxBlockEntries is how many entries of one block's ledger are read per call.
 const maxBlockEntries = 512
