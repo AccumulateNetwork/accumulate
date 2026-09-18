@@ -96,28 +96,79 @@ type Options struct {
 	Partition *url.URL
 }
 
-// Account pulls u from src into batch per opts.Mode, and, when opts.Verify is
-// set, refuses it unless it hashes into the root the Directory anchored for
-// the block the peer served it at.
+// Pending is state pulled from a peer and not yet kept. It sits in a batch of
+// its own; nothing reaches the caller's batch until Settle says the Directory
+// anchored the root it hashes into.
 //
-// The pull goes into a nested batch that is only committed once it verifies,
-// so a refused account leaves nothing behind. Note that the peer's state moves
-// while the pull runs: the four queries can straddle a block, in which case
-// the assembled state hashes to nothing the Directory anchored and the account
-// is refused. That is the pull racing the network, and the answer to it is to
-// ask again — see AccountFrom.
-func Account(ctx context.Context, src Source, batch *database.Batch, u *url.URL, opts Options) error {
+// It exists because the pull runs ahead of the anchors. A peer serves its
+// current block, and the Directory anchors that block a few blocks later, so
+// an account fetched now is verified in a moment — not refused for arriving
+// before its proof (executor.md, "Sync": the pull follows the network).
+type Pending struct {
+	// Account is the account that was pulled.
+	Account *url.URL
+
+	// Block is the block the peer served the state at. It is the block whose
+	// anchored root settles it.
+	Block uint64
+
+	receipt *api.Receipt
+	batch   *database.Batch
+	done    bool
+}
+
+// Settle verifies the state against the root the Directory anchored for
+// Pending.Block and, if it holds, writes it into the caller's batch. Either
+// way the pending state is released.
+func (p *Pending) Settle(anchoredRoot [32]byte) error {
+	if p.done {
+		return errors.NotAllowed.WithFormat("%v: already settled", p.Account)
+	}
+	p.done = true
+	defer p.batch.Discard()
+
+	if p.receipt == nil {
+		// The peer has no such account, so there is nothing to verify and
+		// nothing was written.
+		return nil
+	}
+	if err := Verify(p.batch, p.Account, p.receipt, anchoredRoot); err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	return errors.UnknownError.Wrap(p.batch.Commit())
+}
+
+// Keep writes the state into the caller's batch without verifying it. It is
+// for the Directory spine, which is what the verifier itself is read from, and
+// for tests.
+func (p *Pending) Keep() error {
+	if p.done {
+		return errors.NotAllowed.WithFormat("%v: already settled", p.Account)
+	}
+	p.done = true
+	defer p.batch.Discard()
+	return errors.UnknownError.Wrap(p.batch.Commit())
+}
+
+// Discard throws the pulled state away.
+func (p *Pending) Discard() {
+	p.done = true
+	p.batch.Discard()
+}
+
+// Fetch pulls u from src per opts.Mode and holds it, unverified and unwritten,
+// until the caller settles it. withReceipt asks the peer for the proof that
+// binds the state to its root; without one the state can only be kept, not
+// verified.
+func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, opts Options, withReceipt bool) (*Pending, error) {
 	if src == nil {
-		return errors.BadRequest.With("pull.Account: src required")
+		return nil, errors.BadRequest.With("pull.Fetch: src required")
 	}
 	if batch == nil {
-		return errors.BadRequest.With("pull.Account: batch required")
+		return nil, errors.BadRequest.With("pull.Fetch: batch required")
 	}
 	if u == nil {
-		return errors.BadRequest.With("pull.Account: url required")
-	}
-	if opts.Verify != nil && opts.Partition == nil {
-		return errors.BadRequest.With("pull.Account: partition required when verifying")
+		return nil, errors.BadRequest.With("pull.Fetch: url required")
 	}
 	pageSize := opts.PageSize
 	if pageSize == 0 {
@@ -125,49 +176,79 @@ func Account(ctx context.Context, src Source, batch *database.Batch, u *url.URL,
 	}
 
 	sub := batch.Begin(true)
-	defer sub.Discard()
+	p := &Pending{Account: u, batch: sub}
+
+	fail := func(err error) (*Pending, error) {
+		sub.Discard()
+		return nil, err
+	}
 
 	// 1. Main account state, with the receipt that binds it to the peer's root.
-	receipt, err := pullMain(ctx, src, sub, u, opts.Verify != nil)
+	receipt, err := pullMain(ctx, src, sub, u, withReceipt)
 	if err != nil {
-		return errors.UnknownError.WithFormat("main %s: %w", u, err)
+		return fail(errors.UnknownError.WithFormat("main %s: %w", u, err))
+	}
+	p.receipt = receipt
+	if receipt != nil {
+		p.Block = receipt.LocalBlock
 	}
 
 	// 2. Directory entries (the secondary-state list of contained URLs).
 	if err := pullDirectory(ctx, src, sub, u, pageSize); err != nil {
-		return errors.UnknownError.WithFormat("directory %s: %w", u, err)
+		return fail(errors.UnknownError.WithFormat("directory %s: %w", u, err))
 	}
 
 	// 3. Pending txids.
 	if err := pullPending(ctx, src, sub, u, pageSize); err != nil {
-		return errors.UnknownError.WithFormat("pending %s: %w", u, err)
+		return fail(errors.UnknownError.WithFormat("pending %s: %w", u, err))
 	}
 
 	// 4. Chains.
 	switch opts.Mode {
 	case ModeStateOnly:
 		if err := pullChainHeads(ctx, src, sub, u, pageSize); err != nil {
-			return errors.UnknownError.WithFormat("chain heads %s: %w", u, err)
+			return fail(errors.UnknownError.WithFormat("chain heads %s: %w", u, err))
 		}
 	case ModeFullSpine:
 		if err := pullChainsFull(ctx, src, sub, u, pageSize); err != nil {
-			return errors.UnknownError.WithFormat("chains full %s: %w", u, err)
+			return fail(errors.UnknownError.WithFormat("chains full %s: %w", u, err))
 		}
 	default:
-		return errors.BadRequest.WithFormat("unknown pull mode %d", opts.Mode)
+		return fail(errors.BadRequest.WithFormat("unknown pull mode %d", opts.Mode))
 	}
 
-	if opts.Verify != nil && receipt != nil {
-		root, err := opts.Verify.AnchoredRoot(ctx, opts.Partition, receipt.LocalBlock)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-		if err := Verify(sub, u, receipt, root); err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
+	return p, nil
+}
+
+// Account pulls u from src into batch per opts.Mode and, when opts.Verify is
+// set, refuses it unless it hashes into the root the Directory anchored for
+// the block the peer served it at. It is Fetch and Settle in one call, for a
+// caller that can wait on the anchor; a caller that cannot uses the two.
+//
+// Nothing is written until it verifies, so a refused account leaves nothing
+// behind. Note that the peer's state moves while the pull runs: the four
+// queries can straddle a block, in which case the assembled state hashes to
+// nothing the Directory anchored and the account is refused. That is the pull
+// racing the network, and the answer to it is to ask again — see AccountFrom.
+func Account(ctx context.Context, src Source, batch *database.Batch, u *url.URL, opts Options) error {
+	if opts.Verify != nil && opts.Partition == nil {
+		return errors.BadRequest.With("pull.Account: partition required when verifying")
 	}
 
-	return errors.UnknownError.Wrap(sub.Commit())
+	p, err := Fetch(ctx, src, batch, u, opts, opts.Verify != nil)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if opts.Verify == nil {
+		return errors.UnknownError.Wrap(p.Keep())
+	}
+
+	root, err := opts.Verify.AnchoredRoot(ctx, opts.Partition, p.Block)
+	if err != nil {
+		p.Discard()
+		return errors.UnknownError.Wrap(err)
+	}
+	return errors.UnknownError.Wrap(p.Settle(root))
 }
 
 // AccountFrom pulls u from the first source whose state verifies, and reports
