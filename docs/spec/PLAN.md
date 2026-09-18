@@ -462,7 +462,15 @@ And two that follow from the block ledger:
   birth. Its documenting test **fails by design** and must not be merged into a
   green suite until the arithmetic is fixed. Whether a wrong receipt is merely
   invalid or is *valid for the wrong entry* was **not** established, and that
-  decides its priority.
+  decides its priority. **It has since proved to be benign on `main`** — the
+  released line's dedup cannot be made to skip by it — but real there, which
+  makes it the one prerequisite named in the ordering note below.
+  *Known exception to the practice stated below, flagged rather than fixed:*
+  #4321 is a main-line finding whose mechanism is described here and in a
+  public issue, because it was filed as an integration-line bug before its
+  reach was established. Removing the text here would unpublish nothing while
+  the issue itself is public, and changing an issue's visibility is not a call
+  to make in passing — so it is left as it is and named for a decision.
 
 *Proposed placement, for Paul.* What a 30-minute chaos run can be a gate for
 is the question, and today the answer is nothing about the join. It would pass
