@@ -546,6 +546,15 @@ not on `dagbft-integration` and it has not run under chaos, so the sentence
 above about what the wiring does when no peer can answer is still what a
 deployed node does.
 
+**The changed set comes from the block ledger (Paul, 2026-09-18)**: the code
+derives it from a block's envelopes (`collect_block.go`, `accountsNamed`),
+which names principals, signers and anchor pools and therefore misses the
+system accounts every block changes and admits `acc://unknown`. The block
+ledger already records every `(account, chain, index)` a block changed and is
+committed to by the state root, so it is servable with a proof; executor.md
+"Sync" step 3 now specifies it as the source. Until that lands, no local tree
+can reach an anchored root.
+
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.
 

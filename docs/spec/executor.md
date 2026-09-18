@@ -234,7 +234,21 @@ nodes take the same path, in this order:
    nobody to ask (#4296). The
    buffered blocks after `P` are then applied to that staging, so staging is
    what the peers hold as of every block from `P` on.
-3. **Pull the state.** The Directory's spine first — anchors, ledger and
+3. **Pull the state.** The set of accounts to pull is **the block ledger's,
+   not the block's envelopes'**. Every block records `(account, chain, index)`
+   for every chain its execution changed (see "The block ledger"), that record
+   is a chain on the partition's ledger account, and the chain's anchor is part
+   of the account's hash — so the state root commits to what each block
+   changed and a receipt from the chain proves it. A joining node asks a peer
+   for the block ledger records covering `(R, Q]`, verifies each against the
+   anchored root the way it verifies an account, and pulls the union of their
+   accounts. That set is exact and complete: it includes the accounts a block
+   changed as a side effect and the system accounts every block touches —
+   `<partition>/ledger` and `<partition>/synthetic` — which a block's
+   envelopes never name, and it contains no unroutable name, which envelopes
+   do. Deriving the set from envelopes leaves the local tree chasing a root it
+   cannot reach, because the accounts it omits change on every non-empty
+   block. The Directory's spine first — anchors, ledger and
    operators, with their chains — so anchors and their signatures can be
    verified; then the partition's BPT by pages, and every account behind a
    leaf that is missing or stale. The blocks being buffered say which
