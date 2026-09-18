@@ -74,6 +74,18 @@ func (x *Executor) CollectBlock(batch *database.Batch, params execute.BlockParam
 			b.staging.Discard()
 			return nil, errors.UnknownError.Wrap(err)
 		}
+		// Release what the store already says is delivered, as closing a
+		// block does for every stream it positioned. A collecting node never
+		// closes a block, so without this its staging's own Delivered stays
+		// at zero and the first entry it holds on a stream the peers have
+		// delivered half a million of sizes the stage from zero (#4291).
+		// Nothing at or below the store's Delivered can run again, and the
+		// pulled state's Delivered only moves forward, so this is safe
+		// before the settle as well as at it.
+		if pos.delivered > 0 {
+			b.staging.Release(str.id(), pos.delivered)
+		}
+
 		numbers := make([]uint64, 0, len(c.arrivals[k]))
 		for n := range c.arrivals[k] {
 			numbers = append(numbers, n)
@@ -292,18 +304,13 @@ func accountsNamed(envelopes []*messaging.Envelope) []*url.URL {
 			seen[k] = u
 		}
 	}
-	var addTxn func(txn *protocol.Transaction)
-	addTxn = func(txn *protocol.Transaction) {
-		if txn == nil {
-			return
-		}
-		add(txn.Header.Principal)
-	}
 	var addMsg func(msg messaging.Message)
 	addMsg = func(msg messaging.Message) {
 		switch m := msg.(type) {
 		case *messaging.TransactionMessage:
-			addTxn(m.Transaction)
+			if m.Transaction != nil {
+				add(m.Transaction.Header.Principal)
+			}
 		case *messaging.SignatureMessage:
 			if m.TxID != nil {
 				add(m.TxID.Account())

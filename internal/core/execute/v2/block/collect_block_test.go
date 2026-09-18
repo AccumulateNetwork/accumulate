@@ -134,15 +134,17 @@ func TestCollectBlock_HoldsWhatTheExecutingNodeHolds(t *testing.T) {
 	require.Equal(t, 3, out.Held)
 	s.newBlock() // close block 3: Delivered is written back to the ledger
 
-	// Before the settle the collecting node still holds what the executing
-	// node released, and still waits on the anchor the executing node has
-	// already seen.
+	// Before the settle the collecting node holds what it has collected and
+	// still waits on the anchor the executing node has already seen. Its
+	// stage starts where the store it is pulling says the stream stands, not
+	// at zero: collecting a block releases what the store already delivered,
+	// as closing a block does.
 	{
 		tx := col.staging().Begin()
 		require.Equal(t, []uint64{3, 6}, tx.ProofBlocks(s.str.source), "both packages' proofs wait")
 		st := tx.Status(s.str.id())
-		require.Equal(t, uint64(0), st.Delivered, "a collecting node delivers nothing")
-		require.Equal(t, 6, st.Held)
+		require.Equal(t, uint64(3), st.Delivered, "the stage stands where the store says the stream does")
+		require.Equal(t, 3, st.Held)
 		tx.Discard()
 	}
 
