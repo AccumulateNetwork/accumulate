@@ -34,11 +34,12 @@ type arrival struct {
 	seq        *messaging.SequencedMessage
 
 	// admissible is whether the message is proven to have come from its
-	// source (see Executor.isAdmissible). Only ARRIVING messages carry this:
-	// anything already staged passed the proof check when it was recorded,
-	// because an unproven message returns Pending before ever reaching the
-	// sequence check, so it never enters the staged window. And a chain is
-	// append-only, so admissible never becomes inadmissible.
+	// source (see Executor.isAdmissible). Only ARRIVING messages carry it.
+	// What is already staged is not covered by it: an entry collected
+	// WITHOUT a proof is staged too, and whether such a number may be taken
+	// is `streamPosition.runnable`'s question, asked against the state as it
+	// stands. A chain is append-only, so an admissible arrival never becomes
+	// inadmissible.
 	admissible bool
 }
 

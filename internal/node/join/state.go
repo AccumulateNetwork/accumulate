@@ -42,6 +42,13 @@ type PulledState struct {
 	log       *slog.Logger
 
 	spine bool // the Directory's spine has been pulled
+
+	// refused are the accounts a round could not pull — served at a block the
+	// Directory has not anchored yet, or served by a peer that could not be
+	// verified. They are asked for again next round: an account dropped once
+	// is an account the local root can never account for, and the join would
+	// wait for a match that cannot come.
+	refused []*url.URL
 }
 
 // StateOptions are what the state half needs.
@@ -121,6 +128,13 @@ func (s *PulledState) Pull(ctx context.Context, accounts []*url.URL) error {
 		s.spine = true
 	}
 
+	// What could not be pulled last round is asked for again, with whatever
+	// this round's blocks named.
+	if len(s.refused) > 0 {
+		accounts = append(append([]*url.URL{}, s.refused...), accounts...)
+		s.refused = nil
+	}
+
 	if len(accounts) == 0 {
 		// A round the blocks named nothing for: find what differs by paging
 		// the peer's BPT against this node's leaves. Incomplete on a live
@@ -140,8 +154,14 @@ func (s *PulledState) Pull(ctx context.Context, accounts []*url.URL) error {
 
 	batch := s.db.Begin(true)
 	defer batch.Discard()
-	pulled, refused := 0, 0
+	pulled := 0
+	var refused []*url.URL
+	seen := map[string]bool{}
 	for _, u := range accounts {
+		if seen[u.String()] {
+			continue
+		}
+		seen[u.String()] = true
 		err := pull.Account(ctx, s.source, batch, u, pull.Options{
 			Mode:      pull.ModeStateOnly,
 			Verify:    s.anchors,
@@ -153,18 +173,19 @@ func (s *PulledState) Pull(ctx context.Context, accounts []*url.URL) error {
 		case errors.Is(err, pull.ErrNotAnchored):
 			// Served at a block the Directory has not anchored yet: asked
 			// for again next round, when it has.
-			refused++
+			refused = append(refused, u)
 		default:
 			s.log.Info("An account could not be pulled", "account", u, "error", err)
-			refused++
+			refused = append(refused, u)
 		}
 	}
+	s.refused = refused
 	err = batch.Commit()
 	if err != nil {
 		return errors.UnknownError.WithFormat("commit what was pulled: %w", err)
 	}
 	s.log.Info("Pulled the accounts the blocks named", "partition", s.partition,
-		"asked", len(accounts), "pulled", pulled, "refused", refused)
+		"asked", len(accounts), "pulled", pulled, "refused", len(refused))
 	return nil
 }
 

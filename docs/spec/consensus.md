@@ -285,17 +285,24 @@ first leader after a restart re-commits every ancestor in the window and the
 node executes a block its peers did not, #4290), and the block index the
 position belongs to (`persist.Checkpoint`, `Service.saveCheckpoint`, two files under
 the node's `consensus/<partition>/` directory — the position for the block
-about to be produced and the one before it). On restart the node first
-re-executes from the store's last sealed height through the committed log to
-its head — the blocks whose state the seal had not yet made durable — then
-restores the checkpoint whose block is the executor's last block
-(`Service.seedFromCheckpoint`, `Node.Restore`), so the node participates from
-that round and certificate catch-up bridges the gap to the live frontier,
-within `DAGGCDepth`. A node with state but no matching checkpoint starts at
-round zero, says so, and cannot catch a live network. What a restarted node
-still lacks — the state and staging its peers hold, and the certificates
-below its checkpoint that a later leader commits — is the sync mechanism
-(E11, [DIFFERENCES.md](DIFFERENCES.md)).
+about to be produced and the one before it). On restart the node restores the
+checkpoint whose block is the executor's last block
+(`Service.seedFromCheckpoint`, `Node.Restore`), so it participates in
+consensus from that round rather than from zero.
+
+**What it does not do is execute from there.** A restart is a join
+(executor.md, "Sync"): the node collects every committed block instead of
+executing it, takes a running validator's staging, pulls the state, and
+executes from the block after its root matches. The checkpoint decides where
+the node stands in the DAG; the join decides what it executes. A node that
+executed the blocks between its last one and the network's — by replaying the
+committed log, or by catching up certificate by certificate — would execute
+them from a staging its peers do not have, and the root chain is a Merkle root
+over the history of block roots, so it would never match again (#4290).
+
+A node that finds no validator with staging to give — every node restarted, so
+every stage is empty — executes from its own last block instead, which is safe
+for the same reason: no peer holds an entry it lacks.
 
 ### Retention
 
