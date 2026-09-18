@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
@@ -31,6 +32,7 @@ type Sequencer struct {
 	logger      logging.OptionalLogger
 	db          database.Viewer
 	cache       *synthcache.Cache
+	staging     *execute.Staging
 	partitionID string
 	partition   config.NetworkUrl
 	valKey      []byte
@@ -71,6 +73,13 @@ type SequencerParams struct {
 	Partition    string
 	ValidatorKey []byte
 
+	// Staging is the partition's staging, the one the executor feeds. With
+	// it the node serves what it holds unexecuted to a node that is joining
+	// (executor spec, "Sync" step 2). A process running several networks
+	// (the simulator) must pass it; elsewhere it is found by partition in
+	// the registry.
+	Staging *execute.Staging
+
 	// Cache is the producer's synthetic/anchor cache the executor fills.
 	// With it, every answer is built from the cache and a miss is refused
 	// and counted (healing spec, "The cache"). Without it — only the v1
@@ -91,6 +100,7 @@ func NewSequencer(params SequencerParams) *Sequencer {
 	s.logger.L = params.Logger
 	s.db = params.Database
 	s.cache = params.Cache
+	s.staging = params.Staging
 	s.partitionID = params.Partition
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	s.valKey = params.ValidatorKey

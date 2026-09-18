@@ -468,7 +468,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 
 	// Register consensus API services
-	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache)
+	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache, staging)
 	if err != nil {
 		return err
 	}
@@ -478,7 +478,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 }
 
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache, staging *execute.Staging) error {
 	logger := logging.NewSlogLogger(inst.logger)
 	// These are the SERVING side of the node: consensus queries, the
 	// sequencer answering a peer's healing request, the API.  They are
@@ -533,6 +533,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		Logger:       logger.With("module", "api"),
 		Database:     db,
 		Cache:        synthCache,
+		Staging:      staging,
 		EventBus:     s.eventBus,
 		Globals:      globals,
 		Partition:    s.Partition.ID,

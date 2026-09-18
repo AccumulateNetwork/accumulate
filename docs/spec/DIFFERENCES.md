@@ -265,6 +265,49 @@ committed-digest set, without which the first leader after every restart
 re-committed the whole rescue window below the floor (16 batches where the
 peers committed 3, run `20260918T014155Z`).
 
+**Serving staging (#4291, done)**: a running validator serves its staging as
+of its last committed block through the private API, paged by stream, with
+the block index on every page (healing.md, "Staging snapshot"). **Nothing
+reads it yet**: the pull a starting node makes is still `Conductor.Rejoin`
+from the source's cache, with the inexactness described above, until the join
+of step 2 is built on this call. Also not done: the refusal is "this node has
+executed no block", not the node state of step 5 — a node that is `BOOTING`
+will serve its stage until that lands (#4295). And a page is as of whatever
+block the validator had committed when the call arrived; nothing is pinned
+server side, so a reader whose pages straddle a commit starts over rather
+than being served a consistent version.
+
+**Caution — the page's `Block` is not "the state of that block" (#4291)**: it
+is the consensus index of the last block the executor processed, published at
+commit, and an empty block writes no state, so `SystemLedger.Index` can lag
+it. That is deliberate and it is the safe direction — the index is at or above
+every block whose intake the page reflects — but nothing in the page says so.
+A joining node must take the entries as of that index and decide which block's
+state to converge on by the anchored-root match (#4293's tracker), on a block
+at or above the page's. Serving the last *written* block instead would
+under-report and is the dangerous direction.
+
+**`Delivered` on a page is memory, not a ledger read (#4291)**: the issue's
+trap said to read the ledger. This branch instead made block close release
+every stream the block positioned at the ledger's `Delivered`, so memory
+tracks the ledger for every stream a block has touched and the value is
+atomic with the rest of the page; a ledger read beside it would be a second,
+unpaired read. The residue: **a stream that no block has positioned since a
+restart keeps `Delivered: 0` in memory**, so a page may carry 0 for such a
+stream. It is safe, because the joining node releases through its own pulled
+ledger when it settles (#4292's `SettleStaging`), but it is not what the issue
+asked for.
+
+**`Executor.Collect` changes staging outside a block (#4291)**: the interim
+`Conductor.Rejoin` path (`internal/core/execute/v2/block/rejoin.go`) commits
+a staging transaction with no block behind it. Two consequences for the
+snapshot: a node that rejoined from a source's cache can serve those
+cache-derived entries as if they were peer state, and staging can change
+between two pages with the block index unchanged, so "one block, never a
+mixture" holds only against block-driven changes. The hole closes when the
+join of #4294 removes `Conductor.Rejoin`; `Collect` is deliberately not
+changed before then.
+
 **Decided (Paul, 2026-09-18)**: a starting node takes its staging from a
 running validator through an API, keeps it current from consensus while it
 pulls the state the buffered blocks name, and executes from the block after
