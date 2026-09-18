@@ -118,6 +118,7 @@ type Service struct {
 	// advances the block index. See collect.go.
 	collecting    bool
 	buffer        []*CollectedGroup
+	bufferBytes   int
 	bufferOverrun bool
 	// stagingReady says the peer's staging has been taken, so the blocks this
 	// node collects are applied to it; until then they are only buffered.
@@ -739,11 +740,7 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 	// A certificate delivered twice is not a failure: this node executed it
 	// already and its batches were retired on purpose (#4125). Skip it and
 	// execute the rest of the group.
-	type executed struct {
-		cert    *types.Certificate
-		digests []types.BatchDigest
-	}
-	var executedCerts []executed
+	var executedCerts []*types.Certificate
 	var batches []*types.Batch
 	payloadEntries := 0
 	for _, cert := range group {
@@ -759,11 +756,7 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 		}
 		batches = append(batches, certBatches...)
 		payloadEntries += len(cert.Header.Payload)
-		digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-		for _, entry := range cert.Header.Payload {
-			digests = append(digests, entry.Digest)
-		}
-		executedCerts = append(executedCerts, executed{cert: cert, digests: digests})
+		executedCerts = append(executedCerts, cert)
 	}
 	if len(executedCerts) == 0 {
 		// The whole group was executed before (a redelivery after restart);
@@ -779,26 +772,18 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 	// executes nothing until the join says which block its state is
 	// (executor spec, "Sync", steps 1 and 4; #4292).
 	if s.Collecting() {
-		certs := make([]*types.Certificate, 0, len(executedCerts))
-		for _, e := range executedCerts {
-			certs = append(certs, e.cert)
-		}
-		err := s.collectGroup(certs, batches, leader, isLeader)
+		err := s.collectGroup(executedCerts, batches, leader, isLeader)
 		if err != nil {
 			return leader, err
 		}
 		// The batches are kept in the buffer, so the workers may retire
 		// theirs: a joining node that held its workers' copies as well would
 		// pay for every block twice.
-		s.pruneCommitted(certs, 0)
+		s.pruneCommitted(executedCerts, 0)
 		return nil, nil
 	}
 
-	certs := make([]*types.Certificate, 0, len(executedCerts))
-	for _, e := range executedCerts {
-		certs = append(certs, e.cert)
-	}
-	err := s.produceGroup(certs, batches, leader, isLeader, payloadEntries)
+	err := s.produceGroup(executedCerts, batches, leader, isLeader, payloadEntries)
 	if err != nil {
 		return leader, err
 	}

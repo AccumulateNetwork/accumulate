@@ -56,20 +56,36 @@ func (g *CollectedGroup) Time() time.Time {
 	return time.Unix(0, g.Leader.Header.Timestamp).UTC()
 }
 
-// maxCollectedGroups bounds the join's buffer.
+// maxCollectedGroups and maxCollectedBytes bound the join's buffer.
 //
 // The spec says a joining node buffers every committed block from the moment
 // it starts listening; in a process that is a bound or it is a memory fault,
-// and this node is already holding every batch of every buffered block. At
-// one group per leader round, four rounds a second, this is about half an
-// hour of a live network — well past the time a state pull takes, and short
-// of the point where the buffer is the largest thing in the process.
+// and this node is holding every batch of every buffered block. The count
+// alone does not bound the memory — at 500 tps a block's batches are of the
+// order of half a megabyte, so eight thousand groups is gigabytes before the
+// count ever trips — so the bytes are bounded too, as staged proofs are and
+// for the same reason (#4282).
 //
-// Past it the join cannot be exact — the buffer would no longer be every
-// block since the snapshot — so the buffer is marked overrun and the join
-// must start again from a newer snapshot (#4294). It is a var only so a test
-// can lower it.
-var maxCollectedGroups = 8192
+// Past either bound the join cannot be exact — the buffer would no longer be
+// every block since the snapshot — so it is marked overrun and the join must
+// start again from a newer snapshot (#4294). They are vars only so a test can
+// lower them.
+var (
+	maxCollectedGroups = 8192
+	maxCollectedBytes  = 1 << 30 // 1 GiB of batches
+)
+
+// bytes is what this group costs to hold: its batches, which are the bulk of
+// it by orders of magnitude.
+func (g *CollectedGroup) bytes() int {
+	n := 0
+	for _, b := range g.Batches {
+		for _, tx := range b.Transactions {
+			n += len(tx)
+		}
+	}
+	return n
+}
 
 // StartCollecting puts the service in collecting mode: committed groups are
 // taken into staging and buffered instead of executed.
@@ -120,6 +136,8 @@ func (s *Service) StopCollecting() []*CollectedGroup {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.collecting = false
+	s.bufferOverrun = false
+	s.bufferBytes = 0
 	out := s.buffer
 	s.buffer = nil
 	return out
@@ -308,13 +326,20 @@ func (s *Service) collectIntoStaging(g *CollectedGroup) error {
 		Batches:     g.Batches,
 	})
 	if err != nil {
+		// A block this node could not take into staging is a block it cannot
+		// produce either, and the certificate is already marked executed, so
+		// it will not come again: the buffer has a hole and the join must
+		// start over rather than hand off a run of blocks with one missing.
+		s.mu.Lock()
+		s.bufferOverrun = true
+		s.mu.Unlock()
 		return fmt.Errorf("collect block: %w", err)
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nameAccounts(out.Accounts)
-	s.logger.Debug("Collected a committed group while joining",
+	s.logger.Debug("Collected a committed group into staging",
 		"partition", s.config.Partition.ID,
 		"round", g.Round(),
 		"certs", len(g.Certs),
@@ -343,15 +368,21 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 
 	g := &CollectedGroup{Certs: certs, Batches: batches, Leader: leader, IsLeader: isLeader}
 
+	// The bounds are checked before anything is taken into staging, so a group
+	// past them is in neither the buffer nor the stage. Past a bound the join
+	// is over: the blocks since the snapshot are no longer all in hand, and
+	// nothing may be produced from a buffer with a hole in it.
 	s.mu.Lock()
-	if len(s.buffer) >= maxCollectedGroups {
+	full := len(s.buffer) >= maxCollectedGroups || s.bufferBytes+g.bytes() > maxCollectedBytes
+	if full {
 		s.bufferOverrun = true
-		s.mu.Unlock()
-		return errors.NotReady.WithFormat("%s: the join buffer is full at %d groups; the join must start again from a newer snapshot",
-			s.config.Partition.ID, maxCollectedGroups)
 	}
 	ready := s.stagingReady
 	s.mu.Unlock()
+	if full {
+		return errors.NotReady.WithFormat("%s: the join buffer is full at %d groups and %d bytes; the join must start again from a newer snapshot",
+			s.config.Partition.ID, len(s.buffer), s.bufferBytes)
+	}
 
 	if ready {
 		err := s.collectIntoStaging(g)
@@ -363,6 +394,7 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.buffer = append(s.buffer, g)
+	s.bufferBytes += g.bytes()
 	s.logger.Debug("Buffered a committed group while joining",
 		"partition", s.config.Partition.ID,
 		"round", leader.Header.Round,
@@ -372,6 +404,7 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 		"buffered", len(s.buffer))
 	return nil
 }
+
 
 // maxNamedAccounts bounds the set of accounts the collected blocks have named
 // and the pull has not yet been told about. It is large enough for the blocks
