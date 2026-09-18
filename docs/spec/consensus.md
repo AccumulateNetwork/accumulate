@@ -279,8 +279,11 @@ already hold in memory; it is the same data, made durable.
 
 A validator's consensus position is **checkpointed per block, before the
 block is produced**: the primary's round and epoch, Bullshark's last committed
-leader round and its per-author watermarks, and the block index the position
-belongs to (`persist.Checkpoint`, `Service.saveCheckpoint`, two files under
+leader round, its per-author watermarks and its committed-digest set (the
+certificates within the rescue window already committed — without it the
+first leader after a restart re-commits every ancestor in the window and the
+node executes a block its peers did not, #4290), and the block index the
+position belongs to (`persist.Checkpoint`, `Service.saveCheckpoint`, two files under
 the node's `consensus/<partition>/` directory — the position for the block
 about to be produced and the one before it). On restart the node first
 re-executes from the store's last sealed height through the committed log to

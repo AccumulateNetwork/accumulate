@@ -214,6 +214,36 @@ func (b *Bullshark) GetLastCommitted() map[string]types.Round {
 	return result
 }
 
+// GetCommitted is the digest-level commit dedup as hex digests: what the
+// ancestor walk must not emit again. A checkpoint carries it, because a
+// restart that restored only the round watermarks left it empty and the
+// first leader after the restart re-committed every ancestor within
+// rescueWindow -- a different block from the peers' (#4290).
+func (b *Bullshark) GetCommitted() map[string]types.Round {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	out := make(map[string]types.Round, len(b.committed))
+	for d, r := range b.committed {
+		out[hex.EncodeToString(d[:])] = r
+	}
+	return out
+}
+
+// SetCommitted restores the digest-level commit dedup from a checkpoint.
+func (b *Bullshark) SetCommitted(committed map[string]types.Round) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for h, r := range committed {
+		raw, err := hex.DecodeString(h)
+		if err != nil || len(raw) != len(types.CertificateDigest{}) {
+			continue
+		}
+		var d types.CertificateDigest
+		copy(d[:], raw)
+		b.committed[d] = r
+	}
+}
+
 // SetLastCommitRound sets the last commit round.
 // This is useful for crash recovery.
 func (b *Bullshark) SetLastCommitRound(round types.Round) {

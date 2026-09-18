@@ -247,7 +247,11 @@ done: a node down longer than that is beyond catch-up and only sync can bring
 it back; certificates at or below the checkpoint's round that a later leader
 commits are not pulled by catch-up, so the first block after a rejoin can
 still differ from its peers' — sync must deliver staging and the DAG floor
-together; the stranded condition is a Warn a minute, not a state.
+together; the stranded condition is a Warn a minute, not a state. The
+opposite defect is fixed (#4290): the checkpoint now carries Bullshark's
+committed-digest set, without which the first leader after every restart
+re-committed the whole rescue window below the floor (16 batches where the
+peers committed 3, run `20260918T014155Z`).
 
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.

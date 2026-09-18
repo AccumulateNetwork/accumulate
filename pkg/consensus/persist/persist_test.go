@@ -241,3 +241,20 @@ func TestStateSnapshot_ToCheckpoint(t *testing.T) {
 		t.Errorf("last commit round mismatch")
 	}
 }
+
+// The committed-digest set rides in the checkpoint and comes back as saved.
+func TestCheckpoint_CommittedRoundTrips(t *testing.T) {
+	store := NewStore(t.TempDir())
+	cp := NewCheckpoint("BVN1", 10, 1, 8, map[string]types.Round{"aa": 8})
+	cp.Committed = map[string]types.Round{"0102": 7, "0304": 8}
+	if err := store.Save(cp); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Committed) != 2 || got.Committed["0102"] != 7 || got.Committed["0304"] != 8 {
+		t.Fatalf("committed set did not round-trip: %v", got.Committed)
+	}
+}
