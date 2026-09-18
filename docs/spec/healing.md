@@ -77,35 +77,35 @@ a request could not, and that is **sync** (executor.md, "Sync"; E11 in
 [DIFFERENCES.md](DIFFERENCES.md)) — the only exit. A "not yet" or an answer
 for the stream, even one, resets the count: the source is still serving it.
 
-### Rejoining after a restart
+### Joining, and what healing is not for
 
 Staging is memory. A validator that restarts comes back with its store — the
 ledger's `Delivered` for every stream — and an empty stage, while its peers
 still hold what was above `Delivered` when it stopped: entries waiting on a
-proof, or behind a hole. The peers execute those the moment the proving
-anchor lands, which under load is seconds after the restart. A node that
-executed that block holding nothing executed a different block, and because
-the root chain is a Merkle root over the history of block roots, its anchors
-never again matched its peers' (#4290: five restarts took a twelve-validator
-Directory below its quorum of eight).
+proof, or behind a hole, and anchor copies below their quorum. The peers
+execute those the moment the proving anchor lands or the quorum completes,
+which under load is seconds after the restart. A node that executed that
+block holding nothing executed a different block, and because the root chain
+is a Merkle root over the history of block roots, its anchors never again
+matched its peers' (#4290: five restarts took a twelve-validator Directory
+below its quorum of eight).
 
-So **a node that starts rejoins before it executes.** At its first block-begin
-it asks every inbound synthetic stream's source for `[Delivered + 1, ...]`,
-span by span, until the source says nothing more is produced, and holds what
-comes back exactly as a block would — proof to anchor staging, entries at
-their numbers — without a block. Then the block runs. This is the pull, not
-a probe: no patience, no selection, no cadence, because the node's own
-staging is the gap and it alone can fill it. A source that no longer holds
-the span (the cache had released it, its own restart lost it) is a node that
-cannot rejoin by healing; it says so once and needs sync (executor.md
-"Sync", E11). **Anchor streams are rebuilt the same way.** A block anchor
-copy's signature is recorded in the store as it arrives, so the quorum a
-restarted node was gathering is still there — but the held entry that runs
-when the quorum completes, or when the anchor before it executes, is
-staging's and is gone with it; the restarted node's first Directory block
-executed no anchor where its peers executed three (run 20260918T015356Z).
-The pull asks each anchor source for `[Delivered + 1, ...]` and holds one
-copy per anchor; the signatures that make the quorum are the store's.
+**Healing does not rebuild a node's staging, and a source's cache cannot.**
+The cache holds what the source *produced*; the peers hold what they had
+*received* by a given block, and the two differ by whatever is in flight —
+one entry held early is one entry executed a block early (run
+20260918T023054Z). A node that starts takes its staging from a running
+validator of its partition as of that validator's last committed block, and
+keeps it current from consensus from there (executor.md, "Sync"). Healing
+begins where it always did: once the node executes, a hole in its stage is a
+gap like any other, asked of the source on the cadence.
+
+The pull a starting node makes today — every inbound stream from its source
+from `Delivered + 1` up, held as a block would hold it, before its first
+block (`Conductor.Rejoin`) — is what removed the immediate wedge and it stays
+until the join lands, recorded as not exact in
+[DIFFERENCES.md](DIFFERENCES.md) E11. The source keeps released entries and
+anchor acks a grace of blocks (`RejoinGrace`) so a pull can be served at all.
 
 ### Who asks, and when
 
@@ -500,7 +500,7 @@ on the node's metrics endpoint, as are every row of the counting table above.
 Where the implementation departs from this specification, see
 [DIFFERENCES.md](DIFFERENCES.md).
 
-### Rejoining
+### Rejoining (interim)
 
 `Conductor.Rejoin` (`internal/core/crosschain/rejoin.go`) is armed by `Start`
 and consumed at the next block-begin, before the block executes, in
@@ -509,15 +509,15 @@ and consumed at the next block-begin, before the block executes, in
 served, up to `maxRejoinSpans` spans, until `NotReady`; each answer's
 packages go to `Collector.Collect` (`block.Executor.Collect`, `rejoin.go`):
 the proof through the block's `intakeProof`, each entry held at its number
-with its companion, nothing written. `NotFound` is logged once as a node that
-cannot rejoin by healing. Anchor streams: `anchorAnswers` per span,
-one `BlockAnchor` copy per anchor held by `holdAnchors` as a copy below
-quorum is held. Counted per span in
+with its companion, nothing written. Anchor streams: `anchorAnswers` per
+span, one `BlockAnchor` copy per anchor held by `holdAnchors` as a copy below
+quorum is held. `NotFound` is logged once. Counted per span in
 `accumulate_conductor_rejoin_spans_total{outcome}` (answered, not-yet, miss,
-failed); entries in `heal_entries_total{outcome="rejoined"}`. A node whose
-system ledger is at block zero is at genesis and rejoins nothing. The
-simulator's `Partition.RestartNode` empties a node's staging and arms its
-conductor (`TestOneValidatorRestartDoesNotDiverge`).
+failed); entries in `heal_entries_total{outcome="rejoined"}`. A node on
+which nothing was ever delivered rejoins nothing. The simulator's
+`Partition.RestartNode` empties a node's staging and arms its conductor
+(`TestOneValidatorRestartDoesNotDiverge`). Superseded by the join
+(executor.md "Sync"; PLAN E11), which takes staging from a peer instead.
 
 ### Healing is for a synthetic stream that has stopped
 

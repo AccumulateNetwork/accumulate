@@ -165,54 +165,55 @@ no batches past the bound, the batches wait, and proposal resumes when the
 lag falls. Proof outstanding: a soak in which BVN2's lag stays under the bound
 and its anchor leg stays near its floor.
 
-### E11 #4205 — a node syncs from the running protocol
+### E11 #4205 — a node joins from the running protocol, and a restart is a join
 
-Spec: executor.md "Sync". A node that joins or restarts pulls the state of the
-chains from the running protocol, verified against the anchored root, while
-collecting from consensus, and executes nothing until the state matches and
-staging holds what its peers hold. Validator and follower alike. What exists
-today: genesis or a snapshot *file*, and consensus catch-up from peers'
-retention (`pkg/consensus/recovery.go`); nothing pulls chain state.
+Spec: executor.md "Sync". Decided by Paul 2026-09-18: a starting node does not
+catch up through consensus. It listens and collects into staging, takes
+staging from a running validator as of that validator's last committed block,
+pulls the state — the Directory's spine, then the BPT by pages and the
+accounts the buffered blocks name — verified against the anchored root, and
+executes from the first block after the root matches. It serves nothing it
+cannot answer until its history is backfilled. The bootstrap-v3 work
+(`origin/bootstrap-v3`, `origin/bootstrap-v3-merge-1.4.4`; epic #3985:
+`internal/core/bootstrap/{pull,enumerate,tracker,bptproof,nodestate,…}`,
+`BptPageQuery`) is the state half, built on the CometBFT line and never on
+this one; the staging half is new.
 
-1. **State as of a block, served by peers — NOT by snapshot.** Paul
-   (2026-09-06): "We intend to move to a different mechanism for syncing than
-   snapshots." The snapshot-based fast sync (#4058: `internal/fastsync`, the
-   sequencer's pinned provable view and `SnapshotRange`, the major-header,
-   minor-root and partition-root ranges, `pkg/consensus/snapshot`) is removed.
-   The mechanism is to be designed against executor.md "Sync"; until then a
-   node behind the retention window has no way back but genesis.
-2. **Verified against the anchored root.** The joiner checks the restored BPT
-   root against the partition's `StateTreeAnchor` for that block as the
-   Directory anchored it, read from a Directory node through the API; a
-   mismatch discards the state and asks another peer. Test: a corrupted chunk
-   is refused, the next peer is asked.
-3. **Listening first.** Before asking for state the joiner subscribes to
-   consensus and buffers committed groups by round; consensus recovery follows
-   the DAG from the current round; the executor runs nothing. Test: commits
-   that arrive during the transfer are held, in order, none lost.
-4. **Resume.** With the state at block N verified, groups above N execute in
-   order and groups at or below N are dropped; a group the buffer never saw is
-   fetched from retention, and a gap past retention sends the node back to
-   step 1 for a newer state. Staging fills from the stream it executes and
-   from the rejoin pull for what was in flight before it listened — done
-   for the restart case (#4290, 2026-09-18: `Conductor.Rejoin`, the source's
-   `RejoinGrace`). Test: a
-   validator killed under 500 tps rejoins and votes within a bounded number of
-   blocks, with block hashes equal to its peers'.
-5. **Followers take the same path** with voting off; the follower mode uses it
-   in place of a snapshot file. Test: a follower started against a running
-   Docker network reaches the network's height.
-6. **The snapshot file stays for genesis and archives**, not for joining.
-
-Two decisions for Paul before step 1 is built: whether a whole-state transfer
-is acceptable at the target state size, or the pull must be incremental (by
-account, walking the BPT); and retention — the transfer must finish inside
-what peers keep (`stagedCommits`, 18 on a BVN today), or peers must serve
-"state at N plus the commits after N" on request.
+1. **Staging as an API.** A validator serves its staging as of its last
+   committed block, per partition: every stream's `Delivered`, sighted mark,
+   held entries with companions and collected flags, validated hashes,
+   proofs waiting by anchor block, anchor copies held. Served atomically at a
+   block boundary. Test: a snapshot taken between two blocks equals what a
+   fresh staging fed the same blocks holds.
+2. **Collect without executing.** The executor applies a committed block to
+   staging only — classify, intake proofs, hold entries and anchor copies —
+   and a joining node runs every buffered block through it from `P + 1`.
+   Then, at `Q`, releases through each stream's `Delivered` from the pulled
+   ledgers and decides proofs against the anchors executed by `Q`. Test: a
+   node that collected blocks `P + 1 .. Q` on top of a peer's staging at `P`
+   holds exactly what the peer holds at `Q`.
+3. **State pull on this line.** Port `pull`, `enumerate`, `tracker`,
+   `bptproof` and `BptPageQuery` from bootstrap-v3; the spine first; the
+   accounts named by buffered blocks next; verified against the Directory's
+   `StateTreeAnchor` for the block. A restart pulls only what changed after
+   its last block. Test: a corrupted account is refused and re-pulled from
+   another peer; a node with state at `R` reaches the root at `Q` pulling
+   only accounts touched in `(R, Q]`.
+4. **Handoff.** At the root match the executor starts at `Q + 1` from the
+   buffer; the consensus checkpoint restores only the DAG position; catch-up
+   replay of unexecuted blocks is removed, as is the interim rejoin pull
+   (`Conductor.Rejoin`) once this is proven. Test: the simulator's
+   `RestartNode` takes this path and `TestOneValidatorRestartDoesNotDiverge`
+   holds; a Docker chaos run keeps every restarted validator agreeing on the
+   anchor body.
+5. **Serve last.** Node state `BOOTING → ACTIVE → COMPLETE`, advertised; the
+   sequencer and the historical API refuse until `COMPLETE`; the cache fills
+   by backfill. Test: a request for missing data routed to a `BOOTING` node
+   is refused and answered by a `COMPLETE` one.
 
 Done when: a soak with chaos restarts under load keeps every restarted
-validator voting within the bound, and #4205 closes. Required before chaos
-returns to the acceptance run.
+validator agreeing on every anchor body, and #4205 closes. Required before
+chaos returns to the acceptance run.
 
 ### #4214 — resolved: there was no loss
 
