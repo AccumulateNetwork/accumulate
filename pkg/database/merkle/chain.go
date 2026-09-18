@@ -68,7 +68,7 @@ func (m *Chain) AddEntry(hash []byte, unique bool) error {
 	}
 
 	hash = copyHash(hash)                    // Just to make sure hash doesn't get changed
-	_, err = m.ElementIndex(hash).Get()      // See if this element is a duplicate
+	at, err := m.ElementIndex(hash).Get()    // See if this element is a duplicate
 	if errors.Is(err, storage.ErrNotFound) { // So only if the hash is not yet added to the Merkle Tree
 		err = m.ElementIndex(hash).Put(uint64(head.Count)) // Keep its index
 		if err != nil {
@@ -76,8 +76,11 @@ func (m *Chain) AddEntry(hash []byte, unique bool) error {
 		}
 	} else if err != nil {
 		return err
-	} else if unique {
-		return nil // Don't add duplicates
+	} else {
+		recordDuplicate(m, unique, at) // EVIDENCE INSTRUMENTATION, inert by default
+		if unique {
+			return nil // Don't add duplicates
+		}
 	}
 
 	err = m.Element(uint64(head.Count)).Put(hash)
