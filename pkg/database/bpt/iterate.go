@@ -141,6 +141,26 @@ func (b *branch) walkRange(found *bool, key [32]byte, values []KeyValuePair, pos
 	return errors.UnknownError.Wrap(err)
 }
 
+// GetRange returns up to count entries from the BPT starting after startKey in
+// BPT key order, and the last key seen — pass it as startKey to get the next
+// page. A returned slice shorter than count means the BPT is exhausted.
+//
+// Use the all-FF key as the initial startKey to begin a fresh scan. Stateless
+// across calls, so a client can resume from the key it was last given.
+//
+// Ported from bootstrap-v3 (issue #4293); unchanged.
+func (b *BPT) GetRange(startKey [32]byte, count int) (entries []KeyValuePair, nextStart [32]byte, err error) {
+	if count <= 0 {
+		return nil, startKey, nil
+	}
+	values := make([]KeyValuePair, count)
+	nextStart, vals, err := b.getRange(startKey, values)
+	if err != nil {
+		return nil, startKey, err
+	}
+	return vals, nextStart, nil
+}
+
 func (b *BPT) getRange(startKey [32]byte, values []KeyValuePair) (lastKey [32]byte, _ []KeyValuePair, err error) {
 	err = b.executePending() //                                    Execute any pending inserts
 	if err != nil {

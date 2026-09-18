@@ -63,6 +63,22 @@ func (a *Account) BptReceipt() (*merkle.Receipt, error) {
 	return receipt, nil
 }
 
+// StateTreeReceipt returns a Merkle receipt proving the account's state into
+// its BPT leaf value. It is the first half of StateReceipt, without the BPT
+// path, and it is what a node pulling state needs (executor.md, "Sync"): the
+// peer's receipt carries the path from the leaf to the anchored root, and this
+// says the state the node just pulled is what sits at the foot of it.
+//
+// Unlike StateReceipt it does not read the BPT, so it works on an uncommitted
+// batch — the pull verifies before it commits.
+func (a *Account) StateTreeReceipt() (*merkle.Receipt, error) {
+	hasher, err := a.parent.observer.DidChangeAccount(a.parent, a)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return hasher.Receipt(0, len(hasher)-1), nil
+}
+
 // StateReceipt returns a Merkle receipt for the account state in the BPT.
 func (a *Account) StateReceipt() (*merkle.Receipt, error) {
 	hasher, err := a.parent.observer.DidChangeAccount(a.parent, a)

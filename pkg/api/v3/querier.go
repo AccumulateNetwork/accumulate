@@ -61,6 +61,12 @@ func (q Querier2) QueryTransactionChains(ctx context.Context, scope *url.TxID, q
 	return rangeOf[*ChainEntryRecord[Record]](doQuery(q, ctx, scope.AsUrl(), query))
 }
 
+// QueryBptPage asks the partition at scope for one page of its BPT, for a node
+// pulling the state (executor.md, "Sync").
+func (q Querier2) QueryBptPage(ctx context.Context, scope *url.URL, query *BptPageQuery) (*BptPageRecord, error) {
+	return recordIs[*BptPageRecord](doQuery(q, ctx, scope, query))
+}
+
 func (q Querier2) QueryChainEntry(ctx context.Context, scope *url.URL, query *ChainQuery) (*ChainEntryRecord[Record], error) {
 	return chainEntryOf[Record](doQuery(q, ctx, scope, query))
 }

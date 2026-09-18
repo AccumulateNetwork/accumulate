@@ -47,6 +47,19 @@ ConsensusPeerInfo:
     - name: Port
       type: uint
 
+# BptLeafSummary is one BPT leaf: the account-key hash, its value hash, and the
+# account URL. The URL is what a pulling node needs to ask for the account;
+# without it the puller would have to keep its own key-hash to URL map.
+BptLeafSummary:
+  fields:
+    - name: KeyHash
+      type: hash
+    - name: ValueHash
+      type: hash
+    - name: Account
+      type: url
+      pointer: true
+
 ServiceAddress:
   incomparable: true
   fields:

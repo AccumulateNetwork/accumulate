@@ -199,6 +199,19 @@ this one; the staging half is new.
    its last block. Test: a corrupted account is refused and re-pulled from
    another peer; a node with state at `R` reaches the root at `Q` pulling
    only accounts touched in `(R, Q]`.
+
+   *Landed (#4293) with three gaps to close here.* The pages are read and
+   nothing of a peer's goes into the local BPT — the stale set is the diff
+   between the peer's pages and the node's own leaves — and a pulled account
+   replaces what the node held for it and carries its chains' open mark sets,
+   so it can be executed from. What is *not* done: the accounts are named by
+   re-diffing the peer's whole tree each round rather than by the blocks
+   (#4292's `CollectBlock` output is the block-named path, not wired); the
+   anchored roots are read from one API with no `BlockAnchor` signature or
+   quorum checked, so with one source that source supplies both the root and
+   the state hashing into it; and accounts are pulled as if independent,
+   though a key page's hash covers its book's pending. DIFFERENCES E11 has
+   the list.
 4. **Handoff.** At the root match the executor starts at `Q + 1` from the
    buffer; the consensus checkpoint restores only the DAG position; catch-up
    replay of unexecuted blocks is removed, as is the interim rejoin pull
