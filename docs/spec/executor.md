@@ -249,6 +249,22 @@ nodes take the same path, in this order:
    that block a few blocks later — so a fetched account is held, unwritten,
    until the anchor for its block arrives, and is neither trusted early nor
    refused for arriving before its proof.
+
+   **The BPT pages are read, never written.** A leaf enters the local BPT
+   only as the hash of state this node holds and has verified, because the
+   local root is what the node matches against an anchored root to decide it
+   is caught up; a leaf taken from a peer's word would make that root the
+   peer's and the match would say nothing. The pages name accounts and say
+   what the peer's leaves are, and the difference from the node's own leaves
+   is the set to pull.
+
+   **What is pulled is what the node executes from.** The pulled state
+   replaces what the node holds for that account rather than joining with it,
+   or a restart keeps entries the peer has dropped and the account never
+   hashes into the anchored root again. A chain is taken with the entries of
+   its open mark set — the entries since its last mark point — because an
+   append rebuilds the chain's tail from them, and a node that cannot append
+   to its chains cannot execute block `Q + 1`.
 4. **Converge, then execute.** When the local BPT root equals the
    `StateTreeAnchor` of an anchored block `Q` at or above `P`, staging is
    brought to `Q`: everything collected through `Q` held, everything at or
