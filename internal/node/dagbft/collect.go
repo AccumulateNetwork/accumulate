@@ -94,6 +94,14 @@ func (s *Service) StartCollecting() {
 	defer s.mu.Unlock()
 	s.collecting = true
 	s.bufferOverrun = false
+
+	// The block this node stood at when it started collecting is what maps
+	// the buffer onto block numbers: the first group buffered is the block
+	// after it, and each one after that is the next block, because a group
+	// that would have produced no block is not buffered either. The handoff
+	// needs that map to know which buffered groups the pulled state already
+	// contains (#4294).
+	s.collectFrom = s.lastBlockIndex
 }
 
 // Collecting reports whether this node is joining: collecting committed
@@ -197,14 +205,36 @@ func (s *Service) performHandoff(q uint64) error {
 		s.mu.Unlock()
 		return errors.NotReady.WithFormat("%s: the join buffer overran; the join must start again", s.config.Partition.ID)
 	}
-	groups := s.buffer
+	// The buffered groups are blocks collectFrom+1, collectFrom+2, … in
+	// order. The state is block q, so the groups at or below q are blocks
+	// this node's state already contains and must NOT be produced again:
+	// producing the first of them as block q+1 would execute an old block's
+	// transactions against a newer state, under a block number that is not
+	// theirs — every node's divergence in one step.
+	if q < s.collectFrom {
+		s.mu.Unlock()
+		return errors.Conflict.WithFormat("%s: cannot hand off at block %d, behind the block %d this node stood at",
+			s.config.Partition.ID, q, s.collectFrom)
+	}
+	skip := q - s.collectFrom
+	if skip > uint64(len(s.buffer)) {
+		// The pull reached q before consensus delivered the blocks up to it.
+		// Handing off now would produce the blocks still to arrive under the
+		// wrong numbers, so the join waits and asks again.
+		s.mu.Unlock()
+		return errors.NotReady.WithFormat("%s: the state is block %d and only %d blocks have been collected since %d",
+			s.config.Partition.ID, q, len(s.buffer), s.collectFrom)
+	}
+
+	groups := s.buffer[skip:]
 	s.buffer = nil
 	s.collecting = false
 	s.lastBlockIndex = q
 	s.mu.Unlock()
 
 	s.logger.Info("Joined: executing from the block after the state",
-		"partition", s.config.Partition.ID, "block", q, "buffered", len(groups))
+		"partition", s.config.Partition.ID, "block", q,
+		"collectedFrom", s.collectFrom, "alreadyInTheState", skip, "toProduce", len(groups))
 
 	for i, g := range groups {
 		err := s.produceGroup(g.Certs, g.Batches, g.Leader, g.IsLeader, g.payloadEntries())
