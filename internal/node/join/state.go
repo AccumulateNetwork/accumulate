@@ -10,6 +10,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -101,6 +102,11 @@ type PulledState struct {
 	round uint64 // how many rounds have run, for the backstop's cadence
 	wide  bool   // the last ledger walk could not cover (R, Q]
 
+	// executed is the block this node's EXECUTOR last executed: the number
+	// the daemon logs as lastBlock. It is read once, before anything is
+	// pulled, and never again — see localBlock.
+	executed uint64
+
 	// held is what has been fetched and not yet settled: state a peer served
 	// at a block the Directory has not anchored yet. It is HELD rather than
 	// thrown away, because a re-fetch next round is served at a newer block
@@ -129,6 +135,15 @@ type StateOptions struct {
 	// itself is #4303.
 	Sources Sources
 
+	// ExecutedBlock is the block this node's executor last executed — the
+	// number the daemon logs as lastBlock (cmd/accumulated/run/dagbft.go,
+	// lastExecutedBlock). Zero means read it from the store, which is the
+	// same number as long as nothing has been pulled yet.
+	//
+	// It is handed over so the daemon and the join cannot disagree about
+	// where this node stands.
+	ExecutedBlock uint64
+
 	Logger *slog.Logger
 }
 
@@ -153,6 +168,18 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		machine:   machine,
 		tracker:   track,
 		log:       log.With("module", "join"),
+		executed:  opts.ExecutedBlock,
+	}
+
+	// Read NOW, before the pull writes anything, or not at all. The store's
+	// copy of this number stops being this node's the moment the ledger
+	// account is pulled — see localBlock.
+	if s.executed == 0 {
+		n, err := readExecutedBlock(opts.Database, opts.Partition)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		s.executed = n
 	}
 	s.anchors = &pull.DirectoryAnchors{
 		// The Directory's anchors are what everything else is verified
@@ -311,13 +338,34 @@ func (s *PulledState) changedAccounts(ctx context.Context) ([]*url.URL, error) {
 	return ChangedAccounts(s.partition, entries), nil
 }
 
-// localBlock is the block this node's state is: what its own ledger says. A
-// node with no ledger at all has executed nothing.
+// localBlock is the block this node's state is: the block its EXECUTOR last
+// executed, remembered from before the pull started. A node that has executed
+// nothing is at zero.
+//
+// It is NOT read from the store each time it is asked for. `<partition>/ledger`
+// is an account, and it is one of the accounts the pull overwrites with the
+// peer's — so after the first round the store's answer is the PEER's block and
+// not this node's. Measured on the live twelve-node network of 2026-09-18: the
+// joining node's own store answered 929 and the peer 946, while its executor
+// was at block 76. The join therefore believed it was 17 blocks behind when it
+// was 853 behind, s.wide was never set, the page diff never ran as the primary,
+// and the walk covered 17 blocks instead of 853 (#4295).
+//
+// Nothing moves it while the join runs: a joining node collects committed
+// blocks and executes none of them (join.Run, step 1), so its executor stands
+// still until the handoff.
 func (s *PulledState) localBlock() (uint64, error) {
-	batch := s.db.Begin(false)
+	return s.executed, nil
+}
+
+// readExecutedBlock is what the daemon reads to decide whether a node must
+// join at all (cmd/accumulated/run/dagbft.go, lastExecutedBlock). It is only
+// this node's answer before anything has been pulled.
+func readExecutedBlock(db *database.Database, partition *url.URL) (uint64, error) {
+	batch := db.Begin(false)
 	defer batch.Discard()
 	var ledger *protocol.SystemLedger
-	err := batch.Account(s.partition.JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
+	err := batch.Account(partition.JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
 	switch {
 	case err == nil:
 		return ledger.Index, nil
@@ -365,6 +413,7 @@ type heldBatch struct {
 	batch    *database.Batch
 	accounts []*heldAccount
 	rounds   int
+	since    time.Time // when it was fetched, for the give-up log
 }
 
 // heldAccount is one fetched account waiting for its block to be anchored.
@@ -436,6 +485,19 @@ func (s *PulledState) settleBatch(ctx context.Context, h *heldBatch) (int, []*ur
 	// Either everything resolved, or the wait is over. Give up on the
 	// stragglers so the batch can close: a block nobody anchors is a peer's
 	// claim and not a wait (pull.AccountFrom).
+	//
+	// SAID OUT LOUD. This is the dominant failure mode and it used to be
+	// silent: the Directory anchors roughly one block in six of a BVN's, so
+	// most batches are served at a block that will never be anchored and
+	// five settle rounds in six end here. A node that has thrown away twelve
+	// held accounts after eight hundred seconds of waiting was indisting-
+	// uishable, in its log, from one that had nothing to do (#4295).
+	if len(waiting) > 0 {
+		s.log.Info("Pulled accounts were given up on unanchored: the directory never anchored the block they were served at",
+			"partition", s.partition, "accounts", len(waiting), "rounds", h.rounds,
+			"block", waiting[0].pending.Block, "waited", time.Since(h.since).Round(time.Second),
+			"first", waiting[0].url)
+	}
 	for _, a := range waiting {
 		a.pending.Discard()
 		refused = append(refused, a.url)
@@ -476,7 +538,7 @@ func (s *PulledState) fetch(ctx context.Context, accounts []*url.URL) (int, []*u
 		chunk := accounts[:n]
 		accounts = accounts[n:]
 
-		h := &heldBatch{batch: s.db.Begin(true)}
+		h := &heldBatch{batch: s.db.Begin(true), since: time.Now()}
 		for _, u := range chunk {
 			srcs, partition, err := s.sourcesFor(ctx, u)
 			switch {

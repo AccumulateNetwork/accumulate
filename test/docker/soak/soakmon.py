@@ -192,6 +192,41 @@ def query_all_nodes(params, ports=None, method="query"):
     return out
 
 
+def sequence_with_sighted(result):
+    """One node's `sequence` list with `received` taken from the record's
+    `sighted` list.
+
+    How far a stream has been sighted is derived from the serving node's
+    staging and is not stored (#4189), so it is carried BESIDE the account
+    body and never in it: a body with a derived value written into it no
+    longer hashes to the leaf the receipt served with it proves, and no
+    joining node can verify that account again (#4295). The body's own
+    `received` therefore reads 0 and the number lives in `sighted`.
+
+    Raises if the result carries no account, which is how a node that did not
+    answer is told from one that answered with nothing."""
+    seq = result["account"]["sequence"] or []
+    sighted = {}
+    for s in result.get("sighted") or []:
+        u = _norm_url(s.get("source"))
+        if u:
+            sighted[u] = int(s.get("received") or 0)
+    if not sighted:
+        return seq
+    out = []
+    for e in seq:
+        e = dict(e)
+        u = _norm_url(e.get("url"))
+        if u in sighted:
+            e["received"] = sighted[u]
+        out.append(e)
+    return out
+
+
+def _norm_url(u):
+    return (u or "").strip().lower().rstrip("/")
+
+
 def merge_sequence_views(views):
     """Merge one ledger's `sequence` list as read from several nodes: per
     remote, the max of each field. Every field is monotone on every node, so
@@ -1042,7 +1077,7 @@ def collect_flows_api():
             views = []
             for r in query_all_nodes({"scope": "acc://%s.acme/%s" % (SCOPE[dst], path)}):
                 try:
-                    views.append(r["account"]["sequence"] or [])
+                    views.append(sequence_with_sighted(r))
                 except Exception:
                     continue
             answered.append(len(views))

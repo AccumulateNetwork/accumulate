@@ -17,6 +17,18 @@ Receipt:
       type: string
       optional: true
 
+SightedStream:
+  description: is how far one inbound stream of a sequence ledger has been sighted. It is derived from staging and is never stored, so it travels BESIDE the account body and never in it - the body must hash to the leaf the receipt served with it proves (#4295)
+  fields:
+    - name: Source
+      description: is the partition the stream comes from
+      type: url
+      pointer: true
+    - name: Received
+      description: is the highest sequence number sighted on the stream, which is what every operator surface means by "received"
+      type: uint
+      keep-empty: true
+
 LastBlock:
   fields:
     - name: Height

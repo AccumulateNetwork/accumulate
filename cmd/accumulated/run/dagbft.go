@@ -504,7 +504,13 @@ func (s *DAGBFTService) start(inst *Instance) error {
 				Router:  router,
 				Self:    self,
 			},
-			Logger: slog.Default(),
+			// The block this node's EXECUTOR last executed, handed over
+			// rather than read again later. The pull overwrites
+			// `<partition>/ledger` with the peer's, so the store stops being
+			// able to answer this question the moment the join starts
+			// (#4295).
+			ExecutedBlock: lastBlock,
+			Logger:        slog.Default(),
 		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("prepare the join: %w", err)

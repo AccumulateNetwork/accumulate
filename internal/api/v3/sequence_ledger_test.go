@@ -12,8 +12,19 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// served is what a reader of the API sees: the stored body as it is served,
+// plus the sighted counts served beside it, merged on the reader's side. The
+// server never merges them — a body with a derived value in it stops hashing
+// to the leaf its own receipt proves (#4295).
+func served(staging *execute.Staging, u *url.URL, account protocol.Account) protocol.Account {
+	rec := &api.AccountRecord{Account: account, Sighted: sighted(staging, u, account)}
+	return rec.SightedAccount()
+}
 
 // Received is derived from staging on read (#4189). Every operator surface asks
 // an account how far a stream has been sighted — `debug sequence` for its
@@ -46,7 +57,7 @@ func TestWithSighted_FillsReceivedFromStaging(t *testing.T) {
 
 	stored, err := batch.Account(synthetic).Main().Get()
 	require.NoError(t, err)
-	got := withSighted(staging, synthetic, stored).(*protocol.SyntheticLedger)
+	got := served(staging, synthetic, stored).(*protocol.SyntheticLedger)
 
 	part := got.Partition(source)
 	require.Equal(t, uint64(9), part.Received, "sighted through 9")
@@ -60,7 +71,7 @@ func TestWithSighted_FillsReceivedFromStaging(t *testing.T) {
 	reread, err := batch.Account(synthetic).Main().Get()
 	require.NoError(t, err)
 	require.Equal(t, uint64(0), reread.(*protocol.SyntheticLedger).Partition(source).Received,
-		"withSighted must copy, not edit the batch's memoized record")
+		"the derived value must never reach the record the batch memoized")
 }
 
 // A stream that has never been behind reports Received == Delivered, not zero.
@@ -80,7 +91,7 @@ func TestWithSighted_HealthyStreamReportsDelivered(t *testing.T) {
 
 	stored, err := batch.Account(synthetic).Main().Get()
 	require.NoError(t, err)
-	got := withSighted(execute.NewStaging(), synthetic, stored).(*protocol.SyntheticLedger)
+	got := served(execute.NewStaging(), synthetic, stored).(*protocol.SyntheticLedger)
 
 	part := got.Partition(source)
 	require.Equal(t, uint64(42), part.Received, "nothing staged means nothing outstanding")
@@ -109,7 +120,7 @@ func TestWithSighted_AnchorLedger(t *testing.T) {
 
 	stored, err := batch.Account(anchors).Main().Get()
 	require.NoError(t, err)
-	got := withSighted(staging, anchors, stored).(*protocol.AnchorLedger)
+	got := served(staging, anchors, stored).(*protocol.AnchorLedger)
 
 	require.Equal(t, uint64(6), got.Partition(source).Received)
 }

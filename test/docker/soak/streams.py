@@ -29,7 +29,18 @@ def q(scope):
             "-H","content-type: application/json",
             "-d",json.dumps({"jsonrpc":"2.0","id":1,"method":"query","params":{"scope":scope}})],
             capture_output=True, text=True).stdout
-        try: seq = (json.loads(out).get("result",{}).get("account",{}) or {}).get("sequence") or []
+        try:
+            res = json.loads(out).get("result",{}) or {}
+            seq = (res.get("account",{}) or {}).get("sequence") or []
+            # How far a stream has been sighted is derived from staging and
+            # travels BESIDE the body, because a body with it written in no
+            # longer hashes to the leaf its own receipt proves (#4295). The
+            # body's `received` reads 0; the number is in `sighted`.
+            sighted = {norm(x.get("source")): int(x.get("received") or 0)
+                       for x in (res.get("sighted") or []) if x.get("source")}
+            if sighted:
+                seq = [dict(e, received=sighted.get(norm(e.get("url")), e.get("received") or 0))
+                       for e in seq]
         except Exception: return
         with lock: views.append(seq)
 

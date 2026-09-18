@@ -563,6 +563,15 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 			Logger:    f.getLogger().With("module", "acc-rpc"),
 			Database:  f.getDatabase().Deep(),
 			Partition: f.networkFactory.id,
+			// The node's staging, handed over as the sequencer's is. A
+			// process running several networks has no registry to look it up
+			// in, and the node's querier finds it there (execute.StagingFor,
+			// registered by cmd/accumulated/run/dagbft.go). Without it every
+			// simulator test of the pull, the join and the receipt contract
+			// ran against a querier that does not ship: the derived-value
+			// path was a no-op, and the defect that stopped every restarted
+			// node rejoining could not appear here (#4295).
+			Staging: f.getStaging(),
 		}),
 	})
 
