@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -56,9 +57,12 @@ var mRejoinSpans = promauto.NewCounterVec(prometheus.CounterOpts{
 // without holding the same would diverge from them for good (#4290). Start
 // calls it; a test calls it to stand a node where a restarted node stands.
 //
-// Anchor streams need no rebuilding: a block anchor copy's signature is
-// recorded in the store as it arrives, so the quorum a restarted node was
-// gathering is still there.
+// Anchor streams are rebuilt too. A block anchor copy's signature is recorded
+// in the store as it arrives, so the quorum a restarted node was gathering is
+// still there -- but the entry that runs when the quorum completes, or when
+// the anchor before it executes, is a held entry in staging, and it is gone.
+// Run 20260918T015356Z: the restarted node's first Directory block executed
+// no anchor where its peers executed three, and its state diverged there.
 func (c *Conductor) Rejoin() { c.rejoinPending.Store(true) }
 
 func (c *Conductor) rejoin(blockIndex uint64) {
@@ -104,67 +108,119 @@ func (c *Conductor) rejoin(blockIndex uint64) {
 	}
 	for _, source := range sources {
 		delivered := synth.Partition(source).Delivered
-		first := delivered + 1
-		held, spans, retries := 0, 0, 0
-		outcome := "complete"
-	walk:
-		for ; spans < maxRejoinSpans; spans++ {
+		c.rejoinStream(batch, blockIndex, source, delivered, "synthetics", func(ctx context.Context, first, last uint64) ([]*messaging.Envelope, uint64, error) {
 			var envs []*messaging.Envelope
 			sink := func(env *messaging.Envelope) error { envs = append(envs, env); return nil }
-			ctx, cancel := context.WithTimeout(context.Background(), def(c.HealTimeout, DefaultHealTimeout))
-			_, served, err := c.requestSpanTo(ctx, ranger, source, first, first+protocol.MaxReceiptListElements-1,
-				func(uint64) string { return "rejoined" }, sink)
-			cancel()
-			switch {
-			case err == nil:
-				n, err := c.Collector.Collect(batch, envs)
-				if err != nil {
-					outcome = "failed"
-					mRejoinSpans.WithLabelValues("failed", c.Partition.ID, partitionLabel(source)).Inc()
-					slog.Error("Cannot rejoin: intake failed", "module", "conductor", "source", source, "destination", c.Url(), "start", first, "error", err)
-					break walk
-				}
-				held += n
-				mRejoinSpans.WithLabelValues("answered", c.Partition.ID, partitionLabel(source)).Inc()
-				if served < first {
-					break walk
-				}
-				first = served + 1
-			case errors.Is(err, errors.NotReady):
-				// The source has produced nothing more, or its tail is not
-				// yet provable and so not yet dispatched: the peers hold
-				// nothing beyond this either.
-				mRejoinSpans.WithLabelValues("not-yet", c.Partition.ID, partitionLabel(source)).Inc()
-				break walk
-			case errors.Is(err, errors.NotFound):
-				outcome = "stranded"
-				mRejoinSpans.WithLabelValues("miss", c.Partition.ID, partitionLabel(source)).Inc()
-				slog.Error("Cannot rejoin by healing: the source no longer holds what this node's peers hold; this node's state will diverge until it syncs (#4290, #4205)",
-					"module", "conductor", "source", source, "destination", c.Url(), "start", first, "delivered", delivered, "error", err)
-				break walk
-			default:
-				if retries < rejoinRetries {
-					retries++
-					spans--
-					slog.Warn("Rejoin request failed; asking again", "module", "conductor", "source", source, "destination", c.Url(), "start", first, "attempt", retries, "error", err)
-					time.Sleep(c.rejoinWait())
+			_, served, err := c.requestSpanTo(ctx, ranger, source, first, last, func(uint64) string { return "rejoined" }, sink)
+			return envs, served, err
+		})
+	}
+
+	var anchors *protocol.AnchorLedger
+	switch err := batch.Account(c.Url(protocol.AnchorPool)).Main().GetAs(&anchors); {
+	case errors.Is(err, errors.NotFound):
+		return
+	case err != nil:
+		slog.Error("Cannot rejoin: anchor ledger", "module", "conductor", "destination", c.Url(), "error", err)
+		return
+	}
+	for _, source := range c.anchorSources() {
+		delivered := anchors.Partition(source).Delivered
+		c.rejoinStream(batch, blockIndex, source, delivered, "anchors", func(ctx context.Context, first, last uint64) ([]*messaging.Envelope, uint64, error) {
+			records, err := c.anchorAnswers(ctx, ranger, source, first, last)
+			if err != nil {
+				return nil, 0, err
+			}
+			if len(records) == 0 {
+				return nil, 0, errors.InvalidRecord.With("empty answer")
+			}
+			// One copy per anchor is enough to hold it: the signatures
+			// that make its quorum are in the store already, and the
+			// ones that are not arrive through consensus.
+			var msgs []messaging.Message
+			var served uint64
+			for _, r := range records {
+				if r.Sequence == nil {
 					continue
 				}
+				sig := keySignatureOf(r)
+				if sig == nil {
+					continue
+				}
+				mHealEntries.WithLabelValues("rejoined", c.Partition.ID, partitionLabel(source)).Inc()
+				msgs = append(msgs, &messaging.BlockAnchor{Anchor: r.Sequence, Signature: sig})
+				served = r.Sequence.Number
+			}
+			if len(msgs) == 0 {
+				return nil, 0, errors.InvalidRecord.With("answer carries no signed anchor")
+			}
+			return []*messaging.Envelope{{Messages: msgs}}, served, nil
+		})
+	}
+}
+
+// rejoinStream walks one stream from delivered up, span by span, and holds
+// what its source answers. ask returns the packages for a span and the
+// highest number it served.
+func (c *Conductor) rejoinStream(batch *database.Batch, blockIndex uint64, source *url.URL, delivered uint64, what string,
+	ask func(ctx context.Context, first, last uint64) ([]*messaging.Envelope, uint64, error)) {
+	first := delivered + 1
+	held, spans, retries := 0, 0, 0
+	outcome := "complete"
+walk:
+	for ; spans < maxRejoinSpans; spans++ {
+		ctx, cancel := context.WithTimeout(context.Background(), def(c.HealTimeout, DefaultHealTimeout))
+		envs, served, err := ask(ctx, first, first+protocol.MaxReceiptListElements-1)
+		cancel()
+		switch {
+		case err == nil:
+			n, err := c.Collector.Collect(batch, envs)
+			if err != nil {
 				outcome = "failed"
 				mRejoinSpans.WithLabelValues("failed", c.Partition.ID, partitionLabel(source)).Inc()
-				slog.Error("Cannot rejoin: request failed", "module", "conductor", "source", source, "destination", c.Url(), "start", first, "error", err)
+				slog.Error("Cannot rejoin: intake failed", "module", "conductor", "what", what, "source", source, "destination", c.Url(), "start", first, "error", err)
 				break walk
 			}
+			held += n
+			mRejoinSpans.WithLabelValues("answered", c.Partition.ID, partitionLabel(source)).Inc()
+			if served < first {
+				break walk
+			}
+			first = served + 1
+		case errors.Is(err, errors.NotReady):
+			// The source has produced nothing more, or its tail is not
+			// yet provable and so not yet dispatched: the peers hold
+			// nothing beyond this either.
+			mRejoinSpans.WithLabelValues("not-yet", c.Partition.ID, partitionLabel(source)).Inc()
+			break walk
+		case errors.Is(err, errors.NotFound):
+			outcome = "stranded"
+			mRejoinSpans.WithLabelValues("miss", c.Partition.ID, partitionLabel(source)).Inc()
+			slog.Error("Cannot rejoin by healing: the source no longer holds what this node's peers hold; this node's state will diverge until it syncs (#4290, #4205)",
+				"module", "conductor", "what", what, "source", source, "destination", c.Url(), "start", first, "delivered", delivered, "error", err)
+			break walk
+		default:
+			if retries < rejoinRetries {
+				retries++
+				spans--
+				slog.Warn("Rejoin request failed; asking again", "module", "conductor", "what", what, "source", source, "destination", c.Url(), "start", first, "attempt", retries, "error", err)
+				time.Sleep(c.rejoinWait())
+				continue
+			}
+			outcome = "failed"
+			mRejoinSpans.WithLabelValues("failed", c.Partition.ID, partitionLabel(source)).Inc()
+			slog.Error("Cannot rejoin: request failed", "module", "conductor", "what", what, "source", source, "destination", c.Url(), "start", first, "error", err)
+			break walk
 		}
-		if spans == maxRejoinSpans {
-			outcome = "incomplete"
-		}
-		if delivered == 0 && held == 0 && outcome == "complete" {
-			continue // a stream nothing has ever come down: not worth a line
-		}
-		slog.Info("Rejoined stream", "module", "conductor", "source", source, "destination", c.Url(),
-			"delivered", delivered, "held", held, "spans", spans, "outcome", outcome, "block", blockIndex)
 	}
+	if spans == maxRejoinSpans {
+		outcome = "incomplete"
+	}
+	if delivered == 0 && held == 0 && outcome == "complete" {
+		return // a stream nothing has ever come down: not worth a line
+	}
+	slog.Info("Rejoined stream", "module", "conductor", "what", what, "source", source, "destination", c.Url(),
+		"delivered", delivered, "held", held, "spans", spans, "outcome", outcome, "block", blockIndex)
 }
 
 // rejoinWait is the pause between retries: none under a test's HealTimeout

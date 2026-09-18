@@ -98,9 +98,14 @@ a probe: no patience, no selection, no cadence, because the node's own
 staging is the gap and it alone can fill it. A source that no longer holds
 the span (the cache had released it, its own restart lost it) is a node that
 cannot rejoin by healing; it says so once and needs sync (executor.md
-"Sync", E11). Anchor streams need no rebuilding: a block anchor copy's
-signature is recorded in the store as it arrives, so the quorum a restarted
-node was gathering is still there.
+"Sync", E11). **Anchor streams are rebuilt the same way.** A block anchor
+copy's signature is recorded in the store as it arrives, so the quorum a
+restarted node was gathering is still there — but the held entry that runs
+when the quorum completes, or when the anchor before it executes, is
+staging's and is gone with it; the restarted node's first Directory block
+executed no anchor where its peers executed three (run 20260918T015356Z).
+The pull asks each anchor source for `[Delivered + 1, ...]` and holds one
+copy per anchor; the signatures that make the quorum are the store's.
 
 ### Who asks, and when
 
@@ -504,7 +509,9 @@ served, up to `maxRejoinSpans` spans, until `NotReady`; each answer's
 packages go to `Collector.Collect` (`block.Executor.Collect`, `rejoin.go`):
 the proof through the block's `intakeProof`, each entry held at its number
 with its companion, nothing written. `NotFound` is logged once as a node that
-cannot rejoin by healing. Counted per span in
+cannot rejoin by healing. Anchor streams: `anchorAnswers` per span,
+one `BlockAnchor` copy per anchor held by `holdAnchors` as a copy below
+quorum is held. Counted per span in
 `accumulate_conductor_rejoin_spans_total{outcome}` (answered, not-yet, miss,
 failed); entries in `heal_entries_total{outcome="rejoined"}`. A node whose
 system ledger is at block zero is at genesis and rejoins nothing. The
