@@ -362,16 +362,28 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   flight" rather than as misses. Nothing is healed and nothing alarms; the
   node-state gauge is what shows it.
 
-**Not proven, and the first attempt never engaged**: run
-`20260918T124530Z` (30 m, 100 tps, chaos, `0259684c5`) was the first Docker
-chaos run of the join and it tested the fallback rather than the join — no
-node found a peer to ask, on any partition, because of #4296 — so the join
-has still not run on a real network. The Docker chaos run
-(`30m-100tps-chaos.conf`, then 24 h) is the proof, and it is a human step. Two
+**Not proven: a join has taken staging on a real network, and none has
+completed on one.** Run `20260918T124530Z` (30 m, 100 tps, chaos,
+`0259684c5`) was the first Docker chaos run of the join and it tested the
+fallback rather than the join — no node found a peer to ask, on any
+partition, because of #4296. Run `20260918T131713Z`, on `0132b886c` with
+#4296 merged, went one step further and stopped: the join took staging from a
+peer 22 times, including on the restarted node eleven seconds after its
+restart (`Staging taken from a peer block=201 partition=Directory streams=4`,
+`block=198 partition=BVN1 streams=1`), and every spine pull behind those
+succeeded — but **not one block-named account was ever pulled** (2,171 pull
+rounds, `pulled=0` on all of them, #4303), so no node reached a root match
+and no join completed. In the same run a fresh network could not start at
+all: every node loads genesis, so `lastBlock == 1` and no node is `Fresh`,
+and all twelve joined and refused each other (#4304, a regression from
+#4296). The Docker chaos run (`30m-100tps-chaos.conf`, then 24 h) is the
+proof, and it is a human step. Two
 known holes will meet it first — an account carrying pending signature
 material cannot be verified at all (#4293's entry above, filed as #4298), and
 a remote transaction stub the store cannot resolve is not collected (#4292's
-entry, filed as #4299).
+entry, filed as #4299). Run `20260918T131713Z` met neither: its refusals are
+`notFound` and `badRequest` answered before verification is reached, so
+nothing in it exercised the verification path at all.
 
 **State pull (#4293, partly done)**: the bootstrap-v3 packages are on this
 line — `internal/core/bootstrap/{pull,enumerate,bptproof,tracker,nodestate}`
