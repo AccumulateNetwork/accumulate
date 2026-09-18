@@ -907,16 +907,22 @@ depends on the last:
 5. Decide whether an anchor must be sent.
 6. **If the block is empty, stop.** Nothing below runs.
 7. Record the previous block's state hash on the BPT chain.
-8. Record pending transactions; process chain updates; record the block
-   ledger (below).
+8. Record pending transactions; process chain updates.
 9. Add each synthetic chain that changed to the root chain, index the root
-   chain, update the transaction-chain index — from the hashes the block
-   appended, kept with the record of each append (`ChainUpdates.Hashes`);
-   only a chain appended to outside that record (the signature chain, the
-   BPT chain) is read back for its hash (#4245).
-10. Update major index chains if this is a major block.
-11. Execute post-update actions.
-12. **Update the BPT**, and only then active globals.
+   chain, name each entry that chain gained in this block's entry list, update
+   the transaction-chain index — from the hashes the block appended, kept with
+   the record of each append (`ChainUpdates.Hashes`); only a chain appended to
+   outside that record (the signature chain, the BPT chain) is read back for
+   its hash (#4245).
+10. Record the block ledger (below). It is written LAST of the things that
+    change the entry list, because step 9 adds to that list: the synthetic
+    chains are not anchored by the chain-update loop, so the only record that
+    they changed — and of which entries they gained — is the one step 9 makes.
+    A block ledger written before step 9 never names the partition's synthetic
+    account at all.
+11. Update major index chains if this is a major block.
+12. Execute post-update actions.
+13. **Update the BPT**, and only then active globals.
 
 ### Anchor emission, and the heartbeat
 
@@ -1001,7 +1007,7 @@ backwards, and every gap in a producer's numbering.
 
 ### The block ledger
 
-Step 8 of closing a block records the block ledger. The records live on the
+Step 10 of closing a block records the block ledger. The records live on the
 partition's system ledger account, `<partition>.acme/ledger`, which is the only
 account permitted to hold them (`Account.Commit` rejects a dirty block ledger
 on any other account).
@@ -1020,6 +1026,20 @@ on any other account).
    and the index follows it.
 2. `Account(ledger).BlockLedgerChain()` — a chain named `block-ledger`. The
    block appends one entry: the hash of the marshaled record above.
+
+**The synthetic chains are named the same way as everything else.** A
+partition's synthetic chains are anchored by `anchorSynthChains`, not by the
+chain-update loop, so nothing else adds them to the entry list. That step adds
+them, and it adds **one entry per appended chain entry, carrying that entry's
+index** — the same (account, chain, index) contract every other chain gets,
+because every consumer reads the chain AT the index it is given
+(`loadBlockEntry`, and through it `queryMinorBlock` and the block event
+stream). One entry per chain per block would name index 0 in every block, so a
+block query would answer block *N* with the first block's synthetic
+transaction, and a reader reconstructing from the block ledger would recover
+one of the *n* entries a block appended. The entries are emitted by sorted
+destination and ascending index: the record is hashed, so its order is
+consensus state, and a map's order is not.
 
 Both are written once. The record is never rewritten, which is what a layered
 backend's permanent layer holds ([database.md](database.md), "Backends"); the
