@@ -273,6 +273,24 @@ IndexEntryRecord:
       marshal-as: reference
       pointer: true
 
+BptPageRecord:
+  union: { type: record }
+  description: is one page of a BPT enumeration; the entries are in BPT key order and BptRoot is the root they are consistent with
+  fields:
+    - name: Entries
+      type: BptLeafSummary
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: NextStart
+      description: is the key to pass as the next request's StartHash; undefined when Done
+      type: hash
+    - name: BptRoot
+      type: hash
+    - name: Done
+      description: reports that this page exhausts the BPT
+      type: bool
+
 ErrorRecord:
   union: { type: record }
   fields:

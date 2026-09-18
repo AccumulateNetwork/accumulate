@@ -57,6 +57,9 @@ QueryType:
     value: 0x04
   Block:
     value: 0x05
+  BptPage:
+    description: paginated BPT enumeration, for a node pulling the state (executor.md, "Sync")
+    value: 0x06
 
   AnchorSearch:
     value: 0x10
@@ -78,6 +81,9 @@ RecordType:
     value: 0x03
   Key:
     value: 0x04
+  BptPage:
+    description: one page of a BPT enumeration
+    value: 0x05
 
   Message:
     value: 0x10

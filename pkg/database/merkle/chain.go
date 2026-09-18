@@ -229,6 +229,72 @@ func (m *Chain) tailFallback(head *State, from, to int64) ([][]byte, error) {
 	return hashes, nil
 }
 
+// RestoreHead sets the chain's head and open mark set from a peer, for a node
+// pulling the state (executor.md, "Sync", step 3). open is the chain's entries
+// from the last mark point to head.Count.
+//
+// The head alone is not a chain that can be appended to. An append records the
+// entry in its Tail chunk, and a chunk that falls short is refilled from the
+// elements, so a chain given a head and nothing else fails on its next entry
+// ("tail chunk 0 ... holds 0 hashes before entry 3 and element 0 is missing").
+// The open mark set is therefore restored with the head: its elements, their
+// index entries, and the Tail chunks they belong to. Entries below the last
+// mark point are not needed to append — the mark point that closed their set
+// is closed — and a node pulling state only takes chains it needs to read in
+// full (ModeFullSpine) entry by entry.
+//
+// The open set is checked against the head where the head allows it: replaying
+// it onto the state reconstructed at the mark boundary must reproduce the
+// head, which is the same discharge VerifyAgainstHead performs for a restore.
+func (m *Chain) RestoreHead(head *State, open [][]byte) error {
+	if head == nil {
+		return errors.BadRequest.WithFormat("%v: head required", m.key)
+	}
+	// The set to restore is the one the next append continues: the entries
+	// since the boundary at Count &^ markMask, which is what getTailChunks
+	// counts and appendTail refills from. At an exact mark point that set is
+	// empty; Chain.OpenSet answers with the set just closed instead, and a
+	// caller passing that is taken to mean the same chain.
+	lastMark := head.Count &^ m.markMask
+	if lastMark == head.Count && head.Count > 0 && int64(len(open)) == m.markFreq {
+		lastMark = head.Count - m.markFreq
+	}
+	if int64(len(open)) != head.Count-lastMark {
+		return errors.BadRequest.WithFormat(
+			"%v: the open mark set of a chain of height %d holds %d entries, got %d",
+			m.key, head.Count, head.Count-lastMark, len(open))
+	}
+
+	var before *State
+	if lastMark == 0 {
+		before = new(State)
+	} else {
+		before = StateAtBoundary(head, uint64(lastMark))
+	}
+	if before != nil && !VerifyAgainstHead(before, head, open) {
+		return errors.BadRequest.WithFormat("%v: the open mark set does not reproduce the head", m.key)
+	}
+
+	for i, h := range open {
+		index := lastMark + int64(i)
+		h = copyHash(h)
+		if err := m.ElementIndex(h).Put(uint64(index)); err != nil {
+			return errors.UnknownError.WithFormat("%v: put element index %d: %w", m.key, index, err)
+		}
+		if err := m.Element(uint64(index)).Put(h); err != nil {
+			return errors.UnknownError.WithFormat("%v: put element %d: %w", m.key, index, err)
+		}
+		if err := m.appendTail(index, h); err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	// The open set is in the Tail records now, so the head does not carry it.
+	head = head.Copy()
+	head.HashList = nil
+	return m.Head().Put(head)
+}
+
 // AddEntry adds a Hash to the Chain controlled by the ChainManager. If unique is
 // true, the hash will not be added if it is already in the chain.
 func (m *Chain) AddEntry(hash []byte, unique bool) error {
