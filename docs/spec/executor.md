@@ -234,6 +234,24 @@ nodes take the same path, in this order:
    nobody to ask (#4296). The
    buffered blocks after `P` are then applied to that staging, so staging is
    what the peers hold as of every block from `P` on.
+
+   **A node that has executed no block does not join at all**, and that is
+   where the exception lives: it is not a flag inside the join saying "execute
+   anyway", it is the decision to enter the join. **Genesis is not an
+   execution.** Loading the genesis snapshot writes the system ledger at block
+   1, so "has executed no block" is `lastBlock <= GenesisBlock`; `lastBlock >
+   0` is true of every node that has ever started, and reading it as "this
+   node has been running" sent every node of a fresh network into the join to
+   ask the others for a staging none of them had (#4304). A network whose
+   nodes all start by asking can only start when they all give up asking,
+   which on twelve nodes is a twenty-second race won by one arbitrary node per
+   partition — not a start-up rule.
+
+   The two cases this cannot tell apart are the first node of a **new network**
+   and a node added to a **running partition** that holds nothing but genesis:
+   both read block 1, and the daemon executes from genesis in both. The second
+   is wrong and there is no local fact that separates them — the distinction is
+   whether the partition has moved on, which is a network fact (#4340).
 3. **Pull the state.** The set of accounts to pull is **the block ledger's,
    not the block's envelopes'**. Every block records `(account, chain, index)`
    for every chain its execution changed (see "The block ledger"), that record
