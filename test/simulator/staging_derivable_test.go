@@ -317,10 +317,23 @@ func TestStagingIsNotNamedByTheBlockLedger(t *testing.T) {
 	}
 
 	// The synthetic chain to BVN1 exists and has the ten entries on it — it
-	// is simply not in any block ledger. anchorSynthChains calls
-	// DidUpdateChain (block_end.go:557), but it runs at block_end.go:288,
-	// AFTER recordBlockLedger has already marshalled and hashed the record
-	// at block_end.go:245.
+	// is simply not in any block ledger, and that is deliberate.
+	// enumerateModifiedChains (block_end.go:911, called at :120, before
+	// recordBlockLedger at :245) throws away everything DidAddChainEntry
+	// recorded and rebuilds the list from the batch's updated accounts,
+	// SKIPPING the partition's synthetic account outright:
+	//
+	//	// Anchoring the synthetic transaction ledger causes sadness and
+	//	// despair (it breaks things but I don't know why)
+	//	_, ok := protocol.ParsePartitionUrl(e.Account)
+	//	if ok && e.Account.PathEqual(protocol.Synthetic) {
+	//		continue
+	//	}
+	//
+	// anchorSynthChains does call DidUpdateChain for it (block_end.go:557),
+	// but that runs at :288 — after the record has been marshalled and
+	// hashed. So the one account Paul's proposal names is the one account
+	// the block ledger never names.
 	sc := b0.Account(PartitionUrl("BVN0").JoinPath(Synthetic)).SyntheticChain("BVN1")
 	head, err := sc.Inner().Head().Get()
 	require.NoError(t, err)
