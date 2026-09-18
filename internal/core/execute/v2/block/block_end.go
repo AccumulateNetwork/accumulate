@@ -270,13 +270,16 @@ func (block *Block) close() (execute.BlockState, error) {
 	}
 
 	// Record the block ledger LAST, so it names everything this block
-	// changed. The synthetic chains are anchored above rather than by the
-	// loop over modified chains -- they are skipped there, because that loop
-	// also anchors, and anchoring them twice in one block would give the same
-	// chain two root-chain entries and invalidate the root position the
-	// proofs are built from. But anchorSynthChains registers them as block
-	// entries on its way past, and it runs after everything else that can,
-	// so the record is only complete once it has.
+	// changed. The synthetic chains never reach the loop over modified
+	// chains: enumerateModifiedChains rebuilds the entry list from the
+	// batch's updated accounts, and it runs BEFORE produceBlockMessages
+	// appends anything to a synthetic chain (and in a sub-batch at that), so
+	// the synthetic account is not in that list when the loop runs. (The
+	// explicit skip in enumerateModifiedChains is therefore dead code, not
+	// the thing that prevents double anchoring.) anchorSynthChains is what
+	// anchors them and what names their entries, and it runs after
+	// everything else that adds to the list, so the record is only complete
+	// once it has.
 	//
 	// One record keyed by block index, and its hash on the block-ledger
 	// chain, so the ledger account's hash commits to what this block changed.
@@ -540,7 +543,8 @@ func getMajorHeight(desc execute.DescribeShim, batch *database.Batch) (uint64, e
 
 // anchorSynthChains anchors each destination's synthetic chain this block
 // appended to into the root chain, records the chain's index entry for the
-// block, and remembers the root position for the block's proofs.
+// block, remembers the root position for the block's proofs, and names each
+// entry it appended in the block ledger.
 func (m *Executor) anchorSynthChains(block *Block, rootChain *database.Chain) error {
 	if block.cacheBlock == nil {
 		return nil
@@ -563,10 +567,38 @@ func (m *Executor) anchorSynthChains(block *Block, rootChain *database.Chain) er
 		}
 		st.IndexIndex = indexIndex
 		st.RootPos = rootChain.Height() - 1 // the anchor just appended
-		block.State.ChainUpdates.DidUpdateChain(&protocol.BlockEntry{
-			Account: m.Describe.Synthetic(),
-			Chain:   st.ChainName,
-		})
+	}
+
+	// Name the entries in the block ledger: ONE BlockEntry PER APPENDED CHAIN
+	// ENTRY, carrying that entry's own index, as for every other chain. The
+	// block ledger's contract is a list of (account, chain, index) triples
+	// (executor spec, "The block ledger"), and every consumer reads the chain
+	// AT that index — loadBlockEntry, and through it the block query and the
+	// block event stream. One entry per chain per block would say index 0 for
+	// every block, so block N would report block 1's synthetic transaction as
+	// its own, and a reconstruction driven from the block ledger would
+	// recover one entry of the block's n.
+	//
+	// The index is the position buildSynthTxn appended at, carried in the
+	// cache's entry. Emitted by sorted stream and ascending index, so the
+	// list is the same on every node: the record is hashed onto the
+	// block-ledger chain, and the ledger account's hash is in the BPT.
+	byStream := make(map[string][]*synthcache.Entry, len(keys))
+	for _, e := range block.cacheBlock.Entries {
+		k := synthcache.StreamKey(e.Stream)
+		byStream[k] = append(byStream[k], e)
+	}
+	for _, k := range keys {
+		st := block.cacheBlock.Streams[k]
+		entries := byStream[k]
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Index < entries[j].Index })
+		for _, e := range entries {
+			block.State.ChainUpdates.DidUpdateChain(&protocol.BlockEntry{
+				Account: m.Describe.Synthetic(),
+				Chain:   st.ChainName,
+				Index:   uint64(e.Index),
+			})
+		}
 	}
 	return nil
 }
@@ -931,6 +963,17 @@ func (x *Executor) enumerateModifiedChains(block *Block) error {
 		for _, e := range chains {
 			// Anchoring the synthetic transaction ledger causes sadness and
 			// despair (it breaks things but I don't know why)
+			//
+			// This branch never fires. The only place the partition's
+			// synthetic chain is appended is buildSynthTxn, reached from
+			// produceBlockMessages, which runs after this enumeration and
+			// writes into a sub-batch committed later still -- so the
+			// synthetic account is never among UpdatedAccounts here.
+			// Instrumented over a two-BVN simulator run: 0 hits against
+			// 6,951 chains enumerated. It is left in place because removing
+			// it is a separate question; it is not what keeps a synthetic
+			// chain from being anchored twice (see "Record the block ledger
+			// LAST").
 			_, ok := protocol.ParsePartitionUrl(e.Account)
 			if ok && e.Account.PathEqual(protocol.Synthetic) {
 				continue

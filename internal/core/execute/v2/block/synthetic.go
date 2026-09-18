@@ -76,7 +76,18 @@ func (x *Executor) produceSyntheticInto(batch *database.Batch, produced []*Produ
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
-	// Shouldn't this be recorded somewhere?
+	// The appends below are recorded into a throwaway, ON PURPOSE. It is
+	// tempting to point this at block.State.ChainUpdates instead, and it must
+	// not be: this runs from produceBlockMessages, BEFORE the loop over
+	// modified chains in close(). That loop anchors every chain its entries
+	// name (it skips only the ledger account), and anchorSynthChains anchors
+	// the synthetic chains again at the end of the block. One chain would get
+	// two root-chain entries and two index entries in one block, and the root
+	// position the block's proofs are built from would point at the second.
+	//
+	// What the block ledger needs from these appends — (account, chain,
+	// index) per appended entry — is added by anchorSynthChains, from the
+	// cache's entries, after everything that anchors has run.
 	state := new(chain.ChainUpdates)
 
 	blk := &synthcache.Block{Index: block, Streams: map[string]*synthcache.Stream{}}

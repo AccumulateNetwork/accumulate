@@ -7,7 +7,8 @@
 package simulator_test
 
 import (
-		"math/big"
+	"context"
+	"math/big"
 	"sort"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -186,12 +188,25 @@ func TestSyntheticIsNamedByTheBlockLedger(t *testing.T) {
 	// The block BVN1 stood at before anything was staged.
 	before := sim.S.BlockIndex("BVN1")
 
+	// Mixed pacing, deliberately: some blocks send one transaction to bob,
+	// some send three. One synthetic per block cannot tell a record that
+	// names a CHAIN once per block from one that names each ENTRY at its own
+	// index — every index would be 0 and every count would agree. Blocks that
+	// append several entries separate the two.
 	hold.Store(true)
-	for i := uint64(1); i <= 10; i++ {
-		sim.BuildAndSubmitTxnSuccessfully(
-			build.Transaction().For(alice, "tokens").
-				SendTokens(1, 0).To(bob, "tokens").
-				SignWith(alice, "book", "1").Version(1).Timestamp(i).PrivateKey(aliceKey))
+	var ts uint64
+	for i := 0; i < 6; i++ {
+		n := 1
+		if i%2 == 1 {
+			n = 3
+		}
+		for j := 0; j < n; j++ {
+			ts++
+			sim.BuildAndSubmitTxnSuccessfully(
+				build.Transaction().For(alice, "tokens").
+					SendTokens(1, 0).To(bob, "tokens").
+					SignWith(alice, "book", "1").Version(1).Timestamp(ts).PrivateKey(aliceKey))
+		}
 		sim.Step()
 	}
 	sim.StepN(30)
@@ -315,33 +330,129 @@ func TestSyntheticIsNamedByTheBlockLedger(t *testing.T) {
 		t.Logf("  BVN0 chain named by %d block ledgers: %s", c, n)
 	}
 
-	// The synthetic chain to BVN1 exists and has the ten entries on it — it
-	// is simply not in any block ledger, and that is deliberate.
-	// enumerateModifiedChains (block_end.go:911, called at :120, before
-	// recordBlockLedger at :245) throws away everything DidAddChainEntry
-	// recorded and rebuilds the list from the batch's updated accounts,
-	// SKIPPING the partition's synthetic account outright:
+	// The producer's synthetic chain to BVN1 is named by the block ledgers,
+	// and named the way every other chain is: one entry per APPENDED CHAIN
+	// ENTRY, carrying that entry's own index (executor.md, "The block
+	// ledger" — the list is (account, chain, index) triples, and every
+	// consumer reads the chain AT that index). The block ledger is written
+	// last, after anchorSynthChains has registered those entries.
 	//
-	//	// Anchoring the synthetic transaction ledger causes sadness and
-	//	// despair (it breaks things but I don't know why)
-	//	_, ok := protocol.ParsePartitionUrl(e.Account)
-	//	if ok && e.Account.PathEqual(protocol.Synthetic) {
-	//		continue
-	//	}
-	//
-	// anchorSynthChains does call DidUpdateChain for it (block_end.go:557),
-	// but that runs at :288 — after the record has been marshalled and
-	// hashed. So the one account Paul's proposal names is the one account
-	// the block ledger never names.
+	// The ground truth for "which entries did block B append" is not the
+	// block ledger — that is what is under test — but the synthetic chain's
+	// own INDEX chain, which addChainAnchor writes per block with the last
+	// entry index that block appended.
 	sc := b0.Account(PartitionUrl("BVN0").JoinPath(Synthetic)).SyntheticChain("BVN1")
 	head, err := sc.Inner().Head().Get()
 	require.NoError(t, err)
-	t.Logf("BVN0's synthetic chain to BVN1 (%s) has height %d, named by %d block ledgers",
-		sc.Name(), head.Count, chains0[synth0+";"+sc.Name()])
 	require.NotZero(t, head.Count, "the source did append to its synthetic chain")
-	require.Equal(t, int(head.Count), chains0[synth0+";"+sc.Name()],
-		"every block that appended to the synthetic chain names it in that block's ledger: "+
-			"the block ledger is built last, after anchorSynthChains has registered the entries")
+
+	appended := map[uint64][]uint64{} // block -> entry indices it appended
+	indexOfEntry := map[uint64]uint64{}
+	ic, err := sc.Index().Get()
+	require.NoError(t, err)
+	require.NotZero(t, ic.Height(), "the synthetic chain is indexed per block")
+	var next uint64
+	for i := int64(0); i < ic.Height(); i++ {
+		raw, err := ic.Entry(i)
+		require.NoError(t, err)
+		ie := new(IndexEntry)
+		require.NoError(t, ie.UnmarshalBinary(raw))
+		for x := next; x <= ie.Source; x++ {
+			appended[ie.BlockIndex] = append(appended[ie.BlockIndex], x)
+			indexOfEntry[x] = ie.BlockIndex
+		}
+		next = ie.Source + 1
+	}
+	require.Equal(t, int(head.Count), len(indexOfEntry),
+		"the index chain accounts for every entry on the synthetic chain")
+
+	// The workload must actually have put more than one synthetic for BVN1
+	// in one block, or naming per chain and naming per entry are the same
+	// assertion and this proves nothing.
+	multi := 0
+	for _, ix := range appended {
+		if len(ix) > 1 {
+			multi++
+		}
+	}
+	require.NotZero(t, multi, "precondition: some block appended more than one entry to the synthetic chain")
+	t.Logf("BVN0's synthetic chain to BVN1 (%s) has height %d over %d blocks, %d of which appended more than one entry",
+		sc.Name(), head.Count, len(appended), multi)
+
+	// What the block ledgers say: block -> the indices of that chain they name.
+	named0map := map[uint64][]uint64{}
+	acct0 := b0.Account(PartitionUrl("BVN0").JoinPath(Ledger))
+	for i := uint64(1); i <= sim.S.BlockIndex("BVN0")+2; i++ {
+		bl, err := acct0.BlockLedger(i).Get()
+		switch {
+		case errors.Is(err, errors.NotFound):
+			continue
+		case err != nil:
+			require.NoError(t, err)
+		}
+		if bl == nil {
+			continue
+		}
+		for _, e := range bl.Entries {
+			if e.Account.Equal(PartitionUrl("BVN0").JoinPath(Synthetic)) && e.Chain == sc.Name() {
+				named0map[i] = append(named0map[i], e.Index)
+			}
+		}
+	}
+	for b, ix := range named0map {
+		sort.Slice(ix, func(i, j int) bool { return ix[i] < ix[j] })
+		t.Logf("  block %d names synthetic indices %v (appended %v)", b, ix, appended[b])
+	}
+
+	// Every appended entry is named by exactly one block ledger, at its own
+	// index, by the ledger of the block that appended it.
+	require.Equal(t, appended, named0map,
+		"each block ledger names exactly the synthetic chain entries that block appended, at their own indices")
+	seen := map[uint64]uint64{}
+	for b, ix := range named0map {
+		for _, x := range ix {
+			if first, ok := seen[x]; ok {
+				t.Errorf("block %d names synthetic entry %d, already named by block %d", b, x, first)
+			}
+			seen[x] = b
+		}
+	}
+	require.Equal(t, int(head.Count), len(seen), "every entry on the chain is named, exactly once")
+
+	// And the naming RESOLVES: the production read path — queryMinorBlock,
+	// which goes through loadBlockEntry (internal/api/v3/load.go) — answers
+	// each block with the chain entries that block actually appended, and no
+	// others.
+	chainObj, err := sc.Get()
+	require.NoError(t, err)
+	ctx := context.Background()
+	q := api.Querier2{Querier: sim.S.Services()}
+	resolved := map[[32]byte]uint64{}
+	for b := range appended {
+		blk := b
+		rec, err := q.QueryMinorBlock(ctx, PartitionUrl("BVN0"), &api.BlockQuery{Minor: &blk})
+		require.NoError(t, err)
+		require.NotNil(t, rec.Entries)
+		var got []uint64
+		for _, e := range rec.Entries.Records {
+			if e.Account == nil || !e.Account.Equal(PartitionUrl("BVN0").JoinPath(Synthetic)) || e.Name != sc.Name() {
+				continue
+			}
+			want, err := chainObj.Entry(int64(e.Index))
+			require.NoError(t, err)
+			require.Equal(t, *(*[32]byte)(want), e.Entry,
+				"block %d, synthetic index %d: the query returned the chain's entry at that index", blk, e.Index)
+			if first, ok := resolved[e.Entry]; ok {
+				t.Errorf("the query reports entry %x as the content of block %d and of block %d", e.Entry[:4], first, blk)
+			}
+			resolved[e.Entry] = blk
+			got = append(got, e.Index)
+		}
+		sort.Slice(got, func(i, j int) bool { return got[i] < got[j] })
+		require.Equal(t, appended[blk], got, "the block query reports block %d's own synthetic entries", blk)
+	}
+	require.Equal(t, int(head.Count), len(resolved),
+		"the block query resolves every entry on the synthetic chain, each as the content of one block")
 
 	// The claim under test, stated as an assertion: no block ledger on the
 	// DESTINATION side records what was staged and not executed. Naming the
@@ -358,9 +469,3 @@ func countHeldNamed(f *blockLedgerFacts, held []heldFact) int {
 	}
 	return n
 }
-
-// TestAnchorsAreStagedToo answers the "is it only synthetics?" question
-// empirically: an anchor below its validator-signature quorum is held in the
-// anchor stream's stage, exactly as an unproven synthetic is held in the
-// synthetic stream's (msg_block_anchor.go, "an entry in the anchor stream's
-// stage at its number").

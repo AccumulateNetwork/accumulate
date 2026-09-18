@@ -208,6 +208,27 @@ under the wrapper's hash. What remains beyond the spec's shape:
 **Size**: measured on run `20260905T153920Z` before this work, 72 records per
 user transaction; the items above are the ones still to measure after it.
 
+### E14. Naming the synthetic chains in the block ledger is not gated on a version
+
+**Spec** ([executor.md](executor.md), "The block ledger", *Activation and
+history*): what a block records changes the ledger account's hash, so it is
+gated on an `ExecutorVersion` like any change to what a block produces.
+
+**Code**: building the block ledger after `anchorSynthChains` — so that it
+names the partition's synthetic chains and the entries they gained — is
+unconditional. Two binaries on the same chain, one with the change and one
+without, produce different state roots for any block that produced a synthetic
+message, and fork.
+
+**Why it stands**: `dagbft-integration` is not deployed, and every node on this
+line is rebuilt and restarted together, so no mixed-binary window exists. That
+assumption is the whole of the justification. The decision to leave it ungated
+is Paul's, not this change's; the entry exists so that the day this line does
+carry a deployed network, the gate is known to be missing.
+
+**Size**: small — an `ExecutorVersion` predicate around the ordering and the
+naming, if the assumption ever stops holding.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
