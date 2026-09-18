@@ -9,6 +9,7 @@ package crosschain
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -25,6 +26,15 @@ import (
 type Collector interface {
 	Collect(batch *database.Batch, envelopes []*messaging.Envelope) (int, error)
 }
+
+// rejoinRetries and rejoinRetryWait bound how long a rejoining node waits for
+// a source that does not answer: a node that has just started may not have
+// its peers yet, and the pull is the one thing the block waits for. A minute
+// in all; after that the stream is logged as failed and the block runs.
+const (
+	rejoinRetries   = 12
+	rejoinRetryWait = 5 * time.Second
+)
 
 // maxRejoinSpans bounds one stream's rejoin walk, in spans of
 // MaxReceiptListElements from Delivered up. A node further behind than that
@@ -82,7 +92,7 @@ func (c *Conductor) rejoin(blockIndex uint64) {
 	for _, source := range c.inboundSources(synth) {
 		delivered := synth.Partition(source).Delivered
 		first := delivered + 1
-		held, spans := 0, 0
+		held, spans, retries := 0, 0, 0
 		outcome := "complete"
 	walk:
 		for ; spans < maxRejoinSpans; spans++ {
@@ -120,6 +130,13 @@ func (c *Conductor) rejoin(blockIndex uint64) {
 					"module", "conductor", "source", source, "destination", c.Url(), "start", first, "delivered", delivered, "error", err)
 				break walk
 			default:
+				if retries < rejoinRetries {
+					retries++
+					spans--
+					slog.Warn("Rejoin request failed; asking again", "module", "conductor", "source", source, "destination", c.Url(), "start", first, "attempt", retries, "error", err)
+					time.Sleep(c.rejoinWait())
+					continue
+				}
 				outcome = "failed"
 				mRejoinSpans.WithLabelValues("failed", c.Partition.ID, partitionLabel(source)).Inc()
 				slog.Error("Cannot rejoin: request failed", "module", "conductor", "source", source, "destination", c.Url(), "start", first, "error", err)
@@ -135,4 +152,13 @@ func (c *Conductor) rejoin(blockIndex uint64) {
 		slog.Info("Rejoined stream", "module", "conductor", "source", source, "destination", c.Url(),
 			"delivered", delivered, "held", held, "spans", spans, "outcome", outcome, "block", blockIndex)
 	}
+}
+
+// rejoinWait is the pause between retries: none under a test's HealTimeout
+// of zero, which stands for "do not wait on the network".
+func (c *Conductor) rejoinWait() time.Duration {
+	if c.HealTimeout != nil && *c.HealTimeout == 0 {
+		return 0
+	}
+	return rejoinRetryWait
 }
