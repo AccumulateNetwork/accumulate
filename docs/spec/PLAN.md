@@ -276,9 +276,20 @@ every anchored root — independent of the others and fatal on its own),
 **#4304** (a fresh network cannot start: `Fresh` is dead code), with
 **#4297** and **#4307** beside them as the un-gated services that made the
 first possible. All but #4298 and #4304 are fixed on
-`issue-4303-join-pulls-from-peers`, pushed and under review, none merged; the
-fix introduces one knowing contradiction with this spec — the block ledger is
-taken on the peer's word — which is **#4310**, and the reviewer judges it.
+`issue-4303-join-pulls-from-peers`, **merged 2026-09-18** (`05221528b` into
+`c2b0e9d2f`), the full gate green including consim at 717s; the fix introduces
+one knowing contradiction with this spec — the block ledger is taken on the
+peer's word — which is **#4310**, and the reviewer judges it.
+
+**Merged with known exceptions, agreed by Paul.** #4313 and #4314 remain open
+and are *not* fixed by that merge. **#4313** is an executed exploit on the
+path the join drives — `RestoreHead` skips its discharge at absorbed
+boundaries, letting one peer write 256 chosen hashes into the anchor pool; its
+fix commits `Count` into the BPT leaf, which changes the leaf and therefore
+needs an activation height. **#4314** is that a collection proof does not bind
+absolute index: `Validate` never reads `Count`, and restated counts verify.
+Both pre-date the branch. Neither is a builder's call to start: #4313 is
+blocked on the activation height, which is Paul's.
 
 **Ahead of any design work on #4298, one measurement** (lead, 2026-09-18):
 how often `<partition>/ledger`'s scheduled-events BPT and
@@ -290,6 +301,63 @@ drains at the next block's `Begin`, so if they are rarely non-empty then
 sample on a running soak, not a design. Then
 `30m-100tps-chaos.conf`; then #4299, provisionally, which that run may
 promote ahead of itself; then the 24-hour run.
+
+**Five items filed 2026-09-18 after the merge, and where they are proposed to
+go — a proposal, not a change to the approved order.** The approved order
+above stands until Paul says otherwise; this paragraph is the issue manager's
+reasoning about where these belong, recorded so nothing lives only in a chat
+message. Its twin is the note of the same date on #4205.
+
+Three findings were relayed as "recorded on #4205" and were **recorded
+nowhere** — not in any of that issue's seven notes. They are now filed with
+their evidence:
+
+- **#4316** — `localBlock` reads the ledger record `pullSpine` just
+  overwrote (`internal/node/join/state.go:320` reads what `:575`/`:588`/`:596`
+  wrote from the peer via `pull.go:685` and `:418`), so the block-ledger walk
+  measures the node against the peer rather than against itself. Today the
+  page-diff backstop covers for it and the walk is dead weight; that is a cost
+  and a hidden dependency, not a stall.
+- **#4317** — two of the five #4303 fixes have no *targeted* test: #4305's
+  `UpdateBPT` (`state.go:453`, `:592`) and #4309's spine partition
+  (`state.go:575`). Their sole coverage is one broad e2e test,
+  `test/e2e/join_pull_test.go:49`, whose "fails on each of the five taken
+  alone" claim nobody has reproduced. Three reverts and three runs settle it.
+- **#4318** — the join's verification rests on one call site
+  (`internal/node/join/state.go:413`); substituting `Keep()` for `Settle()`
+  makes it verify nothing and no test in `internal/node/join` or `test/e2e`
+  goes red. This is why #4303's "zero verification failures in 22 MB of logs"
+  read as success rather than as the verifier never running.
+
+And two that follow from the block ledger:
+
+- **#4315** — anchor the block-ledger chain into the root chain. Verified in
+  the tree: `recordBlockLedger` at `block_end.go:245` appends at `:968`, after
+  `enumerateModifiedChains` at `:120`, and no `addChainAnchor` names
+  `BlockLedgerChain()` (the three that exist are `:226`, `:277` for the bpt
+  chain per #4272, and `:551`). The same ordering accident #4272 fixed, and
+  the mechanical reason #4310 exists. **Blocked on an activation height —
+  Paul's call**, as #4272's was.
+- **#4312** — unadjudicated, and Paul's. A review disproved its "entries are
+  lost" premise, and the two code claims check out: `Entry(i)` returns
+  whatever sits at that position unchecked (`merkle/chain.go:494`) and
+  `AddEntry(hash, unique)` returns `nil` without appending on a stale
+  `ElementIndex` hit (`:317-324`). That is consensus divergence, not a storage
+  leak, and it inverts the proposed disposal step. **Nothing on #4312 should
+  be built until that is answered.**
+
+*Proposed placement, for Paul.* #4318 and #4317 argue to sit **in front of**
+`30m-100tps-chaos.conf` rather than after it, for the reason #4296, #4303 and
+#4304 were placed there: the run's verdict is only worth what the mechanism
+under it is. A 30-minute chaos run today would pass or fail for reasons
+unrelated to the join — it cannot distinguish a join that verified every
+account from one that verified none (#4318), and the two fixes it would be
+resting on have no targeted test (#4317). Both are cheap: #4317 is three
+reverts and three runs, #4318 is one test. #4316 is a correctness defect the
+page diff currently masks and does not gate the run. #4315 and #4313 do not
+gate it either, but both are stopped dead until their activation heights are
+named, so they should be asked about now rather than when they become urgent.
+**None of this is acted on until Paul answers.**
 
 **The tests that passed do not exercise the mechanism.** This has to be said
 next to the order, because the order was built on them.
