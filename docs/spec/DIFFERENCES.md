@@ -316,6 +316,22 @@ executes from its own last block, producing what it buffered while it asked.
 That is safe for exactly the reason the join exists: no peer holds an entry
 this node lacks, because no peer holds anything.
 
+**Serve last (#4295, partly done)**: a node that is joining refuses the
+sequencer (`Sequence`, `SequenceRange`) and the staging snapshot with
+`NotReady`, counted per call in `accumulate_node_not_serving_total`, so
+healing does not take an empty cache for an answer and a joining node cannot
+take another joining node's stage. The requester already treats `NotReady` as
+"in flight, ask later" rather than a miss, and the anchor path asks the source's
+validators by node and moves past one that refuses. **Differences from the
+issue as written**: a node serves again as soon as it EXECUTES (ACTIVE), not
+once its history is backfilled (COMPLETE) — there is no backfill on this line,
+so requiring COMPLETE would mean a node that joined never answered anything
+again. The state is not persisted (`bootpersist` is not ported): a restart
+joins again, which is the same answer. It is not advertised in the node's
+service record either, so `FindService` still returns a joining node and the
+caller learns its state from the refusal rather than from the listing; the
+`unavailable` outcome label the issue asks for is therefore not added.
+
 **Not proven**: the join has not run on a real network. The Docker chaos run
 (`30m-100tps-chaos.conf`, then 24 h) is the proof, and it is a human step. Two
 known holes will meet it first — an account carrying pending signature

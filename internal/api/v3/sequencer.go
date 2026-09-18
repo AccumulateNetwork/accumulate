@@ -8,6 +8,9 @@ package api
 
 import (
 	"context"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"sync"
 	"sync/atomic"
 
@@ -133,6 +136,10 @@ func NewSequencer(params SequencerParams) *Sequencer {
 func (s *Sequencer) Type() api.ServiceType { return private.ServiceTypeSequencer }
 
 func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64, _ private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	if err := s.serving("sequence"); err != nil {
+		return nil, err
+	}
+
 	// Admission control — proof building is the most expensive query this
 	// node serves, and heal storms poll it hardest exactly when the node is
 	// slowest (#4164). See gate.go.
@@ -177,6 +184,10 @@ func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64,
 // destination, with a single collection proof (#4048) covering the whole
 // range, set as SourceReceiptList on the last record.
 func (s *Sequencer) SequenceRange(ctx context.Context, src, dst *url.URL, start, end uint64, opts private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
+	if err := s.serving("sequence-range"); err != nil {
+		return nil, err
+	}
+
 	// Admission control — see gate.go and the note on Sequence.
 	if err := sequenceGate.enter(ctx); err != nil {
 		return nil, err
@@ -273,4 +284,29 @@ func (s *Sequencer) getRootReceipt(batch *database.Batch, from, to uint64) (*mer
 		return nil, errors.UnknownError.WithFormat("get root chain receipt from %d to %d: %w", from, to, err)
 	}
 	return receipt, nil
+}
+
+// What a node refuses while it is joining, by the call it refused (#4295).
+var mNotServing = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "node",
+	Name:      "not_serving_total",
+	Help:      "Requests refused because this node is joining and does not hold what they ask for, by call",
+}, []string{"partition", "call"})
+
+// serving refuses a request for data this node does not hold.
+//
+// A node that is joining answers for nothing it did not execute: its producer
+// cache holds what it produced before it left and nothing of the blocks it
+// missed, so an answer from it is an answer from an empty cache — which
+// healing reads as "the source has nothing", strands the entry, and spends
+// the requester's retry budget on a node that cannot help (#4287). It says
+// NotReady instead, and the requester asks the next validator (executor spec,
+// "Sync", step 5).
+func (s *Sequencer) serving(call string) error {
+	if nodestate.Serving(s.partitionID) {
+		return nil
+	}
+	mNotServing.WithLabelValues(s.partitionID, call).Inc()
+	return errors.NotReady.WithFormat("%s is joining and cannot answer for what it has not executed", s.partitionID)
 }

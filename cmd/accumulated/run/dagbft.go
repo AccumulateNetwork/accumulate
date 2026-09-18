@@ -494,7 +494,10 @@ func (s *DAGBFTService) start(inst *Instance) error {
 				if err != nil {
 					slog.Error("This node could not start executing", "module", "join",
 						"partition", s.Partition.ID, "block", lastBlock, "error", err)
+					return
 				}
+				// It is executing, so it answers for itself again (#4295).
+				state.Executing(lastBlock)
 
 			default:
 				// A join that cannot finish leaves the node collecting: it

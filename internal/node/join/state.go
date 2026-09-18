@@ -86,11 +86,19 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		Query:    opts.Query,
 		OnAnchor: track.Observe,
 	}
+
+	// The partition's services read this to decide what they may answer: a
+	// node that is joining answers for nothing it has not executed (#4295).
+	// Registered as BOOTING, and the tracker promotes it to ACTIVE when the
+	// root matches.
+	if id, ok := protocol.ParsePartitionUrl(opts.Partition); ok {
+		nodestate.Register(id, machine)
+	}
 	return s, nil
 }
 
 // Machine is the node's state — BOOTING until the root matches, ACTIVE after
-// — which #4295 advertises and refuses requests by.
+// — which the partition's services refuse requests by (#4295).
 func (s *PulledState) Machine() *nodestate.Machine { return s.machine }
 
 // Pull fetches the accounts the collected blocks named, and the Directory's
@@ -184,6 +192,26 @@ func (s *PulledState) pullSpine(ctx context.Context) error {
 	}
 	s.log.Info("Pulled the spine", "partition", s.partition, "accounts", len(accounts))
 	return nil
+}
+
+// Executing records that the node is executing from a block it reached
+// without a root match — the whole-network restart, where no peer had staging
+// to give and the node starts from its own state. Its services answer for
+// themselves again from here; leaving it BOOTING would make a node that is
+// running refuse every request for the rest of its life (#4295).
+func (s *PulledState) Executing(block uint64) {
+	// The anchor recorded is this node's own root at that block. It is not a
+	// root anyone anchored — nothing verified this state — and the difference
+	// is the point: this path is taken only when no peer had anything to
+	// verify against, because every peer restarted too.
+	batch := s.db.Begin(false)
+	defer batch.Discard()
+	root, err := batch.GetBptRootHash()
+	if err != nil {
+		s.log.Error("Cannot read this node's own root", "error", err)
+		return
+	}
+	s.machine.PromoteToActive(root, block)
 }
 
 // Matched reports the block whose anchored root the local root equals. Until

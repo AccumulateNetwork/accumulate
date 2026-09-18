@@ -54,9 +54,8 @@ func (s *Sequencer) stagingFor() *execute.Staging {
 // produced (executor spec, "Sync" step 2; healing spec, "Staging snapshot").
 //
 // One page per call, and the page says which block it is as of. A node that
-// has executed no block holds nothing anyone should start from and refuses
-// (errors.NotReady) — as it will once the node states of step 5 land, for
-// the whole time it is BOOTING.
+// has executed no block, and a node that is joining, hold nothing anyone
+// should start from and refuse (errors.NotReady).
 //
 // The request is validated before it is served. A cursor that names no
 // stream, and a request that does not say which partition it means, are bad
@@ -68,6 +67,15 @@ func (s *Sequencer) StagingSnapshot(_ context.Context, req *private.StagingSnaps
 	}
 	if !strings.EqualFold(req.Partition, s.partitionID) {
 		return nil, errors.BadRequest.WithFormat("requested partition is %s but this partition is %s", req.Partition, s.partitionID)
+	}
+
+	// A node that is joining holds what it has collected since it started,
+	// which is not what a running validator holds and is not a stage anyone
+	// should start from. It refuses, and the asking node goes to the next
+	// validator — which is what keeps two joining nodes from taking each
+	// other's stage (#4295).
+	if err := s.serving("staging-snapshot"); err != nil {
+		return nil, err
 	}
 
 	staging := s.stagingFor()
