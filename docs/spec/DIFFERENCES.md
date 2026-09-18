@@ -233,10 +233,22 @@ it (healing.md, "Rejoining"), the source keeping released entries
 `RejoinGrace` blocks for it. Before this, a restarted validator executed its
 first block holding nothing while its peers executed what they held, and its
 root chain never matched again: five restarts took the Directory below its
-anchor quorum (run `20260917T223150Z`). Not done: a source that no longer
-holds the span leaves the node unable to rejoin by healing, and that is
-logged, not a state the node acts on; sync is the way out and does not
-exist.
+anchor quorum (run `20260917T223150Z`). **Not exact, and therefore not
+done**: the source's cache holds what it has produced, not what the
+destination's peers had received at the restart block. Run
+`20260918T023054Z`: the pull handed the restarted node BVN3 → BVN1 entry 445,
+still in flight to its peers, and it executed it at block 187 where its
+peers executed it at 188 — one chain entry a block early, and the root chain
+diverged again. The set a rejoining node must hold is "what its peers held
+at block R": known only to the peers (a held entry's arrival block, which
+staging does not record) or to the committed log (which is memory: ten
+minutes of batches in the worker, certificates within `DAGGCDepth`). Either
+is a decision on where a rejoining node reads from; the spec today says the
+source's cache, never a peer's staging. Also not done: a source that no
+longer holds the span leaves the node unable to rejoin by healing, logged,
+not a state the node acts on; and a source whose own re-seeded cache cannot
+continue its receipts (#4287) fails the pull for a minute, then the block
+runs with the hole.
 
 **Seeding (#4238, done)**: the service checkpoints its consensus position
 per block and restores the one matching the executor's last block on restart
