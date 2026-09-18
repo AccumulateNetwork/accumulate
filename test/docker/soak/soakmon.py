@@ -534,22 +534,10 @@ def overall_status(api_up, progress):
 # --- Prometheus scrape (authoritative source: node /metrics) -----------------
 METRICS_PORT = 26670
 NS = "accumulate"
-PROM_LINE = re.compile(r'^([a-zA-Z_:][\w:]*)(?:\{([^}]*)\})?\s+([-0-9.eE+]+)')
-
-
-def parse_prom(text):
-    for line in text.splitlines():
-        if not line or line[0] == "#":
-            continue
-        m = PROM_LINE.match(line)
-        if not m:
-            continue
-        name, lbls, val = m.group(1), m.group(2) or "", m.group(3)
-        labels = dict(re.findall(r'(\w+)="([^"]*)"', lbls))
-        try:
-            yield name, labels, float(val)
-        except ValueError:
-            continue
+# The Prometheus text parser lives in promparse.py, shared with
+# nodewatch.py. Two copies of a parser are two chances to disagree about
+# what a node said.
+from promparse import PROM_LINE, parse_prom  # noqa: E402,F401
 
 
 # On-disk database size per node, both engines (dnn + bvnn), in KiB — read in

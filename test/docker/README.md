@@ -314,6 +314,37 @@ command:
   - --database=bolt       # Use BoltDB instead of Badger
 ```
 
+## Watching a running network: soak/nodewatch.py
+
+`soak/nodewatch.py` says what every node is doing right now: its own executed
+block height per partition, whether it is executing or joining, how far behind
+its partition it is, and how long it has been stuck. It needs no soak, no run
+directory and no load generator, and it starts nothing.
+
+```
+soak/nodewatch.py                 # one pasteable text status (two samples, 10 s apart)
+soak/nodewatch.py --watch         # the same, re-sampled every 5 s
+soak/nodewatch.py --serve         # live view on :8099, plus /status.txt and /status.json
+```
+
+The text form is a first-class output, meant to be pasted into a chat by
+someone reading it on a phone; `--serve` publishes exactly the same sample at
+`/status.txt`.
+
+**Height here is never a routed query.** `query acc://bvn-BVN1.acme/ledger`
+asked of a wedged node is answered by a healthy peer: on 2026-09-18, with
+acc-bvn1-val1 stuck at block 76, its own API port answered `index: 929` for
+its own partition. nodewatch reads `consensus-status` addressed to each node's
+own peer ID, which is answered locally and cannot be satisfied by a peer.
+
+**`accumulate_node_state` is a negative-only signal.** The gauge (0 booting,
+1 waiting, 2 active, 3 complete) is created only when a node enters the join
+state machine, so a node that came up from genesis does not export it at all.
+Absent means "not joining", never "unknown" and never "booting" -- and it
+cannot by itself assert that a node is active. nodewatch therefore decides
+"wedged" from three readings together: the gauge, the node's own `stalledFor`
+from its join log, and whether its own height moved between samples.
+
 ## See Also
 
 - [Test Wallet](../wallet/README.md) - Managing test account keys
