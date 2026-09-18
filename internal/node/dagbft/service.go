@@ -27,7 +27,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/persist"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -112,6 +111,14 @@ type Service struct {
 	lastBlockAt  time.Time
 	stallSince   time.Time
 	lastStallLog time.Time
+
+	// Joining (#4292): while collecting, every committed group is taken into
+	// staging and kept in the buffer instead of executed, and nothing here
+	// advances the block index. See collect.go.
+	collecting    bool
+	buffer        []*CollectedGroup
+	bufferBytes   int
+	bufferOverrun bool
 
 	// Validator synchronization
 	validatorUpdateHeight uint64 // Height at which validator update was detected
@@ -534,7 +541,11 @@ func (s *Service) blockProductionLoop() {
 			}
 
 			cert, err := s.processCommittedGroup(group)
-			if err == nil {
+			if err == nil && !s.Collecting() {
+				// A joining node has executed nothing, and must read as
+				// lagging: its primary proposes no batches it could not
+				// execute until the handoff (consensus spec, invariant 9;
+				// #4292, #4294).
 				s.node.ReportExecuted()
 			}
 			if err != nil {
@@ -641,6 +652,15 @@ func (s *Service) checkBlockLiveness() {
 		"lastBlock", lastIndex,
 		"round", s.CurrentRound(),
 	}
+
+	// A joining node produces no blocks on purpose: it is collecting them
+	// while it pulls the state (#4292). That is not a stall, and reporting it
+	// as one would put an error in the log for every join.
+	if s.Collecting() {
+		s.logger.Info("Joining: collecting committed blocks, executing none",
+			append(args, "buffered", s.BufferedCount())...)
+		return
+	}
 	if !produced {
 		// Distinguish "stopped" from "never started": the round is the tell —
 		// a partition whose consensus rounds climb while its block height
@@ -690,11 +710,7 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 	// A certificate delivered twice is not a failure: this node executed it
 	// already and its batches were retired on purpose (#4125). Skip it and
 	// execute the rest of the group.
-	type executed struct {
-		cert    *types.Certificate
-		digests []types.BatchDigest
-	}
-	var executedCerts []executed
+	var executedCerts []*types.Certificate
 	var batches []*types.Batch
 	payloadEntries := 0
 	for _, cert := range group {
@@ -710,11 +726,7 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 		}
 		batches = append(batches, certBatches...)
 		payloadEntries += len(cert.Header.Payload)
-		digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-		for _, entry := range cert.Header.Payload {
-			digests = append(digests, entry.Digest)
-		}
-		executedCerts = append(executedCerts, executed{cert: cert, digests: digests})
+		executedCerts = append(executedCerts, cert)
 	}
 	if len(executedCerts) == 0 {
 		// The whole group was executed before (a redelivery after restart);
@@ -725,6 +737,21 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 	// Check if this validator is the leader of this commit
 	pubKey := s.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey)
 	isLeader := types.ValidatorsEqual(leader.Header.Author, pubKey)
+
+	// A joining node collects this group into staging and keeps it; it
+	// executes nothing until the join says which block its state is
+	// (executor spec, "Sync", steps 1 and 4; #4292).
+	if s.Collecting() {
+		err := s.collectGroup(executedCerts, batches, leader, isLeader)
+		if err != nil {
+			return leader, err
+		}
+		// The batches are kept in the buffer, so the workers may retire
+		// theirs: a joining node that held its workers' copies as well would
+		// pay for every block twice.
+		s.pruneCommitted(executedCerts, 0)
+		return nil, nil
+	}
 
 	// Produce block. The block time MUST be derived from the certificate,
 	// not the local clock: block time is part of executed state, so if each
@@ -781,34 +808,12 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 	// Record state hash for consistency verification. Every certificate in
 	// the group carries the block's resulting hash — the group IS the block.
 	stateHash := s.adapter.StateHash()
-	for _, e := range executedCerts {
-		e.cert.SetStateHash(types.StateHash(stateHash))
+	for _, cert := range executedCerts {
+		cert.SetStateHash(types.StateHash(stateHash))
 	}
 	s.RecordStateHash(leader.Header.Round, blockIndex, types.StateHash(stateHash))
 
-	// Prune batches from workers now that they've been processed.
-	//
-	// Record which block did the pruning. If a later certificate names one of
-	// these digests, the executor's wait diagnostic reports "pruned after
-	// block N" instead of an unattributable "missing=1" — that is the
-	// difference between naming the #4125 halt and guessing at it.
-	// Name the certificate, not just its round. A round is not unique — every
-	// validator authors a header per round — so "pruned at round 260" cannot
-	// distinguish the same certificate arriving twice from two certificates of
-	// the same round sharing a batch. Those want different fixes, and the
-	// round-260 halt could not be told apart without this (#4125).
-	for _, e := range executedCerts {
-		if len(e.digests) == 0 {
-			continue
-		}
-		prunedBy := fmt.Sprintf("block %d round %d cert %s author %x",
-			blockIndex, e.cert.Header.Round, e.cert.Digest().String()[:16],
-			e.cert.Header.Author[:4])
-		commit := worker.CommitInfo{Cert: e.cert.Digest().String(), Detail: prunedBy}
-		for _, w := range s.node.Workers() {
-			w.PruneCommitted(e.digests, commit)
-		}
-	}
+	s.pruneCommitted(executedCerts, blockIndex)
 
 	// Emit block event.
 	//

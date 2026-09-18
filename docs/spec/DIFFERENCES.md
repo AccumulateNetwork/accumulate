@@ -399,6 +399,57 @@ pulls the state the buffered blocks name, and executes from the block after
 its root matches; a restart is the same path, not a consensus replay. PLAN
 E11 lists the five steps.
 
+**Collecting (#4292, done)**: the executor takes a peer's staging
+(`Executor.LoadStaging`, from #4291's snapshot, refusing a stage that is not
+empty and streams that are not this partition's), takes a committed block into
+staging without executing it (`Executor.CollectBlock`), and settles staging
+at the block its pulled state is (`SettleStaging`): proofs decided against
+the anchors that state has executed, every stream released through the
+`Delivered` the pulled ledger names. The DAG service has a collecting mode —
+committed groups are collected and buffered, the block index does not move,
+no checkpoint is saved, no state hash recorded, no block event published, and
+the node does not report execution, so its primary reads as lagging and
+proposes no batches (consensus.md, invariant 9). **Differences from the
+spec**, both deliberate:
+
+- The spec says a joining node buffers *every* committed block from the
+  moment it listens. The buffer is bounded — `maxCollectedGroups` (8,192
+  groups, about half an hour at four leader rounds a second) and
+  `maxCollectedBytes` (1 GiB of batches, because the count alone does not
+  bound the memory) — since the node holds every batch of every buffered
+  block, and an unbounded buffer is a memory fault of the kind that ended
+  runs `20260903T202621Z` and `20260904T*`. Past either bound, and after any
+  block that could not be collected, the buffer is marked overrun and the
+  join must start again from a newer snapshot; nothing yet does that restart
+  (#4294).
+- A collected entry's `Collected` flag is decided against the store as it
+  stands when the block is collected, which on a joining node is the state
+  the pull has reached, not the state at that block. A joining node's store
+  is *behind* its peers', so it can only over-mark: it holds collected what
+  its peers hold runnable, never the reverse. For an entry covered by a
+  package proof that closes itself — the proof is staged, and the anchor
+  decides it at the settle or after the handoff. For an entry that carries
+  its own receipt it does not: nothing stages that proof, so the entry waits
+  for a validated hash that may never come, and its stream stops where its
+  peers' moves. That is the divergence this work exists to prevent, and
+  `SettleStaging` does not close it; it is closed in #4294 by making
+  runnability a question about the entry and the state rather than about when
+  the entry was held.
+- `classify` resolves a remote transaction body from the store, so a sequenced
+  message carrying a remote stub whose body this node has not pulled yet is
+  not classified and not held at all — a hole on the joining node where its
+  peers hold an entry. A block does not have this problem because anything
+  the classifier drops still goes through its own message executor on the
+  envelope pass; collecting has no second pass. #4294's join pulls the
+  accounts a block names before the block is collected, which closes it.
+- `intakeProof` discards a proof whose anchor block is at or below the newest
+  executed Directory anchor as "never, not not-yet". On a partially pulled
+  store the anchor pool's `DirectoryAnchorBlock` field and the Directory
+  anchor chain can disagree, and a proof discarded that way is discarded for
+  good. The pull writes an account's state and its chains together, so the
+  two are consistent per pulled account; nothing enforces it across the
+  window in which the pull runs.
+
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.
 

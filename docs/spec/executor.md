@@ -217,7 +217,11 @@ nodes take the same path, in this order:
    then on into a buffer, and into staging — collected, not executed.
    Staging is the executor's intake without the execution: arrivals held at
    their numbers, proofs staged for their anchors, anchor copies held below
-   their quorum. Nothing is released yet.
+   their quorum. Nothing is released yet, and **nothing is written**: not an
+   anchor's signature, not a message body, not a ledger. A collected block
+   has no index — the node does not yet know which block it is — and the
+   node executes nothing, so it does not report execution and its primary
+   proposes no batches (consensus.md, invariant 9).
 2. **Take staging from a running validator.** Ask a validator of this
    partition, through the API, for its staging as of its last committed block
    `P`: every stream's `Delivered`, held entries with their companions,
@@ -269,7 +273,10 @@ nodes take the same path, in this order:
    `StateTreeAnchor` of an anchored block `Q` at or above `P`, staging is
    brought to `Q`: everything collected through `Q` held, everything at or
    below each stream's `Delivered` at `Q` — read from the pulled ledgers —
-   released, and proofs decided against the anchors executed by `Q`. The
+   released, and proofs decided against the anchors executed by `Q`. `Q` is
+   checked against the state, not taken on trust: staging settled against
+   another block than the state it is paired with executes a different block
+   than the peers, which is the failure the join exists to prevent. The
    node then executes block `Q + 1` from the buffer as any node executes a
    block, and it is a validator or a follower from there. A follower differs
    only in what it does with the blocks it processes — it does not vote or
