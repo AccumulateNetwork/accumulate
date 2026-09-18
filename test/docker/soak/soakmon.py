@@ -1946,7 +1946,67 @@ const bytes=v=>(v==null?'—':v<1024?fmt(v)+' B':v<1048576?(v/1024).toFixed(1)+'
   $('foot').textContent=`updated ${age}s ago · flow+wedges+heals refresh ~1s · monitor read-only`;
 }
 tick();setInterval(tick,1000);
-</script></body></html>"""
+</script>
+<details id=defs style="margin:14px 0 6px 0"><summary style="cursor:pointer;color:var(--mut)">definitions — what every number on this board is</summary><dl id=defsl style="columns:2;column-gap:28px;font-size:12px;line-height:1.35"></dl></details>
+<script>
+// One sentence per value, set as hover text on the value and its label, and
+// listed under "definitions" so nothing has to be hovered. Paul: the values
+// do not have to clear, and most should not; they have to be defined so a
+// reader can see what they mean.
+const DEFS={
+ rtotal:"All transactions the network processed per second over the last 30 s: user submissions plus the synthetics and anchors they produce.",
+ ruser:"User transactions the load generator submitted per second, last 30 s.",
+ rtgt:"The rate the load generator is trying to hold.",
+ rsyn:"Synthetic transactions produced network-wide per second, last 30 s. A cross-partition send produces one on the far side.",
+ ranc:"Anchors produced per second, last 30 s. Each partition anchors to the Directory and the Directory to each partition.",
+ rratio:"Synthetic plus anchor transactions as a share of all transactions, last 30 s.",
+ ratotal:"All transactions the network processed per second, averaged over the whole run.",
+ rauser:"User transactions submitted per second, averaged over the whole run (the generator's own clock).",
+ rasyn:"Synthetic transactions produced per second, averaged since the monitor started watching.",
+ raanc:"Anchors produced per second, averaged since the monitor started watching.",
+ rashare:"Synthetic plus anchor transactions as a share of all transactions, whole run.",
+ raover:"The two windows behind the whole-run figures: the generator's clock for user, the monitor's for produced.",
+ heights:"Block height per partition, with seconds per block over the last 5 min and averaged over the run. Red = stalled: the height has not moved, or an inbound flow has been red past the stall threshold.",
+ lblocks:"Blocks the executor closed, taken as the highest count across nodes.",
+ lempty:"Blocks that carried no transactions.",
+ lidle:"Shown when nearly every block is empty: consensus is committing empty rounds.",
+ nrssavg:"Resident memory of the node process, MiB, averaged over the fleet.", nrssmax:"Largest resident memory of any node, MiB.", nrssmin:"Smallest resident memory of any node, MiB.",
+ ngravg:"Goroutines in the node process, averaged over the fleet.", ngrmax:"Most goroutines in any node.", ngrmin:"Fewest goroutines in any node.",
+ ndbavg:"Database on disk per node, GB, averaged.", ndbmax:"Largest database on disk of any node, GB.", ndbgrow:"How fast the largest database is growing, GB per hour.",
+ lheld:"Batches kept after execution so a peer that is behind can still fetch them.", lhits:"Times a peer fetched one of those retained batches.", lexp:"Retained batches let go when their retention window passed.",
+ lredel:"Certificates handed to the executor a second time. Should stay at zero.",
+ lwaits:"Times a block had to wait for a batch it did not yet hold, by reason.",
+ x0a:"Share of block-processing wall time spent in the serial phase (staging, drains, barriers). Below 25% there is nothing for sharding to win.",
+ x0b:"Parallel runs formed per block; about 1 means each block was one run.",
+ x0c:"Fraction of blocks in which an anchor arrived together with synthetics.",
+ hheld:"Transactions received on a stream and not yet executed: waiting for a proof, or held behind a hole."
+};
+const HDEFS={
+ "answered (#)":"Span requests the source answered with entries.",
+ "requests for txs in flight (#)":"Span requests the source answered 'that is in transit, not missing'. Nothing to heal; counted so a storm of them shows as a rate. On anchor streams this is the next anchor not produced yet.",
+ "miss (#)":"Span requests the source could not serve: it no longer holds the span. A defect at the source if this node is caught up.",
+ "failed (#)":"Span requests that errored.",
+ "dropped toward (destination)":"Where the dropped envelopes were going.",
+ "drops by senders (#)":"Envelopes the sending dispatchers gave up on, by destination and reason. Healing repairs what a drop loses.",
+ "txs (#)":"Transactions held in staging on that stream, not yet executed.",
+ "size":"What those held transactions cost in memory.",
+ "generated (#)":"Transactions of this type the load generator submitted.",
+ "rejected (#)":"Transactions of this type the network refused at submission.",
+ "skipped (#)":"Transactions of this type the generator could not build (no eligible account yet)."
+};
+(function(){
+  const dl=document.getElementById('defsl');
+  const row=(k,d)=>dl.insertAdjacentHTML('beforeend',`<dt style="font-weight:600">${k}</dt><dd style="margin:0 0 6px 0;color:var(--mut)">${d}</dd>`);
+  for(const [id,d] of Object.entries(DEFS)){
+    const el=document.getElementById(id); if(!el) continue;
+    el.title=d; const sib=el.nextElementSibling; if(sib&&sib.classList.contains('sl')) sib.title=d;
+    row((sib&&sib.classList.contains('sl'))?sib.textContent:id, d);
+  }
+  const seen=new Set();
+  for(const th of document.querySelectorAll('th')){ const k=th.textContent.trim(); const d=HDEFS[k]; if(d){ th.title=d; if(!seen.has(k)){ seen.add(k); row(k,d);} } }
+})();
+</script>
+</body></html>"""
 
 
 def main():
