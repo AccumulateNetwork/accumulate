@@ -7,6 +7,8 @@
 package database
 
 import (
+	"log/slog"
+
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
@@ -45,7 +47,11 @@ import (
 // mainnet snapshot holds millions of accounts and tens of millions of entries;
 // buffering every write into the batch that restored the snapshot, as a single
 // commit, would not fit in memory.
-func rebuildChainIndexes(db Beginner, limit int) error {
+//
+// filtered says the caller restored through a Predicate, so a chain may
+// legitimately be missing the records its entries live in - see
+// (*chainIndexWriter).rebuildChain.
+func rebuildChainIndexes(db Beginner, limit int, filtered bool) error {
 	if limit <= 0 {
 		limit = defaultBatchRecordLimit
 	}
@@ -56,7 +62,7 @@ func rebuildChainIndexes(db Beginner, limit int) error {
 	accounts := db.Begin(false)
 	defer accounts.Discard()
 
-	w := &chainIndexWriter{db: db, limit: limit}
+	w := &chainIndexWriter{db: db, limit: limit, filtered: filtered}
 	w.batch = db.Begin(true)
 	defer func() { w.batch.Discard() }()
 
@@ -78,10 +84,11 @@ func rebuildChainIndexes(db Beginner, limit int) error {
 // are read through the same batch, so rotating it also drops the mark point
 // states the reads cached - which is the larger half of the memory.
 type chainIndexWriter struct {
-	db    Beginner
-	limit int
-	batch *Batch
-	n     int
+	db       Beginner
+	limit    int
+	filtered bool
+	batch    *Batch
+	n        int
 }
 
 // rotate commits the current batch and starts a new one.
@@ -118,6 +125,29 @@ func (w *chainIndexWriter) rebuildAccount(u *url.URL) error {
 	return nil
 }
 
+// rebuildChain indexes a chain's entries in ascending order.
+//
+// A restore that filtered records out may leave a chain whose head is present
+// and whose entries are not. genesis.Extract does exactly this: it keeps an
+// account's Main and its MainChain Head and drops the chain's mark points
+// (States) for anything that is not a data account, and a snapshot carries no
+// Element records at all - Element is an index record, so Collect's
+// IgnoreIndices drops it. Chain.Entry then cannot reconstruct an element below
+// the last mark point, and every account with more than markFreq (256) entries
+// fails. That is a legitimate state for a filtered restore, not a corrupt
+// database, so the chain is left unindexed rather than failing the restore.
+//
+// It stops at the first entry it cannot read rather than skipping past it.
+// Entry succeeds for indices at or above the last mark point, because those
+// live in the head's hash list, so skipping would index a tail while leaving
+// the history unscanned - and a hash whose first occurrence is in that
+// unscanned history would be recorded at a LATER position. That is the wrong
+// value this rebuild exists to avoid. Stopping keeps the ascending prefix,
+// which is complete and therefore first-occurrence correct, and leaves the rest
+// absent, which is the clean NotFound callers already handle.
+//
+// With no Predicate in play a missing entry means the database is corrupt, and
+// it stays loud.
 func (w *chainIndexWriter) rebuildChain(u *url.URL, name string) error {
 	// The batch is replaced part way through a long chain, so the account and
 	// the chain are resolved again after every rotation.
@@ -136,7 +166,16 @@ func (w *chainIndexWriter) rebuildChain(u *url.URL, name string) error {
 			w.n++
 
 			hash, err := inner.Entry(i)
-			if err != nil {
+			switch {
+			case err == nil:
+				// Ok
+			case w.filtered && errors.Is(err, errors.NotFound):
+				// The entries are not present in this restore. Leave the rest
+				// of the chain unindexed.
+				slog.Info("Chain index rebuild: entries not present, leaving the rest of the chain unindexed",
+					"account", u, "chain", name, "entry", i, "count", head.Count)
+				return nil
+			default:
 				return errors.UnknownError.WithFormat("load entry %d of %s of %v: %w", i, name, u, err)
 			}
 

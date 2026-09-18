@@ -714,7 +714,7 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 	// whether it holds an anchor. Rebuild it, or a restored node diverges - see
 	// rebuildChainIndexes. Index records are not covered by the BPT, so this
 	// runs after the BPT is built and does not disturb the hash check below.
-	err = rebuildChainIndexes(db, opts.BatchRecordLimit)
+	err = rebuildChainIndexes(db, opts.BatchRecordLimit, opts.Predicate != nil)
 	if err != nil {
 		return errors.UnknownError.WithFormat("rebuild chain indexes: %w", err)
 	}

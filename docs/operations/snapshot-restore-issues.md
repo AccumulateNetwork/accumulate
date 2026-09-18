@@ -165,24 +165,66 @@ Two properties of that rebuild are load-bearing:
    does. Buffering every write into one in-memory batch is fine on a 14-account
    simulator and will not fit a real store's millions of accounts and tens of
    millions of entries.
+3. **A filtered restore is tolerated, an unfiltered one is not.** A restore that
+   passes a `Predicate` may legitimately keep a chain's head and drop the records
+   its entries live in — `genesis.Extract` does exactly that, keeping `Main` and
+   the `MainChain` `Head` while dropping the chain's mark points (`States`) for
+   anything that is not a data account. Since a snapshot carries no `Element`
+   records either (`Element` is an index record, so `IgnoreIndices` drops it),
+   `Chain.Entry` then cannot reconstruct any element below the last mark point,
+   and every account with more than 256 entries is unreadable. With a `Predicate`
+   in play the rebuild leaves that chain unindexed and carries on; with no
+   `Predicate` an unreadable entry means a corrupt database and still fails the
+   restore.
+
+   It **stops** at the first unreadable entry rather than skipping past it.
+   `Entry` succeeds at or above the last mark point (those live in the head's
+   hash list), so skipping would index a tail while leaving the history
+   unscanned, and a hash whose first occurrence is in that unscanned history
+   would be recorded at a *later* position — reintroducing the wrong value
+   point 1 exists to prevent.
 
 ### Operator impact
 
 **A restore now takes materially longer.** The rebuild reads every entry of every
 chain of every account, so its cost is linear in the total number of chain
 entries in the snapshot, on top of the restore itself. This is a one-time cost
-per restore; it is not paid again at startup.
+per restore; it is not paid again at startup. Measured in the mainnet shape
+(100k accounts x 20 entries = 2M entries): 23.8s against a 6.4s baseline,
+extrapolating to roughly 6–7 minutes on 35M mainnet entries. Peak heap is bounded
+by the chunk, not by the entry count.
 
 **Files:** `internal/database/snapshot_chain_index.go`,
 `internal/database/snapshot.go`
 
-**Not fixed here:** the **v1** restore path
-(`internal/database/snapshot/restore.go:137`) still rebuilds the index for
-*system accounts only* — the gate is
-`if _, ok := protocol.ParsePartitionUrl(acct.Url.RootIdentity()); ok`. A user
-account restored from a v1 snapshot still gets no index for its pre-snapshot
-entries. v1 restore is reachable only from `tools/cmd/debug` (`snap_restore.go`),
-not from a node, which is why it was left alone; see #4328.
+**Not fixed here — the v1 path, which is WORSE and is reachable from a node.**
+`internal/database/snapshot/restore.go:137` rebuilds the index for *system
+accounts only* (the gate is
+`if _, ok := protocol.ParsePartitionUrl(acct.Url.RootIdentity()); ok`), so a user
+account restored from a v1 snapshot gets no index for its pre-snapshot entries.
+
+For the system accounts it *does* rebuild, it uses an unconditional ascending
+`Put` (`merkle_snapshot.go:117-146`, `RestoreElementIndexFromHead` and
+`RestoreElementIndexFromMarkPoints`), so **the last occurrence of a repeated hash
+wins** — the exact variant rejected above, already shipped on this path. And
+`<partition>/anchors` is a system account, so the damage is not confined to the
+read-side receipt plane: `AddChainEntry2` returns `c.HeightOf(entry)` on its
+duplicate branch (`v2/chain/state_state.go:148-150`), that value flows through
+`DidReceiveAnchor` into `anchorChain.Receipt(received.Index, entry.Source)` at
+`block_end.go:670`, and that receipt is built into the **outgoing anchor**. A
+v1-restored node can therefore emit a different anchor receipt from its peers, or
+fail block production outright when the range inverts.
+
+**v1 restore is reachable from a node**, not only from tooling:
+`snapshot.FullRestore` (`internal/database/snapshot/full.go:70-93`)
+version-dispatches, and is called from `internal/node/abci/accumulator.go:344`
+(InitChain), `internal/node/abci/snapshot.go:146` (state sync
+`ApplySnapshotChunk`), `internal/node/daemon/snapshots.go:507`, and
+`internal/bsn/executor.go:150`.
+
+This was left out of the change above deliberately — it is a distinct defect on a
+distinct path and wants its own fix and its own tests — not because it is
+unreachable. See **#4341**, and #4321 for the off-by-one arithmetic in the same two functions.
 
 ## create-snap Tool Requirements
 
