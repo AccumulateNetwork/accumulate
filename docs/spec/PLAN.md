@@ -465,12 +465,11 @@ And two that follow from the block ledger:
   decides its priority. **It has since proved to be benign on `main`** — the
   released line's dedup cannot be made to skip by it — but real there, which
   makes it the one prerequisite named in the ordering note below.
-  *Known exception to the practice stated below, flagged rather than fixed:*
-  #4321 is a main-line finding whose mechanism is described here and in a
-  public issue, because it was filed as an integration-line bug before its
-  reach was established. Removing the text here would unpublish nothing while
-  the issue itself is public, and changing an issue's visibility is not a call
-  to make in passing — so it is left as it is and named for a decision.
+  *A decided exception to the practice stated below:* #4321 is a main-line
+  finding described here and in a public issue. **Paul ruled 2026-09-18 that it
+  stays public** — it is proven benign and already published, so closing it now
+  would hide nothing already seen while losing the public record. Recorded on
+  the issue.
 
 *Proposed placement, for Paul.* What a 30-minute chaos run can be a gate for
 is the question, and today the answer is nothing about the join. It would pass
@@ -529,6 +528,16 @@ commit messages** — they may be referenced here by number and by ordering
 only. Where that distinction would force a real choice, raise it rather than
 decide it. The staging-load findings are referenced here by nothing but their
 existence, deliberately, and this paragraph names no mechanism for any of them.
+
+**Two main-line findings now outrank everything in this section, and neither is
+E11 work.** #4328 and #4330 are confidential, are on `main`, and are reached by
+the **default** way a node joins a network — not by a tool and not by the
+DAG-BFT line. #4328 was filed as latent pending one question; that question is
+answered and it is **live**. Both are consequences of one root cause and have
+one fix between them. They are named here only so the order does not read as
+though the riskiest open work is on the integration line, because it is not;
+the mechanisms are on the issues, per the practice above. Nothing in E11 gates
+on them and they gate nothing in E11 — they are simply more urgent.
 
 **One cross-issue ordering constraint, recorded here because it is invisible
 from either issue alone.** #4327's fix must not be backported to `main` unless
