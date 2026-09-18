@@ -189,10 +189,23 @@ Two properties of that rebuild are load-bearing:
 **A restore now takes materially longer.** The rebuild reads every entry of every
 chain of every account, so its cost is linear in the total number of chain
 entries in the snapshot, on top of the restore itself. This is a one-time cost
-per restore; it is not paid again at startup. Measured in the mainnet shape
-(100k accounts x 20 entries = 2M entries): 23.8s against a 6.4s baseline,
-extrapolating to roughly 6–7 minutes on 35M mainnet entries. Peak heap is bounded
-by the chunk, not by the entry count.
+per restore; it is not paid again at startup.
+
+**What has been measured, and what has not.** On a 100k-account x 20-entry
+construction (2M entries), the rebuild cost 22s against a 6.4s baseline, and
+peak heap was **+340 MiB over baseline at the default chunk of 50,000** — the
+figure to check against a GOMEMLIMIT. Those numbers come from synthetic chains
+in a freshly written badger database in a temp directory on a developer
+workstation; "mainnet shape" describes the account-to-entry ratio, not mainnet.
+**No mainnet restore has ever been timed.** Extrapolating linearly gives roughly
+six to seven minutes for 35M entries, but treat that as a FLOOR rather than an
+estimate: the rebuild pays two guaranteed key misses per entry — `Chain.Entry`
+reads `Element(i)`, which a v2 snapshot never carries, and the existence check
+reads `ElementIndex(hash)`, which misses on every entry of a fresh restore — and
+on a multi-hundred-GB LSM with a cold page cache those cost materially more than
+they do here. The measured rate already fell from 188k entries/s at 240k entries
+to about 90k/s at 2M, on a tiny store. Peak heap is bounded by the chunk rather
+than by the entry count; wall clock is not.
 
 **Files:** `internal/database/snapshot_chain_index.go`,
 `internal/database/snapshot.go`
