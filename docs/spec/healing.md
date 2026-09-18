@@ -506,43 +506,84 @@ A running validator serves its staging as of its last committed block, so a
 node that joins or restarts starts from what its peers hold rather than from
 what a source produced (executor.md, "Sync" step 2). It is a private API
 call, `StagingSnapshot` (`internal/api/private`, served by the partition's
-sequencer): **one page** of `{Block, Streams, NextLedger, NextSource,
-NextNumber}`, where each stream is `{Ledger, Source, Delivered, Sighted,
-Entries, Validated, Proofs}`, an entry is `{Number, Message, Companion,
-Collected, Hash}`, a validated hash is `{Number, Hash}` and a staged proof is
-`{AnchorBlock, Proof}`. A held entry's ID is not carried: every place that
-holds one holds it under the message's own ID, so the reader derives it.
-Anchor streams are streams like any other; their entries are the held
-`SequencedMessage` copies, with `Hash` the transaction's stored form.
+sequencer): **one page** of `{Block, Streams, More, NextLedger, NextSource,
+NextNumber, NextProofOffset}`, where each stream is `{Ledger, Source,
+Delivered, Sighted, Entries, Validated, Proofs}`, an entry is `{Number,
+Message, Companion, Collected, Hash}`, a validated hash is `{Number, Hash}`
+and a staged proof is `{AnchorBlock, Proof}`. A held entry's ID is not
+carried: every place that holds one holds it under the message's own ID, so
+the reader derives it. Anchor streams are streams like any other; their
+entries are the held `SequencedMessage` copies, with `Hash` the transaction's
+stored form.
 
 **The page and the block index are read under one lock** — a block's commit
 publishes its index with its own additions — so a page is what the node held
 at one block and never a mixture of two. A reader that paired a page with a
 different block would execute a different block.
 
+**`Block` is the consensus index of the last block the executor processed**:
+the index the block was opened with, published when it committed. It is not
+the index of the last block whose state was written — an empty block writes
+nothing, so the system ledger's index can lag it — and that is the direction
+that is safe: the index is at or above every block whose intake the page
+reflects, where serving the last written block would under-report and hand a
+joining node entries it would call new. **A joining node must not pair this
+index with "the state of that block."** Which block's state it converges on
+is the anchored-root match's to decide (#4293's tracker), and that block must
+be at or above the page's `Block`.
+
 **Paging is by stream and by sequence number**, because a stage may hold
 thousands of entries (run 20260918T023054Z: 290 and 551 on the Directory's
 streams). A page covers at most `MaxSnapshotSpan` numbers, counted across the
-entries and validated hashes together, and a nil `NextLedger` means it was
-the last. A source's proofs travel with the first page of the first stream of
-that source; a source that holds proofs and no stream gets a page of its own
-with a nil `Ledger`. **The block moves on between pages**: every page says
-which block it is as of, and a reader whose pages disagree discards what it
-has and starts over (`FetchStagingSnapshot`). The snapshot is not pinned
-server side — a validator does not keep a version of its stage alive for a
-reader that stalled.
+entries and validated hashes together, and at most `MaxSnapshotBytes` — but
+never fewer than one entry or one proof, so paging always advances. **`More`
+says whether there is another page, and nothing else does**: `NextLedger` is
+nil for a source that holds proofs and no stream, so an empty field is a real
+position and cannot mean "the end". A source's proofs travel with the first
+page of the first stream of that source, and are charged bytes rather than
+numbers because a proof stands at no sequence number and one source may hold
+up to `MaxStagedProofBytes` of them; `NextProofOffset` is how many of them the
+reader already has, so a source's proofs are paged rather than truncated.
 
-`Delivered` on a page is the ledger's, which is what the block released the
-stream at when it closed (executor.md, "What the stream ledger is for"), not
-a memory copy that a restart left at zero.
+**The block moves on between pages**: every page says which block it is as of,
+and a reader whose pages disagree discards what it has and starts over
+(`FetchStagingSnapshot`), at most `MaxSnapshotRestarts` times and with a
+backoff, and it follows at most `MaxSnapshotPages` pages in one attempt. When
+those run out it returns `NotReady` naming the peer and the block: the join
+asks another validator, or asks again. The snapshot is not pinned server side
+— a validator does not keep a version of its stage alive for a reader that
+stalled.
+
+`Delivered` on a page is staging's own value, in memory, so that it is atomic
+with the rest of the page — a ledger read beside it would be a second,
+unpaired read of a second moment. It tracks the ledger because **closing a
+block releases every stream the block positioned at the ledger's `Delivered`**,
+not only the streams it delivered into (executor.md, "What the stream ledger
+is for"), so a stream a block has touched since this node started says what
+the ledger says.
+
+**A request names a position or it is refused.** `Partition` is required, and
+so is `Source` whenever `Ledger`, `Number` or `ProofOffset` is set: a cursor
+without a source names no stream, and a server that guessed would answer from
+the wrong place. Both are `BadRequest`.
 
 A node that has executed no block holds nothing anyone should start from and
 refuses with `NotReady`; so will a node that is `BOOTING`, once node states
-land (executor.md, "Sync" step 5). Loading refuses staging that already holds
-something: a join starts from what its peer held, not from a mixture of that
-and whatever this node collected before it asked. Counted per partition in
+land (executor.md, "Sync" step 5). **Loading is all or nothing**: it refuses
+staging that already holds something — a join starts from what its peer held,
+not from a mixture of that and whatever this node collected before it asked —
+and a load that fails part way leaves staging empty, so the join can ask
+again. What a peer's proofs may cost is bounded as this node's own intake is,
+at `MaxStagedProofBytes` per source. Counted per partition in
 `accumulate_staging_snapshots_total` with the bytes served in
-`accumulate_staging_snapshot_bytes_total`.
+`accumulate_staging_snapshot_bytes_total`, measured as the page is built.
+
+**"One block, never a mixture" holds against block-driven changes.** While the
+interim `Conductor.Rejoin` path exists, `Executor.Collect` puts healed
+packages into staging outside any block (see "Rejoining (interim)" below), so
+staging can change between two pages without the block changing. That closes
+when the join of #4294 removes `Conductor.Rejoin`; until then it is recorded
+in DIFFERENCES.md, E11.
 
 ### Rejoining (interim)
 
