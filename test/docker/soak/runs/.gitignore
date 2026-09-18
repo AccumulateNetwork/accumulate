@@ -14,6 +14,12 @@
 *.pb.gz
 # Goroutine dumps: same story, multi-MiB text.
 *.goroutines.txt
+# Log tails captured by the stall watchdog. These are logs -- the root *.log
+# ignore would have caught them -- but they are written as .log-tail.txt, and
+# the `!*.txt` negation above re-admits them. One run's stall-capture is 13 MiB
+# of them, individual files past GitLab's 1 MiB blob cap. Same rule as the rest:
+# read them locally, put the conclusion in manifest.md.
+*.log-tail.txt
 node-logs.txt
 node-logs-live.txt
 container-logs/
