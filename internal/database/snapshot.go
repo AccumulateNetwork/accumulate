@@ -700,6 +700,14 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 		return errors.UnknownError.WithFormat("update BPT: %w", err)
 	}
 
+	// EXPERIMENT (see snapshot_rebuild_experiment.go). A no-op unless a test
+	// sets RebuildChainIndexMode. Placed where dagbft-integration places its
+	// rebuildChainIndexes call: after the BPT is built, before the commit.
+	err = rebuildChainIndexesExperiment(batch)
+	if err != nil {
+		return errors.UnknownError.WithFormat("rebuild chain indexes: %w", err)
+	}
+
 	err = batch.Commit()
 	if err != nil {
 		return errors.UnknownError.WithFormat("commit changes: %w", err)
