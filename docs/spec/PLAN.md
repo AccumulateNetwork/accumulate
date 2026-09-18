@@ -282,14 +282,14 @@ one knowing contradiction with this spec — the block ledger is taken on the
 peer's word — which is **#4310**, and the reviewer judges it.
 
 **Merged with known exceptions, agreed by Paul.** #4313 and #4314 remain open
-and are *not* fixed by that merge. **#4313** is an executed exploit on the
-path the join drives — `RestoreHead` skips its discharge at absorbed
-boundaries, letting one peer write 256 chosen hashes into the anchor pool; its
-fix commits `Count` into the BPT leaf, which changes the leaf and therefore
-needs an activation height. **#4314** is that a collection proof does not bind
-absolute index: `Validate` never reads `Count`, and restated counts verify.
-Both pre-date the branch. Neither is a builder's call to start: #4313 is
-blocked on the activation height, which is Paul's.
+and are *not* fixed by that merge. Both are **confidential** issues and both
+pre-date the branch; the detail stays on the issues rather than in this file,
+which is public. What the order needs to know is only this: #4313 is on the
+path the join drives, its fix changes the BPT leaf and therefore needs an
+activation height, and neither is a builder's call to start until that height
+is named. (This paragraph previously summarised both findings here. That was a
+mistake in a public file and the summary has been removed; see the note below
+on what is already published.)
 
 **Ahead of any design work on #4298, one measurement** (lead, 2026-09-18):
 how often `<partition>/ledger`'s scheduled-events BPT and
@@ -434,13 +434,35 @@ And two that follow from the block ledger:
   chain per #4272, and `:551`). The same ordering accident #4272 fixed, and
   the mechanical reason #4310 exists. **Blocked on an activation height —
   Paul's call**, as #4272's was.
-- **#4312** — unadjudicated, and Paul's. A review disproved its "entries are
-  lost" premise, and the two code claims check out: `Entry(i)` returns
-  whatever sits at that position unchecked (`merkle/chain.go:494`) and
-  `AddEntry(hash, unique)` returns `nil` without appending on a stale
-  `ElementIndex` hit (`:317-324`). That is consensus divergence, not a storage
-  leak, and it inverts the proposed disposal step. **Nothing on #4312 should
-  be built until that is answered.**
+- **#4312** — **adjudicated 2026-09-18: the disproof stands**, confirmed by a
+  second agent that did not take the first's word, and the consequence is live
+  on this line today. `Entry(i)` returns a stored element above the head
+  (`merkle/chain.go:494-503`, before the head check at `:509-511`), and
+  `AddEntry` returns `nil` without appending on a stale index hit (`:316-327`).
+  Two nodes re-executing the same ten blocks end at **different heights with
+  different anchors**, demonstrated against unmodified production code on
+  `repro-4312-blast-radius` at `07bdfdeea`, with a mutation check that makes
+  the test fail once the bug is fixed. **No malice is required** — a peer that
+  merely answers from behind is sufficient, and `joining := lastBlock > 0`
+  means the rollback path runs only on nodes that have already executed
+  blocks. Nothing detects it: `merkle.OnDuplicate` "is nil in production" and
+  its sole assignment anywhere is a test. It surfaces as a divergent block hash
+  and a broken anchor quorum — the #4290 signature. **No executor version is
+  needed** for any of the candidate fixes. What remains for Paul is narrower
+  than the question the issue was filed on: **what should a join do when it is
+  ahead of its peer?** Today it silently rolls backwards.
+- **#4321** — a second, independent stale-index source, and an outright
+  arithmetic bug rather than a design question:
+  `RestoreElementIndexFromMarkPoints`
+  (`internal/database/snapshot/merkle_snapshot.go:138-149`) writes
+  `ElementIndex(h) = state.Count + i`, off by one mark set. 512 of 600 records
+  wrong on a 600-entry chain, 168 naming a position at or past the head.
+  Narrower reach than #4312 — system accounts and Version1 snapshots only, via
+  the genesis and repair tools — but it writes a database that is wrong from
+  birth. Its documenting test **fails by design** and must not be merged into a
+  green suite until the arithmetic is fixed. Whether a wrong receipt is merely
+  invalid or is *valid for the wrong entry* was **not** established, and that
+  decides its priority.
 
 *Proposed placement, for Paul.* What a 30-minute chaos run can be a gate for
 is the question, and today the answer is nothing about the join. It would pass
@@ -473,13 +495,28 @@ the masked cost it was filed as — see #4319's second defect — and belongs wi
 #4319 because the same write causes both; it is not separately gating.
 **#4315** and **#4313** do not gate the run at all, but both are stopped dead
 until their activation heights are named, so they should be asked about now
-rather than when they become urgent. **#4312** is a fork, not a tweak, and
-nothing on it should be built until it is answered.
+rather than when they become urgent. **#4312** is adjudicated and its fix needs
+no executor version, so it can be worked as soon as the narrow question — what
+a join does when it is ahead of its peer — is answered; **#4321** can be worked
+now.
 
-**Still open for Paul: the activation heights (#4313, #4315) and the #4312
-adjudication.** The #4319 decision is made and recorded above; the rest of this
-placement remains a proposal with its reasoning, which is what the plan asks
-for when the order would change.
+**Still open for Paul: the activation heights (#4313, #4315), the narrow #4312
+question, and a confidentiality call (below).** The #4319 decision is made and
+recorded above; the rest of this placement remains a proposal with its
+reasoning, which is what the plan asks for when the order would change.
+
+**A confidentiality problem in this file, for Paul to rule on.** This project
+is public and so is this document. #4313 and #4314 are confidential issues, and
+further confidential threat-model findings on the join's staging load were filed
+2026-09-18. Until now this paragraph summarised #4313's and #4314's mechanisms
+in plain text; that summary has been removed and replaced with what the order
+actually needs, which is that they exist, that one of them gates on an
+activation height, and that neither is startable until it is named. **The
+removal does not unpublish anything** — the same descriptions are in the merge
+commit message for `05221528b`, already on `dagbft-integration` and public — so
+someone should decide whether that history matters and whether this file should
+name confidential issue numbers at all. The new staging-load findings are
+referenced here by nothing but their existence, deliberately.
 
 **The tests that passed do not exercise the mechanism.** This has to be said
 next to the order, because the order was built on them.
