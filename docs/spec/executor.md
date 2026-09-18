@@ -204,33 +204,64 @@ Staging decides what executes: a block delivers the contiguous run starting at
 `Delivered + 1`, taken from this block's arrivals and from what is held. Two
 nodes holding different things execute different runs from the same block, so
 staging must be the same everywhere, and it is, because it is a deterministic
-function of the consensus stream.
+function of the consensus stream **from the block a node joined at**.
 
-Every node syncs the same way, validator or follower. A node that joins or
-restarts does two things at once. It **pulls the state of the chains down from
-the running protocol** — the accounts and chains as
-of a block, verified against the root the protocol has anchored — and it
-**collects messages from consensus** into staging from the moment it starts
-listening. When the pulled state matches the protocol and staging holds what
-the node's peers hold above `Delivered` — anything collected before it started
-listening arrives the way any other gap does, through healing — the node picks
-up processing transactions at the next block, and not before. Until then it is
-neither a validator nor a follower; it is a node building the state to become
-one (#4205). A follower differs from a validator only in what it does with the
-blocks it processes — it does not vote or propose — not in how it gets there.
+**A node that joins does not catch up through consensus, and neither does a
+node that restarts.** Consensus is a stream of blocks to execute; a node that
+executes them from a state and a staging that differ from its peers' by even
+one entry executes a different block, and the root chain is a Merkle root
+over the history of block roots, so it never matches again (#4290). Both
+nodes take the same path, in this order:
 
-For a node that restarts with its store intact, the second part is what the
-code does today (healing.md, "Rejoining"; #4290): at its first block-begin,
-before that block executes, it pulls every inbound synthetic stream from its
-source from `Delivered + 1` up and holds what comes back as a block would,
-and the source keeps released entries a grace of blocks for exactly this
-(`RejoinGrace`). The first part, pulling state for a node that has none or is
-past what its sources still hold, is E11.
+1. **Listen.** Subscribe to consensus and take every committed block from
+   then on into a buffer, and into staging — collected, not executed.
+   Staging is the executor's intake without the execution: arrivals held at
+   their numbers, proofs staged for their anchors, anchor copies held below
+   their quorum. Nothing is released yet.
+2. **Take staging from a running validator.** Ask a validator of this
+   partition, through the API, for its staging as of its last committed block
+   `P`: every stream's `Delivered`, held entries with their companions,
+   validated hashes, proofs waiting by anchor block, anchor copies held. `P`
+   must be at or above the first buffered block; otherwise ask again. The
+   buffered blocks after `P` are then applied to that staging, so staging is
+   what the peers hold as of every block from `P` on.
+3. **Pull the state.** The Directory's spine first — anchors, ledger and
+   operators, with their chains — so anchors and their signatures can be
+   verified; then the partition's BPT by pages, and every account behind a
+   leaf that is missing or stale. The blocks being buffered say which
+   accounts change: their user transactions and the synthetics and anchors
+   they execute name every principal touched, so the pull follows the
+   network rather than enumerating twice. Each pulled state is verified
+   against the BPT root the Directory anchored for that block. A node that
+   restarts with its store intact pulls only what changed after its last
+   block.
+4. **Converge, then execute.** When the local BPT root equals the
+   `StateTreeAnchor` of an anchored block `Q` at or above `P`, staging is
+   brought to `Q`: everything collected through `Q` held, everything at or
+   below each stream's `Delivered` at `Q` — read from the pulled ledgers —
+   released, and proofs decided against the anchors executed by `Q`. The
+   node then executes block `Q + 1` from the buffer as any node executes a
+   block, and it is a validator or a follower from there. A follower differs
+   only in what it does with the blocks it processes — it does not vote or
+   propose — not in how it gets there.
+5. **Serve last.** Until the node's history is backfilled — the producer
+   cache filled, the chains it lacks fetched — it does not answer requests
+   for missing data: not the sequencer, not healing. It keeps up with
+   blocks and says so (node state `BOOTING`, `ACTIVE`, `COMPLETE`; advertised
+   so nothing routes a request to a node that cannot answer it).
+
+What a restart therefore never does is replay committed blocks it did not
+execute, or rebuild staging from a source's cache: the first executes with
+the wrong staging, the second holds what the source produced rather than
+what the peers had received (run 20260918T023054Z: an entry still in flight
+to the peers, held from the cache, executed a block early). The consensus
+checkpoint still restores the DAG position (consensus.md, "Restart"); what
+the node executes is decided by the join, not by the position.
 
 Nothing derived from staging is written into hashed state unless it is derived
 through execution. `Delivered` qualifies. A copy of how far a stream has been
 sighted does not: it is per-node and transient, and it is exactly what a
-restarted node rebuilds.
+joining node takes from a peer.
 
 ### A block does not begin with an empty slate
 

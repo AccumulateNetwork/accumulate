@@ -265,6 +265,13 @@ committed-digest set, without which the first leader after every restart
 re-committed the whole rescue window below the floor (16 batches where the
 peers committed 3, run `20260918T014155Z`).
 
+**Decided (Paul, 2026-09-18)**: a starting node takes its staging from a
+running validator through an API, keeps it current from consensus while it
+pulls the state the buffered blocks name, and executes from the block after
+its root matches; a restart is the same path, not a consensus replay. PLAN
+E11 lists the five steps. The bootstrap-v3 state pull exists only on the
+CometBFT line.
+
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.
 
