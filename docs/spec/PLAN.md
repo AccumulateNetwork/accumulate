@@ -275,7 +275,10 @@ accounts cannot be verified anyway), **#4309** (a BVN's join wrote four
 every anchored root — independent of the others and fatal on its own),
 **#4304** (a fresh network cannot start: `Fresh` is dead code), with
 **#4297** and **#4307** beside them as the un-gated services that made the
-first possible. All but #4298 and #4304 are fixed on
+first possible. #4304 is fixed on `issue-4304-fresh-node-start`: a node that
+has executed no block beyond genesis does not join, `join.Options.Fresh` is
+deleted, and the residue — such a node cannot be told from one deployed into a
+running partition — is **#4340**. All but #4298 are fixed on
 `issue-4303-join-pulls-from-peers`, pushed and under review, none merged; the
 fix introduces one knowing contradiction with this spec — the block ledger is
 taken on the peer's word — which is **#4310**, and the reviewer judges it.
