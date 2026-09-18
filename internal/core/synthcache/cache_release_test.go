@@ -98,6 +98,7 @@ func TestCache_EmptyBlocksAreDropped(t *testing.T) {
 	tx = c.Begin(5)
 	tx.Release(bvn1, 2)
 	tx.Commit()
+	age(c, 5, RejoinGrace)
 	_, blocks = c.Len()
 	require.Equal(t, 1, blocks, "every entry released: the block goes with them")
 	_, ok = c.Block(3)

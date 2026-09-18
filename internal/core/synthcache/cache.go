@@ -148,6 +148,7 @@ type Cache struct {
 	received []*ReceivedAnchor
 	newest   uint64
 	released map[string]uint64 // per stream, the number the destination has said it executed through
+	pending  []pendingRelease  // the destination's words not yet applied: kept RejoinGrace blocks
 
 	// per destination of this partition's anchors, the anchor number it has
 	// said it executed through; an anchor every destination has executed is
@@ -194,6 +195,25 @@ func Stats() Counters {
 		c.Misses[k] = v
 	}
 	return c
+}
+
+// RejoinGrace is how many blocks a stream's entries are kept past the
+// destination's word that it executed them. The word is the partition's: it
+// comes from any current validator of the destination, and the partition's
+// Delivered moves when a quorum executes. A validator of the destination that
+// restarted just then lost what it held in staging and pulls it back from
+// this cache before it executes its first block (executor spec, "Sync";
+// #4290); released at once, the entries would be gone by the time it asks,
+// and it could never again execute the block its peers executed. Five
+// minutes of blocks covers a restart, its catch-up and the pull; what it
+// costs is that many blocks of production held past their release.
+const RejoinGrace = 300
+
+// pendingRelease is a destination's word waiting out the grace.
+type pendingRelease struct {
+	stream  string
+	through uint64
+	at      uint64 // the block the word was recorded in
 }
 
 // New returns an empty cache keeping horizon blocks (DefaultHorizon when 0).
@@ -354,8 +374,9 @@ func (t *Txn) Commit() {
 		c.newest = t.block
 	}
 	for k, r := range t.released {
-		c.releaseLocked(k, r.through)
+		c.pending = append(c.pending, pendingRelease{k, r.through, t.block})
 	}
+	c.applyReleasesLocked()
 	for k, a := range t.anchorAcks {
 		c.releaseAnchorsLocked(k, a)
 	}
@@ -399,6 +420,20 @@ func (t *Txn) Discard() {
 		return
 	}
 	*t = Txn{}
+}
+
+// applyReleasesLocked applies every word whose grace has run (RejoinGrace).
+func (c *Cache) applyReleasesLocked() {
+	kept := c.pending[:0]
+	for _, p := range c.pending {
+		if p.at+RejoinGrace <= c.newest {
+			c.releaseLocked(p.stream, p.through)
+		} else {
+			kept = append(kept, p)
+		}
+	}
+	clear(c.pending[len(kept):])
+	c.pending = kept
 }
 
 // releaseLocked drops a stream's entries through number n and the block

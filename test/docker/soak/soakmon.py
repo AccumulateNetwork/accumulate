@@ -862,6 +862,8 @@ def heals_from(per):
         "entries": entries if "entries" in seen else None,
         "applied": entries_by.get("applied", 0) if "entries" in seen else None,
         "notRequired": entries_by.get("not-required", 0) if "entries" in seen else None,
+        # entries a restarted node pulled back before its first block (#4290)
+        "rejoined": entries_by.get("rejoined", 0) if "entries" in seen else None,
         "proofs": proofs if "proofs" in seen else None,
         "judged": judged if "judged" in seen else None,
         "held": None,

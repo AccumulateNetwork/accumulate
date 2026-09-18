@@ -91,7 +91,7 @@ func TestTrim(t *testing.T) {
 // entries at or below n and the block segments that held only them; entries
 // above n and other destinations' entries stay.
 func TestCache_ReleaseOnDelivered(t *testing.T) {
-	c := New(0)
+	c := New(4 * RejoinGrace) // the horizon must not be what drops them here
 	bvn1 := protocol.PartitionUrl("BVN1")
 	bvn2 := protocol.PartitionUrl("BVN2")
 	mk := func(dst *url.URL, n uint64, block uint64) *Entry {
@@ -122,13 +122,23 @@ func TestCache_ReleaseOnDelivered(t *testing.T) {
 	entries, _ := c.Len()
 	require.Equal(t, 5, entries)
 
-	// BVN1 says it executed through 3
+	// BVN1 says it executed through 3. The word is the partition's; a
+	// validator of BVN1 that restarted as it executed pulls #1-#3 back from
+	// here before its first block, so they stay a grace of blocks (#4290).
 	tx = c.Begin(9)
 	tx.Release(bvn1, 3)
 	tx.Commit()
 	entries, _ = c.Len()
-	require.Equal(t, 2, entries, "BVN1 #4 and BVN2 #1 remain")
+	require.Equal(t, 5, entries, "nothing goes until the grace has run")
 	_, ok := c.Entry(bvn1, 3)
+	require.True(t, ok, "still served to a rejoining validator")
+	age(c, 9, RejoinGrace-1)
+	entries, _ = c.Len()
+	require.Equal(t, 5, entries, "one block short of the grace")
+	age(c, 9+RejoinGrace-1, 1)
+	entries, _ = c.Len()
+	require.Equal(t, 2, entries, "BVN1 #4 and BVN2 #1 remain")
+	_, ok = c.Entry(bvn1, 3)
 	require.False(t, ok)
 	_, ok = c.Entry(bvn1, 4)
 	require.True(t, ok)
@@ -143,11 +153,21 @@ func TestCache_ReleaseOnDelivered(t *testing.T) {
 	require.NotNil(t, b8.Stream(bvn1), "block 8's segment still proves #4")
 
 	// A lower or repeated word changes nothing
-	tx = c.Begin(10)
+	tx = c.Begin(9 + RejoinGrace + 1)
 	tx.Release(bvn1, 2)
 	tx.Commit()
+	age(c, 9+RejoinGrace+1, RejoinGrace)
 	entries, _ = c.Len()
 	require.Equal(t, 2, entries)
+}
+
+// age commits empty blocks after `from`, n of them, so the cache's newest
+// block moves without anything being produced: what a destination's word
+// waits out (RejoinGrace).
+func age(c *Cache, from, n uint64) {
+	for b := from + 1; b <= from+n; b++ {
+		c.Begin(b).Commit()
+	}
 }
 
 // A claim past what is held releases what is held and stops; a claim at the
@@ -170,6 +190,7 @@ func TestCache_ReleaseIsBoundedByWhatIsHeld(t *testing.T) {
 	tx = c.Begin(4)
 	tx.Release(bvn1, ^uint64(0))
 	tx.Commit() // must return
+	age(c, 4, RejoinGrace)
 	entries, _ := c.Len()
 	require.Zero(t, entries)
 	require.Equal(t, uint64(3), c.released[streamKey(bvn1)], "clamped to the highest held number")
