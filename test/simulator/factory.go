@@ -84,9 +84,10 @@ type networkFactory struct {
 
 type nodeFactory struct {
 	*networkFactory
-	staging *coreexec.Staging
-	cache   *synthcache.Cache
-	heals   *crosschain.HealCounters
+	staging   *coreexec.Staging
+	conductor *crosschain.Conductor
+	cache     *synthcache.Cache
+	heals     *crosschain.HealCounters
 
 	// Options
 	id      int
@@ -170,6 +171,7 @@ func (f *nodeFactory) Build(p *Partition) *Node {
 		n.database = f.getDatabase()
 	}
 	n.staging = f.getStaging()
+	n.conductor = f.conductor
 	n.synthCache = f.getSynthCache()
 	n.heals = f.getHeals()
 
@@ -658,11 +660,15 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	if err != nil {
 		panic(err)
 	}
+	f.conductor = conductor
 
 	// Create an executor
 	exec, err := execute.NewExecutor(execOpts)
 	if err != nil {
 		panic(err)
+	}
+	if col, ok := exec.(crosschain.Collector); ok {
+		conductor.Collector = col
 	}
 
 	// Create the app interface

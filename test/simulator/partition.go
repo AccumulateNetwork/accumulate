@@ -50,12 +50,14 @@ func (p *Partition) NodeCount() int { return len(p.nodes) }
 // NodeDatabase is node i's database, for a test that compares nodes.
 func (p *Partition) NodeDatabase(i int) *database.Database { return p.nodes[i].database }
 
-// ResetNodeStaging empties node i's staging and leaves its peers' alone:
-// what a restart does to one validator, whose staging is memory and is not
-// rebuilt from the store. The node's executor holds the same pointer, so it
-// carries on from an empty stage while its peers carry on from a full one
-// (#4290).
-func (p *Partition) ResetNodeStaging(i int) { p.nodes[i].staging.Reset() }
+// RestartNode stands node i where a restarted validator stands: its store
+// intact, its staging empty, its conductor set to rejoin at the next block
+// (#4290). The simulator has no process to restart; this is what a restart
+// does to the executor's memory.
+func (p *Partition) RestartNode(i int) {
+	p.nodes[i].staging.Reset()
+	p.nodes[i].conductor.Rejoin()
+}
 
 // NodeStaging is node i's staging, for a test that compares nodes.
 func (p *Partition) NodeStaging(i int) *coreexec.Staging { return p.nodes[i].staging }

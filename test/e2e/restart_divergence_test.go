@@ -196,7 +196,7 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 	}
 
 	// One validator restarts: its staging is gone, its peers' is not.
-	p.ResetNodeStaging(1)
+	p.RestartNode(1)
 	t.Logf("held after the restart:  %v", []int{held(0), held(1), held(2)})
 
 	// The held-back anchors land on every node in the next block: the peers

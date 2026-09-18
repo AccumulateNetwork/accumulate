@@ -39,6 +39,7 @@ type Node struct {
 	database   *database.Database
 	services   *message.Handler
 	staging    *execute.Staging
+	conductor  *crosschain.Conductor
 	synthCache *synthcache.Cache
 	heals      *crosschain.HealCounters
 }

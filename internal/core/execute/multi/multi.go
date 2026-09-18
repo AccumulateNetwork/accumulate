@@ -196,3 +196,14 @@ func (b *multiBlockState) Commit() error {
 	err = b.multi.updateActive()
 	return errors.UnknownError.Wrap(err)
 }
+
+// Collect forwards to the active executor when it takes healed packages into
+// staging outside a block (v2, executor spec "Sync"); v1 holds nothing.
+func (m *Multi) Collect(batch *database.Batch, envelopes []*messaging.Envelope) (int, error) {
+	if c, ok := (*m.active.Load()).(interface {
+		Collect(*database.Batch, []*messaging.Envelope) (int, error)
+	}); ok {
+		return c.Collect(batch, envelopes)
+	}
+	return 0, nil
+}
