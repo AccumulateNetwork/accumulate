@@ -150,6 +150,10 @@ type Cache struct {
 	released map[string]uint64 // per stream, the number the destination has said it executed through
 	pending  []pendingRelease  // the destination's words not yet applied: kept RejoinGrace blocks
 
+	// the destinations' words on this partition's anchors not yet applied:
+	// kept RejoinGrace blocks, for the same reason
+	pendingAnchorAcks []pendingAnchorAck
+
 	// per destination of this partition's anchors, the anchor number it has
 	// said it executed through; an anchor every destination has executed is
 	// released
@@ -206,8 +210,18 @@ func Stats() Counters {
 // #4290); released at once, the entries would be gone by the time it asks,
 // and it could never again execute the block its peers executed. Five
 // minutes of blocks covers a restart, its catch-up and the pull; what it
-// costs is that many blocks of production held past their release.
+// costs is that many blocks of production held past their release. Anchors
+// the same: the pull rebuilds the anchor streams too, and run
+// 20260918T021748Z found "anchor 102 is not in the cache" seconds after a
+// restart, released on the partition's word.
 const RejoinGrace = 300
+
+// pendingAnchorAck is a destination's word on anchors waiting out the grace.
+type pendingAnchorAck struct {
+	stream string
+	ack    anchorAck
+	at     uint64
+}
 
 // pendingRelease is a destination's word waiting out the grace.
 type pendingRelease struct {
@@ -376,10 +390,10 @@ func (t *Txn) Commit() {
 	for k, r := range t.released {
 		c.pending = append(c.pending, pendingRelease{k, r.through, t.block})
 	}
-	c.applyReleasesLocked()
 	for k, a := range t.anchorAcks {
-		c.releaseAnchorsLocked(k, a)
+		c.pendingAnchorAcks = append(c.pendingAnchorAcks, pendingAnchorAck{k, a, t.block})
 	}
+	c.applyReleasesLocked()
 	c.trimLocked()
 	mEntries.Set(float64(len(c.byHash)))
 	mBlocks.Set(float64(len(c.blocks)))
@@ -434,6 +448,16 @@ func (c *Cache) applyReleasesLocked() {
 	}
 	clear(c.pending[len(kept):])
 	c.pending = kept
+	keptAcks := c.pendingAnchorAcks[:0]
+	for _, p := range c.pendingAnchorAcks {
+		if p.at+RejoinGrace <= c.newest {
+			c.releaseAnchorsLocked(p.stream, p.ack)
+		} else {
+			keptAcks = append(keptAcks, p)
+		}
+	}
+	clear(c.pendingAnchorAcks[len(keptAcks):])
+	c.pendingAnchorAcks = keptAcks
 }
 
 // releaseLocked drops a stream's entries through number n and the block

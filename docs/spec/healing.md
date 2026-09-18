@@ -329,7 +329,8 @@ two-level cycled cache in the dynamic layer and serves reads, not healing.
   sender's `Delivered` on the destination's anchor stream to it, and the
   destination drops the anchors it produced at or below it — once every
   destination it anchors to has said so, since one anchor goes to all of them
-  under one number: one for a BVN, every partition for the Directory. Anchors
+  under one number: one for a BVN, every partition for the Directory — and
+  then, like a synthetic stream's word, after the grace. Anchors
   say nothing about synthetics; each stream is released by its own word. So
   the cache holds the entries in play — what the other side has not yet said
   it executed — not a window of history. **A synthetic stream's word is
@@ -473,7 +474,7 @@ and `SyntheticMessage` (`Txn.Release` at the destination's block close, applied
 at commit: the stream's entries at or below it, the block segments that held
 them, and a block left with nothing to prove, go;
 `accumulate_synthcache_released_total`; the word waits `RejoinGrace` blocks
-before it is applied, see Rejoining), and on every dispatched
+before it is applied, see Rejoining — anchor acks likewise), and on every dispatched
 `BlockAnchor` for the anchor stream (`Txn.ReleaseAnchors`, taken where the
 copy's validator signature is recorded, applied at commit once every
 destination of the anchor has spoken; `anchors_released_total`); a block that
