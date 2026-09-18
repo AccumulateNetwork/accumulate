@@ -120,17 +120,28 @@ const DefaultRetry = 2 * time.Second
 // before it concludes that none of them has any to give.
 const DefaultRounds = 10
 
-// ErrNoPeerHasStaging is returned when every validator of the partition has
-// been asked and none could serve its staging.
-//
-// It is not a failure of the join so much as an answer: on a network that
-// restarted as a whole, every node's staging is empty and every node refuses,
-// because a node that has executed no block since it started holds nothing
-// anyone should start from. There is then nothing to take and nothing to be
-// exact about — no peer holds an entry this node lacks — and the caller may
-// execute from where it stands. A node restarting alone gets a real answer
-// from its peers instead.
-var ErrNoPeerHasStaging = errors.NotReady.With("no validator of this partition could serve its staging")
+// An Outcome is how a join ended. It is a value and not an error code,
+// because the one the caller acts on — no peer had staging to give — must be
+// told apart from every other NotReady this node meets, and NotReady is what
+// an anchor that has not reached its quorum yet, an account the Directory has
+// not anchored yet, and a peer that is busy all return. Matching on the code
+// would route a routine "not yet" into "execute from where you stand", which
+// pairs a peer's staging with this node's older state: the divergence the
+// join exists to prevent (#4290).
+type Outcome int
+
+const (
+	// Joined: the node took a peer's staging, pulled the state, matched the
+	// root and handed off. It is executing.
+	Joined Outcome = iota
+
+	// NoPeerHasStaging: every validator of the partition was asked and none
+	// could serve any. On a network that restarted as a whole that is the
+	// true answer — every node's staging is empty — so there is nothing to
+	// take and nothing to be exact about, and the caller may execute from
+	// where it stands. A node restarting alone gets a real answer instead.
+	NoPeerHasStaging
+)
 
 // Run joins the partition. It returns when the node has handed off to block
 // production, or when the context is cancelled.
@@ -147,9 +158,9 @@ var ErrNoPeerHasStaging = errors.NotReady.With("no validator of this partition c
 //  4. when the local root equals the anchored root of a block Q at or above
 //     P, settle staging at Q and hand off: block Q + 1 executes from the
 //     buffer, as any node executes a block.
-func Run(ctx context.Context, opts Options) error {
+func Run(ctx context.Context, opts Options) (Outcome, error) {
 	if opts.Buffer == nil || opts.Stage == nil || opts.State == nil || opts.Peers == nil {
-		return errors.BadRequest.With("a join needs a buffer, a stage, a state and peers")
+		return Joined, errors.BadRequest.With("a join needs a buffer, a stage, a state and peers")
 	}
 	log := opts.Logger
 	if log == nil {
@@ -161,61 +172,79 @@ func Run(ctx context.Context, opts Options) error {
 		retry = DefaultRetry
 	}
 
-	opts.Buffer.StartCollecting()
-
-	// Step 2, retried: a peer that is itself joining refuses (NotReady,
-	// #4295), a peer whose staging is older than this node's buffer leaves a
-	// hole, and a peer too busy to finish a paged read says so. Any of those
-	// means ask the next validator, not give up.
-	p, err := takeStaging(ctx, opts, log, retry)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	log.Info("Staging taken from a peer", "block", p)
-
-	// Steps 3 and 4: pull until the root matches, and hand off at Q.
+	// The join starts over from here whenever the buffer overruns: the blocks
+	// since the snapshot are no longer all in hand, so nothing taken before
+	// is usable and a newer snapshot is taken instead.
 	for {
-		if err := ctx.Err(); err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-		if opts.Buffer.BufferOverrun() {
-			// The blocks since P are no longer all in hand, so the join
-			// cannot be exact. Start again from a newer snapshot.
-			return errors.NotReady.WithFormat("%s: the join buffer overran; the join must start again", opts.Partition)
-		}
+		opts.Buffer.StartCollecting()
 
-		q, ok, err := opts.State.Matched(ctx)
+		// Step 2, retried: a peer that is itself joining refuses (NotReady,
+		// #4295), and a peer too busy to finish a paged read says so. Either
+		// means ask the next validator, not give up. When every validator
+		// has been asked and none could answer, that IS the answer.
+		p, taken, err := takeStaging(ctx, opts, log, retry)
 		if err != nil {
-			return errors.UnknownError.WithFormat("match the anchored root: %w", err)
+			return Joined, errors.UnknownError.Wrap(err)
 		}
-		if ok && q >= p {
-			err = opts.Stage.SettleStagingAt(q)
-			if err != nil {
-				return errors.UnknownError.WithFormat("settle staging at %d: %w", q, err)
-			}
-			err = opts.Buffer.Handoff(q)
-			if err != nil {
-				return errors.UnknownError.WithFormat("hand off at %d: %w", q, err)
-			}
-			log.Info("Joined", "block", q, "snapshotBlock", p)
-			return nil
+		if !taken {
+			log.Info("No validator of this partition could serve its staging")
+			return NoPeerHasStaging, nil
 		}
-		if ok {
-			// The root matched a block below the staging this node took.
-			// Staging as of P and state as of Q < P is a mixture no node
-			// ever held; keep pulling until the state reaches P.
-			log.Info("The root matched below the staging taken; still pulling", "matched", q, "snapshotBlock", p)
-		}
+		log.Info("Staging taken from a peer", "block", p)
 
-		err = opts.State.Pull(ctx, opts.Buffer.NamedAccounts())
-		if err != nil {
-			return errors.UnknownError.WithFormat("pull state: %w", err)
-		}
+		// Steps 3 and 4: pull until the root matches, and hand off at Q.
+		restart := false
+		for !restart {
+			if err := ctx.Err(); err != nil {
+				return Joined, errors.UnknownError.Wrap(err)
+			}
+			if opts.Buffer.BufferOverrun() {
+				// The blocks since P are no longer all in hand, so the join
+				// cannot be exact. Start again from a newer snapshot.
+				log.Info("The join buffer overran; starting again from a newer snapshot")
+				restart = true
+				break
+			}
 
-		select {
-		case <-ctx.Done():
-			return errors.UnknownError.Wrap(ctx.Err())
-		case <-time.After(retry):
+			q, ok, err := opts.State.Matched(ctx)
+			if err != nil {
+				return Joined, errors.UnknownError.WithFormat("match the anchored root: %w", err)
+			}
+			if ok && q >= p {
+				err = opts.Stage.SettleStagingAt(q)
+				if err != nil {
+					return Joined, errors.UnknownError.WithFormat("settle staging at %d: %w", q, err)
+				}
+				err = opts.Buffer.Handoff(q)
+				switch {
+				case err == nil:
+					log.Info("Joined", "block", q, "snapshotBlock", p)
+					return Joined, nil
+				case errors.Is(err, errors.NotReady):
+					// The pull ran ahead of the blocks consensus has
+					// delivered: handing off now would give the blocks still
+					// to arrive the wrong numbers. Wait for them.
+					log.Info("The state is ahead of the blocks collected so far; waiting", "block", q, "error", err)
+				default:
+					return Joined, errors.UnknownError.WithFormat("hand off at %d: %w", q, err)
+				}
+			} else if ok {
+				// The root matched a block below the staging this node took.
+				// Staging as of P and state as of Q < P is a mixture no node
+				// ever held; keep pulling until the state reaches P.
+				log.Info("The root matched below the staging taken; still pulling", "matched", q, "snapshotBlock", p)
+			}
+
+			err = opts.State.Pull(ctx, opts.Buffer.NamedAccounts())
+			if err != nil {
+				return Joined, errors.UnknownError.WithFormat("pull state: %w", err)
+			}
+
+			select {
+			case <-ctx.Done():
+				return Joined, errors.UnknownError.Wrap(ctx.Err())
+			case <-time.After(retry):
+			}
 		}
 	}
 }
@@ -225,22 +254,22 @@ func Run(ctx context.Context, opts Options) error {
 // cannot be read, or that has executed no block itself is passed over: that
 // is that node's condition, not an answer about the snapshot, and the next
 // validator is asked.
-func takeStaging(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration) (uint64, error) {
+func takeStaging(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration) (uint64, bool, error) {
 	rounds := opts.Rounds
 	if rounds <= 0 {
 		rounds = DefaultRounds
 	}
 	for attempt := 0; ; attempt++ {
 		if attempt >= rounds {
-			return 0, ErrNoPeerHasStaging
+			return 0, false, nil
 		}
 		if err := ctx.Err(); err != nil {
-			return 0, errors.UnknownError.Wrap(err)
+			return 0, false, errors.UnknownError.Wrap(err)
 		}
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():
-				return 0, errors.UnknownError.Wrap(ctx.Err())
+				return 0, false, errors.UnknownError.Wrap(ctx.Err())
 			case <-time.After(retry):
 			}
 		}
@@ -271,7 +300,7 @@ func takeStaging(ctx context.Context, opts Options, log *slog.Logger, retry time
 				log.Info("A validator's staging could not be loaded", "peer", peer.PeerID, "block", snap.Block, "error", err)
 				continue
 			}
-			return snap.Block, nil
+			return snap.Block, true, nil
 		}
 	}
 }

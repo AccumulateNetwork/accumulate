@@ -797,6 +797,16 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 // (#4294). Every node must produce a group the same way whichever path it
 // arrived by.
 func (s *Service) produceGroup(certs []*types.Certificate, batches []*types.Batch, leader *types.Certificate, isLeader bool, payloadEntries int) error {
+	return s.produce(certs, batches, leader, isLeader, payloadEntries, true)
+}
+
+// produce is produceGroup with a say over the checkpoint. A buffered group is
+// produced with the consensus position as it is NOW, which is ahead of the
+// block being produced — the node collected while consensus ran on — so
+// writing a checkpoint for it would pair a block with a position that commits
+// certificates the executor has not executed. The handoff writes none; the
+// first live block after it writes one that is true (#4238, #4294).
+func (s *Service) produce(certs []*types.Certificate, batches []*types.Batch, leader *types.Certificate, isLeader bool, payloadEntries int, checkpoint bool) error {
 	s.mu.Lock()
 	if s.halted {
 		s.mu.Unlock()
@@ -831,7 +841,9 @@ func (s *Service) produceGroup(certs []*types.Certificate, batches []*types.Batc
 	// Record the consensus position this block is produced at, before it is
 	// produced: a crash on either side of ProduceBlock leaves a checkpoint
 	// that matches the executor's last block (#4238).
-	s.saveCheckpoint(blockIndex)
+	if checkpoint {
+		s.saveCheckpoint(blockIndex)
+	}
 
 	hash, err := s.adapter.ProduceBlock(s.ctx, params)
 	if err != nil {

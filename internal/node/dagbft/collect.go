@@ -95,6 +95,15 @@ func (s *Service) StartCollecting() {
 	s.collecting = true
 	s.bufferOverrun = false
 
+	// A join that starts again starts clean: what was buffered belongs to a
+	// snapshot that is no longer usable, and staging is taken again from a
+	// newer one (#4294).
+	s.buffer = nil
+	s.bufferBytes = 0
+	s.stagingReady = false
+	s.named = nil
+	s.namedFull = false
+
 	// The block this node stood at when it started collecting is what maps
 	// the buffer onto block numbers: the first group buffered is the block
 	// after it, and each one after that is the next block, because a group
@@ -237,11 +246,16 @@ func (s *Service) performHandoff(q uint64) error {
 		"collectedFrom", s.collectFrom, "alreadyInTheState", skip, "toProduce", len(groups))
 
 	for i, g := range groups {
-		err := s.produceGroup(g.Certs, g.Batches, g.Leader, g.IsLeader, g.payloadEntries())
+		err := s.produce(g.Certs, g.Batches, g.Leader, g.IsLeader, g.payloadEntries(), false)
 		if err != nil {
 			return errors.UnknownError.WithFormat("produce buffered group %d of %d (round %d): %w",
 				i+1, len(groups), g.Round(), err)
 		}
+		// Each one is a committed group this node has now executed. Without
+		// this the executor reads as permanently behind by the size of the
+		// buffer, and past MaxExecutionLag a joined validator's primary
+		// proposes empty headers for ever (consensus spec, invariant 9).
+		s.node.ReportExecuted()
 	}
 	return nil
 }

@@ -648,7 +648,9 @@ func (c *Cache) Block(index uint64) (*Block, bool) {
 	b, ok := c.blocks[index]
 	if !ok && index <= c.joinedAt {
 		// A block this node did not execute, because it joined at or after
-		// it. Not a miss: nothing of that block was this node's to produce.
+		// it. The answer is the same — it holds nothing for that block — but
+		// it is not counted as a miss: a miss says the cache failed to hold
+		// what this node produced, and this node produced none of it.
 		return nil, false
 	}
 	count("block", ok)

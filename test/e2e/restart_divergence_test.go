@@ -46,25 +46,13 @@ import (
 // the three nodes' root chains are compared.
 func itoa(v uint64) string { return fmt.Sprint(v) }
 
-// The join is driven from the test: staging is taken at one step of the loop
-// and the state at another, so a variant can put the proving anchor before or
-// during the join.
-func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
-	// The anchors that prove the held entries land first, so the peers run
-	// them before the joining node takes their staging.
-	restartAndJoin(t, 3, 9)
-}
-
-// The proving anchor lands DURING the join: staging is taken while the peers
-// still hold the entries and their proofs wait, the anchor arrives while the
-// node is collecting, and the peers execute what they held. The joining node
-// must end on their root chain, not one block ahead or behind (#4290, run
+// The proving anchor lands AFTER the join: the node takes its peers' staging
+// and their state while they still hold the entries and their proofs wait, and
+// when the anchor arrives every node — the one that joined included — executes
+// what it holds. A join that took no staging holds nothing then, executes a
+// block its peers do not, and its root chain never matches again (#4290, run
 // 20260918T023054Z).
-func TestOneValidatorRestartDoesNotDiverge_AnchorLandsDuringTheJoin(t *testing.T) {
-	restartAndJoin(t, 0, 9)
-}
-
-func restartAndJoin(t *testing.T, takeStagingAt, completeJoinAt int) {
+func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
 	aliceKey := acctesting.GenerateKey(alice)
@@ -231,8 +219,43 @@ func restartAndJoin(t *testing.T, takeStagingAt, completeJoinAt int) {
 	require.True(t, p.Joining(1))
 	t.Logf("held after the restart:  %v", []int{held(0), held(1), held(2)})
 
-	// The held-back anchors land on every node in the next block: the peers
-	// execute what they hold, the restarted node has nothing to execute.
+	// The join happens FIRST, while the peers still hold the entries and
+	// their proofs still wait: the node takes their staging and their state,
+	// and only then do the anchors land. That ordering is what this test is
+	// for — with it, a join that skipped the staging (or collected nothing)
+	// holds nothing when the proving anchor arrives, executes a block its
+	// peers do not, and its root chain never matches again (#4290).
+	require.NoError(t, p.TakeStaging(1, 0), "take a peer's staging")
+	{
+		tx := p.NodeStaging(1).Begin()
+		n := 0
+		for _, st := range tx.Streams() {
+			n += int(st.Held)
+		}
+		tx.Discard()
+		require.Greater(t, n, 0, "the staging taken holds what the peers hold")
+	}
+	// Blocks pass between the two halves of the join, and they carry new
+	// entries: sent now, they reach BVN1 after the snapshot was taken, so
+	// they are in nobody's snapshot and the joining node can only have them
+	// by COLLECTING them. Their anchors are still held back, so the peers
+	// hold them unexecuted — which is what makes the difference visible when
+	// the anchors land.
+	for i := uint64(18); i <= 20; i++ {
+		send(i)
+		sim.Step()
+	}
+	sim.StepN(10)
+	t.Logf("held while joining:      %v", []int{held(0), held(1), held(2)})
+	require.Greater(t, held(1), 0, "the joining node collected what arrived after the snapshot")
+
+	require.NoError(t, p.CompleteJoin(1, 0), "take the state and execute from the next block")
+	require.False(t, p.Joining(1))
+	t.Logf("held after the join:     %v", []int{held(0), held(1), held(2)})
+	require.Equal(t, held(0), held(1), "the joined node holds what its peers hold")
+
+	// The held-back anchors land on every node in the next block: every node,
+	// the one that joined included, executes what it holds.
 	dropAnchors.Store(false)
 	release.Store(true)
 	proofs := func() string {
@@ -255,18 +278,6 @@ func restartAndJoin(t *testing.T, takeStagingAt, completeJoinAt int) {
 	}
 	for step := 0; step < 30; step++ {
 		require.NoError(t, sim.S.Step())
-
-		// The join: staging from a peer part way through — while the blocks
-		// that prove the held entries are still landing — and the state, and
-		// the handoff, a few blocks later. Between the two the node collects
-		// what it is handed, which is what makes the two exact.
-		switch step {
-		case takeStagingAt:
-			require.NoError(t, p.TakeStaging(1, 0), "take a peer's staging")
-		case completeJoinAt:
-			require.NoError(t, p.CompleteJoin(1, 0), "take the state and execute from the next block")
-			require.False(t, p.Joining(1))
-		}
 
 		var line string
 		for i := 0; i < p.NodeCount(); i++ {

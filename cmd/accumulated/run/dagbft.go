@@ -441,7 +441,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	//
 	// A node with nothing — genesis, or a fresh database — has nothing to join
 	// from and executes from its first block as it always has.
-	joining := lastExecutedBlock(db, s.Partition.ID) > 0
+	lastBlock, err := lastExecutedBlock(db, s.Partition.ID)
+	if err != nil {
+		return errors.UnknownError.WithFormat("read this node's last block: %w", err)
+	}
+	joining := lastBlock > 0
 	if joining {
 		s.service.StartCollecting()
 	}
@@ -474,14 +478,18 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			Peers:     &join.APIPeers{Partition: s.Partition.ID, Client: client},
 			Logger:    slog.Default(),
 		}
-		lastBlock := lastExecutedBlock(db, s.Partition.ID)
 		go func() {
-			err := join.Run(inst.context, opts)
+			outcome, err := join.Run(inst.context, opts)
 			switch {
-			case err == nil:
-				return
+			case err != nil:
+				// A join that cannot finish leaves the node collecting: it
+				// keeps up with consensus and executes nothing, which is the
+				// spec's answer and is safe. It is also an operator's
+				// problem, so it is an error and not a debug line.
+				slog.Error("The join did not complete; this node is not executing",
+					"module", "join", "partition", s.Partition.ID, "error", err)
 
-			case errors.Is(err, join.ErrNoPeerHasStaging):
+			case outcome == join.NoPeerHasStaging:
 				// No validator of this partition has staging to give: they
 				// all restarted too, and an empty stage is what every one of
 				// them holds. There is nothing to take and nothing to be
@@ -698,13 +706,21 @@ var (
 // lastExecutedBlock is the block this node's state is, or zero when it has
 // executed none: what says whether a node is starting from genesis or coming
 // back to a network that has moved on (executor spec, "Sync").
-func lastExecutedBlock(db *database.Database, partition string) uint64 {
+func lastExecutedBlock(db *database.Database, partition string) (uint64, error) {
 	batch := db.Begin(false)
 	defer batch.Discard()
 	var ledger *protocol.SystemLedger
-	err := batch.Account(protocol.PartitionUrl(partition).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
-	if err != nil {
-		return 0
+	switch err := batch.Account(protocol.PartitionUrl(partition).JoinPath(protocol.Ledger)).Main().GetAs(&ledger); {
+	case err == nil:
+		return ledger.Index, nil
+	case errors.Is(err, errors.NotFound):
+		// No ledger at all: this node has executed nothing, so it is starting
+		// from genesis rather than coming back to a network.
+		return 0, nil
+	default:
+		// Anything else is a store this node cannot read. Treating it as
+		// "no ledger" would start a node executing from a checkpoint against
+		// state it could not read — silently.
+		return 0, errors.UnknownError.Wrap(err)
 	}
-	return ledger.Index
 }
