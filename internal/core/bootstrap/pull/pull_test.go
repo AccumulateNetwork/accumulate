@@ -7,8 +7,9 @@
 package pull
 
 import (
+	"bytes"
 	"context"
-	"errors"
+	"fmt"
 	"testing"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -295,31 +296,37 @@ func TestFullSpine_ChainEntriesReplayed(t *testing.T) {
 	}
 }
 
-// TestStateOnly_NoChainEntriesPulled — guards against regression
-// where ModeStateOnly accidentally calls AddEntry. Local chain has
-// the right Head (count + anchor) but Entry(0) returns an error
-// because the entry was never stored.
-func TestStateOnly_NoChainEntriesPulled(t *testing.T) {
-	u := protocol.DnUrl().JoinPath("alice")
-
-	src := newObservedDB(t)
-	{
-		b := src.Begin(true)
-		if err := b.Account(u).Main().Put(&protocol.DataAccount{Url: u}); err != nil {
-			t.Fatal(err)
-		}
-		for i := 0; i < 3; i++ {
-			e := make([]byte, 32)
-			e[0] = byte(i)
-			e[31] = 0xcc
-			if err := b.Account(u).MainChain().Inner().AddEntry(e, false); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if err := b.Commit(); err != nil {
+// buildChain writes an account whose main chain holds n entries.
+func buildChain(t *testing.T, db *database.Database, u *url.URL, n int, salt byte) {
+	t.Helper()
+	b := db.Begin(true)
+	defer b.Discard()
+	if err := b.Account(u).Main().Put(&protocol.DataAccount{Url: u}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < n; i++ {
+		e := make([]byte, 32)
+		e[0] = byte(i)
+		e[1] = byte(i >> 8)
+		e[31] = salt
+		if err := b.Account(u).MainChain().Inner().AddEntry(e, false); err != nil {
 			t.Fatal(err)
 		}
 	}
+	if err := b.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestStateOnly_PullsTheOpenMarkSetOnly — ModeStateOnly does not replay a
+// chain's history, but it cannot skip the open mark set either: an append
+// rebuilds the tail chunk from the elements of the open set. Below the last
+// mark point nothing is pulled.
+func TestStateOnly_PullsTheOpenMarkSetOnly(t *testing.T) {
+	u := protocol.DnUrl().JoinPath("alice")
+
+	src := newObservedDB(t)
+	buildChain(t, src, u, 260, 0xcc) // past the 256-entry mark point
 
 	dst := newObservedDB(t)
 	dstBatch := dst.Begin(true)
@@ -336,13 +343,127 @@ func TestStateOnly_NoChainEntriesPulled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dstChain.CurrentState().Count != 3 {
-		t.Errorf("Head Count = %d, want 3", dstChain.CurrentState().Count)
+	if dstChain.CurrentState().Count != 260 {
+		t.Errorf("Head Count = %d, want 260", dstChain.CurrentState().Count)
 	}
-	// Trying to read entry 0 should error (the entry wasn't stored).
-	_, err = dstChain.Entry(0)
-	if err == nil {
-		t.Error("ModeStateOnly should NOT pull chain entries; Entry(0) should error")
+	// The open mark set is [256, 260) — those are held.
+	for i := int64(256); i < 260; i++ {
+		if _, err := dstChain.Entry(i); err != nil {
+			t.Errorf("entry %d of the open mark set was not pulled: %v", i, err)
+		}
+	}
+	// Below the last mark point nothing was pulled.
+	if _, err := dstChain.Entry(0); err == nil {
+		t.Error("ModeStateOnly pulled an entry below the last mark point")
+	}
+}
+
+// TestStateOnly_ChainCanBeAppendedTo is the rule a joined node depends on: it
+// executes block Q+1, which appends to the chains it pulled. A pulled chain
+// must therefore take the same entry the source takes and anchor to the same
+// place — otherwise the node's first block differs from its peers' and its
+// root chain never matches again (#4290).
+func TestStateOnly_ChainCanBeAppendedTo(t *testing.T) {
+	// 3: a chain whose whole set is open. 255: the append closes the mark
+	// set, which is assembled from every chunk of it. 260: past a mark point.
+	for _, height := range []int{3, 255, 260} {
+		t.Run(fmt.Sprint(height), func(t *testing.T) {
+			u := protocol.DnUrl().JoinPath("alice")
+
+			src := newObservedDB(t)
+			buildChain(t, src, u, height, 0xcc)
+
+			dst := newObservedDB(t)
+			b := dst.Begin(true)
+			if err := Account(context.Background(), &dbSource{db: src}, b, u, Options{Mode: ModeStateOnly}); err != nil {
+				t.Fatal(err)
+			}
+			if err := b.Commit(); err != nil {
+				t.Fatal(err)
+			}
+
+			next := make([]byte, 32)
+			next[0] = 0x77
+			next[31] = 0x77
+
+			sb := src.Begin(true)
+			if err := sb.Account(u).MainChain().Inner().AddEntry(next, false); err != nil {
+				t.Fatal(err)
+			}
+			if err := sb.Commit(); err != nil {
+				t.Fatal(err)
+			}
+
+			db := dst.Begin(true)
+			if err := db.Account(u).MainChain().Inner().AddEntry(next, false); err != nil {
+				t.Fatalf("a pulled chain could not be appended to: %v", err)
+			}
+			if err := db.Commit(); err != nil {
+				t.Fatal(err)
+			}
+
+			sro, dro := src.Begin(false), dst.Begin(false)
+			defer sro.Discard()
+			defer dro.Discard()
+			want, err := sro.Account(u).MainChain().Anchor()
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := dro.Account(u).MainChain().Anchor()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(want, got) {
+				t.Fatalf("after the same append the anchors differ:\n  source %x\n  pulled %x", want, got)
+			}
+			if want, err := sro.Account(u).Hash(); err != nil {
+				t.Fatal(err)
+			} else if got, err := dro.Account(u).Hash(); err != nil {
+				t.Fatal(err)
+			} else if got != want {
+				t.Fatalf("after the same append the leaves differ:\n  source %x\n  pulled %x", want, got)
+			}
+		})
+	}
+}
+
+// TestFullSpine_RePullIsIdempotent — a restarting node re-pulls the spine. A
+// pull that appended from index 0 every time doubled the chain.
+func TestFullSpine_RePullIsIdempotent(t *testing.T) {
+	u := protocol.DnUrl().JoinPath("anchors")
+
+	src := newObservedDB(t)
+	buildChain(t, src, u, 3, 0x99)
+
+	dst := newObservedDB(t)
+	for i := 0; i < 2; i++ {
+		b := dst.Begin(true)
+		if err := Account(context.Background(), &dbSource{db: src}, b, u, Options{Mode: ModeFullSpine}); err != nil {
+			t.Fatalf("pull %d: %v", i+1, err)
+		}
+		if err := b.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ro := dst.Begin(false)
+	defer ro.Discard()
+	c, err := ro.Account(u).MainChain().Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.CurrentState().Count != 3 {
+		t.Fatalf("the chain is %d entries after two pulls of a 3-entry chain", c.CurrentState().Count)
+	}
+
+	// And a pull that would have to shorten the chain is refused, not
+	// silently left as it is.
+	shorter := newObservedDB(t)
+	buildChain(t, shorter, u, 1, 0x99)
+	b := dst.Begin(true)
+	defer b.Discard()
+	if err := Account(context.Background(), &dbSource{db: shorter}, b, u, Options{Mode: ModeFullSpine}); err == nil {
+		t.Fatal("a peer serving a shorter chain than the node holds was accepted")
 	}
 }
 
@@ -380,8 +501,8 @@ func TestDnSpineAccounts(t *testing.T) {
 	}
 	// Sanity: each one is under dn.acme.
 	for _, u := range got {
-		if !errors.Is(error(nil), nil) || u == nil { // silence the import; really just checking nil
-			t.Errorf("nil spine url")
+		if u == nil {
+			t.Fatal("nil spine url")
 		}
 		if u.RootIdentity().String() != protocol.DnUrl().String() {
 			t.Errorf("spine account %s not under dn.acme", u)

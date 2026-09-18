@@ -33,9 +33,11 @@
 package pull
 
 import (
+	"bytes"
 	"context"
 	stderrors "errors"
 	"fmt"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -111,8 +113,14 @@ type Pending struct {
 	// Account is the account that was pulled.
 	Account *url.URL
 
-	// Block is the block the peer served the state at. It is the block whose
-	// anchored root settles it.
+	// Partition is the partition whose block Block is. Block numbers collide
+	// across partitions — with a one-second cadence the Directory and a BVN
+	// are at the same number at the same second — so a block number without
+	// its partition names nothing (#4205).
+	Partition *url.URL
+
+	// Block is the block the peer served the state at. It is the block of
+	// Partition whose anchored root settles it.
 	Block uint64
 
 	receipt *api.Receipt
@@ -120,20 +128,45 @@ type Pending struct {
 	done    bool
 }
 
+// MaxHeld bounds how many fetched-but-unsettled accounts may be outstanding at
+// once, across the process. Each one holds an open child batch, so the state it
+// pulled is held in memory until it settles or is discarded, and an unbounded
+// pull is an unbounded heap. A caller that needs more than this settles a round
+// of accounts before fetching the next.
+const MaxHeld = 1024
+
+var held atomic.Int64
+
+// Held reports how many fetched accounts are outstanding, for diagnostics.
+func Held() int64 { return held.Load() }
+
+// release marks the pending state finished and gives back its place under
+// MaxHeld. It is called exactly once per Pending.
+func (p *Pending) release() {
+	p.done = true
+	held.Add(-1)
+}
+
 // Settle verifies the state against the root the Directory anchored for
 // Pending.Block and, if it holds, writes it into the caller's batch. Either
 // way the pending state is released.
+//
+// It cannot succeed on anything it did not verify: a fetch that carries no
+// receipt, or a root nobody anchored, is a failure, not an empty success.
 func (p *Pending) Settle(anchoredRoot [32]byte) error {
 	if p.done {
 		return errors.NotAllowed.WithFormat("%v: already settled", p.Account)
 	}
-	p.done = true
+	p.release()
 	defer p.batch.Discard()
 
 	if p.receipt == nil {
-		// The peer has no such account, so there is nothing to verify and
-		// nothing was written.
-		return nil
+		return errors.BadRequest.WithFormat(
+			"%v: fetched without a receipt, so there is nothing to settle it against", p.Account)
+	}
+	if anchoredRoot == ([32]byte{}) {
+		return errors.BadRequest.WithFormat(
+			"%v: the directory anchored no root for %v block %d", p.Account, p.Partition, p.Block)
 	}
 	if err := Verify(p.batch, p.Account, p.receipt, anchoredRoot); err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -148,14 +181,17 @@ func (p *Pending) Keep() error {
 	if p.done {
 		return errors.NotAllowed.WithFormat("%v: already settled", p.Account)
 	}
-	p.done = true
+	p.release()
 	defer p.batch.Discard()
 	return errors.UnknownError.Wrap(p.batch.Commit())
 }
 
 // Discard throws the pulled state away.
 func (p *Pending) Discard() {
-	p.done = true
+	if p.done {
+		return
+	}
+	p.release()
 	p.batch.Discard()
 }
 
@@ -173,15 +209,27 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 	if u == nil {
 		return nil, errors.BadRequest.With("pull.Fetch: url required")
 	}
+	if withReceipt && opts.Partition == nil {
+		// A receipt proves the state as of a block, and a block number without
+		// its partition names nothing.
+		return nil, errors.BadRequest.With("pull.Fetch: partition required when asking for a receipt")
+	}
 	pageSize := opts.PageSize
 	if pageSize == 0 {
 		pageSize = 256
 	}
 
+	if n := held.Add(1); n > MaxHeld {
+		held.Add(-1)
+		return nil, errors.NotReady.WithFormat(
+			"%v: %d accounts are already fetched and unsettled, the limit is %d", u, n-1, MaxHeld)
+	}
+
 	sub := batch.Begin(true)
-	p := &Pending{Account: u, batch: sub}
+	p := &Pending{Account: u, Partition: opts.Partition, batch: sub}
 
 	fail := func(err error) (*Pending, error) {
+		p.release()
 		sub.Discard()
 		return nil, err
 	}
@@ -246,7 +294,7 @@ func Account(ctx context.Context, src Source, batch *database.Batch, u *url.URL,
 		return errors.UnknownError.Wrap(p.Keep())
 	}
 
-	root, err := opts.Verify.AnchoredRoot(ctx, opts.Partition, p.Block)
+	root, err := opts.Verify.AnchoredRoot(ctx, p.Partition, p.Block)
 	if err != nil {
 		p.Discard()
 		return errors.UnknownError.Wrap(err)
@@ -258,21 +306,35 @@ func Account(ctx context.Context, src Source, batch *database.Batch, u *url.URL,
 // which one answered. A source that serves state that does not hash into the
 // anchored root is refused and the next is asked; when none answer, every
 // refusal is reported.
+//
+// A source that serves the account at a block the Directory has not anchored
+// is one of those refusals, not the end of the pull. The block compared is the
+// one the peer put in its own receipt, so a peer claiming a block that will
+// never be anchored would otherwise stop the whole pull for everyone. Only
+// when no source could serve an anchored state is the failure reported as
+// ErrNotAnchored — which is the wait it names, and the caller asks again.
 func AccountFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url.URL, opts Options) (int, error) {
 	if len(srcs) == 0 {
 		return -1, errors.BadRequest.With("pull.AccountFrom: at least one source required")
 	}
 	var refusals []error
+	var early int
 	for i, src := range srcs {
 		err := Account(ctx, src, batch, u, opts)
 		if err == nil {
 			return i, nil
 		}
-		if errors.Is(err, ErrNotAnchored) || ctx.Err() != nil {
-			// Not the peer's fault, and asking another will not help.
+		if ctx.Err() != nil {
 			return -1, errors.UnknownError.Wrap(err)
 		}
+		if errors.Is(err, ErrNotAnchored) {
+			early++
+		}
 		refusals = append(refusals, errors.UnknownError.WithFormat("source %d: %w", i, err))
+	}
+	if early == len(srcs) {
+		return -1, errors.NotReady.WithFormat(
+			"%v: no source served a state at a block the directory has anchored: %w", u, ErrNotAnchored)
 	}
 	return -1, errors.Conflict.WithFormat("%v: no source served state that verifies: %w", u, stderrors.Join(refusals...))
 }
@@ -289,19 +351,31 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("query account: %w", err)
 	}
+
+	// A peer that answers with an empty record has served nothing, and serving
+	// nothing is a failure of that source, not an account with no state. It
+	// used to return success with no receipt, and a fetch with no receipt
+	// settles against any root at all, including one nobody anchored.
 	if rec == nil || rec.Account == nil {
-		return nil, nil // Nothing to store
-	}
-	if err := batch.Account(u).Main().Put(rec.Account); err != nil {
-		return nil, errors.UnknownError.WithFormat("store main: %w", err)
+		return nil, errors.NotFound.WithFormat("%v: the peer served no account", u)
 	}
 	if wantReceipt && rec.Receipt == nil {
 		return nil, errors.Conflict.WithFormat("%v: the peer served no receipt", u)
 	}
+	if err := batch.Account(u).Main().Put(rec.Account); err != nil {
+		return nil, errors.UnknownError.WithFormat("store main: %w", err)
+	}
 	return rec.Receipt, nil
 }
 
+// pullDirectory replaces the account's directory list with the peer's. It
+// replaces rather than adds: a node re-pulling an account it already holds —
+// which is the restart case, and the point of the sync — would otherwise keep
+// the entries the peer has dropped, and an account holding one entry more than
+// the peer's does not hash into the anchored root, against that peer or any
+// other, for as long as the node runs.
 func pullDirectory(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64) error {
+	var all []*url.URL
 	var start uint64
 	for {
 		count := pageSize
@@ -312,24 +386,26 @@ func pullDirectory(ctx context.Context, src Source, batch *database.Batch, u *ur
 			return fmt.Errorf("query: %w", err)
 		}
 		if page == nil || len(page.Records) == 0 {
-			return nil
+			break
 		}
 		for _, r := range page.Records {
 			if r == nil || r.Value == nil {
 				continue
 			}
-			if err := batch.Account(u).Directory().Add(r.Value); err != nil {
-				return fmt.Errorf("add %s: %w", r.Value, err)
-			}
+			all = append(all, r.Value)
 		}
 		if uint64(len(page.Records)) < count {
-			return nil
+			break
 		}
 		start += uint64(len(page.Records))
 	}
+	return errors.UnknownError.Wrap(batch.Account(u).Directory().Put(all))
 }
 
+// pullPending replaces the account's pending list with the peer's, for the
+// reason pullDirectory replaces its directory.
 func pullPending(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64) error {
+	var all []*url.TxID
 	var start uint64
 	for {
 		count := pageSize
@@ -340,15 +416,13 @@ func pullPending(ctx context.Context, src Source, batch *database.Batch, u *url.
 			return fmt.Errorf("query: %w", err)
 		}
 		if page == nil || len(page.Records) == 0 {
-			return nil
+			break
 		}
 		for _, r := range page.Records {
 			if r == nil || r.Value == nil {
 				continue
 			}
-			if err := batch.Account(u).Pending().Add(r.Value); err != nil {
-				return fmt.Errorf("add %s: %w", r.Value, err)
-			}
+			all = append(all, r.Value)
 			// TODO #3999: also pull each pending tx's sig-material
 			// (ValidatorSignatures, Payments, Votes, Signatures) so
 			// hashPendingV2 can compute the same per-account hash as
@@ -356,17 +430,23 @@ func pullPending(ctx context.Context, src Source, batch *database.Batch, u *url.
 			// Pending diverge and the launcher never promotes.
 		}
 		if uint64(len(page.Records)) < count {
-			return nil
+			break
 		}
 		start += uint64(len(page.Records))
 	}
+	return errors.UnknownError.Wrap(batch.Account(u).Pending().Put(all))
 }
 
-// pullChainHeads sets each of the account's chains' Head() directly
-// from ChainRecord.{Count, State}. Skips chain entries entirely. The
-// resulting BPT-leaf hash matches the source's because hashChains
-// uses CurrentState().Anchor() which is computed from Pending only
-// (see internal/core/execute/v2/internal/bpt_prod.go).
+// pullChainHeads sets each of the account's chains from ChainRecord.{Count,
+// State} plus the entries of its open mark set. It skips the entries below the
+// last mark point: the BPT-leaf hash is over a chain's head anchor, which is
+// computed from Pending alone (internal/database/observer_prod.go, hashChains),
+// so the leaf is reproduced without them.
+//
+// The open mark set is not optional. A chain given a head and no elements
+// cannot be appended to — an append rebuilds its Tail chunk from the elements
+// of the open set — so a node joined with such a chain could not execute block
+// Q+1 (merkle.Chain.RestoreHead).
 func pullChainHeads(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64) error {
 	// Empty ChainQuery requests "list all chains for this account".
 	// Setting Range here triggers the v3 validator's "name is required
@@ -386,23 +466,67 @@ func pullChainHeads(ctx context.Context, src Source, batch *database.Batch, u *u
 		state := &merkle.State{
 			Count:   int64(c.Count),
 			Pending: c.State,
-			// HashList not exposed via api.ChainRecord; left nil.
-			// Anchor() uses Pending only, so BPT-leaf hash is
-			// correct. Forward AddEntry calls (gossip extension)
-			// rebuild HashList naturally from the markpoint cycle.
 		}
 		dstChain, err := batch.Account(u).ChainByName(c.Name)
 		if err != nil {
 			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
-		if err := dstChain.Head().Put(state); err != nil {
-			return fmt.Errorf("set head %s/%s: %w", u, c.Name, err)
+
+		inner := dstChain.Inner()
+		lastMark := state.Count &^ inner.MarkMask()
+		open, err := chainEntries(ctx, src, u, c.Name, uint64(lastMark), uint64(state.Count), pageSize)
+		if err != nil {
+			return fmt.Errorf("chain %s/%s: open mark set: %w", u, c.Name, err)
+		}
+		if err := inner.RestoreHead(state, open); err != nil {
+			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
 		if err := addChainToIndex(batch, u, c); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// chainEntries reads the entries [start, end) of one of the peer's chains.
+func chainEntries(ctx context.Context, src Source, u *url.URL, chainName string, start, end, pageSize uint64) ([][]byte, error) {
+	var out [][]byte
+	for start < end {
+		count := pageSize
+		if count > end-start {
+			count = end - start
+		}
+		expand := false
+		page, err := src.QueryChainEntries(ctx, u, &api.ChainQuery{
+			Name: chainName,
+			Range: &api.RangeOptions{
+				Start:  start,
+				Count:  &count,
+				Expand: &expand,
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("query entries from %d: %w", start, err)
+		}
+		if page == nil || len(page.Records) == 0 {
+			return nil, fmt.Errorf("the peer served no entry at %d of %d", start, end)
+		}
+		for _, e := range page.Records {
+			if e == nil {
+				return nil, fmt.Errorf("the peer served a nil entry at %d", start)
+			}
+			if e.Index != start {
+				return nil, fmt.Errorf("the peer served entry %d where %d was asked for", e.Index, start)
+			}
+			entry := e.Entry
+			out = append(out, entry[:])
+			start++
+			if start >= end {
+				break
+			}
+		}
+	}
+	return out, nil
 }
 
 // addChainToIndex records the chain in the account's chain index. The account
@@ -422,9 +546,15 @@ func addChainToIndex(batch *database.Batch, u *url.URL, c *api.ChainRecord) erro
 	}
 }
 
-// pullChainsFull replays every entry on every chain via
-// merkle.AddEntry. The Head is rebuilt naturally as entries are
-// added; we don't write Head() directly.
+// pullChainsFull replays every entry of every chain the node does not already
+// hold. It starts from the local height, not from zero, so a second pull of an
+// account is a no-op rather than a chain of twice the height — a restarting
+// node re-pulls the spine, and a pull that is not idempotent doubles it.
+//
+// The result is held to the peer's word for the chain's head: after the
+// replay the local anchor must equal the anchor of the head the peer served.
+// A local chain that is ahead of the peer's, or that holds a different
+// prefix, is refused rather than extended into a chain neither side has.
 func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64) error {
 	// Empty ChainQuery: list-all-chains. See pullChainHeads.
 	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{})
@@ -442,7 +572,7 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *u
 		if err != nil {
 			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
-		if err := pullChainEntries(ctx, src, dstChain.Inner(), u, c.Name, pageSize); err != nil {
+		if err := pullChainEntries(ctx, src, dstChain.Inner(), u, c, pageSize); err != nil {
 			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
 		if err := addChainToIndex(batch, u, c); err != nil {
@@ -452,47 +582,41 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *u
 	return nil
 }
 
-// pullChainEntries paginates one chain's entries and AddEntry-s
-// them into the local chain.
-func pullChainEntries(ctx context.Context, src Source, dst dstChainAdder, u *url.URL, chainName string, pageSize uint64) error {
-	var start uint64
-	for {
-		count := pageSize
-		expand := false
-		page, err := src.QueryChainEntries(ctx, u, &api.ChainQuery{
-			Name: chainName,
-			Range: &api.RangeOptions{
-				Start:  start,
-				Count:  &count,
-				Expand: &expand,
-			},
-		})
-		if err != nil {
-			return fmt.Errorf("query entries: %w", err)
-		}
-		if page == nil || len(page.Records) == 0 {
-			return nil
-		}
-		for _, e := range page.Records {
-			if e == nil {
-				continue
-			}
-			if err := dst.AddEntry(e.Entry[:], false); err != nil {
-				return fmt.Errorf("add entry %d: %w", e.Index, err)
-			}
-		}
-		if uint64(len(page.Records)) < count {
-			return nil
-		}
-		start += uint64(len(page.Records))
+// pullChainEntries brings one chain up to the height the peer served, from
+// whatever the node already holds, and checks the result against the peer's
+// head.
+func pullChainEntries(ctx context.Context, src Source, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, pageSize uint64) error {
+	head, err := dst.Head().Get()
+	if err != nil {
+		return fmt.Errorf("load the local head: %w", err)
 	}
-}
+	if head.Count > int64(c.Count) {
+		return errors.Conflict.WithFormat(
+			"the local chain is at %d and the peer served %d; it cannot be re-pulled", head.Count, c.Count)
+	}
 
-// dstChainAdder narrows a database chain to just the AddEntry method
-// pullChainEntries needs. Lets us share the loop across the merkle
-// chain and the index chain types if needed later.
-type dstChainAdder interface {
-	AddEntry(hash []byte, unique bool) error
+	entries, err := chainEntries(ctx, src, u, c.Name, uint64(head.Count), c.Count, pageSize)
+	if err != nil {
+		return err
+	}
+	for i, e := range entries {
+		if err := dst.AddEntry(e, false); err != nil {
+			return fmt.Errorf("add entry %d: %w", head.Count+int64(i), err)
+		}
+	}
+
+	// The peer's head is what the account's leaf is hashed from, so a replay
+	// that does not reproduce it has built a different chain.
+	got, err := dst.Head().Get()
+	if err != nil {
+		return fmt.Errorf("load the rebuilt head: %w", err)
+	}
+	want := &merkle.State{Count: int64(c.Count), Pending: c.State}
+	if !bytes.Equal(got.Anchor(), want.Anchor()) {
+		return errors.Conflict.WithFormat(
+			"the replayed chain anchors to %x and the peer's head to %x", got.Anchor(), want.Anchor())
+	}
+	return nil
 }
 
 // SpineAccounts returns the four spine accounts for a given

@@ -50,12 +50,12 @@ func bptRoot(t *testing.T, db *database.Database) [32]byte {
 // holds them unverified, and returns them with the block the peer served them
 // at. Every account must come from the same block, or the assembled state is a
 // mixture of two and hashes to neither.
-func pullEvery(t *testing.T, src pull.Source, batch *database.Batch, accounts []*url.URL) ([]*pull.Pending, uint64) {
+func pullEvery(t *testing.T, src pull.Source, batch *database.Batch, part *url.URL, accounts []*url.URL) ([]*pull.Pending, uint64) {
 	t.Helper()
 	var held []*pull.Pending
 	var block uint64
 	for _, u := range accounts {
-		p, err := pull.Fetch(context.Background(), src, batch, u, pull.Options{Mode: pull.ModeStateOnly}, true)
+		p, err := pull.Fetch(context.Background(), src, batch, u, pull.Options{Mode: pull.ModeStateOnly, Partition: part}, true)
 		require.NoError(t, err, "fetch %v", u)
 		if block == 0 {
 			block = p.Block
@@ -151,7 +151,7 @@ func TestPullReachesTheAnchoredRoot(t *testing.T) {
 	total := len(named)
 	t.Logf("the partition has %d accounts at R", total)
 
-	held, r := pullEvery(t, src, batch, named)
+	held, r := pullEvery(t, src, batch, part, named)
 	rootR := waitForAnchor(t, sim, anchors, part, r)
 	for _, p := range held {
 		require.NoError(t, p.Settle(rootR), "settle %v", p.Account)
@@ -175,7 +175,7 @@ func TestPullReachesTheAnchoredRoot(t *testing.T) {
 		"the whole partition was re-pulled; only the accounts touched in (R, Q] should be")
 	t.Logf("%d of %d accounts were touched in (R, Q]: %v", len(stale), total, stale)
 
-	held, q := pullEvery(t, src, batch, stale)
+	held, q := pullEvery(t, src, batch, part, stale)
 	require.Greater(t, q, r)
 	rootQ := waitForAnchor(t, sim, anchors, part, q)
 	for _, p := range held {

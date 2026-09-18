@@ -27,9 +27,23 @@ const servedBlock = 17
 type peer struct {
 	*dbSource
 	corrupt func(protocol.Account) protocol.Account
+
+	// block is the block this peer claims to have served the state at. Zero
+	// means servedBlock. A peer naming a block the Directory has not anchored
+	// is either running ahead of the anchors or lying, and the puller cannot
+	// tell which — see TestAccountFrom_AsksThePeersPastAnEarlyBlock.
+	block uint64
+
+	// empty makes the peer answer with a record carrying no account, which is
+	// how a peer that has nothing to serve answers.
+	empty bool
 }
 
 func (s *peer) QueryAccount(_ context.Context, u *url.URL, q *api.DefaultQuery) (*api.AccountRecord, error) {
+	if s.empty {
+		return new(api.AccountRecord), nil
+	}
+
 	b := s.db.Begin(false)
 	defer b.Discard()
 
@@ -44,7 +58,11 @@ func (s *peer) QueryAccount(_ context.Context, u *url.URL, q *api.DefaultQuery) 
 		if err != nil {
 			return nil, err
 		}
-		rec.Receipt = &api.Receipt{LocalBlock: servedBlock}
+		block := s.block
+		if block == 0 {
+			block = servedBlock
+		}
+		rec.Receipt = &api.Receipt{LocalBlock: block}
 		rec.Receipt.Receipt = *r
 	}
 
@@ -247,8 +265,8 @@ func TestVerifiedPull_RefusesUnanchoredRoot(t *testing.T) {
 }
 
 // TestVerifiedPull_WaitsForTheAnchor — the Directory has not anchored the
-// block the peer served at yet. That is a wait, not a refusal, so the failure
-// must carry ErrNotAnchored and AccountFrom must not burn through its sources.
+// block the only peer served at. That is a wait, not a refusal, so the failure
+// carries ErrNotAnchored and the caller asks again.
 func TestVerifiedPull_WaitsForTheAnchor(t *testing.T) {
 	src, u, root := alice(t)
 
@@ -257,7 +275,7 @@ func TestVerifiedPull_WaitsForTheAnchor(t *testing.T) {
 	defer batch.Discard()
 
 	p := &peer{dbSource: &dbSource{db: src}}
-	_, err := AccountFrom(context.Background(), []Source{p, p}, batch, u, Options{
+	_, err := AccountFrom(context.Background(), []Source{p}, batch, u, Options{
 		Mode:      ModeStateOnly,
 		Verify:    anchored{root: root, block: servedBlock + 1}, // a different block
 		Partition: protocol.DnUrl(),
@@ -267,6 +285,161 @@ func TestVerifiedPull_WaitsForTheAnchor(t *testing.T) {
 	}
 	if !apierrors.Is(err, ErrNotAnchored) {
 		t.Fatalf("err = %v, want ErrNotAnchored", err)
+	}
+}
+
+// TestAccountFrom_AsksThePeersPastAnEarlyBlock — one peer answers at a block
+// the Directory has not anchored. The puller cannot tell a peer running ahead
+// of the anchors from one naming a block that will never be anchored, because
+// the block it compares is the peer's own word; either way the answer is to
+// ask the next source, not to stop the pull.
+func TestAccountFrom_AsksThePeersPastAnEarlyBlock(t *testing.T) {
+	src, u, root := alice(t)
+
+	early := &peer{dbSource: &dbSource{db: src}, block: servedBlock + 99}
+	good := &peer{dbSource: &dbSource{db: src}}
+
+	dst := newObservedDB(t)
+	batch := dst.Begin(true)
+	i, err := AccountFrom(context.Background(), []Source{early, good}, batch, u, Options{
+		Mode:      ModeStateOnly,
+		Verify:    anchored{root: root, block: servedBlock},
+		Partition: protocol.DnUrl(),
+	})
+	if err != nil {
+		t.Fatalf("one peer at an unanchored block stopped the pull: %v", err)
+	}
+	if i != 1 {
+		t.Fatalf("source %d answered, want the second one", i)
+	}
+	if err := batch.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := leafOf(t, dst, u), leafOf(t, src, u); got != want {
+		t.Fatalf("leaf mismatch after asking past the early peer:\n  want %x\n  got  %x", want, got)
+	}
+}
+
+// TestAccountFrom_EveryPeerEarlyIsAWait — when no source could serve an
+// anchored state, and only then, the failure is the wait ErrNotAnchored names.
+func TestAccountFrom_EveryPeerEarlyIsAWait(t *testing.T) {
+	src, u, root := alice(t)
+
+	dst := newObservedDB(t)
+	batch := dst.Begin(true)
+	defer batch.Discard()
+
+	_, err := AccountFrom(context.Background(), []Source{
+		&peer{dbSource: &dbSource{db: src}, block: servedBlock + 1},
+		&peer{dbSource: &dbSource{db: src}, block: servedBlock + 2},
+	}, batch, u, Options{
+		Mode:      ModeStateOnly,
+		Verify:    anchored{root: root, block: servedBlock},
+		Partition: protocol.DnUrl(),
+	})
+	if !apierrors.Is(err, ErrNotAnchored) {
+		t.Fatalf("err = %v, want ErrNotAnchored", err)
+	}
+}
+
+// TestAccountFrom_APeerThatServesNothingFails — a peer answering with an empty
+// record has served nothing. It used to read as success with no receipt, and a
+// fetch with no receipt settled against any root at all.
+func TestAccountFrom_APeerThatServesNothingFails(t *testing.T) {
+	src, u, root := alice(t)
+
+	nothing := &peer{dbSource: &dbSource{db: src}, empty: true}
+	good := &peer{dbSource: &dbSource{db: src}}
+
+	dst := newObservedDB(t)
+	batch := dst.Begin(true)
+	i, err := AccountFrom(context.Background(), []Source{nothing, good}, batch, u, Options{
+		Mode:      ModeStateOnly,
+		Verify:    anchored{root: root, block: servedBlock},
+		Partition: protocol.DnUrl(),
+	})
+	if err != nil {
+		t.Fatalf("AccountFrom: %v", err)
+	}
+	if i != 1 {
+		t.Fatalf("source %d answered, want the second one", i)
+	}
+	if err := batch.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := leafOf(t, dst, u), leafOf(t, src, u); got != want {
+		t.Fatalf("leaf mismatch:\n  want %x\n  got  %x", want, got)
+	}
+}
+
+// TestSettle_RefusesWithoutAReceipt — Settle is the point where an unverified
+// fetch could become state the node believes. It cannot succeed on a fetch it
+// has no receipt for, nor against a root nobody anchored.
+func TestSettle_RefusesWithoutAReceipt(t *testing.T) {
+	src, u, root := alice(t)
+
+	dst := newObservedDB(t)
+	batch := dst.Begin(true)
+	defer batch.Discard()
+
+	// Fetched without asking for a receipt: nothing to settle against.
+	p, err := Fetch(context.Background(), &peer{dbSource: &dbSource{db: src}}, batch, u,
+		Options{Mode: ModeStateOnly, Partition: protocol.DnUrl()}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Settle(root); err == nil {
+		t.Fatal("a fetch with no receipt settled")
+	}
+
+	// And a root nobody anchored is not a root.
+	p, err = Fetch(context.Background(), &peer{dbSource: &dbSource{db: src}}, batch, u,
+		Options{Mode: ModeStateOnly, Partition: protocol.DnUrl()}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Settle([32]byte{}); err == nil {
+		t.Fatal("a zero root settled")
+	}
+}
+
+// TestFetch_RequiresThePartition — a receipt proves the state as of a block,
+// and a block number without its partition names nothing (#4205).
+func TestFetch_RequiresThePartition(t *testing.T) {
+	src, u, _ := alice(t)
+	dst := newObservedDB(t)
+	batch := dst.Begin(true)
+	defer batch.Discard()
+	if _, err := Fetch(context.Background(), &peer{dbSource: &dbSource{db: src}}, batch, u,
+		Options{Mode: ModeStateOnly}, true); err == nil {
+		t.Fatal("a receipt was asked for without naming the partition")
+	}
+}
+
+// TestHeld_IsBounded — a fetched account holds an open child batch until it
+// settles, so the number outstanding is bounded.
+func TestHeld_IsBounded(t *testing.T) {
+	src, u, _ := alice(t)
+	dst := newObservedDB(t)
+	batch := dst.Begin(true)
+	defer batch.Discard()
+
+	before := Held()
+	p, err := Fetch(context.Background(), &peer{dbSource: &dbSource{db: src}}, batch, u,
+		Options{Mode: ModeStateOnly, Partition: protocol.DnUrl()}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if Held() != before+1 {
+		t.Fatalf("Held = %d, want %d while one account is outstanding", Held(), before+1)
+	}
+	p.Discard()
+	if Held() != before {
+		t.Fatalf("Held = %d after the fetch was discarded, want %d", Held(), before)
+	}
+	p.Discard() // idempotent
+	if Held() != before {
+		t.Fatalf("a second Discard moved Held to %d", Held())
 	}
 }
 
