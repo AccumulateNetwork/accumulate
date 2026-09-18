@@ -262,9 +262,14 @@ Order and gates: 1 and 3 in parallel (they share nothing); 2 on 1; 4 on all
 three, gated on `TestOneValidatorRestartDoesNotDiverge` with the interim pull
 removed and no Docker chaos run before it passes; 5 after 4; then **#4296**,
 a gate before any chaos run: a joining node must be able to find a validator
-to ask, and must refuse to execute when it found none. Then
-`30m-100tps-chaos.conf`; then #4298 and #4299, provisionally, which the
-30-minute run may promote ahead of itself; then the 24-hour run. Steps 3 and 4
+to ask, and must refuse to execute when it found none — *delivered and
+closed*. Then **#4304** (a fresh network must be able to start) and **#4303**
+(a join must reach a root match), which are the same kind of gate and are
+there for the same reason: run `20260918T131713Z` showed the join taking
+staging from a peer for the first time on a real network and then stalling
+before any node reached `Q`. Then `30m-100tps-chaos.conf`; then #4298 and
+#4299, provisionally, which that run may promote ahead of itself; then the
+24-hour run. Steps 3 and 4
 show a plan before code (a port across a five-month database-API gap; a
 rewiring of consensus start-up). The observations behind the order — three
 causes each sufficient alone, why a source's cache and consensus replay are
@@ -289,7 +294,9 @@ the same route, so the count is part of the gate and not an optimisation.
 delivery queue cannot be verified, so a partition holding one cannot be
 joined) and #4299 (a message whose remote stub the store cannot resolve is
 dropped by collect) are the two holes DIFFERENCES E11 calls the ones that
-will meet the chaos run first. They are placed after the 30-minute run
+will meet the chaos run first. Run `20260918T131713Z` did not promote either
+and did not rule either out: it stalled before the state in which either
+would bite, on #4303 and #4304. They are placed after the 30-minute run
 deliberately: both are expensive to design for in the abstract and cheap to
 observe, and a live join that stalls on an unverifiable account says so in
 minutes with evidence no amount of reasoning produces. The 30-minute run
