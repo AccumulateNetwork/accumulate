@@ -323,6 +323,20 @@ It also names the cause of #4316: the same `pullSpine` write turned a node
 holding correct, peer-identical, anchored block-22 state into a root no node
 ever held and the Directory never anchored.
 
+**The one confound against that finding is now excluded, and the reproduction
+is a committed test.** Branch `repro-4205-restart-rejoin` at `03916816b` (off
+`c2b0e9d2f`, **not pushed, not merged**): `test/e2e/restart_rejoin_pull_test.go`,
+`TestRestartedNodeWithAPopulatedDatabaseResyncs`, failing in 1.978 s. The
+original run left open whether the restarted node being discoverable as its own
+peer (`QueryPeers.Self` unset) affected which block accounts were served at; the
+test adds a six-line read-only accessor to the simulator so `Self` can be set,
+and **asserts the exclusion rather than assuming it** — `require.Len(t, srcs,
+p.NodeCount()-1)`, 3 nodes becoming 2 sources, which passes. With the joining
+node genuinely excluded, **the resync failure is unchanged.** It is also not a
+round-cap artifact: it fails at 400 rounds too, in 20.68 s. The commit changes
+no production code. It remains in-process simulator only — no Docker, no soak —
+and living on one machine until it is pushed.
+
 **DECIDED by Paul, 2026-09-18: a restarted node catches up by REPLAYING THE
 COMMITTED LOG, not by pulling state.** It already holds every cold account;
 give it blocks `R+1..N` from the DAG log and let it execute forward. His
@@ -382,10 +396,18 @@ rather than reading:
   broken, established by a test-auditor running the reverts: *pull addressed at
   a named peer*, *the set comes from the block ledger*, *joining node must not
   serve*. `705da0ab5`'s claim that `TestJoinPullsFromPeersAndPromotes` "fails
-  on each of the five taken alone" is **refuted — it fails on two.** (Filed as
-  "two", from a reading of test bodies that asked a different question —
-  *targeted* test versus *any* test that goes red. The audit's answer is the
-  one that counts.)
+  on each of the five taken alone" is **refuted — it fails on two**, and the
+  mutation table names them: #4305 (delete `h.batch.UpdateBPT()`) and #4309
+  (restore the DN spine into a BVN store). (Filed as "two", from a reading of
+  test bodies that asked a different question — *targeted* test versus *any*
+  test that goes red. Both readings reconcile: the broad e2e test is the
+  coverage for those two and not for the other three.) The auditor also
+  established **what carries that test**: neutering `staleAccounts`
+  (`state.go:349`) turns it red, while `changedAccounts` returning nil does
+  not — so the test rests **entirely on the BPT page-diff backstop**, and
+  `blockLedger`, `blockLedgerOf`, `ChangedAccounts`-as-called and
+  `MaxLedgerSpan` are unconstrained by the suite. That corroborates #4316 by
+  execution: the walk is dead weight and nothing notices if it stops.
 - **#4318** — the join's verification rests on one call site
   (`internal/node/join/state.go:413`); substituting `Keep()` for `Settle()`
   makes it verify nothing. **Executed: the suite stayed green**, so
