@@ -210,6 +210,7 @@ user transaction; the items above are the ones still to measure after it.
 
 ### E14. Naming the synthetic chains in the block ledger is not gated on a version
 
+The rule is not "before the change versus after it": `c2b0e9d2f`, `44490e380` and `481dc3f32` produce three distinct state roots on the same deterministic workload, so all three are mutually incompatible. If any node, image or database anywhere was built from the intermediate commit, rebuilding together includes that one.
 **Spec** ([executor.md](executor.md), "The block ledger", *Activation and
 history*): what a block records changes the ledger account's hash, so it is
 gated on an `ExecutorVersion` like any change to what a block produces.
