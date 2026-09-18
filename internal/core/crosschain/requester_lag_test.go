@@ -218,25 +218,29 @@ func TestRequester_LaggingNodeDoesNotAsk(t *testing.T) {
 	const max = 8
 	// One activation on a fresh conductor, so the patience window from an
 	// earlier answer cannot hide an ask: how many requests a node at this lag
-	// makes on first sight of an empty anchor stream.
+	// makes on sight of a HOLE in an anchor stream -- anchor 3 held, anchor 2
+	// missing. A hole is asked on sight whatever else is true; only the guard
+	// under test can stop it. (An empty anchor stream's probe for the next
+	// anchor waits until it is overdue, #4288, so it is not the vehicle.)
 	asksAt := func(lag int) int {
 		c := testConductor()
 		c.SetExecutionLagSource(func() int { return lag }, max)
 		asks := 0
-		ask := streamAsk{stream: anchorStream, what: "anchors", healed: func(int) {},
+		ask := streamAsk{stream: anchorStream, what: "anchors", delivered: 1, healed: func(int) {},
 			ask: func(first, last uint64, _ entryOutcome) (int, uint64, error) {
 				asks++
 				return int(last - first + 1), last, nil
 			}}
 		staged := execute.NewStaging().Begin()
 		defer staged.Discard()
+		staged.Hold(anchorStream, 3, reqHeld(3, false))
 		c.requestStream(context.Background(), staged, healCadence, reqSource, ask)
 		return asks
 	}
 	require.Zero(t, asksAt(max+1), "beyond MaxExecutionLag: the gap is in our own backlog")
 	require.Equal(t, 1, asksAt(1), "one behind is what a working node looks like at the hook: asked")
 	require.Equal(t, 1, asksAt(max), "at the threshold, not beyond it: asked")
-	require.Equal(t, 1, asksAt(0), "caught up: an anchor stream is asked on sight")
+	require.Equal(t, 1, asksAt(0), "caught up: a hole is asked on sight")
 }
 
 // A ranger that answers by node: unaddressed requests come from signer A;

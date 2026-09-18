@@ -145,13 +145,14 @@ type askedSpan struct {
 }
 
 type healRequester struct {
-	mu       sync.Mutex
-	asks     map[string][]askedSpan // stream -> spans asked within patience
-	backoff  map[string]uint64      // source -> block before which it is not asked
-	failures map[string]uint
-	misses   map[string]uint       // stream -> consecutive activations answered only NotFound
-	stranded map[string]strandedAt // stream -> where it was stranded
-	still    map[string]stillAt    // stream -> how long Delivered has sat still
+	mu          sync.Mutex
+	asks        map[string][]askedSpan // stream -> spans asked within patience
+	backoff     map[string]uint64      // source -> block before which it is not asked
+	failures    map[string]uint
+	misses      map[string]uint             // stream -> consecutive activations answered only NotFound
+	stranded    map[string]strandedAt       // stream -> where it was stranded
+	still       map[string]stillAt          // stream -> how long Delivered has sat still
+	anchorProbe map[string]anchorProbeState // per anchor stream, when its next anchor becomes overdue (#4288)
 }
 
 // stillAt is where a stream's Delivered stood when it stopped moving, and
@@ -594,6 +595,9 @@ func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.Stream
 		if askedRecently(r.asks[streamKey(stream)], delivered+1, blockIndex) {
 			return nil
 		}
+		if !isSyntheticStream(stream) && !r.anchorOverdueLocked(streamKey(stream), delivered, blockIndex) {
+			return nil // the next anchor is not produced yet, not missing (#4288)
+		}
 		return [][2]uint64{{delivered + 1, delivered + protocol.MaxReceiptListElements}}
 	}
 	through := sighted
@@ -668,6 +672,45 @@ func isSyntheticStream(id execute.StreamID) bool {
 // not move, and reports whether it has now sat still for probeAfter of them.
 // Delivered moving resets the count: the stream is delivering, which is the
 // opposite of every case healing exists for (#4280).
+// anchorOverdue is how many blocks an anchor stream's Delivered may sit
+// unchanged before the next anchor is asked for, and how often it is asked
+// again while it stays unchanged: the heartbeat's at-most-one-anchor-per-four
+// blocks plus the in-flight window of eight (#4277, #4248). Below that the
+// next anchor is simply not produced yet, and asking buys "not yet" -- which
+// is what every stream with the Directory at one end did, once per patience,
+// forever: about 150 round trips a minute on 20260917T223150Z with nothing to
+// heal (#4288). This gates the PROBE only. A hole -- a later anchor held while
+// an earlier one is missing -- is a loss, and is asked on sight as before;
+// gating holes too is what made a lost block validator anchor unrecoverable
+// when the synthetic stillness gate was tried on anchors (#4280).
+const anchorOverdue = 12
+
+type anchorProbeState struct {
+	delivered uint64 // the Delivered the wait is measured from
+	since     uint64 // the block Delivered was first seen at this value
+	probedAt  uint64 // the block of the last probe; 0 for none
+}
+
+// anchorOverdueLocked reports whether an anchor stream's next anchor is
+// overdue and has not been probed within the last anchorOverdue blocks, and
+// records the probe when it is. r.mu must be held.
+func (r *healRequester) anchorOverdueLocked(key string, delivered, blockIndex uint64) bool {
+	if r.anchorProbe == nil {
+		r.anchorProbe = map[string]anchorProbeState{}
+	}
+	st, ok := r.anchorProbe[key]
+	if !ok || st.delivered != delivered {
+		r.anchorProbe[key] = anchorProbeState{delivered: delivered, since: blockIndex}
+		return false
+	}
+	if blockIndex-st.since < anchorOverdue || (st.probedAt != 0 && blockIndex-st.probedAt < anchorOverdue) {
+		return false
+	}
+	st.probedAt = blockIndex
+	r.anchorProbe[key] = st
+	return true
+}
+
 func (r *healRequester) stillLongEnough(key string, delivered uint64) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()

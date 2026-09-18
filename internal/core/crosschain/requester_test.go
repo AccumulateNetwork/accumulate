@@ -228,15 +228,16 @@ func TestOutcome_Backoff(t *testing.T) {
 	require.False(t, r.backedOff(reqSource, 300), "an answer clears the back-off")
 }
 
-// The stillness gate is for SYNTHETIC streams. Every measurement behind it
-// came from one: the 743,000-entry storm, the runs averaging 49 consecutive
-// numbers, the 13.7-29.3s in-flight times (#4280). An anchor stream is a
-// different shape -- roughly one entry per block per partition, executed
-// under a quorum -- and gating it made a lost block validator anchor
-// unrecoverable rather than merely slow: TestMissingBlockValidatorAnchorTxn
-// went from 1 failure in 20 runs to 13, and stayed broken at a 600-block
-// budget. An anchor stream is asked on sight.
-func TestDecide_AnAnchorStreamIsNotGatedByStillness(t *testing.T) {
+// An anchor stream with a HOLE -- a later anchor held while an earlier one is
+// missing -- is asked on sight: that is a loss, and gating it made a lost
+// block validator anchor unrecoverable (TestMissingBlockValidatorAnchorTxn,
+// #4280). But the PROBE for the next anchor, when nothing is held above
+// Delivered, waits until that anchor is overdue: since the heartbeat the next
+// anchor is always merely not produced yet, and asking on sight bought "not
+// yet" once per patience on every stream touching the Directory, forever
+// (#4288). Overdue is anchorOverdue blocks of Delivered not moving, and a
+// probe repeats no sooner than anchorOverdue blocks later.
+func TestDecide_AnAnchorStreamProbesOnlyWhenOverdue(t *testing.T) {
 	anchorStream := execute.StreamID{
 		Ledger: protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool),
 		Source: reqSource,
@@ -246,14 +247,26 @@ func TestDecide_AnAnchorStreamIsNotGatedByStillness(t *testing.T) {
 	tx := s.Begin()
 	defer tx.Discard()
 
-	// The very first activation on a stalled anchor stream asks: there is no
-	// settling period to wait out.
-	require.Equal(t, [][2]uint64{{6, 5 + protocol.MaxReceiptListElements}},
-		r.decide(tx, anchorStream, 5, 8),
-		"an anchor stream is asked on sight, not after probeAfter activations")
+	probe := [][2]uint64{{6, 5 + protocol.MaxReceiptListElements}}
+	require.Empty(t, r.decide(tx, anchorStream, 5, 8), "first sight of a quiet anchor stream: the next anchor is not overdue")
+	require.Empty(t, r.decide(tx, anchorStream, 5, 8+anchorOverdue-1), "one block short of overdue")
+	require.Equal(t, probe, r.decide(tx, anchorStream, 5, 8+anchorOverdue), "overdue: probed")
+	require.Empty(t, r.decide(tx, anchorStream, 5, 8+anchorOverdue+1), "just probed: not again")
+	again := uint64(anchorOverdue)
+	if p := uint64(healPatience * healCadence); p > again {
+		again = p
+	}
+	require.Equal(t, probe, r.decide(tx, anchorStream, 5, 8+anchorOverdue+again), "still overdue, wait elapsed: probed again")
 
-	// A synthetic stream at the same standing is still gated, so the two
-	// rules stay distinct.
-	require.Empty(t, r.decide(tx, reqStream, 5, 8),
-		"a synthetic stream still waits for its Delivered to sit still")
+	// Delivered moving starts the wait over
+	require.Empty(t, r.decide(tx, anchorStream, 6, 8+anchorOverdue+again+1), "Delivered moved: not overdue")
+
+	// A hole is asked on sight, whatever the wait: anchor 8 held, 7 missing
+	tx.Hold(anchorStream, 8, reqHeld(8, false))
+	spans := r.decide(tx, anchorStream, 6, 8+anchorOverdue+again+2)
+	require.NotEmpty(t, spans, "a later anchor is held: the missing one is asked on sight")
+	require.Equal(t, uint64(7), spans[0][0], "the hole, not a probe")
+
+	// A synthetic stream at the same standing is gated by stillness, as before
+	require.Empty(t, r.decide(tx, reqStream, 5, 8), "a synthetic stream still waits for its Delivered to sit still")
 }
