@@ -362,26 +362,50 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   flight" rather than as misses. Nothing is healed and nothing alarms; the
   node-state gauge is what shows it.
 
-**Not proven: a join has taken staging on a real network, and none has
-completed on one.** Run `20260918T124530Z` (30 m, 100 tps, chaos,
-`0259684c5`) was the first Docker chaos run of the join and it tested the
-fallback rather than the join — no node found a peer to ask, on any
-partition, because of #4296. Run `20260918T131713Z`, on `0132b886c` with
-#4296 merged, went one step further and stopped: the join took staging from a
-peer 22 times, including on the restarted node eleven seconds after its
-restart (`Staging taken from a peer block=201 partition=Directory streams=4`,
-`block=198 partition=BVN1 streams=1`), and every spine pull behind those
-succeeded — but **not one block-named account was ever pulled** (2,171 pull
-rounds, `pulled=0` on all of them, #4303), so no node reached a root match
-and no join completed. In the same run a fresh network could not start at
-all: every node loads genesis, so `lastBlock == 1` and no node is `Fresh`,
-and all twelve joined and refused each other (#4304, a regression from
-#4296). The Docker chaos run (`30m-100tps-chaos.conf`, then 24 h) is the
-proof, and it is a human step. Two
-known holes will meet it first — an account carrying pending signature
-material cannot be verified at all (#4293's entry above, filed as #4298), and
-a remote transaction stub the store cannot resolve is not collected (#4292's
-entry, filed as #4299). Run `20260918T131713Z` met neither: its refusals are
+**Not proven, and the tests that pass do not exercise the mechanism**: a join
+has taken staging on a real network, and none has completed on one.
+`TestOneValidatorRestartDoesNotDiverge` replaces steps 3 and 4 with a store
+copy (`test/simulator/partition.go:96-116`), and
+`TestPullReachesTheAnchoredRoot` sources from `api.Querier2{Querier:
+sim.S.Services()}` (`test/e2e/state_pull_test.go:128`) — no p2p, no routing,
+no self-dial — and calls `batch.UpdateBPT()` by hand at `:161` and `:187`,
+which is the step the production pull omits. A test that performs by hand what
+its production caller must perform proves the library and not the caller. Run
+`20260918T124530Z` (30 m, 100 tps, chaos, `0259684c5`) was the first Docker
+chaos run of the join and it tested the fallback rather than the join — no
+node found a peer to ask, on any partition, because of #4296. Run
+`20260918T131713Z`, on `0132b886c` with #4296 merged, went one step further
+and stopped: the join took staging from a peer 22 times, including on the
+restarted node eleven seconds after its restart (`Staging taken from a peer
+block=201 partition=Directory streams=4`, `block=198 partition=BVN1
+streams=1`), and every spine pull behind those succeeded — but **not one
+block-named account was ever pulled** (2,171 pull rounds, `pulled=0` on all of
+them), so no node reached a root match and no join completed. **The cause was
+found and it is four independent defects, each sufficient alone**: the joining
+node's pull is served by *itself* — `dagbft.go:461` hands it the node's own
+routed client, `dial_network.go:44-45` ("Always use self-discovery") answers
+locally for any service the node provides, `api.go:71` registers the querier
+for every partition it serves, and the querier is not gated by node state, so
+the node's own genesis store answers instead of refusing (#4303, with #4297);
+the pull never calls `UpdateBPT`, so the local root cannot move however much
+is pulled (#4305); the partition's `ledger` and `synthetic` accounts change
+every block, are named by no envelope and are pulled once, while the page-diff
+backstop is unreachable because `s.refused` stays non-empty on a name that can
+never route (#4306); and those two accounts could not be verified anyway
+(#4298, which is therefore not an edge case but a precondition). **Zero
+verification failures in 22 MB of logs: the verifier never ran once.** In the
+same run a fresh network could not start deterministically either:
+`Options.Fresh` is dead code — `dagbft.go:449` gates on `lastBlock > 0` and
+`:488` sets `Fresh: lastBlock == 0` inside it — so the escape #4296 added is
+unreachable in the daemon, and the network started on a 20-second timeout race
+won by one arbitrary node per partition (#4304). A joining node also rejected
+14,643 user transactions against its own un-executed store, because the
+submitter is not gated either (#4307). The Docker chaos run (`30m-100tps-
+chaos.conf`, then 24 h) is the proof, and it is a human step. Two known holes
+will meet it first — an account carrying pending signature material cannot be
+verified at all (#4293's entry above, filed as #4298), and a remote
+transaction stub the store cannot resolve is not collected (#4292's entry,
+filed as #4299). Run `20260918T131713Z` met neither: its refusals are
 `notFound` and `badRequest` answered before verification is reached, so
 nothing in it exercised the verification path at all.
 
@@ -440,7 +464,12 @@ reaches the root the Directory anchored for `Q`; the tracker then promotes.
   pulling the accounts each observed block names, until a whole block's set is
   pulled before the next anchor arrives. Until #4292 is wired, the diff is re-
   run per round, which converges by repetition rather than by construction.
-  (#4294 wired it; #4302 section 5 records what that leaves.)
+  (#4294 wired it; #4302 section 5 records what that leaves. **And wiring it
+  turned the diff off**: the diff is the else-branch of "the blocks named
+  something" (`join/state.go:169-181`), and `s.refused` is sticky
+  (`:163-167`), so one name that can never route keeps the diff from ever
+  running — #4306. The design is blocks primary with the scan as the safety
+  net; the code is blocks only, with a scan in a case that no longer occurs.)
 - **The Directory's spine is pulled unverified, and so is the root everything
   else is verified against** (#4301)**.** The spine is what the verifier reads
   from, so there is nothing to verify it against until it is there; and
