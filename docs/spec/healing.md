@@ -518,7 +518,20 @@ stream ambiguous between "caught up" and "package lost". Extending the wait to
 anchors was a generalisation with no evidence under it, and it did not slow
 recovery of a lost block validator anchor so much as prevent it: the e2e case
 went from one failure in twenty runs to thirteen, and stayed broken when given
-a 600-block budget instead of fifty. **An anchor stream is asked on sight.**
+a 600-block budget instead of fifty. **An anchor stream's holes are asked on sight; its probe waits until the
+next anchor is overdue.** A hole — a later anchor held while an earlier one
+is missing — is a loss, and is asked for the moment it is seen. The probe —
+nothing held above `Delivered`, so the span above it asked for whole — is
+what the stillness gate exists to pace on synthetic streams, and on an anchor
+stream it has a sharper answer than stillness: since the heartbeat (#4277)
+the next anchor is produced at most every `anchorHeartbeatSkip + 1` blocks,
+so `Delivered` not moving for fewer than that plus the in-flight window
+(`anchorOverdue`, 12 blocks) means the next anchor is not produced yet, not
+missing. Asking sooner buys "not yet", and did — once per patience on every
+stream with the Directory at one end, about 150 round trips a minute at 100
+tps with nothing to heal (#4288). The probe fires once `Delivered` has sat
+unchanged for `anchorOverdue` blocks and repeats no sooner than another
+`anchorOverdue`; a hole is never gated.
 
 ### The in-flight window belongs to the sender
 
