@@ -39,7 +39,14 @@ import (
 // own arrivals are visible to the block's own run building, and a discarded
 // block leaves nothing behind.
 type Staging struct {
-	mu      sync.Mutex
+	mu sync.Mutex
+
+	// block is the last block committed into staging. It is published with
+	// the block's own additions, under the same lock, so a reader takes
+	// staging and the block it is as of together — a snapshot paired with a
+	// different block executes a different block (#4291).
+	block uint64
+
 	streams map[string]*streamState
 	ids     map[string]StreamID                                // the stream behind each key, for Streams()
 	proofs  map[string]map[uint64][]*protocol.AnnotatedReceipt // source -> anchor block
@@ -269,6 +276,7 @@ func NewStaging() *Staging {
 func (s *Staging) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.block = 0
 	s.streams = map[string]*streamState{}
 	s.ids = map[string]StreamID{}
 	s.proofs = map[string]map[uint64][]*protocol.AnnotatedReceipt{}
@@ -285,6 +293,7 @@ type StagingTxn struct {
 	s  *Staging
 	mu sync.Mutex
 
+	block     uint64
 	held      map[string]map[uint64]*Held
 	validated map[string]map[uint64][32]byte
 	sighted   map[string]uint64
@@ -300,6 +309,20 @@ func (s *Staging) Begin() *StagingTxn {
 	t := &StagingTxn{s: s}
 	t.reset()
 	return t
+}
+
+// AtBlock names the block this transaction belongs to. Commit publishes the
+// index with the block's additions, so staging always knows which block it
+// is as of and a reader takes both under one lock (#4291). A transaction
+// that is never told — the conductor's reads, a test — leaves the index
+// where the last block left it.
+func (t *StagingTxn) AtBlock(index uint64) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.block = index
 }
 
 func sourceKey(source *url.URL) string { return strings.ToLower(source.String()) }
@@ -917,6 +940,9 @@ func (t *StagingTxn) Commit() {
 	}
 	for k := range touched {
 		s.streams[k].observe(k)
+	}
+	if t.block > s.block {
+		s.block = t.block
 	}
 	t.reset()
 }

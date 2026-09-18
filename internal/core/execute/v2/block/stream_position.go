@@ -271,15 +271,28 @@ func (b *Block) flushStreams() error {
 	defer b.positions.mu.Unlock()
 
 	keys := make([]string, 0, len(b.positions.m))
-	for k, p := range b.positions.m {
-		if p.highest > 0 {
-			keys = append(keys, k)
-		}
+	for k := range b.positions.m {
+		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
 	for _, k := range keys {
 		p := b.positions.m[k]
+
+		// Every stream the block touched releases at the ledger's Delivered,
+		// not only the ones it delivered into. Staging is memory, so after a
+		// restart its copy of Delivered is zero while the ledger's is not,
+		// and a snapshot of staging that said zero would hand a joining node
+		// entries its peers executed blocks ago (#4291). Releasing what the
+		// ledger already says is delivered is a no-op for a stream that is
+		// up to date and the correction for one that is not.
+		if p.delivered > 0 {
+			b.staging.Release(p.stream.id(), p.delivered)
+		}
+		if p.highest == 0 {
+			continue
+		}
+
 		var ledger protocol.SequenceLedger
 		err := b.Batch.Account(p.stream.ledger).Main().GetAs(&ledger)
 		if err != nil {
@@ -293,8 +306,6 @@ func (b *Block) flushStreams() error {
 		if err != nil {
 			return errors.UnknownError.WithFormat("store %v: %w", p.stream.ledger, err)
 		}
-		// Release what this block delivered — applied when the block commits
-		b.staging.Release(p.stream.id(), p.highest)
 	}
 	return nil
 }
