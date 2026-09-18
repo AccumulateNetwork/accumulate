@@ -10,7 +10,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"fmt"
 	"testing"
 	"time"
 
@@ -35,11 +34,7 @@ func (a *collectingAdapter) CollectBlock(_ context.Context, params adapter.Block
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.collected = append(a.collected, params)
-	out := &execute.CollectedBlock{Held: len(params.Batches)}
-	for i := range params.Batches {
-		out.Accounts = append(out.Accounts, protocol.AccountUrl(fmt.Sprintf("alice%d", i)))
-	}
-	return out, nil
+	return &execute.CollectedBlock{Held: len(params.Batches)}, nil
 }
 
 // newJoiningService is newCommitService with an adapter that can collect.

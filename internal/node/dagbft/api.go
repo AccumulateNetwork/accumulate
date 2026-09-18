@@ -12,7 +12,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -24,6 +27,16 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// What a joining node refused to take in, by the call it refused. A restarted
+// validator that keeps accepting user traffic rejects every transaction of it
+// against a store it has not filled, and nothing says so (#4307).
+var mNotSubmitting = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "node",
+	Name:      "not_submitting_total",
+	Help:      "Submissions refused because this node is joining and cannot validate against state it has not executed",
+}, []string{"partition", "call"})
 
 // ConsensusAPIService implements api.ConsensusService for DAG-BFT.
 type ConsensusAPIService struct {
@@ -140,8 +153,9 @@ func boolOpt(v *bool, def bool) bool {
 
 // SubmitterService implements api.Submitter for DAG-BFT.
 type SubmitterService struct {
-	logger  logging.OptionalLogger
-	service *Service
+	logger    logging.OptionalLogger
+	service   *Service
+	nodeState nodestate.Serving
 }
 
 var _ api.Submitter = (*SubmitterService)(nil)
@@ -150,6 +164,13 @@ var _ api.Submitter = (*SubmitterService)(nil)
 type SubmitterServiceParams struct {
 	Logger  logging.Logger
 	Service *Service
+
+	// NodeState is this node's join state. A joining node refuses
+	// submissions: it validates against a store the pull has half filled, so
+	// every user transaction fails on an account it does not have yet, and the
+	// caller is told its transaction is invalid when it is not (#4307 -- 15,035
+	// of those in run 20260918T131713Z). Nil means the node never joined.
+	NodeState nodestate.Serving
 }
 
 // NewSubmitterService creates a new SubmitterService.
@@ -157,7 +178,21 @@ func NewSubmitterService(params SubmitterServiceParams) *SubmitterService {
 	s := new(SubmitterService)
 	s.logger.L = params.Logger
 	s.service = params.Service
+	s.nodeState = params.NodeState
 	return s
+}
+
+// serving refuses while this node is joining. NotReady, not an error about the
+// envelope: the submitter's client asks another node, which is exactly what
+// should happen, and a validation failure would instead tell the user their
+// transaction is bad.
+func (s *SubmitterService) serving(call string) error {
+	if s.nodeState == nil || s.nodeState.CanServeCurrent() {
+		return nil
+	}
+	mNotSubmitting.WithLabelValues(strings.ToLower(s.service.config.Partition.ID), call).Inc()
+	return errors.NotReady.WithFormat(
+		"%s is joining and cannot validate against state it has not executed", s.service.config.Partition.ID)
 }
 
 // Type returns the service type.
@@ -201,6 +236,10 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 	s.logger.Debug("TRACE-SUBMIT: SubmitterService.Submit() called (DAG-BFT)",
 		"messages", strings.Join(msgIDs, ","),
 		"partition", s.service.config.Partition.ID)
+
+	if err := s.serving("Submit"); err != nil {
+		return nil, err
+	}
 
 	// Verify the envelope is well-formed
 	if opts.Verify == nil || *opts.Verify {
@@ -295,8 +334,9 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 
 // ValidatorService implements api.Validator for DAG-BFT.
 type ValidatorService struct {
-	logger  logging.OptionalLogger
-	service *Service
+	logger    logging.OptionalLogger
+	service   *Service
+	nodeState nodestate.Serving
 }
 
 var _ api.Validator = (*ValidatorService)(nil)
@@ -305,6 +345,9 @@ var _ api.Validator = (*ValidatorService)(nil)
 type ValidatorServiceParams struct {
 	Logger  logging.Logger
 	Service *Service
+
+	// NodeState is this node's join state; see SubmitterServiceParams.
+	NodeState nodestate.Serving
 }
 
 // NewValidatorService creates a new ValidatorService.
@@ -312,6 +355,7 @@ func NewValidatorService(params ValidatorServiceParams) *ValidatorService {
 	s := new(ValidatorService)
 	s.logger.L = params.Logger
 	s.service = params.Service
+	s.nodeState = params.NodeState
 	return s
 }
 
@@ -320,6 +364,12 @@ func (s *ValidatorService) Type() api.ServiceType { return api.ServiceTypeValida
 
 // Validate validates an envelope without submitting it.
 func (s *ValidatorService) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+	if s.nodeState != nil && !s.nodeState.CanServeCurrent() {
+		mNotSubmitting.WithLabelValues(strings.ToLower(s.service.config.Partition.ID), "Validate").Inc()
+		return nil, errors.NotReady.WithFormat(
+			"%s is joining and cannot validate against state it has not executed", s.service.config.Partition.ID)
+	}
+
 	// Marshal envelope
 	b, err := envelope.MarshalBinary()
 	if err != nil {

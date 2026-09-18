@@ -13,7 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bptproof"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -29,12 +32,23 @@ import (
 const defaultPageSize = 50
 const maxPageSize = 100
 
+// What a joining node refused to answer, by the call (#4297). It is the
+// querier's half of accumulate_node_not_serving_total, which counts the
+// sequencer's.
+var mNotQuerying = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "node",
+	Name:      "not_querying_total",
+	Help:      "Queries refused because this node is joining and does not hold what they ask for, by call",
+}, []string{"partition", "call"})
+
 type Querier struct {
 	staging   *execute.Staging
 	logger    logging.OptionalLogger
 	db        database.Viewer
 	partition config.NetworkUrl
 	consensus api.ConsensusService
+	nodeState nodestate.Serving
 }
 
 var _ api.Querier = (*Querier)(nil)
@@ -48,6 +62,15 @@ type QuerierParams struct {
 	// Staging is the partition's staging, for reporting how far a stream
 	// has been sighted. Nil falls back to the registered one for Partition.
 	Staging *execute.Staging
+
+	// NodeState is this node's join state. While it is joining, the querier
+	// refuses the two things a joining node must not answer -- a BPT page and
+	// an account read carrying a receipt -- because those are what another
+	// node's pull reads, and this node's store is the one the pull is filling
+	// (#4297). Plain reads stay open: gating them would stop a node answering
+	// ordinary questions about itself, which is the cost #4297 weighs. Nil
+	// means the node never joined.
+	NodeState nodestate.Serving
 }
 
 func NewQuerier(params QuerierParams) *Querier {
@@ -56,6 +79,7 @@ func NewQuerier(params QuerierParams) *Querier {
 	s.db = params.Database
 	s.staging = params.Staging
 	s.consensus = params.Consensus
+	s.nodeState = params.NodeState
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	return s
 }
@@ -87,6 +111,13 @@ func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (a
 		fixRange(query.EntryRange)
 	}
 
+	// A joining node does not answer what another node's pull reads. Before
+	// the gate, because a refusal costs nothing and the point is not to touch
+	// the store at all.
+	if err := s.servingFor(query); err != nil {
+		return nil, err
+	}
+
 	// Admission control BEFORE the database is touched — see gate.go. An
 	// ungated query path let pollers drive 45% of validator CPU into state
 	// reads and collapse the network (#4164).
@@ -103,6 +134,38 @@ func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (a
 		return err
 	})
 	return r, err
+}
+
+// servingFor refuses the queries a joining node must not answer.
+//
+// Two of them, and the reason is the same for both: they are what a pull
+// reads. A BPT page says what the peer's leaves are, and an account read with
+// a receipt says the account hashes into the peer's root -- and a joining
+// node's leaves and root are the half-filled ones the pull is building. A
+// second joining node taking its spine from the first, unverified by
+// construction, and then never pulling the spine again, is the compounding
+// case (#4297).
+//
+// NotReady, so the caller asks another node.
+func (s *Querier) servingFor(query api.Query) error {
+	if s.nodeState == nil || s.nodeState.CanServeCurrent() {
+		return nil
+	}
+	var call string
+	switch q := query.(type) {
+	case *api.BptPageQuery:
+		call = "BptPageQuery"
+	case *api.DefaultQuery:
+		if !q.IncludeReceipt.Yes() {
+			return nil
+		}
+		call = "QueryAccountWithReceipt"
+	default:
+		return nil
+	}
+	mNotQuerying.WithLabelValues(strings.ToLower(s.partition.PartitionID()), call).Inc()
+	return errors.NotReady.WithFormat(
+		"%s is joining and cannot answer for state it has not executed", s.partition.PartitionID())
 }
 
 func (s *Querier) getLastBlockTime(ctx context.Context, batch *database.Batch) *time.Time {
@@ -795,12 +858,30 @@ func (s *Querier) queryMinorBlock(ctx context.Context, batch *database.Batch, mi
 	r.Entries = new(api.RecordRange[*api.ChainEntryRecord[api.Record]])
 	r.Entries.Total = uint64(len(allEntries))
 
+	// Expand explicitly false asks for the block ledger's record and nothing
+	// else: the (account, chain, index) triples, with no chain entry read back
+	// and no message loaded. That is what a joining node needs and all it
+	// needs -- the set of accounts the block changed (executor.md, "Sync",
+	// step 3) -- and expanding every entry of every block in (R, Q] to find a
+	// list of names costs a message load per transaction. Expand unset keeps
+	// the expanded form every existing caller gets.
+	names := entryRange.Expand != nil && !*entryRange.Expand
+
 	var didAnchor *protocol.BlockEntry
 	allocRange(r.Entries, entryRange, zeroBased)
 	for i := range r.Entries.Records {
 		e := allEntries[r.Entries.Start+uint64(i)]
 		if s.partition.AnchorPool().Equal(e.Account) && e.Chain == "main" {
 			didAnchor = e
+		}
+
+		if names {
+			r.Entries.Records[i] = &api.ChainEntryRecord[api.Record]{
+				Account: e.Account,
+				Name:    e.Chain,
+				Index:   e.Index,
+			}
+			continue
 		}
 
 		r.Entries.Records[i], err = loadBlockEntry(batch, e)
@@ -813,7 +894,7 @@ func (s *Querier) queryMinorBlock(ctx context.Context, batch *database.Batch, mi
 		}
 	}
 
-	if didAnchor == nil || !s.partition.Equal(protocol.DnUrl()) {
+	if names || didAnchor == nil || !s.partition.Equal(protocol.DnUrl()) {
 		return r, nil
 	}
 

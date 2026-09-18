@@ -20,7 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -434,38 +433,4 @@ func TestSettleStaging_RefusesAStateThatIsNotTheBlock(t *testing.T) {
 	require.Error(t, err)
 	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
 	require.Contains(t, err.Error(), "BVN0", "the partition is named: block numbers collide across partitions")
-}
-
-// The accounts a block names are what the state pull must fetch for it
-// (#4293): every principal, every signer.
-func TestCollectBlock_NamesTheAccountsTheBlockTouches(t *testing.T) {
-	f := newStagingFixture(t, 0)
-
-	alice := protocol.AccountUrl("alice", "tokens")
-	txn := new(protocol.Transaction)
-	txn.Header.Principal = alice
-	txn.Body = &protocol.SendTokens{}
-	env := &messaging.Envelope{Messages: []messaging.Message{
-		&messaging.TransactionMessage{Transaction: txn},
-		&messaging.SignatureMessage{
-			Signature: &protocol.ED25519Signature{Signer: protocol.AccountUrl("alice", "book", "1"), TransactionHash: txn.ID().Hash()},
-			TxID:      txn.ID(),
-		},
-	}}
-
-	out, err := f.x.CollectBlock(f.batch, execute.BlockParams{Index: 4}, []*messaging.Envelope{env})
-	require.NoError(t, err)
-	require.Equal(t, 0, out.Held, "a user envelope holds nothing in staging")
-	require.Equal(t, []string{
-		protocol.AccountUrl("alice", "book", "1").String(),
-		alice.String(),
-	}, urlStrings(out.Accounts))
-}
-
-func urlStrings(urls []*url.URL) []string {
-	out := make([]string, len(urls))
-	for i, u := range urls {
-		out[i] = u.String()
-	}
-	return out
 }

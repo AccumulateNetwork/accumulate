@@ -248,16 +248,41 @@ nodes take the same path, in this order:
    envelopes never name, and it contains no unroutable name, which envelopes
    do. Deriving the set from envelopes leaves the local tree chasing a root it
    cannot reach, because the accounts it omits change on every non-empty
-   block. The Directory's spine first — anchors, ledger and
-   operators, with their chains — so anchors and their signatures can be
-   verified; then the partition's BPT by pages, and every account behind a
-   leaf that is missing or stale. The blocks being buffered say which
-   accounts change, so the pull follows the network rather than enumerating
-   twice. **The accounts a block names** are the principal of every
-   transaction it executes, the signer of every signature it carries, and
-   the anchor pool for every anchor — every account the block can write. A
-   node that restarts with its store intact pulls only what changed after
-   its last block.
+   block.
+
+   **Every read is addressed at a named peer, and never at this node.** A
+   node's own client answers locally for any service the node itself provides,
+   without touching the network, and a joining node provides the querier for
+   every partition it serves — so a pull given that client reads the
+   un-executed store the pull exists to fill, and is refused by it forever
+   (#4303: 18,313 refusals, not one of them a verification failure). The
+   joining node routes each account to a partition, looks that partition's
+   query service up under its network's key, **drops its own peer ID**, and
+   asks one named peer at a time — the rule it already follows for staging. A
+   peer that cannot serve an account is that peer's condition and the next
+   peer is asked. The roots everything is verified against are read the same
+   way: from a Directory peer that has executed them.
+
+   **The partition's own spine first** — its anchors, ledger and operators,
+   with their chains — because those are what everything else is read
+   through, and they cannot be verified before they are there. The
+   Directory's anchors are read from a Directory peer through the API; they
+   are **not written into this partition's store**. A partition's state tree
+   holds no account of another partition, so a leaf no peer of this partition
+   has puts the local root beyond every root the Directory ever anchored for
+   it, however perfectly everything else is pulled. A node runs the Directory
+   alongside its BVN, and the Directory's own join pulls the Directory's spine
+   into the Directory's store, where those accounts belong.
+
+   Then the block ledger's accounts, and the partition's BPT by pages for
+   every account behind a leaf that is missing or stale. The page diff is the
+   **backstop and it must stay reachable**: it runs on the first round,
+   because a node that has just started does not know whether the store it
+   holds is the state of `R`; on a cadence after that; and whenever the walk
+   cannot cover `(R, Q]`. Running it only when the ledger named nothing makes
+   it unreachable, because one name that can never be satisfied keeps the set
+   non-empty for the life of the process. A node that restarts with its store
+   intact pulls only what changed after its last block.
 
    **A pulled account is verified against the root the Directory anchored,
    never against one of its own.** A peer serves the account with a receipt
@@ -271,7 +296,17 @@ nodes take the same path, in this order:
    the anchors — a peer serves its current block and the Directory anchors
    that block a few blocks later — so a fetched account is held, unwritten,
    until the anchor for its block arrives, and is neither trusted early nor
-   refused for arriving before its proof.
+   refused for arriving before its proof. **The hold is the fetch itself, not
+   a note to fetch again**: an account thrown away because its block is not
+   anchored yet is re-fetched at a newer block that is not anchored either,
+   which never settles anything. It is held across rounds, settled against the
+   block it was served at, and only given up after a bounded wait — a block
+   nobody ever anchors is a peer's claim, not a wait.
+
+   **What is pulled is written into the state tree, not only into the store.**
+   Committing an account does not move the root by itself; the root is what
+   the node matches against an anchored root, so a pull that does not update
+   the tree can fetch everything the network has and never move (#4305).
 
    **The BPT pages are read, never written.** A leaf enters the local BPT
    only as the hash of state this node holds and has verified, because the
@@ -305,6 +340,18 @@ nodes take the same path, in this order:
    for missing data: not the sequencer, not healing. It keeps up with
    blocks and says so (node state `BOOTING`, `ACTIVE`, `COMPLETE`; advertised
    so nothing routes a request to a node that cannot answer it).
+
+   **A joining node also refuses what it cannot answer for.** It does not
+   take user traffic: validating a transaction against a store the pull has
+   half filled fails on an account the node does not have yet, and tells the
+   sender its transaction is bad when it is not — so `Submit` and `Validate`
+   answer `NotReady` and the sender asks another node (#4307). And it does
+   not answer the two reads another node's **pull** takes — a BPT page, and
+   an account with a receipt — because its leaves and its root are the
+   half-filled ones its own pull is building, and a second joining node would
+   otherwise take its spine, unverified by construction, from the first
+   (#4297). Ordinary reads stay open: a node that people query still answers
+   questions about itself.
 
 What a restart therefore never does is replay committed blocks it did not
 execute, or rebuild staging from a source's cache: the first executes with
