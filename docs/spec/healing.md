@@ -100,12 +100,9 @@ keeps it current from consensus from there (executor.md, "Sync"). Healing
 begins where it always did: once the node executes, a hole in its stage is a
 gap like any other, asked of the source on the cadence.
 
-The pull a starting node makes today — every inbound stream from its source
-from `Delivered + 1` up, held as a block would hold it, before its first
-block (`Conductor.Rejoin`) — is what removed the immediate wedge and it stays
-until the join lands, recorded as not exact in
-[DIFFERENCES.md](DIFFERENCES.md) E11. The source keeps released entries and
-anchor acks a grace of blocks (`RejoinGrace`) so a pull can be served at all.
+The source keeps released entries and anchor acks a grace of blocks
+(`RejoinGrace`) so that a node which has just joined can still be answered for
+the holes its healing asks about.
 
 ### Who asks, and when
 
@@ -578,31 +575,28 @@ at `MaxStagedProofBytes` per source. Counted per partition in
 `accumulate_staging_snapshots_total` with the bytes served in
 `accumulate_staging_snapshot_bytes_total`, measured as the page is built.
 
-**"One block, never a mixture" holds against block-driven changes.** While the
-interim `Conductor.Rejoin` path exists, `Executor.Collect` puts healed
-packages into staging outside any block (see "Rejoining (interim)" below), so
-staging can change between two pages without the block changing. That closes
-when the join of #4294 removes `Conductor.Rejoin`; until then it is recorded
-in DIFFERENCES.md, E11.
+**One block, never a mixture.** Nothing changes staging outside a block any
+more: a joining node's collect is the only other writer, and a joining node
+does not serve snapshots.
 
-### Rejoining (interim)
+### Rejoining is the join
 
-`Conductor.Rejoin` (`internal/core/crosschain/rejoin.go`) is armed by `Start`
-and consumed at the next block-begin, before the block executes, in
-`willBeginBlock`: for each inbound synthetic source the walk asks
-`[Delivered + 1, Delivered + MaxReceiptListElements]` and on from the number
-served, up to `maxRejoinSpans` spans, until `NotReady`; each answer's
-packages go to `Collector.Collect` (`block.Executor.Collect`, `rejoin.go`):
-the proof through the block's `intakeProof`, each entry held at its number
-with its companion, nothing written. Anchor streams: `anchorAnswers` per
-span, one `BlockAnchor` copy per anchor held by `holdAnchors` as a copy below
-quorum is held. `NotFound` is logged once. Counted per span in
-`accumulate_conductor_rejoin_spans_total{outcome}` (answered, not-yet, miss,
-failed); entries in `heal_entries_total{outcome="rejoined"}`. A node on
-which nothing was ever delivered rejoins nothing. The simulator's
-`Partition.RestartNode` empties a node's staging and arms its conductor
-(`TestOneValidatorRestartDoesNotDiverge`). Superseded by the join
-(executor.md "Sync"; PLAN E11), which takes staging from a peer instead.
+There is no separate rejoin. A node that restarts takes the same path as a
+node that has never run: it collects the blocks it is handed, takes a running
+validator's staging, pulls the state, and executes from the block after its
+root matches (executor.md, "Sync"). The interim pull — `Conductor.Rejoin`,
+which asked each source for the span above `Delivered` and held what came
+back — is gone, with its metric: the source's cache holds what the source
+*produced*, and a node that started from it held an entry its peers had not
+received and executed it a block early (run 20260918T023054Z).
+
+`synthcache.RejoinGrace` stays. A node that has joined heals like any other,
+and the holes it asks for may be entries the source's word has already
+released; the grace is what lets the source still answer.
+
+The simulator's `Partition.RestartNode` empties a node's staging and starts
+its join; `TakeStaging` and `CompleteJoin` are the two steps a test drives
+(`TestOneValidatorRestartDoesNotDiverge`).
 
 ### Healing is for a synthetic stream that has stopped
 

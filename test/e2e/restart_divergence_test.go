@@ -52,9 +52,18 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 	bobKey := acctesting.GenerateKey(bob)
 
+	// A node that is joining executes nothing, so it reports no results for
+	// the blocks it collects, and the simulator's per-block result comparison
+	// would call that a consensus failure. It is not: the node is not
+	// executing on purpose. What matters is the state it reaches, and that is
+	// what this test ends by comparing — every node's root chain, which is a
+	// Merkle root over the history of block roots and so compares every block
+	// any of them executed.
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 2, 3),
 		simulator.Genesis(GenesisTime),
+		simulator.IgnoreDeliverResults(),
+		simulator.IgnoreCommitResults(),
 	)
 	sim.SetRoute(alice, "BVN0")
 	sim.SetRoute(bob, "BVN1")
@@ -195,8 +204,13 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 		tx.Discard()
 	}
 
-	// One validator restarts: its staging is gone, its peers' is not.
+	// One validator restarts: its staging is gone, its peers' is not. From
+	// here it collects the blocks it is handed and executes none of them, and
+	// it comes back by the join path — never by replaying what it missed or
+	// by rebuilding staging from a source's cache (executor spec, "Sync";
+	// #4294).
 	p.RestartNode(1)
+	require.True(t, p.Joining(1))
 	t.Logf("held after the restart:  %v", []int{held(0), held(1), held(2)})
 
 	// The held-back anchors land on every node in the next block: the peers
@@ -223,6 +237,19 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 	}
 	for step := 0; step < 30; step++ {
 		require.NoError(t, sim.S.Step())
+
+		// The join: staging from a peer part way through — while the blocks
+		// that prove the held entries are still landing — and the state, and
+		// the handoff, a few blocks later. Between the two the node collects
+		// what it is handed, which is what makes the two exact.
+		switch step {
+		case 3:
+			require.NoError(t, p.TakeStaging(1, 0), "take a peer's staging")
+		case 9:
+			require.NoError(t, p.CompleteJoin(1, 0), "take the state and execute from the next block")
+			require.False(t, p.Joining(1))
+		}
+
 		var line string
 		for i := 0; i < p.NodeCount(); i++ {
 			tx := p.NodeStaging(i).Begin()

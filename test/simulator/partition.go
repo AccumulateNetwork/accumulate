@@ -8,10 +8,13 @@ package simulator
 
 import (
 	"bytes"
+	"context"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"io"
 	"sort"
 	"sync"
@@ -51,13 +54,87 @@ func (p *Partition) NodeCount() int { return len(p.nodes) }
 // NodeDatabase is node i's database, for a test that compares nodes.
 func (p *Partition) NodeDatabase(i int) *database.Database { return p.nodes[i].database }
 
-// RestartNode stands node i where a restarted validator stands: its store
-// intact, its staging empty, its conductor set to rejoin at the next block
-// (#4290). The simulator has no process to restart; this is what a restart
-// does to the executor's memory.
+// RestartNode stands node i where a restarted validator stands, and starts its
+// join: its staging is empty — staging is memory, and a restart loses it — and
+// from here it collects the blocks it is handed instead of executing them
+// (executor spec, "Sync", step 1). It executes nothing until the join
+// completes; a restart IS a join (#4205, #4294).
+//
+// The simulator has no process to restart and no consensus buffer: every node
+// is handed every block, so "buffered" and "collected" are the same thing
+// here. What the join must still get right is the same: the node takes a
+// peer's staging, takes the state, and executes from the block after.
 func (p *Partition) RestartNode(i int) {
 	p.nodes[i].staging.Reset()
-	p.nodes[i].conductor.Rejoin()
+	p.nodes[i].join.leave()
+}
+
+// Joining reports whether node i is collecting rather than executing.
+func (p *Partition) Joining(i int) bool { return p.nodes[i].join.Joining() }
+
+// TakeStaging is step 2 of node i's join: it takes node j's staging as of j's
+// last committed block, through the same private API a real node uses
+// (#4291), and loads it. The blocks that follow are applied to it as they
+// arrive, which is what collecting has been doing since RestartNode.
+func (p *Partition) TakeStaging(i, j int) error {
+	from, ok := p.NodePrivate(j).(private.StagingSnapshotter)
+	if !ok {
+		return errors.NotAllowed.With("this node does not serve staging")
+	}
+	snap, err := private.FetchStagingSnapshot(context.Background(), from, p.ID)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	return p.nodes[i].join.takeStaging(snap)
+}
+
+// CompleteJoin is steps 3 and 4 of node i's join: the state comes from node j
+// — in the simulator by copying its store, where a real node pulls it account
+// by account and verifies each against the anchored root (#4293) — staging is
+// settled at the block that state is, and node i executes from the next block
+// as any node does.
+func (p *Partition) CompleteJoin(i, j int) error {
+	src, ok := p.nodes[j].store.(*memory.Database)
+	dst, ok2 := p.nodes[i].store.(*memory.Database)
+	if !ok || !ok2 {
+		return errors.NotAllowed.With("the simulator's join needs in-memory stores")
+	}
+	entries, err := src.Export()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	err = dst.Import(entries)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// The block the state is: what the peer's ledger says, which is what the
+	// anchored-root match answers on a real network.
+	var q uint64
+	err = p.nodes[i].database.View(func(batch *database.Batch) error {
+		var ledger *protocol.SystemLedger
+		err := batch.Account(protocol.PartitionUrl(p.ID).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
+		if err != nil {
+			return err
+		}
+		q = ledger.Index
+		return nil
+	})
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	settler, ok := p.nodes[i].executor.(interface{ SettleStagingAt(uint64) error })
+	if !ok {
+		return errors.NotAllowed.With("this executor cannot settle staging")
+	}
+	err = settler.SettleStagingAt(q)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	p.nodes[i].join.done()
+	return nil
 }
 
 // NodeStaging is node i's staging, for a test that compares nodes.

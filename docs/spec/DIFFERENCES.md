@@ -267,10 +267,8 @@ peers committed 3, run `20260918T014155Z`).
 
 **Serving staging (#4291, done)**: a running validator serves its staging as
 of its last committed block through the private API, paged by stream, with
-the block index on every page (healing.md, "Staging snapshot"). **Nothing
-reads it yet**: the pull a starting node makes is still `Conductor.Rejoin`
-from the source's cache, with the inexactness described above, until the join
-of step 2 is built on this call. Also not done: the refusal is "this node has
+the block index on every page (healing.md, "Staging snapshot"). The join
+reads it (#4294). Also not done: the refusal is "this node has
 executed no block", not the node state of step 5 — a node that is `BOOTING`
 will serve its stage until that lands (#4295). And a page is as of whatever
 block the validator had committed when the call arrived; nothing is pinned
@@ -298,15 +296,19 @@ stream. It is safe, because the joining node releases through its own pulled
 ledger when it settles (#4292's `SettleStaging`), but it is not what the issue
 asked for.
 
-**`Executor.Collect` changes staging outside a block (#4291)**: the interim
-`Conductor.Rejoin` path (`internal/core/execute/v2/block/rejoin.go`) commits
-a staging transaction with no block behind it. Two consequences for the
-snapshot: a node that rejoined from a source's cache can serve those
-cache-derived entries as if they were peer state, and staging can change
-between two pages with the block index unchanged, so "one block, never a
-mixture" holds only against block-driven changes. The hole closes when the
-join of #4294 removes `Conductor.Rejoin`; `Collect` is deliberately not
-changed before then.
+**The handoff (#4294, in progress)**: the join's orchestration exists
+(`internal/node/join`) and the DAG service can be handed off to — it leaves
+collecting mode at Q, stands at Q, and produces what it buffered from Q + 1,
+all inside the block production loop, which is the only thing that produces
+blocks. `Conductor.Rejoin`, its metric and `Executor.Collect` are gone: a
+restart is a join. The simulator's `RestartNode` starts a join and
+`TakeStaging`/`CompleteJoin` complete it, so
+`TestOneValidatorRestartDoesNotDiverge` passes by the join path with nothing
+rebuilt from a source's cache. **Not done**: nothing in
+`cmd/accumulated/run/dagbft.go` starts a join yet, so on a real node the
+collecting mode is never entered and a restart still starts at its checkpoint
+and executes — which is the behaviour every diverging run of 2026-09-18 had.
+The Docker chaos proof is a human step after the wiring.
 
 **State pull (#4293, partly done)**: the bootstrap-v3 packages are on this
 line — `internal/core/bootstrap/{pull,enumerate,bptproof,tracker,nodestate}`
@@ -426,15 +428,13 @@ spec**, both deliberate:
   stands when the block is collected, which on a joining node is the state
   the pull has reached, not the state at that block. A joining node's store
   is *behind* its peers', so it can only over-mark: it holds collected what
-  its peers hold runnable, never the reverse. For an entry covered by a
-  package proof that closes itself — the proof is staged, and the anchor
-  decides it at the settle or after the handoff. For an entry that carries
-  its own receipt it does not: nothing stages that proof, so the entry waits
-  for a validated hash that may never come, and its stream stops where its
-  peers' moves. That is the divergence this work exists to prevent, and
-  `SettleStaging` does not close it; it is closed in #4294 by making
-  runnability a question about the entry and the state rather than about when
-  the entry was held.
+  its peers hold runnable, never the reverse. An entry covered by a package
+  proof closes itself — the proof is staged, and the anchor decides it. An
+  entry carrying its own receipt used not to: nothing stages that proof, so
+  it waited for a validated hash that might never come. Closed in #4294:
+  `runnable` re-checks a collected entry's own receipt against the anchor
+  chain, so runnability is a question about the entry and the state and not
+  about when the entry was held (executor.md, "Collection").
 - `classify` resolves a remote transaction body from the store, so a sequenced
   message carrying a remote stub whose body this node has not pulled yet is
   not classified and not held at all — a hole on the joining node where its

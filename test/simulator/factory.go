@@ -85,6 +85,7 @@ type networkFactory struct {
 type nodeFactory struct {
 	*networkFactory
 	staging   *coreexec.Staging
+	executor  execute.Executor
 	conductor *crosschain.Conductor
 	cache     *synthcache.Cache
 	heals     *crosschain.HealCounters
@@ -98,6 +99,7 @@ type nodeFactory struct {
 	_nodeKey   []byte
 	peerID     peer.ID
 	store      keyvalue.Beginner
+	join       joinState
 	database   *database.Database
 	eventBus   *events.Bus
 	svcHandler *message.Handler
@@ -171,6 +173,9 @@ func (f *nodeFactory) Build(p *Partition) *Node {
 		n.database = f.getDatabase()
 	}
 	n.staging = f.getStaging()
+	n.store = f.getStore()
+	n.join = &f.join
+	n.executor = f.executor
 	n.conductor = f.conductor
 	n.synthCache = f.getSynthCache()
 	n.heals = f.getHeals()
@@ -488,10 +493,12 @@ func (f *nodeFactory) registerSvc(typ api.ServiceType, svc message.Service) {
 type abciFunc = func(*nodeFactory, execute.Executor, consensus.RestoreFunc) consensus.App
 
 func noABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
+	node.join.exec = exec
 	return &consensus.ExecutorApp{
 		Executor: exec,
 		EventBus: node.getEventBus(),
 		Restore:  restore,
+		Join:     &node.join,
 	}
 }
 
@@ -672,9 +679,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	if err != nil {
 		panic(err)
 	}
-	if col, ok := exec.(crosschain.Collector); ok {
-		conductor.Collector = col
-	}
+	f.executor = exec
 
 	// Create the app interface
 	abci := f.abci(f, exec, func(file ioutil.SectionReader) error {

@@ -309,11 +309,6 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("create executor: %w", err)
 	}
-	// A node that restarts rebuilds staging from its sources before its first
-	// block (executor spec, "Sync"; #4290); the executor takes the answers in.
-	if col, ok := exec.(crosschain.Collector); ok {
-		conductor.Collector = col
-	}
 
 	// Create executor adapter
 	executorBridge, err := adapter.NewExecutorBridge(adapter.ExecutorBridgeConfig{

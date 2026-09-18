@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -39,6 +40,9 @@ type Node struct {
 	database   *database.Database
 	services   *message.Handler
 	staging    *execute.Staging
+	store      keyvalue.Beginner
+	executor   execute.Executor
+	join       *joinState
 	conductor  *crosschain.Conductor
 	synthCache *synthcache.Cache
 	heals      *crosschain.HealCounters

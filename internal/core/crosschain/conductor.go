@@ -77,14 +77,6 @@ type Conductor struct {
 	// queries to the destination. Defaults to DefaultHealTimeout.
 	HealTimeout *time.Duration
 
-	// Collector takes the packages a rejoining node pulls into staging before
-	// its first block (see Rejoin). Nil means a restart rebuilds nothing.
-	Collector Collector
-
-	// rejoinPending is set at Start and by Rejoin, and consumed by the next
-	// block-begin.
-	rejoinPending atomic.Bool
-
 	// Heals counts successful recoveries, so a node can report what it has had
 	// to repair rather than only that it is currently healthy — the distinction
 	// #4103 showed matters, where every surface said healthy while nothing was
@@ -180,7 +172,6 @@ func (c *Conductor) runExclusive(key string, task func()) {
 func (c *Conductor) Start(bus *events.Bus) error {
 	events.SubscribeSync(bus, c.willBeginBlock)
 	events.SubscribeSync(bus, c.willChangeGlobals)
-	c.Rejoin() // a process start is a restart until proven a genesis
 	return nil
 }
 
@@ -203,14 +194,6 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 	// Skip for v1
 	if !globals.ExecutorVersion.V2Enabled() {
 		return nil
-	}
-
-	// A node that has just started rebuilds staging from its sources before
-	// this block executes (executor spec, "Sync"; #4290). Synchronous: the
-	// block waits, consensus does not (execution lag, consensus spec,
-	// invariant 9).
-	if c.rejoinPending.CompareAndSwap(true, false) {
-		c.rejoin(e.Index)
 	}
 
 	if c.Ready != nil && !c.Ready(e) {
