@@ -6,6 +6,41 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import soakmon
 
 
+class SequenceWithSighted(unittest.TestCase):
+    """How far a stream has been sighted is derived from the serving node's
+    staging and is NOT stored (#4189), so it is served beside the account body
+    and never in it: a body with a derived value written into it stops hashing
+    to the leaf the receipt served with it proves, and no joining node can
+    verify that account again (#4295). The board reads the number from
+    `sighted`, and the body's own `received` is always zero."""
+
+    def test_received_comes_from_sighted_and_not_from_the_body(self):
+        r = {"account": {"sequence": [
+                {"url": "acc://dn.acme", "produced": 5, "received": 0, "delivered": 3}]},
+             "sighted": [{"source": "acc://dn.acme", "received": 222}]}
+        seq = soakmon.sequence_with_sighted(r)
+        self.assertEqual(seq[0]["received"], 222)
+        self.assertEqual(seq[0]["delivered"], 3, "the rest of the entry is untouched")
+        self.assertEqual(r["account"]["sequence"][0]["received"], 0,
+                         "the served record is left as it was served")
+
+    def test_a_stream_with_no_sighted_entry_keeps_the_body(self):
+        r = {"account": {"sequence": [
+                {"url": "acc://bvn-BVN1.acme", "received": 7},
+                {"url": "acc://dn.acme", "received": 0}]},
+             "sighted": [{"source": "ACC://DN.ACME", "received": 9}]}
+        seq = soakmon.sequence_with_sighted(r)
+        self.assertEqual(seq[0]["received"], 7)
+        self.assertEqual(seq[1]["received"], 9, "matched case-insensitively")
+
+    def test_a_node_that_did_not_answer_is_not_a_node_that_answered_nothing(self):
+        # The caller counts the nodes that answered, and a merged maximum read
+        # over fewer nodes is the monitor losing a node rather than a sequence
+        # number going backwards. So a result with no account must raise.
+        with self.assertRaises(Exception):
+            soakmon.sequence_with_sighted({"error": "not ready"})
+
+
 class MergeSequenceViews(unittest.TestCase):
     def test_a_lagging_node_cannot_lower_the_reading(self):
         # Node A is current, node B's executor is behind: B under-reports

@@ -39,7 +39,9 @@ type AccountRecord struct {
 	Pending       *RecordRange[*TxIDRecord] `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	Receipt       *Receipt                  `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 	LastBlockTime *time.Time                `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
-	extraData     []byte
+	// Sighted is how far each of a sequence ledger's inbound streams has been sighted, for an anchor or synthetic ledger and nothing else. It is derived from staging, never stored (#4189), and carried here rather than written into Account - a value synthesised into the body makes the body stop hashing to the leaf Receipt proves, and every proof of that account then fails (#4295).
+	Sighted   []*SightedStream `json:"sighted,omitempty" form:"sighted" query:"sighted" validate:"required"`
+	extraData []byte
 }
 
 type AnchorReceiptOptions struct {
@@ -528,6 +530,16 @@ type ServiceAddress struct {
 	extraData []byte
 }
 
+// SightedStream is how far one inbound stream of a sequence ledger has been sighted. It is derived from staging and is never stored, so it travels BESIDE the account body and never in it - the body must hash to the leaf the receipt served with it proves (#4295).
+type SightedStream struct {
+	fieldsSet []bool
+	// Source is the partition the stream comes from.
+	Source *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	// Received is the highest sequence number sighted on the stream, which is what every operator surface means by "received".
+	Received  uint64 `json:"received" form:"received" query:"received" validate:"required"`
+	extraData []byte
+}
+
 type SignatureSetRecord struct {
 	fieldsSet  []bool
 	Account    protocol.Account                                `json:"account,omitempty" form:"account" query:"account" validate:"required"`
@@ -663,6 +675,13 @@ func (v *AccountRecord) Copy() *AccountRecord {
 	if v.LastBlockTime != nil {
 		u.LastBlockTime = new(time.Time)
 		*u.LastBlockTime = *v.LastBlockTime
+	}
+	u.Sighted = make([]*SightedStream, len(v.Sighted))
+	for i, v := range v.Sighted {
+		v := v
+		if v != nil {
+			u.Sighted[i] = (v).Copy()
+		}
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -1818,6 +1837,23 @@ func RecordRangeAs[T2 Record, T1 Record](v *RecordRange[T1]) (*RecordRange[T2], 
 	return u, nil
 }
 
+func (v *SightedStream) Copy() *SightedStream {
+	u := new(SightedStream)
+
+	if v.Source != nil {
+		u.Source = v.Source
+	}
+	u.Received = v.Received
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SightedStream) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *SignatureSetRecord) Copy() *SignatureSetRecord {
 	u := new(SignatureSetRecord)
 
@@ -1996,6 +2032,14 @@ func (v *AccountRecord) Equal(u *AccountRecord) bool {
 		return false
 	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
 		return false
+	}
+	if len(v.Sighted) != len(u.Sighted) {
+		return false
+	}
+	for i := range v.Sighted {
+		if !((v.Sighted[i]).Equal(u.Sighted[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -3192,6 +3236,22 @@ func (v *RecordRange[T]) Equal(u *RecordRange[T]) bool {
 	return true
 }
 
+func (v *SightedStream) Equal(u *SightedStream) bool {
+	switch {
+	case v.Source == u.Source:
+		// equal
+	case v.Source == nil || u.Source == nil:
+		return false
+	case !((v.Source).Equal(u.Source)):
+		return false
+	}
+	if !(v.Received == u.Received) {
+		return false
+	}
+
+	return true
+}
+
 func (v *SignatureSetRecord) Equal(u *SignatureSetRecord) bool {
 	if !(protocol.EqualAccount(v.Account, u.Account)) {
 		return false
@@ -3331,6 +3391,7 @@ var fieldNames_AccountRecord = []string{
 	4: "Pending",
 	5: "Receipt",
 	6: "LastBlockTime",
+	7: "Sighted",
 }
 
 func (v *AccountRecord) MarshalBinary() ([]byte, error) {
@@ -3358,6 +3419,11 @@ func (v *AccountRecord) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.LastBlockTime == nil) {
 		writer.WriteTime(6, *v.LastBlockTime)
+	}
+	if !(len(v.Sighted) == 0) {
+		for _, v := range v.Sighted {
+			writer.WriteValue(7, v.MarshalBinary)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_AccountRecord)
@@ -3402,6 +3468,11 @@ func (v *AccountRecord) IsValid() error {
 		errs = append(errs, "field LastBlockTime is missing")
 	} else if v.LastBlockTime == nil {
 		errs = append(errs, "field LastBlockTime is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Sighted is missing")
+	} else if len(v.Sighted) == 0 {
+		errs = append(errs, "field Sighted is not set")
 	}
 
 	switch len(errs) {
@@ -7019,6 +7090,60 @@ func (v *ServiceAddress) IsValid() error {
 	}
 }
 
+var fieldNames_SightedStream = []string{
+	1: "Source",
+	2: "Received",
+}
+
+func (v *SightedStream) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Source == nil) {
+		writer.WriteUrl(1, v.Source)
+	}
+	writer.WriteUint(2, v.Received)
+
+	_, _, err := writer.Reset(fieldNames_SightedStream)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *SightedStream) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Source is missing")
+	} else if v.Source == nil {
+		errs = append(errs, "field Source is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Received is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_SignatureSetRecord = []string{
 	1: "RecordType",
 	2: "Account",
@@ -7489,6 +7614,13 @@ func (v *AccountRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 	if x, ok := reader.ReadTime(6); ok {
 		v.LastBlockTime = &x
+	}
+	for {
+		if x := new(SightedStream); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
+			v.Sighted = append(v.Sighted, x)
+		} else {
+			break
+		}
 	}
 
 	seen, err := reader.Reset(fieldNames_AccountRecord)
@@ -9473,6 +9605,32 @@ func (v *ServiceAddress) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *SightedStream) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SightedStream) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Source = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Received = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SightedStream)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SignatureSetRecord) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -9724,6 +9882,7 @@ func init() {
 		encoding.NewTypeField("pending", "RecordRange[*TxIDRecord]"),
 		encoding.NewTypeField("receipt", "Receipt"),
 		encoding.NewTypeField("lastBlockTime", "string"),
+		encoding.NewTypeField("sighted", "SightedStream[]"),
 	}, "AccountRecord", "accountRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -10095,6 +10254,11 @@ func init() {
 	}, "ServiceAddress", "serviceAddress")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("source", "string"),
+		encoding.NewTypeField("received", "uint64"),
+	}, "SightedStream", "sightedStream")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("recordType", "string"),
 		encoding.NewTypeField("account", "protocol.Account"),
 		encoding.NewTypeField("signatures", "RecordRange[*MessageRecord[messaging.Message]]"),
@@ -10145,6 +10309,7 @@ func (v *AccountRecord) MarshalJSON() ([]byte, error) {
 		Pending       *RecordRange[*TxIDRecord]                     `json:"pending,omitempty"`
 		Receipt       *Receipt                                      `json:"receipt,omitempty"`
 		LastBlockTime *time.Time                                    `json:"lastBlockTime,omitempty"`
+		Sighted       encoding.JsonList[*SightedStream]             `json:"sighted,omitempty"`
 		ExtraData     *string                                       `json:"$epilogue,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
@@ -10162,6 +10327,9 @@ func (v *AccountRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.LastBlockTime == nil) {
 		u.LastBlockTime = v.LastBlockTime
+	}
+	if !(len(v.Sighted) == 0) {
+		u.Sighted = v.Sighted
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -11195,6 +11363,7 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 		Pending       *RecordRange[*TxIDRecord]                     `json:"pending,omitempty"`
 		Receipt       *Receipt                                      `json:"receipt,omitempty"`
 		LastBlockTime *time.Time                                    `json:"lastBlockTime,omitempty"`
+		Sighted       encoding.JsonList[*SightedStream]             `json:"sighted,omitempty"`
 		ExtraData     *string                                       `json:"$epilogue,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
@@ -11203,6 +11372,7 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 	u.Pending = v.Pending
 	u.Receipt = v.Receipt
 	u.LastBlockTime = v.LastBlockTime
+	u.Sighted = v.Sighted
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -11218,6 +11388,7 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 	v.Pending = u.Pending
 	v.Receipt = u.Receipt
 	v.LastBlockTime = u.LastBlockTime
+	v.Sighted = u.Sighted
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

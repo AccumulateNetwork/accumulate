@@ -455,10 +455,17 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 		return nil, errors.UnknownError.WithFormat("load state: %w", err)
 	}
 
-	// A sequence ledger's Received is derived, not stored (#4189). Fill it in
-	// on the way out so every reader that asks an account how far a stream has
-	// been sighted still gets an answer. Nothing is written.
-	r.Account = withSighted(s.stagingFor(), record.Url(), state)
+	// The body is served exactly as it is stored. It must be: the receipt
+	// built below is built from the stored state, so a body with anything
+	// synthesised into it does not hash to the leaf its own receipt proves,
+	// and every node pulling that account refuses it forever (#4295).
+	r.Account = state
+
+	// A sequence ledger's Received is derived, not stored (#4189), so it is
+	// answered BESIDE the body. Every reader that asks an account how far a
+	// stream has been sighted still gets an answer; nothing that hashes is
+	// touched.
+	r.Sighted = sighted(s.stagingFor(), record.Url(), state)
 
 	switch state.Type() {
 	case protocol.AccountTypeIdentity, protocol.AccountTypeKeyBook:

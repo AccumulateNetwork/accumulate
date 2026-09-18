@@ -373,7 +373,11 @@ func getAccount[T protocol.Account](h *healer, u *url.URL) T {
 	r, err := h.tryEach().QueryAccount(h.ctx, u, nil)
 	checkf(err, "get %v", u)
 
-	a := r.Account
+	// SightedAccount and not Account: a sequence ledger's Received is derived
+	// from the serving node's staging and travels beside the body, because a
+	// body with it written in stops hashing to the leaf its own receipt
+	// proves (#4295). Everything below reads Received.
+	a := r.SightedAccount()
 	b, ok := a.(T)
 	if !ok {
 		fatalf("%v is a %T not a %v", u, a, reflect.TypeOf(new(T)).Elem())

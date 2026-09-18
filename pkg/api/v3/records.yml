@@ -36,6 +36,12 @@ AccountRecord:
     - name: LastBlockTime
       type: time
       pointer: true
+    - name: Sighted
+      description: is how far each of a sequence ledger's inbound streams has been sighted, for an anchor or synthetic ledger and nothing else. It is derived from staging, never stored (#4189), and carried here rather than written into Account - a value synthesised into the body makes the body stop hashing to the leaf Receipt proves, and every proof of that account then fails (#4295)
+      type: SightedStream
+      marshal-as: reference
+      pointer: true
+      repeatable: true
 
 ChainRecord:
   union: { type: record }
