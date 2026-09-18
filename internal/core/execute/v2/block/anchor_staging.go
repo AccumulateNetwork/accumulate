@@ -7,6 +7,7 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -79,7 +80,7 @@ func (b *Block) intakeProof(source *url.URL, proof *protocol.AnnotatedReceipt, s
 		return errors.BadRequest.WithFormat("proof names Directory block %d, %d past the newest executed", proof.Anchor.SourceBlock, proof.Anchor.SourceBlock-executed)
 	}
 
-	if n := b.staging.StagedProofBytes(source); n >= maxStagedProofBytes {
+	if n := b.staging.StagedProofBytes(source); n >= maxStagedProofBytes() {
 		mExecStagedProofs.WithLabelValues("refused").Inc()
 		if b.proofBudgetBound == nil {
 			b.proofBudgetBound = map[string]bool{}
@@ -102,29 +103,11 @@ func (b *Block) intakeProof(source *url.URL, proof *protocol.AnnotatedReceipt, s
 // the proof is refused rather than held.
 const maxAnchorAhead = 3600
 
-// maxStagedProofBytes bounds what one source's waiting proofs may cost.
-//
-// This used to bound the number of distinct Directory blocks instead, at 256,
-// on the reasoning that honest traffic waits on a handful of blocks so the
-// bound would only ever bind on a flood. That holds while a node is keeping
-// up and is false the moment it falls behind — which is exactly when its
-// proofs matter. Run 20260917T184129Z stranded 80,552 entries that way
-// (#4282).
-//
-// Bytes are the right currency because bytes are what the node pays. A proof
-// is one receipt list covering a whole package, a few hundred bytes against
-// entries averaging about the same each, and the entries are already held
-// without any byte bound at all — so refusing the proof saves almost nothing
-// and costs everything it would have proved.
-//
-// The flood the old bound imagined is prevented elsewhere and still is: a
-// proof must be bound to a message from that source in the same envelope, it
-// may not name a Directory block more than maxAnchorAhead past the newest
-// executed, and each list is capped at MaxReceiptListElements and must
-// validate. What remains is bounded here so a source cannot grow this
-// without bound while its anchors go unexecuted.
-// It is a var only so a test can lower it; nothing changes it at run time.
-var maxStagedProofBytes = 64 << 20
+// maxStagedProofBytes is execute.MaxStagedProofBytes: the budget lives with
+// staging because both ends of it are staging's — this node's intake bounds
+// what a source may stage here, and Staging.Load bounds what a peer's
+// snapshot may bring in (#4291 review).
+func maxStagedProofBytes() int { return execute.MaxStagedProofBytes }
 
 // validateStagedProofs runs after the anchor group has executed: every
 // Directory anchor this block executed decides the proofs waiting on its

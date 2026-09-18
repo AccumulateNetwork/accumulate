@@ -71,12 +71,15 @@ PartitionRootRecord:
 # snapshot"). Block is on every page: a reader that pairs a page with a
 # different block executes a different block, so a page whose Block differs
 # from the first page's is not part of the same snapshot and the reader
-# starts over. When NextLedger is set the snapshot continues from
-# (NextLedger, NextSource, NextNumber); when it is nil the page is the last.
+# starts over. More says whether the snapshot continues from (NextLedger,
+# NextSource, NextNumber, NextProofOffset) — and it says so explicitly,
+# because NextLedger is nil for a source that holds proofs and no stream, so
+# "the cursor is empty" cannot mean "there is no more" (#4291 review).
 StagingSnapshot:
   fields:
     - name: Block
-      description: is the block this page is as of
+      description: |-
+        is the CONSENSUS block index of the last block the executor processed — the index the block was opened with, published when it committed — and not the index of the last block whose state was written: an empty block writes nothing, so the system ledger's index can lag this one. It is at or above every block whose intake this page reflects, which is the safe direction. A joining node must NOT pair it with "the state of that block". Which block's state the node converges on is decided by the anchored-root match (#4293), and that block must be at or above this one
       type: uint
     - name: Streams
       description: is the streams, or parts of streams, this page carries
@@ -85,16 +88,22 @@ StagingSnapshot:
       pointer: true
       repeatable: true
     - name: NextLedger
-      description: is the ledger of the stream the next page starts at, nil when this is the last page
+      description: is the ledger of the stream the next page starts at; nil when the next page starts at a source that holds proofs and no stream, so it does not say whether there is a next page — More does
       type: url
       pointer: true
     - name: NextSource
-      description: is the source of the stream the next page starts at
+      description: is the source of the stream the next page starts at, set whenever More is set
       type: url
       pointer: true
     - name: NextNumber
       description: is the first sequence number the next page carries
       type: uint
+    - name: NextProofOffset
+      description: is how many of that source's waiting proofs the reader already has, so a source with more proofs than one page can carry is paged
+      type: uint
+    - name: More
+      description: is whether the snapshot continues at the cursor, set explicitly because a nil NextLedger is a real cursor
+      type: bool
 
 # StagedStream is one stream's stage, or the part of it a page carries. A
 # stream with a nil Ledger carries nothing but the proofs of a source that

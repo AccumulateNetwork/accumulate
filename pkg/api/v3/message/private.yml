@@ -141,6 +141,8 @@ PrivateStagingSnapshotRequest:
       pointer: true
     - name: Number
       type: uint
+    - name: ProofOffset
+      type: uint
     - name: Limit
       type: uint
 

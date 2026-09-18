@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -155,7 +156,15 @@ func TestStagingSnapshotIsWhatTheNodeHolds(t *testing.T) {
 	require.True(t, ok, "the node's private API serves staging")
 	snap, err := private.FetchStagingSnapshot(context.Background(), client, "BVN1")
 	require.NoError(t, err)
-	require.Equal(t, sim.S.BlockIndex("BVN1"), snap.Block, "the snapshot is as of the last committed block")
+
+	// The block a page names is the CONSENSUS index of the last block the
+	// executor processed, which is what the simulator's BlockIndex reports.
+	// It is not, and this does not claim it is, the index of the last block
+	// whose state was written: an empty block writes nothing. A joining node
+	// pairs the entries with that index, never with "the state of that
+	// block" — which block's state it converges on is the anchored-root
+	// match's to decide (#4293, healing.md "Staging snapshot").
+	require.Equal(t, sim.S.BlockIndex("BVN1"), snap.Block, "the page names the block the executor last processed")
 
 	loaded := execute.NewStaging()
 	require.NoError(t, loaded.Load(snap))
@@ -164,4 +173,23 @@ func TestStagingSnapshotIsWhatTheNodeHolds(t *testing.T) {
 	// And a partition this node does not serve is refused.
 	_, err = client.StagingSnapshot(context.Background(), &private.StagingSnapshotRequest{Partition: "BVN0"})
 	require.Error(t, err)
+
+	// So is a request that does not say which partition it means, and a
+	// cursor that names no stream: both are reachable over the wire and both
+	// used to be answered from whatever the node happened to hold, or to
+	// panic (#4291 review).
+	_, err = client.StagingSnapshot(context.Background(), &private.StagingSnapshotRequest{})
+	require.ErrorIs(t, err, errors.BadRequest)
+	_, err = client.StagingSnapshot(context.Background(), &private.StagingSnapshotRequest{
+		Partition: "BVN1",
+		Ledger:    PartitionUrl("BVN1").JoinPath(Synthetic),
+	})
+	require.ErrorIs(t, err, errors.BadRequest)
+
+	// A cursor with a source and no ledger is a carrier, not a panic.
+	_, err = client.StagingSnapshot(context.Background(), &private.StagingSnapshotRequest{
+		Partition: "BVN1",
+		Source:    PartitionUrl("BVN0"),
+	})
+	require.NoError(t, err)
 }

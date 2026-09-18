@@ -258,13 +258,14 @@ type PrivateSnapshotRangeResponse struct {
 }
 
 type PrivateStagingSnapshotRequest struct {
-	fieldsSet []bool
-	Partition string   `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
-	Ledger    *url.URL `json:"ledger,omitempty" form:"ledger" query:"ledger" validate:"required"`
-	Source    *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
-	Number    uint64   `json:"number,omitempty" form:"number" query:"number" validate:"required"`
-	Limit     uint64   `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
-	extraData []byte
+	fieldsSet   []bool
+	Partition   string   `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Ledger      *url.URL `json:"ledger,omitempty" form:"ledger" query:"ledger" validate:"required"`
+	Source      *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	Number      uint64   `json:"number,omitempty" form:"number" query:"number" validate:"required"`
+	ProofOffset uint64   `json:"proofOffset,omitempty" form:"proofOffset" query:"proofOffset" validate:"required"`
+	Limit       uint64   `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+	extraData   []byte
 }
 
 type PrivateStagingSnapshotResponse struct {
@@ -1016,6 +1017,7 @@ func (v *PrivateStagingSnapshotRequest) Copy() *PrivateStagingSnapshotRequest {
 		u.Source = v.Source
 	}
 	u.Number = v.Number
+	u.ProofOffset = v.ProofOffset
 	u.Limit = v.Limit
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -1675,6 +1677,9 @@ func (v *PrivateStagingSnapshotRequest) Equal(u *PrivateStagingSnapshotRequest) 
 		return false
 	}
 	if !(v.Number == u.Number) {
+		return false
+	}
+	if !(v.ProofOffset == u.ProofOffset) {
 		return false
 	}
 	if !(v.Limit == u.Limit) {
@@ -3808,7 +3813,8 @@ var fieldNames_PrivateStagingSnapshotRequest = []string{
 	3: "Ledger",
 	4: "Source",
 	5: "Number",
-	6: "Limit",
+	6: "ProofOffset",
+	7: "Limit",
 }
 
 func (v *PrivateStagingSnapshotRequest) MarshalBinary() ([]byte, error) {
@@ -3834,8 +3840,11 @@ func (v *PrivateStagingSnapshotRequest) MarshalBinary() ([]byte, error) {
 	if !(v.Number == 0) {
 		writer.WriteUint(5, v.Number)
 	}
+	if !(v.ProofOffset == 0) {
+		writer.WriteUint(6, v.ProofOffset)
+	}
 	if !(v.Limit == 0) {
-		writer.WriteUint(6, v.Limit)
+		writer.WriteUint(7, v.Limit)
 	}
 
 	_, _, err := writer.Reset(fieldNames_PrivateStagingSnapshotRequest)
@@ -3877,6 +3886,11 @@ func (v *PrivateStagingSnapshotRequest) IsValid() error {
 		errs = append(errs, "field Number is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field ProofOffset is missing")
+	} else if v.ProofOffset == 0 {
+		errs = append(errs, "field ProofOffset is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Limit is missing")
 	} else if v.Limit == 0 {
 		errs = append(errs, "field Limit is not set")
@@ -5697,6 +5711,9 @@ func (v *PrivateStagingSnapshotRequest) UnmarshalFieldsFrom(reader *encoding.Rea
 		v.Number = x
 	}
 	if x, ok := reader.ReadUint(6); ok {
+		v.ProofOffset = x
+	}
+	if x, ok := reader.ReadUint(7); ok {
 		v.Limit = x
 	}
 
@@ -6266,6 +6283,7 @@ func init() {
 		encoding.NewTypeField("ledger", "string"),
 		encoding.NewTypeField("source", "string"),
 		encoding.NewTypeField("number", "uint64"),
+		encoding.NewTypeField("proofOffset", "uint64"),
 		encoding.NewTypeField("limit", "uint64"),
 	}, "PrivateStagingSnapshotRequest", "privateStagingSnapshotRequest")
 
@@ -6968,13 +6986,14 @@ func (v *PrivateSnapshotRangeResponse) MarshalJSON() ([]byte, error) {
 
 func (v *PrivateStagingSnapshotRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      Type     `json:"type"`
-		Partition string   `json:"partition,omitempty"`
-		Ledger    *url.URL `json:"ledger,omitempty"`
-		Source    *url.URL `json:"source,omitempty"`
-		Number    uint64   `json:"number,omitempty"`
-		Limit     uint64   `json:"limit,omitempty"`
-		ExtraData *string  `json:"$epilogue,omitempty"`
+		Type        Type     `json:"type"`
+		Partition   string   `json:"partition,omitempty"`
+		Ledger      *url.URL `json:"ledger,omitempty"`
+		Source      *url.URL `json:"source,omitempty"`
+		Number      uint64   `json:"number,omitempty"`
+		ProofOffset uint64   `json:"proofOffset,omitempty"`
+		Limit       uint64   `json:"limit,omitempty"`
+		ExtraData   *string  `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.Partition) == 0) {
@@ -6988,6 +7007,9 @@ func (v *PrivateStagingSnapshotRequest) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Number == 0) {
 		u.Number = v.Number
+	}
+	if !(v.ProofOffset == 0) {
+		u.ProofOffset = v.ProofOffset
 	}
 	if !(v.Limit == 0) {
 		u.Limit = v.Limit
@@ -8105,19 +8127,21 @@ func (v *PrivateSnapshotRangeResponse) UnmarshalJSON(data []byte) error {
 
 func (v *PrivateStagingSnapshotRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      Type     `json:"type"`
-		Partition string   `json:"partition,omitempty"`
-		Ledger    *url.URL `json:"ledger,omitempty"`
-		Source    *url.URL `json:"source,omitempty"`
-		Number    uint64   `json:"number,omitempty"`
-		Limit     uint64   `json:"limit,omitempty"`
-		ExtraData *string  `json:"$epilogue,omitempty"`
+		Type        Type     `json:"type"`
+		Partition   string   `json:"partition,omitempty"`
+		Ledger      *url.URL `json:"ledger,omitempty"`
+		Source      *url.URL `json:"source,omitempty"`
+		Number      uint64   `json:"number,omitempty"`
+		ProofOffset uint64   `json:"proofOffset,omitempty"`
+		Limit       uint64   `json:"limit,omitempty"`
+		ExtraData   *string  `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.Partition
 	u.Ledger = v.Ledger
 	u.Source = v.Source
 	u.Number = v.Number
+	u.ProofOffset = v.ProofOffset
 	u.Limit = v.Limit
 	err := json.Unmarshal(data, &u)
 	if err != nil {
@@ -8130,6 +8154,7 @@ func (v *PrivateStagingSnapshotRequest) UnmarshalJSON(data []byte) error {
 	v.Ledger = u.Ledger
 	v.Source = u.Source
 	v.Number = u.Number
+	v.ProofOffset = u.ProofOffset
 	v.Limit = u.Limit
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {

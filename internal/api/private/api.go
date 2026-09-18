@@ -10,6 +10,7 @@ import (
 	"context"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
@@ -95,14 +96,43 @@ type StagingSnapshotter interface {
 }
 
 // A StagingSnapshotRequest names the partition whose staging is wanted and
-// where in it the page starts. Ledger nil starts at the first stream; Ledger
-// and Source together name the stream to continue from, and Number the first
-// sequence number of it to carry. Limit bounds the entries in the page; zero
-// means the server's own bound.
+// where in it the page starts.
+//
+// Source nil starts at the first stream, and Ledger and Number must then be
+// empty: a number without a stream names nothing. Source alone names the
+// carrier of a source that holds proofs and no stream. Source with Ledger
+// names a stream, and Number is the first sequence number of it to carry.
+// ProofOffset is how many of that source's waiting proofs the reader already
+// has, so a source with more proofs than one page can carry is paged rather
+// than truncated. Limit bounds how many sequence numbers the page covers;
+// zero means the server's own bound, and so does anything above it.
+//
+// Partition is required. A server that holds one partition's staging still
+// refuses a request that does not say which partition it means, because a
+// request that names nothing would be answered from whatever the server
+// happened to hold (#4291 review).
 type StagingSnapshotRequest struct {
-	Partition string
-	Ledger    *url.URL
-	Source    *url.URL
-	Number    uint64
-	Limit     uint64
+	Partition   string
+	Ledger      *url.URL
+	Source      *url.URL
+	Number      uint64
+	ProofOffset uint64
+	Limit       uint64
+}
+
+// Validate reports whether the request names a position that exists. It is
+// what a server calls before it serves: a Ledger without a Source, or a
+// Number without a Source, names no stream, and a server that guessed would
+// either panic or answer from the wrong place.
+func (r *StagingSnapshotRequest) Validate() error {
+	if r == nil {
+		return errors.BadRequest.With("missing request")
+	}
+	if r.Partition == "" {
+		return errors.BadRequest.With("missing partition")
+	}
+	if r.Source == nil && (r.Ledger != nil || r.Number != 0 || r.ProofOffset != 0) {
+		return errors.BadRequest.With("a staging snapshot cursor without a source names no stream")
+	}
+	return nil
 }

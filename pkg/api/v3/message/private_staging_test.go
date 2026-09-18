@@ -70,7 +70,13 @@ func TestPrivateStagingSnapshot(t *testing.T) {
 	c := SetupTest(t, &Sequencer{Sequencer: s})
 
 	client := c.ForAddress(nil).Private().(private.StagingSnapshotter)
-	actual, err := client.StagingSnapshot(context.Background(), &private.StagingSnapshotRequest{Partition: "BVN0", Number: 5, Limit: 8})
+	actual, err := client.StagingSnapshot(context.Background(), &private.StagingSnapshotRequest{
+		Partition:   "BVN0",
+		Source:      protocol.PartitionUrl("BVN1"),
+		Number:      5,
+		ProofOffset: 2,
+		Limit:       8,
+	})
 	require.NoError(t, err)
 	require.True(t, expect.Equal(actual), "the snapshot came back as it was sent")
 	require.Len(t, actual.Streams, 1)
@@ -83,6 +89,7 @@ func TestPrivateStagingSnapshot(t *testing.T) {
 	require.Len(t, s.asked, 1)
 	require.Equal(t, "BVN0", s.asked[0].Partition)
 	require.Equal(t, uint64(5), s.asked[0].Number)
+	require.Equal(t, uint64(2), s.asked[0].ProofOffset, "the proof cursor survives the wire too")
 	require.Equal(t, uint64(8), s.asked[0].Limit)
 }
 
@@ -102,31 +109,95 @@ func (plainSequencer) Sequence(context.Context, *url.URL, *url.URL, uint64, priv
 	return nil, errors.NotFound
 }
 
-// Pages are assembled only while they are as of one block. The peer commits
-// a block between the first page and the second, and the reader refuses what
-// it has rather than executing a state no node ever held.
-func TestPrivateStagingSnapshotPagingRefusesABlockChange(t *testing.T) {
+// Pages are assembled only while they are as of one block. The peer commits a
+// block between the first page and the second, so the reader discards what it
+// has and starts over rather than executing a state no node ever held — and
+// it starts over a bounded number of times, because the peer commits a block
+// every second or so and nothing pins a version of its stage for a reader
+// (#4291 review).
+func TestPrivateStagingSnapshotRestartsOnABlockChange(t *testing.T) {
 	first := stagedPage(99, 5, 6)
+	first.More = true
 	first.NextLedger = first.Streams[0].Ledger
 	first.NextSource = first.Streams[0].Source
 	first.NextNumber = 7
 	second := stagedPage(100, 7, 8)
 
-	s := &stagingServer{pages: []*private.StagingSnapshot{first, second}}
-	c := SetupTest(t, &Sequencer{Sequencer: s})
+	// A peer whose block moves on every second page, forever.
+	s := &movingServer{first: first, second: second}
+	_, err := private.FetchStagingSnapshot(context.Background(), s, "BVN0")
+	require.Error(t, err)
+	require.ErrorIs(t, err, errors.NotReady, "the reader gives up on this peer")
+	require.Equal(t, 2*(private.MaxSnapshotRestarts+1), s.calls, "after a bounded number of attempts")
+
+	// The same two pages as of the same block assemble, over the wire.
+	second.Block = 99
+	canned := &stagingServer{pages: []*private.StagingSnapshot{first, second}}
+	c := SetupTest(t, &Sequencer{Sequencer: canned})
 	client := c.ForAddress(nil).Private().(private.StagingSnapshotter)
 
-	_, err := private.FetchStagingSnapshot(context.Background(), client, "BVN0")
-	require.Error(t, err)
-	require.ErrorIs(t, err, errors.Conflict)
-
-	// The same two pages as of the same block assemble.
-	second.Block = 99
-	s.asked = nil
 	whole, err := private.FetchStagingSnapshot(context.Background(), client, "BVN0")
 	require.NoError(t, err)
 	require.Equal(t, uint64(99), whole.Block)
 	require.Len(t, whole.Streams, 2)
-	require.Len(t, s.asked, 2)
-	require.Equal(t, uint64(7), s.asked[1].Number, "the second page continues where the first stopped")
+	require.Len(t, canned.asked, 2)
+	require.Equal(t, uint64(7), canned.asked[1].Number, "the second page continues where the first stopped")
+}
+
+// movingServer answers the first page, then a page as of a later block, over
+// and over: a peer that commits faster than this reader can read it.
+type movingServer struct {
+	private.Sequencer
+	first, second *private.StagingSnapshot
+	calls         int
+}
+
+func (s *movingServer) StagingSnapshot(context.Context, *private.StagingSnapshotRequest) (*private.StagingSnapshot, error) {
+	s.calls++
+	if s.calls%2 == 1 {
+		return s.first, nil
+	}
+	return s.second, nil
+}
+
+// A cursor is a position and every position has a source, so a page that says
+// there is more but does not say where is a peer this reader cannot follow.
+// It is the mirror of the nil-ledger cursor the server sends for a source
+// that holds proofs and no stream (#4291 review).
+func TestPrivateStagingSnapshotCursorWithoutASource(t *testing.T) {
+	page := stagedPage(99, 5, 6)
+	page.More = true
+	page.NextLedger = page.Streams[0].Ledger // a ledger, and no source
+
+	s := &stagingServer{pages: []*private.StagingSnapshot{page}}
+	_, err := private.FetchStagingSnapshot(context.Background(), s, "BVN0")
+	require.Error(t, err)
+	require.ErrorIs(t, err, errors.PeerMisbehaved)
+	require.Len(t, s.asked, 1, "and the reader stopped asking")
+}
+
+// A peer whose cursor crawls forward one number at a time never finishes, and
+// the reader must not follow it forever (#4291 review).
+func TestPrivateStagingSnapshotBoundsPages(t *testing.T) {
+	s := new(crawlingServer)
+	_, err := private.FetchStagingSnapshot(context.Background(), s, "BVN0")
+	require.Error(t, err)
+	require.ErrorIs(t, err, errors.NotReady)
+	require.Equal(t, private.MaxSnapshotPages, s.calls)
+}
+
+// crawlingServer always has more, one number further on.
+type crawlingServer struct {
+	private.Sequencer
+	calls int
+}
+
+func (s *crawlingServer) StagingSnapshot(_ context.Context, req *private.StagingSnapshotRequest) (*private.StagingSnapshot, error) {
+	s.calls++
+	page := stagedPage(99)
+	page.More = true
+	page.NextLedger = page.Streams[0].Ledger
+	page.NextSource = page.Streams[0].Source
+	page.NextNumber = req.Number + 1
+	return page, nil
 }

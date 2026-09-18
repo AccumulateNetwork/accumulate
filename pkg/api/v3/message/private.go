@@ -118,11 +118,12 @@ func (s Sequencer) stagingSnapshot(c *call[*PrivateStagingSnapshotRequest]) {
 		return
 	}
 	res, err := snap.StagingSnapshot(c.context, &private.StagingSnapshotRequest{
-		Partition: c.params.Partition,
-		Ledger:    c.params.Ledger,
-		Source:    c.params.Source,
-		Number:    c.params.Number,
-		Limit:     c.params.Limit,
+		Partition:   c.params.Partition,
+		Ledger:      c.params.Ledger,
+		Source:      c.params.Source,
+		Number:      c.params.Number,
+		ProofOffset: c.params.ProofOffset,
+		Limit:       c.params.Limit,
 	})
 	if err != nil {
 		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
@@ -192,7 +193,7 @@ func (r *PrivatePartitionRootRangeResponse) rval() *private.PartitionRootRecord 
 
 // StagingSnapshot implements [private.StagingSnapshotter.StagingSnapshot].
 func (c PrivateClient) StagingSnapshot(ctx context.Context, req *private.StagingSnapshotRequest) (*private.StagingSnapshot, error) {
-	m := &PrivateStagingSnapshotRequest{Partition: req.Partition, Ledger: req.Ledger, Source: req.Source, Number: req.Number, Limit: req.Limit}
+	m := &PrivateStagingSnapshotRequest{Partition: req.Partition, Ledger: req.Ledger, Source: req.Source, Number: req.Number, ProofOffset: req.ProofOffset, Limit: req.Limit}
 	return typedRequest[*PrivateStagingSnapshotResponse, *private.StagingSnapshot](AddressedClient(c), ctx, m)
 }
 

@@ -57,11 +57,16 @@ func (s *Sequencer) stagingFor() *execute.Staging {
 // has executed no block holds nothing anyone should start from and refuses
 // (errors.NotReady) — as it will once the node states of step 5 land, for
 // the whole time it is BOOTING.
+//
+// The request is validated before it is served. A cursor that names no
+// stream, and a request that does not say which partition it means, are bad
+// requests and not guesses: both are reachable over the wire, and the join of
+// #4294 calls this in process, where a guess is fatal (#4291 review).
 func (s *Sequencer) StagingSnapshot(_ context.Context, req *private.StagingSnapshotRequest) (*private.StagingSnapshot, error) {
-	if req == nil {
-		return nil, errors.BadRequest.With("missing request")
+	if err := req.Validate(); err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
-	if req.Partition != "" && !strings.EqualFold(req.Partition, s.partitionID) {
+	if !strings.EqualFold(req.Partition, s.partitionID) {
 		return nil, errors.BadRequest.WithFormat("requested partition is %s but this partition is %s", req.Partition, s.partitionID)
 	}
 
@@ -70,14 +75,15 @@ func (s *Sequencer) StagingSnapshot(_ context.Context, req *private.StagingSnaps
 		return nil, errors.NotReady.With("this node does not hold staging")
 	}
 
-	snap := staging.Snapshot(req.Ledger, req.Source, req.Number, req.Limit)
+	snap, size := staging.Snapshot(req)
 	if snap.Block == 0 {
 		return nil, errors.NotReady.With("this node has not executed a block")
 	}
 
+	// The page's size is measured as the page is built. Encoding it a second
+	// time to weigh it would double the cost of the largest response this
+	// node serves, and drop the error when that failed (#4291 review).
 	mStagingSnapshots.WithLabelValues(s.partitionID).Inc()
-	if b, err := snap.MarshalBinary(); err == nil {
-		mStagingSnapshotBytes.WithLabelValues(s.partitionID).Add(float64(len(b)))
-	}
+	mStagingSnapshotBytes.WithLabelValues(s.partitionID).Add(float64(size))
 	return snap, nil
 }

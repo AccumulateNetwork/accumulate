@@ -115,17 +115,21 @@ type StagedStream struct {
 
 type StagingSnapshot struct {
 	fieldsSet []bool
-	// Block is the block this page is as of.
+	// Block is the CONSENSUS block index of the last block the executor processed — the index the block was opened with, published when it committed — and not the index of the last block whose state was written: an empty block writes nothing, so the system ledger's index can lag this one. It is at or above every block whose intake this page reflects, which is the safe direction. A joining node must NOT pair it with "the state of that block". Which block's state the node converges on is decided by the anchored-root match (#4293), and that block must be at or above this one.
 	Block uint64 `json:"block,omitempty" form:"block" query:"block" validate:"required"`
 	// Streams is the streams, or parts of streams, this page carries.
 	Streams []*StagedStream `json:"streams,omitempty" form:"streams" query:"streams" validate:"required"`
-	// NextLedger is the ledger of the stream the next page starts at, nil when this is the last page.
+	// NextLedger is the ledger of the stream the next page starts at; nil when the next page starts at a source that holds proofs and no stream, so it does not say whether there is a next page — More does.
 	NextLedger *url.URL `json:"nextLedger,omitempty" form:"nextLedger" query:"nextLedger" validate:"required"`
-	// NextSource is the source of the stream the next page starts at.
+	// NextSource is the source of the stream the next page starts at, set whenever More is set.
 	NextSource *url.URL `json:"nextSource,omitempty" form:"nextSource" query:"nextSource" validate:"required"`
 	// NextNumber is the first sequence number the next page carries.
 	NextNumber uint64 `json:"nextNumber,omitempty" form:"nextNumber" query:"nextNumber" validate:"required"`
-	extraData  []byte
+	// NextProofOffset is how many of that source's waiting proofs the reader already has, so a source with more proofs than one page can carry is paged.
+	NextProofOffset uint64 `json:"nextProofOffset,omitempty" form:"nextProofOffset" query:"nextProofOffset" validate:"required"`
+	// More is whether the snapshot continues at the cursor, set explicitly because a nil NextLedger is a real cursor.
+	More      bool `json:"more,omitempty" form:"more" query:"more" validate:"required"`
+	extraData []byte
 }
 
 func (v *PartitionRootRecord) Copy() *PartitionRootRecord {
@@ -296,6 +300,8 @@ func (v *StagingSnapshot) Copy() *StagingSnapshot {
 		u.NextSource = v.NextSource
 	}
 	u.NextNumber = v.NextNumber
+	u.NextProofOffset = v.NextProofOffset
+	u.More = v.More
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -486,6 +492,12 @@ func (v *StagingSnapshot) Equal(u *StagingSnapshot) bool {
 		return false
 	}
 	if !(v.NextNumber == u.NextNumber) {
+		return false
+	}
+	if !(v.NextProofOffset == u.NextProofOffset) {
+		return false
+	}
+	if !(v.More == u.More) {
 		return false
 	}
 
@@ -1022,6 +1034,8 @@ var fieldNames_StagingSnapshot = []string{
 	3: "NextLedger",
 	4: "NextSource",
 	5: "NextNumber",
+	6: "NextProofOffset",
+	7: "More",
 }
 
 func (v *StagingSnapshot) MarshalBinary() ([]byte, error) {
@@ -1050,6 +1064,12 @@ func (v *StagingSnapshot) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.NextNumber == 0) {
 		writer.WriteUint(5, v.NextNumber)
+	}
+	if !(v.NextProofOffset == 0) {
+		writer.WriteUint(6, v.NextProofOffset)
+	}
+	if !(!v.More) {
+		writer.WriteBool(7, v.More)
 	}
 
 	_, _, err := writer.Reset(fieldNames_StagingSnapshot)
@@ -1091,6 +1111,16 @@ func (v *StagingSnapshot) IsValid() error {
 		errs = append(errs, "field NextNumber is missing")
 	} else if v.NextNumber == 0 {
 		errs = append(errs, "field NextNumber is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field NextProofOffset is missing")
+	} else if v.NextProofOffset == 0 {
+		errs = append(errs, "field NextProofOffset is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field More is missing")
+	} else if !v.More {
+		errs = append(errs, "field More is not set")
 	}
 
 	switch len(errs) {
@@ -1374,6 +1404,12 @@ func (v *StagingSnapshot) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(5); ok {
 		v.NextNumber = x
 	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.NextProofOffset = x
+	}
+	if x, ok := reader.ReadBool(7); ok {
+		v.More = x
+	}
 
 	seen, err := reader.Reset(fieldNames_StagingSnapshot)
 	if err != nil {
@@ -1443,6 +1479,8 @@ func init() {
 		encoding.NewTypeField("nextLedger", "string"),
 		encoding.NewTypeField("nextSource", "string"),
 		encoding.NewTypeField("nextNumber", "uint64"),
+		encoding.NewTypeField("nextProofOffset", "uint64"),
+		encoding.NewTypeField("more", "bool"),
 	}, "StagingSnapshot", "stagingSnapshot")
 
 }
@@ -1581,12 +1619,14 @@ func (v *StagedStream) MarshalJSON() ([]byte, error) {
 
 func (v *StagingSnapshot) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Block      uint64                           `json:"block,omitempty"`
-		Streams    encoding.JsonList[*StagedStream] `json:"streams,omitempty"`
-		NextLedger *url.URL                         `json:"nextLedger,omitempty"`
-		NextSource *url.URL                         `json:"nextSource,omitempty"`
-		NextNumber uint64                           `json:"nextNumber,omitempty"`
-		ExtraData  *string                          `json:"$epilogue,omitempty"`
+		Block           uint64                           `json:"block,omitempty"`
+		Streams         encoding.JsonList[*StagedStream] `json:"streams,omitempty"`
+		NextLedger      *url.URL                         `json:"nextLedger,omitempty"`
+		NextSource      *url.URL                         `json:"nextSource,omitempty"`
+		NextNumber      uint64                           `json:"nextNumber,omitempty"`
+		NextProofOffset uint64                           `json:"nextProofOffset,omitempty"`
+		More            bool                             `json:"more,omitempty"`
+		ExtraData       *string                          `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Block == 0) {
 		u.Block = v.Block
@@ -1602,6 +1642,12 @@ func (v *StagingSnapshot) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.NextNumber == 0) {
 		u.NextNumber = v.NextNumber
+	}
+	if !(v.NextProofOffset == 0) {
+		u.NextProofOffset = v.NextProofOffset
+	}
+	if !(!v.More) {
+		u.More = v.More
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -1778,18 +1824,22 @@ func (v *StagedStream) UnmarshalJSON(data []byte) error {
 
 func (v *StagingSnapshot) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Block      uint64                           `json:"block,omitempty"`
-		Streams    encoding.JsonList[*StagedStream] `json:"streams,omitempty"`
-		NextLedger *url.URL                         `json:"nextLedger,omitempty"`
-		NextSource *url.URL                         `json:"nextSource,omitempty"`
-		NextNumber uint64                           `json:"nextNumber,omitempty"`
-		ExtraData  *string                          `json:"$epilogue,omitempty"`
+		Block           uint64                           `json:"block,omitempty"`
+		Streams         encoding.JsonList[*StagedStream] `json:"streams,omitempty"`
+		NextLedger      *url.URL                         `json:"nextLedger,omitempty"`
+		NextSource      *url.URL                         `json:"nextSource,omitempty"`
+		NextNumber      uint64                           `json:"nextNumber,omitempty"`
+		NextProofOffset uint64                           `json:"nextProofOffset,omitempty"`
+		More            bool                             `json:"more,omitempty"`
+		ExtraData       *string                          `json:"$epilogue,omitempty"`
 	}{}
 	u.Block = v.Block
 	u.Streams = v.Streams
 	u.NextLedger = v.NextLedger
 	u.NextSource = v.NextSource
 	u.NextNumber = v.NextNumber
+	u.NextProofOffset = v.NextProofOffset
+	u.More = v.More
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -1799,6 +1849,8 @@ func (v *StagingSnapshot) UnmarshalJSON(data []byte) error {
 	v.NextLedger = u.NextLedger
 	v.NextSource = u.NextSource
 	v.NextNumber = u.NextNumber
+	v.NextProofOffset = u.NextProofOffset
+	v.More = u.More
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

@@ -657,6 +657,32 @@ func (t *StagingTxn) StagedProofBytes(source *url.URL) int {
 
 // proofSize is what one staged proof costs, near enough to bound it by: the
 // hashes dominate and everything else is a handful of fixed fields.
+// MaxStagedProofBytes bounds what one source's waiting proofs may cost — on
+// intake, where a source stages them here, and in Staging.Load, where a
+// peer's snapshot brings them in.
+//
+// This used to bound the number of distinct Directory blocks instead, at 256,
+// on the reasoning that honest traffic waits on a handful of blocks so the
+// bound would only ever bind on a flood. That holds while a node is keeping
+// up and is false the moment it falls behind — which is exactly when its
+// proofs matter. Run 20260917T184129Z stranded 80,552 entries that way
+// (#4282).
+//
+// Bytes are the right currency because bytes are what the node pays. A proof
+// is one receipt list covering a whole package, a few hundred bytes against
+// entries averaging about the same each, and the entries are already held
+// without any byte bound at all — so refusing the proof saves almost nothing
+// and costs everything it would have proved.
+//
+// The flood the old bound imagined is prevented elsewhere and still is: a
+// proof must be bound to a message from that source in the same envelope, it
+// may not name a Directory block more than maxAnchorAhead past the newest
+// executed, and each list is capped at MaxReceiptListElements and must
+// validate. What remains is bounded here so a source cannot grow this
+// without bound while its anchors go unexecuted.
+// It is a var only so a test can lower it; nothing changes it at run time.
+var MaxStagedProofBytes = 64 << 20
+
 func proofSize(p *protocol.AnnotatedReceipt) int {
 	if p == nil || p.ReceiptList == nil {
 		return 0

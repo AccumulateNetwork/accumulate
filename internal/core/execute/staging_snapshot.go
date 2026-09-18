@@ -22,11 +22,23 @@ import (
 // the wire (healing spec, "Staging snapshot").
 const MaxSnapshotSpan = 256
 
+// MaxSnapshotBytes bounds what one page costs to build, hold and send.
+//
+// A span bound alone does not bound a page: entries vary in size, and one
+// source may hold up to MaxStagedProofBytes of waiting proofs, which are
+// charged against no span at all because they stand at no sequence number. A
+// page that carried a source's whole proof budget would be hundreds of
+// megabytes — read into memory twice, once by the server and once by the
+// reader — for a call any peer may make (#4291 review).
+//
+// The budget is advisory in one direction only: a page always carries at
+// least one entry or one proof, however large, so paging always advances.
+//
+// It is a var only so a test can lower it; nothing changes it at run time.
+var MaxSnapshotBytes = 4 << 20
+
 // Snapshot is staging as of the last committed block: one page of it,
-// starting at the stream named by ledger and source and, within that stream,
-// at number. A nil ledger starts at the first stream. Limit bounds how many
-// sequence numbers the page covers; zero and anything above MaxSnapshotSpan
-// mean MaxSnapshotSpan.
+// starting where the request says.
 //
 // The page and the block index are read under one lock, so what the page
 // carries is what this node held when it committed that block and not a
@@ -37,7 +49,20 @@ const MaxSnapshotSpan = 256
 //
 // Block is zero when the node has committed no block. Staging is then not a
 // snapshot of anything and the caller refuses to serve it.
-func (s *Staging) Snapshot(ledger, source *url.URL, number, limit uint64) *private.StagingSnapshot {
+//
+// The second return is what the page costs in bytes, measured as it is built
+// — the metric the server counts, so that counting it does not mean encoding
+// the largest message the node sends a second time (#4291 review).
+//
+// A request that names a position that does not exist — a Ledger or a Number
+// without a Source — is served from the beginning rather than being guessed
+// at. Servers refuse it first ([private.StagingSnapshotRequest.Validate]);
+// this method only declines to panic on it.
+func (s *Staging) Snapshot(req *private.StagingSnapshotRequest) (*private.StagingSnapshot, int) {
+	if req == nil {
+		req = new(private.StagingSnapshotRequest)
+	}
+	limit := req.Limit
 	if limit == 0 || limit > MaxSnapshotSpan {
 		limit = MaxSnapshotSpan
 	}
@@ -67,7 +92,7 @@ func (s *Staging) Snapshot(ledger, source *url.URL, number, limit uint64) *priva
 		if seen[k] || len(m) == 0 {
 			continue
 		}
-		order = append(order, position{"\xff" + k, StreamID{Source: s.sources[k]}})
+		order = append(order, position{carrierKey(k), StreamID{Source: s.sources[k]}})
 	}
 	sort.Slice(order, func(i, j int) bool { return order[i].key < order[j].key })
 
@@ -83,86 +108,166 @@ func (s *Staging) Snapshot(ledger, source *url.URL, number, limit uint64) *priva
 	}
 
 	start := 0
-	if ledger != nil || source != nil {
-		want := StreamID{Ledger: ledger, Source: source}.key()
+	var number, offset uint64
+	if req.Source != nil {
+		want := snapshotKey(req.Ledger, req.Source)
 		for start < len(order) && order[start].key < want {
 			start++
 		}
-	} else {
-		number = 0
+		number, offset = req.Number, req.ProofOffset
 	}
 
-	budget := limit
+	budget := limit // sequence numbers left in this page
+	bytes := 0      // what the page has cost so far
+	empty := true   // nothing has been put in it yet
+
+	// more ends the page at a position and says where the next one starts.
+	more := func(out *private.StagedStream, id StreamID, number, offset uint64) (*private.StagingSnapshot, int) {
+		if out != nil {
+			snap.Streams = append(snap.Streams, out)
+		}
+		snap.More = true
+		snap.NextLedger, snap.NextSource = id.Ledger, id.Source
+		snap.NextNumber, snap.NextProofOffset = number, offset
+		return snap, bytes
+	}
+
 	for i := start; i < len(order); i++ {
 		p := order[i]
+
+		// A page that is full stops at the start of the next stream, which is
+		// a position the cursor can name whether or not that stream has a
+		// ledger: More says there is a next page, so a nil NextLedger is a
+		// carrier and not an ending (#4291 review).
+		if i > start && (budget == 0 || bytes >= MaxSnapshotBytes) {
+			return more(nil, p.id, 0, 0)
+		}
+
 		st := s.streams[p.key]
 
-		// Only the page's first stream starts part way through; every stream
-		// after it starts at its own Delivered + 1.
+		// Only the page's first position starts part way through; every
+		// position after it starts at its own beginning.
 		var from uint64
+		var skip uint64
 		if i == start {
-			from = number
+			from, skip = number, offset
 		}
 
 		out := &private.StagedStream{Ledger: p.id.Ledger, Source: p.id.Source}
-		var span uint64
+		var end uint64 // the highest number the stream stages
+		var stages bool
 		if st != nil {
 			out.Delivered, out.Sighted = st.delivered, st.sighted
-			span = uint64(len(st.entries))
+			span := uint64(len(st.entries))
 			if n := uint64(len(st.validated)); n > span {
 				span = n
 			}
 			if from <= st.delivered {
 				from = st.delivered + 1
 			}
+			if span > 0 {
+				end, stages = st.delivered+span, true
+			}
 		}
 
 		// The source's proofs travel with the first page of its first
 		// stream, where the reader can act on them before the entries they
-		// prove arrive.
-		if owner[sourceKey(p.id.Source)] == p.key && (st == nil || from == st.delivered+1) {
-			for _, b := range sortedProofBlocks(s.proofs[sourceKey(p.id.Source)]) {
-				for _, pr := range s.proofs[sourceKey(p.id.Source)][b] {
-					out.Proofs = append(out.Proofs, &private.StagedProof{AnchorBlock: b, Proof: pr})
+		// prove arrive. They are charged bytes, not numbers: a proof stands
+		// at no sequence number, and one source may hold up to
+		// MaxStagedProofBytes of them.
+		sk := sourceKey(p.id.Source)
+		if owner[sk] == p.key && (st == nil || from == st.delivered+1) {
+			proofs := s.stagedProofs(sk)
+			n := int(min(skip, uint64(len(proofs))))
+			for ; n < len(proofs); n++ {
+				size := proofSize(proofs[n].Proof)
+				if !empty && bytes+size > MaxSnapshotBytes {
+					break
 				}
+				out.Proofs = append(out.Proofs, proofs[n])
+				bytes += size
+				empty = false
 			}
+			if n < len(proofs) {
+				// The source's proofs are not finished, so neither is the
+				// snapshot: the next page resumes at the same position with
+				// the proofs the reader already has counted off.
+				return more(out, p.id, from, uint64(n))
+			}
+			skip = uint64(len(proofs))
 		}
 
-		if st != nil && span > 0 {
-			last := st.delivered + span
-			if from+budget-1 < last {
-				last = from + budget - 1
-			}
-			for n := from; n <= last; n++ {
-				if h := st.entry(n); h != nil {
+		if stages && from <= end {
+			next := from
+			var span uint64
+			for next <= end && span < budget {
+				if !empty && bytes >= MaxSnapshotBytes {
+					break
+				}
+				if h := st.entry(next); h != nil {
 					out.Entries = append(out.Entries, &private.StagedEntry{
-						Number:    n,
+						Number:    next,
 						Message:   h.Message,
 						Companion: h.Companion,
 						Collected: h.Collected,
 						Hash:      h.Hash,
 					})
+					bytes += h.size
+					empty = false
 				}
-				if v, ok := st.hash(n); ok {
-					out.Validated = append(out.Validated, &private.StagedHash{Number: n, Hash: v})
+				if v, ok := st.hash(next); ok {
+					out.Validated = append(out.Validated, &private.StagedHash{Number: next, Hash: v})
+					bytes += stagedHashSize
+					empty = false
 				}
+				span++
+				next++
 			}
-			budget -= last - from + 1
-			if last < st.delivered+span {
+			budget -= span
+			if next <= end {
 				// The stream is not finished, so neither is the snapshot
-				snap.Streams = append(snap.Streams, out)
-				snap.NextLedger, snap.NextSource, snap.NextNumber = p.id.Ledger, p.id.Source, last+1
-				return snap
+				return more(out, p.id, next, skip)
 			}
 		}
+		// A start number past the end of the stream carries nothing and
+		// costs nothing. Charging it would underflow the budget and serve
+		// the whole stage in one page (#4291 review).
 
 		snap.Streams = append(snap.Streams, out)
-		if budget == 0 && i+1 < len(order) {
-			snap.NextLedger, snap.NextSource, snap.NextNumber = order[i+1].id.Ledger, order[i+1].id.Source, 0
-			return snap
+	}
+	return snap, bytes
+}
+
+// stagedHashSize is what a validated hash costs on the wire: the hash and its
+// number.
+const stagedHashSize = 32 + 8
+
+// carrierKey orders the carrier of a source that holds proofs and no stream
+// after every real stream. No ledger URL sorts there, so the carrier's key
+// cannot collide with a stream's.
+func carrierKey(source string) string { return "\xff" + source }
+
+// snapshotKey is the order key of the position a request names. A request
+// may name a carrier, whose ledger is nil, so this is not StreamID.key —
+// which dereferences the ledger and panics (#4291 review).
+func snapshotKey(ledger, source *url.URL) string {
+	if ledger == nil {
+		return carrierKey(sourceKey(source))
+	}
+	return StreamID{Ledger: ledger, Source: source}.key()
+}
+
+// stagedProofs is a source's waiting proofs in the order a page sends them:
+// by the anchor block they wait on, and within a block in the order they were
+// staged. The caller holds s.mu.
+func (s *Staging) stagedProofs(source string) []*private.StagedProof {
+	var out []*private.StagedProof
+	for _, b := range sortedProofBlocks(s.proofs[source]) {
+		for _, pr := range s.proofs[source][b] {
+			out = append(out, &private.StagedProof{AnchorBlock: b, Proof: pr})
 		}
 	}
-	return snap
+	return out
 }
 
 func sortedProofBlocks(m map[uint64][]*protocol.AnnotatedReceipt) []uint64 {
@@ -185,6 +290,13 @@ func sortedProofBlocks(m map[uint64][]*protocol.AnnotatedReceipt) []uint64 {
 //
 // A held entry's ID is the message's own: every place that holds one holds
 // it under Message.ID(), so the ID is derived rather than carried.
+//
+// The whole snapshot is built aside and published only once all of it has
+// loaded. A snapshot with one bad entry in it therefore leaves staging empty
+// and the load can be tried again, against the same peer or another one; a
+// load that wrote as it went would wedge a joining node on the first
+// malformed entry, because a half-loaded staging is not empty and Load
+// refuses one that is not (#4291 review).
 func (s *Staging) Load(snap *private.StagingSnapshot) error {
 	if snap == nil {
 		return errors.BadRequest.With("missing snapshot")
@@ -195,6 +307,18 @@ func (s *Staging) Load(snap *private.StagingSnapshot) error {
 	if len(s.streams) > 0 || len(s.proofs) > 0 {
 		return errors.Conflict.With("staging is not empty")
 	}
+
+	// Built aside, published at the end.
+	load := &Staging{
+		block:   snap.Block,
+		streams: map[string]*streamState{},
+		ids:     map[string]StreamID{},
+		proofs:  map[string]map[uint64][]*protocol.AnnotatedReceipt{},
+		sources: map[string]*url.URL{},
+		byID:    map[[32]byte]*Held{},
+		byTxn:   map[[32]byte]*Held{},
+	}
+	proofBytes := map[string]int{}
 
 	for _, in := range snap.Streams {
 		if in.Source == nil {
@@ -208,15 +332,25 @@ func (s *Staging) Load(snap *private.StagingSnapshot) error {
 			if p.Proof == nil {
 				continue
 			}
-			if hasSameProof(s.proofs[sk][p.AnchorBlock], p.Proof) {
+			if hasSameProof(load.proofs[sk][p.AnchorBlock], p.Proof) {
 				continue
 			}
-			if s.proofs[sk] == nil {
-				s.proofs[sk] = map[uint64][]*protocol.AnnotatedReceipt{}
+
+			// A peer's proofs are bounded as this node's own are: the same
+			// budget, in the same currency, for the same reason — a source
+			// cannot grow this without bound (#4282, #4291 review).
+			size := proofSize(p.Proof)
+			if proofBytes[sk]+size > MaxStagedProofBytes {
+				return errors.BadRequest.WithFormat("staged proofs for %v exceed %d bytes", in.Source, MaxStagedProofBytes)
 			}
-			s.proofs[sk][p.AnchorBlock] = append(s.proofs[sk][p.AnchorBlock], p.Proof)
-			if _, ok := s.sources[sk]; !ok {
-				s.sources[sk] = in.Source
+			proofBytes[sk] += size
+
+			if load.proofs[sk] == nil {
+				load.proofs[sk] = map[uint64][]*protocol.AnnotatedReceipt{}
+			}
+			load.proofs[sk][p.AnchorBlock] = append(load.proofs[sk][p.AnchorBlock], p.Proof)
+			if _, ok := load.sources[sk]; !ok {
+				load.sources[sk] = in.Source
 			}
 		}
 
@@ -226,11 +360,11 @@ func (s *Staging) Load(snap *private.StagingSnapshot) error {
 
 		id := StreamID{Ledger: in.Ledger, Source: in.Source}
 		k := id.key()
-		st := s.streams[k]
+		st := load.streams[k]
 		if st == nil {
 			st = new(streamState)
-			s.streams[k] = st
-			s.ids[k] = id
+			load.streams[k] = st
+			load.ids[k] = id
 		}
 		if in.Delivered > st.delivered {
 			st.delivered = in.Delivered
@@ -261,14 +395,23 @@ func (s *Staging) Load(snap *private.StagingSnapshot) error {
 			h.size = heldSize(h)
 			st.hold(e.Number, h)
 			st.keep(h)
-			s.index(h)
+			load.index(h)
 		}
 		if in.Sighted > st.sighted {
 			st.sighted = in.Sighted
 		}
-		st.observe(k)
 	}
 
-	s.block = snap.Block
+	// Published: from here nothing can fail.
+	s.block = load.block
+	s.streams = load.streams
+	s.ids = load.ids
+	s.proofs = load.proofs
+	s.sources = load.sources
+	s.byID = load.byID
+	s.byTxn = load.byTxn
+	for k, st := range s.streams {
+		st.observe(k)
+	}
 	return nil
 }
