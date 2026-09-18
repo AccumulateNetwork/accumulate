@@ -981,3 +981,50 @@ The rules the implementation holds to, pending that part:
 
 **Size**: the API part is large and covers far more than proofs. This entry
 exists so the two calls are not mistaken for unspecified behaviour.
+
+## The block-ledger chain is written every block and never anchored
+
+executor.md ("The block ledger", invariant 12) requires the block-ledger chain
+to be anchored into the root chain every block it is appended to, so that a
+span of it can be proven. It is not, and the omission is mechanical rather than
+considered.
+
+`recordBlockLedger` (`block_end.go:958`) writes the block's record and appends
+its hash to `BlockLedgerChain()`, from `block_end.go:245`, gated on
+`V2JiuquanEnabled` — so the chain is live and has been since Jiuquan. But the
+loop that anchors a block's changed chains into the root chain skips the ledger
+account outright (`block_end.go:184-187`, "Do not create root chain or BPT
+entries for the ledger"), because the ledger owns the root chain and a chain
+cannot be anchored into itself. Three chains live on that account and are
+skipped by it. Two of them are anchored explicitly afterwards: the bpt chain
+(`block_end.go:258-283`, #4272) and each destination's synthetic chain
+(`anchorSynthChains`). The block-ledger chain was not.
+
+The consequence is the one #4272's own comment states for the case it fixed:
+the chain "is written every block and never anchored, so it has no index chain,
+and a BPT root can be proven no further than the node asserting it." Read for
+this chain, that is exactly #4310 — a joining node reads block-ledger records
+through `BlockQuery` with `EntryRange.Expand` false and takes them on the
+peer's word, because there is nothing to verify them against. The chain's
+anchor is in the ledger account's leaf, so the chain's **head** is provable
+through the state tree; a leaf carries only the anchor the chain has now, so a
+**past span** is not.
+
+What this blocks is larger than #4310. A collection proof over a span of this
+chain would prove every record in the span at a proven absolute index, which
+makes a peer's omission fail validation instead of passing as a shorter answer
+— the property invariant 12 states and the one healing depends on
+(executor.md, "Healing a divergent state"). `GetReceiptList` already takes any
+chain and `BlockLedgerChain()` is resolvable by name (`account_chains.go:267`),
+so the proof side is a call; the missing anchor is what leaves it with nothing
+to continue into.
+
+The fix is the shape of the block immediately above it: load the chain's head,
+and if it is non-empty call `addChainAnchor(rootChain, ledger.BlockLedgerChain(),
+block.Index)`. It changes what every node writes into the root chain, so it
+takes an activation height, and it proves only blocks produced after that
+height — a root chain cannot be anchored retroactively, so spans below the
+activation stay unprovable and the page diff remains the backstop for them.
+
+**Size**: small for the anchor itself; the span-proof consumer on the join side
+is separate work and is not written.

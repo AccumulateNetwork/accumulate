@@ -305,6 +305,78 @@ through execution. `Delivered` qualifies. A copy of how far a stream has been
 sighted does not: it is per-node and transient, and it is exactly what a
 joining node takes from a peer.
 
+### Healing a divergent state
+
+A node's state is the anchor and the state-tree root. History is how a node
+reached them, not what it holds. That distinction is what lets a node hold the
+network's state before its own execution is capable of producing it: state is
+installed and proven, not recomputed, so bringing the tree into line and
+bringing execution into line are separate work that need not wait on each
+other.
+
+A node whose execution does not match the protocol produces leaves that differ
+from the network's. It does not have to fix execution first. It heals.
+
+**The state tree says what to heal.** A page diff finds the leaves that
+disagree. The leaf is four elements — main state, secondary state, the chains'
+anchors, pending — so the disagreement localises to one of them, and inside the
+chains element to one chain's anchor. Nothing else needs to be consulted to
+know what is wrong: the tree that decides whether a node is admitted is the
+same tree that says where it is broken.
+
+**The block ledger says what changed, and proves it.** A collection proof over
+a span of the block-ledger chain carries every record in the span at a proven
+absolute index, under one terminus the node checks against its own directory
+anchors. One object covers a span rather than a conversation covering a block
+at a time, which is what makes healing a bounded operation rather than a
+crawl. The proof is the authorization by itself: it needs no key book, no
+quorum and no signature, only the anchor the node already holds.
+
+**Entries are enumerated by the hashes the merkle tree names.** An entry whose
+hash the tree does not name is referenced by nothing. It is not wrong state —
+it is lost: it occupies storage and no valid structure can reach it. The same
+is true one level up, of any key-value pair an installed account no longer
+refers to. Healing therefore leaks storage and does not corrupt state, and the
+two must not be confused when weighing it.
+
+**Lost entries are tracked while syncing and purged later.** A node cannot
+safely decide an entry is dead while its own execution is still producing
+entries that may themselves be wrong. So a node records what it found not to
+match as it syncs and as it attempts execution, and acts on that record once it
+is executing correctly — marking, and removing from the database later. The
+decision is recorded when the evidence is in hand rather than re-derived after
+it is gone.
+
+**That record is node-local, and is never hashed into anything consensus
+sees.** Two nodes healing the same partition accumulate different garbage:
+different wrong execution, different spans healed, different entries orphaned.
+A record of it that reached a leaf, a chain, or a block's entries would make
+one node execute a different block than its peers — so it lives outside the
+state tree and outside the block, and nothing reads it to decide anything the
+protocol observes.
+
+**A healed node is a proof source for the spans it healed**, because the
+entries it installed are the entries the proof named; rebuilding the span's
+anchor from them reproduces the proven anchor. A span it did not heal it cannot
+answer for, and refuses rather than answering from what its own execution
+wrote.
+
+**A healing node does not vote.** Its executor is by assumption not yet
+producing the protocol's results, so it must not sign results it computed. It
+follows, it serves what it can prove, and it is promoted to voting when its
+execution — not merely its state — agrees with the network.
+
+Two things this does not heal, and both are the leaf's second element rather
+than its chains. `<partition>/ledger` hashes the scheduled-events tree and
+`<partition>/synthetic` hashes the delivery queues; neither is a chain, so no
+collection proof reconstructs them and no anchor restores them. They are the
+two accounts every non-empty block changes, so they are not an edge case but a
+precondition, and they are the limit of what healing reaches. Separately, the
+executed height rides in the ledger account's own main state, so installing
+that account's state moves what the node believes it has executed: which value
+wins is decided deliberately, not left to the order in which a pull happens to
+write.
+
 ### A block does not begin with an empty slate
 
 Opening a block finishes the previous one. Before any of this block's messages
@@ -367,9 +439,18 @@ block index. Two things follow, and both are the point:
   writes one record the size of block *N*'s entry list and appends one hash to
   a chain. Nothing already written is read back or written again. A node at
   block 35,000,000 pays the same to record a block as a node at block 100.
-- **The block ledger is consensus state.** The chain's anchor is part of the
-  ledger account's hash, so the state root commits to what every block changed,
-  and a receipt from the chain proves it.
+- **The block ledger is consensus state, and every span of it is provable.**
+  The chain's anchor is part of the ledger account's hash, so the state root
+  commits to what every block changed. That makes the chain's *head* provable
+  through the leaf; it does not make a *past* span provable, because a leaf
+  carries only the anchor the chain has now. So the block-ledger chain is
+  anchored into the root chain every block it is appended to, the way the bpt
+  chain is (invariant 11) and for the same reason. The loop that anchors
+  changed chains skips the ledger account outright — the ledger owns the root
+  chain and a chain cannot be anchored into itself — so this chain, like the
+  bpt chain and the synthetic chains, is anchored explicitly. Without it the
+  chain is written every block and never anchored, it has no index chain, and
+  what a block changed can be proven no further than the node asserting it.
 
 It is not an account per block — that puts a BPT entry into the state tree for
 every block forever, which is the tree's size doubling for no consensus
@@ -420,6 +501,13 @@ one thing a per-block record must never do. An empty block has no entry.
     the root is an entry on the partition's bpt chain and that chain is anchored
     into the root chain. There is no root an account proof cannot be completed
     against, and therefore no "not yet" that means "never".
+12. **What a block changed can be proven, for any block, to the directory.**
+    The block ledger's records are never taken on a peer's word. The record's
+    hash is an entry on the block-ledger chain, that chain is anchored into the
+    root chain, and a collection proof over a span of it proves every record in
+    the span, each at its own index. A peer cannot serve a shortened set: the
+    proof's counted state binds each element to an absolute index, so an
+    omission fails validation instead of passing as a quieter answer.
 
 ### Versioning
 
