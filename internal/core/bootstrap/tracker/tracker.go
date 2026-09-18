@@ -5,10 +5,10 @@
 // https://opensource.org/licenses/MIT.
 
 // Package tracker watches the local BPT root chase a moving target — the
-// roots the Directory anchored — and flips the node's state machine BOOTING →
-// ACTIVE at the first block whose anchored root the local root equals. That
-// block is Q of executor.md, "Sync", step 4: the block the node then executes
-// from.
+// roots the Directory anchored for one partition — and flips the node's state
+// machine to ACTIVE at the first block whose anchored root the local root
+// equals. That block is Q of executor.md, "Sync", step 4: the block the node
+// then executes from.
 //
 // The tracker is passive. Callers feed it the anchors they collect and ask it
 // to check after every commit; there is no goroutine here.
@@ -16,8 +16,16 @@
 // What it is handed matters. An anchor given to Observe must be one the
 // Directory anchored — a StateTreeAnchor out of an anchor executed at the
 // Directory — never a root a peer claims for itself and never a root the node
-// computed for itself while BOOTING. The tracker is the matcher, not the
-// verifier.
+// computed for itself while BOOTING. **And the local root must be derived from
+// state this node holds and has verified**: a leaf taken from a peer's word
+// would make the local root the peer's root and the match meaningless, which
+// is why enumeration writes nothing (package enumerate). The tracker is the
+// matcher, not the verifier.
+//
+// A tracker belongs to one partition. Block numbers collide across partitions
+// — with a one-second cadence the Directory and a BVN are at the same number
+// at the same second — so a node serving two partitions runs two trackers and
+// each ignores the other's anchors (#4205).
 //
 // Ported from bootstrap-v3 (issue #4293). Changed on this line: the default
 // match threshold is 1, because one match against an anchored root is
@@ -32,6 +40,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // DefaultMatchThreshold is the number of consecutive matching Check calls
@@ -40,41 +49,46 @@ import (
 // block's state, and there is nothing a second look adds.
 const DefaultMatchThreshold = 1
 
-// Tracker compares the local BPT root against observed anchors and
-// flips a nodestate.Machine to StateActive after MatchThreshold
+// DefaultMaxObserved is how many anchors a tracker keeps. A join runs for as
+// long as it takes to catch up, and an unbounded set of observations is an
+// unbounded heap on a node that never converges. The oldest are dropped
+// first: the local root cannot come to equal a root from thousands of blocks
+// back, because the state the node is assembling is the current state.
+const DefaultMaxObserved = 4096
+
+// Tracker compares the local BPT root against the anchors observed for its
+// partition and flips a nodestate.Machine to StateActive after MatchThreshold
 // consecutive Check calls match.
 type Tracker struct {
-	db      *database.Database
-	machine *nodestate.Machine
+	db        *database.Database
+	machine   *nodestate.Machine
+	partition *url.URL
 
 	// MatchThreshold is the number of consecutive matches required
 	// before promoting. Zero means use DefaultMatchThreshold.
 	MatchThreshold int
 
+	// MaxObserved bounds the observed set. Zero means DefaultMaxObserved.
+	MaxObserved int
+
 	mu sync.Mutex
-	// observed maps anchor → block height it was seen at. A map
-	// rather than a single "latest" because (a) the local root will
-	// briefly equal an older block's anchor as it catches up, and (b)
-	// we want to record the correct sinceBlock when we promote.
+	// observed maps anchor → the block of partition it was seen at. A map
+	// rather than a single "latest" because the local root will briefly equal
+	// an older block's anchor as it catches up, and because promotion records
+	// the block the matching root was anchored for.
 	observed map[[32]byte]uint64
-	// latestBlock is the highest block we've seen an anchor for —
-	// used as a tie-breaker if the local root somehow matches
-	// multiple observed anchors in one Check (it shouldn't, but a
-	// chain reorg in the source would).
+	// order is the anchors in the order they were first observed, for
+	// eviction. Anchors arrive in block order, so the front is the oldest.
+	order [][32]byte
+	// latestBlock is the highest block an anchor has been seen at.
 	latestBlock uint64
-	// consecutive is the current consecutive-match streak. Reset
-	// on any mismatch. Promotion fires when consecutive ≥
-	// MatchThreshold (or DefaultMatchThreshold when zero).
+	// consecutive is the current consecutive-match streak, reset on any
+	// mismatch. Promotion fires when it reaches the threshold.
 	consecutive int
-	// streakAnchor and streakBlock record the anchor/block that
-	// most-recently extended the streak. PromoteToActive uses these
-	// so SinceBlock reflects the up-to-date observation, not the
-	// anchor that started the streak.
-	streakAnchor [32]byte
-	streakBlock  uint64
 }
 
-// New constructs a Tracker bound to db and machine.
+// New constructs a Tracker bound to db and machine, for the machine's
+// partition.
 func New(db *database.Database, machine *nodestate.Machine) (*Tracker, error) {
 	if db == nil {
 		return nil, fmt.Errorf("tracker.New: db required")
@@ -82,47 +96,72 @@ func New(db *database.Database, machine *nodestate.Machine) (*Tracker, error) {
 	if machine == nil {
 		return nil, fmt.Errorf("tracker.New: machine required")
 	}
+	if machine.Partition() == nil {
+		return nil, fmt.Errorf("tracker.New: the machine must name its partition")
+	}
 	return &Tracker{
-		db:       db,
-		machine:  machine,
-		observed: make(map[[32]byte]uint64),
+		db:        db,
+		machine:   machine,
+		partition: machine.Partition(),
+		observed:  make(map[[32]byte]uint64),
 	}, nil
 }
 
-// Observe records a verified BPT-root anchor seen at block. Calling
-// Observe with a zero anchor is a no-op (avoids accidentally accepting
-// an empty header). Observing the same anchor twice keeps the earliest
-// block it appeared at — replays of the same anchor across blocks are
-// harmless.
-func (t *Tracker) Observe(block uint64, anchor [32]byte) {
-	if anchor == ([32]byte{}) {
+// Partition reports the partition whose anchors this tracker matches.
+func (t *Tracker) Partition() *url.URL { return t.partition }
+
+// Observe records an anchor the Directory executed for partition's block.
+//
+// An anchor for another partition is ignored: the caller feeds it every anchor
+// the Directory executes, and a block number means nothing without the
+// partition it belongs to. A zero anchor is ignored too — it is what an empty
+// header looks like. Observing the same anchor twice keeps the earliest block
+// it appeared at, because that block is the first at which the state behind
+// the root was the partition's state.
+func (t *Tracker) Observe(partition *url.URL, block uint64, anchor [32]byte) {
+	if anchor == ([32]byte{}) || partition == nil || !partition.Equal(t.partition) {
 		return
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	if existing, ok := t.observed[anchor]; ok {
-		// Keep the earliest block where this root was first valid.
 		if block < existing {
 			t.observed[anchor] = block
 		}
 	} else {
 		t.observed[anchor] = block
+		t.order = append(t.order, anchor)
 	}
 	if block > t.latestBlock {
 		t.latestBlock = block
 	}
+
+	max := t.MaxObserved
+	if max <= 0 {
+		max = DefaultMaxObserved
+	}
+	for len(t.order) > max {
+		delete(t.observed, t.order[0])
+		t.order = t.order[1:]
+	}
 }
 
-// Check reads the current local BPT root and updates the
-// consecutive-match streak. On reaching MatchThreshold it promotes
-// the state machine. Returns (true, nil) on the promoting call;
-// (false, nil) if not yet or if the machine was already past
-// BOOTING.
+// Check reads the current local BPT root and updates the consecutive-match
+// streak. On reaching MatchThreshold it promotes the state machine. Returns
+// (true, nil) on the promoting call; (false, nil) if not yet, or if the
+// machine is already past WAITING.
 func (t *Tracker) Check(ctx context.Context) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	if t.machine.State() != nodestate.StateBooting {
+	// BOOTING and WAITING are both states a node promotes out of
+	// (nodestate: BOOTING → WAITING → ACTIVE). Refusing WAITING made the
+	// documented path a permanent stall that read as "not yet".
+	switch t.machine.State() {
+	case nodestate.StateBooting, nodestate.StateWaiting:
+		// Still joining
+	default:
 		return false, nil
 	}
 
@@ -141,16 +180,11 @@ func (t *Tracker) Check(ctx context.Context) (bool, error) {
 	t.mu.Lock()
 	block, ok := t.observed[local]
 	if !ok {
-		// Mismatch — reset the streak.
 		t.consecutive = 0
-		t.streakAnchor = [32]byte{}
-		t.streakBlock = 0
 		t.mu.Unlock()
 		return false, nil
 	}
 	t.consecutive++
-	t.streakAnchor = local
-	t.streakBlock = block
 	streak := t.consecutive
 	t.mu.Unlock()
 
@@ -158,10 +192,9 @@ func (t *Tracker) Check(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	// Streak reached the threshold. PromoteToActive returns false
-	// if a concurrent caller already transitioned us past BOOTING.
-	// We treat that as not-our-promotion rather than an error —
-	// both reach the same destination state.
+	// PromoteToActive returns false if a concurrent caller already
+	// transitioned us past BOOTING/WAITING. Not our promotion, same
+	// destination.
 	if !t.machine.PromoteToActive(local, block) {
 		return false, nil
 	}
@@ -169,16 +202,15 @@ func (t *Tracker) Check(ctx context.Context) (bool, error) {
 }
 
 // ConsecutiveMatches reports the current consecutive-match streak
-// for diagnostics. Useful for logs that want to show "5/10 toward
-// promotion."
+// for diagnostics.
 func (t *Tracker) ConsecutiveMatches() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.consecutive
 }
 
-// LatestObservedBlock reports the highest block any observed anchor
-// has been seen at. Useful for logging / progress output.
+// LatestObservedBlock reports the highest block of this partition any observed
+// anchor has been seen at.
 func (t *Tracker) LatestObservedBlock() uint64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -186,14 +218,14 @@ func (t *Tracker) LatestObservedBlock() uint64 {
 }
 
 // ObservedCount reports how many distinct anchors are currently held.
-// Pure observability helper.
 func (t *Tracker) ObservedCount() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return len(t.observed)
 }
 
-// Observation is one (block, anchor) pair in the tracker's set.
+// Observation is one (block, anchor) pair in the tracker's set. The partition
+// is the tracker's.
 type Observation struct {
 	Block  uint64
 	Anchor [32]byte
@@ -212,11 +244,12 @@ func (t *Tracker) Snapshot() []Observation {
 	return out
 }
 
-// RestoreFrom merges observations into the tracker. Used at startup
-// to rehydrate from persisted state. Existing entries take the
+// RestoreFrom merges observations into the tracker. Used at startup to
+// rehydrate from persisted state; the observations are this tracker's
+// partition's, which is what Snapshot returned. Existing entries take the
 // earliest block per anchor (same rule as Observe).
 func (t *Tracker) RestoreFrom(obs []Observation) {
 	for _, o := range obs {
-		t.Observe(o.Block, o.Anchor)
+		t.Observe(t.partition, o.Block, o.Anchor)
 	}
 }

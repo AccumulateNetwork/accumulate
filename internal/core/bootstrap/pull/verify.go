@@ -73,6 +73,12 @@ func Verify(batch *database.Batch, u *url.URL, receipt *api.Receipt, anchoredRoo
 //
 // It reads forward and remembers what it has read, so a pull that walks the
 // network block by block reads each anchor once.
+//
+// Both ends are bounded, because this runs for as long as a node takes to
+// join. It starts Backfill entries back from the end of the Directory's anchor
+// chain rather than at entry 0 — the anchors a pull needs are the current
+// ones, and entry 0 is the first anchor the network ever executed — and it
+// keeps at most MaxRoots of them, dropping the oldest first.
 type DirectoryAnchors struct {
 	// Query reaches the Directory.
 	Query api.Querier
@@ -80,14 +86,32 @@ type DirectoryAnchors struct {
 	// PageSize is how many anchor-chain entries are read per call. Default 64.
 	PageSize uint64
 
+	// Backfill is how far back from the end of the Directory's anchor chain
+	// the first read starts. Default 1024 entries, which at a one-second
+	// cadence across four partitions is a few minutes of anchors — enough to
+	// cover the blocks a pull in flight was served at.
+	Backfill uint64
+
+	// MaxRoots is how many (partition, block) roots are kept. Default 4096.
+	// The oldest are dropped first; a root that old belongs to a block no
+	// pull is still waiting to settle.
+	MaxRoots int
+
 	// OnAnchor, if set, is called for every anchor read, in chain order. The
 	// tracker's Observe is the intended consumer.
 	OnAnchor func(partition *url.URL, block uint64, root [32]byte)
 
-	mu    sync.Mutex
-	roots map[anchorKey][32]byte
-	next  uint64 // the next main-chain entry to read
+	mu      sync.Mutex
+	roots   map[anchorKey][32]byte
+	order   []anchorKey // insertion order, for eviction
+	next    uint64      // the next main-chain entry to read
+	started bool
 }
+
+const (
+	defaultAnchorBackfill = 1024
+	defaultMaxRoots       = 4096
+)
 
 type anchorKey struct {
 	partition string
@@ -124,6 +148,22 @@ func (d *DirectoryAnchors) Read(ctx context.Context) error {
 	return d.readLocked(ctx)
 }
 
+// record keeps a root, evicting the oldest when the map is full.
+func (d *DirectoryAnchors) record(key anchorKey, root [32]byte) {
+	max := d.MaxRoots
+	if max <= 0 {
+		max = defaultMaxRoots
+	}
+	if _, ok := d.roots[key]; !ok {
+		d.order = append(d.order, key)
+	}
+	d.roots[key] = root
+	for len(d.order) > max {
+		delete(d.roots, d.order[0])
+		d.order = d.order[1:]
+	}
+}
+
 func (d *DirectoryAnchors) readLocked(ctx context.Context) error {
 	if d.roots == nil {
 		d.roots = map[anchorKey][32]byte{}
@@ -135,6 +175,27 @@ func (d *DirectoryAnchors) readLocked(ctx context.Context) error {
 
 	q := api.Querier2{Querier: d.Query}
 	pool := protocol.DnUrl().JoinPath(protocol.AnchorPool)
+
+	// The first read starts near the end of the chain, not at entry 0.
+	if !d.started {
+		d.started = true
+		backfill := d.Backfill
+		if backfill == 0 {
+			backfill = defaultAnchorBackfill
+		}
+		chain, err := q.QueryChain(ctx, pool, &api.ChainQuery{Name: "main"})
+		switch {
+		case err == nil:
+			if chain.Count > backfill {
+				d.next = chain.Count - backfill
+			}
+		case errors.Is(err, errors.NotFound):
+			return nil // The Directory has executed no anchors yet
+		default:
+			return errors.UnknownError.WithFormat("read the directory's anchor chain: %w", err)
+		}
+	}
+
 	for {
 		count, expand := pageSize, true
 		page, err := q.QueryMainChainEntries(ctx, pool, &api.ChainQuery{
@@ -166,7 +227,7 @@ func (d *DirectoryAnchors) readLocked(ctx context.Context) error {
 			if a == nil || a.Source == nil {
 				continue
 			}
-			d.roots[anchorKey{a.Source.String(), a.MinorBlockIndex}] = a.StateTreeAnchor
+			d.record(anchorKey{a.Source.String(), a.MinorBlockIndex}, a.StateTreeAnchor)
 			if d.OnAnchor != nil {
 				d.OnAnchor(a.Source, a.MinorBlockIndex, a.StateTreeAnchor)
 			}

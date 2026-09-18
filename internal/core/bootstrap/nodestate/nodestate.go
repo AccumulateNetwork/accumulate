@@ -24,15 +24,20 @@
 // Transitions are forward only: BOOTING → WAITING → ACTIVE → COMPLETE. A node
 // never regresses; a verification that breaks means starting over.
 //
-// Ported from bootstrap-v3 (issue #4293). Changed on this line: the doc
-// comment, which named the snapshot this line no longer has. The code is
-// unchanged.
+// A machine is per partition. A node serves two of them, and every block
+// number it advertises is a block of one partition or the other (#4205).
+//
+// Ported from bootstrap-v3 (issue #4293). Changed on this line: the states are
+// the partition's, not the node's, and the doc comment named a snapshot this
+// line no longer has.
 package nodestate
 
 import (
 	"fmt"
 	"sync"
 	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // State is the bootstrap state of a node.
@@ -81,7 +86,13 @@ func (s State) CanServeHistory() bool {
 type Advertisement struct {
 	State State
 
-	// SinceBlock is the block height at which the state became true.
+	// Partition is the partition this advertisement is about. A node serves
+	// two of them, and block numbers collide across partitions — with a
+	// one-second cadence the Directory and a BVN are at the same number at
+	// the same second — so SinceBlock without it names nothing (#4205).
+	Partition *url.URL
+
+	// SinceBlock is the block of Partition at which the state became true.
 	SinceBlock uint64
 
 	// VerifiedAnchor is the root the Directory anchored that the node's
@@ -107,6 +118,9 @@ func (a *Advertisement) Validate() error {
 	default:
 		return fmt.Errorf("nodestate: invalid state %d", a.State)
 	}
+	if a.Partition == nil {
+		return fmt.Errorf("nodestate: an advertisement must name its partition")
+	}
 	if a.State == StateActive || a.State == StateComplete {
 		if a.VerifiedAnchor == ([32]byte{}) {
 			return fmt.Errorf("nodestate: ACTIVE/COMPLETE advertisement must carry VerifiedAnchor")
@@ -118,6 +132,8 @@ func (a *Advertisement) Validate() error {
 // Machine is the in-process state machine. Forward-only transitions.
 // Persistence is the caller's.
 type Machine struct {
+	partition *url.URL
+
 	mu       sync.RWMutex
 	state    State
 	since    uint64
@@ -127,18 +143,25 @@ type Machine struct {
 	onChange []func(Advertisement)
 }
 
-// New constructs a Machine in StateBooting.
-func New() *Machine {
+// New constructs a Machine in StateBooting for a partition.
+func New(partition *url.URL) *Machine {
 	return &Machine{
-		state: StateBooting,
-		last:  time.Now(),
+		partition: partition,
+		state:     StateBooting,
+		last:      time.Now(),
 	}
 }
+
+// Partition reports the partition this machine is the state of.
+func (m *Machine) Partition() *url.URL { return m.partition }
 
 // Restore reconstructs a Machine from a persisted state record.
 // state must be one of StateBooting, StateWaiting, StateActive, or
 // StateComplete. ACTIVE / COMPLETE require a non-zero verifiedAnchor.
-func Restore(state State, sinceBlock uint64, verifiedAnchor [32]byte, historyDepth uint64) (*Machine, error) {
+func Restore(partition *url.URL, state State, sinceBlock uint64, verifiedAnchor [32]byte, historyDepth uint64) (*Machine, error) {
+	if partition == nil {
+		return nil, fmt.Errorf("nodestate.Restore: partition required")
+	}
 	switch state {
 	case StateBooting, StateWaiting, StateActive, StateComplete:
 		// ok
@@ -149,11 +172,12 @@ func Restore(state State, sinceBlock uint64, verifiedAnchor [32]byte, historyDep
 		return nil, fmt.Errorf("nodestate.Restore: ACTIVE/COMPLETE requires non-zero verifiedAnchor")
 	}
 	return &Machine{
-		state:  state,
-		since:  sinceBlock,
-		anchor: verifiedAnchor,
-		depth:  historyDepth,
-		last:   time.Now(),
+		partition: partition,
+		state:     state,
+		since:     sinceBlock,
+		anchor:    verifiedAnchor,
+		depth:     historyDepth,
+		last:      time.Now(),
 	}, nil
 }
 
@@ -289,6 +313,7 @@ func (m *Machine) Heartbeat() Advertisement {
 func (m *Machine) adLocked() Advertisement {
 	return Advertisement{
 		State:          m.state,
+		Partition:      m.partition,
 		SinceBlock:     m.since,
 		VerifiedAnchor: m.anchor,
 		HistoryDepth:   m.depth,

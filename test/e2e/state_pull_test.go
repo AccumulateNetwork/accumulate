@@ -127,16 +127,17 @@ func TestPullReachesTheAnchoredRoot(t *testing.T) {
 
 	// The tracker sees every root the Directory anchors, as the node collecting
 	// blocks would hand it (#4292).
-	machine := nodestate.New()
+	machine := nodestate.New(part)
 	local := emptyDb()
 	trk, err := tracker.New(local, machine)
 	require.NoError(t, err)
 	anchors := &pull.DirectoryAnchors{
 		Query: sim.S.Services(),
+		// Every anchor the Directory executes is handed over; the tracker
+		// keeps the ones for its own partition and drops the rest, because a
+		// block number without its partition names nothing (#4205).
 		OnAnchor: func(p *url.URL, block uint64, root [32]byte) {
-			if p.Equal(part) {
-				trk.Observe(block, root)
-			}
+			trk.Observe(p, block, root)
 		},
 	}
 

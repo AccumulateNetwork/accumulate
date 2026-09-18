@@ -10,7 +10,15 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// bvn0 is the partition the machines under test belong to. A machine is per
+// partition: a node serves two, and every block number it advertises is a
+// block of one of them (#4205).
+func bvn0() *url.URL { return protocol.PartitionUrl("BVN0") }
 
 func TestState_Capabilities(t *testing.T) {
 	cases := []struct {
@@ -38,7 +46,7 @@ func TestState_Capabilities(t *testing.T) {
 }
 
 func TestMachine_ForwardOnlyTransitions(t *testing.T) {
-	m := New()
+	m := New(bvn0())
 	if got, want := m.State(), StateBooting; got != want {
 		t.Fatalf("initial state = %v, want %v", got, want)
 	}
@@ -73,7 +81,7 @@ func TestMachine_ForwardOnlyTransitions(t *testing.T) {
 }
 
 func TestMachine_Active_RequiresNonZeroAnchor(t *testing.T) {
-	m := New()
+	m := New(bvn0())
 	if m.PromoteToActive([32]byte{}, 100) {
 		t.Fatal("zero anchor should be rejected")
 	}
@@ -83,7 +91,7 @@ func TestMachine_Active_RequiresNonZeroAnchor(t *testing.T) {
 }
 
 func TestMachine_OnChange(t *testing.T) {
-	m := New()
+	m := New(bvn0())
 	var fired int32
 	var lastAd Advertisement
 	m.OnChange(func(ad Advertisement) {
@@ -134,7 +142,7 @@ func TestParseState(t *testing.T) {
 
 func TestRestore(t *testing.T) {
 	anchor := [32]byte{0xaa}
-	m, err := Restore(StateActive, 42, anchor, 0)
+	m, err := Restore(bvn0(), StateActive, 42, anchor, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,13 +154,13 @@ func TestRestore(t *testing.T) {
 		t.Errorf("Get = %+v, missing restored fields", ad)
 	}
 
-	if _, err := Restore(StateActive, 1, [32]byte{}, 0); err == nil {
+	if _, err := Restore(bvn0(), StateActive, 1, [32]byte{}, 0); err == nil {
 		t.Error("expected error for ACTIVE with zero anchor")
 	}
-	if _, err := Restore(StateUnknown, 0, [32]byte{}, 0); err == nil {
+	if _, err := Restore(bvn0(), StateUnknown, 0, [32]byte{}, 0); err == nil {
 		t.Error("expected error for StateUnknown")
 	}
-	if _, err := Restore(StateBooting, 0, [32]byte{}, 0); err != nil {
+	if _, err := Restore(bvn0(), StateBooting, 0, [32]byte{}, 0); err != nil {
 		t.Errorf("BOOTING restore failed: %v", err)
 	}
 }
@@ -163,12 +171,13 @@ func TestAdvertisement_Validate(t *testing.T) {
 		ad     Advertisement
 		wantOK bool
 	}{
-		{"booting valid", Advertisement{State: StateBooting}, true},
-		{"active no anchor", Advertisement{State: StateActive}, false},
-		{"active with anchor", Advertisement{State: StateActive, VerifiedAnchor: [32]byte{1}}, true},
-		{"complete with anchor", Advertisement{State: StateComplete, VerifiedAnchor: [32]byte{1}}, true},
-		{"unknown state", Advertisement{State: StateUnknown}, false},
-		{"out-of-range state", Advertisement{State: 99}, false},
+		{"booting valid", Advertisement{State: StateBooting, Partition: bvn0()}, true},
+		{"active no anchor", Advertisement{State: StateActive, Partition: bvn0()}, false},
+		{"active with anchor", Advertisement{State: StateActive, Partition: bvn0(), VerifiedAnchor: [32]byte{1}}, true},
+		{"complete with anchor", Advertisement{State: StateComplete, Partition: bvn0(), VerifiedAnchor: [32]byte{1}}, true},
+		{"unknown state", Advertisement{State: StateUnknown, Partition: bvn0()}, false},
+		{"out-of-range state", Advertisement{State: 99, Partition: bvn0()}, false},
+		{"no partition", Advertisement{State: StateBooting}, false},
 	}
 	for _, c := range cases {
 		err := c.ad.Validate()
@@ -179,7 +188,7 @@ func TestAdvertisement_Validate(t *testing.T) {
 }
 
 func TestHeartbeat_AdvancesLastUpdated(t *testing.T) {
-	m := New()
+	m := New(bvn0())
 	t0 := m.Get().LastUpdated
 	time.Sleep(2 * time.Millisecond)
 	t1 := m.Heartbeat().LastUpdated

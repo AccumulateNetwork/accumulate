@@ -158,12 +158,12 @@ func TestRun_LearnsWithoutWriting(t *testing.T) {
 	}
 
 	// The check that matters: nothing has been pulled, so nothing may promote.
-	m := nodestate.New()
+	m := nodestate.New(scope)
 	trk, err := tracker.New(dst, m)
 	if err != nil {
 		t.Fatal(err)
 	}
-	trk.Observe(99, srcRoot)
+	trk.Observe(scope, 99, srcRoot)
 	promoted, err := trk.Check(context.Background())
 	if err != nil {
 		t.Fatal(err)

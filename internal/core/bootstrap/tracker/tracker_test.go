@@ -13,7 +13,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// part is the partition every machine and tracker in these tests belongs to.
+func part() *url.URL { return protocol.PartitionUrl("BVN0") }
+
+// machine is a nodestate.Machine for part().
+func machine() *nodestate.Machine { return nodestate.New(part()) }
 
 func newTrackerDB(t *testing.T) *database.Database {
 	t.Helper()
@@ -67,14 +75,14 @@ func TestCheck_PromotesOnMatch(t *testing.T) {
 	db := newTrackerDB(t)
 	root := fillN(t, db, 5)
 
-	m := nodestate.New()
+	m := machine()
 	tr, err := New(db, m)
 	tr.MatchThreshold = 1
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	tr.Observe(42, root)
+	tr.Observe(part(), 42, root)
 
 	promoted, err := tr.Check(context.Background())
 	if err != nil {
@@ -102,13 +110,13 @@ func TestCheck_NoMatchStaysBooting(t *testing.T) {
 	db := newTrackerDB(t)
 	fillN(t, db, 3)
 
-	m := nodestate.New()
+	m := machine()
 	tr, _ := New(db, m)
 	tr.MatchThreshold = 1
 
 	var bogus [32]byte
 	bogus[0] = 0xff
-	tr.Observe(7, bogus)
+	tr.Observe(part(), 7, bogus)
 
 	promoted, err := tr.Check(context.Background())
 	if err != nil {
@@ -137,12 +145,12 @@ func TestCheck_MovingTarget(t *testing.T) {
 		t.Fatal("test setup: roots should differ")
 	}
 
-	m := nodestate.New()
+	m := machine()
 	tr, _ := New(dst, m)
 	tr.MatchThreshold = 1
 
-	tr.Observe(10, root1)
-	tr.Observe(20, root2)
+	tr.Observe(part(), 10, root1)
+	tr.Observe(part(), 20, root2)
 
 	// Catch dst up to anchor1. Same input → same BPT root.
 	if got := fillRange(t, dst, 0, 4); got != root1 {
@@ -177,9 +185,9 @@ func TestCheck_MovingTarget(t *testing.T) {
 // pre-genesis or malformed header) is silently ignored.
 func TestObserve_IgnoresZeroAnchor(t *testing.T) {
 	db := newTrackerDB(t)
-	tr, _ := New(db, nodestate.New())
+	tr, _ := New(db, machine())
 	tr.MatchThreshold = 1
-	tr.Observe(99, [32]byte{})
+	tr.Observe(part(), 99, [32]byte{})
 	if tr.ObservedCount() != 0 {
 		t.Errorf("ObservedCount=%d, want 0 (zero anchor ignored)", tr.ObservedCount())
 	}
@@ -192,12 +200,12 @@ func TestObserve_KeepsEarliestBlockForSameAnchor(t *testing.T) {
 	db := newTrackerDB(t)
 	root := fillN(t, db, 2)
 
-	m := nodestate.New()
+	m := machine()
 	tr, _ := New(db, m)
 	tr.MatchThreshold = 1
-	tr.Observe(100, root)
-	tr.Observe(50, root) // earlier — should win
-	tr.Observe(150, root)
+	tr.Observe(part(), 100, root)
+	tr.Observe(part(), 50, root) // earlier — should win
+	tr.Observe(part(), 150, root)
 
 	promoted, err := tr.Check(context.Background())
 	if err != nil {
@@ -214,7 +222,7 @@ func TestObserve_KeepsEarliestBlockForSameAnchor(t *testing.T) {
 // TestCheck_ContextCanceled returns ctx.Err.
 func TestCheck_ContextCanceled(t *testing.T) {
 	db := newTrackerDB(t)
-	tr, _ := New(db, nodestate.New())
+	tr, _ := New(db, machine())
 	tr.MatchThreshold = 1
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -226,7 +234,7 @@ func TestCheck_ContextCanceled(t *testing.T) {
 // TestNew_RejectsMissingInputs — guards.
 func TestNew_RejectsMissingInputs(t *testing.T) {
 	db := newTrackerDB(t)
-	m := nodestate.New()
+	m := machine()
 	if _, err := New(nil, m); err == nil {
 		t.Error("expected err for nil db")
 	}
@@ -241,17 +249,17 @@ func TestSnapshot_RestoreRoundTrip(t *testing.T) {
 	db := newTrackerDB(t)
 	root := fillN(t, db, 4)
 
-	src, _ := New(db, nodestate.New())
-	src.Observe(11, root)
-	src.Observe(22, [32]byte{0xab})
-	src.Observe(7, [32]byte{0xcd})
+	src, _ := New(db, machine())
+	src.Observe(part(), 11, root)
+	src.Observe(part(), 22, [32]byte{0xab})
+	src.Observe(part(), 7, [32]byte{0xcd})
 
 	snap := src.Snapshot()
 	if len(snap) != 3 {
 		t.Fatalf("snap len = %d, want 3", len(snap))
 	}
 
-	dst, _ := New(db, nodestate.New())
+	dst, _ := New(db, machine())
 	dst.MatchThreshold = 1
 	dst.RestoreFrom(snap)
 	if dst.ObservedCount() != 3 {
@@ -271,7 +279,7 @@ func TestSnapshot_RestoreRoundTrip(t *testing.T) {
 // TestLatestObservedBlock — accessor accuracy.
 func TestLatestObservedBlock(t *testing.T) {
 	db := newTrackerDB(t)
-	tr, _ := New(db, nodestate.New())
+	tr, _ := New(db, machine())
 	tr.MatchThreshold = 1
 	if tr.LatestObservedBlock() != 0 {
 		t.Errorf("LatestObservedBlock=%d, want 0", tr.LatestObservedBlock())
@@ -279,9 +287,9 @@ func TestLatestObservedBlock(t *testing.T) {
 	var a, b [32]byte
 	a[0] = 1
 	b[0] = 2
-	tr.Observe(7, a)
-	tr.Observe(3, b) // earlier — should not regress latest
-	tr.Observe(15, a)
+	tr.Observe(part(), 7, a)
+	tr.Observe(part(), 3, b) // earlier — should not regress latest
+	tr.Observe(part(), 15, a)
 	if tr.LatestObservedBlock() != 15 {
 		t.Errorf("LatestObservedBlock=%d, want 15", tr.LatestObservedBlock())
 	}
@@ -295,10 +303,10 @@ func TestCheck_ThresholdRequiresConsecutiveMatches(t *testing.T) {
 	db := newTrackerDB(t)
 	root := fillN(t, db, 3)
 
-	m := nodestate.New()
+	m := machine()
 	tr, _ := New(db, m)
 	tr.MatchThreshold = threshold
-	tr.Observe(50, root)
+	tr.Observe(part(), 50, root)
 
 	// The first threshold-1 checks: the streak grows but no promotion.
 	for i := 1; i < threshold; i++ {
@@ -334,10 +342,10 @@ func TestCheck_MismatchResetsStreak(t *testing.T) {
 	db := newTrackerDB(t)
 	root := fillN(t, db, 3)
 
-	m := nodestate.New()
+	m := machine()
 	tr, _ := New(db, m)
 	tr.MatchThreshold = 3
-	tr.Observe(7, root)
+	tr.Observe(part(), 7, root)
 
 	// 2 matches, then mutate db so root changes (mismatch), then back.
 	for i := 0; i < 2; i++ {
