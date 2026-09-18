@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -111,6 +112,66 @@ func TestProcessCommittedGroup_CollectingBuffersInsteadOfExecuting(t *testing.T)
 	require.NoError(t, err)
 	require.Len(t, ca.blocks, 1, "a node that has joined executes")
 	require.Equal(t, uint64(1), ca.blocks[0].Index)
+}
+
+// The handoff: at the block the join matched, the node leaves collecting
+// mode, stands at that block, and produces every group it buffered from the
+// next one, in order (executor spec, "Sync", step 4; #4294).
+func TestHandoff_ProducesTheBufferFromQPlusOne(t *testing.T) {
+	svc, ca, author := newJoiningService(t)
+	w := svc.node.Workers()[0]
+	svc.StartCollecting()
+
+	for i := 0; i < 3; i++ {
+		b := types.NewBatch([][]byte{{byte(i)}})
+		require.NoError(t, w.StoreBatch(b))
+		_, err := svc.processCommittedGroup(group(commitCert(author, types.Round(2*i+2), time.Unix(int64(100+i), 0),
+			[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
+		require.NoError(t, err)
+	}
+	require.Len(t, svc.Buffered(), 3)
+	require.Empty(t, ca.blocks)
+
+	// The state pull reached block 40; staging was settled there.
+	require.NoError(t, svc.performHandoff(40))
+
+	require.False(t, svc.Collecting(), "a node that has joined is not collecting")
+	require.Empty(t, svc.Buffered(), "the buffer is spent")
+	require.Len(t, ca.blocks, 3, "every buffered group produced a block")
+	require.Equal(t, uint64(41), ca.blocks[0].Index, "the first block after the block the state is")
+	require.Equal(t, uint64(42), ca.blocks[1].Index)
+	require.Equal(t, uint64(43), ca.blocks[2].Index)
+	require.Equal(t, types.Round(2), ca.blocks[0].LeaderRound, "in the order consensus committed them")
+	require.Equal(t, types.Round(6), ca.blocks[2].LeaderRound)
+	require.Equal(t, uint64(43), svc.lastBlockIndex)
+
+	// And the next committed group is produced, not collected.
+	b := types.NewBatch([][]byte{[]byte("after")})
+	require.NoError(t, w.StoreBatch(b))
+	_, err := svc.processCommittedGroup(group(commitCert(author, 8, time.Unix(200, 0),
+		[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
+	require.NoError(t, err)
+	require.Len(t, ca.blocks, 4)
+	require.Equal(t, uint64(44), ca.blocks[3].Index)
+}
+
+// A handoff is refused when the node is not joining, and when the buffer
+// overran — in which case the blocks since the snapshot are not all in hand
+// and producing them would skip one.
+func TestHandoff_RefusedWhenTheJoinCannotBeExact(t *testing.T) {
+	svc, ca, _ := newJoiningService(t)
+
+	require.Error(t, svc.performHandoff(10), "a node that is not joining has nothing to hand off")
+
+	svc.StartCollecting()
+	svc.mu.Lock()
+	svc.bufferOverrun = true
+	svc.mu.Unlock()
+	err := svc.performHandoff(10)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, errors.NotReady), "got %v", err)
+	require.True(t, svc.Collecting(), "and it is still joining")
+	require.Empty(t, ca.blocks)
 }
 
 // An adapter that cannot collect must refuse, not execute: a node that

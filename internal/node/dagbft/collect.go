@@ -121,6 +121,89 @@ func (s *Service) StopCollecting() []*CollectedGroup {
 	return out
 }
 
+// A handoffRequest is the join asking to leave collecting mode at a block.
+// It is served by the block production loop, not by the caller's goroutine:
+// the loop is the only thing that produces blocks, so a handoff that ran
+// beside it could execute a buffered group and a newly committed one at once,
+// and they would be the same block index (#4294).
+type handoffRequest struct {
+	q    uint64
+	done chan error
+}
+
+// Handoff leaves collecting mode at block q and produces every buffered group
+// in order, from q + 1. It blocks until that is done.
+//
+// The executor's state is q's state — the pull put it there — and staging has
+// been settled at q (#4292), so the next block this node executes is q + 1,
+// which is exactly what its peers execute next. From there it is a validator
+// like any other (executor spec, "Sync", step 4).
+func (s *Service) Handoff(q uint64) error {
+	if !s.Collecting() {
+		return errors.NotAllowed.WithFormat("%s: not joining", s.config.Partition.ID)
+	}
+	req := handoffRequest{q: q, done: make(chan error, 1)}
+	select {
+	case s.handoff <- req:
+	case <-s.ctx.Done():
+		return errors.UnknownError.Wrap(s.ctx.Err())
+	}
+	select {
+	case err := <-req.done:
+		return err
+	case <-s.ctx.Done():
+		return errors.UnknownError.Wrap(s.ctx.Err())
+	}
+}
+
+// performHandoff runs in the block production loop. It takes the buffer and
+// leaves collecting mode in one step, sets the block this node stands at, and
+// produces what it collected.
+//
+// A group that fails to produce stops the handoff with the buffer already
+// taken: the node is no longer collecting and no longer joining, and the
+// groups that were not produced are gone. That is a fault, not a state to
+// recover from in place — the node must join again — so it is returned to the
+// caller and logged as an error rather than swallowed.
+func (s *Service) performHandoff(q uint64) error {
+	s.mu.Lock()
+	if !s.collecting {
+		s.mu.Unlock()
+		return errors.NotAllowed.WithFormat("%s: not joining", s.config.Partition.ID)
+	}
+	if s.bufferOverrun {
+		s.mu.Unlock()
+		return errors.NotReady.WithFormat("%s: the join buffer overran; the join must start again", s.config.Partition.ID)
+	}
+	groups := s.buffer
+	s.buffer = nil
+	s.collecting = false
+	s.lastBlockIndex = q
+	s.mu.Unlock()
+
+	s.logger.Info("Joined: executing from the block after the state",
+		"partition", s.config.Partition.ID, "block", q, "buffered", len(groups))
+
+	for i, g := range groups {
+		err := s.produceGroup(g.Certs, g.Batches, g.Leader, g.IsLeader, g.payloadEntries())
+		if err != nil {
+			return errors.UnknownError.WithFormat("produce buffered group %d of %d (round %d): %w",
+				i+1, len(groups), g.Round(), err)
+		}
+	}
+	return nil
+}
+
+// payloadEntries is how many batches the group's certificates named: what
+// says whether the block it produces is empty.
+func (g *CollectedGroup) payloadEntries() int {
+	n := 0
+	for _, cert := range g.Certs {
+		n += len(cert.Header.Payload)
+	}
+	return n
+}
+
 // collectGroup takes one committed group into staging without executing it,
 // and keeps it.
 //
