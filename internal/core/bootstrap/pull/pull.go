@@ -314,8 +314,28 @@ func pullChainHeads(ctx context.Context, src Source, batch *database.Batch, u *u
 		if err := dstChain.Head().Put(state); err != nil {
 			return fmt.Errorf("set head %s/%s: %w", u, c.Name, err)
 		}
+		if err := addChainToIndex(batch, u, c); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// addChainToIndex records the chain in the account's chain index. The account
+// hash is taken over the chains that index names, and a batch only builds it
+// when it commits — the pull verifies before it commits, so it writes the
+// index itself.
+func addChainToIndex(batch *database.Batch, u *url.URL, c *api.ChainRecord) error {
+	meta := &protocol.ChainMetadata{Name: c.Name, Type: c.Type}
+	_, err := batch.Account(u).Chains().Index(meta)
+	switch {
+	case err == nil:
+		return nil // Already listed
+	case errors.Is(err, errors.NotFound):
+		return errors.UnknownError.Wrap(batch.Account(u).Chains().Add(meta))
+	default:
+		return errors.UnknownError.WithFormat("chain index %s: %w", u, err)
+	}
 }
 
 // pullChainsFull replays every entry on every chain via
@@ -340,6 +360,9 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *u
 		}
 		if err := pullChainEntries(ctx, src, dstChain.Inner(), u, c.Name, pageSize); err != nil {
 			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+		}
+		if err := addChainToIndex(batch, u, c); err != nil {
+			return err
 		}
 	}
 	return nil
