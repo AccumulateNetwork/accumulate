@@ -20,7 +20,7 @@ import (
 // partition's anchors. The anchor is released when the last of them has said
 // so; a destination that has not spoken holds everything (#4232).
 func TestCache_ReleaseAnchorsOnDelivered(t *testing.T) {
-	c := New(0)
+	c := New(8 * RejoinGrace) // the horizon must not be what drops them here
 	bvn1, bvn2 := protocol.PartitionUrl("BVN1"), protocol.PartitionUrl("BVN2")
 	tx := c.Begin(3)
 	for n := uint64(1); n <= 5; n++ {
@@ -29,34 +29,43 @@ func TestCache_ReleaseAnchorsOnDelivered(t *testing.T) {
 	tx.Commit()
 	require.Equal(t, 5, c.AnchorLen())
 
-	// One of two destinations has executed through 4: nothing goes
+	// One destination has executed through 4: nothing goes until every
+	// destination has spoken
 	tx = c.Begin(4)
 	tx.ReleaseAnchors(bvn1, 4, 2)
 	tx.Commit()
+	age(c, 4, RejoinGrace)
 	require.Equal(t, 5, c.AnchorLen(), "the other destination has not spoken")
 
-	// The other has executed through 2: anchors 1 and 2 go
-	tx = c.Begin(5)
+	// The other has executed through 2: anchors 1 and 2 go -- once the word
+	// has waited out the grace a rejoining validator of either destination
+	// pulls them in (#4290)
+	b := uint64(5 + RejoinGrace)
+	tx = c.Begin(b)
 	tx.ReleaseAnchors(bvn2, 2, 2)
 	tx.Commit()
+	require.Equal(t, 5, c.AnchorLen(), "the word waits out the grace")
+	age(c, b, RejoinGrace)
 	require.Equal(t, 3, c.AnchorLen())
 	_, _, ok := c.PeekAnchor(2)
 	require.False(t, ok)
 	_, _, ok = c.PeekAnchor(3)
 	require.True(t, ok)
 
-	// A claim past what is held releases what is held and stops
-	tx = c.Begin(6)
+	b += RejoinGrace + 1
+	tx = c.Begin(b)
 	tx.ReleaseAnchors(bvn1, ^uint64(0), 2)
 	tx.ReleaseAnchors(bvn2, ^uint64(0), 2)
 	tx.Commit()
+	age(c, b, RejoinGrace)
 	require.Zero(t, c.AnchorLen())
 
-	// A single destination: a BVN's anchors go to the Directory alone
-	tx = c.Begin(7)
-	tx.AddAnchor(6, 7, &protocol.Transaction{Body: &protocol.BlockValidatorAnchor{}})
+	b += RejoinGrace + 1
+	tx = c.Begin(b)
+	tx.AddAnchor(6, b, &protocol.Transaction{Body: &protocol.BlockValidatorAnchor{}})
 	tx.ReleaseAnchors(protocol.DnUrl(), 6, 1)
 	tx.Commit()
+	age(c, b, RejoinGrace)
 	require.Zero(t, c.AnchorLen(), "one destination is the whole fan-out")
 }
 
