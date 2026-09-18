@@ -5,29 +5,34 @@
 // https://opensource.org/licenses/MIT.
 
 // Package enumerate walks a partition's BPT page by page through the v3
-// BptPageQuery and inserts every (KeyHash, ValueHash) leaf locally, for a node
-// that is pulling the state (executor.md, "Sync", step 3).
+// BptPageQuery and reports which accounts the peer holds and which of them the
+// node does not agree with, for a node that is pulling the state
+// (executor.md, "Sync", step 3).
 //
-// The pages say which accounts exist and what their leaves hash to. They are
-// not themselves trusted: nothing is believed until each account is pulled and
-// verified against the root the Directory anchored (package pull). A fresh
-// node enumerates once to learn the set; a node restarting with its store
-// intact does not enumerate at all — the blocks it buffers name what changed.
+// **Nothing is written.** The local BPT may only hold leaves derived from
+// state this node holds and has verified; a leaf taken from a peer's word
+// would make the local root the peer's root, and the local root is exactly
+// what the tracker matches against an anchored root to decide the node is
+// caught up. Enumeration therefore learns the peer's key set and its claimed
+// value hashes and hands the difference to package pull, which fetches each
+// account, verifies it against the root the Directory anchored, and writes it
+// — and only then does a leaf enter the local BPT, derived from the state.
 //
 // The per-page BptRoot moves while the scan runs on a live network. That is
 // expected and is not an error: the scan is a list of names, and convergence
 // is decided later, by the tracker.
 //
-// Ported from bootstrap-v3 (issue #4293). Changed on this line: the doc
-// comment. The code is unchanged.
+// Ported from bootstrap-v3 (issue #4293). Changed on this line: bootstrap-v3
+// inserted the peer's leaves into the local BPT, which is safe only under the
+// rejected model where matching the peer's whole root was the proof.
 package enumerate
 
 import (
 	"context"
-	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
@@ -46,18 +51,20 @@ type Result struct {
 	// PagesPulled counts the BptPageQuery requests issued.
 	PagesPulled int
 
-	// LeavesInserted counts the (KeyHash, ValueHash) pairs written
-	// to the local BPT.
-	LeavesInserted int
+	// LeavesSeen counts the (KeyHash, ValueHash) pairs the peer served.
+	LeavesSeen int
 
 	// LastBptRoot is the BptRoot from the last received page, for
 	// progress reporting. It is the peer's word for its own root, so it
 	// is not a thing to verify against.
 	LastBptRoot [32]byte
 
-	// Accounts is the list of account URLs the scan named. The caller
-	// pulls each one whose leaf it does not already hold.
+	// Accounts is every account the scan named.
 	Accounts []*url.URL
+
+	// Stale is the accounts whose leaf the node does not hold, or holds and
+	// does not agree with. Those are the accounts to pull.
+	Stale []*url.URL
 }
 
 // Options configures Run.
@@ -71,13 +78,13 @@ type Options struct {
 	OnPage func(pageNum int, page *api.BptPageRecord)
 }
 
-// Run paginates the partition at scope, inserting every received
-// leaf into the local BPT under batch. Returns when the source
-// reports Done=true.
+// Run paginates the partition at scope and reports what the peer holds and
+// how it differs from what the node holds. The batch is read, never written.
 //
-// The batch is the launcher's local DB write batch. The caller is
-// responsible for committing it after Run returns (and after any
-// concurrent gossip processing has finished).
+// It is what a node restarting with its store intact asks for: its leaves are
+// the state as of its last block, so only the leaves that moved since come
+// back stale. A fresh node holds no leaves, so every account is stale, which
+// is the same answer.
 //
 // On error, Run returns the partial Result so the caller can decide
 // whether to resume from the last good page.
@@ -89,13 +96,13 @@ func Run(
 	opts Options,
 ) (*Result, error) {
 	if src == nil {
-		return nil, fmt.Errorf("enumerate.Run: Source required")
+		return nil, errors.BadRequest.With("enumerate.Run: Source required")
 	}
 	if scope == nil {
-		return nil, fmt.Errorf("enumerate.Run: scope required")
+		return nil, errors.BadRequest.With("enumerate.Run: scope required")
 	}
 	if batch == nil {
-		return nil, fmt.Errorf("enumerate.Run: batch required")
+		return nil, errors.BadRequest.With("enumerate.Run: batch required")
 	}
 	pageSize := opts.PageSize
 	if pageSize == 0 {
@@ -106,10 +113,8 @@ func Run(
 	var start [32]byte // zero = begin a fresh scan from the highest BPT key
 
 	for {
-		select {
-		case <-ctx.Done():
-			return res, ctx.Err()
-		default:
+		if err := ctx.Err(); err != nil {
+			return res, err
 		}
 
 		page, err := src.QueryBptPage(ctx, scope, &api.BptPageQuery{
@@ -117,7 +122,7 @@ func Run(
 			Count:     pageSize,
 		})
 		if err != nil {
-			return res, fmt.Errorf("page %d: %w", res.PagesPulled+1, err)
+			return res, errors.UnknownError.WithFormat("page %d: %w", res.PagesPulled+1, err)
 		}
 		res.PagesPulled++
 
@@ -125,13 +130,22 @@ func Run(
 			if e == nil {
 				continue
 			}
-			if err := batch.BPT().Insert(record.KeyFromHash(e.KeyHash), e.ValueHash[:]); err != nil {
-				return res, fmt.Errorf("insert leaf %x at page %d: %w",
-					e.KeyHash[:8], res.PagesPulled, err)
+			res.LeavesSeen++
+			if e.Account == nil {
+				// A leaf that names no account cannot be pulled, so there is
+				// nothing the node can do about it either way.
+				continue
 			}
-			res.LeavesInserted++
-			if e.Account != nil {
-				res.Accounts = append(res.Accounts, e.Account)
+			res.Accounts = append(res.Accounts, e.Account)
+
+			local, err := batch.BPT().Get(record.KeyFromHash(e.KeyHash))
+			switch {
+			case err == nil && len(local) == 32 && [32]byte(local) == e.ValueHash:
+				// Held, and it agrees
+			case err == nil, errors.Is(err, errors.NotFound):
+				res.Stale = append(res.Stale, e.Account)
+			default:
+				return res, errors.UnknownError.WithFormat("read local leaf %x: %w", e.KeyHash[:8], err)
 			}
 		}
 		res.LastBptRoot = page.BptRoot
