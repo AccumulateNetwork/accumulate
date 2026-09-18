@@ -500,23 +500,36 @@ no executor version, so it can be worked as soon as the narrow question — what
 a join does when it is ahead of its peer — is answered; **#4321** can be worked
 now.
 
-**Still open for Paul: the activation heights (#4313, #4315), the narrow #4312
-question, and a confidentiality call (below).** The #4319 decision is made and
-recorded above; the rest of this placement remains a proposal with its
-reasoning, which is what the plan asks for when the order would change.
+**Still open for Paul: the activation heights (#4313, #4315) and the narrow
+#4312 question.** The #4319 decision is made and recorded above, as is the
+confidentiality call below; the rest of this placement remains a proposal with
+its reasoning, which is what the plan asks for when the order would change.
 
-**A confidentiality problem in this file, for Paul to rule on.** This project
-is public and so is this document. #4313 and #4314 are confidential issues, and
-further confidential threat-model findings on the join's staging load were filed
-2026-09-18. Until now this paragraph summarised #4313's and #4314's mechanisms
-in plain text; that summary has been removed and replaced with what the order
-actually needs, which is that they exist, that one of them gates on an
-activation height, and that neither is startable until it is named. **The
-removal does not unpublish anything** — the same descriptions are in the merge
-commit message for `05221528b`, already on `dagbft-integration` and public — so
-someone should decide whether that history matters and whether this file should
-name confidential issue numbers at all. The new staging-load findings are
-referenced here by nothing but their existence, deliberately.
+**Confidentiality in this file — decided by Paul, 2026-09-18: leave it.** This
+project is public and so is this document, and #4313, #4314 and the
+threat-model findings filed the same day are confidential issues. Paul's
+ruling: do not rewrite history, do not change any issue's visibility, and do
+not attempt to scrub the published descriptions — rewriting published history
+unpublishes nothing, and the DAG-BFT line is not assigned to a release, so
+those findings are against code no network runs. Recorded in full on #4313.
+
+**The standing practice that follows, which the ruling does not waive.** Paul
+decided the above when everything in question looked pre-release. Two findings
+have since proved to be on `main`. So: main-line findings are filed
+**confidential**, and **their mechanisms do not go into this file or into
+commit messages** — they may be referenced here by number and by ordering
+only. Where that distinction would force a real choice, raise it rather than
+decide it. The staging-load findings are referenced here by nothing but their
+existence, deliberately, and this paragraph names no mechanism for any of them.
+
+**One cross-issue ordering constraint, recorded here because it is invisible
+from either issue alone.** #4327's fix must not be backported to `main` unless
+#4321 is fixed first or in the same change. On the DAG-BFT line #4327's fix is
+correct and load-bearing; on `main` it has a precondition that #4321 currently
+violates, so the order is fixed even though #4321 on its own merits is low
+priority. #4321 is therefore a prerequisite of any #4327 backport, and inherits
+its urgency from that schedule rather than from its own severity. Both issues
+carry this note; the mechanism is on them, not here.
 
 **The tests that passed do not exercise the mechanism.** This has to be said
 next to the order, because the order was built on them.
