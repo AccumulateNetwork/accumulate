@@ -4,22 +4,25 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-// Package tracker watches the local BPT root chase a moving target —
-// the latest signed major-block anchor observed via gossip — and flips
-// the bootstrap state machine BOOTING → ACTIVE the first time the two
-// match.
+// Package tracker watches the local BPT root chase a moving target — the
+// roots the Directory anchored — and flips the node's state machine BOOTING →
+// ACTIVE at the first block whose anchored root the local root equals. That
+// block is Q of executor.md, "Sync", step 4: the block the node then executes
+// from.
 //
-// The tracker is deliberately passive: callers (the orchestrator,
-// v3-5) feed it observed anchors and ask it to check after every
-// commit. There is no background goroutine here; the orchestrator
-// drives cadence.
+// The tracker is passive. Callers feed it the anchors they collect and ask it
+// to check after every commit; there is no goroutine here.
 //
-// Trust model: anchors handed to Observe are presumed already
-// signature-verified. The tracker is the matcher, not the verifier.
-// Verification of major-block anchor signatures lives elsewhere — in
-// this build queue, the orchestrator pulls signed anchors from the
-// peer's anchor pool and trusts the peer's ACTIVE/COMPLETE claim per
-// the v3 doc.
+// What it is handed matters. An anchor given to Observe must be one the
+// Directory anchored — a StateTreeAnchor out of an anchor executed at the
+// Directory — never a root a peer claims for itself and never a root the node
+// computed for itself while BOOTING. The tracker is the matcher, not the
+// verifier.
+//
+// Ported from bootstrap-v3 (issue #4293). Changed on this line: the default
+// match threshold is 1, because one match against an anchored root is
+// decisive; bootstrap-v3 needed ten in a row because it matched against a
+// peer's claim about itself, where a single match could be a coincidence.
 package tracker
 
 import (
@@ -31,12 +34,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 )
 
-// DefaultMatchThreshold is the number of consecutive matching
-// Check calls required before the tracker promotes the machine.
-// A single match could be coincidence (local root briefly equal
-// to a stale anchor while drifting); requiring N in a row across
-// a moving source proves we're actually tracking, not colliding.
-const DefaultMatchThreshold = 10
+// DefaultMatchThreshold is the number of consecutive matching Check calls
+// required before the tracker promotes the machine. One: an anchored root is
+// a fact about a block, so the local root equalling it says the state is that
+// block's state, and there is nothing a second look adds.
+const DefaultMatchThreshold = 1
 
 // Tracker compares the local BPT root against observed anchors and
 // flips a nodestate.Machine to StateActive after MatchThreshold

@@ -289,38 +289,38 @@ func TestLatestObservedBlock(t *testing.T) {
 
 // TestCheck_ThresholdRequiresConsecutiveMatches — promotion only
 // fires after MatchThreshold consecutive Check calls match. A
-// single mismatch resets the streak. Default threshold (10) is
-// used to validate the production wiring; smaller thresholds are
-// covered by other tests.
+// single mismatch resets the streak.
 func TestCheck_ThresholdRequiresConsecutiveMatches(t *testing.T) {
+	const threshold = 10
 	db := newTrackerDB(t)
 	root := fillN(t, db, 3)
 
 	m := nodestate.New()
-	tr, _ := New(db, m) // default MatchThreshold = 10
+	tr, _ := New(db, m)
+	tr.MatchThreshold = threshold
 	tr.Observe(50, root)
 
-	// First 9 checks: streak grows but no promotion.
-	for i := 1; i < DefaultMatchThreshold; i++ {
+	// The first threshold-1 checks: the streak grows but no promotion.
+	for i := 1; i < threshold; i++ {
 		promoted, err := tr.Check(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
 		if promoted {
-			t.Fatalf("promoted at streak %d, want only at %d", i, DefaultMatchThreshold)
+			t.Fatalf("promoted at streak %d, want only at %d", i, threshold)
 		}
 		if got := tr.ConsecutiveMatches(); got != i {
 			t.Errorf("after Check %d: ConsecutiveMatches=%d, want %d", i, got, i)
 		}
 	}
 
-	// 10th check: promotion fires.
+	// The threshold-th check: promotion fires.
 	promoted, err := tr.Check(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !promoted {
-		t.Fatal("expected promotion at default threshold")
+		t.Fatal("expected promotion at the configured threshold")
 	}
 	if m.Get().State != nodestate.StateActive {
 		t.Errorf("state = %v, want ACTIVE", m.Get().State)

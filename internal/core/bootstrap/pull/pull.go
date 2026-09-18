@@ -4,35 +4,43 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-// Package pull is the bootstrap-v3 launcher's account-state puller.
+// Package pull fetches account state from a peer, for a node that is pulling
+// the state (executor.md, "Sync", step 3).
 //
 // Two modes:
 //
-//   - ModeStateOnly: head (protocol.Account body) + secondary state
-//     (Directory list, Pending txid list) + chain *heads* (Count +
-//     Pending). No chain entries. Sufficient to recompute the BPT
-//     leaf hash for the account because the production observer
-//     hashes only the chain head's Anchor (computed from Pending),
-//     not entries.
+//   - ModeStateOnly: the account body, its secondary state (the Directory
+//     list, the Pending txid list) and its chain *heads* — no chain entries.
+//     That is enough to reproduce the account's BPT leaf, because the
+//     observer hashes a chain's head anchor, not its entries.
 //
-//   - ModeFullSpine: head + secondary state + every chain entry
-//     replayed via merkle.AddEntry. Used for DN-side spine accounts
-//     (anchor pool, ledger, operators, operators/1) where the
-//     launcher needs the full chain history for ongoing operation.
+//   - ModeFullSpine: the same, plus every chain entry replayed. Used for the
+//     spine — anchors, ledger, operators, operators/1 — where the node needs
+//     the chain history itself: without the operators' key pages of the time
+//     it cannot verify the signatures on the anchors it verifies against.
 //
-// Trust model: per the v3 doc, BPT-match-against-trusted-anchor is
-// the consistency check. The puller doesn't verify anything itself
-// — it just populates the local DB. The launcher's tracker (v3-4)
-// is what flips ACTIVE on root match.
+// Verification. An account is only as good as the root it hashes into, and a
+// node that is still pulling has no root of its own: it verifies against the
+// root the Directory anchored for the block the peer served the account at
+// (Verify, in verify.go). A peer whose state does not verify is refused and
+// another is asked — AccountFrom. Nothing is written into the caller's batch
+// until it verifies.
+//
+// Ported from bootstrap-v3 (issue #4293). Changed on this line: the pull
+// writes through a nested batch and verifies before committing it; the
+// bootstrap-v3 puller wrote straight through and verified nothing, because
+// that design trusted whole-BPT root match and the peer's ACTIVE claim.
 package pull
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -73,70 +81,140 @@ type Options struct {
 
 	// PageSize for paginated list pulls. Default 256.
 	PageSize uint64
+
+	// Verify says what root the Directory anchored for the block a peer served
+	// an account at. When it is set, Account refuses state that does not hash
+	// into that root.
+	//
+	// Nil pulls without verifying. That is for the Directory spine — the
+	// accounts the verifier itself reads from, which cannot be verified before
+	// they exist — and for tests.
+	Verify Verifier
+
+	// Partition is the partition whose blocks the account's state belongs to.
+	// Required when Verify is set.
+	Partition *url.URL
 }
 
-// Account pulls u from src into batch per opts.Mode. After Account
-// returns successfully, calling batch.Account(u).Hash() will produce
-// the same BPT leaf hash as the source DB (modulo the source's BPT
-// having advanced — eventual consistency under live traffic).
+// Account pulls u from src into batch per opts.Mode, and, when opts.Verify is
+// set, refuses it unless it hashes into the root the Directory anchored for
+// the block the peer served it at.
+//
+// The pull goes into a nested batch that is only committed once it verifies,
+// so a refused account leaves nothing behind. Note that the peer's state moves
+// while the pull runs: the four queries can straddle a block, in which case
+// the assembled state hashes to nothing the Directory anchored and the account
+// is refused. That is the pull racing the network, and the answer to it is to
+// ask again — see AccountFrom.
 func Account(ctx context.Context, src Source, batch *database.Batch, u *url.URL, opts Options) error {
 	if src == nil {
-		return fmt.Errorf("pull.Account: src required")
+		return errors.BadRequest.With("pull.Account: src required")
 	}
 	if batch == nil {
-		return fmt.Errorf("pull.Account: batch required")
+		return errors.BadRequest.With("pull.Account: batch required")
 	}
 	if u == nil {
-		return fmt.Errorf("pull.Account: url required")
+		return errors.BadRequest.With("pull.Account: url required")
+	}
+	if opts.Verify != nil && opts.Partition == nil {
+		return errors.BadRequest.With("pull.Account: partition required when verifying")
 	}
 	pageSize := opts.PageSize
 	if pageSize == 0 {
 		pageSize = 256
 	}
 
-	// 1. Main account state.
-	if err := pullMain(ctx, src, batch, u); err != nil {
-		return fmt.Errorf("main %s: %w", u, err)
+	sub := batch.Begin(true)
+	defer sub.Discard()
+
+	// 1. Main account state, with the receipt that binds it to the peer's root.
+	receipt, err := pullMain(ctx, src, sub, u, opts.Verify != nil)
+	if err != nil {
+		return errors.UnknownError.WithFormat("main %s: %w", u, err)
 	}
 
 	// 2. Directory entries (the secondary-state list of contained URLs).
-	if err := pullDirectory(ctx, src, batch, u, pageSize); err != nil {
-		return fmt.Errorf("directory %s: %w", u, err)
+	if err := pullDirectory(ctx, src, sub, u, pageSize); err != nil {
+		return errors.UnknownError.WithFormat("directory %s: %w", u, err)
 	}
 
 	// 3. Pending txids.
-	if err := pullPending(ctx, src, batch, u, pageSize); err != nil {
-		return fmt.Errorf("pending %s: %w", u, err)
+	if err := pullPending(ctx, src, sub, u, pageSize); err != nil {
+		return errors.UnknownError.WithFormat("pending %s: %w", u, err)
 	}
 
 	// 4. Chains.
 	switch opts.Mode {
 	case ModeStateOnly:
-		if err := pullChainHeads(ctx, src, batch, u, pageSize); err != nil {
-			return fmt.Errorf("chain heads %s: %w", u, err)
+		if err := pullChainHeads(ctx, src, sub, u, pageSize); err != nil {
+			return errors.UnknownError.WithFormat("chain heads %s: %w", u, err)
 		}
 	case ModeFullSpine:
-		if err := pullChainsFull(ctx, src, batch, u, pageSize); err != nil {
-			return fmt.Errorf("chains full %s: %w", u, err)
+		if err := pullChainsFull(ctx, src, sub, u, pageSize); err != nil {
+			return errors.UnknownError.WithFormat("chains full %s: %w", u, err)
 		}
 	default:
-		return fmt.Errorf("unknown pull mode %d", opts.Mode)
+		return errors.BadRequest.WithFormat("unknown pull mode %d", opts.Mode)
 	}
-	return nil
+
+	if opts.Verify != nil && receipt != nil {
+		root, err := opts.Verify.AnchoredRoot(ctx, opts.Partition, receipt.LocalBlock)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		if err := Verify(sub, u, receipt, root); err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	return errors.UnknownError.Wrap(sub.Commit())
 }
 
-func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL) error {
-	rec, err := src.QueryAccount(ctx, u, nil)
+// AccountFrom pulls u from the first source whose state verifies, and reports
+// which one answered. A source that serves state that does not hash into the
+// anchored root is refused and the next is asked; when none answer, every
+// refusal is reported.
+func AccountFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url.URL, opts Options) (int, error) {
+	if len(srcs) == 0 {
+		return -1, errors.BadRequest.With("pull.AccountFrom: at least one source required")
+	}
+	var refusals []error
+	for i, src := range srcs {
+		err := Account(ctx, src, batch, u, opts)
+		if err == nil {
+			return i, nil
+		}
+		if errors.Is(err, ErrNotAnchored) || ctx.Err() != nil {
+			// Not the peer's fault, and asking another will not help.
+			return -1, errors.UnknownError.Wrap(err)
+		}
+		refusals = append(refusals, errors.UnknownError.WithFormat("source %d: %w", i, err))
+	}
+	return -1, errors.Conflict.WithFormat("%v: no source served state that verifies: %w", u, stderrors.Join(refusals...))
+}
+
+// pullMain stores the account body and returns the receipt the peer served
+// with it, which binds the body to the peer's BPT root. wantReceipt asks for
+// one; without it the peer does the work of building a proof nobody checks.
+func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL, wantReceipt bool) (*api.Receipt, error) {
+	var query *api.DefaultQuery
+	if wantReceipt {
+		query = &api.DefaultQuery{IncludeReceipt: &api.ReceiptOptions{ForAny: true}}
+	}
+	rec, err := src.QueryAccount(ctx, u, query)
 	if err != nil {
-		return fmt.Errorf("query account: %w", err)
+		return nil, errors.UnknownError.WithFormat("query account: %w", err)
 	}
 	if rec == nil || rec.Account == nil {
-		return nil // pre-genesis placeholder; nothing to store
+		return nil, nil // Nothing to store
 	}
 	if err := batch.Account(u).Main().Put(rec.Account); err != nil {
-		return fmt.Errorf("store main: %w", err)
+		return nil, errors.UnknownError.WithFormat("store main: %w", err)
 	}
-	return nil
+	if wantReceipt && rec.Receipt == nil {
+		return nil, errors.Conflict.WithFormat("%v: the peer served no receipt", u)
+	}
+	return rec.Receipt, nil
 }
 
 func pullDirectory(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64) error {

@@ -4,32 +4,29 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-// Package nodestate is the in-process bootstrap state machine and
-// the advertisement payload published to peer discovery.
+// Package nodestate is the state a node is in while it joins, and the
+// advertisement that says so (executor.md, "Sync", step 5: a node serves
+// last, and says what it can answer).
 //
-// A node moves through four states with explicit trust semantics:
+// Four states:
 //
-//   - BOOTING:  pulling spine + BPT (snapshot). Cannot serve
-//     queries; cannot validate.
-//   - WAITING:  snapshot applied locally; network is running but
-//     we are waiting on a major-block signed anchor that matches
-//     the snapshot's BPT root. Still cannot serve queries.
-//   - ACTIVE:   spine completed with validator-quorum signatures
-//     from a major block; local BPT root is consensus-verified.
-//     Can serve current-state queries and participate in consensus.
-//   - COMPLETE: ACTIVE plus historical backfill complete — every
-//     entry in every account chain is present locally (or the
-//     historical retention policy is satisfied).
+//   - BOOTING:  pulling the spine and the state. Cannot serve queries,
+//     cannot validate.
+//   - WAITING:  the state is local, but no anchored root has been seen that
+//     matches it yet. Still cannot serve queries.
+//   - ACTIVE:   the local root equals a root the Directory anchored, so the
+//     state is verified. Can serve current-state queries and take part in
+//     consensus.
+//   - COMPLETE: ACTIVE plus the history backfilled — the producer cache
+//     filled and the chains the node lacked fetched — so it can answer the
+//     sequencer and healing too.
 //
-// Forward-only transitions: BOOTING → WAITING → ACTIVE → COMPLETE.
-// A node never regresses; if a verification breaks, the launcher
-// exits or rolls the data dir back to a pre-bootstrap state and
-// starts over.
+// Transitions are forward only: BOOTING → WAITING → ACTIVE → COMPLETE. A node
+// never regresses; a verification that breaks means starting over.
 //
-// The machine is orthogonal to the trust model — it would look the
-// same under a back-walk-to-genesis design or any other. Lives here
-// (rather than in pipeline/) because consumers like the advertisement
-// publisher reference it without depending on the trust phase.
+// Ported from bootstrap-v3 (issue #4293). Changed on this line: the doc
+// comment, which named the snapshot this line no longer has. The code is
+// unchanged.
 package nodestate
 
 import (
@@ -87,10 +84,8 @@ type Advertisement struct {
 	// SinceBlock is the block height at which the state became true.
 	SinceBlock uint64
 
-	// VerifiedAnchor is the BPT root that validates the
-	// ACTIVE/COMPLETE claim — peers can spot-check by querying a
-	// BPT leaf and verifying the proof anchors at this root. Empty
-	// for BOOTING.
+	// VerifiedAnchor is the root the Directory anchored that the node's
+	// own root matched. Empty for BOOTING.
 	VerifiedAnchor [32]byte
 
 	// HistoryDepth is the oldest block fully retained, for COMPLETE.
@@ -121,7 +116,7 @@ func (a *Advertisement) Validate() error {
 }
 
 // Machine is the in-process state machine. Forward-only transitions.
-// Persistence is handled by the caller (via bootpersist).
+// Persistence is the caller's.
 type Machine struct {
 	mu       sync.RWMutex
 	state    State
@@ -193,12 +188,10 @@ func (m *Machine) State() State {
 	return m.state
 }
 
-// PromoteToWaiting transitions BOOTING → WAITING. The snapshot has
-// been applied locally (BPT root is the snapshot's claimed root) but
-// no validator-quorum-signed anchor matching that root has been
-// observed yet. claimedAnchor is the BPT root from the snapshot;
-// sinceBlock is the snapshot's minor block. Returns false if the
-// transition is invalid.
+// PromoteToWaiting transitions BOOTING → WAITING: the state is local and the
+// node knows what root it thinks it has, but no anchored root matching it has
+// been seen yet. claimedAnchor is the local BPT root and sinceBlock is the
+// block it was taken at. Returns false if the transition is invalid.
 func (m *Machine) PromoteToWaiting(claimedAnchor [32]byte, sinceBlock uint64) bool {
 	if claimedAnchor == ([32]byte{}) {
 		return false
@@ -222,11 +215,11 @@ func (m *Machine) PromoteToWaiting(claimedAnchor [32]byte, sinceBlock uint64) bo
 	return true
 }
 
-// PromoteToActive transitions WAITING → ACTIVE (or BOOTING → ACTIVE
-// for legacy callers who skip WAITING). anchor is the verified BPT
-// root from a major-block-signed anchor (must be non-zero);
-// sinceBlock is the height the verification was established at.
-// Returns false if the transition is invalid.
+// PromoteToActive transitions WAITING → ACTIVE, or BOOTING → ACTIVE for a
+// caller that skips WAITING. anchor is the root the Directory anchored that
+// the local root now equals (non-zero), and sinceBlock is the block it was
+// anchored for — block Q of executor.md, "Sync". Returns false if the
+// transition is invalid.
 func (m *Machine) PromoteToActive(anchor [32]byte, sinceBlock uint64) bool {
 	if anchor == ([32]byte{}) {
 		return false

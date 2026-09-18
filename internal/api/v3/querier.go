@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bptproof"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -315,9 +316,51 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 		}
 		return r, err
 
+	case *api.BptPageQuery:
+		return s.queryBptPage(batch, query)
+
 	default:
 		return nil, errors.NotAllowed.WithFormat("unknown query type %v", query.QueryType())
 	}
+}
+
+// queryBptPage serves one page of this partition's BPT to a node pulling the
+// state (executor.md, "Sync"). The page says which accounts exist and what
+// their leaves hash to; it carries no proof, because each account is verified
+// on its own, when it is pulled, against the root the Directory anchored.
+func (s *Querier) queryBptPage(batch *database.Batch, query *api.BptPageQuery) (*api.BptPageRecord, error) {
+	const defaultBptPageSize = 256
+	const maxBptPageSize = 4096
+
+	count := query.Count
+	if count == 0 || count > maxBptPageSize {
+		count = defaultBptPageSize
+	}
+
+	startKey := query.StartHash
+	if startKey == ([32]byte{}) {
+		startKey = bptproof.FullScanStart()
+	}
+
+	page, err := bptproof.GetPage(batch, startKey, int(count))
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	out := &api.BptPageRecord{
+		NextStart: page.NextStart,
+		BptRoot:   page.BptRoot,
+		Done:      page.Done,
+		Entries:   make([]*api.BptLeafSummary, len(page.Entries)),
+	}
+	for i, e := range page.Entries {
+		out.Entries[i] = &api.BptLeafSummary{
+			KeyHash:   e.KeyHash,
+			ValueHash: e.ValueHash,
+			Account:   e.Account,
+		}
+	}
+	return out, nil
 }
 
 func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, record *database.Account, wantReceipt *api.ReceiptOptions) (*api.AccountRecord, error) {

@@ -4,23 +4,22 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-// Package enumerate is the bootstrap-v3 launcher's BPT-enumeration
-// consumer. It paginates a partition's BPT via the v3 BptPageQuery,
-// inserts each (KeyHash, ValueHash) pair into the local BPT, and
-// reports progress + when the scan is complete.
+// Package enumerate walks a partition's BPT page by page through the v3
+// BptPageQuery and inserts every (KeyHash, ValueHash) leaf locally, for a node
+// that is pulling the state (executor.md, "Sync", step 3).
 //
-// Per the corrected sync model, pages do NOT carry per-leaf Merkle
-// proofs. The launcher builds a complete local BPT from these pages;
-// matching the local root against a trusted current StateTreeAnchor
-// (obtained via signed major-block anchors) is the consistency
-// check.
+// The pages say which accounts exist and what their leaves hash to. They are
+// not themselves trusted: nothing is believed until each account is pulled and
+// verified against the root the Directory anchored (package pull). A fresh
+// node enumerates once to learn the set; a node restarting with its store
+// intact does not enumerate at all — the blocks it buffers name what changed.
 //
-// Concurrency with gossip: the launcher runs this loop in parallel
-// with gossip ingestion. As the network advances during enumeration,
-// the per-page BptRoot may move; that's fine. Every received leaf
-// gets inserted; gossip-driven updates overwrite leaves whose
-// account state has changed; the local root eventually catches up
-// to a recent signed anchor and stays there.
+// The per-page BptRoot moves while the scan runs on a live network. That is
+// expected and is not an error: the scan is a list of names, and convergence
+// is decided later, by the tracker.
+//
+// Ported from bootstrap-v3 (issue #4293). Changed on this line: the doc
+// comment. The code is unchanged.
 package enumerate
 
 import (
@@ -48,16 +47,13 @@ type Result struct {
 	// to the local BPT.
 	LeavesInserted int
 
-	// LastBptRoot is the BptRoot from the last received page. The
-	// caller can compare this to gossip-delivered anchors to track
-	// catch-up progress; on a steady network the last page's root
-	// equals the current StateTreeAnchor.
+	// LastBptRoot is the BptRoot from the last received page, for
+	// progress reporting. It is the peer's word for its own root, so it
+	// is not a thing to verify against.
 	LastBptRoot [32]byte
 
-	// Accounts is the de-duplicated list of account URLs encountered
-	// during enumeration. The caller uses this to drive the
-	// post-enumerate state-pull pass: for each URL whose Main is
-	// not yet local, pull the account.
+	// Accounts is the list of account URLs the scan named. The caller
+	// pulls each one whose leaf it does not already hold.
 	Accounts []*url.URL
 }
 
