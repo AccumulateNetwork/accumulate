@@ -190,17 +190,29 @@ func (s *PulledState) Pull(ctx context.Context) error {
 
 	// The anchors first: they are what everything else is verified against,
 	// and reading them is what tells the tracker which roots to watch for.
+	//
+	// A failure here ends the round, never the join. Both this and the spine
+	// below are reads addressed at a named peer now, so either can fail for
+	// the ordinary reason that the peer it picked is restarting — and under
+	// chaos that is a certainty, not a possibility. Returning an error reaches
+	// join.Run, which returns, and the daemon logs "the join did not complete"
+	// and abandons the goroutine: the node then collects forever, with no
+	// retry, until an operator restarts it. The reads on either side of these
+	// were deliberately made to log and continue; these two were missed.
 	err := s.anchors.Read(ctx)
 	if err != nil {
-		return errors.UnknownError.WithFormat("read the Directory's anchors: %w", err)
+		s.log.Info("The Directory's anchors could not be read this round",
+			"partition", s.partition, "error", err)
 	}
 
 	if !s.spine {
 		err := s.pullSpine(ctx)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			s.log.Info("The spine could not be pulled this round; it is asked for again",
+				"partition", s.partition, "error", err)
+		} else {
+			s.spine = true
 		}
-		s.spine = true
 	}
 
 	// What earlier rounds fetched and could not verify yet is settled first,
@@ -467,7 +479,14 @@ func (s *PulledState) fetch(ctx context.Context, accounts []*url.URL) (int, []*u
 		h := &heldBatch{batch: s.db.Begin(true)}
 		for _, u := range chunk {
 			srcs, partition, err := s.sourcesFor(ctx, u)
-			if err != nil {
+			switch {
+			case errors.Is(err, errNotThisPartition):
+				// Dropped, not refused: a peer named an account this store
+				// must not hold, and asking again will not change that.
+				s.log.Info("A named account is not this partition's and was dropped",
+					"account", u, "partition", s.partition)
+				continue
+			case err != nil:
 				s.log.Info("No peer could be found for an account", "account", u, "error", err)
 				refused = append(refused, u)
 				continue
@@ -503,9 +522,26 @@ func (s *PulledState) fetch(ctx context.Context, accounts []*url.URL) (int, []*u
 	return pulled, refused
 }
 
+// errNotThisPartition is an account that routes somewhere else. It is dropped
+// and not refused: a refusal is retried for the life of the process, and this
+// name is never going to become this partition's.
+var errNotThisPartition = errors.NotAllowed.With("the account is not this partition's")
+
 // sourcesFor is the peers that can answer for an account, and the partition
 // they answer for. The partition matters: a receipt proves the state as of a
 // block, and block numbers collide across partitions (#4308).
+//
+// An account that routes to another partition is refused outright. The pull
+// writes into THIS partition's store, and a partition's state tree holds no
+// account of another's, so such a name puts a leaf in the local BPT that no
+// peer of this partition has — and the local root leaves the anchored series
+// for good, however perfectly everything else is pulled. That is the same
+// failure pullSpine was fixed for; the difference is that the spine's list is
+// ours by construction and this one is a peer's, arriving in a block ledger
+// record or a BPT page. Worse, the account verifies: it is fetched from its
+// own partition's honest peers and settles against the root the Directory
+// anchored for THAT partition, so nothing downstream catches it. The leaf is
+// durable, so a restart does not clear it.
 func (s *PulledState) sourcesFor(ctx context.Context, u *url.URL) ([]pull.Source, *url.URL, error) {
 	srcs, partition, err := s.sources.For(ctx, u)
 	if err != nil {
@@ -513,6 +549,9 @@ func (s *PulledState) sourcesFor(ctx context.Context, u *url.URL) ([]pull.Source
 	}
 	if partition == nil {
 		partition = s.partition
+	}
+	if !partition.Equal(s.partition) {
+		return nil, nil, errNotThisPartition
 	}
 	return srcs, partition, nil
 }

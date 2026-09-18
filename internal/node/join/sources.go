@@ -238,6 +238,8 @@ func (p *peerQuerier) Query(ctx context.Context, scope *url.URL, query api.Query
 	p.mu.Unlock()
 
 	var last error
+	var notFound error
+	var sawNotFound int
 	for i := range ids {
 		id := ids[(start+i)%len(ids)]
 		rec, err := p.peers.clientFor(id, p.partition).Query(ctx, scope, query)
@@ -247,13 +249,30 @@ func (p *peerQuerier) Query(ctx context.Context, scope *url.URL, query api.Query
 		if ctx.Err() != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
-		// NotFound is the peer's answer about the record, not a failure of
-		// the peer: an account the network does not have is not one another
-		// peer will produce.
+		// NotFound is the peer's answer about the record, and it is the
+		// network's answer only once every peer has given it. A peer that is
+		// itself joining holds an empty store and answers NotFound for
+		// everything it has not pulled yet, so taking the first one as the
+		// network's answer ends the read while a peer that holds the record is
+		// standing right there. That matters because the callers read NotFound
+		// as a fact about the network and not about the peer: the block-ledger
+		// walk reads it as an empty block, and the anchor read as a directory
+		// that has executed no anchors.
 		if errors.Is(err, errors.NotFound) {
-			return nil, err
+			notFound = err
+			sawNotFound++
+			continue
 		}
 		last = err
+	}
+	// Only every peer agreeing makes NotFound the network's answer. A mixture
+	// of NotFound and failures says nothing, so it is an error and the caller
+	// asks again rather than concluding there is nothing there.
+	if sawNotFound == len(ids) && len(ids) > 0 {
+		return nil, notFound
+	}
+	if last == nil {
+		last = notFound
 	}
 	return nil, errors.UnknownError.WithFormat("no peer of %v answered: %w", p.partition, last)
 }
