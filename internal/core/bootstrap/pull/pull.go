@@ -250,6 +250,18 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 	p.receipt = receipt
 	if receipt != nil {
 		p.Block = receipt.LocalBlock
+
+		// The block is the SERVING partition's, not the puller's. A receipt
+		// proves the state as of a block of the partition that built it
+		// (api.Receipt.Partition, internal/api/v3/querier.go), and block
+		// numbers collide across partitions -- so settling a foreign
+		// account's block against this node's partition asks the Directory
+		// for a root it never anchored for that block (#4308). Latent while
+		// every account a join pulls is its own partition's; wrong the moment
+		// one is not.
+		if receipt.Partition != "" {
+			p.Partition = protocol.PartitionUrl(receipt.Partition)
+		}
 	}
 
 	// 2. Directory entries (the secondary-state list of contained URLs).
@@ -345,6 +357,39 @@ func AccountFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *u
 			"%v: no source served a state at a block the directory has anchored: %w", u, ErrNotAnchored)
 	}
 	return -1, errors.Conflict.WithFormat("%v: no source served state that verifies: %w", u, stderrors.Join(refusals...))
+}
+
+// FetchFrom fetches u from the first source that serves it and hands the state
+// back held, unverified and unwritten, with the index of the source that
+// answered. A source that cannot serve the account is refused and the next is
+// asked; when none answer, every refusal is reported.
+//
+// It is AccountFrom's first half, for a caller that settles later. That caller
+// is the join: Account discards on ErrNotAnchored, so a caller built on it
+// re-fetches next round, at a newer block the Directory has not anchored
+// either -- a treadmill that never settles anything. Holding the fetch and
+// retrying Settle against THE SAME BLOCK is what the Pending/Settle split
+// exists for.
+//
+// The returned Pending holds an open child of batch. It must be settled or
+// discarded before batch is committed or discarded, and it counts against
+// MaxHeld until it is.
+func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url.URL, opts Options) (*Pending, int, error) {
+	if len(srcs) == 0 {
+		return nil, -1, errors.BadRequest.With("pull.FetchFrom: at least one source required")
+	}
+	var refusals []error
+	for i, src := range srcs {
+		p, err := Fetch(ctx, src, batch, u, opts, opts.Verify != nil)
+		if err == nil {
+			return p, i, nil
+		}
+		if ctx.Err() != nil {
+			return nil, -1, errors.UnknownError.Wrap(err)
+		}
+		refusals = append(refusals, errors.UnknownError.WithFormat("source %d: %w", i, err))
+	}
+	return nil, -1, errors.Conflict.WithFormat("%v: no source served it: %w", u, stderrors.Join(refusals...))
 }
 
 // pullMain stores the account body and returns the receipt the peer served
