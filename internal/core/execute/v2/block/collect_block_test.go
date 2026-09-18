@@ -249,7 +249,11 @@ func TestSettleStaging_ReleasesThroughThePulledDelivered(t *testing.T) {
 	require.NoError(t, f.batch.Account(id.Ledger).Main().Put(ledger))
 	putSystemLedger(t, f.batch, f.x, 7)
 
-	require.NoError(t, f.x.SettleStaging(f.batch, 7))
+	require.NoError(t, f.batch.Commit())
+	batch := f.db.Begin(true)
+	defer batch.Discard()
+	require.NoError(t, f.x.SettleStaging(batch, 7))
+	require.False(t, batch.IsDirty(), "settling staging writes nothing: it is memory")
 
 	tx = f.x.staging().Begin()
 	defer tx.Discard()
