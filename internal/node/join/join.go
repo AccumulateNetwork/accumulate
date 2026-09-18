@@ -49,6 +49,15 @@ type Buffer interface {
 	// round named.
 	NamedAccounts() []*url.URL
 
+	// ApplyStaging runs load — the executor taking a peer's staging — and
+	// then applies every block buffered since this node started collecting to
+	// THAT staging, in order, and each new one as it arrives. The two are one
+	// step because the order is the spec's: staging comes from a validator as
+	// of its block P, and the blocks after P are applied to it (executor
+	// spec, "Sync", step 2). A node that collected into its own staging first
+	// would have nothing to load into.
+	ApplyStaging(load func() error) error
+
 	// Handoff leaves collecting mode at block q and produces the buffered
 	// groups from q + 1 in order.
 	Handoff(q uint64) error
@@ -257,7 +266,7 @@ func takeStaging(ctx context.Context, opts Options, log *slog.Logger, retry time
 			// block this node has collected. Everything at or below P is in
 			// the snapshot. There is no third case, and no block index to
 			// compare: a buffered group carries a leader round, not a block.
-			err = opts.Stage.LoadStaging(snap)
+			err = opts.Buffer.ApplyStaging(func() error { return opts.Stage.LoadStaging(snap) })
 			if err != nil {
 				log.Info("A validator's staging could not be loaded", "peer", peer.PeerID, "block", snap.Block, "error", err)
 				continue
