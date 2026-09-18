@@ -169,6 +169,14 @@ func (s *stagingSim) member(i int) *messaging.SyntheticMessage {
 	return &messaging.SyntheticMessage{Message: s.seqs[i], Signature: s.sign(s.seqs[i])}
 }
 
+// memberWithProof is a copy that carries its own collection proof, as a
+// dispatch does when the proof does not travel separately (wrapSynthetic).
+func (s *stagingSim) memberWithProof(i int, anchorBlock uint64) *messaging.SyntheticMessage {
+	m := s.member(i)
+	m.Proof = s.proof(i, i, anchorBlock)
+	return m
+}
+
 // sign is the source validator's signature over a sequenced message, what a
 // dispatched copy carries.
 func (s *stagingSim) sign(seq *messaging.SequencedMessage) protocol.KeySignature {
@@ -493,4 +501,28 @@ func to32(b []byte) [32]byte {
 	var h [32]byte
 	copy(h[:], b)
 	return h
+}
+
+// An entry collected WITH its own collection proof runs when that proof's
+// anchor executes, not only when a package proof covers its number.
+//
+// Without this the entry waits for a proof that may never come: its own is
+// not staged for its anchor, and nothing re-offers it. A node that is joining
+// decides what to hold against a state it is still pulling, so it holds such
+// entries where its peers did not, and a stream that stops where its peers'
+// moves is divergence (#4294).
+func TestStaging_EntryWithItsOwnProof_RunsWhenItsAnchorExecutes(t *testing.T) {
+	s := newStagingSim(t, 6)
+
+	m := s.memberWithProof(0, 3)
+	require.Equal(t, errors.Pending, s.process([]messaging.Message{m}, m), "collected: its anchor is not here")
+	require.True(t, s.held(1))
+	require.True(t, s.collected(1))
+	require.Empty(t, s.run(), "and it does not run")
+
+	s.newBlock()
+	s.anchorExecutes(3, s.rootAt(3))
+	require.False(t, s.proven(0), "no package proof validated its number")
+	require.Equal(t, []uint64{1}, s.run(), "but the anchor its own proof names is here now")
+	require.Equal(t, uint64(1), s.delivered())
 }

@@ -622,7 +622,13 @@ no recovery path must not be the one that is dropped.
 `SyntheticMessage.process`: an entry whose proof's anchor is not here yet is
 collected (`collect`): the message and the transaction it belongs to are held
 in staging at the entry's number (first sighting wins), marked collected until
-the hash validated at its number is its own. Nothing is written. The run
+the hash validated at its number is its own — **or until the anchor named by
+the proof it arrived with has executed here**, which is the same question its
+arrival asked, asked again against the chain as it now stands. Its own proof
+is re-checked in full when it runs, so that decides only when the entry is
+offered. Without it an entry held for want of an anchor waits for a package
+proof over its number that may never come: the proof it arrived with is not
+staged for its anchor, and nothing re-offers it. Nothing is written. The run
 builder never takes a collected number until then (`streamPosition.runnable`),
 and staging judges an arriving proof-less entry the same way
 (`syntheticIsProven`); an entry held by the sequenced layer carries no

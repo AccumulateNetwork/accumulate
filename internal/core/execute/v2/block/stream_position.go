@@ -119,7 +119,39 @@ func (p *streamPosition) runnable(n uint64) bool {
 			}
 		}
 	}
+
+	// An entry collected WITH its own collection proof is runnable once that
+	// proof's anchor has executed here: the same question its arrival asked,
+	// asked again against the chain as it now stands (executor spec,
+	// "Collection"). Its own proof is re-checked in full when it runs — that
+	// it covers this message, and who signed it — so this decides only WHEN
+	// it is offered, never whether it is valid.
+	//
+	// Without this, an entry held because its anchor had not arrived waits
+	// for a PACKAGE proof over its number, which may never come: the proof it
+	// arrived with is not staged for its anchor, and nothing re-offers it. On
+	// a node that is joining, which decides what to hold against a state it
+	// is still pulling, that is a stream that stops where its peers' moves —
+	// which is divergence (#4294).
+	if p.block != nil {
+		if proof := heldCollectionProof(h); proof != nil {
+			_, ok, err := p.block.Executor.provingAnchorIndex(p.batch, proof)
+			return err == nil && ok
+		}
+	}
 	return false
+}
+
+// heldCollectionProof is the proof a held entry arrived with, if it arrived
+// with one of its own.
+func heldCollectionProof(h *execute.Held) *protocol.AnnotatedReceipt {
+	switch m := h.Message.(type) {
+	case *messaging.SyntheticMessage:
+		return m.Proof
+	case *messaging.BadSyntheticMessage:
+		return m.Proof
+	}
+	return nil
 }
 
 // received is the largest number this stream has ever seen. It says the stream
