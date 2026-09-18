@@ -94,7 +94,12 @@ func chainRespV3(account *api.AccountRecord, chains *api.RecordRange[*api.ChainR
 	res := new(ChainQueryResponse)
 	if account != nil {
 		res.Type = account.Account.Type().String()
-		res.Data = account.Account
+		// v2 has no field to carry a sighted count beside the body, and its
+		// callers are operator surfaces asking how far a stream is behind. It
+		// does not assert that Data hashes to Receipt, so merging here is safe
+		// -- but if a v2 client ever starts checking the two against each
+		// other, this is where a weaker #4295 comes back.
+		res.Data = account.SightedAccount()
 		res.Receipt = receiptV3(account.Receipt)
 		res.ChainId = account.Account.GetUrl().AccountID()
 	}

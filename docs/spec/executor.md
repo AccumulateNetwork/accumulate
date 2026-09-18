@@ -907,11 +907,17 @@ zero while the ledger's does not, and a stage that said zero would report
 entries as held that the node executed blocks ago — which is exactly what a
 joining node would then take from it (healing.md, "Staging snapshot").
 
-**`Received` is answered, not stored.** Removing the field from the record does
-not remove the question, and the question is the one every operator surface
-asks: how far is this stream behind. The API fills it in on the way out from
-staging's sighted mark, computed on read and never written, so the account on
-disk carries no trace of it and nothing about consensus depends on the answer.
+**`Received` is answered, not stored -- BESIDE the body, never in it.** Removing
+the field from the record does not remove the question, and the question is the
+one every operator surface asks: how far is this stream behind. The API answers
+it from staging's sighted mark, computed on read and never written, so the
+account on disk carries no trace of it and nothing about consensus depends on
+the answer. It travels as `AccountRecord.Sighted`, a value beside the body, and
+a reader that wants it merges on its own side after checking whatever proof came
+with the record. Filling it INTO the body on the way out was the mistake: the
+receipt is built from the stored state, so a synthesised body does not hash to
+the leaf its own receipt proves, and no anchor ledger could ever be pulled
+(#4295). See "Sync", step 3.
 
 Writing it back instead would be the mistake. A value derived from staging,
 placed in an account, makes a staging discrepancy a divergent block hash rather
