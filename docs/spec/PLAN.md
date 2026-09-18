@@ -302,7 +302,41 @@ sample on a running soak, not a design. Then
 `30m-100tps-chaos.conf`; then #4299, provisionally, which that run may
 promote ahead of itself; then the 24-hour run.
 
-**Five items filed 2026-09-18 after the merge, and where they are proposed to
+**#4319 reframes everything below it, and it is a decision before it is
+work.** A debugger agent proved by execution on 2026-09-18 (in-process
+simulator only — no Docker, no soak) that a restarted node **never rejoins at
+all**: it stays BOOTING, executes nothing, and every settle batch expires.
+`pulled=0` on all 59–60 rounds; the settle histogram 366/359/352/345/338 is
+every batch exhausting `maxSettleRounds = 4` (`internal/node/join/state.go:66`,
+window at `:431`) and being discarded. The cause is structural: a restarted
+node already holds every cold account, so it differs from its peers **only in
+the accounts that change every block** — and those are served at the peer's
+*current* block, which the Directory has not yet anchored, so
+`settleBatch`'s `anchors.AnchoredRoot` (`state.go:410`) never resolves inside
+the window. The lag grows rather than closing: 88−38=50 at round 0, 238−63=175
+at round 50. A node joining from **empty** converges (pulled=3,3,19, matched
+round 7) because its cold accounts have old, already-anchored served blocks.
+**That is why `test/e2e/join_pull_test.go` passes from `emptyDb()` and the
+real restart case cannot** — the join is tested in the one configuration where
+it works. This is not #4290's divergence; the node never returns to service.
+It also names the cause of #4316: the same `pullSpine` write turned a node
+holding correct, peer-identical, anchored block-22 state into a root no node
+ever held and the Directory never anchored.
+
+So the capability is blocked on a design decision, not on bug fixes: **how a
+joining node asks for state as of an anchored block.** A peer serves its
+current block; an anchored root exists only for blocks already anchored, which
+is always behind; for a restart the two never meet. Three shapes, all Paul's:
+a peer serves state as of an anchored block it names (and retains what that
+requires); or the joining node settles against something other than an
+already-anchored root (and something else admits it); or the join stops
+pulling the difference and takes the whole state as of an anchored block —
+which is what the simulator's `CompleteJoin` (`test/simulator/partition.go:96`,
+`Export`/`Import`) fakes, and what the snapshot/fast-sync streaming removed on
+2026-09-06 did. If the answer is the third, that removal is what is being
+revisited. **No amount of the work below substitutes for this answer.**
+
+**Six items filed 2026-09-18 after the merge, and where they are proposed to
 go — a proposal, not a change to the approved order.** The approved order
 above stands until Paul says otherwise; this paragraph is the issue manager's
 reasoning about where these belong, recorded so nothing lives only in a chat
@@ -346,18 +380,37 @@ And two that follow from the block ledger:
   leak, and it inverts the proposed disposal step. **Nothing on #4312 should
   be built until that is answered.**
 
-*Proposed placement, for Paul.* #4318 and #4317 argue to sit **in front of**
-`30m-100tps-chaos.conf` rather than after it, for the reason #4296, #4303 and
-#4304 were placed there: the run's verdict is only worth what the mechanism
-under it is. A 30-minute chaos run today would pass or fail for reasons
-unrelated to the join — it cannot distinguish a join that verified every
-account from one that verified none (#4318), and the two fixes it would be
-resting on have no targeted test (#4317). Both are cheap: #4317 is three
-reverts and three runs, #4318 is one test. #4316 is a correctness defect the
-page diff currently masks and does not gate the run. #4315 and #4313 do not
-gate it either, but both are stopped dead until their activation heights are
-named, so they should be asked about now rather than when they become urgent.
-**None of this is acted on until Paul answers.**
+*Proposed placement, for Paul.* What a 30-minute chaos run can be a gate for
+is the question, and today the answer is nothing about the join. It would pass
+or fail for reasons unrelated to it:
+
+- **#4304** — a fresh network cannot start; `Fresh` is dead code, evaluated
+  inside `if joining` at `dagbft.go:513` and therefore always false. The soak
+  starts a fresh network. Run `20260918T131713Z` ended 11 of 12 nodes
+  collecting, one executing, the Directory stuck at block 1. Until this is
+  fixed the run does not begin, let alone gate.
+- **#4319** — on the current build a restarted node never rejoins at all, so a
+  chaos run's restarts produce a node that stays BOOTING. The run cannot
+  distinguish that from any other failure, and #4319 is blocked on a design
+  answer before it is work.
+- **#4318** — the run cannot distinguish a join that verified every account
+  from one that verified none. One test fixes that.
+- **#4317** — the two fixes the run would rest on (#4305, #4309) have no
+  targeted test; three reverts and three runs settle whether the one broad e2e
+  test covers them.
+
+So the order that makes the gate mean something is: the #4319 decision, then
+#4304, then #4318 and #4317 (both cheap, both about being able to read the
+run's verdict), then the run. **#4316** is a live corruption rather than the
+masked cost it was filed as — see #4319's second defect — and belongs with
+#4319 because the same write causes both; it is not separately gating.
+**#4315** and **#4313** do not gate the run at all, but both are stopped dead
+until their activation heights are named, so they should be asked about now
+rather than when they become urgent. **#4312** is a fork, not a tweak, and
+nothing on it should be built until it is answered.
+
+**None of this is acted on until Paul answers.** It is a proposal with its
+reasoning, which is what the plan asks for when the order would change.
 
 **The tests that passed do not exercise the mechanism.** This has to be said
 next to the order, because the order was built on them.
