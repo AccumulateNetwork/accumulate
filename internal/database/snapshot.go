@@ -583,6 +583,10 @@ func estimateBPTProgress(currentHash [32]byte) float64 {
 	return progress
 }
 
+// defaultBatchRecordLimit is how many records a restore buffers before it
+// commits and starts a new batch.
+const defaultBatchRecordLimit = 50_000
+
 type RestoreOptions struct {
 	BatchRecordLimit int
 	SkipHashCheck    bool
@@ -608,7 +612,7 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 		opts = new(RestoreOptions)
 	}
 	if opts.BatchRecordLimit == 0 {
-		opts.BatchRecordLimit = 50_000
+		opts.BatchRecordLimit = defaultBatchRecordLimit
 	}
 
 	rd, err := snapshot.Open(file)
@@ -703,6 +707,16 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 	err = batch.Commit()
 	if err != nil {
 		return errors.UnknownError.WithFormat("commit changes: %w", err)
+	}
+
+	// A snapshot carries a chain's entries but not its merkle element index, and
+	// the executor reads that index to skip duplicate entries and to answer
+	// whether it holds an anchor. Rebuild it, or a restored node diverges - see
+	// rebuildChainIndexes. Index records are not covered by the BPT, so this
+	// runs after the BPT is built and does not disturb the hash check below.
+	err = rebuildChainIndexes(db, opts.BatchRecordLimit)
+	if err != nil {
+		return errors.UnknownError.WithFormat("rebuild chain indexes: %w", err)
 	}
 
 	if opts.SkipHashCheck {

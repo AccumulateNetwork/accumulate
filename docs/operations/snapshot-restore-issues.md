@@ -105,6 +105,85 @@ The `cmd/create-snap/main.go` tool needs review to ensure:
 3. All message/transaction records are included
 4. The collection happens at a consistent database state
 
+## Issue 4: Restored Node Had No Merkle Element Index (#4328, #4330)
+
+### Problem
+
+A node restored from a V2 snapshot diverged from its genesis-built peers in two
+opposite ways:
+
+- **By append (#4328).** `<partition>/votes` grew an entry its peers skipped, so
+  the account hash, the chain anchor and the BPT root all differed.
+- **By refusal (#4330).** The node answered "I never received that anchor" about
+  an anchor sitting on its own `anchor(dn)/root` chain.
+
+A poisoned database passes `VerifyHash` and produces the same app hash as a clean
+one, so there was no point at which the node learned it was different until it
+diverged.
+
+### Root Cause
+
+A snapshot carries a chain's entries but not its **merkle element index**. The
+index is an index record, so `collectOptions` walks with `IgnoreIndices: true`
+and the BPT does not cover it, and nothing rebuilt it afterwards: the only
+`postRestore` implementor was `internal/database/events.go`. So a restored node
+had no element index for anything predating its snapshot.
+
+That index answers two different questions during execution:
+
+- **Is this entry already on the chain?** `Chain.AddEntry` reads it to skip a
+  duplicate. Production offers a duplicate nearly every block: `block_begin.go`
+  captures the ABCI `CommitInfo` into `<partition>/votes`, and that
+  transaction's hash carries no height, time, block hash or signature, so in
+  steady state it is byte-identical block after block. With no index the skip
+  never fires.
+- **Do we hold this anchor?** `holdsAnchorRoot` (`msg_synthetic.go`, via
+  `IndexOf`), the proof checks in `create_token_account.go` and
+  `set_lite_account_delegate.go` (via `HeightOf`), and
+  `internal/database/indexing/receipts.go` all ask it about existence. With no
+  index the answer is always no.
+
+### Fix
+
+`database.Restore` now rebuilds every chain's element index from its entries,
+for every account, once, at restore
+(`internal/database/snapshot_chain_index.go`).
+
+Two properties of that rebuild are load-bearing:
+
+1. **First occurrence, not last.** `AddEntry` writes the index only when no
+   record exists, so on a node that built its own chain a repeated hash is
+   indexed at the height it *first* appeared at. A rebuild that writes the last
+   occurrence repairs the dedup and the existence checks — those read presence,
+   not the value — but breaks the receipt plane:
+   `indexing.getIndexedChainReceipt` does `Receipt(HeightOf(entry), anchorIndex)`,
+   and if `HeightOf` names an occurrence *after* that anchor the receipt fails
+   outright with `invalid range: from (26) > to (21)`. A missing index is a clean
+   `NotFound` a caller can handle; a plausible wrong index is not.
+2. **Committed in chunks.** The rebuild commits and replaces its batch every
+   `BatchRecordLimit` entries (default 50,000), the way the restore loop already
+   does. Buffering every write into one in-memory batch is fine on a 14-account
+   simulator and will not fit a real store's millions of accounts and tens of
+   millions of entries.
+
+### Operator impact
+
+**A restore now takes materially longer.** The rebuild reads every entry of every
+chain of every account, so its cost is linear in the total number of chain
+entries in the snapshot, on top of the restore itself. This is a one-time cost
+per restore; it is not paid again at startup.
+
+**Files:** `internal/database/snapshot_chain_index.go`,
+`internal/database/snapshot.go`
+
+**Not fixed here:** the **v1** restore path
+(`internal/database/snapshot/restore.go:137`) still rebuilds the index for
+*system accounts only* — the gate is
+`if _, ok := protocol.ParsePartitionUrl(acct.Url.RootIdentity()); ok`. A user
+account restored from a v1 snapshot still gets no index for its pre-snapshot
+entries. v1 restore is reachable only from `tools/cmd/debug` (`snap_restore.go`),
+not from a node, which is why it was left alone; see #4328.
+
 ## create-snap Tool Requirements
 
 The `cmd/create-snap/main.go` tool creates V2 snapshots with consensus sections. It needs the following improvements:
@@ -166,3 +245,5 @@ The `cmd/create-snap/main.go` tool creates V2 snapshots with consensus sections.
 - `cmd/create-snap/main.go` - Snapshot creation tool
 - `cmd/accumulated/cmd_snapshot.go` - restore-genesis command
 - `pkg/database/snapshot/` - Snapshot format definitions
+- `internal/database/snapshot.go` - V2 collect and `database.Restore`
+- `internal/database/snapshot_chain_index.go` - Merkle element index rebuild (Issue 4)
