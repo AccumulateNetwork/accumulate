@@ -58,6 +58,12 @@ type Checkpoint struct {
 	// Key is the hex-encoded author public key.
 	LastCommitted map[string]types.Round `json:"last_committed"`
 
+	// Committed is Bullshark's digest-level commit dedup: the certificates
+	// within the rescue window that have been committed, by hex digest.
+	// Without it a restarted node's first leader commit re-emits every
+	// ancestor in the window and executes a block its peers did not (#4290).
+	Committed map[string]types.Round `json:"committed,omitempty"`
+
 	// Certificates holds serialized certificates that need to be restored.
 	// This includes pending certificates that weren't yet committed.
 	Certificates []CertificateData `json:"certificates,omitempty"`

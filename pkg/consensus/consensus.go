@@ -883,9 +883,11 @@ func (n *Node) LastCommitRound() types.Round {
 // watermarks. The service saves one per block so a restart can resume where
 // the executor's state is (#4238).
 func (n *Node) Checkpoint() *persist.Checkpoint {
-	return persist.NewCheckpoint(n.config.Partition,
+	cp := persist.NewCheckpoint(n.config.Partition,
 		n.primary.CurrentRound(), n.primary.CurrentEpoch(),
 		n.bullshark.LastCommitRound(), n.bullshark.GetLastCommitted())
+	cp.Committed = n.bullshark.GetCommitted()
+	return cp
 }
 
 // Restore seeds the consensus position from a checkpoint, before Start: the
@@ -901,6 +903,7 @@ func (n *Node) Restore(cp *persist.Checkpoint) {
 	for author, round := range cp.LastCommitted {
 		n.bullshark.SetLastCommittedForAuthor(author, round)
 	}
+	n.bullshark.SetCommitted(cp.Committed)
 	n.dag.SetLastCommitRound(cp.LastCommitRound)
 	slog.Info("Restored consensus position", "partition", n.config.Partition,
 		"round", cp.CurrentRound, "lastCommit", cp.LastCommitRound, "block", cp.BlockIndex)

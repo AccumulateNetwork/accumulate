@@ -430,3 +430,64 @@ func TestLargeDAG(t *testing.T) {
 		seen[digest] = true
 	}
 }
+
+// A restarted node's first commit must be its peers' commit. The dedup that
+// keeps orderDag from re-emitting the rescue window is a digest set; a
+// checkpoint that restored only the round watermarks left it empty, and the
+// first leader after a restart re-committed every ancestor within
+// rescueWindow -- 16 batches where the peers committed 3, a different block,
+// a root chain that never matched again (#4290, run 20260918T014155Z).
+func TestRestoredCommittedSetKeepsTheFirstCommitEqual(t *testing.T) {
+	h := newTestHelper(t, 4)
+	peer := New(h.committee, h.dag)
+
+	r0 := h.insertGenesis()
+	r1 := h.insertRound(1, r0)
+	r2 := h.insertRound(2, r1)
+	r3 := h.insertRound(3, r2)
+	for _, cert := range r3 {
+		peer.ProcessCertificate(cert)
+	}
+	require.Equal(t, types.Round(2), peer.LastCommitRound())
+
+	// The checkpoint, as saved for the block leader 2 ordered.
+	lastCommitRound := peer.LastCommitRound()
+	lastCommitted := peer.GetLastCommitted()
+	committed := peer.GetCommitted()
+	require.NotEmpty(t, committed)
+
+	// The peer goes on: leader 4 commits rounds 3-4.
+	r4 := h.insertRound(4, r3)
+	r5 := h.insertRound(5, r4)
+	var theirs []ConsensusOutput
+	for _, cert := range r5 {
+		theirs = append(theirs, peer.ProcessCertificate(cert)...)
+	}
+	require.NotEmpty(t, theirs)
+
+	digests := func(outs []ConsensusOutput) []types.CertificateDigest {
+		var ds []types.CertificateDigest
+		for _, o := range outs {
+			ds = append(ds, o.Certificate.Digest())
+		}
+		return ds
+	}
+
+	// A restart: a new instance on the same DAG, seeded from the checkpoint.
+	restarted := NewWithState(h.committee, h.dag, lastCommitRound, lastCommitted)
+	restarted.SetCommitted(committed)
+	var mine []ConsensusOutput
+	for _, cert := range r5 {
+		mine = append(mine, restarted.ProcessCertificate(cert)...)
+	}
+	require.Equal(t, digests(theirs), digests(mine), "the first commit after a restart is the peers' commit")
+
+	// Without the set, the same restart re-commits the history below its
+	// floor: what every restart did before.
+	bare := NewWithState(h.committee, h.dag, lastCommitRound, lastCommitted)
+	var extra []ConsensusOutput
+	for _, cert := range r5 {
+		extra = append(extra, bare.ProcessCertificate(cert)...)
+	}
+	require.Greater(t, len(extra), len(theirs), "the watermarks alone do not keep committed history out of the walk")
+}
