@@ -229,12 +229,26 @@ nodes take the same path, in this order:
    operators, with their chains — so anchors and their signatures can be
    verified; then the partition's BPT by pages, and every account behind a
    leaf that is missing or stale. The blocks being buffered say which
-   accounts change: their user transactions and the synthetics and anchors
-   they execute name every principal touched, so the pull follows the
-   network rather than enumerating twice. Each pulled state is verified
-   against the BPT root the Directory anchored for that block. A node that
-   restarts with its store intact pulls only what changed after its last
-   block.
+   accounts change, so the pull follows the network rather than enumerating
+   twice. **The accounts a block names** are the principal of every
+   transaction it executes, the signer of every signature it carries, and
+   the anchor pool for every anchor — every account the block can write. A
+   node that restarts with its store intact pulls only what changed after
+   its last block.
+
+   **A pulled account is verified against the root the Directory anchored,
+   never against one of its own.** A peer serves the account with a receipt
+   running from the account's state hash to the peer's BPT root. The account
+   is kept only if three things hold: the receipt is valid; it ends at the
+   `StateTreeAnchor` the Directory anchored for the block the peer served the
+   account at; and it passes through the leaf the pulled state hashes to
+   locally. The third is what makes the pull safe, because a peer can serve a
+   true receipt for an account and a false body for it. Anything else is
+   refused, and the account is asked of another peer. The pull runs ahead of
+   the anchors — a peer serves its current block and the Directory anchors
+   that block a few blocks later — so a fetched account is held, unwritten,
+   until the anchor for its block arrives, and is neither trusted early nor
+   refused for arriving before its proof.
 4. **Converge, then execute.** When the local BPT root equals the
    `StateTreeAnchor` of an anchored block `Q` at or above `P`, staging is
    brought to `Q`: everything collected through `Q` held, everything at or

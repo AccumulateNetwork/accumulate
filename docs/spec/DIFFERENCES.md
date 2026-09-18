@@ -265,12 +265,53 @@ committed-digest set, without which the first leader after every restart
 re-committed the whole rescue window below the floor (16 batches where the
 peers committed 3, run `20260918T014155Z`).
 
+**State pull (#4293, partly done)**: the bootstrap-v3 packages are on this
+line — `internal/core/bootstrap/{pull,enumerate,bptproof,tracker,nodestate}`
+and the v3 `BptPageQuery`, served by the querier. A pulled account is verified
+the way the spec now says: against the `StateTreeAnchor` the Directory
+anchored for the block the peer served it at, read from `acc://dn.acme/anchors`
+(`pull.DirectoryAnchors`), with the peer's receipt required to pass through the
+leaf the pulled state hashes to locally, so a true receipt for one account and
+a false body for it is refused and asked of another peer (`pull.AccountFrom`).
+A fetch is held unwritten until its block's anchor arrives (`pull.Pending`),
+because the pull runs ahead of the anchors. `TestPullReachesTheAnchoredRoot`
+restores a database to block `R`, runs the network to `Q`, pulls the six of
+twenty-one accounts whose leaf moved, and reaches the root the Directory
+anchored for `Q`; the tracker then promotes.
+
+**Not done**, and each is a hole in the same step:
+
+- Nothing is wired into node start-up. That is #4294; today the packages are
+  reachable only from tests.
+- **An account's leaf is only reproduced for the state the pull fetches.**
+  The account hash covers a pending transaction's `Payments`, `Votes`,
+  `Signatures` and `History`, the scheduled-events BPT on a partition ledger,
+  and the delivery queues on the synthetic account; the pull fetches none of
+  them. An account carrying any of them cannot be verified, so it cannot be
+  pulled, so a partition holding one cannot be joined. The v3 API has no
+  surface for most of it.
+- **"The accounts a block names" is not read from the blocks.** The spec says
+  the buffered blocks name what to re-pull; the code names them by diffing the
+  peer's BPT pages against the local leaves (`enumerate.Stale`), which is a
+  full scan of the peer's tree per round rather than a read of what the block
+  touched. The envelope-side answer needs #4292.
+- **The Directory's spine is pulled unverified.** It is what the verifier
+  itself is read from, so there is nothing to verify it against until it is
+  there. The spec does not say what closes that circle.
+- **A peer serving a page is not held to it.** A BPT page carries no proof, so
+  a peer can omit a leaf and the puller will not know an account is missing
+  until its root fails to match.
+- `orchestrator`, `anchorsrc`, `bootpersist`, `clientsrc` and `gossip` from
+  bootstrap-v3 are not ported; the first is #4294's, the rest are of the
+  rejected trust model.
+- The v3 `block` query's entry paging ignores `start`, so it cannot be used to
+  page through what a block touched. Untouched here.
+
 **Decided (Paul, 2026-09-18)**: a starting node takes its staging from a
 running validator through an API, keeps it current from consensus while it
 pulls the state the buffered blocks name, and executes from the block after
 its root matches; a restart is the same path, not a consensus replay. PLAN
-E11 lists the five steps. The bootstrap-v3 state pull exists only on the
-CometBFT line.
+E11 lists the five steps.
 
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.
