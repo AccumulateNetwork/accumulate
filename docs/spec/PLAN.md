@@ -249,12 +249,14 @@ this one; the staging half is new.
    by backfill. Test: a request for missing data routed to a `BOOTING` node
    is refused and answered by a `COMPLETE` one.
 
-   *Landed (#4295) with three departures, in DIFFERENCES E11.* The sequencer
-   and the staging snapshot refuse while a node is joining, counted per call.
-   Serving resumes when the node EXECUTES, not when its history is backfilled:
-   there is no backfill on this line, so `COMPLETE` would mean a node that
-   joined never answered again. The state is not persisted and not advertised
-   — a caller learns it from the refusal.
+   *Landed (#4295) with the departures in DIFFERENCES E11.* Every private
+   call the sequencer serves, and the staging snapshot, refuse while a node is
+   joining, counted per call, with the state as a gauge. A node that joined
+   answers `NotReady` — not `NotFound`, which strands a stream — for the
+   blocks it did not execute. Serving resumes when the node EXECUTES, not when
+   its history is backfilled: there is no backfill on this line, so `COMPLETE`
+   would mean a node that joined never answered again. The state is not
+   persisted and not advertised, and the v3 querier is not gated.
 
 Order and gates: 1 and 3 in parallel (they share nothing); 2 on 1; 4 on all
 three, gated on `TestOneValidatorRestartDoesNotDiverge` with the interim pull

@@ -39,6 +39,12 @@ type pinnedSnapshot struct {
 // as of one anchored block. Any other epoch must match the pinned one; a
 // mismatch means the pin was replaced and the client must start over.
 func (s *Sequencer) SnapshotRange(ctx context.Context, partition *url.URL, epoch, offset uint64, _ private.SequenceOptions) (*private.SnapshotChunk, error) {
+	// A node that is joining reads a store the pull has half filled: what it
+	// would answer here is neither its own history nor its peers' (#4295).
+	if err := s.serving("snapshot-range"); err != nil {
+		return nil, err
+	}
+
 	if partition == nil {
 		return nil, errors.BadRequest.With("missing partition")
 	}

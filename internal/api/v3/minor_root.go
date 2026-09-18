@@ -30,6 +30,12 @@ var _ private.MinorRootRanger = (*Sequencer)(nil)
 // window's network updates, and a receipt list proving the root chain
 // extends the root at since to this anchor's root.
 func (s *Sequencer) MinorRootRange(ctx context.Context, partition *url.URL, since, until uint64, _ private.SequenceOptions) (*private.MinorRootRecord, error) {
+	// A node that is joining reads a store the pull has half filled: what it
+	// would answer here is neither its own history nor its peers' (#4295).
+	if err := s.serving("minor-root-range"); err != nil {
+		return nil, err
+	}
+
 	if partition == nil {
 		return nil, errors.BadRequest.With("missing partition")
 	}

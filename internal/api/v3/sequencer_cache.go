@@ -122,6 +122,16 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 			if produced, err := s.producedFor(dst); err == nil && num > produced {
 				return nil, errors.NotReady.WithFormat("synthetic %d for %v is not produced yet (%d so far)", num, dst, produced)
 			}
+			// A node that joined produced none of the blocks at or below the
+			// block it joined at, so it holds none of their entries and
+			// never will: there is no backfill on this line. That is not a
+			// miss — a miss says the cache failed to hold what this node
+			// produced — and it must not be, because a miss is what strands
+			// a stream (healing spec, "Stranded streams"). It is "not from
+			// me", and the asker goes to a node that executed them (#4295).
+			if joined := s.cache.Joined(); joined > 0 {
+				return nil, errors.NotReady.WithFormat("%v joined at block %d and produced nothing for %v at or before it; ask a node that did", s.partitionID, joined, dst)
+			}
 			synthcache.Count("entry", false)
 			return nil, errors.NotFound.WithFormat("synthetic %d for %v is not in the cache", num, dst)
 		}

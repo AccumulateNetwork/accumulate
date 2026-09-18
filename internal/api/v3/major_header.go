@@ -29,6 +29,12 @@ var _ private.MajorHeaderRanger = (*Sequencer)(nil)
 // it is the only partition whose own database archives the quorum for its own
 // anchors.
 func (s *Sequencer) MajorHeaderRange(ctx context.Context, partition *url.URL, start, end uint64, _ private.SequenceOptions) ([]*private.MajorHeaderRecord, error) {
+	// A node that is joining reads a store the pull has half filled: what it
+	// would answer here is neither its own history nor its peers' (#4295).
+	if err := s.serving("major-header-range"); err != nil {
+		return nil, err
+	}
+
 	if partition == nil {
 		return nil, errors.BadRequest.With("missing partition")
 	}

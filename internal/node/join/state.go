@@ -9,6 +9,10 @@ package join
 import (
 	"context"
 	"log/slog"
+	"strings"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/enumerate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
@@ -20,6 +24,29 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// What state this node is in, as a number an operator can watch: 0 booting,
+// 1 waiting, 2 active, 3 complete. A node stuck joining is invisible without
+// it — the refusal counter only moves if somebody asks (#4295).
+var mNodeState = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Namespace: "accumulate",
+	Subsystem: "node",
+	Name:      "state",
+	Help:      "This node's state for the partition: 0 booting, 1 waiting, 2 active, 3 complete (executor spec, \"Sync\", step 5)",
+}, []string{"partition"})
+
+func stateNumber(s nodestate.State) float64 {
+	switch s {
+	case nodestate.StateWaiting:
+		return 1
+	case nodestate.StateActive:
+		return 2
+	case nodestate.StateComplete:
+		return 3
+	default:
+		return 0
+	}
+}
 
 // PulledState is the join's state half (#4293): it pulls what the node lacks
 // from running peers, verified against the root the Directory anchored for
@@ -94,18 +121,22 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		OnAnchor: track.Observe,
 	}
 
-	// The partition's services read this to decide what they may answer: a
-	// node that is joining answers for nothing it has not executed (#4295).
-	// Registered as BOOTING, and the tracker promotes it to ACTIVE when the
-	// root matches.
+	// Watchable from the moment the node starts joining, and on every change.
+	label := opts.Partition.String()
 	if id, ok := protocol.ParsePartitionUrl(opts.Partition); ok {
-		nodestate.Register(id, machine)
+		label = strings.ToLower(id)
 	}
+	mNodeState.WithLabelValues(label).Set(stateNumber(machine.State()))
+	machine.OnChange(func(ad nodestate.Advertisement) {
+		mNodeState.WithLabelValues(label).Set(stateNumber(ad.State))
+	})
 	return s, nil
 }
 
-// Machine is the node's state — BOOTING until the root matches, ACTIVE after
-// — which the partition's services refuse requests by (#4295).
+// Machine is the node's state — BOOTING until the root matches, ACTIVE after.
+// The node's own services are given it, and refuse what they cannot answer
+// while it is joining (#4295). It is handed over rather than registered: a
+// process can run several nodes of one partition, and each has its own.
 func (s *PulledState) Machine() *nodestate.Machine { return s.machine }
 
 // Pull fetches the accounts the collected blocks named, and the Directory's
@@ -220,19 +251,25 @@ func (s *PulledState) pullSpine(ctx context.Context) error {
 // to give and the node starts from its own state. Its services answer for
 // themselves again from here; leaving it BOOTING would make a node that is
 // running refuse every request for the rest of its life (#4295).
-func (s *PulledState) Executing(block uint64) {
-	// The anchor recorded is this node's own root at that block. It is not a
-	// root anyone anchored — nothing verified this state — and the difference
-	// is the point: this path is taken only when no peer had anything to
-	// verify against, because every peer restarted too.
+func (s *PulledState) Executing(block uint64) error {
+	// The root recorded is this node's own, read BEFORE it starts executing
+	// again so that it is the root of the block named. It is not a root
+	// anyone anchored — nothing verified this state — and that is the point:
+	// this path is taken only when no peer had anything to verify against,
+	// because every peer restarted too.
 	batch := s.db.Begin(false)
-	defer batch.Discard()
 	root, err := batch.GetBptRootHash()
+	batch.Discard()
 	if err != nil {
-		s.log.Error("Cannot read this node's own root", "error", err)
-		return
+		return errors.UnknownError.WithFormat("read this node's own root: %w", err)
 	}
-	s.machine.PromoteToActive(root, block)
+	if root == ([32]byte{}) {
+		return errors.InternalError.With("this node's root is empty")
+	}
+	if !s.machine.PromoteToActive(root, block) {
+		return errors.Conflict.WithFormat("%v is %v, not joining", s.partition, s.machine.State())
+	}
+	return nil
 }
 
 // Matched reports the block whose anchored root the local root equals. Until

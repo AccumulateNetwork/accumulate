@@ -317,20 +317,49 @@ That is safe for exactly the reason the join exists: no peer holds an entry
 this node lacks, because no peer holds anything.
 
 **Serve last (#4295, partly done)**: a node that is joining refuses the
-sequencer (`Sequence`, `SequenceRange`) and the staging snapshot with
-`NotReady`, counted per call in `accumulate_node_not_serving_total`, so
-healing does not take an empty cache for an answer and a joining node cannot
-take another joining node's stage. The requester already treats `NotReady` as
-"in flight, ask later" rather than a miss, and the anchor path asks the source's
-validators by node and moves past one that refuses. **Differences from the
-issue as written**: a node serves again as soon as it EXECUTES (ACTIVE), not
-once its history is backfilled (COMPLETE) — there is no backfill on this line,
-so requiring COMPLETE would mean a node that joined never answered anything
-again. The state is not persisted (`bootpersist` is not ported): a restart
-joins again, which is the same answer. It is not advertised in the node's
-service record either, so `FindService` still returns a joining node and the
-caller learns its state from the refusal rather than from the listing; the
-`unavailable` outcome label the issue asks for is therefore not added.
+sequencer (`Sequence`, `SequenceRange`, `MajorHeaderRange`, `MinorRootRange`,
+`PartitionRootRange`, `SnapshotRange`) and the staging snapshot with
+`NotReady`, counted per call in `accumulate_node_not_serving_total`, and its
+state is a gauge (`accumulate_node_state`). The state is the node's own,
+handed to its services rather than looked up by partition: a process can run
+several nodes of one partition — devnet does — and a registry keyed by
+partition would give them all one node's state. A node that never joined has
+none and serves.
+
+A node that HAS joined holds nothing of the blocks it did not execute, and
+never will — there is no backfill on this line — so a request for one of them
+is answered `NotReady` naming the block it joined at, not `NotFound`. The
+difference matters: the requester counts `NotFound` as a miss and a run of
+misses strands a stream for good (healing.md, "Stranded streams"), while
+`NotReady` is "ask someone who has it".
+
+**Differences from the issue as written**:
+
+- **Serving resumes when the node executes (ACTIVE), not when its history is
+  backfilled (COMPLETE)**, because there is no backfill: requiring COMPLETE
+  would mean a node that joined never answered anything again. What it cannot
+  answer it refuses by the rule above, so the difference is which answer a
+  peer gets, not whether it is misled.
+- **The state is not persisted** (`bootpersist` is not ported). A restart
+  joins again, which reaches the same answer.
+- **It is not advertised** in the node's service record, so `FindService`
+  still returns a joining node and the caller learns its state from the
+  refusal rather than from the listing. The `unavailable` outcome label the
+  issue asks for is therefore not added: the requester cannot tell a joining
+  node from a node whose entries are in flight, and both mean "ask again".
+- **The v3 querier is not gated.** A joining node still answers account
+  state and BPT pages from a store the pull has half filled. The hazard is
+  another joining node pulling its unverified spine from it — `pull.Account`
+  in `ModeFullSpine` is explicitly unverified, because it is what the verifier
+  reads from — and then never pulling the spine again. Gating the querier
+  would also stop a joining node answering ordinary reads about itself, which
+  is why it is recorded rather than done.
+- **A joining sibling partition is a quiet hole.** Every node runs the
+  Directory beside its BVN, and the dialer answers a service the node itself
+  provides before asking the network, so while one of them is joining the
+  other's healing requests to it are refused locally and recorded as "in
+  flight" rather than as misses. Nothing is healed and nothing alarms; the
+  node-state gauge is what shows it.
 
 **Not proven**: the join has not run on a real network. The Docker chaos run
 (`30m-100tps-chaos.conf`, then 24 h) is the proof, and it is a human step. Two

@@ -8,11 +8,13 @@ package api
 
 import (
 	"context"
+	"strings"
+	"sync"
+	"sync/atomic"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
-	"sync"
-	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -314,14 +316,15 @@ var mNotServing = promauto.NewCounterVec(prometheus.CounterOpts{
 // NotReady instead, and the requester asks the next validator (executor spec,
 // "Sync", step 5).
 func (s *Sequencer) serving(call string) error {
-	if s.nodeState != nil {
-		switch s.nodeState.State() {
-		case nodestate.StateActive, nodestate.StateComplete:
-			return nil
-		}
-	} else if nodestate.Serving(s.partitionID) {
+	// A node with no state of its own never joined: it has always executed
+	// what it holds, and it answers for itself.
+	if s.nodeState == nil {
 		return nil
 	}
-	mNotServing.WithLabelValues(s.partitionID, call).Inc()
+	switch s.nodeState.State() {
+	case nodestate.StateActive, nodestate.StateComplete:
+		return nil
+	}
+	mNotServing.WithLabelValues(strings.ToLower(s.partitionID), call).Inc()
 	return errors.NotReady.WithFormat("%s is joining and cannot answer for what it has not executed", s.partitionID)
 }
