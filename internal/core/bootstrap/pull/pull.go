@@ -242,6 +242,19 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		return nil, err
 	}
 
+	// The body the node already holds, kept in case the spine fill finds the
+	// node past this peer. NotFound is the bootstrap case: nothing held, and
+	// nothing to be ahead of.
+	var heldBody protocol.Account
+	if opts.Mode == ModeFullSpine {
+		switch err := sub.Account(u).Main().GetAs(&heldBody); {
+		case err == nil, errors.Is(err, errors.NotFound):
+			// Ok
+		default:
+			return fail(errors.UnknownError.WithFormat("read the held body of %s: %w", u, err))
+		}
+	}
+
 	// 1. Main account state, with the receipt that binds it to the peer's root.
 	receipt, err := pullMain(ctx, src, sub, u, withReceipt)
 	if err != nil {
@@ -281,8 +294,21 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 			return fail(errors.UnknownError.WithFormat("chain heads %s: %w", u, err))
 		}
 	case ModeFullSpine:
-		if err := pullChainsFull(ctx, src, sub, u, pageSize); err != nil {
+		past, err := pullChainsFull(ctx, src, sub, u, pageSize)
+		if err != nil {
 			return fail(errors.UnknownError.WithFormat("chains full %s: %w", u, err))
+		}
+		// The meeting point is the account's, not one chain's. A node past
+		// this peer on every chain of the account is past it on the account:
+		// its body is the later one, and taking the peer's would rewind the
+		// account to the peer's block while its chains stay at the node's —
+		// a body and chains from two different heights, which is a leaf
+		// neither side has. That matters most for <partition>/ledger, whose
+		// body is read as the node's own height (#4344).
+		if past && heldBody != nil {
+			if err := sub.Account(u).Main().Put(heldBody); err != nil {
+				return fail(errors.UnknownError.WithFormat("keep the held body of %s: %w", u, err))
+			}
 		}
 	default:
 		return fail(errors.BadRequest.WithFormat("unknown pull mode %d", opts.Mode))
@@ -606,70 +632,162 @@ func addChainToIndex(batch *database.Batch, u *url.URL, c *api.ChainRecord) erro
 //
 // The result is held to the peer's word for the chain's head: after the
 // replay the local anchor must equal the anchor of the head the peer served.
-// A local chain that is ahead of the peer's, or that holds a different
-// prefix, is refused rather than extended into a chain neither side has.
-func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64) error {
+// A local chain that holds a different prefix is refused rather than extended
+// into a chain neither side has. A local chain that is merely ahead of the
+// peer's is the meeting point reached early — see pullChainEntries.
+//
+// It reports whether the node is PAST this peer for the account as a whole:
+// at or beyond the peer on every chain, and strictly beyond on at least one.
+// That is the account-level meeting point, and it is what says the body the
+// node holds is the later of the two.
+func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64) (bool, error) {
 	// Empty ChainQuery: list-all-chains. See pullChainHeads.
 	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{})
 	if err != nil {
-		return fmt.Errorf("list chains: %w", err)
+		return false, fmt.Errorf("list chains: %w", err)
 	}
 	if chains == nil {
-		return nil
+		return false, nil
 	}
+	var anyBeyond, anyFilled bool
 	for _, c := range chains.Records {
 		if c == nil || c.Name == "" {
 			continue
 		}
 		dstChain, err := batch.Account(u).ChainByName(c.Name)
 		if err != nil {
-			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+			return false, fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
-		if err := pullChainEntries(ctx, src, dstChain.Inner(), u, c, pageSize); err != nil {
-			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+		// came in at is the node's height for this chain BEFORE the fill.
+		cameInAt, err := pullChainEntries(ctx, src, dstChain.Inner(), u, c, pageSize)
+		if err != nil {
+			return false, fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
+		switch {
+		case cameInAt > int64(c.Count):
+			anyBeyond = true
+		case cameInAt < int64(c.Count):
+			anyFilled = true
+		}
+		// Equal is neither: a chain that did not move between the peer's
+		// block and the node's says nothing about which of them is later.
 		if err := addChainToIndex(batch, u, c); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return nil
+	// Beyond on one chain and behind on another is not a node that is past
+	// the peer; it is an account whose chains do not agree on a height, and
+	// the peer's body is taken as it always was.
+	return anyBeyond && !anyFilled, nil
 }
 
 // pullChainEntries brings one chain up to the height the peer served, from
 // whatever the node already holds, and checks the result against the peer's
 // head.
-func pullChainEntries(ctx context.Context, src Source, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, pageSize uint64) error {
+//
+// Syncing and bootstrapping are one walk at two depths: the node fills entries
+// back from the head until it meets data it already has. A bootstrapping node
+// never meets any, so it collects everything; a restarted node meets its own
+// at once. The meeting point is therefore the only part of the walk a restart
+// exercises, and the only part a bootstrap does not — which is why bootstrap
+// passed while a twelve-node restart could not pull a spine account at all.
+//
+// Two different things can be true of a chain the node already holds, and they
+// get different answers:
+//
+//   - The local chain is AHEAD of the peer's — the peer serves c.Count
+//     entries and the node holds those same entries and more. That is the
+//     meeting point reached early. It is not an error: everything this peer
+//     can give for this chain, the node has. Nothing is fetched and nothing is
+//     appended.
+//
+//   - The local chain DISAGREES with the peer's at a position they both hold.
+//     That is two nodes holding different history, and it is refused however
+//     long either chain is. Refusing is the whole point of the check, so a
+//     case where agreement cannot be established is refused too.
+//
+// Which of the two it is, is decided at the PEER'S height, not the node's: the
+// local state after c.Count entries against the head the peer served. Below
+// that height the two must agree; above it the peer has no opinion.
+//
+// What this cannot decide is WHY the node is ahead — whether it executed
+// further before it stopped, or an earlier pull wrote a peer's entries into
+// its chain. Both leave a chain that agrees with this peer everywhere this
+// peer can speak, and nothing in a chain records which of the two put an entry
+// there. The check here is the one that can be made: agreement wherever the
+// peer has an opinion.
+//
+// It returns the height the node came in at, which the caller compares with
+// the peer's to decide the account-level meeting point.
+func pullChainEntries(ctx context.Context, src Source, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, pageSize uint64) (int64, error) {
 	head, err := dst.Head().Get()
 	if err != nil {
-		return fmt.Errorf("load the local head: %w", err)
+		return 0, fmt.Errorf("load the local head: %w", err)
 	}
-	if head.Count > int64(c.Count) {
-		return errors.Conflict.WithFormat(
-			"the local chain is at %d and the peer served %d; it cannot be re-pulled", head.Count, c.Count)
+	// The height the node comes in at, taken as a number before anything is
+	// appended: Head().Get() hands back the manager's own state, and every
+	// AddEntry below advances it, so head.Count is not the starting height
+	// once the fill has run.
+	from := head.Count
+	want := &merkle.State{Count: int64(c.Count), Pending: c.State}
+
+	// At or past the peer's height: the meeting point, discharged where the
+	// peer has something to say.
+	if from >= int64(c.Count) {
+		mine := head
+		if from > int64(c.Count) {
+			mine, err = dst.StateAt(int64(c.Count) - 1)
+			// A chain the node holds only from a mark point on — one
+			// restored head-first, or one whose history has been dropped
+			// — has no state at that height. StateAt says so with an
+			// error for some of those and with a state of the wrong
+			// height for others, so both are checked.
+			if err == nil && mine.Count != int64(c.Count) {
+				err = errors.NotFound.WithFormat(
+					"the local chain holds no state at %d, only at %d", c.Count, mine.Count)
+			}
+			if err != nil {
+				// Without the local state at the peer's height there is
+				// no telling a node that is simply ahead from one holding
+				// different history — and that difference is what this
+				// check exists for. Refuse rather than assume.
+				return from, errors.Conflict.WithFormat(
+					"the local chain is at %d and the peer served %d, and the local state at %d cannot be read, so the two cannot be compared: %w",
+					from, c.Count, c.Count, err)
+			}
+		}
+		if !bytes.Equal(mine.Anchor(), want.Anchor()) {
+			return from, errors.Conflict.WithFormat(
+				"the local chain of %d entries and the peer's of %d disagree at %d: the local chain anchors to %x there and the peer's head to %x",
+				from, c.Count, c.Count, mine.Anchor(), want.Anchor())
+		}
+		return from, nil
 	}
 
-	entries, err := chainEntries(ctx, src, u, c.Name, uint64(head.Count), c.Count, pageSize)
+	entries, err := chainEntries(ctx, src, u, c.Name, uint64(from), c.Count, pageSize)
 	if err != nil {
-		return err
+		return from, err
 	}
 	for i, e := range entries {
 		if err := dst.AddEntry(e, false); err != nil {
-			return fmt.Errorf("add entry %d: %w", head.Count+int64(i), err)
+			return from, fmt.Errorf("add entry %d: %w", from+int64(i), err)
 		}
 	}
 
 	// The peer's head is what the account's leaf is hashed from, so a replay
-	// that does not reproduce it has built a different chain.
+	// that does not reproduce it has built a different chain. The fill only
+	// appended what the peer served, so the disagreement is below the height
+	// the node came in at — the two hold different history there.
 	got, err := dst.Head().Get()
 	if err != nil {
-		return fmt.Errorf("load the rebuilt head: %w", err)
+		return from, fmt.Errorf("load the rebuilt head: %w", err)
 	}
-	want := &merkle.State{Count: int64(c.Count), Pending: c.State}
 	if !bytes.Equal(got.Anchor(), want.Anchor()) {
-		return errors.Conflict.WithFormat(
-			"the replayed chain anchors to %x and the peer's head to %x", got.Anchor(), want.Anchor())
+		return from, errors.Conflict.WithFormat(
+			"the local chain of %d entries is not a prefix of the peer's: after replaying the peer's entries [%d, %d) the chain anchors to %x and the peer's head to %x, so they disagree below %d",
+			from, from, c.Count, got.Anchor(), want.Anchor(), from)
 	}
-	return nil
+	return from, nil
 }
 
 // SpineAccounts returns the four spine accounts for a given
