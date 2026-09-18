@@ -91,8 +91,17 @@ func TestProcessCommittedGroup_CollectingBuffersInsteadOfExecuting(t *testing.T)
 	require.NoError(t, err)
 
 	require.Empty(t, ca.blocks, "a joining node produces no blocks")
-	require.Len(t, ca.collected, 2, "every committed group is collected into staging")
-	require.Equal(t, b1.Digest(), ca.collected[0].Batches[0].Digest())
+	require.Empty(t, ca.collected,
+		"and holds nothing until it has its peers' staging: the blocks are buffered, not applied")
+
+	// The join takes a peer's staging; the blocks buffered since are applied
+	// to it, in order (executor spec, "Sync", step 2).
+	loaded := false
+	require.NoError(t, svc.applyStagingNow(func() error { loaded = true; return nil }))
+	require.True(t, loaded)
+	require.Len(t, ca.collected, 2, "every buffered group is applied to that staging")
+	require.Equal(t, b1.Digest(), ca.collected[0].Batches[0].Digest(), "in the order consensus committed them")
+	require.Equal(t, b2.Digest(), ca.collected[1].Batches[0].Digest())
 	require.Equal(t, uint64(0), ca.collected[0].Index, "a collected block has no index until the handoff")
 	require.Equal(t, time.Unix(100, 0).UTC(), ca.collected[0].Time, "the block time is the leader's, unclamped")
 

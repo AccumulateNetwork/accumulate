@@ -208,16 +208,90 @@ func (g *CollectedGroup) payloadEntries() int {
 	return n
 }
 
-// collectGroup takes one committed group into staging without executing it,
-// and keeps it.
+// ApplyStaging takes a peer's staging — `load` is the join's LoadStaging —
+// and then applies to it every block this node has buffered since it started
+// collecting, in order, and every one that arrives after.
 //
-// The buffer is appended to only after the collect succeeds: a group whose
-// staging intake failed is not a block this node may later produce as though
-// it had collected it.
-func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batch, leader *types.Certificate, isLeader bool) error {
-	collector, ok := s.adapter.(interface {
-		CollectBlock(ctx context.Context, params adapter.BlockParams) (*execute.CollectedBlock, error)
-	})
+// The order is the spec's (executor.md, "Sync", step 2): staging comes from a
+// validator as of its block P, and the buffered blocks after P are applied to
+// THAT staging. A node that collected into its own staging first would have
+// nothing to load into — a stage with entries in it is not a peer's stage —
+// and it would be holding, before it knew what its peers hold, whatever its
+// partially pulled state made of the blocks it saw.
+//
+// It runs in the block production loop, like the handoff, because that is
+// where the buffer is written: loading beside it would apply the buffered
+// blocks and a newly committed one to staging at once, in no order.
+func (s *Service) ApplyStaging(load func() error) error {
+	if !s.Collecting() {
+		return errors.NotAllowed.WithFormat("%s: not joining", s.config.Partition.ID)
+	}
+	req := stagingRequest{load: load, done: make(chan error, 1)}
+	select {
+	case s.applyStaging <- req:
+	case <-s.ctx.Done():
+		return errors.UnknownError.Wrap(s.ctx.Err())
+	}
+	select {
+	case err := <-req.done:
+		return err
+	case <-s.ctx.Done():
+		return errors.UnknownError.Wrap(s.ctx.Err())
+	}
+}
+
+// A stagingRequest is the join asking to load a peer's staging and apply what
+// has been buffered to it.
+type stagingRequest struct {
+	load func() error
+	done chan error
+}
+
+// applyStagingNow runs in the block production loop.
+func (s *Service) applyStagingNow(load func() error) error {
+	s.mu.Lock()
+	if !s.collecting {
+		s.mu.Unlock()
+		return errors.NotAllowed.WithFormat("%s: not joining", s.config.Partition.ID)
+	}
+	if s.stagingReady {
+		s.mu.Unlock()
+		return errors.NotAllowed.WithFormat("%s: staging has already been taken", s.config.Partition.ID)
+	}
+	buffered := make([]*CollectedGroup, len(s.buffer))
+	copy(buffered, s.buffer)
+	s.mu.Unlock()
+
+	err := load()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	for i, g := range buffered {
+		err := s.collectIntoStaging(g)
+		if err != nil {
+			return errors.UnknownError.WithFormat("collect buffered group %d of %d (round %d): %w",
+				i+1, len(buffered), g.Round(), err)
+		}
+	}
+
+	s.mu.Lock()
+	s.stagingReady = true
+	s.mu.Unlock()
+	s.logger.Info("Staging taken from a peer; the blocks since are applied to it",
+		"partition", s.config.Partition.ID, "applied", len(buffered))
+	return nil
+}
+
+// A blockCollector is an adapter that can take a committed block into the
+// executor's staging without executing it (#4292).
+type blockCollector interface {
+	CollectBlock(ctx context.Context, params adapter.BlockParams) (*execute.CollectedBlock, error)
+}
+
+// collectIntoStaging takes one group into staging without executing it.
+func (s *Service) collectIntoStaging(g *CollectedGroup) error {
+	collector, ok := s.adapter.(blockCollector)
 	if !ok {
 		return errors.NotAllowed.WithFormat("%s: the adapter cannot collect a block without executing it",
 			s.config.Partition.ID)
@@ -227,11 +301,11 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 		// No index: a collecting node does not know which block this is
 		// until the join matches the root (#4294). Everything a collected
 		// block does is keyed on the stream and the number, not the block.
-		Time:        time.Unix(0, leader.Header.Timestamp).UTC(),
-		IsLeader:    isLeader,
-		LeaderRound: leader.Header.Round,
-		Certificate: leader,
-		Batches:     batches,
+		Time:        g.Time(),
+		IsLeader:    g.IsLeader,
+		LeaderRound: g.Round(),
+		Certificate: g.Leader,
+		Batches:     g.Batches,
 	})
 	if err != nil {
 		return fmt.Errorf("collect block: %w", err)
@@ -239,20 +313,62 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.buffer) >= maxCollectedGroups {
-		s.bufferOverrun = true
-		return errors.NotReady.WithFormat("%s: the join buffer is full at %d groups; the join must start again from a newer snapshot",
-			s.config.Partition.ID, len(s.buffer))
-	}
-	s.buffer = append(s.buffer, &CollectedGroup{Certs: certs, Batches: batches, Leader: leader, IsLeader: isLeader})
 	s.nameAccounts(out.Accounts)
 	s.logger.Debug("Collected a committed group while joining",
+		"partition", s.config.Partition.ID,
+		"round", g.Round(),
+		"certs", len(g.Certs),
+		"batches", len(g.Batches),
+		"held", out.Held,
+		"accounts", len(out.Accounts))
+	return nil
+}
+
+// collectGroup keeps one committed group, and takes it into staging if
+// staging is this node's peers' (ApplyStaging). Until then the group is only
+// buffered: nothing is held before the node knows what its peers hold.
+//
+// The buffer is appended to only after the collect succeeds: a group whose
+// staging intake failed is not a block this node may later produce as though
+// it had collected it.
+func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batch, leader *types.Certificate, isLeader bool) error {
+	// Refused here, before anything is buffered: a node whose executor cannot
+	// collect would buffer blocks it can never take into staging, and the
+	// only way out of that is to execute them — from a staging its peers do
+	// not have (#4290).
+	if _, ok := s.adapter.(blockCollector); !ok {
+		return errors.NotAllowed.WithFormat("%s: the adapter cannot collect a block without executing it",
+			s.config.Partition.ID)
+	}
+
+	g := &CollectedGroup{Certs: certs, Batches: batches, Leader: leader, IsLeader: isLeader}
+
+	s.mu.Lock()
+	if len(s.buffer) >= maxCollectedGroups {
+		s.bufferOverrun = true
+		s.mu.Unlock()
+		return errors.NotReady.WithFormat("%s: the join buffer is full at %d groups; the join must start again from a newer snapshot",
+			s.config.Partition.ID, maxCollectedGroups)
+	}
+	ready := s.stagingReady
+	s.mu.Unlock()
+
+	if ready {
+		err := s.collectIntoStaging(g)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.buffer = append(s.buffer, g)
+	s.logger.Debug("Buffered a committed group while joining",
 		"partition", s.config.Partition.ID,
 		"round", leader.Header.Round,
 		"certs", len(certs),
 		"batches", len(batches),
-		"held", out.Held,
-		"accounts", len(out.Accounts),
+		"staged", ready,
 		"buffered", len(s.buffer))
 	return nil
 }
