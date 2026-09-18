@@ -81,3 +81,28 @@ type PartitionRootRanger interface {
 	Sequencer
 	PartitionRootRange(ctx context.Context, partition *url.URL, stateRoot [32]byte, opts SequenceOptions) (*PartitionRootRecord, error)
 }
+
+// StagingSnapshotter is an optional extension of [Sequencer] that serves the
+// node's staging as of its last committed block: everything above Delivered
+// it holds, unexecuted, so a node that joins or restarts starts from what its
+// peers hold rather than from what a source produced (executor.md, "Sync"
+// step 2; healing.md, "Staging snapshot"). Paged by stream — a stage may
+// hold thousands of entries — with the block index on every page. A node
+// that has executed no block refuses (errors.NotReady).
+type StagingSnapshotter interface {
+	Sequencer
+	StagingSnapshot(ctx context.Context, req *StagingSnapshotRequest) (*StagingSnapshot, error)
+}
+
+// A StagingSnapshotRequest names the partition whose staging is wanted and
+// where in it the page starts. Ledger nil starts at the first stream; Ledger
+// and Source together name the stream to continue from, and Number the first
+// sequence number of it to carry. Limit bounds the entries in the page; zero
+// means the server's own bound.
+type StagingSnapshotRequest struct {
+	Partition string
+	Ledger    *url.URL
+	Source    *url.URL
+	Number    uint64
+	Limit     uint64
+}
