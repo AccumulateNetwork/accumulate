@@ -260,12 +260,41 @@ this one; the staging half is new.
 
 Order and gates: 1 and 3 in parallel (they share nothing); 2 on 1; 4 on all
 three, gated on `TestOneValidatorRestartDoesNotDiverge` with the interim pull
-removed and no Docker chaos run before it passes; 5 after 4. Steps 3 and 4
+removed and no Docker chaos run before it passes; 5 after 4; then **#4296**,
+a gate before any chaos run: a joining node must be able to find a validator
+to ask, and must refuse to execute when it found none. Then
+`30m-100tps-chaos.conf`; then #4298 and #4299, provisionally, which the
+30-minute run may promote ahead of itself; then the 24-hour run. Steps 3 and 4
 show a plan before code (a port across a five-month database-API gap; a
 rewiring of consensus start-up). The observations behind the order — three
 causes each sufficient alone, why a source's cache and consensus replay are
 both wrong, how to find the next divergence in minutes — are on #4205
 (2026-09-18).
+
+Why #4296 is a gate and not a fix in passing: the chaos gate cannot be met on
+a build where the join never engages, and run `20260918T124530Z` is a build
+that was exactly that — every lookup for a validator to ask returned an empty
+list, on every node and both partitions, and the restarted node executed from
+its own stage at Directory block 186 and BVN1 block 181. **Both halves of
+#4296 are in the gate.** The lookup fix removes the symptom; the half that
+counts the validators found, and refuses to execute on a count of zero unless
+the node has executed no block, is what makes the refusal sound. The
+fallback's safety rested on the clause "every validator of the partition is
+asked for its staging" (DIFFERENCES E11), which was never true on a live
+network, so "asked nobody" was being read as "nobody holds anything". Any
+later failure that empties the peer list reaches the same wrong conclusion by
+the same route, so the count is part of the gate and not an optimisation.
+
+#4298 (an account carrying pending signature material, scheduled events or a
+delivery queue cannot be verified, so a partition holding one cannot be
+joined) and #4299 (a message whose remote stub the store cannot resolve is
+dropped by collect) are the two holes DIFFERENCES E11 calls the ones that
+will meet the chaos run first. They are placed after the 30-minute run
+deliberately: both are expensive to design for in the abstract and cheap to
+observe, and a live join that stalls on an unverifiable account says so in
+minutes with evidence no amount of reasoning produces. The 30-minute run
+decides whether either moves ahead of it; a stall on one is a promotion with
+evidence, which is the only kind to make.
 
 Done when: a soak with chaos restarts under load keeps every restarted
 validator agreeing on every anchor body, and #4205 closes. Required before

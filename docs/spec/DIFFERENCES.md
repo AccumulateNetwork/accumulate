@@ -272,7 +272,7 @@ reads it (#4294). Also not done: the refusal is "this node has
 executed no block", not the node state of step 5 — a node that is `BOOTING`
 will serve its stage until that lands (#4295). And a page is as of whatever
 block the validator had committed when the call arrived; nothing is pinned
-server side, so a reader whose pages straddle a commit starts over rather
+server side (#4302), so a reader whose pages straddle a commit starts over rather
 than being served a consistent version.
 
 **Caution — the page's `Block` is not "the state of that block" (#4291)**: it
@@ -290,8 +290,8 @@ trap said to read the ledger. This branch instead made block close release
 every stream the block positioned at the ledger's `Delivered`, so memory
 tracks the ledger for every stream a block has touched and the value is
 atomic with the rest of the page; a ledger read beside it would be a second,
-unpaired read. The residue: **a stream that no block has positioned since a
-restart keeps `Delivered: 0` in memory**, so a page may carry 0 for such a
+unpaired read. The residue (#4302): **a stream that no block has positioned
+since a restart keeps `Delivered: 0` in memory**, so a page may carry 0 for such a
 stream. It is safe, because the joining node releases through its own pulled
 ledger when it settles (#4292's `SettleStaging`), but it is not what the issue
 asked for.
@@ -420,14 +420,15 @@ reaches the root the Directory anchored for `Q`; the tracker then promotes.
   principal of every transaction, the signer of every signature, the anchor
   pool for every anchor — and it is not wired.
 - **BPT paging is not a consistent snapshot, so a fresh node's enumeration is
-  incomplete by construction.** Pages are served by key order from a cursor
-  (`BPT.GetRange`), one batch each, and a leaf inserted *behind* the cursor
-  between two pages is never seen; on a live network that happens constantly.
-  This is why the design follows the blocks rather than trusting one
-  enumeration: a scan is a starting list, and what keeps it right is re-pulling
-  the accounts each observed block names, until a whole block's set is pulled
-  before the next anchor arrives. Until #4292 is wired, the diff is re-run per
-  round, which converges by repetition rather than by construction.
+  incomplete by construction** (#4302)**.** Pages are served by key order from
+  a cursor (`BPT.GetRange`), one batch each, and a leaf inserted *behind* the
+  cursor between two pages is never seen; on a live network that happens
+  constantly. This is why the design follows the blocks rather than trusting
+  one enumeration: a scan is a starting list, and what keeps it right is re-
+  pulling the accounts each observed block names, until a whole block's set is
+  pulled before the next anchor arrives. Until #4292 is wired, the diff is re-
+  run per round, which converges by repetition rather than by construction.
+  (#4294 wired it; #4302 section 5 records what that leaves.)
 - **The Directory's spine is pulled unverified, and so is the root everything
   else is verified against** (#4301)**.** The spine is what the verifier reads
   from, so there is nothing to verify it against until it is there; and
@@ -446,17 +447,18 @@ reaches the root the Directory anchored for `Q`; the tracker then promotes.
   no proof, so a peer can omit a leaf and the puller will not know an account
   is missing until its root fails to match.
 - **`tracker.Observe` keeps the earliest block for a repeated root, so `Q` is
-  the first block with that root, not the last.** That is intended: a run of
-  blocks that change nothing all carry the same `StateTreeAnchor`, the state
-  behind the root is the state from the first of them, and executing from
-  `Q + 1` where `Q` is the earliest replays the blocks in between rather than
-  skipping them — the safe direction, because a block replayed from the state
-  it started at produces the same result and a block skipped does not.
+  the first block with that root, not the last** (#4302)**.** That is
+  intended: a run of blocks that change nothing all carry the same
+  `StateTreeAnchor`, the state behind the root is the state from the first of
+  them, and executing from `Q + 1` where `Q` is the earliest replays the
+  blocks in between rather than skipping them — the safe direction, because a
+  block replayed from the state it started at produces the same result and a
+  block skipped does not.
 - `orchestrator`, `anchorsrc`, `bootpersist`, `clientsrc` and `gossip` from
-  bootstrap-v3 are not ported; the first is #4294's, the rest are of the
+  bootstrap-v3 are not ported (#4302); the first is #4294's, the rest are of the
   rejected trust model.
 - The v3 `block` query's entry paging ignores `start`, so it cannot be used to
-  page through what a block touched. Untouched here.
+  page through what a block touched. Untouched here (#4302).
 
 **Decided (Paul, 2026-09-18)**: a starting node takes its staging from a
 running validator through an API, keeps it current from consensus while it
@@ -509,7 +511,7 @@ spec**, both deliberate:
   (`dagbft/collect.go:385`, on the collect's output), so that closure is
   contested; #4299 holds the citations and is where it is settled.
 - `intakeProof` discards a proof whose anchor block is at or below the newest
-  executed Directory anchor as "never, not not-yet". On a partially pulled
+  executed Directory anchor as "never, not not-yet" (#4302). On a partially pulled
   store the anchor pool's `DirectoryAnchorBlock` field and the Directory
   anchor chain can disagree, and a proof discarded that way is discarded for
   good. The pull writes an account's state and its chains together, so the
