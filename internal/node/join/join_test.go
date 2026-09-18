@@ -31,6 +31,7 @@ type fakeBuffer struct {
 	accounts   []*url.URL
 	handedOff  uint64
 	handoffErr error
+	applied    int // how many blocks were applied to the staging that was taken
 }
 
 func (b *fakeBuffer) StartCollecting()    { b.collecting = true }
@@ -40,6 +41,14 @@ func (b *fakeBuffer) NamedAccounts() []*url.URL {
 	out := b.accounts
 	b.accounts = nil
 	return out
+}
+func (b *fakeBuffer) ApplyStaging(load func() error) error {
+	err := load()
+	if err != nil {
+		return err
+	}
+	b.applied++
+	return nil
 }
 func (b *fakeBuffer) Handoff(q uint64) error {
 	if b.handoffErr != nil {
@@ -168,6 +177,7 @@ func TestJoin_TakesStagingPullsThenHandsOff(t *testing.T) {
 	require.NoError(t, run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers}))
 
 	require.NotNil(t, stage.loaded, "staging was taken from the peer")
+	require.Equal(t, 1, buf.applied, "and the blocks buffered since were applied to it")
 	require.Equal(t, uint64(17), stage.loaded.Block)
 	require.Equal(t, uint64(20), stage.settled, "staging settles at the block the state is")
 	require.Equal(t, uint64(20), buf.handedOff, "and the handoff is at that block")
