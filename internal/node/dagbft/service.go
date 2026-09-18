@@ -117,6 +117,7 @@ type Service struct {
 	// staging and kept in the buffer instead of executed, and nothing here
 	// advances the block index. See collect.go.
 	collecting    bool
+	collectFrom   uint64
 	buffer        []*CollectedGroup
 	bufferBytes   int
 	bufferOverrun bool
