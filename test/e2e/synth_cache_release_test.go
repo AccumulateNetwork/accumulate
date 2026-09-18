@@ -7,6 +7,7 @@
 package e2e
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -70,9 +71,18 @@ func TestSyntheticCacheReleasesOnDelivered(t *testing.T) {
 	// Let the last deliveries be reported back on the reverse traffic
 	sim.StepN(20)
 
+	// The word has been heard, but a validator of the destination that
+	// restarted as it executed pulls these back before its first block, so
+	// they stay a grace of blocks (healing spec, "Rejoining"; #4290)
 	for _, part := range []string{"BVN0", "BVN1"} {
 		entries, _ := sim.S.Partition(part).SynthCache().Len()
-		t.Logf("%s cache holds %d entries after %d transfers each way", part, entries, transfers)
+		t.Logf("%s cache holds %d entries after %d transfers each way, within the grace", part, entries, transfers)
+		require.GreaterOrEqual(t, entries, transfers/2, "%s: the cache keeps what it released for a rejoining node", part)
+	}
+	sim.StepN(synthcache.RejoinGrace)
+	for _, part := range []string{"BVN0", "BVN1"} {
+		entries, _ := sim.S.Partition(part).SynthCache().Len()
+		t.Logf("%s cache holds %d entries once the grace has run", part, entries)
 		require.Less(t, entries, transfers/2, "%s: the cache should hold only the undelivered tail, not the history", part)
 	}
 }

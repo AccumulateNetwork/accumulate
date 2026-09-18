@@ -194,7 +194,9 @@ retention (`pkg/consensus/recovery.go`); nothing pulls chain state.
    order and groups at or below N are dropped; a group the buffer never saw is
    fetched from retention, and a gap past retention sends the node back to
    step 1 for a newer state. Staging fills from the stream it executes and
-   from healing (H8) for what was in flight before it listened. Test: a
+   from the rejoin pull for what was in flight before it listened — done
+   for the restart case (#4290, 2026-09-18: `Conductor.Rejoin`, the source's
+   `RejoinGrace`). Test: a
    validator killed under 500 tps rejoins and votes within a bounded number of
    blocks, with block hashes equal to its peers'.
 5. **Followers take the same path** with voting off; the follower mode uses it

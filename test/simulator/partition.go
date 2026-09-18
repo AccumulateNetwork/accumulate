@@ -44,6 +44,24 @@ func (p *Partition) View(fn func(*database.Batch) error) error { return p.nodes[
 // received on each stream and not yet executed (executor spec, "Sync").
 func (p *Partition) Staging() *coreexec.Staging { return p.nodes[0].staging }
 
+// NodeCount is how many nodes the partition runs.
+func (p *Partition) NodeCount() int { return len(p.nodes) }
+
+// NodeDatabase is node i's database, for a test that compares nodes.
+func (p *Partition) NodeDatabase(i int) *database.Database { return p.nodes[i].database }
+
+// RestartNode stands node i where a restarted validator stands: its store
+// intact, its staging empty, its conductor set to rejoin at the next block
+// (#4290). The simulator has no process to restart; this is what a restart
+// does to the executor's memory.
+func (p *Partition) RestartNode(i int) {
+	p.nodes[i].staging.Reset()
+	p.nodes[i].conductor.Rejoin()
+}
+
+// NodeStaging is node i's staging, for a test that compares nodes.
+func (p *Partition) NodeStaging(i int) *coreexec.Staging { return p.nodes[i].staging }
+
 // Heals is the partition's healing counters as its first node's conductor
 // keeps them: entries pulled by the requester, requests, misses.
 func (p *Partition) Heals() *crosschain.HealCounters { return p.nodes[0].heals }

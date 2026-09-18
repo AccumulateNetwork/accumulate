@@ -807,6 +807,14 @@ func sourceKey(u *url.URL) string { return strings.ToLower(u.String()) }
 // span — what it has dispatched and is not still in flight — so the result
 // says how many entries were submitted and the last number among them.
 func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64, classify entryOutcome) (int, uint64, error) {
+	return c.requestSpanTo(ctx, ranger, source, first, last, classify, func(env *messaging.Envelope) error {
+		return c.submit(ctx, c.Url(), env)
+	})
+}
+
+// requestSpanTo is requestSpan with the packages it builds handed to sink
+// instead of submitted: a rejoining node holds them directly (Rejoin).
+func (c *Conductor) requestSpanTo(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64, classify entryOutcome, sink func(*messaging.Envelope) error) (int, uint64, error) {
 	records, err := ranger.SequenceRange(ctx, source.JoinPath(protocol.Synthetic), c.Url(), first, last, private.SequenceOptions{})
 	if err != nil {
 		return 0, 0, errors.UnknownError.Wrap(err)
@@ -844,7 +852,7 @@ func (c *Conductor) requestSpan(ctx context.Context, ranger private.SequenceRang
 			return nil
 		}
 		env := &messaging.Envelope{Messages: append([]messaging.Message{proofMsg}, msgs...)}
-		err := c.submit(ctx, c.Url(), env)
+		err := sink(env)
 		msgs, size = nil, 0
 		return err
 	}

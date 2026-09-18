@@ -223,9 +223,20 @@ consensus "catches up" by fetching batches from peers' retention
 (`pkg/consensus/recovery.go`, `DefaultCatchUpTimeout` 60 s). A peer further
 behind than retention is told `absence=no-record` and has no way back; a
 validator restarted under load could not rejoin and stalled its partition
-(#4205, run `20260903T202621Z`). Nothing pulls chain state from peers, nothing
-verifies it against an anchored root, and nothing gates execution on staging
-being complete.
+(#4205, run `20260903T202621Z`). Nothing pulls chain state from peers and
+nothing verifies it against an anchored root.
+
+**Rejoin (#4290, done)**: a node that starts with its store intact rebuilds
+staging before its first block executes — every inbound synthetic stream
+pulled from its source from `Delivered + 1` up and held as a block would hold
+it (healing.md, "Rejoining"), the source keeping released entries
+`RejoinGrace` blocks for it. Before this, a restarted validator executed its
+first block holding nothing while its peers executed what they held, and its
+root chain never matched again: five restarts took the Directory below its
+anchor quorum (run `20260917T223150Z`). Not done: a source that no longer
+holds the span leaves the node unable to rejoin by healing, and that is
+logged, not a state the node acts on; sync is the way out and does not
+exist.
 
 **Seeding (#4238, done)**: the service checkpoints its consensus position
 per block and restores the one matching the executor's last block on restart

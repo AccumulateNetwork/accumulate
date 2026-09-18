@@ -77,6 +77,31 @@ a request could not, and that is **sync** (executor.md, "Sync"; E11 in
 [DIFFERENCES.md](DIFFERENCES.md)) — the only exit. A "not yet" or an answer
 for the stream, even one, resets the count: the source is still serving it.
 
+### Rejoining after a restart
+
+Staging is memory. A validator that restarts comes back with its store — the
+ledger's `Delivered` for every stream — and an empty stage, while its peers
+still hold what was above `Delivered` when it stopped: entries waiting on a
+proof, or behind a hole. The peers execute those the moment the proving
+anchor lands, which under load is seconds after the restart. A node that
+executed that block holding nothing executed a different block, and because
+the root chain is a Merkle root over the history of block roots, its anchors
+never again matched its peers' (#4290: five restarts took a twelve-validator
+Directory below its quorum of eight).
+
+So **a node that starts rejoins before it executes.** At its first block-begin
+it asks every inbound synthetic stream's source for `[Delivered + 1, ...]`,
+span by span, until the source says nothing more is produced, and holds what
+comes back exactly as a block would — proof to anchor staging, entries at
+their numbers — without a block. Then the block runs. This is the pull, not
+a probe: no patience, no selection, no cadence, because the node's own
+staging is the gap and it alone can fill it. A source that no longer holds
+the span (the cache had released it, its own restart lost it) is a node that
+cannot rejoin by healing; it says so once and needs sync (executor.md
+"Sync", E11). Anchor streams need no rebuilding: a block anchor copy's
+signature is recorded in the store as it arrives, so the quorum a restarted
+node was gathering is still there.
+
 ### Who asks, and when
 
 Healing **activates every few blocks**, not every block. A request goes to
@@ -302,7 +327,12 @@ two-level cycled cache in the dynamic layer and serves reads, not healing.
   under one number: one for a BVN, every partition for the Directory. Anchors
   say nothing about synthetics; each stream is released by its own word. So
   the cache holds the entries in play — what the other side has not yet said
-  it executed — not a window of history. A stream with no reverse traffic
+  it executed — not a window of history. **A synthetic stream's word is
+  applied after a grace** (`RejoinGrace`, five minutes of blocks): the word
+  is the partition's, and a validator of the destination that restarted as
+  the partition executed those entries lost them from staging and pulls them
+  back from here before its first block (see Rejoining). Released at once,
+  they would be gone by the time it asked. A stream with no reverse traffic
   hears nothing and falls back to the horizon, which is the backstop, not the
   mechanism. The value is taken only from a message whose signer is a current
   validator of the sender (a synthetic about to execute, an anchor copy whose
@@ -437,7 +467,8 @@ the destination's `Delivered` carried on every dispatched `SyntheticProof`
 and `SyntheticMessage` (`Txn.Release` at the destination's block close, applied
 at commit: the stream's entries at or below it, the block segments that held
 them, and a block left with nothing to prove, go;
-`accumulate_synthcache_released_total`), and on every dispatched
+`accumulate_synthcache_released_total`; the word waits `RejoinGrace` blocks
+before it is applied, see Rejoining), and on every dispatched
 `BlockAnchor` for the anchor stream (`Txn.ReleaseAnchors`, taken where the
 copy's validator signature is recorded, applied at commit once every
 destination of the anchor has spoken; `anchors_released_total`); a block that
@@ -462,6 +493,23 @@ on the node's metrics endpoint, as are every row of the counting table above.
 
 Where the implementation departs from this specification, see
 [DIFFERENCES.md](DIFFERENCES.md).
+
+### Rejoining
+
+`Conductor.Rejoin` (`internal/core/crosschain/rejoin.go`) is armed by `Start`
+and consumed at the next block-begin, before the block executes, in
+`willBeginBlock`: for each inbound synthetic source the walk asks
+`[Delivered + 1, Delivered + MaxReceiptListElements]` and on from the number
+served, up to `maxRejoinSpans` spans, until `NotReady`; each answer's
+packages go to `Collector.Collect` (`block.Executor.Collect`, `rejoin.go`):
+the proof through the block's `intakeProof`, each entry held at its number
+with its companion, nothing written. `NotFound` is logged once as a node that
+cannot rejoin by healing. Counted per span in
+`accumulate_conductor_rejoin_spans_total{outcome}` (answered, not-yet, miss,
+failed); entries in `heal_entries_total{outcome="rejoined"}`. A node whose
+system ledger is at block zero is at genesis and rejoins nothing. The
+simulator's `Partition.RestartNode` empties a node's staging and arms its
+conductor (`TestOneValidatorRestartDoesNotDiverge`).
 
 ### Healing is for a synthetic stream that has stopped
 

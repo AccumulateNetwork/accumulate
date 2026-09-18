@@ -261,6 +261,22 @@ func NewStaging() *Staging {
 	return &Staging{streams: map[string]*streamState{}, ids: map[string]StreamID{}, proofs: map[string]map[uint64][]*protocol.AnnotatedReceipt{}, sources: map[string]*url.URL{}, byID: map[[32]byte]*Held{}, byTxn: map[[32]byte]*Held{}}
 }
 
+// Reset empties staging: every held entry, every validated hash, every
+// waiting proof. It is what a validator restart does to staging, which is
+// memory by design and is not rebuilt from the store (executor spec,
+// "Sync"). A test uses it to stand one node where a restarted node stands
+// while its peers keep what they hold (#4290).
+func (s *Staging) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.streams = map[string]*streamState{}
+	s.ids = map[string]StreamID{}
+	s.proofs = map[string]map[uint64][]*protocol.AnnotatedReceipt{}
+	s.sources = map[string]*url.URL{}
+	s.byID = map[[32]byte]*Held{}
+	s.byTxn = map[[32]byte]*Held{}
+}
+
 // A StagingTxn is one block's view of staging: everything committed, plus
 // what this block has added, minus what it has released. Commit publishes
 // it; Discard drops it. The block's own additions are few and keyed by

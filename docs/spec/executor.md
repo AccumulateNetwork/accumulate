@@ -219,6 +219,14 @@ neither a validator nor a follower; it is a node building the state to become
 one (#4205). A follower differs from a validator only in what it does with the
 blocks it processes — it does not vote or propose — not in how it gets there.
 
+For a node that restarts with its store intact, the second part is what the
+code does today (healing.md, "Rejoining"; #4290): at its first block-begin,
+before that block executes, it pulls every inbound synthetic stream from its
+source from `Delivered + 1` up and holds what comes back as a block would,
+and the source keeps released entries a grace of blocks for exactly this
+(`RejoinGrace`). The first part, pulling state for a node that has none or is
+past what its sources still hold, is E11.
+
 Nothing derived from staging is written into hashed state unless it is derived
 through execution. `Delivered` qualifies. A copy of how far a stream has been
 sighted does not: it is per-node and transient, and it is exactly what a
