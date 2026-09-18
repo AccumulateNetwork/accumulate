@@ -302,8 +302,8 @@ sample on a running soak, not a design. Then
 `30m-100tps-chaos.conf`; then #4299, provisionally, which that run may
 promote ahead of itself; then the 24-hour run.
 
-**#4319 reframes everything below it, and it is a decision before it is
-work.** A debugger agent proved by execution on 2026-09-18 (in-process
+**#4319 reframes everything below it, and Paul has now decided it.** A
+debugger agent proved by execution on 2026-09-18 (in-process
 simulator only — no Docker, no soak) that a restarted node **never rejoins at
 all**: it stays BOOTING, executes nothing, and every settle batch expires.
 `pulled=0` on all 59–60 rounds; the settle histogram 366/359/352/345/338 is
@@ -323,20 +323,44 @@ It also names the cause of #4316: the same `pullSpine` write turned a node
 holding correct, peer-identical, anchored block-22 state into a root no node
 ever held and the Directory never anchored.
 
-So the capability is blocked on a design decision, not on bug fixes: **how a
-joining node asks for state as of an anchored block.** A peer serves its
-current block; an anchored root exists only for blocks already anchored, which
-is always behind; for a restart the two never meet. Three shapes, all Paul's:
-a peer serves state as of an anchored block it names (and retains what that
-requires); or the joining node settles against something other than an
-already-anchored root (and something else admits it); or the join stops
-pulling the difference and takes the whole state as of an anchored block —
-which is what the simulator's `CompleteJoin` (`test/simulator/partition.go:96`,
-`Export`/`Import`) fakes, and what the snapshot/fast-sync streaming removed on
-2026-09-06 did. If the answer is the third, that removal is what is being
-revisited. **No amount of the work below substitutes for this answer.**
+**DECIDED by Paul, 2026-09-18: a restarted node catches up by REPLAYING THE
+COMMITTED LOG, not by pulling state.** It already holds every cold account;
+give it blocks `R+1..N` from the DAG log and let it execute forward. His
+rationale: *the committed log is the durability point, and execution produces
+anchored state by construction, so the anchor treadmill that #4319 documents
+cannot arise — the node never needs to be served state at a block it cannot
+verify.* Replay removes the premise rather than tuning the gap.
 
-**Six items filed 2026-09-18 after the merge, and where they are proposed to
+Two alternatives were considered and **rejected**, recorded so they are not
+relitigated. **(a) Make `settleBatch` wait on the anchor instead of discarding
+after `maxSettleRounds = 4`** — rejected; #4319's own evidence is why it could
+not have worked, since the lag *grows* and no finite window closes it.
+**(b) Have peers serve state as of a caller-specified anchored block** —
+rejected, partly because it requires historical reads, which is a standing
+position and not a new one.
+
+**The consequence that bounds the decision: #4238 is now THE constraint on the
+chosen mechanism, not an alternative to it.** Replay works only as far back as
+the log is retained, so **the retention horizon is the maximum outage a node
+can survive**. #4238 is where that limit lives — a restarted validator that
+cannot rejoin past a DAG GC horizon, with `RequestStateSync` a stub. **Its
+figures must not be quoted as current**: the 2000-round depth and the ~8-minute
+conclusion were written 2026-09-06 against a different build, and a debugger is
+establishing the real horizon by execution. Until then the honest statement is
+that replay is bounded by log retention and the size of that bound is being
+measured. What happens to a node down *longer* than the horizon is a follow-on
+the decision does not settle; #4319's evidence that a node joining from empty
+does converge (pulled=3,3,19, matched round 7) makes "wipe and start from
+empty" a real candidate rather than a counsel of despair.
+
+The decision does not by itself delete the state-pull path — it says a restart
+does not take it. What becomes of `PulledState`, `pullSpine` and the settle
+window is downstream design work, and **none of #4316, #4318, #4301, #4310,
+#4298 or #4306 should be closed on the strength of it**. A decision is not a
+delivery; until replay is built and proven, the pull path is still the code
+that runs.
+
+**Seven items filed 2026-09-18 after the merge, and where they are proposed to
 go — a proposal, not a change to the approved order.** The approved order
 above stands until Paul says otherwise; this paragraph is the issue manager's
 reasoning about where these belong, recorded so nothing lives only in a chat
@@ -344,24 +368,40 @@ message. Its twin is the note of the same date on #4205.
 
 Three findings were relayed as "recorded on #4205" and were **recorded
 nowhere** — not in any of that issue's seven notes. They are now filed with
-their evidence:
+their evidence, and two of the three have since been confirmed by execution
+rather than reading:
 
 - **#4316** — `localBlock` reads the ledger record `pullSpine` just
   overwrote (`internal/node/join/state.go:320` reads what `:575`/`:588`/`:596`
   wrote from the peer via `pull.go:685` and `:418`), so the block-ledger walk
   measures the node against the peer rather than against itself. Today the
-  page-diff backstop covers for it and the walk is dead weight; that is a cost
-  and a hidden dependency, not a stall.
-- **#4317** — two of the five #4303 fixes have no *targeted* test: #4305's
-  `UpdateBPT` (`state.go:453`, `:592`) and #4309's spine partition
-  (`state.go:575`). Their sole coverage is one broad e2e test,
-  `test/e2e/join_pull_test.go:49`, whose "fails on each of the five taken
-  alone" claim nobody has reproduced. Three reverts and three runs settle it.
+  page-diff backstop covers for the mis-measured walk — but the *write* is a
+  live corruption, not a cost: #4319 shows it turned a node holding correct,
+  peer-identical, anchored block-22 state into a root no node ever held.
+- **#4317** — **three** of the five #4303 fixes have no test that fails when
+  broken, established by a test-auditor running the reverts: *pull addressed at
+  a named peer*, *the set comes from the block ledger*, *joining node must not
+  serve*. `705da0ab5`'s claim that `TestJoinPullsFromPeersAndPromotes` "fails
+  on each of the five taken alone" is **refuted — it fails on two.** (Filed as
+  "two", from a reading of test bodies that asked a different question —
+  *targeted* test versus *any* test that goes red. The audit's answer is the
+  one that counts.)
 - **#4318** — the join's verification rests on one call site
   (`internal/node/join/state.go:413`); substituting `Keep()` for `Settle()`
-  makes it verify nothing and no test in `internal/node/join` or `test/e2e`
-  goes red. This is why #4303's "zero verification failures in 22 MB of logs"
-  read as success rather than as the verifier never running.
+  makes it verify nothing. **Executed: the suite stayed green**, so
+  `internal/core/bootstrap/pull/verify.go` is entirely dead to its caller. This
+  is why #4303's "zero verification failures in 22 MB of logs" read as success
+  rather than as the verifier never running — and it means the safety property
+  #4310 and #4301 lean on is untested.
+- **#4320** — the layer beneath both: the daemon's join wiring has no test at
+  all. Setting `joining := false` at `cmd/accumulated/run/dagbft.go:458` leaves
+  the whole suite green, `./cmd/accumulated/run` included, as does dropping the
+  `NodeState` gates (`run/api.go:83`, `dagbft.go:648`, `:660`, and a third at
+  `:674`) or `self = inst.p2p.ID()` at `:476`. `PulledState.Executing` has
+  exactly one caller in the tree, `dagbft.go:542`, and no test reaches it. So
+  the switch that decides whether a node joins at all can be turned off and
+  nothing notices — and so can the fixes #4297, #4303 and #4307 cost a run
+  each to find.
 
 And two that follow from the block ledger:
 
@@ -391,26 +431,33 @@ or fail for reasons unrelated to it:
   fixed the run does not begin, let alone gate.
 - **#4319** — on the current build a restarted node never rejoins at all, so a
   chaos run's restarts produce a node that stays BOOTING. The run cannot
-  distinguish that from any other failure, and #4319 is blocked on a design
-  answer before it is work.
+  distinguish that from any other failure. **Now decided, and therefore work**:
+  replay `R+1..N` from the committed log. Nothing is built yet.
 - **#4318** — the run cannot distinguish a join that verified every account
-  from one that verified none. One test fixes that.
-- **#4317** — the two fixes the run would rest on (#4305, #4309) have no
-  targeted test; three reverts and three runs settle whether the one broad e2e
-  test covers them.
+  from one that verified none. **Executed: the substitution survives a green
+  suite.** One test fixes that.
+- **#4317** — **three** of the fixes the run would rest on have no test that
+  fails when broken, and `705da0ab5`'s coverage claim is refuted by execution.
+- **#4320** — the run rests on the daemon wiring that decides whether a node
+  joins at all, and that wiring can be switched off with the suite green.
 
-So the order that makes the gate mean something is: the #4319 decision, then
-#4304, then #4318 and #4317 (both cheap, both about being able to read the
-run's verdict), then the run. **#4316** is a live corruption rather than the
-masked cost it was filed as — see #4319's second defect — and belongs with
+So the order that makes the gate mean something is: **#4319's replay**, then
+#4304, then #4318, #4317 and #4320 (all three cheap, all three about being able
+to read the run's verdict), then the run. **#4238** sits beside #4319 as its
+bound rather than in the sequence — the retention horizon is now the maximum
+outage a node can survive, and its size is being measured by execution; its old
+~8-minute figure must not be quoted. **#4316** is a live corruption rather than
+the masked cost it was filed as — see #4319's second defect — and belongs with
 #4319 because the same write causes both; it is not separately gating.
 **#4315** and **#4313** do not gate the run at all, but both are stopped dead
 until their activation heights are named, so they should be asked about now
 rather than when they become urgent. **#4312** is a fork, not a tweak, and
 nothing on it should be built until it is answered.
 
-**None of this is acted on until Paul answers.** It is a proposal with its
-reasoning, which is what the plan asks for when the order would change.
+**Still open for Paul: the activation heights (#4313, #4315) and the #4312
+adjudication.** The #4319 decision is made and recorded above; the rest of this
+placement remains a proposal with its reasoning, which is what the plan asks
+for when the order would change.
 
 **The tests that passed do not exercise the mechanism.** This has to be said
 next to the order, because the order was built on them.
