@@ -46,7 +46,25 @@ import (
 // the three nodes' root chains are compared.
 func itoa(v uint64) string { return fmt.Sprint(v) }
 
+// The join is driven from the test: staging is taken at one step of the loop
+// and the state at another, so a variant can put the proving anchor before or
+// during the join.
 func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
+	// The anchors that prove the held entries land first, so the peers run
+	// them before the joining node takes their staging.
+	restartAndJoin(t, 3, 9)
+}
+
+// The proving anchor lands DURING the join: staging is taken while the peers
+// still hold the entries and their proofs wait, the anchor arrives while the
+// node is collecting, and the peers execute what they held. The joining node
+// must end on their root chain, not one block ahead or behind (#4290, run
+// 20260918T023054Z).
+func TestOneValidatorRestartDoesNotDiverge_AnchorLandsDuringTheJoin(t *testing.T) {
+	restartAndJoin(t, 0, 9)
+}
+
+func restartAndJoin(t *testing.T, takeStagingAt, completeJoinAt int) {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
 	aliceKey := acctesting.GenerateKey(alice)
@@ -243,9 +261,9 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 		// the handoff, a few blocks later. Between the two the node collects
 		// what it is handed, which is what makes the two exact.
 		switch step {
-		case 3:
+		case takeStagingAt:
 			require.NoError(t, p.TakeStaging(1, 0), "take a peer's staging")
-		case 9:
+		case completeJoinAt:
 			require.NoError(t, p.CompleteJoin(1, 0), "take the state and execute from the next block")
 			require.False(t, p.Joining(1))
 		}
