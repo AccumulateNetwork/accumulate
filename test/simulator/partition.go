@@ -8,6 +8,7 @@ package simulator
 
 import (
 	"bytes"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
@@ -61,6 +62,13 @@ func (p *Partition) RestartNode(i int) {
 
 // NodeStaging is node i's staging, for a test that compares nodes.
 func (p *Partition) NodeStaging(i int) *coreexec.Staging { return p.nodes[i].staging }
+
+// NodePrivate is the private API as node i serves it, addressed to that node:
+// what a joining node asks a running validator for (#4291).
+func (p *Partition) NodePrivate(i int) private.Sequencer {
+	addr := private.ServiceTypeSequencer.AddressFor(p.ID).Multiaddr()
+	return p.sim.services.ForPeer(p.nodes[i].peerID).ForAddress(addr).Private()
+}
 
 // Heals is the partition's healing counters as its first node's conductor
 // keeps them: entries pulled by the requester, requests, misses.
