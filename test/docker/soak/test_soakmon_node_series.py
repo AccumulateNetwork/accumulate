@@ -685,6 +685,46 @@ class OutcomesThisHarnessDoesNotKnowYet(unittest.TestCase):
         self.assertEqual(1, len(sub["impossible"]))
         self.assertIn("relayed 15 of 10 accepted", sub["impossible"][0])
 
+    def test_relays_with_no_accepted_series_at_all_is_an_alarm(self):
+        """The two checks above are guarded on the partition having
+        reported `accepted`, so a build that exports `relayed_total` and
+        never creates `submissions_total{outcome="accepted"}` slips past
+        both: stranded floors to 0 and a node relaying everything — or
+        losing everything — reads clean. Under the current wording a
+        relayed submission IS accepted, so relays with no accepted series
+        is a counter the node never created, not a quiet node."""
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "taken"}, 600.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "unreachable"}, 40.0)]},
+            "follower")
+        self.assertEqual(1, len(sub["impossible"]), sub["impossible"])
+        self.assertIn("640 relayed and no accepted series at all",
+                      sub["impossible"][0])
+        self.assertEqual(0, sub["stranded"], "floored, and therefore a lie")
+
+    def test_a_reported_zero_is_not_the_same_as_no_series(self):
+        """A node that says `accepted 0` beside relays is caught by the
+        existing check and reads differently — a measurement that is wrong,
+        not a measurement that is missing."""
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 0.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "taken"}, 600.0)]}, "follower")
+        self.assertEqual(2, len(sub["impossible"]), sub["impossible"])
+        self.assertIn("relayed 600 of 0 accepted", " ".join(sub["impossible"]))
+        self.assertNotIn("no accepted series", " ".join(sub["impossible"]))
+
+    def test_no_relays_and_no_accepted_series_is_not_an_alarm(self):
+        """A node with neither is a node nothing reached, or a build with
+        neither family. Absence is not a fault."""
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_certified_own_transactions_total",
+             {"partition": "BVN3"}, 0.0)]}, "follower")
+        self.assertEqual([], sub["impossible"])
+
     def test_an_unknown_outcome_counts_toward_that_alarm_too(self):
         """Otherwise a build with a fourth label can relay more than it
         took with no alarm at all (reviewer L2)."""

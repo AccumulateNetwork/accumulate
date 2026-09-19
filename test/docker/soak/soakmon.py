@@ -1218,7 +1218,7 @@ def write_mem_csv(mem, force=False):
 # this quantity over the fleet gives the network's true stranded count
 # without any node claiming credit for another's work.
 #
-# Two impossible states, each an instrument alarm and never floored away
+# Three impossible states, each an instrument alarm and never floored away
 # (REPORTING-SPEC 1a):
 #   * certified + relayed{taken} > accepted — double-counting somewhere:
 #     a per-header certified count, a per-attempt relay count, or a node
@@ -1228,6 +1228,13 @@ def write_mem_csv(mem, force=False):
 #     sum includes outcomes this harness does not know: a build with a
 #     fourth label could otherwise relay more than it took with no alarm
 #     (reviewer L2).
+#   * relays present and NO accepted series at all. The two above are
+#     guarded on the partition having reported `accepted`, so a build that
+#     exports relayed_total and never creates
+#     submissions_total{outcome="accepted"} slips past both, stranded
+#     floors to 0, and a node relaying everything — or losing everything —
+#     reads clean. A relayed submission is `accepted` by definition, so
+#     this is a counter the node never created.
 #
 # Until the families exist every consumer says `— not measured`, never 0
 # (REPORTING-SPEC 1).
@@ -1332,7 +1339,7 @@ def submissions_from(per, role="validator"):
                              ("relayedRefused", "relayedNotReady",
                               "relayedUnreachable")) \
                 + sum((p.get("unknownRelayOutcomes") or {}).values())
-            # Two impossible states, each an instrument fault and each
+            # Three impossible states, each an instrument fault and each
             # named rather than absorbed by the floor (REPORTING-SPEC 1a).
             if p.get("accepted") is not None and q + ok > a:
                 out["impossible"].append(
@@ -1341,6 +1348,21 @@ def submissions_from(per, role="validator"):
             if p.get("accepted") is not None and tried > a:
                 out["impossible"].append(
                     "%s %s: relayed %d of %d accepted" % (c, part, tried, a))
+            # Relays present and NO accepted series at all. Both checks
+            # above are guarded on `accepted is not None`, so a build that
+            # exports relayed_total and never creates
+            # submissions_total{outcome="accepted"} slips past both — and
+            # under the current wording it cannot be right: a submission
+            # that enters the relay IS accepted, so relays without an
+            # accepted series is a missing counter, not a quiet node. Left
+            # unsaid it is the retracted reading's silent failure by
+            # another route: stranded floors to 0 and a node relaying
+            # everything, or losing everything, reads clean.
+            if p.get("accepted") is None and tried > 0:
+                out["impossible"].append(
+                    "%s %s: %d relayed and no accepted series at all — a "
+                    "relayed submission is accepted by definition, so this "
+                    "is a counter the node never created" % (c, part, tried))
             # The quantity: what it neither got into its own certified
             # header NOR handed to a node that took it. On a working
             # relaying node this is ~0; before relay it was everything the

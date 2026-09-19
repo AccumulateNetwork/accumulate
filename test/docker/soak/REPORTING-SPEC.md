@@ -194,12 +194,17 @@ exporter's hook is the node's own certificate and not its own header.
 Each transaction MUST be counted at most once, at the first certified header
 carrying its batch: a header that never certifies is requeued and its batches
 re-proposed, so a per-header count double-counts and drives the difference
-negative. Two impossible states (clause 1a) MUST be surfaced as instrument
+negative. Three impossible states (clause 1a) MUST be surfaced as instrument
 alarms and never floored silently: `certified + relayed{taken} > accepted`
 (a per-header certified count, a per-attempt relay count, or a node promoted
 mid-run that kept its own copy of what it relayed — a real event, not a broken
-counter), and `sum(relayed) > accepted`, where the sum includes outcomes the
-reader does not know. Until the families exist the harness renders
+counter); `sum(relayed) > accepted`, where the sum includes outcomes the
+reader does not know; and **any relay at all beside no `accepted` series**,
+since a relayed submission is `accepted` by definition — the first two are
+read against a reported `accepted`, so without that check a build exporting
+`relayed_total` and no `submissions_total{outcome="accepted"}` slips past
+both, the stranded count floors to 0, and a node relaying everything or
+losing everything reads clean. Until the families exist the harness renders
 `— not measured` on the board, in `submissions.csv` (a header and no rows, and
 an empty field in a row that does exist) and in the manifest — never 0, because
 0 asserts that nothing stranded, which is the one thing run `20260919T191634Z`
