@@ -466,7 +466,7 @@ nodes take the same path, in this order:
    - **Level with the peer on every chain.** The node is not past the peer,
      and the peer's body, directory and pending list are taken as they always
      were. This rests on an account's body not moving without one of its
-     chains moving, AND THAT IS KNOWN TO BE FALSE (#4349). Two accounts move
+     chains moving, AND THAT IS KNOWN TO BE FALSE (#4350). Two accounts move
      without any chain of theirs moving, both found by walking the BPT block
      by block under ordinary traffic. `<partition>/anchors` advances
      `MinorBlockSequenceNumber` and `LastAnchorBlock` in `prepareAnchor` with
