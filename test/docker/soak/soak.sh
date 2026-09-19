@@ -851,10 +851,15 @@ stalled_end="${stalled_end:-unknown}"
 #     carrying its own batches like any node, and what it never gets is the
 #     2f+1 votes, so "never proposed" would read 0 on it;
 #   * minus the relay, because Paul (2026-09-19) said followers can and
-#     should relay, so a follower that hands on everything it takes is
-#     WORKING — subtracting only certified would make it the largest red
-#     number on the board.
-# What is left is the stranded count, and it is the one that must be 0.
+#     should relay — and relay is not gated on being synced: a read needs
+#     local state, a relay needs none, so a node relays whether it is
+#     following OR syncing (executor.md step 6). A node that hands on
+#     everything it takes is WORKING, and subtracting only certified would
+#     make it the largest red number on the board.
+# What is left is the stranded count, and it is the one that must be 0 —
+# at the LAST sample, which soakmon writes on its way out, after the drain.
+# The row states the trend into it, because at any earlier sample a relay
+# in flight and a stranded transaction are the same number.
 # No build exports any of the three yet (#4366, #4369), so the file is a
 # header with no rows and this says `— not measured` — never 0, which would
 # assert that nothing stranded, the one claim run 20260919T191634Z could
@@ -863,6 +868,8 @@ relay_row() {   # $1 = role: validator | follower
   python3 - "$rd/submissions.csv" "${1:-}" <<'PYEOF'
 import csv, sys
 path, role = sys.argv[1], sys.argv[2]
+KEYS = ("relayedTaken", "relayedRefused", "relayedNotReady",
+        "relayedUnreachable")
 try:
     rows = [r for r in csv.DictReader(open(path))
             if not role or r.get("role") == role]
@@ -872,12 +879,12 @@ if not rows:
     print("— not measured (no node exports `accumulate_dagbft_relayed_total`; #4366, #4369)")
     raise SystemExit
 last = max(r["time"] for r in rows)
-tot = {"relayedAccepted": 0, "relayedRefused": 0, "relayedUnreachable": 0}
+tot = {k: 0 for k in KEYS}
 seen = False
 for r in rows:
     if r["time"] != last:
         continue
-    for k in tot:
+    for k in KEYS:
         v = (r.get(k) or "").strip()
         if v:
             try:
@@ -886,8 +893,8 @@ for r in rows:
                 pass
 if not seen:
     print("— not measured (rows at %s carry no relay counts)" % last); raise SystemExit
-print("%d taken / %d refused / %d unreachable (as of %s)"
-      % (tot["relayedAccepted"], tot["relayedRefused"],
+print("%d taken / %d refused / %d target not ready / %d unreachable (as of %s)"
+      % (tot["relayedTaken"], tot["relayedRefused"], tot["relayedNotReady"],
          tot["relayedUnreachable"], last))
 PYEOF
 }
@@ -904,15 +911,51 @@ rows = [r for r in rows if not role or r.get("role") == role]
 if not rows:
     print("— not measured (no node exports `accumulate_dagbft_submissions_total`; #4366, #4369)")
     raise SystemExit
-last = max(r["time"] for r in rows)
+# THE LAST SAMPLE, and the trend into it (reviewer M3). soakmon writes a
+# final row when it is stopped, which soak.sh does after the load
+# generator's grace drain and any IDLE_AFTER tail — so the last row is the
+# only one taken with nothing in flight, and "must be 0" is read against
+# it. At any earlier sample a relay not yet answered and a transaction
+# nobody will ever take are the same number, so the row states the
+# movement over the final samples as well: falling with no new accepts is
+# draining, flat or rising is stranded.
+TREND_N = 5
+stamps = sorted({r["time"] for r in rows})
+last = stamps[-1]
+
+
+def totals(ts):
+    """(stranded, accepted) at one sample; stranded is None if nobody counted."""
+    st = acc = None
+    blanks = 0
+    for r in rows:
+        if r["time"] != ts:
+            continue
+        # An EMPTY field is a counter that node never created — one family
+        # exported and not the other. Summing it as 0 would report "nothing
+        # stranded here" for a partition nobody measured (REPORTING-SPEC 1).
+        v = (r.get("acceptedNeitherCertifiedNorTaken") or "").strip()
+        if v:
+            try:
+                st = (st or 0) + int(v)
+            except ValueError:
+                blanks += 1
+        else:
+            blanks += 1
+        a = (r.get("accepted") or "").strip()
+        if a:
+            try:
+                acc = (acc or 0) + int(a)
+            except ValueError:
+                pass
+    return st, acc, blanks
+
+
 per, blank = {}, 0
 for r in rows:
     if r["time"] != last:
         continue
-    # An EMPTY field is a counter that node never created — one family
-    # exported and not the other. Summing it as 0 would report "nothing
-    # stranded here" for a partition nobody measured (REPORTING-SPEC 1).
-    v = (r.get("acceptedNeitherCertifiedNorRelayed") or "").strip()
+    v = (r.get("acceptedNeitherCertifiedNorTaken") or "").strip()
     if not v:
         blank += 1
         continue
@@ -925,8 +968,27 @@ if not per:
     print("— not measured (rows at %s but no counts%s)" % (last, missing or ""))
     raise SystemExit
 (wv, wk) = max((v, k) for k, v in per.items())
-print("%d, worst %s on %s (as of %s)%s"
-      % (sum(per.values()), wv, "/".join(wk), last, missing))
+total = sum(per.values())
+
+series = [totals(t) for t in stamps[-TREND_N:]]
+vals = [x[0] for x in series if x[0] is not None]
+accs = [x[1] for x in series if x[1] is not None]
+if len(vals) < 2:
+    trend = "no trend (one sample)"
+elif vals[-1] == 0:
+    trend = "0 at the last sample"
+elif vals[-1] < vals[0]:
+    trend = "falling %d -> %d over the last %d samples (draining)" % (
+        vals[0], vals[-1], len(vals))
+elif len(accs) >= 2 and accs[-1] == accs[0]:
+    trend = "%s %d -> %d over the last %d samples with NO new accepts (stranded)" % (
+        "flat at" if vals[-1] == vals[0] else "rising", vals[0], vals[-1], len(vals))
+else:
+    trend = "%s %d -> %d over the last %d samples, still accepting" % (
+        "flat at" if vals[-1] == vals[0] else "rising", vals[0], vals[-1], len(vals))
+
+print("%d, worst %s on %s (as of %s; %s)%s"
+      % (total, wv, "/".join(wk), last, trend, missing))
 PYEOF
 }
 
@@ -963,7 +1025,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   # A run that wedged and dumped is the most valuable kind of run there is;
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
   echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
-  echo "| accepted, neither certified here nor accepted on relay (#, whole run, the validators) | $(sub_row validator) |"
+  echo "| accepted, neither certified here nor taken on relay (#, whole run, the validators) | $(sub_row validator) |"
   if [ "$n_fol" -gt 0 ]; then
     echo
     echo "### Follower (#4365)"
@@ -975,7 +1037,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     else
       echo "| every follower measurement | — not measured (followerlog.py produced nothing; see \`soak.log\`) |"
     fi
-    echo "| accepted, neither certified here nor accepted on relay (#, whole run) | $(sub_row follower) |"
+    echo "| accepted, neither certified here nor taken on relay (#, whole run) | $(sub_row follower) |"
     echo "| relayed (#, whole run) | $(relay_row follower) |"
     echo
     echo "Full detail in \`follower-report.md\`; the per-sample series in \`follower.csv\`."
