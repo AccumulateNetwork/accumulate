@@ -186,38 +186,16 @@ func streamKey(id execute.StreamID) string {
 	return strings.ToLower(id.Ledger.String() + "|" + id.Source.String())
 }
 
-// selectedToPull answers whether this node asks its sources for its gaps this
-// activation.
-//
-// A validator asks when the previous block's hash selects it as one of the
-// pair over the partition's validator set. Pulls are fungible between
-// validators — whoever asks, the answer lands through consensus and heals
-// everyone — so two ask and the rest stay quiet (healing.md, "Who asks, and
-// when").
-//
-// A node that is NOT in the partition's committee asks every activation,
-// because nothing else will ask for it. The selection is drawn over the
-// active set and cannot name a node outside it, and a gap that only this node
-// has is a gap no validator computes: it never asks, so nobody asks, and the
-// hole is permanent. That is what the run showed -- the follower made 0
-// requests while its four peers made 351, and `followerHeals` read 0 with no
-// instrument behind it, which is indistinguishable from a calm stream
-// (#4367). A follower "differs only in what it does with the blocks it
-// processes ... not in how it gets there" (executor.md, "Sync" step 5), and
-// filling its own holes is how it gets there.
-//
-// It asks only for its OWN gaps, and only for the ones the ordinary patience
-// and back-off windows have not already asked about, so the cost is one more
-// asker on the streams that are actually behind, not a request per block.
-//
-// A node with no validator key never pulls: unchanged, and nothing in this
-// tree runs without one.
+// selectedToPull answers whether this validator is one of the pair the
+// previous block's hash selects over the partition's validator set. Pulls are
+// fungible — whoever asks, the answer heals everyone — so two ask and the rest
+// stay quiet. A node with no validator key, or one not in the set, never pulls.
 func (c *Conductor) selectedToPull(ledger *protocol.SystemLedger) bool {
 	if len(c.ValidatorKey) != ed25519.PrivateKeySize {
 		return false
 	}
 	keys, err := c.partitionValidators()
-	if err != nil {
+	if err != nil || len(keys) == 0 {
 		return false
 	}
 	self := c.ValidatorKey.Public().(ed25519.PublicKey)
@@ -229,7 +207,7 @@ func (c *Conductor) selectedToPull(ledger *protocol.SystemLedger) bool {
 		}
 	}
 	if me < 0 {
-		return true // outside the committee: it fills its own holes
+		return false
 	}
 	for _, i := range pullSenders(previousBlockSeed(ledger), len(keys)) {
 		if i == me {

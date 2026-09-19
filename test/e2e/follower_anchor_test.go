@@ -18,11 +18,9 @@ import (
 	nodeconfig "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
-	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -145,89 +143,4 @@ func TestAFollowerDispatchesNoAnchor(t *testing.T) {
 		}
 	}
 	require.NotZero(t, others, "the validators stopped anchoring")
-}
-
-// A node in no committee still asks its sources for its own gaps, and the
-// entries come back — through the production wiring: the real conductor's
-// requester on the follower itself, the real private sequencer on the
-// source, and the real dispatcher carrying the bundle back.
-//
-// The follower on run 20260919T191634Z asked for nothing at all, ever, while
-// its four peers asked 351 times, because the pull is selected over the
-// ACTIVE validator set and the selection cannot name a node outside it
-// (requester.go, selectedToPull → cadence.go, partitionValidators). A hole on
-// such a node is permanent and reads exactly like a calm stream.
-func TestAFollowerAsksForItsOwnGaps(t *testing.T) {
-	var timestamp uint64
-	const validators = 3
-	net, _ := networkWithAFollower(t.Name(), 2, validators)
-
-	// Drop the first synthetic deposit, so the destination partition — the
-	// one the follower is on — has a gap that only a request can fill.
-	var dropped int
-	sim := NewSim(t,
-		simulator.WithNetwork(net),
-		simulator.Genesis(GenesisTime),
-		simulator.SkipProposalCheck(), // FIXME should not be necessary
-		simulator.CaptureDispatchedMessages(func(_ context.Context, env *messaging.Envelope) (bool, error) {
-			if dropped > 0 {
-				return true, nil
-			}
-			msgs, err := env.Normalize()
-			if err != nil {
-				return false, err
-			}
-			for _, msg := range msgs {
-			again:
-				switch m := msg.(type) {
-				case interface{ Unwrap() messaging.Message }:
-					msg = m.Unwrap()
-					goto again
-				case messaging.MessageWithTransaction:
-					if m.GetTransaction().Body.Type() == protocol.TransactionTypeSyntheticDepositTokens {
-						dropped++
-						return false, nil
-					}
-				}
-			}
-			return true, nil
-		}),
-	)
-
-	// The follower is the last node of BVN0, and of the Directory, because
-	// every node of a BVN runs a Directory node too (factory.go,
-	// getNetworkFactories).
-	const follower = validators
-	require.Equal(t, validators+1, sim.S.Partition("BVN0").NodeCount())
-	require.Zero(t, sim.S.Partition("BVN0").NodeHeals(follower).Requests.Load(),
-		"nothing has happened yet")
-
-	// Alice on BVN1 pays Bob on BVN0, so the synthetic that is lost is bound
-	// for the partition the follower is on.
-	alice := acctesting.GenerateKey("Alice")
-	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
-	bob := acctesting.GenerateKey("Bob")
-	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
-	sim.SetRoute(aliceUrl, "BVN1")
-	sim.SetRoute(bobUrl, "BVN0")
-	MakeLiteTokenAccount(t, sim.DatabaseFor(aliceUrl), alice[32:], protocol.AcmeUrl())
-
-	var st []*protocol.TransactionStatus
-	for i := 0; i < 4; i++ {
-		st = append(st, sim.SubmitTxnSuccessfully(MustBuild(t,
-			build.Transaction().For(aliceUrl).
-				SendTokens(1, protocol.AcmePrecisionPower).To(bobUrl).
-				SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice))))
-		sim.StepN(2)
-	}
-	sim.StepUntil(True(func(*Harness) bool { return dropped > 0 }))
-
-	// The hole closes, and the follower asked for it.
-	for _, st := range st {
-		sim.StepUntil(
-			Txn(st.TxID).Succeeds(),
-			Txn(st.TxID).Produced().Succeeds())
-	}
-	require.NotZero(t, sim.S.Partition("BVN0").NodeHeals(follower).Requests.Load(),
-		"the follower never asked its sources for anything")
 }

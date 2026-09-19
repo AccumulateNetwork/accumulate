@@ -227,6 +227,18 @@ func (p *Partition) SetNodeBlockHook(fn NodeBlockHookFunc) {
 // in the definition and active on nothing, and the two readings must agree:
 // a simulator node that is a follower in genesis and a validator in consensus
 // is a node no operator can deploy.
+//
+// It settles who LEADS (state_block.go, the leader is drawn over
+// n.validators) and not who votes. A follower here still votes and still
+// counts its own vote: newVotes seeds the tracker with n.self
+// unconditionally and reachedThreshold counts it (consensus/voting.go:24-29,
+// 46-50), so a follower logs `Vote by non-validator` on its peers -- 1,021
+// of them in one run of TestAFollowerDispatchesNoAnchor -- while its own
+// node reaches the threshold one vote early. Harmless in lockstep, where
+// every node executes the same block anyway, but it means **this simulator
+// cannot show that a follower does not vote**: that is consensus, it is the
+// same shape as #4371, and a test asserting it here would be asserting it of
+// a node that does.
 func (n *Node) isValidatorOn(typ protocol.PartitionType) bool {
 	switch typ {
 	case protocol.PartitionTypeDirectory:
