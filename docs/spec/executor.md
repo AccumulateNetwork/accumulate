@@ -216,8 +216,10 @@ by the position.
 
 A join asks one question — *what is the state of the protocol at a height, and
 why should this node believe it* — and answers it in four steps: validate the
-spine, pull the state that spine's root commits to, derive staging from that
-state, execute from the next block. Nothing in it rests on a peer's word.
+spine, pull the state that spine's root commits to, collect consensus until
+what it collected and what it pulled line up, execute from the next block.
+Nothing in it rests on a peer's word, and nothing in it asks a peer what it
+holds.
 
 #### 1. The spine is the trust root, and it is validated first
 
@@ -390,49 +392,67 @@ the account's hash cannot be computed to match. An account with a non-empty
 pending list that is pulled without it diverges, and the node never converges
 (#3999, #4298).
 
-#### 4. Staging is derived, not asked for
+#### 4. Staging is what was collected, minus what the state says executed
 
 A stage holds two lists per stream, indexed from `Delivered + 1`: the entries
 received, and the hashes proofs have validated ("Staging is one structure").
-Both are recoverable from what the node has already verified.
+A joining node fills both from consensus alone, and reads `Delivered` out of
+the state it pulled.
 
-**The validated hashes come from the anchors, which are state.** A collection
-proof names the Directory anchor it terminates in, and a validated proof's
-hashes go into the stream's stage at their numbers. The anchors executed
-through `Q` are in the state the node pulled, so the validated frontier of
-every stream at `Q` is computed, not asked for.
+**Synced to `B`, the next block is everything not yet executed.** The pulled
+state at `B` says, per stream, exactly how far execution reached. Block
+`B + 1`'s transactions are by definition ones not executed as of `B`. If the
+run each stream can deliver from `Delivered + 1` is contiguous — no sequence
+number missing between `Delivered` and what `B + 1` carries, no proof naming
+a hash the node does not hold — then nothing any peer is holding is missing
+here, and the node executes `B + 1` as its peers did. **If there are no gaps
+there is nothing in staging to worry about.**
 
-**The bodies are content-addressed, so they come from anybody.** A proof binds
-hash to index, so an entry fetched for a validated number is checked against
-the hash the proof already fixed. There is nothing to trust in the source: a
-wrong body fails its own hash. What a peer used to be asked for — its validated
-hash set, its held entries, its `Delivered` — is either derived here or, in
-`Delivered`'s case, read out of the verified state (#4301, #4322).
+**A gap is an entry that arrived before the node was listening.** `B + 1`
+delivers #105 while the node's `Delivered` is 103 and #104 is not in `B + 1`:
+the peers held #104 from a block before `B`, and executing `B + 1` without it
+is the #4290 divergence. The node does not execute. It takes `B + 1`'s block
+ledger, pulls the accounts it names at anchored `B + 1` — whose `Delivered`
+now says what the peers actually ran — keeps `B + 1`'s transactions in
+staging, and asks the same question of `B + 2`. **It advances the sync one
+block at a time until a block has no gap, then executes.**
 
-**The run is a function of the validated frontier, not of what the node
-happens to hold.** On a validated index whose body is missing, the block waits
-and the body is fetched; it does not deliver a shorter run. A run that stops at
-what a node holds is a run that differs per node, which is the divergence this
-whole section exists to prevent.
+That loop ends, and quickly. The node has collected every committed block
+since it started, so an entry a peer holds that *arrived after that point*
+the node holds too; a gap can only be an entry from before. Held sets are
+small — a handful of entries at 100 tps — and clear within a few blocks, so
+within a few rounds the last pre-listen entry has been executed by the
+network and is in the pulled state, and every stream's run is contiguous.
+
+**The root is the check that does not depend on the sequence numbers.** After
+executing any block, the local BPT root equals that block's anchored root or
+it does not. A mismatch is a gap the sequence check missed — the node
+re-syncs at that block and continues — so a wrong run is caught at the block
+it happens in, never carried forward.
+
+**The bodies are content-addressed, so they come from anybody.** An entry the
+node needs and did not receive — a validated hash with no body behind it — is
+fetched by hash from any peer and checked against the hash the proof already
+fixed. There is nothing to trust in the source: a wrong body fails its own
+hash. **The run is a function of the validated frontier, not of what the node
+happens to hold**: on a validated index whose body is missing, the block waits
+and the body is fetched; it does not deliver a shorter run, because a run
+that stops at what a node holds differs per node.
 
 **An anchor below its quorum needs no quorum recovered.** It is held in the
 anchor stream's stage at its number, runnable once the signatures reach the
 threshold **or a validated hash at its number is its own**; and a collection
 proof under a known directory root authorizes it outright, because the proof
 depends only on the current directory root, which every synced node has
-(#4056). A historical quorum is never re-gathered, so a partial signature set
-is never something a joining node has to reconstruct.
+(#4056). A historical quorum is never re-gathered.
 
-**What is not derivable is what no anchor covers yet.** A stream's validated
-frontier reaches as far as the Directory has anchored, and peers may hold
-entries above it on a sighting the joining node cannot reconstruct. `Q` is
-therefore chosen at or below the anchored frontier. **Whether that is
-sufficient — whether everything the peers hold unexecuted at `Q` is provable
-under the root the joining node has verified for `Q` — is open, and it is the
-question that decides whether a peer is ever asked for staging at all.** It is
-answered by measurement, not by argument: take a running validator's held set
-at an anchored `Q` and ask whether every member is provable under that root.
-Until it is answered this is an open hole and not an assumption.
+**No peer is ever asked what it holds.** The earlier design's step 2 — a
+validator serving its staging as of its last committed block — answered a
+question the node can answer for itself, and answered it from one
+unauthenticated peer with nothing to check it against (#4322). The block
+ledger, the accounts and the anchors are verified; the transactions come from
+consensus; `Delivered` is hashed state. Staging is what was collected minus
+what the state says executed, and that is all it ever needs to be.
 
 #### 5. Converge, then execute
 
