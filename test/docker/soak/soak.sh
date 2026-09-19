@@ -927,18 +927,33 @@ PYEOF
 # submission is accepted and falls when the relay is answered, so between
 # samples it jitters by whatever is in flight. Two rows either side of a
 # disturbance therefore measure the jitter as often as the loss. The SETTLED
-# level over an interval is its MINIMUM — everything above the floor was in
-# flight and came back — so each step is min(after) - min(before), read on
-# the whole interval and not on two rows.
+# level over a stretch is its MINIMUM — everything above the floor was in
+# flight and came back.
+#
+# THE WINDOWS ARE LOCAL TO EACH DISTURBANCE, and that is the correction.
+# Taking the minimum over a whole interval [e_i, e_i+1) puts it at the
+# interval's START, so a rise in the middle of a quiet stretch first shows
+# up as the NEXT interval's minimum and is billed to the next disturbance:
+# a run that was flat through a restart, climbed +3 with nothing happening,
+# and was flat through the next restart printed "01:20Z restart: 0 -> 3
+# (+3)" — a violation rendered as compliance, on the one case this table
+# exists for (reviewer on #4364). So:
+#   step_i  = min over [e_i, e_i + W)  -  min over [e_i - W, e_i)
+#   creep_i = min over [e_i+1 - W, e_i+1)  -  min over [e_i, e_i + W)
+# The step is what the disturbance cost; the creep is the climb in the
+# quiet stretch, and THAT is the criterion's number. Windows are clamped so
+# two never meet, and a clamped one says so.
 #
 # A pause's step lands at the UN-pause, not at the log line: chaos logs
 # `pause <node> <p>s` when it starts and never logs the end, so the
 # disturbance's effective moment is the timestamp plus p.
 steps_rows() {   # $1 = role: validator | follower
-  python3 - "$rd/submissions.csv" "$rd/chaos.log" "${1:-}" <<'PYEOF'
+  python3 - "$rd/submissions.csv" "$rd/chaos.log" "${1:-}" \
+           "${STEP_WINDOW_SECS:-120}" <<'PYEOF'
 import csv, datetime, re, sys
 
 subs, chaos, role = sys.argv[1], sys.argv[2], sys.argv[3]
+W = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else 120
 
 
 def secs(t):
@@ -950,30 +965,34 @@ def hhmm(t):
     return t[11:16] + "Z"
 
 
+def row(a, b):
+    print("| %s | %s |" % (a, b))
+
+
 # --- the disturbances, at the moment they take effect -----------------------
 try:
     lines = [l.rstrip("\n") for l in open(chaos) if l.strip()]
 except OSError:
-    print("| stranded across disturbances | — not measured (no `chaos.log`) |")
+    row("stranded across disturbances", "— not measured (no `chaos.log`)")
     raise SystemExit
 events = []
 for l in lines:
     m = re.match(r"^(\S+Z) restart (\S+)", l)
     if m:
-        events.append((secs(m.group(1)), hhmm(m.group(1)), "restart", m.group(2)))
+        events.append([secs(m.group(1)), hhmm(m.group(1)), "restart", m.group(2)])
         continue
     m = re.match(r"^(\S+Z) pause (\S+) (\d+)s", l)
     if m:
-        # at the UN-pause
-        events.append((secs(m.group(1)) + int(m.group(3)), hhmm(m.group(1)),
-                       "pause", m.group(2)))
+        # at the UN-pause: chaos logs the start and never the end
+        t = secs(m.group(1)) + int(m.group(3))
+        events.append([t, hhmm(m.group(1)), "pause", m.group(2)])
 if not events:
     if any(" DISABLED " in l for l in lines):
-        print("| stranded across disturbances | chaos off — no disturbances "
-              "to attribute steps to |")
+        row("stranded across disturbances",
+            "chaos off — no disturbances to attribute steps to")
     else:
-        print("| stranded across disturbances | — not measured (`chaos.log` "
-              "records no restart or pause) |")
+        row("stranded across disturbances",
+            "— not measured (`chaos.log` records no restart or pause)")
     raise SystemExit
 events.sort()
 
@@ -982,8 +1001,7 @@ try:
     rows = [r for r in csv.DictReader(open(subs))
             if not role or r.get("role") == role]
 except OSError:
-    print("| stranded across disturbances | — not measured (no "
-          "`submissions.csv`) |")
+    row("stranded across disturbances", "— not measured (no `submissions.csv`)")
     raise SystemExit
 series = {}
 for r in rows:
@@ -999,40 +1017,103 @@ for r in rows:
     series.setdefault(r["time"], {})[(r.get("node"), r.get("partition"))] = n
 points = sorted((secs(t), sum(d.values())) for t, d in series.items())
 if not points:
-    print("| stranded across disturbances | — not measured (no stranded "
-          "series; #4366, #4369) |")
+    row("stranded across disturbances",
+        "— not measured (no stranded series; #4366, #4369)")
     raise SystemExit
+t0, t1 = points[0][0], points[-1][0]
 
 
-def settled(lo, hi):
-    """The floor of the series over [lo, hi): what did NOT come back."""
+def floor_of(lo, hi):
+    """The settled level over [lo, hi): what did NOT come back.
+
+    The figure jitters by whatever is in flight, so its floor over a few
+    samples is the level and any single reading is not.
+    """
     vals = [v for t, v in points if lo <= t < hi]
     return min(vals) if vals else None
 
 
-bounds = [e[0] for e in events] + [points[-1][0] + 1]
-out, biggest, where = [], None, ""
-before = settled(points[0][0], bounds[0])
-if before is not None:
-    out.append("| baseline (before the first disturbance) | %d |" % before)
+# Windows are LOCAL to each disturbance, and clamped so two never meet.
+# A minimum taken over a whole interval sits at the interval's start, so a
+# rise in the middle of a quiet stretch first appears as the NEXT
+# interval's minimum and is billed to the next disturbance — printing a
+# violation as compliance (reviewer on #4364). Local windows measure the
+# step at the disturbance; the stretch between two of them is measured
+# separately, below, and that is the criterion's number.
+nbr = [None] + [e[0] for e in events] + [None]    # neighbouring disturbances
+win = []
+for i, e in enumerate(events):
+    lo, hi = e[0] - W, e[0] + W
+    by_event = False
+    if nbr[i] is not None and nbr[i] > lo:
+        lo, by_event = nbr[i], True
+    if nbr[i + 2] is not None and nbr[i + 2] < hi:
+        hi, by_event = nbr[i + 2], True
+    lo, hi = max(lo, t0 - 1), min(hi, t1 + 1)
+    # Two different notes. Clipped by the run's edge is ordinary — the
+    # window is short but it is still this disturbance's. Clipped by
+    # another disturbance is not: the step and the creep beside it are
+    # then measured over the same samples and cannot be told apart.
+    if by_event:
+        note = (" (window met a neighbouring disturbance — its step and the "
+                "creep beside it are not separable)")
+    elif (e[0] - lo) < W or (hi - e[0]) < W:
+        note = " (window shortened by the run's start or end)"
+    else:
+        note = ""
+    win.append((lo, hi, note))
+
+biggest_step = biggest_step_at = None
+biggest_creep = biggest_creep_at = None
+prev_after = None
+prev_label = None
+
+head = floor_of(t0, min(events[0][0], t0 + W))
+if head is not None:
+    row("baseline (the first %ds of the run)" % W, "%d" % head)
+
 for i, (t, at, kind, node) in enumerate(events):
-    after = settled(t, bounds[i + 1])
+    lo, hi, note = win[i]
+    before, after = floor_of(lo, t), floor_of(t, hi)
+    # the quiet stretch that ENDS at this disturbance
+    start_floor = prev_after if prev_after is not None else head
+    start_label = prev_label if prev_label is not None else "the run's start"
+    if start_floor is not None and before is not None:
+        creep = before - start_floor
+        row("between %s and %s" % (start_label, at),
+            "crept %+d" % creep)
+        if biggest_creep is None or creep > biggest_creep:
+            biggest_creep = creep
+            biggest_creep_at = "%s to %s" % (start_label, at)
     if before is None or after is None:
-        out.append("| %s %s %s | — not measured (no sample in the interval) |"
-                   % (at, kind, node))
+        row("%s %s %s" % (at, kind, node),
+            "— not measured (no sample in the %ds window)%s" % (W, note))
+        prev_after, prev_label = None, at
         continue
     step = after - before
-    out.append("| %s %s %s | stranded %d -> %d (%+d) |"
-               % (at, kind, node, before, after, step))
-    if biggest is None or step > biggest:
-        biggest, where = step, "%s %s %s" % (at, kind, node)
-    before = after
-for l in out:
-    print(l)
-if biggest is not None:
-    print("| largest step between disturbances | %+d, at %s%s |"
-          % (biggest, where,
-             "" if biggest else " — the figure did not climb"))
+    row("%s %s %s" % (at, kind, node),
+        "stranded %d -> %d (%+d)%s" % (before, after, step, note))
+    if biggest_step is None or step > biggest_step:
+        biggest_step, biggest_step_at = step, "%s %s %s" % (at, kind, node)
+    prev_after, prev_label = after, at
+
+tail = floor_of(max(t1 - W, events[-1][0]), t1 + 1)
+if prev_after is not None and tail is not None:
+    creep = tail - prev_after
+    row("between %s and the end of the run" % prev_label, "crept %+d" % creep)
+    if biggest_creep is None or creep > biggest_creep:
+        biggest_creep = creep
+        biggest_creep_at = "%s to the end of the run" % prev_label
+
+if biggest_step is not None:
+    row("largest step at a disturbance",
+        "%+d, at %s%s" % (biggest_step, biggest_step_at,
+                          "" if biggest_step else " — no disturbance cost anything"))
+if biggest_creep is not None:
+    row("largest climb between disturbances",
+        "%+d, %s%s" % (biggest_creep, biggest_creep_at,
+                       "" if biggest_creep > 0 else
+                       " — the figure did not climb"))
 PYEOF
 }
 
@@ -1231,13 +1312,20 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     echo "**Stranded across disturbances (#4364).** The criterion is that the"
     echo "figure does not climb between disturbances and that every step is"
     echo "attributable to one of them — these counters never clear, so this is"
-    echo "a cumulative loss, not a level. Each step is the settled level after"
-    echo "a disturbance minus the settled level before it, and settled means"
-    echo "the MINIMUM over the interval: the figure jitters by whatever is in"
-    echo "flight between samples, so two rows either side would measure the"
-    echo "jitter. A pause is dated at its un-pause. A step spans to the next"
-    echo "disturbance, so a non-zero one needs \`submissions.csv\` to say"
-    echo "whether it landed at the disturbance or crept afterwards."
+    echo "a cumulative loss, not a level. Two different numbers, so both are"
+    echo "here: a **step** is what a disturbance cost, and a **creep** is the"
+    echo "climb in the quiet stretch between two of them. The criterion's"
+    echo "number is \`largest climb between disturbances\`."
+    echo
+    echo "Settled means the MINIMUM over a window, because the figure jitters"
+    echo "by whatever is in flight between samples and a single reading is not"
+    echo "a level. The windows are LOCAL — ${STEP_WINDOW_SECS:-120}s either"
+    echo "side of the disturbance, four samples at the 30s cadence and well"
+    echo "inside the chaos cadence — so a rise in the middle of a quiet"
+    echo "stretch is a creep and not the next disturbance's step. A window"
+    echo "clamped by a neighbouring event says so; where two disturbances are"
+    echo "closer than twice the window the creep between them is not"
+    echo "separable. A pause is dated at its un-pause."
     echo
     echo "| disturbance | stranded |"
     echo "|---|---|"
