@@ -711,6 +711,50 @@ class ARetryIsOneResponsibilityNotThree(unittest.TestCase):
         self.assertEqual(2, sub["stranded"],
                          "two transactions that were never lost")
 
+    def test_a_fresh_client_submit_is_a_new_submission(self):
+        """The other half of the rule, which had no fixture. The node's own
+        attempts inside one call are one `accepted`; a client that submits
+        the SAME envelope again has made the node take responsibility a
+        second time, and that is two.
+
+        It matters because the two cases look alike in a log and produce
+        opposite readings: the first must not inflate `accepted`, and the
+        second must — a client hammering a follower that cannot place its
+        work should show up, not be deduplicated into one.
+        """
+        # One submission, three of the node's own attempts: 1.
+        one = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 1.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "taken"}, 1.0)]}, "follower")
+        self.assertEqual(1, one["accepted"])
+        # The same envelope submitted twice by the client: 2, and two
+        # hand-offs, because the node took it twice.
+        two = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 2.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "taken"}, 2.0)]}, "follower")
+        self.assertEqual(2, two["accepted"])
+        self.assertEqual(2, two["relayedTaken"])
+        self.assertEqual(0, two["stranded"], "neither was lost")
+        self.assertEqual([], two["impossible"],
+                         "a duplicate submission is not an instrument fault")
+
+    def test_a_client_that_keeps_resubmitting_what_nobody_takes_shows(self):
+        """And the reading that depends on it: a client submitting the same
+        work ten times to a node that can place none of it reads 10
+        stranded, not 1. Deduplicating would hide the very thing the row
+        exists for."""
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 10.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "unreachable"}, 10.0)]},
+            "follower")
+        self.assertEqual(10, sub["stranded"])
+
     def test_a_restart_that_loses_nothing_leaves_the_row_at_zero(self):
         """The disturbance the twelve-hour config runs. 500 submissions
         relayed across a validator restart, every one retried onto another
@@ -963,6 +1007,19 @@ class TheBoardSaysWhatTheNumberIs(unittest.TestCase):
         self.assertIn("never per attempt", self.PAGE)
         self.assertIn("Counted ONCE PER SUBMISSION, AT ITS FINAL ANSWER",
                       self.PAGE)
+
+    def test_the_tooltip_says_what_each_one_IS(self):
+        """It used to say "each one is a lost user transaction". Under the
+        synchronous relay the caller was told the network could not take
+        it and can submit again elsewhere — what the row counts is this
+        node giving up on work it accepted, which is a different and
+        smaller claim. A tooltip that overstates its number is how a
+        reader stops believing the board."""
+        tip = next(l for l in self.PAGE.splitlines()
+                   if l.startswith(" fstrand:"))
+        self.assertIn("GAVE UP ON", tip)
+        self.assertIn("cumulative loss over the run and not a level", tip)
+        self.assertNotIn("each one is a lost user transaction", tip)
 
     def test_the_row_says_what_it_means_across_a_disturbance(self):
         """A twelve-hour chaos run is the reason this row exists, and a
