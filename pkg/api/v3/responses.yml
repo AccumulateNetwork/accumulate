@@ -55,6 +55,10 @@ ConsensusStatus:
       description: indicates whether the node is still catching up to the network
       type: bool
       optional: true
+    - name: ChallengeSignature
+      description: is the caller's challenge signed with this node's validator key, proving the node holds the key whose hash it reports (#4366)
+      type: bytes
+      optional: true
     - name: Peers
       type: ConsensusPeerInfo
       marshal-as: reference

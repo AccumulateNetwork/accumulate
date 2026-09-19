@@ -6086,6 +6086,7 @@ func init() {
 		encoding.NewTypeField("partition", "string"),
 		encoding.NewTypeField("includePeers", "bool"),
 		encoding.NewTypeField("includeAccumulate", "bool"),
+		encoding.NewTypeField("challenge", "bytes"),
 	}, "ConsensusStatusRequest", "consensusStatusRequest")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -6399,6 +6400,7 @@ func (v *ConsensusStatusRequest) MarshalJSON() ([]byte, error) {
 		Partition         string  `json:"partition,omitempty"`
 		IncludePeers      *bool   `json:"includePeers,omitempty"`
 		IncludeAccumulate *bool   `json:"includeAccumulate,omitempty"`
+		Challenge         *string `json:"challenge,omitempty"`
 		ExtraData         *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -6413,6 +6415,9 @@ func (v *ConsensusStatusRequest) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.ConsensusStatusOptions.IncludeAccumulate == nil) {
 		u.IncludeAccumulate = v.ConsensusStatusOptions.IncludeAccumulate
+	}
+	if !(len(v.ConsensusStatusOptions.Challenge) == 0) {
+		u.Challenge = encoding.BytesToJSON(v.ConsensusStatusOptions.Challenge)
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -7251,6 +7256,7 @@ func (v *ConsensusStatusRequest) UnmarshalJSON(data []byte) error {
 		Partition         string  `json:"partition,omitempty"`
 		IncludePeers      *bool   `json:"includePeers,omitempty"`
 		IncludeAccumulate *bool   `json:"includeAccumulate,omitempty"`
+		Challenge         *string `json:"challenge,omitempty"`
 		ExtraData         *string `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -7258,6 +7264,7 @@ func (v *ConsensusStatusRequest) UnmarshalJSON(data []byte) error {
 	u.Partition = v.ConsensusStatusOptions.Partition
 	u.IncludePeers = v.ConsensusStatusOptions.IncludePeers
 	u.IncludeAccumulate = v.ConsensusStatusOptions.IncludeAccumulate
+	u.Challenge = encoding.BytesToJSON(v.ConsensusStatusOptions.Challenge)
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -7269,6 +7276,11 @@ func (v *ConsensusStatusRequest) UnmarshalJSON(data []byte) error {
 	v.ConsensusStatusOptions.Partition = u.Partition
 	v.ConsensusStatusOptions.IncludePeers = u.IncludePeers
 	v.ConsensusStatusOptions.IncludeAccumulate = u.IncludeAccumulate
+	if x, err := encoding.BytesFromJSON(u.Challenge); err != nil {
+		return fmt.Errorf("error decoding Challenge: %w", err)
+	} else {
+		v.ConsensusStatusOptions.Challenge = x
+	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
