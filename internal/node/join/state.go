@@ -82,19 +82,21 @@ type PulledState struct {
 	// anchor never lives on its own partition's pool (#4301).
 	anchors *anchorsrc.Source
 
-	// churn advances the validator sets when they change. A BVN learns of an
-	// operator change from the DirectoryAnchors in its OWN pool, which is not
-	// the pool its roots come from; the Directory's root source already reads
-	// DirectoryAnchors, so the Directory needs no second reader.
-	churn *anchorsrc.Source
+	// authority is the validator sets this node trusts. It is seeded from
+	// this node's OWN store before anything is pulled, and it moves only
+	// when the spine settles: <partition>/network and /globals are spine
+	// accounts, so the definition arrives verified against a root a quorum
+	// signed (#4301).
+	authority *anchorsrc.Authority
 
 	machine *nodestate.Machine
 	tracker *tracker.Tracker
 	log     *slog.Logger
 
-	spine bool   // the Directory's spine has been pulled
-	round uint64 // how many rounds have run, for the backstop's cadence
-	wide  bool   // the last ledger walk could not cover (R, Q]
+	spine        bool   // this partition's spine has been pulled and verified
+	spinePending bool   // a spine fetch is held, waiting for its anchor
+	round        uint64 // how many rounds have run, for the backstop's cadence
+	wide         bool   // the last ledger walk could not cover (R, Q]
 
 	// executed is the block this node's EXECUTOR last executed: the number
 	// the daemon logs as lastBlock. It is read once, before anything is
@@ -193,16 +195,19 @@ func NewState(opts StateOptions) (*PulledState, error) {
 
 	// Producer routing. To verify THIS partition's root the node needs an
 	// anchor this partition PRODUCED, and a produced anchor lives on the
-	// RECEIVING partition's pool: a BVN's in dn.acme/anchors, and the
-	// Directory's own in a BVN's. Reading every partition's root from
-	// dn.acme/anchors — which is what this line did — can never obtain the
-	// Directory's (#4301).
+	// RECEIVING partition's pool: a BVN's in dn.acme/anchors. The Directory
+	// anchors to itself as well as to every BVN, so its own root is in both
+	// pools under the same signatures; the join reads it from a BVN's so
+	// that the copy it takes is a second partition's. What the old code
+	// could not do was not obtain the Directory's root — it was check who
+	// signed it (#4301).
 	pool, err := anchorsrc.PoolFor(opts.Partition, authority.BvnNames())
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("find the pool that holds %v's anchors: %w", opts.Partition, err)
 	}
 	// Read from a peer that has executed those anchors — never from this
 	// node, whose anchor pool is the one the pull has not filled yet (#4303).
+	s.authority = authority
 	s.anchors, err = anchorsrc.New(opts.Sources.Querier(pool.Identity()), pool, opts.Partition, authority)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -213,20 +218,6 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		// network that has anchored nothing, and the difference between them
 		// is the difference between a peer lying and a peer being slow.
 		s.log.Info("An anchor was refused", "partition", opts.Partition, "block", block, "error", err)
-	}
-
-	// The churn reader. Operator changes reach a BVN as NetworkAccountUpdates
-	// inside the DirectoryAnchors in its own pool, and those are not the
-	// anchors its roots come from. The Directory's root source already reads
-	// DirectoryAnchors, so it needs no second reader.
-	if !protocol.DnUrl().Equal(opts.Partition) {
-		s.churn, err = anchorsrc.New(
-			opts.Sources.Querier(opts.Partition),
-			opts.Partition.JoinPath(protocol.AnchorPool),
-			protocol.DnUrl(), authority)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
 	}
 
 	// Watchable from the moment the node starts joining, and on every change.
@@ -268,29 +259,23 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	// and abandons the goroutine: the node then collects forever, with no
 	// retry, until an operator restarts it. The reads on either side of these
 	// were deliberately made to log and continue; these two were missed.
-	// The validator sets first, then the anchors: an anchor signed under a
-	// set the walk has not reached is refused, so a round that reads the
-	// roots before the changes refuses everything it then reads.
-	if s.churn != nil {
-		if err := s.churn.Read(ctx); err != nil {
-			s.log.Info("The directory's anchors in this partition's own pool could not be read this round",
-				"partition", s.partition, "error", err)
-		}
-	}
-
 	err := s.anchors.Read(ctx)
 	if err != nil {
 		s.log.Info("This partition's anchors could not be read this round",
 			"partition", s.partition, "error", err)
 	}
 
-	if !s.spine {
+	// The spine is fetched ONCE and then waited on. ModeFullSpine replays
+	// every chain entry of four accounts, and a batch that cannot settle
+	// this round is held and settled by settleHeld when its anchor arrives —
+	// re-fetching it every round until then is a full chain replay per round
+	// on a network whose Directory anchors roughly one block in six (review
+	// finding 5).
+	if !s.spine && !s.spinePending {
 		err := s.pullSpine(ctx)
 		if err != nil {
 			s.log.Info("The spine could not be pulled this round; it is asked for again",
 				"partition", s.partition, "error", err)
-		} else {
-			s.spine = true
 		}
 	}
 
@@ -466,6 +451,14 @@ type heldBatch struct {
 	accounts []*heldAccount
 	rounds   int
 	since    time.Time // when it was fetched, for the give-up log
+
+	// spine says this batch is the spine's, fetched once and waited on.
+	// When it finishes, the node either has a verified spine or asks for it
+	// again; nothing else re-fetches it in the meantime (review finding 5).
+	spine bool
+
+	// asked is how many accounts the batch set out to settle.
+	asked int
 }
 
 // heldAccount is one fetched account waiting for its block to be anchored.
@@ -494,10 +487,50 @@ func (s *PulledState) settleHeld(ctx context.Context) (int, []*url.URL) {
 		refused = append(refused, missed...)
 		if !done {
 			keep = append(keep, h)
+			continue
+		}
+		if h.spine {
+			s.spineSettled(got, h.asked, len(missed))
 		}
 	}
 	s.held = keep
 	return pulled, refused
+}
+
+// spineSettled records what became of the one spine fetch, and moves the
+// validator sets if it verified.
+//
+// **This is how a joining node crosses a change to the validator sets**, and
+// on this line it is the only way. <partition>/network and /globals are
+// spine accounts, so they arrive with a receipt that ends at a root a quorum
+// of this partition's validators signed and passes through the leaf the
+// pulled body hashes to; adopting them from the store afterwards is
+// therefore an induction step and not a peer's word. A change never travels
+// in an anchor past Vandenberg (#4301, review finding 1).
+func (s *PulledState) spineSettled(got, asked, refused int) {
+	s.spinePending = false
+	if refused > 0 || got < asked {
+		s.log.Info("The spine did not verify this round; it is asked for again",
+			"partition", s.partition, "settled", got, "asked", asked, "refused", refused)
+		return
+	}
+	s.spine = true
+
+	moved, err := s.authority.UpdateFrom(s.db, s.partition)
+	switch {
+	case err != nil:
+		s.log.Info("The verified spine's network definition could not be read",
+			"partition", s.partition, "error", err)
+	case moved:
+		// The window this source already read was measured against the old
+		// set, so anything it refused on the way is gone unless it reads it
+		// again (review finding 4).
+		s.anchors.Rewind()
+		s.log.Info("The validator set moved with the verified spine",
+			"partition", s.partition, "version", s.authority.Version())
+	}
+	s.log.Info("Pulled the spine, verified against an anchored root",
+		"partition", s.partition, "accounts", got)
 }
 
 // settleBatch settles what it can of one held batch and reports whether the
@@ -708,7 +741,7 @@ func (s *PulledState) sourcesFor(ctx context.Context, u *url.URL) ([]pull.Source
 // Directory's own join pulls the Directory's spine into the Directory's
 // store, where those accounts belong.
 func (s *PulledState) pullSpine(ctx context.Context) error {
-	h := &heldBatch{batch: s.db.Begin(true), since: time.Now()}
+	h := &heldBatch{batch: s.db.Begin(true), since: time.Now(), spine: true}
 	accounts := pull.SpineAccounts(s.partition)
 	for _, u := range accounts {
 		srcs, partition, err := s.sourcesFor(ctx, u)
@@ -731,9 +764,12 @@ func (s *PulledState) pullSpine(ctx context.Context) error {
 		}
 		h.accounts = append(h.accounts, &heldAccount{url: u, pending: p})
 	}
+	h.asked = len(h.accounts)
 
-	if len(h.accounts) == 0 {
+	if h.asked == 0 {
+		// Everything the peers have for the spine, this node already has.
 		h.batch.Discard()
+		s.spine = true
 		s.log.Info("The spine is already this node's", "partition", s.partition, "accounts", len(accounts))
 		return nil
 	}
@@ -744,15 +780,15 @@ func (s *PulledState) pullSpine(ctx context.Context) error {
 	// for its proof rather than being taken without one.
 	got, missed, done := s.settleBatch(ctx, h)
 	if !done {
+		s.spinePending = true
 		s.held = append(s.held, h)
-	}
-	if len(missed) > 0 || !done {
 		return errors.NotReady.WithFormat(
-			"the spine has not verified yet: %d of %d accounts settled against an anchored root",
-			got, len(accounts))
+			"the spine is held until its block is anchored: %d of %d settled", got, h.asked)
 	}
-	s.log.Info("Pulled the spine, verified against an anchored root",
-		"partition", s.partition, "accounts", got)
+	s.spineSettled(got, h.asked, len(missed))
+	if !s.spine {
+		return errors.NotReady.With("the spine did not verify")
+	}
 	return nil
 }
 

@@ -1009,6 +1009,18 @@ func SpineAccounts(partitionURL *url.URL) []*url.URL {
 		partitionURL.JoinPath(protocol.Ledger),
 		partitionURL.JoinPath(protocol.Operators),
 		partitionURL.JoinPath(protocol.Operators, "1"),
+
+		// The network definition and the globals, because they are what says
+		// who may sign an anchor and how many of them are needed. A node
+		// holds its own from genesis or from its own execution, and the only
+		// way that copy ever moves is this one: pulled with a receipt that
+		// ends at a root a quorum signed and passes through the leaf the
+		// pulled body hashes to, then handed to anchorsrc.Authority. Past
+		// Vandenberg a change to them never travels in an anchor
+		// (block_end.go:791-793), so this is the whole of how a joining node
+		// crosses one (#4301).
+		partitionURL.JoinPath(protocol.Network),
+		partitionURL.JoinPath(protocol.Globals),
 	}
 }
 

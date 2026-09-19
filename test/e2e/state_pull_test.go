@@ -259,9 +259,14 @@ func TestPullSpineCarriesTheChains(t *testing.T) {
 	})
 }
 
-// anchorSourceFor is the anchor source the join builds, built the same way:
-// the validator sets come from the partition's own store and the pool is the
-// one that holds the anchors that partition PRODUCED (anchorsrc.PoolFor).
+// anchorSourceFor is the anchor source the join builds, built the same way.
+//
+// **It seeds the validator sets from the SIMULATOR's store**, which is a
+// peer's — the shortcut the mechanism exists to forbid. That is acceptable
+// here and only here: these are pull-library tests, where the anchor source
+// is scaffolding for producing a verified root and not the thing under test.
+// The tests that exercise the seed for real build it through join.NewState,
+// which reads the joining node's own store (spine_directory_root_test.go).
 func anchorSourceFor(t *testing.T, sim *Sim, part *url.URL) *anchorsrc.Source {
 	t.Helper()
 	id, ok := ParsePartitionUrl(part)

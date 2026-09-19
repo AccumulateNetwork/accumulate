@@ -27,8 +27,12 @@ import (
 //     {k0,k1,k2,k3}/3 superseded by {k0,k1,k2}/2, an anchor carrying k3's old
 //     signature and k0's new one reaches two, which the new set means two
 //     CURRENT keys by (#4301, threat review F2). There is one set and one
-//     threshold here, and the version a signature declares is not a selector
-//     — see Set and Authority.
+//     threshold here — the set this node trusts — and the version a
+//     signature declares is not a selector but a floor: a signature made
+//     under a set this node has moved PAST is refused, and one declaring a
+//     newer version is checked against this set like any other, which is the
+//     only way a change is ever crossed (#4301, review finding 1). See Set
+//     and Authority.
 //
 //   - **Distinct.** A second copy from one validator is no second signature.
 //     The executor says it in its own words (msg_block_anchor.go, "A second
@@ -79,6 +83,12 @@ func (s *Source) verify(producer string, rec *api.MessageRecord[*messaging.Trans
 				keySig, _ = m.Signature.(protocol.KeySignature)
 			}
 			if keySig == nil {
+				continue
+			}
+			if keySig.GetSignerVersion() < set.Version {
+				// Made under a set this node has moved past. Refusing it is
+				// what stops an old signature being replayed forward; a
+				// retired signer forging a NEW one is stopped by membership.
 				continue
 			}
 			if !set.MaySign(keySig.GetPublicKeyHash()) {

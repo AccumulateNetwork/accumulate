@@ -34,12 +34,14 @@
 // # Producer routing
 //
 // To verify partition P's root you need an anchor PRODUCED BY P, and a
-// produced anchor lives on the RECEIVING partition's pool, never on its own.
-// So a BVN's root is read from dn.acme/anchors, and the Directory's own root
-// is read from a BVN's anchor pool. A node that reads every partition's root
-// from dn.acme/anchors can never obtain the Directory's — which is what
-// pull.DirectoryAnchors was, and what join/state.go asked for every
-// partition. PoolFor is the rule.
+// produced anchor lives on the RECEIVING partition's pool. So a BVN's root
+// is read from dn.acme/anchors. The Directory anchors to ITSELF as well as
+// to every BVN (crosschain/anchoring.go keeps the DN-to-itself branch), so
+// its own root is in dn.acme/anchors and in every BVN's pool under the same
+// signatures; PoolFor sends the Directory's join to a BVN's pool so that a
+// second partition's copy attests it, but either copy verifies against the
+// same keys. What the old code could not do was not obtain the Directory's
+// root — it was check who signed it (#4301; measured, see the issue).
 package anchorsrc
 
 import (
@@ -141,13 +143,15 @@ func New(q api.Querier, pool, producer *url.URL, authority *Authority) (*Source,
 	return &Source{Query: q, Pool: pool, Producer: producer, Authority: authority}, nil
 }
 
-// PoolFor is the anchor pool that holds the anchors a partition PRODUCES.
+// PoolFor is the anchor pool a partition's join reads its own roots from.
 //
-// The Directory's own anchors are the ones it sent out, so they are in a
-// BVN's pool; everyone else's are in the Directory's. bvns is the BVN list
-// from the node's own network definition. Which BVN is chosen is not a trust
-// decision — an anchor from the wrong pool simply fails to verify or is not
-// this producer's — so the first is taken.
+// Everyone's anchors are in the Directory's pool, and the Directory's are in
+// every BVN's as well as its own. The Directory's join is sent to a BVN's
+// pool so that the copy it reads is a second partition's; which BVN is
+// chosen is not a trust decision — an anchor from the wrong pool simply
+// fails to verify or is not this producer's — so the first is taken, and a
+// Directory join therefore depends on one partition's peers being reachable
+// (review finding 9).
 func PoolFor(producer *url.URL, bvns []string) (*url.URL, error) {
 	if producer == nil {
 		return nil, errors.BadRequest.With("anchorsrc.PoolFor: a producer partition is required")
@@ -194,6 +198,20 @@ func (s *Source) AnchoredRoot(ctx context.Context, partition *url.URL, block uin
 		return root, nil
 	}
 	return [32]byte{}, errors.NotReady.WithFormat("%v block %d: %w", partition, block, ErrNotAnchored)
+}
+
+// Rewind makes the source read its window again from the start.
+//
+// The join calls it when the trusted sets move. An anchor refused because
+// this node had not reached the set that signed it is skipped and the cursor
+// moves past it, so without a rewind the roots that were in flight across a
+// change are lost for good and the node waits for the next one — which, on a
+// BVN, is the ordinary case, because the roots and the definition come from
+// different peers with different lag (review finding 4).
+func (s *Source) Rewind() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.started = false
 }
 
 // Read takes whatever anchors the pool has gained since the last call,
@@ -381,30 +399,17 @@ func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messagin
 		return
 	}
 
-	// The walk, and only from the Directory.
-	//
-	// A verified anchor is its partition's quorum over whatever it carries,
-	// and a BVN's quorum is not the bar for naming the validators. Only the
-	// Directory executes a change to the network accounts, and the executor
-	// refuses a DirectoryAnchor from any other source outright
-	// (execute/v2/chain/directory_anchor.go:40). Without this test a quorum
-	// of ONE BVN — three keys of four in the soak topology, against the
-	// Directory's eight of twelve — could put its own keys in every
-	// partition's set as a joining node sees it, and every root it signed
-	// afterwards would verify (#4301, threat review F1).
-	if dir, ok := body.(*protocol.DirectoryAnchor); ok && len(dir.Updates) > 0 {
-		switch {
-		case !protocol.IsDnUrl(pa.Source):
-			if s.OnRefused != nil {
-				s.OnRefused(pa.MinorBlockIndex, errors.Unauthorized.WithFormat(
-					"%v carried an operator change and is not the directory's", pa.Source))
-			}
-		default:
-			if err := s.Authority.Apply(dir.Updates); err != nil && s.OnRefused != nil {
-				s.OnRefused(pa.MinorBlockIndex, errors.UnknownError.WithFormat("walk the validator set forward: %w", err))
-			}
-		}
-	}
+	// **There is no walk here, and there is nothing to be gained by putting
+	// one back.** A change to the validator sets used to travel as
+	// DirectoryAnchor.Updates, and this package used to apply them. Past
+	// Vandenberg the Directory never populates that field
+	// (block_end.go:791-793; the change leaves as a messaging.NetworkUpdate,
+	// network_accounts.go:128-131), so the walk could not fire on this line
+	// at all — and while it was here, a quorum of ONE BVN could have used it
+	// to name the validators of every partition (#4301, review finding 1,
+	// threat finding F1). The sets move one way only: through
+	// Authority.Update, from a definition the join pulled and verified as a
+	// leaf under a root a quorum signed.
 
 	if !pa.Source.Equal(s.Producer) {
 		// Verified, but it is somebody else's root. It still walked the

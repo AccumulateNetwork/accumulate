@@ -372,10 +372,23 @@ func TestTheDirectorysRootComesFromABvnPool(t *testing.T) {
 	require.Equal(t, root(0xcc), got)
 }
 
-// And the signature really on it was made over the Directory's own form of
-// the envelope, not over the copy sitting in the BVN's pool. A verifier that
-// only knows the record's own form refuses every DirectoryAnchor in a BVN
-// pool, which is every chance the Directory has of proving its own root.
+// The Directory's canonical form of the envelope is accepted too — parity
+// with the executor, not a live requirement.
+//
+// **No anchor this line produces has that form.** The conductor signs one
+// envelope per destination (crosschain/conductor.go, sendBlockAnchor →
+// PrepareAnchorSubmission(destination)), and a measurement of both pools on
+// one and on three validators found zero DirectoryAnchors signed over the
+// Directory's form; (e) passes with the second form removed. My earlier note
+// said that without this form every DirectoryAnchor in a BVN pool fails
+// verification, and that is wrong — corrected on #4301.
+//
+// The form stays because the executor accepts it (msg_block_anchor.go:333,
+// the Vandenberg signature-reuse path, which is how a re-submitted anchor
+// carries the Directory's one signature to every BVN), and a verifier of
+// anchors that refuses what the executor executes would refuse a root the
+// network agreed on. This test pins the parity; it does not claim a live
+// producer.
 func TestADirectoryAnchorIsSignedOverTheDirectorysForm(t *testing.T) {
 	ctx := context.Background()
 	f := newNet(t, 4, 1)
@@ -404,161 +417,213 @@ func TestPoolForRoutesByProducer(t *testing.T) {
 	require.Error(t, err, "with no BVN there is no pool that holds the directory's own anchors")
 }
 
-// (d) The walk stands at one set: the carrier of a change is accepted
-// although it declares the version it INTRODUCES — which is how production
-// signs it — the set is replaced, and what it replaced stops being a signer.
-func TestTheWalkStandsAtOneSet(t *testing.T) {
+// (d) The sets move by Update — a definition the caller verified — and an
+// anchor is judged by membership in the set this node trusts, never by the
+// version its signature declares.
+func TestTheTrustedSetDecides(t *testing.T) {
 	ctx := context.Background()
 	pool := bvn0().JoinPath(protocol.AnchorPool)
 
 	// Four seated validators and four the network knows but has not seated.
 	newFixture := func() *netFixture { return newNet(t, 4, 1, 4) }
 
-	t.Run("the carrier is signed under the version it introduces, and is accepted", func(t *testing.T) {
-		// This is the timing, traced through production: the executor
-		// publishes the new globals at the close of the block that executed
-		// the change (block_end.go:421-432), the conductor stores them
-		// (conductor.go:183), and THAT block's anchor goes out at the start
-		// of the next one with SignerVersion taken from the new definition
-		// (conductor.go:261,346 -> anchoring.go:146). A verifier that
-		// insisted on "the set of the time" would refuse the one anchor the
-		// walk exists to accept and would never move again (#4301, threat
-		// review F4).
+	t.Run("an anchor signed after a change this node has not crossed is accepted", func(t *testing.T) {
+		// This is what the whole rework is for. Past Vandenberg a change to
+		// dn.acme/network never travels in an anchor (block_end.go:791-793),
+		// and the anchor of the block that executed the change is already
+		// signed under the NEW version. A verifier that demanded the set of
+		// the time would refuse every anchor from that moment and the node
+		// would never join again (#4301, review finding 1). The declared
+		// version is ignored; the signers are members of the set this node
+		// holds, and that is enough.
 		f := newFixture()
 		a := f.authority(t)
-		v2 := f.withActive(t, 2, 0, 1, 2) // validator 3 stands down
-
-		carrier := f.anchor(t, anchorOpts{
+		after := f.anchor(t, anchorOpts{
 			source: dn(), destination: bvn0(), block: 20, root: root(0x20),
-			signers: []int{0, 1, 2}, version: 2, // the NEW version, as production signs it
-			updates: []protocol.NetworkAccountUpdate{update(v2)},
+			signers: []int{0, 1, 2}, version: 9, // far ahead of this node
 		})
-		s := sourceOver(t, a, pool, dn(), carrier)
+		s := sourceOver(t, a, pool, dn(), after)
 
 		got, err := s.AnchoredRoot(ctx, dn(), 20)
 		require.NoError(t, err)
 		require.Equal(t, root(0x20), got)
-		require.Equal(t, uint64(2), a.Version(), "the walk did not take the change it verified")
+	})
 
-		set, err := a.SetFor(protocol.Directory)
-		require.NoError(t, err)
-		require.Equal(t, 3, set.Size())
-		require.Equal(t, uint64(2), set.Threshold, "2/3 of three is two")
-		require.False(t, set.MaySign(hashOf(f.keys[3][32:])), "the validator that stood down is not a signer")
+	t.Run("a signature made under a set this node has moved past is refused", func(t *testing.T) {
+		f := newFixture()
+		a := f.authority(t)
+		// The node crosses to version 2 the way the join does: a definition
+		// it verified as state.
+		require.True(t, a.Update(f.withActive(t, 2, 0, 1, 2)))
+
+		old := f.anchor(t, anchorOpts{
+			source: dn(), destination: bvn0(), block: 21, root: root(0x21),
+			signers: []int{0, 1, 2}, version: 1, // made under the old set
+		})
+		s := sourceOver(t, a, pool, dn(), old)
+
+		_, err := s.AnchoredRoot(ctx, dn(), 21)
+		require.ErrorIs(t, err, ErrNotAnchored,
+			"an old signature was replayed forward past the set that made it")
 	})
 
 	t.Run("a superseded quorum cannot sign a new root", func(t *testing.T) {
-		// The whole seat is turned over: 0-3 out, 4-7 in. An attacker with a
-		// threshold of the retired keys -- retired, commonly, because they
-		// were compromised -- must not be able to sign anything, whatever
-		// version their signature declares (#4301, threat review F3).
+		// The whole seat turns over: 0-3 out, 4-7 in. An attacker with a
+		// quorum of the retired keys -- retired, commonly, because they were
+		// compromised -- must not be able to sign anything, whatever version
+		// they declare (#4301, threat review F3).
 		f := newFixture()
 		a := f.authority(t)
-		v2 := f.withActive(t, 2, 4, 5, 6, 7)
+		require.True(t, a.Update(f.withActive(t, 2, 4, 5, 6, 7)))
 
-		carrier := f.anchor(t, anchorOpts{
-			source: dn(), destination: bvn0(), block: 30, root: root(0x30),
-			signers: []int{0, 1, 2}, version: 2,
-			updates: []protocol.NetworkAccountUpdate{update(v2)},
-		})
-		// Signed by a full quorum of the RETIRED set, declaring the version
-		// they were seated under.
 		byRetired := f.anchor(t, anchorOpts{
 			source: dn(), destination: bvn0(), block: 31, root: root(0x31),
-			signers: []int{0, 1, 2}, version: 1,
+			signers: []int{0, 1, 2}, version: 2, // declaring the current version
 		})
-		// And a definition of their own, to take the network back.
-		theirs := f.withActive(t, 3, 0, 1, 2, 3)
-		byRetiredWithUpdate := f.anchor(t, anchorOpts{
-			source: dn(), destination: bvn0(), block: 32, root: root(0x32),
-			signers: []int{0, 1, 2}, version: 1,
-			updates: []protocol.NetworkAccountUpdate{update(theirs)},
-		})
-
-		s := sourceOver(t, a, pool, dn(), carrier, byRetired, byRetiredWithUpdate)
-		require.NoError(t, s.Read(ctx))
-		require.Equal(t, uint64(2), a.Version(), "a retired quorum named the validators")
+		s := sourceOver(t, a, pool, dn(), byRetired)
 
 		_, err := s.AnchoredRoot(ctx, dn(), 31)
 		require.ErrorIs(t, err, ErrNotAnchored, "a retired quorum signed a new root")
-		_, err = s.AnchoredRoot(ctx, dn(), 32)
-		require.ErrorIs(t, err, ErrNotAnchored)
 	})
 
-	t.Run("a retired key does not fill a current threshold", func(t *testing.T) {
-		// {k0,k1,k2,k3}/3 becomes {k0,k1,k2}/2. An anchor carrying k3's
-		// signature and k0's reaches two -- which is what the new set means
-		// TWO CURRENT KEYS by -- if signatures from different sets are
-		// pooled against one threshold (#4301, threat review F2).
+	t.Run("the old quorum is not a quorum when the set grew", func(t *testing.T) {
+		// The reviewer's discriminating fixture (finding 3): version 2 ADDS
+		// validators, so the threshold rises from three to four. Three
+		// signers were a quorum before and are not one now, and the only
+		// thing that can tell the two apart is which set is being counted
+		// against.
 		f := newFixture()
 		a := f.authority(t)
-		v2 := f.withActive(t, 2, 0, 1, 2)
-
-		carrier := f.anchor(t, anchorOpts{
+		before := f.anchor(t, anchorOpts{
 			source: dn(), destination: bvn0(), block: 40, root: root(0x40),
 			signers: []int{0, 1, 2}, version: 2,
-			updates: []protocol.NetworkAccountUpdate{update(v2)},
-		})
-		mixed := f.anchor(t, anchorOpts{
-			source: dn(), destination: bvn0(), block: 41, root: root(0x41),
-			signers: []int{0, 3}, // one current, one retired
 		})
 
-		s := sourceOver(t, a, pool, dn(), carrier, mixed)
-		require.NoError(t, s.Read(ctx))
-		require.Equal(t, uint64(2), a.Version())
+		under1 := sourceOver(t, f.authority(t), pool, dn(), before)
+		got, err := under1.AnchoredRoot(ctx, dn(), 40)
+		require.NoError(t, err, "three of four is a quorum at version 1")
+		require.Equal(t, root(0x40), got)
 
-		_, err := s.AnchoredRoot(ctx, dn(), 41)
-		require.ErrorIs(t, err, ErrNotAnchored,
-			"one current key and one retired key reached a threshold of two current keys")
+		require.True(t, a.Update(f.withActive(t, 2, 0, 1, 2, 3, 4, 5)))
+		set, err := a.SetFor(protocol.Directory)
+		require.NoError(t, err)
+		require.Equal(t, uint64(4), set.Threshold, "2/3 of six is four")
+
+		under2 := sourceOver(t, a, pool, dn(), before)
+		_, err = under2.AnchoredRoot(ctx, dn(), 40)
+		require.ErrorIs(t, err, ErrNotAnchored, "three signers were taken as a quorum of six")
+	})
+
+	t.Run("a definition older than the trusted one is ignored", func(t *testing.T) {
+		f := newFixture()
+		a := f.authority(t)
+		require.True(t, a.Update(f.withActive(t, 3, 4, 5, 6, 7)))
+		require.False(t, a.Update(f.withActive(t, 2, 0, 1, 2, 3)),
+			"a replayed older definition rolled the set back")
+		require.Equal(t, uint64(3), a.Version())
 	})
 }
 
-// (F1) Only the Directory carries an operator change.
+// An anchor no longer carries the validator sets anywhere, which is both what
+// this line does and one fewer way in.
 //
-// A BVN's quorum is three keys of four in the soak topology; the Directory's
-// is eight of twelve, and every container's single key is a validator of
-// both. So a quorum of one BVN is a quarter of what naming the validators
-// should cost -- and before this test it bought all of it, for every
-// partition, on any peer willing to serve the anchor. The executor refuses
-// the same thing at execute/v2/chain/directory_anchor.go:40.
-func TestOnlyTheDirectoryCarriesAnOperatorChange(t *testing.T) {
+// A change to dn.acme/network leaves the Directory as a messaging.NetworkUpdate
+// past Vandenberg and never enters an anchor (block_end.go:791-793,
+// network_accounts.go:128-131), so a walk over DirectoryAnchor.Updates could
+// not fire at all (#4301, review finding 1) -- and while it was here, a
+// quorum of ONE BVN could have used it to name the validators of every
+// partition (threat review F1). Nothing an anchor carries moves the sets.
+func TestAnAnchorNeverMovesTheValidatorSets(t *testing.T) {
 	ctx := context.Background()
 	f := newNet(t, 4, 1, 4)
 	a := f.authority(t)
-
-	// The attacker's definition: their four spare keys, seated everywhere.
 	theirs := f.withActive(t, 2, 4, 5, 6, 7)
 
-	// Signed by a full quorum of BVN0's validators, in a BlockValidatorAnchor
-	// that is otherwise perfectly valid, and served in the Directory's pool
-	// -- which is what a BVN's join reads.
-	forged := f.anchor(t, anchorOpts{
-		source: bvn0(), destination: dn(), block: 50, root: root(0x50),
-		signers: []int{0, 1, 2},
+	// From the Directory, with a full Directory quorum, carrying a perfectly
+	// well-formed update.
+	fromDn := f.anchor(t, anchorOpts{
+		source: dn(), destination: bvn0(), block: 50, root: root(0x50),
+		signers: []int{0, 1, 2}, updates: []protocol.NetworkAccountUpdate{update(theirs)},
 	})
-	// And the same with the body a DirectoryAnchor, still sourced at the BVN.
-	forgedDir := f.anchor(t, anchorOpts{
+	// And from a BVN, with a full BVN quorum, which is a quarter of what
+	// naming the validators should cost.
+	fromBvn := f.anchor(t, anchorOpts{
 		source: bvn0(), destination: dn(), block: 51, root: root(0x51),
 		signers: []int{0, 1, 2}, forceDirBody: true,
 		updates: []protocol.NetworkAccountUpdate{update(theirs)},
 	})
 
-	s := sourceOver(t, a, dn().JoinPath(protocol.AnchorPool), bvn0(), forged, forgedDir)
+	s := sourceOver(t, a, bvn0().JoinPath(protocol.AnchorPool), dn(), fromDn)
 	require.NoError(t, s.Read(ctx))
+	s2 := sourceOver(t, a, dn().JoinPath(protocol.AnchorPool), bvn0(), fromBvn)
+	require.NoError(t, s2.Read(ctx))
 
-	require.Equal(t, uint64(1), a.Version(),
-		"a BVN's quorum named the validators of every partition")
+	require.Equal(t, uint64(1), a.Version(), "an anchor moved the validator sets")
 	set, err := a.SetFor(protocol.Directory)
 	require.NoError(t, err)
-	require.False(t, set.MaySign(hashOf(f.keys[4][32:])), "the attacker's key is a directory signer")
+	require.False(t, set.MaySign(hashOf(f.keys[4][32:])), "a key an anchor named became a signer")
 
-	// The BVN's own root is still recorded: the anchor was valid for what a
-	// BVN's quorum may say, which is its own state and not who the
-	// validators are.
-	got, err := s.AnchoredRoot(ctx, bvn0(), 51)
+	// Both anchors are still recorded: they were valid for what their own
+	// quorum may say, which is their partition's state.
+	got, err := s.AnchoredRoot(ctx, dn(), 50)
+	require.NoError(t, err)
+	require.Equal(t, root(0x50), got)
+	got, err = s2.AnchoredRoot(ctx, bvn0(), 51)
 	require.NoError(t, err)
 	require.Equal(t, root(0x51), got)
+}
+
+// Only this source's producer has its roots recorded. A source for a BVN
+// reads the Directory's pool, which is full of the Directory's own anchors;
+// handing those to the BVN's tracker would offer it a root from another
+// partition's block numbering, and block numbers collide across partitions
+// (#4205).
+func TestOnlyTheProducersRootsAreRecorded(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+	a := f.authority(t)
+
+	mine := f.anchor(t, anchorOpts{source: bvn0(), destination: dn(), block: 70, root: root(0x70), signers: []int{0, 1, 2}})
+	theirs := f.anchor(t, anchorOpts{source: dn(), destination: dn(), block: 70, root: root(0x71), signers: []int{0, 1, 2}})
+
+	var observed []string
+	s := sourceOver(t, a, dn().JoinPath(protocol.AnchorPool), bvn0(), mine, theirs)
+	s.OnAnchor = func(p *url.URL, block uint64, _ [32]byte) {
+		observed = append(observed, p.String())
+	}
+	require.NoError(t, s.Read(ctx))
+
+	require.Equal(t, []string{bvn0().String()}, observed,
+		"a root from another partition's block numbering was handed to this partition's tracker")
+	got, err := s.AnchoredRoot(ctx, bvn0(), 70)
+	require.NoError(t, err)
+	require.Equal(t, root(0x70), got, "the producer's own root at that block")
+}
+
+// The backfill window is a stated limit, and a refusal rather than a silence.
+func TestAnAnchorOutsideTheBackfillWindowIsNotRead(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+	a := f.authority(t)
+	pool := dn().JoinPath(protocol.AnchorPool)
+
+	var entries []*api.MessageRecord[messaging.Message]
+	for i := 0; i < 6; i++ {
+		entries = append(entries, f.anchor(t, anchorOpts{
+			source: bvn0(), destination: dn(), block: uint64(80 + i), root: root(byte(0x80 + i)),
+			signers: []int{0, 1, 2},
+		}))
+	}
+
+	s, err := New(&poolQuerier{pool: pool, entries: entries}, pool, bvn0(), a)
+	require.NoError(t, err)
+	s.Backfill = 2
+
+	_, err = s.AnchoredRoot(ctx, bvn0(), 80)
+	require.ErrorIs(t, err, ErrNotAnchored, "an anchor older than the window was read anyway")
+	got, err := s.AnchoredRoot(ctx, bvn0(), 85)
+	require.NoError(t, err, "the newest anchors are what the window is for")
+	require.Equal(t, root(0x85), got)
 }
 
 // (F5) One page from one peer cannot park the cursor past the chain.
@@ -595,22 +660,4 @@ func TestTheCursorCannotBeParkedPastTheChain(t *testing.T) {
 	got, err := s.AnchoredRoot(ctx, bvn0(), 60)
 	require.NoError(t, err, "the cursor stayed parked past the chain after the liar was gone")
 	require.Equal(t, root(0x60), got)
-}
-
-// An authority walks only on a VERIFIED anchor: a change carried by an anchor
-// nobody signed is not a change.
-func TestAnUnverifiedAnchorDoesNotWalkTheSet(t *testing.T) {
-	ctx := context.Background()
-	f := newNet(t, 4, 1)
-	a := f.authority(t)
-
-	v2 := f.withActive(t, 2, 0, 1, 2)
-	carrier := f.anchor(t, anchorOpts{
-		source: dn(), destination: bvn0(), block: 30, root: root(0x30),
-		updates: []protocol.NetworkAccountUpdate{update(v2)},
-	}) // no signers
-
-	s := sourceOver(t, a, bvn0().JoinPath(protocol.AnchorPool), dn(), carrier)
-	require.NoError(t, s.Read(ctx))
-	require.Equal(t, uint64(1), a.Version(), "one peer must not be able to name the validators")
 }

@@ -14,27 +14,25 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Set is one partition's validator set: which keys may sign for that
 // partition, and how many distinct ones an anchor needs.
 //
-// There is one per partition and it is the set the walk STANDS AT. A
+// There is one per partition and it is the set this node TRUSTS. A
 // superseded set is not kept, because a set that is retired is usually
 // retired for a reason and a quorum of retired keys must not be able to sign
-// a new root or name a new set (#4301, threat review F3). The executor says
-// the same thing in its own way: it checks membership in the current active
-// set and ignores the version a signature declares
-// (msg_block_anchor.go, "TODO: Consider checking the version").
+// a new root (#4301, threat review F3).
 type Set struct {
 	// Partition is the partition the set signs for.
 	Partition string
 
 	// Version is the network definition version this set came from. It is
-	// for the log and the error, never a selector: an anchor's declared
-	// SignerVersion says what the signer believed, not what this node
-	// trusts.
+	// the floor on what a signature may declare and it is never a selector:
+	// a signature declaring an OLDER version was made under a set this node
+	// has moved past and is refused, and one declaring a newer version is
+	// checked against this set like any other, because that is the only way
+	// a change is ever crossed.
 	Version uint64
 
 	// Threshold is how many distinct keys of this set must sign.
@@ -59,8 +57,8 @@ func (s *Set) Size() int {
 	return len(s.keys)
 }
 
-// Authority is the validator sets this node trusts, and the walk that extends
-// them.
+// Authority is the validator set this node trusts, per partition, and the
+// step that moves it.
 //
 // **It starts from what the node already holds.** A signature is verified
 // against a key, not against a root, so there is nothing to bootstrap: a
@@ -69,25 +67,33 @@ func (s *Set) Size() int {
 // "there is nothing to verify the spine against" (#4301): the spine is not
 // what the verifier reads its keys from, the node's own store is.
 //
-// **Churn is a walk.** A change to the network definition reaches a partition
-// as a NetworkAccountUpdate carried inside a DirectoryAnchor produced by the
-// DIRECTORY (execute/v2/chain/directory_anchor.go:40 refuses any other
-// source), and that anchor is signed by a quorum of the outgoing set. So the
-// walk is: verify an anchor under the set the node stands at; only then apply
-// the updates it carries; the set is replaced and the old one is gone.
+// **Membership in the trusted set decides, and the version a signature
+// declares does not.** That is the executor's rule
+// (msg_block_anchor.go, core.AnchorSigner, and its standing "TODO: Consider
+// checking the version"), and it is the only rule that can cross a change:
+// an anchor after a set change is signed by the set that came out of it, and
+// so, on this line, is the anchor of the block that made the change. A
+// verifier that demanded "the set of the time" would refuse every anchor
+// from the moment the network moved and would never move again (#4301,
+// review finding 1).
 //
-// The version a signature declares is NOT how the set is chosen. The carrier
-// of a change is signed under the NEW version — the executor publishes the
-// new globals at the close of the block that executed the change
-// (block_end.go:421-432), the conductor stores them (conductor.go:183), and
-// the anchor for that block goes out at the start of the next with
-// SignerVersion from the new definition (conductor.go:261,346 →
-// anchoring.go:146). A node that insisted on "the set of the time" would
-// therefore refuse the one anchor the walk exists to accept, and would never
-// move again (#4301, threat review F4). Membership and threshold come from
-// the set this node stands at, as the executor does; the outgoing and
-// incoming sets overlap by construction, which is what lets the carrier
-// through.
+// **The step forward is a verified leaf, not a carrier.** There is no
+// carrier: a change to dn.acme/network leaves the Directory as a
+// messaging.NetworkUpdate past Vandenberg and never enters an anchor
+// (block_end.go:791-793, network_accounts.go:128-131), so
+// DirectoryAnchor.Updates is always empty here. What the join does instead
+// is pull <partition>.acme/network and /globals as spine accounts, with a
+// receipt that ends at a root a quorum signed and passes through the leaf
+// the pulled body hashes to, and hand the result here (Update). The new
+// definition inherits the anchor's quorum trust because it is bound to the
+// anchor's root — which is what internal/fastsync/spine.go does in its own
+// protocol.
+//
+// **Its limit, stated.** A change that turns over enough of the set that the
+// new anchors cannot reach the OLD set's threshold cannot be crossed, and
+// such a node must be re-seeded. The executor has the same limit for the
+// same reason. An overlapping change — a validator in or out, a key rotated,
+// a follower added — is crossed.
 //
 // Why the network definition and not <partition>/operators/1, which is what
 // bootstrap-v3's anchorsrc read: on this line genesis writes EVERY node of
@@ -95,21 +101,22 @@ func (s *Set) Size() int {
 // threshold over all of them (node/daemon/init.go:196-233,266;
 // node/genesis/bootstrap.go:544-562). A BVN's four validators can therefore
 // never reach a threshold taken over twelve keys, so the page cannot answer
-// "a quorum of that partition's validators". The protocol's own answer is the
-// network definition: core.AnchorSigner admits a signer iff the definition
-// says it is active on the source partition (internal/core/signer.go:42-48),
-// and the quorum is GlobalValues.ValidatorThreshold for that partition
+// "a quorum of that partition's validators". The protocol's own answer is
+// the network definition: core.AnchorSigner admits a signer iff the
+// definition says it is active on the source partition
+// (internal/core/signer.go:42-48), and the quorum is
+// GlobalValues.ValidatorThreshold for that partition
 // (execute/v2/block/anchor_signatures.go:142). Both are read from
 // <partition>.acme/network, which every partition holds its own copy of
 // (genesis/bootstrap.go:254).
 type Authority struct {
 	mu sync.Mutex
 
-	// values is the trusted globals at the version the walk has reached.
+	// values is the trusted globals.
 	values *core.GlobalValues
 
 	// sets is partition (lower case) → the one set that partition's anchors
-	// are checked against. Replaced by the walk, never accumulated.
+	// are checked against. Replaced by Update, never accumulated.
 	sets map[string]*Set
 }
 
@@ -122,23 +129,30 @@ type Authority struct {
 // the peer's authority, which is the whole defect (#4301). This is the same
 // discipline the join reads its executed block under (#4295).
 func FromStore(db database.Viewer, local *url.URL) (*Authority, error) {
+	values, err := readValues(db, local)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return FromValues(values)
+}
+
+func readValues(db database.Viewer, local *url.URL) (*core.GlobalValues, error) {
 	if db == nil || local == nil {
-		return nil, errors.BadRequest.With("anchorsrc.FromStore: a store and a partition are required")
+		return nil, errors.BadRequest.With("anchorsrc: a store and a partition are required")
 	}
 	get := func(account *url.URL, target interface{}) error {
 		return db.View(func(batch *database.Batch) error {
 			return batch.Account(account).Main().GetAs(target)
 		})
 	}
-
 	values := new(core.GlobalValues)
 	if err := values.LoadNetwork(local, get); err != nil {
-		return nil, errors.UnknownError.WithFormat("read this node's own network definition: %w", err)
+		return nil, errors.UnknownError.WithFormat("read %v's network definition: %w", local, err)
 	}
 	if err := values.LoadGlobals(local, get); err != nil {
-		return nil, errors.UnknownError.WithFormat("read this node's own network globals: %w", err)
+		return nil, errors.UnknownError.WithFormat("read %v's network globals: %w", local, err)
 	}
-	return FromValues(values)
+	return values, nil
 }
 
 // FromValues holds the given globals as the trusted set. It is what FromStore
@@ -174,7 +188,7 @@ func (a *Authority) BvnNames() []string {
 	return a.values.BvnNames()
 }
 
-// SetFor is the set that signs for a partition — the one the walk stands at,
+// SetFor is the set that signs for a partition — the one this node trusts,
 // and the only one. There is no version argument on purpose: see Set.
 func (a *Authority) SetFor(partition string) (*Set, error) {
 	a.mu.Lock()
@@ -187,57 +201,49 @@ func (a *Authority) SetFor(partition string) (*Set, error) {
 	return set, nil
 }
 
-// Apply walks the authority forward over the updates an anchor carried.
+// Update moves the trusted sets to a network definition the caller has
+// VERIFIED, and reports whether anything changed.
 //
-// **The caller must have verified that anchor under the set this authority
-// currently trusts, first, and the anchor must be the DIRECTORY'S.** Both
-// halves are load-bearing. Verification is what makes the walk a signed step
-// rather than a peer's assertion. The Directory is what keeps the step at the
-// right bar: only the Directory executes a change to the network accounts and
-// only its anchors carry one (chain/directory_anchor.go:40), so a walk that
-// took updates from any verified anchor would let a quorum of ONE BVN — three
-// keys of four in the soak topology, against the Directory's eight of twelve —
-// name the validators of every partition as a joining node sees them
-// (#4301, threat review F1). Source.consider enforces it.
+// **The caller must have verified it as state**, not taken it from a peer:
+// the definition is an account, and the join settles it like every other
+// account — a receipt that is valid, that ends at a root a quorum of this
+// partition's validators signed, and that passes through the leaf the pulled
+// body hashes to (pull.Verify). That is what makes this an induction step
+// and not a peer's assertion, and it is the only route by which the sets
+// this node trusts ever move.
 //
-// Updates that do not change the authority — the oracle, the routing table —
-// are ignored. An update that does not parse is an error and nothing is
-// applied.
-func (a *Authority) Apply(updates []protocol.NetworkAccountUpdate) error {
-	if len(updates) == 0 {
-		return nil
+// A definition older than the trusted one is ignored. Anything else is
+// taken, including a change that moves only the globals — the accept
+// threshold is a ratio held there, and it decides the quorum.
+func (a *Authority) Update(values *core.GlobalValues) bool {
+	if values == nil || values.Network == nil || values.Globals == nil {
+		return false
 	}
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	next := &core.GlobalValues{Network: a.values.Network, Globals: a.values.Globals}
-	changed := false
-	for _, u := range updates {
-		body, ok := u.Body.(*protocol.WriteData)
-		if !ok {
-			continue // Only the network data accounts carry the authority
-		}
-		switch strings.ToLower(u.Name) {
-		case protocol.Network:
-			if err := next.ParseNetwork(body.Entry); err != nil {
-				return errors.UnknownError.WithFormat("apply a network definition update: %w", err)
-			}
-			changed = true
-		case protocol.Globals:
-			if err := next.ParseGlobals(body.Entry); err != nil {
-				return errors.UnknownError.WithFormat("apply a network globals update: %w", err)
-			}
-			changed = true
-		}
+	if values.Network.Version < a.values.Network.Version {
+		return false
 	}
-	if !changed {
-		return nil
+	next := &core.GlobalValues{Network: values.Network, Globals: values.Globals}
+	if next.Network.Equal(a.values.Network) && next.Globals.Equal(a.values.Globals) {
+		return false
 	}
-
 	a.values = next
 	a.record(next)
-	return nil
+	return true
+}
+
+// UpdateFrom reads the partition's network accounts out of a store the caller
+// has filled with VERIFIED state, and moves the trusted sets to them. It is
+// what the join calls once its spine has settled against an anchored root.
+func (a *Authority) UpdateFrom(db database.Viewer, local *url.URL) (bool, error) {
+	values, err := readValues(db, local)
+	if err != nil {
+		return false, errors.UnknownError.Wrap(err)
+	}
+	return a.Update(values), nil
 }
 
 // record replaces the set for each partition the definition names. What was
