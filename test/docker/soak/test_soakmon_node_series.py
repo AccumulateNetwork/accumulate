@@ -479,24 +479,94 @@ class APromotedNodeIsARealEventNotABrokenCounter(unittest.TestCase):
                       "a reader who is told 'instrument fault' goes to the "
                       "wrong code for the one event this run produces")
 
-    def test_accepted_means_the_caller_was_told_yes(self):
-        """M1 has no arithmetic to test — it is a definition, and the wrong
-        one produces `accepted = 0` beside `relayed = n` under a synchronous
-        relay. Demonstrated rather than asserted:
+    def test_accepted_means_the_node_took_responsibility(self):
+        """`accepted` has no arithmetic to test — it is a definition, and
+        this is the third one. Both narrower readings were tried and both
+        produce a false all-clear on a node that is working or a false
+        alarm on one that is not:
+
+        *"entered this node's worker batch"* — under a synchronous relay
+        the envelope never does, so `accepted = 0` beside `relayed = n`:
 
             accepted=0, relayed-taken=880 ->
               ['… certified 0 + relayed-taken 880 of 0 accepted',
                '… relayed 880 of 0 accepted']
             stranded reads 0 (only because of the floor)
 
-        Two alarms and a false all-clear on a node working perfectly. So the
-        words are pinned here, where a builder reading the contract sees the
-        same ones the harness was written against.
+        *"`Submit` returned success to the caller"* — a relay ending
+        `refused`, `not-ready` or `unreachable` returned no success, so one
+        unreachable relay fires the instrument-fault alarm on a CORRECT run,
+        and a node whose relays never land reads accepted 0 / stranded 0: a
+        node dropping everything looks perfect (#4366 note_3869869239,
+        decided at note_3869919047).
+
+        So: the node took responsibility — the submission entered its
+        worker or its relay — and the words are pinned here, where a
+        builder reading the contract sees the same ones the harness was
+        written against.
         """
         with open(os.path.join(HERE, "soakmon.py")) as fh:
             page = fh.read()
-        self.assertIn("Submit returned SUCCESS TO THE CALLER", page)
+        self.assertIn("THE NODE TOOK RESPONSIBILITY", page)
+        self.assertIn("it entered this node's worker,", page)
+        self.assertIn("or it entered this node's relay", page)
+        # Neither retracted reading, anywhere in the block.
+        self.assertNotIn("Submit returned SUCCESS TO THE CALLER", page)
         self.assertNotIn("Submit returned success and the envelope", page)
+
+    def test_a_relay_that_never_lands_is_accepted_and_stranded(self):
+        """The arithmetic the wording has to support, and the case the
+        retracted reading could not express: a node whose every relay ends
+        `unreachable` took 880 and delivered none. It must read 880
+        stranded — the row that should be red — and must NOT raise the
+        instrument-fault alarm, because nothing here is impossible."""
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 880.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "unreachable"}, 880.0)]},
+            "follower")
+        self.assertEqual(880, sub["accepted"])
+        self.assertEqual(880, sub["relayedUnreachable"])
+        self.assertEqual(0, sub["relayedTaken"])
+        self.assertEqual(880, sub["stranded"])
+        self.assertEqual([], sub["impossible"],
+                         "a correct run must not raise an instrument fault")
+
+    def test_a_relay_that_mostly_lands_strands_only_the_rest(self):
+        """The realistic case, and the one where the retracted reading is
+        worst. 880 taken into the relay, 800 land, 80 do not.
+
+        Under "took responsibility": accepted 880, stranded 80, no alarm —
+        80 really did strand and the row is red for them.
+
+        Under "returned success to the caller" the 80 would be `rejected`,
+        so accepted 800 against 880 relayed: the instrument-fault alarm
+        fires (`relayed 880 of 800 accepted`) AND stranded reads 0. Both
+        wrong at once, on a run where 80 transactions were lost.
+        """
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 880.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "taken"}, 800.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "unreachable"}, 80.0)]},
+            "follower")
+        self.assertEqual(880, sub["accepted"])
+        self.assertEqual(80, sub["stranded"])
+        self.assertEqual([], sub["impossible"])
+
+    def test_a_submission_refused_without_relaying_is_rejected(self):
+        """`rejected` is what the node refused WITHOUT relaying, so it
+        never enters the arithmetic: 0 accepted, 0 stranded, no alarm."""
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "rejected"}, 12.0)]}, "follower")
+        self.assertEqual(12, sub["rejected"])
+        self.assertEqual(0, sub["accepted"])
+        self.assertEqual(0, sub["stranded"])
+        self.assertEqual([], sub["impossible"])
 
     def test_the_contract_forbids_relaying_and_proposing_the_same_thing(self):
         with open(os.path.join(HERE, "soakmon.py")) as fh:

@@ -1041,23 +1041,49 @@ def write_mem_csv(mem, force=False):
 # `accumulate`, all monotone and never reset:
 #
 #   accumulate_dagbft_submissions_total{partition, outcome}
-#       outcome = "accepted"  -- Submit returned SUCCESS TO THE CALLER. The
-#                                node took responsibility for the
-#                                submission, whether the envelope entered
-#                                this node's own worker batch or was
-#                                relayed to a node that can propose it.
+#       outcome = "accepted"  -- THE NODE TOOK RESPONSIBILITY for the
+#                                submission: it entered this node's worker,
+#                                or it entered this node's relay. That is
+#                                the node's ledger of what it owes, and it
+#                                is settled the moment the submission is
+#                                taken — not by what the relay later
+#                                answers, and not by what the caller is
+#                                told. (The caller IS answered with the
+#                                relay's result; that is a separate
+#                                decision, the lead's, and it does not move
+#                                this counter.)
+#
 #                                NOT "entered this node's worker": under a
 #                                synchronous relay the envelope never does,
 #                                so that reading exports accepted=0 with
 #                                relayed=n and raises the `relayed >
-#                                accepted` alarm on a follower working
-#                                perfectly. It also silently answers Paul's
-#                                open question 2 (synchronous, or
-#                                accept-and-forward), which is not the
-#                                harness's to answer. "Took responsibility"
-#                                holds under either (reviewer M1 on #4364).
-#       outcome = "rejected"  -- Submit refused it: validation, or a node
-#                                that neither proposes nor relays.
+#                                accepted` alarm on a node working
+#                                perfectly (reviewer M1 on #4364).
+#
+#                                NOT "Submit returned success to the
+#                                caller" either, which is what this block
+#                                said until the builder tried to implement
+#                                both halves of it (#4366
+#                                note_3869869239, lead's decision
+#                                note_3869919047). A relay that ends
+#                                `refused`, `not-ready` or `unreachable`
+#                                returned no success — so under that
+#                                reading it is not `accepted`, one
+#                                unreachable relay anywhere makes
+#                                `sum(relayed) > accepted` and fires the
+#                                INSTRUMENT-FAULT alarm on a correct run,
+#                                and a node whose relays never land reads
+#                                `accepted 0, stranded 0`: a node dropping
+#                                everything looks perfect. The two rules
+#                                beside it — `relayed <= accepted`, and a
+#                                relay that gives up lands in the stranded
+#                                figure — require the opposite.
+#       outcome = "rejected"  -- the node refused it WITHOUT relaying: a
+#                                malformed envelope, the worker's own
+#                                refusal, or a node that cannot propose and
+#                                has no relay. A submission that enters the
+#                                relay is `accepted` however the relay ends;
+#                                where it ends is `relayed{outcome}`.
 #       partition             -- the partition id the submission was routed
 #                                to on this node ("Directory", "BVN3"), NOT
 #                                the container: every container runs two
@@ -1132,11 +1158,13 @@ def write_mem_csv(mem, force=False):
 #   * relay target refuses, is not ready, or is unreachable -> three labels,
 #     whatever the node then does about it. If it gives up, the submission
 #     lands in the stranded figure below, which is where a drop belongs.
-#   * synchronous, or accept-and-forward -> the counting moment is the
-#     relay's FINAL answer either way, and `accepted` means the caller was
-#     told yes either way. Under accept-and-forward a sample can show
-#     accepted > sum(relayed): that difference is relays in flight. Under
-#     synchronous they move together.
+#   * synchronous, or accept-and-forward -> `accepted` is the node's own
+#     ledger of responsibility and does not depend on the answer, so the
+#     arithmetic is the same either way; the relay's outcome is counted at
+#     its FINAL answer. Under either model a sample can show
+#     accepted > sum(relayed): that difference is relays in flight. (The
+#     lead has since decided synchronous — the caller gets the target's
+#     answer — and nothing here changes with it.)
 #   * which partitions it relays for -> a submission the node refuses
 #     outright is `submissions_total{outcome="rejected"}` and never enters
 #     this arithmetic; one it accepts and drops is stranded, correctly.
