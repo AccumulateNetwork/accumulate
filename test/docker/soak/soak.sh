@@ -938,8 +938,10 @@ PYEOF
 # and was flat through the next restart printed "01:20Z restart: 0 -> 3
 # (+3)" — a violation rendered as compliance, on the one case this table
 # exists for (reviewer on #4364). So:
-#   step_i  = min over [e_i, e_i + W)  -  min over [e_i - W, e_i)
-#   creep_i = min over [e_i+1 - W, e_i+1)  -  min over [e_i, e_i + W)
+#   step_i  = min over [e_i + S, e_i + W)  -  min over [e_i - W, e_i)
+#   creep_i = min over [e_i+1 - W, e_i+1)  -  min over [e_i + S, e_i + W)
+# S is the settle: the sample at the disturbance's own second still reads
+# the pre-effect level, because a relay must time out before it gives up.
 # The step is what the disturbance cost; the creep is the climb in the
 # quiet stretch, and THAT is the criterion's number. Windows are clamped so
 # two never meet, and a clamped one says so.
@@ -949,11 +951,23 @@ PYEOF
 # disturbance's effective moment is the timestamp plus p.
 steps_rows() {   # $1 = role: validator | follower
   python3 - "$rd/submissions.csv" "$rd/chaos.log" "${1:-}" \
-           "${STEP_WINDOW_SECS:-120}" <<'PYEOF'
+           "${STEP_WINDOW_SECS:-120}" "${STEP_SETTLE_SECS:-60}" <<'PYEOF'
 import csv, datetime, re, sys
 
 subs, chaos, role = sys.argv[1], sys.argv[2], sys.argv[3]
 W = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else 120
+S = int(sys.argv[5]) if len(sys.argv) > 5 and sys.argv[5] else 60
+# A misconfiguration this table cannot survive, said once rather than as
+# "no sample in the window" against every disturbance in the run. Anything
+# that closes the after-window makes every step unmeasurable; a settle
+# check catches it here because a settle at or past the window is the only
+# way to get there (the neighbouring-event clamp is already reported per
+# row, and never closes the BEFORE-window).
+if S >= W:
+    print("| stranded across disturbances | — not measured "
+          "(STEP_SETTLE_SECS=%d is not less than STEP_WINDOW_SECS=%d, so "
+          "there is no after-window and no step can be taken) |" % (S, W))
+    raise SystemExit
 
 
 def secs(t):
@@ -1040,6 +1054,18 @@ def floor_of(lo, hi):
 # violation as compliance (reviewer on #4364). Local windows measure the
 # step at the disturbance; the stretch between two of them is measured
 # separately, below, and that is the criterion's number.
+# THE AFTER-WINDOW STARTS S SECONDS AFTER THE DISTURBANCE, and that is the
+# mirror of the same mistake. The sample stamped at the disturbance's own
+# second still reads the PRE-EFFECT level — a relay has to time out before
+# it gives up, so a restart's loss shows one sample later — and a floor
+# taken from that second picks the pre-effect reading up: the step prints
+# +0 and the loss appears as the creep after it, so an ordinary lossy
+# restart reads as a criterion violation. The acceptance run's first lossy
+# restart would have failed the gate for the wrong reason.
+#
+# The sample AT t goes in neither window: it is pre-effect for a relay that
+# times out and post-effect for a loss that is instant, and nothing here
+# can tell which.
 nbr = [None] + [e[0] for e in events] + [None]    # neighbouring disturbances
 win = []
 for i, e in enumerate(events):
@@ -1074,7 +1100,7 @@ if head is not None:
 
 for i, (t, at, kind, node) in enumerate(events):
     lo, hi, note = win[i]
-    before, after = floor_of(lo, t), floor_of(t, hi)
+    before, after = floor_of(lo, t), floor_of(t + S, hi)
     # the quiet stretch that ENDS at this disturbance
     start_floor = prev_after if prev_after is not None else head
     start_label = prev_label if prev_label is not None else "the run's start"
@@ -1087,7 +1113,8 @@ for i, (t, at, kind, node) in enumerate(events):
             biggest_creep_at = "%s to %s" % (start_label, at)
     if before is None or after is None:
         row("%s %s %s" % (at, kind, node),
-            "— not measured (no sample in the %ds window)%s" % (W, note))
+            "— not measured (no sample in the %ds before or the %ds-%ds "
+            "after)%s" % (W, S, W, note))
         prev_after, prev_label = None, at
         continue
     step = after - before
@@ -1097,7 +1124,7 @@ for i, (t, at, kind, node) in enumerate(events):
         biggest_step, biggest_step_at = step, "%s %s %s" % (at, kind, node)
     prev_after, prev_label = after, at
 
-tail = floor_of(max(t1 - W, events[-1][0]), t1 + 1)
+tail = floor_of(max(t1 - W, events[-1][0] + S), t1 + 1)
 if prev_after is not None and tail is not None:
     creep = tail - prev_after
     row("between %s and the end of the run" % prev_label, "crept %+d" % creep)
@@ -1322,10 +1349,15 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     echo "a level. The windows are LOCAL — ${STEP_WINDOW_SECS:-120}s either"
     echo "side of the disturbance, four samples at the 30s cadence and well"
     echo "inside the chaos cadence — so a rise in the middle of a quiet"
-    echo "stretch is a creep and not the next disturbance's step. A window"
-    echo "clamped by a neighbouring event says so; where two disturbances are"
-    echo "closer than twice the window the creep between them is not"
-    echo "separable. A pause is dated at its un-pause."
+    echo "stretch is a creep and not the next disturbance's step. The"
+    echo "after-window starts ${STEP_SETTLE_SECS:-60}s late, because the"
+    echo "sample at the disturbance's own second still reads the pre-effect"
+    echo "level: a relay has to time out before it gives up, so the loss"
+    echo "shows a sample later and a floor taken from that second would"
+    echo "print the step as 0 and the loss as the creep after it. The sample"
+    echo "AT the disturbance is in neither window. A window clamped by a"
+    echo "neighbouring event says so, and there the step and the creep beside"
+    echo "it are not separable. A pause is dated at its un-pause."
     echo
     echo "| disturbance | stranded |"
     echo "|---|---|"
