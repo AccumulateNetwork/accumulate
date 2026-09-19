@@ -86,6 +86,12 @@ func (m *Membership) InCommittee() bool {
 	if g == nil || g.Network == nil || len(g.Network.Validators) == 0 {
 		return true
 	}
+	// A walk over the validators, not NetworkDefinition.ValidatorByKey: that
+	// is a binary search over PublicKeyHash, which answers "not in the
+	// network" for a definition that is unsorted or whose hashes are unset,
+	// and here that answer means refuse everything. Twelve validators is a
+	// walk, and it reads the field the daemon itself reads to build the
+	// committee (cmd/accumulated/run/dagbft.go:411-421).
 	for _, v := range g.Network.Validators {
 		if bytes.Equal(v.PublicKey, m.key) {
 			return v.IsActiveOn(m.partition)

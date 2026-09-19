@@ -28,16 +28,11 @@ func globalsWith(t *testing.T, active map[string][]ed25519.PublicKey) *network.G
 	t.Helper()
 	g := new(network.GlobalValues)
 	g.Network = new(protocol.NetworkDefinition)
-	byKey := map[string]*protocol.ValidatorInfo{}
+	// AddValidator, so the fixture is shaped exactly as the definition on
+	// chain is: sorted by key hash, with PublicKeyHash set.
 	for part, keys := range active {
 		for _, k := range keys {
-			v, ok := byKey[string(k)]
-			if !ok {
-				v = &protocol.ValidatorInfo{PublicKey: k}
-				byKey[string(k)] = v
-				g.Network.Validators = append(g.Network.Validators, v)
-			}
-			v.Partitions = append(v.Partitions, &protocol.ValidatorPartitionInfo{ID: part, Active: true})
+			g.Network.AddValidator(k, part, true)
 		}
 	}
 	return g
