@@ -326,10 +326,10 @@ class SubmissionsWhenTheFamilyAppears(Fleet):
         self.assertEqual("0", by[("acc-bvn3-fol1", "BVN3")]["relayedTaken"])
         self.assertEqual(
             "880",
-            by[("acc-bvn3-fol1", "BVN3")]["acceptedNeitherCertifiedNorTaken"])
+            by[("acc-bvn3-fol1", "BVN3")]["acceptedNeitherCertifiedTakenNorRefused"])
         self.assertEqual(
             "5",
-            by[("acc-bvn1-val1", "BVN3")]["acceptedNeitherCertifiedNorTaken"])
+            by[("acc-bvn1-val1", "BVN3")]["acceptedNeitherCertifiedTakenNorRefused"])
         # A partition that reported no rejections writes an empty field, not
         # a 0: the counter was never created, which is a different fact.
         self.assertEqual("", by[("acc-bvn1-val1", "BVN3")]["rejected"])
@@ -346,7 +346,8 @@ class SubmissionsWhenTheFamilyAppears(Fleet):
              {"partition": "BVN1"}, 12.0)]})
         self.assertEqual(0, sub["stranded"], "never negative")
         self.assertEqual(1, len(sub["impossible"]))
-        self.assertIn("certified 12 + relayed-taken 0 of 10 accepted",
+        self.assertIn("certified 12 + relayed-taken 0 + relayed-refused 0 of "
+                      "10 accepted",
                       sub["impossible"][0])
 
     def test_a_node_exporting_only_one_half_is_measured_but_says_so(self):
@@ -394,13 +395,13 @@ class ARelayingFollowerIsNotAFailure(Fleet):
         head, rows = self.rows("submissions.csv")
         cols = head.split(",")
         for c in ("relayedTaken", "relayedRefused", "relayedUnreachable",
-                  "acceptedNeitherCertifiedNorTaken"):
+                  "acceptedNeitherCertifiedTakenNorRefused"):
             self.assertIn(c, cols, c)
         row = dict(zip(cols, next(r for r in rows
                                   if r.split(",")[1] == "acc-bvn3-fol1"
                                   and r.split(",")[3] == "BVN3").split(",")))
         self.assertEqual("880", row["relayedTaken"])
-        self.assertEqual("0", row["acceptedNeitherCertifiedNorTaken"])
+        self.assertEqual("0", row["acceptedNeitherCertifiedTakenNorRefused"])
 
 
 class ARelayThatDoesNotAlwaysLand(Fleet):
@@ -422,7 +423,10 @@ class ARelayThatDoesNotAlwaysLand(Fleet):
         self.assertEqual(50, f["relayedRefused"])
         self.assertEqual(20, f["relayedNotReady"])
         self.assertEqual(10, f["relayedUnreachable"])
-        self.assertEqual(80, f["stranded"], "50 refused + 20 not-ready + 10 lost")
+        # The 50 refused were ANSWERED — a validator validated them and
+        # declined, and the caller was told so. Only the 30 that got no
+        # answer of any kind are stranded (threat-reviewer F4 on #4366).
+        self.assertEqual(30, f["stranded"], "20 not-ready + 10 unreachable")
 
     def test_a_syncing_target_is_not_a_refusal(self):
         """`refused` means a target VALIDATED it and declined — policy, and
@@ -443,7 +447,9 @@ class ARelayThatDoesNotAlwaysLand(Fleet):
         self.assertEqual({50, 20, 10},
                          {per["relayedRefused"], per["relayedNotReady"],
                           per["relayedUnreachable"]})
-        self.assertEqual(80, per["stranded"])
+        self.assertEqual(30, per["stranded"],
+                         "a refusal is an answer; not-ready and unreachable "
+                         "are not")
 
 
 class APromotedNodeIsARealEventNotABrokenCounter(unittest.TestCase):
@@ -467,7 +473,8 @@ class APromotedNodeIsARealEventNotABrokenCounter(unittest.TestCase):
             ("accumulate_dagbft_certified_own_transactions_total",
              {"partition": "BVN3"}, 40.0)]}, "follower")
         self.assertEqual(1, len(sub["impossible"]))
-        self.assertIn("certified 40 + relayed-taken 100 of 100 accepted",
+        self.assertIn("certified 40 + relayed-taken 100 + relayed-refused 0 of "
+                      "100 accepted",
                       sub["impossible"][0])
         self.assertEqual(0, sub["stranded"], "floored, never negative")
 
@@ -655,6 +662,76 @@ class TheLastSampleIsTheOneThatCounts(Fleet):
         soakmon._final_rows()     # must not raise
 
 
+class GarbageAtAFollowerMustNotPaintItRed(unittest.TestCase):
+    """threat-reviewer F4 on #4366, decided by the lead.
+
+    A follower's stranded figure used to be driven by whoever sent it
+    garbage. `relayIt` counts every relay as `accepted` whatever the
+    outcome, so a client, a peer dialling junk at `submit:P`, or the load
+    generator's own invalid submissions made a WORKING follower's row red
+    and failed the acceptance gate — while the same envelope sent straight
+    to a validator is `rejected` and costs nothing.
+
+    A refusal is an answer, not a loss: a validator validated the
+    submission and declined, and that answer went back to the caller
+    unchanged. It is subtracted with `taken`.
+    """
+
+    def test_a_flood_of_garbage_all_refused_reads_zero_stranded(self):
+        """The scenario as the threat review states it."""
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 50000.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "refused"}, 50000.0)]},
+            "follower")
+        self.assertEqual(50000, sub["accepted"])
+        self.assertEqual(50000, sub["relayedRefused"])
+        self.assertEqual(0, sub["stranded"],
+                         "a node that relayed every one and was answered "
+                         "every time lost nothing")
+        self.assertEqual([], sub["impossible"])
+
+    def test_the_garbage_is_still_visible_where_it_belongs(self):
+        """Subtracted from the stranded figure, not hidden: the refusals
+        keep their own row, so an operator can see a follower being
+        flooded. That is why this is the harness subtracting rather than
+        the node counting a refusal as `rejected`."""
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 50000.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "refused"}, 50000.0)]},
+            "follower")
+        self.assertEqual(50000, sub["relayedRefused"])
+        self.assertEqual(0, sub["relayedTaken"])
+
+    def test_garbage_the_node_refuses_itself_never_enters_the_arithmetic(self):
+        """The other half of the threat review's sentence: garbage is
+        `rejected` if the node refuses it without relaying."""
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "rejected"}, 50000.0)]},
+            "follower")
+        self.assertEqual(0, sub["accepted"])
+        self.assertEqual(0, sub["stranded"])
+        self.assertEqual([], sub["impossible"])
+
+    def test_a_real_loss_beside_the_garbage_still_shows(self):
+        """Subtracting refusals must not make the row unable to go red.
+        Same flood, plus 7 submissions no target would take."""
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 50007.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "refused"}, 50000.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "unreachable"}, 7.0)]},
+            "follower")
+        self.assertEqual(7, sub["stranded"],
+                         "the seven nobody answered for, and not one more")
+
+
 class OutcomesThisHarnessDoesNotKnowYet(unittest.TestCase):
     """Four questions about the relay are open for Paul (#4366), and the
     answer may add an outcome. An unknown label is counted and named, never
@@ -682,8 +759,13 @@ class OutcomesThisHarnessDoesNotKnowYet(unittest.TestCase):
              {"partition": "BVN3", "outcome": "taken"}, 6.0),
             ("accumulate_dagbft_relayed_total",
              {"partition": "BVN3", "outcome": "refused"}, 9.0)]}, "follower")
-        self.assertEqual(1, len(sub["impossible"]))
-        self.assertIn("relayed 15 of 10 accepted", sub["impossible"][0])
+        # Both impossible states, because both are: 6 taken + 9 refused
+        # discharges 15 of 10 accepted, and 15 were relayed of 10 accepted.
+        self.assertEqual(2, len(sub["impossible"]), sub["impossible"])
+        joined = " ".join(sub["impossible"])
+        self.assertIn("relayed 15 of 10 accepted", joined)
+        self.assertIn("certified 0 + relayed-taken 6 + relayed-refused 9 "
+                      "of 10 accepted", joined)
 
     def test_relays_with_no_accepted_series_at_all_is_an_alarm(self):
         """The two checks above are guarded on the partition having
@@ -755,10 +837,10 @@ class TheBoardSaysWhatTheNumberIs(unittest.TestCase):
 
     def test_the_labels_name_the_quantity_and_the_window(self):
         self.assertIn(
-            "accepted, neither certified here nor taken on relay "
+            "accepted, neither certified here, taken on relay, nor refused "
             "(#, whole run)", self.PAGE)
         self.assertIn(
-            "accepted, neither certified here nor taken on relay "
+            "accepted, neither certified here, taken on relay, nor refused "
             "(#, whole run, worst validator)", self.PAGE)
         self.assertIn("accepted (#, whole run)", self.PAGE)
         self.assertIn("relayed (#, whole run): taken / refused / "

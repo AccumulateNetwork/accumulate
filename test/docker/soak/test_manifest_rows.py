@@ -34,7 +34,7 @@ SOAK = os.path.join(HERE, "soak.sh")
 
 HEADER = ("time,node,role,partition,accepted,rejected,certified,relayedTaken,"
           "relayedRefused,relayedNotReady,relayedUnreachable,"
-          "acceptedNeitherCertifiedNorTaken,sample")
+          "acceptedNeitherCertifiedTakenNorRefused,sample")
 
 
 def _functions():

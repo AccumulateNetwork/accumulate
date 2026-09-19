@@ -96,13 +96,32 @@ and why no run can say whether a submission was accepted and never proposed.
 The last three are the set a follower makes necessary (#4364, for #4366/#4369).
 The quantity is
 
-> **accepted, neither certified here nor taken on relay (#, whole run)**
-> = `accepted - certified - relayed{taken}`, per (node, partition),
-> floored at 0.
+> **accepted, neither certified here, taken on relay, nor refused
+> (#, whole run)**
+> = `accepted - certified - relayed{taken} - relayed{refused}`,
+> per (node, partition), floored at 0.
 
 On a validator it sits at the in-flight window — the rounds not yet certified.
 On a **working** relaying node it is ~0, because the hand-off discharges the
 duty. On one that strands it is everything the network dialled to it and lost.
+What is left in it had **no answer of any kind**: `not-ready`, `unreachable`,
+or still in flight.
+
+**`relayed{refused}` MUST be subtracted.** A validator validated the submission
+and declined, and that answer went back to the caller unchanged — the caller
+was told "no", nothing is in flight and nothing is lost. Left in, the figure is
+driven by whoever sends the node garbage (a client, a peer dialling junk at
+`submit:P`, the load generator's own invalid submissions) while the same
+envelope sent straight to a validator is `rejected` and costs nothing: a
+working follower's row goes red and the acceptance gate fails on traffic it did
+not create (threat-reviewer F4 on #4366). Garbage at a follower is `rejected`
+if the node refuses it without relaying and `relayed{refused}` if a validator
+declines it; neither is stranded, and both stay visible on their own rows.
+
+This holds **because the relay is synchronous and the refusal is passed back
+unchanged**. Under accept-and-forward the caller has already been told yes, so
+a later refusal IS a loss and MUST return to the figure. A change to that
+decision changes this subtraction with it.
 
 **`accepted` MUST mean "the node took responsibility"** — the submission
 entered this node's worker, or this node's relay — and `rejected` MUST mean the
@@ -195,7 +214,9 @@ Each transaction MUST be counted at most once, at the first certified header
 carrying its batch: a header that never certifies is requeued and its batches
 re-proposed, so a per-header count double-counts and drives the difference
 negative. Three impossible states (clause 1a) MUST be surfaced as instrument
-alarms and never floored silently: `certified + relayed{taken} > accepted`
+alarms and never floored silently: `certified + relayed{taken} +
+relayed{refused} > accepted` — the same three terms the quantity subtracts, so
+a violation the check does not name is hidden by the floor —
 (a per-header certified count, a per-attempt relay count, or a node promoted
 mid-run that kept its own copy of what it relayed — a real event, not a broken
 counter); `sum(relayed) > accepted`, where the sum includes outcomes the
