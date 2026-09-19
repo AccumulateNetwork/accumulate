@@ -449,12 +449,24 @@ nodes take the same path, in this order:
      assumed away.
    - **Level with the peer on every chain.** The node is not past the peer,
      and the peer's body, directory and pending list are taken as they always
-     were. This assumes an account's body does not move without one of its
-     chains moving. That holds for everything the executor writes — it records
-     every account it changes on a chain of that account, which is what the
-     block ledger and the state tree are built on — and it is not enforced
-     here; for a verified pull the leaf catches a source that breaks it, and
-     for the spine, which is unverified, nothing does.
+     were. This rests on an account's body not moving without one of its
+     chains moving, AND THAT IS KNOWN TO BE FALSE (#4349). Two accounts move
+     without any chain of theirs moving, both found by walking the BPT block
+     by block under ordinary traffic. `<partition>/anchors` advances
+     `MinorBlockSequenceNumber` and `LastAnchorBlock` in `prepareAnchor` with
+     all ten of its chains standing still — six times in sixty blocks — and it
+     is a spine account, pulled without verification and settled with `Keep`,
+     so a node level on every chain takes a peer's body and re-stamps an
+     anchor sequence number the network has already seen. A lite identity's
+     directory grows by `AddDirectoryEntry` without `st.Update`, writing no
+     chain entry at all; a lite identity has no chains, so it can never be
+     past, and the node ends up holding an identity that does not name one of
+     its own token accounts.
+     Refusing the level case is not the answer either: it would strand any
+     account whose body legitimately moves that way. The comparison has to
+     become one that does not depend on this, and until it does, this is an
+     open hole and not an assumption. For a verified pull the leaf catches a
+     source that breaks it; for the spine, nothing does.
    - **A chain the peer does not serve at all.** A peer that cannot name a
      chain the node holds entries of is a peer the node is past on that chain.
      An account with no chains at all is not that: an account created without
