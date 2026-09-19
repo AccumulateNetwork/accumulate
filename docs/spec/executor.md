@@ -385,6 +385,18 @@ nodes take the same path, in this order:
    which is why a defect at the meeting point is invisible to every bootstrap
    test and fatal to every restart.
 
+   The other depth — the long tail, where a chain is taken as its head and its
+   open mark set and no history — is the **same walk with the same meeting
+   point**, and it is the one a restart spends its life in. The head a peer
+   serves is not installed over a chain the node already holds past it: the
+   long tail asks the same question of the same chain at the same height, and
+   a node ahead of the peer keeps its chain untouched. This is not an edge of
+   the long tail. When the node is ahead, the block-ledger walk has nothing to
+   say (the peer's block is not past the node's), so the page diff decides the
+   round, and the page diff names every account whose leaf differs from the
+   peer's **in either direction** — which, for a node that is ahead, is every
+   account it is ahead on, every round.
+
    Two things can be true of a chain the node already holds, and they are
    **not the same thing**:
 
@@ -410,13 +422,55 @@ nodes take the same path, in this order:
 
    **The meeting point is the account's, not one chain's.** A node at or
    beyond this peer on every chain of the account, and strictly beyond on at
-   least one, is past the peer for the account: it keeps its own body too.
-   Taking the peer's body there would rewind the account to the peer's block
-   while its chains stay at the node's — a body and chains from two different
-   heights, which is a leaf neither side has, and for `<partition>/ledger` it
-   is the node's own executed height being replaced by a peer's (#4344). Where
-   the chains do not agree on which is later — beyond on one and behind on
-   another — the node is not past the peer, and the body is taken.
+   least one, is past the peer for the account. An account is its body, its
+   directory list, its pending list and its chains **together** — that is what
+   its leaf is hashed from — so a node that is past the peer keeps all four
+   and **the pull takes nothing at all**. Taking any one of them would rewind
+   that part of the account to the peer's block while the rest stays at the
+   node's: a leaf that is neither side's, which is the one thing a pull must
+   never leave behind, and for `<partition>/ledger` it is the node's own
+   executed height being replaced by a peer's (#4344).
+
+   Taking nothing is also what makes the case safe to verify. What the node
+   holds is not what the peer serves, so it cannot hash to the leaf the peer's
+   receipt proves: a pull that carried the node's own state in its batch could
+   never be verified, and would be refused by its own verifier every round. A
+   pull that writes nothing has nothing to verify, and holds that by
+   construction rather than by an exemption.
+
+   The other outcomes, each decided rather than fallen into:
+
+   - **Beyond on one chain and behind on another.** Neither side's state is
+     the account's and a mixture of the two is neither, so the source is
+     refused and the next one is asked. No node that executed the same history
+     can be in that state — every chain of an account grows with the blocks
+     that touch it — but a *source* can claim it, and the spine is pulled
+     without verification, so the claim has to be answered rather than
+     assumed away.
+   - **Level with the peer on every chain.** The node is not past the peer,
+     and the peer's body, directory and pending list are taken as they always
+     were. This assumes an account's body does not move without one of its
+     chains moving. That holds for everything the executor writes — it records
+     every account it changes on a chain of that account, which is what the
+     block ledger and the state tree are built on — and it is not enforced
+     here; for a verified pull the leaf catches a source that breaks it, and
+     for the spine, which is unverified, nothing does.
+   - **A chain the peer does not serve at all.** A peer that cannot name a
+     chain the node holds entries of is a peer the node is past on that chain.
+     An account with no chains at all is not that: an account created without
+     a transaction of its own has an empty chain list, legitimately, and a
+     node holding nothing for one must take the peer's body or it could never
+     bootstrap it. The distinction is what the node holds, not what the peer
+     serves.
+
+   **Where agreement cannot be shown, the account is refused and nothing is
+   written.** That is the conservative answer and it is the right one, but its
+   reach is worth stating: a chain the node received head-first holds no state
+   and no entries below its open mark set, so *every* peer below the node's
+   own height is incomparable, not merely peers below the mark point, until
+   the node's own execution has crossed a mark point of its own. A refusal
+   there is reported as something that could not be compared, never as a
+   disagreement the node has not established.
 4. **Converge, then execute.** When the local BPT root equals the
    `StateTreeAnchor` of an anchored block `Q` at or above `P`, staging is
    brought to `Q`: everything collected through `Q` held, everything at or
