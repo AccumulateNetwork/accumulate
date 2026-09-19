@@ -492,8 +492,11 @@ has moved on, which is a network fact (#4340).
 Until the node's history is backfilled — the producer cache filled, the chains
 it lacks fetched — it does not answer requests for missing data: not the
 sequencer, not healing. It keeps up with blocks and says so (node state
-`BOOTING`, `ACTIVE`, `COMPLETE`; advertised, so nothing routes a request to a
-node that cannot answer it).
+`BOOTING`, `ACTIVE`, `COMPLETE`). Its state is advertised, but advertising is
+not what keeps a request away: a peer finds any installed handler by libp2p
+identify ahead of the DHT (`connectedPeersDiscoverer`), so what protects a
+caller is the node's answer — `NotReady` for a read it cannot make, a relay
+for a transaction it cannot propose — never the absence of a record.
 
 **A read needs local state; a relay needs none. That is the whole rule.**
 Everything a node is asked divides on it, and the two halves have opposite
@@ -525,14 +528,27 @@ and a user's has none (#4366, run `20260919T191634Z`).
 **It does not validate what it relays.** Validating against a store the pull
 has half filled fails on an account the node does not have yet and tells the
 sender its transaction is bad when it is not (#4307) — so a node that relays
-passes the submission on **unexamined** rather than judging it, and the node
-that will propose it is the node that validates it. A relay is therefore not a
-weaker `Submit`; it is a different operation, and a node that cannot propose
-must not answer as though it had.
+passes the submission on **not validated, decoded only to route**: routing
+reads the envelope's principals to pick the destination partition, against
+the routing table the node holds as of its last executed block (the globals
+it was seeded with, then `WillChangeGlobals`), and reads nothing else; the
+node that will propose it is the node that validates it. A relay is therefore
+not a weaker `Submit`; it is a different operation, and a node that cannot
+propose must not answer as though it had. **`Validate` is a read**: a syncing
+node refuses it (#4307), and a node that is synced answers it from its own
+state whatever its committee, because a validation judges against the latest
+committed state and promises nothing about proposal.
 
 What a follower is owed by this, and what it owes: a follower is a full
 participant in carrying traffic and in no committee, so it relays every
-transaction it is given and proposes none. A node in no committee of a
+transaction it is given — from a client at its API and from a peer at its
+submit service alike, which puts one relay hop on the share of cross-partition
+dispatch that lands on it — and proposes none. **A relay goes to a node that
+can propose, never to the relaying node itself, never to another node that
+would only relay it again, and never twice for one submission**: "never
+dropped" with no bound would make a loop between two followers, or a node and
+itself through a local-first dial, conform to this text. The mechanism is the
+build's; the bound is the rule's. A node in no committee of a
 partition still never *proposes* for it, and still never authors or dispatches
 an anchor for it (#4367) — relaying a transaction and producing consensus
 output are different things, and the first is allowed precisely because it
@@ -540,7 +556,11 @@ produces nothing.
 
 Open, and not settled here: what a relaying node does when the target refuses
 or is unreachable; whether it answers its caller on the relay's result or
-accepts and forwards; whether it relays only for the partitions it runs; and
+accepts and forwards; whether it relays only for the partitions it runs;
+whether a node that cannot propose still advertises `submit:<partition>` on
+the DHT (a record, distinct from the installed handler above); what a node
+that has not yet validated the spine, and so holds no committee to choose a
+target from, relays to; and
 what "fully synced" is, given `COMPLETE` has no production caller today
 (#4368 — which gates when a syncing node's *reads* open, not the relay: a
 relay needs no state).
