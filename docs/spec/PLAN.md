@@ -29,7 +29,7 @@ R #4219 ─▶ S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86   cost: first the
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3               correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back
 #4205 restart recovery                                before chaos returns to a soak
-Phase 1 (Paul, 2026-09-19): #4365 (PASSED 2026-09-19, run 20260919T191634Z) ─▶ #4367 (MERGED 775ce23a6) ─▶ #4366's build (relay, never drop; needs no state) ─▶ gate-0 rerun ─▶ #4368 (what "fully synced" is — gates reads, not the relay) ─▶ #4301 ─▶ #4361 ─▶ #4362 ─▶ serve-last ─▶ #4363 ─▶ #4364 ─▶ the 12 h / 100 tps acceptance with followers added and removed   the one order; E11's second pass below is its text
+Phase 1 (Paul, 2026-09-19): #4365 (PASSED 2026-09-19, run 20260919T191634Z) ─▶ #4367 (MERGED 775ce23a6) ─▶ { #4366's build (relay, never drop; capped — F1 is #4374, before the acceptance run)  ∥  #4301 (validate the spine)  ∥  #4361 (serve as of an anchored block; its join test after #4301) } ─▶ gate-0 rerun ─▶ #4368 (what "fully synced" is — gates reads, not the relay; spec at ce4f9e8cf, code is #4295) ─▶ #4362 ─▶ serve-last ─▶ #4363 ─▶ #4364 ─▶ the 12 h / 100 tps acceptance with followers added and removed   the one order (Paul, 2026-09-19: "Why are we not assigning work to do for our goal for bootstrapping?" — the join runs in parallel with the relay from 21:57Z, not behind it); E11's second pass below is its text
 ```
 
 Each item is its own issue branch from the previous item's tip.
@@ -334,7 +334,9 @@ bootstrapping a follower."
    in-process harness with its assertions inverted.
 
 Then bootstrapping — four pieces, three of them deletions in disguise, in
-this order because each one's gate needs the one before it:
+this order *within the join* because each one's gate needs the one before it
+(#4301's builder and #4361's port run in parallel with the relay's finish
+from 2026-09-19 21:57Z, on Paul's word; #4361's join test waits for #4301):
 
 1. **Validate the spine — #4301.** Port `anchorsrc` from `bootstrap-v3`:
    the latest signed anchor for the partition, its validator-quorum
