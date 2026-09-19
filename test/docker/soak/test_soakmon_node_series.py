@@ -662,6 +662,85 @@ class TheLastSampleIsTheOneThatCounts(Fleet):
         soakmon._final_rows()     # must not raise
 
 
+class ARetryIsOneResponsibilityNotThree(unittest.TestCase):
+    """reviewer M2 on #4366, the lead's reading, and the rule the twelve-hour
+    chaos run turns on.
+
+    A submission that took three attempts — a target that was not ready, one
+    that was unreachable, and one that took it — is ONE submission the node
+    took responsibility for and ONE hand-off. Counted per attempt instead,
+    `accepted - certified - relayed{taken}` becomes the number of not-taken
+    ATTEMPTS, and these are monotone counters: chaos restarts a validator,
+    the follower's next N relays end `unreachable` and land on the retry
+    through another validator, and the follower's row reads N stranded, red,
+    for the remaining hours of the run — after a transient the network
+    recovered from perfectly.
+    """
+
+    def test_three_attempts_one_submission(self):
+        """The fixture the rule is written for: accepted 1, taken 1,
+        stranded 0 — and no trace of the two attempts that failed, because
+        neither was a submission and neither was a final answer."""
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 1.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "taken"}, 1.0)]}, "follower")
+        self.assertEqual(1, sub["accepted"])
+        self.assertEqual(1, sub["relayedTaken"])
+        self.assertEqual(0, sub["relayedNotReady"])
+        self.assertEqual(0, sub["relayedUnreachable"])
+        self.assertEqual(0, sub["stranded"])
+        self.assertEqual([], sub["impossible"])
+
+    def test_what_per_attempt_counting_would_have_read(self):
+        """The same three attempts, counted per attempt: accepted 3 for one
+        transaction, and 2 stranded that were never lost. Rendered on the
+        board this is a red row on a working follower, and it never clears.
+        """
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 3.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "not-ready"}, 1.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "unreachable"}, 1.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "taken"}, 1.0)]}, "follower")
+        self.assertEqual(3, sub["accepted"], "three attempts, one transaction")
+        self.assertEqual(2, sub["stranded"],
+                         "two transactions that were never lost")
+
+    def test_a_restart_that_loses_nothing_leaves_the_row_at_zero(self):
+        """The disturbance the twelve-hour config runs. 500 submissions
+        relayed across a validator restart, every one retried onto another
+        validator and taken: 500 accepted, 500 taken, 0 stranded."""
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 500.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "taken"}, 500.0)]}, "follower")
+        self.assertEqual(0, sub["stranded"])
+
+    def test_a_restart_that_does_lose_something_stays_counted(self):
+        """And the other half of the rule, which is not a defect: the
+        counters are monotone, so a submission the node really gave up on
+        stays in the figure for the rest of the run. One restart that loses
+        three transactions leaves a permanent 3 — the acceptance reading is
+        that the figure does not CLIMB between disturbances, not that it is
+        0 forever."""
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 500.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "taken"}, 497.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "unreachable"}, 3.0)]},
+            "follower")
+        self.assertEqual(3, sub["stranded"])
+        self.assertEqual([], sub["impossible"], "a real loss is not a fault")
+
+
 class GarbageAtAFollowerMustNotPaintItRed(unittest.TestCase):
     """threat-reviewer F4 on #4366, decided by the lead.
 
@@ -873,6 +952,25 @@ class TheBoardSaysWhatTheNumberIs(unittest.TestCase):
             self.assertIn(" %s:\"" % tag, self.PAGE,
                           "%s has no DEFS entry — undefined is the only "
                           "unacceptable state" % tag)
+
+    def test_the_counting_rules_are_stated_where_a_builder_reads_them(self):
+        """Both halves of the one rule, in the block a builder reads: the
+        node counts `accepted` once at first entry, and `relayed` once at
+        the final answer. Either alone lets the other drift
+        (reviewer M2 on #4366)."""
+        self.assertIn("COUNTED ONCE PER SUBMISSION, AT ITS FIRST ENTRY",
+                      self.PAGE)
+        self.assertIn("never per attempt", self.PAGE)
+        self.assertIn("Counted ONCE PER SUBMISSION, AT ITS FINAL ANSWER",
+                      self.PAGE)
+
+    def test_the_row_says_what_it_means_across_a_disturbance(self):
+        """A twelve-hour chaos run is the reason this row exists, and a
+        cumulative loss read as a level is how it gets excused."""
+        self.assertIn("ACROSS A DISTURBANCE", self.PAGE)
+        self.assertIn("NEVER CLEARS", self.PAGE)
+        flat = " ".join(self.PAGE.replace("#", " ").split())
+        self.assertIn("figure does NOT CLIMB BETWEEN DISTURBANCES", flat)
 
     def test_the_families_the_exporter_must_provide_are_named_in_one_place(self):
         """#4366's builder exports what this reads; the names must not drift
