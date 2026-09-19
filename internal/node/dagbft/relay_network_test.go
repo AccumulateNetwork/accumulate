@@ -37,6 +37,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -392,12 +393,20 @@ loop:
 				failed = append(failed, fmt.Sprintf("joining %d: %v", round, err))
 			}
 
-			// A validator's own path, for comparison.
+			// A validator's own path, unchanged: the same call, and the
+			// same answer it gave before any of this existed.
 			nVal++
-			if _, err := peerClient.ForPeer(nodes[0].apiNode.ID()).
+			res, err := peerClient.ForPeer(nodes[0].apiNode.ID()).
 				ForAddress(api.ServiceTypeSubmit.AddressFor(part).Multiaddr()).
-				Submit(ctx, mark("VAL-TX-", round), opts); err != nil {
+				Submit(ctx, mark("VAL-TX-", round), opts)
+			switch {
+			case err != nil:
 				failed = append(failed, fmt.Sprintf("validator %d: %v", round, err))
+			case round == 1:
+				require.Len(t, res, 1)
+				require.True(t, res[0].Success)
+				require.Equal(t, "Transaction submitted to DAG-BFT consensus", res[0].Message)
+				require.Equal(t, errors.Pending, res[0].Status.Code)
 			}
 		}
 	}
@@ -458,6 +467,13 @@ loop:
 	relayed := float64(nHTTP + nPeer + nJoin)
 	require.Equal(t, relayed, taken,
 		"ONE hop per submission: a second follower relaying it again would count it twice")
+
+	// The quantity the harness renders, over this whole registry: what was
+	// taken and neither certified here nor handed to a node that can
+	// propose. On a working relay it is zero, and it is the number the
+	// gate-0 run had no row for (#4364).
+	require.Equal(t, float64(0), (a1-a0)-certified-taken,
+		"accepted, neither certified here nor taken on relay, must be 0")
 	require.Equal(t, float64(0), relayedAll-taken, "no submission ended refused, not-ready or unreachable")
 	require.NotZero(t, certified, "the validators certified their own transactions")
 
