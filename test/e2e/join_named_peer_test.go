@@ -148,7 +148,12 @@ func TestJoinReadsOnlyFromNamedPeers(t *testing.T) {
 		Router:  sim.S.Router(),
 	}
 
-	local := emptyDb()
+	// What a joining node really holds before it asks anybody anything: its
+	// own genesis network accounts. They are the keys it verifies anchors
+	// against, and they are the one thing it must not take from a peer
+	// (#4301). An empty store is not a case: every node loads genesis before
+	// it joins, and a node with no key to start from cannot verify a root.
+	local := genesisOf(t, sim, "BVN0")
 	state, err := join.NewState(join.StateOptions{
 		Partition: part,
 		Database:  local,

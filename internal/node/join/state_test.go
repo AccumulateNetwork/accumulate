@@ -89,6 +89,9 @@ func TestLocalBlock_IsTheExecutorsBlockAndNotThePulledLedger(t *testing.T) {
 		querier:   apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"}),
 	}
 
+	values, _ := genesisValues(t, 4)
+	putNetwork(t, local, here, values)
+
 	s, err := NewState(StateOptions{Partition: here, Database: local, Sources: srcs})
 	require.NoError(t, err)
 
@@ -147,7 +150,8 @@ func TestSettleBatch_SaysWhatItGaveUpOn(t *testing.T) {
 	}
 	// A Directory that has anchored nothing, so nothing the peer serves can
 	// ever settle.
-	s.anchors = &pull.DirectoryAnchors{Query: noAnchors{}}
+	values, _ := genesisValues(t, 4)
+	s.anchors = noAnchorSource(t, here, values)
 
 	pulled, refused := s.fetch(ctx, []*url.URL{account})
 	require.Zero(t, pulled, "nothing can settle against a directory with no anchors")
