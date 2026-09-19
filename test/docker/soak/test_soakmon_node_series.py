@@ -12,14 +12,24 @@ submissions it can never propose (#4366), so the one node whose RSS, heap,
 goroutines and staged count anyone would want over twelve hours.
 
 **`submissions.csv` is the other half of that:** run-analyst could not say
-whether a submission was accepted at the follower and never proposed,
-because nothing counts it. The families are Go and are not the harness's to
-add (#4366/#4369); the harness's job is to name what it will read and to
-render `— not measured` until it appears — never 0, because 0 would assert
-the very thing the run could not establish.
+whether a submission was accepted at the follower and never carried into the
+committed log, because nothing counts it. The families are Go and are not
+the harness's to add (#4366/#4369); the harness's job is to name what it
+will read and to render `— not measured` until it appears — never 0, because
+0 would assert the very thing the run could not establish.
+
+The second family counts **certified**, not proposed, and the fixtures below
+are built to hold that distinction: a follower authors and broadcasts a
+header carrying its own batches exactly as a validator does
+(`header_builder.go:35-76`), so a "proposed" counter would tick for
+everything it accepted and the gap would read 0 on the one node where
+everything strands. What it never gets is 2f+1 votes — validators drop its
+header at `vote_handler.go:277-284` — so `certified` is 0 for its lifetime
+(reviewer H1 on #4364).
 """
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -44,6 +54,9 @@ SCRAPE = [
 # The same, plus the two families #4366 must export. `partition` and not
 # `container`: every container runs TWO NODES, a DN node and a BVN node, and
 # their submission queues are separate.
+#
+# A VALIDATOR: it certifies its own headers, so the gap is the in-flight
+# window — the rounds not yet certified. Two and five.
 SCRAPE_WITH_SUBMISSIONS = SCRAPE + [
     ("accumulate_dagbft_submissions_total",
      {"partition": "Directory", "outcome": "accepted"}, 1200.0),
@@ -51,8 +64,27 @@ SCRAPE_WITH_SUBMISSIONS = SCRAPE + [
      {"partition": "Directory", "outcome": "rejected"}, 3.0),
     ("accumulate_dagbft_submissions_total",
      {"partition": "BVN3", "outcome": "accepted"}, 880.0),
-    ("accumulate_dagbft_proposed_transactions_total", {"partition": "Directory"}, 1198.0),
-    ("accumulate_dagbft_proposed_transactions_total", {"partition": "BVN3"}, 875.0),
+    ("accumulate_dagbft_certified_own_transactions_total", {"partition": "Directory"}, 1198.0),
+    ("accumulate_dagbft_certified_own_transactions_total", {"partition": "BVN3"}, 875.0),
+]
+
+# A FOLLOWER, on the same build. It accepted 1,200 on the Directory and 880
+# on BVN3, it PROPOSED every one of them — it authors and broadcasts headers
+# like any node — and it certified NONE, because no validator votes on a
+# header whose author is not in the committee. The counter is present and
+# reads 0; that is a measurement, and the gap is everything it accepted.
+#
+# The first draft of this contract asked for "proposed" instead. Against a
+# build that honoured it this node would have reported 1,200 and 880 proposed
+# against 1,200 and 880 accepted — a gap of ZERO, rendered un-red under the
+# words "accepted, never proposed", on the one node where nothing survives.
+SCRAPE_FOLLOWER_SUBMISSIONS = SCRAPE + [
+    ("accumulate_dagbft_submissions_total",
+     {"partition": "Directory", "outcome": "accepted"}, 1200.0),
+    ("accumulate_dagbft_submissions_total",
+     {"partition": "BVN3", "outcome": "accepted"}, 880.0),
+    ("accumulate_dagbft_certified_own_transactions_total", {"partition": "Directory"}, 0.0),
+    ("accumulate_dagbft_certified_own_transactions_total", {"partition": "BVN3"}, 0.0),
 ]
 
 FOLLOWER = [{"container": "acc-bvn3-fol1", "port": 26692, "dir": "bvn3-5",
@@ -63,6 +95,7 @@ class Fleet(unittest.TestCase):
     """A two-validator, one-follower network, scraped without docker."""
 
     scrape = SCRAPE
+    follower_scrape = None   # defaults to `scrape`
 
     def setUp(self):
         self._saved = (soakmon.containers, soakmon._scrape_one,
@@ -71,7 +104,11 @@ class Fleet(unittest.TestCase):
         soakmon.FOLLOWERS = list(FOLLOWER)
         soakmon.containers = lambda: ["acc-bvn1-val1", "acc-bvn2-val1",
                                       "acc-bvn3-fol1"]
-        soakmon._scrape_one = lambda c, out, lock: out.setdefault(c, list(self.scrape))
+        # The follower may answer differently from a validator — it must, for
+        # the counter that matters (reviewer H1).
+        soakmon._scrape_one = lambda c, out, lock: out.setdefault(
+            c, list(self.follower_scrape if (self.follower_scrape and "fol" in c)
+                    else self.scrape))
         soakmon.collect_flows_api = lambda: ({"synthetic": {}, "anchor": {}}, 0, 0)
         self.tmp = tempfile.mkdtemp(prefix="soaktest-")
         soakmon.RUN_DIR = self.tmp
@@ -153,11 +190,11 @@ class SubmissionsAreNotMeasuredYet(Fleet):
         m = soakmon.collect_metrics()
         sub = m["nodeStats"]["submissions"]
         self.assertFalse(sub["measured"])
-        self.assertIsNone(sub["neverProposed"])
+        self.assertIsNone(sub["neverCertified"])
         self.assertIsNone(sub["accepted"])
-        self.assertIsNone(sub["worstNeverProposed"])
+        self.assertIsNone(sub["worstNeverCertified"])
         self.assertFalse(sub["follower"]["measured"])
-        self.assertIsNone(sub["follower"]["neverProposed"])
+        self.assertIsNone(sub["follower"]["neverCertified"])
 
     def test_the_file_is_written_with_a_header_and_no_rows(self):
         """The run directory says the harness asked. An empty field would
@@ -173,23 +210,41 @@ class SubmissionsWhenTheFamilyAppears(Fleet):
     """The same harness, against a build that exports the contract."""
 
     scrape = SCRAPE_WITH_SUBMISSIONS
+    follower_scrape = SCRAPE_FOLLOWER_SUBMISSIONS
 
-    def test_accepted_minus_proposed_per_node_and_partition(self):
+    def test_accepted_minus_certified_per_node_and_partition(self):
         sub = soakmon.collect_metrics()["nodeStats"]["submissions"]
         self.assertTrue(sub["measured"])
         # Per validator: Directory 1200-1198 = 2, BVN3 880-875 = 5.
-        self.assertEqual(7, sub["byNode"]["acc-bvn1-val1"]["neverProposed"])
-        self.assertEqual(14, sub["neverProposed"], "two validators")
+        self.assertEqual(7, sub["byNode"]["acc-bvn1-val1"]["neverCertified"])
+        self.assertEqual(14, sub["neverCertified"], "two validators")
         self.assertEqual(2 * 2080, sub["accepted"])
         self.assertEqual(2 * 3, sub["rejected"])
-        self.assertEqual(7, sub["worstNeverProposed"])
+        self.assertEqual(7, sub["worstNeverCertified"])
+
+    def test_the_follower_certifies_nothing_so_the_gap_is_everything(self):
+        """THE finding this whole contract turns on (reviewer H1 on #4364).
+
+        This follower PROPOSED all 2,080 transactions it accepted — it
+        authors and broadcasts headers carrying its own batches like any
+        node — and certified none. Under the first draft's `proposed`
+        counter the gap would have been 0, rendered as a plain un-red zero
+        beside the words "never proposed", on the one node where everything
+        strands. Against `certified` it is 2,080.
+        """
+        sub = soakmon.collect_metrics()["nodeStats"]["submissions"]
+        f = sub["follower"]
+        self.assertEqual(0, f["certified"], "a follower never certifies")
+        self.assertEqual(2080, f["accepted"])
+        self.assertEqual(2080, f["neverCertified"],
+                         "everything it accepted stranded")
 
     def test_the_followers_figure_is_beside_the_total_not_inside_it(self):
         """Same membership rule as every other total (M6): the aggregate is
         the validators, the follower is named separately."""
         sub = soakmon.collect_metrics()["nodeStats"]["submissions"]
-        self.assertEqual(14, sub["neverProposed"], "the validators only")
-        self.assertEqual(7, sub["follower"]["neverProposed"])
+        self.assertEqual(14, sub["neverCertified"], "the validators only")
+        self.assertEqual(2080, sub["follower"]["neverCertified"])
         self.assertEqual("acc-bvn3-fol1", sub["follower"]["worstNode"])
         self.assertIn("acc-bvn3-fol1", sub["followerByNode"])
         self.assertNotIn("acc-bvn3-fol1", sub["byNode"])
@@ -204,23 +259,28 @@ class SubmissionsWhenTheFamilyAppears(Fleet):
         by = {(r.split(",")[1], r.split(",")[3]): dict(zip(cols, r.split(",")))
               for r in rows}
         self.assertEqual("follower", by[("acc-bvn3-fol1", "BVN3")]["role"])
-        self.assertEqual("5", by[("acc-bvn3-fol1", "BVN3")]["acceptedNeverProposed"])
         self.assertEqual("880", by[("acc-bvn3-fol1", "BVN3")]["accepted"])
+        self.assertEqual("0", by[("acc-bvn3-fol1", "BVN3")]["certified"])
+        self.assertEqual("880",
+                         by[("acc-bvn3-fol1", "BVN3")]["acceptedNeverCertified"])
+        self.assertEqual("5", by[("acc-bvn1-val1", "BVN3")]["acceptedNeverCertified"])
         # A partition that reported no rejections writes an empty field, not
         # a 0: the counter was never created, which is a different fact.
         self.assertEqual("", by[("acc-bvn1-val1", "BVN3")]["rejected"])
 
-    def test_more_proposed_than_accepted_is_an_alarm_not_a_negative(self):
+    def test_more_certified_than_accepted_is_an_alarm_not_a_negative(self):
         """REPORTING-SPEC 1a: a value another value on the same panel
-        disproves is an instrument fault, surfaced, never floored silently."""
+        disproves is an instrument fault, surfaced, never floored silently.
+        The likely cause is a counter counting per header rather than once
+        per transaction, so a re-proposed batch is counted twice."""
         sub = soakmon.submissions_from({"acc-bvn1-val1": [
             ("accumulate_dagbft_submissions_total",
              {"partition": "BVN1", "outcome": "accepted"}, 10.0),
-            ("accumulate_dagbft_proposed_transactions_total",
+            ("accumulate_dagbft_certified_own_transactions_total",
              {"partition": "BVN1"}, 12.0)]})
-        self.assertEqual(0, sub["neverProposed"], "never negative")
+        self.assertEqual(0, sub["neverCertified"], "never negative")
         self.assertEqual(1, len(sub["impossible"]))
-        self.assertIn("proposed 12 of 10 accepted", sub["impossible"][0])
+        self.assertIn("certified 12 of 10 accepted", sub["impossible"][0])
 
     def test_a_node_exporting_only_one_half_is_measured_but_says_so(self):
         sub = soakmon.submissions_from({"acc-bvn1-val1": [
@@ -229,7 +289,7 @@ class SubmissionsWhenTheFamilyAppears(Fleet):
         self.assertTrue(sub["measured"])
         self.assertEqual(["submissions"], sub["families"])
         p = sub["byNode"]["acc-bvn1-val1"]["byPartition"]["BVN1"]
-        self.assertIsNone(p["proposed"], "the missing half is absent, not 0")
+        self.assertIsNone(p["certified"], "the missing half is absent, not 0")
 
 
 class TheBoardSaysWhatTheNumberIs(unittest.TestCase):
@@ -244,10 +304,23 @@ class TheBoardSaysWhatTheNumberIs(unittest.TestCase):
             self.assertIn(tag, self.PAGE, tag)
 
     def test_the_labels_name_the_quantity_and_the_window(self):
-        self.assertIn("accepted, never proposed (#, whole run)", self.PAGE)
-        self.assertIn("accepted, never proposed (#, whole run, worst validator)",
+        self.assertIn("accepted, never certified (#, whole run)", self.PAGE)
+        self.assertIn("accepted, never certified (#, whole run, worst validator)",
                       self.PAGE)
         self.assertIn("accepted (#, whole run)", self.PAGE)
+
+    def test_no_rendered_label_says_proposed(self):
+        """A follower DOES propose, so the word on a label would make the
+        board wrong on the one node the row exists for (reviewer H1 on
+        #4364). Prose that explains the distinction is fine and wanted; a
+        `<span class=sl>` the reader sees is not."""
+        labels = re.findall(r"<span class=sl>([^<]*)</span>", self.PAGE)
+        self.assertTrue(labels, "no labels found — the parser is wrong")
+        for lab in labels:
+            self.assertNotIn("proposed", lab,
+                             "a visible label says 'proposed': %r" % lab)
+        self.assertNotIn("accumulate_dagbft_proposed_transactions_total",
+                         self.PAGE, "the retracted family name is still here")
 
     def test_every_new_id_has_a_definition(self):
         for tag in ("fstrand", "nstrand", "nacc", "nstrandnode"):
@@ -259,8 +332,8 @@ class TheBoardSaysWhatTheNumberIs(unittest.TestCase):
         """#4366's builder exports what this reads; the names must not drift
         between the note on that issue and the code that parses them."""
         self.assertEqual("accumulate_dagbft_submissions_total", soakmon.SUBMIT_TOTAL)
-        self.assertEqual("accumulate_dagbft_proposed_transactions_total",
-                         soakmon.PROPOSED_TOTAL)
+        self.assertEqual("accumulate_dagbft_certified_own_transactions_total",
+                         soakmon.CERTIFIED_TOTAL)
 
 
 if __name__ == "__main__":
