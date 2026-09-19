@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/enumerate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
@@ -71,14 +72,14 @@ func pullEvery(t *testing.T, src pull.Source, batch *database.Batch, part *url.U
 // partition's block, and returns the root it anchored. The pull runs ahead of
 // the anchors by design: a peer serves its current block, and the Directory
 // anchors it a few blocks later.
-func waitForAnchor(t *testing.T, sim *Sim, anchors *pull.DirectoryAnchors, part *url.URL, block uint64) [32]byte {
+func waitForAnchor(t *testing.T, sim *Sim, anchors *anchorsrc.Source, part *url.URL, block uint64) [32]byte {
 	t.Helper()
 	for i := 0; i < 50; i++ {
 		root, err := anchors.AnchoredRoot(context.Background(), part, block)
 		if err == nil {
 			return root
 		}
-		require.True(t, errors.Is(err, pull.ErrNotAnchored), "%v", err)
+		require.True(t, errors.Is(err, anchorsrc.ErrNotAnchored), "%v", err)
 		sim.Step()
 	}
 	t.Fatalf("the directory did not anchor %v block %d within 50 blocks", part, block)
@@ -131,14 +132,13 @@ func TestPullReachesTheAnchoredRoot(t *testing.T) {
 	local := emptyDb()
 	trk, err := tracker.New(local, machine)
 	require.NoError(t, err)
-	anchors := &pull.DirectoryAnchors{
-		Query: sim.S.Services(),
-		// Every anchor the Directory executes is handed over; the tracker
-		// keeps the ones for its own partition and drops the rest, because a
-		// block number without its partition names nothing (#4205).
-		OnAnchor: func(p *url.URL, block uint64, root [32]byte) {
-			trk.Observe(p, block, root)
-		},
+	anchors := anchorSourceFor(t, sim, part)
+	// Every VERIFIED anchor is handed over; the tracker keeps the ones for
+	// its own partition and drops the rest, because a block number without
+	// its partition names nothing (#4205). An anchor that did not verify
+	// never reaches it at all (#4301).
+	anchors.OnAnchor = func(p *url.URL, block uint64, root [32]byte) {
+		trk.Observe(p, block, root)
 	}
 
 	// --- The node's database as of R -----------------------------------
@@ -257,4 +257,25 @@ func TestPullSpineCarriesTheChains(t *testing.T) {
 			}
 		})
 	})
+}
+
+// anchorSourceFor is the anchor source the join builds, built the same way.
+//
+// **It seeds the validator sets from the SIMULATOR's store**, which is a
+// peer's — the shortcut the mechanism exists to forbid. That is acceptable
+// here and only here: these are pull-library tests, where the anchor source
+// is scaffolding for producing a verified root and not the thing under test.
+// The tests that exercise the seed for real build it through join.NewState,
+// which reads the joining node's own store (spine_directory_root_test.go).
+func anchorSourceFor(t *testing.T, sim *Sim, part *url.URL) *anchorsrc.Source {
+	t.Helper()
+	id, ok := ParsePartitionUrl(part)
+	require.True(t, ok, "%v is not a partition", part)
+	a, err := anchorsrc.FromStore(sim.Database(id), part)
+	require.NoError(t, err)
+	pool, err := anchorsrc.PoolFor(part, a.BvnNames())
+	require.NoError(t, err)
+	src, err := anchorsrc.New(sim.S.Services(), pool, part, a)
+	require.NoError(t, err)
+	return src
 }

@@ -97,7 +97,8 @@ func TestFetch_AnAccountTheNodeIsPastIsNeitherHeldNorRefused(t *testing.T) {
 	// s.anchors must be non-nil for the fetch to ask for a receipt at all,
 	// which is what the long tail does (join.fetch passes Verify: s.anchors).
 	// It is never consulted: a past account has nothing to settle.
-	s.anchors = &pull.DirectoryAnchors{Query: noAnchors{}}
+	values, _ := genesisValues(t, 4)
+	s.anchors = noAnchorSource(t, here, values)
 
 	before := pull.Held()
 	pulled, refused := s.fetch(ctx, []*url.URL{u})

@@ -99,9 +99,11 @@ type Options struct {
 	// an account at. When it is set, Account refuses state that does not hash
 	// into that root.
 	//
-	// Nil pulls without verifying. That is for the Directory spine — the
-	// accounts the verifier itself reads from, which cannot be verified before
-	// they exist — and for tests.
+	// Nil pulls without verifying, which is for tests only. The spine used
+	// to be pulled this way, on the rationale that it is what the verifier
+	// reads from; that rationale was false — a signature is verified against
+	// a key the node already holds, not against a root — and it is what
+	// #4301 closed.
 	Verify Verifier
 
 	// Partition is the partition whose blocks the account's state belongs to.
@@ -1007,6 +1009,18 @@ func SpineAccounts(partitionURL *url.URL) []*url.URL {
 		partitionURL.JoinPath(protocol.Ledger),
 		partitionURL.JoinPath(protocol.Operators),
 		partitionURL.JoinPath(protocol.Operators, "1"),
+
+		// The network definition and the globals, because they are what says
+		// who may sign an anchor and how many of them are needed. A node
+		// holds its own from genesis or from its own execution, and the only
+		// way that copy ever moves is this one: pulled with a receipt that
+		// ends at a root a quorum signed and passes through the leaf the
+		// pulled body hashes to, then handed to anchorsrc.Authority. Past
+		// Vandenberg a change to them never travels in an anchor
+		// (block_end.go:791-793), so this is the whole of how a joining node
+		// crosses one (#4301).
+		partitionURL.JoinPath(protocol.Network),
+		partitionURL.JoinPath(protocol.Globals),
 	}
 }
 
