@@ -49,7 +49,16 @@ CSV = os.path.join(RUN_DIR, "readprobe.csv")
 REPORT = os.path.join(RUN_DIR, "readprobe-report.md")
 
 
+# Silenced when this module is imported by a test rather than run: a round
+# summary printed into a unittest's output reads as a failure to whoever is
+# scanning it, and "2 failed" in the middle of a green suite is exactly the
+# kind of thing that gets believed (L4).
+QUIET = "unittest" in sys.modules
+
+
 def log(msg):
+    if QUIET:
+        return
     print(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), msg, flush=True)
 
 

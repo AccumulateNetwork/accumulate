@@ -349,25 +349,48 @@ curl -s -m 10 -X POST http://localhost:26680/v3 -H 'content-type: application/js
   | python3 -c 'import json,sys; json.dump(json.load(sys.stdin).get("result") or {}, sys.stdout)' \
   > "$rd/network-definition.json" 2>/dev/null
 if [ "$n_fol" -gt 0 ]; then
+  # The follower's OWN key, looked up in the capture (M5) — not "is there
+  # any inactive entry", which answers "absent from the definition", the
+  # reassuring form, when the premise of the gate has failed.
+  #
+  # stderr goes to the run log, NOT to /dev/null (L2): an import error or a
+  # changed JSON shape used to be reported as "network-status did not
+  # answer", which is a different fault with a different fix.
   key_form=$(python3 -c '
 import json, sys
 sys.path.insert(0, sys.argv[2])
 import followerlog
 try:
     d = json.load(open(sys.argv[1]))
-except Exception:
+except Exception as e:
+    sys.stderr.write("network-definition.json unreadable: %r\n" % (e,))
     d = None
-v = followerlog.definition_check(d)
-if not v["measured"]:
-    print("— not measured (%s)" % v["why"]); raise SystemExit
+# The key prefix comes from the follower own identity line, which it logs
+# at startup; the network has been up for 30 s, so it is there.
+try:
+    with open(sys.argv[3], errors="replace") as f:
+        pre = followerlog.read(f).key_prefix(sys.argv[4])
+except Exception as e:
+    sys.stderr.write("cannot read the follower key prefix: %r\n" % (e,))
+    pre = None
+v = followerlog.definition_check(d, pre)
+form = v["followerKeyForm"]
+if not form:
+    print("— not measured (%s)" % (v["why"] or "unknown")); raise SystemExit
 print("%s; active validators per partition: %s" % (
-    v["followerKeyForm"],
-    ", ".join("%s %d" % kv for kv in sorted(v["active"].items()))))' \
-    "$rd/network-definition.json" "$here" 2>/dev/null)
-  key_form=${key_form:-— not measured (network-status did not answer)}
-  sed -i "s#^| follower key | .*#| follower key | ${key_form} |#" "$manifest"
+    form, ", ".join("%s %d" % kv for kv in sorted(v["active"].items()))))' \
+    "$rd/network-definition.json" "$here" "$rd/node-logs-live.txt" "${FOL_LIST%%,*}" \
+    2>>"$log")
+  key_form=${key_form:-— not measured (the key-form capture produced nothing; see soak.log)}
+  if grep -q '^| follower key | ' "$manifest"; then
+    sed -i "s#^| follower key | .*#| follower key | ${key_form} |#" "$manifest"
+    grep -q "^| follower key | ${key_form} |" "$manifest" \
+      || echo "WARNING: the manifest's follower-key row was not replaced — it still reads \"pending\"" | tee -a "$log"
+  else
+    echo "WARNING: no follower-key row in the manifest to fill in" | tee -a "$log"
+  fi
   python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["followerKeyForm"]=sys.argv[2]; json.dump(d, open(p,"w"))' \
-    "$runjson" "$key_form" 2>/dev/null
+    "$runjson" "$key_form" 2>>"$log"
   echo "$(date -u +%FT%TZ) follower key: $key_form" | tee -a "$log"
 fi
 
@@ -535,6 +558,12 @@ echo "   chaos: armed (every ~${CHAOS_MIN}s + jitter; first event follows the fi
   # is CHAOS_SKIP_ONE_IN=N (every Nth slot; 0, the default, never): it used to
   # be a hidden one-in-five draw, which cost 20260917T212457Z three of its
   # five slots.
+  # NOT COVERED BY A TEST (reviewer L3, accepted for this CHAOS=off run and
+  # carried to #4364): this intersection and the heals split below are bash,
+  # and nothing exercises them. Harmless here — chaos is off — and
+  # load-bearing the moment #4364 turns it on, which is where they get a
+  # test.
+  #
   # VALIDATORS only. `--filter name=acc-bvn` also matches `acc-bvn3-fol1`,
   # and a follower restarted by chaos is the node the run is measuring being
   # disturbed by the run (#4365). The roster is intersected with the
@@ -591,12 +620,16 @@ echo "time,dnHeight,heals,cpuPct,followerHeals" > "$mon"
     # with a follower and a run without, and this column is compared across
     # runs (#4365). The follower's own heals are in soakmon's per-node table,
     # labelled.
-    heals=0; fol_heals=0
+    # followerHeals is EMPTY, not 0, on a run with no follower: there is no
+    # instrument behind it, and an absent instrument must not render as a
+    # measurement (REPORTING-SPEC 1, L1). It is the only column a
+    # no-follower run's monitor.csv gains.
+    heals=0; fol_heals=""; [ "$n_fol" -gt 0 ] && fol_heals=0
     for c in $(docker ps --filter name=acc-bvn --format '{{.Names}}'); do
       x=$(docker exec "$c" sh -c 'wget -q -O - http://127.0.0.1:26670/metrics 2>/dev/null' \
         | grep -E '^accumulate_conductor_heal_entries_total\{[^}]*outcome="applied"' | awk '{s+=$NF} END {printf "%d", s}')
       case ",$FOL_LIST," in
-        *",$c,"*) fol_heals=$((fol_heals + ${x:-0})) ;;
+        *",$c,"*) fol_heals=$(( ${fol_heals:-0} + ${x:-0} )) ;;
         *)        heals=$((heals + ${x:-0})) ;;
       esac
     done

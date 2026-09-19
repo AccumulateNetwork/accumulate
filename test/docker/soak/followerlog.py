@@ -26,12 +26,40 @@ load starts:
    says whether the follower's key is in it and inactive, or not in it at
    all. The manifest has to record which.
 
-**Never compare without the partition.** Every container runs a BVN engine
-and a Directory engine and both reach the same block numbers at the same
-second, so a block number alone names two different blocks. The anchor line
-carries only a destination, not its source — but a BVN anchors only to the
-Directory and the Directory anchors only to BVNs, so the destination decides
-the source, and that is how the source partition is recovered here.
+**Never compare without the partition, and the destination is not the
+partition.** Every container runs a BVN engine and a Directory engine, both
+reach the same block numbers at the same second, and the log line carries a
+destination but not its source. The obvious rule — "a line addressed to
+dn.acme came from this node's BVN" — is WRONG, and reading it that way is
+H1: `conductor.go:283-288` iterates `Network.Partitions`, which
+`init.go:203` seeds with the Directory, so **the Directory anchors to
+itself as well as to every BVN**. On run 20260917T212457Z, acc-bvn1-val1
+logged 1156 lines to each BVN and 2316 to dn — 1156 Directory
+self-anchors plus ~1160 BVN1 anchors — and at block 500 it logged dn.acme
+twice, eight seconds apart, with different roots. Filing both under the
+node's BVN, last write wins, reports a mismatch on a block two nodes agree
+on, or agreement on a block where they differ, depending on log order.
+
+The rule used here: **only the Directory anchors to a BVN**, so every
+`(root, bpt)` a node addressed to a BVN — anywhere in the log — is one its
+Directory engine computed. A `dn.acme` line carrying one of those values is
+that engine's copy to itself; a `dn.acme` line carrying a value the node
+never sent to a BVN is its own BVN engine's. The set is taken over the
+node's whole log rather than over the one block, because the two engines
+need not be at the same block number at the moment either of them anchors —
+`reading-a-run.md` says they usually are, and "usually" is not a rule to
+file evidence by.
+
+A `dn.acme` line from a node that never addressed a BVN at all — a log
+fragment that lost the Directory engine's lines — is **ambiguous**: nothing
+in it separates the two engines. Those are counted and not compared, never
+guessed, and the count is a row. The values are `(root, bpt)` together,
+eight bytes, so two engines of one node colliding on both is not a case
+worth designing for; the conflict detector below would catch its
+consequence anyway.
+
+A `partition` attribute on that log line would make all of this
+unnecessary; that is Go, and it is the lead's.
 
 **What this cannot see, and says so.** ``Header from unknown validator``
 (vote_handler.go:284), ``Vote from unknown validator`` (:35) and
@@ -97,21 +125,35 @@ def _int(f, key):
         return None
 
 
-def _partition_of_destination(dest, own_bvn):
-    """The partition that PRODUCED an anchor whose destination is `dest`.
+def _is_dn_destination(dest):
+    d = (dest or "").lower()
+    return "//dn." in d or d.endswith("//dn.acme")
 
-    A BVN's anchors go only to the Directory; the Directory's go to every
-    BVN. So a line addressed to dn.acme came from this node's own BVN, and
-    a line addressed to a BVN came from the Directory.
+
+def _is_bvn_destination(dest):
+    return "bvn-" in (dest or "").lower()
+
+
+AMBIGUOUS = object()
+
+
+def _source_of(dest, own_bvn, dn_values, value):
+    """The partition that PRODUCED this anchor line. See the module docstring.
+
+    `dn_values` is every (root, bpt) this node addressed to a BVN anywhere in
+    the log — its Directory engine's, because only the Directory anchors to a
+    BVN. Returns a partition id, None (a destination this reader does not
+    understand), or AMBIGUOUS.
     """
-    if not dest:
-        return None
-    d = dest.lower()
-    if "//dn." in d or d.endswith("//dn.acme"):
-        return own_bvn
-    if "bvn-" in d:
+    if _is_bvn_destination(dest):
         return "Directory"
-    return None
+    if not _is_dn_destination(dest):
+        return None
+    if value in dn_values:
+        return "Directory"          # the Directory's copy to itself
+    if dn_values:
+        return own_bvn              # this node's BVN engine
+    return AMBIGUOUS                # this node never anchored to a BVN
 
 
 class Report:
@@ -125,6 +167,13 @@ class Report:
         self.changes = []           # (node, ts, kind, pubkey)
         self.drops = {"header": {}, "vote": {}}   # kind -> {node: count}
         self.sawDropLine = False
+        # dn.acme lines at a block where the node logged no bvn-* line: the
+        # two engines cannot be told apart there, so they are counted and
+        # not filed (H1).
+        self.ambiguous = {}         # node -> count
+        # One (node, partition, block) given two different values. Log order
+        # used to decide this silently; it is a finding.
+        self.conflicts = []         # (node, partition, block, first, second)
 
     # -- identity -------------------------------------------------------
     def key_prefix(self, node):
@@ -191,17 +240,44 @@ def read(lines):
         elif ev == "vote-drop":
             r.sawDropLine = True
             r.drops["vote"][node] = r.drops["vote"].get(node, 0) + 1
-    # Anchors need each node's own BVN, which is known only after every
-    # identity line has been seen — so they are resolved here, not in the
-    # loop above, and the input is read exactly once.
+    # Anchors are resolved after the pass — they need each node's own BVN,
+    # from its identity line, AND every line of their own (node, block)
+    # group, because which engine logged a dn.acme line is decided by the
+    # bvn-* lines beside it (H1). The input is still read exactly once.
+    # What each node's DIRECTORY engine computed, over the whole log: every
+    # value the node addressed to a BVN. Only the Directory anchors to a BVN.
+    dn_values = {}
     for node, f in pending:
-        part = _partition_of_destination(f.get("destination"), r.bvn_of(node))
+        if _is_bvn_destination(f.get("destination")):
+            dn_values.setdefault(node, set()).add((f.get("root"), f.get("bpt")))
+
+    groups = OrderedDict()
+    for node, f in pending:
         blk = _int(f, "block")
-        if part is None or blk is None:
+        if blk is None:
             continue
-        # The Directory sends the same anchor to every BVN, so the same
-        # (partition, block) arrives several times with identical values.
-        r.anchors.setdefault(node, {})[(part, blk)] = (f.get("root"), f.get("bpt"))
+        groups.setdefault((node, blk), []).append(f)
+
+    for (node, blk), lines in groups.items():
+        own = r.bvn_of(node)
+        mine = dn_values.get(node, set())
+        for f in lines:
+            value = (f.get("root"), f.get("bpt"))
+            part = _source_of(f.get("destination"), own, mine, value)
+            if part is AMBIGUOUS:
+                r.ambiguous[node] = r.ambiguous.get(node, 0) + 1
+                continue
+            if part is None:
+                continue
+            slot = r.anchors.setdefault(node, {})
+            prev = slot.get((part, blk))
+            if prev is not None and prev != value:
+                # The Directory's four copies are identical by construction,
+                # so this is the node contradicting itself — not something
+                # log order should quietly resolve.
+                r.conflicts.append((node, part, blk, prev, value))
+                continue
+            slot[(part, blk)] = value
     return r
 
 
@@ -219,6 +295,8 @@ def compare_roots(report, follower, validators):
     if not mine:
         return {"measured": False, "compared": 0, "uncompared": 0,
                 "mismatches": [], "firstMismatch": None,
+                "ambiguous": report.ambiguous.get(follower, 0),
+                "conflicts": [c for c in report.conflicts if c[0] == follower],
                 "why": "the follower logged no anchor line — fall back to the "
                        "v3 API on the follower and a validator at the same "
                        "ledger index (query with includeReceipt)"}
@@ -237,6 +315,8 @@ def compare_roots(report, follower, validators):
             bad.append((part, blk, mine[(part, blk)], ref, who))
     return {"measured": True, "compared": compared, "uncompared": uncompared,
             "mismatches": bad, "firstMismatch": bad[0] if bad else None,
+            "ambiguous": report.ambiguous.get(follower, 0),
+            "conflicts": [c for c in report.conflicts if c[0] == follower],
             "why": None}
 
 
@@ -311,20 +391,30 @@ def drop_check(report, follower, validators):
             "byValidator": by, "why": None}
 
 
-def definition_check(status):
-    """What the NetworkDefinition says about keys that are in it and inactive.
+def definition_check(status, key_prefix=None):
+    """What the NetworkDefinition says about THE FOLLOWER'S OWN key.
 
     `status` is the `result` of a `network-status` call, captured before load
     starts. A validator entry is active on a partition or it is not, and the
     DAG-BFT committee is built from the active ones only
-    (run/dagbft.go:415) — so a key with no active partition is precisely a
-    node that is in the definition and in no committee.
+    (run/dagbft.go:415) — so the follower's key with no active partition is
+    precisely a node that is in the definition and in no committee.
+
+    `key_prefix` is the eight hex characters the follower logged for itself
+    (`Report.key_prefix`); the capture carries the full `publicKey` hex, so
+    the two are matched by prefix. It is looked up rather than inferred from
+    "is there any inactive entry": if init misbehaved and the follower's key
+    came out ACTIVE — the gate's premise failing — the inferred answer was
+    "absent from the definition", the most reassuring row on the page,
+    printed beside a count that said the partition had one validator too
+    many (M5).
     """
     try:
         vals = status["network"]["validators"]
     except (TypeError, KeyError):
         return {"measured": False, "active": {}, "inactiveKeys": [],
-                "followerKeyForm": None,
+                "followerKey": None, "followerKeyForm": None,
+                "followerActiveOn": [], "followerInNoCommittee": None,
                 "why": "no network-status capture for this run"}
     active, inactive = {}, []
     for v in vals:
@@ -334,10 +424,41 @@ def definition_check(status):
             active[p] = active.get(p, 0) + 1
         if not on:
             inactive.append(v.get("publicKey"))
-    return {"measured": True, "active": active, "inactiveKeys": inactive,
-            "followerKeyForm": ("inactive in the definition" if inactive
-                                else "absent from the definition"),
-            "why": None}
+
+    out = {"measured": True, "active": active, "inactiveKeys": inactive,
+           "followerKey": None, "followerKeyForm": None,
+           "followerActiveOn": [], "followerInNoCommittee": None, "why": None}
+    if not key_prefix:
+        out["why"] = ("the follower logged no identity line, so its key is "
+                      "not known and its entry cannot be looked up")
+        return out
+
+    pre = key_prefix.lower()
+    mine = [v for v in vals if (v.get("publicKey") or "").lower().startswith(pre)]
+    if len(mine) > 1:
+        out["followerKeyForm"] = ("%d entries share the follower's key prefix "
+                                  "%s — the definition cannot be read" %
+                                  (len(mine), key_prefix))
+        return out
+    if not mine:
+        out["followerKeyForm"] = "absent from the definition"
+        out["followerInNoCommittee"] = True
+        return out
+
+    v = mine[0]
+    on = [p["id"] for p in (v.get("partitions") or []) if p.get("active")]
+    out["followerKey"] = v.get("publicKey")
+    out["followerActiveOn"] = on
+    if on:
+        # The premise of the gate failing. Say it, loudly, in the row.
+        out["followerKeyForm"] = ("**ACTIVE in the definition on %s** — this "
+                                  "node IS in a committee and is not a "
+                                  "follower" % ", ".join(sorted(on)))
+        out["followerInNoCommittee"] = False
+    else:
+        out["followerKeyForm"] = "inactive in the definition"
+        out["followerInNoCommittee"] = True
+    return out
 
 
 def behind_summary(lines):
@@ -350,11 +471,19 @@ def behind_summary(lines):
     went silent for the second half of a run must not read as the best half
     of it.
     """
-    rows, unanswered = [], 0
+    rows, unanswered, marks = [], 0, []
     for ln in lines:
         p = ln.rstrip("\n").split(",")
         if len(p) < 6 or p[0] == "time":
             continue
+        # The monitor's own high-water mark, carried in every row since M4.
+        # A run directory written before that column exists has six fields;
+        # it stays readable and the report says which source it used.
+        if len(p) >= 7 and p[6] != "":
+            try:
+                marks.append((p[0], p[2], int(p[6])))
+            except ValueError:
+                pass
         if p[5] == "":
             unanswered += 1
             continue
@@ -365,14 +494,22 @@ def behind_summary(lines):
     if not rows:
         return {"measured": False, "samples": 0, "unanswered": unanswered,
                 "maxBehind": None, "maxAt": None, "maxPartition": None,
-                "endBehind": {},
+                "maxSource": None, "endBehind": {},
                 "why": "follower.csv carried no answered sample"}
     worst = max(rows, key=lambda r: r[3])
+    best = (worst[0], worst[2], worst[3])
+    source = "the largest of the samples written to follower.csv"
+    if marks:
+        # The mark is what the board showed, taken every tick rather than
+        # every write, so it is the one the manifest must state (M4).
+        m = max(marks, key=lambda x: x[2])
+        if m[2] >= best[2]:
+            best, source = m, "the monitor's high-water mark over every tick"
     last_ts = rows[-1][0]
     end = {r[2]: r[3] for r in rows if r[0] == last_ts}
     return {"measured": True, "samples": len(rows), "unanswered": unanswered,
-            "maxBehind": worst[3], "maxAt": worst[0], "maxPartition": worst[2],
-            "endBehind": end, "why": None}
+            "maxBehind": best[2], "maxAt": best[0], "maxPartition": best[1],
+            "maxSource": source, "endBehind": end, "why": None}
 
 
 def verdict(report, follower, validators, definition=None):
@@ -383,7 +520,8 @@ def verdict(report, follower, validators, definition=None):
             "committee": committee_check(report, follower, validators),
             "certificates": certificate_check(report, follower, validators),
             "drops": drop_check(report, follower, validators),
-            "definition": definition_check(definition)}
+            "definition": definition_check(definition,
+                                           report.key_prefix(follower))}
 
 
 ABSENT = "— not measured"
@@ -410,8 +548,11 @@ def rows(v):
         ("follower", "`%s`, partitions %s"
          % (v["follower"], ", ".join(v.get("partitions") or []) or ABSENT)),
         ("follower key in the NetworkDefinition",
-         _n(df["followerKeyForm"], df["measured"])
-         + ("" if df["measured"] else " (%s)" % df["why"])),
+         (df["followerKeyForm"] or ABSENT)
+         + ("" if df["followerKeyForm"] else " (%s)" % (df["why"] or ""))),
+        ("active validators per partition, from the NetworkDefinition",
+         ", ".join("%s %d" % kv for kv in sorted(df["active"].items()))
+         if df["measured"] else ABSENT),
         ("committee size per partition (validators, at genesis)",
          ", ".join("%s %d" % kv for kv in sorted(c["sizes"].items()))
          if c["measured"] else ABSENT + " (%s)" % c["why"]),
@@ -432,6 +573,10 @@ def rows(v):
          if first else ("none" if r["measured"] else ABSENT)),
         ("blocks the follower anchored that no validator had (#)",
          _n(r.get("uncompared"), r["measured"])),
+        ("anchor lines whose engine could not be determined (#)",
+         _n(r.get("ambiguous"))),
+        ("blocks where the follower contradicted itself (#)",
+         _n(len(r.get("conflicts") or []))),
         ("certificates refused for a non-committee author (#)",
          _n(ct["nonCommitteeAuthor"])),
         ("...of those, authored by the follower (#)", _n(ct["byFollower"])),
@@ -445,7 +590,8 @@ def rows(v):
     if b is not None:
         out += [
             ("follower behind the validators (blocks, max over the run)",
-             ("%d, at %s on %s" % (b["maxBehind"], b["maxAt"], b["maxPartition"]))
+             ("%d, at %s on %s — %s"
+              % (b["maxBehind"], b["maxAt"], b["maxPartition"], b["maxSource"]))
              if b["measured"] else ABSENT + " (%s)" % b["why"]),
             ("follower behind the validators (blocks, at the last sample)",
              ", ".join("%s %d" % kv for kv in sorted(b["endBehind"].items()))

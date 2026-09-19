@@ -129,27 +129,45 @@ class CsvRows(unittest.TestCase):
         v = soakmon.collect_follower({"Directory": 500, "BVN3": 499}, now=10.0)
         rows = soakmon.follower_csv_rows(v, "2026-09-19T18:00:00Z")
         self.assertEqual(2, len(rows))
-        self.assertEqual(["2026-09-19T18:00:00Z,acc-bvn3-fol1,BVN3,498,499,1",
-                          "2026-09-19T18:00:00Z,acc-bvn3-fol1,Directory,498,500,2"],
+        self.assertEqual(["2026-09-19T18:00:00Z,acc-bvn3-fol1,BVN3,498,499,1,1",
+                          "2026-09-19T18:00:00Z,acc-bvn3-fol1,Directory,498,500,2,2"],
                          rows)
 
     def test_an_unanswered_partition_writes_a_blank_not_a_zero(self):
         soakmon._read_ledger_index = lambda port, part: None
         v = soakmon.collect_follower({"Directory": 500, "BVN3": 499}, now=10.0)
         rows = soakmon.follower_csv_rows(v, "2026-09-19T18:00:00Z")
-        self.assertEqual("2026-09-19T18:00:00Z,acc-bvn3-fol1,Directory,,500,",
+        self.assertEqual("2026-09-19T18:00:00Z,acc-bvn3-fol1,Directory,,500,,",
                          rows[1], "an empty field, never a 0")
+
+    def test_the_high_water_mark_rides_along_in_every_row(self):
+        """M4: the board's `fmax` is a high-water mark over every tick
+        (I_HEIGHT = 1 s); the CSV is written every I_MEM = 30 s. A one-tick
+        excursion past the bound — what a five-minute gate exists to catch —
+        was red on the board and absent from the manifest, under the same
+        label. The mark travels in the row, so the two cannot disagree."""
+        soakmon._read_ledger_index = lambda port, part: 480
+        soakmon.collect_follower({"Directory": 500, "BVN3": 500}, now=10.0)
+        soakmon._read_ledger_index = lambda port, part: 600
+        v = soakmon.collect_follower({"Directory": 600, "BVN3": 600}, now=40.0)
+        rows = soakmon.follower_csv_rows(v, "2026-09-19T18:00:30Z")
+        # behind now is 0; the run's worst was 20 and the row still says so.
+        self.assertEqual("2026-09-19T18:00:30Z,acc-bvn3-fol1,BVN3,600,600,0,20",
+                         rows[0])
 
 
 class TheRowGroupIsOnTheBoard(unittest.TestCase):
     """The dashboard's own text, checked as text: the panel exists, the labels
     name the quantity and the window, and nothing says "not measured" as 0."""
 
-    PAGE = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             "soakmon.py")).read()
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "soakmon.py")) as _fh:
+        PAGE = _fh.read()
+    del _fh
 
     def test_the_panel_and_its_ids_exist(self):
-        for tag in ("<h4>follower", "id=fbehind", "id=fheight", "id=fmax"):
+        for tag in ("<h4>follower", "id=fbehind", "id=fheight", "id=fmax",
+                    "id=fres"):
             self.assertIn(tag, self.PAGE, tag)
 
     def test_the_labels_name_the_quantity_and_the_window(self):
@@ -157,7 +175,7 @@ class TheRowGroupIsOnTheBoard(unittest.TestCase):
         self.assertIn("behind (blocks, whole run)", self.PAGE)
 
     def test_every_follower_id_has_a_tooltip(self):
-        for tag in ("fbehind", "fheight", "fmax", "fstate"):
+        for tag in ("fbehind", "fheight", "fmax", "fstate", "fres"):
             self.assertIn(" %s:\"" % tag, self.PAGE,
                           "%s has no TIPS entry — undefined is the only "
                           "unacceptable state" % tag)
