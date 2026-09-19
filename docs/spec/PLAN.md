@@ -172,8 +172,9 @@ Spec: executor.md "Sync". Decided by Paul 2026-09-18: a starting node does not
 catch up through consensus. It validates the spine — the operators' key book
 and the anchors it signs — pulls the state that the verified anchor's root
 commits to, derives staging from that state, and executes from the block after
-the root matches. It serves nothing it cannot answer until its history is
-backfilled. The bootstrap-v3 work (`origin/bootstrap-v3`,
+the root matches. A syncing node rejects every request and serves once fully
+synced (Paul, 2026-09-19; what "fully synced" is on a line with no backfill
+is #4368). The bootstrap-v3 work (`origin/bootstrap-v3`,
 `origin/bootstrap-v3-merge-1.4.4`; epic #3985:
 `internal/core/bootstrap/{pull,enumerate,tracker,bptproof,nodestate,anchorsrc,…}`,
 `BptPageQuery`) is the state half, built on the CometBFT line and never on
@@ -281,7 +282,8 @@ and are left as they were written; two of their premises no longer hold.
    blocks it did not execute. Serving resumes when the node EXECUTES, not when
    its history is backfilled: there is no backfill on this line, so `COMPLETE`
    would mean a node that joined never answered again. The state is not
-   persisted and not advertised, and the v3 querier is not gated.
+   persisted and not advertised. (The v3 querier was not gated when this was
+   written; `servingFor` now refuses the two pull reads — DIFFERENCES E11.)
 
 **E11, second pass — the order and the gates for the validated-spine design**
 (2026-09-19). Phase 1's definition of done (Paul, 2026-09-19): "the network
@@ -374,6 +376,12 @@ this order because each one's gate needs the one before it:
    validator rejoining and Directory 12 of 12.
 4. **Serve last stays** — #4295's `NotReady` on `Submit`/`Validate` and on the
    two pull reads (#4297, #4307), `BOOTING → ACTIVE → COMPLETE` advertised.
+   *Gate:* #4368's named test — the spec says `COMPLETE` serves, the code
+   serves from `ACTIVE`, and `PromoteToComplete` has no production caller on
+   a line with no backfill; the serve-last builder confirms from the code
+   which of the two the spec means and it enters the protocol as their
+   statement. #4295's body is restated to the every-request rule or
+   superseded by #4368 (issue-manager).
    The two small defects that survive the deletions, #4355 (a successful join
    logged as an error) and #4356 (the ledger walk dead after 128 blocks),
    are fixed in passing here; #4359 (the `Expand:false` REST change) is
@@ -398,8 +406,11 @@ smaller than the first — most of it is removing what the first added — becau
 the spine, once validated, answers the questions the first pass built
 machinery to ask a peer.
 
-Order and gates: 1 and 3 in parallel (they share nothing); 2 on 1; 4 on all
-three, gated on `TestOneValidatorRestartDoesNotDiverge` with the interim pull
+*The first pass's order, kept as its record — superseded by the second pass
+above; `issue-4303-join-pulls-from-peers` (`c055da8e9`) and the fix set it
+names ARE merged into `dagbft-integration`, contrary to the last sentence
+below, which is left as written.* Order and gates: 1 and 3 in parallel (they
+share nothing); 2 on 1; 4 on all three, gated on `TestOneValidatorRestartDoesNotDiverge` with the interim pull
 removed and no Docker chaos run before it passes; 5 after 4; then **#4296**,
 a gate before any chaos run: a joining node must be able to find a validator
 to ask, and must refuse to execute when it found none — *delivered and
@@ -483,9 +494,10 @@ says so in minutes with evidence no amount of reasoning produces. The
 30-minute run decides whether either moves ahead of it; a stall on one is a
 promotion with evidence, which is the only kind to make.
 
-Done when: a soak with chaos restarts under load keeps every restarted
-validator agreeing on every anchor body, and #4205 closes. Required before
-chaos returns to the acceptance run.
+Done when: phase 1's acceptance — twelve hours at 100 tps with followers
+added and removed and validators restarted, every restarted validator
+agreeing on every anchor body throughout (E11 second pass) — and #4205
+closes. The restart-only wording this replaced predates 2026-09-19.
 
 ### #4214 — resolved: there was no loss
 
