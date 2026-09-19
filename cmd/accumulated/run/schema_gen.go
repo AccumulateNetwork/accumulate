@@ -522,6 +522,10 @@ func init() {
 					Elem:     schema.TypeReferenceFor[events.Bus](),
 				},
 			},
+			{
+				Name: "lastExecuted",
+				Type: schema.TypeReferenceFor[uint64](),
+			},
 		},
 	}).SetGoType()
 

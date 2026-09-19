@@ -70,12 +70,31 @@ func (block *Block) close() (execute.BlockState, error) {
 
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
-	mExecBlocks.Inc()
+	mExecBlocks.WithLabelValues(m.Describe.PartitionId).Inc()
+
+	// THE BLOCK THIS NODE'S OWN EXECUTOR HAS EXECUTED, recorded where nothing
+	// but this node's executor writes.
+	//
+	// The daemon used to take that number from `<partition>/ledger`, which is
+	// an ACCOUNT — and one of the accounts the join's pull fetches from a peer
+	// and settles into this store. So what the daemon read at start-up was
+	// whatever the previous process's pull left behind, not what this node
+	// executed, and the NoPeerHasStaging branch starts executing at it
+	// (#4344). SystemData is not an account and not in the BPT: no pull
+	// writes it, and writing it does not move the state root.
+	//
+	// It is written with the block, in the block's own batch, so it commits
+	// exactly when the block does. A crash between them cannot leave the
+	// record ahead of the state.
+	err := block.Batch.SystemData(m.Describe.PartitionId).ExecutedBlock().Put(block.Index)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("record this node's executed block: %w", err)
+	}
 
 	// Write each stream's advances to its ledger, once per stream (#4169 step
 	// 7). Before anything else reads or writes those records: production
 	// bumps Produced on the same ledger below.
-	err := block.flushStreams()
+	err = block.flushStreams()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("flush streams: %w", err)
 	}

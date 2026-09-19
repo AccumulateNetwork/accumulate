@@ -247,6 +247,22 @@ nodes take the same path, in this order:
    which on twelve nodes is a twenty-second race won by one arbitrary node per
    partition — not a start-up rule.
 
+   **The node's own last block is read from a record no pull writes.** It used
+   to be read from `<partition>/ledger`, and that is an *account* — one of the
+   accounts this step's pull fetches from a peer and settles into this store,
+   so what a restart read there was whatever the previous process's pull left
+   behind rather than what this node executed (#4344). The executor writes the
+   block it commits into `SystemData(partition).ExecutedBlock`, in the block's
+   own batch, so it commits exactly when the block does; the record is not an
+   account and is not in the state tree, so writing it does not move the root
+   and nothing a peer serves can reach it. The daemon reads it once, before
+   the join starts, and everything that depends on this node's own height —
+   whether it must join, the height it exports, and the block it begins
+   executing at when no peer has staging — uses that one number. A store
+   written before the record existed has none; it falls back to the ledger
+   once, at the first start, and the number is written into the record before
+   anything is pulled.
+
    The two cases this cannot tell apart are the first node of a **new network**
    and a node added to a **running partition** that holds nothing but genesis:
    both read block 1, and the daemon executes from genesis in both. The second

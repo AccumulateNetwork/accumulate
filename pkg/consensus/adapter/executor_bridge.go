@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
@@ -340,6 +341,12 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		m.WithLabelValues("process-failed").Add(float64(processFailed))
 		m.WithLabelValues("status-failed").Add(float64(statusFailed))
 		slog.Info("Block execution accounting",
+			// A node runs two partitions in one process and the line carried
+			// no partition, so the two chains' block numbers interleaved in
+			// one stream and anyone deriving a height from it was silently
+			// mixing them (#4345c). b.partitionID was already in scope four
+			// lines above.
+			"partition", b.partitionID,
 			"block", params.Index,
 			"round", params.LeaderRound,
 			"batches", len(params.Batches),
@@ -377,6 +384,16 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		return [32]byte{}, fmt.Errorf("commit block: %w", err)
 	}
 	phase("commit", t)
+
+	// THIS NODE'S OWN HEIGHT, on the wire, for this partition. Reported after
+	// the commit, because a block that did not commit was not executed.
+	//
+	// Nothing exported it before: the only per-node block numbers were
+	// process-wide counters summing two chains, so telling a wedged node from
+	// a healthy one meant two JSON-RPC calls per node per partition — and the
+	// obvious query is ROUTED, so a wedged node answers with a healthy peer's
+	// height (#4345b).
+	nodestate.ReportExecuted(b.partitionID, params.Index)
 
 	// Update our tracking. DidCompleteMajorBlock is recorded here because the
 	// closed block state is the only thing that knows, and it does not outlive

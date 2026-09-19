@@ -586,20 +586,25 @@ var (
 	// move, so the soak monitor calls it stalled. Neither says "idle". With
 	// both counters the answer is immediate — blocks climbing and empties
 	// climbing with them is an idle network, not a wedged one.
-	BlocksProducedTotal = promauto.NewCounter(prometheus.CounterOpts{
+	//
+	// Both are labelled by partition. A node runs the Directory AND a BVN in
+	// one process, so unlabelled they are one series summing two chains and
+	// nothing in the exposition says which blocks are whose (#4345b). The
+	// names are unchanged.
+	BlocksProducedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "blocks_produced_total",
-		Help:      "Blocks produced from committed certificates",
-	})
+		Help:      "Blocks produced from committed certificates, by partition",
+	}, []string{"partition"})
 
 	// BlocksEmptyTotal counts blocks whose certificate carried no batches.
-	BlocksEmptyTotal = promauto.NewCounter(prometheus.CounterOpts{
+	BlocksEmptyTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "blocks_empty_total",
-		Help:      "Blocks produced from a certificate with an empty payload (an idle network)",
-	})
+		Help:      "Blocks produced from a certificate with an empty payload (an idle network), by partition",
+	}, []string{"partition"})
 )
 
 // The batch plane's memory (consensus spec, invariants 1 and 4).

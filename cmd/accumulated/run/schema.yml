@@ -360,6 +360,11 @@ Service:
         - name: eventBus
           type: '*events.Bus'
           marshal-as: none
+        # The block THIS node's executor last executed, read once at start-up
+        # before the join's pull can write a peer's ledger over it (#4344).
+        - name: lastExecuted
+          type: uint64
+          marshal-as: none
       fields:
         - name: NodeDir
           type: string

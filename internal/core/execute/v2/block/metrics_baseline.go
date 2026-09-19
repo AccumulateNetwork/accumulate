@@ -36,12 +36,17 @@ var mExecPhaseSeconds = promauto.NewCounterVec(prometheus.CounterOpts{
 	Help:      "Wall time spent in ProcessAll by phase: serial (staging, drains, barrier envelopes) or parallel (shard flushes, including their serial commit)",
 }, []string{"phase"}) // serial | parallel
 
-var mExecBlocks = promauto.NewCounter(prometheus.CounterOpts{
+// mExecBlocks is labelled by partition because a node runs the Directory AND
+// a BVN in one process, so without the label it is one series summing two
+// chains: 5264 on acc-bvn1-val2 on 2026-09-18, and nothing in the exposition
+// said which blocks were whose (#4345b). The NAME is unchanged — a consumer
+// that sums the series over a node reads exactly what it read before.
+var mExecBlocks = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
 	Subsystem: "exec",
 	Name:      "blocks_total",
-	Help:      "Blocks closed by the executor",
-})
+	Help:      "Blocks closed by the executor, by partition",
+}, []string{"partition"})
 
 var mExecFlushes = promauto.NewCounter(prometheus.CounterOpts{
 	Namespace: "accumulate",
