@@ -105,7 +105,7 @@ bvns:
         bvnnType: "validator"
       # The follower (#4365). Same wiring as every node above — the same
       # image, the same CoreValidatorConfiguration, its own generated key —
-      # and `follower` for both engines, which is the ONE difference:
+      # and `follower` for both of its nodes, which is the ONE difference:
       # BuildGenesisDocs enters the key in the NetworkDefinition as INACTIVE
       # (internal/node/daemon/init.go:213-214,
       # `AddValidator(pubKey, part, node.DnnType == config.Validator)`), and

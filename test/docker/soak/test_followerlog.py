@@ -27,9 +27,10 @@ import followerlog
 FOL = "acc-bvn3-fol1"
 VALS = ["acc-bvn3-val1", "acc-bvn3-val2"]
 
-# Every node logs its own key, per engine, at Info (consensus.go:585) — 16 hex
-# characters of the raw public key, of which the author/pubkey fields elsewhere
-# carry the first 8 (vote_handler.go:552).
+# Each of a container's two nodes logs its own key at Info
+# (consensus.go:585) — 16 hex characters of the raw public key, of which the
+# author/pubkey fields elsewhere carry the first 8 (vote_handler.go:552). In
+# this network both nodes of a container run the same key.
 IDENT = [
     "acc-bvn3-val1  | 2026-09-19T18:00:00Z INFO Starting consensus node partition=BVN3 numWorkers=1 validatorKey=aaaa1111aaaa1111",
     "acc-bvn3-val1  | 2026-09-19T18:00:00Z INFO Starting consensus node partition=Directory numWorkers=1 validatorKey=aaaa1111aaaa1111",
@@ -39,7 +40,7 @@ IDENT = [
     "acc-bvn3-fol1  | 2026-09-19T18:00:00Z INFO Starting consensus node partition=Directory numWorkers=1 validatorKey=ffff9999ffff9999",
 ]
 
-# The committee each engine built at startup, at Info (dagbft.go:427).
+# The committee each node built at startup, at Info (dagbft.go:427).
 COMMITTEE = [
     "acc-bvn3-val1  | 2026-09-19T18:00:01Z INFO Extracted initial validators for DAG-BFT partition=BVN3 validators=4",
     "acc-bvn3-val1  | 2026-09-19T18:00:01Z INFO Extracted initial validators for DAG-BFT partition=Directory validators=12",
@@ -49,14 +50,23 @@ COMMITTEE = [
     "acc-bvn3-fol1  | 2026-09-19T18:00:01Z INFO Extracted initial validators for DAG-BFT partition=Directory validators=12",
 ]
 
-def anchor(node, ts, block, dest, root, bpt):
+def anchor(container, ts, block, source, dest, root, bpt):
+    """One `Sending an anchor` line as conductor.go:308 writes it, with the
+    `source` attribute #4370 added."""
+    return ("%s  | %s INFO Sending an anchor module=conductor block=%d "
+            "source=%s destination=%s seq=%d root=%s bpt=%s"
+            % (container, ts, block, source, dest, block, root, bpt))
+
+
+def anchor_no_source(container, ts, block, dest, root, bpt):
+    """The line as builds before #4370 write it: no source partition."""
     return ("%s  | %s INFO Sending an anchor module=conductor block=%d "
             "destination=%s seq=%d root=%s bpt=%s"
-            % (node, ts, block, dest, block, root, bpt))
+            % (container, ts, block, dest, block, root, bpt))
 
 
-# The REAL shape, from
-# runs/20260917T212457Z/node-logs-live.txt, acc-bvn1-val1, block 500:
+# The REAL shape, from runs/20260917T212457Z/node-logs-live.txt,
+# acc-bvn1-val1, block 500 (with `source` as #4370 adds it):
 #
 #   21:34:26Z ... destination=acc://bvn-BVN1.acme root=4597dc3a bpt=6fcdbe82
 #   21:34:26Z ... destination=acc://bvn-BVN2.acme root=4597dc3a bpt=6fcdbe82
@@ -64,42 +74,42 @@ def anchor(node, ts, block, dest, root, bpt):
 #   21:34:26Z ... destination=acc://dn.acme      root=4597dc3a bpt=6fcdbe82
 #   21:34:34Z ... destination=acc://dn.acme      root=96c2b37b bpt=d2ce8d05
 #
-# The Directory engine anchors to every partition INCLUDING ITSELF —
-# conductor.go:283-288 iterates Network.Partitions and init.go:203 seeds
-# that list with the Directory — so four of those five lines are the DN's
-# and only the last is the node's BVN engine. The fixture used to carry one
-# dn.acme line per node per block and call it the BVN's, which is why the
-# suite passed over a reader that filed half the Directory's anchors under
-# BVN3 (H1).
+# Paul, 2026-09-19: "There are no engines. Every container runs two nodes: a
+# DN node and a BVN node, in one process, sharing one log stream."
+# `acc-bvn1-val1` is a DN node plus a BVN1 node. The DN node anchors to every
+# partition INCLUDING dn.acme, itself; the BVN node anchors to dn.acme. So
+# four of those five lines are the DN node's and one is the BVN node's, and
+# the only thing in the line that says which is `source`.
 BVNS = ["BVN1", "BVN2", "BVN3"]
 
 
-def dn_engine(node, ts, block, root, bpt):
-    """The four lines one node's Directory engine logs for one DN block, at
-    one instant, with one (root, bpt)."""
-    return [anchor(node, ts, block, "acc://%s.acme" % d, root, bpt)
+def dn_node(container, ts, block, root, bpt, source="Directory"):
+    """The four lines a container's DN node logs for one DN block, at one
+    instant, with one (root, bpt)."""
+    return [anchor(container, ts, block, source, "acc://%s.acme" % d, root, bpt)
             for d in ["dn"] + ["bvn-%s" % b for b in BVNS]]
 
 
-def bvn_engine(node, ts, block, root, bpt):
-    """The one line a node's BVN engine logs for one BVN block."""
-    return [anchor(node, ts, block, "acc://dn.acme", root, bpt)]
+def bvn_node(container, ts, block, root, bpt, source="BVN3"):
+    """The one line a container's BVN node logs for one BVN block."""
+    return [anchor(container, ts, block, source, "acc://dn.acme", root, bpt)]
 
 
-def _run(nodes, blocks=3, dn_first=True):
-    """A log in the real shape: per node, per block, a DN self-anchor group
-    and a BVN anchor, with distinct roots."""
+def _run(containers, blocks=3):
+    """A log in the real shape: per container, per block, its DN node's
+    anchors and its BVN node's, with distinct roots."""
     out = []
-    for n in nodes:
+    for c in containers:
         for i in range(blocks):
-            # Both engines at the same block number, as this network runs
-            # them (reading-a-run.md: "both reach the same block numbers at
-            # the same second"), with their own roots.
-            d = dn_engine(n, "2026-09-19T18:01:%02d" % i, 100 + i,
-                          "dr%02d" % i, "db%02d" % i)
-            b = bvn_engine(n, "2026-09-19T18:01:%02d" % (i + 30), 100 + i,
-                           "r%02d" % i, "b%02d" % i)
-            out += (d + b) if dn_first else (b + d)
+            # Both nodes at the same block number, as this network runs them
+            # (reading-a-run.md: "both reach the same block numbers at the
+            # same second"), with their own roots. Nothing here depends on
+            # that any more — the source is read from the line — but the
+            # fixture should look like the log.
+            out += dn_node(c, "2026-09-19T18:01:%02d" % i, 100 + i,
+                           "dr%02d" % i, "db%02d" % i)
+            out += bvn_node(c, "2026-09-19T18:01:%02d" % (i + 30), 100 + i,
+                            "r%02d" % i, "b%02d" % i)
     return out
 
 
@@ -107,18 +117,18 @@ AGREE = _run(VALS + [FOL])
 
 
 class Identity(unittest.TestCase):
-    def test_each_node_states_its_own_key_per_engine(self):
+    def test_each_container_states_its_key_for_both_of_its_nodes(self):
         r = followerlog.read(IDENT)
         self.assertEqual({"BVN3": "ffff9999ffff9999",
                           "Directory": "ffff9999ffff9999"}, r.identities[FOL])
         self.assertEqual("ffff9999", r.key_prefix(FOL),
                          "author= and pubkey= carry eight hex characters")
 
-    def test_the_nodes_own_bvn_comes_from_the_log_not_the_name(self):
+    def test_the_containers_bvn_comes_from_the_log_not_the_name(self):
         r = followerlog.read(IDENT)
         self.assertEqual("BVN3", r.bvn_of(FOL))
 
-    def test_a_node_that_never_logged_its_key_has_none(self):
+    def test_a_container_that_never_logged_its_key_has_none(self):
         r = followerlog.read([])
         self.assertIsNone(r.key_prefix(FOL))
 
@@ -147,9 +157,9 @@ class Roots(unittest.TestCase):
 
     def test_one_differing_root_is_named_with_its_block(self):
         bad = list(AGREE)
-        bad += bvn_engine(FOL, "2026-09-19T18:02:00Z", 103,
+        bad += bvn_node(FOL, "2026-09-19T18:02:00Z", 103,
                           "DEAD", "b03")
-        bad += bvn_engine(VALS[0], "2026-09-19T18:02:00Z", 103,
+        bad += bvn_node(VALS[0], "2026-09-19T18:02:00Z", 103,
                           "r03", "b03")
         v = followerlog.compare_roots(followerlog.read(IDENT + bad), FOL, VALS)
         self.assertEqual(1, len(v["mismatches"]))
@@ -158,9 +168,9 @@ class Roots(unittest.TestCase):
 
     def test_a_differing_bpt_counts_too(self):
         bad = list(AGREE)
-        bad += bvn_engine(FOL, "2026-09-19T18:02:00Z", 104,
+        bad += bvn_node(FOL, "2026-09-19T18:02:00Z", 104,
                           "r04", "DEAD")
-        bad += bvn_engine(VALS[0], "2026-09-19T18:02:00Z", 104,
+        bad += bvn_node(VALS[0], "2026-09-19T18:02:00Z", 104,
                           "r04", "b04")
         v = followerlog.compare_roots(followerlog.read(IDENT + bad), FOL, VALS)
         self.assertEqual(1, len(v["mismatches"]))
@@ -179,111 +189,178 @@ class Roots(unittest.TestCase):
     def test_a_block_only_the_follower_anchored_is_not_compared(self):
         """The follower running a block ahead at the moment the log was cut is
         not a mismatch; it is a block with nothing to compare against."""
-        extra = AGREE + bvn_engine(FOL, "2026-09-19T18:03:00Z", 199, "r99", "b99")
+        extra = AGREE + bvn_node(FOL, "2026-09-19T18:03:00Z", 199, "r99", "b99")
         v = followerlog.compare_roots(followerlog.read(IDENT + extra), FOL, VALS)
         self.assertEqual([], v["mismatches"])
         self.assertEqual(6, v["compared"])
         self.assertEqual(1, v["uncompared"])
 
 
-class TheDirectoryAnchorsToItself(unittest.TestCase):
-    """H1. The Directory anchors to EVERY partition including itself, so a
-    `destination=acc://dn.acme` line is the node's BVN engine's only when it
-    is not one of the Directory's own four.
+class TwoNodesInOneLogStream(unittest.TestCase):
+    """H1, as Paul corrected it. Every container runs TWO NODES — a DN node
+    and a BVN node — in one process, sharing one log stream. The DN node
+    anchors to every partition including `dn.acme`, itself; the BVN node
+    anchors to `dn.acme`. So one container emits two different (root, bpt)
+    against `dn.acme` for the same block: two nodes, not two halves of one.
 
     Proven on runs/20260917T212457Z: acc-bvn1-val1 logged 1156 lines to each
-    BVN and 2316 to dn — 1156 DN self-anchors plus ~1160 BVN1 anchors — and
-    at block 500 it logged dn.acme twice, eight seconds apart, with
-    different roots. Filing both under the node's BVN, last write wins, can
-    report a mismatch on a block two nodes agree on, or agreement on a block
-    where they differ. Which of the two depends only on log order, which is
-    why the original suite passed.
+    BVN and 2316 to dn, and at block 500 logged dn.acme twice, eight seconds
+    apart, with different roots. Filing both under the container's BVN, last
+    write wins, reported a mismatch on a block two containers agree on, or
+    agreement on a block where they differ, according to log order.
+
+    The source is now on the line (`source=`, #4370) and is READ, never
+    inferred. The version of this reader that matched (root, bpt) values to
+    guess is gone: the emitter can identify itself, and a guess here would
+    have left the same ambiguity in the run-analyst's divergence verdict and
+    in reading-a-run.md's recipe.
     """
 
-    def test_the_dn_self_anchor_is_filed_under_the_directory(self):
-        lines = IDENT + dn_engine(FOL, "2026-09-19T18:00:26Z", 500,
-                                  "4597dc3a", "6fcdbe82") \
-                      + bvn_engine(FOL, "2026-09-19T18:00:34Z", 500,
-                                   "96c2b37b", "d2ce8d05")
+    def test_each_of_the_two_nodes_files_under_its_own_partition(self):
+        lines = IDENT + dn_node(FOL, "2026-09-19T18:00:26Z", 500,
+                                "4597dc3a", "6fcdbe82") \
+                      + bvn_node(FOL, "2026-09-19T18:00:34Z", 500,
+                                 "96c2b37b", "d2ce8d05")
         a = followerlog.read(lines).anchors[FOL]
         self.assertEqual(("4597dc3a", "6fcdbe82"), a[("Directory", 500)])
         self.assertEqual(("96c2b37b", "d2ce8d05"), a[("BVN3", 500)],
-                         "the node's own BVN engine, not the Directory's copy")
+                         "the container's BVN node, not the DN node's copy")
 
     def test_log_order_does_not_change_the_filing(self):
-        """The bug was last-write-wins over two lines that land on one key."""
-        early = dn_engine(FOL, "2026-09-19T18:00:26Z", 500, "DD", "DB")
-        late = bvn_engine(FOL, "2026-09-19T18:00:34Z", 500, "BB", "BP")
-        first = followerlog.read(IDENT + early + late).anchors[FOL]
-        second = followerlog.read(IDENT + late + early).anchors[FOL]
+        """The bug was last-write-wins over two lines that landed on one key."""
+        dn = dn_node(FOL, "2026-09-19T18:00:26Z", 500, "DD", "DB")
+        bvn = bvn_node(FOL, "2026-09-19T18:00:34Z", 500, "BB", "BP")
+        first = followerlog.read(IDENT + dn + bvn).anchors[FOL]
+        second = followerlog.read(IDENT + bvn + dn).anchors[FOL]
         self.assertEqual(first, second)
         self.assertEqual(("BB", "BP"), first[("BVN3", 500)])
 
-    def test_a_false_mismatch_is_not_produced_when_the_engines_interleave(self):
-        """The follower is precisely the node whose engine timing is expected
-        to differ. A validator with its DN line last and a follower with its
-        BVN line last agree on both partitions; the old model called it a
-        root mismatch on BVN3."""
-        v_lines = (bvn_engine(VALS[0], "2026-09-19T18:00:20Z", 500, "BB", "BP")
-                   + dn_engine(VALS[0], "2026-09-19T18:00:26Z", 500, "DD", "DB"))
-        f_lines = (dn_engine(FOL, "2026-09-19T18:00:26Z", 500, "DD", "DB")
-                   + bvn_engine(FOL, "2026-09-19T18:00:34Z", 500, "BB", "BP"))
+    def test_a_false_mismatch_is_not_produced_when_the_two_nodes_interleave(self):
+        """The follower is precisely the container whose two nodes are
+        expected to differ in timing. A validator with its DN line last and
+        a follower with its BVN line last agree on both partitions; the old
+        model called it a root mismatch on BVN3."""
+        v_lines = (bvn_node(VALS[0], "2026-09-19T18:00:20Z", 500, "BB", "BP")
+                   + dn_node(VALS[0], "2026-09-19T18:00:26Z", 500, "DD", "DB"))
+        f_lines = (dn_node(FOL, "2026-09-19T18:00:26Z", 500, "DD", "DB")
+                   + bvn_node(FOL, "2026-09-19T18:00:34Z", 500, "BB", "BP"))
         v = followerlog.compare_roots(
             followerlog.read(IDENT + v_lines + f_lines), FOL, VALS)
         self.assertEqual([], v["mismatches"],
-                         "both nodes agree on BVN3 500 and on Directory 500")
+                         "both agree on BVN3 500 and on Directory 500")
         self.assertEqual(2, v["compared"])
 
-    def test_a_real_bvn_divergence_is_not_hidden_by_the_dn_copy(self):
-        """The other half of the bug: with the DN line last on both nodes,
-        both (BVN3, 500) entries held the DIRECTORY's root, so a BVN3
-        divergence scored as agreement while `compared` climbed."""
-        v_lines = (bvn_engine(VALS[0], "2026-09-19T18:00:20Z", 500, "GOOD", "GP")
-                   + dn_engine(VALS[0], "2026-09-19T18:00:26Z", 500, "DD", "DB"))
-        f_lines = (bvn_engine(FOL, "2026-09-19T18:00:20Z", 500, "FORK", "FP")
-                   + dn_engine(FOL, "2026-09-19T18:00:26Z", 500, "DD", "DB"))
+    def test_a_real_bvn_divergence_is_not_hidden_by_the_dn_nodes_copy(self):
+        """The other half of the bug: with the DN line last on both, both
+        (BVN3, 500) entries held the DN NODE's root, so a BVN3 divergence
+        scored as agreement while `compared` climbed."""
+        v_lines = (bvn_node(VALS[0], "2026-09-19T18:00:20Z", 500, "GOOD", "GP")
+                   + dn_node(VALS[0], "2026-09-19T18:00:26Z", 500, "DD", "DB"))
+        f_lines = (bvn_node(FOL, "2026-09-19T18:00:20Z", 500, "FORK", "FP")
+                   + dn_node(FOL, "2026-09-19T18:00:26Z", 500, "DD", "DB"))
         v = followerlog.compare_roots(
             followerlog.read(IDENT + v_lines + f_lines), FOL, VALS)
         self.assertEqual(1, len(v["mismatches"]))
         self.assertEqual(("BVN3", 500), v["firstMismatch"][:2])
         self.assertEqual(("FORK", "FP"), v["firstMismatch"][2])
 
-    def test_the_engines_need_not_be_at_the_same_block(self):
-        """The rule is taken over the node's whole log, not over one block:
-        the two engines usually reach the same block number at the same
-        second, and "usually" is not a rule to file evidence by."""
-        lines = IDENT + dn_engine(FOL, "2026-09-19T18:00:26Z", 500, "DD", "DB") \
-                      + bvn_engine(FOL, "2026-09-19T18:00:34Z", 499, "BB", "BP")
+    def test_the_two_nodes_need_not_be_at_the_same_block(self):
+        """Nothing depends on that any more: the source is on the line."""
+        lines = IDENT + dn_node(FOL, "2026-09-19T18:00:26Z", 500, "DD", "DB") \
+                      + bvn_node(FOL, "2026-09-19T18:00:34Z", 499, "BB", "BP")
         a = followerlog.read(lines).anchors[FOL]
         self.assertEqual(("DD", "DB"), a[("Directory", 500)])
         self.assertEqual(("BB", "BP"), a[("BVN3", 499)])
 
-    def test_a_node_that_never_anchored_to_a_bvn_is_ambiguous(self):
-        """A log fragment that lost the Directory engine's lines: nothing in
-        it distinguishes the two engines, so it is counted and NOT compared —
-        never guessed (REPORTING-SPEC 1)."""
-        lines = IDENT + bvn_engine(FOL, "2026-09-19T18:00:34Z", 777, "X", "Y")
-        r = followerlog.read(lines)
-        self.assertEqual({}, r.anchors.get(FOL, {}))
-        self.assertEqual(1, r.ambiguous.get(FOL))
-
-    def test_the_directorys_own_copies_agree_with_each_other(self):
-        """Four lines, one key: they carry identical values by construction,
-        so this must not read as the node contradicting itself."""
-        r = followerlog.read(IDENT + dn_engine(FOL, "2026-09-19T18:00:26Z",
-                                               500, "DD", "DB"))
+    def test_the_dn_nodes_four_copies_are_one_reading(self):
+        """Four lines, one (source, block): identical by construction, so
+        this must not read as the node contradicting itself."""
+        r = followerlog.read(IDENT + dn_node(FOL, "2026-09-19T18:00:26Z",
+                                             500, "DD", "DB"))
         self.assertEqual([], r.conflicts)
+        self.assertEqual(1, len(r.anchors[FOL]))
 
     def test_a_node_that_contradicts_itself_is_a_finding(self):
-        """Two different values for one (node, partition, block) is not
-        something log order should silently resolve."""
+        """Two values for one (container, source, block) is not something
+        log order should silently resolve."""
         lines = (IDENT
-                 + dn_engine(FOL, "2026-09-19T18:00:26Z", 500, "DD", "DB")
-                 + [anchor(FOL, "2026-09-19T18:00:27Z", 500,
+                 + dn_node(FOL, "2026-09-19T18:00:26Z", 500, "DD", "DB")
+                 + [anchor(FOL, "2026-09-19T18:00:27Z", 500, "Directory",
                            "acc://bvn-BVN1.acme", "OTHER", "DB")])
         r = followerlog.read(lines)
         self.assertEqual(1, len(r.conflicts))
         self.assertEqual((FOL, "Directory", 500), r.conflicts[0][:3])
+
+
+class TheSourceValue(unittest.TestCase):
+    """#4370 logs `c.Partition.ID`, a bare id. A partition URL is accepted
+    and reduced to the id as well, so this reader does not break if the
+    emitter is later changed to log the URL — the id is what every other
+    reading here is keyed by."""
+
+    def test_the_bare_partition_id(self):
+        r = followerlog.read(IDENT + bvn_node(FOL, "T", 9, "R", "B",
+                                              source="BVN3"))
+        self.assertIn(("BVN3", 9), r.anchors[FOL])
+
+    def test_the_directory_id(self):
+        r = followerlog.read(IDENT + dn_node(FOL, "T", 9, "R", "B",
+                                             source="Directory"))
+        self.assertIn(("Directory", 9), r.anchors[FOL])
+
+    def test_a_partition_url_is_reduced_to_the_id(self):
+        r = followerlog.read(
+            IDENT + bvn_node(FOL, "T", 9, "R", "B", source="acc://bvn-BVN3.acme")
+            + dn_node(FOL, "T", 8, "R2", "B2", source="acc://dn.acme"))
+        self.assertIn(("BVN3", 9), r.anchors[FOL])
+        self.assertIn(("Directory", 8), r.anchors[FOL])
+
+    def test_an_empty_source_is_no_source(self):
+        line = ("%s  | T INFO Sending an anchor module=conductor block=9 "
+                'source="" destination=acc://dn.acme seq=9 root=R bpt=B' % FOL)
+        r = followerlog.read(IDENT + [line])
+        self.assertEqual({}, r.anchors.get(FOL, {}))
+        self.assertEqual(1, r.sourceless[FOL])
+
+
+class WithoutTheSourceAttribute(unittest.TestCase):
+    """A log from a build before #4370. The reader does NOT guess."""
+
+    OLD = [anchor_no_source(FOL, "2026-09-19T18:00:26Z", 500,
+                            "acc://dn.acme", "DD", "DB"),
+           anchor_no_source(FOL, "2026-09-19T18:00:34Z", 500,
+                            "acc://dn.acme", "BB", "BP")]
+
+    def test_the_lines_are_counted_and_never_filed(self):
+        r = followerlog.read(IDENT + self.OLD)
+        self.assertEqual({}, r.anchors.get(FOL, {}))
+        self.assertEqual(2, r.sourceless[FOL])
+
+    def test_the_root_section_is_not_measured_and_names_the_issue(self):
+        v = followerlog.compare_roots(followerlog.read(IDENT + self.OLD),
+                                      FOL, VALS)
+        self.assertFalse(v["measured"])
+        self.assertEqual(0, v["compared"])
+        self.assertIn("#4370", v["why"])
+        self.assertIn("no source partition", v["why"])
+
+    def test_it_is_told_apart_from_a_follower_that_logged_nothing(self):
+        """Two different facts: a build that cannot say which node sent a
+        line, and a follower that sent none. The second names the v3 API
+        fallback; the first must not, because the lines are there."""
+        silent = followerlog.compare_roots(followerlog.read(IDENT), FOL, VALS)
+        self.assertIn("logged no anchor line", silent["why"])
+        self.assertIn("v3 API", silent["why"])
+        old = followerlog.compare_roots(followerlog.read(IDENT + self.OLD),
+                                        FOL, VALS)
+        self.assertNotIn("v3 API", old["why"])
+
+    def test_the_row_says_how_many_lines_had_no_source(self):
+        v = followerlog.verdict(followerlog.read(IDENT + self.OLD),
+                                FOL, VALS, None)
+        text = followerlog.render(v)
+        self.assertIn("anchor lines carrying no source partition (#4370) (#) | 2",
+                      text)
 
 
 class Committee(unittest.TestCase):

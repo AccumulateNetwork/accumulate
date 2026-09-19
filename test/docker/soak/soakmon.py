@@ -756,7 +756,8 @@ def parse_prom(text):
             continue
 
 
-# On-disk database size per node, both engines (dnn + bvnn), in KiB — read in
+# On-disk database size per container, both of its nodes (dnn + bvnn), in
+# KiB — read in
 # the same per-container thread as the metrics scrape. The first non-empty
 # sample is kept so growth can be reported as MiB per hour over the run.
 _DISK = {}
@@ -2196,7 +2197,7 @@ const bytes=v=>(v==null?'—':v<1024?fmt(v)+' B':v<1048576?(v/1024).toFixed(1)+'
   $('nrssavg').textContent=mib(ns.rssAvgMiB); $('nrssmax').textContent=mib(ns.rssMaxMiB);
   $('nrssmin').textContent=mib(ns.rssMinMiB);
   $('nrssnode').textContent=ns.rssMaxNode?('max '+ns.rssMaxNode):'';
-  // Database size on disk: both engines per node, summed. Growth is MiB/hour
+  // Database size on disk: both of a container's nodes, summed. Growth is MiB/hour
   // since the first sample, so a run's disk appetite is a number, not a
   // guess from the docker volume at teardown.
   const db=ns.disk||{};

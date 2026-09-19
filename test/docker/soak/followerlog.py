@@ -12,11 +12,11 @@ log the run already captures, plus the NetworkDefinition it captures before
 load starts:
 
 1. **Does it compute the same state?** Every node's conductor logs
-   ``Sending an anchor`` per block at Info, with ``root`` and ``bpt``
-   (conductor.go:308) — the same line `reading-a-run.md` uses for a
-   divergence. Compare the follower's against any validator's, per
-   (partition, block).
-2. **Is its key in any committee?** Each engine logs the committee it built
+   ``Sending an anchor`` per block at Info, with ``source``, ``root`` and
+   ``bpt`` (conductor.go:308; ``source`` since #4370) — the same line
+   `reading-a-run.md` uses for a divergence. Compare the follower's against
+   any validator's, per (source partition, block).
+2. **Is its key in any committee?** Each node logs the committee it built
    at Info (``Extracted initial validators for DAG-BFT``, dagbft.go:427) and
    every later change (``Validator added``, certificate_handler.go:379).
 3. **Did any validator ever see a certificate it authored?**
@@ -26,40 +26,30 @@ load starts:
    says whether the follower's key is in it and inactive, or not in it at
    all. The manifest has to record which.
 
-**Never compare without the partition, and the destination is not the
-partition.** Every container runs a BVN engine and a Directory engine, both
-reach the same block numbers at the same second, and the log line carries a
-destination but not its source. The obvious rule — "a line addressed to
-dn.acme came from this node's BVN" — is WRONG, and reading it that way is
-H1: `conductor.go:283-288` iterates `Network.Partitions`, which
-`init.go:203` seeds with the Directory, so **the Directory anchors to
-itself as well as to every BVN**. On run 20260917T212457Z, acc-bvn1-val1
-logged 1156 lines to each BVN and 2316 to dn — 1156 Directory
-self-anchors plus ~1160 BVN1 anchors — and at block 500 it logged dn.acme
-twice, eight seconds apart, with different roots. Filing both under the
-node's BVN, last write wins, reports a mismatch on a block two nodes agree
-on, or agreement on a block where they differ, depending on log order.
+**Never compare without the partition, and read it from the line.** Every
+container runs **two nodes** — a DN node and a BVN node — in one process,
+sharing one log stream (Paul, 2026-09-19: *"There are no engines. Every
+container runs two nodes: a DN node and a BVN node, in one process, sharing
+one log stream."*). `acc-bvn1-val1` is a DN node plus a BVN1 node. The DN
+node anchors to every partition **including `dn.acme`, itself**; the BVN
+node anchors to `dn.acme`. So one container emits two different
+`(root, bpt)` against `destination=acc://dn.acme` for the same block —
+two nodes, not two halves of one — proven on run `20260917T212457Z`,
+`acc-bvn1-val1`, block 500: `root=4597dc3a bpt=6fcdbe82` at 21:34:26Z and
+`root=96c2b37b bpt=d2ce8d05` at 21:34:34Z.
 
-The rule used here: **only the Directory anchors to a BVN**, so every
-`(root, bpt)` a node addressed to a BVN — anywhere in the log — is one its
-Directory engine computed. A `dn.acme` line carrying one of those values is
-that engine's copy to itself; a `dn.acme` line carrying a value the node
-never sent to a BVN is its own BVN engine's. The set is taken over the
-node's whole log rather than over the one block, because the two engines
-need not be at the same block number at the moment either of them anchors —
-`reading-a-run.md` says they usually are, and "usually" is not a rule to
-file evidence by.
+The line therefore has to say which node sent it, and since #4370 it does:
+`source=<partition id>` (`Directory`, `BVN1`, …). Anchors are grouped by
+`(source, destination, block)` read from the line — **no inference**. An
+earlier version of this reader guessed the source by matching a `dn.acme`
+line's `(root, bpt)` against the same container's `bvn-*` lines; the guess
+was removable because the emitter can simply identify itself, and a
+heuristic in this one tool would have left the same ambiguity in the
+run-analyst's divergence verdict and in `reading-a-run.md`'s recipe.
 
-A `dn.acme` line from a node that never addressed a BVN at all — a log
-fragment that lost the Directory engine's lines — is **ambiguous**: nothing
-in it separates the two engines. Those are counted and not compared, never
-guessed, and the count is a row. The values are `(root, bpt)` together,
-eight bytes, so two engines of one node colliding on both is not a case
-worth designing for; the conflict detector below would catch its
-consequence anyway.
-
-A `partition` attribute on that log line would make all of this
-unnecessary; that is Go, and it is the lead's.
+A log whose anchor lines carry no `source` — anything built before #4370 —
+is **not compared**: the root section renders `— not measured` and names
+the issue. It does not fall back to the guess.
 
 **What this cannot see, and says so.** ``Header from unknown validator``
 (vote_handler.go:284), ``Vote from unknown validator`` (:35) and
@@ -104,7 +94,10 @@ _KV = re.compile(r'(\w+)=("[^"]*"|\S+)')
 
 
 def parse(lines):
-    """Yield (node, ts, event, fields) for every line this reader knows."""
+    """Yield (container, ts, event, fields) for every line this reader knows.
+
+    The first field is the log's line prefix, which is the CONTAINER — it
+    runs two nodes, a DN node and a BVN node, sharing this one stream."""
     for raw in lines:
         line = ANSI.sub("", raw.rstrip("\n"))
         m = _MSG_RE.match(line)
@@ -125,81 +118,73 @@ def _int(f, key):
         return None
 
 
-def _is_dn_destination(dest):
-    d = (dest or "").lower()
-    return "//dn." in d or d.endswith("//dn.acme")
+def _anchor_source(f):
+    """The partition that produced this anchor, from the line's own
+    `source` attribute (#4370). None when the build predates it.
 
-
-def _is_bvn_destination(dest):
-    return "bvn-" in (dest or "").lower()
-
-
-AMBIGUOUS = object()
-
-
-def _source_of(dest, own_bvn, dn_values, value):
-    """The partition that PRODUCED this anchor line. See the module docstring.
-
-    `dn_values` is every (root, bpt) this node addressed to a BVN anywhere in
-    the log — its Directory engine's, because only the Directory anchors to a
-    BVN. Returns a partition id, None (a destination this reader does not
-    understand), or AMBIGUOUS.
+    #4370 logs `c.Partition.ID`, so the value is a bare partition id —
+    `Directory`, `BVN1`. A partition URL is accepted too and reduced to the
+    id, so that this reader is not broken by the emitter being changed to
+    log `protocol.PartitionUrl(...)` instead; the id is what every other
+    reading in this file is keyed by.
     """
-    if _is_bvn_destination(dest):
-        return "Directory"
-    if not _is_dn_destination(dest):
+    src = (f.get("source") or "").strip()
+    if not src:
         return None
-    if value in dn_values:
-        return "Directory"          # the Directory's copy to itself
-    if dn_values:
-        return own_bvn              # this node's BVN engine
-    return AMBIGUOUS                # this node never anchored to a BVN
+    if "//" in src:                       # acc://dn.acme, acc://bvn-BVN1.acme
+        host = src.split("//", 1)[1].split(".")[0]
+        return "Directory" if host.lower() == "dn" else host.replace("bvn-", "")
+    return src
 
 
 class Report:
     """Everything the log said, indexed by what the gate asks of it."""
 
     def __init__(self):
-        self.identities = {}        # node -> {partition: 16-hex key}
-        self.committees = {}        # (node, partition) -> size
-        self.anchors = {}           # node -> {(partition, block): (root, bpt)}
-        self.invalid = []           # (node, ts, author, error)
-        self.changes = []           # (node, ts, kind, pubkey)
-        self.drops = {"header": {}, "vote": {}}   # kind -> {node: count}
+        # Keyed by CONTAINER — the log's line prefix. A container runs two
+        # nodes, a DN node and a BVN node, so a container is not a node and
+        # the two words are kept apart here deliberately.
+        self.identities = {}        # container -> {partition: 16-hex key}
+        self.committees = {}        # (container, partition) -> size
+        self.anchors = {}           # container -> {(source, block): (root, bpt)}
+        self.invalid = []           # (container, ts, author, error)
+        self.changes = []           # (container, ts, kind, pubkey)
+        self.drops = {"header": {}, "vote": {}}   # kind -> {container: count}
         self.sawDropLine = False
-        # dn.acme lines at a block where the node logged no bvn-* line: the
-        # two engines cannot be told apart there, so they are counted and
-        # not filed (H1).
-        self.ambiguous = {}         # node -> count
-        # One (node, partition, block) given two different values. Log order
-        # used to decide this silently; it is a finding.
-        self.conflicts = []         # (node, partition, block, first, second)
+        # Anchor lines with no `source` attribute: a build before #4370.
+        # Counted and NOT filed — the container's two nodes cannot be told
+        # apart without it, and this reader does not guess.
+        self.sourceless = {}        # container -> count
+        # One (container, source, block) given two different values. Log
+        # order used to decide this silently; it is a finding.
+        self.conflicts = []         # (container, source, block, first, second)
 
     # -- identity -------------------------------------------------------
-    def key_prefix(self, node):
+    def key_prefix(self, container):
         """The eight hex characters that `author=` and `pubkey=` carry.
 
-        `hexEncode` (vote_handler.go:552) is the first 8 characters of
+        Both of a container's nodes run with the same key here, so one value
+        is the container's. `hexEncode` (vote_handler.go:552) is the first 8 characters of
         `HeaderDigest(key).String()`, and HeaderDigest is a cast of the
         32-byte public key, not a hash of it — so it is the key's own hex,
         and the 16 characters a node logs for itself share that prefix.
         """
-        ids = self.identities.get(node)
+        ids = self.identities.get(container)
         if not ids:
             return None
         return sorted(ids.values())[0][:8]
 
-    def bvn_of(self, node):
-        """The node's own BVN, taken from what it logged rather than from its
-        container name."""
-        for p in self.identities.get(node, {}):
+    def bvn_of(self, container):
+        """The partition of the container's BVN node, taken from what it
+        logged rather than from its container name."""
+        for p in self.identities.get(container, {}):
             if p != "Directory":
                 return p
-        m = re.match(r"acc-(bvn\d+)-", node or "")
+        m = re.match(r"acc-(bvn\d+)-", container or "")
         return m.group(1).upper() if m else None
 
-    def anchor_blocks(self, node):
-        return list(self.anchors.get(node, {}))
+    def anchor_blocks(self, container):
+        return list(self.anchors.get(container, {}))
 
 
 def read(lines):
@@ -216,68 +201,65 @@ def read(lines):
     """
     r = Report()
     pending = []
-    for node, ts, ev, f in parse(lines):
+    for container, ts, ev, f in parse(lines):
         if ev == "anchor":
-            pending.append((node, f))
+            pending.append((container, f))
             continue
         if ev == "identity":
             part = f.get("partition")
             key = f.get("validatorKey")
             if part and key:
-                r.identities.setdefault(node, {})[part] = key
+                r.identities.setdefault(container, {})[part] = key
         elif ev == "committee":
             n = _int(f, "validators")
             part = f.get("partition")
             if part and n is not None:
-                r.committees[(node, part)] = n
+                r.committees[(container, part)] = n
         elif ev in ("validator-added", "validator-removed"):
-            r.changes.append((node, ts, ev.split("-")[1], f.get("pubkey")))
+            r.changes.append((container, ts, ev.split("-")[1], f.get("pubkey")))
         elif ev == "invalid-cert":
-            r.invalid.append((node, ts, f.get("author"), f.get("error", "")))
+            r.invalid.append((container, ts, f.get("author"), f.get("error", "")))
         elif ev == "header-drop":
             r.sawDropLine = True
-            r.drops["header"][node] = r.drops["header"].get(node, 0) + 1
+            r.drops["header"][container] = r.drops["header"].get(container, 0) + 1
         elif ev == "vote-drop":
             r.sawDropLine = True
-            r.drops["vote"][node] = r.drops["vote"].get(node, 0) + 1
-    # Anchors are resolved after the pass — they need each node's own BVN,
-    # from its identity line, AND every line of their own (node, block)
-    # group, because which engine logged a dn.acme line is decided by the
-    # bvn-* lines beside it (H1). The input is still read exactly once.
-    # What each node's DIRECTORY engine computed, over the whole log: every
-    # value the node addressed to a BVN. Only the Directory anchors to a BVN.
-    dn_values = {}
-    for node, f in pending:
-        if _is_bvn_destination(f.get("destination")):
-            dn_values.setdefault(node, set()).add((f.get("root"), f.get("bpt")))
-
-    groups = OrderedDict()
-    for node, f in pending:
+            r.drops["vote"][container] = r.drops["vote"].get(container, 0) + 1
+    # Anchors are resolved after the pass, because they need each
+    # container's identity lines. Grouped by (source, destination, block)
+    # read from the line itself (#4370) — the source partition is stated,
+    # never inferred.
+    seen = OrderedDict()
+    for container, f in pending:
         blk = _int(f, "block")
         if blk is None:
             continue
-        groups.setdefault((node, blk), []).append(f)
+        src = _anchor_source(f)
+        if src is None:
+            # A build before #4370. The container's DN node and BVN node
+            # both address dn.acme, so without `source` there is nothing in
+            # the line that separates them. Counted; not filed; not guessed.
+            r.sourceless[container] = r.sourceless.get(container, 0) + 1
+            continue
+        value = (f.get("root"), f.get("bpt"))
+        key = (container, src, f.get("destination"), blk)
+        prev = seen.get(key)
+        if prev is not None and prev != value:
+            r.conflicts.append((container, src, blk, prev, value))
+            continue
+        seen[key] = value
 
-    for (node, blk), lines in groups.items():
-        own = r.bvn_of(node)
-        mine = dn_values.get(node, set())
-        for f in lines:
-            value = (f.get("root"), f.get("bpt"))
-            part = _source_of(f.get("destination"), own, mine, value)
-            if part is AMBIGUOUS:
-                r.ambiguous[node] = r.ambiguous.get(node, 0) + 1
-                continue
-            if part is None:
-                continue
-            slot = r.anchors.setdefault(node, {})
-            prev = slot.get((part, blk))
-            if prev is not None and prev != value:
-                # The Directory's four copies are identical by construction,
-                # so this is the node contradicting itself — not something
-                # log order should quietly resolve.
-                r.conflicts.append((node, part, blk, prev, value))
-                continue
-            slot[(part, blk)] = value
+    # The DN node sends the same anchor to every partition, so one
+    # (source, block) arrives once per destination with identical values.
+    # Two destinations of one source disagreeing is the node contradicting
+    # itself — not something log order should quietly resolve.
+    for (container, src, _dest, blk), value in seen.items():
+        slot = r.anchors.setdefault(container, {})
+        prev = slot.get((src, blk))
+        if prev is not None and prev != value:
+            r.conflicts.append((container, src, blk, prev, value))
+            continue
+        slot[(src, blk)] = value
     return r
 
 
@@ -292,14 +274,21 @@ def compare_roots(report, follower, validators):
     validator at the same ledger index.
     """
     mine = report.anchors.get(follower, {})
+    sourceless = report.sourceless.get(follower, 0)
+    base = {"measured": False, "compared": 0, "uncompared": 0,
+            "mismatches": [], "firstMismatch": None,
+            "sourceless": sourceless,
+            "conflicts": [c for c in report.conflicts if c[0] == follower]}
+    if not mine and sourceless:
+        # Every anchor line it logged predates #4370. Comparing them would
+        # mean guessing which of the container's two nodes sent each one,
+        # and a guess in a root verdict is worse than no verdict.
+        return dict(base, why="anchor lines carry no source partition; #4370")
     if not mine:
-        return {"measured": False, "compared": 0, "uncompared": 0,
-                "mismatches": [], "firstMismatch": None,
-                "ambiguous": report.ambiguous.get(follower, 0),
-                "conflicts": [c for c in report.conflicts if c[0] == follower],
-                "why": "the follower logged no anchor line — fall back to the "
-                       "v3 API on the follower and a validator at the same "
-                       "ledger index (query with includeReceipt)"}
+        return dict(base, why="the follower logged no anchor line — fall back "
+                              "to the v3 API on the follower and a validator "
+                              "at the same ledger index (query with "
+                              "includeReceipt)")
     theirs = {}
     for v in validators:
         for k, val in report.anchors.get(v, {}).items():
@@ -315,13 +304,13 @@ def compare_roots(report, follower, validators):
             bad.append((part, blk, mine[(part, blk)], ref, who))
     return {"measured": True, "compared": compared, "uncompared": uncompared,
             "mismatches": bad, "firstMismatch": bad[0] if bad else None,
-            "ambiguous": report.ambiguous.get(follower, 0),
+            "sourceless": sourceless,
             "conflicts": [c for c in report.conflicts if c[0] == follower],
             "why": None}
 
 
 def committee_check(report, follower, validators):
-    """The committee every engine built, and every change to one during the run.
+    """The committee every node built, and every change to one during the run.
 
     The follower is excluded when: every node that reported a size for a
     partition reported the SAME size, and the follower's key was never added
@@ -330,11 +319,11 @@ def committee_check(report, follower, validators):
     otherwise be measured against.
     """
     sizes, disagree = {}, {}
-    for (node, part), n in report.committees.items():
+    for (container, part), n in report.committees.items():
         seen = sizes.setdefault(part, n)
         if seen != n:
             disagree.setdefault(part, set()).add(seen)
-            disagree[part].add(n)
+            disagree[part].add(n)  # two nodes of one partition disagreeing
     if not sizes:
         return {"measured": False, "sizes": {}, "disagree": {},
                 "addedDuringRun": [], "followerExcluded": None,
@@ -355,8 +344,8 @@ def certificate_check(report, follower, validators):
     key = report.key_prefix(follower)
     non_committee = [c for c in report.invalid if "not in committee" in (c[3] or "")]
     by_val = {}
-    for node, _, _, _ in non_committee:
-        by_val[node] = by_val.get(node, 0) + 1
+    for container, _, _, _ in non_committee:
+        by_val[container] = by_val.get(container, 0) + 1
     mine = [c for c in non_committee if key and (c[2] or "").startswith(key)]
     return {"measured": True,
             "nonCommitteeAuthor": len(non_committee),
@@ -385,8 +374,8 @@ def drop_check(report, follower, validators):
     vd = sum(report.drops["vote"].values())
     by = {}
     for kind in ("header", "vote"):
-        for node, n in report.drops[kind].items():
-            by.setdefault(node, {})[kind] = n
+        for container, n in report.drops[kind].items():
+            by.setdefault(container, {})[kind] = n
     return {"measured": True, "headerDrops": hd, "voteDrops": vd,
             "byValidator": by, "why": None}
 
@@ -573,8 +562,8 @@ def rows(v):
          if first else ("none" if r["measured"] else ABSENT)),
         ("blocks the follower anchored that no validator had (#)",
          _n(r.get("uncompared"), r["measured"])),
-        ("anchor lines whose engine could not be determined (#)",
-         _n(r.get("ambiguous"))),
+        ("anchor lines carrying no source partition (#4370) (#)",
+         _n(r.get("sourceless"))),
         ("blocks where the follower contradicted itself (#)",
          _n(len(r.get("conflicts") or []))),
         ("certificates refused for a non-committee author (#)",

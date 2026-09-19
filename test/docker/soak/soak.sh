@@ -552,7 +552,8 @@ echo "   chaos: armed (every ~${CHAOS_MIN}s + jitter; first event follows the fi
   # partitions and every node gets its turn before any node gets a second. A
   # random draw with replacement put three of four disturbances on BVN3 in
   # the first hour of 20260917T223150Z and none on BVN1; Paul: "that isn't
-  # testing very much". Every validator runs the Directory as well, so the
+  # testing very much". Every container runs a DN node as well as its BVN
+  # node, so the
   # Directory is disturbed by every event. The kind alternates restart, pause,
   # and flips on each full cycle so a node sees both over a run. A no-op slot
   # is CHAOS_SKIP_ONE_IN=N (every Nth slot; 0, the default, never): it used to

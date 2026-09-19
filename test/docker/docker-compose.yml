@@ -13,7 +13,8 @@
 # since Bullshark commits a leader every other round.
 #
 # Cut from 3 BVNs to 2 on 2026-08-25 (chasing 1000 tx/s on a single 24-core
-# host: 12 dual-engine validators left too little CPU per node and every rate
+# host: 12 containers each running two nodes left too little CPU per node,
+# and every rate
 # above ~60 tx/s collapsed), and back to 3 since. The topology is a real
 # multi-partition network — DN + BVN1 + BVN2 + BVN3 — so cross-partition
 # synthetics and anchors are exercised in both directions.

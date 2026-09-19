@@ -205,7 +205,7 @@ class FollowerTest(unittest.TestCase):
                          "init names directories by position among ALL nodes")
         self.assertEqual(B + 4, fols[0]["port"])
         self.assertEqual(["Directory", "BVN2"], fols[0]["partitions"],
-                         "every node runs the Directory as well as its BVN")
+                         "a container runs two nodes, a DN one and a BVN one")
 
     def test_the_loadgen_and_the_height_read_see_validators_only(self):
         self.assertEqual([B, B + 1, B + 2, B + 3], topology.node_ports(self.f))

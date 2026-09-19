@@ -151,10 +151,11 @@ def read_txn(s):
 def follower_targets(reservoir, follower):
     """The sampled entries a follower can answer for FROM ITS OWN STORE.
 
-    A follower runs the Directory and its own BVN, like every node here. Ask
-    it for another BVN's entry and the router fetches it from a node of that
-    BVN, so the read measures the router and the peer, not the follower —
-    and a follower that answered nothing would still score a clean sheet.
+    A follower container runs two nodes, a DN one and a BVN one, like every
+    container here. Ask it for another BVN's entry and the router fetches it
+    from a node of that BVN, so the read measures the router and the peer,
+    not the follower — and a follower that answered nothing would still
+    score a clean sheet.
     """
     parts = set(follower["partitions"])
     return [s for s in reservoir if s["partition"] in parts]

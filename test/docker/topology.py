@@ -102,8 +102,9 @@ def node_records(path=None):
                     the node's own role so adding a follower renumbers no
                     validator
     ``port``        the host port the compose publishes its API on
-    ``partitions``  the partitions this node serves — the Directory and its
-                    own BVN, because every node in this network runs both
+    ``partitions``  the partitions this container serves — the Directory and
+                    its own BVN, because every container here runs TWO NODES,
+                    a DN node and a BVN node, in one process
     ``peerAddress`` as declared, or None
 
     Everything else in this module is a projection of this list. It used to be
@@ -197,9 +198,10 @@ def node_count(path=None):
 def partitions(path=None):
     """Every partition, Directory first — the DN is a partition too.
 
-    The DN is not declared in the `bvns:` list, but every node here runs a DN
-    engine alongside its BVN engine, so the Directory is as real a partition
-    as any BVN and is the one whose stall matters most.
+    The DN is not declared in the `bvns:` list, but every container here runs
+    TWO NODES — a DN node and a BVN node, in one process sharing one log
+    stream — so the Directory is as real a partition as any BVN and is the one
+    whose stall matters most.
     """
     return ["Directory"] + bvns(path)
 
