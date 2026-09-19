@@ -383,6 +383,10 @@ func (n nodeOpts) apply(inst *Instance, root *Config) error {
 			Listen:       listen(n.DevNet.Listen, devNetDefaultHost, n.IP),
 			ValidatorKey: rawPrivKeyFrom(n.PrivVal),
 			StorageType:  n.DevNet.StorageType,
+			// #4361: how much superseded BPT state each node keeps, so a
+			// test can run a network that serves anchored blocks and one
+			// that refuses them.
+			BPTHistoryDepth: n.DevNet.BPTHistoryDepth,
 		},
 		ID:             protocol.Directory,
 		Type:           protocol.PartitionTypeDirectory,

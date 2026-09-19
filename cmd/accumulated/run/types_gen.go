@@ -256,6 +256,8 @@ type CoreValidatorConfiguration struct {
 	// ExecutionShards is the number of identity shards user transactions execute across; zero or one is serial (#4145).
 	ExecutionShards *int64
 	DagGcDepth      *int64
+	// BPTHistoryDepth is how many minor blocks of superseded BPT state to retain, so this node can serve an account or a BPT page AS OF an anchored block rather than as of its own current block (#4361). Zero retains none and refuses every such request; a node retaining none cannot serve a join.
+	BPTHistoryDepth *uint64
 	// BlockInterval is the target time between blocks, pinned into every generated node config. Halving it halves the wall time a failure takes to show itself.
 	BlockInterval *encoding.Duration
 }
@@ -324,8 +326,10 @@ type DAGBFTService struct {
 	Partition    *protocol.PartitionInfo
 	NumWorkers   *int64
 	// ExecutionShards is the number of identity shards user transactions execute across; zero or one is serial (#4145).
-	ExecutionShards  *int64
-	DAGGCDepth       *int64
+	ExecutionShards *int64
+	DAGGCDepth      *int64
+	// BPTHistoryDepth is how many minor blocks of superseded BPT state to retain, so this node can serve an account or a BPT page AS OF an anchored block rather than as of its own current block (#4361). Zero retains none and refuses every such request; a node retaining none cannot serve a join. Defaults to 1024.
+	BPTHistoryDepth  *uint64
 	CommitBufferSize *int64
 	// MaxExecutionLag is how many committed blocks the executor may fall behind before headers carry no batches and user work is refused (consensus spec, invariant 9). Defaults to 8.
 	MaxExecutionLag *int64
@@ -876,6 +880,8 @@ type NetSimConfiguration struct {
 	// BlockInterval the cadence the deployed network declares; recorded in the genesis globals, which every node then paces from (#4267).
 	BlockInterval *encoding.Duration
 	StorageType   *StorageType
+	// BPTHistoryDepth is how many minor blocks of superseded BPT state to retain, so this node can serve an account or a BPT page AS OF an anchored block rather than as of its own current block (#4361). Zero retains none and refuses every such request; a node retaining none cannot serve a join.
+	BPTHistoryDepth *uint64
 }
 
 func (NetSimConfiguration) Type() ConfigurationType { return ConfigurationTypeNetSim }

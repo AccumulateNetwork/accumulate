@@ -92,6 +92,14 @@ type Options struct {
 	// shared with the API that reports how far a stream has been sighted.
 	// Nil makes the executor keep a private one.
 	Staging *Staging
+
+	// BPTHistoryDepth is how many minor blocks of superseded BPT state to
+	// retain, so this node can serve an account and a BPT page AS OF an
+	// anchored block rather than as of its own current block (#4361). Zero
+	// retains none, and a node retaining none cannot serve a join
+	// (executor.md, "Sync", step 2). It changes no hash and is not consensus
+	// -relevant: retention writes only under its own key shape.
+	BPTHistoryDepth uint64
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.

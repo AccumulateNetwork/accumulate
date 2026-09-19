@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -293,32 +294,35 @@ type Account struct {
 	key    *record.Key
 	parent *Batch
 
-	url                    values.Value[*url.URL]
-	main                   values.Value[protocol.Account]
-	pending                values.Set[*url.TxID]
-	syntheticForAnchor     map[accountSyntheticForAnchorMapKey]values.Set[*url.TxID]
-	localDeliveryQueue     values.List[*url.TxID]
-	cascadeDeliveryQueue   values.List[*url.TxID]
-	directory              values.Set[*url.URL]
-	directoryAnchorBlock   values.Value[uint64]
-	events                 *AccountEvents
-	blockLedger            map[accountBlockLedgerMapKey]values.Value[*BlockLedger]
-	blockLedgerChain       *Chain2
-	transaction            map[accountTransactionMapKey]*AccountTransaction
-	mainChain              *Chain2
-	scratchChain           *Chain2
-	signatureChain         *Chain2
-	rootChain              *Chain2
-	bptChain               *Chain2
-	anchorSequenceChain    *Chain2
-	majorBlockChain        *Chain2
-	syntheticSequenceChain map[accountSyntheticSequenceChainMapKey]*Chain2
-	syntheticChain         map[accountSyntheticChainMapKey]*Chain2
-	anchorChain            map[accountAnchorChainMapKey]*AccountAnchorChain
-	chains                 values.Set[*protocol.ChainMetadata]
-	syntheticAnchors       values.Set[[32]byte]
-	ethereumTxHashes       values.Set[[32]byte]
-	data                   *AccountData
+	url                        values.Value[*url.URL]
+	main                       values.Value[protocol.Account]
+	pending                    values.Set[*url.TxID]
+	syntheticForAnchor         map[accountSyntheticForAnchorMapKey]values.Set[*url.TxID]
+	localDeliveryQueue         values.List[*url.TxID]
+	cascadeDeliveryQueue       values.List[*url.TxID]
+	directory                  values.Set[*url.URL]
+	directoryAnchorBlock       values.Value[uint64]
+	events                     *AccountEvents
+	blockLedger                map[accountBlockLedgerMapKey]values.Value[*BlockLedger]
+	blockLedgerChain           *Chain2
+	transaction                map[accountTransactionMapKey]*AccountTransaction
+	retainedStateReceipt       map[accountRetainedStateReceiptMapKey]values.Value[*merkle.Receipt]
+	retainedStateReceiptBlocks values.Set[uint64]
+	retainedMainState          map[accountRetainedMainStateMapKey]values.Value[[]byte]
+	mainChain                  *Chain2
+	scratchChain               *Chain2
+	signatureChain             *Chain2
+	rootChain                  *Chain2
+	bptChain                   *Chain2
+	anchorSequenceChain        *Chain2
+	majorBlockChain            *Chain2
+	syntheticSequenceChain     map[accountSyntheticSequenceChainMapKey]*Chain2
+	syntheticChain             map[accountSyntheticChainMapKey]*Chain2
+	anchorChain                map[accountAnchorChainMapKey]*AccountAnchorChain
+	chains                     values.Set[*protocol.ChainMetadata]
+	syntheticAnchors           values.Set[[32]byte]
+	ethereumTxHashes           values.Set[[32]byte]
+	data                       *AccountData
 }
 
 func (c *Account) Key() *record.Key { return c.key }
@@ -357,6 +361,30 @@ type accountTransactionMapKey struct {
 
 func (k accountTransactionKey) ForMap() accountTransactionMapKey {
 	return accountTransactionMapKey{k.Hash}
+}
+
+type accountRetainedStateReceiptKey struct {
+	Block uint64
+}
+
+type accountRetainedStateReceiptMapKey struct {
+	Block uint64
+}
+
+func (k accountRetainedStateReceiptKey) ForMap() accountRetainedStateReceiptMapKey {
+	return accountRetainedStateReceiptMapKey{k.Block}
+}
+
+type accountRetainedMainStateKey struct {
+	Block uint64
+}
+
+type accountRetainedMainStateMapKey struct {
+	Block uint64
+}
+
+func (k accountRetainedMainStateKey) ForMap() accountRetainedMainStateMapKey {
+	return accountRetainedMainStateMapKey{k.Block}
 }
 
 type accountSyntheticSequenceChainKey struct {
@@ -499,6 +527,30 @@ func (c *Account) newTransaction(k accountTransactionKey) *AccountTransaction {
 	v.key = c.key.Append("Transaction", k.Hash)
 	v.parent = c
 	return v
+}
+
+func (c *Account) RetainedStateReceipt(block uint64) values.Value[*merkle.Receipt] {
+	return values.GetOrCreateMap(c, &c.retainedStateReceipt, accountRetainedStateReceiptKey{block}, (*Account).newRetainedStateReceipt)
+}
+
+func (c *Account) newRetainedStateReceipt(k accountRetainedStateReceiptKey) values.Value[*merkle.Receipt] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("RetainedStateReceipt", k.Block), false, values.Struct[merkle.Receipt]())
+}
+
+func (c *Account) RetainedStateReceiptBlocks() values.Set[uint64] {
+	return values.GetOrCreate(c, &c.retainedStateReceiptBlocks, (*Account).newRetainedStateReceiptBlocks)
+}
+
+func (c *Account) newRetainedStateReceiptBlocks() values.Set[uint64] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("RetainedStateReceiptBlocks"), values.Wrapped(values.UintWrapper), values.CompareUint)
+}
+
+func (c *Account) RetainedMainState(block uint64) values.Value[[]byte] {
+	return values.GetOrCreateMap(c, &c.retainedMainState, accountRetainedMainStateKey{block}, (*Account).newRetainedMainState)
+}
+
+func (c *Account) newRetainedMainState(k accountRetainedMainStateKey) values.Value[[]byte] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("RetainedMainState", k.Block), false, values.Wrapped(values.BytesWrapper))
 }
 
 func (c *Account) MainChain() *Chain2 {
@@ -677,6 +729,28 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		}
 		v := c.Transaction(hash)
 		return v, key.SliceI(2), nil
+	case "RetainedStateReceipt":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (8)")
+		}
+		block, okBlock := key.Get(1).(uint64)
+		if !okBlock {
+			return nil, nil, errors.InternalError.With("bad key for account (9)")
+		}
+		v := c.RetainedStateReceipt(block)
+		return v, key.SliceI(2), nil
+	case "RetainedStateReceiptBlocks":
+		return c.RetainedStateReceiptBlocks(), key.SliceI(1), nil
+	case "RetainedMainState":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (10)")
+		}
+		block, okBlock := key.Get(1).(uint64)
+		if !okBlock {
+			return nil, nil, errors.InternalError.With("bad key for account (11)")
+		}
+		v := c.RetainedMainState(block)
+		return v, key.SliceI(2), nil
 	case "MainChain":
 		return c.MainChain(), key.SliceI(1), nil
 	case "ScratchChain":
@@ -693,31 +767,31 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.MajorBlockChain(), key.SliceI(1), nil
 	case "SyntheticSequenceChain":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (8)")
-		}
-		partition, okPartition := key.Get(1).(string)
-		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account (9)")
-		}
-		v := c.getSyntheticSequenceChain(partition)
-		return v, key.SliceI(2), nil
-	case "SyntheticChain":
-		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (10)")
-		}
-		partition, okPartition := key.Get(1).(string)
-		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account (11)")
-		}
-		v := c.getSyntheticChain(partition)
-		return v, key.SliceI(2), nil
-	case "AnchorChain":
-		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (12)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.InternalError.With("bad key for account (13)")
+		}
+		v := c.getSyntheticSequenceChain(partition)
+		return v, key.SliceI(2), nil
+	case "SyntheticChain":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (14)")
+		}
+		partition, okPartition := key.Get(1).(string)
+		if !okPartition {
+			return nil, nil, errors.InternalError.With("bad key for account (15)")
+		}
+		v := c.getSyntheticChain(partition)
+		return v, key.SliceI(2), nil
+	case "AnchorChain":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (16)")
+		}
+		partition, okPartition := key.Get(1).(string)
+		if !okPartition {
+			return nil, nil, errors.InternalError.With("bad key for account (17)")
 		}
 		v := c.getAnchorChain(partition)
 		return v, key.SliceI(2), nil
@@ -730,7 +804,7 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Data":
 		return c.Data(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for account (14)")
+		return nil, nil, errors.InternalError.With("bad key for account (18)")
 	}
 }
 
@@ -777,6 +851,19 @@ func (c *Account) IsDirty() bool {
 		return true
 	}
 	for _, v := range c.transaction {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.retainedStateReceipt {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	if values.IsDirty(c.retainedStateReceiptBlocks) {
+		return true
+	}
+	for _, v := range c.retainedMainState {
 		if v.IsDirty() {
 			return true
 		}
@@ -882,6 +969,11 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkMap(&err, c.blockLedger, c.newBlockLedger, c.getBlockLedgerKeys, opts, fn)
 	values.WalkField(&err, c.blockLedgerChain, c.newBlockLedgerChain, opts, fn)
 	values.WalkMap(&err, c.transaction, c.newTransaction, c.getTransactionKeys, opts, fn)
+	values.WalkMap(&err, c.retainedStateReceipt, c.newRetainedStateReceipt, nil, opts, fn)
+	if !opts.IgnoreIndices {
+		values.WalkField(&err, c.retainedStateReceiptBlocks, c.newRetainedStateReceiptBlocks, opts, fn)
+	}
+	values.WalkMap(&err, c.retainedMainState, c.newRetainedMainState, nil, opts, fn)
 	values.WalkField(&err, c.mainChain, c.newMainChain, opts, fn)
 	values.WalkField(&err, c.scratchChain, c.newScratchChain, opts, fn)
 	values.WalkField(&err, c.signatureChain, c.newSignatureChain, opts, fn)
@@ -925,6 +1017,13 @@ func (c *Account) baseCommit() error {
 	}
 	values.Commit(&err, c.blockLedgerChain)
 	for _, v := range c.transaction {
+		values.Commit(&err, v)
+	}
+	for _, v := range c.retainedStateReceipt {
+		values.Commit(&err, v)
+	}
+	values.Commit(&err, c.retainedStateReceiptBlocks)
+	for _, v := range c.retainedMainState {
 		values.Commit(&err, v)
 	}
 	values.Commit(&err, c.mainChain)

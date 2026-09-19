@@ -114,6 +114,14 @@ func TestANodeReportsItsOwnStateAndItsOwnHeight(t *testing.T) {
 // the partition label, so the wait is not itself a test of the fix.
 func startNetsimAndExecute(t *testing.T) string {
 	t.Helper()
+	return startNetsimAndExecuteWith(t, nil)
+}
+
+// startNetsimAndExecuteWith is startNetsimAndExecute with the BPT history
+// depth named, so a test can run a network that serves anchored blocks and one
+// that refuses to (#4361). Nil takes the node's default.
+func startNetsimAndExecuteWith(t *testing.T, bptHistoryDepth *uint64) string {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -136,9 +144,10 @@ func startNetsimAndExecute(t *testing.T) string {
 		P2P: &P2P{Key: &PrivateKeySeed{Seed: record.NewKey("node-own-state")}},
 		Configurations: []Configuration{
 			&NetSimConfiguration{
-				Listen:     multiaddr.StringCast(fmt.Sprintf("/tcp/%d", basePort)),
-				Bvns:       1,
-				Validators: 1,
+				Listen:          multiaddr.StringCast(fmt.Sprintf("/tcp/%d", basePort)),
+				Bvns:            1,
+				Validators:      1,
+				BPTHistoryDepth: bptHistoryDepth,
 				Globals: &network.GlobalValues{
 					Globals: &protocol.NetworkGlobals{
 						// Never during the test: a major block adds nothing

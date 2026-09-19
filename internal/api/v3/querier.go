@@ -426,6 +426,10 @@ func (s *Querier) queryBptPage(batch *database.Batch, scope *url.URL, query *api
 		startKey = bptproof.FullScanStart()
 	}
 
+	if query.ForHeight != 0 {
+		return s.queryBptPageAt(batch, startKey, count, query.ForHeight)
+	}
+
 	page, err := bptproof.GetPage(batch, startKey, count)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -443,6 +447,69 @@ func (s *Querier) queryBptPage(batch *database.Batch, scope *url.URL, query *api
 			ValueHash: e.ValueHash,
 			Account:   e.Account,
 		}
+	}
+	return out, nil
+}
+
+// queryBptPageAt serves one page of this partition's BPT AS OF an anchored
+// block (#4361).
+//
+// A page taken from the peer's current tree names the accounts the peer holds
+// now; the difference a joining node computes from it is a difference against a
+// moving target, and the leaves it names are leaves no anchor covers. At a
+// named block the page is the tree the anchored root commits to, so the
+// difference is the set the node must pull to reach that root and BptRoot is
+// the StateTreeAnchor the block's anchor carries.
+//
+// It refuses on the same boundaries as an account request, with the same status
+// codes, and never falls back to the current tree: a page said to be as of a
+// block and taken from the current tree names wrong accounts with wrong leaves
+// and carries no proof for the caller to catch it with.
+//
+// The walk is the current path's — [bpt.BPT.GetRangeAt] is [bpt.BPT.GetRange]
+// with the node loads redirected to retained versions. What is duplicated from
+// bptproof.GetPage is the leaf-to-summary mapping below, because bptproof is
+// #4301's package this week; the two should be one call once it lands.
+func (s *Querier) queryBptPageAt(batch *database.Batch, startKey [32]byte, count int, height uint64) (*api.BptPageRecord, error) {
+	entry, err := indexing.ResolveRetainedBlock(s.partition, batch, height)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	root, block, err := indexing.BPTRootAt(s.partition, batch, height)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if block != entry.BlockIndex {
+		return nil, errors.InternalError.WithFormat(
+			"resolution and root lookup disagree: block %d against %d", entry.BlockIndex, block)
+	}
+
+	pairs, nextStart, err := batch.BPT().GetRangeAt(block, root, startKey, count)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("BPT range as of block %d: %w", block, err)
+	}
+
+	out := &api.BptPageRecord{
+		NextStart: nextStart,
+		BptRoot:   root,
+		Done:      len(pairs) < count,
+		Entries:   make([]*api.BptLeafSummary, len(pairs)),
+	}
+	for i, p := range pairs {
+		if len(p.Value) != 32 {
+			return nil, errors.InternalError.WithFormat(
+				"BPT leaf at %x has %d-byte value, want 32", p.Key.Hash(), len(p.Value))
+		}
+		e := &api.BptLeafSummary{KeyHash: p.Key.Hash()}
+		copy(e.ValueHash[:], p.Value)
+		// Account leaves are keyed ("Account", *url.URL). Other record types
+		// may be in the BPT, so this is best-effort.
+		if p.Key.Len() >= 2 {
+			if u, ok := p.Key.Get(1).(*url.URL); ok {
+				e.Account = u
+			}
+		}
+		out.Entries[i] = e
 	}
 	return out, nil
 }
@@ -492,6 +559,17 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 		return r, nil
 	}
 
+	// A historical request must branch BEFORE the current-state receipt is
+	// built. ReceiptOptions.Yes reports true for a ForHeight-only query
+	// (pkg/api/v3/query.go:104), so this path is already reached today and
+	// already answers such a request with a current-state receipt — which is
+	// exactly what #4361 exists to stop. There is deliberately no fallback: a
+	// node that cannot prove the past refuses.
+	if wantReceipt.ForHeight != 0 {
+		err = s.historicalStateReceipt(batch, record, r, wantReceipt.ForHeight)
+		return r, errors.UnknownError.Wrap(err)
+	}
+
 	block, receipt, err := indexing.ReceiptForAccountState(s.partition, batch, record)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get state receipt: %w", err)
@@ -511,6 +589,88 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	r.Receipt.Partition = s.partition.PartitionID()
 	r.Receipt.Complete = s.partition.URL.Equal(protocol.DnUrl())
 	return r, nil
+}
+
+// historicalStateReceipt answers a ForHeight request for an account's state
+// (#4361).
+//
+// The receipt starts at the account's state hash as of the resolved block and
+// TERMINATES AT THAT BLOCK'S BPT ROOT — not at the partition's current root,
+// which is where `main`'s AIP-58 path terminates. The root as of block B is the
+// StateTreeAnchor the partition's anchor for B carries, so a joining node that
+// has verified that anchor (executor.md, "Sync", §1) can check this receipt
+// against a value it already holds, on the round it fetched the account, with
+// no waiting and no bound. Terminating at the current root is what makes a hot
+// account impossible to settle, because no anchor ever covers the root it was
+// served at.
+//
+// Nothing is lost by cutting here. This line anchors the ledger's bpt chain
+// into the root chain (#4272), so ProofService.AnchorReceipt binds ANY root on
+// that chain — a past one included — to a directory root. A caller wanting the
+// reach `main` gives makes that second call with this receipt's Anchor.
+//
+// Receipt.ForHeight carries the RESOLVED block, which is the last
+// state-changing block at or before the requested height. That is exact rather
+// than approximate: a block that changed nothing carries its predecessor's
+// root. LocalBlock keeps its existing meaning and describes the node, which is
+// current.
+//
+// THE RESPONSE IS COHERENT OR IT IS A REFUSAL. The body carried is the body as
+// of the resolved block, and the receipt starts at a plain hash of it, so a
+// verifier recomputes the starting point from what it was handed —
+// Receipt.StartsAtMainState says so on every historical answer. Where the node
+// cannot produce the body for that block the whole request is refused with
+// IncompleteChain, rather than served as a past receipt beside a present body:
+// that pairing does not check, and the caller that does not check keeps state
+// no anchor covers.
+func (s *Querier) historicalStateReceipt(batch *database.Batch, record *database.Account, r *api.AccountRecord, height uint64) error {
+	proof, err := indexing.HistoricalAccountStateProof(s.partition, batch, record, height)
+	if err != nil {
+		// NotFound, IncompleteChain, NotReady and BadRequest are all meaningful
+		// to the caller and must reach it unchanged
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// LocalBlock describes this node, not the proof: the latest block it has
+	// indexed. Reporting the resolved block here would make it disagree with
+	// ForHeight, which is where the proof's block is said.
+	block, err := indexing.LoadIndexEntryFromEnd(batch.Account(s.partition.Ledger()).RootChain().Index(), 1)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if block == nil {
+		return errors.InternalError.With("root index chain is empty")
+	}
+
+	// THE BODY IS THE BODY AT THAT BLOCK, and what cannot be said as of that
+	// block is not said at all. queryAccount filled this record from the
+	// account as it stands NOW — the body, its directory, its pending list and
+	// the sighted streams beside it. A past receipt served with a present body
+	// is two halves that do not fit: the body does not hash to the receipt's
+	// start, so a pulling node refuses it and a trusting one keeps state no
+	// anchor covers (executor.md, "Sync", §2). Directory, Pending and Sighted
+	// are not retained per block, so they are cleared rather than served as if
+	// they were the values of that block.
+	r.Account = proof.State
+	r.Directory = nil
+	r.Pending = nil
+	r.Sighted = nil
+
+	r.Receipt = new(api.Receipt)
+	r.Receipt.Receipt = *proof.Receipt
+	r.Receipt.ForHeight = proof.Block
+	r.Receipt.StartsAtMainState = proof.StartsAtMainState
+	r.Receipt.LocalBlock = block.BlockIndex
+	if block.BlockTime != nil {
+		r.Receipt.LocalBlockTime = *block.BlockTime
+	}
+
+	// There is a second call to make, on every partition including the
+	// directory: the terminus is a PAST root, and a past directory root is not
+	// the current directory root a `Complete` receipt promises.
+	r.Receipt.Partition = proof.Partition
+	r.Receipt.Complete = false
+	return nil
 }
 
 func (s *Querier) queryMessage(ctx context.Context, batch *database.Batch, txid *url.TxID) (*api.MessageRecord[messaging.Message], error) {
