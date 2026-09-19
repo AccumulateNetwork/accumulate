@@ -220,3 +220,41 @@ func TestFromGenesisFollower_AnswersReadsAndRefusesWrites(t *testing.T) {
 	_, err = val.Validate(ctx, new(messaging.Envelope), api.ValidateOptions{})
 	require.True(t, errors.Is(err, errors.NotReady), "Validate: got %v", err)
 }
+
+// TestSubmitter_AnUnknownCommitteeDoesNotRefuse — the submit path's half of
+// the three-valued answer (#4366, #4367).
+//
+// GlobalValues.MembershipOf answers CommitteeUnknown while the node holds no
+// network definition, and here that is NOT a refusal: the daemon waits five
+// seconds for globals and then carries on with an empty definition
+// (cmd/accumulated/run/dagbft.go:383-390), so refusing on that race would
+// take every validator of a starting network off the air. The refusal is the
+// positive fact that a KNOWN committee does not contain this key.
+//
+// The conductor decides the opposite for the same answer, because it must
+// not sign what it cannot justify — crosschain.TestUnknownCommitteeDoesNotSend.
+// That is why the shared answer has three values.
+func TestSubmitter_AnUnknownCommitteeDoesNotRefuse(t *testing.T) {
+	svc, _, mine := newJoiningService(t)
+	ctx := context.Background()
+
+	// No globals at all, and globals with no validators: both unknown.
+	for _, m := range []*Membership{
+		NewMembership("bvn1", mine),
+		func() *Membership {
+			m := NewMembership("bvn1", mine)
+			m.SetGlobals(globalsWith(t, nil))
+			return m
+		}(),
+	} {
+		require.Equal(t, network.CommitteeUnknown, m.globals.Load().MembershipOf(mine, "bvn1"))
+		require.True(t, m.InCommittee(), "an unknown committee must not refuse")
+
+		sub := NewSubmitterService(SubmitterServiceParams{Service: svc, Membership: m})
+		_, err := sub.Submit(ctx, new(messaging.Envelope), api.SubmitOptions{})
+		if err != nil {
+			require.NotContains(t, err.Error(), "committee",
+				"a node that does not yet know its committee refused for membership")
+		}
+	}
+}

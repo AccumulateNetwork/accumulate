@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 )
 
 // healCadence is how many blocks pass between healing activations (#4201).
@@ -63,16 +64,20 @@ const sendersPerActivation = 2
 //
 // A node with no key is not in a committee: it has no identity to be in one
 // with.
+// The answer comes from the one place that reads a committee,
+// GlobalValues.MembershipOf, which gives three values; this is the call site
+// that decides what UNKNOWN means here. Unknown does NOT send: a node that
+// cannot yet tell whether it is a validator must not sign an anchor with a
+// key every receiver may refuse, and the anchor it withholds is sent by the
+// next block once the globals are loaded. The submit path decides the other
+// way for the other reason (internal/node/dagbft/membership.go), which is
+// why the shared answer is three-valued and not a boolean (#4366).
 func (c *Conductor) inCommittee() bool {
 	if len(c.ValidatorKey) != ed25519.PrivateKeySize {
 		return false
 	}
-	globals := c.Globals.Load()
-	if globals == nil || globals.Network == nil {
-		return false
-	}
-	_, v, ok := globals.Network.ValidatorByKey(c.ValidatorKey.Public().(ed25519.PublicKey))
-	return ok && v.IsActiveOn(c.Partition.ID)
+	pub := c.ValidatorKey.Public().(ed25519.PublicKey)
+	return c.Globals.Load().MembershipOf(pub, c.Partition.ID) == network.CommitteeMember
 }
 
 // partitionValidators returns this partition's active validator keys, sorted,

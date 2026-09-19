@@ -228,8 +228,13 @@ func refuseUnlessServing(partition, call string, state nodestate.Serving, m *Mem
 // the certified-own counter, the difference is what this node took and never
 // got into a block (#4366, #4369).
 func (s *SubmitterService) submitted(outcome string) {
-	metrics.SubmissionsTotal.WithLabelValues(
-		strings.ToLower(s.service.config.Partition.ID), outcome).Inc()
+	// The partition ID verbatim — "Directory", "BVN3" — as the harness that
+	// reads this family spells it (test/docker/soak/soakmon.py takes the
+	// label as a key and does not canonicalise it; its fixtures and
+	// docker-network.yml both use the topology's spelling). The certified
+	// counter in pkg/consensus/primary takes the same string from the same
+	// config, so the pair joins.
+	metrics.SubmissionsTotal.WithLabelValues(s.service.config.Partition.ID, outcome).Inc()
 }
 
 // Type returns the service type.

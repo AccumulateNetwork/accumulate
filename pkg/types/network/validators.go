@@ -7,6 +7,9 @@
 package network
 
 import (
+	"bytes"
+	"crypto/ed25519"
+	"crypto/sha256"
 	"fmt"
 	"math"
 	"math/big"
@@ -98,4 +101,65 @@ func (g *GlobalValues) MajorBlockSchedule() cron.Schedule {
 	}
 	g.memoize.majorBlockSchedule = s
 	return s
+}
+
+// CommitteeMembership is what the network definition says about one key's
+// standing in one partition's committee.
+//
+// Three values and not two, because "this node holds no definition yet" is a
+// different fact from "this key is not a validator", and the two callers that
+// ask need OPPOSITE defaults for it: the submit path must not refuse traffic
+// on a startup race, and the anchor path must not sign on one. A boolean
+// forces one of them to be wrong, which is how the same question came to have
+// two implementations that disagreed (#4366, #4367).
+type CommitteeMembership int
+
+const (
+	// CommitteeUnknown: no globals, or a definition with no validators at
+	// all. Nothing is known about this key; the caller decides what to do
+	// with not knowing, and says so where it decides.
+	CommitteeUnknown CommitteeMembership = iota
+
+	// CommitteeMember: the key is a validator active on the partition.
+	CommitteeMember
+
+	// CommitteeOutsider: the definition is known and this key is not an
+	// active validator of the partition — a follower, a validator active
+	// elsewhere, one removed on chain, or no key at all.
+	CommitteeOutsider
+)
+
+// MembershipOf reports the standing of an ed25519 public key in a partition's
+// committee, as these globals give it.
+//
+// Safe on a nil receiver: a node that has loaded nothing yet answers
+// CommitteeUnknown rather than panicking, which is what an atomic load of the
+// globals gives before the first WillChangeGlobals.
+//
+// The validators are walked rather than binary-searched. ValidatorByKey is a
+// search over PublicKeyHash, so a definition that is unsorted or whose hashes
+// are unset answers "not in the network", and a false outsider means refusing
+// every submission or withholding every anchor. Twelve validators is a walk,
+// and both the stored key and its hash are compared, so an entry carrying
+// only one of them still matches.
+func (g *GlobalValues) MembershipOf(key []byte, partition string) CommitteeMembership {
+	if len(key) != ed25519.PublicKeySize {
+		// No identity to be in a committee with (#4367).
+		return CommitteeOutsider
+	}
+	if g == nil || g.Network == nil || len(g.Network.Validators) == 0 {
+		return CommitteeUnknown
+	}
+
+	hash := sha256.Sum256(key)
+	for _, v := range g.Network.Validators {
+		if !bytes.Equal(v.PublicKey, key) && v.PublicKeyHash != hash {
+			continue
+		}
+		if v.IsActiveOn(partition) {
+			return CommitteeMember
+		}
+		return CommitteeOutsider
+	}
+	return CommitteeOutsider
 }

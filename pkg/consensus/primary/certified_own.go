@@ -7,8 +7,6 @@
 package primary
 
 import (
-	"strings"
-
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
@@ -68,8 +66,11 @@ func (p *Primary) countCertifiedOwn(cert *types.Certificate) {
 		}
 	}
 	if txns > 0 {
+		// The partition ID verbatim, the same string the submissions
+		// counter carries (internal/node/dagbft/api.go): the harness joins
+		// the two families on this label.
 		metrics.CertifiedOwnTransactionsTotal.
-			WithLabelValues(strings.ToLower(p.config.Partition)).Add(float64(txns))
+			WithLabelValues(p.config.Partition).Add(float64(txns))
 	}
 }
 

@@ -677,9 +677,10 @@ var (
 	// handed: accepted (it entered this node's worker) or rejected (it was
 	// refused).
 	//
-	// The partition label is lowercased at every call site, because it joins
-	// with CertifiedOwnTransactionsTotal and every container runs two nodes,
-	// a DN node and a BVN node, whose queues are separate.
+	// The partition label is the partition ID verbatim — "Directory",
+	// "BVN3" — because the harness reads it as a key and joins this family
+	// with CertifiedOwnTransactionsTotal on it, and because every container
+	// runs two nodes, a DN node and a BVN node, whose queues are separate.
 	SubmissionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,

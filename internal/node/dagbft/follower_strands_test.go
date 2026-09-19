@@ -60,8 +60,11 @@ func TestFollowerRefusesAndNothingStrands(t *testing.T) {
 	}
 
 	const (
-		nVals  = 4
-		part   = "bvn3strand" // unique, so the shared metric registry is ours
+		nVals = 4
+		// Unique, so the shared metric registry is ours — and MIXED CASE on
+		// purpose: the harness reads the partition label as a key and joins
+		// the two families on it, so neither may fold the case.
+		part   = "BVN3strand"
 		runFor = 10 * time.Second
 	)
 
@@ -302,4 +305,13 @@ loop:
 	require.NotZero(t, certified, "the validators certified their own transactions")
 	require.LessOrEqual(t, certified, accepted,
 		"certified must never exceed accepted — the harness reads that as an instrument alarm")
+
+	// The label is the partition ID as the node holds it, in both families:
+	// lowercase them and the harness's join produces two half-rows.
+	require.Zero(t, testutil.ToFloat64(
+		metrics.SubmissionsTotal.WithLabelValues(strings.ToLower(part), "accepted")),
+		"the submissions label was folded to lowercase")
+	require.Zero(t, testutil.ToFloat64(
+		metrics.CertifiedOwnTransactionsTotal.WithLabelValues(strings.ToLower(part))),
+		"the certified label was folded to lowercase")
 }
