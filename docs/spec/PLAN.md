@@ -283,8 +283,24 @@ and are left as they were written; two of their premises no longer hold.
    persisted and not advertised, and the v3 querier is not gated.
 
 **E11, second pass — the order and the gates for the validated-spine design**
-(2026-09-19). Four pieces, three of them deletions in disguise, in this order
-because each one's gate needs the one before it:
+(2026-09-19). Phase 1's definition of done (Paul, 2026-09-19): "the network
+can run chaos for 12 hours while adding and removing followers while carrying
+a 100 tps load." Its order (Paul, same day): "launch a follower to a 100 tps
+non-chaos network (not bootstrap it) 5 m. Then work bootstrapping. Then work
+bootstrapping a follower."
+
+0. **A follower launched with the network — #4365.** One follower started at
+   `compose up` beside the twelve validators, key in no committee, 100 tps,
+   chaos off, five minutes: it executes every block at the network's cadence,
+   root-matches every anchored root, votes on and proposes nothing, and
+   answers requests. *Gate for everything below:* whether a non-committee
+   node can follow this line at all is believed, not shown (the churn plan's
+   P2 never had a test), and every later step assumes it. A failure here is
+   the phase's first finding and goes to a `debugger` before anything is
+   built.
+
+Then bootstrapping — four pieces, three of them deletions in disguise, in
+this order because each one's gate needs the one before it:
 
 1. **Validate the spine — #4301.** Port `anchorsrc` from `bootstrap-v3`:
    the latest signed anchor for the partition, its validator-quorum
@@ -329,7 +345,14 @@ because each one's gate needs the one before it:
    are fixed in passing here; #4359 (the `Expand:false` REST change) is
    decided, not assumed.
 
-Then the 24-hour run, which is #4205's acceptance and is unchanged. The
+Then **bootstrapping a follower** — **#4363** (a follower joins a *running*
+network through the join above, keeps up, answers `NotReady` until
+`COMPLETE`, and can be stopped with nothing waiting on it) and **#4364** (the
+harness's add-follower / remove-follower disturbances, a verdict per
+add/remove in the manifest, and `12h-100tps-followers.conf`). Then the
+acceptance: **twelve hours, 100 tps, followers added and removed, validators
+restarted** — which supersedes the 24-hour restart-only run this issue was
+filed with, and is Paul's to start. The
 no-chaos 100 tps path is already re-established on `bff83e840`
 (`20260919T115321Z`, identical to the 09-17 baseline), so what the 24-hour run
 tests is the join, and only the join.
