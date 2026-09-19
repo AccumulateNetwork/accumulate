@@ -22,6 +22,7 @@ import (
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -151,6 +152,11 @@ func (p *Partition) NodePrivate(i int) private.Sequencer {
 // keeps them: entries pulled by the requester, requests, misses.
 func (p *Partition) Heals() *crosschain.HealCounters { return p.nodes[0].heals }
 
+// NodeHeals is node i's healing counters. Per node, because whether a
+// particular node asks for its own gaps is the question, and the Prometheus
+// counters are the whole process's (#4367).
+func (p *Partition) NodeHeals(i int) *crosschain.HealCounters { return p.nodes[i].heals }
+
 // SynthCache is the partition's producer cache (node 0's).
 func (p *Partition) SynthCache() *synthcache.Cache { return p.nodes[0].synthCache }
 
@@ -214,9 +220,38 @@ func (p *Partition) SetNodeBlockHook(fn NodeBlockHookFunc) {
 	}
 }
 
+// isValidatorOn reports whether this node runs as a validator on the
+// partition, from the node's OWN configuration — the same field
+// BuildGenesisDocs turns into the definition's active flag
+// (internal/node/daemon/init.go:213-214). A node configured as a follower is
+// in the definition and active on nothing, and the two readings must agree:
+// a simulator node that is a follower in genesis and a validator in consensus
+// is a node no operator can deploy.
+func (n *Node) isValidatorOn(typ protocol.PartitionType) bool {
+	switch typ {
+	case protocol.PartitionTypeDirectory:
+		return n.network.DnnType == config.Validator
+	case protocol.PartitionTypeBlockSummary:
+		return n.network.BsnnType == config.Validator
+	default:
+		return n.network.BvnnType == config.Validator
+	}
+}
+
 func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
+	// Only the partition's validators. Every node used to be handed to
+	// InitChain as a validator whatever the definition said, so a follower
+	// could not be built here at all: the executor refuses a validator
+	// genesis does not have (v1/block/executor.go:299, "InitChain request
+	// includes N validator(s) not present in genesis"), and before that
+	// check a follower would have run as a full voting member of a committee
+	// it is not in — the simulator quietly answering the question gate 0
+	// asks (#4367).
 	var val []*execute.ValidatorUpdate
 	for _, n := range p.nodes {
+		if !n.isValidatorOn(p.Type) {
+			continue
+		}
 		val = append(val, &execute.ValidatorUpdate{
 			Type:      protocol.SignatureTypeED25519,
 			PublicKey: n.network.PrivValKey[32:],
