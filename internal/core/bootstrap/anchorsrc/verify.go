@@ -18,9 +18,9 @@ import (
 // verify returns nil iff a quorum of the producing partition's validators
 // signed this anchor transaction.
 //
-// What is counted is DISTINCT members of ONE set — the set this node's walk
-// stands at — and only after their signatures have been checked. Each of
-// those three words was a way in:
+// What is counted is DISTINCT members of ONE set — the set this node trusts
+// — and only after their signatures have been checked. Each of those three
+// words was a way in:
 //
 //   - **One set.** Counting signatures from several sets against one
 //     threshold lets a rotated-out key stand in for a current one: with
