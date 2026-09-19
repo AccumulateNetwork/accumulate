@@ -399,6 +399,32 @@ this order because each one's gate needs the one before it:
    are fixed in passing here; #4359 (the `Expand:false` REST change) is
    decided, not assumed.
 
+**Between gate 0 and bootstrapping a follower: what gate 0 found.** The
+five-minute run (`20260919T191634Z`, #4365) settled the follower itself — 749
+anchored roots matched, zero blocks behind — and found that the network around
+it was not ready for one. Two defects, both in the order below because the
+same mechanism runs 144× longer in the acceptance run and a stranded *user*
+transaction has no healer:
+
+- **#4367 — a node in no committee must not author or dispatch anchors it
+  cannot sign.** All 1,997 of the follower's anchor dispatches were rejected
+  (`key is not an active validator`). The asymmetry named by the run-analyst:
+  the healing *pull* path is membership-gated (`cadence.go:54-62`), the anchor
+  *send* path was not (`conductor.go:187-301`). *Merged.*
+- **#4366 — a node that cannot propose a transaction relays it, and never
+  drops it** (Paul, 2026-09-19: "Followers can relay txs. And should."). Every
+  one of the run's 3,929 healed entries was destined for BVN3, the follower's
+  partition, and none for any other; target selection has no committee filter,
+  so validators dialled the follower, it accepted, and it could never propose.
+  The load generator's own stall was the same bug — `acc://lg-0a85adbd08bc679d.acme`
+  routes to BVN3. The remedy is the relay in executor.md step 6, not a
+  refusal: a relay reads no account and needs no state, so it is available to
+  a syncing node and a follower alike, and it delivers the transaction where a
+  refusal would only move the problem. **Blocked by #4368** — "fully synced"
+  cannot be expressed while `nodestate.PromoteToComplete` has no production
+  caller. Gate: a five-minute rerun of `5m-100tps-follower.conf` in which
+  heals return to zero and no transaction strands.
+
 Then **bootstrapping a follower** — **#4363** (a follower joins a *running*
 network through the join above, keeps up, answers `NotReady` until
 `COMPLETE`, and can be stopped with nothing waiting on it) and **#4364** (the
