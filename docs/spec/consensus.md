@@ -21,11 +21,6 @@ batch is broadcast to every validator of the partition when sealed, and any
 validator that lacks a batch its committed certificates name must fetch it
 from a peer before it can execute the block.
 
-A node that is not in the partition's committee has no worker for it: what it
-accepts for that partition it hands to a validator that does (executor.md,
-"Sync" step 5), and its own batches, headers and votes for that partition are
-nothing to consensus.
-
 So a validator holds batches in four places, for four reasons:
 
 | store | holds | until |
