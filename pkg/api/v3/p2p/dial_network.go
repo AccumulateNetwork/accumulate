@@ -9,6 +9,7 @@ package p2p
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -19,6 +20,55 @@ import (
 )
 
 func (n *Node) Tracker() dial.Tracker { return n.tracker }
+
+// Providers returns up to limit peers this node knows of that handle the
+// given service, using the same discovery the dialer itself uses: connected
+// peers first, by the protocols libp2p identify reports, and the DHT behind
+// them.
+//
+// It exists because a relay must NAME its target. DialNetwork answers
+// "somebody who serves this", which for a node that cannot propose is itself
+// (the dial is local-first), and for a node that can is whoever the rotation
+// lands on — neither of which a relay may accept without knowing who it is
+// (#4366, executor.md "Sync" step 6: a relay goes to a node that can
+// propose, never to itself and never to another node that would only relay
+// it again).
+func (n *Node) Providers(ctx context.Context, sa *api.ServiceAddress, limit int) []peer.ID {
+	if sa == nil {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+
+	d := &connectedPeersDiscoverer{n, (*dhtDiscoverer)(n)}
+	resp, err := d.Discover(ctx, &dial.DiscoveryRequest{
+		Network: n.peermgr.network,
+		Service: sa,
+		Limit:   limit,
+		Timeout: time.Second,
+	})
+	if err != nil {
+		return nil
+	}
+	peers, ok := resp.(dial.DiscoveredPeers)
+	if !ok {
+		return nil
+	}
+
+	self := n.host.ID()
+	var out []peer.ID
+	for p := range peers {
+		if p.ID == self {
+			continue
+		}
+		out = append(out, p.ID)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
 
 func (n *Node) Connector() dial.Connector { return (*connector)(n) }
 

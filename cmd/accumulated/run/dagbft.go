@@ -664,6 +664,9 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		EventBus:         s.eventBus,
 		NodeKeyHash:      sha256.Sum256(validatorKey[32:]), // Public key portion
 		ValidatorKeyHash: sha256.Sum256(validatorKey[32:]),
+		// Reported as CatchingUp, which is what tells another node's relay
+		// that this one cannot propose yet (#4366).
+		NodeState: nodeState,
 	})
 	registerRpcService(inst, consensusSvc.Type().AddressFor(s.Partition.ID), message.ConsensusService{ConsensusService: consensusSvc})
 	err := dagbftProvidesService.Register(inst.services, s, consensusSvc)
@@ -671,11 +674,18 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		return errors.UnknownError.WithFormat("register consensus service: %w", err)
 	}
 
-	// Create submitter service
-	submitterSvc := dagbft.NewSubmitterService(dagbft.SubmitterServiceParams{
+	// Create submitter service, with the committee predicate and the relay
+	// it hands on what it cannot propose with (#4366).
+	submitterSvc := newSubmitterService(submitterParams{
 		Logger:    logger.With("module", "api"),
+		Partition: s.Partition.ID,
+		AuthorKey: validatorKey[32:],
+		Globals:   globals,
+		EventBus:  s.eventBus,
 		Service:   s.service,
 		NodeState: nodeState,
+		Node:      inst.p2p,
+		Network:   inst.config.Network,
 	})
 	registerRpcService(inst, submitterSvc.Type().AddressFor(s.Partition.ID), message.Submitter{Submitter: submitterSvc})
 	err = dagbftProvidesSubmitter.Register(inst.services, s, submitterSvc)

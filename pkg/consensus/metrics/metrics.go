@@ -659,3 +659,87 @@ var (
 		Help:      "Transactions at the consensus/execution hand-off by outcome: arrived (in a committed batch), executed, unmarshal-failed, process-failed, status-failed. arrived minus executed is what did not execute.",
 	}, []string{"partition", "outcome"})
 )
+
+// What a node did with what it was handed, and how much of it reached a
+// certificate (#4366, #4369, #4364).
+//
+// A node in no committee accepts a submission it can never get into a block:
+// its header is dropped before any vote, so nothing it takes is ever
+// certified, and nothing said so. The two families below are read together —
+// accepted minus certified, per node and partition — and the difference is
+// "accepted, never certified". On a validator it sits at the in-flight depth;
+// on a node in no committee it is everything the network dialled to it.
+//
+// Under "a node relays what it cannot propose" a third family joins them:
+// a node that relays everything reads accepted-minus-certified as maximal
+// red on a node that is working perfectly, so the quantity the harness
+// renders is accepted minus certified minus relayed{taken}.
+//
+// The contract (labels, meaning, what the harness renders) is #4366
+// note_3869838619.
+var (
+	// SubmissionsTotal is what this node's Submit did with what it was
+	// handed: accepted (it entered this node's worker) or rejected (it was
+	// refused).
+	//
+	// The partition label is the partition ID verbatim — "Directory",
+	// "BVN3" — because the harness reads it as a key and joins this family
+	// with CertifiedOwnTransactionsTotal on it, and because every container
+	// runs two nodes, a DN node and a BVN node, whose queues are separate.
+	SubmissionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "submissions_total",
+		Help:      "Submissions this node accepted or rejected, by outcome",
+	}, []string{"partition", "outcome"})
+
+	// CertifiedOwnTransactionsTotal is the transactions from this node's own
+	// batches that reached a certified header of this node.
+	//
+	// Counted once per transaction, at the first certified header carrying
+	// its batch: a header that never certifies is requeued and its batches
+	// re-proposed, so a per-header count double-counts and would drive
+	// accepted-minus-certified negative. Counted after the certificate is in
+	// the DAG, not when it is created: a failed insert un-claims the round
+	// and requeues the batches (A13a).
+	CertifiedOwnTransactionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "certified_own_transactions_total",
+		Help:      "Transactions from this node's own batches that reached a certified header",
+	}, []string{"partition"})
+
+	// RelayedTotal is what became of the submissions this node could not
+	// propose and handed on, counted ONCE PER SUBMISSION at its FINAL
+	// answer -- a NotReady that is retried and then taken is one taken, not
+	// two outcomes.
+	//
+	//	taken       a node that can propose took it: the hand-off
+	//	refused     a target validated it and declined; a statement about
+	//	            the submission, passed back to the caller unchanged
+	//	not-ready   every target that answered said NotReady and this node
+	//	            gave up; a statement about the NETWORK, not the
+	//	            submission
+	//	unreachable no target answered at all
+	//
+	// A relayed submission is never also proposed by this node: relay or
+	// propose, never both, or a node that is promoted certifies what it
+	// also relayed and the harness reads the sum as an instrument fault
+	// (#4364).
+	RelayedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "relayed_total",
+		Help:      "Submissions this node could not propose and relayed, by the outcome of the relay",
+	}, []string{"partition", "outcome"})
+)
+
+// The outcomes of RelayedTotal. One word per outcome, and the same word
+// everywhere: the harness reads an outcome it does not know under its own
+// name and never folds it into taken.
+const (
+	RelayTaken       = "taken"
+	RelayRefused     = "refused"
+	RelayNotReady    = "not-ready"
+	RelayUnreachable = "unreachable"
+)

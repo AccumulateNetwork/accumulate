@@ -190,6 +190,14 @@ type Primary struct {
 	ourHeaders map[types.HeaderDigest]*types.Header
 	// Certificates we've created
 	ourCerts map[types.Round]*types.Certificate
+
+	// Batches of ours already counted as certified, and the round they were
+	// counted at, so a re-proposed batch is not counted twice (#4366; see
+	// certified_own.go).
+	certifiedMu        sync.Mutex
+	certifiedBatches   map[types.BatchDigest]types.Round
+	certifiedHighRound types.Round
+	certifiedNextSweep types.Round
 	// Set of headers we've already voted on (to avoid duplicate votes)
 	// Maps header digest to the round it was for (enables round-based cleanup)
 	votedHeaders map[types.HeaderDigest]types.Round

@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -49,6 +50,7 @@ type ConsensusAPIService struct {
 	nodeKeyHash   [32]byte
 	valKeyHash    [32]byte
 	heals         *crosschain.HealCounters
+	nodeState     nodestate.Serving
 }
 
 var _ api.ConsensusService = (*ConsensusAPIService)(nil)
@@ -63,6 +65,12 @@ type ConsensusAPIServiceParams struct {
 	EventBus         *events.Bus
 	NodeKeyHash      [32]byte
 	ValidatorKeyHash [32]byte
+
+	// NodeState is this node's join state, reported as CatchingUp. It is
+	// what tells a RELAY that this node, committee key and all, cannot
+	// propose yet and would only relay again -- the one fact that bounds a
+	// relay to a single hop (#4366; see relay.go).
+	NodeState nodestate.Serving
 
 	// Heals is shared with the conductor so recoveries are reportable, not
 	// only loggable (#4075, #4105) — the soak monitor reads these fields.
@@ -81,6 +89,7 @@ func NewConsensusAPIService(params ConsensusAPIServiceParams) *ConsensusAPIServi
 	s.nodeKeyHash = params.NodeKeyHash
 	s.valKeyHash = params.ValidatorKeyHash
 	s.heals = params.Heals
+	s.nodeState = params.NodeState
 	return s
 }
 
@@ -102,6 +111,12 @@ func (s *ConsensusAPIService) ConsensusStatus(ctx context.Context, opts api.Cons
 	res.ValidatorKeyHash = s.valKeyHash
 	res.PartitionID = s.partitionID
 	res.PartitionType = s.partitionType
+
+	// "Still catching up to the network" -- and therefore, for this
+	// partition, still unable to propose. A relay reads this to avoid
+	// handing a submission to a node that would only relay it again
+	// (#4366).
+	res.CatchingUp = s.nodeState != nil && !s.nodeState.CanServeCurrent()
 
 	// Load values from the database
 	res.LastBlock = new(api.LastBlock)
@@ -153,9 +168,11 @@ func boolOpt(v *bool, def bool) bool {
 
 // SubmitterService implements api.Submitter for DAG-BFT.
 type SubmitterService struct {
-	logger    logging.OptionalLogger
-	service   *Service
-	nodeState nodestate.Serving
+	logger     logging.OptionalLogger
+	service    *Service
+	nodeState  nodestate.Serving
+	membership *Membership
+	relay      *Relay
 }
 
 var _ api.Submitter = (*SubmitterService)(nil)
@@ -170,7 +187,22 @@ type SubmitterServiceParams struct {
 	// every user transaction fails on an account it does not have yet, and the
 	// caller is told its transaction is invalid when it is not (#4307 -- 15,035
 	// of those in run 20260918T131713Z). Nil means the node never joined.
+	//
+	// A joining node does not DROP what it cannot propose, it relays it: a
+	// relay reads no account and verifies no signature, so nothing about
+	// the half-filled store reaches it (executor.md, "Sync" step 6).
 	NodeState nodestate.Serving
+
+	// Membership is this node's standing in the partition's current
+	// committee. A node in no committee cannot get a submission into a
+	// block: its header is dropped before any vote. Nil means the caller
+	// applies no committee gate.
+	Membership *Membership
+
+	// Relay hands on what this node cannot propose. Nil means there is
+	// nowhere to hand it to, and a node that cannot propose then answers
+	// NotReady rather than taking what it would strand.
+	Relay *Relay
 }
 
 // NewSubmitterService creates a new SubmitterService.
@@ -179,20 +211,80 @@ func NewSubmitterService(params SubmitterServiceParams) *SubmitterService {
 	s.logger.L = params.Logger
 	s.service = params.Service
 	s.nodeState = params.NodeState
+	s.membership = params.Membership
+	s.relay = params.Relay
 	return s
 }
 
-// serving refuses while this node is joining. NotReady, not an error about the
-// envelope: the submitter's client asks another node, which is exactly what
-// should happen, and a validation failure would instead tell the user their
-// transaction is bad.
-func (s *SubmitterService) serving(call string) error {
-	if s.nodeState == nil || s.nodeState.CanServeCurrent() {
-		return nil
+// canPropose reports whether this node can get a submission for its partition
+// into a block by proposing it itself.
+//
+// Two things stop it, and they are different facts with the same consequence:
+// its author key is in no current committee of the partition, so every header
+// it writes is dropped before any vote; or it is still joining, so it would
+// validate against a store its pull has half filled and tell the sender its
+// transaction is bad when it is not (#4307).
+//
+// A node that cannot propose does not refuse and does not keep it. It relays
+// it (executor.md, "Sync" step 6; Paul, 2026-09-19: "Followers can relay txs.
+// And should.").
+func (s *SubmitterService) canPropose() bool {
+	if !s.membership.CanPropose() {
+		return false
 	}
-	mNotSubmitting.WithLabelValues(strings.ToLower(s.service.config.Partition.ID), call).Inc()
-	return errors.NotReady.WithFormat(
-		"%s is joining and cannot validate against state it has not executed", s.service.config.Partition.ID)
+	return s.nodeState == nil || s.nodeState.CanServeCurrent()
+}
+
+// relayIt hands a submission this node cannot propose to one that can, and
+// answers the caller with the target's answer.
+//
+// Synchronous on purpose: accept-and-forward would tell the sender its
+// transaction is in hand while this node still has to find somewhere to put
+// it, which is accept-then-drop under another name — the failure #4366 is.
+func (s *SubmitterService) relayIt(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+	partition := s.service.config.Partition.ID
+
+	if s.relay == nil {
+		// Nowhere to hand it to. Refusing is still better than taking it:
+		// what this node takes for a partition it cannot propose for never
+		// reaches a block at all. The reason is the one that will still be
+		// true when the join finishes (consensus.md, invariant 10: a
+		// refusal says why).
+		mNotSubmitting.WithLabelValues(strings.ToLower(partition), "Submit").Inc()
+		s.submitted("rejected")
+		if !s.membership.CanPropose() {
+			return nil, errors.NotReady.WithFormat(
+				"this node is not in the current committee of %s and has no relay", partition)
+		}
+		return nil, errors.NotReady.WithFormat(
+			"%s is joining and cannot validate against state it has not executed", partition)
+	}
+
+	res, outcome, err := s.relay.Submit(ctx, envelope, opts)
+
+	// Once per submission, at its final answer (#4366 note_3869838619).
+	metrics.RelayedTotal.WithLabelValues(partition, outcome).Inc()
+
+	// accepted means Submit returned success TO THE CALLER, whether this
+	// node proposed it or a validator took it from this node.
+	if outcome == metrics.RelayTaken {
+		s.submitted("accepted")
+	} else {
+		s.submitted("rejected")
+	}
+	return res, err
+}
+
+// submitted records what this node did with a submission, as the caller saw
+// it: accepted means Submit returned success, rejected means it did not.
+// Read against the certified-own and relayed counters, the difference is what
+// this node took and neither proposed nor handed on (#4366, #4369).
+func (s *SubmitterService) submitted(outcome string) {
+	// The partition ID verbatim -- "Directory", "BVN3" -- as the harness
+	// that reads this family spells it: it takes the label as a key and
+	// joins the three families on it, and every container runs two nodes, a
+	// DN node and a BVN node, whose queues are separate.
+	metrics.SubmissionsTotal.WithLabelValues(s.service.config.Partition.ID, outcome).Inc()
 }
 
 // Type returns the service type.
@@ -237,8 +329,12 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		"messages", strings.Join(msgIDs, ","),
 		"partition", s.service.config.Partition.ID)
 
-	if err := s.serving("Submit"); err != nil {
-		return nil, err
+	// What this node cannot propose it relays, not validated, decoded only
+	// to route: validating against a store this node has not filled, or
+	// judging a partition it is in no committee of, answers a question it
+	// is not the one to answer (executor.md, "Sync" step 6).
+	if !s.canPropose() {
+		return s.relayIt(ctx, envelope, opts)
 	}
 
 	// Verify the envelope is well-formed
@@ -246,6 +342,7 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		_, err := envelope.Normalize()
 		if err != nil {
 			s.logger.Error("TRACE-SUBMIT: envelope normalization failed", "error", err)
+			s.submitted("rejected")
 			return nil, errors.BadRequest.WithFormat("verify: %w", err)
 		}
 	}
@@ -254,6 +351,7 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 	b, err := envelope.MarshalBinary()
 	if err != nil {
 		s.logger.Error("TRACE-SUBMIT: envelope marshaling failed", "error", err)
+		s.submitted("rejected")
 		return nil, errors.EncodingError.WithFormat("marshal: %w", err)
 	}
 
@@ -284,6 +382,9 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		submit = s.service.SubmitUserTransaction
 	}
 	if err := submit(b); err != nil {
+		// Every road out of here is a rejection: the envelope did not enter
+		// this node's worker and Submit does not return success.
+		s.submitted("rejected")
 		if stderrors.Is(err, worker.ErrStoreFull) || stderrors.Is(err, worker.ErrExecutionLagging) {
 			// Retry later: the answer every internal client already handles.
 			// The reason travels in the error (consensus spec, invariant 10).
@@ -314,6 +415,10 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		s.logger.Error("TRACE-SUBMIT: internal error", "error", err)
 		return nil, errors.InternalError.WithFormat("submit: %w", err)
 	}
+
+	// Accepted: it is in this node's worker. Whether it ever reaches a
+	// certified header is the other half of the measurement.
+	s.submitted("accepted")
 
 	s.logger.Debug("TRACE-SUBMIT: submission successful, creating result WITHOUT Status field (BUG!)")
 
@@ -363,6 +468,14 @@ func NewValidatorService(params ValidatorServiceParams) *ValidatorService {
 func (s *ValidatorService) Type() api.ServiceType { return api.ServiceTypeValidate }
 
 // Validate validates an envelope without submitting it.
+//
+// Validate is a READ, and reads divide from relays on whether local state is
+// needed: a joining node refuses it, because it would judge against a store
+// its pull has half filled (#4307), and a node that is synced answers it
+// from its own state WHATEVER ITS COMMITTEE, because a validation judges
+// against the latest committed state and promises nothing about proposal
+// (executor.md, "Sync" step 6). So there is no committee gate here, and
+// nothing to relay: the answer needs no proposer.
 func (s *ValidatorService) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	if s.nodeState != nil && !s.nodeState.CanServeCurrent() {
 		mNotSubmitting.WithLabelValues(strings.ToLower(s.service.config.Partition.ID), "Validate").Inc()
