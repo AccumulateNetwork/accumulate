@@ -335,6 +335,7 @@ type DAGBFTService struct {
 	MaxEnvelopesPerBlock *uint64
 	service              *dagbft.Service
 	eventBus             *events.Bus
+	lastExecuted         uint64
 }
 
 func (DAGBFTService) Type() ServiceType { return ServiceTypeDAGBFT }

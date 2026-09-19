@@ -370,7 +370,33 @@ state is a gauge (`accumulate_node_state`). The state is the node's own,
 handed to its services rather than looked up by partition: a process can run
 several nodes of one partition — devnet does — and a registry keyed by
 partition would give them all one node's state. A node that never joined has
-none and serves.
+no state machine and serves.
+
+**The gauge, though, is every node's, for every partition it runs, from
+start-up (#4345a).** It used to be created by the join and only by the join —
+a Prometheus `GaugeVec` creates a child on the first `WithLabelValues` — so a
+healthy node exported no such series at all. Measured on the live network on
+2026-09-18, at one moment: the joining node exported
+`accumulate_node_state{partition="bvn1"} 0` and `{partition="directory"} 0`
+and a healthy peer exported nothing. Absence therefore meant "this process has
+not been in the join state machine this lifetime", which is neither ACTIVE nor
+unhealthy: the metric could only ever say something was wrong, and only while
+it was wrong. The daemon now reports `BOOTING` for each partition as it
+starts, `ACTIVE` for a node that executes without asking anyone, and the join
+reports every transition of its machine through the same door.
+
+**A node also exports the block ITS OWN executor last executed**,
+`accumulate_node_executed_block{partition}` (#4345b). Nothing did: the two
+block counters are process-wide, and a node runs the Directory and a BVN in
+one process, so each was one series summing two chains — 5264 on
+acc-bvn1-val2. Reading one node's height therefore meant a JSON-RPC query, and
+the obvious query is ROUTED: asked of a node wedged at block 76, the router
+answers from a healthy peer. `accumulate_exec_blocks_total`,
+`accumulate_dagbft_blocks_produced_total` and
+`accumulate_dagbft_blocks_empty_total` now carry a `partition` label too; the
+names are unchanged, so a consumer that sums a node's series reads what it
+read before, but one that took a maximum across nodes must take it per
+partition (`test/docker/soak/soakmon.py`, `life_from`).
 
 A node that HAS joined holds nothing of the blocks it did not execute, and
 never will — there is no backfill on this line — so a request for one of them

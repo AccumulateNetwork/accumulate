@@ -118,6 +118,37 @@ func TestProduceBlock_AccountsForArrivedVersusExecuted(t *testing.T) {
 	require.Equal(t, "1", at["unmarshalFailed"])
 }
 
+// And it says WHICH CHAIN's block it is accounting for.
+//
+// A node runs the Directory and a BVN in one process, and this line carried
+// no partition — so the two chains' block numbers interleaved in one stream
+// and anyone deriving a height from it was silently mixing them. From
+// acc-bvn1-val2's log on 2026-09-19, three consecutive lines:
+//
+//	block=3686 round=8828
+//	block=4141 round=8852
+//	block=4142 round=8856
+//
+// That is the Directory at 3686 and BVN1 at 4141, and nothing in the line
+// says so. b.partitionID was already in scope four lines above (#4345c).
+func TestProduceBlock_AccountingNamesItsPartition(t *testing.T) {
+	logs := captureWarnings(t)
+
+	bridge := newBridge(t, new(fakeExec))
+	_, err := bridge.ProduceBlock(context.Background(), BlockParams{
+		Index:   12,
+		Time:    time.Unix(100, 0),
+		Batches: []*types.Batch{types.NewBatch([][]byte{envBytes(t, 1)})},
+	})
+	require.NoError(t, err)
+
+	recs := logs.matching("Block execution accounting")
+	require.NotEmpty(t, recs)
+	at := attrsOf(recs[0])
+	require.Equal(t, "bvn1", at["partition"],
+		"the accounting line does not say which chain's block it is (#4345c)")
+}
+
 // An empty block says nothing — most blocks on an idle network are empty and
 // the accounting must not become its own flood.
 func TestProduceBlock_EmptyBlockIsSilent(t *testing.T) {

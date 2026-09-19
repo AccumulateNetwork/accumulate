@@ -396,3 +396,10 @@
       parameters: # Not indexed
       - name: Block
         type: uint
+    - name: ExecutedBlock
+      # The block THIS node's executor last executed. It is here, under
+      # SystemData, and not on <partition>/ledger, because the ledger is an
+      # ACCOUNT and the join's pull overwrites accounts with a peer's
+      # (#4344). Nothing outside this node's own executor writes it.
+      type: index
+      dataType: uint
