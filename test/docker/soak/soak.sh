@@ -861,6 +861,11 @@ stalled_end="${stalled_end:-unknown}"
 #     following OR syncing (executor.md step 6). A node that hands on
 #     everything it takes is WORKING, and subtracting only certified would
 #     make it the largest red number on the board.
+#   * minus the relays a validator REFUSED, because that is an answer the
+#     caller was given and not a loss. Left in, whoever floods a follower
+#     with garbage drives its figure while the same envelope sent straight
+#     to a validator costs nothing (threat-reviewer F4 on #4366). The
+#     refusals stay visible on the `relayed` row.
 # What is left is the stranded count, and it is the one that must be 0 —
 # at the LAST sample, which soakmon writes on its way out, after the drain.
 # The row states the trend into it, because at any earlier sample a relay
@@ -963,7 +968,7 @@ def totals(ts):
         # An EMPTY field is a counter that node never created — one family
         # exported and not the other. Summing it as 0 would report "nothing
         # stranded here" for a partition nobody measured (REPORTING-SPEC 1).
-        v = (r.get("acceptedNeitherCertifiedNorTaken") or "").strip()
+        v = (r.get("acceptedNeitherCertifiedTakenNorRefused") or "").strip()
         if v:
             try:
                 st = (st or 0) + int(v)
@@ -982,7 +987,7 @@ def totals(ts):
 
 per, blank = {}, 0
 for r in at(last):
-    v = (r.get("acceptedNeitherCertifiedNorTaken") or "").strip()
+    v = (r.get("acceptedNeitherCertifiedTakenNorRefused") or "").strip()
     if not v:
         blank += 1
         continue
@@ -1088,7 +1093,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   # A run that wedged and dumped is the most valuable kind of run there is;
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
   echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
-  echo "| accepted, neither certified here nor taken on relay (#, whole run, the validators) | $(sub_row validator "$lg_exit" "$stopped_early") |"
+  echo "| accepted, neither certified here, taken on relay, nor refused (#, whole run, the validators) | $(sub_row validator "$lg_exit" "$stopped_early") |"
   if [ "$n_fol" -gt 0 ]; then
     echo
     echo "### Follower (#4365)"
@@ -1100,7 +1105,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     else
       echo "| every follower measurement | — not measured (followerlog.py produced nothing; see \`soak.log\`) |"
     fi
-    echo "| accepted, neither certified here nor taken on relay (#, whole run) | $(sub_row follower "$lg_exit" "$stopped_early") |"
+    echo "| accepted, neither certified here, taken on relay, nor refused (#, whole run) | $(sub_row follower "$lg_exit" "$stopped_early") |"
     echo "| relayed (#, whole run) | $(relay_row follower) |"
     echo
     echo "Full detail in \`follower-report.md\`; the per-sample series in \`follower.csv\`."
