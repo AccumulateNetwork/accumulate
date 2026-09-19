@@ -60,9 +60,44 @@ def _log_exit(why):
         pass
 
 
+def _final_rows():
+    """One last row in the per-node series, on the way out (#4364, M3).
+
+    soakmon is stopped after the load generator's grace drain and any
+    IDLE_AFTER tail, so this is the only sample with nothing in flight —
+    which is the sample "the stranded count must be 0" is read against.
+    Everything here is best-effort and must never delay or fail the exit:
+    the process is already going, and a monitor that hangs on the way out
+    keeps its port for the next run.
+    """
+    try:
+        # NEVER a blocking acquire: this also runs from the signal handler,
+        # and if the signal lands while the collector holds LOCK the monitor
+        # deadlocks on its way out — keeping :8099 for the next run, which
+        # is the failure soak.sh's stale-soakmon gate exists for. Two
+        # seconds, then read without it; a torn dict is a bad last row, a
+        # hung exit is a lost run.
+        got = LOCK.acquire(timeout=2)
+        try:
+            ns = dict(STATE.get("nodeStats") or {})
+        finally:
+            if got:
+                LOCK.release()
+        if ns.get("submissions"):
+            write_submissions_csv(ns["submissions"], force=True)
+        if ns.get("mem"):
+            write_mem_csv(ns["mem"], force=True)
+    except Exception as e:
+        try:
+            sys.stderr.write("final rows: %r\n" % (e,))
+        except Exception:
+            pass
+
+
 def _on_signal(sig, _frame):
     _log_exit("signal %s (%s)" % (sig, signal.Signals(sig).name
                                   if hasattr(signal, "Signals") else sig))
+    _final_rows()
     os._exit(128 + sig)
 
 
@@ -79,7 +114,7 @@ if __name__ == "__main__":
         except (ValueError, OSError):
             pass
 
-    atexit.register(lambda: _log_exit("normal exit"))
+    atexit.register(lambda: (_final_rows(), _log_exit("normal exit")))
 
 
 # Everything this process says must survive an abrupt death.
@@ -955,12 +990,14 @@ def mem_csv_rows(mem, ts):
     return out
 
 
-def write_mem_csv(mem):
+def write_mem_csv(mem, force=False):
     """Append one row per node to RUN_DIR/mem.csv every I_MEM seconds. The
     dashboard's history keeps ten minutes; this is the twelve-hour series the
-    steady-state criteria are judged from."""
+    steady-state criteria are judged from.
+
+    `force` writes regardless of the interval — used once, at exit."""
     now = time.time()
-    if now - _MEM_CSV_T[0] < I_MEM:
+    if not force and now - _MEM_CSV_T[0] < I_MEM:
         return
     if not (mem.get("byNode") or mem.get("followerByNode")):
         return
@@ -1000,13 +1037,27 @@ def write_mem_csv(mem):
 # Certification is the discriminator, and it is local knowledge at exactly
 # one place in the code (reviewer H1 on #4364).
 #
-# THE CONTRACT THIS HARNESS READS. Two counters, per node, namespace
-# `accumulate`, both monotone and never reset:
+# THE CONTRACT THIS HARNESS READS. Three counters, per node, namespace
+# `accumulate`, all monotone and never reset:
 #
 #   accumulate_dagbft_submissions_total{partition, outcome}
-#       outcome = "accepted"  -- Submit returned success and the envelope
-#                                entered this node's worker batch
-#       outcome = "rejected"  -- Submit refused it (validation, not serving)
+#       outcome = "accepted"  -- Submit returned SUCCESS TO THE CALLER. The
+#                                node took responsibility for the
+#                                submission, whether the envelope entered
+#                                this node's own worker batch or was
+#                                relayed to a node that can propose it.
+#                                NOT "entered this node's worker": under a
+#                                synchronous relay the envelope never does,
+#                                so that reading exports accepted=0 with
+#                                relayed=n and raises the `relayed >
+#                                accepted` alarm on a follower working
+#                                perfectly. It also silently answers Paul's
+#                                open question 2 (synchronous, or
+#                                accept-and-forward), which is not the
+#                                harness's to answer. "Took responsibility"
+#                                holds under either (reviewer M1 on #4364).
+#       outcome = "rejected"  -- Submit refused it: validation, or a node
+#                                that neither proposes nor relays.
 #       partition             -- the partition id the submission was routed
 #                                to on this node ("Directory", "BVN3"), NOT
 #                                the container: every container runs two
@@ -1027,39 +1078,175 @@ def write_mem_csv(mem):
 #       cheaper hook. A certified header that is never committed is a
 #       different defect and wants its own counter.
 #
-# The quantity the board and the manifest name is the difference:
+#   accumulate_dagbft_relayed_total{partition, outcome}
+#       submissions this node handed to another node because it cannot
+#       propose them itself. Paul, 2026-09-19: "Followers can relay txs. And
+#       should." and "update specs and development plan with relaying txs if
+#       following or syncing" — so a node that takes a transaction and
+#       passes it on is WORKING, and the instrument has to say so.
+#       outcome = "taken"       -- the relay target took it. This is the
+#                                  hand-off that discharges the relaying
+#                                  node's duty; what happens after it is the
+#                                  TARGET's accepted/certified pair, on the
+#                                  target's own node (see COMPOSES, below).
+#                                  "taken", not "accepted", so that one word
+#                                  never means two things in one row
+#                                  (reviewer L1).
+#       outcome = "refused"     -- a target VALIDATED it and declined. A
+#                                  final answer, and a statement about the
+#                                  submission.
+#       outcome = "not-ready"   -- every target that answered said it was
+#                                  not ready (`NotReady` — a joining node,
+#                                  executor.md step 6, #4307) and the node
+#                                  gave up. A statement about the NETWORK,
+#                                  not about the submission, and filing it
+#                                  under `refused` would read a syncing
+#                                  fleet as a policy decision (reviewer M2).
+#       outcome = "unreachable" -- no target answered at all.
 #
-#   accepted never certified (#, whole run) = accepted - certified, per
-#   (node, partition), floored at 0 and summed.
+#       Counted ONCE PER SUBMISSION, AT ITS FINAL ANSWER — not per attempt.
+#       `NotReady` from a target is NOT a final answer: it is the protocol's
+#       "ask someone else", the dialer keeps that peer in rotation, and a
+#       submission that then succeeds is one `taken`. Only when the node
+#       stops trying does the submission take an outcome, and if every
+#       answer it ever got was `NotReady` that outcome is `not-ready`. A
+#       count of attempts or retries is a different measurement and wants
+#       its own family.
 #
-# The window is the whole run, because both are run-long counters. On a
-# validator this sits at the in-flight window — the rounds not yet certified,
-# single digits. On a node in no committee it is 0 certified for the life of
-# the process, so the difference is everything the network dialled to it.
-# `certified > accepted` is an impossible state (REPORTING-SPEC 1a) and is
-# surfaced as an alarm naming the node, not absorbed by the floor.
+#       `relayed_total <= accepted` per (node, partition), always: a node
+#       relays only what it first took responsibility for.
+#
+#       AND A RELAYED SUBMISSION IS NOT ALSO PROPOSED BY THE RELAYING NODE.
+#       Relay or propose, never both. If a relaying node keeps its own copy
+#       in its worker, then the moment it is PROMOTED — the disturbance
+#       #4364 exists to run — it certifies what it also relayed and
+#       `certified + relayed{taken} > accepted` fires as an "instrument
+#       fault" on a real event, sending the reader to the wrong code. It
+#       also double-counts across the fleet and leaves a replay-rejected
+#       duplicate (reviewer M4). The alarm's caption names promotion too,
+#       because a promotion can race an in-flight relay however the contract
+#       is written.
+#
+# THE OPEN QUESTIONS ARE PAUL'S, and these labels survive any answer
+# (lead's note on #4366, 2026-09-19 — NOT for the harness to decide):
+#   * relay target refuses, is not ready, or is unreachable -> three labels,
+#     whatever the node then does about it. If it gives up, the submission
+#     lands in the stranded figure below, which is where a drop belongs.
+#   * synchronous, or accept-and-forward -> the counting moment is the
+#     relay's FINAL answer either way, and `accepted` means the caller was
+#     told yes either way. Under accept-and-forward a sample can show
+#     accepted > sum(relayed): that difference is relays in flight. Under
+#     synchronous they move together.
+#   * which partitions it relays for -> a submission the node refuses
+#     outright is `submissions_total{outcome="rejected"}` and never enters
+#     this arithmetic; one it accepts and drops is stranded, correctly.
+#   * what "fully synced" means -> IT DOES NOT GATE THE RELAY. Paul,
+#     2026-09-19: "update specs and development plan with relaying txs if
+#     following or syncing". executor.md step 6 divides everything a node
+#     is asked on one line: a READ needs local state, so a syncing node
+#     refuses every read until `COMPLETE`; a RELAY reads no account,
+#     verifies no signature and needs no state, so a node relays whether it
+#     is following OR syncing, and never drops. A syncing node therefore
+#     has live relay counters, and an earlier draft of this block — "a
+#     syncing node rejects, it does not relay" — was wrong.
+#
+# The quantity the board and the manifest name:
+#
+#   accepted, neither certified here nor taken on relay (#, whole run)
+#     = accepted - certified - relayed{taken},
+#       per (node, partition), floored at 0 and summed.
+#
+# THAT SUBTRACTION IS THE WHOLE POINT OF THIS REVISION. It used to be
+# `accepted - certified`, which on a node in no committee is everything it
+# took, by construction — and under relay that is every transaction the
+# follower handled SUCCESSFULLY. A follower doing exactly what Paul says it
+# should would have shown the largest red number on the board under a label
+# meaning failure (builder's learning 1, #4366 note_3869803013). The
+# counters were right and the sentence built from them was false.
+#
+# The window is the whole run, because all three are run-long counters.
+#   * on a validator: certified ~ accepted, relay ~ 0, so this is the
+#     in-flight window — rounds not yet certified, single digits.
+#   * on a WORKING follower: certified 0, relayed{taken} ~ accepted, so
+#     this is ~0 and the row is not red. That is the reading the revision
+#     exists to produce.
+#   * IN FLIGHT IS NOT STRANDED, and at one sample they look the same. A
+#     healthy run ends with a small residue — relays not yet answered, and
+#     on a validator the rounds not yet certified — so "MUST be 0" is read
+#     against the LAST sample, which soakmon writes at its own exit, after
+#     the load generator's grace drain and any IDLE_AFTER tail. The
+#     manifest states that value AND its movement over the final samples:
+#     falling with no new accepts is draining, flat or rising is stranded
+#     (reviewer M3). A reader who learns to excuse a small number excuses
+#     a slow strand.
+#   * on a follower that strands: certified 0, relay 0 or refused or
+#     unreachable, so this is everything it took — the gate-0 reading, and
+#     the number that must be 0 on an acceptance run.
+#
+# COMPOSES ACROSS NODES. A relay hand-off is the boundary of what the
+# relaying node can see: `relayed{taken}` says a node that CAN propose took
+# it, not that it certified it. The next leg is that node's own
+# accepted/certified pair, exported by the same two families, so summing
+# this quantity over the fleet gives the network's true stranded count
+# without any node claiming credit for another's work.
+#
+# Two impossible states, each an instrument alarm and never floored away
+# (REPORTING-SPEC 1a):
+#   * certified + relayed{taken} > accepted — double-counting somewhere:
+#     a per-header certified count, a per-attempt relay count, or a node
+#     PROMOTED mid-run that kept its own copy of what it relayed (#4364's
+#     own disturbance — a real event, not a broken counter).
+#   * sum(relayed) > accepted — a relay of something never accepted. The
+#     sum includes outcomes this harness does not know: a build with a
+#     fourth label could otherwise relay more than it took with no alarm
+#     (reviewer L2).
 #
 # Until the families exist every consumer says `— not measured`, never 0
 # (REPORTING-SPEC 1).
 SUBMIT_TOTAL = "accumulate_dagbft_submissions_total"
 CERTIFIED_TOTAL = "accumulate_dagbft_certified_own_transactions_total"
+RELAYED_TOTAL = "accumulate_dagbft_relayed_total"
+RELAY_OUTCOMES = ("taken", "refused", "not-ready", "unreachable")
+# outcome label -> the field this harness keeps it in. Spelled out rather
+# than derived, because `not-ready` does not camel-case by rule and a
+# silent mis-derivation would file a network fact under nothing.
+RELAY_FIELD = {"taken": "relayedTaken", "refused": "relayedRefused",
+               "not-ready": "relayedNotReady",
+               "unreachable": "relayedUnreachable"}
+# `sample` says which row this is: `periodic` every I_SUB seconds, `final`
+# the one written on the way out. It is not a nicety — "the stranded count
+# must be 0 at the last sample after the drain" is unreadable unless a
+# reader can tell whether the final write actually landed, and inferring it
+# from a timestamp fails whenever an idle tail puts periodic rows after the
+# load generator's exit too (reviewer N2).
 SUBMIT_CSV_HEADER = ("time,node,role,partition,accepted,rejected,certified,"
-                     "acceptedNeverCertified")
+                     "relayedTaken,relayedRefused,relayedNotReady,"
+                     "relayedUnreachable,acceptedNeitherCertifiedNorTaken,"
+                     "sample")
 
 
 def submissions_from(per, role="validator"):
-    """Accepted / rejected / certified per (node, partition) from one scrape.
+    """Accepted / rejected / certified / relayed per (node, partition).
 
-    `measured` is False when NEITHER family appeared on any node — which is
-    every build to date. A node that exports one and not the other is
-    measured but incomplete, and says so per node rather than rendering the
-    missing half as zero.
+    `measured` is False when NONE of the three families appeared on any node
+    — which is every build to date. A node that exports some and not others
+    is measured but incomplete, and says so per node rather than rendering
+    the missing ones as zero.
+
+    A relay outcome label this harness does not know is counted under
+    `unknownRelayOutcomes` and shown, never folded into a known one: four
+    questions about the relay's behaviour are open for Paul (#4366) and the
+    answer may add a label.
     """
+    blank = {"accepted": None, "rejected": None, "certified": None,
+             "relayedTaken": None, "relayedRefused": None,
+             "relayedNotReady": None, "relayedUnreachable": None}
     by_node = {}
     seen = set()
+    out_unknown = {}
     for c, rows in (per or {}).items():
         for name, lab, v in rows or ():
-            if name not in (SUBMIT_TOTAL, CERTIFIED_TOTAL):
+            if name not in (SUBMIT_TOTAL, CERTIFIED_TOTAL, RELAYED_TOTAL):
                 continue
             try:
                 n = int(float(v))
@@ -1068,41 +1255,78 @@ def submissions_from(per, role="validator"):
             lab = lab if isinstance(lab, dict) else {}
             part = lab.get("partition") or "?"
             node = by_node.setdefault(c, {"role": role, "byPartition": {}})
-            p = node["byPartition"].setdefault(
-                part, {"accepted": None, "rejected": None, "certified": None})
+            p = node["byPartition"].setdefault(part, dict(blank))
             if name == SUBMIT_TOTAL:
                 seen.add("submissions")
                 o = lab.get("outcome")
                 if o in ("accepted", "rejected"):
                     p[o] = (p[o] or 0) + n
-            else:
+            elif name == CERTIFIED_TOTAL:
                 seen.add("certified")
                 p["certified"] = (p["certified"] or 0) + n
+            else:
+                # An outcome this harness does not know is NOT folded into a
+                # known one and not dropped: Paul has four open questions on
+                # the relay's behaviour (#4366) and the answer may add a
+                # label. It is counted, named, and surfaced.
+                seen.add("relayed")
+                o = lab.get("outcome")
+                k = RELAY_FIELD.get(o)
+                if k:
+                    p[k] = (p[k] or 0) + n
+                else:
+                    key = o or "(no outcome label)"
+                    out_unknown[key] = out_unknown.get(key, 0) + n
+                    per_unknown = p.setdefault("unknownRelayOutcomes", {})
+                    per_unknown[key] = per_unknown.get(key, 0) + n
 
+    fields = ("accepted", "rejected", "certified", "relayedTaken",
+              "relayedRefused", "relayedNotReady", "relayedUnreachable",
+              "stranded")
     out = {"measured": bool(seen), "families": sorted(seen), "byNode": by_node,
-           "accepted": None, "rejected": None, "certified": None,
-           "neverCertified": None, "worstNode": None,
-           "worstNeverCertified": None, "impossible": []}
+           "stranded": None, "worstNode": None, "worstStranded": None,
+           "impossible": [], "unknownRelayOutcomes": out_unknown}
+    for k in fields:
+        out.setdefault(k, None)
     if not seen:
         return out
-    acc = rej = cert = never = 0
+    tot = {k: 0 for k in fields}
     for c, node in by_node.items():
-        n_acc = n_cert = n_never = n_rej = 0
+        n = {k: 0 for k in fields}
         for part, p in node["byPartition"].items():
-            a, r, q = p.get("accepted") or 0, p.get("rejected") or 0, p.get("certified") or 0
-            if p.get("accepted") is not None and p.get("certified") is not None and q > a:
+            a = p.get("accepted") or 0
+            q = p.get("certified") or 0
+            ok = p.get("relayedTaken") or 0
+            # Every relay outcome, INCLUDING ones this harness cannot read:
+            # a build with a fourth label could otherwise relay more than it
+            # took with no alarm (reviewer L2).
+            tried = ok + sum(p.get(k) or 0 for k in
+                             ("relayedRefused", "relayedNotReady",
+                              "relayedUnreachable")) \
+                + sum((p.get("unknownRelayOutcomes") or {}).values())
+            # Two impossible states, each an instrument fault and each
+            # named rather than absorbed by the floor (REPORTING-SPEC 1a).
+            if p.get("accepted") is not None and q + ok > a:
                 out["impossible"].append(
-                    "%s %s: certified %d of %d accepted" % (c, part, q, a))
-            gap = max(0, a - q)
-            p["neverCertified"] = gap
-            n_acc += a; n_rej += r; n_cert += q; n_never += gap
-        node.update({"accepted": n_acc, "rejected": n_rej,
-                     "certified": n_cert, "neverCertified": n_never})
-        acc += n_acc; rej += n_rej; cert += n_cert; never += n_never
-        if out["worstNeverCertified"] is None or n_never > out["worstNeverCertified"]:
-            out["worstNeverCertified"], out["worstNode"] = n_never, c
-    out.update({"accepted": acc, "rejected": rej, "certified": cert,
-                "neverCertified": never})
+                    "%s %s: certified %d + relayed-taken %d of %d accepted"
+                    % (c, part, q, ok, a))
+            if p.get("accepted") is not None and tried > a:
+                out["impossible"].append(
+                    "%s %s: relayed %d of %d accepted" % (c, part, tried, a))
+            # The quantity: what it neither got into its own certified
+            # header NOR handed to a node that took it. On a working
+            # relaying node this is ~0; before relay it was everything the
+            # node accepted.
+            gap = max(0, a - q - ok)
+            p["stranded"] = gap
+            for k in fields:
+                n[k] += p.get(k) or 0
+        node.update(n)
+        for k in fields:
+            tot[k] += n[k]
+        if out["worstStranded"] is None or n["stranded"] > out["worstStranded"]:
+            out["worstStranded"], out["worstNode"] = n["stranded"], c
+    out.update(tot)
     return out
 
 
@@ -1120,19 +1344,27 @@ def merge_submissions(val, fol):
     out["measured"] = bool(val.get("measured") or fol.get("measured"))
     out["follower"] = {k: fol.get(k) for k in
                        ("measured", "accepted", "rejected", "certified",
-                        "neverCertified", "worstNode", "worstNeverCertified")}
+                        "relayedTaken", "relayedRefused", "relayedNotReady",
+                        "relayedUnreachable", "stranded", "worstNode",
+                        "worstStranded")}
     out["followerByNode"] = fol.get("byNode") or {}
     out["impossible"] = list(val.get("impossible") or []) + list(fol.get("impossible") or [])
+    unknown = dict(val.get("unknownRelayOutcomes") or {})
+    for k, v in (fol.get("unknownRelayOutcomes") or {}).items():
+        unknown[k] = unknown.get(k, 0) + v
+    out["unknownRelayOutcomes"] = unknown
     return out
 
 
-def submissions_csv_rows(sub, ts):
+def submissions_csv_rows(sub, ts, sample="periodic"):
     """One row per (node, partition) per sample, validators then followers.
 
     No rows at all while the families are absent: an empty field here would
     read as "the node answered zero", and the file's whole job is to say
     whether anyone asked. The header is written regardless, so a run
     directory always shows the harness looked.
+
+    `sample` is `periodic` or `final`; see SUBMIT_CSV_HEADER.
     """
     rows = []
     for source, role in ((sub.get("byNode") or {}, "validator"),
@@ -1144,14 +1376,24 @@ def submissions_csv_rows(sub, ts):
                 rows.append(",".join(
                     [ts, c, node.get("role") or role, part] +
                     ["" if p.get(k) is None else str(p.get(k))
-                     for k in ("accepted", "rejected", "certified", "neverCertified")]))
+                     for k in ("accepted", "rejected", "certified",
+                               "relayedTaken", "relayedRefused",
+                               "relayedNotReady", "relayedUnreachable",
+                               "stranded")] + [sample]))
     return rows
 
 
-def write_submissions_csv(sub):
-    """Append RUN_DIR/submissions.csv every I_SUB seconds (#4364)."""
+def write_submissions_csv(sub, force=False):
+    """Append RUN_DIR/submissions.csv every I_SUB seconds (#4364).
+
+    `force` writes regardless of the interval. soakmon is killed AFTER the
+    load generator's grace drain and any IDLE_AFTER tail, so the row written
+    on the way out is the only one taken with nothing left in flight — and
+    "the stranded count must be 0" can only be read against that one
+    (reviewer M3). Every earlier sample mixes a relay not yet answered with
+    a transaction nobody will ever take."""
     now = time.time()
-    if now - _SUB_CSV_T[0] < I_SUB:
+    if not force and now - _SUB_CSV_T[0] < I_SUB:
         return
     _SUB_CSV_T[0] = now
     path = os.path.join(RUN_DIR, "submissions.csv")
@@ -1160,7 +1402,7 @@ def write_submissions_csv(sub):
     with open(path, "a") as f:
         if new:
             f.write(SUBMIT_CSV_HEADER + "\n")
-        for line in submissions_csv_rows(sub, ts):
+        for line in submissions_csv_rows(sub, ts, "final" if force else "periodic"):
             f.write(line + "\n")
 
 
@@ -2172,7 +2414,8 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <b id=fmax>—</b><span class=sl>behind (blocks, whole run)</span>
         <span class=mut id=fheight>—</span><span class=sl>its height / the validators&rsquo;</span>
         <span class=mut id=fres>—</span><span class=sl>its RSS (MiB) / heals (#)</span>
-        <b id=fstrand>—</b><span class=sl>accepted, never certified (#, whole run)</span>
+        <b id=fstrand>—</b><span class=sl>accepted, neither certified here nor taken on relay (#, whole run)</span>
+        <span class=mut id=frelay>—</span><span class=sl>relayed (#, whole run): taken / refused / target not ready / unreachable</span>
         <span class=cap id=fstate></span>
       </div>
     </div>
@@ -2200,7 +2443,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       </div>
       <div class=sub>submissions</div>
       <div class=kv>
-        <b id=nstrand>—</b><span class=sl>accepted, never certified (#, whole run, worst validator)</span>
+        <b id=nstrand>—</b><span class=sl>accepted, neither certified here nor taken on relay (#, whole run, worst validator)</span>
         <span class=mut id=nacc>—</span><span class=sl>accepted (#, whole run)</span>
         <span class=cap id=nstrandnode></span>
       </div>
@@ -2298,7 +2541,7 @@ function card(k,v,d){return `<div class=card><div class=k>${k}</div><div class=v
 // the collector's dict or on a substring of this file.
 const ABSENT='<span class=mut>— not measured</span>';
 function followerView(fo, ns){
-  const out={fbehind:ABSENT,fmax:ABSENT,fheight:ABSENT,fres:ABSENT,fstrand:ABSENT,fstate:''};
+  const out={fbehind:ABSENT,fmax:ABSENT,fheight:ABSENT,fres:ABSENT,fstrand:ABSENT,frelay:ABSENT,fstate:''};
   const names=Object.keys(fo.nodes||{});
   // No follower in the topology is not a broken instrument and not a zero:
   // the row group says so and stays put, so the board reads the same on a
@@ -2333,14 +2576,24 @@ function followerView(fo, ns){
   // must still be visible somewhere.
   const fst=ns.followerStats;
   out.fres=fst?`${fmt(fst.rssMaxMiB)} / ${fst.healsMeasured?fmt(fst.healEntries):ABSENT}`:ABSENT;
-  // Accepted and never CERTIFIED (#4364). A follower does author and
-  // broadcast headers carrying its own batches — proposing is not the
-  // discriminator, certification is (header_builder.go:35-76 vs
-  // vote_handler.go:277-284). No build exports the families yet, so this is
-  // `— not measured` and MUST NOT be 0.
+  // What the follower neither certified itself NOR handed to a node that
+  // took it (#4364). Certification is the discriminator, not proposal — a
+  // follower authors and broadcasts headers carrying its own batches
+  // (header_builder.go:35-76) and never collects the votes
+  // (vote_handler.go:277-284) — and since Paul's "Followers can relay txs.
+  // And should." the relay hand-off discharges the duty, so a WORKING
+  // follower reads ~0 here while relaying everything. Subtracting only
+  // `certified` would paint a working relay maximal red.
+  // No build exports the families yet, so this is `— not measured`, never 0.
   const sub=(ns&&ns.submissions)||null, fsub=sub&&sub.follower;
-  out.fstrand=(sub&&sub.measured&&fsub&&fsub.neverCertified!=null)
-    ?`<span class="${fsub.neverCertified?'red':''}">${fmt(fsub.neverCertified)}</span>`:ABSENT;
+  out.fstrand=(sub&&sub.measured&&fsub&&fsub.stranded!=null)
+    ?`<span class="${fsub.stranded?'red':''}">${fmt(fsub.stranded)}</span>`:ABSENT;
+  out.frelay=(sub&&sub.measured&&fsub&&fsub.relayedTaken!=null)
+    ?`${fmt(fsub.relayedTaken)} / `
+     +`<span class="${fsub.relayedRefused?'yel':''}">${fmt(fsub.relayedRefused)}</span> / `
+     +`<span class="${fsub.relayedNotReady?'yel':''}">${fmt(fsub.relayedNotReady)}</span> / `
+     +`<span class="${fsub.relayedUnreachable?'red':''}">${fmt(fsub.relayedUnreachable)}</span>`
+    :ABSENT;
   out.fstate=`${names.join(', ')} · bound ${fo.bound} blocks`
     +(over?` · OVER the bound (${who})`:'');
   return out;
@@ -2408,7 +2661,7 @@ async function tick(){
   // follower (#4365).
   {
     const v=followerView(s.follower||{}, s.nodeStats||{});
-    for(const k of ['fbehind','fmax','fheight','fres','fstrand','fstate'])$(k).innerHTML=v[k];
+    for(const k of ['fbehind','fmax','fheight','fres','fstrand','frelay','fstate'])$(k).innerHTML=v[k];
   }
   // header
   const ph=lg.phase||'—';$('phase').textContent=ph;
@@ -2472,13 +2725,18 @@ const bytes=v=>(v==null?'—':v<1024?fmt(v)+' B':v<1048576?(v/1024).toFixed(1)+'
   // would assert that nothing ever stranded, which is exactly the claim run
   // 20260919T191634Z could not make.
   const sub=ns.submissions||{};
-  $('nstrand').innerHTML=(sub.measured&&sub.worstNeverCertified!=null)
-    ?`<span class="${sub.worstNeverCertified?'red':''}">${fmt(sub.worstNeverCertified)}</span>`:ABSENT;
+  $('nstrand').innerHTML=(sub.measured&&sub.worstStranded!=null)
+    ?`<span class="${sub.worstStranded?'red':''}">${fmt(sub.worstStranded)}</span>`:ABSENT;
   $('nacc').innerHTML=(sub.measured&&sub.accepted!=null)?fmt(sub.accepted):ABSENT;
+  // A relay outcome label the harness does not know is SHOWN, not folded
+  // into a known one: Paul has four open questions on the relay's
+  // behaviour (#4366) and the answer may add a label.
+  const unk=Object.entries(sub.unknownRelayOutcomes||{});
   $('nstrandnode').textContent=sub.measured
     ?((sub.worstNode?'worst '+sub.worstNode:'')
-      +((sub.impossible&&sub.impossible.length)?' · INSTRUMENT ALARM: '+sub.impossible.join('; '):''))
-    :'no node exports accumulate_dagbft_certified_own_transactions_total (#4366, #4369)';
+      +((sub.impossible&&sub.impossible.length)?' · INSTRUMENT ALARM: '+sub.impossible.join('; '):'')
+      +(unk.length?' · unknown relay outcome: '+unk.map(([k,v])=>`${k} ${fmt(v)}`).join(', '):''))
+    :'no node exports accumulate_dagbft_relayed_total (#4366, #4369)';
   // wedges / heals pills
   $('wsyn').innerHTML=w.measured?fmt((w.byReason||{})['queue-full']||0):nm(null);$('wanc').innerHTML=w.measured?fmt((w.byReason||{}).deadline||0):nm(null);$('wtot').innerHTML=nm(w.total);
   $('hent').innerHTML=nm(h.entries);
@@ -2603,15 +2861,16 @@ const DEFS={
  fmax:"The largest that gap has been at any sample since this monitor started. Never cleared; it is the number the manifest states as the worst of the run.",
  fheight:"The follower's own ledger index and the validators' highest, per partition it runs. Two separate reads a moment apart, so a follower reading one block ahead is skew, not a negative lag.",
  fres:"The follower's own resident memory and healed entries. It is NOT in the fleet averages or the heal total beside them — those mean the validators, the same membership monitor.csv's heals column has — so it is reported here. A follower is never selected as a gap requester (cadence.go:57-66), so its heals should stay 0; 0 here is a read number, not an assumption.",
- fstrand:"Transactions the follower's Submit accepted that never reached a certified header of its own, whole run: accepted minus certified, over accumulate_dagbft_submissions_total{outcome=\"accepted\"} and accumulate_dagbft_certified_own_transactions_total. NOT 'never proposed': a follower does author and broadcast headers carrying its own batches (header_builder.go:35-76); what it never gets is the 2f+1 votes, because validators drop a header whose author is not in the committee (vote_handler.go:277-284). So certified is 0 for the life of a follower and this equals everything the network dialled to it (#4366) — each one a lost user transaction or a synthetic that will have to be healed. Reads \u2014 not measured until a node exports the two families (#4369); 0 would assert the opposite of what is known.",
+ fstrand:"Transactions the follower's Submit took responsibility for that it neither got into a certified header of its own NOR handed to a node that took it: accepted minus certified minus relayed-taken, whole run. THE number that must be 0 on an acceptance run — each one is a lost user transaction, or a synthetic that will have to be healed. Certified and not 'proposed': a follower does author and broadcast headers carrying its own batches (header_builder.go:35-76) and never collects the 2f+1 votes, because validators drop a header whose author is not in the committee (vote_handler.go:277-284), so certified is 0 for its whole life. And minus relayed-taken, because Paul (2026-09-19) said followers can and should relay: subtracting only certified would show a follower relaying everything perfectly as the largest red number on the board. Read it against the LAST sample, which is written when the monitor exits, after the drain — at any earlier sample a relay in flight and a stranded transaction look the same, which is why the manifest states the trend beside the value. Reads \u2014 not measured until a node exports the three families (#4366, #4369); 0 would assert the opposite of what is known.",
+ frelay:"What became of the submissions this node handed on, whole run, counted once per submission at its FINAL answer: taken by a node that can propose it / a target validated it and refused / every target that answered said NotReady and the node gave up / no target answered at all. Taken is the hand-off that discharges the duty — what happens after it is the TARGET's own accepted-and-certified pair, so the same counters summed over the fleet give the network's true stranded count with nobody claiming credit for another node's work. 'Target not ready' is a statement about the network (a joining node, #4307), not about the submission, which is why it is not filed under refused; a NotReady that is retried and then succeeds is one taken, not two outcomes. What the node does about a refusal, a not-ready or an unreachable target is open for Paul on #4366. Relaying is NOT gated on being synced: a read needs local state, a relay needs none, so a node relays whether it is following or syncing (executor.md step 6).",
  fstate:"Which containers are followers and the bound the gate is judged against — two blocks: one for the two reads not being simultaneous at a one-second block interval, one for the executor being inside the block it is closing.",
  lblocks:"Blocks produced by the network, summed over partitions, each partition taken as the highest count any node reported.",
  lempty:"Blocks that carried no transactions.",
  lidle:"Shown when nearly every block is empty: consensus is committing empty rounds.",
  nrssavg:"Resident memory of the node process, MiB, averaged over the fleet.", nrssmax:"Largest resident memory of any node, MiB.", nrssmin:"Smallest resident memory of any node, MiB.",
- nstrand:"The largest count, on any one validator, of transactions it accepted at Submit that never reached a certified header of its own — accepted minus certified, whole run. On a validator this sits at the in-flight window, the rounds not yet certified; a number that climbs means submissions are dying in a queue nobody drains. Over the validators, the same membership as every other total in this panel.",
+ nstrand:"The largest count, on any one validator, of transactions it took responsibility for at Submit and neither certified itself nor handed to a node that took it — accepted minus certified minus relayed-taken, whole run. On a validator certification is its own job and it relays nothing, so this sits at the in-flight window, the rounds not yet certified; a number that climbs means submissions are dying in a queue nobody drains. In flight and stranded look alike at one sample: the manifest states the final value after the drain together with its trend, and that is the reading to judge on. Over the validators, the same membership as every other total in this panel.",
  nacc:"Transactions accepted at Submit across the validators, whole run — the denominator the number above is read against.",
- nstrandnode:"Which validator holds that worst count, and any instrument alarm: a node reporting more certified than accepted is an impossible state (REPORTING-SPEC 1a) and means a counter is wrong — most likely one counting per header instead of once per transaction, so a re-proposed batch was counted twice — not that nothing stranded.",
+ nstrandnode:"Which validator holds that worst count, plus the two impossible states (REPORTING-SPEC 1a): certified plus relayed-taken above what was accepted, or more relayed than accepted. Causes, in order of likelihood: a certified count per header instead of once per transaction; a relay counted per attempt instead of once per submission at its final answer; or — and this one is a REAL EVENT, not a broken counter — a node PROMOTED mid-run that kept its own copy of a submission it had already relayed, which the contract forbids precisely because it lands here (#4364's own disturbance). Also shown: any relay outcome label this harness does not know, named rather than folded into one it does, because the relay's behaviour is still open for Paul (#4366).",
  ngravg:"Goroutines in the node process, averaged over the fleet.", ngrmax:"Most goroutines in any node.", ngrmin:"Fewest goroutines in any node.",
  ndbavg:"Database on disk per node, GB, averaged.", ndbmax:"Largest database on disk of any node, GB.", ndbgrow:"How fast the largest database is growing, GB per hour.",
  lheld:"Batches kept after execution so a peer that is behind can still fetch them.", lhits:"Times a peer fetched one of those retained batches.", lexp:"Retained batches let go when their retention window passed.",
