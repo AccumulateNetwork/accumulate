@@ -34,6 +34,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
@@ -51,20 +52,75 @@ type onePartition string
 func (p onePartition) RouteAccount(*url.URL) (string, error)        { return string(p), nil }
 func (p onePartition) Route(...*messaging.Envelope) (string, error) { return string(p), nil }
 
+// executingAdapter is this test's executor: the production Service hands it
+// every block it produces from the committed certificates, in the
+// certificate's canonical payload order, exactly as the executor bridge is
+// handed one. What it records is therefore "executed in a block on this
+// node's partition", not "named by a certificate the committee agreed".
+type executingAdapter struct {
+	mu        sync.Mutex
+	blocks    int
+	executed  map[string]bool
+	validated int
+}
+
+func newExecutingAdapter() *executingAdapter {
+	return &executingAdapter{executed: map[string]bool{}}
+}
+
+func (a *executingAdapter) ProduceBlock(_ context.Context, p adapter.BlockParams) ([32]byte, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.blocks++
+	for _, b := range p.Batches {
+		for _, tx := range b.Transactions {
+			a.executed[string(tx)] = true
+		}
+	}
+	return [32]byte{byte(a.blocks)}, nil
+}
+
+func (a *executingAdapter) ValidateTransaction([]byte) error {
+	a.mu.Lock()
+	a.validated++
+	a.mu.Unlock()
+	return nil
+}
+
+func (a *executingAdapter) LastBlock() (uint64, [32]byte, error)                       { return 0, [32]byte{}, nil }
+func (a *executingAdapter) LastMajorBlock() (uint64, time.Time, bool)                  { return 0, time.Time{}, false }
+func (a *executingAdapter) StateHash() [32]byte                                        { return [32]byte{} }
+func (a *executingAdapter) Validators() []adapter.ValidatorInfo                        { return nil }
+func (a *executingAdapter) OnValidatorSetChange(func([]adapter.ValidatorInfo, uint64)) {}
+
+func (a *executingAdapter) count(prefix string) int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	n := 0
+	for tx := range a.executed {
+		if strings.Contains(tx, prefix) {
+			n++
+		}
+	}
+	return n
+}
+
+func (a *executingAdapter) blockCount() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.blocks
+}
+
 type relayNode struct {
 	name    string
 	pub     ed25519.PublicKey
 	chost   host.Host
-	cn      *consensus.Node
 	svc     *Service
+	exec    *executingAdapter
 	apiNode *p2p.Node
 	sub     *SubmitterService
 	relay   *Relay
 	joining bool
-
-	mu        sync.Mutex
-	committed map[string]bool
-	blocks    int
 }
 
 // TestARelayCarriesWhatItCannotPropose is #4366's regression test: the
@@ -124,7 +180,9 @@ func TestARelayCarriesWhatItCannotPropose(t *testing.T) {
 			infos[i] = types.ValidatorInfo{PublicKey: pub, Stake: 100}
 		}
 	}
-	committee := types.NewCommittee(infos, 1)
+	// The committee the production Service builds for itself from
+	// InitialValidators; these are the same four keys.
+	_ = types.NewCommittee(infos, 1)
 
 	// The committee as the globals on chain give it: the four validators
 	// active on the partition, the two followers in it nowhere.
@@ -152,6 +210,11 @@ func TestARelayCarriesWhatItCannotPropose(t *testing.T) {
 		}
 	}
 
+	initial := make([]adapter.ValidatorInfo, nVals)
+	for i := range initial {
+		initial[i] = adapter.ValidatorInfo{PublicKey: [32]byte(pubs[i]), Stake: 100, Active: true}
+	}
+
 	nodes := make([]*relayNode, nNodes)
 	var apiAddrs []multiaddr.Multiaddr
 	for i := range nodes {
@@ -169,19 +232,22 @@ func TestARelayCarriesWhatItCannotPropose(t *testing.T) {
 			MinRoundInterval:    50 * time.Millisecond,
 			BatchCollectTimeout: 10 * time.Second,
 		}
-		cn, err := consensus.NewNode(nodeCfg, committee, chosts[i], ps)
-		require.NoError(t, err)
 
+		// The production Service: it builds the consensus node, starts it,
+		// and runs the block production loop that hands every committed
+		// certificate's batches to the executor. Nothing here inserts a
+		// genesis certificate or collects committed groups by hand.
+		exec := newExecutingAdapter()
 		svc, err := NewService(ServiceConfig{
-			Partition:  &protocol.PartitionInfo{ID: part, Type: protocol.PartitionTypeBlockValidator},
-			NodeConfig: nodeCfg,
-			Adapter:    &collectingAdapter{commitAdapter: commitAdapter{hash: [32]byte{0xAA}}},
-			EventBus:   events.NewBus(nil),
+			Partition:         &protocol.PartitionInfo{ID: part, Type: protocol.PartitionTypeBlockValidator},
+			NodeConfig:        nodeCfg,
+			Adapter:           exec,
+			EventBus:          events.NewBus(nil),
+			Host:              chosts[i],
+			PubSub:            ps,
+			InitialValidators: initial,
 		})
 		require.NoError(t, err)
-		svc.node = cn
-		svc.committee = committee
-		svc.ctx = ctx0
 
 		// The API host. Each bootstraps to every host before it, so every
 		// node is connected to every other and libp2p identify tells each
@@ -249,66 +315,18 @@ func TestARelayCarriesWhatItCannotPropose(t *testing.T) {
 		registerService(t, apiNode, api.ServiceTypeConsensus.AddressFor(part), message.ConsensusService{ConsensusService: cons})
 
 		nodes[i] = &relayNode{
-			name: name, pub: pubs[i], chost: chosts[i], cn: cn, svc: svc,
+			name: name, pub: pubs[i], chost: chosts[i], svc: svc, exec: exec,
 			apiNode: apiNode, sub: sub, relay: relay, joining: i == iJoining,
-			committed: map[string]bool{},
 		}
-	}
-
-	for _, nd := range nodes {
-		require.NoError(t, nd.cn.InsertGenesisForAll(keys[:nVals]))
 	}
 
 	ctx, cancel := context.WithCancel(ctx0)
-	var wg sync.WaitGroup
+	defer cancel()
 	for _, nd := range nodes {
+		require.NoError(t, nd.svc.Start(ctx))
 		nd := nd
-		wg.Add(1)
-		go func() { defer wg.Done(); _ = nd.cn.Start(ctx) }()
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case group, ok := <-nd.cn.Committed():
-					if !ok {
-						return
-					}
-					for _, cert := range group {
-						batches, err := nd.cn.CollectBatches(ctx, cert)
-						if err != nil {
-							continue
-						}
-						nd.mu.Lock()
-						for _, b := range batches {
-							for _, tx := range b.Transactions {
-								nd.committed[string(tx)] = true
-							}
-						}
-						nd.blocks++
-						nd.mu.Unlock()
-						digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-						for _, e := range cert.Header.Payload {
-							digests = append(digests, e.Digest)
-						}
-						for _, w := range nd.cn.Workers() {
-							w.PruneCommitted(digests, worker.CommitInfo{Detail: "test", Cert: cert.Digest().String()})
-						}
-					}
-					nd.cn.ReportExecuted()
-				}
-			}
-		}()
+		t.Cleanup(func() { _ = nd.svc.Stop() })
 	}
-	defer func() {
-		cancel()
-		wg.Wait()
-		for _, nd := range nodes {
-			nd.cn.Stop()
-		}
-	}()
 
 	// The API mesh has to have exchanged identify before a relay can find a
 	// provider that is not itself.
@@ -418,43 +436,38 @@ loop:
 
 	require.Empty(t, failed, "a submission a node could not propose was refused instead of relayed")
 
-	// What reached a block, anywhere.
+	// What was EXECUTED, on every node. This is the production Service's
+	// block production loop handing the committed certificates' batches to
+	// the adapter, in canonical order -- not a certificate the committee
+	// agreed and this test then read out of a channel by hand.
 	seen := map[string]int{}
 	for _, nd := range nodes {
-		nd.mu.Lock()
 		counts := map[string]int{}
-		for tx := range nd.committed {
-			for _, p := range []string{"HTTP-TX-", "PEER-TX-", "JOIN-TX-", "VAL-TX-"} {
-				if strings.Contains(tx, p) {
-					counts[p]++
-				}
-			}
+		for _, p := range []string{"HTTP-TX-", "PEER-TX-", "JOIN-TX-", "VAL-TX-"} {
+			counts[p] = nd.exec.count(p)
 		}
-		t.Logf("%-18s blocks=%d committed=%d http=%d peer=%d joining=%d validator=%d",
-			nd.name, nd.blocks, len(nd.committed),
+		t.Logf("%-18s blocks=%d http=%d peer=%d joining=%d validator=%d",
+			nd.name, nd.exec.blockCount(),
 			counts["HTTP-TX-"], counts["PEER-TX-"], counts["JOIN-TX-"], counts["VAL-TX-"])
 		for k, v := range counts {
 			if v > seen[k] {
 				seen[k] = v
 			}
 		}
-		nd.mu.Unlock()
 	}
 
 	require.NotZero(t, seen["VAL-TX-"], "the network did not run")
 	require.NotZero(t, seen["HTTP-TX-"],
-		"a transaction submitted to the follower's own API never reached a block (#4366)")
+		"a transaction submitted to the follower's own API was never executed in a block (#4366)")
 	require.NotZero(t, seen["PEER-TX-"],
-		"a transaction a peer dialled to the follower never reached a block (#4366)")
+		"a transaction a peer dialled to the follower was never executed in a block (#4366)")
 	require.NotZero(t, seen["JOIN-TX-"],
-		"a transaction submitted to a joining node never reached a block")
+		"a transaction submitted to a joining node was never executed in a block")
 
-	// It follows, or this proves nothing.
+	// It follows, or this proves nothing: a node in no committee executes
+	// every block the committee makes.
 	for _, i := range []int{iFol1, iFol2} {
-		nodes[i].mu.Lock()
-		b := nodes[i].blocks
-		nodes[i].mu.Unlock()
-		require.NotZero(t, b, "%s executed no block at all", nodes[i].name)
+		require.NotZero(t, nodes[i].exec.blockCount(), "%s executed no block at all", nodes[i].name)
 	}
 
 	// The three counter families, read off the registry the exporter serves.

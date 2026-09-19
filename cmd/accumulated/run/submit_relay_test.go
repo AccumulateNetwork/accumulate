@@ -15,6 +15,7 @@ import (
 
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -95,16 +96,56 @@ func TestNewSubmitterService_TheDaemonWiresTheCommitteeAndTheRelay(t *testing.T)
 	defer func() { _ = apiNode.Close() }()
 
 	bus := events.NewBus(nil)
-	sub := newSubmitterService(submitterParams{
-		Partition: partition,
-		AuthorKey: pub,
+	full := submitterParams{
+		Partition:    partition,
+		AuthorKey:    pub,
+		ValidatorKey: priv,
 		// Seeded with a committee this node is not in.
-		Globals:  definitionWith(partition, []ed25519.PublicKey{someoneElse}),
-		EventBus: bus,
-		Service:  svc,
-		Node:     apiNode,
-		Network:  "WiringNet",
+		Globals:   definitionWith(partition, []ed25519.PublicKey{someoneElse}),
+		EventBus:  bus,
+		Service:   svc,
+		NodeState: nodestate.Always{},
+		Node:      apiNode,
+		Network:   "WiringNet",
+	}
+
+	// Every piece is required, and the daemon's call site is pinned by that
+	// and not by a test choosing arguments: omit any one of them and the
+	// node does not start. Six of these used to be silent (#4366
+	// note_3869956734, C1, C2, C3, C5, C6, C8).
+	for name, break_ := range map[string]func(*submitterParams){
+		"no author key (C4)":   func(p *submitterParams) { p.AuthorKey = nil },
+		"no validator key":     func(p *submitterParams) { p.ValidatorKey = nil },
+		"no globals (C1)":      func(p *submitterParams) { p.Globals = nil },
+		"no event bus (C2)":    func(p *submitterParams) { p.EventBus = nil },
+		"no node state (C8)":   func(p *submitterParams) { p.NodeState = nil },
+		"no p2p node (C3)":     func(p *submitterParams) { p.Node = nil },
+		"no network name (C6)": func(p *submitterParams) { p.Network = "" },
+		"no partition (C7)":    func(p *submitterParams) { p.Partition = "" },
+	} {
+		broken := full
+		break_(&broken)
+		_, err := newSubmitterService(broken)
+		require.Error(t, err, "the daemon must not start a submit service with %s", name)
+	}
+
+	// And the consensus service's two, which are how another node's relay
+	// learns this one cannot propose and that it holds the key it names.
+	_, err = newConsensusAPIService(dagbft.ConsensusAPIServiceParams{
+		Service: svc, PartitionID: partition, ValidatorKey: priv,
 	})
+	require.Error(t, err, "no node state (C5): CatchingUp would never be reported")
+	_, err = newConsensusAPIService(dagbft.ConsensusAPIServiceParams{
+		Service: svc, PartitionID: partition, NodeState: nodestate.Always{},
+	})
+	require.Error(t, err, "no validator key: no relay could ever confirm this node")
+	_, err = newConsensusAPIService(dagbft.ConsensusAPIServiceParams{
+		Service: svc, PartitionID: partition, NodeState: nodestate.Always{}, ValidatorKey: priv,
+	})
+	require.NoError(t, err)
+
+	sub, err := newSubmitterService(full)
+	require.NoError(t, err)
 
 	verify := false
 	env := &messaging.Envelope{TxHash: []byte("0123456789abcdef0123456789abcdef")}

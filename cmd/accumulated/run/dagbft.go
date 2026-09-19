@@ -633,7 +633,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("register node state: %w", err)
 	}
-	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache, staging, nodeState)
+	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache, staging, nodeState, serving)
 	if err != nil {
 		return err
 	}
@@ -643,7 +643,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 }
 
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache, staging *execute.Staging, nodeState *nodestate.Machine) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache, staging *execute.Staging, nodeState *nodestate.Machine, serving nodestate.Serving) error {
 	logger := logging.NewSlogLogger(inst.logger)
 	// These are the SERVING side of the node: consensus queries, the
 	// sequencer answering a peer's healing request, the API.  They are
@@ -654,7 +654,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	db := database.New(store, logger).Deep()
 
 	// Create consensus service
-	consensusSvc := dagbft.NewConsensusAPIService(dagbft.ConsensusAPIServiceParams{
+	consensusSvc, err := newConsensusAPIService(dagbft.ConsensusAPIServiceParams{
 		Heals:            healCounters,
 		Logger:           logger.With("module", "api"),
 		Service:          s.service,
@@ -666,30 +666,37 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		ValidatorKeyHash: sha256.Sum256(validatorKey[32:]),
 		// Reported as CatchingUp, which is what tells another node's relay
 		// that this one cannot propose yet (#4366).
-		NodeState: nodeState,
+		NodeState: serving,
 		// Answers a relay's challenge, so that naming a validator's key
 		// hash is not enough to be handed its traffic (#4366 F1).
 		ValidatorKey: ed25519.PrivateKey(validatorKey),
 	})
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
 	registerRpcService(inst, consensusSvc.Type().AddressFor(s.Partition.ID), message.ConsensusService{ConsensusService: consensusSvc})
-	err := dagbftProvidesService.Register(inst.services, s, consensusSvc)
+	err = dagbftProvidesService.Register(inst.services, s, consensusSvc)
 	if err != nil {
 		return errors.UnknownError.WithFormat("register consensus service: %w", err)
 	}
 
 	// Create submitter service, with the committee predicate and the relay
 	// it hands on what it cannot propose with (#4366).
-	submitterSvc := newSubmitterService(submitterParams{
-		Logger:    logger.With("module", "api"),
-		Partition: s.Partition.ID,
-		AuthorKey: validatorKey[32:],
-		Globals:   globals,
-		EventBus:  s.eventBus,
-		Service:   s.service,
-		NodeState: nodeState,
-		Node:      inst.p2p,
-		Network:   inst.config.Network,
+	submitterSvc, err := newSubmitterService(submitterParams{
+		Logger:       logger.With("module", "api"),
+		Partition:    s.Partition.ID,
+		AuthorKey:    validatorKey[32:],
+		ValidatorKey: ed25519.PrivateKey(validatorKey),
+		Globals:      globals,
+		EventBus:     s.eventBus,
+		Service:      s.service,
+		NodeState:    serving,
+		Node:         inst.p2p,
+		Network:      inst.config.Network,
 	})
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
 	registerRpcService(inst, submitterSvc.Type().AddressFor(s.Partition.ID), message.Submitter{Submitter: submitterSvc})
 	err = dagbftProvidesSubmitter.Register(inst.services, s, submitterSvc)
 	if err != nil {
