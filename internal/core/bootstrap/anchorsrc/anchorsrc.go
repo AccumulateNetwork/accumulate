@@ -260,6 +260,13 @@ func (s *Source) record(key anchorKey, root [32]byte) {
 	}
 }
 
+// maxPagesPerRead bounds one call's paging. A page that does not advance the
+// cursor would otherwise loop forever under the lock, and a peer chooses how
+// many records a page has (#4301, threat review F5). The cursor keeps its
+// place between calls, so a node far behind catches up over several rounds
+// rather than in one.
+const maxPagesPerRead = 64
+
 func (s *Source) readLocked(ctx context.Context) error {
 	if s.roots == nil {
 		s.roots = map[anchorKey][32]byte{}
@@ -268,34 +275,49 @@ func (s *Source) readLocked(ctx context.Context) error {
 	if pageSize == 0 {
 		pageSize = DefaultPageSize
 	}
+	backfill := s.Backfill
+	if backfill == 0 {
+		backfill = DefaultBackfill
+	}
 
 	q := api.Querier2{Querier: s.Query}
 
-	// The first read starts near the end of the chain, not at entry 0.
-	if !s.started {
+	// **The cursor is re-anchored on every read, against the chain as this
+	// read's peer reports it.** It is a number derived from what peers said,
+	// and the peers rotate: one page whose last entry claimed index 2^40
+	// would otherwise park the cursor past the end of the real chain for the
+	// life of the process, every honest peer would answer NotFound for that
+	// range, and nothing would ever reset it — one response, for a node that
+	// verifies no anchor again (#4301, threat review F5). A peer that reports
+	// a count too LOW only makes this node re-read entries it has already
+	// considered, which is idempotent.
+	chain, err := q.QueryChain(ctx, s.Pool, &api.ChainQuery{Name: "main"})
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.NotFound):
+		return nil // The pool holds no anchors yet
+	default:
+		return errors.UnknownError.WithFormat("read %v's anchor chain: %w", s.Pool, err)
+	}
+	if !s.started || s.next > chain.Count {
 		s.started = true
-		backfill := s.Backfill
-		if backfill == 0 {
-			backfill = DefaultBackfill
-		}
-		chain, err := q.QueryChain(ctx, s.Pool, &api.ChainQuery{Name: "main"})
-		switch {
-		case err == nil:
-			if chain.Count > backfill {
-				s.next = chain.Count - backfill
-			}
-		case errors.Is(err, errors.NotFound):
-			return nil // The pool holds no anchors yet
-		default:
-			return errors.UnknownError.WithFormat("read %v's anchor chain: %w", s.Pool, err)
+		s.next = 0
+		if chain.Count > backfill {
+			// The anchors a join needs are the current ones, and entry 0 is
+			// the first anchor the network ever executed.
+			s.next = chain.Count - backfill
 		}
 	}
 
-	for {
+	for page := 0; page < maxPagesPerRead; page++ {
+		// What was ASKED FOR, kept here, because what comes back is the
+		// peer's and the cursor must not be.
+		start := s.next
 		count, expand := pageSize, true
-		page, err := q.QueryMainChainEntries(ctx, s.Pool, &api.ChainQuery{
+		rec, err := q.QueryMainChainEntries(ctx, s.Pool, &api.ChainQuery{
 			Name:  "main",
-			Range: &api.RangeOptions{Start: s.next, Count: &count, Expand: &expand},
+			Range: &api.RangeOptions{Start: start, Count: &count, Expand: &expand},
 		})
 		switch {
 		case err == nil:
@@ -305,19 +327,23 @@ func (s *Source) readLocked(ctx context.Context) error {
 		default:
 			return errors.UnknownError.WithFormat("read %v's anchors: %w", s.Pool, err)
 		}
-		if page == nil || len(page.Records) == 0 {
+		if rec == nil || len(rec.Records) == 0 {
 			return nil
 		}
 
-		for _, rec := range page.Records {
-			s.next = rec.Index + 1
-			s.consider(rec)
+		for _, entry := range rec.Records {
+			s.consider(entry)
 		}
 
-		if uint64(len(page.Records)) < count {
+		// Advanced by what was asked for and answered, never by an index the
+		// peer chose.
+		s.next = start + uint64(len(rec.Records))
+
+		if uint64(len(rec.Records)) < count {
 			return nil
 		}
 	}
+	return nil
 }
 
 // consider verifies one pool entry and, if it holds, records its root and
@@ -355,11 +381,28 @@ func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messagin
 		return
 	}
 
-	// A verified anchor is the preceding set's signature over whatever
-	// change it carries, so the walk may take the change now.
+	// The walk, and only from the Directory.
+	//
+	// A verified anchor is its partition's quorum over whatever it carries,
+	// and a BVN's quorum is not the bar for naming the validators. Only the
+	// Directory executes a change to the network accounts, and the executor
+	// refuses a DirectoryAnchor from any other source outright
+	// (execute/v2/chain/directory_anchor.go:40). Without this test a quorum
+	// of ONE BVN — three keys of four in the soak topology, against the
+	// Directory's eight of twelve — could put its own keys in every
+	// partition's set as a joining node sees it, and every root it signed
+	// afterwards would verify (#4301, threat review F1).
 	if dir, ok := body.(*protocol.DirectoryAnchor); ok && len(dir.Updates) > 0 {
-		if err := s.Authority.Apply(dir.Updates); err != nil && s.OnRefused != nil {
-			s.OnRefused(pa.MinorBlockIndex, errors.UnknownError.WithFormat("walk the validator set forward: %w", err))
+		switch {
+		case !protocol.IsDnUrl(pa.Source):
+			if s.OnRefused != nil {
+				s.OnRefused(pa.MinorBlockIndex, errors.Unauthorized.WithFormat(
+					"%v carried an operator change and is not the directory's", pa.Source))
+			}
+		default:
+			if err := s.Authority.Apply(dir.Updates); err != nil && s.OnRefused != nil {
+				s.OnRefused(pa.MinorBlockIndex, errors.UnknownError.WithFormat("walk the validator set forward: %w", err))
+			}
 		}
 	}
 

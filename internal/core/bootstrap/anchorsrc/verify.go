@@ -18,25 +18,29 @@ import (
 // verify returns nil iff a quorum of the producing partition's validators
 // signed this anchor transaction.
 //
-// What is counted is DISTINCT members of the set, and only after their
-// signatures have been checked. Neither half is optional:
+// What is counted is DISTINCT members of ONE set — the set this node's walk
+// stands at — and only after their signatures have been checked. Each of
+// those three words was a way in:
 //
-//   - Membership alone is worthless here, because the query API manufactures
-//     signature records. loadTransactionSignaturesV1 (internal/api/v3/load.go)
-//     appends a messaging.BlockAnchor carrying an ED25519Signature with only
-//     PublicKey set, one per status.AnchorSigners, and those are a peer's word
-//     about who signed. They carry no signature bytes, so they fail Verify —
-//     which is the only reason they do not reach the threshold on their own.
+//   - **One set.** Counting signatures from several sets against one
+//     threshold lets a rotated-out key stand in for a current one: with
+//     {k0,k1,k2,k3}/3 superseded by {k0,k1,k2}/2, an anchor carrying k3's old
+//     signature and k0's new one reaches two, which the new set means two
+//     CURRENT keys by (#4301, threat review F2). There is one set and one
+//     threshold here, and the version a signature declares is not a selector
+//     — see Set and Authority.
 //
-//   - Distinctness matters because a second copy from one validator is no
-//     second signature. The executor says the same thing in its own words
-//     (msg_block_anchor.go, "A second copy from the same validator is no
-//     second signature").
+//   - **Distinct.** A second copy from one validator is no second signature.
+//     The executor says it in its own words (msg_block_anchor.go, "A second
+//     copy from the same validator is no second signature").
 //
-// The set is the one of the signature's time: a signature declares the
-// network definition version it was made under, and the version is hashed
-// into the signature, so it names a set rather than asserting one. A version
-// the node's walk has not reached is refused (see Authority).
+//   - **Checked.** Membership alone is worthless, because the query API
+//     manufactures signature records: loadTransactionSignaturesV1
+//     (internal/api/v3/load.go) appends a messaging.BlockAnchor carrying an
+//     ED25519Signature with only PublicKey set, one per status.AnchorSigners.
+//     Those are a peer's word about who signed, and they carry no signature
+//     bytes, which is the only reason they do not reach the threshold on
+//     their own.
 func (s *Source) verify(producer string, rec *api.MessageRecord[*messaging.TransactionMessage]) error {
 	if rec.Sequence == nil {
 		return errors.BadRequest.With("the anchor record carries no sequenced message, so there is nothing a signature covers")
@@ -45,21 +49,25 @@ func (s *Source) verify(producer string, rec *api.MessageRecord[*messaging.Trans
 		return errors.Unauthenticated.With("the anchor carries no signatures")
 	}
 
+	set, err := s.Authority.SetFor(producer)
+	if err != nil {
+		return errors.Unauthenticated.WithFormat("no validator set for %s: %w", producer, err)
+	}
+	if set.Threshold == 0 {
+		return errors.Unauthenticated.WithFormat("%s has a zero validator threshold", producer)
+	}
+
 	// A BlockAnchor signature covers the SequencedMessage wrapping the
 	// transaction, not the bare transaction — the executor's own pattern
 	// (execute/v2/block/msg_block_anchor.go, checkSignature).
 	forms := signedForms(rec)
 
 	signed := map[[32]byte]bool{}
-	var threshold uint64
-	var haveSet bool
-	var refusals []error
-
-	for _, set := range rec.Signatures.Records {
-		if set == nil || set.Signatures == nil {
+	for _, sigSet := range rec.Signatures.Records {
+		if sigSet == nil || sigSet.Signatures == nil {
 			continue
 		}
-		for _, sigMsg := range set.Signatures.Records {
+		for _, sigMsg := range sigSet.Signatures.Records {
 			if sigMsg == nil || sigMsg.Message == nil {
 				continue
 			}
@@ -73,16 +81,7 @@ func (s *Source) verify(producer string, rec *api.MessageRecord[*messaging.Trans
 			if keySig == nil {
 				continue
 			}
-
-			// The set of the signature's time, named by the signature.
-			vs, err := s.Authority.SetFor(producer, keySig.GetSignerVersion())
-			if err != nil {
-				refusals = append(refusals, err)
-				continue
-			}
-			threshold, haveSet = vs.Threshold, true
-
-			if !vs.MaySign(keySig.GetPublicKeyHash()) {
+			if !set.MaySign(keySig.GetPublicKeyHash()) {
 				continue
 			}
 			if !verifiesAny(keySig, forms) {
@@ -92,18 +91,10 @@ func (s *Source) verify(producer string, rec *api.MessageRecord[*messaging.Trans
 		}
 	}
 
-	if !haveSet {
-		if len(refusals) > 0 {
-			return errors.Unauthenticated.WithFormat("no validator set covers this anchor's signatures: %w", refusals[0])
-		}
-		return errors.Unauthenticated.With("the anchor carries no validator signature")
-	}
-	if threshold == 0 {
-		return errors.Unauthenticated.WithFormat("%s has a zero validator threshold", producer)
-	}
-	if uint64(len(signed)) < threshold {
+	if uint64(len(signed)) < set.Threshold {
 		return errors.Unauthenticated.WithFormat(
-			"only %d of %s's validators signed, and %d are required", len(signed), producer, threshold)
+			"only %d of %s's validators signed, and %d of the set at network version %d are required",
+			len(signed), producer, set.Threshold, set.Version)
 	}
 	return nil
 }

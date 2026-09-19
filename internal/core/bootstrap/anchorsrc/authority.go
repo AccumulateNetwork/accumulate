@@ -17,22 +17,24 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// Set is one partition's validator set at one version of the network
-// definition: which keys may sign for that partition, and how many distinct
-// ones an anchor needs.
+// Set is one partition's validator set: which keys may sign for that
+// partition, and how many distinct ones an anchor needs.
 //
-// It is a snapshot. A set is never edited once it is in an Authority's
-// history, because an anchor signed under it must still be checkable after
-// the network has moved on.
+// There is one per partition and it is the set the walk STANDS AT. A
+// superseded set is not kept, because a set that is retired is usually
+// retired for a reason and a quorum of retired keys must not be able to sign
+// a new root or name a new set (#4301, threat review F3). The executor says
+// the same thing in its own way: it checks membership in the current active
+// set and ignores the version a signature declares
+// (msg_block_anchor.go, "TODO: Consider checking the version").
 type Set struct {
 	// Partition is the partition the set signs for.
 	Partition string
 
-	// Version is the network definition version this set was read from. An
-	// anchor signature declares the version it was made under
-	// (crosschain.signTransaction sets it from Network.Version), and the
-	// version is hashed into the signature, so it names the set to check
-	// against and cannot be moved afterwards.
+	// Version is the network definition version this set came from. It is
+	// for the log and the error, never a selector: an anchor's declared
+	// SignerVersion says what the signer believed, not what this node
+	// trusts.
 	Version uint64
 
 	// Threshold is how many distinct keys of this set must sign.
@@ -68,12 +70,24 @@ func (s *Set) Size() int {
 // what the verifier reads its keys from, the node's own store is.
 //
 // **Churn is a walk.** A change to the network definition reaches a partition
-// as a NetworkAccountUpdate carried inside a DirectoryAnchor
-// (execute/v2/chain/directory_anchor.go), and that anchor is signed by a
-// quorum of the PRECEDING set. So the walk is: verify an anchor under the set
-// the node trusts now; only then apply the updates it carries; the next
-// version becomes trustable. A signature declaring a version the walk has not
-// reached is refused, never guessed at.
+// as a NetworkAccountUpdate carried inside a DirectoryAnchor produced by the
+// DIRECTORY (execute/v2/chain/directory_anchor.go:40 refuses any other
+// source), and that anchor is signed by a quorum of the outgoing set. So the
+// walk is: verify an anchor under the set the node stands at; only then apply
+// the updates it carries; the set is replaced and the old one is gone.
+//
+// The version a signature declares is NOT how the set is chosen. The carrier
+// of a change is signed under the NEW version — the executor publishes the
+// new globals at the close of the block that executed the change
+// (block_end.go:421-432), the conductor stores them (conductor.go:183), and
+// the anchor for that block goes out at the start of the next with
+// SignerVersion from the new definition (conductor.go:261,346 →
+// anchoring.go:146). A node that insisted on "the set of the time" would
+// therefore refuse the one anchor the walk exists to accept, and would never
+// move again (#4301, threat review F4). Membership and threshold come from
+// the set this node stands at, as the executor does; the outgoing and
+// incoming sets overlap by construction, which is what lets the carrier
+// through.
 //
 // Why the network definition and not <partition>/operators/1, which is what
 // bootstrap-v3's anchorsrc read: on this line genesis writes EVERY node of
@@ -94,10 +108,9 @@ type Authority struct {
 	// values is the trusted globals at the version the walk has reached.
 	values *core.GlobalValues
 
-	// sets is the history: partition (lower case) → version → set. A version
-	// is in here only because the node held it to begin with or because a
-	// verified anchor carried the change that produced it.
-	sets map[string]map[uint64]*Set
+	// sets is partition (lower case) → the one set that partition's anchors
+	// are checked against. Replaced by the walk, never accumulated.
+	sets map[string]*Set
 }
 
 // FromStore reads the node's own network definition and globals and holds
@@ -140,7 +153,7 @@ func FromValues(values *core.GlobalValues) (*Authority, error) {
 	// replaced wholesale by a walk, never edited, so sharing them is safe.
 	a := &Authority{
 		values: &core.GlobalValues{Network: values.Network, Globals: values.Globals},
-		sets:   map[string]map[uint64]*Set{},
+		sets:   map[string]*Set{},
 	}
 	a.record(a.values)
 	return a, nil
@@ -161,26 +174,15 @@ func (a *Authority) BvnNames() []string {
 	return a.values.BvnNames()
 }
 
-// SetFor is the set that signs for a partition at a version.
-//
-// A version the walk has not reached is refused, and so is one older than the
-// node started from: the node holds one definition, not a history, so there
-// is no set to check an older signature against. Refusing is the safe answer
-// in both directions — the anchors a join needs are the current ones, and one
-// that cannot be checked is not a root.
-func (a *Authority) SetFor(partition string, version uint64) (*Set, error) {
+// SetFor is the set that signs for a partition — the one the walk stands at,
+// and the only one. There is no version argument on purpose: see Set.
+func (a *Authority) SetFor(partition string) (*Set, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	byVersion, ok := a.sets[strings.ToLower(partition)]
+	set, ok := a.sets[strings.ToLower(partition)]
 	if !ok {
 		return nil, errors.NotFound.WithFormat("this node's network definition names no partition %s", partition)
-	}
-	set, ok := byVersion[version]
-	if !ok {
-		return nil, errors.NotFound.WithFormat(
-			"no validator set for %s at network version %d: this node has walked to version %d",
-			partition, version, a.values.Network.Version)
 	}
 	return set, nil
 }
@@ -188,11 +190,15 @@ func (a *Authority) SetFor(partition string, version uint64) (*Set, error) {
 // Apply walks the authority forward over the updates an anchor carried.
 //
 // **The caller must have verified that anchor under the set this authority
-// currently trusts, first.** That is what makes the walk safe: each operator
-// change is anchored and signed by the preceding set, so applying the change
-// an already-verified anchor carried extends the trust by exactly one signed
-// step. Applying updates from an unverified anchor would let one peer name
-// the validators, which is the defect this package exists to close.
+// currently trusts, first, and the anchor must be the DIRECTORY'S.** Both
+// halves are load-bearing. Verification is what makes the walk a signed step
+// rather than a peer's assertion. The Directory is what keeps the step at the
+// right bar: only the Directory executes a change to the network accounts and
+// only its anchors carry one (chain/directory_anchor.go:40), so a walk that
+// took updates from any verified anchor would let a quorum of ONE BVN — three
+// keys of four in the soak topology, against the Directory's eight of twelve —
+// name the validators of every partition as a joining node sees them
+// (#4301, threat review F1). Source.consider enforces it.
 //
 // Updates that do not change the authority — the oracle, the routing table —
 // are ignored. An update that does not parse is an error and nothing is
@@ -234,9 +240,8 @@ func (a *Authority) Apply(updates []protocol.NetworkAccountUpdate) error {
 	return nil
 }
 
-// record adds a set per partition at the values' network version. The sets
-// already in the history are left alone: an anchor signed under an earlier
-// version is still checked against the set of its time.
+// record replaces the set for each partition the definition names. What was
+// there is dropped: a retired set is not a signer (see Set).
 func (a *Authority) record(values *core.GlobalValues) {
 	version := values.Network.Version
 	for _, p := range values.Network.Partitions {
@@ -252,9 +257,6 @@ func (a *Authority) record(values *core.GlobalValues) {
 				set.keys[v.PublicKeyHash] = true
 			}
 		}
-		if a.sets[id] == nil {
-			a.sets[id] = map[uint64]*Set{}
-		}
-		a.sets[id][version] = set
+		a.sets[id] = set
 	}
 }
