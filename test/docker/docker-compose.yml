@@ -1,5 +1,10 @@
-# Docker Compose for 8-Node DAG-BFT Network
-# 2 BVNs × 4 validators each
+# Docker Compose for the DAG-BFT soak network
+# 3 BVNs × 4 validators, plus one follower (#4365), plus bootstrap
+#
+# The header said "8-Node" and "2 BVNs" long after the network went back to
+# three; the shape of record is docker-network.yml, and ../topology.py derives
+# everything from it. Ports 26680..26691 are the twelve validators and 26692
+# is the follower, allocated in that file's declaration order.
 #
 # Block interval defaults to 1s here (ACC_BLOCK_INTERVAL), not the binary's 3s.
 # A soak exists to reach failures, and at 3s/block every failure that needs
@@ -7,11 +12,12 @@
 # BVN2 took 8 and 23 minutes to show it. Rounds pace at half the interval,
 # since Bullshark commits a leader every other round.
 #
-# Cut from 3 BVNs to 2 on 2026-08-25: chasing 1000 tx/s on a single 24-core
-# host, 12 dual-engine validators left too little CPU per node, and every
-# rate above ~60 tx/s collapsed. The topology is still a real multi-partition
-# network — DN + BVN1 + BVN2 — so cross-partition synthetics and anchors are
-# still exercised in both directions. Ports are 26680..26687.
+# Cut from 3 BVNs to 2 on 2026-08-25 (chasing 1000 tx/s on a single 24-core
+# host: 12 containers each running two nodes left too little CPU per node,
+# and every rate
+# above ~60 tx/s collapsed), and back to 3 since. The topology is a real
+# multi-partition network — DN + BVN1 + BVN2 + BVN3 — so cross-partition
+# synthetics and anchors are exercised in both directions.
 #
 # 2026-09-13: moved off 26660..26667. This host also runs a mainnet follower
 # that binds 127.0.0.1:26660, so publishing on 0.0.0.0:26660 fails to bind and
@@ -376,6 +382,45 @@ services:
       - /root/.accumulate/bvn3-4/accumulate.toml
     ports:
       - "26691:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  # The follower (#4365) — the thirteenth node, and not a validator.
+  #
+  # Identical to every service above: same image, same limits, same volume,
+  # same dependencies. It is a follower because of its ENTRY in
+  # docker-network.yml (dnnType/bvnnType: follower), which makes
+  # `init network` write its key into the NetworkDefinition as inactive, and
+  # the DAG-BFT committee is built from active validators only. Nothing here
+  # distinguishes it, and nothing here should: the gate asks whether a node
+  # with ordinary wiring and a non-committee key follows the line.
+  #
+  # The name is what the rest of the harness selects on. `acc-bvn3-fol1`
+  # still matches `docker ps --filter name=acc-bvn`, so the per-node memory,
+  # disk and heal readers pick it up — and the chaos roster and the load
+  # generator's endpoints, which must NOT include it, select validators from
+  # ../topology.py instead of that filter. See topology.py's header.
+  #
+  # Its data directory is bvn3-5: `init network` names directories by a
+  # node's position among ALL of its BVN's nodes, not among its validators.
+  bvn3-fol1:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn3-fol1
+    logging: *bounded-logging
+    environment: *node-env
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn3-5
+      - /root/.accumulate/bvn3-5/accumulate.toml
+    ports:
+      - "26692:26660"
     depends_on:
       init:
         condition: service_completed_successfully

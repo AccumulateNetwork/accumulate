@@ -66,13 +66,20 @@ def _on_signal(sig, _frame):
     os._exit(128 + sig)
 
 
-for _sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT):
-    try:
-        signal.signal(_sig, _on_signal)
-    except (ValueError, OSError):
-        pass
+# Installed only when this file IS the monitor. At module level in script
+# mode, so the timing for a real run is unchanged — the handlers are up
+# before main() — but a test that imports soakmon no longer prints "soakmon
+# exiting: normal exit" into the suite's output when the test process ends
+# (L4). A line that looks like the monitor dying, in the middle of a green
+# suite, is exactly the kind of thing that gets believed.
+if __name__ == "__main__":
+    for _sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT):
+        try:
+            signal.signal(_sig, _on_signal)
+        except (ValueError, OSError):
+            pass
 
-atexit.register(lambda: _log_exit("normal exit"))
+    atexit.register(lambda: _log_exit("normal exit"))
 
 
 # Everything this process says must survive an abrupt death.
@@ -379,7 +386,14 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 PARTITIONS = topology.partitions()
 SCOPE = topology.scopes()
 PROBE_PORTS = topology.probe_ports()
-NODE_PORTS = topology.node_ports()  # every node: a ledger is read from all of them (REPORTING-SPEC 1b)
+# The VALIDATORS. topology.node_ports() excludes followers deliberately
+# (#4365): a ledger is read from all of them and the max kept
+# (REPORTING-SPEC 1b), and that max is what a follower's lag is measured
+# against — a max taken over a set containing the follower makes `behind`
+# zero by construction. This said "every node" while the network had only
+# validators in it; it no longer does.
+NODE_PORTS = topology.node_ports()
+FOLLOWERS = topology.followers()   # [] on a topology with no follower
 
 
 def _plabel(u):
@@ -413,6 +427,169 @@ def collect_heights():
             best = v if best is None else max(best, v)
         heights[p] = best
     return heights
+
+
+# --- the follower (#4365) ----------------------------------------------------
+#
+# A follower is a node with a validator's wiring and a key in no committee.
+# It executes every committed block and votes on and proposes nothing, so the
+# only thing that says it is keeping up is its own ledger index against the
+# validators'.
+#
+# "Within a block or two" (the issue's words) is a number here, because a
+# board cannot colour a phrase. TWO blocks, and the reason is the reading and
+# not the protocol: the follower's index and the validators' max are two
+# separate HTTP reads taken a moment apart, so at a one-second block interval
+# one block of the difference is the sampling; the executor being one block
+# behind the block it is executing at the instant of the read is the second.
+# Anything past that is the follower actually lagging. The first minute is
+# excluded by the reader, not here: nodes finish starting within seconds of
+# each other and the genesis funding burst is not the steady state.
+BEHIND_BOUND = 2
+
+# (container, partition) -> (worst behind seen, when). Never cleared: it is
+# the "max over the run" the manifest states, and it is a high-water mark on
+# a quantity that is not monotone, which is exactly the case where a running
+# maximum is the honest summary.
+#
+# It lives in THIS PROCESS, and soak.sh restarts soakmon if it dies. After a
+# restart the board's mark starts again from zero while follower.csv keeps
+# every mark written before it, so the manifest can read HIGHER than the
+# board (reviewer N4). That is the safe direction — the summary cannot
+# under-report — but the two are then not the same number, and a reader
+# comparing them should check soakmon.log for a restart before calling it a
+# defect.
+_FOLLOWER_WORST = {}
+
+
+def judge_behind(follower, network):
+    """One partition's follower reading against the validators' max.
+
+    Absent is not zero and a negative lag is not a lag (REPORTING-SPEC 1,
+    1a). A follower reading HIGHER than the validators' max is skew — the
+    two readings are not simultaneous — and is reported as `ahead`, the same
+    way judge_gap reports a flow cell's.
+    """
+    if network is None:
+        return {"measured": False, "behind": None, "ahead": None,
+                "follower": follower, "network": None, "over": False,
+                "why": "the validators' height was unreadable"}
+    if follower is None:
+        return {"measured": False, "behind": None, "ahead": None,
+                "follower": None, "network": network, "over": False,
+                "why": "the follower did not answer"}
+    d = network - follower
+    return {"measured": True, "behind": max(0, d), "ahead": max(0, -d),
+            "follower": follower, "network": network,
+            "over": d > BEHIND_BOUND, "why": None}
+
+
+def _read_ledger_index(port, partition):
+    """One node's index for one partition's ledger, or None if it did not
+    answer. Separate from collect_heights because that one takes a max over
+    several nodes and this one must be one named node's own reading."""
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "query",
+                       "params": {"scope": "acc://%s.acme/ledger" % SCOPE[partition]}})
+    out = sh(["curl", "-s", "-m", "4", "-X", "POST",
+              "http://localhost:%d/v3" % port,
+              "-H", "content-type: application/json", "-d", body], timeout=6)
+    try:
+        return int(json.loads(out)["result"]["account"]["index"])
+    except Exception:
+        return None
+
+
+def collect_follower(heights, now=None):
+    """Each follower's height per partition it serves, against the validators'.
+
+    `heights` is what collect_heights returned — the max over the validators.
+    A follower is asked only about the partitions it runs (its own BVN and
+    the Directory); asking it about another BVN would route the query away
+    and measure a validator through it.
+    """
+    now = time.time() if now is None else now
+    if not FOLLOWERS:
+        return {"measured": False, "nodes": {}, "bound": BEHIND_BOUND,
+                "why": "no follower in this topology"}
+    out = {}
+    for f in FOLLOWERS:
+        parts, worst, worst_run, worst_at = {}, None, None, None
+        for p in f["partitions"]:
+            if p not in heights:
+                continue
+            j = judge_behind(_read_ledger_index(f["port"], p), heights.get(p))
+            parts[p] = j
+            if j["measured"]:
+                worst = j["behind"] if worst is None else max(worst, j["behind"])
+                key = (f["container"], p)
+                prev = _FOLLOWER_WORST.get(key)
+                if prev is None or j["behind"] > prev[0]:
+                    _FOLLOWER_WORST[key] = (j["behind"], now)
+        for p in parts:
+            hw = _FOLLOWER_WORST.get((f["container"], p))
+            if hw and (worst_run is None or hw[0] > worst_run):
+                worst_run, worst_at = hw
+        out[f["container"]] = {
+            "partitions": parts, "worstBehind": worst,
+            "maxBehindRun": worst_run, "maxBehindAt": worst_at,
+            "bvn": f["bvn"], "port": f["port"],
+            "over": bool(worst is not None and worst > BEHIND_BOUND)}
+    return {"measured": True, "nodes": out, "bound": BEHIND_BOUND, "why": None}
+
+
+FOLLOWER_CSV_HEADER = ("time,follower,partition,followerHeight,"
+                       "validatorsMaxHeight,behindBlocks,maxBehindRunBlocks")
+
+
+def follower_csv_rows(state, ts):
+    """One row per (follower, partition) per sample, for follower.csv.
+
+    A partition the follower did not answer for writes an EMPTY field, not a
+    zero: the manifest's "max behind over the run" must not be able to read a
+    silent follower as a caught-up one.
+
+    The last column is the monitor's own high-water mark for that stream,
+    carried in every row (M4). The board's `fmax` is taken over every tick
+    (I_HEIGHT, one second); this file is written every I_MEM (thirty). A
+    one-tick excursion past the bound — which is what a five-minute gate
+    exists to catch — was red on the board and absent from the manifest,
+    under the same label. Now the manifest reads the same mark the board
+    shows, because it travels in the row rather than being recomputed from
+    the samples that happened to be written.
+    """
+    rows = []
+    for c in sorted(state.get("nodes") or {}):
+        node = state["nodes"][c]
+        for p in sorted(node["partitions"]):
+            j = node["partitions"][p]
+            hw = _FOLLOWER_WORST.get((c, p))
+            rows.append("%s,%s,%s,%s,%s,%s,%s" % (
+                ts, c, p,
+                "" if j["follower"] is None else j["follower"],
+                "" if j["network"] is None else j["network"],
+                "" if not j["measured"] else j["behind"],
+                "" if hw is None else hw[0]))
+    return rows
+
+
+_FOLLOWER_CSV_T = [0.0]
+
+
+def write_follower_csv(state):
+    if not state.get("measured"):
+        return
+    now = time.time()
+    if now - _FOLLOWER_CSV_T[0] < I_MEM:
+        return
+    _FOLLOWER_CSV_T[0] = now
+    path = os.path.join(RUN_DIR, "follower.csv")
+    new = not os.path.exists(path)
+    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+    with open(path, "a") as f:
+        if new:
+            f.write(FOLLOWER_CSV_HEADER + "\n")
+        for row in follower_csv_rows(state, ts):
+            f.write(row + "\n")
 
 
 # Per-partition record of the last height CHANGE. Liveness is progress over
@@ -587,7 +764,8 @@ def parse_prom(text):
             continue
 
 
-# On-disk database size per node, both engines (dnn + bvnn), in KiB — read in
+# On-disk database size per container, both of its nodes (dnn + bvnn), in
+# KiB — read in
 # the same per-container thread as the metrics scrape. The first non-empty
 # sample is kept so growth can be reported as MiB per hour over the run.
 _DISK = {}
@@ -1016,9 +1194,25 @@ def collect_metrics():
     for t in threads:
         t.join()
 
+    # Every aggregate below means the VALIDATORS (M6). `containers()` is
+    # `docker ps --filter name=acc-bvn`, which matches `acc-bvn3-fol1` too,
+    # so these used to sum over thirteen nodes while soak.sh's `heals`
+    # column kept to the twelve: one run, two heal totals, one word. The
+    # follower's own figures go beside them under their own name, the
+    # per-node table keeps every node — a follower that leaks is a finding —
+    # and every total carries a `scope` saying whose it is.
+    fol_names = {f["container"] for f in FOLLOWERS}
+    per_fol = {c: r for c, r in per.items() if c in fol_names}
+    per = {c: r for c, r in per.items() if c not in fol_names}
+    n_fol = len(fol_names & set(cs))
+    SCOPE_VAL = ("the %d validators%s" %
+                 (len(per), "" if not n_fol else
+                  "; the %d follower(s) are reported separately" % n_fol))
+
     heals = heals_from(per)
     drops = wedges_from(per)
     handoff = handoff_from(per)
+    heals["scope"] = drops["scope"] = SCOPE_VAL
 
     # Per-node RSS and goroutines, and the memory detail behind them. An
     # unbounded goroutine count is what #4089 looked like before anyone noticed
@@ -1038,6 +1232,7 @@ def collect_metrics():
     #     reads as a stall to anything watching the ledger index and as health
     #     to anything watching block production. Neither says "idle".
     life = life_from(per)
+    life["scope"] = SCOPE_VAL
     for c, rows in per.items():
         for name, lab, v in rows:
             if name == "process_resident_memory_bytes":
@@ -1067,15 +1262,53 @@ def collect_metrics():
         nodes["disk"] = disk_from(dict(_DISK), _DISK_FIRST, time.time())
     for c, v in nodes["disk"]["byNode"].items():
         nodes["byNode"].setdefault(c, {}).update(v)
+    # Say which of these nodes is not a validator (#4365). The container name
+    # carries it (`acc-bvn3-fol1`), but /data is read by scripts, and a reader
+    # that has to parse a name to learn a role eventually parses it wrong.
+    # The per-node table keeps EVERY node, the follower included and
+    # flagged — /data is read by scripts, and a reader that has to parse a
+    # container name to learn a role eventually parses it wrong.
+    fol_mem = mem_from(per_fol) if per_fol else None
+    for c in nodes["byNode"]:
+        nodes["byNode"][c]["follower"] = False
+    for c, v in (fol_mem or {"byNode": {}})["byNode"].items():
+        nodes["byNode"].setdefault(c, {}).update(
+            {"rssMiB": v.get("rssMiB"), "heapMiB": v.get("heapAllocMiB"),
+             "gcPerSec": v.get("gcPerSec"), "staged": v.get("staged"),
+             "follower": True})
+    nodes["followers"] = sorted(fol_names & set(per_fol))
+    nodes["validatorCount"] = len(per)
+    nodes["scope"] = SCOPE_VAL
+    if per_fol:
+        fh = heals_from(per_fol)
+        frss = [float(v) / 1048576.0 for c, rows in per_fol.items()
+                for name, _, v in rows if name == "process_resident_memory_bytes"]
+        nodes["followerStats"] = {
+            "count": len(per_fol),
+            "nodes": sorted(per_fol),
+            "rssMaxMiB": round(max(frss)) if frss else None,
+            "healEntries": fh.get("entries"),
+            "healsMeasured": fh.get("measured"),
+            # A follower never heals: cadence.go:57-66 picks gap-requesters
+            # from ACTIVE validators only, so this reads 0 for the life of
+            # the follower and a dropped entry on it is a permanent hole.
+            # Displayed so that 0 is a read number and not an assumption.
+            "note": "a follower is never selected as a gap requester "
+                    "(cadence.go:57-66), so heals here should stay 0"}
+    else:
+        nodes["followerStats"] = None
     # The flow matrix comes from the ledgers over the API, read from every
     # node (collect_flows_api). A metrics path used to sit here waiting for
     # an accumulate_crosschain_sequence gauge that no node has exported for
     # weeks; it filled nothing and fell through every sample.
     flows, syn_prod, anc_prod = collect_flows_api()
 
-    return {"heals": heals, "wedges": drops, "handoff": handoff, "flows": flows, "life": life, "exec": exec_from(per),
+    ex = exec_from(per)
+    ex["scope"] = SCOPE_VAL
+    return {"heals": heals, "wedges": drops, "handoff": handoff, "flows": flows, "life": life, "exec": ex,
             "synProduced": syn_prod, "ancProduced": anc_prod, "nodeStats": nodes,
-            "nodes": len(cs), "scraped": sum(1 for r in per.values() if r)}
+            "nodes": len(cs), "scraped": sum(1 for r in per.values() if r)
+            + sum(1 for r in per_fol.values() if r)}
 
 
 def collect_flows_api():
@@ -1458,6 +1691,14 @@ def _collect_once(last, hist):
             upd["network"] = collect_height()
             upd["heights"] = collect_heights()
             upd["progress"] = assess_progress(upd["heights"], now)
+            # The follower (#4365), against the validators' max read above.
+            # Its own reading, not a thirteenth probe port: the max hides a
+            # lagging node by construction, which is the whole measurement.
+            upd["follower"] = collect_follower(upd["heights"], now)
+            try:
+                write_follower_csv(upd["follower"])
+            except Exception as e:
+                log("follower.csv: %s" % e)
             upd["status"] = overall_status(
                 upd["network"].get("api") == "up", upd["progress"])
             last["height"] = now
@@ -1485,11 +1726,19 @@ def _collect_once(last, hist):
             # say it in soak.log where the session watchers look.
             try:
                 ns = upd["nodeStats"]
-                if ns.get("rssMaxMiB", 0) > 3072 and time.time() - _RSS_ALARM.get("t", 0) > 300:
+                # The fleet max is the validators' since M6, so check the
+                # follower's own figure too — a follower that leaks is a
+                # finding, and the alarm must not stop seeing it because
+                # the aggregate stopped counting it.
+                worst, who = ns.get("rssMaxMiB", 0), ns.get("rssMaxNode")
+                fs = ns.get("followerStats") or {}
+                if (fs.get("rssMaxMiB") or 0) > worst:
+                    worst, who = fs["rssMaxMiB"], ", ".join(fs.get("nodes") or [])
+                if worst > 3072 and time.time() - _RSS_ALARM.get("t", 0) > 300:
                     _RSS_ALARM["t"] = time.time()
                     line = "%s RSS ALARM: %s at %dMiB of 4GiB — OOM kill approaching\n" % (
                         time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                        ns.get("rssMaxNode"), ns.get("rssMaxMiB", 0))
+                        who, worst)
                     log(line.strip())
                     with open(os.path.join(RUN_DIR, "soak.log"), "a") as f:
                         f.write(line)
@@ -1683,6 +1932,16 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <span class=cap id=lidle></span>
       </div>
     </div>
+    <div class=col><h4>follower</h4>
+      <div class=sub>a node in no committee, launched with the network</div>
+      <div class=kv>
+        <b id=fbehind>—</b><span class=sl>behind (blocks, now)</span>
+        <b id=fmax>—</b><span class=sl>behind (blocks, whole run)</span>
+        <span class=mut id=fheight>—</span><span class=sl>its height / the validators&rsquo;</span>
+        <span class=mut id=fres>—</span><span class=sl>its RSS (MiB) / heals (#)</span>
+        <span class=cap id=fstate></span>
+      </div>
+    </div>
     <div class=col><h4>nodes</h4>
       <div class=sub>resident memory</div>
       <div class=kv>
@@ -1790,6 +2049,55 @@ const $=id=>document.getElementById(id);
 const fmt=n=>(n==null?'—':n.toLocaleString());
 const dur=s=>{s=Math.max(0,s|0);const h=(s/3600|0),m=(s%3600/60|0);return h+'h '+String(m).padStart(2,'0')+'m';};
 function card(k,v,d){return `<div class=card><div class=k>${k}</div><div class=v>${v}</div><div class=d>${d||''}</div></div>`;}
+// --- pure render helpers (executed by test_soakmon_render.py) ---
+// These take state and return HTML. They touch no DOM, so a test can run
+// them in node and assert on what they produce — which is the difference
+// between a rendering that is checked and a rendering that is merely
+// described. M3: the follower panel's absent branch was replaced by '0' in
+// a mutation and all 151 tests still passed, because every test asserted on
+// the collector's dict or on a substring of this file.
+const ABSENT='<span class=mut>— not measured</span>';
+function followerView(fo, ns){
+  const out={fbehind:ABSENT,fmax:ABSENT,fheight:ABSENT,fres:ABSENT,fstate:''};
+  const names=Object.keys(fo.nodes||{});
+  // No follower in the topology is not a broken instrument and not a zero:
+  // the row group says so and stays put, so the board reads the same on a
+  // run with one and a run without (REPORTING-SPEC 1).
+  if(!fo.measured||!names.length){
+    out.fstate=fo.why||'no follower in this topology';
+    return out;
+  }
+  // One follower today; if there are several, the worst is the headline and
+  // the caption names every one of them.
+  let worst=null,worstRun=null,who='';
+  for(const n of names){
+    const v=fo.nodes[n];
+    if(v.worstBehind!=null&&(worst==null||v.worstBehind>worst)){worst=v.worstBehind;who=n;}
+    if(v.maxBehindRun!=null&&(worstRun==null||v.maxBehindRun>worstRun))worstRun=v.maxBehindRun;
+  }
+  const over=worst!=null&&worst>(fo.bound||2);
+  out.fbehind=worst==null?ABSENT:`<span class="${over?'red':''}">${fmt(worst)}</span>`;
+  out.fmax=worstRun==null?ABSENT:fmt(worstRun);
+  const per=[];
+  for(const n of names){
+    const v=fo.nodes[n];
+    for(const p of Object.keys(v.partitions||{})){
+      const j=v.partitions[p];
+      per.push(j.measured?`${shortP(p)} ${fmt(j.follower)}/${fmt(j.network)}`
+                         :`${shortP(p)} ${j.why}`);
+    }
+  }
+  out.fheight=per.length?per.join(' · '):ABSENT;
+  // Its own resources, because M6 took it out of the fleet averages so that
+  // those keep the CSV's membership. A follower that leaks is a finding and
+  // must still be visible somewhere.
+  const fst=ns.followerStats;
+  out.fres=fst?`${fmt(fst.rssMaxMiB)} / ${fst.healsMeasured?fmt(fst.healEntries):ABSENT}`:ABSENT;
+  out.fstate=`${names.join(', ')} · bound ${fo.bound} blocks`
+    +(over?` · OVER the bound (${who})`:'');
+  return out;
+}
+// --- end pure render helpers ---
 function spark(el,pts,color){
   if(!pts||pts.length<2){el.innerHTML='';return;}
   const n=pts.length,mx=Math.max(1,...pts),W=300,H=44;
@@ -1849,6 +2157,11 @@ async function tick(){
     return `<span class=n ${col?`style="color:${col}"`:''}>${fmt(hh[p])}</span>`+
            `<span class=l ${col?`style="color:${col}"`:''}>${shortP(p)}${note}</span>`;
   }).join('')||'<span class=mut>—</span>';
+  // follower (#4365).
+  {
+    const v=followerView(s.follower||{}, s.nodeStats||{});
+    for(const k of ['fbehind','fmax','fheight','fres','fstate'])$(k).innerHTML=v[k];
+  }
   // header
   const ph=lg.phase||'—';$('phase').textContent=ph;
   // The badge reports progress, not reachability. "up" requires every
@@ -1877,7 +2190,7 @@ async function tick(){
   const hr=h.requests,hp=h.proofs,hld=h.held,hf=s.handoff||{};
   $('cards').innerHTML=[
     card('DN height',fmt(nw.dnHeight),`${fmt(gen)} tx · ${pct.toFixed(0)}% of plan`),
-    card('Healed entries',`<span class=grn>${nm(h.entries)}</span>`,h.entries==null?'not measured':'received in answer to span requests'),
+    card('Healed entries',`<span class=grn>${nm(h.entries)}</span>`,h.entries==null?'not measured':`received in answer to span requests · ${h.scope||'the validators'}`),
     card('Heal requests',nm(hr&&hr.answered),hr?`answered · ${h.notYetPerMin!=null?h.notYetPerMin.toFixed(0):'—'}/min requests for txs in flight`:'not measured'),
     card('Proofs',nm(hp&&hp.validated),hp?`${fmt(hp.staged)} staged · ${fmt(hp.disproved)} disproved`:'not measured'),
     card('Wedges',`<span class="${(w.total||0)?'yel':''}">${nm(w.total)}</span>`,w.measured?Object.entries(w.byReason||{}).map(([k,v])=>`${fmt(v)} ${k}`).join(' · ')||'none':'not measured — no node exports a drop counter'),
@@ -1885,14 +2198,14 @@ async function tick(){
     card('Not executed',`<span class="${(hf.unexecuted||0)?'red':''}">${nm(hf.measured?hf.unexecuted:null)}</span>`,
       hf.measured?`${fmt(hf.arrived)} arrived · ${fmt(hf.executed)} executed`:'not measured — needs a node built after #4279'),
     card('Rejected',`<span class="${(lg.rejected||0)?'red':''}">${fmt(lg.rejected||0)}</span>`,`${fmt(lg.skipped||0)} skipped`),
-    card('Nodes',fmt(ns.count||0),`${fmt(ns.rssAvgMiB||0)} MiB avg · ${fmt(ns.rssMaxMiB||0)} max · heap ${fmt((ns.mem||{}).heapMaxMiB||0)} · GC ${(ns.mem||{}).gcPerSecMax!=null?(ns.mem||{}).gcPerSecMax.toFixed(1)+'/s':'—'} ${(ns.mem||{}).gcCoresSum!=null?'· '+(ns.mem||{}).gcCoresSum.toFixed(1)+' GC cores':''} · staged ${fmt((ns.mem||{}).stagedMax||0)}`),
+    card('Validators',fmt(ns.count||0),`${fmt(ns.rssAvgMiB||0)} MiB avg · ${fmt(ns.rssMaxMiB||0)} max · heap ${fmt((ns.mem||{}).heapMaxMiB||0)} · GC ${(ns.mem||{}).gcPerSecMax!=null?(ns.mem||{}).gcPerSecMax.toFixed(1)+'/s':'—'} ${(ns.mem||{}).gcCoresSum!=null?'· '+(ns.mem||{}).gcCoresSum.toFixed(1)+' GC cores':''} · staged ${fmt((ns.mem||{}).stagedMax||0)}${(ns.followerStats&&ns.followerStats.count)?' · follower not counted here':''}`),
   ].join('');
   const mib=v=>v?fmt(v)+' MiB':'—';
 const bytes=v=>(v==null?'—':v<1024?fmt(v)+' B':v<1048576?(v/1024).toFixed(1)+' KiB':(v/1048576).toFixed(1)+' MiB');
   $('nrssavg').textContent=mib(ns.rssAvgMiB); $('nrssmax').textContent=mib(ns.rssMaxMiB);
   $('nrssmin').textContent=mib(ns.rssMinMiB);
   $('nrssnode').textContent=ns.rssMaxNode?('max '+ns.rssMaxNode):'';
-  // Database size on disk: both engines per node, summed. Growth is MiB/hour
+  // Database size on disk: both of a container's nodes, summed. Growth is MiB/hour
   // since the first sample, so a run's disk appetite is a number, not a
   // guess from the docker volume at teardown.
   const db=ns.disk||{};
@@ -2024,6 +2337,11 @@ const DEFS={
  rashare:"Synthetic plus anchor transactions as a share of all transactions, whole run.",
  raover:"The two windows behind the whole-run figures: the generator's clock for user, the monitor's for produced.",
  heights:"Block height per partition, with seconds per block over the last 5 min and averaged over the run. Red = stalled: the height has not moved, or an inbound flow has been red past the stall threshold.",
+ fbehind:"Blocks the follower's ledger is behind the validators' highest, now, worst of the partitions it runs. A follower is in no committee: it executes every committed block and votes on and proposes nothing, so this is the only thing that says it is keeping up.",
+ fmax:"The largest that gap has been at any sample since this monitor started. Never cleared; it is the number the manifest states as the worst of the run.",
+ fheight:"The follower's own ledger index and the validators' highest, per partition it runs. Two separate reads a moment apart, so a follower reading one block ahead is skew, not a negative lag.",
+ fres:"The follower's own resident memory and healed entries. It is NOT in the fleet averages or the heal total beside them — those mean the validators, the same membership monitor.csv's heals column has — so it is reported here. A follower is never selected as a gap requester (cadence.go:57-66), so its heals should stay 0; 0 here is a read number, not an assumption.",
+ fstate:"Which containers are followers and the bound the gate is judged against — two blocks: one for the two reads not being simultaneous at a one-second block interval, one for the executor being inside the block it is closing.",
  lblocks:"Blocks produced by the network, summed over partitions, each partition taken as the highest count any node reported.",
  lempty:"Blocks that carried no transactions.",
  lidle:"Shown when nearly every block is empty: consensus is committing empty rounds.",

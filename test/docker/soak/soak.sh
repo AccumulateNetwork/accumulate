@@ -148,6 +148,27 @@ fi
 n_bvn=$(grep -cE '^\s*- id: "BVN' "$here/../docker-network.yml")
 n_node=$(grep -cE '^\s*- listenAddress:' "$here/../docker-network.yml")
 
+# Validators and followers, separately (#4365). They are different nodes with
+# different roles in the measurement — a follower is never handed load and
+# never disturbed — and a manifest that says "13 nodes" tells a reader
+# neither how big the committees were nor that one node was not in them.
+read -r n_val n_fol FOL_LIST FOL_PORTS FOL_PARTS <<<"$(python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import topology
+f = topology.followers()
+print(len(topology.validator_records()), len(f),
+      ",".join(x["container"] for x in f) or "-",
+      ",".join(str(x["port"]) for x in f) or "-",
+      ";".join("/".join(x["partitions"]) for x in f) or "-")' "$here/.." 2>/dev/null)"
+n_val=${n_val:-$n_node}; n_fol=${n_fol:-0}
+FOL_LIST=${FOL_LIST:--}; FOL_PORTS=${FOL_PORTS:--}; FOL_PARTS=${FOL_PARTS:--}
+if [ "$n_fol" -gt 0 ]; then
+  topo_desc="$n_bvn BVNs, $n_val validators + $n_fol follower ($FOL_LIST, partitions ${FOL_PARTS//\// }) + bootstrap"
+else
+  topo_desc="$n_bvn BVNs, $n_val validators + bootstrap"
+fi
+
 # The partition list, derived once from docker-network.yml and reused by the
 # monitor loop below. Everything that needs to know the shape of this network
 # reads that one file (see ../topology.py); nothing restates it.
@@ -160,11 +181,16 @@ print(" ".join(topology.partitions()))' "$here/.." 2>/dev/null)
 # host ports are a convention of docker-compose.yml derived from the node order
 # in docker-network.yml, and a convention that has drifted is a monitor and a
 # loadgen quietly pointed at ports nothing serves. Fail here, not at hour six.
+# `problems()` refuses the shapes this harness cannot measure rather than
+# mis-measuring them: a follower declared before a validator (it takes that
+# validator's directory AND its host port), a node that is a validator on one
+# partition and a follower on the other, a peerAddress that disagrees with the
+# container name the compose uses.
 topo_problem=$(python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
 import topology
-print(topology.check_ports_against_compose() or "")' "$here/.." 2>&1)
+print("; ".join([topology.check_ports_against_compose() or ""] + topology.problems()).strip("; "))' "$here/.." 2>&1)
 if [ -z "$PARTS" ] || [ -n "$topo_problem" ]; then
   echo "topology preflight failed: ${topo_problem:-cannot read docker-network.yml}" | tee -a "$log"
   exit 1
@@ -192,7 +218,15 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "| executor version | **$exec_ver** |"
   echo "| healing | $heal_flags |"
   echo "| fault model | $fault_model |"
-  echo "| topology | $n_bvn BVNs, $n_node nodes + bootstrap |"
+  echo "| topology | $topo_desc |"
+  if [ "$n_fol" -gt 0 ]; then
+    # Which form of "in no committee" ran. The key is IN the definition and
+    # inactive, because `init network` writes one key and one config per node
+    # listed in docker-network.yml — a key that is in no definition is a node
+    # with no config, which is a Go change and not this harness's (#4365).
+    # Filled in from the network's own NetworkDefinition once it is up.
+    echo "| follower key | pending (read from network-status before load) |"
+  fi
   echo "| partitions | $PARTS |"
   echo "| chaos | $CHAOS_ENABLED |"
   echo "| target duration | $DURATION |"
@@ -204,9 +238,10 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "Config as run is frozen in \`config/\` (soak.conf${conf_override:+ + override.conf}, the compose and network files). Results appended below on exit."
 } > "$manifest"
 
-printf '{"runId":"%s","startedUtc":"%s","image":"%s","imageId":"%s","commit":"%s","describe":"%s","branch":"%s","uncommittedFiles":%s,"executorVersion":"%s","healing":"%s","faultModel":"%s","bvns":%s,"nodes":%s,"partitions":"%s","chaos":"%s","duration":"%s","tps":"%s","note":"%s"}\n' \
+printf '{"runId":"%s","startedUtc":"%s","image":"%s","imageId":"%s","commit":"%s","describe":"%s","branch":"%s","uncommittedFiles":%s,"executorVersion":"%s","healing":"%s","faultModel":"%s","bvns":%s,"nodes":%s,"validators":%s,"followers":%s,"followerContainers":"%s","followerPorts":"%s","followerPartitions":"%s","followerKeyForm":"pending","partitions":"%s","chaos":"%s","duration":"%s","tps":"%s","note":"%s"}\n' \
   "$run_id" "$(date -u +%FT%TZ)" "$soak_image" "$image_id" "$git_head" "$git_desc" "$git_branch" "$git_dirty" \
-  "$exec_ver" "$heal_flags" "$fault_model" "$n_bvn" "$n_node" \
+  "$exec_ver" "$heal_flags" "$fault_model" "$n_bvn" "$n_node" "$n_val" "$n_fol" \
+  "$FOL_LIST" "$FOL_PORTS" "$FOL_PARTS" \
   "$PARTS" "$CHAOS_ENABLED" "$DURATION" "$TPS" "$NOTE" > "$runjson"
 
 echo "== soak start $(date -u) duration=$DURATION tps=$TPS ==" | tee "$log"
@@ -302,6 +337,62 @@ up=""; for _ in $(seq 1 90); do
 done
 [ -n "$up" ] || { echo "network never came up" | tee -a "$log"; exit 1; }
 sleep 30
+
+# The NetworkDefinition, captured BEFORE load starts (#4365). It is the
+# authority on which keys are in the definition and which of them are active
+# on which partition, and the DAG-BFT committee is built from the active ones
+# only (run/dagbft.go:415) — so a key with no active partition is exactly a
+# node that is in the definition and in no committee. Captured now, not at
+# teardown, because it is the state the run was launched with.
+curl -s -m 10 -X POST http://localhost:26680/v3 -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"network-status","params":{"partition":"Directory"}}' \
+  | python3 -c 'import json,sys; json.dump(json.load(sys.stdin).get("result") or {}, sys.stdout)' \
+  > "$rd/network-definition.json" 2>/dev/null
+if [ "$n_fol" -gt 0 ]; then
+  # The follower's OWN key, looked up in the capture (M5) — not "is there
+  # any inactive entry", which answers "absent from the definition", the
+  # reassuring form, when the premise of the gate has failed.
+  #
+  # stderr goes to the run log, NOT to /dev/null (L2): an import error or a
+  # changed JSON shape used to be reported as "network-status did not
+  # answer", which is a different fault with a different fix.
+  key_form=$(python3 -c '
+import json, sys
+sys.path.insert(0, sys.argv[2])
+import followerlog
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception as e:
+    sys.stderr.write("network-definition.json unreadable: %r\n" % (e,))
+    d = None
+# The key prefix comes from the follower own identity line, which it logs
+# at startup; the network has been up for 30 s, so it is there.
+try:
+    with open(sys.argv[3], errors="replace") as f:
+        pre = followerlog.read(f).key_prefix(sys.argv[4])
+except Exception as e:
+    sys.stderr.write("cannot read the follower key prefix: %r\n" % (e,))
+    pre = None
+v = followerlog.definition_check(d, pre)
+form = v["followerKeyForm"]
+if not form:
+    print("— not measured (%s)" % (v["why"] or "unknown")); raise SystemExit
+print("%s; active validators per partition: %s" % (
+    form, ", ".join("%s %d" % kv for kv in sorted(v["active"].items()))))' \
+    "$rd/network-definition.json" "$here" "$rd/node-logs-live.txt" "${FOL_LIST%%,*}" \
+    2>>"$log")
+  key_form=${key_form:-— not measured (the key-form capture produced nothing; see soak.log)}
+  if grep -q '^| follower key | ' "$manifest"; then
+    sed -i "s#^| follower key | .*#| follower key | ${key_form} |#" "$manifest"
+    grep -q "^| follower key | ${key_form} |" "$manifest" \
+      || echo "WARNING: the manifest's follower-key row was not replaced — it still reads \"pending\"" | tee -a "$log"
+  else
+    echo "WARNING: no follower-key row in the manifest to fill in" | tee -a "$log"
+  fi
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["followerKeyForm"]=sys.argv[2]; json.dump(d, open(p,"w"))' \
+    "$runjson" "$key_form" 2>>"$log"
+  echo "$(date -u +%FT%TZ) follower key: $key_form" | tee -a "$log"
+fi
 
 # Observability FIRST, and it is a gate, not a hope. The monitor comes up
 # before any load exists, and if it does not come up the run DOES NOT HAPPEN —
@@ -461,14 +552,35 @@ echo "   chaos: armed (every ~${CHAOS_MIN}s + jitter; first event follows the fi
   # partitions and every node gets its turn before any node gets a second. A
   # random draw with replacement put three of four disturbances on BVN3 in
   # the first hour of 20260917T223150Z and none on BVN1; Paul: "that isn't
-  # testing very much". Every validator runs the Directory as well, so the
+  # testing very much". Every container runs a DN node as well as its BVN
+  # node, so the
   # Directory is disturbed by every event. The kind alternates restart, pause,
   # and flips on each full cycle so a node sees both over a run. A no-op slot
   # is CHAOS_SKIP_ONE_IN=N (every Nth slot; 0, the default, never): it used to
   # be a hidden one-in-five draw, which cost 20260917T212457Z three of its
   # five slots.
+  # NOT COVERED BY A TEST (reviewer L3, accepted for this CHAOS=off run and
+  # carried to #4364): this intersection and the heals split below are bash,
+  # and nothing exercises them. Harmless here — chaos is off — and
+  # load-bearing the moment #4364 turns it on, which is where they get a
+  # test.
+  #
+  # VALIDATORS only. `--filter name=acc-bvn` also matches `acc-bvn3-fol1`,
+  # and a follower restarted by chaos is the node the run is measuring being
+  # disturbed by the run (#4365). The roster is intersected with the
+  # topology's validator list rather than filtered by a substring, so a
+  # future naming change cannot quietly put a follower back in it.
+  mapfile -t vals < <(python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import topology
+print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
   mapfile -t nodes < <(docker ps --filter name=acc-bvn --format '{{.Names}}' \
+    | grep -Fxf <(printf '%s\n' "${vals[@]}") \
     | awk -F- '{print $3, $2, $0}' | sort -k1,1 -k2,2 | awk '{print $3}')
+  if [ "${#nodes[@]}" -eq 0 ]; then
+    echo "$(date -u +%FT%TZ) NO validator containers matched the topology — chaos is doing nothing" >> "$chaos"
+  fi
   echo "$(date -u +%FT%TZ) order: ${nodes[*]}" >> "$chaos"
   i=0; slot=0
   while [ "$(date +%s)" -lt "$end" ]; do
@@ -492,7 +604,8 @@ CHAOS=$!
 fi
 
 # Monitor: heights + total heals every 5 min
-echo "time,dnHeight,heals,cpuPct" > "$mon"
+# followerHeals is its own column, not part of the heals sum: see the loop.
+echo "time,dnHeight,heals,cpuPct,followerHeals" > "$mon"
 ( while kill -0 $DRIVER 2>/dev/null; do
     h=$(curl -s -X POST http://localhost:26680/v3 -H 'content-type: application/json' \
       -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"scope":"acc://dn.acme/ledger"}}' \
@@ -503,11 +616,23 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
     # receiver-pull, so every run's record said "heals 0 -> 0" -- including
     # 20260917T212457Z, where 1,291 requests were answered and 2,231 entries
     # applied. A run record that says zero over that is not a record.
-    heals=0
+    # Over the VALIDATORS. A follower heals like any node, but folding its
+    # count into this sum would change what the column means between a run
+    # with a follower and a run without, and this column is compared across
+    # runs (#4365). The follower's own heals are in soakmon's per-node table,
+    # labelled.
+    # followerHeals is EMPTY, not 0, on a run with no follower: there is no
+    # instrument behind it, and an absent instrument must not render as a
+    # measurement (REPORTING-SPEC 1, L1). It is the only column a
+    # no-follower run's monitor.csv gains.
+    heals=0; fol_heals=""; [ "$n_fol" -gt 0 ] && fol_heals=0
     for c in $(docker ps --filter name=acc-bvn --format '{{.Names}}'); do
       x=$(docker exec "$c" sh -c 'wget -q -O - http://127.0.0.1:26670/metrics 2>/dev/null' \
         | grep -E '^accumulate_conductor_heal_entries_total\{[^}]*outcome="applied"' | awk '{s+=$NF} END {printf "%d", s}')
-      heals=$((heals + ${x:-0}))
+      case ",$FOL_LIST," in
+        *",$c,"*) fol_heals=$(( ${fol_heals:-0} + ${x:-0} )) ;;
+        *)        heals=$((heals + ${x:-0})) ;;
+      esac
     done
     # Per-container stats alongside the fleet sum: the fleet CPU column dated
     # the 20260819 collapse, but WHICH nodes were burning had to be inferred.
@@ -515,7 +640,7 @@ echo "time,dnHeight,heals,cpuPct" > "$mon"
     ts=$(date -u +%FT%T)
     echo "$stats" | sed "s/^/$ts,/" >> "$rd/stats.csv"
     cpu=$(echo "$stats" | cut -d, -f2 | tr -d '%' | awk '{s+=$1} END {printf "%.0f", s}')
-    echo "$ts,${h:-?},$heals,${cpu:-?}" >> "$mon"
+    echo "$ts,${h:-?},$heals,${cpu:-?},$fol_heals" >> "$mon"
     # 30 s, not 5 min: run 20260903T121819Z climbed from 45 MiB to the
     # GOMEMLIMIT in ten minutes and stats.csv had two points for it (PLAN S0).
     sleep ${MON_INTERVAL:-$([ "$duration_seconds" -le 1800 ] && echo 20 || echo 30)}
@@ -623,6 +748,27 @@ c=$(docker ps --format '{{.Names}}' | grep -E '^acc-(dn|bvn)' | head -1)
   docker exec "$c" cat "$f" > "$rd/storage-stats/${node}-$rel.json" 2>/dev/null
 done
 rmdir "$rd/storage-stats" 2>/dev/null || true
+# The follower's verdict (#4365), read out of the captured log rather than
+# polled live: node-logs-live.txt streams from the first block, so nothing is
+# lost, and comparing `Sending an anchor` per (source, destination, block) —
+# the source read from the line, #4370 — is the same evidence a debugger uses
+# for a divergence. Cheaper than an API poll per block at a one-second
+# interval, and it re-runs on the saved run directory afterwards without the
+# network. On an image built before #4370 the lines carry no source, the two
+# nodes in a container cannot be told apart, and the root rows say
+# `— not measured` rather than comparing.
+if [ "$n_fol" -gt 0 ] && [ -x "$here/followerlog.py" ]; then
+  "$here/followerlog.py" "$rd/node-logs-live.txt" \
+    --follower "${FOL_LIST%%,*}" \
+    --definition "$rd/network-definition.json" \
+    --behind "$rd/follower.csv" > "$rd/follower-report.md" 2>>"$log"
+  "$here/followerlog.py" "$rd/node-logs-live.txt" \
+    --follower "${FOL_LIST%%,*}" \
+    --definition "$rd/network-definition.json" \
+    --behind "$rd/follower.csv" --rows > "$rd/follower-rows.md" 2>/dev/null
+  echo "   follower report: $rd/follower-report.md" | tee -a "$log"
+fi
+
 # Final produced-vs-received across every channel, the check that sees a stall.
 if [ -x "$here/streams.py" ]; then
   "$here/streams.py" > "$rd/streams-final.txt" 2>&1
@@ -657,11 +803,28 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   echo "| reconcile pulls (#4073) | $reconcile_pulls |"
   echo "| stalled channels at end | $stalled_end |"
   echo "| read-back probe | $(grep -m1 '^\*\*Whole run:\*\*' "$rd/readprobe-report.md" 2>/dev/null | sed 's/\*\*//g' || echo 'no report') |"
+  if [ "$n_fol" -gt 0 ]; then
+    echo "| follower read probe | $(grep -m1 -E '^\*\*acc-' "$rd/readprobe-report.md" 2>/dev/null | sed 's/\*\*//g' || echo '— not measured (no readprobe report)') |"
+  fi
   # A run that wedged and dumped is the most valuable kind of run there is;
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
   echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
+  if [ "$n_fol" -gt 0 ]; then
+    echo
+    echo "### Follower (#4365)"
+    echo
+    echo "| what | value |"
+    echo "|---|---|"
+    if [ -s "$rd/follower-rows.md" ]; then
+      cat "$rd/follower-rows.md"
+    else
+      echo "| every follower measurement | — not measured (followerlog.py produced nothing; see \`soak.log\`) |"
+    fi
+    echo
+    echo "Full detail in \`follower-report.md\`; the per-sample series in \`follower.csv\`."
+  fi
   echo
-  echo "Raw: \`soak.log\`, \`monitor.csv\`, \`chaos.log\`, \`loadgen-stats.json\`, \`readprobe.csv\` / \`readprobe-report.md\`."
+  echo "Raw: \`soak.log\`, \`monitor.csv\`, \`chaos.log\`, \`loadgen-stats.json\`, \`readprobe.csv\` / \`readprobe-report.md\`$([ "$n_fol" -gt 0 ] && echo ', `follower.csv` / `follower-report.md`, `network-definition.json`')."
 } >> "$manifest"
 
 # Accumulating index — one line per run, newest last, never rewritten.

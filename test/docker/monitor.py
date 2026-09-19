@@ -18,7 +18,16 @@ import topology
 # Derived from docker-network.yml. A hand-listed roster goes stale the first
 # time the topology changes, and a dead container name reports as a node using
 # 0 MB — which silently drags the fleet memory average down.
+#
+# Followers are in the list (#4365) — their memory is as worth watching as a
+# validator's — and labelled, because a reader comparing thirteen rows must
+# not be left to infer from a name which one is in no committee.
 NODES = topology.containers()
+FOLLOWERS = set(topology.follower_containers())
+
+
+def label(name):
+    return name + " (follower)" if name in FOLLOWERS else name
 
 def parse_size(size_str):
     """Convert size string (e.g., '1.5GiB', '512MiB') to MB"""
@@ -193,9 +202,12 @@ def monitor(output_dir, duration=300, interval=10):
                 total_memory_mb += stats['memory_mb']
                 total_db_size_mb += db_stats['db_size_mb']
 
-                # Write per-node resources
+                # Write per-node resources. The name carries the role
+                # (#4365): a thirteenth row that is not a validator, in a
+                # CSV read months later, must not need the topology to be
+                # reconstructed to be understood.
                 resources_writer.writerow([
-                    timestamp, node, stats['cpu_percent'], stats['memory_mb'],
+                    timestamp, label(node), stats['cpu_percent'], stats['memory_mb'],
                     stats['memory_limit_mb'], stats['memory_percent'],
                     stats['disk_read_mb'], stats['disk_write_mb'],
                     stats['net_in_mb'], stats['net_out_mb']
@@ -203,7 +215,7 @@ def monitor(output_dir, duration=300, interval=10):
 
                 # Write per-node database
                 database_writer.writerow([
-                    timestamp, node, db_stats['db_size_mb'], db_stats['db_files']
+                    timestamp, label(node), db_stats['db_size_mb'], db_stats['db_files']
                 ])
 
             # Calculate and write cluster summary

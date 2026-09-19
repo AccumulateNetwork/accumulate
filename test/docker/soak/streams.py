@@ -44,6 +44,9 @@ def q(scope):
         except Exception: return
         with lock: views.append(seq)
 
+    # The validators. topology.node_ports() excludes followers (#4365): this
+    # is "the ledger as the NETWORK holds it", and a follower is not part of
+    # the network's agreement — it only reads it.
     for port in topology.node_ports():
         t = threading.Thread(target=ask, args=(port,)); t.start(); threads.append(t)
     for t in threads: t.join()
