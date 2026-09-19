@@ -1041,23 +1041,49 @@ def write_mem_csv(mem, force=False):
 # `accumulate`, all monotone and never reset:
 #
 #   accumulate_dagbft_submissions_total{partition, outcome}
-#       outcome = "accepted"  -- Submit returned SUCCESS TO THE CALLER. The
-#                                node took responsibility for the
-#                                submission, whether the envelope entered
-#                                this node's own worker batch or was
-#                                relayed to a node that can propose it.
+#       outcome = "accepted"  -- THE NODE TOOK RESPONSIBILITY for the
+#                                submission: it entered this node's worker,
+#                                or it entered this node's relay. That is
+#                                the node's ledger of what it owes, and it
+#                                is settled the moment the submission is
+#                                taken — not by what the relay later
+#                                answers, and not by what the caller is
+#                                told. (The caller IS answered with the
+#                                relay's result; that is a separate
+#                                decision, the lead's, and it does not move
+#                                this counter.)
+#
 #                                NOT "entered this node's worker": under a
 #                                synchronous relay the envelope never does,
 #                                so that reading exports accepted=0 with
 #                                relayed=n and raises the `relayed >
-#                                accepted` alarm on a follower working
-#                                perfectly. It also silently answers Paul's
-#                                open question 2 (synchronous, or
-#                                accept-and-forward), which is not the
-#                                harness's to answer. "Took responsibility"
-#                                holds under either (reviewer M1 on #4364).
-#       outcome = "rejected"  -- Submit refused it: validation, or a node
-#                                that neither proposes nor relays.
+#                                accepted` alarm on a node working
+#                                perfectly (reviewer M1 on #4364).
+#
+#                                NOT "Submit returned success to the
+#                                caller" either, which is what this block
+#                                said until the builder tried to implement
+#                                both halves of it (#4366
+#                                note_3869869239, lead's decision
+#                                note_3869919047). A relay that ends
+#                                `refused`, `not-ready` or `unreachable`
+#                                returned no success — so under that
+#                                reading it is not `accepted`, one
+#                                unreachable relay anywhere makes
+#                                `sum(relayed) > accepted` and fires the
+#                                INSTRUMENT-FAULT alarm on a correct run,
+#                                and a node whose relays never land reads
+#                                `accepted 0, stranded 0`: a node dropping
+#                                everything looks perfect. The two rules
+#                                beside it — `relayed <= accepted`, and a
+#                                relay that gives up lands in the stranded
+#                                figure — require the opposite.
+#       outcome = "rejected"  -- the node refused it WITHOUT relaying: a
+#                                malformed envelope, the worker's own
+#                                refusal, or a node that cannot propose and
+#                                has no relay. A submission that enters the
+#                                relay is `accepted` however the relay ends;
+#                                where it ends is `relayed{outcome}`.
 #       partition             -- the partition id the submission was routed
 #                                to on this node ("Directory", "BVN3"), NOT
 #                                the container: every container runs two
@@ -1132,11 +1158,13 @@ def write_mem_csv(mem, force=False):
 #   * relay target refuses, is not ready, or is unreachable -> three labels,
 #     whatever the node then does about it. If it gives up, the submission
 #     lands in the stranded figure below, which is where a drop belongs.
-#   * synchronous, or accept-and-forward -> the counting moment is the
-#     relay's FINAL answer either way, and `accepted` means the caller was
-#     told yes either way. Under accept-and-forward a sample can show
-#     accepted > sum(relayed): that difference is relays in flight. Under
-#     synchronous they move together.
+#   * synchronous, or accept-and-forward -> `accepted` is the node's own
+#     ledger of responsibility and does not depend on the answer, so the
+#     arithmetic is the same either way; the relay's outcome is counted at
+#     its FINAL answer. Under either model a sample can show
+#     accepted > sum(relayed): that difference is relays in flight. (The
+#     lead has since decided synchronous — the caller gets the target's
+#     answer — and nothing here changes with it.)
 #   * which partitions it relays for -> a submission the node refuses
 #     outright is `submissions_total{outcome="rejected"}` and never enters
 #     this arithmetic; one it accepts and drops is stranded, correctly.
@@ -1152,9 +1180,32 @@ def write_mem_csv(mem, force=False):
 #
 # The quantity the board and the manifest name:
 #
-#   accepted, neither certified here nor taken on relay (#, whole run)
-#     = accepted - certified - relayed{taken},
+#   accepted, neither certified here, taken on relay, nor refused
+#   (#, whole run)
+#     = accepted - certified - relayed{taken} - relayed{refused},
 #       per (node, partition), floored at 0 and summed.
+#
+# WHY `refused` IS SUBTRACTED, and what it depends on. A validator
+# validated the submission and declined, and that answer went back to the
+# caller unchanged: the caller was told "no". Nothing is in flight and
+# nothing is lost, so it is not a strand. Left in, the figure is driven by
+# whoever sends the follower garbage — a client, a peer dialling junk at
+# `submit:P`, or the load generator's own invalid submissions — and the
+# SAME envelope sent straight to a validator is `rejected` and costs
+# nothing. A working follower's row would go red and the acceptance gate
+# ("must be 0") would fail on traffic it did not create
+# (threat-reviewer F4 on #4366, decided by the lead).
+#
+# THE DEPENDENCY, because it will rot silently: this holds because the
+# relay is SYNCHRONOUS and the refusal is passed back unchanged. Under
+# accept-and-forward the caller has already been told yes, so a later
+# `refused` IS a loss and belongs back in the figure. If that decision
+# changes, this subtraction changes with it.
+#
+# Not counted as `rejected` instead (the threat review's other option):
+# keeping it `accepted` keeps `relayed <= accepted` true and keeps the
+# refusal visible on its own row, so an operator can still see garbage
+# being flooded at a follower rather than having it vanish.
 #
 # THAT SUBTRACTION IS THE WHOLE POINT OF THIS REVISION. It used to be
 # `accepted - certified`, which on a node in no committee is everything it
@@ -1170,6 +1221,9 @@ def write_mem_csv(mem, force=False):
 #   * on a WORKING follower: certified 0, relayed{taken} ~ accepted, so
 #     this is ~0 and the row is not red. That is the reading the revision
 #     exists to produce.
+#   * on a follower FLOODED WITH GARBAGE: certified 0, every relay
+#     `refused`, so this is 0 — the follower did its job, and the garbage
+#     is visible on the relay row instead, where it belongs.
 #   * IN FLIGHT IS NOT STRANDED, and at one sample they look the same. A
 #     healthy run ends with a small residue — relays not yet answered, and
 #     on a validator the rounds not yet certified — so "MUST be 0" is read
@@ -1190,16 +1244,27 @@ def write_mem_csv(mem, force=False):
 # this quantity over the fleet gives the network's true stranded count
 # without any node claiming credit for another's work.
 #
-# Two impossible states, each an instrument alarm and never floored away
+# Three impossible states, each an instrument alarm and never floored away
 # (REPORTING-SPEC 1a):
-#   * certified + relayed{taken} > accepted — double-counting somewhere:
-#     a per-header certified count, a per-attempt relay count, or a node
-#     PROMOTED mid-run that kept its own copy of what it relayed (#4364's
-#     own disturbance — a real event, not a broken counter).
+#   * certified + relayed{taken} + relayed{refused} > accepted —
+#     double-counting somewhere: a per-header certified count, a
+#     per-attempt relay count, or a node PROMOTED mid-run that kept its own
+#     copy of what it relayed (#4364's own disturbance — a real event, not
+#     a broken counter). The three terms are the ones subtracted above, so
+#     this check and the quantity stay the same expression: a violation the
+#     check did not name would be hidden by the floor, which is the whole
+#     failure mode this row group exists to prevent.
 #   * sum(relayed) > accepted — a relay of something never accepted. The
 #     sum includes outcomes this harness does not know: a build with a
 #     fourth label could otherwise relay more than it took with no alarm
 #     (reviewer L2).
+#   * relays present and NO accepted series at all. The two above are
+#     guarded on the partition having reported `accepted`, so a build that
+#     exports relayed_total and never creates
+#     submissions_total{outcome="accepted"} slips past both, stranded
+#     floors to 0, and a node relaying everything — or losing everything —
+#     reads clean. A relayed submission is `accepted` by definition, so
+#     this is a counter the node never created.
 #
 # Until the families exist every consumer says `— not measured`, never 0
 # (REPORTING-SPEC 1).
@@ -1221,8 +1286,8 @@ RELAY_FIELD = {"taken": "relayedTaken", "refused": "relayedRefused",
 # load generator's exit too (reviewer N2).
 SUBMIT_CSV_HEADER = ("time,node,role,partition,accepted,rejected,certified,"
                      "relayedTaken,relayedRefused,relayedNotReady,"
-                     "relayedUnreachable,acceptedNeitherCertifiedNorTaken,"
-                     "sample")
+                     "relayedUnreachable,"
+                     "acceptedNeitherCertifiedTakenNorRefused,sample")
 
 
 def submissions_from(per, role="validator"):
@@ -1297,6 +1362,14 @@ def submissions_from(per, role="validator"):
             a = p.get("accepted") or 0
             q = p.get("certified") or 0
             ok = p.get("relayedTaken") or 0
+            # A refusal is an ANSWER, not a loss: a validator validated the
+            # submission and declined, and the caller was told so. It is
+            # subtracted with `taken` (threat-reviewer F4 on #4366) —
+            # otherwise whoever floods a follower with garbage drives its
+            # stranded figure, and the same envelope sent straight to a
+            # validator costs nothing.
+            no = p.get("relayedRefused") or 0
+            done = q + ok + no
             # Every relay outcome, INCLUDING ones this harness cannot read:
             # a build with a fourth label could otherwise relay more than it
             # took with no alarm (reviewer L2).
@@ -1304,20 +1377,37 @@ def submissions_from(per, role="validator"):
                              ("relayedRefused", "relayedNotReady",
                               "relayedUnreachable")) \
                 + sum((p.get("unknownRelayOutcomes") or {}).values())
-            # Two impossible states, each an instrument fault and each
+            # Three impossible states, each an instrument fault and each
             # named rather than absorbed by the floor (REPORTING-SPEC 1a).
-            if p.get("accepted") is not None and q + ok > a:
+            if p.get("accepted") is not None and done > a:
                 out["impossible"].append(
-                    "%s %s: certified %d + relayed-taken %d of %d accepted"
-                    % (c, part, q, ok, a))
+                    "%s %s: certified %d + relayed-taken %d + relayed-refused "
+                    "%d of %d accepted" % (c, part, q, ok, no, a))
             if p.get("accepted") is not None and tried > a:
                 out["impossible"].append(
                     "%s %s: relayed %d of %d accepted" % (c, part, tried, a))
+            # Relays present and NO accepted series at all. Both checks
+            # above are guarded on `accepted is not None`, so a build that
+            # exports relayed_total and never creates
+            # submissions_total{outcome="accepted"} slips past both — and
+            # under the current wording it cannot be right: a submission
+            # that enters the relay IS accepted, so relays without an
+            # accepted series is a missing counter, not a quiet node. Left
+            # unsaid it is the retracted reading's silent failure by
+            # another route: stranded floors to 0 and a node relaying
+            # everything, or losing everything, reads clean.
+            if p.get("accepted") is None and tried > 0:
+                out["impossible"].append(
+                    "%s %s: %d relayed and no accepted series at all — a "
+                    "relayed submission is accepted by definition, so this "
+                    "is a counter the node never created" % (c, part, tried))
             # The quantity: what it neither got into its own certified
-            # header NOR handed to a node that took it. On a working
-            # relaying node this is ~0; before relay it was everything the
-            # node accepted.
-            gap = max(0, a - q - ok)
+            # header, NOR handed to a node that took it, NOR had answered
+            # with a refusal. What is left had no answer of any kind — it
+            # is `not-ready`, `unreachable`, or still in flight. On a
+            # working relaying node this is ~0; before relay it was
+            # everything the node accepted.
+            gap = max(0, a - done)
             p["stranded"] = gap
             for k in fields:
                 n[k] += p.get(k) or 0
@@ -2414,7 +2504,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <b id=fmax>—</b><span class=sl>behind (blocks, whole run)</span>
         <span class=mut id=fheight>—</span><span class=sl>its height / the validators&rsquo;</span>
         <span class=mut id=fres>—</span><span class=sl>its RSS (MiB) / heals (#)</span>
-        <b id=fstrand>—</b><span class=sl>accepted, neither certified here nor taken on relay (#, whole run)</span>
+        <b id=fstrand>—</b><span class=sl>accepted, neither certified here, taken on relay, nor refused (#, whole run)</span>
         <span class=mut id=frelay>—</span><span class=sl>relayed (#, whole run): taken / refused / target not ready / unreachable</span>
         <span class=cap id=fstate></span>
       </div>
@@ -2443,7 +2533,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       </div>
       <div class=sub>submissions</div>
       <div class=kv>
-        <b id=nstrand>—</b><span class=sl>accepted, neither certified here nor taken on relay (#, whole run, worst validator)</span>
+        <b id=nstrand>—</b><span class=sl>accepted, neither certified here, taken on relay, nor refused (#, whole run, worst validator)</span>
         <span class=mut id=nacc>—</span><span class=sl>accepted (#, whole run)</span>
         <span class=cap id=nstrandnode></span>
       </div>
@@ -2576,8 +2666,11 @@ function followerView(fo, ns){
   // must still be visible somewhere.
   const fst=ns.followerStats;
   out.fres=fst?`${fmt(fst.rssMaxMiB)} / ${fst.healsMeasured?fmt(fst.healEntries):ABSENT}`:ABSENT;
-  // What the follower neither certified itself NOR handed to a node that
-  // took it (#4364). Certification is the discriminator, not proposal — a
+  // What the follower neither certified itself, NOR handed to a node
+  // that took it, NOR had answered with a refusal (#4364). A refusal is
+  // an answer the caller was given, not a loss — leaving it in let
+  // whoever floods a follower with garbage drive this number
+  // (threat-reviewer F4 on #4366). Certification is the discriminator, not proposal — a
   // follower authors and broadcasts headers carrying its own batches
   // (header_builder.go:35-76) and never collects the votes
   // (vote_handler.go:277-284) — and since Paul's "Followers can relay txs.
@@ -2861,16 +2954,16 @@ const DEFS={
  fmax:"The largest that gap has been at any sample since this monitor started. Never cleared; it is the number the manifest states as the worst of the run.",
  fheight:"The follower's own ledger index and the validators' highest, per partition it runs. Two separate reads a moment apart, so a follower reading one block ahead is skew, not a negative lag.",
  fres:"The follower's own resident memory and healed entries. It is NOT in the fleet averages or the heal total beside them — those mean the validators, the same membership monitor.csv's heals column has — so it is reported here. A follower is never selected as a gap requester (cadence.go:57-66), so its heals should stay 0; 0 here is a read number, not an assumption.",
- fstrand:"Transactions the follower's Submit took responsibility for that it neither got into a certified header of its own NOR handed to a node that took it: accepted minus certified minus relayed-taken, whole run. THE number that must be 0 on an acceptance run — each one is a lost user transaction, or a synthetic that will have to be healed. Certified and not 'proposed': a follower does author and broadcast headers carrying its own batches (header_builder.go:35-76) and never collects the 2f+1 votes, because validators drop a header whose author is not in the committee (vote_handler.go:277-284), so certified is 0 for its whole life. And minus relayed-taken, because Paul (2026-09-19) said followers can and should relay: subtracting only certified would show a follower relaying everything perfectly as the largest red number on the board. Read it against the LAST sample, which is written when the monitor exits, after the drain — at any earlier sample a relay in flight and a stranded transaction look the same, which is why the manifest states the trend beside the value. Reads \u2014 not measured until a node exports the three families (#4366, #4369); 0 would assert the opposite of what is known.",
+ fstrand:"Transactions the follower's Submit took responsibility for that it neither got into a certified header of its own, nor handed to a node that took it, nor had answered with a refusal: accepted minus certified minus relayed-taken minus relayed-refused, whole run. What is left had no answer of any kind — target not ready, unreachable, or still in flight. A refusal is subtracted because a validator validated the submission and declined and the caller was told so: nothing is lost, and leaving it in let whoever floods this node with garbage drive the number while the same envelope sent straight to a validator cost nothing (threat-reviewer F4 on #4366). That holds because the relay is synchronous and the refusal goes back unchanged; under accept-and-forward a refusal would be a loss again. THE number that must be 0 on an acceptance run — each one is a lost user transaction, or a synthetic that will have to be healed. Certified and not 'proposed': a follower does author and broadcast headers carrying its own batches (header_builder.go:35-76) and never collects the 2f+1 votes, because validators drop a header whose author is not in the committee (vote_handler.go:277-284), so certified is 0 for its whole life. And minus relayed-taken, because Paul (2026-09-19) said followers can and should relay: subtracting only certified would show a follower relaying everything perfectly as the largest red number on the board. Read it against the LAST sample, which is written when the monitor exits, after the drain — at any earlier sample a relay in flight and a stranded transaction look the same, which is why the manifest states the trend beside the value. Reads \u2014 not measured until a node exports the three families (#4366, #4369); 0 would assert the opposite of what is known.",
  frelay:"What became of the submissions this node handed on, whole run, counted once per submission at its FINAL answer: taken by a node that can propose it / a target validated it and refused / every target that answered said NotReady and the node gave up / no target answered at all. Taken is the hand-off that discharges the duty — what happens after it is the TARGET's own accepted-and-certified pair, so the same counters summed over the fleet give the network's true stranded count with nobody claiming credit for another node's work. 'Target not ready' is a statement about the network (a joining node, #4307), not about the submission, which is why it is not filed under refused; a NotReady that is retried and then succeeds is one taken, not two outcomes. What the node does about a refusal, a not-ready or an unreachable target is open for Paul on #4366. Relaying is NOT gated on being synced: a read needs local state, a relay needs none, so a node relays whether it is following or syncing (executor.md step 6).",
  fstate:"Which containers are followers and the bound the gate is judged against — two blocks: one for the two reads not being simultaneous at a one-second block interval, one for the executor being inside the block it is closing.",
  lblocks:"Blocks produced by the network, summed over partitions, each partition taken as the highest count any node reported.",
  lempty:"Blocks that carried no transactions.",
  lidle:"Shown when nearly every block is empty: consensus is committing empty rounds.",
  nrssavg:"Resident memory of the node process, MiB, averaged over the fleet.", nrssmax:"Largest resident memory of any node, MiB.", nrssmin:"Smallest resident memory of any node, MiB.",
- nstrand:"The largest count, on any one validator, of transactions it took responsibility for at Submit and neither certified itself nor handed to a node that took it — accepted minus certified minus relayed-taken, whole run. On a validator certification is its own job and it relays nothing, so this sits at the in-flight window, the rounds not yet certified; a number that climbs means submissions are dying in a queue nobody drains. In flight and stranded look alike at one sample: the manifest states the final value after the drain together with its trend, and that is the reading to judge on. Over the validators, the same membership as every other total in this panel.",
+ nstrand:"The largest count, on any one validator, of transactions it took responsibility for at Submit and neither certified itself, nor handed to a node that took it, nor had answered with a refusal — accepted minus certified minus relayed-taken minus relayed-refused, whole run. What is left had no answer of any kind. On a validator certification is its own job and it relays nothing, so this sits at the in-flight window, the rounds not yet certified; a number that climbs means submissions are dying in a queue nobody drains. In flight and stranded look alike at one sample: the manifest states the final value after the drain together with its trend, and that is the reading to judge on. Over the validators, the same membership as every other total in this panel.",
  nacc:"Transactions accepted at Submit across the validators, whole run — the denominator the number above is read against.",
- nstrandnode:"Which validator holds that worst count, plus the two impossible states (REPORTING-SPEC 1a): certified plus relayed-taken above what was accepted, or more relayed than accepted. Causes, in order of likelihood: a certified count per header instead of once per transaction; a relay counted per attempt instead of once per submission at its final answer; or — and this one is a REAL EVENT, not a broken counter — a node PROMOTED mid-run that kept its own copy of a submission it had already relayed, which the contract forbids precisely because it lands here (#4364's own disturbance). Also shown: any relay outcome label this harness does not know, named rather than folded into one it does, because the relay's behaviour is still open for Paul (#4366).",
+ nstrandnode:"Which validator holds that worst count, plus the three impossible states (REPORTING-SPEC 1a): certified plus relayed-taken plus relayed-refused above what was accepted; more relayed than accepted; or any relay at all beside no accepted series. Causes, in order of likelihood: a certified count per header instead of once per transaction; a relay counted per attempt instead of once per submission at its final answer; or — and this one is a REAL EVENT, not a broken counter — a node PROMOTED mid-run that kept its own copy of a submission it had already relayed, which the contract forbids precisely because it lands here (#4364's own disturbance). Also shown: any relay outcome label this harness does not know, named rather than folded into one it does, because the relay's behaviour is still open for Paul (#4366).",
  ngravg:"Goroutines in the node process, averaged over the fleet.", ngrmax:"Most goroutines in any node.", ngrmin:"Fewest goroutines in any node.",
  ndbavg:"Database on disk per node, GB, averaged.", ndbmax:"Largest database on disk of any node, GB.", ndbgrow:"How fast the largest database is growing, GB per hour.",
  lheld:"Batches kept after execution so a peer that is behind can still fetch them.", lhits:"Times a peer fetched one of those retained batches.", lexp:"Retained batches let go when their retention window passed.",

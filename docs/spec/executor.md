@@ -494,7 +494,8 @@ fully synced when its state is the state a signed anchor commits to and it
 executes every block from there at the network's cadence — the only proof
 this protocol has of its own state is the signed anchor at a height ("We only
 need the signed anchor at the current height to prove the state of the entire
-protocol at that height"; Paul, 2026-09-19), and this line has no backfill of
+protocol at that height"; Paul, 2026-09-18/19, the spine decision), and this
+line has no backfill of
 history: the producer cache fills by execution alone, a join pulls state and
 not chain entries, and nothing under this section fetches entries a node did
 not execute — that is phase 3's conversion of history, or phase 2's database
@@ -580,8 +581,8 @@ accepts and forwards; whether it relays only for the partitions it runs;
 whether a node that cannot propose still advertises `submit:<partition>` on
 the DHT (a record, distinct from the installed handler above); what a node
 that has not yet validated the spine, and so holds no committee to choose a
-target from, relays to; and
-and — settled above, recorded here because it was open — what "fully synced"
+target from, relays to; and — settled above, recorded here because it was
+open — what "fully synced"
 is: a verified anchored root, `ACTIVE` (#4368; resolution taken through the
 spec-change protocol 2026-09-19, historian: inside phase 1).
 
