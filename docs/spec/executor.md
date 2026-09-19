@@ -542,7 +542,8 @@ Open, and not settled here: what a relaying node does when the target refuses
 or is unreachable; whether it answers its caller on the relay's result or
 accepts and forwards; whether it relays only for the partitions it runs; and
 what "fully synced" is, given `COMPLETE` has no production caller today
-(#4368, which therefore blocks #4366).
+(#4368 — which gates when a syncing node's *reads* open, not the relay: a
+relay needs no state).
 
 What a restart therefore never does is replay committed blocks it did not
 execute, or rebuild staging from a source's cache: the first executes with the

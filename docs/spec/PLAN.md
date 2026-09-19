@@ -29,7 +29,7 @@ R #4219 ─▶ S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86   cost: first the
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3               correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back
 #4205 restart recovery                                before chaos returns to a soak
-Phase 1 (Paul, 2026-09-19): #4365 (PASSED 2026-09-19, run 20260919T191634Z) ─▶ #4367 (MERGED 775ce23a6) ─▶ #4368 (what "fully synced" is in code states) ─▶ #4366's build (relay, never drop) ─▶ gate-0 rerun ─▶ #4301 ─▶ #4361 ─▶ #4362 ─▶ serve-last ─▶ #4363 ─▶ #4364 ─▶ the 12 h / 100 tps acceptance with followers added and removed   the one order; E11's second pass below is its text
+Phase 1 (Paul, 2026-09-19): #4365 (PASSED 2026-09-19, run 20260919T191634Z) ─▶ #4367 (MERGED 775ce23a6) ─▶ #4366's build (relay, never drop; needs no state) ─▶ gate-0 rerun ─▶ #4368 (what "fully synced" is — gates reads, not the relay) ─▶ #4301 ─▶ #4361 ─▶ #4362 ─▶ serve-last ─▶ #4363 ─▶ #4364 ─▶ the 12 h / 100 tps acceptance with followers added and removed   the one order; E11's second pass below is its text
 ```
 
 Each item is its own issue branch from the previous item's tip.
@@ -319,7 +319,8 @@ bootstrapping a follower."
    "Between gate 0 and bootstrapping a follower" below, which is their
    record: #4367 merged (`775ce23a6`); #4366 is the relay of executor.md step
    6 — a node that cannot propose a transaction, following or syncing, relays
-   it and never drops it — with its build blocked on #4368 and gated on the
+   it and never drops it — needing no state, so not waiting on #4368 (which
+   gates when a syncing node's reads open) — and gated on the
    five-minute rerun (heals 0 → 0; stranded 0 **and** relayed-taken ≈
    accepted, since either alone is satisfied by a node that does nothing;
    0 anchors dispatched by the follower; the follower verdict unchanged; the
@@ -376,8 +377,8 @@ this order because each one's gate needs the one before it:
    which of the two the spec means and it enters the protocol as their
    statement. That test gains one case after #4366: a from-genesis
    non-committee node answers reads AND relays a transaction it cannot
-   propose (executor.md step 6). #4368 is on the critical path ahead of
-   #4366's build. #4295's body is restated to the every-read rule or
+   propose (executor.md step 6). #4368 gates the read side (#4295, #4363,
+   #4365), not the relay; it follows the gate-0 rerun. #4295's body is restated to the every-read rule or
    superseded by #4368 (issue-manager).
    The two small defects that survive the deletions, #4355 (a successful join
    logged as an error) and #4356 (the ledger walk dead after 128 blocks),
@@ -405,10 +406,13 @@ transaction has no healer:
   routes to BVN3. The remedy is the relay in executor.md step 6, not a
   refusal: a relay reads no account and needs no state, so it is available to
   a syncing node and a follower alike, and it delivers the transaction where a
-  refusal would only move the problem. **Blocked by #4368** — "fully synced"
-  cannot be expressed while `nodestate.PromoteToComplete` has no production
-  caller. Gate: a five-minute rerun of `5m-100tps-follower.conf` in which
-  heals return to zero and no transaction strands.
+  refusal would only move the problem. Not blocked by #4368: a relay needs
+  no state, so what "fully synced" is — unexpressible while
+  `nodestate.PromoteToComplete` has no production caller — gates only when a
+  syncing node's reads open (#4295, #4363, #4365), after the rerun. Gate: a
+  five-minute rerun of `5m-100tps-follower.conf` in which heals return to
+  zero and no transaction strands — stranded 0 **and** relayed-taken ≈
+  accepted, either alone being satisfied by a node that does nothing.
 
 Then **bootstrapping a follower** — **#4363** (a follower joins a *running*
 network through the join above, keeps up, answers `NotReady` until

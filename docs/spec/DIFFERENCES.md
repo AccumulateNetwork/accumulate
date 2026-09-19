@@ -407,7 +407,8 @@ advertised" would not close it: `connectedPeersDiscoverer`
 (`pkg/api/v3/p2p/dial_network.go:133-160`) finds an installed handler by
 libp2p identify ahead of the DHT. (#4366; run `20260919T191634Z`; reproduced
 in-process, 1,249 accepted, 0 committed.) Open until #4366 lands; its build
-is blocked on #4368's decision of what "fully synced" is in code states.
+does not wait on #4368: a relay needs no state, so what "fully synced" is
+gates only when a syncing node's reads open.
 
 **The gauge, though, is every node's, for every partition it runs, from
 start-up (#4345a).** It used to be created by the join and only by the join —
