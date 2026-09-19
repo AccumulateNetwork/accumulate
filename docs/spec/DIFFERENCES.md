@@ -446,10 +446,16 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
 **Differences from the issue as written**:
 
 - **Serving resumes when the node executes (ACTIVE), not when its history is
-  backfilled (COMPLETE)**, because there is no backfill: requiring COMPLETE
-  would mean a node that joined never answered anything again. What it cannot
-  answer it refuses by the rule above, so the difference is which answer a
-  peer gets, not whether it is misled.
+  backfilled (COMPLETE)** — *retired as a difference 2026-09-19 (#4368): the
+  spec now says the same.* Fully synced is a verified anchored root; there is
+  no backfill on this line and there will be none in phase 1; `COMPLETE` and
+  `WAITING` are retired; a node that never joined has no state machine and
+  serves as `ACTIVE`. What remains different: `PromoteToWaiting`,
+  `PromoteToComplete`, `CanServeHistory` and `nodestate.Restore` still exist
+  with no production caller (delete, or pin by test — the builder's
+  uncommitted caller scan is the pin); the gauge and the daemon's `Always{}`
+  are two objects nothing keeps in agreement; and `servingFor` gates two query
+  kinds where the spec says every read (#4295).
 - **The state is not persisted** (#4300; `bootpersist` is not ported). A
   restart joins again, which reaches the same answer.
 - **It is not advertised** (#4300) in the node's service record, so

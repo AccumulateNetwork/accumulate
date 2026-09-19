@@ -489,10 +489,26 @@ has moved on, which is a network fact (#4340).
 
 #### 6. Serve last
 
-Until the node's history is backfilled — the producer cache filled, the chains
-it lacks fetched — it does not answer requests for missing data: not the
-sequencer, not healing. It keeps up with blocks and says so (node state
-`BOOTING`, `ACTIVE`, `COMPLETE`). Its state is advertised, but advertising is
+**Fully synced is a verified state, not a backfilled history.** A node is
+fully synced when its state is the state a signed anchor commits to and it
+executes every block from there at the network's cadence — the only proof
+this protocol has of its own state is the signed anchor at a height ("We only
+need the signed anchor at the current height to prove the state of the entire
+protocol at that height"; Paul, 2026-09-19), and this line has no backfill of
+history: the producer cache fills by execution alone, a join pulls state and
+not chain entries, and nothing under this section fetches entries a node did
+not execute — that is phase 3's conversion of history, or phase 2's database
+node, not a syncing node's work. So the node states are two: **`BOOTING`**,
+from the start of a join until the local root matches a verified anchored
+root; **`ACTIVE`** from that block on, and from its first block for a node
+that took nothing from a peer — a node that never joined has no state
+machine at all and serves as `ACTIVE` (#4368). `COMPLETE` and `WAITING`, which
+named a backfilled history, are retired: nothing reached them and nothing
+could. What a joined node cannot answer *for a block it did not execute* —
+an entry the sequencer is asked for from before it joined — it refuses per
+request with `NotReady` naming the block it joined at, never `NotFound`,
+which a requester counts as a miss (#4295, DIFFERENCES E11). The node's state
+is a gauge and is advertised, but advertising is
 not what keeps a request away: a peer finds any installed handler by libp2p
 identify ahead of the DHT (`connectedPeersDiscoverer`), so what protects a
 caller is the node's answer — `NotReady` for a read it cannot make, a relay
@@ -509,7 +525,11 @@ the half-filled ones its own pull is building, and a second joining node would
 otherwise take its spine from the first (#4297). Nor does it answer for
 missing data: not the sequencer, not healing. **In this phase a syncing node
 refuses every read** and answers once it is fully synced (Paul, 2026-09-19):
-`BOOTING` and `ACTIVE` refuse with `NotReady`, `COMPLETE` serves. Tracking
+`BOOTING` refuses with `NotReady`, `ACTIVE` serves. "Every read" is the rule;
+the code gates two query kinds (`servingFor`: a BPT page, an account with a
+receipt) and a joining node still answers ordinary account reads from a
+half-filled store — a code change under #4295, not a narrowing of this
+sentence. Tracking
 which nodes are not synced, so a *reader* can be sent to one that can answer,
 is the next phase's work and nothing here anticipates it.
 
@@ -561,9 +581,9 @@ whether a node that cannot propose still advertises `submit:<partition>` on
 the DHT (a record, distinct from the installed handler above); what a node
 that has not yet validated the spine, and so holds no committee to choose a
 target from, relays to; and
-what "fully synced" is, given `COMPLETE` has no production caller today
-(#4368 — which gates when a syncing node's *reads* open, not the relay: a
-relay needs no state).
+and — settled above, recorded here because it was open — what "fully synced"
+is: a verified anchored root, `ACTIVE` (#4368; resolution taken through the
+spec-change protocol 2026-09-19, historian: inside phase 1).
 
 What a restart therefore never does is replay committed blocks it did not
 execute, or rebuild staging from a source's cache: the first executes with the

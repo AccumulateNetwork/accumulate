@@ -85,18 +85,81 @@ This is the contract the soak monitor is written against:
 | `dispatcher_drops_total` | counter | destination, reason={deadline,queue-full} | envelopes dropped undelivered |
 | `bcdb_staged_commits`, `bcdb_oldest_view_age_seconds` | gauge | database | store isolation cost, as of the last commit or release |
 | `dagbft_execution_lag_blocks` | gauge | partition | committed groups the executor has not produced a block from |
-| `dagbft_submissions_total` | counter | partition, outcome={accepted,rejected} | what this node's `Submit` did with what it was handed, per partition it runs |
+| `dagbft_submissions_total` | counter | partition, outcome={accepted,rejected} | `accepted` = `Submit` returned success **to the caller** — the node took responsibility, whether the envelope entered its own worker or was relayed |
 | `dagbft_certified_own_transactions_total` | counter | partition | transactions from this node's OWN batches that reached a CERTIFIED header of this node, each counted at most once |
+| `dagbft_relayed_total` | counter | partition, outcome={taken,refused,not-ready,unreachable} | submissions this node handed to a node that can propose them, counted once per submission at its **final** answer |
 
-Exported: the first two, on both branches. **Missing: the remaining eight — which
+Exported: the first two, on both branches. **Missing: the remaining nine — which
 is why the flow matrix and wedge panels have never shown a true value** (#4095),
 and why no run can say whether a submission was accepted and never proposed.
 
-The last two are the pair a follower makes necessary (#4364, for #4366/#4369).
-`accepted - certified` per (node, partition), floored at 0, is **accepted never
-certified (#, whole run)**: on a validator it sits at the in-flight window — the
-rounds not yet certified — and on a node in no committee it is everything the
-network dialled to it and lost.
+The last three are the set a follower makes necessary (#4364, for #4366/#4369).
+The quantity is
+
+> **accepted, neither certified here nor taken on relay (#, whole run)**
+> = `accepted - certified - relayed{taken}`, per (node, partition),
+> floored at 0.
+
+On a validator it sits at the in-flight window — the rounds not yet certified.
+On a **working** relaying node it is ~0, because the hand-off discharges the
+duty. On one that strands it is everything the network dialled to it and lost.
+
+**`accepted` MUST mean "`Submit` returned success to the caller"**, not "the
+envelope entered this node's worker batch". Under a synchronous relay the
+envelope never enters it, so the narrower reading exports `accepted = 0` beside
+`relayed = n` and raises the `relayed > accepted` alarm on a node working
+perfectly — and it silently answers an open question (synchronous, or
+accept-and-forward) that is Paul's.
+
+**The rule is read against the LAST sample, and stated with its trend.** In
+flight and stranded are the same number at any one sample: a relay not yet
+answered, and on a validator the rounds not yet certified. The monitor MUST
+write a final row when it is stopped — which is after the load generator's
+grace drain and any idle tail — and the manifest MUST state that value **and
+its movement over the final samples**: falling with no new accepts is draining,
+flat or rising is stranded. The requirement is therefore **0 at the last sample
+after the drain, or the residue and its trend** — never "a small number is
+fine", which teaches a reader to excuse a slow strand.
+
+**The relay leg is not optional arithmetic.** Paul, 2026-09-19: *"Followers can
+relay txs. And should."* `accepted - certified` on a node in no committee is
+everything it took, by construction, so without the third term a follower
+relaying perfectly would render the largest red number on the board under a
+label meaning failure — a clause-1 false negative's mirror image, and on the one
+node a follower run exists to watch. `relayed_total` MUST be counted **once per
+submission, at the relay's answer**, not per attempt: a submission refused by two
+targets and taken by a third is one `accepted`, and a retry count is a different
+measurement wanting its own family.
+
+**It composes across nodes.** `relayed{taken}` says a node that can propose
+took it, not that it certified it; the next leg is that node's own
+`accepted`/`certified` pair in the same families. Summing the quantity over the
+fleet therefore gives the network's true stranded count with no node claiming
+credit for another's work. For that to hold, **a relayed submission MUST NOT
+also be proposed by the relaying node** — relay or propose, never both.
+Otherwise a node promoted mid-run certifies what it also relayed, which
+double-counts across the fleet and fires the alarm below on a real event.
+
+**`not-ready` is a fact about the network, not about the submission.** A target
+that answers `NotReady` is a joining node (executor.md step 6, #4307); the
+protocol's meaning is "ask someone else", so a `NotReady` is a retry and MUST
+NOT be recorded as an outcome. A submission that is then taken is one `taken`.
+Only when the relaying node stops trying does the submission take an outcome,
+and if every answer it ever received was `NotReady` that outcome is
+`not-ready`, distinct from `refused` — which means a target validated it and
+declined, a final answer and a statement about the submission itself.
+
+**Relaying is not gated on being synced.** Paul, 2026-09-19: *"update specs and
+development plan with relaying txs if following or syncing"*. A read needs
+local state and a relay needs none (executor.md step 6), so a syncing node
+refuses every read and still relays every transaction. A syncing node's relay
+counters are live.
+
+**An outcome label the reader does not know MUST be surfaced under its own
+name**, never folded into a known one and never dropped: four questions about
+the relay's behaviour are open (lead's note on #4366) and the answer may add a
+label; folding an unread outcome into `accepted` would move a failure into the
+success column.
 
 **It MUST be certification and not proposal.** A node in no committee authors
 and broadcasts a header carrying its own batches exactly as a validator does
@@ -113,12 +176,16 @@ exporter's hook is the node's own certificate and not its own header.
 Each transaction MUST be counted at most once, at the first certified header
 carrying its batch: a header that never certifies is requeued and its batches
 re-proposed, so a per-header count double-counts and drives the difference
-negative. `certified > accepted` is an impossible state (clause 1a) and MUST be
-surfaced as an instrument alarm, not floored silently. Until both families exist
-the harness renders `— not measured` on the board, in `submissions.csv` (a
-header and no rows, and an empty field in a row that does exist) and in the
-manifest — never 0, because 0 asserts that nothing stranded, which is the one
-thing run `20260919T191634Z` could not establish.
+negative. Two impossible states (clause 1a) MUST be surfaced as instrument
+alarms and never floored silently: `certified + relayed{taken} > accepted`
+(a per-header certified count, a per-attempt relay count, or a node promoted
+mid-run that kept its own copy of what it relayed — a real event, not a broken
+counter), and `sum(relayed) > accepted`, where the sum includes outcomes the
+reader does not know. Until the families exist the harness renders
+`— not measured` on the board, in `submissions.csv` (a header and no rows, and
+an empty field in a row that does exist) and in the manifest — never 0, because
+0 asserts that nothing stranded, which is the one thing run `20260919T191634Z`
+could not establish.
 
 The consensus-status API MUST additionally report `syntheticHeals` and
 `anchorHeals` (#4075) — the coarse monitor's CSV reads them.
