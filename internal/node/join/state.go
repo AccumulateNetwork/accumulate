@@ -548,6 +548,23 @@ func (s *PulledState) fetch(ctx context.Context, accounts []*url.URL) (int, []*u
 				refused = append(refused, u)
 				continue
 			}
+			if p.Past() {
+				// The node is past this peer on this account: everything the
+				// peer can give for it, the node has, and the pull took
+				// nothing. There is nothing to settle and no anchor to wait
+				// for, and holding it would hold a batch open for state the
+				// node is never going to take.
+				//
+				// It is not refused either: nothing failed. The account is
+				// named again next round if its leaf still differs from the
+				// peer's -- enumerate.Stale names a difference in either
+				// direction, so an account the node is ahead on is named
+				// every round until the network passes it (#4348).
+				p.Discard()
+				s.log.Debug("The node is past the peer on an account; nothing was pulled",
+					"account", u, "partition", s.partition)
+				continue
+			}
 			h.accounts = append(h.accounts, &heldAccount{url: u, pending: p})
 		}
 
