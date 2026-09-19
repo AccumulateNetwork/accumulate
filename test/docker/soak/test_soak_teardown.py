@@ -15,6 +15,15 @@ box and Paul killed it by hand. Two causes, both in `soak.sh`:
        plain kill: subshell gone | its 'sleep 300' ALIVE
        stop_bg   : subshell gone | its 'sleep 300' gone
 
+A third finding on review (M1): `pkill -P` alone wakes the subshell, which
+runs its loop body once more before the TERM arrives. On the chaos loop that
+body forks a `docker pause`/`docker restart` — a disturbance at teardown,
+then `compose down` on a paused container — and this issue's acceptance run
+is a chaos run. Measured here with a chaos-shaped loop:
+
+    pkill -P then TERM  : loop body ran again? DISTURBANCE FORKED
+    STOP,pkill,TERM,CONT: loop body ran again? NO
+
 This cannot be proved against a live run from here, and a run must confirm
 it: `soak.log` must carry no `survived teardown` warning, and `pgrep -x
 sleep` must be clean once the script exits. What CAN be pinned is the shape
@@ -83,16 +92,41 @@ class EveryBackgroundJobRecordsItsPid(unittest.TestCase):
 
 
 class TeardownNamesThemAll(unittest.TestCase):
-    def test_stop_bg_kills_the_child_before_the_subshell(self):
-        """Order is the fix: `pkill -P` makes the `sleep` return, so the
-        subshell does not leave it orphaned for the rest of its interval."""
+    def test_stop_bg_stops_then_kills_the_child_then_terms_then_conts(self):
+        """The order IS the fix, and all four signals are load-bearing.
+
+        `pkill -P` alone wakes the subshell, which runs its loop body once
+        more before the TERM lands — on the chaos loop that body forks a
+        `docker pause`/`restart`, a disturbance AT teardown, and #4364's
+        acceptance run is a chaos run (reviewer M1). Measured here with a
+        chaos-shaped loop that appends to a file after its sleep:
+
+            pkill -P then TERM : loop body ran again? DISTURBANCE FORKED
+            STOP,pkill,TERM,CONT: loop body ran again? NO
+
+        STOP freezes it so it cannot fork; the TERM queues while stopped and
+        is acted on the moment CONT resumes it, before any further command.
+        """
         body = re.search(r"stop_bg\(\)\s*\{(.*?)\n\}", SRC, re.S)
         self.assertIsNotNone(body, "stop_bg is gone")
         b = body.group(1)
-        self.assertLess(b.index("pkill -P"), b.index('kill "$p"'),
-                        "children first, or the sleep is orphaned")
+        for sig in ("kill -STOP", "pkill -P", "kill -TERM", "kill -CONT"):
+            self.assertIn(sig, b, sig)
+        self.assertLess(b.index("kill -STOP"), b.index("pkill -P"),
+                        "freeze first, or the woken loop forks one more time")
+        self.assertLess(b.index("pkill -P"), b.index("kill -TERM"),
+                        "children before the parent, or the sleep is orphaned")
+        self.assertLess(b.index("kill -TERM"), b.index("kill -CONT"),
+                        "CONT last, or the queued TERM is never acted on")
 
     def test_every_captured_pid_is_passed_to_stop_bg(self):
+        # NOTE the parser's limits, deliberately strict so it fails safe
+        # (reviewer L3): it sees only jobs written as a line ending in `&`
+        # with `VAR=$!` on its own line below — a one-liner `cmd & VAR=$!`
+        # reads as an orphan and fails this suite rather than passing it —
+        # and it matches only `${VAR:-}` forms in the stop_bg call. On this
+        # file it finds exactly the eleven `&`-terminated lines a raw grep
+        # finds, so there is no blind spot today.
         call = re.search(r"\nstop_bg ((?:.|\\\n)*?)\n(?=[^ ])", SRC)
         self.assertIsNotNone(call, "teardown does not call stop_bg")
         passed = set(re.findall(r"\$\{([A-Z_][A-Z0-9_]*):-\}", call.group(1)))

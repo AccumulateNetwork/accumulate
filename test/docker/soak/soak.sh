@@ -52,12 +52,26 @@ export COMPOSE_PROJECT_NAME ACC_BLOCK_INTERVAL ACC_MEM_LIMIT GOMEMLIMIT ACC_TX_T
 #    this box, two identical `( while true; do sleep 300; done ) &` jobs:
 #      plain kill: subshell gone | its 'sleep 300' ALIVE
 #      stop_bg   : subshell gone | its 'sleep 300' gone
-#    So: children first (`pkill -P`), then the subshell.
+#
+# So the order is STOP, children, TERM, CONT — four signals, and each one is
+# there for a reason (reviewer M1 on #4364):
+#   STOP    freeze the subshell first. Killing the `sleep` wakes it, and it
+#           then runs its loop body once more before the TERM lands ~1ms
+#           later. On the chaos loop that body is `docker pause`/`docker
+#           restart` — a disturbance forked AT teardown, and `compose down`
+#           on a paused container. The acceptance run for this issue is a
+#           chaos run, so the window is not theoretical.
+#   pkill -P kill the `sleep`, so it is not orphaned when the parent goes.
+#   TERM    queued while the process is stopped; it is not acted on yet.
+#   CONT    resume, and the queued TERM kills it before any further command.
+# Nothing here blocks: no `wait`, and the script sets no `-e`.
 stop_bg() {
   for p in "$@"; do
     [ -n "$p" ] || continue
+    kill -STOP "$p" 2>/dev/null || true
     pkill -P "$p" 2>/dev/null || true
-    kill "$p" 2>/dev/null || true
+    kill -TERM "$p" 2>/dev/null || true
+    kill -CONT "$p" 2>/dev/null || true
   done
   return 0
 }
@@ -825,12 +839,15 @@ if [ -x "$here/streams.py" ]; then
 fi
 stalled_end="${stalled_end:-unknown}"
 
-# Accepted and never proposed (#4364). soakmon writes submissions.csv every
+# Accepted and never CERTIFIED (#4364). soakmon writes submissions.csv every
 # 30s from accumulate_dagbft_submissions_total and
-# accumulate_dagbft_proposed_transactions_total. No build exports either
-# family yet (#4366, #4369), so the file is a header with no rows and this
-# says `— not measured` — never 0, which would assert that nothing stranded,
-# the one claim run 20260919T191634Z could not make.
+# accumulate_dagbft_certified_own_transactions_total. Certified and not
+# proposed: a follower authors and broadcasts headers carrying its own
+# batches like any node, and what it never gets is the 2f+1 votes, so
+# "never proposed" would read 0 on it. No build exports either family yet
+# (#4366, #4369), so the file is a header with no rows and this says
+# `— not measured` — never 0, which would assert that nothing stranded, the
+# one claim run 20260919T191634Z could not make.
 sub_row() {   # $1 = role: validator | follower
   python3 - "$rd/submissions.csv" "${1:-}" <<'PYEOF'
 import csv, sys
@@ -844,18 +861,28 @@ if not rows:
     print("— not measured (no node exports `accumulate_dagbft_submissions_total`; #4366, #4369)")
     raise SystemExit
 last = max(r["time"] for r in rows)
-per = {}
+per, blank = {}, 0
 for r in rows:
     if r["time"] != last:
         continue
+    # An EMPTY field is a counter that node never created — one family
+    # exported and not the other. Summing it as 0 would report "nothing
+    # stranded here" for a partition nobody measured (REPORTING-SPEC 1).
+    v = (r.get("acceptedNeverCertified") or "").strip()
+    if not v:
+        blank += 1
+        continue
     try:
-        per[(r["node"], r["partition"])] = int(r["acceptedNeverProposed"] or 0)
+        per[(r["node"], r["partition"])] = int(v)
     except ValueError:
-        pass
+        blank += 1
+missing = "" if not blank else ", %d (node, partition) without a count" % blank
 if not per:
-    print("— not measured (rows present but no counts at %s)" % last); raise SystemExit
+    print("— not measured (rows at %s but no counts%s)" % (last, missing or ""))
+    raise SystemExit
 (wv, wk) = max((v, k) for k, v in per.items())
-print("%d, worst %s on %s (as of %s)" % (sum(per.values()), wv, "/".join(wk), last))
+print("%d, worst %s on %s (as of %s)%s"
+      % (sum(per.values()), wv, "/".join(wk), last, missing))
 PYEOF
 }
 
@@ -892,7 +919,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   # A run that wedged and dumped is the most valuable kind of run there is;
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
   echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
-  echo "| accepted never proposed (#, whole run, the validators) | $(sub_row validator) |"
+  echo "| accepted never certified (#, whole run, the validators) | $(sub_row validator) |"
   if [ "$n_fol" -gt 0 ]; then
     echo
     echo "### Follower (#4365)"
@@ -904,7 +931,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     else
       echo "| every follower measurement | — not measured (followerlog.py produced nothing; see \`soak.log\`) |"
     fi
-    echo "| accepted never proposed (#, whole run) | $(sub_row follower) |"
+    echo "| accepted never certified (#, whole run) | $(sub_row follower) |"
     echo
     echo "Full detail in \`follower-report.md\`; the per-sample series in \`follower.csv\`."
   fi
