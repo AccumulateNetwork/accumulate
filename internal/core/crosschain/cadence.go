@@ -49,6 +49,32 @@ func healActivates(blockIndex uint64) bool {
 // sighting of a sequence number.
 const sendersPerActivation = 2
 
+// inCommittee reports whether this node's own key is active on this partition
+// in the globals it holds — whether it is one of the nodes that vote, propose
+// and anchor for this partition, or a follower that only executes what they
+// agree (executor.md, "Sync" step 5).
+//
+// The question is asked of the node's OWN key, which nothing asked before
+// #4367: `ContainsValidator` guarded inbound authors and `IsActiveOn` guarded
+// the healing pull, but the anchor send path asked only about globals, the
+// executor version, `Ready` and the ledger index. So on run 20260919T191634Z
+// a node in no committee signed and dispatched 1,997 anchors with a key every
+// receiver refused (msg_block_anchor.go:285), one per block per partition.
+//
+// A node with no key is not in a committee: it has no identity to be in one
+// with.
+func (c *Conductor) inCommittee() bool {
+	if len(c.ValidatorKey) != ed25519.PrivateKeySize {
+		return false
+	}
+	globals := c.Globals.Load()
+	if globals == nil || globals.Network == nil {
+		return false
+	}
+	_, v, ok := globals.Network.ValidatorByKey(c.ValidatorKey.Public().(ed25519.PublicKey))
+	return ok && v.IsActiveOn(c.Partition.ID)
+}
+
 // partitionValidators returns this partition's active validator keys, sorted,
 // so every node derives the same list in the same order from the same globals.
 func (c *Conductor) partitionValidators() ([]ed25519.PublicKey, error) {

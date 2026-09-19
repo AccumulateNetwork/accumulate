@@ -85,9 +85,40 @@ This is the contract the soak monitor is written against:
 | `dispatcher_drops_total` | counter | destination, reason={deadline,queue-full} | envelopes dropped undelivered |
 | `bcdb_staged_commits`, `bcdb_oldest_view_age_seconds` | gauge | database | store isolation cost, as of the last commit or release |
 | `dagbft_execution_lag_blocks` | gauge | partition | committed groups the executor has not produced a block from |
+| `dagbft_submissions_total` | counter | partition, outcome={accepted,rejected} | what this node's `Submit` did with what it was handed, per partition it runs |
+| `dagbft_certified_own_transactions_total` | counter | partition | transactions from this node's OWN batches that reached a CERTIFIED header of this node, each counted at most once |
 
-Exported: the first two, on both branches. **Missing: the remaining six — which
-is why the flow matrix and wedge panels have never shown a true value** (#4095).
+Exported: the first two, on both branches. **Missing: the remaining eight — which
+is why the flow matrix and wedge panels have never shown a true value** (#4095),
+and why no run can say whether a submission was accepted and never proposed.
+
+The last two are the pair a follower makes necessary (#4364, for #4366/#4369).
+`accepted - certified` per (node, partition), floored at 0, is **accepted never
+certified (#, whole run)**: on a validator it sits at the in-flight window — the
+rounds not yet certified — and on a node in no committee it is everything the
+network dialled to it and lost.
+
+**It MUST be certification and not proposal.** A node in no committee authors
+and broadcasts a header carrying its own batches exactly as a validator does
+(`pkg/consensus/primary/header_builder.go:35-76`, no committee gate on that
+path); what it never obtains is 2f+1 votes, because validators drop its header
+at `vote_handler.go:277-284`, so `tryCreateCertificateLocked` never fires for
+it. A counter of transactions *proposed* would therefore tick for everything a
+follower accepted, the difference would read **0**, and the board would render
+an un-red zero under a label asserting nothing stranded — on the one node where
+everything does. That is a clause-1 false negative produced by a build that
+followed the contract exactly (reviewer H1 on #4364), and it is why the
+exporter's hook is the node's own certificate and not its own header.
+
+Each transaction MUST be counted at most once, at the first certified header
+carrying its batch: a header that never certifies is requeued and its batches
+re-proposed, so a per-header count double-counts and drives the difference
+negative. `certified > accepted` is an impossible state (clause 1a) and MUST be
+surfaced as an instrument alarm, not floored silently. Until both families exist
+the harness renders `— not measured` on the board, in `submissions.csv` (a
+header and no rows, and an empty field in a row that does exist) and in the
+manifest — never 0, because 0 asserts that nothing stranded, which is the one
+thing run `20260919T191634Z` could not establish.
 
 The consensus-status API MUST additionally report `syntheticHeals` and
 `anchorHeals` (#4075) — the coarse monitor's CSV reads them.
