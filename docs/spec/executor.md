@@ -466,30 +466,40 @@ the peers, which is the failure the join exists to prevent.
 
 The node then executes block `Q + 1` from the buffer as any node executes a
 block, and it is a validator or a follower from there. A follower differs from
-a validator in two things and not in how it gets there: what it does with the
-blocks it processes — it does not vote or propose — and what it takes from the
-network, which is nothing it cannot propose.
+a validator in what it does with the blocks it processes — it does not vote or
+propose — and in one more thing: what it accepts for a partition it cannot
+propose for, it hands to a validator that can.
 
-**A node does not take what it cannot propose.** A submission's only road to a
-block is the receiving node's own batch and its own header (consensus.md, "What
-a batch is"); a header whose author is in no committee is dropped before any
-vote. So a node whose author key is not in the *current* committee of a
-partition — a follower, or a validator removed on-chain — does not advertise
-the submit service for that partition, does not offer it to its own API
-(dialling is local-first, so an unadvertised service it still offered locally
-would be a dead end for its own clients), and answers `NotReady` to `Submit`
-and to `Validate` for it: a validation is a promise about what a submission
-would do, and this node cannot make one. The client asks a validator, as it
-already does for any `NotReady`; forwarding on the node's behalf is the next
-phase's. This is a property of the key against the committee, not of the
-node's state: a `COMPLETE` follower refuses `Submit` for the partitions it
-follows and serves every read. Without it a follower is a sink for its own
-partition — every validator's router and dispatcher dials `submit:<partition>`
-by liveness alone, the follower accepts, the transaction is never executed
-anywhere, and a user transaction, unlike a cross-partition stream, has no
-healer (#4366; run `20260919T191634Z`: 3,929 heals and one stranded user
-transaction, every one on the follower's partition; reproduced in-process on
-#4366, 1,249 accepted, 0 committed).
+**A fully synced follower relays what it cannot propose** (Paul, 2026-09-19:
+"Followers can relay txs. And should."). A submission's only road to a block
+is a committee validator's own batch and header (consensus.md, "What a batch
+is"); a node whose author key is not in a partition's current committee has
+no such road for that partition. It does not, for want of a committee key,
+answer `NotReady` to a submission for it, and it does not drop it: it relays
+the submission to a node that can propose it. The invariant: **a submission a
+follower took reaches a proposing validator's worker, or the submitter is told
+it did not.** Silent loss by any route is the defect this rule exists for —
+run `20260919T191634Z`: one follower, 3,929 heals and one stranded user
+transaction, every one on its partition, because a validator's router dialled
+the follower's submit service by liveness alone, the follower accepted, and
+nothing ever proposed it (#4366; reproduced in-process on #4366, 1,249
+accepted, 0 committed); a user transaction, unlike a cross-partition stream,
+has no healer. Cross-partition messages dispatched to a follower are relayed
+the same way. `Validate` needs no relay: it judges against the latest
+committed state, which a fully synced follower has.
+
+**Open — decided by Paul, not by this text or by a builder:** what the
+follower does when the relay target refuses or is unreachable (the message
+client is single-shot; only the dispatcher retries `NotReady`); whether it
+answers the submitter on the relay's result or accepts and forwards — the
+invariant excludes only fire-and-forget; whether it relays only for the
+partitions it runs or for any; what "fully synced" is in the node's states
+(#4368: `COMPLETE` is not reached from genesis on this line); whether it
+advertises `submit:<partition>` on the DHT — which puts it on the anchor and
+synthetic dispatch path — or relays only what reaches its own API; and
+whether "txs" covers the dispatcher's cross-partition messages (read here as
+yes). A relay that needs to know which other nodes are synced, or that
+forwards on behalf of a *syncing* node, is the next phase's (step 6).
 
 While all of this runs the node **listens**: it subscribes to consensus and
 takes every committed block from then on into a buffer, and into staging —
@@ -526,11 +536,15 @@ receipt — because its leaves and its root are the half-filled ones its own pul
 is building, and a second joining node would otherwise take its spine from the
 first (#4297). **In this phase a syncing node rejects every request** — not only
 these — and answers once it is fully synced (Paul, 2026-09-19): `BOOTING` and
-`ACTIVE` refuse with `NotReady`, `COMPLETE` serves — the services its committee
-membership gives it (step 5: a node in no committee of a partition never serves
-`Submit` or `Validate` for it, whatever its state). Tracking which nodes are
-not synced, and forwarding a request a node cannot handle to one that can, is
-the next phase's work, not this one's, and nothing here anticipates it.
+`ACTIVE` refuse with `NotReady`, `COMPLETE` serves. ("Every" is this text's
+word for the phase; Paul's are "rejects requests" and "responds once fully
+synced" — one axis, sync state.) Tracking which nodes are *not synced* so a
+request can be judged rapidly, and forwarding a request on behalf of a
+**syncing** node to one that is synced, is the next phase's work, not this
+one's, and nothing here anticipates it; a fully synced follower relaying a
+submission it cannot propose (step 5) is not that — it is by a synced node,
+for a role it does not hold, to a target chosen by the committee membership
+it already holds.
 
 What a restart therefore never does is replay committed blocks it did not
 execute, or rebuild staging from a source's cache: the first executes with the

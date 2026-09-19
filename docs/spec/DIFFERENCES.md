@@ -391,13 +391,22 @@ state is a gauge (`accumulate_node_state`). The state is the node's own,
 handed to its services rather than looked up by partition: a process can run
 several nodes of one partition — devnet does — and a registry keyed by
 partition would give them all one node's state. A node that never joined has
-no state machine and serves — **including `Submit` and `Validate` for a
-partition whose committee it is not in**, which the spec (step 5, "A node does
-not take what it cannot propose", 2026-09-19) forbids: nothing on the advertise,
-route, dial or submit path asks whether the node's key is in the committee
-(`peer_manager.go:155-180`, `dispatcher.go:151-157`, `dial/dialer.go:139-248`,
-`dagbft/api.go:186-198`), so a follower accepts what it can never propose
-(#4366; run `20260919T191634Z`). Open until #4366 lands.
+no state machine and serves — **including `Submit` for a partition whose
+committee it is not in, and it then drops what it accepted**: nothing on the
+advertise, route, dial or submit path asks whether the node's key is in the
+committee (`peer_manager.go:155-180`, `dispatcher.go:151-157`,
+`dial/dialer.go:139-248`, `dagbft/api.go:186-198`), the accepted submission
+goes to the node's own worker and header, which no validator votes on, and
+nothing relays it. The spec (step 5, "A fully synced follower relays what it
+cannot propose", Paul 2026-09-19) requires the relay; the code has none for a
+submission that reaches a non-committee node's submit service (its JSON-RPC
+`Submitter` is wired to the network client and does dial onward,
+`internal/node/http/handler.go:81-107`; the p2p service does not). Note that
+"not advertised" would not close it either: `connectedPeersDiscoverer`
+(`pkg/api/v3/p2p/dial_network.go:133-160`) finds an installed handler by
+libp2p identify ahead of the DHT. (#4366; run `20260919T191634Z`.) Open
+until #4366 lands; its build is blocked on #4368's decision of what "fully
+synced" is in code states.
 
 **The gauge, though, is every node's, for every partition it runs, from
 start-up (#4345a).** It used to be created by the join and only by the join —
