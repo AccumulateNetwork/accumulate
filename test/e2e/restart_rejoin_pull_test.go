@@ -69,8 +69,6 @@ import (
 // (cmd/accumulated/run/dagbft.go); the simulator's is zero, matching a node
 // configured off.
 func TestRestartedNodeWithAPopulatedDatabaseResyncs(t *testing.T) {
-	t.Skip("the gate for #4361: serving at an anchored block is in, but the pull does not ask for one yet -- #4301 (the verified spine) and #4362 (the convergence loop) open this")
-
 	const joiner = 2 // the node that stops and comes back
 
 	alice := url.MustParse("alice")
@@ -85,6 +83,13 @@ func TestRestartedNodeWithAPopulatedDatabaseResyncs(t *testing.T) {
 		simulator.Genesis(GenesisTime),
 		simulator.IgnoreDeliverResults(),
 		simulator.IgnoreCommitResults(),
+
+		// Without retention the peers hold only their current BPT and refuse
+		// every anchored-block request, so the pull #4362 makes would be
+		// refused rather than served. A node's own default is 1024
+		// (cmd/accumulated/run/dagbft.go); the simulator's is zero, which
+		// matches a node configured off.
+		simulator.BPTHistoryDepth(1024),
 	)
 	sim.SetRoute(alice, "BVN0")
 	sim.SetRoute(bob, "BVN0")

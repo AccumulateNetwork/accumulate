@@ -93,6 +93,14 @@ type PulledState struct {
 	tracker *tracker.Tracker
 	log     *slog.Logger
 
+	// atBlock is the highest block of THIS partition that the spine says the
+	// Directory has anchored, refreshed at the top of every round. It is the
+	// block the pull asks peers for, so what comes back is anchored before it
+	// is requested and settles on the round it was fetched (#4362). Zero when
+	// no anchor has been verified yet, which asks for the peer's own block,
+	// as the pull did before.
+	atBlock uint64
+
 	spine        bool   // this partition's spine has been pulled and verified
 	spinePending bool   // a spine fetch is held, waiting for its anchor
 	round        uint64 // how many rounds have run, for the backstop's cadence
@@ -266,6 +274,23 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	if err != nil {
 		s.log.Info("This partition's anchors could not be read this round",
 			"partition", s.partition, "error", err)
+	}
+
+	// The block this round asks peers for. It is a block a quorum of the
+	// producing partition's validators signed an anchor for, so a peer's
+	// answer at it is verifiable the moment it arrives -- which is what lets
+	// a HOT account settle at all. Before #4362 the pull asked for the peer's
+	// current block, the Directory had not anchored it, and a restarted node
+	// (which differs from its peers only in hot accounts) never settled one.
+	//
+	// It only moves forward: a peer's pool read that briefly sees less than a
+	// previous round must not walk the join backwards onto a block whose
+	// state peers may already have pruned.
+	if at, _, err := s.anchors.LatestAnchor(ctx); err != nil {
+		s.log.Info("The latest anchored block could not be read this round; the pull asks peers for their own block",
+			"partition", s.partition, "error", err)
+	} else if at > s.atBlock {
+		s.atBlock = at
 	}
 
 	// The spine is fetched ONCE and then waited on. ModeFullSpine replays
@@ -665,6 +690,7 @@ func (s *PulledState) fetch(ctx context.Context, accounts []*url.URL) (int, []*u
 				Mode:      pull.ModeStateOnly,
 				Verify:    s.anchors,
 				Partition: partition,
+				AtBlock:   s.askAt(partition),
 			})
 			if err != nil {
 				s.log.Info("An account could not be pulled", "account", u, "error", err)
@@ -729,6 +755,21 @@ var errNotThisPartition = errors.NotAllowed.With("the account is not this partit
 // own partition's honest peers and settles against the root the Directory
 // anchored for THAT partition, so nothing downstream catches it. The leaf is
 // durable, so a restart does not clear it.
+// askAt is the block to ask a peer for an account of the given partition.
+//
+// Only this node's own partition gets one. A block number means nothing
+// outside the partition that made it -- BVN1 block 200 and BVN2 block 200 are
+// unrelated -- and s.anchors carries roots for THIS partition's producer
+// only, so naming s.atBlock for a foreign account would ask for a block the
+// serving partition never had (#4308). Those keep the old behaviour: the
+// peer's own block, settled when the Directory anchors it.
+func (s *PulledState) askAt(partition *url.URL) uint64 {
+	if partition == nil || s.partition == nil || !partition.Equal(s.partition) {
+		return 0
+	}
+	return s.atBlock
+}
+
 func (s *PulledState) sourcesFor(ctx context.Context, u *url.URL) ([]pull.Source, *url.URL, error) {
 	srcs, partition, err := s.sources.For(ctx, u)
 	if err != nil {
@@ -776,6 +817,7 @@ func (s *PulledState) pullSpine(ctx context.Context) error {
 			Mode:      pull.ModeFullSpine,
 			Verify:    s.anchors,
 			Partition: partition,
+			AtBlock:   s.askAt(partition),
 		})
 		if err != nil {
 			h.batch.Discard()

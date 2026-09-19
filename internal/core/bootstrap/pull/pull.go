@@ -111,6 +111,32 @@ type Options struct {
 	// receipt proves the state as of a block, and block numbers collide
 	// across partitions (#4205).
 	Partition *url.URL
+
+	// AtBlock is the block to ask the peer for, and it is why a restart can
+	// converge at all (#4362).
+	//
+	// Zero asks for whatever block the peer is on. That is what the pull did
+	// before, and it works for a COLD account -- one the peer has not touched
+	// for a while, served at an old block the Directory anchored long ago,
+	// which settles on the first try. It cannot work for a HOT one. The
+	// partition's ledger, anchors and synthetic ledger change every block, so
+	// the peer serves them at its CURRENT block, the Directory has not
+	// anchored that block yet, and by the time it does the peer has moved on.
+	// A restarted node holds every cold account already and differs from its
+	// peers only in the hot ones, so the pull it needs is exactly the pull
+	// that could never settle: pulled=0, forever.
+	//
+	// Non-zero asks for the state as of that block, which the caller takes
+	// from a spine anchor it has verified (anchorsrc.Source.LatestAnchor), so
+	// the answer is anchored before it is requested and settles on the round
+	// it was fetched. The peer must answer at that block or not at all; a
+	// peer that answers at a different one is refused rather than settled
+	// against a root nobody asked about.
+	//
+	// The peer must be retaining that block's BPT state to answer -- a node's
+	// default is 1024 blocks (cmd/accumulated/run/dagbft.go), and a peer
+	// configured with none refuses, which is a refusal and not a wait.
+	AtBlock uint64
 }
 
 // Pending is state pulled from a peer and not yet kept. It sits in a batch of
@@ -278,13 +304,22 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 	}
 
 	// 1. Main account state, with the receipt that binds it to the peer's root.
-	receipt, err := pullMain(ctx, src, sub, u, withReceipt)
+	receipt, err := pullMain(ctx, src, sub, u, withReceipt, opts.AtBlock)
 	if err != nil {
 		return fail(errors.UnknownError.WithFormat("main %s: %w", u, err))
 	}
 	p.receipt = receipt
 	if receipt != nil {
+		// The block this state is FOR. On a historical answer that is
+		// ForHeight -- the block the proof was built at -- and NOT
+		// LocalBlock, which is the serving node's present and moves every
+		// block whatever was asked for. Settling against LocalBlock is what
+		// made a hot account unsettleable: the root asked of the Directory
+		// was always the peer's newest, which it has not anchored yet (#4362).
 		p.Block = receipt.LocalBlock
+		if receipt.ForHeight != 0 {
+			p.Block = receipt.ForHeight
+		}
 
 		// The block is the SERVING partition's, not the puller's. A receipt
 		// proves the state as of a block of the partition that built it
@@ -468,10 +503,18 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 // pullMain stores the account body and returns the receipt the peer served
 // with it, which binds the body to the peer's BPT root. wantReceipt asks for
 // one; without it the peer does the work of building a proof nobody checks.
-func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL, wantReceipt bool) (*api.Receipt, error) {
+func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL, wantReceipt bool, atBlock uint64) (*api.Receipt, error) {
 	var query *api.DefaultQuery
 	if wantReceipt {
-		query = &api.DefaultQuery{IncludeReceipt: &api.ReceiptOptions{ForAny: true}}
+		// ForHeight when the caller named a block, ForAny otherwise. See
+		// Options.AtBlock: ForAny is the pull that a hot account can never
+		// settle, and it is kept only for callers with no verified anchor to
+		// ask at (tests, and the spine's own first read).
+		ro := &api.ReceiptOptions{ForAny: true}
+		if atBlock != 0 {
+			ro = &api.ReceiptOptions{ForHeight: atBlock}
+		}
+		query = &api.DefaultQuery{IncludeReceipt: ro}
 	}
 	rec, err := src.QueryAccount(ctx, u, query)
 	if err != nil {
@@ -487,6 +530,32 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 	}
 	if wantReceipt && rec.Receipt == nil {
 		return nil, errors.Conflict.WithFormat("%v: the peer served no receipt", u)
+	}
+
+	// Asked as of a block, answered as of the node's present. ForHeight is
+	// the block the answer is FOR -- the last block at or before the one
+	// asked for in which this account changed, which is exact rather than
+	// approximate, because a block that changed nothing carries its
+	// predecessor's root. LocalBlock is a different thing and always has
+	// been: the latest block the SERVING NODE has indexed, which is its
+	// present (internal/api/v3/querier.go, historicalStateReceipt).
+	//
+	// So a zero ForHeight on a request that named a block means the peer
+	// served its current state and not the state asked for, and settling
+	// that would verify against a root the caller never chose. A ForHeight
+	// past the block asked for is the same failure in the other direction.
+	// Both are refusals, and the caller asks another source.
+	if atBlock != 0 && rec.Receipt != nil {
+		switch {
+		case rec.Receipt.ForHeight == 0:
+			return nil, errors.Conflict.WithFormat(
+				"%v: asked for the state as of block %d and the peer served its current state",
+				u, atBlock)
+		case rec.Receipt.ForHeight > atBlock:
+			return nil, errors.Conflict.WithFormat(
+				"%v: asked for the state as of block %d and the peer answered for block %d",
+				u, atBlock, rec.Receipt.ForHeight)
+		}
 	}
 	if err := batch.Account(u).Main().Put(rec.Account); err != nil {
 		return nil, errors.UnknownError.WithFormat("store main: %w", err)
