@@ -87,16 +87,45 @@ This is the contract the soak monitor is written against:
 | `dagbft_execution_lag_blocks` | gauge | partition | committed groups the executor has not produced a block from |
 | `dagbft_submissions_total` | counter | partition, outcome={accepted,rejected} | what this node's `Submit` did with what it was handed, per partition it runs |
 | `dagbft_certified_own_transactions_total` | counter | partition | transactions from this node's OWN batches that reached a CERTIFIED header of this node, each counted at most once |
+| `dagbft_relayed_total` | counter | partition, outcome={accepted,refused,unreachable} | submissions this node handed to a node that can propose them, counted once per submission at the relay's answer |
 
-Exported: the first two, on both branches. **Missing: the remaining eight — which
+Exported: the first two, on both branches. **Missing: the remaining nine — which
 is why the flow matrix and wedge panels have never shown a true value** (#4095),
 and why no run can say whether a submission was accepted and never proposed.
 
-The last two are the pair a follower makes necessary (#4364, for #4366/#4369).
-`accepted - certified` per (node, partition), floored at 0, is **accepted never
-certified (#, whole run)**: on a validator it sits at the in-flight window — the
-rounds not yet certified — and on a node in no committee it is everything the
-network dialled to it and lost.
+The last three are the set a follower makes necessary (#4364, for #4366/#4369).
+The quantity is
+
+> **accepted, neither certified here nor accepted on relay (#, whole run)**
+> = `accepted - certified - relayed{accepted}`, per (node, partition),
+> floored at 0.
+
+On a validator it sits at the in-flight window — the rounds not yet certified.
+On a **working** follower it is ~0, because the hand-off discharges the duty.
+On a follower that strands it is everything the network dialled to it and lost,
+and on an acceptance run that number MUST be 0.
+
+**The relay leg is not optional arithmetic.** Paul, 2026-09-19: *"Followers can
+relay txs. And should."* `accepted - certified` on a node in no committee is
+everything it took, by construction, so without the third term a follower
+relaying perfectly would render the largest red number on the board under a
+label meaning failure — a clause-1 false negative's mirror image, and on the one
+node a follower run exists to watch. `relayed_total` MUST be counted **once per
+submission, at the relay's answer**, not per attempt: a submission refused by two
+targets and taken by a third is one `accepted`, and a retry count is a different
+measurement wanting its own family.
+
+**It composes across nodes.** `relayed{accepted}` says a node that can propose
+took it, not that it certified it; the next leg is that node's own
+`accepted`/`certified` pair in the same families. Summing the quantity over the
+fleet therefore gives the network's true stranded count with no node claiming
+credit for another's work.
+
+**An outcome label the reader does not know MUST be surfaced under its own
+name**, never folded into a known one and never dropped: four questions about
+the relay's behaviour are open (lead's note on #4366) and the answer may add a
+label; folding an unread outcome into `accepted` would move a failure into the
+success column.
 
 **It MUST be certification and not proposal.** A node in no committee authors
 and broadcasts a header carrying its own batches exactly as a validator does
@@ -113,12 +142,13 @@ exporter's hook is the node's own certificate and not its own header.
 Each transaction MUST be counted at most once, at the first certified header
 carrying its batch: a header that never certifies is requeued and its batches
 re-proposed, so a per-header count double-counts and drives the difference
-negative. `certified > accepted` is an impossible state (clause 1a) and MUST be
-surfaced as an instrument alarm, not floored silently. Until both families exist
-the harness renders `— not measured` on the board, in `submissions.csv` (a
-header and no rows, and an empty field in a row that does exist) and in the
-manifest — never 0, because 0 asserts that nothing stranded, which is the one
-thing run `20260919T191634Z` could not establish.
+negative. Two impossible states (clause 1a) MUST be surfaced as instrument
+alarms and never floored silently: `certified + relayed{accepted} > accepted`,
+and `sum(relayed) > accepted`. Until the families exist the harness renders
+`— not measured` on the board, in `submissions.csv` (a header and no rows, and
+an empty field in a row that does exist) and in the manifest — never 0, because
+0 asserts that nothing stranded, which is the one thing run `20260919T191634Z`
+could not establish.
 
 The consensus-status API MUST additionally report `syntheticHeals` and
 `anchorHeals` (#4075) — the coarse monitor's CSV reads them.

@@ -26,6 +26,14 @@ everything it accepted and the gap would read 0 on the one node where
 everything strands. What it never gets is 2f+1 votes — validators drop its
 header at `vote_handler.go:277-284` — so `certified` is 0 for its lifetime
 (reviewer H1 on #4364).
+
+**And a third family counts the relay.** Paul, 2026-09-19: *"Followers can
+relay txs. And should."* `accepted - certified` on a node in no committee
+is everything it took, by construction — so under relay a follower doing
+exactly what it should would have shown the largest red number on the
+board under a label meaning failure. The quantity subtracts the hand-off
+too, and the fixtures below carry the case that matters: a **relaying**
+follower, `accepted == relayedAccepted`, which must read **0 and not red**.
 """
 import json
 import os
@@ -68,11 +76,11 @@ SCRAPE_WITH_SUBMISSIONS = SCRAPE + [
     ("accumulate_dagbft_certified_own_transactions_total", {"partition": "BVN3"}, 875.0),
 ]
 
-# A FOLLOWER, on the same build. It accepted 1,200 on the Directory and 880
-# on BVN3, it PROPOSED every one of them — it authors and broadcasts headers
-# like any node — and it certified NONE, because no validator votes on a
-# header whose author is not in the committee. The counter is present and
-# reads 0; that is a measurement, and the gap is everything it accepted.
+# A FOLLOWER THAT STRANDS — the gate-0 node, before relay exists. It
+# accepted 1,200 on the Directory and 880 on BVN3, it PROPOSED every one of
+# them (it authors and broadcasts headers like any node), it certified NONE
+# because no validator votes on a header whose author is not in the
+# committee, and it relayed nothing. The gap is everything it accepted.
 #
 # The first draft of this contract asked for "proposed" instead. Against a
 # build that honoured it this node would have reported 1,200 and 880 proposed
@@ -85,6 +93,50 @@ SCRAPE_FOLLOWER_SUBMISSIONS = SCRAPE + [
      {"partition": "BVN3", "outcome": "accepted"}, 880.0),
     ("accumulate_dagbft_certified_own_transactions_total", {"partition": "Directory"}, 0.0),
     ("accumulate_dagbft_certified_own_transactions_total", {"partition": "BVN3"}, 0.0),
+    ("accumulate_dagbft_relayed_total",
+     {"partition": "Directory", "outcome": "accepted"}, 0.0),
+    ("accumulate_dagbft_relayed_total",
+     {"partition": "BVN3", "outcome": "accepted"}, 0.0),
+]
+
+# A FOLLOWER THAT RELAYS — the node Paul described, working. Same 2,080
+# accepted, still 0 certified because it is still in no committee, and every
+# one of them handed to a node that took it. The quantity MUST read 0 here:
+# subtracting only `certified` would paint this node maximal red for doing
+# exactly what it is supposed to do.
+SCRAPE_FOLLOWER_RELAYING = SCRAPE + [
+    ("accumulate_dagbft_submissions_total",
+     {"partition": "Directory", "outcome": "accepted"}, 1200.0),
+    ("accumulate_dagbft_submissions_total",
+     {"partition": "BVN3", "outcome": "accepted"}, 880.0),
+    ("accumulate_dagbft_certified_own_transactions_total", {"partition": "Directory"}, 0.0),
+    ("accumulate_dagbft_certified_own_transactions_total", {"partition": "BVN3"}, 0.0),
+    ("accumulate_dagbft_relayed_total",
+     {"partition": "Directory", "outcome": "accepted"}, 1200.0),
+    ("accumulate_dagbft_relayed_total",
+     {"partition": "BVN3", "outcome": "accepted"}, 880.0),
+]
+
+# A FOLLOWER RELAYING IMPERFECTLY — 1,200 on the Directory all taken; on
+# BVN3, 800 taken, 50 refused by the target and 30 with no target reachable.
+# What it does about those 80 is one of the four questions open for Paul
+# (#4366); what the harness must do is show them under their own names and
+# count them as stranded until something takes them.
+SCRAPE_FOLLOWER_RELAY_PARTIAL = SCRAPE + [
+    ("accumulate_dagbft_submissions_total",
+     {"partition": "Directory", "outcome": "accepted"}, 1200.0),
+    ("accumulate_dagbft_submissions_total",
+     {"partition": "BVN3", "outcome": "accepted"}, 880.0),
+    ("accumulate_dagbft_certified_own_transactions_total", {"partition": "Directory"}, 0.0),
+    ("accumulate_dagbft_certified_own_transactions_total", {"partition": "BVN3"}, 0.0),
+    ("accumulate_dagbft_relayed_total",
+     {"partition": "Directory", "outcome": "accepted"}, 1200.0),
+    ("accumulate_dagbft_relayed_total",
+     {"partition": "BVN3", "outcome": "accepted"}, 800.0),
+    ("accumulate_dagbft_relayed_total",
+     {"partition": "BVN3", "outcome": "refused"}, 50.0),
+    ("accumulate_dagbft_relayed_total",
+     {"partition": "BVN3", "outcome": "unreachable"}, 30.0),
 ]
 
 FOLLOWER = [{"container": "acc-bvn3-fol1", "port": 26692, "dir": "bvn3-5",
@@ -190,11 +242,13 @@ class SubmissionsAreNotMeasuredYet(Fleet):
         m = soakmon.collect_metrics()
         sub = m["nodeStats"]["submissions"]
         self.assertFalse(sub["measured"])
-        self.assertIsNone(sub["neverCertified"])
+        self.assertIsNone(sub["stranded"])
         self.assertIsNone(sub["accepted"])
-        self.assertIsNone(sub["worstNeverCertified"])
+        self.assertIsNone(sub["relayedAccepted"])
+        self.assertIsNone(sub["worstStranded"])
         self.assertFalse(sub["follower"]["measured"])
-        self.assertIsNone(sub["follower"]["neverCertified"])
+        self.assertIsNone(sub["follower"]["stranded"])
+        self.assertIsNone(sub["follower"]["relayedAccepted"])
 
     def test_the_file_is_written_with_a_header_and_no_rows(self):
         """The run directory says the harness asked. An empty field would
@@ -212,15 +266,18 @@ class SubmissionsWhenTheFamilyAppears(Fleet):
     scrape = SCRAPE_WITH_SUBMISSIONS
     follower_scrape = SCRAPE_FOLLOWER_SUBMISSIONS
 
-    def test_accepted_minus_certified_per_node_and_partition(self):
+    def test_a_validator_reads_its_in_flight_window(self):
         sub = soakmon.collect_metrics()["nodeStats"]["submissions"]
         self.assertTrue(sub["measured"])
-        # Per validator: Directory 1200-1198 = 2, BVN3 880-875 = 5.
-        self.assertEqual(7, sub["byNode"]["acc-bvn1-val1"]["neverCertified"])
-        self.assertEqual(14, sub["neverCertified"], "two validators")
+        # Per validator: Directory 1200-1198 = 2, BVN3 880-875 = 5. It
+        # certifies its own work and relays nothing, so the gap is the
+        # rounds not yet certified.
+        self.assertEqual(7, sub["byNode"]["acc-bvn1-val1"]["stranded"])
+        self.assertEqual(0, sub["byNode"]["acc-bvn1-val1"]["relayedAccepted"])
+        self.assertEqual(14, sub["stranded"], "two validators")
         self.assertEqual(2 * 2080, sub["accepted"])
         self.assertEqual(2 * 3, sub["rejected"])
-        self.assertEqual(7, sub["worstNeverCertified"])
+        self.assertEqual(7, sub["worstStranded"])
 
     def test_the_follower_certifies_nothing_so_the_gap_is_everything(self):
         """THE finding this whole contract turns on (reviewer H1 on #4364).
@@ -236,15 +293,16 @@ class SubmissionsWhenTheFamilyAppears(Fleet):
         f = sub["follower"]
         self.assertEqual(0, f["certified"], "a follower never certifies")
         self.assertEqual(2080, f["accepted"])
-        self.assertEqual(2080, f["neverCertified"],
+        self.assertEqual(0, f["relayedAccepted"], "it relayed nothing")
+        self.assertEqual(2080, f["stranded"],
                          "everything it accepted stranded")
 
     def test_the_followers_figure_is_beside_the_total_not_inside_it(self):
         """Same membership rule as every other total (M6): the aggregate is
         the validators, the follower is named separately."""
         sub = soakmon.collect_metrics()["nodeStats"]["submissions"]
-        self.assertEqual(14, sub["neverCertified"], "the validators only")
-        self.assertEqual(2080, sub["follower"]["neverCertified"])
+        self.assertEqual(14, sub["stranded"], "the validators only")
+        self.assertEqual(2080, sub["follower"]["stranded"])
         self.assertEqual("acc-bvn3-fol1", sub["follower"]["worstNode"])
         self.assertIn("acc-bvn3-fol1", sub["followerByNode"])
         self.assertNotIn("acc-bvn3-fol1", sub["byNode"])
@@ -261,9 +319,13 @@ class SubmissionsWhenTheFamilyAppears(Fleet):
         self.assertEqual("follower", by[("acc-bvn3-fol1", "BVN3")]["role"])
         self.assertEqual("880", by[("acc-bvn3-fol1", "BVN3")]["accepted"])
         self.assertEqual("0", by[("acc-bvn3-fol1", "BVN3")]["certified"])
-        self.assertEqual("880",
-                         by[("acc-bvn3-fol1", "BVN3")]["acceptedNeverCertified"])
-        self.assertEqual("5", by[("acc-bvn1-val1", "BVN3")]["acceptedNeverCertified"])
+        self.assertEqual("0", by[("acc-bvn3-fol1", "BVN3")]["relayedAccepted"])
+        self.assertEqual(
+            "880",
+            by[("acc-bvn3-fol1", "BVN3")]["acceptedNeitherCertifiedNorRelayed"])
+        self.assertEqual(
+            "5",
+            by[("acc-bvn1-val1", "BVN3")]["acceptedNeitherCertifiedNorRelayed"])
         # A partition that reported no rejections writes an empty field, not
         # a 0: the counter was never created, which is a different fact.
         self.assertEqual("", by[("acc-bvn1-val1", "BVN3")]["rejected"])
@@ -278,9 +340,10 @@ class SubmissionsWhenTheFamilyAppears(Fleet):
              {"partition": "BVN1", "outcome": "accepted"}, 10.0),
             ("accumulate_dagbft_certified_own_transactions_total",
              {"partition": "BVN1"}, 12.0)]})
-        self.assertEqual(0, sub["neverCertified"], "never negative")
+        self.assertEqual(0, sub["stranded"], "never negative")
         self.assertEqual(1, len(sub["impossible"]))
-        self.assertIn("certified 12 of 10 accepted", sub["impossible"][0])
+        self.assertIn("certified 12 + relayed-accepted 0 of 10 accepted",
+                      sub["impossible"][0])
 
     def test_a_node_exporting_only_one_half_is_measured_but_says_so(self):
         sub = soakmon.submissions_from({"acc-bvn1-val1": [
@@ -292,6 +355,114 @@ class SubmissionsWhenTheFamilyAppears(Fleet):
         self.assertIsNone(p["certified"], "the missing half is absent, not 0")
 
 
+class ARelayingFollowerIsNotAFailure(Fleet):
+    """THE reason this contract was revised.
+
+    Paul, 2026-09-19: "Followers can relay txs. And should." Under the
+    previous quantity — `accepted - certified` — this node reads 2,080:
+    the largest number on the board, red, under a label meaning failure,
+    on a node doing exactly what it is supposed to do. `accepted -
+    certified - relayedAccepted` reads 0.
+    """
+
+    scrape = SCRAPE_WITH_SUBMISSIONS
+    follower_scrape = SCRAPE_FOLLOWER_RELAYING
+
+    def test_a_follower_that_relays_everything_strands_nothing(self):
+        f = soakmon.collect_metrics()["nodeStats"]["submissions"]["follower"]
+        self.assertEqual(2080, f["accepted"])
+        self.assertEqual(0, f["certified"], "it is still in no committee")
+        self.assertEqual(2080, f["relayedAccepted"], "it handed on every one")
+        self.assertEqual(0, f["stranded"],
+                         "a working relay is not a stranded transaction")
+        # And the number it would have shown under the old quantity, so the
+        # test says out loud what the revision is worth.
+        self.assertEqual(2080, f["accepted"] - f["certified"])
+
+    def test_the_relay_outcomes_are_reported_separately(self):
+        f = soakmon.collect_metrics()["nodeStats"]["submissions"]["follower"]
+        self.assertEqual(0, f["relayedRefused"])
+        self.assertEqual(0, f["relayedUnreachable"])
+
+    def test_the_csv_carries_the_relay_columns(self):
+        m = soakmon.collect_metrics()
+        soakmon.write_submissions_csv(m["nodeStats"]["submissions"])
+        head, rows = self.rows("submissions.csv")
+        cols = head.split(",")
+        for c in ("relayedAccepted", "relayedRefused", "relayedUnreachable",
+                  "acceptedNeitherCertifiedNorRelayed"):
+            self.assertIn(c, cols, c)
+        row = dict(zip(cols, next(r for r in rows
+                                  if r.split(",")[1] == "acc-bvn3-fol1"
+                                  and r.split(",")[3] == "BVN3").split(",")))
+        self.assertEqual("880", row["relayedAccepted"])
+        self.assertEqual("0", row["acceptedNeitherCertifiedNorRelayed"])
+
+
+class ARelayThatDoesNotAlwaysLand(Fleet):
+    """Refused and unreachable are their own facts, and until something
+    takes those submissions they are stranded.
+
+    What the follower DOES about a refusal or an unreachable target is one
+    of four questions open for Paul on #4366. The harness does not answer
+    it — it reports both outcomes under their own names and counts what
+    nobody took.
+    """
+
+    scrape = SCRAPE_WITH_SUBMISSIONS
+    follower_scrape = SCRAPE_FOLLOWER_RELAY_PARTIAL
+
+    def test_what_nobody_took_is_the_stranded_count(self):
+        f = soakmon.collect_metrics()["nodeStats"]["submissions"]["follower"]
+        self.assertEqual(2000, f["relayedAccepted"], "1200 + 800")
+        self.assertEqual(50, f["relayedRefused"])
+        self.assertEqual(30, f["relayedUnreachable"])
+        self.assertEqual(80, f["stranded"], "the 50 refused and the 30 lost")
+
+    def test_the_two_failure_outcomes_are_not_merged(self):
+        """A target that answered and declined is a different finding from
+        no target answering at all — one is policy, the other is the
+        network."""
+        f = soakmon.collect_metrics()["nodeStats"]["submissions"]["follower"]
+        self.assertNotEqual(f["relayedRefused"], f["relayedUnreachable"])
+        per = (soakmon.collect_metrics()["nodeStats"]["submissions"]
+               ["followerByNode"]["acc-bvn3-fol1"]["byPartition"]["BVN3"])
+        self.assertEqual(50, per["relayedRefused"])
+        self.assertEqual(30, per["relayedUnreachable"])
+        self.assertEqual(80, per["stranded"])
+
+
+class OutcomesThisHarnessDoesNotKnowYet(unittest.TestCase):
+    """Four questions about the relay are open for Paul (#4366), and the
+    answer may add an outcome. An unknown label is counted and named, never
+    folded into a known one and never dropped — folding it would move a
+    failure into `accepted` and read as success."""
+
+    def test_an_unknown_outcome_is_surfaced_not_absorbed(self):
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 100.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 60.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "deferred"}, 40.0)]}, "follower")
+        self.assertEqual({"deferred": 40}, sub["unknownRelayOutcomes"])
+        self.assertEqual(60, sub["relayedAccepted"])
+        self.assertEqual(40, sub["stranded"],
+                         "an outcome we cannot read is not a hand-off")
+
+    def test_relaying_more_than_was_accepted_is_an_alarm(self):
+        sub = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_submissions_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 10.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "accepted"}, 6.0),
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "refused"}, 9.0)]}, "follower")
+        self.assertEqual(1, len(sub["impossible"]))
+        self.assertIn("relayed 15 of 10 accepted", sub["impossible"][0])
+
+
 class TheBoardSaysWhatTheNumberIs(unittest.TestCase):
     """The dashboard's own text, read as text."""
 
@@ -300,14 +471,20 @@ class TheBoardSaysWhatTheNumberIs(unittest.TestCase):
     del _fh
 
     def test_both_rows_exist(self):
-        for tag in ("id=fstrand", "id=nstrand", "id=nacc", "id=nstrandnode"):
+        for tag in ("id=fstrand", "id=frelay", "id=nstrand", "id=nacc",
+                    "id=nstrandnode"):
             self.assertIn(tag, self.PAGE, tag)
 
     def test_the_labels_name_the_quantity_and_the_window(self):
-        self.assertIn("accepted, never certified (#, whole run)", self.PAGE)
-        self.assertIn("accepted, never certified (#, whole run, worst validator)",
-                      self.PAGE)
+        self.assertIn(
+            "accepted, neither certified here nor accepted on relay "
+            "(#, whole run)", self.PAGE)
+        self.assertIn(
+            "accepted, neither certified here nor accepted on relay "
+            "(#, whole run, worst validator)", self.PAGE)
         self.assertIn("accepted (#, whole run)", self.PAGE)
+        self.assertIn("relayed (#, whole run): taken / refused / unreachable",
+                      self.PAGE)
 
     def test_no_rendered_label_says_proposed(self):
         """A follower DOES propose, so the word on a label would make the
@@ -323,7 +500,7 @@ class TheBoardSaysWhatTheNumberIs(unittest.TestCase):
                          self.PAGE, "the retracted family name is still here")
 
     def test_every_new_id_has_a_definition(self):
-        for tag in ("fstrand", "nstrand", "nacc", "nstrandnode"):
+        for tag in ("fstrand", "frelay", "nstrand", "nacc", "nstrandnode"):
             self.assertIn(" %s:\"" % tag, self.PAGE,
                           "%s has no DEFS entry — undefined is the only "
                           "unacceptable state" % tag)
@@ -334,6 +511,9 @@ class TheBoardSaysWhatTheNumberIs(unittest.TestCase):
         self.assertEqual("accumulate_dagbft_submissions_total", soakmon.SUBMIT_TOTAL)
         self.assertEqual("accumulate_dagbft_certified_own_transactions_total",
                          soakmon.CERTIFIED_TOTAL)
+        self.assertEqual("accumulate_dagbft_relayed_total", soakmon.RELAYED_TOTAL)
+        self.assertEqual(("accepted", "refused", "unreachable"),
+                         soakmon.RELAY_OUTCOMES)
 
 
 if __name__ == "__main__":

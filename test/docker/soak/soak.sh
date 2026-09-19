@@ -843,15 +843,55 @@ if [ -x "$here/streams.py" ]; then
 fi
 stalled_end="${stalled_end:-unknown}"
 
-# Accepted and never CERTIFIED (#4364). soakmon writes submissions.csv every
-# 30s from accumulate_dagbft_submissions_total and
-# accumulate_dagbft_certified_own_transactions_total. Certified and not
-# proposed: a follower authors and broadcasts headers carrying its own
-# batches like any node, and what it never gets is the 2f+1 votes, so
-# "never proposed" would read 0 on it. No build exports either family yet
-# (#4366, #4369), so the file is a header with no rows and this says
-# `— not measured` — never 0, which would assert that nothing stranded, the
-# one claim run 20260919T191634Z could not make.
+# Accepted, neither certified here nor accepted on relay (#4364). soakmon
+# writes submissions.csv every 30s from three families:
+# accumulate_dagbft_submissions_total, ..._certified_own_transactions_total
+# and ..._relayed_total.
+#   * certified, not proposed: a follower authors and broadcasts headers
+#     carrying its own batches like any node, and what it never gets is the
+#     2f+1 votes, so "never proposed" would read 0 on it;
+#   * minus the relay, because Paul (2026-09-19) said followers can and
+#     should relay, so a follower that hands on everything it takes is
+#     WORKING — subtracting only certified would make it the largest red
+#     number on the board.
+# What is left is the stranded count, and it is the one that must be 0.
+# No build exports any of the three yet (#4366, #4369), so the file is a
+# header with no rows and this says `— not measured` — never 0, which would
+# assert that nothing stranded, the one claim run 20260919T191634Z could
+# not make.
+relay_row() {   # $1 = role: validator | follower
+  python3 - "$rd/submissions.csv" "${1:-}" <<'PYEOF'
+import csv, sys
+path, role = sys.argv[1], sys.argv[2]
+try:
+    rows = [r for r in csv.DictReader(open(path))
+            if not role or r.get("role") == role]
+except OSError:
+    print("— not measured (no `submissions.csv`; soakmon wrote none)"); raise SystemExit
+if not rows:
+    print("— not measured (no node exports `accumulate_dagbft_relayed_total`; #4366, #4369)")
+    raise SystemExit
+last = max(r["time"] for r in rows)
+tot = {"relayedAccepted": 0, "relayedRefused": 0, "relayedUnreachable": 0}
+seen = False
+for r in rows:
+    if r["time"] != last:
+        continue
+    for k in tot:
+        v = (r.get(k) or "").strip()
+        if v:
+            try:
+                tot[k] += int(v); seen = True
+            except ValueError:
+                pass
+if not seen:
+    print("— not measured (rows at %s carry no relay counts)" % last); raise SystemExit
+print("%d taken / %d refused / %d unreachable (as of %s)"
+      % (tot["relayedAccepted"], tot["relayedRefused"],
+         tot["relayedUnreachable"], last))
+PYEOF
+}
+
 sub_row() {   # $1 = role: validator | follower
   python3 - "$rd/submissions.csv" "${1:-}" <<'PYEOF'
 import csv, sys
@@ -872,7 +912,7 @@ for r in rows:
     # An EMPTY field is a counter that node never created — one family
     # exported and not the other. Summing it as 0 would report "nothing
     # stranded here" for a partition nobody measured (REPORTING-SPEC 1).
-    v = (r.get("acceptedNeverCertified") or "").strip()
+    v = (r.get("acceptedNeitherCertifiedNorRelayed") or "").strip()
     if not v:
         blank += 1
         continue
@@ -923,7 +963,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   # A run that wedged and dumped is the most valuable kind of run there is;
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
   echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
-  echo "| accepted never certified (#, whole run, the validators) | $(sub_row validator) |"
+  echo "| accepted, neither certified here nor accepted on relay (#, whole run, the validators) | $(sub_row validator) |"
   if [ "$n_fol" -gt 0 ]; then
     echo
     echo "### Follower (#4365)"
@@ -935,7 +975,8 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     else
       echo "| every follower measurement | — not measured (followerlog.py produced nothing; see \`soak.log\`) |"
     fi
-    echo "| accepted never certified (#, whole run) | $(sub_row follower) |"
+    echo "| accepted, neither certified here nor accepted on relay (#, whole run) | $(sub_row follower) |"
+    echo "| relayed (#, whole run) | $(relay_row follower) |"
     echo
     echo "Full detail in \`follower-report.md\`; the per-sample series in \`follower.csv\`."
   fi
