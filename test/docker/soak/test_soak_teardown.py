@@ -19,10 +19,14 @@ A third finding on review (M1): `pkill -P` alone wakes the subshell, which
 runs its loop body once more before the TERM arrives. On the chaos loop that
 body forks a `docker pause`/`docker restart` — a disturbance at teardown,
 then `compose down` on a paused container — and this issue's acceptance run
-is a chaos run. Measured here with a chaos-shaped loop:
+is a chaos run. The window is real in principle (the subshell is runnable
+between the two signals) and NOT reliably observable: the harness-engineer's
+one chaos-shaped trial saw the body run again, the reviewer's 33 trials with
+a builtin body and a chaos-shaped body saw it run again 0 times. The fix is
+free and closes the window regardless:
 
-    pkill -P then TERM  : loop body ran again? DISTURBANCE FORKED
-    STOP,pkill,TERM,CONT: loop body ran again? NO
+    pkill -P then TERM  : loop body may run again (possible; seen 1 of 34)
+    STOP,pkill,TERM,CONT: loop body cannot run again
 
 This cannot be proved against a live run from here, and a run must confirm
 it: `soak.log` must carry no `survived teardown` warning, and `pgrep -x
@@ -98,11 +102,13 @@ class TeardownNamesThemAll(unittest.TestCase):
         `pkill -P` alone wakes the subshell, which runs its loop body once
         more before the TERM lands — on the chaos loop that body forks a
         `docker pause`/`restart`, a disturbance AT teardown, and #4364's
-        acceptance run is a chaos run (reviewer M1). Measured here with a
-        chaos-shaped loop that appends to a file after its sleep:
+        acceptance run is a chaos run (reviewer M1). The window is possible
+        in principle and not reliably observable — seen once by the
+        harness-engineer, 0 times in the reviewer's 33 trials — so the
+        order is pinned here by shape, not by a race:
 
-            pkill -P then TERM : loop body ran again? DISTURBANCE FORKED
-            STOP,pkill,TERM,CONT: loop body ran again? NO
+            pkill -P then TERM : loop body may run again (possible)
+            STOP,pkill,TERM,CONT: loop body cannot run again
 
         STOP freezes it so it cannot fork; the TERM queues while stopped and
         is acted on the moment CONT resumes it, before any further command.
