@@ -916,6 +916,126 @@ print("%d taken / %d refused / %d target not ready / %d unreachable (as of %s)"
 PYEOF
 }
 
+# The stranded figure across each disturbance (#4364). The acceptance
+# criterion is "it does not climb between disturbances, and every step is
+# attributable to one of them" — which was computable from submissions.csv
+# and chaos.log and judgeable from neither, because sub_row's trend looks at
+# the last five samples of a twelve-hour run. A criterion with no instrument
+# is a criterion nobody applies.
+#
+# THE FIGURE IS NOT MONOTONE even though its inputs are: it rises when a
+# submission is accepted and falls when the relay is answered, so between
+# samples it jitters by whatever is in flight. Two rows either side of a
+# disturbance therefore measure the jitter as often as the loss. The SETTLED
+# level over an interval is its MINIMUM — everything above the floor was in
+# flight and came back — so each step is min(after) - min(before), read on
+# the whole interval and not on two rows.
+#
+# A pause's step lands at the UN-pause, not at the log line: chaos logs
+# `pause <node> <p>s` when it starts and never logs the end, so the
+# disturbance's effective moment is the timestamp plus p.
+steps_rows() {   # $1 = role: validator | follower
+  python3 - "$rd/submissions.csv" "$rd/chaos.log" "${1:-}" <<'PYEOF'
+import csv, datetime, re, sys
+
+subs, chaos, role = sys.argv[1], sys.argv[2], sys.argv[3]
+
+
+def secs(t):
+    return datetime.datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=datetime.timezone.utc).timestamp()
+
+
+def hhmm(t):
+    return t[11:16] + "Z"
+
+
+# --- the disturbances, at the moment they take effect -----------------------
+try:
+    lines = [l.rstrip("\n") for l in open(chaos) if l.strip()]
+except OSError:
+    print("| stranded across disturbances | — not measured (no `chaos.log`) |")
+    raise SystemExit
+events = []
+for l in lines:
+    m = re.match(r"^(\S+Z) restart (\S+)", l)
+    if m:
+        events.append((secs(m.group(1)), hhmm(m.group(1)), "restart", m.group(2)))
+        continue
+    m = re.match(r"^(\S+Z) pause (\S+) (\d+)s", l)
+    if m:
+        # at the UN-pause
+        events.append((secs(m.group(1)) + int(m.group(3)), hhmm(m.group(1)),
+                       "pause", m.group(2)))
+if not events:
+    if any(" DISABLED " in l for l in lines):
+        print("| stranded across disturbances | chaos off — no disturbances "
+              "to attribute steps to |")
+    else:
+        print("| stranded across disturbances | — not measured (`chaos.log` "
+              "records no restart or pause) |")
+    raise SystemExit
+events.sort()
+
+# --- the stranded series ----------------------------------------------------
+try:
+    rows = [r for r in csv.DictReader(open(subs))
+            if not role or r.get("role") == role]
+except OSError:
+    print("| stranded across disturbances | — not measured (no "
+          "`submissions.csv`) |")
+    raise SystemExit
+series = {}
+for r in rows:
+    v = (r.get("acceptedNeitherCertifiedTakenNorRefused") or "").strip()
+    if not v:
+        continue
+    try:
+        n = int(v)
+    except ValueError:
+        continue
+    # deduped by (time, node, partition): the forced final row can share a
+    # second with a periodic one, and these are counters.
+    series.setdefault(r["time"], {})[(r.get("node"), r.get("partition"))] = n
+points = sorted((secs(t), sum(d.values())) for t, d in series.items())
+if not points:
+    print("| stranded across disturbances | — not measured (no stranded "
+          "series; #4366, #4369) |")
+    raise SystemExit
+
+
+def settled(lo, hi):
+    """The floor of the series over [lo, hi): what did NOT come back."""
+    vals = [v for t, v in points if lo <= t < hi]
+    return min(vals) if vals else None
+
+
+bounds = [e[0] for e in events] + [points[-1][0] + 1]
+out, biggest, where = [], None, ""
+before = settled(points[0][0], bounds[0])
+if before is not None:
+    out.append("| baseline (before the first disturbance) | %d |" % before)
+for i, (t, at, kind, node) in enumerate(events):
+    after = settled(t, bounds[i + 1])
+    if before is None or after is None:
+        out.append("| %s %s %s | — not measured (no sample in the interval) |"
+                   % (at, kind, node))
+        continue
+    step = after - before
+    out.append("| %s %s %s | stranded %d -> %d (%+d) |"
+               % (at, kind, node, before, after, step))
+    if biggest is None or step > biggest:
+        biggest, where = step, "%s %s %s" % (at, kind, node)
+    before = after
+for l in out:
+    print(l)
+if biggest is not None:
+    print("| largest step between disturbances | %+d, at %s%s |"
+          % (biggest, where,
+             "" if biggest else " — the figure did not climb"))
+PYEOF
+}
+
 sub_row() {   # $1 = role, $2 = when the loadgen exited, $3 = "stallkill" or ""
   python3 - "$rd/submissions.csv" "${1:-}" "${2:-}" "${3:-}" <<'PYEOF'
 import csv, sys
@@ -1107,6 +1227,21 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     fi
     echo "| accepted, neither certified here, taken on relay, nor refused (#, whole run) | $(sub_row follower "$lg_exit" "$stopped_early") |"
     echo "| relayed (#, whole run) | $(relay_row follower) |"
+    echo
+    echo "**Stranded across disturbances (#4364).** The criterion is that the"
+    echo "figure does not climb between disturbances and that every step is"
+    echo "attributable to one of them — these counters never clear, so this is"
+    echo "a cumulative loss, not a level. Each step is the settled level after"
+    echo "a disturbance minus the settled level before it, and settled means"
+    echo "the MINIMUM over the interval: the figure jitters by whatever is in"
+    echo "flight between samples, so two rows either side would measure the"
+    echo "jitter. A pause is dated at its un-pause. A step spans to the next"
+    echo "disturbance, so a non-zero one needs \`submissions.csv\` to say"
+    echo "whether it landed at the disturbance or crept afterwards."
+    echo
+    echo "| disturbance | stranded |"
+    echo "|---|---|"
+    steps_rows follower
     echo
     echo "Full detail in \`follower-report.md\`; the per-sample series in \`follower.csv\`."
   fi
