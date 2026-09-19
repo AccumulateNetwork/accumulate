@@ -371,15 +371,19 @@ this order because each one's gate needs the one before it:
    validator rejoining and Directory 12 of 12.
 4. **Serve last stays** — #4295's `NotReady` on `Submit`/`Validate` and on the
    two pull reads (#4297, #4307), `BOOTING → ACTIVE → COMPLETE` advertised.
-   *Gate:* #4368's named test — the spec says `COMPLETE` serves, the code
-   serves from `ACTIVE`, and `PromoteToComplete` has no production caller on
-   a line with no backfill; the serve-last builder confirms from the code
-   which of the two the spec means and it enters the protocol as their
-   statement. That test gains one case after #4366: a from-genesis
+   *#4368 resolved through the protocol, 2026-09-19:* the builder's
+   statement (\`536155d9d\`, a committed fact-pin through production wiring)
+   showed `COMPLETE` unreachable and vacuous; the spec now says fully synced
+   is a verified anchored root — `BOOTING` refuses, `ACTIVE` serves,
+   `COMPLETE`/`WAITING` retired, a node with no machine serves. *Gate:* the
+   caller scan committed as the regression pin (no production caller of the
+   retired states), a harness row for `accumulate_node_state` (#4364), and
+   #4295's code change making `servingFor` refuse every read while
+   `BOOTING`. That test gains one case after #4366: a from-genesis
    non-committee node answers reads AND relays a transaction it cannot
    propose (executor.md step 6). #4368 gates the read side (#4295, #4363,
-   #4365), not the relay; it follows the gate-0 rerun. #4295's body is restated to the every-read rule or
-   superseded by #4368 (issue-manager).
+   #4365), not the relay; it follows the gate-0 rerun. #4295 carries the
+   every-read code change (issue-manager restates it).
    The two small defects that survive the deletions, #4355 (a successful join
    logged as an error) and #4356 (the ledger walk dead after 128 blocks),
    are fixed in passing here; #4359 (the `Expand:false` REST change) is
