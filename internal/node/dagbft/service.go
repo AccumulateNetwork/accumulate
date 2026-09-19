@@ -855,9 +855,9 @@ func (s *Service) produce(certs []*types.Certificate, batches []*types.Batch, le
 	// them": an idle network commits empty rounds forever, which reads as a
 	// stall to anything watching the ledger index and as health to anything
 	// watching block production.
-	metrics.BlocksProducedTotal.Inc()
+	metrics.BlocksProducedTotal.WithLabelValues(s.config.Partition.ID).Inc()
 	if payloadEntries == 0 {
-		metrics.BlocksEmptyTotal.Inc()
+		metrics.BlocksEmptyTotal.WithLabelValues(s.config.Partition.ID).Inc()
 	}
 
 	// Record state hash for consistency verification. Every certificate in

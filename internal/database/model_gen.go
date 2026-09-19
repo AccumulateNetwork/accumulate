@@ -1996,6 +1996,7 @@ type SystemData struct {
 	parent *Batch
 
 	syntheticIndexIndex map[systemDataSyntheticIndexIndexMapKey]values.Value[uint64]
+	executedBlock       values.Value[uint64]
 }
 
 func (c *SystemData) Key() *record.Key { return c.key }
@@ -2020,6 +2021,14 @@ func (c *SystemData) newSyntheticIndexIndex(k systemDataSyntheticIndexIndexKey) 
 	return values.NewValue(c.logger.L, c.store, c.key.Append("SyntheticIndexIndex", k.Block), false, values.Wrapped(values.UintWrapper))
 }
 
+func (c *SystemData) ExecutedBlock() values.Value[uint64] {
+	return values.GetOrCreate(c, &c.executedBlock, (*SystemData).newExecutedBlock)
+}
+
+func (c *SystemData) newExecutedBlock() values.Value[uint64] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("ExecutedBlock"), false, values.Wrapped(values.UintWrapper))
+}
+
 func (c *SystemData) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for system data (1)")
@@ -2036,6 +2045,8 @@ func (c *SystemData) Resolve(key *record.Key) (record.Record, *record.Key, error
 		}
 		v := c.SyntheticIndexIndex(block)
 		return v, key.SliceI(2), nil
+	case "ExecutedBlock":
+		return c.ExecutedBlock(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for system data (4)")
 	}
@@ -2050,6 +2061,9 @@ func (c *SystemData) IsDirty() bool {
 		if v.IsDirty() {
 			return true
 		}
+	}
+	if values.IsDirty(c.executedBlock) {
+		return true
 	}
 
 	return false
@@ -2067,6 +2081,9 @@ func (c *SystemData) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if !opts.IgnoreIndices {
 		values.WalkMap(&err, c.syntheticIndexIndex, c.newSyntheticIndexIndex, nil, opts, fn)
 	}
+	if !opts.IgnoreIndices {
+		values.WalkField(&err, c.executedBlock, c.newExecutedBlock, opts, fn)
+	}
 	return err
 }
 
@@ -2079,6 +2096,7 @@ func (c *SystemData) Commit() error {
 	for _, v := range c.syntheticIndexIndex {
 		values.Commit(&err, v)
 	}
+	values.Commit(&err, c.executedBlock)
 
 	return err
 }

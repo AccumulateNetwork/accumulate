@@ -11,9 +11,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/enumerate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
@@ -25,28 +22,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// What state this node is in, as a number an operator can watch: 0 booting,
-// 1 waiting, 2 active, 3 complete. A node stuck joining is invisible without
-// it — the refusal counter only moves if somebody asks (#4295).
-var mNodeState = promauto.NewGaugeVec(prometheus.GaugeOpts{
-	Namespace: "accumulate",
-	Subsystem: "node",
-	Name:      "state",
-	Help:      "This node's state for the partition: 0 booting, 1 waiting, 2 active, 3 complete (executor spec, \"Sync\", step 5)",
-}, []string{"partition"})
-
-func stateNumber(s nodestate.State) float64 {
-	switch s {
-	case nodestate.StateWaiting:
-		return 1
-	case nodestate.StateActive:
-		return 2
-	case nodestate.StateComplete:
-		return 3
-	default:
-		return 0
-	}
-}
+// The gauge that says what state this node is in — 0 booting, 1 waiting, 2
+// active, 3 complete — was declared here, and that was the whole of #4345a: a
+// GaugeVec creates a child on the first WithLabelValues, so only a node that
+// entered the join state machine ever exported the series, and absence could
+// not be told from health. It lives in nodestate now and the daemon reports
+// it for every partition it runs, joining or not. The join reports its own
+// transitions through the same door.
 
 const (
 	// pullChunk is how many accounts are fetched before the round settles
@@ -164,13 +146,16 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	}
 
 	// Watchable from the moment the node starts joining, and on every change.
+	// The daemon has already reported this partition's state — the series
+	// exists whether or not a node joins (#4345a) — so this is an update of
+	// something already on the wire, not its creation.
 	label := opts.Partition.String()
 	if id, ok := protocol.ParsePartitionUrl(opts.Partition); ok {
-		label = strings.ToLower(id)
+		label = id
 	}
-	mNodeState.WithLabelValues(label).Set(stateNumber(machine.State()))
+	nodestate.Report(label, machine.State())
 	machine.OnChange(func(ad nodestate.Advertisement) {
-		mNodeState.WithLabelValues(label).Set(stateNumber(ad.State))
+		nodestate.Report(label, ad.State)
 	})
 	return s, nil
 }

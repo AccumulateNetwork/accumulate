@@ -628,8 +628,15 @@ LIFE_METRICS = {
 # the fleet multiplies the chain's block count by the node count: the board
 # read 687,160 blocks produced while the three partitions stood at 111,869
 # (run 20260915T042428Z) -- a number no reader can act on, and an impossible
-# state under REPORTING-SPEC 1a. These take the max; the rest stay sums,
-# because a retained batch or a re-delivery IS a per-node event.
+# state under REPORTING-SPEC 1a. These take the max PER PARTITION and then
+# sum the partitions; the rest stay sums, because a retained batch or a
+# re-delivery IS a per-node event.
+#
+# Per partition since #4345 labelled the counters. Before that a node running
+# the Directory and a BVN exported one series summing both chains, so the max
+# was over per-node sums -- a number that was neither one chain's nor the
+# network's. A node still exporting the unlabelled series is counted under the
+# empty partition name, which reproduces the old reading for that node.
 LIFE_MAX = {"blocks", "blocksEmpty"}
 
 _REASON = re.compile(r'reason="([^"]+)"')
@@ -762,6 +769,8 @@ def life_from(per):
     """Sum the batch-lifecycle metrics over every node's scrape."""
     life = {"redelivered": 0, "retentionHits": 0, "retentionExpired": 0,
             "retained": 0, "blocks": 0, "blocksEmpty": 0, "waitsByReason": {}}
+    # key -> partition -> highest count any node reported for that partition.
+    bypart = {k: {} for k in LIFE_MAX}
     for rows in (per or {}).values():
         for name, lab, v in rows or ():
             try:
@@ -773,7 +782,9 @@ def life_from(per):
                 # A per-node event sums over the fleet; a partition fact does
                 # not (LIFE_MAX).
                 if key in LIFE_MAX:
-                    life[key] = max(life[key], n)
+                    part = lab.get("partition", "") if isinstance(lab, dict) else ""
+                    cur = bypart[key]
+                    cur[part] = max(cur.get(part, 0), n)
                 else:
                     life[key] += n
             elif name == "accumulate_dagbft_batch_waits_total":
@@ -791,6 +802,8 @@ def life_from(per):
                 if reason:
                     life["waitsByReason"][reason] = \
                         life["waitsByReason"].get(reason, 0) + n
+    for key, parts in bypart.items():
+        life[key] = sum(parts.values())
     return life
 
 
@@ -1969,7 +1982,7 @@ const DEFS={
  rashare:"Synthetic plus anchor transactions as a share of all transactions, whole run.",
  raover:"The two windows behind the whole-run figures: the generator's clock for user, the monitor's for produced.",
  heights:"Block height per partition, with seconds per block over the last 5 min and averaged over the run. Red = stalled: the height has not moved, or an inbound flow has been red past the stall threshold.",
- lblocks:"Blocks the executor closed, taken as the highest count across nodes.",
+ lblocks:"Blocks produced by the network, summed over partitions, each partition taken as the highest count any node reported.",
  lempty:"Blocks that carried no transactions.",
  lidle:"Shown when nearly every block is empty: consensus is committing empty rounds.",
  nrssavg:"Resident memory of the node process, MiB, averaged over the fleet.", nrssmax:"Largest resident memory of any node, MiB.", nrssmin:"Smallest resident memory of any node, MiB.",

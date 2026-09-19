@@ -134,6 +134,21 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// must be visible in the log, not inferred from a metric that stays at
 	// zero (REPORTING-SPEC 1).
 	slog.Info("Execution shards", "shards", *s.ExecutionShards, "serial", *s.ExecutionShards <= 1, "partition", s.Partition.ID, "module", "dagbft")
+
+	// THIS PARTITION'S STATE IS ON THE WIRE FROM HERE ON, whether or not this
+	// node ever joins.
+	//
+	// The gauge used to be created by the join and only by the join, so a
+	// healthy node exported no such series and "absent" could not be told
+	// from "booting": a monitor reading absent as 0 painted a healthy fleet
+	// as booting, and one reading it as fine could never assert that a node
+	// was alive. A twelve-node network ran for twenty minutes with one member
+	// executing nothing and every reading said it was healthy (#4345a).
+	//
+	// BOOTING is the honest value here: nothing has been decided yet. The
+	// join overwrites it on every transition, and the branch below sets
+	// ACTIVE for a node that executes without asking anyone.
+	nodestate.Report(s.Partition.ID, nodestate.StateBooting)
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
 	setDefaultPtr(&s.MaxExecutionLag, int64(primary.DefaultMaxExecutionLag))
@@ -461,10 +476,17 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// fresh network into the join to ask each other for a staging none of
 	// them had (#4304). What says a node must join is whether it has
 	// executed a block OF ITS OWN, and that is `lastBlock > GenesisBlock`.
-	lastBlock, err := lastExecutedBlock(db, s.Partition.ID)
+	err = s.noteExecutedBlock(db)
 	if err != nil {
 		return errors.UnknownError.WithFormat("read this node's last block: %w", err)
 	}
+	lastBlock := s.lastExecuted
+	// This node's own height, on the wire, before a block of this run is
+	// executed: a node that is joining and executes nothing must still say
+	// where it stands, and a monitor must not have to infer it from an
+	// absent series (#4345b). The executor moves it from here on.
+	nodestate.ReportExecuted(s.Partition.ID, lastBlock)
+
 	joining := nodeMustJoin(lastBlock)
 	if !joining {
 		// Said out loud, because it is the one condition under which a node
@@ -475,6 +497,13 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		slog.Info("This node has executed no block beyond genesis: it is the first node of a network, "+
 			"so it executes from genesis without asking for staging",
 			"module", "join", "partition", s.Partition.ID, "block", lastBlock)
+
+		// It executes from genesis without asking anyone, so it is ACTIVE:
+		// it answers for the state it holds, and nothing it holds came from
+		// a peer. Reported rather than left at BOOTING, because a node that
+		// never joins never enters the state machine and BOOTING for the
+		// life of the process is the negative-only reading of #4345a.
+		nodestate.Report(s.Partition.ID, nodestate.StateActive)
 	}
 
 	// The join's state is built first, because its node state is what the
@@ -544,31 +573,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 					"module", "join", "partition", s.Partition.ID, "error", err)
 
 			case outcome == join.NoPeerHasStaging:
-				// No validator of this partition has staging to give: they
-				// all restarted too, and an empty stage is what every one of
-				// them holds. There is nothing to take and nothing to be
-				// exact about, so this node executes from where it stands —
-				// the blocks it buffered while it was asking, in order, from
-				// its own last block on.
-				slog.Info("No peer had staging to give; executing from this node's own state",
-					"module", "join", "partition", s.Partition.ID, "block", lastBlock)
-
-				// Its state is recorded as executing BEFORE it is, because
-				// the root recorded must be the root of the block named and
-				// one produced block changes it. A node that could not
-				// record it would refuse every request for the rest of its
-				// life (#4295), so that is a failure and not a log line.
-				err := state.Executing(lastBlock)
-				if err != nil {
-					slog.Error("This node cannot record that it is executing; it will refuse requests",
-						"module", "join", "partition", s.Partition.ID, "block", lastBlock, "error", err)
-					return
-				}
-				err = s.service.Handoff(lastBlock)
-				if err != nil {
-					slog.Error("This node could not start executing", "module", "join",
-						"partition", s.Partition.ID, "block", lastBlock, "error", err)
-				}
+				s.executeFromOwnState(state, s.service)
 
 			default:
 				// A join that cannot finish leaves the node collecting: it
@@ -805,24 +810,130 @@ func nodeMustJoin(lastBlock uint64) bool {
 	return lastBlock > protocol.GenesisBlock
 }
 
+// noteExecutedBlock reads the block this node's own executor last executed
+// and remembers it, ONCE, before anything is pulled.
+//
+// Once, because the store's copy stops being this node's the moment the join
+// starts: a joining node executes nothing, so the number cannot change under
+// it, while the pull writes a peer's state into this store from the first
+// round. Everything that decides what this node does with its own height
+// reads the remembered number — `nodeMustJoin`, the metric, and the
+// NoPeerHasStaging branch that starts executing at it (#4344).
+func (s *DAGBFTService) noteExecutedBlock(db database.Beginner) error {
+	n, err := lastExecutedBlock(db, s.Partition.ID)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	s.lastExecuted = n
+	return nil
+}
+
+// joinExecuting records that this node has started executing; blockHandoff
+// starts it. Both are interfaces so the branch below can be driven without a
+// consensus service — it had no test at all (#4320), which is how a number
+// read from an account the pull overwrites came to be what a node starts
+// executing at.
+type joinExecuting interface{ Executing(uint64) error }
+type blockHandoff interface{ Handoff(uint64) error }
+
+// executeFromOwnState is what a node does when no validator of its partition
+// has staging to give: they all restarted too, and an empty stage is what
+// every one of them holds. There is nothing to take and nothing to be exact
+// about, so this node executes from where it stands — the blocks it buffered
+// while it was asking, in order, from its own last block on.
+//
+// "Its own last block" is s.lastExecuted, read before the pull could touch it.
+func (s *DAGBFTService) executeFromOwnState(state joinExecuting, handoff blockHandoff) {
+	slog.Info("No peer had staging to give; executing from this node's own state",
+		"module", "join", "partition", s.Partition.ID, "block", s.lastExecuted)
+
+	// Its state is recorded as executing BEFORE it is, because the root
+	// recorded must be the root of the block named and one produced block
+	// changes it. A node that could not record it would refuse every request
+	// for the rest of its life (#4295), so that is a failure and not a log
+	// line.
+	err := state.Executing(s.lastExecuted)
+	if err != nil {
+		slog.Error("This node cannot record that it is executing; it will refuse requests",
+			"module", "join", "partition", s.Partition.ID, "block", s.lastExecuted, "error", err)
+		return
+	}
+	err = handoff.Handoff(s.lastExecuted)
+	if err != nil {
+		slog.Error("This node could not start executing", "module", "join",
+			"partition", s.Partition.ID, "block", s.lastExecuted, "error", err)
+	}
+}
+
 // lastExecutedBlock is the block this node's state is, or zero when it has
 // executed none: what says whether a node is starting from genesis or coming
 // back to a network that has moved on (executor spec, "Sync").
-func lastExecutedBlock(db *database.Database, partition string) (uint64, error) {
+//
+// IT IS READ FROM A RECORD NO PULL WRITES.
+//
+// It used to read `<partition>/ledger`, and that is an ACCOUNT — one of the
+// accounts the join's pull fetches from a peer and settles into this store.
+// The live log of acc-bvn1-val1 names them in the held set:
+//
+//	Pulled accounts were given up on unanchored: ... first=acc://bvn-BVN1.acme/ledger
+//	Pulled accounts were given up on unanchored: ... first=acc://dn.acme/ledger
+//
+// So what this read at start-up was whatever the previous process's pull left
+// behind. Today it decides `nodeMustJoin`, where a wrong value is harmless,
+// but it is also what the NoPeerHasStaging branch starts executing at — so a
+// half-finished pull could start this node executing at a peer's block over a
+// store that was only partly filled (#4344).
+//
+// The executor writes SystemData(partition).ExecutedBlock with every block it
+// commits (block_end.go). SystemData is not an account, so no pull reaches it.
+//
+// THE FALLBACK. A store written before that record existed does not have it,
+// and reading zero there would tell a node that has been running for a week
+// that it is the first node of a new network — which executes from genesis
+// without asking anyone. So an absent record falls back to the ledger, ONCE,
+// and the number is written into the record before anything else runs. From
+// that moment the pull cannot move it. The one start that reads the ledger is
+// the first start after the upgrade, and it is no worse off than every start
+// before it was.
+func lastExecutedBlock(db database.Beginner, partition string) (uint64, error) {
 	batch := db.Begin(false)
-	defer batch.Discard()
+	n, err := batch.SystemData(partition).ExecutedBlock().Get()
+	switch {
+	case err == nil && n > 0:
+		batch.Discard()
+		return n, nil
+	case err != nil && !errors.Is(err, errors.NotFound):
+		batch.Discard()
+		return 0, errors.UnknownError.WithFormat("read this node's executed block: %w", err)
+	}
+
+	// No record: read the ledger once, and seed the record from it.
 	var ledger *protocol.SystemLedger
-	switch err := batch.Account(protocol.PartitionUrl(partition).JoinPath(protocol.Ledger)).Main().GetAs(&ledger); {
-	case err == nil:
-		return ledger.Index, nil
+	err = batch.Account(protocol.PartitionUrl(partition).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
+	batch.Discard()
+	switch {
 	case errors.Is(err, errors.NotFound):
 		// No ledger at all: this node has executed nothing, so it is starting
-		// from genesis rather than coming back to a network.
+		// from genesis rather than coming back to a network. Nothing to seed.
 		return 0, nil
-	default:
+	case err != nil:
 		// Anything else is a store this node cannot read. Treating it as
 		// "no ledger" would start a node executing from a checkpoint against
 		// state it could not read — silently.
 		return 0, errors.UnknownError.Wrap(err)
 	}
+
+	slog.Info("This node has no record of its own executed block; seeding it from the ledger this once",
+		"module", "join", "partition", partition, "block", ledger.Index)
+	write := db.Begin(true)
+	defer write.Discard()
+	err = write.SystemData(partition).ExecutedBlock().Put(ledger.Index)
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("seed this node's executed block: %w", err)
+	}
+	err = write.Commit()
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("seed this node's executed block: %w", err)
+	}
+	return ledger.Index, nil
 }
