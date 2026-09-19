@@ -139,12 +139,37 @@ type relayNode struct {
 // (pkg/consensus/primary/vote_handler.go:277-284), and 1,249 of 1,249
 // transactions vanished silently.
 //
-// What this test does by hand: the network definition (no chain here to read
-// one from), the two libp2p meshes, genesis, and the commit loop a running
-// node's executor would be. What is production: the client, the HTTP API
-// handler and its network client, the dialer, the submit and consensus
-// handlers at both ends, the relay's target choice, the counters, and the
-// consensus that commits it.
+// What is production here: the client; the HTTP API handler and the network
+// client it wires Submitter to; the dialer; the submit and consensus
+// handlers at both ends, on separate hosts; the relay's target choice and
+// its challenge; the counters; the consensus that commits it; and the
+// Service itself -- it builds and starts each consensus node, and its block
+// production loop hands every committed certificate's batches to the
+// executor. "Executed" below is what that loop produced, not a certificate
+// read out of a channel by this test.
+//
+// What it still does by hand, and what that costs:
+//
+//   - The network definition and the globals. There is no chain here, so
+//     each node's Membership is seeded with SetGlobals rather than by the
+//     daemon's globals channel and WillChangeGlobals. The daemon's own
+//     wiring of those is pinned separately, in cmd/accumulated/run.
+//   - The executor is an adapter that records. It executes nothing, so
+//     "executed" means "produced in a block, in canonical order" and not
+//     "the account changed" -- that is the Docker rerun's row.
+//   - The joining node's state is nodestate.New(part), never advanced: a
+//     state object of the right type that says BOOTING, not a node that
+//     went through join.NewState and a real pull. So leg (c) proves that a
+//     node reporting BOOTING relays and is not relayed TO, and does not
+//     prove anything about the join itself.
+//   - The two libp2p meshes, and the API mesh has no PersistentTracker. In
+//     the daemon a PeerDatabase is configured, so DialNetwork discovers
+//     through the tracker while Node.Providers discovers through connected
+//     peers and the DHT; here both take the same path. The relay's target
+//     set is therefore the same set in this test and a superset of the
+//     dialer's in the daemon.
+//   - The counters are process-wide, so per-node figures cannot be
+//     separated; the assertions are fleet-wide identities.
 func TestARelayCarriesWhatItCannotPropose(t *testing.T) {
 	if testing.Short() {
 		t.Skip("six consensus nodes, twelve libp2p hosts and half a minute of consensus")
