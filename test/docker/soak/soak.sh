@@ -56,11 +56,13 @@ export COMPOSE_PROJECT_NAME ACC_BLOCK_INTERVAL ACC_MEM_LIMIT GOMEMLIMIT ACC_TX_T
 # So the order is STOP, children, TERM, CONT — four signals, and each one is
 # there for a reason (reviewer M1 on #4364):
 #   STOP    freeze the subshell first. Killing the `sleep` wakes it, and it
-#           then runs its loop body once more before the TERM lands ~1ms
-#           later. On the chaos loop that body is `docker pause`/`docker
-#           restart` — a disturbance forked AT teardown, and `compose down`
-#           on a paused container. The acceptance run for this issue is a
-#           chaos run, so the window is not theoretical.
+#           CAN run its loop body once more before the TERM lands ~1ms
+#           later — possible in principle, seen once in 34 trials (reviewer
+#           M1 on #4364: 0 of 33; harness-engineer: 1 of 1). On the chaos
+#           loop that body is `docker pause`/`docker restart` — a
+#           disturbance forked AT teardown, and `compose down` on a paused
+#           container. The acceptance run for this issue is a chaos run, so
+#           the window is closed rather than argued about.
 #   pkill -P kill the `sleep`, so it is not orphaned when the parent goes.
 #   TERM    queued while the process is stopped; it is not acted on yet.
 #   CONT    resume, and the queued TERM kills it before any further command.
