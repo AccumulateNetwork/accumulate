@@ -29,6 +29,7 @@ R #4219 ─▶ S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86   cost: first the
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3               correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back
 #4205 restart recovery                                before chaos returns to a soak
+Phase 1 (Paul, 2026-09-19): #4365 ─▶ #4301 ─▶ #4361 ─▶ #4362 ─▶ serve-last ─▶ #4363 ─▶ #4364 ─▶ the 12 h / 100 tps acceptance with followers added and removed   the one order; E11's second pass below is its text
 ```
 
 Each item is its own issue branch from the previous item's tip.
@@ -352,10 +353,10 @@ harness's add-follower / remove-follower disturbances, a verdict per
 add/remove in the manifest, and `12h-100tps-followers.conf`). Then the
 acceptance: **twelve hours, 100 tps, followers added and removed, validators
 restarted** — which supersedes the 24-hour restart-only run this issue was
-filed with, and is Paul's to start. The
-no-chaos 100 tps path is already re-established on `bff83e840`
-(`20260919T115321Z`, identical to the 09-17 baseline), so what the 24-hour run
-tests is the join, and only the join.
+filed with (`24h-100tps-chaos.conf` is no longer the acceptance of anything),
+and is Paul's to start. The no-chaos 100 tps path is already re-established on
+`bff83e840` (`20260919T115321Z`, identical to the 09-17 baseline), so what the
+chaos runs test is the join and the followers, and only those.
 
 **What the first pass got wrong, said once.** Steps 1–5 below were built and
 gated green against a spec whose trust terminated in one unauthenticated peer,
@@ -396,9 +397,11 @@ a peer serves. Both are skipped when empty
 (`internal/database/observer_prod.go:49-77`) and the local delivery queue
 drains at the next block's `Begin`, so if they are rarely non-empty then
 #4298 is a retry rather than a blocker. It has never been measured; it is a
-sample on a running soak, not a design. Then
-`30m-100tps-chaos.conf`; then #4299, provisionally, which that run may
-promote ahead of itself; then the 24-hour run.
+sample on a running soak, not a design. What followed this paragraph when it
+was written — `30m-100tps-chaos.conf`, then #4299, then the 24-hour run — is
+superseded by the phase-1 order above: #4365, then #4301 → #4361 → #4362 →
+serve-last with `30m-100tps-chaos.conf` as the join's gate, then #4363 →
+#4364, then the twelve-hour acceptance.
 
 **The tests that passed do not exercise the mechanism.** This has to be said
 next to the order, because the order was built on them.
@@ -466,8 +469,11 @@ The disorder simulator stays useful for H8 and C6 but is no longer the hunt.
 
 ### Acceptance run #7
 
-Twelve hours at 500 tps, 1 s blocks, chaos off, then the same with chaos once
-#4205 is closed. Judged by the criteria below; nothing shorter is a claim.
+Twelve hours at 500 tps, 1 s blocks, chaos off: the throughput and footprint
+run, judged by the criteria below; nothing shorter is a claim. It is not phase
+1's acceptance and does not gate #4205: the chaos run that closes phase 1 is
+the twelve-hour, 100 tps run with followers added and removed and validators
+restarted (E11 second pass, above), and it is Paul's to start.
 
 ## Cost, after the healer is gone
 
