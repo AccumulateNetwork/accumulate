@@ -85,7 +85,7 @@ This is the contract the soak monitor is written against:
 | `dispatcher_drops_total` | counter | destination, reason={deadline,queue-full} | envelopes dropped undelivered |
 | `bcdb_staged_commits`, `bcdb_oldest_view_age_seconds` | gauge | database | store isolation cost, as of the last commit or release |
 | `dagbft_execution_lag_blocks` | gauge | partition | committed groups the executor has not produced a block from |
-| `dagbft_submissions_total` | counter | partition, outcome={accepted,rejected} | `accepted` = **the node took responsibility** — the submission entered this node's worker or this node's relay. `rejected` = refused without relaying |
+| `dagbft_submissions_total` | counter | partition, outcome={accepted,rejected} | `accepted` = **the node took responsibility** — the submission entered this node's worker or this node's relay, counted once at that first entry, never per attempt. `rejected` = refused without relaying |
 | `dagbft_certified_own_transactions_total` | counter | partition | transactions from this node's OWN batches that reached a CERTIFIED header of this node, each counted at most once |
 | `dagbft_relayed_total` | counter | partition, outcome={taken,refused,not-ready,unreachable} | submissions this node handed to a node that can propose them, counted once per submission at its **final** answer |
 
@@ -147,6 +147,30 @@ Two narrower readings are both wrong, and each was tried:
 
 Whether the caller is answered on the relay's result or accepts-and-forwards is
 a separate decision and does not move this counter.
+
+**`accepted` MUST be counted once per submission, at its first entry into the
+node's worker or its relay — never per attempt.** One submission is one
+responsibility however many targets the node tries for it, and the mirror of
+this rule is already stated for `relayed`: once per submission at its final
+answer. Counted per attempt, `accepted - certified - relayed{taken}` becomes
+the number of not-taken **attempts** on monotone counters, so chaos restarting
+one validator — the follower's next N relays to it end `unreachable` and land
+on the retry through another validator — leaves the follower's row red for the
+remaining hours of a twelve-hour run, after a transient the network recovered
+from perfectly (reviewer M2 on #4366). A fresh `Submit` from the **client** is
+a new submission and a new `accepted`; the rule governs the node's own attempts
+inside one call.
+
+**Across a disturbance**, which is what a long chaos run is made of: these are
+monotone counters and the stranded figure never clears, so it is a cumulative
+loss and not a level. A target restarting is not a loss — the retry lands and
+the row does not move. A submission the node gave up on **is** a loss and stays
+counted for the rest of the run, so one restart that loses one transaction
+leaves a permanent 1. The acceptance reading is therefore not "0 forever" but
+**the figure does not climb between disturbances, and every step is
+attributable to one of them**; the step per disturbance is a subtraction over
+`submissions.csv` against `chaos.log`, and the manifest's trend clause answers
+the tail.
 
 **The rule is read against the LAST sample, and stated with its trend.** In
 flight and stranded are the same number at any one sample: a relay not yet

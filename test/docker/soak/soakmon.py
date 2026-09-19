@@ -1084,6 +1084,24 @@ def write_mem_csv(mem, force=False):
 #                                has no relay. A submission that enters the
 #                                relay is `accepted` however the relay ends;
 #                                where it ends is `relayed{outcome}`.
+#
+#       COUNTED ONCE PER SUBMISSION, AT ITS FIRST ENTRY into this node's
+#       worker or this node's relay — never per attempt. One submission is
+#       ONE responsibility however many targets the node tries for it.
+#       Count it per attempt and `accepted - certified - relayed{taken}`
+#       becomes the number of not-taken ATTEMPTS, on monotone counters:
+#       chaos restarts a validator, the follower's next N relays to it end
+#       `unreachable`, the transactions land on the retry through another
+#       validator, and the follower's row shows N stranded, RED, for the
+#       remaining hours of a twelve-hour run — after a transient the
+#       network recovered from perfectly (reviewer M2 on #4366). "0 at the
+#       last sample" could not survive one restart.
+#
+#       A fresh `Submit` from the CLIENT is a new submission and a new
+#       `accepted`: the node took responsibility a second time. The rule
+#       is about this node's own attempts inside one call, which is also
+#       where `relayed`'s "final answer" is decided — the two rules are
+#       the same rule seen from each end.
 #       partition             -- the partition id the submission was routed
 #                                to on this node ("Directory", "BVN3"), NOT
 #                                the container: every container runs two
@@ -1130,7 +1148,8 @@ def write_mem_csv(mem, force=False):
 #                                  fleet as a policy decision (reviewer M2).
 #       outcome = "unreachable" -- no target answered at all.
 #
-#       Counted ONCE PER SUBMISSION, AT ITS FINAL ANSWER — not per attempt.
+#       Counted ONCE PER SUBMISSION, AT ITS FINAL ANSWER — not per attempt,
+#       the mirror of `accepted`'s first-entry rule above.
 #       `NotReady` from a target is NOT a final answer: it is the protocol's
 #       "ask someone else", the dialer keeps that peer in rotation, and a
 #       submission that then succeeds is one `taken`. Only when the node
@@ -1224,6 +1243,23 @@ def write_mem_csv(mem, force=False):
 #   * on a follower FLOODED WITH GARBAGE: certified 0, every relay
 #     `refused`, so this is 0 — the follower did its job, and the garbage
 #     is visible on the relay row instead, where it belongs.
+#
+# ACROSS A DISTURBANCE, which is what the twelve-hour run is made of.
+# These are monotone counters and this figure NEVER CLEARS, so read it as
+# a cumulative loss, not a level:
+#   * a target restarting is not a loss. The node retries and the
+#     submission is one `accepted` and one `relayed{taken}`; the row does
+#     not move. That is what the first-entry rule buys.
+#   * a submission the node gave up on IS a loss, and it stays counted for
+#     the rest of the run. That is correct — it was lost — and it means
+#     one restart that loses one transaction leaves a permanent 1 in a
+#     twelve-hour run.
+#   * so the acceptance reading is not "0 forever" but: the figure does
+#     NOT CLIMB BETWEEN DISTURBANCES, and each step is attributable to
+#     one of them. The step per disturbance is a subtraction over
+#     `submissions.csv`, whose per-sample rows are timestamped against
+#     `chaos.log`; the manifest's trend clause answers the tail
+#     ("flat … with NO new accepts" vs "rising").
 #   * IN FLIGHT IS NOT STRANDED, and at one sample they look the same. A
 #     healthy run ends with a small residue — relays not yet answered, and
 #     on a validator the rounds not yet certified — so "MUST be 0" is read
