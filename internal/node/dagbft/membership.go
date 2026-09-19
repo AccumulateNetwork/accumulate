@@ -88,18 +88,28 @@ func (m *Membership) Standing() network.CommitteeMembership {
 // CanPropose reports whether this node may get a submission into a block for
 // this partition by proposing it itself.
 //
-// UNKNOWN IS NOT A NO. If no globals have arrived yet — the daemon waits five
-// seconds and then carries on with an empty definition
-// (cmd/accumulated/run/dagbft.go:383-390) — the node answers as it did before
-// this predicate existed. Answering no on that race would send every
-// validator of a starting network down the relay path looking for a target it
-// cannot name, and the negative answer is meant to be the positive fact that
-// a KNOWN committee does not contain this key. The conductor decides the
-// opposite for the same value, and for the opposite reason: it must not sign
-// an anchor it cannot justify (internal/core/crosschain/cadence.go). That is
-// why the shared answer is three-valued and not a boolean (#4366, #4367).
+// Only a KNOWN membership says yes. An unknown committee is not a licence to
+// propose: a node that does not know whether it is a validator cannot know
+// that its header will be voted on, and if it is not, everything it takes is
+// stranded silently — which is #4366 itself, arriving through the one door
+// the first build left open (reviewer, 2026-09-19). So unknown relays, and
+// the relay, holding no committee to choose a target from, answers NotReady
+// and counts it (the lead's decision 4, which now holds for any node and not
+// only a joining one).
+//
+// The cost is real and accepted: a validator whose globals have not loaded
+// answers NotReady for a moment at startup — the daemon waits five seconds
+// and then carries on with an empty definition
+// (cmd/accumulated/run/dagbft.go:383-390) — and its submitter's clients ask
+// another node, which is what NotReady is for. Taking traffic it might not
+// be able to propose is the worse of the two.
+//
+// A nil Membership is no gate at all, for the callers that predate this.
 func (m *Membership) CanPropose() bool {
-	return m.Standing() != network.CommitteeOutsider
+	if m == nil {
+		return true
+	}
+	return m.Standing() == network.CommitteeMember
 }
 
 // Known reports whether this node holds a committee for the partition at all.

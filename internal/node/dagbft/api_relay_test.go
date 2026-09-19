@@ -206,34 +206,42 @@ func TestSubmitter_AnActiveValidatorTakesItAndRelaysNothing(t *testing.T) {
 	require.Empty(t, rpc.probed)
 }
 
-// TestSubmitter_AnUnknownCommitteeStillProposes — the submit path's half of
-// the three-valued answer (#4366, #4367).
+// TestSubmitter_AnUnknownCommitteeIsNotALicenceToPropose — decision 4, for
+// any node and not only a joining one (reviewer, 2026-09-19).
 //
-// While the node holds no network definition the answer is CommitteeUnknown,
-// and here that is not "you cannot propose": the daemon waits five seconds
-// for globals and then carries on with an empty definition
-// (cmd/accumulated/run/dagbft.go:383-390), so treating the race as "relay
-// everything" would send every validator of a starting network hunting for a
-// target it cannot name. The conductor decides the opposite for the same
-// value, because it must not sign what it cannot justify.
-func TestSubmitter_AnUnknownCommitteeStillProposes(t *testing.T) {
+// A node that does not know whether it is a validator cannot know that the
+// header carrying a submission will be voted on. The first build let it
+// propose anyway, so a follower whose globals had not arrived took traffic
+// and stranded it — #4366 again, through the one door left open. It now
+// relays; and holding no committee it cannot name a target, so it answers
+// NotReady, counts not-ready, and says so in the log once.
+func TestSubmitter_AnUnknownCommitteeIsNotALicenceToPropose(t *testing.T) {
 	const part = "bvn1"
 	svc, _, mine := newJoiningService(t)
 	m := NewMembership(part, mine) // no globals
-	require.True(t, m.CanPropose())
+	require.False(t, m.CanPropose())
+	require.False(t, m.Known())
 
 	rpc := &fakeRPC{partition: part}
-	sub := NewSubmitterService(SubmitterServiceParams{
-		Service: svc, Membership: m,
-		Relay: NewRelay(RelayParams{Partition: part, Membership: m,
-			Peers: &fakePeers{self: "self"}, RPC: rpc}),
-	})
+	relay := NewRelay(RelayParams{Partition: part, Membership: m,
+		Peers: &fakePeers{self: "self", peers: []peer.ID{"somebody"}}, RPC: rpc})
+	sub := NewSubmitterService(SubmitterServiceParams{Service: svc, Membership: m, Relay: relay})
 
-	verify := false
-	env := &messaging.Envelope{TxHash: []byte("fedcba9876543210fedcba9876543210")}
-	_, err := sub.Submit(context.Background(), env, api.SubmitOptions{Verify: &verify})
-	require.ErrorContains(t, err, "node not started", "it proposed rather than relayed")
-	require.Empty(t, rpc.submitted)
+	a0, _, _, n0, _ := counted(part)
+	no := false
+	_, err := sub.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{Verify: &no})
+	require.True(t, errors.Is(err, errors.NotReady), "got %v", err)
+	require.Empty(t, rpc.submitted, "nothing is handed to a peer chosen by nothing")
+	a1, _, _, n1, _ := counted(part)
+	require.Equal(t, float64(1), n1-n0)
+	require.Equal(t, float64(1), a1-a0)
+
+	// And no Membership at all is still no gate, for every caller that
+	// predates this.
+	plain := NewSubmitterService(SubmitterServiceParams{Service: svc})
+	_, err = plain.Submit(context.Background(),
+		&messaging.Envelope{TxHash: []byte("0123456789abcdef0123456789abcdef")}, api.SubmitOptions{Verify: &no})
+	require.ErrorContains(t, err, "node not started", "an ungated node proposes as it always did")
 }
 
 // TestSubmitter_NoRelayIsARefusalNotADrop — a node that cannot propose and
@@ -464,4 +472,46 @@ func TestConsensusStatus_AnswersARelaysChallengeOnlyWithItsOwnKey(t *testing.T) 
 	})
 	require.NoError(t, err)
 	require.Empty(t, st.ChallengeSignature)
+}
+
+// TestSubmitter_ThreeAttemptsAreOneAccepted — the counting rule (#4366
+// note_3869978257): accepted is counted once, at a submission's first entry
+// into this node's worker or its relay, never per attempt. A client that
+// submits again is a new submission; the relay's own retries are not.
+func TestSubmitter_ThreeAttemptsAreOneAccepted(t *testing.T) {
+	const part = "bvn1"
+	svc, _, mine := newJoiningService(t)
+	a, b, c := otherKey(t), otherKey(t), otherKey(t)
+	pa, pb, pc := peer.ID("not-ready"), peer.ID("unreachable"), peer.ID("takes-it")
+
+	m := NewMembership(part, mine)
+	m.SetGlobals(globalsWith(t, map[string][]ed25519.PublicKey{part: {a, b, c}}))
+
+	rpc := &fakeRPC{
+		partition: part,
+		keys:      map[peer.ID]ed25519.PublicKey{pa: a, pb: b, pc: c},
+		answers: map[peer.ID]answer{
+			pa: {err: errors.NotReady.With("joining")},
+			pb: {err: errors.StreamAborted.With("reset")},
+		},
+	}
+	sub := NewSubmitterService(SubmitterServiceParams{
+		Service: svc, Membership: m,
+		Relay: NewRelay(RelayParams{Partition: part, Membership: m,
+			Peers: &fakePeers{self: "self", peers: []peer.ID{pa, pb, pc}}, RPC: rpc}),
+	})
+
+	a0, r0, t0, n0, u0 := counted(part)
+	no := false
+	res, err := sub.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{Verify: &no})
+	require.NoError(t, err)
+	require.True(t, res[0].Success)
+	require.Len(t, rpc.submitted, 3, "three attempts")
+
+	a1, r1, t1, n1, u1 := counted(part)
+	require.Equal(t, float64(1), a1-a0, "one submission, one accepted")
+	require.Equal(t, float64(1), t1-t0, "one relay, at its final answer")
+	require.Equal(t, float64(0), n1-n0, "a NotReady that is retried and then taken is not an outcome")
+	require.Equal(t, float64(0), u1-u0)
+	require.Equal(t, float64(0), r1-r0)
 }

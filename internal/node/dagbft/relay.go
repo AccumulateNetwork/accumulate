@@ -239,7 +239,7 @@ func (r *Relay) Submit(ctx context.Context, env *messaging.Envelope, opts api.Su
 
 		case metrics.RelayNotReady:
 			sawNotReady = true
-			if errors.Is(err, errors.TooManyRequests) {
+			if errors.Code(err) == errors.TooManyRequests {
 				// Back-pressure is the network saying it is at capacity.
 				// Shopping the envelope to every other validator multiplies
 				// the load exactly when it is weakest, so this one stops
@@ -309,7 +309,17 @@ func (r *Relay) candidates(ctx context.Context) []peer.ID {
 	return append(append(make([]peer.ID, 0, len(out)), out[i:]...), out[:i]...)
 }
 
-// classifyRelay says what one attempt was.
+// classifyRelay says what one attempt was, by the error's CODE.
+//
+// By code, not by errors.Is: ErrorBase.Is walks the cause chain, and every
+// real refusal from a validator's Submit carries a cause -- "verify: %w",
+// "submit: %w" -- whose chain ends in an UnknownError. Matching
+// errors.UnknownError therefore matched every BadRequest a validator ever
+// returned, so a refusal was filed unreachable and shopped to every other
+// validator until the caller was told NoPeer: the laundering this design
+// exists to prevent, invisible because the unit test built a BadRequest
+// with no cause (#4366, reviewer H1). errors.Code walks past UnknownError
+// to the status that was meant.
 //
 // Three buckets are named, and the rest is the target's judgement of the
 // submission, handed back to the caller unchanged:
@@ -317,28 +327,24 @@ func (r *Relay) candidates(ctx context.Context) []peer.ID {
 //   - NotReady and TooManyRequests say "ask someone else" and "ask again".
 //     They are about the TARGET, so the relay tries the next validator.
 //   - the transport statuses, plus InternalError and the unclassified
-//     UnknownError the dialer wraps a failed connection in, mean nothing
-//     came back from a validator at all.
+//     UnknownError a failed dial ends in, mean nothing came back from a
+//     validator at all.
 //   - everything else is a validator's refusal, which is final and is not
-//     re-judged, queued or retried elsewhere. Retrying a refusal at the next
-//     validator is how a relaying node would launder one node's refusal into
-//     the network's answer.
+//     re-judged, queued or retried elsewhere.
 func classifyRelay(res []*api.Submission, err error) string {
 	if err != nil {
-		switch {
-		case errors.Is(err, errors.NotReady),
-			errors.Is(err, errors.TooManyRequests):
+		switch errors.Code(err) {
+		case errors.NotReady, errors.TooManyRequests:
 			return metrics.RelayNotReady
 
-		case errors.Is(err, errors.NoPeer),
-			errors.Is(err, errors.NotFound),
-			errors.Is(err, errors.StreamAborted),
-			errors.Is(err, errors.PeerMisbehaved),
-			errors.Is(err, errors.EncodingError),
-			errors.Is(err, errors.InternalError),
-			errors.Is(err, errors.UnknownError),
-			errors.Is(err, context.DeadlineExceeded),
-			errors.Is(err, context.Canceled):
+		case errors.NoPeer, errors.NotFound, errors.StreamAborted,
+			errors.PeerMisbehaved, errors.EncodingError,
+			errors.InternalError, errors.UnknownError:
+			return metrics.RelayUnreachable
+
+		case 0:
+			// Not one of ours at all: a context deadline, a net error, a
+			// stream the transport gave up on.
 			return metrics.RelayUnreachable
 		}
 		return metrics.RelayRefused

@@ -11,6 +11,8 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
@@ -579,4 +582,115 @@ func TestRelay_ConsecutiveSubmissionsRotate(t *testing.T) {
 	}
 	require.Equal(t, []peer.ID{pa, pb, pa}, rpc.submitted,
 		"consecutive submissions must not all start at the same validator")
+}
+
+// TestClassifyRelay_ARefusalWithACauseIsStillARefusal — the reviewer's H1.
+//
+// Every refusal a validator's Submit returns carries a cause: "verify: %w"
+// around the normalizer's error, "submit: %w" around the worker's. Matching
+// errors.UnknownError with errors.Is matched all of them, because
+// ErrorBase.Is walks the cause chain and a wrapped cause ends in an
+// UnknownError — so a refusal was filed unreachable, shopped to every other
+// validator, and answered NoPeer, which is the laundering this design
+// exists to prevent. The unit test that passed built a BadRequest with no
+// cause.
+func TestClassifyRelay_ARefusalWithACauseIsStillARefusal(t *testing.T) {
+	// The shapes internal/node/dagbft/api.go actually returns.
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"verify, wrapping the normalizer",
+			errors.BadRequest.WithFormat("verify: %w", fmt.Errorf("invalid hash length: want 32, got 5")),
+			metrics.RelayRefused},
+		{"oversized, wrapping the worker",
+			errors.BadRequest.WithFormat("submit: %w", worker.ErrTransactionTooLarge),
+			metrics.RelayRefused},
+		{"store full",
+			errors.NotReady.WithFormat("submit: %w", worker.ErrStoreFull),
+			metrics.RelayNotReady},
+		{"back-pressure",
+			errors.TooManyRequests.WithFormat("submit: %w", worker.ErrBackpressure),
+			metrics.RelayNotReady},
+		{"the node's own fault",
+			errors.InternalError.WithFormat("submit: %w", fmt.Errorf("boom")),
+			metrics.RelayUnreachable},
+		{"no peer",
+			errors.NoPeer.With("nobody serves that"),
+			metrics.RelayUnreachable},
+		{"not one of ours",
+			context.DeadlineExceeded,
+			metrics.RelayUnreachable},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, classifyRelay(nil, c.err), "in memory")
+
+			// And after the round trip the message layer makes of it: the
+			// relay classifies what comes back over the wire, not what the
+			// target constructed.
+			e, ok := c.err.(*errors.Error)
+			if !ok {
+				return
+			}
+			b, err := json.Marshal(e)
+			require.NoError(t, err)
+			wire := new(errors.Error)
+			require.NoError(t, json.Unmarshal(b, wire))
+			require.Equal(t, c.want, classifyRelay(nil, wire), "after the JSON round trip")
+		})
+	}
+}
+
+// TestRelay_ARefusalIsNotShoppedWhateverItsCause — H1 through the relay, not
+// the classifier: a refusal that carries a cause stops at the first target.
+func TestRelay_ARefusalIsNotShoppedWhateverItsCause(t *testing.T) {
+	const part = "BVN3"
+	mine := otherKey(t)
+	a, b := otherKey(t), otherKey(t)
+	pa, pb := peer.ID("first"), peer.ID("second")
+
+	g := globalsWith(t, map[string][]ed25519.PublicKey{part: {a, b}})
+	rpc := &fakeRPC{
+		partition: part,
+		keys:      map[peer.ID]ed25519.PublicKey{pa: a, pb: b},
+		answers: map[peer.ID]answer{pa: {
+			err: errors.BadRequest.WithFormat("verify: %w", fmt.Errorf("invalid hash length: want 32, got 5")),
+		}},
+	}
+	r := relayFor(t, part, mine, g, &fakePeers{self: "self", peers: []peer.ID{pa, pb}}, rpc)
+
+	_, outcome, err := r.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{})
+	require.Equal(t, metrics.RelayRefused, outcome)
+	require.Equal(t, errors.BadRequest, errors.Code(err), "got %v", err)
+	require.Equal(t, []peer.ID{pa}, rpc.submitted,
+		"a refusal with a cause must not be shopped to the rest of the committee")
+}
+
+// TestRelay_ManyAttemptsAreOneSubmission — the counting rule (#4366
+// note_3869978257): accepted is counted once, at a submission's first entry
+// into this node's worker or its relay, never per attempt.
+func TestRelay_ManyAttemptsAreOneSubmission(t *testing.T) {
+	const part = "BVN3"
+	mine := otherKey(t)
+	a, b, c := otherKey(t), otherKey(t), otherKey(t)
+	pa, pb, pc := peer.ID("aa-not-ready"), peer.ID("bb-unreachable"), peer.ID("cc-takes-it")
+
+	g := globalsWith(t, map[string][]ed25519.PublicKey{part: {a, b, c}})
+	rpc := &fakeRPC{
+		partition: part,
+		keys:      map[peer.ID]ed25519.PublicKey{pa: a, pb: b, pc: c},
+		answers: map[peer.ID]answer{
+			pa: {err: errors.NotReady.With("joining")},
+			pb: {err: errors.StreamAborted.With("reset")},
+		},
+	}
+	r := relayFor(t, part, mine, g, &fakePeers{self: "self", peers: []peer.ID{pa, pb, pc}}, rpc)
+
+	_, outcome, err := r.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{})
+	require.NoError(t, err)
+	require.Equal(t, metrics.RelayTaken, outcome, "one outcome, at the submission's final answer")
+	require.Equal(t, []peer.ID{pa, pb, pc}, rpc.submitted, "three attempts")
 }
