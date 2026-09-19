@@ -168,16 +168,40 @@ and its anchor leg stays near its floor.
 ### E11 #4205 — a node joins from the running protocol, and a restart is a join
 
 Spec: executor.md "Sync". Decided by Paul 2026-09-18: a starting node does not
-catch up through consensus. It listens and collects into staging, takes
-staging from a running validator as of that validator's last committed block,
-pulls the state — the Directory's spine, then the BPT by pages and the
-accounts the buffered blocks name — verified against the anchored root, and
-executes from the first block after the root matches. It serves nothing it
-cannot answer until its history is backfilled. The bootstrap-v3 work
-(`origin/bootstrap-v3`, `origin/bootstrap-v3-merge-1.4.4`; epic #3985:
-`internal/core/bootstrap/{pull,enumerate,tracker,bptproof,nodestate,…}`,
+catch up through consensus. It validates the spine — the operators' key book
+and the anchors it signs — pulls the state that the verified anchor's root
+commits to, derives staging from that state, and executes from the block after
+the root matches. It serves nothing it cannot answer until its history is
+backfilled. The bootstrap-v3 work (`origin/bootstrap-v3`,
+`origin/bootstrap-v3-merge-1.4.4`; epic #3985:
+`internal/core/bootstrap/{pull,enumerate,tracker,bptproof,nodestate,anchorsrc,…}`,
 `BptPageQuery`) is the state half, built on the CometBFT line and never on
-this one; the staging half is new.
+this one.
+
+**The trust model changed after steps 1–5 landed (Paul, 2026-09-18), and the
+spec was rewritten for it.** Steps 1–5 below are the record of what was built
+and are left as they were written; two of their premises no longer hold.
+
+- **The spine is validated, not assumed.** It was pulled in `ModeFullSpine`
+  and settled with `Keep` on the rationale that there is nothing to verify it
+  against until it is there. That is false — a signature is verified against a
+  key, not against a root — and it is why the pull's trust terminated in one
+  unauthenticated peer (#4301). `anchorsrc`, which does exactly this
+  verification against the local key page, exists on bootstrap-v3 and was not
+  ported by #4293. Porting it, with the producer-routing rule and the
+  Directory's own root, is the next work.
+- **Staging is what was collected, minus what the state says executed.**
+  Step 1's staging API answered a question the joining node answers for
+  itself (Paul, 2026-09-19): synced to `B`, the next block is by definition
+  everything not executed; if no stream has a gap the node executes, and if
+  one has, the entry arrived before the node was listening — advance the sync
+  one block, pull what that block's ledger names, and ask again. No peer is
+  ever asked what it holds. Step 1 and `takeStaging` are deleted, not
+  hardened.
+- **Comparison is against an anchored height, not a peer's live state.** The
+  meeting-point apparatus and its open hole (#4350) both come from comparing
+  accounts to a moving target. The prerequisite is serving account state at an
+  anchored height — the AIP-58 work on `origin/main`, absent on this line.
 
 1. **Staging as an API.** A validator serves its staging as of its last
    committed block, per partition: every stream's `Delivered`, sighted mark,
@@ -257,6 +281,88 @@ this one; the staging half is new.
    its history is backfilled: there is no backfill on this line, so `COMPLETE`
    would mean a node that joined never answered again. The state is not
    persisted and not advertised, and the v3 querier is not gated.
+
+**E11, second pass — the order and the gates for the validated-spine design**
+(2026-09-19). Phase 1's definition of done (Paul, 2026-09-19): "the network
+can run chaos for 12 hours while adding and removing followers while carrying
+a 100 tps load." Its order (Paul, same day): "launch a follower to a 100 tps
+non-chaos network (not bootstrap it) 5 m. Then work bootstrapping. Then work
+bootstrapping a follower."
+
+0. **A follower launched with the network — #4365.** One follower started at
+   `compose up` beside the twelve validators, key in no committee, 100 tps,
+   chaos off, five minutes: it executes every block at the network's cadence,
+   root-matches every anchored root, votes on and proposes nothing, and
+   answers requests. *Gate for everything below:* whether a non-committee
+   node can follow this line at all is believed, not shown (the churn plan's
+   P2 never had a test), and every later step assumes it. A failure here is
+   the phase's first finding and goes to a `debugger` before anything is
+   built.
+
+Then bootstrapping — four pieces, three of them deletions in disguise, in
+this order because each one's gate needs the one before it:
+
+1. **Validate the spine — #4301.** Port `anchorsrc` from `bootstrap-v3`:
+   the latest signed anchor for the partition, its validator-quorum
+   signatures checked against the key page the node holds from its own
+   execution (or genesis), distinct key page entries to threshold, walked
+   forward across operator changes. Producer routing: a BVN's root from
+   `dn.acme/anchors`, the Directory's own from a BVN's anchor pool. Nothing is
+   kept and no root reaches the tracker until it passes; the `Keep`-without-
+   verify path and its "nothing to verify it against" rationale go.
+   *Gate:* a well-formed anchor with no valid signature is refused; a
+   self-consistent forked state with a matching root does not promote; the
+   Directory's own root is obtainable. Then the four threat tests on
+   `threat-staging-load-unverified` become the regression suite for what is
+   deleted in step 3.
+2. **Serve state at an anchored block — #4361.** Port the AIP-58 historical
+   state from `origin/main` (`docs/protocol/historical-account-state.md`,
+   `test/e2e/aip58_historical_test.go`): an account or a BPT page *as of a
+   named block*, with a receipt to that block's `StateTreeAnchor`. This is
+   what makes a pulled account settle on the round it is fetched, and it is
+   the reason a restart currently converges on nothing. A review, not a
+   cherry-pick: the block ledger and the BPT have moved since (#4358).
+   *Gate:* a restarted node's hot accounts settle on the first round —
+   `TestRestartedNodeWithAPopulatedDatabaseResyncs` with the settle bound
+   removed.
+3. **The convergence loop — #4362.** Sync to `B`, collect `B+1`, execute if
+   no stream has a gap, else pull what `B+1`'s ledger names at anchored `B+1`
+   and try `B+2`; root match after every executed block. Deletes the staging
+   API and `takeStaging` (#4291/#4292's load path, `NoPeerHasStaging`,
+   `executeFromOwnState`), the meeting-point apparatus in `pull` (#4348 ×2)
+   and its hole #4350, the collect-buffer arithmetic #4351 breaks,
+   `settleBatch`'s hold-and-discard (#4352) and the held re-fetch (#4353).
+   Closes #4322–#4326, #4354, #4357 by removal. *Gate:* the restart
+   reproduction passes on this mechanism with `Conductor.Rejoin`, the
+   staging API and the meeting point gone rather than bypassed; a named test
+   in which a peer holds a pre-listen entry shows the node advancing the sync
+   instead of executing; then `30m-100tps-chaos.conf` with every restarted
+   validator rejoining and Directory 12 of 12.
+4. **Serve last stays** — #4295's `NotReady` on `Submit`/`Validate` and on the
+   two pull reads (#4297, #4307), `BOOTING → ACTIVE → COMPLETE` advertised.
+   The two small defects that survive the deletions, #4355 (a successful join
+   logged as an error) and #4356 (the ledger walk dead after 128 blocks),
+   are fixed in passing here; #4359 (the `Expand:false` REST change) is
+   decided, not assumed.
+
+Then **bootstrapping a follower** — **#4363** (a follower joins a *running*
+network through the join above, keeps up, answers `NotReady` until
+`COMPLETE`, and can be stopped with nothing waiting on it) and **#4364** (the
+harness's add-follower / remove-follower disturbances, a verdict per
+add/remove in the manifest, and `12h-100tps-followers.conf`). Then the
+acceptance: **twelve hours, 100 tps, followers added and removed, validators
+restarted** — which supersedes the 24-hour restart-only run this issue was
+filed with, and is Paul's to start. The
+no-chaos 100 tps path is already re-established on `bff83e840`
+(`20260919T115321Z`, identical to the 09-17 baseline), so what the 24-hour run
+tests is the join, and only the join.
+
+**What the first pass got wrong, said once.** Steps 1–5 below were built and
+gated green against a spec whose trust terminated in one unauthenticated peer,
+and whose tests replaced the mechanism with a store copy. The second pass is
+smaller than the first — most of it is removing what the first added — because
+the spine, once validated, answers the questions the first pass built
+machinery to ask a peer.
 
 Order and gates: 1 and 3 in parallel (they share nothing); 2 on 1; 4 on all
 three, gated on `TestOneValidatorRestartDoesNotDiverge` with the interim pull
