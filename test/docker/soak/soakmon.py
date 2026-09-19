@@ -803,7 +803,14 @@ def life_from(per):
                     life["waitsByReason"][reason] = \
                         life["waitsByReason"].get(reason, 0) + n
     for key, parts in bypart.items():
-        life[key] = sum(parts.values())
+        # An unlabelled node reports a whole-node total, not a partition, so it
+        # must be reconciled with the labelled ones rather than added to them.
+        # A rolling upgrade is exactly when both spellings are on the fleet at
+        # once, and adding them read 380 where the truth was 190 -- the same
+        # class of impossible number as the 687,160 this function was written
+        # to kill.
+        whole = parts.pop("", 0)
+        life[key] = max(sum(parts.values()), whole)
     return life
 
 

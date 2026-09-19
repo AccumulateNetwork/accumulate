@@ -47,3 +47,26 @@ class LifeCountsBlocksPerPartition(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MixedFleetDuringARoll(unittest.TestCase):
+    """A roll puts both spellings on the fleet at once, and that is when the
+    board is most likely to be believed and most likely to be wrong."""
+
+    def rows(self, *pairs):
+        return [("accumulate_dagbft_blocks_produced_total", lab, v) for lab, v in pairs]
+
+    def test_an_unlabelled_node_is_not_added_to_the_labelled_ones(self):
+        per = {
+            "new": self.rows(({"partition": "Directory"}, 100), ({"partition": "BVN1"}, 90)),
+            "old": self.rows(({}, 190)),
+        }
+        self.assertEqual(soakmon.life_from(per)["blocks"], 190)
+
+    def test_all_labelled_is_unchanged(self):
+        per = {"a": self.rows(({"partition": "Directory"}, 100), ({"partition": "BVN1"}, 90))}
+        self.assertEqual(soakmon.life_from(per)["blocks"], 190)
+
+    def test_all_unlabelled_is_unchanged(self):
+        per = {"a": self.rows(({}, 190)), "b": self.rows(({}, 188))}
+        self.assertEqual(soakmon.life_from(per)["blocks"], 190)
