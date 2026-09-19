@@ -249,13 +249,14 @@ below as the record of what was built.
 
 Two departures the rewritten section names that this entry did not:
 
-- **Producer routing** — a partition's root must be verified from anchors
-  *produced by* it, which live on the receiving partition's anchor pool: a
-  BVN's from `dn.acme/anchors`, the Directory's own from a BVN's pool. This
-  line builds one `DirectoryAnchors` on `dn.acme/anchors`
-  (`internal/node/join/state.go:166`) and asks it for every partition
-  (`:444`), so by that rule the Directory's own root is unobtainable (#4301,
-  fact 3 — inferred, not yet shown by a run).
+- **Producer routing** — *retired 2026-09-19 (#4301 statement (a))*: the
+  Directory anchors to itself, so its own root is in `dn.acme/anchors` with
+  real signatures; the inference that it was unobtainable there was wrong.
+  What was and is different: until #4301 lands, `pull.DirectoryAnchors`
+  reads roots off `dn.acme/anchors` with no signature checked at all.
+- **The authority is the network definition, not the operators' page**
+  (#4301 statement (b)): the spec now says so; the operators' page keeps its
+  governance role and is never read by a join.
 - **Anchored-height serving** — a peer serves an account with a receipt to
   its *current* root, never as of a caller-named anchored block, so a hot
   account never settles and a restart converges on nothing (#4361;

@@ -223,12 +223,22 @@ holds.
 
 #### 1. The spine is the trust root, and it is validated first
 
-**The spine is the operators' key book and the anchors it signs.** An anchor
-carries the source partition's `StateTreeAnchor` for one of its blocks, and it
-is signed by a quorum of that partition's validators against a key page the
-protocol publishes as an account. One anchor, verified, is the proof of the
-state of the entire protocol at that height: every account under that root —
-the spine's own accounts included — is a leaf check from there.
+**The spine is the network definition and the anchors its validators sign.**
+An anchor carries the source partition's `StateTreeAnchor` for one of its
+blocks, and it is signed by a quorum of that partition's validators. The set
+those signatures are counted against is the **network definition**
+(`dn.acme/network`: each partition's validators and its threshold — the
+protocol's own anchor authority, `core.AnchorSigner`, `ValidatorThreshold`,
+the same set the executor checks an anchor against when it arrives), **not
+the operators' key page**: genesis writes every node of every partition into
+every partition's operator page and takes the threshold over all of them, so
+a BVN's own four validators can never reach it (#4301, measured). The
+operators' book is not gone, it is relocated: governance still terminates
+there — the definition changes only by a write to `dn.acme/network` that
+`dn.acme/operators` authorizes — but a joining node never reads it; it reads
+the definition, which that book last authorized. One anchor, verified, is the
+proof of the state of the entire protocol at that height: every account under
+that root — the spine's own accounts included — is a leaf check from there.
 
 **A signature is verified against a key, not against a root.** That is what
 makes the spine establishable before anything else exists. An earlier version
@@ -254,11 +264,16 @@ reach the threshold. Copies from one signer do not accumulate; a second copy
 from a validator is no second signature.
 
 **Anchors are routed by producer.** To verify partition P's root, the node
-needs an anchor *produced by* P, and a produced anchor lives on the
-**receiving** partition's anchor pool, never on its own. So a BVN's root is
-read from `dn.acme/anchors`, and **the Directory's own root is read from a
-BVN's anchor pool**. A node that reads every partition's root from
-`dn.acme/anchors` can never obtain the Directory's (#4301).
+needs an anchor *produced by* P, signed by P's validators, and a produced
+anchor lives on the **receiving** partition's anchor pool. A BVN's root is
+read from `dn.acme/anchors`. The Directory anchors to every partition
+*including itself*, so its own root is in `dn.acme/anchors` too, with real
+signatures — measured on this line (#4301); a BVN's pool holds the same
+Directory anchors and is a second, independent place to read them. An
+earlier version of this paragraph said the Directory's root could never be
+obtained from `dn.acme/anchors`; that was inferred from the routing rule and
+not from a run, and it was wrong. The defect was never which pool was read;
+it was that no signature was checked.
 
 **Until the spine validates, nothing is kept and no root is handed on.** A
 root that has not been verified against the key book is not a root; it is a

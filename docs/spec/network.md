@@ -81,3 +81,14 @@ Making it changeable — a threshold of validators ratifying, activating at a
 major block boundary so partitions switch together — is #4267's remaining
 scope. Until then a deployed network's cadence is immutable, which is a
 limitation, not a design.
+
+## Where the validator set lives
+
+A partition's validator set and its threshold are the **network definition**,
+`dn.acme/network`, published as an account like every other protocol fact.
+It is the set an anchor's signatures are counted against — by the executor
+when an anchor arrives, and by a joining node validating the spine
+(executor.md, "Sync" §1) — and it changes only by a write that the operators'
+key book (`dn.acme/operators`) authorizes. The operators' page is therefore
+the governance root and the definition is the authority read at run time;
+nothing counts anchor signatures against the operators' page itself (#4301).
