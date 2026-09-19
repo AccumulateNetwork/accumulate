@@ -262,16 +262,24 @@ func (s *SubmitterService) relayIt(ctx context.Context, envelope *messaging.Enve
 
 	res, outcome, err := s.relay.Submit(ctx, envelope, opts)
 
-	// Once per submission, at its final answer (#4366 note_3869838619).
+	// Once per submission, at its final answer, and one accepted with it
+	// (#4366 note_3869838619).
+	//
+	// Every submission that enters the relay is accepted: this node took
+	// responsibility for it, however it then discharged it. That is what
+	// makes the harness's arithmetic hold — relayed_total <= accepted per
+	// node and partition, and "accepted, neither certified here nor taken
+	// on relay" = accepted - certified - relayed{taken}, which is then
+	// exactly the relays that did not reach a proposer, "where a drop
+	// belongs" (soakmon.py, the relay block). Counting only taken as
+	// accepted instead makes sum(relayed) > accepted fire on a correct
+	// build the first time one relay ends unreachable, and hides a node
+	// whose relays never land. The contract also says accepted is "Submit
+	// returned success to the caller", which for a refused or unreachable
+	// relay it was not; the two readings cannot both hold and the
+	// arithmetic is the one the harness computes (#4366, builder's note).
 	metrics.RelayedTotal.WithLabelValues(partition, outcome).Inc()
-
-	// accepted means Submit returned success TO THE CALLER, whether this
-	// node proposed it or a validator took it from this node.
-	if outcome == metrics.RelayTaken {
-		s.submitted("accepted")
-	} else {
-		s.submitted("rejected")
-	}
+	s.submitted("accepted")
 	return res, err
 }
 

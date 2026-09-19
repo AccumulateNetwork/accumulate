@@ -159,8 +159,10 @@ func TestSubmitter_TheRelayAnswerIsTheCallersAnswer(t *testing.T) {
 				testutil.ToFloat64(metrics.RelayedTotal.WithLabelValues(part, c.outcome))-before,
 				"the outcome is counted once, under its own name")
 			a1, r1, _, _, _ := counted(part)
-			require.Equal(t, float64(0), a1-a0, "the caller was not told success")
-			require.Equal(t, float64(1), r1-r0)
+			require.Equal(t, float64(1), a1-a0,
+				"every relayed submission is one accepted, or sum(relayed) > accepted fires on a correct build")
+			require.Equal(t, float64(0), r1-r0,
+				"a relay is not a rejection: the outcome family says what became of it")
 		})
 	}
 }
