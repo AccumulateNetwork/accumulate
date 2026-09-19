@@ -65,6 +65,25 @@ type RelayRPC interface {
 // and forwarding would re-create accept-then-drop under another name, which
 // is the failure this whole issue is (#4366, threat-reviewer note_3869812517
 // D4).
+//
+// What a lying peer can do with this, stated rather than discovered:
+//
+//   - A peer's answer about its own key and its own sync state is an
+//     UNAUTHENTICATED CLAIM. A peer that claims a real validator's key hash
+//     is handed submissions and can drop them, and the caller is told they
+//     were taken. The relay does not create that exposure — before it, the
+//     same peer was a provider of submit for the partition and the
+//     dispatcher and the API router dialled it anyway — but it does not
+//     close it either. Closing it needs the claim signed by the key it
+//     names, which is not in this build.
+//   - Two colluding committee members that both claim they are not catching
+//     up can pass one submission back and forth: each excludes only itself.
+//     The chain ends at the caller's context deadline. An honest node cannot
+//     be made to do this — a node that is catching up says so, and one that
+//     is not proposes rather than relays — so this is collusion, not a
+//     property of the mechanism, and the hard bound for it is a hop marker
+//     on the submission, which is public protocol surface a client could
+//     set (see above).
 type Relay struct {
 	logger     logging.OptionalLogger
 	partition  string
