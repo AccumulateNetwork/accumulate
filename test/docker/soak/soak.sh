@@ -36,6 +36,32 @@ fi
 [ -n "$conf_override" ] && . "$conf_override"
 # The knobs the compose file and the node containers read
 export COMPOSE_PROJECT_NAME ACC_BLOCK_INTERVAL ACC_MEM_LIMIT GOMEMLIMIT ACC_TX_TRACE
+# Stop a background subshell AND the `sleep` it is parked in.
+#
+# THE FIX, in two parts, because the leftover has two causes (#4364):
+#
+# 1. Three sampler loops captured no PID at all — `( while … ) &` with no
+#    `$!` — so teardown's kill list could not name them. They stop only when
+#    their own `while kill -0 $DRIVER` next runs, which is AFTER the sleep:
+#    up to STORAGE_STATS_INTERVAL, 300s in soak.conf. Every background job
+#    this script starts now records its PID and is passed here.
+# 2. A plain `kill` on such a subshell is still not enough. The subshell dies
+#    at once, but the `sleep` it was waiting on is its CHILD: it is orphaned,
+#    reparented, and runs out its full interval. That bare `sleep 300` is the
+#    process Paul killed by hand after both runs on 2026-09-19. Verified on
+#    this box, two identical `( while true; do sleep 300; done ) &` jobs:
+#      plain kill: subshell gone | its 'sleep 300' ALIVE
+#      stop_bg   : subshell gone | its 'sleep 300' gone
+#    So: children first (`pkill -P`), then the subshell.
+stop_bg() {
+  for p in "$@"; do
+    [ -n "$p" ] || continue
+    pkill -P "$p" 2>/dev/null || true
+    kill "$p" 2>/dev/null || true
+  done
+  return 0
+}
+
 DURATION="${DURATION:-24h}"; TPS="${TPS:-2}"
 
 # Parse Go-style durations so short runs work. The old parser did
@@ -645,11 +671,19 @@ echo "time,dnHeight,heals,cpuPct,followerHeals" > "$mon"
     # GOMEMLIMIT in ten minutes and stats.csv had two points for it (PLAN S0).
     sleep ${MON_INTERVAL:-$([ "$duration_seconds" -le 1800 ] && echo 20 || echo 30)}
   done ) &
+MONLOOP=$!    # recorded so teardown can name it (#4364)
 
 # Storage-backend counters over time (PLAN S0). BlockchainDB rewrites
 # stats.json every 50 commits, so only the last snapshot survives a run — and
 # stagedCommits, the D5 instrument, had no history. One row per (node,
 # database) a minute, the few counters that move.
+#
+# THE leftover Paul killed by hand after both runs on 2026-09-19. This loop
+# captured no `$!`, so teardown's kill list could not name it; with
+# STORAGE_STATS_INTERVAL at 300 in soak.conf it outlived the run by up to
+# five minutes, `docker exec`-ing into containers that were already gone.
+# It records its PID now and teardown passes it to `stop_bg`, which kills
+# the `sleep` before the subshell so the sleep is not orphaned either.
 echo "time,node,database,commits,stagedCommits,shallowMisses,maintenanceErrors,permPutTotal,dynaPutTotal,dynaLiveHit,deepHits,deepMisses" > "$rd/storage-stats.csv"
 ( while kill -0 $DRIVER 2>/dev/null; do
     ts=$(date -u +%FT%TZ)
@@ -682,6 +716,7 @@ for part in blob.split("== ")[1:]:
     done
     sleep ${STORAGE_STATS_INTERVAL:-60}
   done ) &
+STORELOOP=$!   # THE leftover (#4364): see above and stop_bg
 
 # Profiles on the hour (PLAN S0): the steady-state criteria compare the heap
 # profile at hour 12 with hour 1, and a capture taken only at the wedge shows
@@ -697,6 +732,7 @@ if [ -x "$here/wedgewatch.sh" ]; then
       kill -0 $DRIVER 2>/dev/null || break
       env RUN_DIR="$rd" "$here/wedgewatch.sh" --now hourly >> "$rd/wedgewatch.log" 2>&1
     done ) &
+  PROFLOOP=$!   # recorded so teardown can name it (#4364)
 fi
 
 wait $DRIVER; rc=$?
@@ -720,7 +756,20 @@ fi
 # The read probe writes its report on SIGTERM; give it a moment before the
 # network goes away so the last round and the report land.
 if [ -n "${READPROBE:-}" ]; then kill $READPROBE 2>/dev/null; wait $READPROBE 2>/dev/null; fi
-kill $CHAOS ${MON:-} ${SEIZE:-} ${LOGCAP:-} ${WEDGE:-} 2>/dev/null
+# Every background job, by the PID it recorded, through stop_bg so the `sleep`
+# each one is parked in dies with it (#4364). MONLOOP, STORELOOP and PROFLOOP
+# were not on this list at all until then.
+stop_bg "${CHAOS:-}" "${MON:-}" "${MONLOOP:-}" "${STORELOOP:-}" "${PROFLOOP:-}" \
+        "${SEIZE:-}" "${LOGCAP:-}" "${WEDGE:-}"
+# And say so if one survived anyway. The symptom is invisible — an orphan
+# subshell doing nothing anyone sees — so it has to become a line in the log
+# rather than something the operator notices in `ps` a day later (#4364).
+sleep 1
+for p in "${CHAOS:-}" "${MON:-}" "${MONLOOP:-}" "${STORELOOP:-}" "${PROFLOOP:-}" \
+         "${SEIZE:-}" "${LOGCAP:-}" "${WEDGE:-}"; do
+  [ -n "$p" ] && kill -0 "$p" 2>/dev/null \
+    && echo "WARNING: background job $p survived teardown: $(ps -o args= -p "$p" 2>/dev/null | head -c 100)" | tee -a "$log"
+done
 ended=$(date -u +%FT%TZ)
 echo "== soak finished $(date -u) driver-exit=$rc ==" | tee -a "$log"
 
@@ -776,6 +825,40 @@ if [ -x "$here/streams.py" ]; then
 fi
 stalled_end="${stalled_end:-unknown}"
 
+# Accepted and never proposed (#4364). soakmon writes submissions.csv every
+# 30s from accumulate_dagbft_submissions_total and
+# accumulate_dagbft_proposed_transactions_total. No build exports either
+# family yet (#4366, #4369), so the file is a header with no rows and this
+# says `— not measured` — never 0, which would assert that nothing stranded,
+# the one claim run 20260919T191634Z could not make.
+sub_row() {   # $1 = role: validator | follower
+  python3 - "$rd/submissions.csv" "${1:-}" <<'PYEOF'
+import csv, sys
+path, role = sys.argv[1], sys.argv[2]
+try:
+    rows = list(csv.DictReader(open(path)))
+except OSError:
+    print("— not measured (no `submissions.csv`; soakmon wrote none)"); raise SystemExit
+rows = [r for r in rows if not role or r.get("role") == role]
+if not rows:
+    print("— not measured (no node exports `accumulate_dagbft_submissions_total`; #4366, #4369)")
+    raise SystemExit
+last = max(r["time"] for r in rows)
+per = {}
+for r in rows:
+    if r["time"] != last:
+        continue
+    try:
+        per[(r["node"], r["partition"])] = int(r["acceptedNeverProposed"] or 0)
+    except ValueError:
+        pass
+if not per:
+    print("— not measured (rows present but no counts at %s)" % last); raise SystemExit
+(wv, wk) = max((v, k) for k, v in per.items())
+print("%d, worst %s on %s (as of %s)" % (sum(per.values()), wv, "/".join(wk), last))
+PYEOF
+}
+
 # ---- verdict ----------------------------------------------------------------
 elapsed_h=$(python3 -c "
 import json
@@ -809,6 +892,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   # A run that wedged and dumped is the most valuable kind of run there is;
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
   echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
+  echo "| accepted never proposed (#, whole run, the validators) | $(sub_row validator) |"
   if [ "$n_fol" -gt 0 ]; then
     echo
     echo "### Follower (#4365)"
@@ -820,11 +904,12 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     else
       echo "| every follower measurement | — not measured (followerlog.py produced nothing; see \`soak.log\`) |"
     fi
+    echo "| accepted never proposed (#, whole run) | $(sub_row follower) |"
     echo
     echo "Full detail in \`follower-report.md\`; the per-sample series in \`follower.csv\`."
   fi
   echo
-  echo "Raw: \`soak.log\`, \`monitor.csv\`, \`chaos.log\`, \`loadgen-stats.json\`, \`readprobe.csv\` / \`readprobe-report.md\`$([ "$n_fol" -gt 0 ] && echo ', `follower.csv` / `follower-report.md`, `network-definition.json`')."
+  echo "Raw: \`soak.log\`, \`monitor.csv\`, \`mem.csv\` (every node, with its role), \`submissions.csv\`, \`chaos.log\`, \`loadgen-stats.json\`, \`readprobe.csv\` / \`readprobe-report.md\`$([ "$n_fol" -gt 0 ] && echo ', `follower.csv` / `follower-report.md`, `network-definition.json`')."
 } >> "$manifest"
 
 # Accumulating index — one line per run, newest last, never rewritten.
