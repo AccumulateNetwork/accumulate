@@ -7,9 +7,11 @@
 package crosschain
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -241,4 +244,33 @@ func TestANodeAbsentFromTheDefinitionAsksForItsOwnGaps(t *testing.T) {
 	c := &Conductor{Partition: part, ValidatorKey: key}
 	c.Globals.Store(globals)
 	require.True(t, c.selectedToPull(&protocol.SystemLedger{Index: 500}))
+}
+
+// The statement has to survive the handler a node actually runs, not only the
+// recorder: followerlog.py parses the rendered line. This renders one through
+// the daemon's own chain — the module-level slog handler writing through the
+// console writer — and logs it, so the line the reader is written against is
+// in this test's output.
+func TestAnchorNotSentRenders(t *testing.T) {
+	buf := new(bytes.Buffer)
+	h, err := logging.NewSlogHandler(logging.SlogConfig{DefaultLevel: slog.LevelInfo}, logging.ConsoleSlogWriter(buf, false))
+	require.NoError(t, err)
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	defer slog.SetDefault(prev)
+
+	runOneBlockAs(t, &protocol.PartitionInfo{ID: "BVN1", Type: protocol.PartitionTypeBlockValidator}, false)
+
+	var line string
+	for _, l := range strings.Split(buf.String(), "\n") {
+		if strings.Contains(l, "Anchor not sent") {
+			line = l
+			break
+		}
+	}
+	require.NotEmpty(t, line, "the node must have logged the root it computed")
+	t.Log(line)
+	for _, want := range []string{"module=conductor", "source=BVN1", "block=", "seq=", "root=", "bpt="} {
+		require.Containsf(t, line, want, "the rendered line carries no %s", want)
+	}
 }

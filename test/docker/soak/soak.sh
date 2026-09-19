@@ -750,9 +750,11 @@ done
 rmdir "$rd/storage-stats" 2>/dev/null || true
 # The follower's verdict (#4365), read out of the captured log rather than
 # polled live: node-logs-live.txt streams from the first block, so nothing is
-# lost, and comparing `Sending an anchor` per (source, destination, block) —
-# the source read from the line, #4370 — is the same evidence a debugger uses
-# for a divergence. Cheaper than an API poll per block at a one-second
+# lost, and comparing each node's anchor line per (source, destination,
+# block) — the source read from the line, #4370 — is the same evidence a
+# debugger uses for a divergence. A validator writes `Sending an anchor`; a
+# node in no committee writes `Anchor not sent`, because since #4367 it
+# states the root it computed instead of signing and dispatching one. Cheaper than an API poll per block at a one-second
 # interval, and it re-runs on the saved run directory afterwards without the
 # network. On an image built before #4370 the lines carry no source, the two
 # nodes in a container cannot be told apart, and the root rows say

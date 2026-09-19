@@ -11,11 +11,21 @@ asks four things of a five-minute run, and this answers all four from the
 log the run already captures, plus the NetworkDefinition it captures before
 load starts:
 
-1. **Does it compute the same state?** Every node's conductor logs
-   ``Sending an anchor`` per block at Info, with ``source``, ``root`` and
-   ``bpt`` (conductor.go:308; ``source`` since #4370) — the same line
+1. **Does it compute the same state?** Every node's conductor logs its
+   block's anchor per block at Info, with ``source``, ``root`` and ``bpt``
+   (conductor.go; ``source`` since #4370) — the same line
    `reading-a-run.md` uses for a divergence. Compare the follower's against
    any validator's, per (source partition, block).
+
+   **A validator logs ``Sending an anchor``; a node in no committee logs
+   ``Anchor not sent``.** Since #4367 a node outside the committee neither
+   signs nor dispatches an anchor — it sent 1,997 and every one was refused
+   at msg_block_anchor.go:285 on run `20260919T191634Z` — so it states the
+   root it computed instead, once per block rather than once per
+   destination, with the same fields. Both messages carry the same reading
+   and are compared the same way; which one a node wrote is itself a result,
+   and the rows below count them separately. A follower that logs
+   ``Sending an anchor`` at all has regressed.
 2. **Is its key in any committee?** Each node logs the committee it built
    at Info (``Extracted initial validators for DAG-BFT``, dagbft.go:427) and
    every later change (``Validator added``, certificate_handler.go:379).
@@ -82,6 +92,7 @@ _MSGS = OrderedDict([
     ("Validator added", "validator-added"),
     ("Validator removed", "validator-removed"),
     ("Sending an anchor", "anchor"),
+    ("Anchor not sent", "anchor-not-sent"),
     ("Invalid certificate", "invalid-cert"),
     ("Header from unknown validator", "header-drop"),
     ("Vote from unknown validator", "vote-drop"),
@@ -147,6 +158,12 @@ class Report:
         self.identities = {}        # container -> {partition: 16-hex key}
         self.committees = {}        # (container, partition) -> size
         self.anchors = {}           # container -> {(source, block): (root, bpt)}
+        # Which of the two lines each container wrote. A node in the
+        # committee dispatches; a node outside it states its root and sends
+        # nothing (#4367). Counted apart, because "the follower dispatched
+        # nothing" is a result and not a detail of how the roots were read.
+        self.dispatched = {}        # container -> `Sending an anchor` lines
+        self.stated = {}            # container -> `Anchor not sent` lines
         self.invalid = []           # (container, ts, author, error)
         self.changes = []           # (container, ts, kind, pubkey)
         self.drops = {"header": {}, "vote": {}}   # kind -> {container: count}
@@ -202,8 +219,11 @@ def read(lines):
     r = Report()
     pending = []
     for container, ts, ev, f in parse(lines):
-        if ev == "anchor":
-            pending.append((container, f))
+        if ev in ("anchor", "anchor-not-sent"):
+            sent = ev == "anchor"
+            pending.append((container, f, sent))
+            slot = r.dispatched if sent else r.stated
+            slot[container] = slot.get(container, 0) + 1
             continue
         if ev == "identity":
             part = f.get("partition")
@@ -230,7 +250,7 @@ def read(lines):
     # read from the line itself (#4370) — the source partition is stated,
     # never inferred.
     seen = OrderedDict()
-    for container, f in pending:
+    for container, f, _sent in pending:
         blk = _int(f, "block")
         if blk is None:
             continue
@@ -278,6 +298,8 @@ def compare_roots(report, follower, validators):
     base = {"measured": False, "compared": 0, "uncompared": 0,
             "mismatches": [], "firstMismatch": None,
             "sourceless": sourceless,
+            "dispatched": report.dispatched.get(follower, 0),
+            "stated": report.stated.get(follower, 0),
             "conflicts": [c for c in report.conflicts if c[0] == follower]}
     if not mine and sourceless:
         # Every anchor line it logged predates #4370. Comparing them would
@@ -305,6 +327,8 @@ def compare_roots(report, follower, validators):
     return {"measured": True, "compared": compared, "uncompared": uncompared,
             "mismatches": bad, "firstMismatch": bad[0] if bad else None,
             "sourceless": sourceless,
+            "dispatched": report.dispatched.get(follower, 0),
+            "stated": report.stated.get(follower, 0),
             "conflicts": [c for c in report.conflicts if c[0] == follower],
             "why": None}
 
@@ -552,6 +576,10 @@ def rows(v):
          ("NO" if c["followerExcluded"] is False else ABSENT)),
         ("validators added to a committee during the run (#)",
          _n(len(c["addedDuringRun"]), c["measured"])),
+        ("anchors the follower dispatched (#4367: must be 0) (#)",
+         _n(r.get("dispatched"))),
+        ("blocks the follower stated a root for without sending (#)",
+         _n(r.get("stated"))),
         ("anchored blocks compared, follower vs a validator (#)",
          _n(r["compared"], r["measured"])
          + ("" if r["measured"] else " (%s)" % r["why"])),
