@@ -141,6 +141,16 @@ func IgnoreDeliverResults() Option {
 	})
 }
 
+// BPTHistoryDepth configures the executors to retain the given number of blocks
+// of superseded BPT state, so an account and a BPT page can be served AS OF an
+// anchored block (#4361). Zero, the default, retains none.
+func BPTHistoryDepth(depth uint64) Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.bptHistoryDepth = depth
+		return nil
+	})
+}
+
 // IgnoreCommitResults ignores inconsistencies in the result of Commit.
 func IgnoreCommitResults() Option {
 	return optionFunc(func(opts *simFactory) error {
