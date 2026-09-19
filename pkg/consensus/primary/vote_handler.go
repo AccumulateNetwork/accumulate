@@ -210,6 +210,10 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 			return
 		}
 
+		// In the DAG, and only now: what this node took has reached a
+		// certificate (#4366). A node in no committee never arrives here.
+		p.countCertifiedOwn(cert)
+
 		// Broadcast
 		if p.gossip != nil {
 			if err := p.gossip.BroadcastCertificate(p.ctx, cert); err != nil {

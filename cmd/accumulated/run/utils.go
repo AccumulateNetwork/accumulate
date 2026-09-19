@@ -75,11 +75,42 @@ func getPrivateKey(key PrivateKey, inst *Instance) (ed25519.PrivateKey, error) {
 }
 
 func registerRpcService(inst *Instance, addr *api.ServiceAddress, service message.Service) {
+	registerRpcServiceIf(inst, addr, service, nil)
+}
+
+// registerRpcServiceIf registers a service whose OFFER — advertisement,
+// NodeInfo listing, and this node's own dialer resolving to itself — is
+// conditional. The handler is installed either way, so a peer holding a
+// stale provider record gets the service's own answer. See
+// [p2p.Node.RegisterServiceIf].
+func registerRpcServiceIf(inst *Instance, addr *api.ServiceAddress, service message.Service, offer func() bool) {
 	handler, err := message.NewHandler(service)
 	if err != nil {
 		panic(err)
 	}
-	inst.p2p.RegisterService(addr, handler.Handle)
+	inst.p2p.RegisterServiceIf(addr, handler.Handle, offer)
+}
+
+// offersService decides whether this node offers a service of the given
+// type, given whether it is in the partition's current committee.
+//
+// Submit and validate go by committee membership: a node in no committee
+// cannot get a submission into a block, so being found as a provider of
+// either is what strands the traffic (#4366, executor.md Sync step 5 and step
+// 6, "COMPLETE serves the services its committee membership gives it"). Every
+// other service is a read, which a follower serves.
+//
+// The readiness half — a JOINING node advertising anything at all — is #4336
+// and is not decided here: its latch has to defer the advertisement until the
+// node can serve rather than skip it, because there is no un-advertise and
+// util.Advertise republishes on its own schedule.
+func offersService(typ api.ServiceType, inCommittee func() bool) bool {
+	switch typ {
+	case api.ServiceTypeSubmit, api.ServiceTypeValidate:
+		return inCommittee == nil || inCommittee()
+	default:
+		return true
+	}
 }
 
 func addrHasOneOf(addr multiaddr.Multiaddr, components ...string) bool {
@@ -351,4 +382,23 @@ func AddConfiguration[T Configuration](cfg *Config, s T, predicate func(T) bool)
 		cfg.Configurations = append(cfg.Configurations, s)
 	}
 	return s
+}
+
+// registerSubmitServices registers the two services a node offers only as a
+// member of a partition's committee: submit and validate.
+//
+// The handlers are installed whatever the answer, so a peer that still holds
+// this node in a DHT provider record — which lingers to its TTL, whatever
+// the node does — gets the service's NotReady naming the reason, rather than
+// a dial failure. What membership decides is whether the node is FOUND: the
+// advertisement, the NodeInfo listing, and whether this node's own dialer
+// resolves the service to itself (#4366).
+func registerSubmitServices(inst *Instance, partition string, inCommittee func() bool, submitter api.Submitter, validator api.Validator) {
+	offer := func(typ api.ServiceType) func() bool {
+		return func() bool { return offersService(typ, inCommittee) }
+	}
+	registerRpcServiceIf(inst, api.ServiceTypeSubmit.AddressFor(partition),
+		message.Submitter{Submitter: submitter}, offer(api.ServiceTypeSubmit))
+	registerRpcServiceIf(inst, api.ServiceTypeValidate.AddressFor(partition),
+		message.Validator{Validator: validator}, offer(api.ServiceTypeValidate))
 }

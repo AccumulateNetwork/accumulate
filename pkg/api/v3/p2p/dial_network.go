@@ -78,6 +78,15 @@ func (d *selfDiscoverer) DiscoverLocal(network string, service *api.ServiceAddre
 		return nil, false
 	}
 
+	// A service this node handles but does not offer is not offered to its
+	// own API either. Dialling is local-first, so answering here would make
+	// this node's own clients a dead end for a service it cannot perform;
+	// falling through sends the dial to a peer that can, with no forwarding
+	// on this node's behalf (#4366, executor.md Sync step 5).
+	if !s.offered() {
+		return nil, false
+	}
+
 	return dial.DiscoveredLocal(func(ctx context.Context) (message.Stream, error) {
 		return handleLocally(ctx, s), nil
 	}), true

@@ -659,3 +659,47 @@ var (
 		Help:      "Transactions at the consensus/execution hand-off by outcome: arrived (in a committed batch), executed, unmarshal-failed, process-failed, status-failed. arrived minus executed is what did not execute.",
 	}, []string{"partition", "outcome"})
 )
+
+// What a node did with what it was handed, and how much of it reached a
+// certificate (#4366, #4369, #4364).
+//
+// A node in no committee accepts a submission it can never get into a block:
+// its header is dropped before any vote, so nothing it takes is ever
+// certified, and nothing said so. The two families below are read together —
+// accepted minus certified, per node and partition — and the difference is
+// "accepted, never certified". On a validator it sits at the in-flight depth;
+// on a node in no committee it is everything the network dialled to it.
+//
+// The contract (labels, meaning, what the harness renders) is #4366
+// note_3869706398.
+var (
+	// SubmissionsTotal is what this node's Submit did with what it was
+	// handed: accepted (it entered this node's worker) or rejected (it was
+	// refused).
+	//
+	// The partition label is lowercased at every call site, because it joins
+	// with CertifiedOwnTransactionsTotal and every container runs two nodes,
+	// a DN node and a BVN node, whose queues are separate.
+	SubmissionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "submissions_total",
+		Help:      "Submissions this node accepted or rejected, by outcome",
+	}, []string{"partition", "outcome"})
+
+	// CertifiedOwnTransactionsTotal is the transactions from this node's own
+	// batches that reached a certified header of this node.
+	//
+	// Counted once per transaction, at the first certified header carrying
+	// its batch: a header that never certifies is requeued and its batches
+	// re-proposed, so a per-header count double-counts and would drive
+	// accepted-minus-certified negative. Counted after the certificate is in
+	// the DAG, not when it is created: a failed insert un-claims the round
+	// and requeues the batches (A13a).
+	CertifiedOwnTransactionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "certified_own_transactions_total",
+		Help:      "Transactions from this node's own batches that reached a certified header",
+	}, []string{"partition"})
+)

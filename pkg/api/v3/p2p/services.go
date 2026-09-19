@@ -34,11 +34,43 @@ func idRpc(sa *api.ServiceAddress) protocol.ID {
 // RegisterService registers a service handler and registers the service with
 // the network.
 func (n *Node) RegisterService(sa *api.ServiceAddress, handler MessageStreamHandler) bool {
+	return n.RegisterServiceIf(sa, handler, nil)
+}
+
+// RegisterServiceIf registers a service handler whose OFFER is conditional.
+//
+// A node offers a service when it advertises it to the DHT, lists it in
+// NodeInfo, and lets its own clients dial it locally. It HANDLES a service
+// when the stream handler is installed. The two are not the same thing, and
+// #4366 is why: a node whose author key is in no committee of a partition
+// cannot get a submission into a block — a submission's only road is the
+// receiving node's own batch and header, and a header from an author outside
+// the committee is dropped before any vote (consensus.md, "What a batch is";
+// pkg/consensus/primary/vote_handler.go:277-284). So it must not be found as
+// a provider of submit or validate for that partition, and its own API must
+// not resolve them to itself, because dialling is local-first
+// (dial/dialer.go:146-152) and an unadvertised service still offered locally
+// is a dead end for its own clients (executor.md, Sync step 5).
+//
+// The handler is installed either way. A DHT provider record lingers to its
+// TTL whatever the node does, so a peer will dial this node after it stops
+// advertising; it must get the service's NotReady, which names the reason,
+// rather than a protocol error.
+//
+// offer is read on every question, not latched at registration — membership
+// is a property of the current committee. What is taken once is the
+// advertisement itself: util.Advertise re-publishes on its own schedule and
+// there is no un-advertise, so a node that gains membership after
+// registration serves and lists the service but is not advertised until it
+// restarts (phase 2, with #4336's readiness latch).
+//
+// A nil offer means always offered, which is every caller that predates this.
+func (n *Node) RegisterServiceIf(sa *api.ServiceAddress, handler MessageStreamHandler, offer func() bool) bool {
 	ptr, ok := sortutil.BinaryInsert(&n.services, func(s *serviceHandler) int { return s.address.Compare(sa) })
 	if !ok {
 		return false
 	}
-	*ptr = &serviceHandler{sa, handler}
+	*ptr = &serviceHandler{sa, handler, offer}
 
 	n.host.SetStreamHandler(idRpc(sa), func(s network.Stream) {
 		// Panic protection
@@ -52,6 +84,12 @@ func (n *Node) RegisterService(sa *api.ServiceAddress, handler MessageStreamHand
 		handler(message.NewStream(s))
 	})
 
+	if offer != nil && !offer() {
+		slog.Info("Not advertising a service this node cannot serve",
+			"service", sa.String(), "module", "api")
+		return true
+	}
+
 	err := n.peermgr.advertizeNewService(sa)
 	if err != nil {
 		slog.Error("Advertizing failed", "error", err, "module", "api")
@@ -63,6 +101,28 @@ func (n *Node) RegisterService(sa *api.ServiceAddress, handler MessageStreamHand
 type serviceHandler struct {
 	address *api.ServiceAddress
 	handler MessageStreamHandler
+
+	// offer decides whether the node offers this service — see
+	// [Node.RegisterServiceIf]. Nil means always.
+	offer func() bool
+}
+
+// offered reports whether the node offers this service right now.
+func (s *serviceHandler) offered() bool { return s == nil || s.offer == nil || s.offer() }
+
+// Offers reports whether this node offers the given service to the network
+// and to its own clients. A service it handles but does not offer answers
+// when it is asked and is not advertised.
+func (n *Node) Offers(sa *api.ServiceAddress) bool {
+	s, ok := n.getOwnService("", sa)
+	return ok && s.offered()
+}
+
+// handles reports whether the node has a handler for the service, offered or
+// not.
+func (n *Node) handles(sa *api.ServiceAddress) bool {
+	_, ok := n.getOwnService("", sa)
+	return ok
 }
 
 // WaitForService IS NOT RELIABLE.
@@ -81,11 +141,16 @@ func (n *nodeService) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*
 	info := new(api.NodeInfo)
 	info.PeerID = n.host.ID()
 	info.Network = n.peermgr.network
-	info.Services = make([]*api.ServiceAddress, len(n.services))
+	info.Services = make([]*api.ServiceAddress, 0, len(n.services))
 	info.Version = accumulate.Version
 	info.Commit = accumulate.Commit
-	for i, s := range n.services {
-		info.Services[i] = s.address
+	for _, s := range n.services {
+		// What the node OFFERS, not what it handles: a service it answers
+		// only to say NotReady is not one to route work to (#4366).
+		if !s.offered() {
+			continue
+		}
+		info.Services = append(info.Services, s.address)
 	}
 	return info, nil
 }

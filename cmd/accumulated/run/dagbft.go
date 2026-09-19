@@ -671,13 +671,26 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		return errors.UnknownError.WithFormat("register consensus service: %w", err)
 	}
 
+	// This node's standing in the partition's current committee. A node whose
+	// author key is not in it cannot get a submission into a block — a
+	// header from an author outside the committee is dropped before any vote
+	// — so it does not take one, does not advertise submit or validate for
+	// the partition, and does not offer them to its own API (#4366;
+	// executor.md, Sync step 5, "A node does not take what it cannot
+	// propose"). Seeded with the globals the daemon already waited for and
+	// kept current by WillChangeGlobals, the same two ways the adapter and
+	// the conductor get theirs.
+	membership := dagbft.NewMembership(s.Partition.ID, validatorKey[32:])
+	membership.SetGlobals(globals)
+	membership.SubscribeGlobals(s.eventBus)
+
 	// Create submitter service
 	submitterSvc := dagbft.NewSubmitterService(dagbft.SubmitterServiceParams{
-		Logger:    logger.With("module", "api"),
-		Service:   s.service,
-		NodeState: nodeState,
+		Logger:     logger.With("module", "api"),
+		Service:    s.service,
+		NodeState:  nodeState,
+		Membership: membership,
 	})
-	registerRpcService(inst, submitterSvc.Type().AddressFor(s.Partition.ID), message.Submitter{Submitter: submitterSvc})
 	err = dagbftProvidesSubmitter.Register(inst.services, s, submitterSvc)
 	if err != nil {
 		return errors.UnknownError.WithFormat("register submitter service: %w", err)
@@ -685,15 +698,19 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 
 	// Create validator service
 	validatorSvc := dagbft.NewValidatorService(dagbft.ValidatorServiceParams{
-		Logger:    logger.With("module", "api"),
-		Service:   s.service,
-		NodeState: nodeState,
+		Logger:     logger.With("module", "api"),
+		Service:    s.service,
+		NodeState:  nodeState,
+		Membership: membership,
 	})
-	registerRpcService(inst, validatorSvc.Type().AddressFor(s.Partition.ID), message.Validator{Validator: validatorSvc})
 	err = dagbftProvidesValidator.Register(inst.services, s, validatorSvc)
 	if err != nil {
 		return errors.UnknownError.WithFormat("register validator service: %w", err)
 	}
+
+	// Both are registered here, offered only while this node is in the
+	// committee.
+	registerSubmitServices(inst, s.Partition.ID, membership.InCommittee, submitterSvc, validatorSvc)
 
 	// Create sequencer service
 	sequencerSvc := api.NewSequencer(api.SequencerParams{

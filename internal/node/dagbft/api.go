@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -153,9 +154,10 @@ func boolOpt(v *bool, def bool) bool {
 
 // SubmitterService implements api.Submitter for DAG-BFT.
 type SubmitterService struct {
-	logger    logging.OptionalLogger
-	service   *Service
-	nodeState nodestate.Serving
+	logger     logging.OptionalLogger
+	service    *Service
+	nodeState  nodestate.Serving
+	membership *Membership
 }
 
 var _ api.Submitter = (*SubmitterService)(nil)
@@ -171,6 +173,12 @@ type SubmitterServiceParams struct {
 	// caller is told its transaction is invalid when it is not (#4307 -- 15,035
 	// of those in run 20260918T131713Z). Nil means the node never joined.
 	NodeState nodestate.Serving
+
+	// Membership is this node's standing in the partition's current
+	// committee. A node that is in no committee cannot get a submission into
+	// a block at all, so it does not take one (#4366; executor.md, Sync step
+	// 5). Nil means the caller applies no committee gate.
+	Membership *Membership
 }
 
 // NewSubmitterService creates a new SubmitterService.
@@ -179,20 +187,49 @@ func NewSubmitterService(params SubmitterServiceParams) *SubmitterService {
 	s.logger.L = params.Logger
 	s.service = params.Service
 	s.nodeState = params.NodeState
+	s.membership = params.Membership
 	return s
 }
 
-// serving refuses while this node is joining. NotReady, not an error about the
-// envelope: the submitter's client asks another node, which is exactly what
-// should happen, and a validation failure would instead tell the user their
-// transaction is bad.
+// serving refuses what this node cannot do, for either of two reasons.
+//
+// NotReady, not an error about the envelope: the submitter's client asks
+// another node, which is exactly what should happen, and a validation failure
+// would instead tell the user their transaction is bad.
+//
+// The two conditions compose, and the message says which (consensus.md,
+// invariant 10: a refusal says why). Committee first: it is the one that is
+// still true when the join finishes.
 func (s *SubmitterService) serving(call string) error {
-	if s.nodeState == nil || s.nodeState.CanServeCurrent() {
+	return refuseUnlessServing(s.service.config.Partition.ID, call, s.nodeState, s.membership)
+}
+
+// refuseUnlessServing is the refusal both write services make, so they cannot
+// drift apart: a validation is a promise about what a submission would do,
+// and a node that will not take the submission cannot make the promise
+// (executor.md, Sync step 5).
+func refuseUnlessServing(partition, call string, state nodestate.Serving, m *Membership) error {
+	if !m.InCommittee() {
+		mNotSubmitting.WithLabelValues(strings.ToLower(partition), call).Inc()
+		return errors.NotReady.WithFormat(
+			"this node is not in the current committee of %s, so %s does not take what it could never propose",
+			partition, call)
+	}
+	if state == nil || state.CanServeCurrent() {
 		return nil
 	}
-	mNotSubmitting.WithLabelValues(strings.ToLower(s.service.config.Partition.ID), call).Inc()
+	mNotSubmitting.WithLabelValues(strings.ToLower(partition), call).Inc()
 	return errors.NotReady.WithFormat(
-		"%s is joining and cannot validate against state it has not executed", s.service.config.Partition.ID)
+		"%s is joining and cannot validate against state it has not executed", partition)
+}
+
+// submitted records what this node did with a submission: accepted means it
+// entered this node's worker, rejected means Submit refused it. Read against
+// the certified-own counter, the difference is what this node took and never
+// got into a block (#4366, #4369).
+func (s *SubmitterService) submitted(outcome string) {
+	metrics.SubmissionsTotal.WithLabelValues(
+		strings.ToLower(s.service.config.Partition.ID), outcome).Inc()
 }
 
 // Type returns the service type.
@@ -238,6 +275,7 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		"partition", s.service.config.Partition.ID)
 
 	if err := s.serving("Submit"); err != nil {
+		s.submitted("rejected")
 		return nil, err
 	}
 
@@ -246,6 +284,7 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		_, err := envelope.Normalize()
 		if err != nil {
 			s.logger.Error("TRACE-SUBMIT: envelope normalization failed", "error", err)
+			s.submitted("rejected")
 			return nil, errors.BadRequest.WithFormat("verify: %w", err)
 		}
 	}
@@ -254,6 +293,7 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 	b, err := envelope.MarshalBinary()
 	if err != nil {
 		s.logger.Error("TRACE-SUBMIT: envelope marshaling failed", "error", err)
+		s.submitted("rejected")
 		return nil, errors.EncodingError.WithFormat("marshal: %w", err)
 	}
 
@@ -284,6 +324,9 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		submit = s.service.SubmitUserTransaction
 	}
 	if err := submit(b); err != nil {
+		// Every road out of here is a rejection: the envelope did not enter
+		// this node's worker.
+		s.submitted("rejected")
 		if stderrors.Is(err, worker.ErrStoreFull) || stderrors.Is(err, worker.ErrExecutionLagging) {
 			// Retry later: the answer every internal client already handles.
 			// The reason travels in the error (consensus spec, invariant 10).
@@ -315,6 +358,10 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		return nil, errors.InternalError.WithFormat("submit: %w", err)
 	}
 
+	// Accepted: it is in this node's worker. Whether it ever reaches a
+	// certified header is the other half of the measurement.
+	s.submitted("accepted")
+
 	s.logger.Debug("TRACE-SUBMIT: submission successful, creating result WITHOUT Status field (BUG!)")
 
 	// Return success - DAG-BFT doesn't have synchronous result like CometBFT
@@ -334,9 +381,10 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 
 // ValidatorService implements api.Validator for DAG-BFT.
 type ValidatorService struct {
-	logger    logging.OptionalLogger
-	service   *Service
-	nodeState nodestate.Serving
+	logger     logging.OptionalLogger
+	service    *Service
+	nodeState  nodestate.Serving
+	membership *Membership
 }
 
 var _ api.Validator = (*ValidatorService)(nil)
@@ -348,6 +396,10 @@ type ValidatorServiceParams struct {
 
 	// NodeState is this node's join state; see SubmitterServiceParams.
 	NodeState nodestate.Serving
+
+	// Membership is this node's standing in the partition's current
+	// committee; see SubmitterServiceParams.
+	Membership *Membership
 }
 
 // NewValidatorService creates a new ValidatorService.
@@ -356,6 +408,7 @@ func NewValidatorService(params ValidatorServiceParams) *ValidatorService {
 	s.logger.L = params.Logger
 	s.service = params.Service
 	s.nodeState = params.NodeState
+	s.membership = params.Membership
 	return s
 }
 
@@ -364,10 +417,8 @@ func (s *ValidatorService) Type() api.ServiceType { return api.ServiceTypeValida
 
 // Validate validates an envelope without submitting it.
 func (s *ValidatorService) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
-	if s.nodeState != nil && !s.nodeState.CanServeCurrent() {
-		mNotSubmitting.WithLabelValues(strings.ToLower(s.service.config.Partition.ID), "Validate").Inc()
-		return nil, errors.NotReady.WithFormat(
-			"%s is joining and cannot validate against state it has not executed", s.service.config.Partition.ID)
+	if err := refuseUnlessServing(s.service.config.Partition.ID, "Validate", s.nodeState, s.membership); err != nil {
+		return nil, err
 	}
 
 	// Marshal envelope
