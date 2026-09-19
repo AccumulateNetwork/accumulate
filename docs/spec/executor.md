@@ -466,30 +466,9 @@ the peers, which is the failure the join exists to prevent.
 
 The node then executes block `Q + 1` from the buffer as any node executes a
 block, and it is a validator or a follower from there. A follower differs from
-a validator in two things and not in how it gets there: what it does with the
-blocks it processes — it does not vote or propose — and what it takes from the
-network, which is nothing it cannot propose.
-
-**A node does not take what it cannot propose.** A submission's only road to a
-block is the receiving node's own batch and its own header (consensus.md, "What
-a batch is"); a header whose author is in no committee is dropped before any
-vote. So a node whose author key is not in the *current* committee of a
-partition — a follower, or a validator removed on-chain — does not advertise
-the submit service for that partition, does not offer it to its own API
-(dialling is local-first, so an unadvertised service it still offered locally
-would be a dead end for its own clients), and answers `NotReady` to `Submit`
-and to `Validate` for it: a validation is a promise about what a submission
-would do, and this node cannot make one. The client asks a validator, as it
-already does for any `NotReady`; forwarding on the node's behalf is the next
-phase's. This is a property of the key against the committee, not of the
-node's state: a `COMPLETE` follower refuses `Submit` for the partitions it
-follows and serves every read. Without it a follower is a sink for its own
-partition — every validator's router and dispatcher dials `submit:<partition>`
-by liveness alone, the follower accepts, the transaction is never executed
-anywhere, and a user transaction, unlike a cross-partition stream, has no
-healer (#4366; run `20260919T191634Z`: 3,929 heals and one stranded user
-transaction, every one on the follower's partition; reproduced in-process on
-#4366, 1,249 accepted, 0 committed).
+a validator in what it does with the blocks it processes — it does not vote or
+propose — not in how it gets there; what it does with a transaction it cannot
+propose is step 6's rule: it relays it, and never drops it.
 
 While all of this runs the node **listens**: it subscribes to consensus and
 takes every committed block from then on into a buffer, and into staging —
