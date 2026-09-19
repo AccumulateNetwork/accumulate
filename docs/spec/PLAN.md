@@ -168,16 +168,39 @@ and its anchor leg stays near its floor.
 ### E11 #4205 — a node joins from the running protocol, and a restart is a join
 
 Spec: executor.md "Sync". Decided by Paul 2026-09-18: a starting node does not
-catch up through consensus. It listens and collects into staging, takes
-staging from a running validator as of that validator's last committed block,
-pulls the state — the Directory's spine, then the BPT by pages and the
-accounts the buffered blocks name — verified against the anchored root, and
-executes from the first block after the root matches. It serves nothing it
-cannot answer until its history is backfilled. The bootstrap-v3 work
-(`origin/bootstrap-v3`, `origin/bootstrap-v3-merge-1.4.4`; epic #3985:
-`internal/core/bootstrap/{pull,enumerate,tracker,bptproof,nodestate,…}`,
+catch up through consensus. It validates the spine — the operators' key book
+and the anchors it signs — pulls the state that the verified anchor's root
+commits to, derives staging from that state, and executes from the block after
+the root matches. It serves nothing it cannot answer until its history is
+backfilled. The bootstrap-v3 work (`origin/bootstrap-v3`,
+`origin/bootstrap-v3-merge-1.4.4`; epic #3985:
+`internal/core/bootstrap/{pull,enumerate,tracker,bptproof,nodestate,anchorsrc,…}`,
 `BptPageQuery`) is the state half, built on the CometBFT line and never on
-this one; the staging half is new.
+this one.
+
+**The trust model changed after steps 1–5 landed (Paul, 2026-09-18), and the
+spec was rewritten for it.** Steps 1–5 below are the record of what was built
+and are left as they were written; two of their premises no longer hold.
+
+- **The spine is validated, not assumed.** It was pulled in `ModeFullSpine`
+  and settled with `Keep` on the rationale that there is nothing to verify it
+  against until it is there. That is false — a signature is verified against a
+  key, not against a root — and it is why the pull's trust terminated in one
+  unauthenticated peer (#4301). `anchorsrc`, which does exactly this
+  verification against the local key page, exists on bootstrap-v3 and was not
+  ported by #4293. Porting it, with the producer-routing rule and the
+  Directory's own root, is the next work.
+- **Staging is derived, not asked for.** Step 1's staging API answered a
+  question the joining node can answer for itself: the validated hashes come
+  from the anchors, which are state, and bodies are content-addressed and
+  fetchable from anybody. Whether a peer is ever asked at all turns on one
+  measurement — whether everything a validator holds unexecuted at an anchored
+  `Q` is provable under the root for `Q`. Until that is measured, step 1 stays
+  and is hardened rather than deleted.
+- **Comparison is against an anchored height, not a peer's live state.** The
+  meeting-point apparatus and its open hole (#4350) both come from comparing
+  accounts to a moving target. The prerequisite is serving account state at an
+  anchored height — the AIP-58 work on `origin/main`, absent on this line.
 
 1. **Staging as an API.** A validator serves its staging as of its last
    committed block, per partition: every stream's `Delivered`, sighted mark,
