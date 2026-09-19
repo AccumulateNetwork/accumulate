@@ -516,21 +516,54 @@ sequencer, not healing. It keeps up with blocks and says so (node state
 `BOOTING`, `ACTIVE`, `COMPLETE`; advertised, so nothing routes a request to a
 node that cannot answer it).
 
-**A joining node also refuses what it cannot answer for.** It does not take
-user traffic: validating a transaction against a store the pull has half filled
-fails on an account the node does not have yet, and tells the sender its
-transaction is bad when it is not — so `Submit` and `Validate` answer
-`NotReady` and the sender asks another node (#4307). And it does not answer the
-two reads another node's **pull** takes — a BPT page, and an account with a
-receipt — because its leaves and its root are the half-filled ones its own pull
-is building, and a second joining node would otherwise take its spine from the
-first (#4297). **In this phase a syncing node rejects every request** — not only
-these — and answers once it is fully synced (Paul, 2026-09-19): `BOOTING` and
-`ACTIVE` refuse with `NotReady`, `COMPLETE` serves — the services its committee
-membership gives it (step 5: a node in no committee of a partition never serves
-`Submit` or `Validate` for it, whatever its state). Tracking which nodes are
-not synced, and forwarding a request a node cannot handle to one that can, is
-the next phase's work, not this one's, and nothing here anticipates it.
+**A read needs local state; a relay needs none. That is the whole rule.**
+Everything a node is asked divides on it, and the two halves have opposite
+answers.
+
+**A read is refused unless the node can answer it from what it holds.** A
+joining node does not answer the two reads another node's **pull** takes — a
+BPT page, and an account with a receipt — because its leaves and its root are
+the half-filled ones its own pull is building, and a second joining node would
+otherwise take its spine from the first (#4297). Nor does it answer for
+missing data: not the sequencer, not healing. **In this phase a syncing node
+refuses every read** and answers once it is fully synced (Paul, 2026-09-19):
+`BOOTING` and `ACTIVE` refuse with `NotReady`, `COMPLETE` serves. Tracking
+which nodes are not synced, so a *reader* can be sent to one that can answer,
+is the next phase's work and nothing here anticipates it.
+
+**A transaction is relayed, never dropped, whether the node is following or
+syncing** (Paul, 2026-09-19: "Followers can relay txs. And should."). A node
+that cannot propose a transaction — because it holds no committee key for the
+partition, or because it has not caught up — hands it to a node that can, and
+that costs it nothing it does not have: **a relay reads no account, verifies
+no signature and needs no state**, which is exactly why the sync rule above
+does not reach it. The failure this replaces is not a node answering when it
+should not have; it is a node **accepting a transaction and then dropping it**,
+which is what gate 0 measured — 3,929 entries healed into one partition, and a
+user transaction stranded with no healer at all, because a synthetic has one
+and a user's has none (#4366, run `20260919T191634Z`).
+
+**It does not validate what it relays.** Validating against a store the pull
+has half filled fails on an account the node does not have yet and tells the
+sender its transaction is bad when it is not (#4307) — so a node that relays
+passes the submission on **unexamined** rather than judging it, and the node
+that will propose it is the node that validates it. A relay is therefore not a
+weaker `Submit`; it is a different operation, and a node that cannot propose
+must not answer as though it had.
+
+What a follower is owed by this, and what it owes: a follower is a full
+participant in carrying traffic and in no committee, so it relays every
+transaction it is given and proposes none. A node in no committee of a
+partition still never *proposes* for it, and still never authors or dispatches
+an anchor for it (#4367) — relaying a transaction and producing consensus
+output are different things, and the first is allowed precisely because it
+produces nothing.
+
+Open, and not settled here: what a relaying node does when the target refuses
+or is unreachable; whether it answers its caller on the relay's result or
+accepts and forwards; whether it relays only for the partitions it runs; and
+what "fully synced" is, given `COMPLETE` has no production caller today
+(#4368, which therefore blocks #4366).
 
 What a restart therefore never does is replay committed blocks it did not
 execute, or rebuild staging from a source's cache: the first executes with the
