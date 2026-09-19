@@ -29,7 +29,7 @@ R #4219 ─▶ S4 #4211, S5, S2 follow-up, S7, BlockchainDB#86   cost: first the
 E5 #4197, E4 #4198, E6, D1 #4199, D2, D3               correctness debt, parallel or after
 H3 #4192                                              when measurement says proofs must reach further back
 #4205 restart recovery                                before chaos returns to a soak
-Phase 1 (Paul, 2026-09-19): #4365 ─▶ #4301 ─▶ #4361 ─▶ #4362 ─▶ serve-last ─▶ #4363 ─▶ #4364 ─▶ the 12 h / 100 tps acceptance with followers added and removed   the one order; E11's second pass below is its text
+Phase 1 (Paul, 2026-09-19): #4365 (PASSED 2026-09-19, run 20260919T191634Z) ─▶ #4366 + #4367 ─▶ gate-0 rerun ─▶ #4301 ─▶ #4361 ─▶ #4362 ─▶ serve-last ─▶ #4363 ─▶ #4364 ─▶ the 12 h / 100 tps acceptance with followers added and removed   the one order; E11's second pass below is its text
 ```
 
 Each item is its own issue branch from the previous item's tip.
@@ -299,6 +299,39 @@ bootstrapping a follower."
    P2 never had a test), and every later step assumes it. A failure here is
    the phase's first finding and goes to a `debugger` before anything is
    built.
+
+   *Passed, 2026-09-19* (run `20260919T191634Z`, `b4533863f`, read by the
+   run-analyst on #4365): `acc-bvn3-fol1` executed all 447 BVN3 and 475
+   Directory blocks with byte-identical accounting to its peers, matched all
+   749 anchored roots, authored nothing, was never behind, answered 234 of 234
+   read probes; committees 4/4/4/12 unchanged. Not covered: five minutes only;
+   two rows `— not measured` (#4369); the load generator reached 24,003 of
+   30,000 sends. **The run was not clean**, and that reorders what follows.
+
+0b. **A follower must not be a traffic sink — #4366 and #4367, before
+   anything else.** Every one of the run's 3,929 heals (190 distinct holes)
+   had destination BVN3, the follower's partition; `held` peaked at 459 on
+   BVN2→BVN3 against ≤49 on every other stream; the first heal was 29 s
+   before load. Cause: submission target selection has no committee filter
+   (`dialer.go:139-248`, `dagbft.go:674-685`), so validators dial the
+   follower, a synthetic signed by a real validator passes validation there,
+   and the follower can never propose it; dispatch is local-first, proven by
+   the follower's own split (1,165 of its 1,997 anchors went to itself), so
+   BVN3 was the only partition that had to be dialled remotely and the only
+   one that lost entries. The load generator's stall — `grow: timed out
+   waiting for acc://lg-0a85adbd08bc679d.acme/book/2`, an ADI that routes to
+   BVN3 — was this bug, and **a stranded user transaction has no healer**.
+   #4366: a follower does not advertise a submission service and its
+   `Submit`/`Validate` answer `NotReady` — a new "must", so it goes through
+   the spec-change protocol before it is built. #4367: the follower's 1,997
+   anchors were 100 % refused (`msg_block_anchor.go:285`) and it never
+   requests a gap — the healing pull path is membership-gated
+   (`cadence.go:54-62`) and the anchor send path is not
+   (`conductor.go:187-301`). Both ahead of #4363 and well ahead of #4364:
+   the same mechanism runs 144× longer on the twelve-hour run. *Gate:* the
+   five-minute run again, with a counter for submissions accepted and never
+   proposed (or a successful `Submit` at Info on a follower), `heals 0 -> 0`,
+   0 refused anchors, and the follower verdict unchanged.
 
 Then bootstrapping — four pieces, three of them deletions in disguise, in
 this order because each one's gate needs the one before it:
