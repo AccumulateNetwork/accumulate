@@ -18,6 +18,7 @@ would report "no header of the follower's was ever rejected" for a network
 that never said a word on the subject.
 """
 import os
+import re
 import sys
 import unittest
 
@@ -145,10 +146,11 @@ class Roots(unittest.TestCase):
         self.assertEqual([], v["mismatches"])
         self.assertIsNone(v["firstMismatch"])
 
-    def test_the_source_partition_is_taken_from_the_destination(self):
-        """reading-a-run.md: never compare without the partition. A BVN's
-        anchors go only to the Directory and the Directory's go everywhere,
-        so a block number alone names two different blocks."""
+    def test_the_source_partition_is_taken_from_the_line(self):
+        """reading-a-run.md: never compare without the partition — and the
+        partition is READ, from the line's own `source` attribute (#4370),
+        never derived from its destination. A block number alone names two
+        different blocks, one per node of the container."""
         r = followerlog.read(IDENT + AGREE)
         self.assertEqual({("BVN3", 100), ("BVN3", 101), ("BVN3", 102),
                           ("Directory", 100), ("Directory", 101),
@@ -292,6 +294,129 @@ class TwoNodesInOneLogStream(unittest.TestCase):
         self.assertEqual((FOL, "Directory", 500), r.conflicts[0][:3])
 
 
+class TheRealRenderedLine(unittest.TestCase):
+    """The bytes a node actually emits, not a tidy reconstruction of them.
+
+    N1: every other fixture in this file writes the attributes in the order
+    the `slog` call lists them and leaves them uncoloured. The node does
+    neither. `ConsoleSlogWriter` sorts the attributes alphabetically — so
+    `source` comes LAST, after `seq`, however the call is written — and
+    colours each key, putting an escape before the key and another between
+    the `=` and the value. A parser proven against the tidy form is proven
+    against nothing a node produces.
+
+    The five lines below are the real bytes of `acc-bvn1-val1`'s block-500
+    anchors from `runs/20260917T212457Z/node-logs-live.txt`, copied
+    verbatim, with ` \x1b[36msource=\x1b[0m<id>` appended in the same
+    coloured style and the same last position #4370 puts it in (the
+    builder's own line: `… root=00000000 seq=12 source=BVN1`).
+
+    Four are the container's DN node — one per partition, `dn.acme`
+    included — and one is its BVN1 node. Before #4370 the last two shared a
+    key and one overwrote the other; here they must land apart.
+    """
+
+    REAL = [
+        "acc-bvn1-val1  | \x1b[90m2026-09-17T21:34:26Z\x1b[0m INFO Sending an anchor "
+        "\x1b[36mblock=\x1b[0m500 \x1b[36mbpt=\x1b[0m6fcdbe82 "
+        "\x1b[36mdestination=\x1b[0macc://bvn-BVN1.acme \x1b[36mmodule=\x1b[0mconductor "
+        "\x1b[36mroot=\x1b[0m4597dc3a \x1b[36mseq=\x1b[0m460 "
+        "\x1b[36msource=\x1b[0mDirectory",
+        "acc-bvn1-val1  | \x1b[90m2026-09-17T21:34:26Z\x1b[0m INFO Sending an anchor "
+        "\x1b[36mblock=\x1b[0m500 \x1b[36mbpt=\x1b[0m6fcdbe82 "
+        "\x1b[36mdestination=\x1b[0macc://bvn-BVN2.acme \x1b[36mmodule=\x1b[0mconductor "
+        "\x1b[36mroot=\x1b[0m4597dc3a \x1b[36mseq=\x1b[0m460 "
+        "\x1b[36msource=\x1b[0mDirectory",
+        "acc-bvn1-val1  | \x1b[90m2026-09-17T21:34:26Z\x1b[0m INFO Sending an anchor "
+        "\x1b[36mblock=\x1b[0m500 \x1b[36mbpt=\x1b[0m6fcdbe82 "
+        "\x1b[36mdestination=\x1b[0macc://bvn-BVN3.acme \x1b[36mmodule=\x1b[0mconductor "
+        "\x1b[36mroot=\x1b[0m4597dc3a \x1b[36mseq=\x1b[0m460 "
+        "\x1b[36msource=\x1b[0mDirectory",
+        "acc-bvn1-val1  | \x1b[90m2026-09-17T21:34:26Z\x1b[0m INFO Sending an anchor "
+        "\x1b[36mblock=\x1b[0m500 \x1b[36mbpt=\x1b[0m6fcdbe82 "
+        "\x1b[36mdestination=\x1b[0macc://dn.acme \x1b[36mmodule=\x1b[0mconductor "
+        "\x1b[36mroot=\x1b[0m4597dc3a \x1b[36mseq=\x1b[0m460 "
+        "\x1b[36msource=\x1b[0mDirectory",
+        "acc-bvn1-val1  | \x1b[90m2026-09-17T21:34:34Z\x1b[0m INFO Sending an anchor "
+        "\x1b[36mblock=\x1b[0m500 \x1b[36mbpt=\x1b[0md2ce8d05 "
+        "\x1b[36mdestination=\x1b[0macc://dn.acme \x1b[36mmodule=\x1b[0mconductor "
+        "\x1b[36mroot=\x1b[0m96c2b37b \x1b[36mseq=\x1b[0m451 "
+        "\x1b[36msource=\x1b[0mBVN1",
+    ]
+
+    IDENT = [
+        "acc-bvn1-val1  | \x1b[90m2026-09-17T21:20:00Z\x1b[0m INFO Starting consensus node "
+        "\x1b[36mnumWorkers=\x1b[0m1 \x1b[36mpartition=\x1b[0mBVN1 "
+        "\x1b[36mvalidatorKey=\x1b[0maaaa1111aaaa1111",
+        "acc-bvn1-val1  | \x1b[90m2026-09-17T21:20:00Z\x1b[0m INFO Starting consensus node "
+        "\x1b[36mnumWorkers=\x1b[0m1 \x1b[36mpartition=\x1b[0mDirectory "
+        "\x1b[36mvalidatorKey=\x1b[0maaaa1111aaaa1111",
+    ]
+
+    def test_the_coloured_line_parses_at_all(self):
+        got = list(followerlog.parse(self.REAL))
+        self.assertEqual(5, len(got), "every line parsed")
+        container, _, ev, f = got[0]
+        self.assertEqual("acc-bvn1-val1", container)
+        self.assertEqual("anchor", ev)
+        self.assertEqual("Directory", f["source"],
+                         "an escape sits between the = and the value")
+        self.assertEqual("500", f["block"])
+        self.assertEqual("acc://bvn-BVN1.acme", f["destination"])
+
+    def test_the_fixture_still_matches_how_the_node_renders(self):
+        """The pin on the pin. `ConsoleSlogWriter` sorts attributes
+        alphabetically, which is why `source` lands last however the slog
+        call is written — verified against the merged #4370 by running
+        `TestSendingAnAnchorRendersSource`, which logs:
+
+            … Sending an anchor block=500 bpt=00000000
+              destination=acc://dn.acme module=conductor root=00000000
+              seq=12 source=BVN1
+
+        If that order ever changes, this fails and the fixture above is
+        known to be stale rather than quietly no longer resembling a log.
+        """
+        keys = re.findall(r"(\w+)=", followerlog.ANSI.sub("", self.REAL[0])
+                          .split("Sending an anchor ", 1)[1])
+        self.assertEqual(["block", "bpt", "destination", "module", "root",
+                          "seq", "source"], keys)
+        self.assertEqual(sorted(keys), keys, "the writer sorts them")
+
+    def test_source_last_after_seq_is_read(self):
+        """It is the final attribute on the line, with no trailing space —
+        the position the console writer's alphabetical sort gives it."""
+        f = list(followerlog.parse([self.REAL[4]]))[0][3]
+        self.assertEqual("BVN1", f["source"])
+        self.assertEqual("451", f["seq"])
+
+    def test_the_two_nodes_of_one_container_land_apart(self):
+        r = followerlog.read(self.IDENT + self.REAL)
+        a = r.anchors["acc-bvn1-val1"]
+        self.assertEqual(("4597dc3a", "6fcdbe82"), a[("Directory", 500)])
+        self.assertEqual(("96c2b37b", "d2ce8d05"), a[("BVN1", 500)])
+        self.assertEqual(0, r.sourceless.get("acc-bvn1-val1", 0))
+        self.assertEqual([], r.conflicts,
+                         "the DN node's four copies are one reading")
+
+    def test_the_same_lines_from_two_containers_compare_clean(self):
+        peer = [ln.replace("acc-bvn1-val1", "acc-bvn1-val2") for ln in
+                self.IDENT + self.REAL]
+        r = followerlog.read(self.IDENT + self.REAL + peer)
+        v = followerlog.compare_roots(r, "acc-bvn1-val1", ["acc-bvn1-val2"])
+        self.assertTrue(v["measured"])
+        self.assertEqual(2, v["compared"], "one Directory block, one BVN1")
+        self.assertEqual([], v["mismatches"])
+        self.assertEqual(0, v["sourceless"])
+
+    def test_the_same_bytes_without_source_are_refused(self):
+        """The same five lines as the build emitted them BEFORE #4370."""
+        old = [ln.rsplit(" \x1b[36msource=", 1)[0] for ln in self.REAL]
+        r = followerlog.read(self.IDENT + old)
+        self.assertEqual({}, r.anchors.get("acc-bvn1-val1", {}))
+        self.assertEqual(5, r.sourceless["acc-bvn1-val1"])
+
+
 class TheSourceValue(unittest.TestCase):
     """#4370 logs `c.Partition.ID`, a bare id. A partition URL is accepted
     and reduced to the id as well, so this reader does not break if the
@@ -354,6 +479,22 @@ class WithoutTheSourceAttribute(unittest.TestCase):
         old = followerlog.compare_roots(followerlog.read(IDENT + self.OLD),
                                         FOL, VALS)
         self.assertNotIn("v3 API", old["why"])
+
+    def test_the_conflict_row_is_absent_too_not_zero(self):
+        """N2. Nothing could be attributed, so no contradiction could be
+        seen. Rendering 0 there says "this container never contradicted
+        itself", which nobody looked for (REPORTING-SPEC 1)."""
+        v = followerlog.verdict(followerlog.read(IDENT + self.OLD),
+                                FOL, VALS, None)
+        row = dict(followerlog.rows(v))[
+            "blocks where the follower contradicted itself (#)"]
+        self.assertEqual("— not measured", row)
+
+    def test_the_conflict_row_is_a_number_once_anything_was_attributed(self):
+        v = followerlog.verdict(followerlog.read(IDENT + AGREE), FOL, VALS, None)
+        row = dict(followerlog.rows(v))[
+            "blocks where the follower contradicted itself (#)"]
+        self.assertEqual("0", row, "measured, and zero, is a fact")
 
     def test_the_row_says_how_many_lines_had_no_source(self):
         v = followerlog.verdict(followerlog.read(IDENT + self.OLD),

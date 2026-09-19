@@ -451,6 +451,14 @@ BEHIND_BOUND = 2
 # the "max over the run" the manifest states, and it is a high-water mark on
 # a quantity that is not monotone, which is exactly the case where a running
 # maximum is the honest summary.
+#
+# It lives in THIS PROCESS, and soak.sh restarts soakmon if it dies. After a
+# restart the board's mark starts again from zero while follower.csv keeps
+# every mark written before it, so the manifest can read HIGHER than the
+# board (reviewer N4). That is the safe direction — the summary cannot
+# under-report — but the two are then not the same number, and a reader
+# comparing them should check soakmon.log for a restart before calling it a
+# defect.
 _FOLLOWER_WORST = {}
 
 

@@ -265,7 +265,7 @@ def read(lines):
 
 def compare_roots(report, follower, validators):
     """The follower's state root and BPT root against the validators', per
-    (partition, block).
+    (source partition, block) — the source read from the line (#4370).
 
     Only blocks BOTH sides anchored are compared. A block only the follower
     reached — it was a block ahead when the log was cut — is counted as
@@ -564,8 +564,11 @@ def rows(v):
          _n(r.get("uncompared"), r["measured"])),
         ("anchor lines carrying no source partition (#4370) (#)",
          _n(r.get("sourceless"))),
+        # Only meaningful where something was attributed: with no source on
+        # the lines nothing was filed, so no contradiction could be seen and
+        # 0 would claim a check nobody made (N2, REPORTING-SPEC 1).
         ("blocks where the follower contradicted itself (#)",
-         _n(len(r.get("conflicts") or []))),
+         _n(len(r.get("conflicts") or []), r["measured"])),
         ("certificates refused for a non-committee author (#)",
          _n(ct["nonCommitteeAuthor"])),
         ("...of those, authored by the follower (#)", _n(ct["byFollower"])),

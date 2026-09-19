@@ -750,10 +750,13 @@ done
 rmdir "$rd/storage-stats" 2>/dev/null || true
 # The follower's verdict (#4365), read out of the captured log rather than
 # polled live: node-logs-live.txt streams from the first block, so nothing is
-# lost, and comparing `Sending an anchor` per (partition, block) is the same
-# evidence a debugger uses for a divergence — cheaper than an API poll per
-# block at a one-second interval, and it re-runs on the saved run directory
-# afterwards without the network.
+# lost, and comparing `Sending an anchor` per (source, destination, block) —
+# the source read from the line, #4370 — is the same evidence a debugger uses
+# for a divergence. Cheaper than an API poll per block at a one-second
+# interval, and it re-runs on the saved run directory afterwards without the
+# network. On an image built before #4370 the lines carry no source, the two
+# nodes in a container cannot be told apart, and the root rows say
+# `— not measured` rather than comparing.
 if [ "$n_fol" -gt 0 ] && [ -x "$here/followerlog.py" ]; then
   "$here/followerlog.py" "$rd/node-logs-live.txt" \
     --follower "${FOL_LIST%%,*}" \
