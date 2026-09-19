@@ -9,8 +9,10 @@ package crosschain
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -77,17 +79,34 @@ func captureLog(t *testing.T) *[]slog.Record {
 	return records
 }
 
-// nullDispatcher accepts and drops, so the conductor's send path runs to the
-// end without a network.
-type nullDispatcher struct{}
+// countingDispatcher accepts and drops, so the conductor's send path runs to
+// the end without a network, and records every submission: what the node put
+// on the wire, which is the thing a membership gate must stop (#4367). The
+// log line says what the node meant to do; this says what it did.
+type countingDispatcher struct {
+	mu   sync.Mutex
+	sent []*url.URL
+}
 
-func (nullDispatcher) Submit(context.Context, *url.URL, *messaging.Envelope) error { return nil }
-func (nullDispatcher) Close()                                                      {}
+func (d *countingDispatcher) Submit(_ context.Context, u *url.URL, _ *messaging.Envelope) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.sent = append(d.sent, u)
+	return nil
+}
 
-func (nullDispatcher) Send(context.Context) <-chan error {
+func (d *countingDispatcher) Close() {}
+
+func (d *countingDispatcher) Send(context.Context) <-chan error {
 	ch := make(chan error)
 	close(ch)
 	return ch
+}
+
+func (d *countingDispatcher) submissions() []*url.URL {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([]*url.URL{}, d.sent...)
 }
 
 // anchorLogDB seeds the state one block of a partition leaves behind: a system
@@ -130,7 +149,14 @@ func anchorLogDB(t *testing.T, part *protocol.PartitionInfo, block uint64) *data
 
 // anchorLogGlobals is a two-partition network, so a Directory conductor
 // anchors to more than itself.
-func anchorLogGlobals() *network.GlobalValues {
+//
+// The node's own key is in the definition, and `active` says whether it is in
+// the two partitions' committees — the only difference between a validator
+// and a follower (executor.md, "Sync" step 5). A second key is always active,
+// so an inactive node is a node outside a committee that exists, not a node
+// in a network with no committee at all. Globals with no validators at all
+// would make every membership test in this package vacuous.
+func anchorLogGlobals(key ed25519.PublicKey, active bool) *network.GlobalValues {
 	g := new(network.GlobalValues)
 	g.ExecutorVersion = protocol.ExecutorVersionLatest
 	g.Network = &protocol.NetworkDefinition{
@@ -141,6 +167,11 @@ func anchorLogGlobals() *network.GlobalValues {
 			{ID: "BVN1", Type: protocol.PartitionTypeBlockValidator},
 		},
 	}
+	peer := ed25519.PrivateKey(acctesting.GenerateKey("anchor-log", "peer")).Public().(ed25519.PublicKey)
+	for _, part := range []string{protocol.Directory, "BVN1"} {
+		g.Network.AddValidator(peer, part, true)
+		g.Network.AddValidator(key, part, active)
+	}
 	return g
 }
 
@@ -150,23 +181,34 @@ func anchorLogGlobals() *network.GlobalValues {
 // partition it is beyond the Partition field a node sets.
 func runOneBlock(t *testing.T, part *protocol.PartitionInfo) {
 	t.Helper()
+	runOneBlockAs(t, part, true)
+}
+
+// runOneBlockAs is runOneBlock for a node whose key is, or is not, in the
+// partition's committee. It returns what the node dispatched.
+func runOneBlockAs(t *testing.T, part *protocol.PartitionInfo, active bool) *countingDispatcher {
+	t.Helper()
 	const block = 500
+	key := acctesting.GenerateKey(t.Name(), part.ID)
+	d := new(countingDispatcher)
 	c := &Conductor{
 		Partition:    part,
-		ValidatorKey: acctesting.GenerateKey(t.Name(), part.ID),
+		ValidatorKey: key,
 		Database:     anchorLogDB(t, part, block),
-		Dispatcher:   nullDispatcher{},
+		Dispatcher:   d,
 		RunTask:      func(f func()) { f() },
 	}
 
 	bus := events.NewBus(nil)
 	require.NoError(t, c.Start(bus))
-	require.NoError(t, bus.Publish(events.WillChangeGlobals{New: anchorLogGlobals()}))
+	globals := anchorLogGlobals(ed25519.PrivateKey(key).Public().(ed25519.PublicKey), active)
+	require.NoError(t, bus.Publish(events.WillChangeGlobals{New: globals}))
 	require.NoError(t, bus.Publish(execute.WillBeginBlock{BlockParams: execute.BlockParams{
 		Context: context.Background(),
 		Index:   block + 1,
 		Time:    time.Now(),
 	}}))
+	return d
 }
 
 // anchorLines picks the sends out of what was logged.

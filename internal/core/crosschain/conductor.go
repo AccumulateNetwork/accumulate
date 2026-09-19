@@ -269,6 +269,33 @@ func (c *Conductor) sendAnchorForLastBlock(e execute.WillBeginBlock, batch *data
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// A node that is not in this partition's committee does not sign or
+	// dispatch an anchor for it: an anchor is a proposal carried by a
+	// validator signature, and "a follower differs only in what it does with
+	// the blocks it processes -- it does not vote or propose" (executor.md,
+	// "Sync" step 5). Without this the follower on run 20260919T191634Z
+	// signed 1,997 anchors with a key every receiver refused, 100% of what it
+	// sent, and each refusal was an ERROR on some validator's log.
+	//
+	// It still says what root it computed, once per block. The comparison
+	// that decides whether a follower's state matches its peers' reads the
+	// send line (followerlog.py, keyed by source partition and block), so a
+	// gate that only stopped the send would take the instrument with it. This
+	// is neither signing nor dispatch, it is one line per block rather than
+	// one per destination, and it is the whole of what the follower verdict
+	// needs.
+	if !c.inCommittee() {
+		pa := anchor.GetPartitionAnchor()
+		slog.InfoContext(e.Context, "Anchor not sent", "module", "conductor",
+			"block", pa.MinorBlockIndex,
+			"source", c.Partition.ID,
+			"seq", sequenceNumber,
+			"root", logging.AsHex(pa.RootChainAnchor).Slice(0, 4),
+			"bpt", logging.AsHex(pa.StateTreeAnchor).Slice(0, 4),
+			"reason", "this node is not an active validator of this partition")
+		return nil
+	}
+
 	// Every copy carries this partition's Delivered on the destination's
 	// anchor stream to it: the latest of the destination's anchors executed
 	// here, which tells the destination what it may drop from its producer

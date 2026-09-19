@@ -59,6 +59,24 @@ def anchor(container, ts, block, source, dest, root, bpt):
             % (container, ts, block, source, dest, block, root, bpt))
 
 
+def not_sent(container, ts, block, source, root, bpt):
+    """The line a node in no committee writes instead (#4367): the root it
+    computed, once per block, and nothing dispatched.
+
+    The attribute order is the one the node's own handler produces, copied
+    from TestAnchorNotSentRenders (internal/core/crosschain/committee_test.go),
+    which renders it through the daemon's console writer:
+
+        2026-09-19T14:41:11-05:00 INFO Anchor not sent block=500
+        bpt=00000000 module=conductor reason="this node is not an active
+        validator of this partition" root=00000000 seq=12 source=BVN1
+    """
+    return ("%s  | %s INFO Anchor not sent block=%d bpt=%s module=conductor "
+            "reason=\"this node is not an active validator of this "
+            "partition\" root=%s seq=%d source=%s"
+            % (container, ts, block, bpt, root, block, source))
+
+
 def anchor_no_source(container, ts, block, dest, root, bpt):
     """The line as builds before #4370 write it: no source partition."""
     return ("%s  | %s INFO Sending an anchor module=conductor block=%d "
@@ -826,6 +844,91 @@ class Rendering(unittest.TestCase):
         text = followerlog.render(followerlog.verdict(
             followerlog.read([]), FOL, VALS, None))
         self.assertIn("— not measured", text)
+
+
+class AFollowerThatSendsNothingIsStillCompared(unittest.TestCase):
+    """Since #4367 a node in no committee does not dispatch an anchor, so the
+    line the root comparison used to read is not written on the follower.
+    It writes `Anchor not sent` instead, once per block, and the comparison
+    has to be exactly as strong as it was."""
+
+    def lines(self, follower_root="r00"):
+        out = list(IDENT)
+        for i, blk in enumerate((100, 101, 102)):
+            ts = "2026-09-19T18:0%d:00Z" % i
+            # The follower states; the validators send.
+            out.append(not_sent(FOL, ts, blk, "BVN3", follower_root, "b%02d" % blk))
+            out.append(not_sent(FOL, ts, blk, "Directory", follower_root, "b%02d" % blk))
+            for v in VALS:
+                out += bvn_node(v, ts, blk, "r00", "b%02d" % blk)
+                out += dn_node(v, ts, blk, "r00", "b%02d" % blk)
+        return out
+
+    def test_the_roots_are_still_compared(self):
+        v = followerlog.compare_roots(followerlog.read(self.lines()), FOL, VALS)
+        self.assertTrue(v["measured"])
+        self.assertEqual(6, v["compared"], "3 BVN3 blocks and 3 Directory blocks")
+        self.assertEqual([], v["mismatches"])
+
+    def test_a_divergence_is_still_caught(self):
+        v = followerlog.compare_roots(followerlog.read(self.lines("DEAD")),
+                                      FOL, VALS)
+        self.assertEqual(6, len(v["mismatches"]))
+        self.assertIn("DEAD", str(v["firstMismatch"]))
+
+    def test_what_it_dispatched_is_counted_apart(self):
+        v = followerlog.compare_roots(followerlog.read(self.lines()), FOL, VALS)
+        self.assertEqual(0, v["dispatched"], "a follower must dispatch none")
+        self.assertEqual(6, v["stated"])
+        row = dict(followerlog.rows(dict(
+            followerlog.verdict(followerlog.read(self.lines()), FOL, VALS))))
+        self.assertEqual(
+            "0", row["anchors the follower dispatched (#4367: must be 0) (#)"])
+
+    def test_no_anchor_line_of_either_kind_is_not_zero_dispatched(self):
+        """The reader saw no anchor line from the follower at all — its log
+        was cut before its first block, or the name in run.json does not
+        match the container. `0 dispatched` there is a clean bill for a
+        follower nobody read; the row has to say so, as the compared-blocks
+        row already does (reading-a-run.md: 0 from a read counter is not a
+        result)."""
+        lines = [ln for ln in self.lines() if "Anchor not sent" not in ln]
+        v = followerlog.compare_roots(followerlog.read(lines), FOL, VALS)
+        self.assertEqual(0, v["anchorLines"])
+        row = dict(followerlog.rows(
+            followerlog.verdict(followerlog.read(lines), FOL, VALS)))
+        for name in ("anchors the follower dispatched (#4367: must be 0) (#)",
+                     "blocks the follower stated a root for without sending (#)"):
+            self.assertTrue(row[name].startswith(followerlog.ABSENT),
+                            "%s read %r" % (name, row[name]))
+            self.assertIn("no anchor line", row[name])
+
+    def test_a_follower_that_still_dispatches_is_visible(self):
+        """The regression this guards: the gate removed and the follower
+        sending again. The row must not read 0."""
+        lines = self.lines() + bvn_node(FOL, "2026-09-19T18:03:00Z", 103,
+                                        "r00", "b103")
+        v = followerlog.compare_roots(followerlog.read(lines), FOL, VALS)
+        self.assertEqual(1, v["dispatched"])
+
+    def test_the_line_the_node_really_writes(self):
+        """The exact line TestAnchorNotSentRenders logged, through the
+        daemon's own console writer, with a container prefix in front of it
+        as docker compose writes one. A reader written against a made-up
+        shape is a reader written against nothing."""
+        real = ("acc-bvn3-fol1  | 2026-09-19T14:41:11-05:00 INFO Anchor not "
+                "sent block=500 bpt=00000000 module=conductor reason=\"this "
+                "node is not an active validator of this partition\" "
+                "root=00000000 seq=12 source=BVN1")
+        got = list(followerlog.parse([real]))
+        self.assertEqual(1, len(got), "the reader did not recognise the line")
+        container, _ts, ev, f = got[0]
+        self.assertEqual("acc-bvn3-fol1", container)
+        self.assertEqual("anchor-not-sent", ev)
+        self.assertEqual("BVN1", f["source"])
+        self.assertEqual("500", f["block"])
+        self.assertEqual("00000000", f["root"])
+        self.assertEqual("00000000", f["bpt"])
 
 
 if __name__ == "__main__":
