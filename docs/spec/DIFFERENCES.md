@@ -740,10 +740,12 @@ seventh nobody had named.
 - **A joining node was a black hole for user traffic (#4307)** and served the
   two reads another node's pull takes (#4297). `Submit`, `Validate`,
   `BptPageQuery` and an account read carrying a receipt answer `NotReady` while
-  the node is joining; plain reads stay open. Since 2026-09-19 the spec also
-  requires `NotReady` from `Submit` and `Validate` while the node's key is in
-  no committee of the partition, whatever its state (step 5; #4366) — not yet
-  built. The node state reaches the
+  the node is joining; plain reads stay open. Since 2026-09-19 the spec draws
+  the line differently for a *transaction*: a node that cannot propose it —
+  following or syncing — relays it unexamined to a node that can, and never
+  drops it (step 6; #4366) — not yet built; for a transaction the relay
+  replaces `Submit`'s `NotReady` while joining, while every *read* keeps it.
+  The node state reaches the
   querier, which is configured apart from consensus, through IOC
   (`dagbftProvidesNodeState` / `querierWantsNodeState`), not a registry keyed by
   partition — a process runs several nodes of one partition.
