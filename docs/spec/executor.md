@@ -376,6 +376,47 @@ nodes take the same path, in this order:
    its open mark set — the entries since its last mark point — because an
    append rebuilds the chain's tail from them, and a node that cannot append
    to its chains cannot execute block `Q + 1`.
+
+   **Syncing and bootstrapping are one walk at two depths.** The spine's
+   chains are taken entry by entry, and the node fills them back from the
+   account's head until it **meets data it already has**. A bootstrapping node
+   never meets any and collects the whole chain; a restarted node meets its
+   own at once and collects nothing. Same walk, different stopping point —
+   which is why a defect at the meeting point is invisible to every bootstrap
+   test and fatal to every restart.
+
+   Two things can be true of a chain the node already holds, and they are
+   **not the same thing**:
+
+   - The local chain is **ahead** of the peer's: the peer serves `n` entries
+     and the node holds those same `n` and more. That is the meeting point
+     reached early. It is not an error and it is not a reason to shorten the
+     chain to the peer's height — everything this peer can give for this
+     chain, the node has. Nothing is fetched and nothing is appended.
+   - The local chain **disagrees** with the peer's at a position they both
+     hold. That is two nodes holding different history, and it is refused
+     whichever of them is longer.
+
+   Which of the two it is, is decided **at the peer's height**: the local
+   state after the peer's `n` entries against the head the peer served. Below
+   that height they must agree; above it the peer has no opinion. Agreement
+   must be **shown**, not assumed: a node that cannot compute its own state at
+   the peer's height — a chain it holds only from a mark point on — refuses,
+   because being ahead is only safe when the prefix can be checked. What this
+   cannot decide is *why* the node is ahead, whether it executed further
+   before it stopped or an earlier pull wrote a peer's entries into its chain:
+   both leave a chain that agrees with this peer everywhere this peer can
+   speak, and nothing in a chain records which put an entry there.
+
+   **The meeting point is the account's, not one chain's.** A node at or
+   beyond this peer on every chain of the account, and strictly beyond on at
+   least one, is past the peer for the account: it keeps its own body too.
+   Taking the peer's body there would rewind the account to the peer's block
+   while its chains stay at the node's — a body and chains from two different
+   heights, which is a leaf neither side has, and for `<partition>/ledger` it
+   is the node's own executed height being replaced by a peer's (#4344). Where
+   the chains do not agree on which is later — beyond on one and behind on
+   another — the node is not past the peer, and the body is taken.
 4. **Converge, then execute.** When the local BPT root equals the
    `StateTreeAnchor` of an anchored block `Q` at or above `P`, staging is
    brought to `Q`: everything collected through `Q` held, everything at or
