@@ -270,10 +270,13 @@ and are left as they were written; two of their premises no longer hold.
    Runnability was made a question about the entry and the state rather than
    about when the entry was held, or a joining node would hold collected what
    its peers hold runnable and its stream would stop where theirs moved.
-5. **Serve last.** Node state `BOOTING → ACTIVE → COMPLETE`, advertised; the
-   sequencer and the historical API refuse until `COMPLETE`; the cache fills
-   by backfill. Test: a request for missing data routed to a `BOOTING` node
-   is refused and answered by a `COMPLETE` one.
+5. **Serve last.** *As first written:* node state `BOOTING → ACTIVE →
+   COMPLETE`, advertised; the sequencer and the historical API refuse until
+   `COMPLETE`; the cache fills by backfill. Test: a request for missing data
+   routed to a `BOOTING` node is refused and answered by a `COMPLETE` one.
+   *Superseded 2026-09-19 (#4368): there is no backfill on this line;
+   `COMPLETE` and `WAITING` are retired; a node serves once its root matches
+   a verified anchored root (`ACTIVE`) — executor.md step 6.*
 
    *Landed (#4295) with the departures in DIFFERENCES E11.* Every private
    call the sequencer serves, and the staging snapshot, refuse while a node is
@@ -370,7 +373,8 @@ this order because each one's gate needs the one before it:
    instead of executing; then `30m-100tps-chaos.conf` with every restarted
    validator rejoining and Directory 12 of 12.
 4. **Serve last stays** — #4295's `NotReady` on `Submit`/`Validate` and on the
-   two pull reads (#4297, #4307), `BOOTING → ACTIVE → COMPLETE` advertised.
+   two pull reads (#4297, #4307), `BOOTING → ACTIVE` advertised (`COMPLETE`
+   retired, #4368).
    *#4368 resolved through the protocol, 2026-09-19:* the builder's
    statement (\`536155d9d\`, a committed fact-pin through production wiring)
    showed `COMPLETE` unreachable and vacuous; the spec now says fully synced
