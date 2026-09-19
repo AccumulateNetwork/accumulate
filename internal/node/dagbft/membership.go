@@ -70,32 +70,24 @@ func (m *Membership) SubscribeGlobals(bus *events.Bus) {
 	})
 }
 
-// InCommittee reports whether this node's key is active on this partition in
-// the current network definition.
+// InCommittee reports whether this node may take a submission for this
+// partition.
 //
-// An UNKNOWN committee is not a refusal. If no globals have arrived, or the
-// network definition names no validators at all, the node answers as it did
-// before this predicate existed: refusing on a startup race would take every
-// validator of a starting network off the air, and the refusal is meant to be
-// the positive fact that a known committee does not contain this key.
+// The answer comes from the one place that reads a committee,
+// GlobalValues.MembershipOf, which gives three values; this is the call site
+// that decides what UNKNOWN means here. UNKNOWN IS NOT A REFUSAL. If no
+// globals have arrived yet — the daemon waits five seconds and then carries
+// on with an empty definition (cmd/accumulated/run/dagbft.go:383-390) — the
+// node answers as it did before this predicate existed. Refusing on that
+// race would take every validator of a starting network off the air, and the
+// refusal is meant to be the positive fact that a KNOWN committee does not
+// contain this key. The conductor decides the opposite for the same answer,
+// and for the opposite reason: it must not sign an anchor it cannot justify
+// (internal/core/crosschain/cadence.go). That is why the shared answer is
+// three-valued and not a boolean (#4366, #4367).
 func (m *Membership) InCommittee() bool {
 	if m == nil {
 		return true
 	}
-	g := m.globals.Load()
-	if g == nil || g.Network == nil || len(g.Network.Validators) == 0 {
-		return true
-	}
-	// A walk over the validators, not NetworkDefinition.ValidatorByKey: that
-	// is a binary search over PublicKeyHash, which answers "not in the
-	// network" for a definition that is unsorted or whose hashes are unset,
-	// and here that answer means refuse everything. Twelve validators is a
-	// walk, and it reads the field the daemon itself reads to build the
-	// committee (cmd/accumulated/run/dagbft.go:411-421).
-	for _, v := range g.Network.Validators {
-		if bytes.Equal(v.PublicKey, m.key) {
-			return v.IsActiveOn(m.partition)
-		}
-	}
-	return false
+	return m.globals.Load().MembershipOf(m.key, m.partition) != network.CommitteeOutsider
 }
