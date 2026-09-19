@@ -259,6 +259,9 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	// and abandons the goroutine: the node then collects forever, with no
 	// retry, until an operator restarts it. The reads on either side of these
 	// were deliberately made to log and continue; these two were missed.
+	// The sets this node trusts, before anything is judged against them.
+	s.refreshAuthority()
+
 	err := s.anchors.Read(ctx)
 	if err != nil {
 		s.log.Info("This partition's anchors could not be read this round",
@@ -515,22 +518,42 @@ func (s *PulledState) spineSettled(got, asked, refused int) {
 		return
 	}
 	s.spine = true
+	s.refreshAuthority()
+	s.log.Info("Pulled the spine, verified against an anchored root",
+		"partition", s.partition, "accounts", got)
+}
 
+// TrustedVersion is the network definition version this join verifies
+// anchors against. It moves only when refreshAuthority takes a definition
+// out of verified state.
+func (s *PulledState) TrustedVersion() uint64 { return s.authority.Version() }
+
+// refreshAuthority takes the validator sets out of this node's store.
+//
+// **Everything in that store arrived verified**, which is what makes this an
+// induction step and not a peer's word: every account the pull writes has a
+// receipt that is valid, that ends at a root a quorum of this partition's
+// validators signed, and that passes through the leaf the pulled body hashes
+// to (pull.Verify). <partition>/network and /globals are spine accounts so
+// they arrive early, but the guarantee is the pull's and not the spine's.
+//
+// It runs every round rather than once, because a network can change while a
+// node is joining and a join that read the sets once would be stranded by
+// the next change exactly as it was by the last (#4301, review finding 1).
+func (s *PulledState) refreshAuthority() {
 	moved, err := s.authority.UpdateFrom(s.db, s.partition)
 	switch {
 	case err != nil:
-		s.log.Info("The verified spine's network definition could not be read",
+		s.log.Debug("The network definition could not be read from this node's store",
 			"partition", s.partition, "error", err)
 	case moved:
-		// The window this source already read was measured against the old
+		// The window the source already read was measured against the old
 		// set, so anything it refused on the way is gone unless it reads it
 		// again (review finding 4).
 		s.anchors.Rewind()
-		s.log.Info("The validator set moved with the verified spine",
+		s.log.Info("The validator set moved, taken from verified state",
 			"partition", s.partition, "version", s.authority.Version())
 	}
-	s.log.Info("Pulled the spine, verified against an anchored root",
-		"partition", s.partition, "accounts", got)
 }
 
 // settleBatch settles what it can of one held batch and reports whether the

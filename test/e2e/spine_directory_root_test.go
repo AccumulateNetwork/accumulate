@@ -432,15 +432,17 @@ func TestAJoinCrossesAChangeToTheValidatorSet(t *testing.T) {
 	after := versionOf(t, sim.S.Database(Directory), DnUrl())
 	require.Greater(t, after, before, "the network definition did not change; this test proves nothing")
 
-	_, matched := joinTheDirectoryFrom(t, sim, namedPeers(t, sim), local, 80)
+	state, matched := joinTheDirectoryFrom(t, sim, namedPeers(t, sim), local, 80)
 	require.NotZero(t, matched,
 		"a node holding the definition from before a governance write never joined again: "+
 			"nothing on this line carries a change in an anchor, so a verifier that picks the set "+
 			"by the version a signature declares refuses every anchor forever (#4301)")
 
 	require.Equal(t, after, versionOf(t, local, DnUrl()),
-		"the node matched but never took the new definition: it crossed on overlap alone "+
-			"and the next change would strand it")
+		"the node matched but its store never took the new definition")
+	require.Equal(t, after, state.TrustedVersion(),
+		"the node matched but is still verifying against the set it started with: "+
+			"it crossed on overlap alone, and the next change would strand it")
 	t.Logf("a node holding definition version %d joined a network at version %d, matched at block %d",
 		before, after, matched)
 }
