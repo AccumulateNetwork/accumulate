@@ -99,9 +99,11 @@ type Options struct {
 	// an account at. When it is set, Account refuses state that does not hash
 	// into that root.
 	//
-	// Nil pulls without verifying. That is for the Directory spine — the
-	// accounts the verifier itself reads from, which cannot be verified before
-	// they exist — and for tests.
+	// Nil pulls without verifying, which is for tests only. The spine used
+	// to be pulled this way, on the rationale that it is what the verifier
+	// reads from; that rationale was false — a signature is verified against
+	// a key the node already holds, not against a root — and it is what
+	// #4301 closed.
 	Verify Verifier
 
 	// Partition is the partition whose blocks the account's state belongs to.
