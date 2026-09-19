@@ -324,8 +324,18 @@ bootstrapping a follower."
    waiting for acc://lg-0a85adbd08bc679d.acme/book/2`, an ADI that routes to
    BVN3 — was this bug, and **a stranded user transaction has no healer**.
    #4366: a follower does not advertise a submission service and its
-   `Submit`/`Validate` answer `NotReady` — a new "must", so it goes through
-   the spec-change protocol before it is built. #4367: the follower's 1,997
+   `Submit`/`Validate` answer `NotReady` — a new "must", taken through the
+   spec-change protocol on #4366 (run-analyst and debugger, reviewer,
+   issue-manager, lead, historian and reviewer again) and now executor.md
+   Sync step 5, "A node does not take what it cannot propose": a node whose
+   key is not in a partition's current committee does not advertise, offer or
+   answer `Submit`/`Validate` for it; step 6's `COMPLETE` serves the services
+   its membership gives it. Its build: the advertise gate takes the service
+   type (submit/validate by committee and state, the rest by state) at the
+   one choke point #4336 names; `NotReady` from `Submit`/`Validate`; the
+   counter `accumulate_dagbft_certified_own_transactions_total{partition}`
+   (#4364's contract) so "accepted, never certified" is a row and not an
+   inference. #4367: the follower's 1,997
    anchors were 100 % refused (`msg_block_anchor.go:285`) and it never
    requests a gap — the healing pull path is membership-gated
    (`cadence.go:54-62`) and the anchor send path is not
@@ -380,7 +390,9 @@ this order because each one's gate needs the one before it:
    serves from `ACTIVE`, and `PromoteToComplete` has no production caller on
    a line with no backfill; the serve-last builder confirms from the code
    which of the two the spec means and it enters the protocol as their
-   statement. #4295's body is restated to the every-request rule or
+   statement. That test gains one case after #4366: a from-genesis
+   non-committee node answers reads and refuses `Submit`/`Validate` — the
+   two conditions (state, membership) compose. #4295's body is restated to the every-request rule or
    superseded by #4368 (issue-manager).
    The two small defects that survive the deletions, #4355 (a successful join
    logged as an error) and #4356 (the ledger walk dead after 128 blocks),
