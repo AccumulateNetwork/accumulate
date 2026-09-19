@@ -85,7 +85,7 @@ This is the contract the soak monitor is written against:
 | `dispatcher_drops_total` | counter | destination, reason={deadline,queue-full} | envelopes dropped undelivered |
 | `bcdb_staged_commits`, `bcdb_oldest_view_age_seconds` | gauge | database | store isolation cost, as of the last commit or release |
 | `dagbft_execution_lag_blocks` | gauge | partition | committed groups the executor has not produced a block from |
-| `dagbft_submissions_total` | counter | partition, outcome={accepted,rejected} | `accepted` = `Submit` returned success **to the caller** — the node took responsibility, whether the envelope entered its own worker or was relayed |
+| `dagbft_submissions_total` | counter | partition, outcome={accepted,rejected} | `accepted` = **the node took responsibility** — the submission entered this node's worker or this node's relay. `rejected` = refused without relaying |
 | `dagbft_certified_own_transactions_total` | counter | partition | transactions from this node's OWN batches that reached a CERTIFIED header of this node, each counted at most once |
 | `dagbft_relayed_total` | counter | partition, outcome={taken,refused,not-ready,unreachable} | submissions this node handed to a node that can propose them, counted once per submission at its **final** answer |
 
@@ -104,12 +104,30 @@ On a validator it sits at the in-flight window — the rounds not yet certified.
 On a **working** relaying node it is ~0, because the hand-off discharges the
 duty. On one that strands it is everything the network dialled to it and lost.
 
-**`accepted` MUST mean "`Submit` returned success to the caller"**, not "the
-envelope entered this node's worker batch". Under a synchronous relay the
-envelope never enters it, so the narrower reading exports `accepted = 0` beside
-`relayed = n` and raises the `relayed > accepted` alarm on a node working
-perfectly — and it silently answers an open question (synchronous, or
-accept-and-forward) that is Paul's.
+**`accepted` MUST mean "the node took responsibility"** — the submission
+entered this node's worker, or this node's relay — and `rejected` MUST mean the
+node refused it **without relaying**: a malformed envelope, the worker's own
+refusal, or a node that cannot propose and has no relay. A submission that
+enters the relay is `accepted` however the relay ends; where it ends is
+`relayed{outcome}`. It is the node's ledger of what it owes, settled when the
+submission is taken.
+
+Two narrower readings are both wrong, and each was tried:
+
+- *"the envelope entered this node's worker batch"* — under a synchronous relay
+  it never does, so this exports `accepted = 0` beside `relayed = n` and raises
+  the `relayed > accepted` alarm on a node working perfectly.
+- *"`Submit` returned success to the caller"* — a relay ending `refused`,
+  `not-ready` or `unreachable` returned no success, so one unreachable relay
+  anywhere makes `sum(relayed) > accepted` and fires the **instrument-fault**
+  alarm on a correct run; and a node whose relays never land reads `accepted 0,
+  stranded 0`, so **a node dropping everything looks perfect**. The two rules
+  beside it in this section — `relayed <= accepted`, and a relay that gives up
+  lands in the stranded figure — require the opposite (#4366 note_3869869239,
+  decided at note_3869919047).
+
+Whether the caller is answered on the relay's result or accepts-and-forwards is
+a separate decision and does not move this counter.
 
 **The rule is read against the LAST sample, and stated with its trend.** In
 flight and stranded are the same number at any one sample: a relay not yet
@@ -176,12 +194,17 @@ exporter's hook is the node's own certificate and not its own header.
 Each transaction MUST be counted at most once, at the first certified header
 carrying its batch: a header that never certifies is requeued and its batches
 re-proposed, so a per-header count double-counts and drives the difference
-negative. Two impossible states (clause 1a) MUST be surfaced as instrument
+negative. Three impossible states (clause 1a) MUST be surfaced as instrument
 alarms and never floored silently: `certified + relayed{taken} > accepted`
 (a per-header certified count, a per-attempt relay count, or a node promoted
 mid-run that kept its own copy of what it relayed — a real event, not a broken
-counter), and `sum(relayed) > accepted`, where the sum includes outcomes the
-reader does not know. Until the families exist the harness renders
+counter); `sum(relayed) > accepted`, where the sum includes outcomes the
+reader does not know; and **any relay at all beside no `accepted` series**,
+since a relayed submission is `accepted` by definition — the first two are
+read against a reported `accepted`, so without that check a build exporting
+`relayed_total` and no `submissions_total{outcome="accepted"}` slips past
+both, the stranded count floors to 0, and a node relaying everything or
+losing everything reads clean. Until the families exist the harness renders
 `— not measured` on the board, in `submissions.csv` (a header and no rows, and
 an empty field in a row that does exist) and in the manifest — never 0, because
 0 asserts that nothing stranded, which is the one thing run `20260919T191634Z`
