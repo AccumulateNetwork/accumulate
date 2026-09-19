@@ -103,3 +103,33 @@ bvns:
         basePort: 26656
         dnnType: "validator"
         bvnnType: "validator"
+      # The follower (#4365). Same wiring as every node above — the same
+      # image, the same CoreValidatorConfiguration, its own generated key —
+      # and `follower` for both engines, which is the ONE difference:
+      # BuildGenesisDocs enters the key in the NetworkDefinition as INACTIVE
+      # (internal/node/daemon/init.go:213-214,
+      # `AddValidator(pubKey, part, node.DnnType == config.Validator)`), and
+      # the DAG-BFT committee is built from active validators only
+      # (cmd/accumulated/run/dagbft.go:415, `IsActiveOn`). So it is in no
+      # committee: it executes every committed block and votes on and
+      # proposes nothing.
+      #
+      # Declared LAST, deliberately. Host ports are allocated in the order
+      # nodes appear in this file (topology.BASE_HOST_PORT + index), so a
+      # follower anywhere else moves a validator's port and silently
+      # repoints the load generator and the monitor. Last, it takes 26692
+      # and nothing above it moves. topology.problems() refuses the other
+      # arrangement.
+      #
+      # Its key IS in the definition, inactive — not absent from it. Absent
+      # is not reachable from these files: `init network` writes one
+      # directory, one key and one genesis per node listed here, so a key
+      # that is in no definition is a node that has no config. That is a Go
+      # change and it is the lead's (#4365 brief, item 2). What runs is the
+      # inactive form, and the manifest says so.
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-fol1"
+        advertizeAddress: "acc-bvn3-fol1"
+        basePort: 26656
+        dnnType: "follower"
+        bvnnType: "follower"

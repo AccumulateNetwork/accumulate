@@ -379,7 +379,14 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 PARTITIONS = topology.partitions()
 SCOPE = topology.scopes()
 PROBE_PORTS = topology.probe_ports()
-NODE_PORTS = topology.node_ports()  # every node: a ledger is read from all of them (REPORTING-SPEC 1b)
+# The VALIDATORS. topology.node_ports() excludes followers deliberately
+# (#4365): a ledger is read from all of them and the max kept
+# (REPORTING-SPEC 1b), and that max is what a follower's lag is measured
+# against — a max taken over a set containing the follower makes `behind`
+# zero by construction. This said "every node" while the network had only
+# validators in it; it no longer does.
+NODE_PORTS = topology.node_ports()
+FOLLOWERS = topology.followers()   # [] on a topology with no follower
 
 
 def _plabel(u):
@@ -413,6 +420,146 @@ def collect_heights():
             best = v if best is None else max(best, v)
         heights[p] = best
     return heights
+
+
+# --- the follower (#4365) ----------------------------------------------------
+#
+# A follower is a node with a validator's wiring and a key in no committee.
+# It executes every committed block and votes on and proposes nothing, so the
+# only thing that says it is keeping up is its own ledger index against the
+# validators'.
+#
+# "Within a block or two" (the issue's words) is a number here, because a
+# board cannot colour a phrase. TWO blocks, and the reason is the reading and
+# not the protocol: the follower's index and the validators' max are two
+# separate HTTP reads taken a moment apart, so at a one-second block interval
+# one block of the difference is the sampling; the executor being one block
+# behind the block it is executing at the instant of the read is the second.
+# Anything past that is the follower actually lagging. The first minute is
+# excluded by the reader, not here: nodes finish starting within seconds of
+# each other and the genesis funding burst is not the steady state.
+BEHIND_BOUND = 2
+
+# (container, partition) -> (worst behind seen, when). Never cleared: it is
+# the "max over the run" the manifest states, and it is a high-water mark on
+# a quantity that is not monotone, which is exactly the case where a running
+# maximum is the honest summary.
+_FOLLOWER_WORST = {}
+
+
+def judge_behind(follower, network):
+    """One partition's follower reading against the validators' max.
+
+    Absent is not zero and a negative lag is not a lag (REPORTING-SPEC 1,
+    1a). A follower reading HIGHER than the validators' max is skew — the
+    two readings are not simultaneous — and is reported as `ahead`, the same
+    way judge_gap reports a flow cell's.
+    """
+    if network is None:
+        return {"measured": False, "behind": None, "ahead": None,
+                "follower": follower, "network": None, "over": False,
+                "why": "the validators' height was unreadable"}
+    if follower is None:
+        return {"measured": False, "behind": None, "ahead": None,
+                "follower": None, "network": network, "over": False,
+                "why": "the follower did not answer"}
+    d = network - follower
+    return {"measured": True, "behind": max(0, d), "ahead": max(0, -d),
+            "follower": follower, "network": network,
+            "over": d > BEHIND_BOUND, "why": None}
+
+
+def _read_ledger_index(port, partition):
+    """One node's index for one partition's ledger, or None if it did not
+    answer. Separate from collect_heights because that one takes a max over
+    several nodes and this one must be one named node's own reading."""
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "query",
+                       "params": {"scope": "acc://%s.acme/ledger" % SCOPE[partition]}})
+    out = sh(["curl", "-s", "-m", "4", "-X", "POST",
+              "http://localhost:%d/v3" % port,
+              "-H", "content-type: application/json", "-d", body], timeout=6)
+    try:
+        return int(json.loads(out)["result"]["account"]["index"])
+    except Exception:
+        return None
+
+
+def collect_follower(heights, now=None):
+    """Each follower's height per partition it serves, against the validators'.
+
+    `heights` is what collect_heights returned — the max over the validators.
+    A follower is asked only about the partitions it runs (its own BVN and
+    the Directory); asking it about another BVN would route the query away
+    and measure a validator through it.
+    """
+    now = time.time() if now is None else now
+    if not FOLLOWERS:
+        return {"measured": False, "nodes": {}, "bound": BEHIND_BOUND,
+                "why": "no follower in this topology"}
+    out = {}
+    for f in FOLLOWERS:
+        parts, worst, worst_run, worst_at = {}, None, None, None
+        for p in f["partitions"]:
+            if p not in heights:
+                continue
+            j = judge_behind(_read_ledger_index(f["port"], p), heights.get(p))
+            parts[p] = j
+            if j["measured"]:
+                worst = j["behind"] if worst is None else max(worst, j["behind"])
+                key = (f["container"], p)
+                prev = _FOLLOWER_WORST.get(key)
+                if prev is None or j["behind"] > prev[0]:
+                    _FOLLOWER_WORST[key] = (j["behind"], now)
+        for p in parts:
+            hw = _FOLLOWER_WORST.get((f["container"], p))
+            if hw and (worst_run is None or hw[0] > worst_run):
+                worst_run, worst_at = hw
+        out[f["container"]] = {
+            "partitions": parts, "worstBehind": worst,
+            "maxBehindRun": worst_run, "maxBehindAt": worst_at,
+            "bvn": f["bvn"], "port": f["port"],
+            "over": bool(worst is not None and worst > BEHIND_BOUND)}
+    return {"measured": True, "nodes": out, "bound": BEHIND_BOUND, "why": None}
+
+
+def follower_csv_rows(state, ts):
+    """One row per (follower, partition) per sample, for follower.csv.
+
+    A partition the follower did not answer for writes an EMPTY field, not a
+    zero: the manifest's "max behind over the run" must not be able to read a
+    silent follower as a caught-up one.
+    """
+    rows = []
+    for c in sorted(state.get("nodes") or {}):
+        node = state["nodes"][c]
+        for p in sorted(node["partitions"]):
+            j = node["partitions"][p]
+            rows.append("%s,%s,%s,%s,%s,%s" % (
+                ts, c, p,
+                "" if j["follower"] is None else j["follower"],
+                "" if j["network"] is None else j["network"],
+                "" if not j["measured"] else j["behind"]))
+    return rows
+
+
+_FOLLOWER_CSV_T = [0.0]
+
+
+def write_follower_csv(state):
+    if not state.get("measured"):
+        return
+    now = time.time()
+    if now - _FOLLOWER_CSV_T[0] < I_MEM:
+        return
+    _FOLLOWER_CSV_T[0] = now
+    path = os.path.join(RUN_DIR, "follower.csv")
+    new = not os.path.exists(path)
+    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+    with open(path, "a") as f:
+        if new:
+            f.write("time,follower,partition,followerHeight,validatorsMaxHeight,behindBlocks\n")
+        for row in follower_csv_rows(state, ts):
+            f.write(row + "\n")
 
 
 # Per-partition record of the last height CHANGE. Liveness is progress over
@@ -1067,6 +1214,14 @@ def collect_metrics():
         nodes["disk"] = disk_from(dict(_DISK), _DISK_FIRST, time.time())
     for c, v in nodes["disk"]["byNode"].items():
         nodes["byNode"].setdefault(c, {}).update(v)
+    # Say which of these nodes is not a validator (#4365). The container name
+    # carries it (`acc-bvn3-fol1`), but /data is read by scripts, and a reader
+    # that has to parse a name to learn a role eventually parses it wrong.
+    fol = {f["container"] for f in FOLLOWERS}
+    for c in nodes["byNode"]:
+        nodes["byNode"][c]["follower"] = c in fol
+    nodes["followers"] = sorted(fol & set(nodes["byNode"]))
+    nodes["validatorCount"] = sum(1 for c in nodes["byNode"] if c not in fol)
     # The flow matrix comes from the ledgers over the API, read from every
     # node (collect_flows_api). A metrics path used to sit here waiting for
     # an accumulate_crosschain_sequence gauge that no node has exported for
@@ -1458,6 +1613,14 @@ def _collect_once(last, hist):
             upd["network"] = collect_height()
             upd["heights"] = collect_heights()
             upd["progress"] = assess_progress(upd["heights"], now)
+            # The follower (#4365), against the validators' max read above.
+            # Its own reading, not a thirteenth probe port: the max hides a
+            # lagging node by construction, which is the whole measurement.
+            upd["follower"] = collect_follower(upd["heights"], now)
+            try:
+                write_follower_csv(upd["follower"])
+            except Exception as e:
+                log("follower.csv: %s" % e)
             upd["status"] = overall_status(
                 upd["network"].get("api") == "up", upd["progress"])
             last["height"] = now
@@ -1683,6 +1846,15 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <span class=cap id=lidle></span>
       </div>
     </div>
+    <div class=col><h4>follower</h4>
+      <div class=sub>a node in no committee, launched with the network</div>
+      <div class=kv>
+        <b id=fbehind>—</b><span class=sl>behind (blocks, now)</span>
+        <b id=fmax>—</b><span class=sl>behind (blocks, whole run)</span>
+        <span class=mut id=fheight>—</span><span class=sl>its height / the validators&rsquo;</span>
+        <span class=cap id=fstate></span>
+      </div>
+    </div>
     <div class=col><h4>nodes</h4>
       <div class=sub>resident memory</div>
       <div class=kv>
@@ -1849,6 +2021,42 @@ async function tick(){
     return `<span class=n ${col?`style="color:${col}"`:''}>${fmt(hh[p])}</span>`+
            `<span class=l ${col?`style="color:${col}"`:''}>${shortP(p)}${note}</span>`;
   }).join('')||'<span class=mut>—</span>';
+  // follower (#4365). No follower in the topology is not a broken
+  // instrument and not a zero: the row group says so and stays put, so the
+  // board reads the same on a run with one and a run without (REPORTING-SPEC 1).
+  const fo=s.follower||{};
+  {
+    const names=Object.keys(fo.nodes||{});
+    if(!fo.measured||!names.length){
+      for(const k of ['fbehind','fmax','fheight'])$(k).innerHTML='<span class=mut>— not measured</span>';
+      $('fstate').textContent=fo.why||'no follower in this topology';
+    }else{
+      // One follower today; if there are several, the worst is the headline
+      // and the caption names every one of them.
+      let worst=null,worstRun=null,who='';
+      for(const n of names){
+        const v=fo.nodes[n];
+        if(v.worstBehind!=null&&(worst==null||v.worstBehind>worst)){worst=v.worstBehind;who=n;}
+        if(v.maxBehindRun!=null&&(worstRun==null||v.maxBehindRun>worstRun))worstRun=v.maxBehindRun;
+      }
+      const col=(worst!=null&&worst>(fo.bound||2))?'red':'';
+      $('fbehind').innerHTML=worst==null?'<span class=mut>— not measured</span>'
+        :`<span class="${col}">${fmt(worst)}</span>`;
+      $('fmax').innerHTML=worstRun==null?'<span class=mut>— not measured</span>':fmt(worstRun);
+      const per=[];
+      for(const n of names){
+        const v=fo.nodes[n];
+        for(const p of Object.keys(v.partitions||{})){
+          const j=v.partitions[p];
+          per.push(j.measured?`${shortP(p)} ${fmt(j.follower)}/${fmt(j.network)}`
+                             :`${shortP(p)} ${j.why}`);
+        }
+      }
+      $('fheight').textContent=per.join(' · ')||'—';
+      $('fstate').textContent=`${names.join(', ')} · bound ${fo.bound} blocks`
+        +(worst!=null&&worst>(fo.bound||2)?` · OVER the bound (${who})`:'');
+    }
+  }
   // header
   const ph=lg.phase||'—';$('phase').textContent=ph;
   // The badge reports progress, not reachability. "up" requires every
@@ -2024,6 +2232,10 @@ const DEFS={
  rashare:"Synthetic plus anchor transactions as a share of all transactions, whole run.",
  raover:"The two windows behind the whole-run figures: the generator's clock for user, the monitor's for produced.",
  heights:"Block height per partition, with seconds per block over the last 5 min and averaged over the run. Red = stalled: the height has not moved, or an inbound flow has been red past the stall threshold.",
+ fbehind:"Blocks the follower's ledger is behind the validators' highest, now, worst of the partitions it runs. A follower is in no committee: it executes every committed block and votes on and proposes nothing, so this is the only thing that says it is keeping up.",
+ fmax:"The largest that gap has been at any sample since this monitor started. Never cleared; it is the number the manifest states as the worst of the run.",
+ fheight:"The follower's own ledger index and the validators' highest, per partition it runs. Two separate reads a moment apart, so a follower reading one block ahead is skew, not a negative lag.",
+ fstate:"Which containers are followers and the bound the gate is judged against — two blocks: one for the two reads not being simultaneous at a one-second block interval, one for the executor being inside the block it is closing.",
  lblocks:"Blocks produced by the network, summed over partitions, each partition taken as the highest count any node reported.",
  lempty:"Blocks that carried no transactions.",
  lidle:"Shown when nearly every block is empty: consensus is committing empty rounds.",

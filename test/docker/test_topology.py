@@ -10,6 +10,13 @@ the network's shape and every one of them went stale differently when the
 network was cut from 3 BVNs to 2. The failure mode is silent — a monitor
 polling a partition that no longer exists reports it "unknown" rather than
 erroring — so the derivation itself needs tests, not just a passing import.
+
+Followers (#4365) are the second thing that shape has to carry. A follower is
+a node with the same wiring as a validator and a key that is in no committee:
+it must be measured like a node and must never be handed load, disturbed by
+chaos, or counted as one of the validators whose height the network's height
+is read from. Every one of those is a separate function here, because the way
+this goes wrong is one consumer keeping the old meaning of a name.
 """
 
 import os
@@ -17,6 +24,8 @@ import tempfile
 import unittest
 
 import topology
+
+B = topology.BASE_HOST_PORT
 
 TWO_BVN = '''\
 id: "DAGBFTTest"
@@ -49,6 +58,74 @@ bvns:
       - listenAddress: "0.0.0.0"
 '''
 
+# The #4365 shape in miniature: two validators per BVN, and one follower
+# declared LAST, under the last BVN, so no validator's host port moves.
+WITH_FOLLOWER = '''\
+bvns:
+  - id: "BVN1"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val1"
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val2"
+        dnnType: "validator"
+        bvnnType: "validator"
+  - id: "BVN2"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-val1"
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-val2"
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-fol1"
+        dnnType: "follower"
+        bvnnType: "follower"
+'''
+
+# A follower declared BEFORE the validators of its BVN. `accumulated init
+# network` names directories by position, so this silently gives bvn1-1 —
+# the first validator's name — to a follower.
+FOLLOWER_FIRST = '''\
+bvns:
+  - id: "BVN1"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        dnnType: "follower"
+        bvnnType: "follower"
+      - listenAddress: "0.0.0.0"
+        dnnType: "validator"
+        bvnnType: "validator"
+'''
+
+# A node that is a validator on the Directory and a follower on its BVN.
+# Legal in the protocol, not something this harness can measure: it belongs
+# in one roster for one partition and the other for the other.
+MIXED = '''\
+bvns:
+  - id: "BVN1"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        dnnType: "validator"
+        bvnnType: "follower"
+'''
+
+# The derived container name and the peerAddress the file states disagree.
+NAME_DRIFT = '''\
+bvns:
+  - id: "BVN1"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-node1"
+        dnnType: "validator"
+        bvnnType: "validator"
+'''
+
 
 def write(text):
     fd, path = tempfile.mkstemp(suffix=".yml")
@@ -75,7 +152,7 @@ class DerivationTest(unittest.TestCase):
         self.assertEqual("bvn-BVN1", s["BVN1"])
 
     def test_ports_are_allocated_in_declaration_order(self):
-        self.assertEqual([26660, 26661, 26662, 26663],
+        self.assertEqual([B, B + 1, B + 2, B + 3],
                          topology.node_ports(self.two))
 
     def test_container_names_follow_the_compose_convention(self):
@@ -87,6 +164,12 @@ class DerivationTest(unittest.TestCase):
         self.assertEqual("bvn2-1",
                          topology.container_paths(self.two)["acc-bvn2-val1"])
 
+    def test_a_node_with_no_declared_type_is_a_validator(self):
+        """The committed file declared no types for years. Absent is not a
+        follower; a parser that read it that way would empty the network."""
+        self.assertEqual([], topology.followers(self.two))
+        self.assertEqual(4, len(topology.validator_ports(self.two)))
+
     def test_asymmetric_topology_is_not_flattened(self):
         """A BVN deliberately short a validator must not report as uniform."""
         self.assertEqual({"BVN1": 3, "BVN2": 1},
@@ -94,6 +177,111 @@ class DerivationTest(unittest.TestCase):
         self.assertEqual(4, topology.node_count(self.lop))
         self.assertEqual(["acc-bvn1-val1", "acc-bvn1-val2", "acc-bvn1-val3",
                           "acc-bvn2-val1"], topology.containers(self.lop))
+
+
+class FollowerTest(unittest.TestCase):
+    """#4365: one node with the validator's wiring and a key in no committee.
+
+    Every assertion here is a consumer that would otherwise treat it as a
+    validator — and each of those is a different way to lose the run. The
+    load generator handed a follower's endpoint strands every transaction
+    it submits there (a non-committee node proposes no batches), which
+    `-max-stranded 20` fails the run for; the chaos loop restarting it
+    disturbs a node the run is measuring; the network's height read as the
+    max over a set that includes a lagging follower hides nothing, but
+    `behind` computed against that same max is always zero.
+    """
+
+    def setUp(self):
+        self.f = write(WITH_FOLLOWER)
+        self.addCleanup(os.unlink, self.f)
+
+    def test_the_follower_is_parsed_and_named_as_one(self):
+        fols = topology.followers(self.f)
+        self.assertEqual(1, len(fols))
+        self.assertEqual("acc-bvn2-fol1", fols[0]["container"])
+        self.assertEqual("BVN2", fols[0]["bvn"])
+        self.assertEqual("bvn2-3", fols[0]["dir"],
+                         "init names directories by position among ALL nodes")
+        self.assertEqual(B + 4, fols[0]["port"])
+        self.assertEqual(["Directory", "BVN2"], fols[0]["partitions"],
+                         "every node runs the Directory as well as its BVN")
+
+    def test_the_loadgen_and_the_height_read_see_validators_only(self):
+        self.assertEqual([B, B + 1, B + 2, B + 3], topology.node_ports(self.f))
+        self.assertEqual(topology.validator_ports(self.f),
+                         topology.node_ports(self.f))
+        self.assertNotIn(B + 4, topology.node_ports(self.f))
+
+    def test_the_port_contract_still_covers_every_node(self):
+        """The compose publishes a port for the follower too; the check that
+        the two files agree must compare against ALL of them or the follower's
+        port reads as an extra the compose invented."""
+        self.assertEqual([B, B + 1, B + 2, B + 3, B + 4],
+                         topology.all_node_ports(self.f))
+        self.assertEqual([B + 4], topology.follower_ports(self.f))
+
+    def test_rosters_name_the_follower_apart(self):
+        self.assertEqual(["acc-bvn2-fol1"], topology.follower_containers(self.f))
+        self.assertNotIn("acc-bvn2-fol1", topology.validator_containers(self.f))
+        self.assertIn("acc-bvn2-fol1", topology.containers(self.f),
+                      "per-node memory and disk must still see it")
+        self.assertEqual("bvn2-3",
+                         topology.container_paths(self.f)["acc-bvn2-fol1"])
+
+    def test_the_validators_keep_the_names_they_had(self):
+        """A follower declared last must not renumber anything before it."""
+        self.assertEqual(["acc-bvn1-val1", "acc-bvn1-val2",
+                          "acc-bvn2-val1", "acc-bvn2-val2"],
+                         topology.validator_containers(self.f))
+
+    def test_a_follower_is_never_probed_for_the_network_height(self):
+        ports = topology.probe_ports(self.f, limit=10)
+        self.assertNotIn(B + 4, ports)
+        self.assertEqual(sorted(topology.validator_ports(self.f)), sorted(ports))
+
+    def test_role_is_stated_for_every_node(self):
+        roles = [(n["container"], n["role"]) for n in topology.node_records(self.f)]
+        self.assertEqual(("acc-bvn2-fol1", "follower"), roles[-1])
+        self.assertTrue(all(r == "validator" for _, r in roles[:-1]))
+
+
+class ProblemsTest(unittest.TestCase):
+    """Shapes this harness cannot measure must be refused before a run, not
+    mis-measured during one."""
+
+    def test_the_committed_topology_has_no_problems(self):
+        self.assertEqual([], topology.problems())
+
+    def test_a_follower_declared_before_a_validator_is_refused(self):
+        p = write(FOLLOWER_FIRST)
+        self.addCleanup(os.unlink, p)
+        probs = topology.problems(p)
+        self.assertTrue(probs)
+        self.assertIn("bvn1-1", " ".join(probs),
+                      "the problem must name the directory that would collide")
+
+    def test_a_node_that_is_a_validator_on_one_partition_is_refused(self):
+        p = write(MIXED)
+        self.addCleanup(os.unlink, p)
+        probs = topology.problems(p)
+        self.assertTrue(probs)
+        self.assertIn("dnnType", " ".join(probs))
+
+    def test_a_peer_address_that_disagrees_with_the_name_is_refused(self):
+        """The container name is a convention of the compose derived from this
+        file. peerAddress in this file IS that container's DNS name, so the two
+        can be checked against each other instead of assumed equal."""
+        p = write(NAME_DRIFT)
+        self.addCleanup(os.unlink, p)
+        probs = topology.problems(p)
+        self.assertTrue(probs)
+        self.assertIn("acc-bvn1-node1", " ".join(probs))
+
+    def test_a_clean_follower_topology_has_no_problems(self):
+        p = write(WITH_FOLLOWER)
+        self.addCleanup(os.unlink, p)
+        self.assertEqual([], topology.problems(p))
 
 
 class ProbeSpreadTest(unittest.TestCase):
@@ -109,7 +297,7 @@ class ProbeSpreadTest(unittest.TestCase):
         are spread across partitions.
         """
         ports = topology.probe_ports(self.two, limit=2)
-        self.assertEqual([26660, 26662], ports,
+        self.assertEqual([B, B + 2], ports,
                          "first node of each BVN before a second of either")
 
     def test_probe_list_never_exceeds_the_nodes_that_exist(self):
@@ -127,12 +315,24 @@ class ConsistencyTest(unittest.TestCase):
 
     def test_a_drifted_compose_is_caught(self):
         """The check has to actually fail when the files disagree."""
-        compose = write('    ports:\n      - "26660:26660"\n')
+        compose = write('    ports:\n      - "%d:26660"\n' % B)
         self.addCleanup(os.unlink, compose)
         # TWO_BVN implies four nodes; the compose publishes one.
         problem = topology.check_ports_against_compose(self.two, compose)
         self.assertIsNotNone(problem)
-        self.assertIn("26663", problem, "the mismatch must name the ports")
+        self.assertIn(str(B + 3), problem, "the mismatch must name the ports")
+
+    def test_a_compose_missing_the_followers_port_is_caught(self):
+        """The follower's port is part of the contract: a compose that forgot
+        its service would otherwise look consistent, and the run would report
+        the follower as unreachable rather than as never started."""
+        f = write(WITH_FOLLOWER)
+        self.addCleanup(os.unlink, f)
+        compose = write("".join('      - "%d:26660"\n' % (B + i) for i in range(4)))
+        self.addCleanup(os.unlink, compose)
+        problem = topology.check_ports_against_compose(f, compose)
+        self.assertIsNotNone(problem)
+        self.assertIn(str(B + 4), problem)
 
     def setUp(self):
         self.two = write(TWO_BVN)
@@ -140,13 +340,35 @@ class ConsistencyTest(unittest.TestCase):
 
 
 class DeployedTopologyTest(unittest.TestCase):
-    """What is actually committed, so a bad edit to the yml fails here."""
+    """What is actually committed, so a bad edit to the yml fails here.
 
-    def test_two_bvns_of_four_validators(self):
-        self.assertEqual(["Directory", "BVN1", "BVN2"], topology.partitions())
-        self.assertEqual({"BVN1": 4, "BVN2": 4}, topology.nodes_per_bvn())
-        self.assertEqual(8, topology.node_count())
-        self.assertEqual(list(range(26660, 26668)), topology.node_ports())
+    This class asserted 2 BVNs, 8 nodes and ports 26660-26667 for months after
+    the network went back to 3 BVNs and the base port moved to 26680 (#4158) —
+    four red tests nobody ran. It states the shape #4365 runs on.
+    """
+
+    def test_three_bvns_of_four_validators_and_one_follower(self):
+        self.assertEqual(["Directory", "BVN1", "BVN2", "BVN3"],
+                         topology.partitions())
+        self.assertEqual({"BVN1": 4, "BVN2": 4, "BVN3": 5},
+                         topology.nodes_per_bvn())
+        self.assertEqual(13, topology.node_count())
+        self.assertEqual(12, len(topology.validator_ports()))
+        self.assertEqual(list(range(B, B + 12)), topology.node_ports())
+        self.assertEqual([B + 12], topology.follower_ports())
+
+    def test_the_one_follower_is_bvn3s_fifth_node(self):
+        fols = topology.followers()
+        self.assertEqual(1, len(fols), "gate 0 runs exactly one follower")
+        self.assertEqual("acc-bvn3-fol1", fols[0]["container"])
+        self.assertEqual("bvn3-5", fols[0]["dir"])
+        self.assertEqual(["Directory", "BVN3"], fols[0]["partitions"])
+
+    def test_the_follower_is_declared_last(self):
+        """Host ports are allocated in declaration order, so a follower
+        anywhere but last moves a validator's port and silently repoints the
+        loadgen and the monitor."""
+        self.assertEqual("follower", topology.node_records()[-1]["role"])
 
 
 if __name__ == "__main__":

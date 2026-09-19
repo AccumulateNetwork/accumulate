@@ -17,12 +17,28 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import topology
 
-# Validator container names and their data directories, derived from
+# Every node's container name and data directory, derived from
 # docker-network.yml rather than restated here — see topology.py. The listed
 # form was a 12-name roster that survived the cut to 8 nodes, and four names
 # that resolve to nothing report as four nodes using 0 MB.
-VALIDATORS = topology.containers()
+#
+# This roster includes the follower (#4365): its memory and disk are worth
+# watching like any node's, and a leak in a non-committee node is a finding.
+# It is NOT a validator, so it is labelled, and the name was VALIDATORS while
+# the list stopped being one.
+NODES = topology.containers()
+FOLLOWERS = set(topology.follower_containers())
 CONTAINER_TO_PATH = topology.container_paths()
+
+
+def label(name):
+    """The node's name as a reader should see it — never a bare container
+    name for a node that is not a validator."""
+    return name + " (follower)" if name in FOLLOWERS else name
+
+
+# Kept for any caller that still means the twelve.
+VALIDATORS = topology.validator_containers()
 
 def get_docker_stats():
     """Get CPU and memory stats for all validators using docker stats."""
@@ -45,7 +61,7 @@ def get_docker_stats():
                     data = json.loads(line)
                     container_name = data.get('Name', '')
 
-                    if container_name in VALIDATORS:
+                    if container_name in NODES:
                         # Parse CPU percentage (e.g., "12.34%")
                         cpu_str = data.get('CPUPerc', '0%').replace('%', '')
                         cpu = float(cpu_str) if cpu_str else 0
@@ -169,7 +185,9 @@ def main():
     print("Starting per-node monitoring...")
     print(f"Monitoring directory: {monitoring_dir}")
     print(f"Network config path: {network_config}")
-    print(f"Monitoring {len(VALIDATORS)} validators\n")
+    print(f"Monitoring {len(VALIDATORS)} validators"
+          + (f" and {len(FOLLOWERS)} follower(s): {', '.join(sorted(FOLLOWERS))}"
+             if FOLLOWERS else "") + "\n")
 
     # Initial collection
     interval = 10  # Collect every 10 seconds

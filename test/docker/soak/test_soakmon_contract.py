@@ -53,6 +53,12 @@ class CollectMetricsRuns(unittest.TestCase):
         self.assertIsInstance(m["nodeStats"], dict)
         self.assertIsInstance(m["life"], dict)
         self.assertEqual(m["nodeStats"]["count"], 2)
+        # Every node says whether it is a follower (#4365), so a reader of
+        # /data never has to infer a role from a container name.
+        for c, v in m["nodeStats"]["byNode"].items():
+            self.assertIn("follower", v, c)
+        self.assertEqual(2, m["nodeStats"]["validatorCount"])
+        self.assertEqual([], m["nodeStats"]["followers"])
         self.assertEqual(m["life"]["blocks"], 687160)
         self.assertEqual(m["heals"]["entries"], 2 * 18171)
         self.assertEqual(m["wedges"]["total"], 2 * 5)
@@ -66,6 +72,38 @@ class CollectMetricsRuns(unittest.TestCase):
         self.assertFalse(m["heals"]["measured"])
         self.assertIsNone(m["heals"]["entries"], "absent is not zero")
         json.dumps(m)
+
+
+class TheFollowerRowGroupIsAlwaysThere(unittest.TestCase):
+    """#4365 added a row group to the board. It must render on a run WITHOUT a
+    follower too, and it must say so rather than showing zeros: a board whose
+    panels come and go with the topology teaches the reader that a missing
+    panel means nothing happened."""
+
+    def setUp(self):
+        self._f, self._r = soakmon.FOLLOWERS, soakmon._read_ledger_index
+        soakmon._FOLLOWER_WORST.clear()
+
+    def tearDown(self):
+        soakmon.FOLLOWERS, soakmon._read_ledger_index = self._f, self._r
+        soakmon._FOLLOWER_WORST.clear()
+
+    def test_with_no_follower_it_is_absent_and_says_why(self):
+        soakmon.FOLLOWERS = []
+        v = soakmon.collect_follower({"Directory": 9}, now=1.0)
+        self.assertFalse(v["measured"])
+        self.assertIn("no follower", v["why"])
+        json.dumps(v)
+
+    def test_with_a_follower_it_carries_the_bound_and_serializes(self):
+        soakmon.FOLLOWERS = [{"container": "acc-bvn3-fol1", "port": 26692,
+                              "dir": "bvn3-5", "bvn": "BVN3",
+                              "partitions": ["Directory", "BVN3"]}]
+        soakmon._read_ledger_index = lambda port, part: 8
+        v = soakmon.collect_follower({"Directory": 9, "BVN3": 9}, now=1.0)
+        self.assertEqual(soakmon.BEHIND_BOUND, v["bound"])
+        self.assertEqual(1, v["nodes"]["acc-bvn3-fol1"]["worstBehind"])
+        json.dumps(v)   # /data is json.dumps(STATE)
 
 
 class DashboardScriptParses(unittest.TestCase):
