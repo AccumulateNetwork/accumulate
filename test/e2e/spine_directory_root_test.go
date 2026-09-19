@@ -247,5 +247,22 @@ func TestAPeerConsistentWithItselfDoesNotPromoteTheNode(t *testing.T) {
 
 	require.NotZero(t, stripped,
 		"no anchor was served to the node at all, so this test proves nothing")
-	t.Logf("%d anchors were served with their signatures removed, and none of them promoted the node", stripped)
+
+	// And nothing was KEPT either. The spine used to be settled with Keep,
+	// unverified, on the rationale that it is what the verifier reads from;
+	// that made the four accounts a joining node needs most the four it took
+	// on a peer's word (#4301).
+	View(t, local, func(batch *database.Batch) {
+		for _, u := range []*url.URL{
+			DnUrl().JoinPath(AnchorPool),
+			DnUrl().JoinPath(Ledger),
+			DnUrl().JoinPath(Operators),
+			DnUrl().JoinPath(Operators, "1"),
+		} {
+			_, err := batch.Account(u).Main().Get()
+			require.Error(t, err, "%v was written from a peer nobody could verify", u)
+		}
+	})
+
+	t.Logf("%d anchors were served with their signatures removed; the node did not promote and kept no spine", stripped)
 }
