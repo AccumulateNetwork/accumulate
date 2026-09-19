@@ -41,6 +41,7 @@ func (p partOpts) apply(cfg *Config) error {
 			MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
 			NumWorkers:           p.NumWorkers,
 			ExecutionShards:      p.ExecutionShards,
+			BPTHistoryDepth:      p.CoreValidatorConfiguration.BPTHistoryDepth,
 			DAGGCDepth:           p.DagGcDepth,
 			BlockInterval:        p.BlockInterval,
 		},

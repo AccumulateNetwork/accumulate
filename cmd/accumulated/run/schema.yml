@@ -244,6 +244,10 @@ Configuration:
         - name: DagGcDepth
           type: '*int'
           optional: true
+        - name: BPTHistoryDepth
+          description: is how many minor blocks of superseded BPT state to retain, so this node can serve an account or a BPT page AS OF an anchored block rather than as of its own current block (#4361). Zero retains none and refuses every such request; a node retaining none cannot serve a join
+          type: '*uint'
+          optional: true
         - name: BlockInterval
           description: is the target time between blocks, pinned into every generated node config. Halving it halves the wall time a failure takes to show itself
           type: '*encoding.Duration'
@@ -277,6 +281,10 @@ Configuration:
           optional: true
         - name: StorageType
           type: '*StorageType'
+          optional: true
+        - name: BPTHistoryDepth
+          description: is how many minor blocks of superseded BPT state to retain, so this node can serve an account or a BPT page AS OF an anchored block rather than as of its own current block (#4361). Zero retains none and refuses every such request; a node retaining none cannot serve a join
+          type: '*uint'
           optional: true
 
     - name: FollowerConfiguration
@@ -384,6 +392,10 @@ Service:
           optional: true
         - name: DAGGCDepth
           type: '*int'
+          optional: true
+        - name: BPTHistoryDepth
+          description: is how many minor blocks of superseded BPT state to retain, so this node can serve an account or a BPT page AS OF an anchored block rather than as of its own current block (#4361). Zero retains none and refuses every such request; a node retaining none cannot serve a join. Defaults to 1024
+          type: '*uint'
           optional: true
         - name: CommitBufferSize
           type: '*int'

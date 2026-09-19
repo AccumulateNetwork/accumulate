@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -140,6 +141,11 @@ func (p *Partition) CompleteJoin(i, j int) error {
 
 // NodeStaging is node i's staging, for a test that compares nodes.
 func (p *Partition) NodeStaging(i int) *coreexec.Staging { return p.nodes[i].staging }
+
+// NodePeerID is node i's peer ID. A joining node must never pull from itself
+// (#4303), and join.QueryPeers drops its own ID from every list; a test that
+// stands a node where a restarted one stands needs that ID to do the same.
+func (p *Partition) NodePeerID(i int) peer.ID { return p.nodes[i].peerID }
 
 // NodePrivate is the private API as node i serves it, addressed to that node:
 // what a joining node asks a running validator for (#4291).
