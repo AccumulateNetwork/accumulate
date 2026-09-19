@@ -502,8 +502,11 @@ transaction is bad when it is not — so `Submit` and `Validate` answer
 two reads another node's **pull** takes — a BPT page, and an account with a
 receipt — because its leaves and its root are the half-filled ones its own pull
 is building, and a second joining node would otherwise take its spine from the
-first (#4297). Ordinary reads stay open: a node that people query still answers
-questions about itself.
+first (#4297). **In this phase a syncing node rejects every request** — not only
+these — and answers once it is fully synced (Paul, 2026-09-19): `BOOTING` and
+`ACTIVE` refuse with `NotReady`, `COMPLETE` serves. Tracking which nodes are
+not synced, and forwarding a request a node cannot handle to one that can, is
+the next phase's work, not this one's, and nothing here anticipates it.
 
 What a restart therefore never does is replay committed blocks it did not
 execute, or rebuild staging from a source's cache: the first executes with the
