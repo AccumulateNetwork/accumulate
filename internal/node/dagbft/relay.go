@@ -9,6 +9,7 @@ package dagbft
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -33,11 +34,12 @@ type RelayPeers interface {
 // RelayRPC is the two calls a relay makes on a NAMED peer — not on "whoever
 // the router picks", which is how a relay ends up talking to itself.
 type RelayRPC interface {
-	// Standing asks a peer which author key it holds for the partition and
-	// whether it is still catching up. Together they are the question that
-	// separates a node that can propose from one that would only relay
-	// again.
-	Standing(ctx context.Context, p peer.ID) (keyHash [32]byte, catchingUp bool, err error)
+	// Standing asks a peer which author key it holds for the partition,
+	// whether it is still catching up, and for the caller's challenge
+	// signed with that key. The first two separate a node that can propose
+	// from one that would only relay again; the third separates the holder
+	// of the key from a peer that merely names it.
+	Standing(ctx context.Context, p peer.ID, challenge []byte) (keyHash [32]byte, catchingUp bool, signature []byte, err error)
 
 	// Submit hands the submission to that one peer.
 	Submit(ctx context.Context, p peer.ID, env *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error)
@@ -84,6 +86,25 @@ type RelayRPC interface {
 //     property of the mechanism, and the hard bound for it is a hop marker
 //     on the submission, which is public protocol surface a client could
 //     set (see above).
+//
+// relayAttemptTimeout bounds ONE call to one candidate.
+//
+// Neither hop has a deadline of its own: a submission that arrives over the
+// p2p submit service is handled on a context built from context.Background()
+// (pkg/api/v3/message/handler.go), and on the way out only the stream OPEN is
+// bounded (p2p.go, getPeerService) -- the response read is not. So a
+// candidate that accepts a stream and never answers pins one goroutine and
+// two streams per submission, on a host the consensus engine shares, until
+// the resource manager refuses every open and the node stops following
+// (#4366 F2, threat-reviewer note_3869947547).
+const relayAttemptTimeout = 10 * time.Second
+
+// relayBudget bounds the WHOLE relay of one submission, every candidate
+// together. "One try per committee member" still holds inside it; what it
+// stops is a submission costing the follower unbounded time because each of
+// ten candidates is slow rather than silent (#4366 F3).
+const relayBudget = 30 * time.Second
+
 type Relay struct {
 	logger     logging.OptionalLogger
 	partition  string
@@ -91,6 +112,11 @@ type Relay struct {
 	peers      RelayPeers
 	rpc        RelayRPC
 	submitAddr *api.ServiceAddress
+
+	// attemptTimeout and budget are relayAttemptTimeout and relayBudget,
+	// as fields so a test can make them small.
+	attemptTimeout time.Duration
+	budget         time.Duration
 
 	mu        sync.Mutex
 	cursor    int
@@ -115,6 +141,8 @@ func NewRelay(p RelayParams) *Relay {
 	r.peers = p.Peers
 	r.rpc = p.RPC
 	r.submitAddr = api.ServiceTypeSubmit.AddressFor(p.Partition)
+	r.attemptTimeout = relayAttemptTimeout
+	r.budget = relayBudget
 	return r
 }
 
@@ -140,6 +168,11 @@ func (r *Relay) Submit(ctx context.Context, env *messaging.Envelope, opts api.Su
 			"cannot relay for %s: this node holds no committee yet", r.partition)
 	}
 
+	// The whole relay of this submission is bounded, and so is every call
+	// inside it (#4366 F2, F3).
+	ctx, cancel := context.WithTimeout(ctx, r.budget)
+	defer cancel()
+
 	candidates := r.candidates(ctx)
 	if len(candidates) == 0 {
 		return nil, metrics.RelayUnreachable, errors.NoPeer.WithFormat(
@@ -157,17 +190,42 @@ func (r *Relay) Submit(ctx context.Context, env *messaging.Envelope, opts api.Su
 		// key is in no committee, or which is still catching up, would only
 		// relay it again, and two nodes each holding a stale "it can
 		// propose" about the other is a relay that goes round in a circle.
-		hash, catchingUp, err := r.rpc.Standing(ctx, p)
+		//
+		// And make it PROVE it holds the key it names. Everything else here
+		// is checked against this node's own globals, but "the peer
+		// answering is the holder of that key" terminated in the peer: a
+		// validator's key hash is public, so one libp2p identity with a
+		// canned answer could take a share of everything this node relays
+		// and drop it, counted `taken` (#4366 F1). A fresh nonce, signed
+		// with the key whose hash is claimed, ends that.
+		nonce, err := newRelayChallenge()
+		if err != nil {
+			return nil, metrics.RelayUnreachable, errors.UnknownError.Wrap(err)
+		}
+
+		hash, catchingUp, sig, err := r.standing(ctx, p, nonce)
 		if err != nil {
 			r.logger.Debug("Relay candidate did not answer", "peer", p, "partition", r.partition, "error", err)
 			continue
 		}
-		if catchingUp || !r.membership.IsMember(hash) {
+		if catchingUp {
+			continue
+		}
+		key, ok := r.membership.ActiveKey(hash)
+		if !ok {
+			continue
+		}
+		if !verifyRelayChallenge(key, r.partition, hash, nonce, sig) {
+			// Unreachable-class, not refused: nothing was said about the
+			// submission. The peer named a validator and could not answer
+			// as one.
+			r.logger.Info("Relay candidate could not prove it holds the key it claims",
+				"peer", p, "partition", r.partition)
 			continue
 		}
 		sawAny = true
 
-		res, err := r.rpc.Submit(ctx, p, env, opts)
+		res, err := r.submit(ctx, p, env, opts)
 		switch classifyRelay(res, err) {
 		case metrics.RelayTaken:
 			r.logger.Debug("Relayed", "peer", p, "partition", r.partition)
@@ -181,6 +239,14 @@ func (r *Relay) Submit(ctx context.Context, env *messaging.Envelope, opts api.Su
 
 		case metrics.RelayNotReady:
 			sawNotReady = true
+			if errors.Is(err, errors.TooManyRequests) {
+				// Back-pressure is the network saying it is at capacity.
+				// Shopping the envelope to every other validator multiplies
+				// the load exactly when it is weakest, so this one stops
+				// here (#4366 F3).
+				return nil, metrics.RelayNotReady, errors.NotReady.WithFormat(
+					"%s is at capacity: %w", r.partition, err)
+			}
 
 		default:
 			r.logger.Debug("Relay target unreachable", "peer", p, "partition", r.partition, "error", err)
@@ -197,6 +263,22 @@ func (r *Relay) Submit(ctx context.Context, env *messaging.Envelope, opts api.Su
 	}
 	return nil, metrics.RelayUnreachable, errors.NoPeer.WithFormat(
 		"cannot relay for %s: no peer that can propose was found", r.partition)
+}
+
+// standing and submit are the two calls a relay makes, each under its own
+// deadline. Without one, a candidate that opens a stream and answers nothing
+// parks this goroutine forever: the inbound request has no deadline and the
+// outbound read has none either (#4366 F2).
+func (r *Relay) standing(ctx context.Context, p peer.ID, nonce []byte) ([32]byte, bool, []byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.attemptTimeout)
+	defer cancel()
+	return r.rpc.Standing(ctx, p, nonce)
+}
+
+func (r *Relay) submit(ctx context.Context, p peer.ID, env *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.attemptTimeout)
+	defer cancel()
+	return r.rpc.Submit(ctx, p, env, opts)
 }
 
 // candidates are the peers that handle submissions for this partition, this
@@ -292,21 +374,22 @@ func (c ClientRelayRPC) forPeer(p peer.ID, typ api.ServiceType) message.Addresse
 	return c.Client.ForPeer(p).ForAddress(typ.AddressFor(c.Partition).Multiaddr())
 }
 
-func (c ClientRelayRPC) Standing(ctx context.Context, p peer.ID) ([32]byte, bool, error) {
+func (c ClientRelayRPC) Standing(ctx context.Context, p peer.ID, challenge []byte) ([32]byte, bool, []byte, error) {
 	no := false
 	st, err := c.forPeer(p, api.ServiceTypeConsensus).
 		ConsensusStatus(ctx, api.ConsensusStatusOptions{
-			// The key and the sync state, and nothing that costs the target
-			// a database read.
+			// The key, the sync state and the answer to the challenge, and
+			// nothing that costs the target a database read.
 			IncludeAccumulate: &no,
 			IncludePeers:      &no,
 			NodeID:            p.String(),
 			Partition:         c.Partition,
+			Challenge:         challenge,
 		})
 	if err != nil {
-		return [32]byte{}, false, errors.UnknownError.Wrap(err)
+		return [32]byte{}, false, nil, errors.UnknownError.Wrap(err)
 	}
-	return st.ValidatorKeyHash, st.CatchingUp, nil
+	return st.ValidatorKeyHash, st.CatchingUp, st.ChallengeSignature, nil
 }
 
 func (c ClientRelayRPC) Submit(ctx context.Context, p peer.ID, env *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {

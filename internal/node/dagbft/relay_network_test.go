@@ -239,6 +239,10 @@ func TestARelayCarriesWhatItCannotPropose(t *testing.T) {
 			PartitionType:    protocol.PartitionTypeBlockValidator,
 			ValidatorKeyHash: sha256.Sum256(pubs[i]),
 			NodeState:        state,
+			// The key that answers a relay's challenge: without it a
+			// candidate can name a validator's hash and be handed
+			// submissions it never proposes (#4366 F1).
+			ValidatorKey: keys[i],
 		})
 
 		registerService(t, apiNode, api.ServiceTypeSubmit.AddressFor(part), message.Submitter{Submitter: sub})

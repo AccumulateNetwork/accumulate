@@ -113,6 +113,35 @@ func (m *Membership) Known() bool {
 	return m.Standing() != network.CommitteeUnknown
 }
 
+// ActiveKey returns the public key of the active validator of this partition
+// whose SHA-256 hash is keyHash, as the globals this node holds give it.
+//
+// It is the root of trust for a relay's challenge: the relay verifies the
+// candidate's signature against THIS key, so a peer that merely names a
+// validator's hash cannot be a target (#4366 F1).
+func (m *Membership) ActiveKey(keyHash [32]byte) (ed25519.PublicKey, bool) {
+	if m == nil {
+		return nil, false
+	}
+	g := m.globals.Load()
+	if g == nil || g.Network == nil {
+		return nil, false
+	}
+	for _, v := range g.Network.Validators {
+		if len(v.PublicKey) != ed25519.PublicKeySize {
+			continue
+		}
+		if v.PublicKeyHash != keyHash && sha256.Sum256(v.PublicKey) != keyHash {
+			continue
+		}
+		if !v.IsActiveOn(m.partition) {
+			return nil, false
+		}
+		return ed25519.PublicKey(bytes.Clone(v.PublicKey)), true
+	}
+	return nil, false
+}
+
 // IsMember reports whether the SHA-256 hash of an author key is an active
 // validator of this partition, in the globals this node holds.
 //

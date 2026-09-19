@@ -56,6 +56,10 @@ ConsensusStatusOptions:
       type: bool
       pointer: true
       optional: true
+    - name: Challenge
+      description: is a nonce the caller wants the node to sign with the validator key it reports, so the caller can tell the holder of that key from a peer that merely names it (#4366)
+      type: bytes
+      optional: true
 
 NetworkStatusOptions:
   fields:

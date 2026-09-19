@@ -48,6 +48,18 @@ func (p *Primary) countCertifiedOwn(cert *types.Certificate) {
 		return
 	}
 
+	// In the DAG, checked rather than assumed. "Called after the insert" is
+	// an ORDERING, and an ordering is not something a test can fail on:
+	// moving this call one line up changed nothing anybody could see
+	// (#4366, test-auditor D2). As a PRECONDITION it is both -- a
+	// certificate that is not in the DAG is not certified as far as this
+	// node is concerned, whether because the insert failed (A13a un-claims
+	// the round and requeues the batches) or because the caller asked too
+	// early.
+	if p.dag == nil || p.dag.GetByDigest(cert.Digest()) == nil {
+		return
+	}
+
 	round := cert.Round()
 	var txns int
 	for _, entry := range cert.Header.Payload {

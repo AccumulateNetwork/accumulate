@@ -11,7 +11,9 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
@@ -40,10 +42,16 @@ func globalsWith(t *testing.T, active map[string][]ed25519.PublicKey) *network.G
 	return g
 }
 
+// testPrivate remembers the private half of every key a test generates, so
+// an honest fake candidate can answer the relay's challenge the way a real
+// validator's ConsensusStatus does.
+var testPrivate = map[string]ed25519.PrivateKey{}
+
 func otherKey(t *testing.T) ed25519.PublicKey {
 	t.Helper()
-	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
+	testPrivate[string(pub)] = priv
 	return pub
 }
 
@@ -67,29 +75,57 @@ type answer struct {
 }
 
 type fakeRPC struct {
+	partition  string
 	keys       map[peer.ID]ed25519.PublicKey // what each peer says it holds
 	catchingUp map[peer.ID]bool
 	keyErr     map[peer.ID]error
 	answers    map[peer.ID]answer
 
+	// cannotSign is the F1 peer: it names a real validator's key hash --
+	// which is public -- and cannot answer the challenge, because it does
+	// not hold the key.
+	cannotSign map[peer.ID]bool
+
+	// silent opens and never answers: the F2 peer.
+	silent map[peer.ID]bool
+
 	probed    []peer.ID
 	submitted []peer.ID
 }
 
-func (f *fakeRPC) Standing(_ context.Context, p peer.ID) ([32]byte, bool, error) {
+func (f *fakeRPC) part() string {
+	if f.partition == "" {
+		return "BVN3"
+	}
+	return f.partition
+}
+
+func (f *fakeRPC) Standing(ctx context.Context, p peer.ID, challenge []byte) ([32]byte, bool, []byte, error) {
 	f.probed = append(f.probed, p)
+	if f.silent[p] {
+		<-ctx.Done()
+		return [32]byte{}, false, nil, ctx.Err()
+	}
 	if err, ok := f.keyErr[p]; ok {
-		return [32]byte{}, false, err
+		return [32]byte{}, false, nil, err
 	}
 	k, ok := f.keys[p]
 	if !ok {
-		return [32]byte{}, false, errors.NoPeer.With("no such peer")
+		return [32]byte{}, false, nil, errors.NoPeer.With("no such peer")
 	}
-	return sha256.Sum256(k), f.catchingUp[p], nil
+	var sig []byte
+	if !f.cannotSign[p] {
+		sig = signRelayChallenge(testPrivate[string(k)], f.part(), challenge)
+	}
+	return sha256.Sum256(k), f.catchingUp[p], sig, nil
 }
 
-func (f *fakeRPC) Submit(_ context.Context, p peer.ID, _ *messaging.Envelope, _ api.SubmitOptions) ([]*api.Submission, error) {
+func (f *fakeRPC) Submit(ctx context.Context, p peer.ID, _ *messaging.Envelope, _ api.SubmitOptions) ([]*api.Submission, error) {
 	f.submitted = append(f.submitted, p)
+	if f.silent[p] {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
 	a, ok := f.answers[p]
 	if !ok {
 		return []*api.Submission{{Success: true}}, nil
@@ -333,4 +369,214 @@ func TestRelay_ACommitteeMemberThatIsCatchingUpIsNotATarget(t *testing.T) {
 	}
 	require.Contains(t, rpc.submitted, pj,
 		"every attempt asks, so a node that has caught up is a target again")
+}
+
+// TestRelay_ACandidateMustProveItHoldsTheKeyItNames — F1
+// (threat-reviewer note_3869947547; lead's close, note_3869952619).
+//
+// A validator's key hash is public: it is in the network definition and in
+// every honest node's ConsensusStatus. So "I hold key H" was a claim that
+// terminated in the peer, and one libp2p identity with a canned answer could
+// take a share of everything a follower relays and drop it, counted `taken`.
+// The relay now sends a fresh nonce and the candidate must sign it with the
+// key whose hash it names.
+func TestRelay_ACandidateMustProveItHoldsTheKeyItNames(t *testing.T) {
+	const part = "BVN3"
+	mine := otherKey(t)
+	val := otherKey(t)
+	impostor, honest := peer.ID("names-the-key"), peer.ID("holds-the-key")
+
+	g := globalsWith(t, map[string][]ed25519.PublicKey{part: {val}})
+	rpc := &fakeRPC{
+		partition: part,
+		// Both name the same real validator hash. Only one can sign for it.
+		keys:       map[peer.ID]ed25519.PublicKey{impostor: val, honest: val},
+		cannotSign: map[peer.ID]bool{impostor: true},
+	}
+	r := relayFor(t, part, mine, g, &fakePeers{self: "self", peers: []peer.ID{impostor, honest}}, rpc)
+
+	res, outcome, err := r.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{})
+	require.NoError(t, err)
+	require.Equal(t, metrics.RelayTaken, outcome)
+	require.True(t, res[0].Success)
+	require.Equal(t, []peer.ID{honest}, rpc.submitted,
+		"a peer that only NAMES a validator's key must never be handed a submission")
+
+	// And a peer that cannot sign is not a refusal of the submission: it is
+	// unreachable-class, so nothing is said about the envelope.
+	only := &fakeRPC{
+		partition:  part,
+		keys:       map[peer.ID]ed25519.PublicKey{impostor: val},
+		cannotSign: map[peer.ID]bool{impostor: true},
+	}
+	r2 := relayFor(t, part, mine, g, &fakePeers{self: "self", peers: []peer.ID{impostor}}, only)
+	_, outcome, err = r2.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{})
+	require.Equal(t, metrics.RelayUnreachable, outcome)
+	require.Error(t, err)
+	require.Empty(t, only.submitted)
+}
+
+// TestRelayChallenge_BindsTagPartitionKeyAndNonce — what the signature is
+// over, and what it cannot be mistaken for.
+func TestRelayChallenge_BindsTagPartitionKeyAndNonce(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	hash := sha256.Sum256(pub)
+
+	nonce, err := newRelayChallenge()
+	require.NoError(t, err)
+	require.Len(t, nonce, relayChallengeSize)
+	other, err := newRelayChallenge()
+	require.NoError(t, err)
+	require.NotEqual(t, nonce, other, "a nonce is fresh, never reused")
+
+	sig := signRelayChallenge(priv, "BVN3", nonce)
+	require.True(t, verifyRelayChallenge(pub, "BVN3", hash, nonce, sig))
+
+	require.False(t, verifyRelayChallenge(pub, "BVN2", hash, nonce, sig), "bound to the partition")
+	require.False(t, verifyRelayChallenge(pub, "BVN3", sha256.Sum256(other), nonce, sig), "bound to the claimed key")
+	require.False(t, verifyRelayChallenge(pub, "BVN3", hash, other, sig), "bound to the nonce")
+	require.False(t, verifyRelayChallenge(pub, "BVN3", hash, nonce, nil), "no signature is no proof")
+
+	// A node signs nothing it was not asked to sign.
+	require.Nil(t, signRelayChallenge(priv, "BVN3", nil))
+
+	// And what it signs cannot be a consensus message: the validator key
+	// signs 32-byte digests everywhere else, and this preimage is the whole
+	// tagged message.
+	msg := relayChallengeMessage("BVN3", hash, nonce)
+	require.Greater(t, len(msg), 32)
+	require.True(t, strings.HasPrefix(string(msg), relayChallengeTag))
+}
+
+// TestRelay_ASilentCandidateDoesNotPinTheRelay — F2, which blocked the merge.
+//
+// A submission that arrives over the p2p submit service is handled on a
+// context built from context.Background(), and on the way out only the
+// stream OPEN is bounded. A candidate that accepts a stream and answers
+// nothing therefore pinned one goroutine and two streams per submission,
+// forever, on the host the consensus engine shares.
+func TestRelay_ASilentCandidateDoesNotPinTheRelay(t *testing.T) {
+	const part = "BVN3"
+	mine := otherKey(t)
+	quiet, ready := otherKey(t), otherKey(t)
+	pq, pr := peer.ID("silent"), peer.ID("answers")
+
+	g := globalsWith(t, map[string][]ed25519.PublicKey{part: {quiet, ready}})
+
+	// Alone, with no caller deadline of any kind.
+	only := &fakeRPC{
+		partition: part,
+		keys:      map[peer.ID]ed25519.PublicKey{pq: quiet},
+		silent:    map[peer.ID]bool{pq: true},
+	}
+	r := relayFor(t, part, mine, g, &fakePeers{self: "self", peers: []peer.ID{pq}}, only)
+	r.attemptTimeout = 200 * time.Millisecond
+	r.budget = 2 * time.Second
+
+	done := make(chan string, 1)
+	go func() {
+		_, outcome, _ := r.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{})
+		done <- outcome
+	}()
+	select {
+	case outcome := <-done:
+		require.Equal(t, metrics.RelayUnreachable, outcome)
+	case <-time.After(5 * time.Second):
+		t.Fatal("a silent candidate pinned the relay: there is no deadline on an attempt (#4366 F2)")
+	}
+
+	// And a silent candidate does not stop the submission reaching one that
+	// answers.
+	both := &fakeRPC{
+		partition: part,
+		keys:      map[peer.ID]ed25519.PublicKey{pq: quiet, pr: ready},
+		silent:    map[peer.ID]bool{pq: true},
+	}
+	r2 := relayFor(t, part, mine, g, &fakePeers{self: "self", peers: []peer.ID{pq, pr}}, both)
+	r2.attemptTimeout = 200 * time.Millisecond
+	r2.budget = 2 * time.Second
+
+	done2 := make(chan string, 1)
+	go func() {
+		_, outcome, _ := r2.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{})
+		done2 <- outcome
+	}()
+	select {
+	case outcome := <-done2:
+		require.Equal(t, metrics.RelayTaken, outcome)
+		require.Equal(t, []peer.ID{pr}, both.submitted)
+	case <-time.After(5 * time.Second):
+		t.Fatal("one silent candidate stopped the relay reaching a live one")
+	}
+}
+
+// TestRelay_BackPressureIsNotShopped — F3. A validator answering
+// TooManyRequests is the network saying it is at capacity; handing the same
+// envelope to every other validator multiplies the load exactly when it is
+// weakest.
+func TestRelay_BackPressureIsNotShopped(t *testing.T) {
+	const part = "BVN3"
+	mine := otherKey(t)
+	a, b := otherKey(t), otherKey(t)
+	pa, pb := peer.ID("busy"), peer.ID("also-there")
+
+	g := globalsWith(t, map[string][]ed25519.PublicKey{part: {a, b}})
+	rpc := &fakeRPC{
+		partition: part,
+		keys:      map[peer.ID]ed25519.PublicKey{pa: a, pb: b},
+		answers:   map[peer.ID]answer{pa: {err: errors.TooManyRequests.With("worker backpressure")}},
+	}
+	r := relayFor(t, part, mine, g, &fakePeers{self: "self", peers: []peer.ID{pa, pb}}, rpc)
+
+	_, outcome, err := r.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{})
+	require.Equal(t, metrics.RelayNotReady, outcome)
+	require.True(t, errors.Is(err, errors.NotReady), "got %v", err)
+	require.Equal(t, []peer.ID{pa}, rpc.submitted,
+		"back-pressure must not be shopped to the rest of the committee")
+}
+
+// TestRelay_UnreachableTriesEachMemberOnce — the other half of decision 2b.
+func TestRelay_UnreachableTriesEachMemberOnce(t *testing.T) {
+	const part = "BVN3"
+	mine := otherKey(t)
+	a, b := otherKey(t), otherKey(t)
+	pa, pb := peer.ID("gone-a"), peer.ID("gone-b")
+
+	g := globalsWith(t, map[string][]ed25519.PublicKey{part: {a, b}})
+	rpc := &fakeRPC{
+		partition: part,
+		keys:      map[peer.ID]ed25519.PublicKey{pa: a, pb: b},
+		answers: map[peer.ID]answer{
+			pa: {err: errors.StreamAborted.With("reset")},
+			pb: {err: errors.StreamAborted.With("reset")},
+		},
+	}
+	r := relayFor(t, part, mine, g, &fakePeers{self: "self", peers: []peer.ID{pa, pb}}, rpc)
+
+	_, outcome, err := r.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{})
+	require.Equal(t, metrics.RelayUnreachable, outcome)
+	require.Error(t, err)
+	require.Equal(t, []peer.ID{pa, pb}, rpc.submitted, "each committee member once, and no more")
+}
+
+// TestRelay_ConsecutiveSubmissionsRotate — the relay's own cursor (decision
+// 2c as the lead let it stand). Without it every submission starts at the
+// same validator, and one validator carries a follower's whole share.
+func TestRelay_ConsecutiveSubmissionsRotate(t *testing.T) {
+	const part = "BVN3"
+	mine := otherKey(t)
+	a, b := otherKey(t), otherKey(t)
+	pa, pb := peer.ID("aaa"), peer.ID("bbb")
+
+	g := globalsWith(t, map[string][]ed25519.PublicKey{part: {a, b}})
+	rpc := &fakeRPC{partition: part, keys: map[peer.ID]ed25519.PublicKey{pa: a, pb: b}}
+	r := relayFor(t, part, mine, g, &fakePeers{self: "self", peers: []peer.ID{pa, pb}}, rpc)
+
+	for i := 0; i < 3; i++ {
+		_, _, err := r.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{})
+		require.NoError(t, err)
+	}
+	require.Equal(t, []peer.ID{pa, pb, pa}, rpc.submitted,
+		"consecutive submissions must not all start at the same validator")
 }

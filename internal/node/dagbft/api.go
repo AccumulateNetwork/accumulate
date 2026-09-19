@@ -8,6 +8,7 @@ package dagbft
 
 import (
 	"context"
+	"crypto/ed25519"
 	stderrors "errors"
 	"fmt"
 	"strings"
@@ -51,6 +52,7 @@ type ConsensusAPIService struct {
 	valKeyHash    [32]byte
 	heals         *crosschain.HealCounters
 	nodeState     nodestate.Serving
+	validatorKey  ed25519.PrivateKey
 }
 
 var _ api.ConsensusService = (*ConsensusAPIService)(nil)
@@ -72,6 +74,14 @@ type ConsensusAPIServiceParams struct {
 	// relay to a single hop (#4366; see relay.go).
 	NodeState nodestate.Serving
 
+	// ValidatorKey is this node's author key, used ONLY to answer a relay's
+	// challenge: a caller that means to hand this node a submission asks it
+	// to sign a nonce with the key whose hash it reports, so that naming a
+	// validator's hash is not enough to be handed traffic (#4366 F1). Empty
+	// means this node cannot answer a challenge, and no relay will choose
+	// it.
+	ValidatorKey ed25519.PrivateKey
+
 	// Heals is shared with the conductor so recoveries are reportable, not
 	// only loggable (#4075, #4105) — the soak monitor reads these fields.
 	Heals *crosschain.HealCounters
@@ -90,6 +100,7 @@ func NewConsensusAPIService(params ConsensusAPIServiceParams) *ConsensusAPIServi
 	s.valKeyHash = params.ValidatorKeyHash
 	s.heals = params.Heals
 	s.nodeState = params.NodeState
+	s.validatorKey = params.ValidatorKey
 	return s
 }
 
@@ -117,6 +128,11 @@ func (s *ConsensusAPIService) ConsensusStatus(ctx context.Context, opts api.Cons
 	// handing a submission to a node that would only relay it again
 	// (#4366).
 	res.CatchingUp = s.nodeState != nil && !s.nodeState.CanServeCurrent()
+
+	// A relay's challenge, answered with the key whose hash is above. Only
+	// when one is asked: a node signs nothing it was not asked to sign, and
+	// what it signs cannot be a consensus message (relay_challenge.go).
+	res.ChallengeSignature = signRelayChallenge(s.validatorKey, s.partitionID, opts.Challenge)
 
 	// Load values from the database
 	res.LastBlock = new(api.LastBlock)
@@ -337,15 +353,17 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		"messages", strings.Join(msgIDs, ","),
 		"partition", s.service.config.Partition.ID)
 
-	// What this node cannot propose it relays, not validated, decoded only
-	// to route: validating against a store this node has not filled, or
-	// judging a partition it is in no committee of, answers a question it
-	// is not the one to answer (executor.md, "Sync" step 6).
-	if !s.canPropose() {
-		return s.relayIt(ctx, envelope, opts)
-	}
-
-	// Verify the envelope is well-formed
+	// Verify the envelope is well-formed -- BEFORE the relay, and on the
+	// same terms as the local path.
+	//
+	// This is the relaying node's own admission, and it is not validation:
+	// Normalize decodes and checks shape, reads no account and touches no
+	// store, so nothing about a half-filled state reaches it (executor.md,
+	// "Sync" step 6, "not validated, decoded only to route"). Without it a
+	// follower turns B bytes of garbage into B bytes at every validator of
+	// the partition, which is the amplification F3 names; with it garbage
+	// costs one node one decode and never leaves it. A caller that asks for
+	// no verification gets none, here as before.
 	if opts.Verify == nil || *opts.Verify {
 		_, err := envelope.Normalize()
 		if err != nil {
@@ -353,6 +371,14 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 			s.submitted("rejected")
 			return nil, errors.BadRequest.WithFormat("verify: %w", err)
 		}
+	}
+
+	// What this node cannot propose it relays: judging a partition it is in
+	// no committee of, or validating against a store its pull has half
+	// filled, answers a question it is not the one to answer (executor.md,
+	// "Sync" step 6).
+	if !s.canPropose() {
+		return s.relayIt(ctx, envelope, opts)
 	}
 
 	// Marshal envelope

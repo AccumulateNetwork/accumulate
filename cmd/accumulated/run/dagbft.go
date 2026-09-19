@@ -667,6 +667,9 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		// Reported as CatchingUp, which is what tells another node's relay
 		// that this one cannot propose yet (#4366).
 		NodeState: nodeState,
+		// Answers a relay's challenge, so that naming a validator's key
+		// hash is not enough to be handed its traffic (#4366 F1).
+		ValidatorKey: ed25519.PrivateKey(validatorKey),
 	})
 	registerRpcService(inst, consensusSvc.Type().AddressFor(s.Partition.ID), message.ConsensusService{ConsensusService: consensusSvc})
 	err := dagbftProvidesService.Register(inst.services, s, consensusSvc)

@@ -9,6 +9,8 @@ package dagbft
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -50,7 +52,7 @@ func TestSubmitter_ANodeInNoCommitteeRelays(t *testing.T) {
 	m.SetGlobals(globalsWith(t, map[string][]ed25519.PublicKey{part: {val, otherKey(t)}}))
 	require.False(t, m.CanPropose(), "this node is in no committee")
 
-	rpc := &fakeRPC{keys: map[peer.ID]ed25519.PublicKey{target: val}}
+	rpc := &fakeRPC{partition: part, keys: map[peer.ID]ed25519.PublicKey{target: val}}
 	sub := NewSubmitterService(SubmitterServiceParams{
 		Service:    svc,
 		Membership: m,
@@ -89,7 +91,7 @@ func TestSubmitter_ASyncingNodeRelays(t *testing.T) {
 	joining := nodestate.New(protocol.PartitionUrl(part))
 	require.False(t, joining.CanServeCurrent(), "and it is still joining")
 
-	rpc := &fakeRPC{keys: map[peer.ID]ed25519.PublicKey{target: val}}
+	rpc := &fakeRPC{partition: part, keys: map[peer.ID]ed25519.PublicKey{target: val}}
 	sub := NewSubmitterService(SubmitterServiceParams{
 		Service:    svc,
 		NodeState:  joining,
@@ -141,8 +143,9 @@ func TestSubmitter_TheRelayAnswerIsTheCallersAnswer(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			rpc := &fakeRPC{
-				keys:    map[peer.ID]ed25519.PublicKey{target: val},
-				answers: map[peer.ID]answer{target: c.answer},
+				partition: part,
+				keys:      map[peer.ID]ed25519.PublicKey{target: val},
+				answers:   map[peer.ID]answer{target: c.answer},
 			}
 			sub := NewSubmitterService(SubmitterServiceParams{
 				Service: svc, Membership: m,
@@ -179,7 +182,7 @@ func TestSubmitter_AnActiveValidatorTakesItAndRelaysNothing(t *testing.T) {
 	m := NewMembership(part, mine)
 	m.SetGlobals(globalsWith(t, map[string][]ed25519.PublicKey{part: {mine, otherKey(t)}}))
 
-	rpc := &fakeRPC{keys: map[peer.ID]ed25519.PublicKey{target: otherKey(t)}}
+	rpc := &fakeRPC{partition: part, keys: map[peer.ID]ed25519.PublicKey{target: otherKey(t)}}
 	sub := NewSubmitterService(SubmitterServiceParams{
 		Service: svc, Membership: m,
 		Relay: NewRelay(RelayParams{Partition: part, Membership: m,
@@ -219,7 +222,7 @@ func TestSubmitter_AnUnknownCommitteeStillProposes(t *testing.T) {
 	m := NewMembership(part, mine) // no globals
 	require.True(t, m.CanPropose())
 
-	rpc := &fakeRPC{}
+	rpc := &fakeRPC{partition: part}
 	sub := NewSubmitterService(SubmitterServiceParams{
 		Service: svc, Membership: m,
 		Relay: NewRelay(RelayParams{Partition: part, Membership: m,
@@ -246,4 +249,219 @@ func TestSubmitter_NoRelayIsARefusalNotADrop(t *testing.T) {
 	sub := NewSubmitterService(SubmitterServiceParams{Service: svc, Membership: m})
 	_, err := sub.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{})
 	require.True(t, errors.Is(err, errors.NotReady), "got %v", err)
+}
+
+// TestSubmitter_ARelayDecodesButDoesNotValidate — the spec's "not validated,
+// decoded only to route" and the relaying node's own admission, which are
+// the same line read from two sides (executor.md "Sync" step 6; #4366 F3).
+//
+// Decoding is the node's own: Normalize reads no account and touches no
+// store, so it is free even for a node whose pull has half filled one, and
+// without it a follower turns garbage into that garbage at every validator
+// of the partition. Validating is not: nothing here judges the envelope
+// against state, and a caller that asks for no verification gets none —
+// which is why an envelope Normalize rejects still relays under
+// Verify:false.
+func TestSubmitter_ARelayDecodesButDoesNotValidate(t *testing.T) {
+	const part = "bvn1"
+	svc, _, mine := newJoiningService(t)
+	val := otherKey(t)
+	target := peer.ID("a-validator")
+
+	m := NewMembership(part, mine)
+	m.SetGlobals(globalsWith(t, map[string][]ed25519.PublicKey{part: {val}}))
+
+	newSub := func(rpc *fakeRPC) *SubmitterService {
+		return NewSubmitterService(SubmitterServiceParams{
+			Service: svc, Membership: m,
+			Relay: NewRelay(RelayParams{Partition: part, Membership: m,
+				Peers: &fakePeers{self: "self", peers: []peer.ID{target}}, RPC: rpc}),
+		})
+	}
+
+	// An envelope nothing can decode: a transaction hash that is not a
+	// hash. Normalize rejects it, and it reads nothing to do so.
+	junk := &messaging.Envelope{TxHash: []byte("short")}
+
+	// The client's default is to verify, and the relay does not carry what
+	// it could not decode.
+	rpc := &fakeRPC{partition: part, keys: map[peer.ID]ed25519.PublicKey{target: val}}
+	a0, r0, t0, _, _ := counted(part)
+	_, err := newSub(rpc).Submit(context.Background(), junk, api.SubmitOptions{})
+	require.True(t, errors.Is(err, errors.BadRequest), "got %v", err)
+	require.Empty(t, rpc.submitted, "garbage must cost one node one decode, not the whole committee")
+	a1, r1, t1, _, _ := counted(part)
+	require.Equal(t, float64(0), a1-a0)
+	require.Equal(t, float64(1), r1-r0, "refused here, and never relayed")
+	require.Equal(t, float64(0), t1-t0)
+
+	// And with verification off it is relayed unread: the relay is not a
+	// validator, and the node that will propose it is the node that judges
+	// it.
+	no := false
+	rpc2 := &fakeRPC{partition: part, keys: map[peer.ID]ed25519.PublicKey{target: val}}
+	_, err = newSub(rpc2).Submit(context.Background(), junk, api.SubmitOptions{Verify: &no})
+	require.NoError(t, err)
+	require.Equal(t, []peer.ID{target}, rpc2.submitted)
+}
+
+// TestSubmitter_AValidatorsRefusalReachesTheCallerUnchanged — F4's half that
+// is the node's: the harness subtracts relayed{refused} from the stranded
+// figure only because a refusal is an ANSWER that went back to the caller
+// (note_3869951312). If the relaying node rewrote it, the subtraction would
+// be subtracting a drop.
+func TestSubmitter_AValidatorsRefusalReachesTheCallerUnchanged(t *testing.T) {
+	const part = "bvn1"
+	svc, _, mine := newJoiningService(t)
+	val := otherKey(t)
+	target := peer.ID("a-validator")
+
+	m := NewMembership(part, mine)
+	m.SetGlobals(globalsWith(t, map[string][]ed25519.PublicKey{part: {val}}))
+
+	refusal := []*api.Submission{{
+		Success: false,
+		Message: "Transaction validation failed: insufficient credits",
+		Status:  &protocol.TransactionStatus{Code: errors.InsufficientCredits},
+	}}
+	rpc := &fakeRPC{
+		partition: part,
+		keys:      map[peer.ID]ed25519.PublicKey{target: val},
+		answers:   map[peer.ID]answer{target: {res: refusal}},
+	}
+	sub := NewSubmitterService(SubmitterServiceParams{
+		Service: svc, Membership: m,
+		Relay: NewRelay(RelayParams{Partition: part, Membership: m,
+			Peers: &fakePeers{self: "self", peers: []peer.ID{target}}, RPC: rpc}),
+	})
+
+	no := false
+	res, err := sub.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{Verify: &no})
+	require.NoError(t, err)
+	require.Equal(t, refusal, res, "the validator's answer, byte for byte")
+	require.Equal(t, "Transaction validation failed: insufficient credits", res[0].Message)
+	require.Equal(t, errors.InsufficientCredits, res[0].Status.Code)
+}
+
+// TestSubmitter_AJoiningNodeWithNoCommitteeSaysNotReady — decision 4 where
+// it is actually reachable.
+//
+// An unknown committee does not stop a node proposing (a startup race must
+// not take a validator off the air), so the only node that reaches the relay
+// holding no committee is one that is JOINING. It cannot name a node that
+// can propose, so it says NotReady, counts not-ready, and says it in the log
+// once.
+func TestSubmitter_AJoiningNodeWithNoCommitteeSaysNotReady(t *testing.T) {
+	const part = "bvn1"
+	svc, _, mine := newJoiningService(t)
+
+	m := NewMembership(part, mine) // no globals: no committee held
+	joining := nodestate.New(protocol.PartitionUrl(part))
+	relay := NewRelay(RelayParams{Partition: part, Membership: m,
+		Peers: &fakePeers{self: "self", peers: []peer.ID{"somebody"}},
+		RPC:   &fakeRPC{partition: part}})
+	sub := NewSubmitterService(SubmitterServiceParams{
+		Service: svc, NodeState: joining, Membership: m, Relay: relay,
+	})
+
+	a0, r0, _, n0, _ := counted(part)
+	no := false
+	for i := 0; i < 2; i++ {
+		_, err := sub.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{Verify: &no})
+		require.True(t, errors.Is(err, errors.NotReady), "got %v", err)
+	}
+	a1, r1, _, n1, _ := counted(part)
+	require.Equal(t, float64(2), n1-n0, "counted not-ready, once per submission")
+	require.Equal(t, float64(2), a1-a0, "and one accepted with each, so sum(relayed) <= accepted holds")
+	require.Equal(t, float64(0), r1-r0)
+	require.True(t, relay.saidBlind, "and it says so in the log once, not twice")
+}
+
+// TestValidator_ASyncedNodeInNoCommitteeAnswers — Validate is a READ, and
+// reads divide from relays on whether local state is needed. A node that is
+// synced answers it whatever its committee, because a validation judges
+// against the latest committed state and promises nothing about proposal
+// (executor.md, "Sync" step 6). The service takes no Membership at all, and
+// this test exists to fail if one is ever added.
+func TestValidator_ASyncedNodeInNoCommitteeAnswers(t *testing.T) {
+	svc, _, _ := newJoiningService(t)
+	val := NewValidatorService(ValidatorServiceParams{Service: svc, NodeState: nodestate.Always{}})
+
+	res, err := val.Validate(context.Background(), new(messaging.Envelope), api.ValidateOptions{})
+	require.False(t, errors.Is(err, errors.NotReady),
+		"a synced node must answer Validate whatever its committee: %v", err)
+	if err == nil {
+		require.NotEmpty(t, res)
+	}
+}
+
+// TestConsensusStatus_ReportsCatchingUpFromTheJoinState — the source of the
+// one fact that bounds a relay to a single hop.
+func TestConsensusStatus_ReportsCatchingUpFromTheJoinState(t *testing.T) {
+	const part = "bvn1"
+	svc, _, mine := newJoiningService(t)
+	machine := nodestate.New(protocol.PartitionUrl(part))
+
+	cons := NewConsensusAPIService(ConsensusAPIServiceParams{
+		Service: svc, PartitionID: part, NodeState: machine,
+		ValidatorKeyHash: sha256.Sum256(mine),
+	})
+	inc := false
+	opts := api.ConsensusStatusOptions{IncludeAccumulate: &inc, IncludePeers: &inc, Partition: part}
+
+	st, err := cons.ConsensusStatus(context.Background(), opts)
+	require.NoError(t, err)
+	require.True(t, st.CatchingUp, "a BOOTING node is catching up, and is no relay's target")
+
+	require.True(t, machine.PromoteToActive([32]byte{1}, 7))
+	st, err = cons.ConsensusStatus(context.Background(), opts)
+	require.NoError(t, err)
+	require.False(t, st.CatchingUp, "and once it is ACTIVE it is a target again")
+
+	// A node that never joined has no state machine and is not catching up.
+	plain := NewConsensusAPIService(ConsensusAPIServiceParams{Service: svc, PartitionID: part})
+	st, err = plain.ConsensusStatus(context.Background(), opts)
+	require.NoError(t, err)
+	require.False(t, st.CatchingUp)
+}
+
+// TestConsensusStatus_AnswersARelaysChallengeOnlyWithItsOwnKey — the service
+// side of F1.
+func TestConsensusStatus_AnswersARelaysChallengeOnlyWithItsOwnKey(t *testing.T) {
+	const part = "bvn1"
+	svc, _, _ := newJoiningService(t)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	cons := NewConsensusAPIService(ConsensusAPIServiceParams{
+		Service: svc, PartitionID: part,
+		ValidatorKeyHash: sha256.Sum256(pub), ValidatorKey: priv,
+	})
+	inc := false
+	nonce, err := newRelayChallenge()
+	require.NoError(t, err)
+
+	st, err := cons.ConsensusStatus(context.Background(), api.ConsensusStatusOptions{
+		IncludeAccumulate: &inc, IncludePeers: &inc, Partition: part, Challenge: nonce,
+	})
+	require.NoError(t, err)
+	require.True(t, verifyRelayChallenge(pub, part, st.ValidatorKeyHash, nonce, st.ChallengeSignature),
+		"the node must prove it holds the key whose hash it reports")
+
+	// No challenge, no signature: a node signs nothing it was not asked to.
+	st, err = cons.ConsensusStatus(context.Background(), api.ConsensusStatusOptions{
+		IncludeAccumulate: &inc, IncludePeers: &inc, Partition: part,
+	})
+	require.NoError(t, err)
+	require.Empty(t, st.ChallengeSignature)
+
+	// A node with no key cannot answer, and is therefore no relay's target.
+	none := NewConsensusAPIService(ConsensusAPIServiceParams{
+		Service: svc, PartitionID: part, ValidatorKeyHash: sha256.Sum256(pub),
+	})
+	st, err = none.ConsensusStatus(context.Background(), api.ConsensusStatusOptions{
+		IncludeAccumulate: &inc, IncludePeers: &inc, Partition: part, Challenge: nonce,
+	})
+	require.NoError(t, err)
+	require.Empty(t, st.ChallengeSignature)
 }
