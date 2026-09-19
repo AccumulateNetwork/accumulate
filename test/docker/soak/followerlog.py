@@ -300,6 +300,8 @@ def compare_roots(report, follower, validators):
             "sourceless": sourceless,
             "dispatched": report.dispatched.get(follower, 0),
             "stated": report.stated.get(follower, 0),
+            "anchorLines": (report.dispatched.get(follower, 0)
+                            + report.stated.get(follower, 0)),
             "conflicts": [c for c in report.conflicts if c[0] == follower]}
     if not mine and sourceless:
         # Every anchor line it logged predates #4370. Comparing them would
@@ -329,6 +331,8 @@ def compare_roots(report, follower, validators):
             "sourceless": sourceless,
             "dispatched": report.dispatched.get(follower, 0),
             "stated": report.stated.get(follower, 0),
+            "anchorLines": (report.dispatched.get(follower, 0)
+                            + report.stated.get(follower, 0)),
             "conflicts": [c for c in report.conflicts if c[0] == follower],
             "why": None}
 
@@ -551,6 +555,14 @@ def _n(v, measured=True):
     return str(v) if measured and v is not None else ABSENT
 
 
+def _no_lines(r):
+    """The reason the two anchor-line counts read ABSENT, or nothing."""
+    if r.get("anchorLines"):
+        return ""
+    return (" (the follower logged no anchor line of either kind, so nothing "
+            "was counted)")
+
+
 def rows(v):
     """The manifest's Result rows, as (name, value) — each naming the quantity
     it counts, not the method that read it."""
@@ -576,10 +588,17 @@ def rows(v):
          ("NO" if c["followerExcluded"] is False else ABSENT)),
         ("validators added to a committee during the run (#)",
          _n(len(c["addedDuringRun"]), c["measured"])),
+        # A count of anchor lines is a real count whenever the follower wrote
+        # one of either kind — `Sending an anchor` (a validator) or
+        # `Anchor not sent` (a node in no committee, #4367). When it wrote
+        # NEITHER, nothing was read, and printing 0 dispatched would be a
+        # clean bill for a follower the reader never saw: the log cut before
+        # its first block, or the name in run.json not matching the
+        # container. 0 there is a read counter, not a result.
         ("anchors the follower dispatched (#4367: must be 0) (#)",
-         _n(r.get("dispatched"))),
+         _n(r.get("dispatched"), bool(r.get("anchorLines"))) + _no_lines(r)),
         ("blocks the follower stated a root for without sending (#)",
-         _n(r.get("stated"))),
+         _n(r.get("stated"), bool(r.get("anchorLines"))) + _no_lines(r)),
         ("anchored blocks compared, follower vs a validator (#)",
          _n(r["compared"], r["measured"])
          + ("" if r["measured"] else " (%s)" % r["why"])),

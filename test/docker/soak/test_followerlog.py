@@ -846,10 +846,6 @@ class Rendering(unittest.TestCase):
         self.assertIn("— not measured", text)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class AFollowerThatSendsNothingIsStillCompared(unittest.TestCase):
     """Since #4367 a node in no committee does not dispatch an anchor, so the
     line the root comparison used to read is not written on the follower.
@@ -889,6 +885,24 @@ class AFollowerThatSendsNothingIsStillCompared(unittest.TestCase):
         self.assertEqual(
             "0", row["anchors the follower dispatched (#4367: must be 0) (#)"])
 
+    def test_no_anchor_line_of_either_kind_is_not_zero_dispatched(self):
+        """The reader saw no anchor line from the follower at all — its log
+        was cut before its first block, or the name in run.json does not
+        match the container. `0 dispatched` there is a clean bill for a
+        follower nobody read; the row has to say so, as the compared-blocks
+        row already does (reading-a-run.md: 0 from a read counter is not a
+        result)."""
+        lines = [ln for ln in self.lines() if "Anchor not sent" not in ln]
+        v = followerlog.compare_roots(followerlog.read(lines), FOL, VALS)
+        self.assertEqual(0, v["anchorLines"])
+        row = dict(followerlog.rows(
+            followerlog.verdict(followerlog.read(lines), FOL, VALS)))
+        for name in ("anchors the follower dispatched (#4367: must be 0) (#)",
+                     "blocks the follower stated a root for without sending (#)"):
+            self.assertTrue(row[name].startswith(followerlog.ABSENT),
+                            "%s read %r" % (name, row[name]))
+            self.assertIn("no anchor line", row[name])
+
     def test_a_follower_that_still_dispatches_is_visible(self):
         """The regression this guards: the gate removed and the follower
         sending again. The row must not read 0."""
@@ -915,3 +929,7 @@ class AFollowerThatSendsNothingIsStillCompared(unittest.TestCase):
         self.assertEqual("500", f["block"])
         self.assertEqual("00000000", f["root"])
         self.assertEqual("00000000", f["bpt"])
+
+
+if __name__ == "__main__":
+    unittest.main()
