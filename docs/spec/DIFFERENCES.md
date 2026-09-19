@@ -234,11 +234,32 @@ naming, if the assumption ever stops holding.
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
 
-**Spec** ([executor.md](executor.md), "Sync"): every node, validator or
-follower, pulls the state of the chains down from the running protocol,
-verified against the anchored root, while collecting messages from consensus
-into staging, and processes transactions only once the state matches and
-staging holds what its peers hold.
+**Spec** ([executor.md](executor.md), "Sync", as rewritten 2026-09-19): a
+node that joins — or restarts, which is a join — validates the spine first
+(the operators' key book and the anchors it signs, by signature, to a
+threshold of distinct key-page entries, anchors routed by producer), pulls
+the state that a verified anchor's root commits to, served *as of that
+anchored block*, and collects consensus from the moment it listens; staging
+is what was collected minus what the pulled state says executed, and the
+node executes the next block when no stream has a gap, else advances the
+sync one block and asks again. **No peer is ever asked what it holds.** The
+paragraph this replaced ("processes transactions only once the state matches
+and staging holds what its peers hold") was the first pass's design, kept
+below as the record of what was built.
+
+Two departures the rewritten section names that this entry did not:
+
+- **Producer routing** — a partition's root must be verified from anchors
+  *produced by* it, which live on the receiving partition's anchor pool: a
+  BVN's from `dn.acme/anchors`, the Directory's own from a BVN's pool. This
+  line builds one `DirectoryAnchors` on `dn.acme/anchors`
+  (`internal/node/join/state.go:166`) and asks it for every partition
+  (`:444`), so by that rule the Directory's own root is unobtainable (#4301,
+  fact 3 — inferred, not yet shown by a run).
+- **Anchored-height serving** — a peer serves an account with a receipt to
+  its *current* root, never as of a caller-named anchored block, so a hot
+  account never settles and a restart converges on nothing (#4361;
+  `repro-4205-restart-rejoin` @ `03916816b`).
 
 **Code**: a node starts from genesis or from a snapshot file it was given, and
 consensus "catches up" by fetching batches from peers' retention
@@ -370,7 +391,13 @@ state is a gauge (`accumulate_node_state`). The state is the node's own,
 handed to its services rather than looked up by partition: a process can run
 several nodes of one partition — devnet does — and a registry keyed by
 partition would give them all one node's state. A node that never joined has
-no state machine and serves.
+no state machine and serves — **including `Submit` and `Validate` for a
+partition whose committee it is not in**, which the spec (step 5, "A node does
+not take what it cannot propose", 2026-09-19) forbids: nothing on the advertise,
+route, dial or submit path asks whether the node's key is in the committee
+(`peer_manager.go:155-180`, `dispatcher.go:151-157`, `dial/dialer.go:139-248`,
+`dagbft/api.go:186-198`), so a follower accepts what it can never propose
+(#4366; run `20260919T191634Z`). Open until #4366 lands.
 
 **The gauge, though, is every node's, for every partition it runs, from
 start-up (#4345a).** It used to be created by the join and only by the join —
@@ -420,8 +447,12 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   label the issue asks for is therefore not added: the requester cannot tell a
   joining node from a node whose entries are in flight, and both mean "ask
   again".
-- **The v3 querier is not gated** (#4297)**.** A joining node still answers
-  account state and BPT pages from a store the pull has half filled. The hazard is
+- **The v3 querier was not gated** (#4297) when this was written; it is now
+  — `servingFor` in `internal/api/v3/querier.go:150-169` refuses a BPT page
+  and an account read carrying a receipt while joining, as the entry below
+  ("`Submit`, `Validate`, `BptPageQuery` and an account read carrying a
+  receipt answer `NotReady`") records. What was true then: a joining node
+  answered account state and BPT pages from a store the pull had half filled. The hazard is
   another joining node pulling its unverified spine from it — `pull.Account`
   in `ModeFullSpine` is explicitly unverified, because it is what the verifier
   reads from — and then never pulling the spine again. Gating the querier
@@ -475,8 +506,10 @@ executed no block beyond genesis does not join, `Fresh` is deleted, and a
 fresh netsim reaches block 2 in 1 second against 18 for the timeout race
 (`TestAFreshNetworkStartsWithoutJoining`, `TestAGenesisLoadedNodeDoesNotJoin`). A joining node also rejected
 14,643 user transactions against its own un-executed store, because the
-submitter is not gated either (#4307). The Docker chaos run (`30m-100tps-
-chaos.conf`, then 24 h) is the proof, and it is a human step. Two known holes
+submitter is not gated either (#4307). The Docker chaos run
+(`30m-100tps-chaos.conf`; the 24 h run named here originally was superseded
+2026-09-19 by phase 1's twelve-hour acceptance with followers, PLAN E11) is
+the proof, and it is a human step. Two known holes
 will meet it first — an account carrying pending signature material cannot be
 verified at all (#4293's entry above, filed as #4298), and a remote
 transaction stub the store cannot resolve is not collected (#4292's entry,
@@ -573,15 +606,23 @@ reaches the root the Directory anchored for `Q`; the tracker then promotes.
 - `orchestrator`, `anchorsrc`, `bootpersist`, `clientsrc` and `gossip` from
   bootstrap-v3 are not ported (#4302; `bootpersist` is #4300's, which settles
   first whether a joining node's state need survive a restart at all); the
-  first is #4294's, the rest are of the rejected trust model.
+  first is #4294's. **`anchorsrc` is not of a rejected model — it is the
+  spine validator #4301 ports** (the signed anchor verified against the local
+  operators' key page, to a threshold of distinct entries, with producer
+  routing); leaving it behind is why the first pass's trust terminated in one
+  peer. `clientsrc` and `gossip` are of the model bootstrap-v3 used to find
+  peers, not of the trust model, and stay unported.
 - The v3 `block` query's entry paging ignores `start`, so it cannot be used to
   page through what a block touched. Untouched here (#4302).
 
-**Decided (Paul, 2026-09-18)**: a starting node takes its staging from a
-running validator through an API, keeps it current from consensus while it
-pulls the state the buffered blocks name, and executes from the block after
-its root matches; a restart is the same path, not a consensus replay. PLAN
-E11 lists the five steps.
+**Decided (Paul, 2026-09-18) — superseded 2026-09-19 by the validated-spine
+design above (executor.md "Sync" steps 1–5; PLAN E11 second pass; #4301 →
+#4361 → #4362):** a starting node takes its staging from a running validator
+through an API, keeps it current from consensus while it pulls the state the
+buffered blocks name, and executes from the block after its root matches; a
+restart is the same path, not a consensus replay. The five steps below are
+the record of what that first pass built; #4362 deletes the staging API and
+`takeStaging`, and what steps 3–5 keep is said there.
 
 **Collecting (#4292, done)**: the executor takes a peer's staging
 (`Executor.LoadStaging`, from #4291's snapshot, refusing a stage that is not
@@ -689,7 +730,10 @@ seventh nobody had named.
 - **A joining node was a black hole for user traffic (#4307)** and served the
   two reads another node's pull takes (#4297). `Submit`, `Validate`,
   `BptPageQuery` and an account read carrying a receipt answer `NotReady` while
-  the node is joining; plain reads stay open. The node state reaches the
+  the node is joining; plain reads stay open. Since 2026-09-19 the spec also
+  requires `NotReady` from `Submit` and `Validate` while the node's key is in
+  no committee of the partition, whatever its state (step 5; #4366) — not yet
+  built. The node state reaches the
   querier, which is configured apart from consensus, through IOC
   (`dagbftProvidesNodeState` / `querierWantsNodeState`), not a registry keyed by
   partition — a process runs several nodes of one partition.
