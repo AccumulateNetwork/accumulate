@@ -85,9 +85,22 @@ This is the contract the soak monitor is written against:
 | `dispatcher_drops_total` | counter | destination, reason={deadline,queue-full} | envelopes dropped undelivered |
 | `bcdb_staged_commits`, `bcdb_oldest_view_age_seconds` | gauge | database | store isolation cost, as of the last commit or release |
 | `dagbft_execution_lag_blocks` | gauge | partition | committed groups the executor has not produced a block from |
+| `dagbft_submissions_total` | counter | partition, outcome={accepted,rejected} | what this node's `Submit` did with what it was handed, per partition it runs |
+| `dagbft_proposed_transactions_total` | counter | partition | transactions this node placed in a batch it AUTHORED and published |
 
-Exported: the first two, on both branches. **Missing: the remaining six — which
-is why the flow matrix and wedge panels have never shown a true value** (#4095).
+Exported: the first two, on both branches. **Missing: the remaining eight — which
+is why the flow matrix and wedge panels have never shown a true value** (#4095),
+and why no run can say whether a submission was accepted and never proposed.
+
+The last two are the pair a follower makes necessary (#4364, for #4366/#4369).
+`accepted - proposed` per (node, partition), floored at 0, is **accepted never
+proposed (#, whole run)**: on a validator it sits at the in-flight depth, and on
+a node in no committee it is everything the network dialled to it and lost.
+`proposed > accepted` is an impossible state (clause 1a) and MUST be surfaced as
+an instrument alarm, not floored silently. Until both families exist the harness
+renders `— not measured` on the board, in `submissions.csv` (a header and no
+rows) and in the manifest — never 0, because 0 asserts that nothing stranded,
+which is the one thing run `20260919T191634Z` could not establish.
 
 The consensus-status API MUST additionally report `syntheticHeals` and
 `anchorHeals` (#4075) — the coarse monitor's CSV reads them.

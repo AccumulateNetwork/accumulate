@@ -136,6 +136,8 @@ MEM_METRICS = {
 }
 _MEM_LAST = {}   # node -> {field: value, "t": when}; for GC/s and GC-CPU rates
 _MEM_CSV_T = [0.0]
+_SUB_CSV_T = [0.0]
+I_SUB = 30  # seconds between rows of submissions.csv (#4364)
 # The rolling history: an hour at one sample a second. It was ten minutes,
 # which is shorter than most things worth watching -- a memory trend, a
 # healing burst after a chaos restart, the shape of a recovery -- and the
@@ -926,25 +928,216 @@ def mem_from(per):
     return summary
 
 
+MEM_CSV_COLS = ["rssMiB", "heapAllocMiB", "heapInuseMiB", "nextGCMiB", "gcCount", "gcPerSec",
+                "gcCores", "cpuSec", "cpuCores", "goroutines", "staged", "viewAgeS"]
+MEM_CSV_HEADER = "time,node,role," + ",".join(MEM_CSV_COLS)
+
+
+def mem_csv_rows(mem, ts):
+    """Every node's row for one sample: the validators, then the followers.
+
+    EVERY node, each carrying its role (#4364). `collect_metrics` splits the
+    scrape in two so that the fleet aggregates keep the validators'
+    membership (M6, #4365) — and the file was written from the validators'
+    half alone, so run 20260919T191634Z recorded twelve nodes for thirteen
+    and the one node with no way to drain its queue (#4366) is the one with
+    no RSS, heap, goroutine or staged series at all. The aggregates still
+    mean the validators; this file means every node, and says which is which
+    rather than leaving a reader to parse `acc-bvn3-fol1`.
+    """
+    rows = [(c, "validator", v) for c, v in (mem.get("byNode") or {}).items()]
+    rows += [(c, "follower", v) for c, v in (mem.get("followerByNode") or {}).items()]
+    rows.sort(key=lambda r: (r[0], r[1]))
+    out = []
+    for c, role, v in rows:
+        out.append(",".join([ts, c, role] +
+                            ["" if v.get(k) is None else str(v.get(k)) for k in MEM_CSV_COLS]))
+    return out
+
+
 def write_mem_csv(mem):
     """Append one row per node to RUN_DIR/mem.csv every I_MEM seconds. The
     dashboard's history keeps ten minutes; this is the twelve-hour series the
     steady-state criteria are judged from."""
     now = time.time()
-    if now - _MEM_CSV_T[0] < I_MEM or not mem.get("byNode"):
+    if now - _MEM_CSV_T[0] < I_MEM:
+        return
+    if not (mem.get("byNode") or mem.get("followerByNode")):
         return
     _MEM_CSV_T[0] = now
     path = os.path.join(RUN_DIR, "mem.csv")
-    cols = ["rssMiB", "heapAllocMiB", "heapInuseMiB", "nextGCMiB", "gcCount", "gcPerSec",
-            "gcCores", "cpuSec", "cpuCores", "goroutines", "staged", "viewAgeS"]
     new = not os.path.exists(path)
     ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
     with open(path, "a") as f:
         if new:
-            f.write("time,node," + ",".join(cols) + "\n")
-        for c in sorted(mem["byNode"]):
-            v = mem["byNode"][c]
-            f.write(ts + "," + c + "," + ",".join("" if v.get(k) is None else str(v.get(k)) for k in cols) + "\n")
+            f.write(MEM_CSV_HEADER + "\n")
+        for line in mem_csv_rows(mem, ts):
+            f.write(line + "\n")
+
+
+# --- accepted, and never proposed (#4364; the exporter is #4366/#4369) -------
+#
+# The measurement gate 0 could not make. On run 20260919T191634Z the
+# follower's own numbers proved it executes every committed block, and the
+# 3,929 healed entries proved something was being lost on its BVN — but the
+# chain "dispatched to the follower -> accepted -> never batched -> healed"
+# was INFERRED from where the holes were, because no counter records a
+# submission a node accepted and never put in a batch it proposed. The only
+# trace is `TRACE-SUBMIT: submission successful`, `slog.Debug` at
+# internal/node/dagbft/api.go:318, and no build emits Debug (#4369).
+#
+# THE CONTRACT THIS HARNESS READS. Two counters, per node, namespace
+# `accumulate`, both monotone and never reset:
+#
+#   accumulate_dagbft_submissions_total{partition, outcome}
+#       outcome = "accepted"  -- Submit returned success and the envelope
+#                                entered this node's worker batch
+#       outcome = "rejected"  -- Submit refused it (validation, not serving)
+#       partition             -- the partition id the submission was routed
+#                                to on this node ("Directory", "BVN3"), NOT
+#                                the container: every container runs two
+#                                nodes and their queues are separate.
+#
+#   accumulate_dagbft_proposed_transactions_total{partition}
+#       transactions this node placed into a batch it AUTHORED and published.
+#       Not transactions executed: a follower's problem is that its batch is
+#       never referenced by a certified header, and counting execution would
+#       credit it for what the committee did.
+#
+# The quantity the board and the manifest name is the difference:
+#
+#   accepted never proposed (#, whole run) = accepted - proposed, per
+#   (node, partition), floored at 0 and summed.
+#
+# The window is the whole run, because both are run-long counters; on a
+# validator this sits at the in-flight depth (single digits) and on a
+# follower it equals everything the network dialled to it. `proposed >
+# accepted` is an impossible state (REPORTING-SPEC 1a) and is surfaced as an
+# alarm naming the node, not absorbed by the floor.
+#
+# Until the families exist every consumer says `— not measured`, never 0
+# (REPORTING-SPEC 1).
+SUBMIT_TOTAL = "accumulate_dagbft_submissions_total"
+PROPOSED_TOTAL = "accumulate_dagbft_proposed_transactions_total"
+SUBMIT_CSV_HEADER = ("time,node,role,partition,accepted,rejected,proposed,"
+                     "acceptedNeverProposed")
+
+
+def submissions_from(per, role="validator"):
+    """Accepted / rejected / proposed per (node, partition) from one scrape.
+
+    `measured` is False when NEITHER family appeared on any node — which is
+    every build to date. A node that exports one and not the other is
+    measured but incomplete, and says so per node rather than rendering the
+    missing half as zero.
+    """
+    by_node = {}
+    seen = set()
+    for c, rows in (per or {}).items():
+        for name, lab, v in rows or ():
+            if name not in (SUBMIT_TOTAL, PROPOSED_TOTAL):
+                continue
+            try:
+                n = int(float(v))
+            except (TypeError, ValueError):
+                continue
+            lab = lab if isinstance(lab, dict) else {}
+            part = lab.get("partition") or "?"
+            node = by_node.setdefault(c, {"role": role, "byPartition": {}})
+            p = node["byPartition"].setdefault(
+                part, {"accepted": None, "rejected": None, "proposed": None})
+            if name == SUBMIT_TOTAL:
+                seen.add("submissions")
+                o = lab.get("outcome")
+                if o in ("accepted", "rejected"):
+                    p[o] = (p[o] or 0) + n
+            else:
+                seen.add("proposed")
+                p["proposed"] = (p["proposed"] or 0) + n
+
+    out = {"measured": bool(seen), "families": sorted(seen), "byNode": by_node,
+           "accepted": None, "rejected": None, "proposed": None,
+           "neverProposed": None, "worstNode": None, "worstNeverProposed": None,
+           "impossible": []}
+    if not seen:
+        return out
+    acc = rej = pro = never = 0
+    for c, node in by_node.items():
+        n_acc = n_pro = n_never = n_rej = 0
+        for part, p in node["byPartition"].items():
+            a, r, q = p.get("accepted") or 0, p.get("rejected") or 0, p.get("proposed") or 0
+            if p.get("accepted") is not None and p.get("proposed") is not None and q > a:
+                out["impossible"].append(
+                    "%s %s: proposed %d of %d accepted" % (c, part, q, a))
+            gap = max(0, a - q)
+            p["neverProposed"] = gap
+            n_acc += a; n_rej += r; n_pro += q; n_never += gap
+        node.update({"accepted": n_acc, "rejected": n_rej,
+                     "proposed": n_pro, "neverProposed": n_never})
+        acc += n_acc; rej += n_rej; pro += n_pro; never += n_never
+        if out["worstNeverProposed"] is None or n_never > out["worstNeverProposed"]:
+            out["worstNeverProposed"], out["worstNode"] = n_never, c
+    out.update({"accepted": acc, "rejected": rej, "proposed": pro,
+                "neverProposed": never})
+    return out
+
+
+def merge_submissions(val, fol):
+    """The validators' reading and the follower's, kept apart but in one dict.
+
+    Same rule as every other total on this board (M6, #4365): the aggregate
+    means the validators, so a run with a follower stays comparable with one
+    without, and the follower's own figures sit beside it under their own
+    key. `measured` is true if EITHER half found the family — a build that
+    exports it exports it on both.
+    """
+    fol = fol or {"measured": False, "byNode": {}}
+    out = dict(val)
+    out["measured"] = bool(val.get("measured") or fol.get("measured"))
+    out["follower"] = {k: fol.get(k) for k in
+                       ("measured", "accepted", "rejected", "proposed",
+                        "neverProposed", "worstNode", "worstNeverProposed")}
+    out["followerByNode"] = fol.get("byNode") or {}
+    out["impossible"] = list(val.get("impossible") or []) + list(fol.get("impossible") or [])
+    return out
+
+
+def submissions_csv_rows(sub, ts):
+    """One row per (node, partition) per sample, validators then followers.
+
+    No rows at all while the families are absent: an empty field here would
+    read as "the node answered zero", and the file's whole job is to say
+    whether anyone asked. The header is written regardless, so a run
+    directory always shows the harness looked.
+    """
+    rows = []
+    for source, role in ((sub.get("byNode") or {}, "validator"),
+                         (sub.get("followerByNode") or {}, "follower")):
+        for c in sorted(source):
+            node = source[c]
+            for part in sorted(node.get("byPartition") or {}):
+                p = node["byPartition"][part]
+                rows.append(",".join(
+                    [ts, c, node.get("role") or role, part] +
+                    ["" if p.get(k) is None else str(p.get(k))
+                     for k in ("accepted", "rejected", "proposed", "neverProposed")]))
+    return rows
+
+
+def write_submissions_csv(sub):
+    """Append RUN_DIR/submissions.csv every I_SUB seconds (#4364)."""
+    now = time.time()
+    if now - _SUB_CSV_T[0] < I_SUB:
+        return
+    _SUB_CSV_T[0] = now
+    path = os.path.join(RUN_DIR, "submissions.csv")
+    new = not os.path.exists(path)
+    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+    with open(path, "a") as f:
+        if new:
+            f.write(SUBMIT_CSV_HEADER + "\n")
+        for line in submissions_csv_rows(sub, ts):
+            f.write(line + "\n")
 
 
 def exec_from(per):
@@ -1269,6 +1462,12 @@ def collect_metrics():
     # flagged — /data is read by scripts, and a reader that has to parse a
     # container name to learn a role eventually parses it wrong.
     fol_mem = mem_from(per_fol) if per_fol else None
+    # mem.csv is written from this dict, and it must carry EVERY node (#4364).
+    # The aggregates above (heapMaxMiB, stagedMax, …) stay the validators'
+    # so they remain comparable with runs that had no follower; the follower's
+    # per-node series sits beside them under its own key and is written to the
+    # file with role=follower.
+    mem["followerByNode"] = (fol_mem or {"byNode": {}})["byNode"]
     for c in nodes["byNode"]:
         nodes["byNode"][c]["follower"] = False
     for c, v in (fol_mem or {"byNode": {}})["byNode"].items():
@@ -1276,6 +1475,12 @@ def collect_metrics():
             {"rssMiB": v.get("rssMiB"), "heapMiB": v.get("heapAllocMiB"),
              "gcPerSec": v.get("gcPerSec"), "staged": v.get("staged"),
              "follower": True})
+    # Accepted and never proposed (#4364). Absent on every build so far; the
+    # contract the exporter must meet is at SUBMIT_TOTAL above and on #4366.
+    nodes["submissions"] = merge_submissions(
+        submissions_from(per, "validator"),
+        submissions_from(per_fol, "follower") if per_fol else None)
+    nodes["submissions"]["scope"] = SCOPE_VAL
     nodes["followers"] = sorted(fol_names & set(per_fol))
     nodes["validatorCount"] = len(per)
     nodes["scope"] = SCOPE_VAL
@@ -1719,6 +1924,10 @@ def _collect_once(last, hist):
                 write_mem_csv(upd["nodeStats"].get("mem", {}))
             except Exception as e:
                 log("mem.csv: %s" % e)
+            try:
+                write_submissions_csv(upd["nodeStats"].get("submissions", {}))
+            except Exception as e:
+                log("submissions.csv: %s" % e)
             # OOM early warning. Run 20260824T065208Z grew from 146MiB to the
             # 4GiB cgroup limit and SEVEN containers were OOM-killed (exit
             # 137) before anything said a word — the death was reconstructed
@@ -1939,6 +2148,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <b id=fmax>—</b><span class=sl>behind (blocks, whole run)</span>
         <span class=mut id=fheight>—</span><span class=sl>its height / the validators&rsquo;</span>
         <span class=mut id=fres>—</span><span class=sl>its RSS (MiB) / heals (#)</span>
+        <b id=fstrand>—</b><span class=sl>accepted, never proposed (#, whole run)</span>
         <span class=cap id=fstate></span>
       </div>
     </div>
@@ -1963,6 +2173,12 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <b id=ndbmax>—</b><span class=sl>max</span>
         <span class=mut id=ndbgrow>—</span><span class=sl>growth</span>
         <span class=cap id=ndbnode></span>
+      </div>
+      <div class=sub>submissions</div>
+      <div class=kv>
+        <b id=nstrand>—</b><span class=sl>accepted, never proposed (#, whole run, worst validator)</span>
+        <span class=mut id=nacc>—</span><span class=sl>accepted (#, whole run)</span>
+        <span class=cap id=nstrandnode></span>
       </div>
     </div>
     <div class=col><h4>delivery</h4>
@@ -2058,7 +2274,7 @@ function card(k,v,d){return `<div class=card><div class=k>${k}</div><div class=v
 // the collector's dict or on a substring of this file.
 const ABSENT='<span class=mut>— not measured</span>';
 function followerView(fo, ns){
-  const out={fbehind:ABSENT,fmax:ABSENT,fheight:ABSENT,fres:ABSENT,fstate:''};
+  const out={fbehind:ABSENT,fmax:ABSENT,fheight:ABSENT,fres:ABSENT,fstrand:ABSENT,fstate:''};
   const names=Object.keys(fo.nodes||{});
   // No follower in the topology is not a broken instrument and not a zero:
   // the row group says so and stays put, so the board reads the same on a
@@ -2093,6 +2309,12 @@ function followerView(fo, ns){
   // must still be visible somewhere.
   const fst=ns.followerStats;
   out.fres=fst?`${fmt(fst.rssMaxMiB)} / ${fst.healsMeasured?fmt(fst.healEntries):ABSENT}`:ABSENT;
+  // Accepted and never proposed (#4364). No build exports the families yet,
+  // so this is `— not measured` and MUST NOT be 0: a follower proposes
+  // nothing, so 0 here would assert the opposite of what is known.
+  const sub=(ns&&ns.submissions)||null, fsub=sub&&sub.follower;
+  out.fstrand=(sub&&sub.measured&&fsub&&fsub.neverProposed!=null)
+    ?`<span class="${fsub.neverProposed?'red':''}">${fmt(fsub.neverProposed)}</span>`:ABSENT;
   out.fstate=`${names.join(', ')} · bound ${fo.bound} blocks`
     +(over?` · OVER the bound (${who})`:'');
   return out;
@@ -2160,7 +2382,7 @@ async function tick(){
   // follower (#4365).
   {
     const v=followerView(s.follower||{}, s.nodeStats||{});
-    for(const k of ['fbehind','fmax','fheight','fres','fstate'])$(k).innerHTML=v[k];
+    for(const k of ['fbehind','fmax','fheight','fres','fstrand','fstate'])$(k).innerHTML=v[k];
   }
   // header
   const ph=lg.phase||'—';$('phase').textContent=ph;
@@ -2217,6 +2439,20 @@ const bytes=v=>(v==null?'—':v<1024?fmt(v)+' B':v<1048576?(v/1024).toFixed(1)+'
   $('ngrmax').textContent=ns.grMax!=null?fmt(ns.grMax):'—';
   $('ngrmin').textContent=ns.grMin!=null?fmt(ns.grMin):'—';
   $('ngrnode').textContent=ns.grMaxNode?('max '+ns.grMaxNode):'';
+  // Accepted and never proposed, over the VALIDATORS — same membership as
+  // every other total in this panel (M6). `— not measured` until a node
+  // exports accumulate_dagbft_submissions_total and
+  // accumulate_dagbft_proposed_transactions_total (#4366, #4369); 0 would
+  // assert that nothing ever stranded, which is exactly the claim run
+  // 20260919T191634Z could not make.
+  const sub=ns.submissions||{};
+  $('nstrand').innerHTML=(sub.measured&&sub.worstNeverProposed!=null)
+    ?`<span class="${sub.worstNeverProposed?'red':''}">${fmt(sub.worstNeverProposed)}</span>`:ABSENT;
+  $('nacc').innerHTML=(sub.measured&&sub.accepted!=null)?fmt(sub.accepted):ABSENT;
+  $('nstrandnode').textContent=sub.measured
+    ?((sub.worstNode?'worst '+sub.worstNode:'')
+      +((sub.impossible&&sub.impossible.length)?' · INSTRUMENT ALARM: '+sub.impossible.join('; '):''))
+    :'no node exports accumulate_dagbft_submissions_total (#4366, #4369)';
   // wedges / heals pills
   $('wsyn').innerHTML=w.measured?fmt((w.byReason||{})['queue-full']||0):nm(null);$('wanc').innerHTML=w.measured?fmt((w.byReason||{}).deadline||0):nm(null);$('wtot').innerHTML=nm(w.total);
   $('hent').innerHTML=nm(h.entries);
@@ -2341,11 +2577,15 @@ const DEFS={
  fmax:"The largest that gap has been at any sample since this monitor started. Never cleared; it is the number the manifest states as the worst of the run.",
  fheight:"The follower's own ledger index and the validators' highest, per partition it runs. Two separate reads a moment apart, so a follower reading one block ahead is skew, not a negative lag.",
  fres:"The follower's own resident memory and healed entries. It is NOT in the fleet averages or the heal total beside them — those mean the validators, the same membership monitor.csv's heals column has — so it is reported here. A follower is never selected as a gap requester (cadence.go:57-66), so its heals should stay 0; 0 here is a read number, not an assumption.",
+ fstrand:"Transactions the follower's Submit accepted and that it never put in a batch it authored, whole run: accepted minus proposed, over accumulate_dagbft_submissions_total{outcome=\"accepted\"} and accumulate_dagbft_proposed_transactions_total. A follower is in no committee, so anything the network dials to it strands there (#4366) — every one of these is a lost user transaction or a synthetic that will have to be healed. Reads \u2014 not measured until a node exports the two families (#4369); 0 would assert the opposite of what is known.",
  fstate:"Which containers are followers and the bound the gate is judged against — two blocks: one for the two reads not being simultaneous at a one-second block interval, one for the executor being inside the block it is closing.",
  lblocks:"Blocks produced by the network, summed over partitions, each partition taken as the highest count any node reported.",
  lempty:"Blocks that carried no transactions.",
  lidle:"Shown when nearly every block is empty: consensus is committing empty rounds.",
  nrssavg:"Resident memory of the node process, MiB, averaged over the fleet.", nrssmax:"Largest resident memory of any node, MiB.", nrssmin:"Smallest resident memory of any node, MiB.",
+ nstrand:"The largest count, on any one validator, of transactions it accepted at Submit and never put in a batch it authored — accepted minus proposed, whole run. On a validator this sits at the in-flight depth; a number that climbs means submissions are dying in a queue nobody drains. Over the validators, the same membership as every other total in this panel.",
+ nacc:"Transactions accepted at Submit across the validators, whole run — the denominator the number above is read against.",
+ nstrandnode:"Which validator holds that worst count, and any instrument alarm: a node reporting more proposed than accepted is an impossible state (REPORTING-SPEC 1a) and means a counter is wrong, not that nothing stranded.",
  ngravg:"Goroutines in the node process, averaged over the fleet.", ngrmax:"Most goroutines in any node.", ngrmin:"Fewest goroutines in any node.",
  ndbavg:"Database on disk per node, GB, averaged.", ndbmax:"Largest database on disk of any node, GB.", ndbgrow:"How fast the largest database is growing, GB per hour.",
  lheld:"Batches kept after execution so a peer that is behind can still fetch them.", lhits:"Times a peer fetched one of those retained batches.", lexp:"Retained batches let go when their retention window passed.",
