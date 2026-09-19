@@ -564,6 +564,21 @@ class TheLastSampleIsTheOneThatCounts(Fleet):
         head, rows = self.rows("mem.csv")
         self.assertTrue(rows, "no final mem row")
 
+    def test_the_final_row_is_marked_as_such(self):
+        """A reader must be able to see that the exit write landed, not
+        infer it from a timestamp: an idle tail puts periodic rows after
+        the load generator too (reviewer N2)."""
+        m = soakmon.collect_metrics()
+        soakmon.write_submissions_csv(m["nodeStats"]["submissions"])
+        soakmon.write_submissions_csv(m["nodeStats"]["submissions"], force=True)
+        head, rows = self.rows("submissions.csv")
+        cols = head.split(",")
+        self.assertEqual("sample", cols[-1])
+        kinds = [dict(zip(cols, r.split(",")))["sample"] for r in rows]
+        self.assertIn("periodic", kinds)
+        self.assertIn("final", kinds)
+        self.assertEqual(len(rows) // 2, kinds.count("final"))
+
     def test_the_exit_hook_survives_an_empty_state(self):
         with soakmon.LOCK:
             soakmon.STATE["nodeStats"] = {}

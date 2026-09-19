@@ -1213,9 +1213,16 @@ RELAY_OUTCOMES = ("taken", "refused", "not-ready", "unreachable")
 RELAY_FIELD = {"taken": "relayedTaken", "refused": "relayedRefused",
                "not-ready": "relayedNotReady",
                "unreachable": "relayedUnreachable"}
+# `sample` says which row this is: `periodic` every I_SUB seconds, `final`
+# the one written on the way out. It is not a nicety — "the stranded count
+# must be 0 at the last sample after the drain" is unreadable unless a
+# reader can tell whether the final write actually landed, and inferring it
+# from a timestamp fails whenever an idle tail puts periodic rows after the
+# load generator's exit too (reviewer N2).
 SUBMIT_CSV_HEADER = ("time,node,role,partition,accepted,rejected,certified,"
                      "relayedTaken,relayedRefused,relayedNotReady,"
-                     "relayedUnreachable,acceptedNeitherCertifiedNorTaken")
+                     "relayedUnreachable,acceptedNeitherCertifiedNorTaken,"
+                     "sample")
 
 
 def submissions_from(per, role="validator"):
@@ -1349,13 +1356,15 @@ def merge_submissions(val, fol):
     return out
 
 
-def submissions_csv_rows(sub, ts):
+def submissions_csv_rows(sub, ts, sample="periodic"):
     """One row per (node, partition) per sample, validators then followers.
 
     No rows at all while the families are absent: an empty field here would
     read as "the node answered zero", and the file's whole job is to say
     whether anyone asked. The header is written regardless, so a run
     directory always shows the harness looked.
+
+    `sample` is `periodic` or `final`; see SUBMIT_CSV_HEADER.
     """
     rows = []
     for source, role in ((sub.get("byNode") or {}, "validator"),
@@ -1370,7 +1379,7 @@ def submissions_csv_rows(sub, ts):
                      for k in ("accepted", "rejected", "certified",
                                "relayedTaken", "relayedRefused",
                                "relayedNotReady", "relayedUnreachable",
-                               "stranded")]))
+                               "stranded")] + [sample]))
     return rows
 
 
@@ -1393,7 +1402,7 @@ def write_submissions_csv(sub, force=False):
     with open(path, "a") as f:
         if new:
             f.write(SUBMIT_CSV_HEADER + "\n")
-        for line in submissions_csv_rows(sub, ts):
+        for line in submissions_csv_rows(sub, ts, "final" if force else "periodic"):
             f.write(line + "\n")
 
 

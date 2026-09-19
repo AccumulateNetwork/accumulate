@@ -752,6 +752,11 @@ if [ -x "$here/wedgewatch.sh" ]; then
 fi
 
 wait $DRIVER; rc=$?
+# When the load generator exited, so the manifest can say whether the row it
+# reads was taken after the drain or before it (reviewer N2). `ended` is far
+# later — after the idle tail and the whole teardown — so it answers a
+# different question and cannot stand in for this one.
+lg_exit=$(date -u +%FT%TZ)
 
 # Keep the network running after the load stops. Recovery of a TAIL loss can only
 # be observed once the loss has aged past reconcileGraceBlocks, and while load
@@ -879,11 +884,18 @@ if not rows:
     print("— not measured (no node exports `accumulate_dagbft_relayed_total`; #4366, #4369)")
     raise SystemExit
 last = max(r["time"] for r in rows)
+# DEDUPE BY (time, node, partition), last row wins. Timestamps are whole
+# seconds and the final row is forced past the 30s interval, so about one
+# run in thirty lands it in the same second as a periodic one — and summing
+# both reported 1,600 taken for 800 (reviewer N1). These are counters: two
+# readings of the same counter are one reading, never a sum.
+at_last = {}
+for r in rows:
+    if r["time"] == last:
+        at_last[(r["time"], r.get("node"), r.get("partition"))] = r
 tot = {k: 0 for k in KEYS}
 seen = False
-for r in rows:
-    if r["time"] != last:
-        continue
+for r in at_last.values():
     for k in KEYS:
         v = (r.get(k) or "").strip()
         if v:
@@ -899,10 +911,12 @@ print("%d taken / %d refused / %d target not ready / %d unreachable (as of %s)"
 PYEOF
 }
 
-sub_row() {   # $1 = role: validator | follower
-  python3 - "$rd/submissions.csv" "${1:-}" <<'PYEOF'
+sub_row() {   # $1 = role, $2 = when the loadgen exited, $3 = "stallkill" or ""
+  python3 - "$rd/submissions.csv" "${1:-}" "${2:-}" "${3:-}" <<'PYEOF'
 import csv, sys
 path, role = sys.argv[1], sys.argv[2]
+lg_exit = sys.argv[3] if len(sys.argv) > 3 else ""
+stopped_early = sys.argv[4] if len(sys.argv) > 4 else ""
 try:
     rows = list(csv.DictReader(open(path)))
 except OSError:
@@ -924,13 +938,28 @@ stamps = sorted({r["time"] for r in rows})
 last = stamps[-1]
 
 
+def at(ts):
+    """The rows of one sample, deduped by (time, node, partition).
+
+    The final row is forced past the 30s interval, timestamps are whole
+    seconds, so about one run in thirty puts it in the same second as a
+    periodic one. These are counters: two readings of one counter are one
+    reading. Summing both made the headline contradict its own trend, in
+    the direction of a false "stranded" (reviewer N1). Last row wins — the
+    forced one, which is the fresher scrape.
+    """
+    keep = {}
+    for r in rows:
+        if r["time"] == ts:
+            keep[(r.get("node"), r.get("partition"))] = r
+    return list(keep.values())
+
+
 def totals(ts):
     """(stranded, accepted) at one sample; stranded is None if nobody counted."""
     st = acc = None
     blanks = 0
-    for r in rows:
-        if r["time"] != ts:
-            continue
+    for r in at(ts):
         # An EMPTY field is a counter that node never created — one family
         # exported and not the other. Summing it as 0 would report "nothing
         # stranded here" for a partition nobody measured (REPORTING-SPEC 1).
@@ -952,9 +981,7 @@ def totals(ts):
 
 
 per, blank = {}, 0
-for r in rows:
-    if r["time"] != last:
-        continue
+for r in at(last):
     v = (r.get("acceptedNeitherCertifiedNorTaken") or "").strip()
     if not v:
         blank += 1
@@ -987,10 +1014,46 @@ else:
     trend = "%s %d -> %d over the last %d samples, still accepting" % (
         "flat at" if vals[-1] == vals[0] else "rising", vals[0], vals[-1], len(vals))
 
-print("%d, worst %s on %s (as of %s; %s)%s"
-      % (total, wv, "/".join(wk), last, trend, missing))
+# WAS THE FINAL ROW WRITTEN, AND IS IT A DRAINED SAMPLE (reviewer N2).
+# "0 at the last sample after the drain" is unreadable if a reader cannot
+# tell. Two separate facts, and neither is inferred from the other: the
+# `sample` column says whether soakmon's exit write landed, and the
+# timestamp says whether it postdates the load generator. A lost final
+# write otherwise reads as the drained sample in silence.
+kinds = {(r.get("sample") or "").strip() for r in at(last)}
+if "final" in kinds:
+    final = "final row written"
+elif not any(kinds):
+    final = "final row: unknown (this file has no `sample` column — pre-#4364 run)"
+else:
+    final = ("FINAL ROW MISSING — soakmon's exit write did not land; "
+             "this reading is mid-drain and up to 30s stale")
+if lg_exit and last:
+    def secs(t):
+        import datetime
+        return datetime.datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=datetime.timezone.utc).timestamp()
+    try:
+        d = secs(last) - secs(lg_exit)
+        final += (", %ds after the load generator exited" % d if d >= 0 else
+                  ", but %ds BEFORE the load generator exited — mid-drain" % -d)
+    except ValueError:
+        pass
+if stopped_early:
+    final += ("; the run was stopped by stallkill, so the load generator was "
+              "killed mid-flight and this is NOT a drained sample")
+
+print("%d, worst %s on %s (as of %s; %s; %s)%s"
+      % (total, wv, "/".join(wk), last, trend, final, missing))
 PYEOF
 }
+
+# stallkill ends a run by killing the load generator mid-flight, and it
+# appends its own heading to the manifest before it does. The forced final
+# row still lands — soakmon gets TERM, not KILL — but it is NOT a drained
+# sample, and the row that quotes it has to say so.
+stopped_early=""
+grep -q '^## Stopped early by stallkill' "$manifest" 2>/dev/null && stopped_early=stallkill
 
 # ---- verdict ----------------------------------------------------------------
 elapsed_h=$(python3 -c "
@@ -1025,7 +1088,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   # A run that wedged and dumped is the most valuable kind of run there is;
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
   echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
-  echo "| accepted, neither certified here nor taken on relay (#, whole run, the validators) | $(sub_row validator) |"
+  echo "| accepted, neither certified here nor taken on relay (#, whole run, the validators) | $(sub_row validator "$lg_exit" "$stopped_early") |"
   if [ "$n_fol" -gt 0 ]; then
     echo
     echo "### Follower (#4365)"
@@ -1037,7 +1100,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     else
       echo "| every follower measurement | — not measured (followerlog.py produced nothing; see \`soak.log\`) |"
     fi
-    echo "| accepted, neither certified here nor taken on relay (#, whole run) | $(sub_row follower) |"
+    echo "| accepted, neither certified here nor taken on relay (#, whole run) | $(sub_row follower "$lg_exit" "$stopped_early") |"
     echo "| relayed (#, whole run) | $(relay_row follower) |"
     echo
     echo "Full detail in \`follower-report.md\`; the per-sample series in \`follower.csv\`."
