@@ -307,6 +307,7 @@ func (c *Conductor) sendBlockAnchor(ctx context.Context, anchor protocol.AnchorB
 	// signature (#4111) requires seeing every validator's send for a given seq.
 	slog.InfoContext(ctx, "Sending an anchor", "module", "conductor",
 		"block", anchor.GetPartitionAnchor().MinorBlockIndex,
+		"source", c.Partition.ID,
 		"destination", destination,
 		"seq", sequenceNumber,
 		"root", logging.AsHex(anchor.GetPartitionAnchor().RootChainAnchor).Slice(0, 4),
