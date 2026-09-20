@@ -1,5 +1,81 @@
 # Changelog
 
+## 1.4.6.5
+
+The release Kermit runs. Two defects reported against Kermit are fixed here:
+an ECDSA lite identity whose transactions validated and then did nothing
+(#4218), and v3 receipt queries that hung past a client timeout on entries
+with old anchors (#4263). No executor version change — `v2-kourou` remains
+the latest and is unchanged — and every encoding addition is an appended
+optional field, so 1.4.6.4 and this release interoperate.
+
+- Historical account state proofs — AIP-58 (#4180)
+  - `ForHeight` was honoured on the chain-entry query path and ignored on the
+    account path, so a caller asking what an account held at block 12,000 got
+    a receipt about the present. It is honoured on both.
+  - A historical proof starts at the main state hash rather than at the whole
+    BPT entry `H(main, secondary, chains, pending)`, of which a verifier holds
+    only one part and so could not compute the receipt's starting point.
+    Nodes retain that receipt alongside the BPT history, on the same window
+    and pruned by the same rule — 146 bytes per receipt.
+  - The three refusals are classified by what they mean, rather than reporting
+    two distinct causes as one status.
+- The two-call account proof (#4272)
+  - A BPT is a Merkle tree of current state, so an account cannot be proved
+    against a past BPT — that tree no longer exists. The proof is built
+    against the current one, and that root reaches the directory only after an
+    anchor round trip. Hence two calls, except on the directory, where the BPT
+    is already the directory's. Now served and verified over the wire.
+- The major-block spine — AIP-59 (#4058)
+  - `MajorHeaderRange` and `MinorRootRange` on the private sequencer service,
+    with the client-side walk in `internal/fastsync/spine.go`, promoted to the
+    public v3 surface so a third party can derive the validator set by
+    induction instead of being handed it. It adds no mechanism and no executor
+    version change; nothing changes unless the new methods are called.
+- A receipt reads the positions it was given, instead of searching for them
+  (#4263)
+  - Both index positions a chain receipt needs were already recorded when the
+    entry was written, in `TransactionChainEntry.ChainIndex` and
+    `.AnchorIndex`. They are now read. The search remains only where the
+    record cannot answer — the entry is not a transaction, the record is
+    absent, or the recorded position does not cover the entry.
+  - The cascade sibling hashes a proof needs at each level were computed once
+    and discarded, surviving only inside a Merkle state's `Pending` list,
+    which is kept every `2^markPower` entries. They are now stored and read.
+  - This is the path that was slow on Kermit, where v3 receipt queries hung
+    past a 180 s client timeout on entries with old anchors.
+- An unfunded ECDSA signer is refused at validation (#4218)
+  - An ECDSA P-256 signature record is 261 bytes — one byte past the fee
+    schedule's 256-byte chunk — so it owes 0.02 credits where an Ed25519
+    record owes 0.01. Under Kourou a local, direct AddCredits waives the
+    signature fee in full, base and surcharge, whatever the key type. Before
+    Kourou the surcharge stands and validation refuses, rather than accepting
+    an envelope that then does nothing. RSA records are oversize for the same
+    reason and get the same treatment.
+- A network declares its block interval (#4267)
+  - `NetworkGlobals.BlockInterval` is recorded beside `MajorBlockSchedule` and
+    appended, so a network deployed before it decodes with the field absent.
+    It is recorded and exposed here and enforced on the DAG-BFT line, where it
+    is the pacing parameter itself; here block time is `timeout_commit` plus
+    execution, so the two are not the same quantity and comparing them would
+    be wrong.
+  - `SplitDuration` rounded where it had to truncate, so any duration with a
+    fractional part of half a second or more wrapped through the wire format:
+    `1.5s -> 500ms`, `900ms -> -100ms`. `BlockInterval` is the first duration
+    in consensus state, which is why nothing had caught it. The bytes change
+    only for values that already decoded wrongly.
+- Defects found by running the full suite on Windows
+  - `accumulated migrate` compared a config path against `filepath.Join`, so
+    the same node migrated to a different config on Windows than on Linux, and
+    nothing reported it.
+  - The Factom address parser split on `\n` and trimmed only spaces, so a CRLF
+    file made every balance fail to parse.
+  - The simulator never closed the badger databases it opened. Unix hides
+    this; on Windows it fails the test after its body passes.
+  - `test/e2e2`'s markdown parser extracted no code blocks from CRLF input, so
+    the generated test came out an empty — but valid — Go file.
+- loadgen exercises HTLC and no longer rejects credit purchases.
+
 ## 1.4.6.4
 
 Fixes a wire-compatibility break in 1.4.6.3. **1.4.6.3 should not be
