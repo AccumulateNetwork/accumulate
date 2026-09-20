@@ -164,6 +164,33 @@ func (a *observedAccount) hashPendingV2(err *error, hasher *hash.Hasher, txid *u
 	}
 }
 
+// MainStateHash is the hash an account's state tree starts at: element 0 of
+// the account hasher, "a simple hash of the main state" and nothing else.
+//
+// It is exported because a node pulling an account as of a past block has to
+// recompute exactly this and has nothing else to recompute it from. A
+// historical receipt starts here rather than at the account's whole BPT entry
+// (api.Receipt.StartsAtMainState), because the puller holds the body it was
+// served and NOT that block's directory, pending list or chains -- so a
+// verifier that recomputed the whole entry would be hashing the body it was
+// given together with its own stale remainder, and would refuse every hot
+// account (#4362).
+//
+// It must stay the hash this file's hashState produces for the main state, or
+// a pulled account verifies against a value no server ever proves.
+func MainStateHash(state protocol.Account) ([32]byte, error) {
+	var err error
+	var hasher hash.Hasher
+	hashValue(&err, &hasher, state)
+	if err != nil {
+		return [32]byte{}, errors.UnknownError.Wrap(err)
+	}
+	if len(hasher) != 1 {
+		return [32]byte{}, errors.InternalError.WithFormat("hashing a main state produced %d hashes, not 1", len(hasher))
+	}
+	return *(*[32]byte)(hasher[0]), nil
+}
+
 func hashState[T any](lastErr *error, hasher *hash.Hasher, allowMissing bool, get func() (T, error)) {
 	if *lastErr != nil {
 		return

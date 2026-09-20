@@ -50,11 +50,6 @@ func Verify(batch *database.Batch, u *url.URL, receipt *api.Receipt, anchoredRoo
 		return errors.BadRequest.WithFormat("%v: the peer served no receipt", u)
 	}
 
-	local, err := batch.Account(u).StateTreeReceipt()
-	if err != nil {
-		return errors.UnknownError.WithFormat("%v: hash the pulled state: %w", u, err)
-	}
-
 	if !receipt.Receipt.Validate(nil) {
 		return errors.BadRequest.WithFormat("%v: the peer's receipt does not validate", u)
 	}
@@ -62,6 +57,43 @@ func Verify(batch *database.Batch, u *url.URL, receipt *api.Receipt, anchoredRoo
 		return errors.Conflict.WithFormat(
 			"%v: the peer's receipt ends at %x, and the directory anchored %x",
 			u, receipt.Receipt.Anchor, anchoredRoot[:])
+	}
+
+	// A HISTORICAL receipt starts at a plain hash of the main state, and a
+	// CURRENT one starts at the account's whole BPT entry. The check has to
+	// match, and using the wrong one refuses an honest answer.
+	//
+	// The account hasher covers the main state, the directory list, the
+	// chains and the pending list. A peer answering as of a past block serves
+	// the body for that block and clears the rest, because it does not retain
+	// them (internal/api/v3/querier.go, historicalStateReceipt) -- so the
+	// puller holds that block's body beside ITS OWN directory, chains and
+	// pending list, which are still the ones it stopped with. Recomputing the
+	// whole entry from that mixture hashes something no node ever held, and
+	// every account whose chains moved -- the ledger, the anchors, the
+	// synthetic ledger, which is exactly what a restart needs -- is refused
+	// (#4362). So on a historical answer the state is checked where the proof
+	// actually starts.
+	if receipt.StartsAtMainState {
+		state, err := batch.Account(u).Main().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("%v: load the pulled state: %w", u, err)
+		}
+		want, err := database.MainStateHash(state)
+		if err != nil {
+			return errors.UnknownError.WithFormat("%v: hash the pulled state: %w", u, err)
+		}
+		if !bytes.Equal(receipt.Receipt.Start, want[:]) {
+			return errors.Conflict.WithFormat(
+				"%v: the body served hashes to %x and its receipt starts at %x",
+				u, want[:], receipt.Receipt.Start)
+		}
+		return nil
+	}
+
+	local, err := batch.Account(u).StateTreeReceipt()
+	if err != nil {
+		return errors.UnknownError.WithFormat("%v: hash the pulled state: %w", u, err)
 	}
 	if !receipt.Receipt.Contains(local) {
 		return errors.Conflict.WithFormat(
