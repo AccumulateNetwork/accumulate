@@ -57,7 +57,8 @@ class CounterResets(Series):
                    self.row("2026-09-20T01:00:30Z", "n", "BVN3", 110, 4),
                    self.row("2026-09-20T01:01:00Z", "n", "BVN3", 5, 0))
         s = self.load()
-        self.assertEqual([("2026-09-20T01:01:00Z", "n", "BVN3")], s["resets"])
+        self.assertEqual([("2026-09-20T01:01:00Z", "n", "BVN3", 4)],
+                         s["resets"], "and it records what it carried")
 
     def test_what_it_had_stranded_is_carried_forward(self):
         self.write(self.row("2026-09-20T01:00:00Z", "n", "BVN3", 100, 4),
@@ -102,12 +103,39 @@ class CounterResets(Series):
         self.assertEqual([4, 7, 8], got)
         self.assertEqual(2, len(self.load()["resets"]))
 
-    def test_the_manifest_row_names_when_and_where(self):
+    def test_the_manifest_row_names_when_where_and_what_it_carried(self):
+        """The carry is added to every later reading and nothing else on
+        the board shows it."""
         self.write(self.row("2026-09-20T01:00:00Z", "n", "BVN3", 100, 4),
                    self.row("2026-09-20T01:20:00Z", "n", "BVN3", 5, 0))
         line = runseries.resets_row(self.load())
-        self.assertIn("1 (n/BVN3 at 01:20Z)", line)
+        self.assertIn("1 (n/BVN3 at 01:20Z carrying 4)", line)
+        self.assertIn("floor of the pair's last samples", line)
         self.assertIn("does not step down", line)
+
+    def test_the_carry_is_a_floor_and_not_the_last_reading(self):
+        """A restart that lands on a jitter spike would otherwise carry
+        the spike forever: 3, 7, 3, 7 restarting at the 7 carries 14 for
+        a settled 6. It never invents a climb — the offset is constant —
+        but it inflates the headline, permanently and invisibly."""
+        self.write(self.row("2026-09-20T01:00:00Z", "n", "BVN3", 100, 3),
+                   self.row("2026-09-20T01:00:30Z", "n", "BVN3", 110, 7),
+                   self.row("2026-09-20T01:01:00Z", "n", "BVN3", 120, 3),
+                   self.row("2026-09-20T01:01:30Z", "n", "BVN3", 130, 7),
+                   self.row("2026-09-20T01:02:00Z", "n", "BVN3", 5, 0))
+        s = self.load()
+        self.assertEqual(3, s["resets"][0][3], "the floor, not the 7")
+        self.assertEqual(3, runseries.complete(s)[-1]["total"])
+
+    def test_the_floor_is_over_the_window_and_not_the_whole_run(self):
+        """An hour-old low is not what the node had settled at."""
+        self.write(self.row("2026-09-20T01:00:00Z", "n", "BVN3", 100, 0),
+                   self.row("2026-09-20T01:20:00Z", "n", "BVN3", 110, 6),
+                   self.row("2026-09-20T01:20:30Z", "n", "BVN3", 120, 6),
+                   self.row("2026-09-20T01:21:00Z", "n", "BVN3", 5, 0))
+        s = runseries.load(self.path, "follower", 120)
+        self.assertEqual(6, s["resets"][0][3],
+                         "the last 120s, not the 0 twenty minutes earlier")
 
     def test_no_resets_is_no_row(self):
         self.write(self.row("2026-09-20T01:00:00Z", "n", "BVN3", 100, 4))
@@ -145,12 +173,17 @@ class Floors(Series):
         pts = [(0.0, 7), (30.0, 0), (60.0, 4), (90.0, 0)]
         self.assertEqual((0, 0.0), runseries.floor_of(pts, 0, 120))
 
-    def test_first_n_reads_the_samples_nearest_the_disturbance(self):
-        """An after-floor takes the first two complete samples from the
-        settle, not everything up to the next disturbance — otherwise a
-        loss late in the stretch would be read as the disturbance's."""
-        pts = [(0.0, 9), (30.0, 9), (60.0, 0), (90.0, 0)]
-        self.assertEqual((9, 0.0), runseries.floor_of(pts, 0, 120, first_n=2))
+    def test_there_is_no_first_n_option(self):
+        """It took the first two samples from the settle, on the reasoning
+        that a later loss should not be billed to the disturbance. A
+        minimum already ignores a later loss — a loss RAISES the figure —
+        so all it could do was exclude later, LOWER readings and overstate
+        the step (reviewer M1 on #4364)."""
+        pts = [(0.0, 5), (30.0, 4), (60.0, 3), (90.0, 3)]
+        self.assertEqual((3, 0.0), runseries.floor_of(pts, 0, 120),
+                         "the settled level is 3, not the first pair's 4")
+        with self.assertRaises(TypeError):
+            runseries.floor_of(pts, 0, 120, first_n=2)
 
     def test_an_empty_range_is_none_and_not_zero(self):
         self.assertEqual((None, None), runseries.floor_of([(0.0, 3)], 10, 20))
@@ -158,8 +191,7 @@ class Floors(Series):
     def test_it_says_when_the_first_point_used_was(self):
         """The step row reports how late an after-floor was taken."""
         pts = [(200.0, 5), (230.0, 5)]
-        self.assertEqual((5, 200.0), runseries.floor_of(pts, 60, 400,
-                                                        first_n=2))
+        self.assertEqual((5, 200.0), runseries.floor_of(pts, 60, 400))
 
 
 class MissingFile(Series):

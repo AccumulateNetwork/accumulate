@@ -1049,7 +1049,7 @@ if not events:
 events.sort()
 
 # --- the series, built once, in runseries.py --------------------------------
-SER = runseries.load(subs, role)
+SER = runseries.load(subs, role, W)
 if SER["error"]:
     row("stranded across disturbances", "— not measured (%s)" % SER["error"])
     raise SystemExit
@@ -1108,7 +1108,18 @@ if head is not None:
 for i, (t, at, kind, node) in enumerate(events):
     lo, a_hi, note = win[i]
     before, _ = runseries.floor_of(pts, lo, t)
-    after, a_t = runseries.floor_of(pts, t + S, a_hi, first_n=2)
+    # The after-window is [t + S, t + W), bounded by the next disturbance.
+    # A minimum already ignores a later loss — a loss RAISES the figure —
+    # so taking only the first few samples could only exclude later, LOWER
+    # readings and overstate the step (reviewer M1). When the window is
+    # EMPTY the node was away: start a window of the same length at the
+    # first complete sample from the settle, and say how late it was.
+    after, a_t = runseries.floor_of(pts, t + S, min(t + W, a_hi))
+    if after is None:
+        back = [tt for tt, _ in pts if t + S <= tt < a_hi]
+        if back:
+            after, a_t = runseries.floor_of(pts, back[0],
+                                            min(back[0] + W, a_hi))
     if a_t is not None and a_t > t + W:
         note += " (the after-floor is %ds late — no complete sample sooner)" % (
             int(a_t - (t + S)))
@@ -1179,7 +1190,8 @@ PYEOF
 }
 
 sub_row() {   # $1 = role, $2 = when the loadgen exited, $3 = "stallkill" or ""
-  python3 - "$rd/submissions.csv" "${1:-}" "${2:-}" "${3:-}" "$here" <<'PYEOF'
+  python3 - "$rd/submissions.csv" "${1:-}" "${2:-}" "${3:-}" "$here" \
+           "${STEP_WINDOW_SECS:-120}" <<'PYEOF'
 import sys
 sys.path.insert(0, sys.argv[5])
 import runseries
@@ -1187,11 +1199,12 @@ import runseries
 path, role = sys.argv[1], sys.argv[2]
 lg_exit = sys.argv[3] if len(sys.argv) > 3 else ""
 stopped_early = sys.argv[4] if len(sys.argv) > 4 else ""
+W = int(sys.argv[6]) if len(sys.argv) > 6 and sys.argv[6] else 120
 
 # The series is built in runseries.py, once, for this row and the step
 # table both: completeness, the counter-reset offsets and the "a level is
 # a minimum" rule are one implementation or they drift (#4364).
-S = runseries.load(path, role)
+S = runseries.load(path, role, W)
 if S["error"]:
     print("— not measured (%s; soakmon wrote none)" % S["error"])
     raise SystemExit

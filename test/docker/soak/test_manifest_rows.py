@@ -566,7 +566,7 @@ class ARemovedAndReAddedNode(Rows):
         self.write_run(*self.REVIEWERS_CASE)
         got = self.call("steps_rows follower")
         self.assertIn("| counter resets seen | 1 (acc-bvn3-fol1/BVN3 at "
-                      "01:22Z)", got)
+                      "01:22Z carrying 4)", got)
         self.assertIn("does not step down", got)
         self.assertIn("| samples dropped as incomplete | 4 of", got)
 
@@ -599,6 +599,96 @@ class ARemovedAndReAddedNode(Rows):
         self.assertTrue(got.startswith("6,"), got)
         self.assertIn("1 counter reset carried forward", got)
         self.assertIn("4 samples skipped as incomplete", got)
+
+
+class TheAfterFloorIsTheWholeWindow(Rows):
+    """reviewer M1. The after-floor took the first two complete samples
+    from the settle, on the reasoning that a later loss should not be
+    billed to the disturbance. A minimum already ignores a later loss — a
+    loss RAISES the figure — so all that could do was exclude later,
+    LOWER readings, overstating the step and understating the creep
+    beside it.
+
+    This is also the CALL SITE's test, which the reviewer asked for by
+    name: remove the argument from `floor_of` alone and the suite stayed
+    green, because the earlier mutation changed the function and not its
+    caller. These fixtures fail either way, because they read the number
+    the manifest prints.
+    """
+
+    P = "acc-bvn3-fol1"
+
+    def chaos(self, *lines):
+        with open(os.path.join(self.rd, "chaos.log"), "w") as f:
+            for l in lines:
+                f.write(l + "\n")
+
+    def write_run(self, *pts):
+        self.write(*[
+            "%s,%s,follower,BVN3,%s,,,%s,,,,%s,periodic"
+            % (t, self.P, "" if a is None else a, "" if a is None else a,
+               "" if x is None else x)
+            for t, a, x in pts])
+
+    # 4 settled before; after the disturbance the relays drain: 5, 4, 3, 3.
+    # The settled level after is 3 — so the disturbance cost nothing and
+    # the figure came DOWN. With the first two samples it reads 4, the
+    # step reads +0 instead of -1, and the creep after it is understated
+    # by the same 1.
+    DRAINING = (("2026-09-20T01:18:00Z", 100, 4),
+                ("2026-09-20T01:18:30Z", 110, 4),
+                ("2026-09-20T01:19:00Z", 120, 4),
+                ("2026-09-20T01:19:30Z", 130, 4),
+                ("2026-09-20T01:21:00Z", 140, 5),
+                ("2026-09-20T01:21:30Z", 150, 4),
+                ("2026-09-20T01:22:00Z", 160, 3),
+                ("2026-09-20T01:22:30Z", 170, 3),
+                ("2026-09-20T01:23:00Z", 180, 3),
+                ("2026-09-20T01:23:30Z", 190, 3))
+
+    WIDE = "STEP_WINDOW_SECS=180 STEP_SETTLE_SECS=60"
+
+    def test_a_lower_later_sample_is_part_of_the_floor(self):
+        """Read at a window wide enough to hold more than two samples —
+        see `test_the_shipped_window_holds_exactly_two_samples` for why
+        that matters."""
+        self.chaos("2026-09-20T01:20:00Z restart acc-bvn3-fol1")
+        self.write_run(*self.DRAINING)
+        got = self.call(self.WIDE + " steps_rows follower")
+        self.assertIn("| 01:20Z restart acc-bvn3-fol1 | stranded 4 -> 3 (-1)",
+                      got, "the settled level after is 3, not 4")
+        self.assertNotIn("stranded 4 -> 4 (+0)", got)
+
+    def test_the_window_still_ends_at_W(self):
+        """A sample past the window is not in the floor, however low: the
+        window is chosen by its BOUNDS, which is what `first_n` was
+        reaching for and got wrong."""
+        self.chaos("2026-09-20T01:20:00Z restart acc-bvn3-fol1")
+        self.write_run(*(self.DRAINING[:4] + (
+            ("2026-09-20T01:21:00Z", 140, 9),
+            ("2026-09-20T01:21:30Z", 150, 9),
+            ("2026-09-20T01:22:00Z", 155, 9),
+            ("2026-09-20T01:22:30Z", 158, 9),
+            ("2026-09-20T01:23:30Z", 160, 0),   # past t + W
+            ("2026-09-20T01:24:00Z", 170, 0))))
+        got = self.call(self.WIDE + " steps_rows follower")
+        self.assertIn("stranded 4 -> 9 (+5)", got)
+
+    def test_the_shipped_window_holds_exactly_two_samples(self):
+        """Worth recording rather than leaving to be rediscovered: at the
+        shipped `STEP_WINDOW_SECS=120` and `STEP_SETTLE_SECS=60` the
+        after-window is [t+60, t+120), which at the 30s submissions.csv
+        cadence holds exactly TWO samples — so `first_n=2` was a no-op on
+        today's configuration and the overstatement it caused could not
+        occur. It would the moment either knob moved, which is why the
+        argument is gone rather than left because it happens to be
+        harmless."""
+        self.chaos("2026-09-20T01:20:00Z restart acc-bvn3-fol1")
+        self.write_run(*self.DRAINING)
+        got = self.call("steps_rows follower")          # the shipped knobs
+        self.assertIn("stranded 4 -> 4 (+0)", got)
+        wide = self.call(self.WIDE + " steps_rows follower")
+        self.assertIn("stranded 4 -> 3 (-1)", wide)
 
 
 class ANodeAwayThroughTheSettleWindow(Rows):
