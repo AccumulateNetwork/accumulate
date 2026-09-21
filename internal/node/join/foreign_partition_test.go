@@ -67,18 +67,19 @@ func TestFetch_DropsAnAccountOfAnotherPartition(t *testing.T) {
 
 	s := quietState(t, here, &routingSources{partition: elsewhere})
 
-	pulled, refused := s.fetch(ctx, []*url.URL{
+	s.spine = true // the spine is not what this is about
+	s.fetchPass(ctx, []*url.URL{
 		protocol.AccountUrl("alice", "tokens"),
 	})
 
-	require.Zero(t, pulled, "nothing of another partition is ever pulled")
-	require.Empty(t, refused,
+	require.Nil(t, s.pass, "nothing of another partition is ever pulled")
+	require.Empty(t, s.refused,
 		"an account of another partition is dropped, not refused: refusing it asks "+
 			"every peer for it again every round, for the life of the process")
 }
 
 // TestFetch_StillRefusesAnAccountOfThisPartition is the control on the test
-// above. Without it, "refused is empty" would also pass if fetch had stopped
+// above. Without it, "refused is empty" would also pass if fetchPass had stopped
 // refusing anything at all, and the assertion would prove nothing.
 func TestFetch_StillRefusesAnAccountOfThisPartition(t *testing.T) {
 	ctx := context.Background()
@@ -88,17 +89,18 @@ func TestFetch_StillRefusesAnAccountOfThisPartition(t *testing.T) {
 	// ordinary way and the account is asked for again next round.
 	s := quietState(t, here, &routingSources{partition: here})
 
-	pulled, refused := s.fetch(ctx, []*url.URL{
+	s.spine = true // the spine is not what this is about
+	s.fetchPass(ctx, []*url.URL{
 		protocol.AccountUrl("alice", "tokens"),
 	})
 
-	require.Zero(t, pulled)
-	require.Len(t, refused, 1,
+	require.Nil(t, s.pass)
+	require.Len(t, s.refused, 1,
 		"an account of this partition that could not be pulled is retried")
 }
 
 // TestSourcesFor_RefusesAnotherPartition pins the decision itself, so that the
-// reason fetch drops the account is visible where it is made.
+// reason fetchPass drops the account is visible where it is made.
 func TestSourcesFor_RefusesAnotherPartition(t *testing.T) {
 	ctx := context.Background()
 	here := protocol.PartitionUrl("BVN0")

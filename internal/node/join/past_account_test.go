@@ -69,7 +69,7 @@ func writeAccount(t *testing.T, db *database.Database, u *url.URL, entries int) 
 //
 // An account the node is past took nothing from the peer: there is no state to
 // verify and no block to wait for an anchor for. Holding it would keep a round
-// batch open across four settle rounds and a place under pull.MaxHeld, for
+// pass open and a place under pull.MaxHeld, for
 // state the node is never going to take — and in the case this arises in, a
 // node ahead of its peer, it is not one account but every account the node is
 // ahead on, every round (enumerate.Stale names a difference in either
@@ -95,17 +95,17 @@ func TestFetch_AnAccountTheNodeIsPastIsNeitherHeldNorRefused(t *testing.T) {
 	writeAccount(t, s.db, u, 50)
 
 	// s.anchors must be non-nil for the fetch to ask for a receipt at all,
-	// which is what the long tail does (join.fetch passes Verify: s.anchors).
+	// which is what the long tail does (join.fetchOne passes Verify: s.anchors).
 	// It is never consulted: a past account has nothing to settle.
 	values, _ := genesisValues(t, 4)
 	s.anchors = noAnchorSource(t, here, values)
 
 	before := pull.Held()
-	pulled, refused := s.fetch(ctx, []*url.URL{u})
+	s.spine = true // the spine is not what this is about
+	s.fetchPass(ctx, []*url.URL{u})
 
-	require.Zero(t, pulled, "an account the node is past was counted as pulled")
-	require.Empty(t, refused, "an account the node is past was refused, so it is asked for again for ever")
-	require.Empty(t, s.held, "an account that took nothing is waiting for an anchor")
+	require.Empty(t, s.refused, "an account the node is past was refused, so it is asked for again for ever")
+	require.Nil(t, s.pass, "an account that took nothing is held, waiting for its root to be proven")
 	require.Equal(t, before, pull.Held(), "the fetch left a held account outstanding")
 
 	// And the node's own state is untouched.
