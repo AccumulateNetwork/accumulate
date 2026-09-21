@@ -382,6 +382,55 @@ class StepsPerDisturbance(Rows):
         self.assertIn("no sample in the", self.call("steps_rows follower"))
 
 
+class AbsentIsNotZero(Rows):
+    """A labelled Prometheus counter has no child series until it is first
+    incremented, so three facts arrive looking alike and must not read alike
+    (REPORTING-SPEC 1, and run `20260919T231856Z`, where `relayedRefused`,
+    `relayedNotReady` and `relayedUnreachable` were EMPTY in 300 of 300 rows
+    and the manifest printed `0 refused / 0 target not ready / 0
+    unreachable`). The run-analyst had to open `relay.go` to learn the
+    zeros were true.
+
+    - the family is exported and this outcome never happened -> a real `0`,
+      and the row says `0 (series present)`;
+    - the family is not exported at all -> `— not measured`;
+    - nothing was written -> `— not measured`, with the reason.
+    """
+
+    TAKEN_ONLY = ("%s,acc-bvn3-fol1,follower,BVN3,1146,,,1146,,,,0,periodic")
+    NOTHING = ("%s,acc-bvn3-fol1,follower,BVN3,1146,,,,,,,0,periodic")
+
+    def test_an_outcome_that_never_happened_reads_zero_and_says_so(self):
+        self.write(self.TAKEN_ONLY % "2026-09-20T01:00:00Z",
+                   self.TAKEN_ONLY % "2026-09-20T01:00:30Z")
+        got = self.call("relay_row follower")
+        self.assertIn("1146 taken", got)
+        self.assertIn("0 (series present) refused", got)
+        self.assertIn("0 (series present) target not ready", got)
+        self.assertIn("0 (series present) unreachable", got)
+        self.assertNotIn("| 0 refused", got)
+
+    def test_a_family_nobody_exports_is_not_measured(self):
+        self.write(self.NOTHING % "2026-09-20T01:00:00Z",
+                   self.NOTHING % "2026-09-20T01:00:30Z")
+        got = self.call("relay_row follower")
+        self.assertIn("not measured", got)
+        self.assertIn("accumulate_dagbft_relayed_total", got)
+        self.assertNotIn("0 taken", got)
+
+    def test_a_series_that_starts_mid_run_counts_as_present(self):
+        """Family presence is judged over the whole file, not the last
+        sample: a counter first incremented mid-run is exported from then
+        on, and the last sample alone would call the earlier ones absent."""
+        self.write(self.NOTHING % "2026-09-20T01:00:00Z",
+                   "2026-09-20T01:00:30Z,acc-bvn3-fol1,follower,BVN3,"
+                   "1146,,,1140,6,,,0,periodic",
+                   self.TAKEN_ONLY % "2026-09-20T01:01:00Z")
+        got = self.call("relay_row follower")
+        self.assertIn("1146 taken", got)
+        self.assertIn("0 (series present) refused", got)
+
+
 class SoakShPassesWhatTheHelpersNeed(unittest.TestCase):
     """The helpers are only as good as their call sites."""
 
@@ -405,6 +454,36 @@ class SoakShPassesWhatTheHelpersNeed(unittest.TestCase):
         for c in calls:
             self.assertIn('"$lg_exit"', c, c)
             self.assertIn('"$stopped_early"', c, c)
+
+    def test_the_storage_row_matches_what_docker_network_yml_holds(self):
+        """The pattern was `[a-z]+` and the file says `BlockchainDB`, so run
+        20260919T231856Z recorded a blank storage backend — on a run that
+        was verifiably on BlockchainDB. Run the manifest's own expression
+        against the real file, not a copy of it."""
+        net = os.path.join(HERE, "..", "docker-network.yml")
+        line = next(l for l in open(net) if l.startswith("database:"))
+        self.assertIn("BlockchainDB", line, "the fixture this pins moved")
+        expr = re.search(r"sed -nE 's/\^database:[^']*'", self.SRC)
+        self.assertIsNotNone(expr, "the storage row's sed is gone")
+        out = subprocess.run(["sed", "-nE",
+                              expr.group(0).split("'")[1], net],
+                             capture_output=True, text=True, timeout=30)
+        self.assertEqual("BlockchainDB", out.stdout.strip().splitlines()[0])
+
+    def test_a_missing_database_line_is_not_a_blank_cell(self):
+        self.assertIn("no `database:` line in docker-network.yml", self.SRC)
+
+    def test_the_uncommitted_count_and_the_patch_are_the_same_set(self):
+        """`status --porcelain` counts tracked changes AND untracked files;
+        `git diff` captured only unstaged tracked ones, so the manifest read
+        `uncommitted files | 1` beside a zero-byte patch and a reader could
+        not tell a dirty tree from a broken capture."""
+        self.assertIn('diff HEAD > "$rd/config/uncommitted.patch"', self.SRC)
+        self.assertIn("--untracked-files=no", self.SRC)
+        self.assertIn("ls-files --others --exclude-standard", self.SRC)
+        self.assertIn("untracked (in no patch)", self.SRC)
+        self.assertIn("the capture failed", self.SRC)
+        self.assertNotIn('diff > "$rd/config/uncommitted.patch"', self.SRC)
 
     def test_the_steps_table_is_in_the_manifest(self):
         """A helper nothing calls measures nothing."""

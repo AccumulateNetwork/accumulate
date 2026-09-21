@@ -431,6 +431,15 @@ PROBE_PORTS = topology.probe_ports()
 # validators in it; it no longer does.
 NODE_PORTS = topology.node_ports()
 FOLLOWERS = topology.followers()   # [] on a topology with no follower
+# Container -> the partitions it runs. Every container runs TWO NODES, a DN
+# node and a BVN node, and a partition that recorded nothing exports no
+# series at all — so building rows from the scrape alone silently dropped
+# the follower's Directory node from submissions.csv (25 (node, partition)
+# pairs for a 13-node network, run 20260919T231856Z). The topology knows
+# which partitions exist on which container; a partition that reported
+# nothing is a row of empty fields, not a missing row.
+PARTITIONS_OF = {r["container"]: list(r["partitions"])
+                 for r in topology.node_records()}
 
 
 def _plabel(u):
@@ -1384,13 +1393,53 @@ def submissions_from(per, role="validator"):
     fields = ("accepted", "rejected", "certified", "relayedTaken",
               "relayedRefused", "relayedNotReady", "relayedUnreachable",
               "stranded")
+    # Which family each field comes from, so "absent" and "zero" can be
+    # told apart. A labelled Prometheus counter has no child series until
+    # it is first incremented, so an EMPTY `relayedRefused` beside a
+    # populated `relayedTaken` means the family is exported and no relay
+    # was ever refused — a real 0. An empty one with no relay family
+    # anywhere means nobody measured it. Run 20260919T231856Z printed both
+    # as `0` and a reader had to open relay.go to learn which it was
+    # (REPORTING-SPEC 1).
+    FAMILY_OF = {"accepted": "submissions", "rejected": "submissions",
+                 "certified": "certified", "relayedTaken": "relayed",
+                 "relayedRefused": "relayed", "relayedNotReady": "relayed",
+                 "relayedUnreachable": "relayed"}
     out = {"measured": bool(seen), "families": sorted(seen), "byNode": by_node,
            "stranded": None, "worstNode": None, "worstStranded": None,
-           "impossible": [], "unknownRelayOutcomes": out_unknown}
+           "impossible": [], "unknownRelayOutcomes": out_unknown,
+           "presence": {}}
     for k in fields:
         out.setdefault(k, None)
     if not seen:
+        out["presence"] = {k: "absent" for k in fields}
         return out
+
+    # Every partition the topology says a SCRAPED container runs, whether or
+    # not it reported anything. A partition that recorded nothing exports no
+    # series, so building the rows from the scrape alone dropped the
+    # follower's Directory node from submissions.csv entirely — a missing
+    # row reads as a node that was not scraped, which is a different fact
+    # from a node that had nothing to say.
+    for c in (per or {}):
+        node = by_node.setdefault(c, {"role": role, "byPartition": {}})
+        for part in PARTITIONS_OF.get(c, ()):
+            node["byPartition"].setdefault(part, dict(blank))
+
+    # A field is `series` where some (node, partition) reported it,
+    # `family` where its family was exported but this series never was
+    # (a true 0), and `absent` where the family was not exported at all.
+    for k in fields:
+        if k == "stranded":
+            out["presence"][k] = "series" if "submissions" in seen else "absent"
+            continue
+        if any(p.get(k) is not None
+               for n in by_node.values() for p in n["byPartition"].values()):
+            out["presence"][k] = "series"
+        elif FAMILY_OF[k] in seen:
+            out["presence"][k] = "family"
+        else:
+            out["presence"][k] = "absent"
     tot = {k: 0 for k in fields}
     for c, node in by_node.items():
         n = {k: 0 for k in fields}
@@ -1453,6 +1502,13 @@ def submissions_from(per, role="validator"):
         if out["worstStranded"] is None or n["stranded"] > out["worstStranded"]:
             out["worstStranded"], out["worstNode"] = n["stranded"], c
     out.update(tot)
+    # A total whose family was never exported is NOT 0 — nobody measured it
+    # (REPORTING-SPEC 1). A total whose family IS exported but whose own
+    # series never appeared stays 0, and `presence` says which, so a reader
+    # of /data never has to open the node's source to tell them apart.
+    for k in fields:
+        if out["presence"].get(k) == "absent":
+            out[k] = None
     return out
 
 
@@ -1473,7 +1529,15 @@ def merge_submissions(val, fol):
                         "relayedTaken", "relayedRefused", "relayedNotReady",
                         "relayedUnreachable", "stranded", "worstNode",
                         "worstStranded")}
+    out["follower"]["presence"] = fol.get("presence") or {}
     out["followerByNode"] = fol.get("byNode") or {}
+    # `presence` describes THIS dict's totals, which are the validators'
+    # (M6), and the follower's describes the follower's. One map cannot
+    # serve both when the halves differ — and here they do: a follower
+    # relays and a validator does not, so the relay family is `absent` on
+    # the validators' aggregate and `series` on the follower's. Merging
+    # them would have labelled the validators' None as a measured 0.
+    out["presence"] = dict(val.get("presence") or {})
     out["impossible"] = list(val.get("impossible") or []) + list(fol.get("impossible") or [])
     unknown = dict(val.get("unknownRelayOutcomes") or {})
     for k, v in (fol.get("unknownRelayOutcomes") or {}).items():
@@ -2717,11 +2781,20 @@ function followerView(fo, ns){
   const sub=(ns&&ns.submissions)||null, fsub=sub&&sub.follower;
   out.fstrand=(sub&&sub.measured&&fsub&&fsub.stranded!=null)
     ?`<span class="${fsub.stranded?'red':''}">${fmt(fsub.stranded)}</span>`:ABSENT;
-  out.frelay=(sub&&sub.measured&&fsub&&fsub.relayedTaken!=null)
-    ?`${fmt(fsub.relayedTaken)} / `
-     +`<span class="${fsub.relayedRefused?'yel':''}">${fmt(fsub.relayedRefused)}</span> / `
-     +`<span class="${fsub.relayedNotReady?'yel':''}">${fmt(fsub.relayedNotReady)}</span> / `
-     +`<span class="${fsub.relayedUnreachable?'red':''}">${fmt(fsub.relayedUnreachable)}</span>`
+  // A labelled counter has no child series until it is first incremented,
+  // so an empty `refused` beside a populated `taken` is a REAL 0 — the
+  // family is there and nothing was refused — while an empty one with no
+  // relay family anywhere is not measured. Rendering both as 0 made a
+  // reader open relay.go to learn which (REPORTING-SPEC 1, #4364).
+  const pres=(fsub&&fsub.presence)||{};
+  const cell=(k,v,col)=>pres[k]==='absent'?ABSENT
+    :pres[k]==='family'?`<span class=mut title="the family is exported and this outcome never occurred">0</span>`
+    :`<span class="${v&&col?col:''}">${fmt(v)}</span>`;
+  out.frelay=(sub&&sub.measured&&fsub)
+    ?`${cell('relayedTaken',fsub.relayedTaken,'')} / `
+     +`${cell('relayedRefused',fsub.relayedRefused,'yel')} / `
+     +`${cell('relayedNotReady',fsub.relayedNotReady,'yel')} / `
+     +`${cell('relayedUnreachable',fsub.relayedUnreachable,'red')}`
     :ABSENT;
   out.fstate=`${names.join(', ')} · bound ${fo.bound} blocks`
     +(over?` · OVER the bound (${who})`:'');
