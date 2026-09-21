@@ -97,8 +97,8 @@ type Source struct {
 	Producer *url.URL
 
 	// Authority is the validator sets anchors are checked against. It is the
-	// node's own, and this source advances it: an anchor that verifies under
-	// the set the authority trusts may carry the change to the next set.
+	// node's own, and this source only READS it — nothing an anchor carries
+	// moves it (see consider).
 	Authority *Authority
 
 	// OnAnchor, if set, is called for every VERIFIED anchor, in chain order.
@@ -120,6 +120,11 @@ type Source struct {
 	order   []anchorKey
 	next    uint64
 	started bool
+
+	// doubt counts consecutive reads whose peer said the chain ends below
+	// the cursor. One is a peer that lags; doubtRounds of them is a cursor
+	// that is wrong.
+	doubt int
 }
 
 type anchorKey struct {
@@ -285,6 +290,12 @@ func (s *Source) record(key anchorKey, root [32]byte) {
 // rather than in one.
 const maxPagesPerRead = 64
 
+// doubtRounds is how many consecutive reads must report a chain shorter than
+// the cursor before the cursor is believed to be the wrong one. The peers
+// rotate per call, so this is that many different peers agreeing; one peer
+// lagging by an entry is the ordinary case and must cost nothing.
+const doubtRounds = 8
+
 func (s *Source) readLocked(ctx context.Context) error {
 	if s.roots == nil {
 		s.roots = map[anchorKey][32]byte{}
@@ -300,15 +311,30 @@ func (s *Source) readLocked(ctx context.Context) error {
 
 	q := api.Querier2{Querier: s.Query}
 
-	// **The cursor is re-anchored on every read, against the chain as this
-	// read's peer reports it.** It is a number derived from what peers said,
-	// and the peers rotate: one page whose last entry claimed index 2^40
-	// would otherwise park the cursor past the end of the real chain for the
-	// life of the process, every honest peer would answer NotFound for that
-	// range, and nothing would ever reset it — one response, for a node that
-	// verifies no anchor again (#4301, threat review F5). A peer that reports
-	// a count too LOW only makes this node re-read entries it has already
-	// considered, which is idempotent.
+	// **The cursor is this node's, and a peer's count only ever sets it when
+	// this node has nothing of its own.**
+	//
+	// Every number in this read comes from a peer, and the peers ROTATE per
+	// call (join/sources.go, peerQuerier): the count and each page come from
+	// different nodes. That makes the two failure directions ordinary rather
+	// than adversarial, and they pull opposite ways.
+	//
+	// Too HIGH — a peer claiming a chain of 2^40 — would park the cursor
+	// past the end of the real chain, every honest peer would then answer
+	// nothing for that range, and the node would verify no anchor again for
+	// the life of the process (threat review F5). Too LOW — the ordinary
+	// case, a count-peer one entry behind the peer that served the last page
+	// — used to rewind the cursor a full window and re-verify up to 1024
+	// anchors, at threshold ed25519 verifications each, over and over
+	// (review re-check, finding 1).
+	//
+	// So: a count BELOW the cursor is that peer's condition and not this
+	// node's business, and nothing happens — unless doubtRounds peers say so
+	// in a row, in which case the cursor is what is wrong and it re-anchors
+	// to the window, exactly as a cold start would. And the cursor is not
+	// this node's until a page has actually been consumed, so a first read
+	// against a peer that names a window and serves nothing at it is
+	// re-anchored next round against another peer.
 	chain, err := q.QueryChain(ctx, s.Pool, &api.ChainQuery{Name: "main"})
 	switch {
 	case err == nil:
@@ -318,14 +344,36 @@ func (s *Source) readLocked(ctx context.Context) error {
 	default:
 		return errors.UnknownError.WithFormat("read %v's anchor chain: %w", s.Pool, err)
 	}
-	if !s.started || s.next > chain.Count {
-		s.started = true
-		s.next = 0
-		if chain.Count > backfill {
-			// The anchors a join needs are the current ones, and entry 0 is
-			// the first anchor the network ever executed.
-			s.next = chain.Count - backfill
+	// window is where a cold start reads from: near the end, because the
+	// anchors a join needs are the current ones and entry 0 is the first
+	// anchor the network ever executed. It is at most Backfill entries, and
+	// MaxRoots is four times that, so re-reading it cannot evict what it
+	// just recorded.
+	window := uint64(0)
+	if chain.Count > backfill {
+		window = chain.Count - backfill
+	}
+
+	switch {
+	case !s.started:
+		// Nothing consumed yet, so there is no cursor to protect.
+		s.doubt = 0
+		s.next = window
+
+	case s.next > chain.Count:
+		s.doubt++
+		if s.doubt < doubtRounds {
+			// One peer is behind the one that served the last page. There is
+			// nothing new HERE, and no reason to believe the cursor is wrong.
+			return nil
 		}
+		// Every peer asked, for doubtRounds reads running, says the chain
+		// ends below this cursor. The cursor is wrong, not the peers.
+		s.doubt = 0
+		s.next = window
+
+	default:
+		s.doubt = 0
 	}
 
 	for page := 0; page < maxPagesPerRead; page++ {
@@ -349,6 +397,10 @@ func (s *Source) readLocked(ctx context.Context) error {
 			return nil
 		}
 
+		// The cursor is this node's from here: a page came back, so the
+		// window this peer named is real.
+		s.started = true
+
 		for _, entry := range rec.Records {
 			s.consider(entry)
 		}
@@ -364,13 +416,27 @@ func (s *Source) readLocked(ctx context.Context) error {
 	return nil
 }
 
-// consider verifies one pool entry and, if it holds, records its root and
-// walks the authority over whatever change it carried.
+// consider takes one pool entry and, if this source's producer made it and a
+// quorum of that producer's validators signed it, records its root.
 //
-// **In that order.** The updates are applied only after the signatures have
-// been checked against the set the authority trusts now, because that is the
-// whole of the walk's safety: each change is anchored and signed by the
-// preceding set.
+// **The producer first, then the signatures.** A pool holds every partition's
+// anchors — a BVN reading dn.acme/anchors sees the Directory's and every
+// other BVN's — and this source answers for one of them. Verifying the rest
+// costs a full signature check per anchor for a root nobody here wants, and
+// it makes noise that reads as a finding: a partition that has not yet
+// executed a network update signs under the older version, fails this node's
+// floor, and is logged as an anchor refused (review re-check, finding 2).
+// Somebody else's anchor is not refused. It is not this source's.
+//
+// Nothing an anchor carries moves the validator sets. A change used to travel
+// as DirectoryAnchor.Updates and this package used to apply them; past
+// Vandenberg the Directory never populates that field (block_end.go:792, and
+// the change leaves as a messaging.NetworkUpdate, network_accounts.go:128),
+// so the walk could not fire on this line at all — and while it was here, a
+// quorum of ONE BVN could have used it to name the validators of every
+// partition (#4301, review finding 1, threat finding F1). The sets move one
+// way only: through Authority.Update, from a definition the join pulled and
+// verified as a leaf under a root the trusted set signed.
 func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]) {
 	if rec == nil || rec.Value == nil || rec.Value.Message == nil || rec.Value.Message.Transaction == nil {
 		return
@@ -386,6 +452,9 @@ func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messagin
 
 	// The producer, not the pool. PartitionAnchor.Source is the partition
 	// that produced the anchor (acc://dn.acme), never the pool it landed in.
+	if !pa.Source.Equal(s.Producer) {
+		return // Somebody else's anchor, in a pool that holds everyone's
+	}
 	produced, ok := protocol.ParsePartitionUrl(pa.Source)
 	if !ok {
 		return
@@ -396,25 +465,6 @@ func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messagin
 		if s.OnRefused != nil {
 			s.OnRefused(pa.MinorBlockIndex, err)
 		}
-		return
-	}
-
-	// **There is no walk here, and there is nothing to be gained by putting
-	// one back.** A change to the validator sets used to travel as
-	// DirectoryAnchor.Updates, and this package used to apply them. Past
-	// Vandenberg the Directory never populates that field
-	// (block_end.go:791-793; the change leaves as a messaging.NetworkUpdate,
-	// network_accounts.go:128-131), so the walk could not fire on this line
-	// at all — and while it was here, a quorum of ONE BVN could have used it
-	// to name the validators of every partition (#4301, review finding 1,
-	// threat finding F1). The sets move one way only: through
-	// Authority.Update, from a definition the join pulled and verified as a
-	// leaf under a root a quorum signed.
-
-	if !pa.Source.Equal(s.Producer) {
-		// Verified, but it is somebody else's root. It still walked the
-		// authority above, which is why a BVN reads the Directory's anchors
-		// out of its own pool.
 		return
 	}
 
