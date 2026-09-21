@@ -24,6 +24,12 @@ import (
 // root would be confidently wrong, which is worse than an error, so nothing
 // here ever falls back to the current root.
 //
+// And the refusal has to say which kind it is. On this line a requester treats
+// NotFound as a fact about the RECORD and a capability limit as a fact about
+// the PEER (`join/sources.go`), so a node that answers NotFound because it
+// could not read its own index makes the requester drop an account the network
+// holds. Nothing in this file turns a store miss into NotFound.
+//
 // Retention is per-node configuration (BPTHistoryDepth). A node running a depth
 // of zero retains nothing, refuses every historical request with
 // [errors.IncompleteChain], and is a correct, honest node — but it cannot serve
@@ -224,11 +230,41 @@ func ResolveBlockAtOrBefore(partition config.NetworkUrl, batch *database.Batch, 
 // account's main chain index.
 //
 // ok is false when this node cannot tell — the account has no indexed main
-// chain, which is not the same as the account not existing. Callers must not
-// turn "I cannot tell" into "it was not there".
+// chain, or it has one whose beginning this node does not hold. Neither is the
+// same as the account not existing, and callers must not turn "I cannot tell"
+// into "it was not there".
+//
+// # A JOINED NODE CANNOT TELL, AND MUST NOT SAY NOT-FOUND
+//
+// A node that pulled its state holds each non-spine chain with its OPEN MARK
+// SET only (`pull.go`, ModeStateOnly: `lastMark := want.Count &^ MarkMask()`),
+// so for a main index chain longer than one mark block — 256 entries, since
+// markPower is 8 — element 0 is not in the store. Measured on this line with
+// the production pull:
+//
+//	PULLED AccountFirstIndexedBlock => ok=false
+//	  err=load acc://alice/tokens main chain index entry 0: cannot locate element 0
+//	  code=notFound
+//
+// Letting that out as an error would be worse than useless. [errors.Code] walks
+// a wrapping UnknownError down to the cause (`pkg/errors/inspect.go`), so the
+// client sees NotFound; `join/sources.go` makes a NotFound that EVERY peer
+// gives the network's answer about the record; and on a network whose reachable
+// peers have all joined, that is every peer. The requester would conclude the
+// account did not exist at that height and drop an account all of them hold.
+//
+// So a store miss on element 0 is "I cannot tell", not an error and never a
+// status. The caller then skips the existence question and answers from the
+// BPT, which is the authority for it anyway.
+// TestAJoinedNodeDoesNotCallItsOwnGapAnAbsence stands the joined node.
 func AccountFirstIndexedBlock(account *database.Account) (block uint64, ok bool, err error) {
 	mainIndexChain, err := account.MainChain().Index().Get()
-	if err != nil {
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.NotFound):
+		return 0, false, nil
+	default:
 		return 0, false, errors.UnknownError.WithFormat("load %v main chain index: %w", account.Url(), err)
 	}
 	if mainIndexChain.Height() == 0 {
@@ -237,10 +273,14 @@ func AccountFirstIndexedBlock(account *database.Account) (block uint64, ok bool,
 
 	entry := new(protocol.IndexEntry)
 	err = mainIndexChain.EntryAs(0, entry)
-	if err != nil {
+	switch {
+	case err == nil:
+		return entry.BlockIndex, true, nil
+	case errors.Is(err, errors.NotFound):
+		return 0, false, nil // The beginning of the chain is not held here
+	default:
 		return 0, false, errors.UnknownError.WithFormat("load %v main chain index entry %d: %w", account.Url(), 0, err)
 	}
-	return entry.BlockIndex, true, nil
 }
 
 // BPTRootAt returns the BPT root as of the given minor block height, together
@@ -315,8 +355,10 @@ func BPTRootAt(partition config.NetworkUrl, batch *database.Batch, height uint64
 // It returns one of four distinguishable refusals, so a client can branch
 // without parsing prose:
 //
-//   - [errors.NotFound] — the account had no record at that height. This is
-//     proven absence, not a capability limit.
+//   - [errors.NotFound] — this node's index has no record of the account at
+//     that height. It is not proof of absence: it is what THIS node's index
+//     says, so a requester counts it as a miss and asks somebody else. It is
+//     never returned for anything this node merely could not read.
 //   - [errors.IncompleteChain] — a capability limit: the height precedes what
 //     this node has indexed, or is indexed but the node retains no BPT history
 //     for it. The message names the boundary.
@@ -337,7 +379,7 @@ func ResolveHistoricalAccountState(partition config.NetworkUrl, batch *database.
 	}
 	if ok && height < first {
 		return nil, errors.NotFound.WithFormat(
-			"%v did not exist at block %d; this node's earliest record of it is block %d", account.Url(), height, first)
+			"this node's earliest record of %v is block %d, so it has none at block %d", account.Url(), first, height)
 	}
 
 	return ResolveRetainedBlock(partition, batch, height)
