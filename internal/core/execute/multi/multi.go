@@ -9,7 +9,6 @@ package execute
 import (
 	"sync/atomic"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	v1 "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
@@ -224,16 +223,16 @@ func (m *Multi) CollectCommittedBlock(params execute.BlockParams, envelopes []*m
 	return c.CollectCommittedBlock(params, envelopes)
 }
 
-// LoadStaging takes a running validator's staging into the active executor's
-// own (executor spec, "Sync", step 2).
-func (m *Multi) LoadStaging(snap *private.StagingSnapshot) error {
+// StagingGaps reports the streams whose run from the pulled Delivered is not
+// contiguous through what a collected block carried (#4362).
+func (m *Multi) StagingGaps(reach []execute.StreamReach) ([]execute.StreamGap, error) {
 	c, ok := (*m.active.Load()).(interface {
-		LoadStaging(*private.StagingSnapshot) error
+		StagingGaps([]execute.StreamReach) ([]execute.StreamGap, error)
 	})
 	if !ok {
-		return errors.NotAllowed.With("this executor cannot take staging from a peer")
+		return nil, errors.NotAllowed.With("this executor cannot say where its streams stand")
 	}
-	return c.LoadStaging(snap)
+	return c.StagingGaps(reach)
 }
 
 // SettleStagingAt brings the active executor's staging to the block its

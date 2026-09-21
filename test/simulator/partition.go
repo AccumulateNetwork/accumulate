@@ -15,15 +15,16 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"io"
 	"sort"
 	"sync"
+	"time"
 
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -56,16 +57,16 @@ func (p *Partition) NodeCount() int { return len(p.nodes) }
 // NodeDatabase is node i's database, for a test that compares nodes.
 func (p *Partition) NodeDatabase(i int) *database.Database { return p.nodes[i].database }
 
-// RestartNode stands node i where a restarted validator stands, and starts its
-// join: its staging is empty — staging is memory, and a restart loses it — and
-// from here it collects the blocks it is handed instead of executing them
-// (executor spec, "Sync", step 1). It executes nothing until the join
+// RestartNode stands node i where a restarted validator stands: its staging is
+// empty -- staging is memory, and a restart loses it -- and from here it
+// collects the blocks it is handed into its own stage instead of executing
+// them (executor spec, "Sync", §5). It executes nothing until the join
 // completes; a restart IS a join (#4205, #4294).
 //
 // The simulator has no process to restart and no consensus buffer: every node
 // is handed every block, so "buffered" and "collected" are the same thing
-// here. What the join must still get right is the same: the node takes a
-// peer's staging, takes the state, and executes from the block after.
+// here. What the join must get right is the same, and it is the production
+// join that gets it: see StartJoin.
 func (p *Partition) RestartNode(i int) {
 	p.nodes[i].staging.Reset()
 	p.nodes[i].join.leave()
@@ -74,69 +75,85 @@ func (p *Partition) RestartNode(i int) {
 // Joining reports whether node i is collecting rather than executing.
 func (p *Partition) Joining(i int) bool { return p.nodes[i].join.Joining() }
 
-// TakeStaging is step 2 of node i's join: it takes node j's staging as of j's
-// last committed block, through the same private API a real node uses
-// (#4291), and loads it. The blocks that follow are applied to it as they
-// arrive, which is what collecting has been doing since RestartNode.
-func (p *Partition) TakeStaging(i, j int) error {
-	from, ok := p.NodePrivate(j).(private.StagingSnapshotter)
-	if !ok {
-		return errors.NotAllowed.With("this node does not serve staging")
-	}
-	snap, err := private.FetchStagingSnapshot(context.Background(), from, p.ID)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	return p.nodes[i].join.takeStaging(snap)
+// A Join is node i's join, running.
+type Join struct {
+	mu   sync.Mutex
+	err  error
+	done bool
 }
 
-// CompleteJoin is steps 3 and 4 of node i's join: the state comes from node j
-// — in the simulator by copying its store, where a real node pulls it account
-// by account and verifies each against the anchored root (#4293) — staging is
-// settled at the block that state is, and node i executes from the next block
-// as any node does.
-func (p *Partition) CompleteJoin(i, j int) error {
-	src, ok := p.nodes[j].store.(*memory.Database)
-	dst, ok2 := p.nodes[i].store.(*memory.Database)
-	if !ok || !ok2 {
-		return errors.NotAllowed.With("the simulator's join needs in-memory stores")
-	}
-	entries, err := src.Export()
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	err = dst.Import(entries)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
+// Done reports whether the join has finished, and Err says how.
+func (j *Join) Done() bool {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.done
+}
 
-	// The block the state is: what the peer's ledger says, which is what the
-	// anchored-root match answers on a real network.
-	var q uint64
-	err = p.nodes[i].database.View(func(batch *database.Batch) error {
-		var ledger *protocol.SystemLedger
-		err := batch.Account(protocol.PartitionUrl(p.ID).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
-		if err != nil {
-			return err
-		}
-		q = ledger.Index
-		return nil
+// Err is the error the join ended with, or nil.
+func (j *Join) Err() error {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.err
+}
+
+// StartJoin runs node i's join -- THE PRODUCTION JOIN, join.Run, with the
+// production pull -- against its peers, and returns while it runs. The caller
+// steps the network until Joining(i) is false.
+//
+// It used to copy node j's STORE into node i's and call that the state pull.
+// That is not a join and it could not fail: it moved a verified state from one
+// process to another with no peer, no receipt, no anchored root and no
+// convergence, so every defect the pull has ever had was invisible here --
+// including the one that stopped every restarted node on the twelve-node
+// network for a month (#4362). What runs now is what a node runs: the pull is
+// addressed at NAMED PEERS with this node's own ID dropped (#4303), every
+// account is verified against the root a quorum signed for the block it was
+// asked at, and the node executes the block after that one only when no stream
+// has a gap.
+//
+// What it still cannot do, and what Docker is for: there is no process to
+// restart, so nothing here exercises the daemon's start-up -- the node-state
+// seam, the services registered while BOOTING, or reading the executed block
+// from a record no pull writes. Those are #4295's, and the soak's.
+func (p *Partition) StartJoin(i int) *Join {
+	out := new(Join)
+	n := p.nodes[i]
+
+	state, err := join.NewState(join.StateOptions{
+		Partition: protocol.PartitionUrl(p.ID),
+		Database:  n.database,
+		Sources: &join.QueryPeers{
+			Client:  p.sim.Services(),
+			Network: p.sim.networkId,
+			Router:  p.sim.router,
+			Self:    n.peerID,
+		},
+		EventBus: n.eventBus,
 	})
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		out.err, out.done = err, true
+		return out
 	}
 
-	settler, ok := p.nodes[i].executor.(interface{ SettleStagingAt(uint64) error })
+	stage, ok := n.executor.(join.Stage)
 	if !ok {
-		return errors.NotAllowed.With("this executor cannot settle staging")
-	}
-	err = settler.SettleStagingAt(q)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		out.err, out.done = errors.NotAllowed.With("this executor cannot settle its staging at a block"), true
+		return out
 	}
 
-	p.nodes[i].join.done()
-	return nil
+	go func() {
+		err := join.Run(context.Background(), join.Options{
+			Partition: p.ID,
+			Buffer:    n.join,
+			Stage:     stage,
+			State:     state,
+			Retry:     time.Millisecond,
+		})
+		out.mu.Lock()
+		out.err, out.done = err, true
+		out.mu.Unlock()
+	}()
+	return out
 }
 
 // NodeStaging is node i's staging, for a test that compares nodes.

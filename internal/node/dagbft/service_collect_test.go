@@ -86,15 +86,12 @@ func TestProcessCommittedGroup_CollectingBuffersInsteadOfExecuting(t *testing.T)
 	require.NoError(t, err)
 
 	require.Empty(t, ca.blocks, "a joining node produces no blocks")
-	require.Empty(t, ca.collected,
-		"and holds nothing until it has its peers' staging: the blocks are buffered, not applied")
 
-	// The join takes a peer's staging; the blocks buffered since are applied
-	// to it, in order (executor spec, "Sync", step 2).
-	loaded := false
-	require.NoError(t, svc.applyStagingNow(func() error { loaded = true; return nil }))
-	require.True(t, loaded)
-	require.Len(t, ca.collected, 2, "every buffered group is applied to that staging")
+	// A joining node collects into ITS OWN stage from the moment it starts
+	// listening. There is no peer's stage to load into first and nothing to
+	// wait for before holding what arrives: no peer is ever asked what it
+	// holds (#4322).
+	require.Len(t, ca.collected, 2, "every group is taken into staging as it arrives")
 	require.Equal(t, b1.Digest(), ca.collected[0].Batches[0].Digest(), "in the order consensus committed them")
 	require.Equal(t, b2.Digest(), ca.collected[1].Batches[0].Digest())
 	require.Equal(t, uint64(0), ca.collected[0].Index, "a collected block has no index until the handoff")
@@ -152,6 +149,11 @@ func TestHandoff_ProducesOnlyWhatTheStateDoesNotHave(t *testing.T) {
 	require.Len(t, svc.Buffered(), 3)
 	require.Empty(t, ca.blocks)
 
+	require.Equal(t, []uint64{41, 42, 43}, []uint64{
+		svc.Buffered()[0].Block, svc.Buffered()[1].Block, svc.Buffered()[2].Block},
+		"each group is STAMPED with its block when it arrives, from the block the "+
+			"node's own executor reached -- not counted at the handoff (#4351)")
+
 	// The pull reached block 41, which is the first of them: it is in the
 	// state already, so only 42 and 43 are produced.
 	require.NoError(t, svc.performHandoff(41))
@@ -197,7 +199,9 @@ func TestHandoff_WaitsForTheBlocksItHasNotCollected(t *testing.T) {
 	require.Len(t, svc.Buffered(), 1, "with its buffer intact")
 	require.Empty(t, ca.blocks)
 
-	// A block behind where the node stood is refused outright.
+	// A block behind where the node stood is refused outright: every group
+	// the buffer holds is above it, so the group numbered 40 is not there
+	// and the blocks between were never collected.
 	err = svc.performHandoff(39)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)

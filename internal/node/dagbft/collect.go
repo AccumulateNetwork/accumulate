@@ -106,18 +106,17 @@ func (g *CollectedGroup) bytes() int {
 // StartCollecting puts the service in collecting mode: every committed group
 // is taken into staging and buffered, and none is executed.
 //
-// `from` is the block this node's own EXECUTOR last executed, so the first
-// group collected is block from+1 and each one after it is the next block. It
-// is handed in rather than read here for the reason #4351 exists: the daemon
-// calls this before Start(), and Start() is what sets the index this used to
-// read, so it read zero and the mapping was repaired only by a later call
-// that also threw the buffer away. The daemon holds the number from
-// SystemData.ExecutedBlock, which no pull can move (#4344).
+// The block each collected group is numbered with is SEEDED WHEN THE FIRST
+// GROUP ARRIVES, from the block this node stands at then, and counted up from
+// there. Not here: the daemon calls this before Start(), and Start() is what
+// sets that number, so seeding here read zero and the mapping was repaired
+// only by a later call that also threw the buffer away -- which is #4351's
+// first violation. By the time a group arrives, Start() has run.
 //
 // It may be called once. A second call would have to say what the blocks
-// already collected are, and there is no answer to that which is not a
-// guess; a join that needs to start again restarts the node.
-func (s *Service) StartCollecting(from uint64) {
+// already collected are, and there is no answer to that which is not a guess;
+// a join that needs to start again restarts the node.
+func (s *Service) StartCollecting() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.collecting {
@@ -127,7 +126,7 @@ func (s *Service) StartCollecting(from uint64) {
 	s.bufferOverrun = false
 	s.buffer = nil
 	s.bufferBytes = 0
-	s.nextCollected = from + 1
+	s.nextCollected = 0
 }
 
 // Collecting reports whether this node is joining: collecting committed
@@ -426,6 +425,9 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 		s.mu.Unlock()
 		return errors.NotReady.WithFormat("%s: the join buffer is full at %d groups and %d bytes; the join cannot finish",
 			s.config.Partition.ID, len(s.buffer), s.bufferBytes)
+	}
+	if s.nextCollected == 0 {
+		s.nextCollected = s.lastBlockIndex + 1
 	}
 	g.Block = s.nextCollected
 	s.nextCollected++

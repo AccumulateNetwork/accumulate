@@ -117,9 +117,9 @@ type Service struct {
 	// advances the block index. See collect.go.
 	collecting bool
 	// nextCollected is the block number the next collected group is stamped
-	// with. It is seeded ONCE, by StartCollecting, from the block this node's
-	// own executor reached -- a number no pull can move -- and it only
-	// counts up from there. Nothing resets it (#4351).
+	// with. It is seeded ONCE, when the first group arrives, from the block
+	// this node stands at then, and it only counts up from there. Nothing
+	// resets it (#4351).
 	nextCollected uint64
 	buffer        []*CollectedGroup
 	bufferBytes   int

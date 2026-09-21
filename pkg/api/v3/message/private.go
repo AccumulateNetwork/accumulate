@@ -28,8 +28,7 @@ func (s Sequencer) methods() serviceMethodMap {
 	typ4, fn4 := makeServiceMethod(s.minorRootRange)
 	typ5, fn5 := makeServiceMethod(s.snapshotRange)
 	typ6, fn6 := makeServiceMethod(s.partitionRootRange)
-	typ7, fn7 := makeServiceMethod(s.stagingSnapshot)
-	return serviceMethodMap{typ: fn, typ2: fn2, typ3: fn3, typ4: fn4, typ5: fn5, typ6: fn6, typ7: fn7}
+	return serviceMethodMap{typ: fn, typ2: fn2, typ3: fn3, typ4: fn4, typ5: fn5, typ6: fn6}
 }
 
 func (s Sequencer) sequence(c *call[*PrivateSequenceRequest]) {
@@ -111,27 +110,6 @@ func (s Sequencer) partitionRootRange(c *call[*PrivatePartitionRootRangeRequest]
 	c.Write(&PrivatePartitionRootRangeResponse{Value: res})
 }
 
-func (s Sequencer) stagingSnapshot(c *call[*PrivateStagingSnapshotRequest]) {
-	snap, ok := s.Sequencer.(private.StagingSnapshotter)
-	if !ok {
-		c.Write(&ErrorResponse{Error: errors.NotAllowed.With("staging snapshot is not supported")})
-		return
-	}
-	res, err := snap.StagingSnapshot(c.context, &private.StagingSnapshotRequest{
-		Partition:   c.params.Partition,
-		Ledger:      c.params.Ledger,
-		Source:      c.params.Source,
-		Number:      c.params.Number,
-		ProofOffset: c.params.ProofOffset,
-		Limit:       c.params.Limit,
-	})
-	if err != nil {
-		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
-		return
-	}
-	c.Write(&PrivateStagingSnapshotResponse{Value: res})
-}
-
 // PrivateClient is a binary message transport client for private API v3 services.
 type PrivateClient AddressedClient
 
@@ -190,11 +168,3 @@ func (c PrivateClient) PartitionRootRange(ctx context.Context, partition *url.UR
 }
 
 func (r *PrivatePartitionRootRangeResponse) rval() *private.PartitionRootRecord { return r.Value } //nolint:unused
-
-// StagingSnapshot implements [private.StagingSnapshotter.StagingSnapshot].
-func (c PrivateClient) StagingSnapshot(ctx context.Context, req *private.StagingSnapshotRequest) (*private.StagingSnapshot, error) {
-	m := &PrivateStagingSnapshotRequest{Partition: req.Partition, Ledger: req.Ledger, Source: req.Source, Number: req.Number, ProofOffset: req.ProofOffset, Limit: req.Limit}
-	return typedRequest[*PrivateStagingSnapshotResponse, *private.StagingSnapshot](AddressedClient(c), ctx, m)
-}
-
-func (r *PrivateStagingSnapshotResponse) rval() *private.StagingSnapshot { return r.Value } //nolint:unused

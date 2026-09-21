@@ -70,6 +70,12 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 		simulator.Genesis(GenesisTime),
 		simulator.IgnoreDeliverResults(),
 		simulator.IgnoreCommitResults(),
+
+		// Without retention the peers hold only their current BPT and refuse
+		// every anchored-block request, so the join's pull has nothing it can
+		// verify. A node's own default is 1024 (cmd/accumulated/run/dagbft.go);
+		// the simulator's is zero, which matches a node configured off.
+		simulator.BPTHistoryDepth(1024),
 	)
 	sim.SetRoute(alice, "BVN0")
 	sim.SetRoute(bob, "BVN1")
@@ -219,45 +225,47 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 	require.True(t, p.Joining(1))
 	t.Logf("held after the restart:  %v", []int{held(0), held(1), held(2)})
 
-	// The join happens FIRST, while the peers still hold the entries and
-	// their proofs still wait: the node takes their staging and their state,
-	// and only then do the anchors land. That ordering is what this test is
-	// for — with it, a join that skipped the staging (or collected nothing)
-	// holds nothing when the proving anchor arrives, executes a block its
-	// peers do not, and its root chain never matches again (#4290).
-	require.NoError(t, p.TakeStaging(1, 0), "take a peer's staging")
-	{
-		tx := p.NodeStaging(1).Begin()
-		n := 0
-		for _, st := range tx.Streams() {
-			n += int(st.Held)
-		}
-		tx.Discard()
-		require.Greater(t, n, 0, "the staging taken holds what the peers hold")
-	}
-	// Blocks pass between the two halves of the join, and they carry new
-	// entries: sent now, they reach BVN1 after the snapshot was taken, so
-	// they are in nobody's snapshot and the joining node can only have them
-	// by COLLECTING them. Their anchors are still held back, so the peers
-	// hold them unexecuted — which is what makes the difference visible when
-	// the anchors land.
+	// THE JOIN RUNS WHILE THE PEERS STILL HOLD THE ENTRIES, and it must not
+	// finish. NO PEER IS ASKED WHAT IT HOLDS any more: the restarted node's
+	// stage is what IT collected, and the entries the peers have held since
+	// before it restarted are not in it. The block after the state it pulls
+	// therefore has a GAP -- it would deliver a shorter run from that block
+	// than its peers do -- and a node that executed anyway is #4290.
+	//
+	// So it stays collecting, block after block, until the peers have
+	// actually executed those entries and the state it pulls SAYS SO.
+	joining := p.StartJoin(1)
+
+	// Blocks pass while it pulls, and they carry new entries: sent now, they
+	// reach BVN1 while the node is collecting, so it holds them and its peers
+	// hold them unexecuted too. Their anchors are still held back.
 	for i := uint64(18); i <= 20; i++ {
 		send(i)
 		sim.Step()
 	}
-	sim.StepN(10)
+	sim.StepN(20)
 	t.Logf("held while joining:      %v", []int{held(0), held(1), held(2)})
-	require.Greater(t, held(1), 0, "the joining node collected what arrived after the snapshot")
+	require.Greater(t, held(1), 0, "the joining node collected what arrived while it was listening")
+	require.NoError(t, joining.Err())
+	require.True(t, p.Joining(1),
+		"the node must NOT execute while the block after its state carries an entry "+
+			"the peers held from before it was listening: that is the gap the join "+
+			"advances past rather than executing over (#4290)")
 
-	require.NoError(t, p.CompleteJoin(1, 0), "take the state and execute from the next block")
-	require.False(t, p.Joining(1))
-	t.Logf("held after the join:     %v", []int{held(0), held(1), held(2)})
-	require.Equal(t, held(0), held(1), "the joined node holds what its peers hold")
-
-	// The held-back anchors land on every node in the next block: every node,
-	// the one that joined included, executes what it holds.
+	// The held-back anchors land on every node in the next block: the peers
+	// execute what they hold. Now the state the joining node pulls says those
+	// entries were delivered, the gap is gone, and it executes.
 	dropAnchors.Store(false)
 	release.Store(true)
+	for i := 0; i < 120 && p.Joining(1); i++ {
+		require.NoError(t, sim.S.Step())
+		require.NoError(t, joining.Err())
+	}
+	require.False(t, p.Joining(1),
+		"once the peers have executed the entries it lacked, the first block with no "+
+			"gap is the block it executes from")
+	require.NoError(t, joining.Err())
+	t.Logf("held after the join:     %v", []int{held(0), held(1), held(2)})
 	proofs := func() string {
 		mfs, err := prometheus.DefaultGatherer.Gather()
 		require.NoError(t, err)
@@ -287,7 +295,8 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 					line += fmt.Sprintf(" n%d:syn(held=%d)", i, st.Held)
 				}
 				if st.ID.Source.Equal(DnUrl()) && st.ID.Ledger.Equal(PartitionUrl("BVN1").JoinPath(AnchorPool)) {
-					line += fmt.Sprintf(" n%d:anc(held=%d,sighted=%d)", i, st.Held, st.Sighted)
+					line += fmt.Sprintf(" n%d:anc(held=%d,sighted=%d,delivered=%d,missing=%v)", i, st.Held, st.Sighted, st.Delivered,
+						tx.Missing(st.ID, st.Delivered, st.Sighted, 3))
 				}
 			}
 			tx.Discard()
@@ -304,6 +313,20 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 
 	// Every node of BVN1 must stand on the same root chain, or the anchors
 	// it signs from here on will never gather a quorum.
+	// Said out loud whether it passes or not: a root chain that is SHORT
+	// rather than different is a node that executed empty blocks where its
+	// peers executed entries, which is what a stuck stream looks like from
+	// the outside.
+	for i := 0; i < p.NodeCount(); i++ {
+		View(t, p.NodeDatabase(i), func(batch *database.Batch) {
+			var l *SystemLedger
+			_ = batch.Account(PartitionUrl("BVN1").JoinPath(Ledger)).Main().GetAs(&l)
+			h, _ := batch.Account(PartitionUrl("BVN1").JoinPath(Ledger)).RootChain().Head().Get()
+			r, _ := batch.GetBptRootHash()
+			t.Logf("node %d: ledger=%d rootChain=%d bpt=%x", i, l.Index, h.Count, r[:6])
+		})
+	}
+
 	var anchors [][]byte
 	for i := 0; i < p.NodeCount(); i++ {
 		View(t, p.NodeDatabase(i), func(batch *database.Batch) {

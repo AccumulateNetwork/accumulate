@@ -100,7 +100,3 @@ Type:
     value: 0x8a
   PrivatePartitionRootRangeResponse:
     value: 0x8b
-  PrivateStagingSnapshotRequest:
-    value: 0x8c
-  PrivateStagingSnapshotResponse:
-    value: 0x8d

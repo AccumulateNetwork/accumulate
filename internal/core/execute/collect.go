@@ -59,7 +59,8 @@ type StreamGap struct {
 	// staging remembers, which is zero on a node that has executed nothing.
 	Delivered uint64
 
-	// Through is the block's reach on the stream.
+	// Through is how far the run was walked: the block's reach on the stream
+	// or the highest number this node holds, whichever is greater.
 	Through uint64
 
 	// Missing is the runs of numbers in (Delivered, Through] that the node

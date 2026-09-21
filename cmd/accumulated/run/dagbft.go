@@ -576,12 +576,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		if err != nil {
 			return errors.UnknownError.WithFormat("prepare the join: %w", err)
 		}
-		// The block this node's own executor last executed, handed in once:
-		// the first group collected is the block after it, and every group
-		// after that is the next block. StartCollecting runs before Start(),
-		// and Start() is what used to set the number this derived itself
-		// from, so it derived zero (#4351).
-		s.service.StartCollecting(lastBlock)
+		// Collecting starts BEFORE Start(), so that no committed group is
+		// executed. The block each collected group is numbered with is
+		// seeded when the first one arrives, by which time Start() has set
+		// the number it is seeded from (#4351).
+		s.service.StartCollecting()
 	}
 
 	// Start the service

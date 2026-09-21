@@ -67,7 +67,7 @@ func TestFetch_DropsAnAccountOfAnotherPartition(t *testing.T) {
 
 	s := quietState(t, here, &routingSources{partition: elsewhere})
 
-	pulled, refused := s.fetch(ctx, []*url.URL{
+	pulled, refused := s.fetch(ctx, &syncPass{block: 946}, []*url.URL{
 		protocol.AccountUrl("alice", "tokens"),
 	})
 
@@ -88,7 +88,7 @@ func TestFetch_StillRefusesAnAccountOfThisPartition(t *testing.T) {
 	// ordinary way and the account is asked for again next round.
 	s := quietState(t, here, &routingSources{partition: here})
 
-	pulled, refused := s.fetch(ctx, []*url.URL{
+	pulled, refused := s.fetch(ctx, &syncPass{block: 946}, []*url.URL{
 		protocol.AccountUrl("alice", "tokens"),
 	})
 
