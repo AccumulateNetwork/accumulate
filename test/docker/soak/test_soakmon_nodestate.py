@@ -127,5 +127,51 @@ class NodeStateRow(unittest.TestCase):
         self.assertTrue(healthy["allActive"])
 
 
+
+class StartToActive(unittest.TestCase):
+    """The number the verdict wants on a restart and an add-follower: the
+    time from the container's start to ACTIVE, per partition (#4364)."""
+
+    def sample(self, track, now, started, **parts):
+        per = {"acc-bvn1-val2": scrape(**parts)}
+        ns = soakmon.nodestate_from(per, now=now, disturbed=started)
+        return soakmon.track_start_to_active(track, ns, started, now)
+
+    def test_a_restart_is_measured_from_start_to_active(self):
+        track, st = {}, {"acc-bvn1-val2": NOW}
+        self.assertEqual([], self.sample(track, NOW + 5, st, directory=0, bvn1=0))
+        got = self.sample(track, NOW + 40, st, directory=2, bvn1=0)
+        self.assertEqual([("directory", 40.0, "reached")],
+                         [(e["partition"], e["startToActiveS"], e["kind"]) for e in got])
+        got = self.sample(track, NOW + 90, st, directory=2, bvn1=2)
+        self.assertEqual([("bvn1", 90.0, "reached")],
+                         [(e["partition"], e["startToActiveS"], e["kind"]) for e in got])
+        # Reported once per start, not every sample after it.
+        self.assertEqual([], self.sample(track, NOW + 95, st, directory=2, bvn1=2))
+        # A second restart is a new start and is measured again.
+        st2 = {"acc-bvn1-val2": NOW + 1000}
+        self.sample(track, NOW + 1003, st2, directory=0, bvn1=0)
+        got = self.sample(track, NOW + 1020, st2, directory=2, bvn1=2)
+        self.assertEqual({20.0}, {e["startToActiveS"] for e in got})
+
+    def test_active_at_first_sight_is_only_an_upper_bound(self):
+        track, st = {}, {"acc-bvn1-val2": NOW - 3600}
+        got = self.sample(track, NOW, st, directory=2)
+        self.assertEqual(["already"], [e["kind"] for e in got])
+
+    def test_a_start_that_never_reaches_active_is_pending(self):
+        track, st = {}, {"acc-bvn1-val2": NOW}
+        self.sample(track, NOW + 5, st, bvn1=0)
+        pend = soakmon.pending_starts(track, NOW + 700)
+        self.assertEqual([("acc-bvn1-val2", "bvn1", "BOOTING", 700.0)],
+                         [(e["node"], e["partition"], e["state"], e["sinceStartS"]) for e in pend])
+        line = soakmon.nodestate_csv_rows(pend, "T")[0]
+        self.assertEqual(len(soakmon.NODESTATE_CSV_HEADER.split(",")), len(line.split(",")))
+
+    def test_docker_start_times_parse(self):
+        self.assertEqual(0, soakmon._parse_started("1970-01-01T00:00:00.123456789Z"))
+        self.assertIsNone(soakmon._parse_started("0001-01-01T00:00:00Z"))
+
+
 if __name__ == "__main__":
     unittest.main()

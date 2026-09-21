@@ -87,6 +87,7 @@ def _final_rows():
             write_submissions_csv(ns["submissions"], force=True)
         if ns.get("mem"):
             write_mem_csv(ns["mem"], force=True)
+        write_nodestate_csv(pending_starts(_NODESTATE_TRACK, time.time()))
     except Exception as e:
         try:
             sys.stderr.write("final rows: %r\n" % (e,))
@@ -1532,6 +1533,204 @@ def write_submissions_csv(sub, force=False):
             f.write(line + "\n")
 
 
+# --- the node-state row (#4364): accumulate_node_state per node, per partition
+#
+# The spec's states are two (executor.md, "Sync"): BOOTING refuses, ACTIVE
+# serves. The gauge says 0 booting, 2 active; 1 and 3 are WAITING and
+# COMPLETE, which the spec retired — shown by name if a build still reports
+# them, and never read as ACTIVE (internal/core/bootstrap/nodestate).
+#
+# One process runs the Directory beside its BVN and the gauge is labelled by
+# partition, so a node is a row per partition: a row per container would fold
+# a booting BVN under an active Directory.
+#
+# BOOTING is not an alarm by itself — a node that has just been restarted, or
+# a follower just added, is booting and that is the join working. BOOTING
+# longer than BOOTING_BOUND_S after its container started is: the join is
+# stuck. The disturbance is dated by the container's start (docker inspect
+# State.StartedAt), because a restart is what makes a node boot and a pause
+# does not.
+NODE_STATE = "accumulate_node_state"
+NODE_STATE_NAMES = {0: "BOOTING", 1: "WAITING (retired)", 2: "ACTIVE", 3: "COMPLETE (retired)"}
+NODE_STATE_ACTIVE = 2
+BOOTING_BOUND_S = 600
+NODESTATE_CSV_HEADER = ("time,node,role,partition,containerStarted,state,"
+                        "startToActiveS,kind")
+_NODESTATE_TRACK = {}   # (node, partition) -> this start, whether it was seen not ACTIVE, when it became ACTIVE
+
+
+def canon_part(p):
+    """The partition as accumulate_node_state spells it: lower case, and the
+    Directory by its name. accumulate_exec_* and accumulate_dagbft_* spell the
+    same partition as its ID ("BVN1", "Directory"); folding here keeps one
+    node-and-partition one row whichever family a reader joins it with."""
+    p = (p or "").strip().lower()
+    return {"dn": "directory"}.get(p, p.replace("bvn-", ""))
+
+
+def nodestate_from(per, now=None, disturbed=None, followers=()):
+    """accumulate_node_state out of every node's scrape, a row per node and
+    partition.
+
+    `per` is container -> [(name, labels, value)], as collect_metrics hands
+    it to every *_from. `disturbed` is container -> epoch seconds of the
+    disturbance that last made it boot (its container start); a node absent
+    from it has no known disturbance, and its BOOTING is shown but not
+    judged. A node with no gauge — a build that predates #4345a, or a scrape
+    that answered nothing — is one row saying `not measured`, never ACTIVE
+    (REPORTING-SPEC 1)."""
+    now = time.time() if now is None else now
+    disturbed = disturbed or {}
+    fol = set(followers or ())
+    rows = []
+    for node in sorted(per or {}):
+        role = "follower" if node in fol else "validator"
+        since = None
+        if disturbed.get(node) is not None:
+            since = max(0.0, now - float(disturbed[node]))
+        seen = {}
+        for name, lab, v in per[node] or ():
+            if name != NODE_STATE:
+                continue
+            try:
+                seen[canon_part((lab or {}).get("partition"))] = int(float(v))
+            except (TypeError, ValueError, AttributeError):
+                continue
+        if not seen:
+            rows.append({"node": node, "role": role, "partition": None,
+                         "measured": False, "value": None, "state": None,
+                         "active": False, "alarm": False, "sinceStartS": since,
+                         "why": "not measured: no %s series in this node's scrape" % NODE_STATE})
+            continue
+        for part in sorted(seen):
+            v = seen[part]
+            state = NODE_STATE_NAMES.get(v, "UNKNOWN (%d)" % v)
+            active = v == NODE_STATE_ACTIVE
+            alarm, why = False, state
+            if state == "BOOTING":
+                if since is None:
+                    why = "BOOTING; container start unknown, so not judged"
+                elif since > BOOTING_BOUND_S:
+                    alarm = True
+                    why = "BOOTING %ds after its container started (bound %ds)" % (since, BOOTING_BOUND_S)
+                else:
+                    why = "BOOTING %ds after its container started" % since
+            rows.append({"node": node, "role": role, "partition": part,
+                         "measured": True, "value": v, "state": state,
+                         "active": active, "alarm": alarm, "sinceStartS": since,
+                         "why": why})
+    return {"rows": rows,
+            "allActive": bool(rows) and all(r["active"] for r in rows),
+            "measured": any(r["measured"] for r in rows),
+            "booting": sum(1 for r in rows if r["state"] == "BOOTING"),
+            "alarms": ["%s %s" % (r["node"], r["partition"]) for r in rows if r["alarm"]],
+            "boundS": BOOTING_BOUND_S,
+            "label": "node state, per node and partition, now; alarm = BOOTING "
+                     "longer than %ds after its container started" % BOOTING_BOUND_S}
+
+
+def track_start_to_active(track, ns, started, now):
+    """The time from a container's start to ACTIVE, per partition — the number
+    the verdict wants on a restart and on an add-follower.
+
+    `track` is carried between samples; `started` is container -> epoch of
+    its current start. Returns the rows that completed on this sample, each
+    with `kind`:
+      reached — seen not ACTIVE after this start and then ACTIVE: the figure
+                is a measurement, to the scrape interval (I_FLOW);
+      already — ACTIVE at the first sample after this start (the container
+                started before the monitor saw it, or booted inside one
+                interval): the figure is an upper bound only.
+    A start that never reaches ACTIVE completes nothing; `pending_starts`
+    names it."""
+    out = []
+    for r in ns.get("rows") or ():
+        if not r.get("measured"):
+            continue
+        st = started.get(r["node"])
+        if st is None:
+            continue
+        key = (r["node"], r["partition"])
+        t = track.get(key)
+        if t is None or t["started"] != st:
+            t = track[key] = {"started": st, "activeAt": None, "sawInactive": False,
+                              "role": r.get("role", "validator"), "state": r["state"]}
+        t["state"] = r["state"]
+        if t["activeAt"] is not None:
+            continue
+        if not r["active"]:
+            t["sawInactive"] = True
+            continue
+        t["activeAt"] = now
+        out.append({"node": r["node"], "role": t["role"], "partition": r["partition"],
+                    "containerStarted": st, "state": r["state"],
+                    "startToActiveS": round(max(0.0, now - st), 1),
+                    "kind": "reached" if t["sawInactive"] else "already"})
+    return out
+
+
+def pending_starts(track, now):
+    """Every start that has not reached ACTIVE, with how long it has been."""
+    return [{"node": n, "role": t["role"], "partition": p,
+             "containerStarted": t["started"], "state": t["state"],
+             "startToActiveS": None, "sinceStartS": round(max(0.0, now - t["started"]), 1),
+             "kind": "final"}
+            for (n, p), t in sorted(track.items()) if t["activeAt"] is None]
+
+
+def nodestate_csv_rows(events, ts):
+    iso = lambda e: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e))
+    return ["%s,%s,%s,%s,%s,%s,%s,%s" % (
+        ts, e["node"], e["role"], e["partition"], iso(e["containerStarted"]),
+        e["state"], "" if e["startToActiveS"] is None else e["startToActiveS"],
+        e["kind"]) for e in events]
+
+
+def write_nodestate_csv(events, now=None):
+    """Append to RUN_DIR/nodestate.csv: one row per start that reached
+    ACTIVE, as it does, and at exit one `final` row per start that never
+    did. Events, not a periodic series: the state is in /data every
+    interval; the file is what the manifest's row is read from."""
+    if not events:
+        return
+    now = time.time() if now is None else now
+    path = os.path.join(RUN_DIR, "nodestate.csv")
+    new = not os.path.exists(path)
+    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+    with open(path, "a") as f:
+        if new:
+            f.write(NODESTATE_CSV_HEADER + "\n")
+        for line in nodestate_csv_rows(events, ts):
+            f.write(line + "\n")
+
+
+def _parse_started(s):
+    """docker's State.StartedAt (RFC 3339, nanoseconds, Z) as epoch seconds."""
+    import calendar
+    s = (s or "").strip()
+    if not s or s.startswith("0001-"):
+        return None
+    try:
+        return calendar.timegm(time.strptime(s[:19], "%Y-%m-%dT%H:%M:%S"))
+    except ValueError:
+        return None
+
+
+def container_starts(cs):
+    """container -> epoch of its current start, one `docker inspect` for all."""
+    if not cs:
+        return {}
+    out = {}
+    txt = sh(["docker", "inspect", "-f", "{{.Name}} {{.State.StartedAt}}"] + list(cs), timeout=20)
+    for line in (txt or "").splitlines():
+        parts = line.split()
+        if len(parts) == 2:
+            t = _parse_started(parts[1])
+            if t is not None:
+                out[parts[0].lstrip("/")] = t
+    return out
+
+
 def exec_from(per):
     """Sum the #4169 step-0 baseline counters over every node's scrape."""
     ex = {"serialSec": 0.0, "parallelSec": 0.0, "blocks": 0, "flushes": 0,
@@ -1765,6 +1964,31 @@ def wedges_from(per):
     return {"measured": True, "total": sum(by_reason.values()), "byDest": by_dest, "byReason": by_reason}
 
 
+def nodestate_sample(per, cs, followers):
+    """The node-state row for one sample, and nodestate.csv's events from it.
+    Never raises: a failed `docker inspect` leaves the starts unknown, which
+    shows BOOTING unjudged rather than taking the collector down."""
+    now = time.time()
+    try:
+        starts = container_starts(cs)
+    except Exception as e:
+        log("nodestate: docker inspect: %s" % e)
+        starts = {}
+    ns = nodestate_from(per, now=now, disturbed=starts, followers=followers)
+    try:
+        write_nodestate_csv(track_start_to_active(_NODESTATE_TRACK, ns, starts, now), now)
+    except Exception as e:
+        log("nodestate.csv: %s" % e)
+    # Every start this monitor has seen, and how long each took: the verdict
+    # reads the restarts and the add-follower from here (#4364, e11.4364c).
+    ns["starts"] = [{"node": n, "partition": p, "containerStarted": t["started"],
+                     "startToActiveS": (None if t["activeAt"] is None
+                                        else round(t["activeAt"] - t["started"], 1)),
+                     "upperBoundOnly": t["activeAt"] is not None and not t["sawInactive"]}
+                    for (n, p), t in sorted(_NODESTATE_TRACK.items())]
+    return ns
+
+
 def collect_metrics():
     # Scrape every node's /metrics and aggregate. Counters (heals/drops) sum
     # across a partition's validators; gauges (sequence) take the max, since all
@@ -1787,6 +2011,10 @@ def collect_metrics():
     # per-node table keeps every node — a follower that leaks is a finding —
     # and every total carries a `scope` saying whose it is.
     fol_names = {f["container"] for f in FOLLOWERS}
+    # The node-state row reads EVERY node, the follower included: an
+    # add-follower is one of the two disturbances whose start-to-ACTIVE the
+    # verdict wants (#4364).
+    nstate = nodestate_sample(per, cs, fol_names)
     per_fol = {c: r for c, r in per.items() if c in fol_names}
     per = {c: r for c, r in per.items() if c not in fol_names}
     n_fol = len(fol_names & set(cs))
@@ -1903,6 +2131,7 @@ def collect_metrics():
     ex = exec_from(per)
     ex["scope"] = SCOPE_VAL
     return {"heals": heals, "wedges": drops, "handoff": handoff, "flows": flows, "life": life, "exec": ex,
+            "nodeState": nstate,
             "synProduced": syn_prod, "ancProduced": anc_prod, "nodeStats": nodes,
             "nodes": len(cs), "scraped": sum(1 for r in per.values() if r)
             + sum(1 for r in per_fol.values() if r)}
@@ -2312,6 +2541,7 @@ def _collect_once(last, hist):
             upd["exec"] = m.get("exec", {})
             upd["scrape"] = {"nodes": m["nodes"], "scraped": m["scraped"]}
             upd["nodeStats"] = m.get("nodeStats", {})
+            upd["nodeState"] = m.get("nodeState", {})
             try:
                 write_mem_csv(upd["nodeStats"].get("mem", {}))
             except Exception as e:
@@ -2573,6 +2803,12 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <span class=mut id=nacc>—</span><span class=sl>accepted (#, whole run)</span>
         <span class=cap id=nstrandnode></span>
       </div>
+      <div class=sub>node state (accumulate_node_state)</div>
+      <div class=kv>
+        <b id=nsact>—</b><span class=sl>ACTIVE, now (node × partition rows)</span>
+        <span class=mut id=nsboot>—</span><span class=sl>BOOTING, now (rows)</span>
+        <span class=cap id=nsrows></span>
+      </div>
     </div>
     <div class=col><h4>delivery</h4>
       <div class=sub>retention</div>
@@ -2727,6 +2963,21 @@ function followerView(fo, ns){
     +(over?` · OVER the bound (${who})`:'');
   return out;
 }
+// The node-state row (#4364): a row per node AND partition; ACTIVE (2) is the
+// predicate, BOOTING is shown by name and is red only past the bound after its
+// container started; a node with no gauge is `— not measured`, never ACTIVE.
+function nodestateView(nsd){
+  const out={act:ABSENT,boot:ABSENT,rows:'no node exports accumulate_node_state'};
+  if(!nsd||!nsd.rows||!nsd.rows.length)return out;
+  const rows=nsd.rows,meas=rows.filter(r=>r.measured);
+  const act=meas.filter(r=>r.active).length,boot=meas.filter(r=>r.state==='BOOTING').length;
+  out.act=meas.length?`<span class="${act<rows.length?'yel':''}">${act} / ${rows.length}</span>`:ABSENT;
+  out.boot=meas.length?`<span class="${nsd.alarms&&nsd.alarms.length?'red':(boot?'yel':'')}">${boot}</span>`:ABSENT;
+  const odd=rows.filter(r=>!r.active).map(r=>
+    `<span class="${r.alarm?'red':(r.measured?'yel':'mut')}">${r.node}${r.partition?' '+r.partition:''}: ${r.why}</span>`);
+  out.rows=odd.length?odd.join(' · '):`every row ACTIVE · alarm bound ${nsd.boundS}s after container start`;
+  return out;
+}
 // --- end pure render helpers ---
 function spark(el,pts,color){
   if(!pts||pts.length<2){el.innerHTML='';return;}
@@ -2853,6 +3104,8 @@ const bytes=v=>(v==null?'—':v<1024?fmt(v)+' B':v<1048576?(v/1024).toFixed(1)+'
   // accumulate_dagbft_certified_own_transactions_total (#4366, #4369); 0
   // would assert that nothing ever stranded, which is exactly the claim run
   // 20260919T191634Z could not make.
+  const nsv=nodestateView(s.nodeState);
+  $('nsact').innerHTML=nsv.act; $('nsboot').innerHTML=nsv.boot; $('nsrows').innerHTML=nsv.rows;
   const sub=ns.submissions||{};
   $('nstrand').innerHTML=(sub.measured&&sub.worstStranded!=null)
     ?`<span class="${sub.worstStranded?'red':''}">${fmt(sub.worstStranded)}</span>`:ABSENT;
@@ -2997,6 +3250,9 @@ const DEFS={
  lempty:"Blocks that carried no transactions.",
  lidle:"Shown when nearly every block is empty: consensus is committing empty rounds.",
  nrssavg:"Resident memory of the node process, MiB, averaged over the fleet.", nrssmax:"Largest resident memory of any node, MiB.", nrssmin:"Smallest resident memory of any node, MiB.",
+ nsact:"Rows of accumulate_node_state reading ACTIVE (value 2) at this sample, out of every row: one row per node AND per partition it runs, because a process runs the Directory beside its BVN and one can boot while the other serves. Only 2 is ACTIVE; a node that exports no gauge is a row that is not ACTIVE. Every node, the follower included.",
+ nsboot:"Rows reading BOOTING (value 0) at this sample. BOOTING right after a restart or an add-follower is the join working; red only when a row has been BOOTING longer than the bound after its container started (State.StartedAt), which means the join is stuck.",
+ nsrows:"Every row that is not ACTIVE, by node and partition, with its state by name and how long since its container started. A retired state (WAITING, COMPLETE) is named, not read as ACTIVE. No gauge reads `not measured`. The time from each container start to ACTIVE is in nodestate.csv and the manifest.",
  nstrand:"The largest count, on any one validator, of transactions it took responsibility for at Submit and neither certified itself, nor handed to a node that took it, nor had answered with a refusal — accepted minus certified minus relayed-taken minus relayed-refused, whole run. What is left had no answer of any kind. On a validator certification is its own job and it relays nothing, so this sits at the in-flight window, the rounds not yet certified; a number that climbs means submissions are dying in a queue nobody drains. In flight and stranded look alike at one sample: the manifest states the final value after the drain together with its trend, and that is the reading to judge on. Over the validators, the same membership as every other total in this panel.",
  nacc:"Transactions accepted at Submit across the validators, whole run — the denominator the number above is read against.",
  nstrandnode:"Which validator holds that worst count, plus the three impossible states (REPORTING-SPEC 1a): certified plus relayed-taken plus relayed-refused above what was accepted; more relayed than accepted; or any relay at all beside no accepted series. Causes, in order of likelihood: a certified count per header instead of once per transaction; a relay counted per attempt instead of once per submission at its final answer; or — and this one is a REAL EVENT, not a broken counter — a node PROMOTED mid-run that kept its own copy of a submission it had already relayed, which the contract forbids precisely because it lands here (#4364's own disturbance). Also shown: any relay outcome label this harness does not know, named rather than folded into one it does, because the relay's behaviour is still open for Paul (#4366).",

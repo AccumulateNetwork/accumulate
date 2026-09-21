@@ -38,9 +38,21 @@ class CollectMetricsRuns(unittest.TestCase):
         soakmon.containers = lambda: ["acc-bvn1-val1", "acc-bvn2-val1"]
         soakmon._scrape_one = lambda c, out, lock: out.setdefault(c, list(SCRAPE))
         soakmon.collect_flows_api = lambda: ({"synthetic": {}, "anchor": {}}, 0, 0)
+        # No docker: the node-state row's container starts are unknown here.
+        self._st = soakmon.container_starts
+        soakmon.container_starts = lambda cs: {}
 
     def tearDown(self):
         soakmon.containers, soakmon._scrape_one, soakmon.collect_flows_api = self._c, self._s, self._f
+        soakmon.container_starts = self._st
+
+    def test_the_node_state_row_is_there_and_absent_is_not_active(self):
+        m = soakmon.collect_metrics()
+        ns = m["nodeState"]
+        self.assertEqual(["acc-bvn1-val1", "acc-bvn2-val1"], [r["node"] for r in ns["rows"]])
+        self.assertFalse(ns["measured"])
+        self.assertFalse(ns["allActive"])
+        json.dumps(m)
 
     def test_it_runs_and_keeps_its_contract(self):
         m = soakmon.collect_metrics()
