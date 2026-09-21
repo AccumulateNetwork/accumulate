@@ -24,20 +24,15 @@ func TestState_Capabilities(t *testing.T) {
 	cases := []struct {
 		s          State
 		curOK      bool
-		historyOK  bool
 		stringForm string
 	}{
-		{StateUnknown, false, false, "UNKNOWN"},
-		{StateBooting, false, false, "BOOTING"},
-		{StateActive, true, false, "ACTIVE"},
-		{StateComplete, true, true, "COMPLETE"},
+		{StateUnknown, false, "UNKNOWN"},
+		{StateBooting, false, "BOOTING"},
+		{StateActive, true, "ACTIVE"},
 	}
 	for _, c := range cases {
 		if c.s.CanServeCurrent() != c.curOK {
 			t.Errorf("%v.CanServeCurrent = %v, want %v", c.s, c.s.CanServeCurrent(), c.curOK)
-		}
-		if c.s.CanServeHistory() != c.historyOK {
-			t.Errorf("%v.CanServeHistory = %v, want %v", c.s, c.s.CanServeHistory(), c.historyOK)
 		}
 		if c.s.String() != c.stringForm {
 			t.Errorf("%v.String = %q, want %q", c.s, c.s.String(), c.stringForm)
@@ -62,21 +57,9 @@ func TestMachine_ForwardOnlyTransitions(t *testing.T) {
 		t.Fatal("anchor not recorded")
 	}
 
-	// Cannot regress.
+	// ACTIVE is final.
 	if m.PromoteToActive(anchor, 200) {
 		t.Fatal("repeat PromoteToActive should fail")
-	}
-
-	if !m.PromoteToComplete(0, 200) {
-		t.Fatal("PromoteToComplete should succeed from ACTIVE")
-	}
-	if m.State() != StateComplete {
-		t.Fatalf("state = %v, want COMPLETE", m.State())
-	}
-
-	// Cannot regress further.
-	if m.PromoteToComplete(0, 300) {
-		t.Fatal("repeat PromoteToComplete should fail")
 	}
 }
 
@@ -107,24 +90,17 @@ func TestMachine_OnChange(t *testing.T) {
 	if lastAd.State != StateActive {
 		t.Fatalf("ad.State = %v, want ACTIVE", lastAd.State)
 	}
-
-	m.PromoteToComplete(1000, 75)
-	if got, want := atomic.LoadInt32(&fired), int32(2); got != want {
-		t.Fatalf("fired = %d, want %d", got, want)
-	}
-	if lastAd.State != StateComplete {
-		t.Fatalf("ad.State = %v, want COMPLETE", lastAd.State)
-	}
-	if lastAd.HistoryDepth != 1000 {
-		t.Fatalf("ad.HistoryDepth = %d, want 1000", lastAd.HistoryDepth)
-	}
 }
 
 func TestParseState(t *testing.T) {
 	cases := map[string]State{
-		"BOOTING":  StateBooting,
-		"ACTIVE":   StateActive,
-		"COMPLETE": StateComplete,
+		"BOOTING": StateBooting,
+		"ACTIVE":  StateActive,
+
+		// Retired (#4368), mapped: a WAITING root was never matched to an
+		// anchored one, and COMPLETE was ACTIVE plus a backfill.
+		"WAITING":  StateBooting,
+		"COMPLETE": StateActive,
 	}
 	for s, want := range cases {
 		got, err := ParseState(s)
@@ -142,7 +118,7 @@ func TestParseState(t *testing.T) {
 
 func TestRestore(t *testing.T) {
 	anchor := [32]byte{0xaa}
-	m, err := Restore(bvn0(), StateActive, 42, anchor, 0)
+	m, err := Restore(bvn0(), StateActive, 42, anchor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,14 +130,55 @@ func TestRestore(t *testing.T) {
 		t.Errorf("Get = %+v, missing restored fields", ad)
 	}
 
-	if _, err := Restore(bvn0(), StateActive, 1, [32]byte{}, 0); err == nil {
+	if _, err := Restore(bvn0(), StateActive, 1, [32]byte{}); err == nil {
 		t.Error("expected error for ACTIVE with zero anchor")
 	}
-	if _, err := Restore(bvn0(), StateUnknown, 0, [32]byte{}, 0); err == nil {
+	if _, err := Restore(bvn0(), StateUnknown, 0, [32]byte{}); err == nil {
 		t.Error("expected error for StateUnknown")
 	}
-	if _, err := Restore(bvn0(), StateBooting, 0, [32]byte{}, 0); err != nil {
+	if _, err := Restore(bvn0(), StateBooting, 0, [32]byte{}); err != nil {
 		t.Errorf("BOOTING restore failed: %v", err)
+	}
+}
+
+// TestRestore_RetiredStates pins how a record persisted before #4368 comes
+// back: WAITING as BOOTING without its claimed root, COMPLETE as ACTIVE with
+// its verified one. The numbers are the ones the retired states held.
+func TestRestore_RetiredStates(t *testing.T) {
+	anchor := [32]byte{0xaa}
+
+	m, err := Restore(bvn0(), State(2), 42, anchor)
+	if err != nil {
+		t.Fatalf("WAITING restore failed: %v", err)
+	}
+	if ad := m.Get(); ad.State != StateBooting || ad.VerifiedAnchor != ([32]byte{}) {
+		t.Errorf("WAITING restored as %v with anchor %x, want BOOTING with none", ad.State, ad.VerifiedAnchor)
+	}
+
+	m, err = Restore(bvn0(), State(4), 42, anchor)
+	if err != nil {
+		t.Fatalf("COMPLETE restore failed: %v", err)
+	}
+	if ad := m.Get(); ad.State != StateActive || ad.VerifiedAnchor != anchor || ad.SinceBlock != 42 {
+		t.Errorf("COMPLETE restored as %+v, want ACTIVE at 42 with its anchor", ad)
+	}
+
+	if _, err := Restore(bvn0(), State(4), 42, [32]byte{}); err == nil {
+		t.Error("expected error for COMPLETE with zero anchor")
+	}
+}
+
+// TestNumber_ActiveIsTwo pins the gauge contract (#4364): retiring WAITING and
+// COMPLETE did not renumber ACTIVE.
+func TestNumber_ActiveIsTwo(t *testing.T) {
+	if got := Number(StateBooting); got != 0 {
+		t.Errorf("Number(BOOTING) = %v, want 0", got)
+	}
+	if got := Number(StateActive); got != 2 {
+		t.Errorf("Number(ACTIVE) = %v, want 2", got)
+	}
+	if StateActive != 3 {
+		t.Errorf("StateActive = %d, want 3: a persisted ACTIVE must still read as ACTIVE", StateActive)
 	}
 }
 
@@ -174,7 +191,7 @@ func TestAdvertisement_Validate(t *testing.T) {
 		{"booting valid", Advertisement{State: StateBooting, Partition: bvn0()}, true},
 		{"active no anchor", Advertisement{State: StateActive, Partition: bvn0()}, false},
 		{"active with anchor", Advertisement{State: StateActive, Partition: bvn0(), VerifiedAnchor: [32]byte{1}}, true},
-		{"complete with anchor", Advertisement{State: StateComplete, Partition: bvn0(), VerifiedAnchor: [32]byte{1}}, true},
+		{"retired state", Advertisement{State: 4, Partition: bvn0(), VerifiedAnchor: [32]byte{1}}, false},
 		{"unknown state", Advertisement{State: StateUnknown, Partition: bvn0()}, false},
 		{"out-of-range state", Advertisement{State: 99, Partition: bvn0()}, false},
 		{"no partition", Advertisement{State: StateBooting}, false},

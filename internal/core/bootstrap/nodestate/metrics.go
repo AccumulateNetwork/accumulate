@@ -39,7 +39,7 @@ var mNodeState = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Namespace: "accumulate",
 	Subsystem: "node",
 	Name:      "state",
-	Help:      "This node's state for the partition: 0 booting, 1 waiting, 2 active, 3 complete (executor spec, \"Sync\", step 5)",
+	Help:      "This node's state for the partition: 0 booting, 2 active; 1 and 3 were waiting and complete, retired and never reported (executor spec, \"Sync\", step 6)",
 }, []string{"partition"})
 
 // mExecutedBlock is the block THIS node's executor last executed.
@@ -68,19 +68,15 @@ var mExecutedBlock = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Help:      "The block THIS node's executor last executed for the partition — its own height, never a routed answer (#4345)",
 }, []string{"partition"})
 
-// Number is the state as the gauge reports it: 0 booting, 1 waiting, 2
-// active, 3 complete.
+// Number is the state as the gauge reports it: 0 booting, 2 active. The
+// numbers are a contract (#4364: a monitor reads ACTIVE as 2), so retiring
+// WAITING (1) and COMPLETE (3) left them unused rather than renumbering
+// (#4368).
 func Number(s State) float64 {
-	switch s {
-	case StateWaiting:
-		return 1
-	case StateActive:
+	if s == StateActive {
 		return 2
-	case StateComplete:
-		return 3
-	default:
-		return 0
 	}
+	return 0
 }
 
 // label is the partition as the exposition names it. Lower case, because that

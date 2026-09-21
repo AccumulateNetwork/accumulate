@@ -5,24 +5,23 @@
 // https://opensource.org/licenses/MIT.
 
 // Package nodestate is the state a node is in while it joins, and the
-// advertisement that says so (executor.md, "Sync", step 5: a node serves
+// advertisement that says so (executor.md, "Sync", step 6: a node serves
 // last, and says what it can answer).
 //
-// Four states:
+// Two states (executor.md, "Sync", step 6):
 //
-//   - BOOTING:  pulling the spine and the state. Cannot serve queries,
-//     cannot validate.
-//   - WAITING:  the state is local, but no anchored root has been seen that
-//     matches it yet. Still cannot serve queries.
-//   - ACTIVE:   the local root equals a root the Directory anchored, so the
-//     state is verified. Can serve current-state queries and take part in
-//     consensus.
-//   - COMPLETE: ACTIVE plus the history backfilled — the producer cache
-//     filled and the chains the node lacked fetched — so it can answer the
-//     sequencer and healing too.
+//   - BOOTING: from the start of a join until the local root matches a
+//     verified anchored root. Cannot serve queries, cannot validate.
+//   - ACTIVE:  the local root equals a root the Directory anchored, so the
+//     state is verified. Serves and takes part in consensus.
 //
-// Transitions are forward only: BOOTING → WAITING → ACTIVE → COMPLETE. A node
-// never regresses; a verification that breaks means starting over.
+// The one transition is BOOTING → ACTIVE. A node never regresses; a
+// verification that breaks means starting over.
+//
+// WAITING and COMPLETE are retired (#4368): they named a backfilled history
+// this line does not have, and nothing reached them. Their numbers stay
+// reserved so ACTIVE keeps its value, and a persisted record naming one is
+// mapped, not refused — see ParseState and Restore.
 //
 // A machine is per partition. A node serves two of them, and every block
 // number it advertises is a block of one partition or the other (#4205).
@@ -44,26 +43,20 @@ import (
 type State int
 
 const (
-	// StateUnknown is the zero value. Treat as "not advertised" for
-	// routing purposes — equivalent to a pre-design legacy node,
-	// which is itself treated as COMPLETE for legacy queries.
+	// StateUnknown is the zero value: not advertised.
 	StateUnknown State = iota
 	StateBooting
-	StateWaiting
+	stateRetiredWaiting // reserved: was WAITING (#4368)
 	StateActive
-	StateComplete
+	stateRetiredComplete // reserved: was COMPLETE (#4368)
 )
 
 func (s State) String() string {
 	switch s {
 	case StateBooting:
 		return "BOOTING"
-	case StateWaiting:
-		return "WAITING"
 	case StateActive:
 		return "ACTIVE"
-	case StateComplete:
-		return "COMPLETE"
 	default:
 		return "UNKNOWN"
 	}
@@ -71,15 +64,9 @@ func (s State) String() string {
 
 // CanServeCurrent reports whether the state can serve current-state
 // queries (current account state, validator participation, bootstrap
-// data for new launchers). True for ACTIVE and COMPLETE.
+// data for new launchers). True for ACTIVE only.
 func (s State) CanServeCurrent() bool {
-	return s == StateActive || s == StateComplete
-}
-
-// CanServeHistory reports whether the state can serve historical
-// queries beyond the rolling window. True for COMPLETE only.
-func (s State) CanServeHistory() bool {
-	return s == StateComplete
+	return s == StateActive
 }
 
 // Serving is what a service asks before it answers for the state this node
@@ -124,11 +111,6 @@ type Advertisement struct {
 	// own root matched. Empty for BOOTING.
 	VerifiedAnchor [32]byte
 
-	// HistoryDepth is the oldest block fully retained, for COMPLETE.
-	// Zero means full history (no retention limit). Unused for
-	// BOOTING / ACTIVE.
-	HistoryDepth uint64
-
 	// LastUpdated is the wall-clock time the advertisement was
 	// generated; consumers discard advertisements older than 2 ×
 	// the publishing heartbeat to avoid stale routing.
@@ -138,7 +120,7 @@ type Advertisement struct {
 // Validate reports a malformed-payload error.
 func (a *Advertisement) Validate() error {
 	switch a.State {
-	case StateBooting, StateWaiting, StateActive, StateComplete:
+	case StateBooting, StateActive:
 		// ok
 	default:
 		return fmt.Errorf("nodestate: invalid state %d", a.State)
@@ -146,10 +128,8 @@ func (a *Advertisement) Validate() error {
 	if a.Partition == nil {
 		return fmt.Errorf("nodestate: an advertisement must name its partition")
 	}
-	if a.State == StateActive || a.State == StateComplete {
-		if a.VerifiedAnchor == ([32]byte{}) {
-			return fmt.Errorf("nodestate: ACTIVE/COMPLETE advertisement must carry VerifiedAnchor")
-		}
+	if a.State == StateActive && a.VerifiedAnchor == ([32]byte{}) {
+		return fmt.Errorf("nodestate: ACTIVE advertisement must carry VerifiedAnchor")
 	}
 	return nil
 }
@@ -163,7 +143,6 @@ type Machine struct {
 	state    State
 	since    uint64
 	anchor   [32]byte
-	depth    uint64
 	last     time.Time
 	onChange []func(Advertisement)
 }
@@ -180,44 +159,54 @@ func New(partition *url.URL) *Machine {
 // Partition reports the partition this machine is the state of.
 func (m *Machine) Partition() *url.URL { return m.partition }
 
-// Restore reconstructs a Machine from a persisted state record.
-// state must be one of StateBooting, StateWaiting, StateActive, or
-// StateComplete. ACTIVE / COMPLETE require a non-zero verifiedAnchor.
-func Restore(partition *url.URL, state State, sinceBlock uint64, verifiedAnchor [32]byte, historyDepth uint64) (*Machine, error) {
+// Restore reconstructs a Machine from a persisted state record. state must
+// be StateBooting or StateActive, and ACTIVE requires a non-zero
+// verifiedAnchor.
+//
+// A record from before #4368 may name a retired state, and it is MAPPED, not
+// refused, so a node that persisted one restarts: WAITING restores as BOOTING
+// with no anchor — its root was claimed, never matched to an anchored one, so
+// the join is not done — and COMPLETE restores as ACTIVE, which it was plus a
+// backfill this line does not have, so it still requires its anchor.
+func Restore(partition *url.URL, state State, sinceBlock uint64, verifiedAnchor [32]byte) (*Machine, error) {
 	if partition == nil {
 		return nil, fmt.Errorf("nodestate.Restore: partition required")
 	}
 	switch state {
-	case StateBooting, StateWaiting, StateActive, StateComplete:
+	case StateBooting, StateActive:
 		// ok
+	case stateRetiredWaiting:
+		state, verifiedAnchor = StateBooting, [32]byte{}
+	case stateRetiredComplete:
+		state = StateActive
 	default:
 		return nil, fmt.Errorf("nodestate.Restore: invalid state %d", state)
 	}
-	if (state == StateActive || state == StateComplete) && verifiedAnchor == ([32]byte{}) {
-		return nil, fmt.Errorf("nodestate.Restore: ACTIVE/COMPLETE requires non-zero verifiedAnchor")
+	if state == StateActive && verifiedAnchor == ([32]byte{}) {
+		return nil, fmt.Errorf("nodestate.Restore: ACTIVE requires non-zero verifiedAnchor")
 	}
 	return &Machine{
 		partition: partition,
 		state:     state,
 		since:     sinceBlock,
 		anchor:    verifiedAnchor,
-		depth:     historyDepth,
 		last:      time.Now(),
 	}, nil
 }
 
 // ParseState maps the persisted string form to the typed State.
 // Unrecognized strings return StateUnknown plus an error.
+//
+// The retired forms are mapped as Restore maps them (#4368): "WAITING" reads
+// as BOOTING, since a root that was never matched to an anchored one is a join
+// not finished, and "COMPLETE" reads as ACTIVE, which it was plus a backfill
+// this line does not have.
 func ParseState(s string) (State, error) {
 	switch s {
-	case "BOOTING":
+	case "BOOTING", "WAITING":
 		return StateBooting, nil
-	case "WAITING":
-		return StateWaiting, nil
-	case "ACTIVE":
+	case "ACTIVE", "COMPLETE":
 		return StateActive, nil
-	case "COMPLETE":
-		return StateComplete, nil
 	default:
 		return StateUnknown, fmt.Errorf("nodestate: unknown state %q", s)
 	}
@@ -246,35 +235,7 @@ func (m *Machine) State() State {
 	return m.state
 }
 
-// PromoteToWaiting transitions BOOTING → WAITING: the state is local and the
-// node knows what root it thinks it has, but no anchored root matching it has
-// been seen yet. claimedAnchor is the local BPT root and sinceBlock is the
-// block it was taken at. Returns false if the transition is invalid.
-func (m *Machine) PromoteToWaiting(claimedAnchor [32]byte, sinceBlock uint64) bool {
-	if claimedAnchor == ([32]byte{}) {
-		return false
-	}
-	m.mu.Lock()
-	if m.state != StateBooting {
-		m.mu.Unlock()
-		return false
-	}
-	m.state = StateWaiting
-	m.anchor = claimedAnchor
-	m.since = sinceBlock
-	m.last = time.Now()
-	cbs := append([]func(Advertisement){}, m.onChange...)
-	ad := m.adLocked()
-	m.mu.Unlock()
-
-	for _, cb := range cbs {
-		cb(ad)
-	}
-	return true
-}
-
-// PromoteToActive transitions WAITING → ACTIVE, or BOOTING → ACTIVE for a
-// caller that skips WAITING. anchor is the root the Directory anchored that
+// PromoteToActive transitions BOOTING → ACTIVE. anchor is the root the Directory anchored that
 // the local root now equals (non-zero), and sinceBlock is the block it was
 // anchored for — block Q of executor.md, "Sync". Returns false if the
 // transition is invalid.
@@ -283,35 +244,12 @@ func (m *Machine) PromoteToActive(anchor [32]byte, sinceBlock uint64) bool {
 		return false
 	}
 	m.mu.Lock()
-	if m.state != StateBooting && m.state != StateWaiting {
+	if m.state != StateBooting {
 		m.mu.Unlock()
 		return false
 	}
 	m.state = StateActive
 	m.anchor = anchor
-	m.since = sinceBlock
-	m.last = time.Now()
-	cbs := append([]func(Advertisement){}, m.onChange...)
-	ad := m.adLocked()
-	m.mu.Unlock()
-
-	for _, cb := range cbs {
-		cb(ad)
-	}
-	return true
-}
-
-// PromoteToComplete transitions ACTIVE → COMPLETE. historyDepth is
-// the oldest block fully retained (zero for unlimited). Returns
-// false if the transition is invalid.
-func (m *Machine) PromoteToComplete(historyDepth, sinceBlock uint64) bool {
-	m.mu.Lock()
-	if m.state != StateActive {
-		m.mu.Unlock()
-		return false
-	}
-	m.state = StateComplete
-	m.depth = historyDepth
 	m.since = sinceBlock
 	m.last = time.Now()
 	cbs := append([]func(Advertisement){}, m.onChange...)
@@ -350,7 +288,6 @@ func (m *Machine) adLocked() Advertisement {
 		Partition:      m.partition,
 		SinceBlock:     m.since,
 		VerifiedAnchor: m.anchor,
-		HistoryDepth:   m.depth,
 		LastUpdated:    m.last,
 	}
 }
