@@ -5,10 +5,9 @@
 // https://opensource.org/licenses/MIT.
 
 // Package join brings a node from "listening" to "executing" (executor spec,
-// "Sync"): it takes a running validator's staging, keeps it current from the
-// blocks consensus commits, pulls the state those blocks name, and hands off
-// to block production at the first block after the local root matches a root
-// the Directory anchored.
+// "Sync"): it collects every block consensus commits, pulls the state a
+// verified anchor commits to, and hands off to block production at the first
+// block whose transactions it can execute exactly as its peers did.
 //
 // A restart takes this path too. A node that restarts does not replay the
 // blocks it missed and does not rebuild staging from a source's cache: the
@@ -16,6 +15,23 @@
 // the source produced rather than what the peers had received, and either one
 // executes a different block — after which the root chain, a Merkle root over
 // the history of block roots, never matches again (#4290, #4205).
+//
+// # No peer is ever asked what it holds
+//
+// The earlier design's step 2 — a validator serving its staging as of its
+// last committed block — is gone, and so is everything that reached for it:
+// `takeStaging`, `LoadStaging`, `ApplyStaging`, `NoPeerHasStaging`, and the
+// branch that executed from this node's own state when nobody answered. It
+// answered a question the node can answer for itself, and answered it from
+// one unauthenticated peer with nothing to check it against (#4322–#4326,
+// #4354, #4357). Staging is what this node collected, minus what the pulled
+// state says executed, and that is all it ever needs to be.
+//
+// The two shapes that ended a join wrongly, named so they stay named:
+// staging taken from a peer, and executing from an empty stage (#4290).
+// Neither is reachable from here any more — there is no call that takes a
+// peer's staging, and a node that cannot say what its peers delivered does
+// not hand off at all; it keeps collecting, which is the safe state.
 package join
 
 import (
@@ -23,149 +39,122 @@ import (
 	"log/slog"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // A Buffer is the consensus side of a join: the node collects every committed
-// block into staging and keeps it, executing none of them, until the handoff
-// (#4292's collecting mode).
+// block into staging and into a buffer, executing none of them, until the
+// handoff.
 type Buffer interface {
-	// StartCollecting puts the node in collecting mode.
-	StartCollecting()
-
 	// Collecting reports whether it is collecting.
 	Collecting() bool
 
 	// BufferOverrun reports that more blocks were committed than the buffer
-	// holds, so the blocks since the snapshot are no longer all in hand.
+	// holds, so the blocks since the node started listening are no longer all
+	// in hand.
 	BufferOverrun() bool
 
-	// ApplyStaging runs load — the executor taking a peer's staging — and
-	// then applies every block buffered since this node started collecting to
-	// THAT staging, in order, and each new one as it arrives. The two are one
-	// step because the order is the spec's: staging comes from a validator as
-	// of its block P, and the blocks after P are applied to it (executor
-	// spec, "Sync", step 2). A node that collected into its own staging first
-	// would have nothing to load into.
-	ApplyStaging(load func() error) error
+	// GapsAt reports whether the block collected as q+1 can be executed: per
+	// stream, whether the run from what the PULLED state says was delivered
+	// is contiguous through the numbers that block carries.
+	//
+	// The numbers are that block's, not everything the node has collected. A
+	// check against everything collected would call a number that a later
+	// block will carry a gap, and the join would never execute anything.
+	//
+	// errors.NotReady means block q+1 has not been collected yet — a wait,
+	// not a gap.
+	GapsAt(q uint64) ([]execute.StreamGap, error)
 
-	// Handoff leaves collecting mode at block q and produces the buffered
-	// groups from q + 1 in order.
+	// Handoff leaves collecting mode at block q and produces the collected
+	// block numbered q+1 and every one after it, in order.
 	Handoff(q uint64) error
 }
 
-// A Stage is the executor's staging half of a join (#4292).
+// A Stage is the executor's staging half of a join.
 type Stage interface {
-	// LoadStaging takes a peer's staging into this node's own.
-	LoadStaging(*private.StagingSnapshot) error
-
-	// SettleStaging brings staging to the block the pulled state is.
+	// SettleStagingAt brings staging to the block the pulled state is.
 	SettleStagingAt(q uint64) error
 }
 
-// A State is the state half: it pulls what the node lacks and says when the
-// local root equals a root the Directory anchored (#4293).
+// A State is the state half: it pulls what the node lacks, says which block's
+// state the node now holds, and hands what it pulled to the rest of the
+// process at the handoff (#4293).
 type State interface {
-	// Pull fetches what the node lacks, verified against the anchored root.
-	// It decides for itself what that is: the accounts the block ledger says
-	// the blocks changed, read from a peer, with the BPT page diff as the
-	// backstop (executor spec, "Sync", step 3). The caller does not supply a
-	// set, because a block's envelopes are not the set (#4306).
+	// Pull runs one round of the pull. It decides for itself what to ask
+	// for: the accounts the block ledger says the blocks changed, read from
+	// a peer, with the BPT page diff as the backstop (executor spec, "Sync",
+	// §3). The caller does not supply a set, because a block's envelopes are
+	// not the set (#4306).
 	Pull(ctx context.Context) error
 
 	// Matched reports the block whose anchored root the local root equals,
-	// and whether it has been reached.
+	// and whether it has been reached. It does not promote the node: a node
+	// that has the state of block B and cannot yet execute B+1 is still
+	// booting.
 	Matched(ctx context.Context) (uint64, bool, error)
-}
 
-// A Peers finds the partition's other validators and their private API.
-type Peers interface {
-	// Validators lists the nodes serving this partition's sequencer, in no
-	// particular order.
-	Validators(ctx context.Context) ([]*api.FindServiceResult, error)
+	// Advance gives up executing from the block the state is at and moves
+	// the sync to a later anchored block. It is what a gap is answered with.
+	Advance()
 
-	// Staging is the private API addressed to one node.
-	Staging(peer *api.FindServiceResult) private.StagingSnapshotter
+	// Handoff publishes what the join pulled — the network definition and
+	// the globals — and records that this node is executing from block q.
+	// It runs BEFORE the first block is executed.
+	Handoff(ctx context.Context, q uint64) error
 }
 
 // Options are what a join needs to run.
 //
 // There is no "fresh" option and there must not be one. Only a node that has
 // executed no block may execute without asking anyone (executor spec, "Sync",
-// step 2), and such a node does not join at all: the daemon does not call Run
-// for it (cmd/accumulated/run/dagbft.go, nodeMustJoin). A flag here saying
+// §5), and such a node does not join at all: the daemon does not call Run for
+// it (cmd/accumulated/run/dagbft.go, nodeMustJoin). A flag here saying
 // "execute anyway" was reachable from no caller for the whole of its life and
 // was true in one hand-written test, while the node it described sat in the
-// join asking its equally empty peers for staging (#4304). Everything that
-// reaches Run has executed a block, so finding no validator is never an
-// answer for it.
+// join asking its equally empty peers for staging (#4304).
 type Options struct {
 	Partition string
 	Buffer    Buffer
 	Stage     Stage
 	State     State
-	Peers     Peers
 	Logger    *slog.Logger
 
-	// Retry is how long to wait before asking again when no peer can serve a
-	// snapshot, or when the pull has not reached an anchored root.
+	// Retry is how long to wait between rounds.
 	Retry time.Duration
-
-	// Rounds is how many times every validator is asked for staging before
-	// the join answers ErrNoPeerHasStaging. Zero means DefaultRounds.
-	Rounds int
 }
 
 // DefaultRetry is how long a join waits before asking again.
 const DefaultRetry = 2 * time.Second
 
-// DefaultRounds is how many times a join asks every validator for staging
-// before it concludes that none of them has any to give.
-const DefaultRounds = 10
-
-// An Outcome is how a join ended. It is a value and not an error code,
-// because the one the caller acts on — no peer had staging to give — must be
-// told apart from every other NotReady this node meets, and NotReady is what
-// an anchor that has not reached its quorum yet, an account the Directory has
-// not anchored yet, and a peer that is busy all return. Matching on the code
-// would route a routine "not yet" into "execute from where you stand", which
-// pairs a peer's staging with this node's older state: the divergence the
-// join exists to prevent (#4290).
-type Outcome int
-
-const (
-	// Joined: the node took a peer's staging, pulled the state, matched the
-	// root and handed off. It is executing.
-	Joined Outcome = iota
-
-	// NoPeerHasStaging: every validator of the partition was asked and none
-	// could serve any. On a network that restarted as a whole that is the
-	// true answer — every node's staging is empty — so there is nothing to
-	// take and nothing to be exact about, and the caller may execute from
-	// where it stands. A node restarting alone gets a real answer instead.
-	NoPeerHasStaging
-)
-
 // Run joins the partition. It returns when the node has handed off to block
 // production, or when the context is cancelled.
 //
-// The order is the spec's, and each step is refused rather than guessed at:
+// The loop is the spec's (executor spec, "Sync", §4 and §5), and it is four
+// sentences:
 //
-//  1. listen — collecting mode, so no committed block is executed and every
-//     one is kept;
-//  2. take staging from a validator, as of that validator's last committed
-//     block P. Collecting starts first, so every block above P is one this
-//     node has collected and everything at or below P is in the snapshot:
-//     there is no hole between them, and nothing to compare;
-//  3. pull the state the buffered blocks name;
-//  4. when the local root equals the anchored root of a block Q at or above
-//     P, settle staging at Q and hand off: block Q + 1 executes from the
-//     buffer, as any node executes a block.
-func Run(ctx context.Context, opts Options) (Outcome, error) {
-	if opts.Buffer == nil || opts.Stage == nil || opts.State == nil || opts.Peers == nil {
-		return Joined, errors.BadRequest.With("a join needs a buffer, a stage, a state and peers")
+//  1. Sync to B. The pull asks for the state as of a block a quorum signed an
+//     anchor for, holds that block fixed for the whole pass, and the pass is
+//     over when the local root equals that block's anchored root.
+//  2. Collect B+1. Every block consensus commits has been going into staging
+//     and into the buffer since the node started listening, so B+1 is there
+//     or it is a moment away.
+//  3. If no stream has a gap — no sequence number missing between what the
+//     pulled state says was delivered and what B+1 carries — execute B+1.
+//     That is the handoff, and the join is done.
+//  4. A gap is an entry that arrived before this node was listening, and
+//     executing without it is the #4290 divergence. Do not execute. Keep
+//     B+1 staged, advance the sync to the next anchored block — everything
+//     the node lacks below it is then at or under the new Delivered and is
+//     no longer a gap — and ask the same question of the block after that.
+//
+// It terminates because everything that arrives after the node starts
+// listening it holds, so a gap can only be an entry from before, and held
+// sets are small and clear within a few blocks.
+func Run(ctx context.Context, opts Options) error {
+	if opts.Buffer == nil || opts.Stage == nil || opts.State == nil {
+		return errors.BadRequest.With("a join needs a buffer, a stage and a state")
 	}
 	log := opts.Logger
 	if log == nil {
@@ -177,156 +166,100 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		retry = DefaultRetry
 	}
 
-	// The join starts over from here whenever the buffer overruns: the blocks
-	// since the snapshot are no longer all in hand, so nothing taken before
-	// is usable and a newer snapshot is taken instead.
 	for {
-		opts.Buffer.StartCollecting()
+		if err := ctx.Err(); err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		if opts.Buffer.BufferOverrun() {
+			// The blocks since the node started listening are no longer all
+			// in hand, so it cannot say which collected group is which block
+			// and it must not guess. There is nothing to start again from —
+			// the buffer is the only copy — so this is a fault the node is
+			// restarted out of, and it keeps collecting nothing meanwhile.
+			return errors.FatalError.WithFormat(
+				"the join buffer overran: the blocks this node collected are no longer all in hand, so it cannot say which of them is the block after the state it pulled")
+		}
 
-		// Step 2, retried: a peer that is itself joining refuses (NotReady,
-		// #4295), and a peer too busy to finish a paged read says so. Either
-		// means ask the next validator, not give up. When every validator
-		// has been asked and none could answer, that IS the answer.
-		p, taken, found, err := takeStaging(ctx, opts, log, retry)
+		b, synced, err := opts.State.Matched(ctx)
 		if err != nil {
-			return Joined, errors.UnknownError.Wrap(err)
+			return errors.UnknownError.WithFormat("match the anchored root: %w", err)
 		}
-		if !taken {
-			if found == 0 {
-				// Nobody was found to ask. That is not an answer about
-				// staging and it must never be read as one: a node that
-				// cannot see its partition cannot know what its peers hold,
-				// and executing from its own stage is exactly the divergence
-				// the join exists to prevent (#4290, #4296). It keeps
-				// collecting, which is the safe state, and says so.
-				//
-				// There is no exception. A node that has executed nothing
-				// never gets here — it does not join (#4304).
-				return Joined, errors.NotReady.WithFormat(
-					"no validator of %s could be found to ask for staging; this node is collecting and not executing", opts.Partition)
-			}
-			log.Info("No validator of this partition could serve its staging", "validatorsFound", found)
-			return NoPeerHasStaging, nil
-		}
-		log.Info("Staging taken from a peer", "block", p)
 
-		// Steps 3 and 4: pull until the root matches, and hand off at Q.
-		restart := false
-		for !restart {
-			if err := ctx.Err(); err != nil {
-				return Joined, errors.UnknownError.Wrap(err)
-			}
-			if opts.Buffer.BufferOverrun() {
-				// The blocks since P are no longer all in hand, so the join
-				// cannot be exact. Start again from a newer snapshot.
-				log.Info("The join buffer overran; starting again from a newer snapshot")
-				restart = true
-				break
-			}
-
-			q, ok, err := opts.State.Matched(ctx)
+		if synced {
+			done, err := converge(ctx, opts, log, b)
 			if err != nil {
-				return Joined, errors.UnknownError.WithFormat("match the anchored root: %w", err)
+				return errors.UnknownError.Wrap(err)
 			}
-			if ok && q >= p {
-				err = opts.Stage.SettleStagingAt(q)
-				if err != nil {
-					return Joined, errors.UnknownError.WithFormat("settle staging at %d: %w", q, err)
-				}
-				err = opts.Buffer.Handoff(q)
-				switch {
-				case err == nil:
-					log.Info("Joined", "block", q, "snapshotBlock", p)
-					return Joined, nil
-				case errors.Is(err, errors.NotReady):
-					// The pull ran ahead of the blocks consensus has
-					// delivered: handing off now would give the blocks still
-					// to arrive the wrong numbers. Wait for them.
-					log.Info("The state is ahead of the blocks collected so far; waiting", "block", q, "error", err)
-				default:
-					return Joined, errors.UnknownError.WithFormat("hand off at %d: %w", q, err)
-				}
-			} else if ok {
-				// The root matched a block below the staging this node took.
-				// Staging as of P and state as of Q < P is a mixture no node
-				// ever held; keep pulling until the state reaches P.
-				log.Info("The root matched below the staging taken; still pulling", "matched", q, "snapshotBlock", p)
+			if done {
+				return nil
 			}
-
+		} else {
 			err = opts.State.Pull(ctx)
 			if err != nil {
-				return Joined, errors.UnknownError.WithFormat("pull state: %w", err)
+				return errors.UnknownError.WithFormat("pull state: %w", err)
 			}
+		}
 
-			select {
-			case <-ctx.Done():
-				return Joined, errors.UnknownError.Wrap(ctx.Err())
-			case <-time.After(retry):
-			}
+		select {
+		case <-ctx.Done():
+			return errors.UnknownError.Wrap(ctx.Err())
+		case <-time.After(retry):
 		}
 	}
 }
 
-// takeStaging asks the partition's validators, one by one, for their staging,
-// and loads the first answer that is usable. A validator that refuses, that
-// cannot be read, or that has executed no block itself is passed over: that
-// is that node's condition, not an answer about the snapshot, and the next
-// validator is asked.
-func takeStaging(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration) (uint64, bool, int, error) {
-	rounds := opts.Rounds
-	if rounds <= 0 {
-		rounds = DefaultRounds
-	}
-	// How many distinct validators were found and asked across every round.
-	// Zero means the node could not see its partition at all, which is a
-	// different thing from every validator having nothing to give (#4296).
-	asked := map[string]bool{}
-	for attempt := 0; ; attempt++ {
-		if attempt >= rounds {
-			return 0, false, len(asked), nil
-		}
-		if err := ctx.Err(); err != nil {
-			return 0, false, len(asked), errors.UnknownError.Wrap(err)
-		}
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return 0, false, len(asked), errors.UnknownError.Wrap(ctx.Err())
-			case <-time.After(retry):
-			}
-		}
+// converge is steps 2 to 4 for one synced block: it asks whether the block
+// collected as b+1 can be executed, and either hands off or advances.
+func converge(ctx context.Context, opts Options, log *slog.Logger, b uint64) (bool, error) {
+	gaps, err := opts.Buffer.GapsAt(b)
+	switch {
+	case errors.Is(err, errors.NotReady):
+		// The state ran ahead of the blocks consensus has delivered. Waiting
+		// is the whole of the answer: the block is on its way.
+		log.Info("The state is block B and the block after it has not been collected yet; waiting",
+			"block", b, "reason", err)
+		return false, nil
 
-		peers, err := opts.Peers.Validators(ctx)
+	case err != nil:
+		return false, errors.UnknownError.WithFormat("check the collected block %d for gaps: %w", b+1, err)
+
+	case len(gaps) == 0:
+		// Nothing any peer is holding is missing here. The node executes
+		// b+1 as its peers did.
+		//
+		// The order is not interchangeable. The globals the join pulled are
+		// published first, because the membership gate, the anchor gate and
+		// the adapter's committee all read that one event and the first
+		// block must not run on the definition this node had before it
+		// joined. Then staging is settled at b, which is what makes the
+		// stage say what its peers' stage says at b. Only then are blocks
+		// produced.
+		err = opts.State.Handoff(ctx, b)
 		if err != nil {
-			log.Info("Cannot find this partition's validators yet", "error", err)
-			continue
+			return false, errors.UnknownError.WithFormat("hand off the pulled state at %d: %w", b, err)
 		}
-		if len(peers) == 0 {
-			log.Info("No validator of this partition has been found yet", "attempt", attempt+1, "of", rounds)
+		err = opts.Stage.SettleStagingAt(b)
+		if err != nil {
+			return false, errors.UnknownError.WithFormat("settle staging at %d: %w", b, err)
 		}
-		for _, peer := range peers {
-			asked[peer.PeerID.String()] = true
-			snap, err := private.FetchStagingSnapshot(ctx, opts.Peers.Staging(peer), opts.Partition)
-			if err != nil {
-				log.Info("A validator did not serve its staging", "peer", peer.PeerID, "error", err)
-				continue
-			}
-			if snap.Block == 0 {
-				continue // that node has executed no block: it is joining too
-			}
-
-			// The buffer holds every block after P, and this is why: the node
-			// entered collecting mode before it asked, so every block the
-			// peer committed after it answered — every block above P — is a
-			// block this node has collected. Everything at or below P is in
-			// the snapshot. There is no third case, and no block index to
-			// compare: a buffered group carries a leader round, not a block.
-			err = opts.Buffer.ApplyStaging(func() error { return opts.Stage.LoadStaging(snap) })
-			if err != nil {
-				log.Info("A validator's staging could not be loaded", "peer", peer.PeerID, "block", snap.Block, "error", err)
-				continue
-			}
-			return snap.Block, true, len(asked), nil
+		err = opts.Buffer.Handoff(b)
+		if err != nil {
+			return false, errors.UnknownError.WithFormat("hand off at %d: %w", b, err)
 		}
+		log.Info("Joined: the state is block B and the block after it has no gap", "block", b)
+		return true, nil
 	}
+
+	// A gap. It is an entry that arrived before this node was listening —
+	// the peers held it from a block before b — and executing b+1 without it
+	// is the divergence the join exists to prevent (#4290). Said out loud,
+	// because a join that advances for ever and a join that is stuck look
+	// identical in a log that does not name the stream.
+	for _, g := range gaps {
+		log.Info("The block after the state has a gap: an entry that arrived before this node was listening",
+			"block", b+1, "stream", g.ID.Ledger, "source", g.ID.Source,
+			"delivered", g.Delivered, "through", g.Through, "missing", g.Missing)
+	}
+	opts.State.Advance()
+	return false, nil
 }

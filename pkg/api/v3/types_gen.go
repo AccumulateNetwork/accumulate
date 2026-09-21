@@ -150,7 +150,9 @@ type ChainQuery struct {
 	Entry          []byte          `json:"entry,omitempty" form:"entry" query:"entry"`
 	Range          *RangeOptions   `json:"range,omitempty" form:"range" query:"range"`
 	IncludeReceipt *ReceiptOptions `json:"includeReceipt,omitempty" form:"includeReceipt" query:"includeReceipt"`
-	extraData      []byte
+	// ForHeight asks for the chains as of a minor block, for a node pulling the state (executor.md, "Sync").
+	ForHeight uint64 `json:"forHeight,omitempty" form:"forHeight" query:"forHeight"`
+	extraData []byte
 }
 
 type ChainRecord struct {
@@ -939,6 +941,7 @@ func (v *ChainQuery) Copy() *ChainQuery {
 	if v.IncludeReceipt != nil {
 		u.IncludeReceipt = (v.IncludeReceipt).Copy()
 	}
+	u.ForHeight = v.ForHeight
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2318,6 +2321,9 @@ func (v *ChainQuery) Equal(u *ChainQuery) bool {
 	case v.IncludeReceipt == nil || u.IncludeReceipt == nil:
 		return false
 	case !((v.IncludeReceipt).Equal(u.IncludeReceipt)):
+		return false
+	}
+	if !(v.ForHeight == u.ForHeight) {
 		return false
 	}
 
@@ -4191,6 +4197,7 @@ var fieldNames_ChainQuery = []string{
 	4: "Entry",
 	5: "Range",
 	6: "IncludeReceipt",
+	7: "ForHeight",
 }
 
 func (v *ChainQuery) MarshalBinary() ([]byte, error) {
@@ -4218,6 +4225,9 @@ func (v *ChainQuery) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.IncludeReceipt == nil) {
 		writer.WriteValue(6, v.IncludeReceipt.MarshalBinary)
+	}
+	if !(v.ForHeight == 0) {
+		writer.WriteUint(7, v.ForHeight)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ChainQuery)
@@ -8101,6 +8111,9 @@ func (v *ChainQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(ReceiptOptions); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.IncludeReceipt = x
 	}
+	if x, ok := reader.ReadUint(7); ok {
+		v.ForHeight = x
+	}
 
 	seen, err := reader.Reset(fieldNames_ChainQuery)
 	if err != nil {
@@ -10028,6 +10041,7 @@ func init() {
 		encoding.NewTypeField("entry", "bytes"),
 		encoding.NewTypeField("range", "RangeOptions"),
 		encoding.NewTypeField("includeReceipt", "ReceiptOptions"),
+		encoding.NewTypeField("forHeight", "uint64"),
 	}, "ChainQuery", "chainQuery")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -10630,6 +10644,7 @@ func (v *ChainQuery) MarshalJSON() ([]byte, error) {
 		Entry          *string         `json:"entry,omitempty"`
 		Range          *RangeOptions   `json:"range,omitempty"`
 		IncludeReceipt *ReceiptOptions `json:"includeReceipt,omitempty"`
+		ForHeight      uint64          `json:"forHeight,omitempty"`
 		ExtraData      *string         `json:"$epilogue,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
@@ -10647,6 +10662,9 @@ func (v *ChainQuery) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.IncludeReceipt == nil) {
 		u.IncludeReceipt = v.IncludeReceipt
+	}
+	if !(v.ForHeight == 0) {
+		u.ForHeight = v.ForHeight
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -11818,6 +11836,7 @@ func (v *ChainQuery) UnmarshalJSON(data []byte) error {
 		Entry          *string         `json:"entry,omitempty"`
 		Range          *RangeOptions   `json:"range,omitempty"`
 		IncludeReceipt *ReceiptOptions `json:"includeReceipt,omitempty"`
+		ForHeight      uint64          `json:"forHeight,omitempty"`
 		ExtraData      *string         `json:"$epilogue,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
@@ -11826,6 +11845,7 @@ func (v *ChainQuery) UnmarshalJSON(data []byte) error {
 	u.Entry = encoding.BytesToJSON(v.Entry)
 	u.Range = v.Range
 	u.IncludeReceipt = v.IncludeReceipt
+	u.ForHeight = v.ForHeight
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -11842,6 +11862,7 @@ func (v *ChainQuery) UnmarshalJSON(data []byte) error {
 	}
 	v.Range = u.Range
 	v.IncludeReceipt = u.IncludeReceipt
+	v.ForHeight = u.ForHeight
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

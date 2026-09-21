@@ -91,6 +91,7 @@ func (x *Executor) CollectBlock(batch *database.Batch, params execute.BlockParam
 			numbers = append(numbers, n)
 		}
 		sort.Slice(numbers, func(i, j int) bool { return numbers[i] < numbers[j] })
+		var high uint64
 		for _, n := range numbers {
 			held, err := b.collectArrival(str, pos.delivered, c.arrivals[k][n])
 			if err != nil {
@@ -100,6 +101,21 @@ func (x *Executor) CollectBlock(batch *database.Batch, params execute.BlockParam
 			if held {
 				out.Held++
 			}
+			// THE BLOCK'S REACH IS WHAT THE BLOCK CARRIED, held or not.
+			//
+			// A number the block carried that this node refused to hold is
+			// exactly the case the gap check exists for: the peers hold it,
+			// they will deliver it in the run from Delivered + 1, and a node
+			// that dropped it from its reach would call the block gapless
+			// and execute a shorter run than its peers (#4290). Numbers at
+			// or below what the store already delivered are not in the run
+			// and say nothing.
+			if n > pos.delivered && n > high {
+				high = n
+			}
+		}
+		if high > 0 {
+			out.Reach = append(out.Reach, execute.StreamReach{ID: str.id(), High: high})
 		}
 	}
 
@@ -418,3 +434,59 @@ func deliveredFrom(batch *database.Batch, id execute.StreamID) (uint64, error) {
 	}
 	return ledger.Partition(id.Source).Delivered, nil
 }
+
+// StagingGaps reports the streams whose run from the PULLED Delivered is not
+// contiguous through the numbers a collected block carried (executor spec,
+// "Sync", §4).
+//
+// This is the whole of the decision the join makes about whether to execute.
+// Block B + 1's transactions are, by definition, ones not executed as of B.
+// If every stream can deliver a contiguous run from Delivered + 1 through
+// what B + 1 carries, then nothing any peer is holding is missing here and
+// this node executes B + 1 exactly as its peers did. A hole is an entry that
+// arrived before this node started listening — the peers have held it since
+// a block before B — and executing without it delivers a shorter run than
+// they do, which is #4290.
+//
+// Delivered comes from the pulled LEDGER and never from staging's memory of
+// it: what a block delivered is block output and is hashed with the rest, so
+// the pulled ledger is the peers' word on it, while staging's own copy is
+// zero on a node that has executed no block (#4291's trap).
+func (x *Executor) StagingGaps(reach []execute.StreamReach) ([]execute.StreamGap, error) {
+	batch := x.Database.Begin(false)
+	defer batch.Discard()
+
+	tx := x.staging().Begin()
+	defer tx.Discard()
+
+	var gaps []execute.StreamGap
+	for _, r := range reach {
+		delivered, err := deliveredFrom(batch, r.ID)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		if r.High <= delivered {
+			// Everything this block carried on the stream, the pulled state
+			// says the peers already executed. There is no run to deliver
+			// and nothing to be missing from it.
+			continue
+		}
+		missing := tx.Missing(r.ID, delivered, r.High, maxReportedGaps)
+		if len(missing) == 0 {
+			continue
+		}
+		gaps = append(gaps, execute.StreamGap{
+			ID:        r.ID,
+			Delivered: delivered,
+			Through:   r.High,
+			Missing:   missing,
+		})
+	}
+	return gaps, nil
+}
+
+// maxReportedGaps bounds what one stream's gap report walks and names. A gap
+// is a handful of entries at 100 tps; a report that walked an unbounded span
+// would put the cost of the backlog on the decision that exists to measure
+// it, and one gap is already the whole answer.
+const maxReportedGaps = 8

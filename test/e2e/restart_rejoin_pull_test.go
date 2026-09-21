@@ -131,7 +131,6 @@ func TestRestartedNodeWithAPopulatedDatabaseResyncs(t *testing.T) {
 			"precondition: node %d holds the same state as the node that stops", i)
 	}
 	t.Logf("node %d stops at block R=%d with root %x", joiner, r, rootAtStop)
-
 	// It restarts: staging is memory and a restart loses it, so from here the
 	// node collects the blocks it is handed and executes none of them.
 	p.RestartNode(joiner)

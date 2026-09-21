@@ -216,6 +216,17 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 				}
 				return r, err
 			}
+			// As of an anchored block when one is named: the chains are
+			// part of the account's leaf, so a caller pulling the body at a
+			// block needs them at that block or it cannot reproduce the
+			// leaf the body's own receipt proves (#4362, historical_chains.go).
+			if query.ForHeight != 0 {
+				r, err := s.queryAccountChainsAt(batch, batch.Account(scope), query.ForHeight)
+				if r != nil {
+					r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+				}
+				return r, err
+			}
 			r, err := s.queryAccountChains(ctx, batch.Account(scope))
 			if r != nil {
 				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
