@@ -95,6 +95,16 @@ func (a *Account) retainStateReceipt(hasher hash.Hasher) error {
 	if len(hasher) < 2 {
 		// The debug observer collapses the components into one hash, so there
 		// is no path from the main state to the entry to retain.
+		//
+		// A NODE BUILT WITH -tags debug THEREFORE CANNOT SERVE A JOIN: it
+		// retains no state receipt, so every historical account request is
+		// refused ("coherent or a refusal"), and TestAIP58_ProveAKeyPageAtItsOwnVersion
+		// fails under that tag. Nothing ships such a binary — the Dockerfile
+		// builds TAGS=production,mainnet and no --build-arg overrides it, so
+		// the soak's image is unaffected, and CI compiles a debug binary
+		// (`go build -tags debug,no_mmap`) but tests with -tags testnet. It is
+		// recorded rather than fixed: making the debug observer keep the
+		// components is a change to what the debug build is for (#4361).
 		return nil
 	}
 
