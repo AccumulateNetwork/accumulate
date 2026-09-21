@@ -44,38 +44,25 @@ import (
 // cmd/accumulated/run/dagbft.go uses -- against the restarted node's own
 // database, with that node's peer ID excluded exactly as production excludes
 // it (#4303).
-// # Why it is skipped, and what un-skips it (#4361)
 //
-// This is the gate for #4361, and #4361 alone does not open it. #4361 is the
-// SERVING half: a peer can now be asked for an account or a BPT page as of a
-// block the Directory anchored, and answers with a body and a receipt that
-// terminate at that block's StateTreeAnchor. The PULL still asks for the
-// peer's current block -- it sends no ForHeight -- so a restart still has
-// nothing that can settle and this test still fails exactly as it did before.
-// Run on this branch, 2026-09-19:
+// # What it waits on (#4362)
 //
-//	its local root is now 4b3dba55..., and its ledger record says block 89
-//	the peers are at block 269 and the Directory has anchored BVN0 through 67
+// The test is live. #4361 is the SERVING half: a peer can be asked for an
+// account or a BPT page as of a block the Directory anchored, and answers with
+// a body and a receipt that terminate at that block's StateTreeAnchor. #4301,
+// the spine validated by signature, gives the join one verified root per
+// anchored block to ask AT. The simulator runs with simulator.BPTHistoryDepth
+// at a node's own default of 1024 (cmd/accumulated/run/dagbft.go), so the
+// peers retain the history those requests need; the simulator's default is
+// zero, which would refuse every anchored-block request.
 //
-// #4301 — the spine validated by signature, so the join has one verified root
-// per anchored block to ask AT — has since merged into the lead branch. What
-// remains is #4362: the convergence loop, which asks for each account at that
-// block and settles it on the round it was fetched, with the settle bound
-// (maxSettleRounds, join/state.go) removed because there is nothing left to
-// wait for.
-//
-// When they land, this test needs one more line than it has: the simulator
-// must run with simulator.BPTHistoryDepth set, or the peers retain nothing and
-// refuse every anchored-block request. A node's own default is 1024
-// (cmd/accumulated/run/dagbft.go); the simulator's is zero, matching a node
-// configured off.
+// What is left is #4362, the convergence loop. The PULL still asks for the
+// peer's current block -- it sends no ForHeight -- so nothing the restarted
+// node pulls ever settles and this test fails with exactly that message.
+// #4362 makes the pull ask for each account at an anchored block and settle it
+// on the round it was fetched, with the settle bound (maxSettleRounds,
+// join/state.go) removed because there is nothing left to wait for.
 func TestRestartedNodeWithAPopulatedDatabaseResyncs(t *testing.T) {
-	// The one thing that flips this is the pull asking at an anchored block.
-	// Named rather than described, so that whoever writes it can find this by
-	// grep and so that a reader is not sent to a merged issue.
-	t.Skip("#4362: the pull does not send ForHeight yet, so a restart still has nothing that can settle; " +
-		"serving at an anchored block (#4361) is in, and this test also needs simulator.BPTHistoryDepth set when it is un-skipped")
-
 	const joiner = 2 // the node that stops and comes back
 
 	alice := url.MustParse("alice")
@@ -90,6 +77,9 @@ func TestRestartedNodeWithAPopulatedDatabaseResyncs(t *testing.T) {
 		simulator.Genesis(GenesisTime),
 		simulator.IgnoreDeliverResults(),
 		simulator.IgnoreCommitResults(),
+		// A node's own default (cmd/accumulated/run/dagbft.go): peers retain
+		// enough history to serve an account as of an anchored block.
+		simulator.BPTHistoryDepth(1024),
 	)
 	sim.SetRoute(alice, "BVN0")
 	sim.SetRoute(bob, "BVN0")
