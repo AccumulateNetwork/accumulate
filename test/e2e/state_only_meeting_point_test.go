@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/enumerate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -302,7 +303,7 @@ func (s *behindSources) Querier(u *url.URL) api.Querier {
 // anchored, so its BPT root IS that block's root. Both the peer and the node
 // below are built this way — a store a real node could have, rather than one
 // assembled by hand.
-func copyOf(t *testing.T, sim *Sim, anchors *pull.DirectoryAnchors, part *url.URL) (*database.Database, uint64, [32]byte) {
+func copyOf(t *testing.T, sim *Sim, anchors *anchorsrc.Source, part *url.URL) (*database.Database, uint64, [32]byte) {
 	t.Helper()
 	ctx := context.Background()
 	src := api.Querier2{Querier: sim.S.Services()}
@@ -370,7 +371,7 @@ func TestJoinRound_ANodeAheadOfItsPeerKeepsItsOwnState(t *testing.T) {
 
 	ctx := context.Background()
 	part := PartitionUrl("BVN0")
-	anchors := &pull.DirectoryAnchors{Query: sim.S.Services()}
+	anchors := anchorSourceFor(t, sim, part)
 
 	var ts uint64
 	send := func() {

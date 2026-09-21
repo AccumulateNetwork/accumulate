@@ -207,6 +207,34 @@
         dataType: uint
         collection: set
 
+    # Retained so a historical proof can start where the current-state proof
+    # does: at the main state hash rather than the whole BPT entry. Written only
+    # when BPT retention is enabled, and pruned on the same window.
+    - name: RetainedStateReceipt
+      description: is the receipt from the main state hash to the BPT entry as of a retained block
+      type: state
+      parameters:
+      - name: Block
+        type: uint
+      dataType: merkle.Receipt
+      pointer: true
+    - name: RetainedStateReceiptBlocks
+      description: records the blocks for which a state receipt is retained, ascending
+      type: index
+      dataType: uint
+      collection: set
+    # The body the historical receipt proves. Without it the response would
+    # carry the CURRENT body beside a receipt for a past one, which does not
+    # hash to that receipt's start, so nothing a puller received could be
+    # checked against it (#4361).
+    - name: RetainedMainState
+      description: is the account's marshalled main state as of a retained block, kept as bytes so what is served is what was hashed
+      type: state
+      parameters:
+      - name: Block
+        type: uint
+      dataType: bytes
+
     # Chains
     - name: MainChain
       type: other

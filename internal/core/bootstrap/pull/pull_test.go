@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -514,8 +515,18 @@ func TestRejectsMissingInputs(t *testing.T) {
 
 func TestDnSpineAccounts(t *testing.T) {
 	got := DnSpineAccounts()
-	if len(got) != 4 {
-		t.Errorf("got %d spine accounts, want 4", len(got))
+	// The anchor pool, the ledger, the operator book and its page, plus the
+	// network definition and the globals -- the accounts that say who may
+	// sign an anchor, which a joining node can only move by pulling them
+	// verified (#4301).
+	want := []string{"anchors", "ledger", "operators", "operators/1", "network", "globals"}
+	if len(got) != len(want) {
+		t.Errorf("got %d spine accounts, want %d", len(got), len(want))
+	}
+	for i, name := range want {
+		if i < len(got) && !strings.EqualFold(strings.Trim(got[i].Path, "/"), name) {
+			t.Errorf("spine account %d is %v, want %s", i, got[i], name)
+		}
 	}
 	// Sanity: each one is under dn.acme.
 	for _, u := range got {

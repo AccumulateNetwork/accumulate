@@ -66,6 +66,8 @@ func TestQueryPeers_RefusesWithNoPeerButItself(t *testing.T) {
 func TestNewState_NeedsPeersNotAQuerier(t *testing.T) {
 	db := database.OpenInMemory(nil)
 	db.SetObserver(database.NewDatabaseObserver())
+	values, _ := genesisValues(t, 4)
+	putNetwork(t, db, protocol.PartitionUrl("BVN0"), values)
 
 	_, err := NewState(StateOptions{
 		Partition: protocol.PartitionUrl("BVN0"),
@@ -87,4 +89,14 @@ type noSources struct{}
 func (noSources) For(context.Context, *url.URL) ([]pull.Source, *url.URL, error) {
 	return nil, nil, errors.NotReady.With("no peers")
 }
-func (noSources) Querier(*url.URL) api.Querier { return nil }
+
+// A querier that answers nothing, which is what a Sources with no peers has
+// to hand over. It is not nil: the anchor source refuses a nil querier,
+// because a join whose roots come from nowhere verifies nothing (#4301).
+func (noSources) Querier(*url.URL) api.Querier { return noQuerier{} }
+
+type noQuerier struct{}
+
+func (noQuerier) Query(context.Context, *url.URL, api.Query) (api.Record, error) {
+	return nil, errors.NotReady.With("no peers")
+}

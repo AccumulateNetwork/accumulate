@@ -382,6 +382,15 @@ func init() {
 				},
 			},
 			{
+				Name:        "BPTHistoryDepth",
+				Description: "is how many minor blocks of superseded BPT state to retain, so this node can serve an account or a BPT page AS OF an anchored block rather than as of its own current block (#4361). Zero retains none and refuses every such request; a node retaining none cannot serve a join",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
+				},
+			},
+			{
 				Name:        "BlockInterval",
 				Description: "is the target time between blocks, pinned into every generated node config. Halving it halves the wall time a failure takes to show itself",
 				Optional:    true,
@@ -462,6 +471,15 @@ func init() {
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
 					Elem:     &schema.SimpleType{Type: schema.SimpleTypeInt},
+				},
+			},
+			{
+				Name:        "BPTHistoryDepth",
+				Description: "is how many minor blocks of superseded BPT state to retain, so this node can serve an account or a BPT page AS OF an anchored block rather than as of its own current block (#4361). Zero retains none and refuses every such request; a node retaining none cannot serve a join. Defaults to 1024",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
 				},
 			},
 			{
@@ -1066,6 +1084,15 @@ func init() {
 					TypeBase: schema.TypeBase{},
 				}).
 					ResolveElemTo(&deferredTypes, "StorageType"),
+			},
+			{
+				Name:        "BPTHistoryDepth",
+				Description: "is how many minor blocks of superseded BPT state to retain, so this node can serve an account or a BPT page AS OF an anchored block rather than as of its own current block (#4361). Zero retains none and refuses every such request; a node retaining none cannot serve a join",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
+				},
 			},
 		},
 	}).SetGoType()

@@ -109,6 +109,10 @@ BptPageQuery:
       description: is the number of leaves asked for; omitted takes the server's default
       type: uint
       optional: true
+    - name: ForHeight
+      description: asks for the page as of a named minor block rather than the server's current one, resolving backward to the last state-changing block at or before it. Zero, the default, is the current tree. A block the server retains no BPT history for is refused, never answered with the current tree (#4361)
+      type: uint
+      optional: true
 
 AnchorSearchQuery:
   union: { type: query }

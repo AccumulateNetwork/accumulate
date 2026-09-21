@@ -10,6 +10,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
@@ -46,7 +48,106 @@ func (a *Account) putBpt() error {
 		return err
 	}
 
-	return a.parent.BPT().Insert(a.key, hasher.MerkleHash())
+	err = a.parent.BPT().Insert(a.key, hasher.MerkleHash())
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	return a.retainStateReceipt(hasher)
+}
+
+// retainStateReceipt keeps the receipt from the account's main state hash to
+// its BPT entry, for as long as the BPT retains history.
+//
+// Without it a historical proof starts at the whole BPT entry —
+// H(main, secondary, chains, pending) — which a verifier holding only the
+// account state cannot reconstruct, so it has to take the server's word for the
+// starting point. With it the historical path starts where [Account.StateReceipt]
+// starts, and the proof is checkable offline from the state the query returns.
+//
+// Nothing is written when retention is off, so a node running a depth of zero
+// stores exactly as many bytes as before. Retention costs, and it is worth
+// stating plainly:
+//
+//	retained bytes ~= dirty accounts per block x depth x 146
+//
+// 146 is the marshalled receipt, not the 64 bytes of new information in it: the
+// record also carries Start (the main state hash, which the verifier supplies)
+// and Anchor (the BPT entry, which BPT history already holds for that block),
+// plus framing. Storing the two sibling hashes alone would realise the saving
+// over retaining the three state components, which cost 96. That is an
+// optimisation and not a defect — the receipt composes directly with Combine,
+// which the bare siblings would not.
+//
+// # A dormant account keeps more than it needs
+//
+// Pruning runs here, so it runs only when an account is written. An account
+// that stops changing keeps every receipt it had when it went quiet. It is
+// bounded (it stops growing when the account does), it never exceeds
+// depth x 146 bytes for one account, and it has no effect on correctness:
+// retainedStateReceipt always takes the newest receipt at or before the block,
+// so the unreachable ones are never read.
+func (a *Account) retainStateReceipt(hasher hash.Hasher) error {
+	height, depth, ok := a.parent.BPT().RetainedWindow()
+	if !ok {
+		return nil
+	}
+	if len(hasher) < 2 {
+		// The debug observer collapses the components into one hash, so there
+		// is no path from the main state to the entry to retain.
+		return nil
+	}
+
+	blocks, err := a.RetainedStateReceiptBlocks().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load retained state receipt blocks: %w", err)
+	}
+	if n := len(blocks); n > 0 && blocks[n-1] >= height {
+		return nil // Already retained for this block
+	}
+
+	err = a.RetainedStateReceipt(height).Put(hasher.Receipt(0, len(hasher)-1))
+	if err != nil {
+		return errors.UnknownError.WithFormat("retain state receipt: %w", err)
+	}
+
+	// And the body that receipt starts at. A historical receipt served beside
+	// the CURRENT body proves nothing a caller can check: the body it was
+	// handed does not hash to the receipt's start, so a pulling node refuses
+	// it and a trusting one keeps the wrong state (#4361, executor.md "Sync"
+	// §2, "A body served with a proof is the stored body, byte for byte").
+	state, err := a.Main().Get()
+	switch {
+	case err == nil:
+		// Kept as the marshalled form, which is what the hasher hashed
+		// (observer_prod.go, hashValue): a caller recomputes the receipt's
+		// start from the bytes it was served, with no re-marshalling in
+		// between to differ.
+		encoded, err := state.MarshalBinary()
+		if err != nil {
+			return errors.UnknownError.WithFormat("marshal main state: %w", err)
+		}
+		err = a.RetainedMainState(height).Put(encoded)
+		if err != nil {
+			return errors.UnknownError.WithFormat("retain main state: %w", err)
+		}
+	case errors.Is(err, errors.NotFound):
+		// An account with chains and no main state: there is no body to
+		// retain and nothing will be served for it.
+	default:
+		return errors.UnknownError.WithFormat("load main state: %w", err)
+	}
+
+	blocks = append(blocks, height)
+	keep, dropped := bpt.PruneHeights(blocks, height, depth)
+	for _, d := range dropped {
+		// Best effort: an unreferenced receipt or body leaks bytes, it does
+		// not corrupt anything.
+		_ = a.RetainedStateReceipt(d).Put(nil)
+		_ = a.RetainedMainState(d).Put(nil)
+	}
+	err = a.RetainedStateReceiptBlocks().Put(keep)
+	return errors.UnknownError.Wrap(err)
 }
 
 // BptReceipt builds a BPT receipt for the account.

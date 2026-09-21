@@ -130,6 +130,32 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	if *s.ExecutionShards < 0 || *s.ExecutionShards > 1024 {
 		return errors.BadRequest.WithFormat("execution-shards %d is out of range [0, 1024]", *s.ExecutionShards)
 	}
+	// How much superseded BPT state this node keeps, so it can serve an
+	// account and a BPT page AS OF an anchored block (#4361). A peer that
+	// keeps none can only serve its own current block, and an account that
+	// changes every block is then unverifiable by anybody: no anchor ever
+	// covers the root it was served at, which is why a restart converges on
+	// nothing.
+	//
+	// 1024 minor blocks is the default, and the number comes from what the
+	// join has to do inside the window rather than from a storage budget. A
+	// joining node fixes on the newest block it holds a verified anchor for
+	// and must still be able to ask for THAT block when the round finishes,
+	// so the window has to cover the anchor lag plus one pull round. The
+	// anchor lag is bounded on this line at 64 root-chain positions
+	// (anchorSearchWindow, internal/api/v3/proof.go); a round is the block
+	// ledger walk over (R, Q] and the accounts it names; blocks are around a
+	// second under load, so 1024 blocks is roughly seventeen minutes — an
+	// order of magnitude over the lag and comfortably over a round.
+	//
+	// What it costs: one BPT block-write per state-changing block, plus
+	// (dirty accounts per block x depth x 146) bytes of retained state
+	// receipts. Measuring that on a real store is #4165's soak, and the
+	// number is here so the run has a prediction to check rather than a
+	// figure to discover.
+	setDefaultPtr(&s.BPTHistoryDepth, uint64(1024))
+	slog.Info("BPT history", "depth", *s.BPTHistoryDepth, "serves-anchored-blocks", *s.BPTHistoryDepth > 0, "partition", s.Partition.ID, "module", "dagbft")
+
 	// Said at startup, every time: a run that meant to shard and did not
 	// must be visible in the log, not inferred from a metric that stays at
 	// zero (REPORTING-SPEC 1).
@@ -272,6 +298,9 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		ExecutionShards: int(*s.ExecutionShards),
 		// A synthetic package must fit in one worker batch (#4141).
 		MaxEnvelopeSize: dagCfg.Batching.MaxBatchBytes,
+		// Retain superseded BPT state so this node can be served from as of
+		// an anchored block (#4361).
+		BPTHistoryDepth: *s.BPTHistoryDepth,
 		Describe: multiexec.DescribeShim{
 			NetworkType: s.Partition.Type,
 			PartitionId: s.Partition.ID,

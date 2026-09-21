@@ -23,6 +23,7 @@ it. Now the row says so, from the `sample` column and from the load
 generator's exit time — two separate facts, neither inferred from the other,
 because an idle tail puts periodic rows after the load generator too.
 """
+import datetime
 import os
 import re
 import subprocess
@@ -38,16 +39,16 @@ HEADER = ("time,node,role,partition,accepted,rejected,certified,relayedTaken,"
 
 
 def _functions():
-    """`relay_row` and `sub_row`, lifted out of soak.sh verbatim."""
+    """The manifest's row helpers, lifted out of soak.sh verbatim."""
     with open(SOAK) as f:
         src = f.read()
     fns = [m.group(0) for m in
-           re.finditer(r"^(relay_row|sub_row)\(\) \{.*?\nPYEOF\n\}\n",
-                       src, re.S | re.M)]
-    if len(fns) != 2:
+           re.finditer(r"^(relay_row|sub_row|steps_rows)\(\) \{"
+                       r".*?\nPYEOF\n\}\n", src, re.S | re.M)]
+    if len(fns) != 3:
         raise AssertionError(
-            "expected relay_row and sub_row in soak.sh, found %d — the "
-            "extraction is stale and this suite is testing nothing"
+            "expected relay_row, sub_row and steps_rows in soak.sh, found "
+            "%d — the extraction is stale and this suite is testing nothing"
             % len(fns))
     return "".join(fns)
 
@@ -170,6 +171,217 @@ class AbsenceStillReadsAsAbsence(Rows):
         self.assertIn("not measured", self.call('relay_row follower'))
 
 
+class StepsPerDisturbance(Rows):
+    """#4364's acceptance criterion — "the figure does not climb between
+    disturbances, and every step is attributable to one of them" — was
+    computable from `submissions.csv` and `chaos.log` and judgeable from
+    neither: `sub_row`'s trend looks at the last five samples of a
+    twelve-hour run.
+
+    Two numbers, because the criterion is two claims: a **step** is what a
+    disturbance cost, a **creep** is the climb in the quiet stretch between
+    two of them, and the criterion's number is the largest creep.
+
+    The figure is NOT monotone though its inputs are, so a level is the
+    MINIMUM over a window and never one reading. Two mistakes were made in
+    the windows, each printing the opposite of the truth, and both are
+    pinned below:
+
+    - a minimum over a WHOLE interval sits at its start, so a rise in the
+      middle of a quiet stretch is billed to the next disturbance — a
+      violation printed as compliance;
+    - an after-window starting at the disturbance's own second picks up
+      the sample stamped there, which still reads the pre-effect level
+      because a relay must time out before it gives up — so an ordinary
+      lossy restart prints +0 and its loss as the creep after it,
+      compliance printed as a violation.
+
+    Every fixture here samples every 30s, the real `submissions.csv`
+    cadence; at sparser spacing the windows hold one reading and the
+    minimum is not a floor.
+    """
+
+    def chaos(self, *lines):
+        with open(os.path.join(self.rd, "chaos.log"), "w") as f:
+            for l in lines:
+                f.write(l + "\n")
+
+    def ramp(self, first, last, *changes):
+        """A sample every 30s from `first` to `last`, taking the latest
+        value at or before each tick. `changes` is (time, value), earliest
+        first, and the first one must be at or before `first`."""
+        def t(x):
+            return datetime.datetime.strptime(
+                x, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+        pts, now, end = [], t(first), t(last)
+        ch = [(t(a), b) for a, b in changes]
+        while now <= end:
+            v = [b for a, b in ch if a <= now][-1]
+            pts.append((now.strftime("%Y-%m-%dT%H:%M:%SZ"), v))
+            now += datetime.timedelta(seconds=30)
+        self.write(*["%s,acc-bvn3-fol1,follower,BVN3,0,,0,0,0,0,0,%d,periodic"
+                     % (a, b) for a, b in pts])
+
+    def two_restarts(self):
+        self.chaos("2026-09-20T01:10:00Z restart acc-bvn3-val1",
+                   "2026-09-20T01:20:00Z restart acc-bvn2-val1")
+
+    # --- absence ----------------------------------------------------------
+
+    def test_no_chaos_log_is_not_measured(self):
+        self.write()
+        self.assertIn("not measured (no `chaos.log`)",
+                      self.call("steps_rows follower"))
+
+    def test_chaos_off_says_so_rather_than_showing_nothing(self):
+        self.chaos("2026-09-20T01:00:00Z DISABLED for this run (CHAOS=off)")
+        self.ramp("2026-09-20T01:00:00Z", "2026-09-20T01:02:00Z",
+                  ("2026-09-20T01:00:00Z", 0))
+        self.assertIn("chaos off", self.call("steps_rows follower"))
+
+    def test_disturbances_but_no_stranded_series_is_not_measured(self):
+        self.chaos("2026-09-20T01:10:00Z restart acc-bvn3-val1")
+        self.write()
+        self.assertIn("not measured (no stranded series",
+                      self.call("steps_rows follower"))
+
+    # --- the two window mistakes -------------------------------------------
+
+    def test_a_creep_between_disturbances_is_not_the_next_ones_step(self):
+        """Flat through a restart at 01:10, +3 at 01:16 with nothing
+        happening, flat through a restart at 01:20. Measured over whole
+        intervals this printed `01:20Z restart … (+3)` — a criterion
+        violation rendered as a disturbance's cost."""
+        self.two_restarts()
+        self.ramp("2026-09-20T01:07:00Z", "2026-09-20T01:23:00Z",
+                  ("2026-09-20T01:07:00Z", 0), ("2026-09-20T01:16:00Z", 3))
+        got = self.call("steps_rows follower")
+        self.assertIn("| 01:10Z restart acc-bvn3-val1 | stranded 0 -> 0 (+0)",
+                      got)
+        self.assertIn("| 01:20Z restart acc-bvn2-val1 | stranded 3 -> 3 (+0)",
+                      got)
+        self.assertIn("| between 01:10Z and 01:20Z | crept +3 |", got)
+        self.assertIn("| largest step at a disturbance | +0,", got)
+        self.assertIn("| largest climb between disturbances | +3, "
+                      "01:10Z to 01:20Z |", got)
+
+    def test_a_loss_one_sample_after_the_restart_is_that_restarts_step(self):
+        """The mirror. The sample stamped at 01:10:00 still reads 0 — a
+        relay has to time out before it gives up — and the loss of 3
+        appears at 01:10:30. An after-window starting at 01:10:00 takes
+        the 0, prints `+0`, and reports the loss as the creep that
+        follows: compliance printed as a violation, on the ordinary case."""
+        self.two_restarts()
+        self.ramp("2026-09-20T01:07:00Z", "2026-09-20T01:23:00Z",
+                  ("2026-09-20T01:07:00Z", 0), ("2026-09-20T01:10:30Z", 3))
+        got = self.call("steps_rows follower")
+        self.assertIn("| 01:10Z restart acc-bvn3-val1 | stranded 0 -> 3 (+3)",
+                      got)
+        self.assertIn("| between 01:10Z and 01:20Z | crept +0 |", got)
+        self.assertIn("| largest step at a disturbance | +3, at 01:10Z "
+                      "restart acc-bvn3-val1 |", got)
+        self.assertIn("| largest climb between disturbances | +0,", got)
+
+    def test_a_loss_two_samples_after_the_restart_is_still_its_step(self):
+        self.two_restarts()
+        self.ramp("2026-09-20T01:07:00Z", "2026-09-20T01:23:00Z",
+                  ("2026-09-20T01:07:00Z", 0), ("2026-09-20T01:11:00Z", 3))
+        got = self.call("steps_rows follower")
+        self.assertIn("| 01:10Z restart acc-bvn3-val1 | stranded 0 -> 3 (+3)",
+                      got)
+        self.assertIn("| between 01:10Z and 01:20Z | crept +0 |", got)
+
+    # --- jitter, pauses, baseline ------------------------------------------
+
+    def test_jitter_between_samples_is_neither_a_step_nor_a_creep(self):
+        """Isolated spikes while relays are in flight, returning to 0 each
+        time. Every window still holds a low reading, so every floor is 0."""
+        self.two_restarts()
+        self.ramp("2026-09-20T01:07:00Z", "2026-09-20T01:23:00Z",
+                  ("2026-09-20T01:07:00Z", 0),
+                  ("2026-09-20T01:09:00Z", 6), ("2026-09-20T01:09:30Z", 0),
+                  ("2026-09-20T01:11:00Z", 7), ("2026-09-20T01:11:30Z", 0),
+                  ("2026-09-20T01:19:00Z", 4), ("2026-09-20T01:19:30Z", 0),
+                  ("2026-09-20T01:21:00Z", 5), ("2026-09-20T01:21:30Z", 0))
+        got = self.call("steps_rows follower")
+        self.assertIn("| 01:10Z restart acc-bvn3-val1 | stranded 0 -> 0 (+0)",
+                      got)
+        self.assertIn("| 01:20Z restart acc-bvn2-val1 | stranded 0 -> 0 (+0)",
+                      got)
+        self.assertIn("| largest step at a disturbance | +0,", got)
+        self.assertIn("the figure did not climb", got)
+
+    def test_a_pauses_step_is_dated_at_the_un_pause(self):
+        """chaos logs `pause <node> <p>s` when it STARTS and never logs the
+        end, so the effective moment is 01:20:30 and the after-window runs
+        from 01:21:30. A loss from 01:21:30 is the pause's."""
+        self.chaos("2026-09-20T01:10:00Z restart acc-bvn3-val1",
+                   "2026-09-20T01:20:00Z pause acc-bvn2-val2 30s")
+        self.ramp("2026-09-20T01:07:00Z", "2026-09-20T01:23:00Z",
+                  ("2026-09-20T01:07:00Z", 0), ("2026-09-20T01:21:30Z", 6))
+        got = self.call("steps_rows follower")
+        self.assertIn("| 01:10Z restart acc-bvn3-val1 | stranded 0 -> 0 (+0)",
+                      got)
+        self.assertIn("| 01:20Z pause acc-bvn2-val2 | stranded 0 -> 6 (+6)",
+                      got)
+
+    def test_the_baseline_is_stated(self):
+        """Otherwise the first step is measured against nothing and a run
+        that was already losing reads as if the disturbance caused it."""
+        self.chaos("2026-09-20T01:10:00Z restart acc-bvn3-val1")
+        self.ramp("2026-09-20T01:07:00Z", "2026-09-20T01:14:00Z",
+                  ("2026-09-20T01:07:00Z", 12))
+        got = self.call("steps_rows follower")
+        self.assertIn("| baseline (the first 120s of the run) | 12 |", got)
+        self.assertIn("stranded 12 -> 12 (+0)", got)
+
+    # --- what cannot be separated ------------------------------------------
+
+    def test_two_disturbances_inside_one_window_say_they_are_not_separable(self):
+        """A short run's chaos cadence is 25s. The step and the creep beside
+        it are then measured over the same samples, and a reader must be
+        told rather than left to believe the attribution."""
+        self.chaos("2026-09-20T01:10:00Z restart acc-bvn3-val1",
+                   "2026-09-20T01:10:40Z restart acc-bvn2-val1")
+        self.ramp("2026-09-20T01:08:00Z", "2026-09-20T01:13:00Z",
+                  ("2026-09-20T01:08:00Z", 0))
+        self.assertIn("not separable", self.call("steps_rows follower"))
+
+    def test_a_second_disturbance_inside_the_settle_is_not_separable(self):
+        """A gap wider than the settle but narrower than the window leaves
+        no room for the first one's effect to show before the second
+        lands. Caught by the window clamp, which is why there is no
+        separate settle check: while the settle is shorter than the
+        window, one implies the other."""
+        self.chaos("2026-09-20T01:10:00Z restart acc-bvn3-val1",
+                   "2026-09-20T01:10:50Z restart acc-bvn2-val1")
+        self.ramp("2026-09-20T01:08:00Z", "2026-09-20T01:13:00Z",
+                  ("2026-09-20T01:08:00Z", 0))
+        self.assertIn("not separable", self.call("steps_rows follower"))
+
+    def test_a_settle_that_swallows_the_window_is_refused_once(self):
+        """The misconfiguration the settle makes possible. Said once and
+        plainly, rather than as "no sample in the window" against every
+        disturbance of a twelve-hour run — which reads as a broken series
+        and sends the reader to the wrong file."""
+        self.chaos("2026-09-20T01:10:00Z restart acc-bvn3-val1")
+        self.ramp("2026-09-20T01:07:00Z", "2026-09-20T01:14:00Z",
+                  ("2026-09-20T01:07:00Z", 0))
+        got = self.call(
+            "STEP_SETTLE_SECS=200 STEP_WINDOW_SECS=120 steps_rows follower")
+        self.assertIn("not measured", got)
+        self.assertIn("STEP_SETTLE_SECS=200 is not less than "
+                      "STEP_WINDOW_SECS=120", got)
+        self.assertNotIn("stranded 0 ->", got)
+
+    def test_an_interval_with_no_sample_says_so(self):
+        self.chaos("2026-09-20T01:10:00Z restart acc-bvn3-val1",
+                   "2026-09-20T01:10:30Z restart acc-bvn2-val1")
+        self.ramp("2026-09-20T01:05:00Z", "2026-09-20T01:05:30Z",
+                  ("2026-09-20T01:05:00Z", 0))
+        self.assertIn("no sample in the", self.call("steps_rows follower"))
+
+
 class SoakShPassesWhatTheHelpersNeed(unittest.TestCase):
     """The helpers are only as good as their call sites."""
 
@@ -193,6 +405,35 @@ class SoakShPassesWhatTheHelpersNeed(unittest.TestCase):
         for c in calls:
             self.assertIn('"$lg_exit"', c, c)
             self.assertIn('"$stopped_early"', c, c)
+
+    def test_the_steps_table_is_in_the_manifest(self):
+        """A helper nothing calls measures nothing."""
+        self.assertIn("steps_rows follower", self.SRC)
+        self.assertIn("Stranded across disturbances", self.SRC)
+        self.assertIn("| disturbance | stranded |", self.SRC)
+
+    def test_the_manifest_says_how_the_numbers_are_taken(self):
+        """A reader who does not know a level is a minimum over a local
+        window will try to reproduce it from two rows and get the jitter —
+        or from whole intervals and bill a creep to a disturbance."""
+        flat = " ".join(self.SRC.split())
+        self.assertIn("Settled means the MINIMUM over a window", flat)
+        self.assertIn("The windows are LOCAL", flat)
+        self.assertIn("a rise in the middle of a quiet", flat)
+        self.assertIn("after-window starts", flat)
+        self.assertIn("still reads the pre-effect", flat)
+        self.assertIn("A pause is dated at its un-pause", flat)
+
+    def test_the_manifest_names_which_number_the_criterion_is(self):
+        """Two numbers on one table is how the wrong one gets quoted."""
+        flat = " ".join(self.SRC.split())
+        # The prose is built from several `echo` lines, so match on
+        # fragments that survive the line breaks rather than a sentence.
+        self.assertIn("a **step** is what a disturbance cost", flat)
+        self.assertIn("a **creep** is the", flat)
+        self.assertIn("The criterion's", flat.replace('" echo "', " "))
+        self.assertIn("number is \\`largest climb between disturbances\\`",
+                      flat)
 
 
 if __name__ == "__main__":

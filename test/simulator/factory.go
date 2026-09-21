@@ -57,6 +57,7 @@ type simFactory struct {
 	executionLag                func() int // what the conductor is told its executor lags consensus by; nil is caught up
 	executionShards             int
 	executionShardsPerNode      []int
+	bptHistoryDepth             uint64
 	interceptDispatchedMessages DispatchInterceptor
 
 	// State
@@ -632,6 +633,11 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		// consensus result comparison then asserts shard-count equivalence
 		// on every block of every test.
 		ExecutionShards: f.shardCount(),
+
+		// Retain superseded BPT state so a peer can be asked for an account
+		// or a BPT page AS OF an anchored block (#4361). Zero, the default,
+		// retains none and refuses every such request.
+		BPTHistoryDepth: f.bptHistoryDepth,
 	}
 
 	// Add background tasks to the block's error group. The simulator must call

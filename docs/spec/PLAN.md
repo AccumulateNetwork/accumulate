@@ -340,17 +340,25 @@ from 2026-09-19 21:57Z, on Paul's word; #4361's join test waits for #4301):
 
 1. **Validate the spine — #4301.** Port `anchorsrc` from `bootstrap-v3`:
    the latest signed anchor for the partition, its validator-quorum
-   signatures checked against the key page the node holds from its own
-   execution (or genesis), distinct key page entries to threshold, walked
-   forward across operator changes. Producer routing: a BVN's root from
-   `dn.acme/anchors`, the Directory's own from a BVN's anchor pool. Nothing is
-   kept and no root reaches the tracker until it passes; the `Keep`-without-
-   verify path and its "nothing to verify it against" rationale go.
+   signatures checked against the **network definition** the node holds from
+   its own execution (or genesis) — not the operators' key page, which cannot
+   reach threshold for a BVN (#4301 statement (b), through the protocol
+   2026-09-19) — distinct members to threshold, one version per quorum.
+   Producer routing: a BVN's root from `dn.acme/anchors`; the Directory's own
+   is there too (it anchors to itself; statement (a)), and in every BVN's
+   pool. Nothing is kept and no root reaches the tracker until it passes; the
+   `Keep`-without-verify path and its "nothing to verify it against"
+   rationale go. How the trusted set moves across an operator change is
+   statement (c), at step 1 of the protocol as this is written — the reviewer
+   found the "walk signed by the preceding set" never fires on this line.
    *Gate:* a well-formed anchor with no valid signature is refused; a
-   self-consistent forked state with a matching root does not promote; the
-   Directory's own root is obtainable. Then the four threat tests on
-   `threat-staging-load-unverified` become the regression suite for what is
-   deleted in step 3.
+   self-consistent forked state with a matching root does not promote; a
+   partial quorum through the real join is refused; a pool re-signed with
+   keys of the peer's own does not promote. (The earlier gate "the
+   Directory's own root is obtainable" no longer discriminates — the old
+   wiring obtained it too; and the four threat tests on
+   `threat-staging-load-unverified` are against `execute.Staging.Load`, not
+   the spine, so the spine's regression suite is this issue's own tests.)
 2. **Serve state at an anchored block — #4361.** Port the AIP-58 historical
    state from `origin/main` (`docs/protocol/historical-account-state.md`,
    `test/e2e/aip58_historical_test.go`): an account or a BPT page *as of a

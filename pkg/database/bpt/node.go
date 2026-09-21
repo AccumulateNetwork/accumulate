@@ -158,8 +158,12 @@ func (e *branch) load() error {
 		return errors.InternalError.With("invalid state - node is dirty but has not been loaded")
 	}
 
-	// If this is the root node, get the hash from the parameters
-	if e.Height == 0 {
+	// If this is the root node, get the hash from the parameters. A historical
+	// view deliberately does NOT do this: it recomputes the root from the nodes
+	// it actually loaded, so the caller can compare that against the root the
+	// ledger recorded. Asserting the expected root here instead would make the
+	// comparison compare a value against itself.
+	if e.Height == 0 && e.bpt.view == nil {
 		s, err := e.bpt.loadState()
 		if err != nil {
 			return errors.UnknownError.WithFormat("load params: %w", err)
@@ -167,15 +171,43 @@ func (e *branch) load() error {
 		e.Hash = s.RootHash
 	}
 
-	err := e.bpt.store.GetValue(e.bpt.key.Append(e.Key), nodeRecord{e})
-	switch {
-	case err == nil:
-		return nil
-	case errors.Is(err, errors.NotFound):
-		e.Left = &emptyNode{parent: e}
-		e.Right = &emptyNode{parent: e}
-	default:
-		return errors.UnknownError.Wrap(err)
+	// In a historical view, prefer the retained version of this node. A node
+	// with no retained version after the view's height has not changed since,
+	// so the current record IS the historical one and the read falls through.
+	loaded := false
+	if v := e.bpt.view; v != nil {
+		data, ok, err := e.bpt.NodeAt(e.Key, v.height)
+		if err != nil {
+			return errors.UnknownError.WithFormat("load retained node: %w", err)
+		}
+		if ok {
+			err = nodeRecord{e}.LoadBytes(data, false)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			loaded = true
+		}
+	}
+
+	if !loaded {
+		err := e.bpt.store.GetValue(e.bpt.key.Append(e.Key), nodeRecord{e})
+		switch {
+		case err == nil:
+			// Ok
+		case errors.Is(err, errors.NotFound):
+			e.Left = &emptyNode{parent: e}
+			e.Right = &emptyNode{parent: e}
+		default:
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	// In a historical view the root's hash was never set from the parameters,
+	// so force it to be recomputed from the children that were just loaded.
+	// Those children's hashes come from the retained block, so the recomputed
+	// root is the historical one.
+	if e.Height == 0 && e.bpt.view != nil {
+		e.status = branchUnhashed
 	}
 	return nil
 }
