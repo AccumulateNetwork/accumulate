@@ -171,10 +171,14 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// was alive. A twelve-node network ran for twenty minutes with one member
 	// executing nothing and every reading said it was healthy (#4345a).
 	//
-	// BOOTING is the honest value here: nothing has been decided yet. The
-	// join overwrites it on every transition, and the branch below sets
-	// ACTIVE for a node that executes without asking anyone.
-	nodestate.Report(s.Partition.ID, nodestate.StateBooting)
+	// BOOTING is the honest value here: nothing has been decided yet, and
+	// none of this node's services exists, so it answers nothing. The join
+	// overwrites it on every transition, and the branch below hands over the
+	// Always{} of a node that executes without asking anyone.
+	//
+	// Reported FROM AN OBJECT rather than as a state the caller names: the
+	// gauge says what the thing that answers says (#4295).
+	nodestate.Report(s.Partition.ID, nodestate.Undecided{})
 	setDefaultPtr(&s.DAGGCDepth, dagconfig.DefaultDAGGCDepth)
 	setDefaultPtr(&s.CommitBufferSize, dagconfig.DefaultCommitBufferSize)
 	setDefaultPtr(&s.MaxExecutionLag, int64(primary.DefaultMaxExecutionLag))
@@ -516,6 +520,12 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// absent series (#4345b). The executor moves it from here on.
 	nodestate.ReportExecuted(s.Partition.ID, lastBlock)
 
+	// serving is the one object that decides whether this node answers for
+	// the state it holds, and the one the gauge reports. A node that joins
+	// gets the join's machine below; a node that does not never joined, so
+	// it answers for itself (#4295: one fact, not two).
+	var serving nodestate.Serving
+
 	joining := nodeMustJoin(lastBlock)
 	if !joining {
 		// Said out loud, because it is the one condition under which a node
@@ -527,12 +537,17 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			"so it executes from genesis without asking for staging",
 			"module", "join", "partition", s.Partition.ID, "block", lastBlock)
 
-		// It executes from genesis without asking anyone, so it is ACTIVE:
-		// it answers for the state it holds, and nothing it holds came from
-		// a peer. Reported rather than left at BOOTING, because a node that
-		// never joins never enters the state machine and BOOTING for the
-		// life of the process is the negative-only reading of #4345a.
-		nodestate.Report(s.Partition.ID, nodestate.StateActive)
+		// It executes from genesis without asking anyone, so it answers for
+		// the state it holds and nothing it holds came from a peer. This is
+		// the object its services are given further down, and the gauge is
+		// written from it rather than asserted beside it: the daemon used to
+		// report ACTIVE here and build Always{} there, and nothing kept the
+		// two in agreement (#4295). Reported rather than left at BOOTING,
+		// because a node that never joins never enters the state machine and
+		// BOOTING for the life of the process is the negative-only reading
+		// of #4345a.
+		serving = nodestate.Always{}
+		nodestate.Report(s.Partition.ID, serving)
 	}
 
 	// The join's state is built first, because its node state is what the
@@ -645,24 +660,23 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("register event bus: %w", err)
 	}
 
-	// Register consensus API services
-	var nodeState *nodestate.Machine
+	// Register consensus API services.
+	//
+	// The join's machine is what a joining node answers by, and the join has
+	// already put it on the gauge (join.NewState). A node that never joined
+	// answers for itself. Either way every service gets the SAME object, and
+	// a service that wants the state gets an answer rather than an absence.
 	if joinState != nil {
-		nodeState = joinState.Machine()
+		serving = joinState.Machine()
 	}
-
-	// Registered whether or not this node joined: a node that never joined
-	// answers for itself, and a service that wants the state must get an
-	// answer rather than an absence.
-	var serving nodestate.Serving = nodestate.Always{}
-	if nodeState != nil {
-		serving = nodeState
+	if serving == nil {
+		serving = nodestate.Always{}
 	}
 	err = dagbftProvidesNodeState.Register(inst.services, s, serving)
 	if err != nil {
 		return errors.UnknownError.WithFormat("register node state: %w", err)
 	}
-	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache, staging, nodeState, serving)
+	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache, staging, serving)
 	if err != nil {
 		return err
 	}
@@ -672,7 +686,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 }
 
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache, staging *execute.Staging, nodeState *nodestate.Machine, serving nodestate.Serving) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache, staging *execute.Staging, serving nodestate.Serving) error {
 	logger := logging.NewSlogLogger(inst.logger)
 	// These are the SERVING side of the node: consensus queries, the
 	// sequencer answering a peer's healing request, the API.  They are
@@ -736,7 +750,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	validatorSvc := dagbft.NewValidatorService(dagbft.ValidatorServiceParams{
 		Logger:    logger.With("module", "api"),
 		Service:   s.service,
-		NodeState: nodeState,
+		NodeState: serving,
 	})
 	registerRpcService(inst, validatorSvc.Type().AddressFor(s.Partition.ID), message.Validator{Validator: validatorSvc})
 	err = dagbftProvidesValidator.Register(inst.services, s, validatorSvc)
@@ -750,7 +764,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		Database:     db,
 		Cache:        synthCache,
 		Staging:      staging,
-		NodeState:    nodeState,
+		NodeState:    serving,
 		EventBus:     s.eventBus,
 		Globals:      globals,
 		Partition:    s.Partition.ID,

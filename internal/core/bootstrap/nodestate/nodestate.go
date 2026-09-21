@@ -72,10 +72,16 @@ func (s State) String() string {
 	}
 }
 
-// CanServeCurrent reports whether the node may answer for the state it holds.
-// True for ACTIVE, and for ACTIVE alone: a node that is BOOTING refuses every
-// read (executor.md, "Sync", step 6).
-func (s State) CanServeCurrent() bool {
+// Serves reports whether a node in this state may answer for the state it
+// holds. True for ACTIVE, and for ACTIVE alone: a node that is BOOTING
+// refuses every read (executor.md, "Sync", step 6).
+//
+// A State deliberately does NOT implement [Serving]. The gauge is written
+// from the object that answers, and a State is a reading of one, not the
+// thing itself: if State satisfied Serving, every call that used to hand
+// Report a state the caller chose would still compile and the two objects
+// would be two again (#4295).
+func (s State) Serves() bool {
 	return s == StateActive
 }
 
@@ -101,7 +107,21 @@ type Always struct{}
 // CanServeCurrent implements [Serving].
 func (Always) CanServeCurrent() bool { return true }
 
+// Undecided is a node that has not decided whether it must join. It answers
+// nothing, because at that point in start-up none of its services exists.
+//
+// It is here so that the gauge is never written from anything but the object
+// that answers CanServeCurrent (#4295): the daemon puts this partition's
+// state on the wire before it reads its own last block, so that "absent"
+// cannot be mistaken for "booting" (#4345a), and BOOTING is the honest value
+// for a node that has decided nothing.
+type Undecided struct{}
+
+// CanServeCurrent implements [Serving].
+func (Undecided) CanServeCurrent() bool { return false }
+
 var _ Serving = Always{}
+var _ Serving = Undecided{}
 var _ Serving = (*Machine)(nil)
 
 // Advertisement is the payload published to peer discovery.
@@ -182,7 +202,7 @@ func (m *Machine) CanServeCurrent() bool {
 	if m == nil {
 		return true // no state of its own: it never joined
 	}
-	return m.State().CanServeCurrent()
+	return m.State().Serves()
 }
 
 // State returns the current state.

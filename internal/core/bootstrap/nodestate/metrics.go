@@ -91,10 +91,31 @@ func Number(s State) float64 {
 // (test/docker/soak/nodewatch.py, canon_part).
 func label(partition string) string { return strings.ToLower(partition) }
 
-// Report exports the state this node is in for one partition. Every node
-// calls it, for every partition it runs, whether or not it ever joins.
-func Report(partition string, s State) {
-	mNodeState.WithLabelValues(label(partition)).Set(Number(s))
+// Report exports the state this node is in for one partition, taken from the
+// object its services refuse by. Every node calls it, for every partition it
+// runs, whether or not it ever joins.
+//
+// ONE FACT, NOT TWO (#4295). The gauge and the gate used to be two objects
+// with nothing keeping them in agreement: Report took whatever State the
+// caller named, while serving/nodeState decided the answers. A from-genesis
+// node has no machine at all, so the daemon ASSERTED ACTIVE on the gauge at
+// one line and handed its services Always{} at another, and a change to
+// either would have left a monitor reading a node's state that was not the
+// state the node answered by. Report now takes the object that answers, so
+// there is nothing to keep in agreement.
+func Report(partition string, s Serving) {
+	mNodeState.WithLabelValues(label(partition)).Set(Number(StateOf(s)))
+}
+
+// StateOf is the state a Serving object is in. The states are two, so this is
+// total: a node that may answer for the state it holds is ACTIVE and one that
+// may not is BOOTING. A nil Serving is a node that never joined, which is the
+// same absence the querier and the sequencer read as "answer for yourself".
+func StateOf(s Serving) State {
+	if s == nil || s.CanServeCurrent() {
+		return StateActive
+	}
+	return StateBooting
 }
 
 // ReportExecuted exports the block this node's own executor last executed for

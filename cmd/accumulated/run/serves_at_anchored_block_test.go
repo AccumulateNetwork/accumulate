@@ -193,7 +193,8 @@ func TestABptPageIsServedAsOfTheBlockTheDirectoryAnchored(t *testing.T) {
 // current-state answers keep working.
 func TestANodeThatRetainsNoBptHistoryRefuses(t *testing.T) {
 	depth := uint64(0)
-	c := clientFor(t, startNetsimAndExecuteWith(t, &depth))
+	api, _ := startNetsimAndExecuteWith(t, &depth)
+	c := clientFor(t, api)
 	ctx := context.Background()
 
 	ledger := protocol.PartitionUrl("BVN1").JoinPath(protocol.Ledger)
@@ -230,7 +231,8 @@ func TestANodeThatRetainsNoBptHistoryRefuses(t *testing.T) {
 // recorded on #4361.
 func TestABlockBelowTheRetentionHorizonIsRefusedByName(t *testing.T) {
 	depth := uint64(4)
-	c := clientFor(t, startNetsimAndExecuteWith(t, &depth))
+	api, _ := startNetsimAndExecuteWith(t, &depth)
+	c := clientFor(t, api)
 	ctx := context.Background()
 
 	ledger := protocol.PartitionUrl("BVN1").JoinPath(protocol.Ledger)

@@ -228,9 +228,11 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	if id, ok := protocol.ParsePartitionUrl(opts.Partition); ok {
 		label = id
 	}
-	nodestate.Report(label, machine.State())
-	machine.OnChange(func(ad nodestate.Advertisement) {
-		nodestate.Report(label, ad.State)
+	// The gauge is written from the machine itself, which is also what the
+	// node's services refuse by: one fact, not two (#4295).
+	nodestate.Report(label, machine)
+	machine.OnChange(func(nodestate.Advertisement) {
+		nodestate.Report(label, machine)
 	})
 	return s, nil
 }

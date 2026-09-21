@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -115,6 +116,15 @@ func TestJoinPullsFromPeersAndPromotes(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// ONE FACT, NOT TWO (#4295): the gauge says what the object the node's
+	// services refuse by says. join.NewState puts this machine on the wire,
+	// and it is the same machine dagbft.go hands the querier, the submitter
+	// and the sequencer.
+	machine := state.Machine()
+	require.False(t, machine.CanServeCurrent(), "a node that is still pulling answers for state it has not executed")
+	require.Equal(t, nodestate.Number(nodestate.StateOf(machine)), nodeStateGauge(t, "bvn0"),
+		"the gauge and the object the node answers by disagree while it is BOOTING")
+
 	var q uint64
 	var ok bool
 	for round := 0; round < 40 && !ok; round++ {
@@ -134,6 +144,14 @@ func TestJoinPullsFromPeersAndPromotes(t *testing.T) {
 	require.Equal(t, nodestate.StateActive, state.Machine().State(),
 		"the node did not promote at the block its state is")
 	require.Equal(t, q, state.Machine().Get().SinceBlock)
+
+	// And the gauge followed it, because it is written from the machine and
+	// not asserted beside it.
+	require.True(t, machine.CanServeCurrent(), "a node whose root matched an anchored root still refuses")
+	require.Equal(t, nodestate.Number(nodestate.StateOf(machine)), nodeStateGauge(t, "bvn0"),
+		"the gauge and the object the node answers by disagree after promotion")
+	require.Equal(t, float64(2), nodeStateGauge(t, "bvn0"),
+		"ACTIVE is 2 on the gauge; #4364's node-state row reads it")
 
 	// And the state it holds is the partition's, not a subset: the accounts a
 	// block changed as a side effect and the system accounts no envelope names.
@@ -220,4 +238,26 @@ func TestBlockLedgerNamesWhatABlockChanged(t *testing.T) {
 	require.False(t, seen[part.JoinPath(Synthetic).String()],
 		"the synthetic account appeared in a block's record; ChangedAccounts adds it because it does not")
 	require.True(t, join.Routable(part.JoinPath(Ledger)))
+}
+
+// nodeStateGauge reads accumulate_node_state for one partition out of the
+// process's own Prometheus registry — the registry /metrics serves.
+func nodeStateGauge(t *testing.T, partition string) float64 {
+	t.Helper()
+	mfs, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+	for _, mf := range mfs {
+		if mf.GetName() != "accumulate_node_state" {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			for _, l := range m.GetLabel() {
+				if l.GetName() == "partition" && l.GetValue() == partition {
+					return m.GetGauge().GetValue()
+				}
+			}
+		}
+	}
+	t.Fatalf("accumulate_node_state has no series for %s", partition)
+	return 0
 }

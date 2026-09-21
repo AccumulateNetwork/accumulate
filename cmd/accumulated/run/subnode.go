@@ -29,6 +29,7 @@ func (s *SubnodeService) start(inst *Instance) error {
 	sub.p2p = inst.p2p
 	// Share halt controllers with parent so HTTP handler can access them
 	sub.parentInstance = inst
+	inst.subnodes = append(inst.subnodes, sub)
 
 	sub.config = &Config{
 		Network: inst.config.Network,

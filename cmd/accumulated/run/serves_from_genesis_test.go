@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	apiv3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -36,7 +38,7 @@ import (
 // and the querier is the one `(*Querier).start` registered with whatever
 // `nodestate.Serving` `dagbft.go` gave it.
 func TestAFromGenesisNodeAnswersTheTwoPullReads(t *testing.T) {
-	api := startNetsimAndExecute(t)
+	api, _ := startNetsimAndExecuteWith(t, nil)
 	c := jsonrpc.NewClient(api)
 	ctx := context.Background()
 
@@ -62,4 +64,59 @@ func TestAFromGenesisNodeAnswersTheTwoPullReads(t *testing.T) {
 	g := gaugeByPartition(t, "accumulate_node_state")
 	require.Contains(t, g, "directory")
 	require.Contains(t, g, "bvn1")
+}
+
+// ONE FACT, NOT TWO: the gauge says what the object that answers says
+// (#4295).
+//
+// accumulate_node_state and the gate used to be two objects with nothing
+// keeping them in agreement. nodestate.Report took whatever State its caller
+// named; serving/nodeState decided the answers; and a node that started from
+// genesis has no state machine at all, so the daemon ASSERTED ACTIVE on the
+// gauge at dagbft.go's !joining branch and built nodestate.Always{} for its
+// services a hundred and twenty lines later. A one-line change to either left
+// a monitor reading a state that was not the state the node answered by.
+//
+// Report now takes the Serving, and nothing else writes the series. This
+// asserts the property on a running node: the gauge for each partition this
+// process runs equals the state of the very object its services were
+// registered with, taken out of the ioc registry the daemon put it in.
+//
+// Nothing is built by hand: the network is the daemon's own start path and
+// the Serving is the one dagbft.go registered.
+func TestTheGaugeSaysWhatTheNodeAnswersBy(t *testing.T) {
+	_, inst := startNetsimAndExecuteWith(t, nil)
+
+	g := gaugeByPartition(t, "accumulate_node_state")
+	for part, label := range map[string]string{protocol.Directory: "directory", "BVN1": "bvn1"} {
+		serving := servingFor(t, inst, part)
+
+		require.Contains(t, g, label, "%s exports no state (#4345a)", part)
+		require.Equal(t, nodestate.Number(nodestate.StateOf(serving)), g[label],
+			"%s: the gauge says %v and the object its services answer by says %v",
+			part, g[label], nodestate.StateOf(serving))
+
+		// And for a node that took nothing from a peer that value is ACTIVE,
+		// which is what #4364's node-state row reads as healthy.
+		require.True(t, serving.CanServeCurrent(),
+			"a from-genesis node does not answer for the state it holds")
+		require.Equal(t, float64(2), g[label])
+	}
+}
+
+// servingFor finds the nodestate.Serving the daemon registered for a
+// partition. A netsim runs each node in an Instance of its own with its own
+// service registry (subnode.go), so this walks the tree the run started.
+func servingFor(t *testing.T, inst *Instance, partition string) nodestate.Serving {
+	t.Helper()
+	if s, err := ioc.Get[nodestate.Serving](inst.services, partition); err == nil {
+		return s
+	}
+	for _, sub := range inst.subnodes {
+		if s, err := ioc.Get[nodestate.Serving](sub.services, partition); err == nil {
+			return s
+		}
+	}
+	t.Fatalf("no node ran %s: nothing registered a nodestate.Serving for it", partition)
+	return nil
 }

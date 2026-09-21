@@ -38,7 +38,7 @@ type Sequencer struct {
 	db          database.Viewer
 	cache       *synthcache.Cache
 	staging     *execute.Staging
-	nodeState   *nodestate.Machine
+	nodeState   nodestate.Serving
 	partitionID string
 	partition   config.NetworkUrl
 	valKey      []byte
@@ -87,12 +87,12 @@ type SequencerParams struct {
 	Staging *execute.Staging
 
 	// NodeState is this NODE's state, which decides what it may answer for
-	// (executor spec, "Sync", step 5). A process running several nodes of one
+	// (executor spec, "Sync", step 6). A process running several nodes of one
 	// partition — the simulator — must pass it, because the registry is keyed
 	// by partition and every node of that partition would otherwise share one
 	// node's state. Nil falls back to the registry, and a node with neither
 	// has not joined and serves.
-	NodeState *nodestate.Machine
+	NodeState nodestate.Serving
 
 	// Cache is the producer's synthetic/anchor cache the executor fills.
 	// With it, every answer is built from the cache and a miss is refused
@@ -321,7 +321,7 @@ func (s *Sequencer) serving(call string) error {
 	if s.nodeState == nil {
 		return nil
 	}
-	if s.nodeState.State() == nodestate.StateActive {
+	if s.nodeState.CanServeCurrent() {
 		return nil
 	}
 	mNotServing.WithLabelValues(strings.ToLower(s.partitionID), call).Inc()

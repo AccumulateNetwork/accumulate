@@ -41,6 +41,12 @@ type Instance struct {
 	pubsub   *pubsub.PubSub // shared GossipSub for all DAG-BFT services
 	services ioc.Registry
 
+	// subnodes are the Instances this one started for the nodes of a netsim
+	// or devnet, in start order. Each runs its services in a registry of its
+	// own (subnode.go), so this is the only way back to what a node was
+	// actually wired with.
+	subnodes []*Instance
+
 	// parentInstance is set for subnodes to allow registering halt controllers
 	// on the parent instance (where the HTTP service runs)
 	parentInstance *Instance

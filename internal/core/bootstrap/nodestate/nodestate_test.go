@@ -15,6 +15,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// constantly is a Serving with a fixed answer.
+type constantly bool
+
+func (c constantly) CanServeCurrent() bool { return bool(c) }
+
 // bvn0 is the partition the machines under test belong to. A machine is per
 // partition: a node serves two, and every block number it advertises is a
 // block of one of them (#4205).
@@ -35,8 +40,11 @@ func TestState_Capabilities(t *testing.T) {
 		{4, false, "UNKNOWN"},
 	}
 	for _, c := range cases {
-		if c.s.CanServeCurrent() != c.curOK {
-			t.Errorf("%v.CanServeCurrent = %v, want %v", c.s, c.s.CanServeCurrent(), c.curOK)
+		if c.s.Serves() != c.curOK {
+			t.Errorf("%v.Serves = %v, want %v", c.s, c.s.Serves(), c.curOK)
+		}
+		if got := StateOf(constantly(c.curOK)); got != c.s && c.s != StateUnknown && c.s != 2 && c.s != 4 {
+			t.Errorf("StateOf(%v) = %v, want %v", c.curOK, got, c.s)
 		}
 		if c.s.String() != c.stringForm {
 			t.Errorf("%v.String = %q, want %q", c.s, c.s.String(), c.stringForm)

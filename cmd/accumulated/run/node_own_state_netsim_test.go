@@ -114,13 +114,16 @@ func TestANodeReportsItsOwnStateAndItsOwnHeight(t *testing.T) {
 // the partition label, so the wait is not itself a test of the fix.
 func startNetsimAndExecute(t *testing.T) string {
 	t.Helper()
-	return startNetsimAndExecuteWith(t, nil)
+	api, _ := startNetsimAndExecuteWith(t, nil)
+	return api
 }
 
 // startNetsimAndExecuteWith is startNetsimAndExecute with the BPT history
 // depth named, so a test can run a network that serves anchored blocks and one
 // that refuses to (#4361). Nil takes the node's default.
-func startNetsimAndExecuteWith(t *testing.T, bptHistoryDepth *uint64) string {
+// It returns the node's API address and the Instance it started, so a test
+// can ask the running node for the very objects its services were wired with.
+func startNetsimAndExecuteWith(t *testing.T, bptHistoryDepth *uint64) (string, *Instance) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -189,7 +192,7 @@ func startNetsimAndExecuteWith(t *testing.T, bptHistoryDepth *uint64) string {
 		}
 	}
 	require.True(t, ready, "the API never answered for both partitions")
-	return api
+	return api, inst
 }
 
 // --- the process's own Prometheus registry ---------------------------------
