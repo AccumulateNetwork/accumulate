@@ -424,7 +424,7 @@ type heldAccount struct {
 	spine   bool
 }
 
-// settlePass settles the held pass once every root its receipts end at is
+// settlePass settles the held pass once the root its receipts end at is
 // proven, and writes what verified.
 //
 // **The accounts a peer serves are current.** A peer serves an account as of
@@ -435,37 +435,58 @@ type heldAccount struct {
 // chain anchor, and every block records the previous block's BPT root on the
 // ledger's bpt chain, which the root chain anchors: the root a peer's state is
 // current at is proven by the history as soon as any later anchor is verified
-// (anchorsrc.ProveRoot). Nothing is thrown away while that happens; the pass
-// is held until it does.
+// (anchorsrc.ProveRoot).
+//
+// **A pass is held only while waiting can end.** The one wait is a root the
+// history has not reached yet, and a later anchor ends it. Peers that do not
+// answer, a receipt that is not the bpt chain's, and a root the history has
+// passed without proving are not waits -- no anchor to come changes them -- so
+// the pass is dropped and fetched again, and no count of rounds is involved.
+//
+// **One pass is one root.** The peers move while a pass is fetched, so its
+// accounts can end at different roots, each of them true. Written together
+// they are a state no block ever had, which the local root can match nothing
+// with. The root most of the pass ends at is the pass; the rest are fetched
+// again, as are accounts served with no receipt at all.
 func (s *PulledState) settlePass(ctx context.Context) {
 	p := s.pass
-	q := s.sources.Querier(s.partition)
-	proven := map[[32]byte]bool{}
-	for _, a := range p.accounts {
-		root := a.pending.Root()
-		if proven[root] {
-			continue
+	asked := len(p.accounts)
+	root, servedAt := p.oneRoot(func(a *heldAccount, why string) {
+		s.log.Debug("A pulled account is fetched again", "account", a.url, "reason", why)
+		a.pending.Discard()
+		if a.spine {
+			p.spineFailed = true
+		} else {
+			s.refused = append(s.refused, a.url)
 		}
-		ok, err := s.anchors.ProveRoot(ctx, q, root)
-		if err != nil {
-			// A peer served a history that does not end at a verified
-			// anchor. What it served is not written; the pass is asked for
-			// again.
-			s.log.Info("The root a pass was served at did not prove; the pass is asked for again",
-				"partition", s.partition, "root", fmt.Sprintf("%x", root[:4]), "error", err)
-			s.dropPass()
-			return
-		}
-		if !ok {
-			// The history has not reached it yet. Held.
-			s.log.Debug("The root a pass was served at is not proven yet",
-				"partition", s.partition, "root", fmt.Sprintf("%x", root[:4]),
-				"waited", time.Since(p.since).Round(time.Millisecond))
-			return
-		}
-		proven[root] = true
+	})
+	if len(p.accounts) < asked {
+		s.log.Info("Part of a pass was served at another root, or at none, and is fetched again",
+			"partition", s.partition, "kept", len(p.accounts), "again", asked-len(p.accounts))
+	}
+	if len(p.accounts) == 0 {
+		s.pass = nil
+		p.batch.Discard()
+		return
 	}
 
+	ok, err := s.anchors.ProveRoot(ctx, s.sources.Querier(s.partition), root, servedAt)
+	if err != nil {
+		// Nothing to come will prove this root. What was served at it is not
+		// written; the pass is asked for again, and the peers are asked in
+		// rotation, so the next fetch starts at another one.
+		s.log.Info("The root a pass was served at did not prove; the pass is asked for again",
+			"partition", s.partition, "root", fmt.Sprintf("%x", root[:4]), "error", err)
+		s.dropPass()
+		return
+	}
+	if !ok {
+		// The history has not reached it yet. Held.
+		s.log.Debug("The root a pass was served at is not proven yet",
+			"partition", s.partition, "root", fmt.Sprintf("%x", root[:4]),
+			"waited", time.Since(p.since).Round(time.Millisecond))
+		return
+	}
 	s.pass = nil
 	pulled := 0
 	for _, a := range p.accounts {
@@ -504,20 +525,20 @@ func (s *PulledState) settlePass(ctx context.Context) {
 		s.spineSettled(p)
 	}
 	s.log.Info("Pulled the accounts the block ledger named", "partition", s.partition,
-		"asked", len(p.accounts), "pulled", pulled, "refused", len(p.accounts)-pulled, "roots", len(proven))
-	s.observe(proven)
+		"asked", len(p.accounts), "pulled", pulled, "refused", len(p.accounts)-pulled, "root", fmt.Sprintf("%x", root[:4]))
+	s.observe(root)
 }
 
 // observe tells the tracker the block this node's state now is, when its
-// local root is one the pass proved. The block is read from the ledger
+// local root is the one the pass proved. The block is read from the ledger
 // account in that state: the state hashes into the proven root, so its ledger
 // is that root's ledger, where a block number in a peer's answer would be the
 // peer's word (#4361, F1).
-func (s *PulledState) observe(proven map[[32]byte]bool) {
+func (s *PulledState) observe(proven [32]byte) {
 	batch := s.db.Begin(false)
 	defer batch.Discard()
 	local, err := batch.GetBptRootHash()
-	if err != nil || !proven[local] {
+	if err != nil || local != proven {
 		return
 	}
 	var ledger *protocol.SystemLedger
@@ -537,6 +558,48 @@ func (s *PulledState) dropPass() {
 	}
 	p.batch.Discard()
 	s.refused = append(s.refused, p.urls()...)
+}
+
+// oneRoot keeps the accounts that end at the root most of the pass ends at,
+// and hands every other one to drop. It returns that root and the block the
+// peer said it served it at.
+func (p *pass) oneRoot(drop func(a *heldAccount, why string)) (root [32]byte, servedAt uint64) {
+	count := map[[32]byte]int{}
+	block := map[[32]byte]uint64{}
+	for _, a := range p.accounts {
+		r := a.pending.Root()
+		if r == ([32]byte{}) {
+			continue
+		}
+		count[r]++
+		if block[r] == 0 {
+			block[r] = a.pending.Block
+		}
+	}
+	for r, n := range count {
+		// The later root breaks a tie, so which root wins does not depend on
+		// the order a map is walked in.
+		if n > count[root] || n == count[root] && block[r] > block[root] {
+			root = r
+		}
+	}
+
+	kept := p.accounts[:0]
+	for _, a := range p.accounts {
+		switch a.pending.Root() {
+		case [32]byte{}:
+			drop(a, "it was served with no receipt, so there is no root to prove it against")
+		case root:
+			kept = append(kept, a)
+		default:
+			drop(a, "it was served at another root than most of its pass")
+		}
+	}
+	for i := len(kept); i < len(p.accounts); i++ {
+		p.accounts[i] = nil
+	}
+	p.accounts = kept
+	return root, block[root]
 }
 
 func (p *pass) urls() []*url.URL {

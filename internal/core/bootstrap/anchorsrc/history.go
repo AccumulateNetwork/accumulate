@@ -12,6 +12,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -53,12 +54,31 @@ func (s *Source) recordHistory(a rootChainAnchor) {
 // this is what lets them settle without waiting for an anchor of their own
 // block, which most blocks never get.
 //
-// q reaches the producer's peers, never this node (#4303). False with no error
-// is a wait: the entry is not on the chain yet, or no verified anchor reaches
-// it yet. A receipt that does not end at a verified anchor is an error.
-func (s *Source) ProveRoot(ctx context.Context, q api.Querier, root [32]byte) (bool, error) {
+// **The receipt is held to the bpt chain.** Everything a partition anchors
+// hangs under its root chain, so a receipt that merely starts at root and ends
+// at a signed root chain anchor says root is SOMETHING the partition recorded
+// -- a transaction hash has one too (#4301). The anchor signs the root chain's
+// height, and the height decides which step of the receipt is a root chain
+// entry (splitAtLeaf). That entry must be the one the bpt chain's index
+// records as the bpt chain's anchor, and the steps below it must be the
+// receipt of the bpt entry the peer names and of no other node.
+//
+// q reaches the producer's peers, never this node (#4303). servedAt is the
+// block the peer said the state was served at, zero if it did not say.
+//
+// False with no error is a wait: the entry is not on the chain yet, or no
+// verified anchor reaches it yet. An error is a root this history will not
+// prove as things stand, and what was fetched at it is fetched again: no peer
+// answered, the receipt is not the bpt chain's or does not end at a verified
+// anchor, or the history has PASSED the root -- an anchor of a later block is
+// verified, so the root would be recorded and reachable if it were ever this
+// partition's, and it is not.
+func (s *Source) ProveRoot(ctx context.Context, q api.Querier, root [32]byte, servedAt uint64) (bool, error) {
 	if q == nil {
 		return false, errors.BadRequest.With("anchorsrc.ProveRoot: a querier is required")
+	}
+	if root == ([32]byte{}) {
+		return false, errors.BadRequest.With("there is no root to prove: the state was served without a receipt")
 	}
 
 	s.mu.Lock()
@@ -78,7 +98,18 @@ func (s *Source) ProveRoot(ctx context.Context, q api.Querier, root [32]byte) (b
 	}
 	s.mu.Unlock()
 
-	rec, err := api.Querier2{Querier: q}.QueryChainEntry(ctx, s.Producer.JoinPath(protocol.Ledger), &api.ChainQuery{
+	wait := func() (bool, error) {
+		if servedAt != 0 && latest.block > servedAt {
+			return false, errors.NotFound.WithFormat(
+				"the history has passed %x: it was served at block %d, the anchor of block %d is verified, and it is not proven",
+				root[:4], servedAt, latest.block)
+		}
+		return false, nil
+	}
+
+	q2 := api.Querier2{Querier: q}
+	ledger := s.Producer.JoinPath(protocol.Ledger)
+	rec, err := q2.QueryChainEntry(ctx, ledger, &api.ChainQuery{
 		Name:           "bpt",
 		Entry:          root[:],
 		IncludeReceipt: &api.ReceiptOptions{ForHeight: latest.index},
@@ -86,11 +117,16 @@ func (s *Source) ProveRoot(ctx context.Context, q api.Querier, root [32]byte) (b
 	switch {
 	case err == nil:
 	case errors.Is(err, errors.NotFound):
-		return false, nil // Not recorded yet: the next block records it
+		return wait() // Not recorded yet: the next block records it
 	default:
-		// The entry exists and is anchored after the latest verified anchor,
-		// or the peer failed; either way it is asked again.
-		return false, nil
+		// Either the entry is anchored after the latest verified anchor, which
+		// is a wait, or the peers failed, which is not. Asking for the entry
+		// without its receipt tells them apart.
+		_, err2 := q2.QueryChainEntry(ctx, ledger, &api.ChainQuery{Name: "bpt", Entry: root[:]})
+		if err2 == nil || errors.Is(err2, errors.NotFound) {
+			return wait()
+		}
+		return false, errors.UnknownError.WithFormat("no peer answered for bpt entry %x: %w", root[:4], err)
 	}
 	if rec == nil || rec.Receipt == nil {
 		return false, errors.Conflict.WithFormat("a peer served the bpt entry %x with no receipt", root[:4])
@@ -102,22 +138,98 @@ func (s *Source) ProveRoot(ctx context.Context, q api.Querier, root [32]byte) (b
 	if !bytes.Equal(r.Start, root[:]) {
 		return false, errors.Conflict.WithFormat("the receipt for bpt entry %x starts at %x", root[:4], r.Start)
 	}
-	if !s.anchored(r.Anchor) {
+	signed, ok := s.anchored(r.Anchor)
+	if !ok {
 		return false, errors.Conflict.WithFormat(
 			"the receipt for bpt entry %x ends at %x, which no verified anchor carries", root[:4], r.Anchor)
+	}
+
+	// Which step is the root chain's entry is the signed height's to say.
+	step, _, leaf, ok := splitAtLeaf(r, signed.index+1)
+	if !ok {
+		return false, errors.Conflict.WithFormat(
+			"no step of the receipt for bpt entry %x is an entry of a root chain of %d", root[:4], signed.index+1)
+	}
+	indexed, err := bptAnchorOf(ctx, q2, ledger, rec.Index)
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("find where the bpt chain anchored entry %d: %w", rec.Index, err)
+	}
+	if indexed.Anchor != leaf {
+		return false, errors.Conflict.WithFormat(
+			"the receipt for %x enters the root chain at entry %d, and the bpt chain's anchor is entry %d: it is not a bpt entry's",
+			root[:4], leaf, indexed.Anchor)
+	}
+	want, ok := leafPattern(rec.Index, indexed.Source+1)
+	if !ok || len(want) != step {
+		return false, errors.Conflict.WithFormat(
+			"the receipt for %x is not that of entry %d of a bpt chain of %d", root[:4], rec.Index, indexed.Source+1)
+	}
+	for i, right := range want {
+		if r.Entries[i].Right != right {
+			return false, errors.Conflict.WithFormat(
+				"the receipt for %x is not that of entry %d of a bpt chain of %d", root[:4], rec.Index, indexed.Source+1)
+		}
 	}
 	return true, nil
 }
 
-// anchored reports whether a root chain anchor is one a verified anchor
-// carries.
-func (s *Source) anchored(anchor []byte) bool {
+// bptIndexPages bounds how far back bptAnchorOf looks. A root being proven is
+// one a peer served as current a moment ago, so its anchor is near the end.
+const bptIndexPages = 50
+
+// bptAnchorOf asks the producer's peers where the bpt chain was anchored with
+// the given entry in it: the first entry of the bpt chain's index whose source
+// is at or past it. It reads the index from its end, a page at a time.
+func bptAnchorOf(ctx context.Context, q api.Querier2, ledger *url.URL, entry uint64) (*protocol.IndexEntry, error) {
+	var found *protocol.IndexEntry
+	expand := true
+	for page := uint64(0); page < bptIndexPages; page++ {
+		count := uint64(bptIndexPageSize)
+		r, err := q.QueryChainEntries(ctx, ledger, &api.ChainQuery{
+			Name:  "bpt-index",
+			Range: &api.RangeOptions{Start: page * bptIndexPageSize, Count: &count, FromEnd: true, Expand: &expand},
+		})
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		if len(r.Records) == 0 {
+			break
+		}
+		// Whatever order the page came in, the earliest entry at or past the
+		// one asked for is the answer.
+		below := false
+		for _, rec := range r.Records {
+			v, ok := rec.Value.(*api.IndexEntryRecord)
+			if !ok || v.Value == nil {
+				return nil, errors.Conflict.WithFormat("entry %d of the bpt chain's index is not an index entry", rec.Index)
+			}
+			switch {
+			case v.Value.Source < entry:
+				below = true
+			case found == nil || v.Value.Source < found.Source:
+				found = v.Value
+			}
+		}
+		if below || uint64(len(r.Records)) < count {
+			break
+		}
+	}
+	if found == nil {
+		return nil, errors.NotFound.WithFormat("the bpt chain's index records no anchor with entry %d in it", entry)
+	}
+	return found, nil
+}
+
+const bptIndexPageSize = 100
+
+// anchored returns the verified anchor that carries a root chain anchor.
+func (s *Source) anchored(anchor []byte) (rootChainAnchor, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, h := range s.history {
 		if bytes.Equal(h.anchor[:], anchor) {
-			return true
+			return h, true
 		}
 	}
-	return false
+	return rootChainAnchor{}, false
 }
