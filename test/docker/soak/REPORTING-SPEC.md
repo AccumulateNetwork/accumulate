@@ -88,6 +88,7 @@ This is the contract the soak monitor is written against:
 | `dagbft_submissions_total` | counter | partition, outcome={accepted,rejected} | `accepted` = **the node took responsibility** — the submission entered this node's worker or this node's relay, counted once at that first entry, never per attempt. `rejected` = refused without relaying |
 | `dagbft_certified_own_transactions_total` | counter | partition | transactions from this node's OWN batches that reached a CERTIFIED header of this node, each counted at most once |
 | `dagbft_relayed_total` | counter | partition, outcome={taken,refused,not-ready,unreachable} | submissions this node handed to a node that can propose them, counted once per submission at its **final** answer |
+| `node_state` | gauge | partition (lower case) | this node's state for the partition: 0 `BOOTING`, 2 `ACTIVE`; 1 and 3 are the retired `WAITING`/`COMPLETE` |
 
 Exported: the first two, on both branches. **Missing: the remaining nine — which
 is why the flow matrix and wedge panels have never shown a true value** (#4095),
@@ -255,6 +256,42 @@ an empty field in a row that does exist) and in the manifest — never 0, becaus
 0 asserts that nothing stranded, which is the one thing run `20260919T191634Z`
 could not establish.
 
+### The node-state row (#4364)
+
+`node_state` is read **per node AND per partition**, every node including the
+follower: one process runs the Directory beside its BVN and one can boot while
+the other serves, so a row per container would fold a booting BVN under an
+active Directory.
+
+- **ACTIVE is value 2, and is the predicate.** Nothing else reads as active —
+  not a retired state (shown by name, `WAITING (retired)`), not an unknown
+  value, and not a missing gauge.
+- **BOOTING is shown by name and is not an alarm by itself**: a node just
+  restarted, or a follower just added, is booting, and that is the join
+  working.
+- **BOOTING longer than `BOOTING_BOUND_S` (600 s) after its container started
+  is an alarm.** The disturbance is dated by the container's
+  `State.StartedAt`: a restart is what makes a node boot, a pause is not.
+  Where the start cannot be read, BOOTING is shown and not judged.
+- **A node with no gauge is one row, `— not measured`, never ACTIVE** (clause
+  1). The fleet reads all-active only when every row is measured and 2.
+
+Board: *ACTIVE, now (node × partition rows)* as `n / rows`, *BOOTING, now
+(rows)*, and every row that is not ACTIVE named with its state and its time
+since its container started.
+
+**Container start → ACTIVE (s)** is the number the verdict wants on a restart
+and on an add-follower. `nodestate.csv` (`time,node,role,partition,
+containerStarted,state,startToActiveS,kind`) holds one row per start, per
+partition, as it reaches ACTIVE: `reached` when the start was seen not ACTIVE
+first — a measurement, to the 5 s scrape interval — and `already` when it was
+ACTIVE at the first sample after the start, an upper bound only. On its way
+out the monitor writes a `final` row for every start that never reached
+ACTIVE. `/data` carries the same under `nodeState.starts`. The manifest's
+row, one for the validators and one for the follower, states the worst
+`reached` figure and names every start that never reached ACTIVE; `already`
+figures are counted and kept out of the worst.
+
 The consensus-status API MUST additionally report `syntheticHeals` and
 `anchorHeals` (#4075) — the coarse monitor's CSV reads them.
 
@@ -313,3 +350,4 @@ was rewritten to purge previously committed raw data — do not reintroduce it.
 | 5 generator honesty | met by tools/cmd/loadgen; parallel-loadtest fails all three (#4102, #4104, #4107) |
 | 6 provenance | met |
 | 7 observation | met, as of this branch |
+| 3 node-state row | met by the harness (#4364): board, `nodestate.csv`, manifest; a node without the gauge reads `— not measured` |
