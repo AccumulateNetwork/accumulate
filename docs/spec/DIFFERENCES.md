@@ -236,8 +236,10 @@ naming, if the assumption ever stops holding.
 
 **Spec** ([executor.md](executor.md), "Sync", as rewritten 2026-09-19): a
 node that joins — or restarts, which is a join — validates the spine first
-(the operators' key book and the anchors it signs, by signature, to a
-threshold of distinct key-page entries, anchors routed by producer), pulls
+(the network definition and the anchors its validators sign, by signature,
+to a threshold of distinct members of the producing partition's set — #4301
+statement (b); the operators' book keeps governance and is not read — anchors
+routed by producer), pulls
 the state that a verified anchor's root commits to, served *as of that
 anchored block*, and collects consensus from the moment it listens; staging
 is what was collected minus what the pulled state says executed, and the
@@ -252,15 +254,30 @@ Two departures the rewritten section names that this entry did not:
 - **Producer routing** — *retired 2026-09-19 (#4301 statement (a))*: the
   Directory anchors to itself, so its own root is in `dn.acme/anchors` with
   real signatures; the inference that it was unobtainable there was wrong.
-  What was and is different: until #4301 lands, `pull.DirectoryAnchors`
-  reads roots off `dn.acme/anchors` with no signature checked at all.
+  What was different until #4301 landed (`1ea77143d`): `pull.DirectoryAnchors`
+  read roots off `dn.acme/anchors` with no signature checked at all; it is
+  deleted, and a root reaches the tracker only after a threshold of distinct
+  members of the producing partition's set have signed it.
 - **The authority is the network definition, not the operators' page**
   (#4301 statement (b)): the spec now says so; the operators' page keeps its
   governance role and is never read by a join.
-- **Anchored-height serving** — a peer serves an account with a receipt to
-  its *current* root, never as of a caller-named anchored block, so a hot
-  account never settles and a restart converges on nothing (#4361;
-  `repro-4205-restart-rejoin` @ `03916816b`).
+- **Anchored-height serving** — *retired 2026-09-19 (#4361, merged
+  `b0ec6e0fd`)*: a peer now serves an account and a BPT page as of a block
+  the Directory anchored, with a receipt terminating at that block's
+  `StateTreeAnchor` and the body as of that block (a mismatch is a refusal,
+  never a wrong answer); out-of-window is `IncompleteChain`; retention 1024
+  blocks on by default; the follow-up (`5894fc61a`) checks a historical
+  page by a leaf and every block against the one above it, and a joined
+  node whose main index chain starts at its open mark answers "did this
+  account exist then" from the BPT instead of turning its own store miss
+  into `NotFound`. What remains different: the *pull* still sends no
+  `ForHeight`, so the join's gate (`TestRestartedNodeWithAPopulatedDatabaseResyncs`,
+  on the branch, skipped) fails exactly as before until #4362 asks at the
+  anchored block; the consumer keys its anchor lookup on the peer-asserted
+  `LocalBlock` (`pull.go:285`) and is safe only because that comparison
+  refuses every historical answer — #4362's loop must key on the block it
+  asked at (threat review, #4361 note_3870022466); retention's cost on
+  BlockchainDB is unmeasured (#4165).
 
 **Code**: a node starts from genesis or from a snapshot file it was given, and
 consensus "catches up" by fetching batches from peers' retention
@@ -407,9 +424,21 @@ is wired to the network client and does dial onward,
 advertised" would not close it: `connectedPeersDiscoverer`
 (`pkg/api/v3/p2p/dial_network.go:133-160`) finds an installed handler by
 libp2p identify ahead of the DHT. (#4366; run `20260919T191634Z`; reproduced
-in-process, 1,249 accepted, 0 committed.) Open until #4366 lands; its build
-does not wait on #4368: a relay needs no state, so what "fully synced" is
-gates only when a syncing node's reads open.
+in-process, 1,249 accepted, 0 committed.) Landed 2026-09-19 (`a09ff3e0a`):
+a node that cannot propose relays synchronously to a confirmed proposer; the
+rerun `20260919T231856Z` read heals 0 → 0 and stranded 0 with 1,146 relayed
+(#4365 note_3876639043). Still different: the relay target is bound to the
+validator key but not yet to the peer that answered — the channel binding is
+#4374's, a follow-up on the same branch; a keyless peer that never answers
+is never demoted (#4374); `NotReady` from store-full is shopped ≤10× (bound
+recorded, #4374).
+
+- **A non-committee node's primary and workers still run ungated** (#4371):
+  consensus.md "What a batch is" says such a node has no worker for the
+  partition; on this line its primary authors a header every round and
+  self-votes (`primary.go:509-585`) and its workers seal what it is handed —
+  invisible in this build (#4369) and harmless to consensus because no
+  validator votes for it, but not the spec's sentence. Open.
 
 **The gauge, though, is every node's, for every partition it runs, from
 start-up (#4345a).** It used to be created by the join and only by the join —
@@ -457,6 +486,11 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   uncommitted caller scan is the pin); the gauge and the daemon's `Always{}`
   are two objects nothing keeps in agreement; and `servingFor` gates two query
   kinds where the spec says every read (#4295).
+- **The ModeFullSpine rationale was wrong and is retired** (#4301 (c)): the
+  spine was pulled "explicitly unverified because it is what the verifier
+  reads from"; the definition and its signatures verify the spine like any
+  leaf, and `ModeFullSpine` stays only for comparability of the every-block
+  chains (executor.md §1).
 - **The state is not persisted** (#4300; `bootpersist` is not ported). A
   restart joins again, which reaches the same answer.
 - **It is not advertised** (#4300) in the node's service record, so
@@ -472,7 +506,7 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   receipt answer `NotReady`") records. What was true then: a joining node
   answered account state and BPT pages from a store the pull had half filled. The hazard is
   another joining node pulling its unverified spine from it — `pull.Account`
-  in `ModeFullSpine` is explicitly unverified, because it is what the verifier
+  in `ModeFullSpine` was explicitly unverified, because it was what the verifier
   reads from — and then never pulling the spine again. Gating the querier
   would also stop a joining node answering ordinary reads about itself, which
   is why it is recorded rather than done.
@@ -751,7 +785,7 @@ seventh nobody had named.
   the node is joining; plain reads stay open. Since 2026-09-19 the spec draws
   the line differently for a *transaction*: a node that cannot propose it —
   following or syncing — relays it unexamined to a node that can, and never
-  drops it (step 6; #4366) — not yet built; for a transaction the relay
+  drops it (step 6; #4366) — built and merged (`a09ff3e0a`); for a transaction the relay
   replaces `Submit`'s `NotReady` while joining, while every *read* keeps it.
   The node state reaches the
   querier, which is configured apart from consensus, through IOC
