@@ -52,6 +52,7 @@ type Sequencer struct {
 	viewMu        sync.Mutex
 	provable      *database.Batch
 	provableBlock uint64
+	closed        bool
 
 	// Recent block -> (consensus round, committee epoch), from DidCommitBlock
 	// events. A fast-syncing node needs its epoch block's round and epoch to

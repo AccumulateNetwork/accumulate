@@ -121,12 +121,38 @@ func (s *Sequencer) captureProvableView(index uint64) {
 	}
 
 	s.viewMu.Lock()
+	defer s.viewMu.Unlock()
+	if s.closed {
+		batch.Discard()
+		return
+	}
 	if s.provable != nil {
 		s.provable.Discard()
 	}
 	s.provable = batch
 	s.provableBlock = ledger.Index
+}
+
+// Close releases the provable view and the pinned snapshot. The view is only
+// ever replaced by the next provable commit, so once blocks stop the last one
+// is held for good -- and a store waits for every open view before it closes.
+// A commit after Close captures nothing.
+func (s *Sequencer) Close() {
+	s.viewMu.Lock()
+	s.closed = true
+	if s.provable != nil {
+		s.provable.Discard()
+		s.provable = nil
+	}
 	s.viewMu.Unlock()
+
+	s.snapMu.Lock()
+	if s.snap != nil {
+		_ = s.snap.file.Close()
+		_ = os.Remove(s.snap.file.Name())
+		s.snap = nil
+	}
+	s.snapMu.Unlock()
 }
 
 func (s *Sequencer) pinSnapshot() error {
