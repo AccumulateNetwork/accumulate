@@ -354,7 +354,32 @@ done
 
 # Build BEFORE up. `up -d` reuses an existing image silently, and every
 # conclusion drawn from such a run is about the wrong build (#4103).
-$compose build >/dev/null 2>&1 || { echo "compose build failed" | tee -a "$log"; exit 1; }
+#
+# The build names the late-follower profile. With no profile compose skips the
+# services in one, so the follower add-follower starts (#4364) was never built
+# from this tree: it ran whatever <project>-<its service> image an earlier run
+# left, or on a fresh box one built mid-chaos with its output thrown away —
+# the node whose join the run is there to prove, on a different binary from
+# the validators it joins.
+$compose --profile late-follower build >/dev/null 2>&1 || { echo "compose build failed" | tee -a "$log"; exit 1; }
+# Its image id goes in the manifest beside the validators', read AFTER the
+# build, and is frozen in config/. A run that will add the follower refuses an
+# image it cannot name, for the reason the validators' check above gives; a
+# run that adds none says unknown and goes on.
+while read -r lf_svc lf_c _; do
+  [ -n "$lf_svc" ] || continue
+  lf_image="${COMPOSE_PROJECT_NAME}-$lf_svc"
+  lf_id=$(docker image inspect --format '{{.Id}}' "$lf_image" 2>/dev/null | awk 'NR==1{print $1}')
+  lf_id=${lf_id:-unknown}
+  sed -i "/^| image id | /a | late follower image id ($lf_c) | \`$lf_image\` \`$lf_id\` (after the build) |" "$manifest"
+  echo "$lf_id $lf_image $lf_c" >> "$rd/config/image-late-follower.txt"
+  echo "   late follower image: $lf_image ($lf_id), container $lf_c" | tee -a "$log"
+  if [ "$lf_id" = unknown ] && [ "${CHAOS_FOLLOWERS:-off}" = on ]; then
+    echo "cannot identify the image \"$lf_image\" that add-follower would start — refusing to run unattributable." | tee -a "$log"
+    echo "  (built by \`compose --profile late-follower build\`; if compose did not build it, the profile is not doing what this script assumes.)" | tee -a "$log"
+    exit 1
+  fi
+done < <(python3 "$here/followerchaos.py" late 2>/dev/null)
 # Surface the up error (a swallowed one hid the port conflict of #4158), and
 # on ANY failure tear the project down before exiting — a failed `up` leaves
 # the containers it already started running, i.e. an UNMONITORED network, which
