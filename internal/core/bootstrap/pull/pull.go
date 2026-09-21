@@ -17,9 +17,12 @@
 //     the next block.
 //
 //   - ModeFullSpine: the same, plus every chain entry replayed. Used for the
-//     spine — anchors, ledger, operators, operators/1 — where the node needs
-//     the chain history itself: without the operators' key pages of the time
-//     it cannot verify the signatures on the anchors it verifies against.
+//     spine, and NOT for verification — verifying an anchor needs only the
+//     validator set the node already holds (anchorsrc.Authority), never a key
+//     page of the time. The chains are taken because these are the accounts
+//     every block touches: a node holding only their heads cannot show that
+//     its own history agrees with a peer's below the peer's height, and the
+//     pull refuses what it cannot compare (see meeting.past).
 //
 // Verification. An account is only as good as the root it hashes into, and a
 // node that is still pulling has no root of its own: it verifies against the
@@ -220,9 +223,13 @@ func (p *Pending) Settle(anchoredRoot [32]byte) error {
 	return errors.UnknownError.Wrap(p.batch.Commit())
 }
 
-// Keep writes the state into the caller's batch without verifying it. It is
-// for the Directory spine, which is what the verifier itself is read from, and
-// for tests.
+// Keep writes the state into the caller's batch without verifying it.
+//
+// **Nothing in production calls it.** It was for the spine, on the rationale
+// that the spine is what the verifier reads from; that rationale was false —
+// the verifier reads its keys from the node's own store — and it is what
+// #4301 closed. What is left is the pull-library tests, which have no anchors
+// to verify against.
 func (p *Pending) Keep() error {
 	if p.done {
 		return errors.NotAllowed.WithFormat("%v: already settled", p.Account)
@@ -393,6 +400,10 @@ func Account(ctx context.Context, src Source, batch *database.Batch, u *url.URL,
 		return errors.UnknownError.Wrap(err)
 	}
 	if opts.Verify == nil {
+		// No production caller reaches this: the join passes Verify on every
+		// path, spine included (#4301). It is kept for the pull-library
+		// tests, which build a peer and a store and have no anchors to
+		// verify against.
 		return errors.UnknownError.Wrap(p.Keep())
 	}
 
@@ -933,13 +944,14 @@ func pullChainEntries(ctx context.Context, src Source, dst *database.MerkleManag
 	return nil
 }
 
-// SpineAccounts returns the four spine accounts for a given
-// partition. The launcher pulls these in ModeFullSpine because the
-// orchestrator's tracker (#3988) needs full chain history for the
-// validator keypage to verify signed major-block anchors locally.
+// SpineAccounts is what a join takes first, in ModeFullSpine: the accounts
+// every block touches, with their chains, so the node can compare its own
+// history against a peer's and can append to them when it executes again.
 //
-// For the DN: dn.acme/{anchors, ledger, operators, operators/1}.
-// For a BVN: <bvn>.acme/{anchors, ledger, operators, operators/1}.
+// They are verified like every other account (#4301). The chains are not
+// taken in order to verify anything — an anchor is checked against the
+// validator set the node already holds — they are taken because a head
+// without its entries cannot be reconciled with a peer's.
 func SpineAccounts(partitionURL *url.URL) []*url.URL {
 	return []*url.URL{
 		partitionURL.JoinPath(protocol.AnchorPool),

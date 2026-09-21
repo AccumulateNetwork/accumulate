@@ -224,6 +224,19 @@ type poolQuerier struct {
 	// the end of the real chain. Zero means it tells the truth.
 	liedCount uint64
 	liedIndex uint64
+
+	// countBehind subtracts from the count this peer reports without
+	// changing what it serves -- a peer one entry behind the one that
+	// served the last page, which per-call rotation makes ordinary.
+	countBehind uint64
+
+	// decoy is what a lying peer serves at the window it named, instead of
+	// the real chain: a page that comes back, so the cursor advances, made
+	// of something this node will not record.
+	decoy *api.MessageRecord[messaging.Message]
+
+	// served counts the entries handed out, so a re-read is visible.
+	served int
 }
 
 func (p *poolQuerier) Query(_ context.Context, scope *url.URL, q api.Query) (api.Record, error) {
@@ -236,6 +249,9 @@ func (p *poolQuerier) Query(_ context.Context, scope *url.URL, q api.Query) (api
 	}
 	if cq.Range == nil {
 		count := uint64(len(p.entries))
+		if p.countBehind > 0 && count >= p.countBehind {
+			count -= p.countBehind
+		}
 		if p.liedCount > 0 {
 			count = p.liedCount
 		}
@@ -243,6 +259,14 @@ func (p *poolQuerier) Query(_ context.Context, scope *url.URL, q api.Query) (api
 	}
 	start := cq.Range.Start
 	rr := new(api.RecordRange[api.Record])
+	if p.decoy != nil && p.liedIndex > 0 {
+		rr.Records = append(rr.Records, &api.ChainEntryRecord[api.Record]{
+			Name: "main", Index: p.liedIndex, Value: p.decoy,
+		})
+		rr.Start = start
+		rr.Total = p.liedCount
+		return rr, nil
+	}
 	for i := start; i < uint64(len(p.entries)); i++ {
 		index := i
 		if p.liedIndex > 0 {
@@ -253,6 +277,7 @@ func (p *poolQuerier) Query(_ context.Context, scope *url.URL, q api.Query) (api
 			Index: index,
 			Value: p.entries[i],
 		})
+		p.served++
 	}
 	rr.Start = start
 	rr.Total = uint64(len(p.entries))
@@ -660,4 +685,172 @@ func TestTheCursorCannotBeParkedPastTheChain(t *testing.T) {
 	got, err := s.AnchoredRoot(ctx, bvn0(), 60)
 	require.NoError(t, err, "the cursor stayed parked past the chain after the liar was gone")
 	require.Equal(t, root(0x60), got)
+}
+
+// (re-check finding 1) A peer whose chain count is behind the one that served
+// the last page must not rewind the cursor.
+//
+// The peers rotate per call (join/sources.go, peerQuerier), so the count and
+// the pages come from different nodes, and a count one entry behind is the
+// ordinary case rather than an attack. It used to send the cursor a full
+// window back and re-verify up to 1024 anchors -- threshold ed25519
+// verifications each -- and then do it again next round.
+func TestALaggingPeersCountDoesNotRewindTheCursor(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+	a := f.authority(t)
+	pool := dn().JoinPath(protocol.AnchorPool)
+
+	var entries []*api.MessageRecord[messaging.Message]
+	for i := 0; i < 300; i++ {
+		entries = append(entries, f.anchor(t, anchorOpts{
+			source: bvn0(), destination: dn(), block: uint64(1000 + i),
+			root: root(byte(i)), signers: []int{0, 1, 2},
+		}))
+	}
+	q := &poolQuerier{pool: pool, entries: entries}
+	s, err := New(q, pool, bvn0(), a)
+	require.NoError(t, err)
+
+	require.NoError(t, s.Read(ctx))
+	require.Equal(t, 300, q.served, "the first read takes the window once")
+
+	// The next read's count comes from a peer one entry behind.
+	q.countBehind = 1
+	require.NoError(t, s.Read(ctx))
+	require.Equal(t, 300, q.served,
+		"a peer one entry behind sent the cursor back a window and the whole window was read again")
+
+	// And the roots are still there; nothing was dropped by not re-reading.
+	got, err := s.AnchoredRoot(ctx, bvn0(), 1299)
+	require.NoError(t, err)
+	require.Equal(t, root(uint8(299%256)), got)
+}
+
+// A cursor every peer says is past the end of the chain is re-anchored, and
+// at the chain's end rather than a window back from it.
+//
+// The lie-high case has two shapes. A peer that names a window and then
+// serves nothing at it is caught by the cursor not being this node's until a
+// page comes back. A peer that names a window and SERVES records at it --
+// they need not verify; the cursor advances by what was asked for and
+// answered -- parks the cursor for real, and only the agreement of the peers
+// that follow can say so.
+func TestACursorPastEveryPeersChainIsReanchored(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+	a := f.authority(t)
+	pool := dn().JoinPath(protocol.AnchorPool)
+
+	good := f.anchor(t, anchorOpts{
+		source: bvn0(), destination: dn(), block: 900, root: root(0x90), signers: []int{0, 1, 2},
+	})
+	// What the liar serves at the window it named: an anchor of its own,
+	// signed by nobody. It is not recorded -- but a page came back, so the
+	// cursor moves and stays moved.
+	decoy := f.anchor(t, anchorOpts{
+		source: bvn0(), destination: dn(), block: 901, root: root(0x91),
+	})
+	q := &poolQuerier{pool: pool, entries: []*api.MessageRecord[messaging.Message]{good}, decoy: decoy}
+	s, err := New(q, pool, bvn0(), a)
+	require.NoError(t, err)
+
+	q.liedCount = 1 << 40
+	q.liedIndex = 1 << 40
+	require.NoError(t, s.Read(ctx))
+
+	// Every peer after it is honest, and each says the chain is one entry
+	// long. The first few are taken for peers that lag -- AnchoredRoot reads
+	// too, so this is doubtRounds-1 reads in all.
+	q.liedCount, q.liedIndex = 0, 0
+	for i := 0; i < doubtRounds-2; i++ {
+		require.NoError(t, s.Read(ctx))
+	}
+	_, err = s.AnchoredRoot(ctx, bvn0(), 900)
+	require.ErrorIs(t, err, ErrNotAnchored,
+		"peers short of doubtRounds disagreeing with the cursor were enough to move it")
+	got, err := s.AnchoredRoot(ctx, bvn0(), 900)
+	require.NoError(t, err, "the cursor stayed parked although every peer said it was past the end")
+	require.Equal(t, root(0x90), got)
+}
+
+// (re-check finding 2) Another partition's anchor is not this source's, and
+// it is not refused either -- it is never verified at all.
+//
+// A pool holds every partition's anchors. Verifying the rest costs a full
+// signature check per anchor for a root nobody here wants, and a partition
+// that has not yet executed a network update signs under the older version,
+// fails this node's floor, and used to be logged as an anchor refused -- read
+// as a finding by the soak checklist (D1).
+func TestAnotherPartitionsAnchorIsNeitherVerifiedNorRefused(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+	a := f.authority(t)
+	pool := dn().JoinPath(protocol.AnchorPool)
+
+	mine := f.anchor(t, anchorOpts{
+		source: bvn0(), destination: dn(), block: 700, root: root(0x70), signers: []int{0, 1, 2},
+	})
+	// The Directory's own anchor, in the Directory's pool, signed by nobody:
+	// it would fail verification loudly if this source looked at it.
+	theirs := f.anchor(t, anchorOpts{
+		source: dn(), destination: dn(), block: 701, root: root(0x71),
+	})
+
+	var refused []uint64
+	s := sourceOver(t, a, pool, bvn0(), mine, theirs)
+	s.OnRefused = func(block uint64, _ error) { refused = append(refused, block) }
+	require.NoError(t, s.Read(ctx))
+
+	require.Empty(t, refused,
+		"another partition's anchor was verified and its failure logged as a refusal")
+	got, err := s.AnchoredRoot(ctx, bvn0(), 700)
+	require.NoError(t, err)
+	require.Equal(t, root(0x70), got)
+}
+
+// Rewind makes the source read its window again.
+//
+// The join calls it when the trusted sets move, and this is the case it is
+// for: a network that ADDS validators produces anchors the new set signs,
+// and those do not reach the old set's threshold. Under the old definition
+// such an anchor is refused and the cursor moves past it, so without a
+// rewind the roots in flight across the change are lost and the node waits
+// for anchors that come after it.
+func TestRewindReadsTheWindowAgain(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1, 2) // four seated, two the network has not seated
+	pool := dn().JoinPath(protocol.AnchorPool)
+
+	// Signed by two of the old set and the two the change seats: two of six
+	// under the old definition, where three of four are needed.
+	entry := f.anchor(t, anchorOpts{
+		source: bvn0(), destination: dn(), block: 500, root: root(0x50),
+		signers: []int{0, 1, 4, 5}, version: 2,
+	})
+	q := &poolQuerier{pool: pool, entries: []*api.MessageRecord[messaging.Message]{entry}}
+
+	a := f.authority(t)
+	s, err := New(q, pool, bvn0(), a)
+	require.NoError(t, err)
+
+	_, err = s.AnchoredRoot(ctx, bvn0(), 500)
+	require.ErrorIs(t, err, ErrNotAnchored, "the old set's threshold was reached by keys it does not name")
+
+	// Reading again takes nothing: the cursor has moved past it.
+	served := q.served
+	require.NoError(t, s.Read(ctx))
+	require.Equal(t, served, q.served, "the cursor did not move past what it read")
+
+	// The node adopts the new definition out of verified state, which is the
+	// only way the sets ever move, and the window is read again.
+	require.True(t, a.Update(f.withActive(t, 2, 0, 1, 2, 3, 4, 5)))
+	set, err := a.SetFor("BVN0")
+	require.NoError(t, err)
+	require.Equal(t, uint64(4), set.Threshold, "2/3 of six is four")
+
+	s.Rewind()
+	got, err := s.AnchoredRoot(ctx, bvn0(), 500)
+	require.NoError(t, err, "the anchor refused under the old set was never read again")
+	require.Equal(t, root(0x50), got)
 }

@@ -266,7 +266,11 @@ Two departures the rewritten section names that this entry did not:
   the Directory anchored, with a receipt terminating at that block's
   `StateTreeAnchor` and the body as of that block (a mismatch is a refusal,
   never a wrong answer); out-of-window is `IncompleteChain`; retention 1024
-  blocks on by default. What remains different: the *pull* still sends no
+  blocks on by default; the follow-up (`5894fc61a`) checks a historical
+  page by a leaf and every block against the one above it, and a joined
+  node whose main index chain starts at its open mark answers "did this
+  account exist then" from the BPT instead of turning its own store miss
+  into `NotFound`. What remains different: the *pull* still sends no
   `ForHeight`, so the join's gate (`TestRestartedNodeWithAPopulatedDatabaseResyncs`,
   on the branch, skipped) fails exactly as before until #4362 asks at the
   anchored block; the consumer keys its anchor lookup on the peer-asserted
@@ -502,7 +506,7 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   receipt answer `NotReady`") records. What was true then: a joining node
   answered account state and BPT pages from a store the pull had half filled. The hazard is
   another joining node pulling its unverified spine from it — `pull.Account`
-  in `ModeFullSpine` is explicitly unverified, because it is what the verifier
+  in `ModeFullSpine` was explicitly unverified, because it was what the verifier
   reads from — and then never pulling the spine again. Gating the querier
   would also stop a joining node answering ordinary reads about itself, which
   is why it is recorded rather than done.

@@ -59,6 +59,16 @@ the root as of B. The walk is the current one with node loads redirected to
 retained versions (`bpt.BPT.GetRangeAt`), so there is one page implementation,
 not two.
 
+**A page carries no proof, so the server checks the tree twice on the reader's
+behalf.** Every block loaded below the root must hash to what the block above
+it records for it — a boundary node is written once inside its parent's block,
+which keeps its hash, and once as a block of its own — and the root recomputed
+from those blocks must equal the root the ledger recorded. The root check alone
+is not enough: the root is recomputed from the hashes its own block records, so
+a stale block further down whose parent's version at that height is intact
+passes it. A receipt refuses such a tree anyway, being rebuilt from the leaf
+upward; a page is a read of leaves and has no such arithmetic in it.
+
 ## Where the receipt terminates, and why it differs from `main`
 
 **It ends at the BPT root as of B.** On `main` it does not: the receipt
@@ -162,14 +172,28 @@ A client branches on the status code without parsing prose.
 
 | status | meaning |
 |---|---|
-| `IncompleteChain` (414) | a capability limit: the height precedes this node's earliest indexed block, or is indexed but no BPT history is retained for it, or the node holds the BPT entry but not the state behind it. The message names the boundary |
+| `IncompleteChain` (414) | a capability limit: the height precedes this node's earliest indexed block, or is indexed but no BPT history is retained for it, or the node holds the BPT entry but not the state behind it, or it cannot rebuild the account's leaf for that block. The message names the boundary |
 | `NotReady` (504) | the height is beyond this node's latest indexed block — "not yet", not "never"; retry later |
-| `NotFound` | the account had no record at that height — proven absence, not a capability limit |
+| `NotFound` | **this node's index** has no record of the account at that height. Not proof of absence: a requester counts it as a miss and asks somebody else |
 | `BadRequest` | `ForHeight` was zero, which means the current state and is not a historical request |
 
 Issue #4361's done-when says a block outside the window answers "`NotFound`
-that says so". It answers `IncompleteChain`, and the distinction is deliberate:
-a client must not read "I do not keep that" as "it was not there".
+that says so". It answers `IncompleteChain`, and the distinction is what keeps
+the join honest: on this line a requester reads `NotFound` as a fact about the
+RECORD — `join/sources.go` makes a `NotFound` that every peer gives the
+network's answer — and everything else as a fact about the PEER, which sends it
+to the next one.
+
+**So nothing on this path turns a local failure into `NotFound`.** The height is
+judged before the account is, so a height of zero or one outside this node's
+indexed range never becomes an answer about the account. A node that cannot
+read the beginning of its own main index chain — which is every node that
+joined, for any account whose index chain is longer than one 256-entry mark
+block — says "I cannot tell" and answers from the BPT instead of reporting the
+account missing. And a leaf this node could not rebuild for the block is
+`IncompleteChain`, because the reconstruction is checked against the recorded
+root only after the leaf is found, so a leaf that failed to rebuild looks
+exactly like one that was never there.
 
 **A node that cannot prove the past says so.** There is no fallback to the
 current root or the current body anywhere on this path.
