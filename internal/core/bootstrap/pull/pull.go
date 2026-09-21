@@ -155,6 +155,16 @@ type Pending struct {
 // anchor for.
 func (p *Pending) Past() bool { return p.past }
 
+// Root is the root the peer's receipt ends at: the peer's word, until the
+// caller proves it and settles against it. Zero when there is no receipt.
+func (p *Pending) Root() [32]byte {
+	var r [32]byte
+	if p.receipt != nil {
+		copy(r[:], p.receipt.Receipt.Anchor)
+	}
+	return r
+}
+
 // MaxHeld bounds how many fetched-but-unsettled accounts may be outstanding at
 // once, across the process. Each one holds an open child batch, so the state it
 // pulled is held in memory until it settles or is discarded, and an unbounded
