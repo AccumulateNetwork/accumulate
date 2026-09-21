@@ -266,7 +266,11 @@ Two departures the rewritten section names that this entry did not:
   the Directory anchored, with a receipt terminating at that block's
   `StateTreeAnchor` and the body as of that block (a mismatch is a refusal,
   never a wrong answer); out-of-window is `IncompleteChain`; retention 1024
-  blocks on by default. What remains different: the *pull* still sends no
+  blocks on by default; the follow-up (`5894fc61a`) checks a historical
+  page by a leaf and every block against the one above it, and a joined
+  node whose main index chain starts at its open mark answers "did this
+  account exist then" from the BPT instead of turning its own store miss
+  into `NotFound`. What remains different: the *pull* still sends no
   `ForHeight`, so the join's gate (`TestRestartedNodeWithAPopulatedDatabaseResyncs`,
   on the branch, skipped) fails exactly as before until #4362 asks at the
   anchored block; the consumer keys its anchor lookup on the peer-asserted

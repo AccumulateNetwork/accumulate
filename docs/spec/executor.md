@@ -324,7 +324,16 @@ This is also what a peer must be able to answer. A peer serves an account
 **as of an anchored block** — the body as of that block and a receipt that
 terminates at that block's `StateTreeAnchor`, the body and the receipt
 coherent or the answer a refusal — and a BPT page as of that block; a block
-outside what it retains is refused as such (#4361). Without it the join
+outside what it retains is refused as such (#4361). A refusal is never
+disguised as a fact about the record: `IncompleteChain` names the window the
+peer retains (1024 minor blocks by default, configured per node) or a leaf
+the peer could not rebuild for that block, and the peer never answers a
+historical ask with its current state; `NotFound` says only that this peer's
+index has no record of the account at that height, and a peer that cannot
+read its own index — a joined node holds a chain from its open mark, not from
+element 0 — answers from the BPT rather than calling its own gap an absence,
+because a requester reads `NotFound` from every peer as the network's answer
+and would drop an account they all hold. Without it the join
 cannot work: accounts that change every block can otherwise only be served at
 a height no anchor covers, so their verification never settles, which is why
 a node joining from an empty store converged on its cold accounts and a

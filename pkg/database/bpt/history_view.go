@@ -78,11 +78,23 @@ func (b *BPT) GetReceiptAt(key *record.Key, height uint64, root [32]byte) (*merk
 // the range collection are [BPT.GetRange], unmodified. A second walk over the
 // retained nodes would be a second thing that can be wrong.
 //
-// Like [BPT.GetReceiptAt] it never falls back to the current tree. The root
-// recomputed from the retained nodes must equal the root the ledger recorded
-// for the block, or the page is refused: a page taken from a tree that is not
-// the tree of that block names the wrong accounts and the wrong leaves, and it
-// carries no proof of its own for a caller to catch that with.
+// Like [BPT.GetReceiptAt] it never falls back to the current tree, and here the
+// check is the only thing between a caller and a wrong answer: a page carries
+// no proof of its own, so nothing downstream can catch a page of the wrong
+// tree. Two things must hold, and both are the view's, not this function's:
+//
+//   - every block loaded below the root hashes to what the block above it
+//     records for it ([branch.load] in a view), so a stale block anywhere on
+//     the path is refused where it is read; and
+//   - the root recomputed from those blocks equals the root the ledger recorded
+//     for the block, which is checked here.
+//
+// The root check alone was not enough and that is worth saying plainly. The
+// root is recomputed from the hashes ITS OWN block records for its children, so
+// a stale block further down whose parent's version at this height was intact
+// passes it. A receipt refuses such a tree anyway, because it is rebuilt from
+// the leaf upward and any stale block moves the anchor; a page is a read of
+// leaves and has no such arithmetic in it.
 func (b *BPT) GetRangeAt(height uint64, root [32]byte, startKey [32]byte, count int) (entries []KeyValuePair, nextStart [32]byte, err error) {
 	v := b.ViewAt(height, root)
 
