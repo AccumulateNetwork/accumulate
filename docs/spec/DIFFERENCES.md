@@ -502,7 +502,7 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   receipt answer `NotReady`") records. What was true then: a joining node
   answered account state and BPT pages from a store the pull had half filled. The hazard is
   another joining node pulling its unverified spine from it — `pull.Account`
-  in `ModeFullSpine` is explicitly unverified, because it is what the verifier
+  in `ModeFullSpine` was explicitly unverified, because it was what the verifier
   reads from — and then never pulling the spine again. Gating the querier
   would also stop a joining node answering ordinary reads about itself, which
   is why it is recorded rather than done.

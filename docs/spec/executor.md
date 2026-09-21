@@ -292,10 +292,13 @@ root that has not been verified against the trusted set is not a root; it is a
 number a peer sent. What one peer can still do is withhold, or serve only old
 anchors that a real quorum once signed — a slower join, never a fork — and a
 second peer is what closes that: the join draws its anchors from more than one
-peer where it has them (the cursor is per peer, and moving to another peer
-re-verifies from where it stands), so that agreement rather than availability
-decides it. A literal cross-check of two pools before any root is trusted is
-not built (#4301, stated); the quorum's signatures are the mechanism and
+peer where it has them, so that agreement rather than availability decides
+it. On this line the anchor source keeps ONE cursor while the peer rotates
+beneath it on every call, so a lagging peer's chain count rewinds the cursor
+a full window and the entries are re-verified — reading several peers is the
+right answer to withholding and #4379 is what makes it cheap, not what makes
+it safe. A literal cross-check of two pools before any root is trusted is not
+built (#4301, stated); the quorum's signatures are the mechanism and
 withholding is its limit.
 
 #### 2. Everything else is a leaf check at an anchored height
