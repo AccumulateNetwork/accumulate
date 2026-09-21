@@ -86,3 +86,43 @@ func TestQuerier_ANodeThatNeverJoinedAnswersEverything(t *testing.T) {
 	_, err = q.Query(context.Background(), protocol.PartitionUrl("BVN0"), page)
 	require.False(t, errors.Is(err, errors.NotReady), "a node that never joined refused a BPT page: %v", err)
 }
+
+// TestABootingNodeRefusesEveryRead — #4368, executor.md "Sync" step 6.
+//
+// Fully synced is a verified anchored root. Until its local root matches one
+// the node is BOOTING, and in this phase a syncing node refuses every read,
+// not only the two a pull takes: a plain account read, a chain read and a
+// minor block are answers about state it has not verified just as much as a
+// BPT page is. Once the machine is ACTIVE the same reads are answered (here by
+// the store, whose answer about an empty database is its own business).
+func TestABootingNodeRefusesEveryRead(t *testing.T) {
+	machine := nodestate.New(protocol.PartitionUrl("BVN0"))
+	q := NewQuerier(QuerierParams{
+		Database:  servingQuerierDB(t),
+		Partition: "BVN0",
+		NodeState: machine,
+	})
+	ctx := context.Background()
+	minor := uint64(1)
+
+	reads := func() map[string]error {
+		out := map[string]error{}
+		_, out["plain account query"] = q.Query(ctx, protocol.AccountUrl("alice"), &api.DefaultQuery{})
+		_, out["chain query"] = q.Query(ctx, protocol.AccountUrl("alice"), &api.ChainQuery{Name: "main"})
+		_, out["minor block query"] = q.Query(ctx, protocol.PartitionUrl("BVN0"), &api.BlockQuery{Minor: &minor})
+		_, out["BPT page query"] = q.Query(ctx, protocol.PartitionUrl("BVN0"), &api.BptPageQuery{Count: 4})
+		return out
+	}
+
+	booting := reads()
+	for _, call := range []string{"plain account query", "chain query", "minor block query", "BPT page query"} {
+		err := booting[call]
+		require.Error(t, err, "%s was answered by a BOOTING node", call)
+		require.True(t, errors.Is(err, errors.NotReady), "%s must refuse with NotReady while BOOTING: got %v", call, err)
+	}
+
+	require.True(t, machine.PromoteToActive([32]byte{1}, 42))
+	for call, err := range reads() {
+		require.False(t, errors.Is(err, errors.NotReady), "%s was refused once the node is ACTIVE: %v", call, err)
+	}
+}
