@@ -289,5 +289,171 @@ class LateFollowerImageIsBuiltAndRecorded(unittest.TestCase):
             self.assertRegex(manifest, r"\|[^\n]*%s[^\n]*unknown" % re.escape(container))
 
 
+ADD_FOLLOWER_CONF = os.path.join(HERE, "5m-100tps-add-follower.conf")
+
+# The walk's `sleep`, ended after a fixed number of SLOTS rather than events:
+# a walk that performs one pair and then does nothing never reaches an event
+# count, and the point of the test is what it does NOT do afterwards.
+SLOTS_PRELUDE = PRELUDE[:PRELUDE.index("sleep() {")] + r"""
+sleep() {
+  if [ "$(grep -c ' sleeping ' "$chaos" 2>/dev/null)" -ge "$SLOTS" ]; then
+    exit 0
+  fi
+  return 0
+}
+"""
+
+
+def conf_values(conf, *names):
+    """The knobs as soak.sh reads them: soak.conf, then the layer over it."""
+    script = '. "$1"; . "$2"; shift 2; for n in "$@"; do printf "%s=%s\\n" "$n" "${!n-}"; done'
+    out = subprocess.run(["bash", "-c", script, "conf", os.path.join(HERE, "soak.conf"), conf]
+                         + list(names), capture_output=True, text=True, check=True).stdout
+    return dict(ln.split("=", 1) for ln in out.splitlines())
+
+
+class TheAddFollowerConf(FollowerDisturbance):
+    """Review e11.4364b.review.3, medium: nothing named CHAOS_VALIDATORS,
+    CHAOS_FOLLOWER_CYCLES or 5m-100tps-add-follower.conf, so the run that is
+    #4363's Docker proof could restart validators, or add a second follower,
+    and no test would say so.
+
+    The same walk as above, with the committed conf as the layer.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.env.update(LAYER=ADD_FOLLOWER_CONF, SLOTS="8")
+
+    def walk(self):
+        p = subprocess.run(["bash", "-c", SLOTS_PRELUDE + chaos_loop()], env=self.env,
+                           capture_output=True, text=True, timeout=60)
+        self.assertEqual(0, p.returncode, p.stderr)
+        with open(self.chaos) as f:
+            log = f.read()
+        with open(self.stub_log) as f:
+            calls = f.read().splitlines()
+        return log, calls
+
+    # The inherited walk needs validator restarts, which this conf turns off.
+    test_add_then_remove_follower_are_walked_in_turn = None
+
+    def test_it_states_what_it_is(self):
+        v = conf_values(ADD_FOLLOWER_CONF, "DURATION", "TPS", "CHAOS", "CHAOS_VALIDATORS",
+                        "CHAOS_FOLLOWERS", "CHAOS_FOLLOWER_CYCLES")
+        self.assertEqual({"DURATION": "5m", "TPS": "100", "CHAOS": "on",
+                          "CHAOS_VALIDATORS": "off", "CHAOS_FOLLOWERS": "on",
+                          "CHAOS_FOLLOWER_CYCLES": "1"}, v)
+        with open(ADD_FOLLOWER_CONF) as f:
+            comment = "".join(ln for ln in f if ln.startswith("#"))
+        self.assertRegex(comment, r"#4363's Docker proof")
+
+    def test_the_pair_fits_inside_the_run(self):
+        v = conf_values(ADD_FOLLOWER_CONF, "CHAOS_MIN", "CHAOS_JITTER", "FOLLOWER_WINDOW_SECS")
+        slot = int(v["CHAOS_MIN"]) + int(v["CHAOS_JITTER"])
+        # two slots, then the reading either side of the removal
+        self.assertLess(2 * slot + 2 * int(v["FOLLOWER_WINDOW_SECS"]), 300,
+                        "the removal's after-reading would fall outside the five minutes")
+
+    def test_the_default_is_no_follower_kinds_and_validators_disturbed(self):
+        v = conf_values(os.devnull, "CHAOS_VALIDATORS", "CHAOS_FOLLOWERS", "CHAOS_FOLLOWER_CYCLES")
+        self.assertEqual({"CHAOS_VALIDATORS": "on", "CHAOS_FOLLOWERS": "off",
+                          "CHAOS_FOLLOWER_CYCLES": "0"}, v,
+                         "every existing conf would change what it disturbs")
+
+    def test_one_add_one_remove_and_no_validator_touched(self):
+        log, calls = self.walk()
+        self.assertGreaterEqual(log.count(" sleeping "), 8, "the walk ended early:\n" + log)
+        events = [ln.split()[1:3] for ln in log.splitlines()
+                  if len(ln.split()) >= 3 and ln.split()[1] in VALIDATOR_KINDS | FOLLOWER_KINDS]
+        (late,) = [ln.split()[1] for ln in subprocess.run(
+            [sys.executable, os.path.join(HERE, "followerchaos.py"), "late"],
+            capture_output=True, text=True, check=True).stdout.splitlines()]
+        self.assertEqual([["add-follower", late], ["remove-follower", late]], events,
+                         "CHAOS_FOLLOWER_CYCLES=1 is one pair, and CHAOS_VALIDATORS=off "
+                         "is no validator event, over %d slots" % 8)
+        self.assertRegex(log, r"validators: not disturbed \(CHAOS_VALIDATORS=off\)")
+        self.assertRegex(log, r"followers: done, 1 pair\(s\) \(CHAOS_FOLLOWER_CYCLES=1\)")
+        disturbed = [c for c in calls if re.match(r"(pause|unpause|restart|kill)\b", c)]
+        self.assertEqual([], disturbed, "CHAOS_VALIDATORS=off and a node was still disturbed")
+
+
+def shell_function(name):
+    """One top-level function of soak.sh AS WRITTEN."""
+    with open(SOAK) as f:
+        src = f.read()
+    i = src.index("\n%s() {" % name)
+    return src[i + 1:src.index("\n}\n", i) + 2]
+
+
+INSPECT_STUB = r"""#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG"
+case "$1" in
+  inspect) grep -qx "${@: -1}" "$STUB_PS" || exit 1 ;;
+  logs)    echo "a line of ${@: -1}'s log" ;;
+esac
+exit 0
+"""
+
+
+class ALateFollowerLeftUpIsRemoved(unittest.TestCase):
+    """`compose down` activates no profile, so it does not reach the late
+    follower: soak.sh removes it by name, before `up` and at teardown."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="follower-leftover-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        bindir = os.path.join(self.tmp, "bin")
+        os.mkdir(bindir)
+        stub = os.path.join(bindir, "docker")
+        with open(stub, "w") as f:
+            f.write(INSPECT_STUB)
+        os.chmod(stub, 0o755)
+        self.stub_log = os.path.join(self.tmp, "docker.log")
+        open(self.stub_log, "w").close()
+        self.ps = os.path.join(self.tmp, "ps.txt")
+        self.env = dict(os.environ, PATH=bindir + os.pathsep + os.environ["PATH"],
+                        STUB_LOG=self.stub_log, STUB_PS=self.ps, SOAK_HERE=HERE, RUN_DIR=self.tmp)
+        self.late = [ln.split()[1] for ln in subprocess.run(
+            [sys.executable, os.path.join(HERE, "followerchaos.py"), "late"],
+            capture_output=True, text=True, check=True).stdout.splitlines()]
+        self.assertTrue(self.late)
+
+    def remove(self, existing):
+        with open(self.ps, "w") as f:
+            f.write("\n".join(existing) + "\n")
+        script = ('set -uo pipefail\nhere="$SOAK_HERE"; rd="$RUN_DIR"; log="$rd/soak.log"\n'
+                  + shell_function("rm_late_followers") + '\nrm_late_followers "left-up"\n')
+        p = subprocess.run(["bash", "-c", script], env=self.env,
+                           capture_output=True, text=True, timeout=60)
+        self.assertEqual(0, p.returncode, p.stderr)
+        with open(self.stub_log) as f:
+            return f.read().splitlines()
+
+    def test_one_that_is_up_is_removed_by_name_and_its_log_kept(self):
+        calls = self.remove(topology.containers())
+        for c in self.late:
+            self.assertIn("rm -f -v " + c, calls)
+            with open(os.path.join(self.tmp, "node-logs-%s-left-up.txt" % c)) as f:
+                self.assertEqual("%s | a line of %s's log\n" % (c, c), f.read())
+        removed = [x.split()[-1] for x in calls if x.startswith("rm ")]
+        self.assertEqual(self.late, removed, "something other than the late follower was removed")
+
+    def test_none_up_removes_nothing(self):
+        calls = self.remove(topology.validator_containers())
+        self.assertEqual([], [x for x in calls if x.startswith("rm ")])
+
+    def test_it_runs_before_up_and_at_teardown(self):
+        with open(SOAK) as f:
+            src = f.read()
+        sites = [m.start() for m in re.finditer(r"^rm_late_followers \"", src, re.M)]
+        up = src.index("\n# Build BEFORE up.")
+        down = src.rindex(" down -v")
+        self.assertTrue([s for s in sites if s < up],
+                        "a follower left by a killed run would hold the config volume `up` recreates")
+        self.assertTrue([s for s in sites if up < s < down],
+                        "teardown's `down` does not reach a profiled service; it must be removed first")
+
+
 if __name__ == "__main__":
     unittest.main()
