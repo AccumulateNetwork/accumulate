@@ -133,3 +133,20 @@ bvns:
         basePort: 26656
         dnnType: "follower"
         bvnnType: "follower"
+      # The added follower (#4364). The same form as acc-bvn3-fol1 — its own
+      # key, entered in the definition as inactive, so in no committee — but
+      # its compose service sits behind the `late-follower` profile and is NOT
+      # started at `compose up`. soak.sh's chaos walk starts it against the
+      # running network (add-follower) and later stops and removes it
+      # (remove-follower); see soak.conf, CHAOS_FOLLOWERS. It finds its peers
+      # through the bootstrap like every node here, and its storage is this
+      # file's `database:`.
+      #
+      # Last, after acc-bvn3-fol1, for the reason given there: it takes 26693
+      # and no port above it moves. Its data directory is bvn3-6.
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-fol2"
+        advertizeAddress: "acc-bvn3-fol2"
+        basePort: 26656
+        dnnType: "follower"
+        bvnnType: "follower"
