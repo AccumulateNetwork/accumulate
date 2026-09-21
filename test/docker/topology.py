@@ -191,8 +191,66 @@ def nodes_per_bvn(path=None):
 
 
 def node_count(path=None):
-    """Every node, followers included — what `up.sh` waits for."""
+    """Every DECLARED node, followers included — started or not.
+
+    Not what `up.sh` waits for: a node behind a compose profile is declared
+    here and is not started by `compose up`. That is `started_count`.
+    """
     return len(node_records(path))
+
+
+_SERVICE = re.compile(r'^  ([A-Za-z0-9_.-]+):\s*$')
+_PROFILES = re.compile(r'^    profiles:')
+_CONTAINER = re.compile(r'^    container_name:\s*"?([A-Za-z0-9_.-]+)"?\s*$')
+
+
+def profiled_containers(compose_path=None):
+    """Containers whose compose service sits behind a profile.
+
+    `docker compose up -d` activates no profile, so it starts none of these.
+    The added follower of #4364 is the one there is: it is declared in
+    docker-network.yml, because init has to write its key and directory, and
+    only the chaos walk ever starts it.
+
+    Which nodes are started is a fact of the compose, not of
+    docker-network.yml, so it is read from there rather than kept as a list
+    here that the compose can drift from.
+    """
+    out, profiled = set(), False
+    in_services = False
+    for line in _read(compose_path or COMPOSE_YML).splitlines():
+        if re.match(r'^[A-Za-z]', line):
+            in_services = line.startswith("services:")
+            profiled = False
+            continue
+        if not in_services:
+            continue
+        if _SERVICE.match(line):
+            profiled = False
+        elif _PROFILES.match(line):
+            profiled = True
+        else:
+            m = _CONTAINER.match(line)
+            if m and profiled:
+                out.add(m.group(1))
+    return out
+
+
+def started_records(path=None, compose_path=None):
+    """The nodes a plain `docker compose up -d` starts, in declaration order.
+
+    Every declared node but those behind a compose profile. This is what
+    `up.sh` waits on: with the late follower counted, its healthy-container
+    target was one more than could ever be healthy and the wait never ended
+    (#4364).
+    """
+    late = profiled_containers(compose_path)
+    return [r for r in node_records(path) if r["container"] not in late]
+
+
+def started_count(path=None, compose_path=None):
+    """How many nodes `up` starts — what `up.sh` waits for, plus the bootstrap."""
+    return len(started_records(path, compose_path))
 
 
 def partitions(path=None):
@@ -404,6 +462,7 @@ if __name__ == "__main__":
         "bvns": bvns(),
         "nodesPerBvn": nodes_per_bvn(),
         "nodeCount": node_count(),
+        "startedCount": started_count(),
         "partitions": partitions(),
         "nodePorts": node_ports(),
         "followerPorts": follower_ports(),

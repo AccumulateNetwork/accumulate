@@ -246,6 +246,75 @@ class FollowerTest(unittest.TestCase):
         self.assertTrue(all(r == "validator" for _, r in roles[:-1]))
 
 
+# A compose for WITH_FOLLOWER in which the follower sits behind a profile, the
+# way #4364's added follower does. The bootstrap has no profile and is no node;
+# the last service has a profile too, and a `volumes:` key after the services
+# that must not be read as one.
+COMPOSE_LATE_FOLLOWER = '''\
+services:
+  bootstrap:
+    container_name: acc-bootstrap
+  bvn1-val1:
+    container_name: acc-bvn1-val1
+    ports:
+      - "26680:26660"
+  bvn2-fol1:
+    profiles: ["late-follower"]
+    build:
+      context: ../..
+    container_name: acc-bvn2-fol1
+  bvn2-val2:
+    container_name: acc-bvn2-val2
+
+volumes:
+  network-config:
+    profiles: ["not-a-service"]
+    container_name: acc-bvn1-val2
+'''
+
+
+class StartedTest(unittest.TestCase):
+    """#4364: a declared node is not always a started one.
+
+    The added follower is in docker-network.yml, because init writes its key
+    and directory, and behind a compose profile, because only the chaos walk
+    starts it. `up.sh` counted it among the containers it waits to see
+    healthy, and waited forever.
+    """
+
+    def setUp(self):
+        self.net = write(WITH_FOLLOWER)
+        self.compose = write(COMPOSE_LATE_FOLLOWER)
+        self.addCleanup(os.unlink, self.net)
+        self.addCleanup(os.unlink, self.compose)
+
+    def test_a_service_behind_a_profile_is_not_started(self):
+        self.assertEqual({"acc-bvn2-fol1"},
+                         topology.profiled_containers(self.compose))
+
+    def test_a_profile_does_not_leak_into_the_next_service(self):
+        started = [r["container"] for r in
+                   topology.started_records(self.net, self.compose)]
+        self.assertIn("acc-bvn2-val2", started)
+        self.assertIn("acc-bvn1-val2", started,
+                      "a key under `volumes:` was read as a service")
+
+    def test_started_is_every_declared_node_but_the_profiled_one(self):
+        self.assertEqual(5, topology.node_count(self.net))
+        self.assertEqual(4, topology.started_count(self.net, self.compose))
+        self.assertNotIn("acc-bvn2-fol1",
+                         [r["container"] for r in
+                          topology.started_records(self.net, self.compose)])
+
+    def test_up_sh_waits_for_the_started_nodes(self):
+        """The caller, not only the library: test/docker/soak/test_up_wait.py
+        runs up.sh against a stub docker; this pins the name it must use."""
+        with open(os.path.join(topology.HERE, "up.sh")) as f:
+            src = f.read()
+        self.assertIn("topology.started_count()", src)
+        self.assertNotIn("topology.node_count()", src)
+
+
 class ProblemsTest(unittest.TestCase):
     """Shapes this harness cannot measure must be refused before a run, not
     mis-measured during one."""
@@ -344,25 +413,42 @@ class DeployedTopologyTest(unittest.TestCase):
 
     This class asserted 2 BVNs, 8 nodes and ports 26660-26667 for months after
     the network went back to 3 BVNs and the base port moved to 26680 (#4158) —
-    four red tests nobody ran. It states the shape #4365 runs on.
+    four red tests nobody ran. It states the shape #4365 runs on, and since
+    #4364 the one more node that is declared and not started.
     """
 
-    def test_three_bvns_of_four_validators_and_one_follower(self):
+    def test_three_bvns_of_four_validators_and_two_followers(self):
         self.assertEqual(["Directory", "BVN1", "BVN2", "BVN3"],
                          topology.partitions())
-        self.assertEqual({"BVN1": 4, "BVN2": 4, "BVN3": 5},
+        self.assertEqual({"BVN1": 4, "BVN2": 4, "BVN3": 6},
                          topology.nodes_per_bvn())
-        self.assertEqual(13, topology.node_count())
+        self.assertEqual(14, topology.node_count())
         self.assertEqual(12, len(topology.validator_ports()))
         self.assertEqual(list(range(B, B + 12)), topology.node_ports())
-        self.assertEqual([B + 12], topology.follower_ports())
+        self.assertEqual([B + 12, B + 13], topology.follower_ports())
 
-    def test_the_one_follower_is_bvn3s_fifth_node(self):
-        fols = topology.followers()
+    def test_up_starts_thirteen_nodes_and_not_the_late_follower(self):
+        """The network comes up as it did before #4364: `up.sh` waits for
+        these and the bootstrap, and 14 healthy is all there can be."""
+        self.assertEqual({"acc-bvn3-fol2"}, topology.profiled_containers())
+        self.assertEqual(13, topology.started_count())
+        started = [r["container"] for r in topology.started_records()]
+        self.assertEqual(topology.validator_containers() + ["acc-bvn3-fol1"],
+                         started)
+
+    def test_the_started_follower_is_bvn3s_fifth_node(self):
+        fols = [f for f in topology.followers()
+                if f in topology.started_records()]
         self.assertEqual(1, len(fols), "gate 0 runs exactly one follower")
         self.assertEqual("acc-bvn3-fol1", fols[0]["container"])
         self.assertEqual("bvn3-5", fols[0]["dir"])
         self.assertEqual(["Directory", "BVN3"], fols[0]["partitions"])
+
+    def test_the_late_follower_is_bvn3s_sixth_node_on_the_last_port(self):
+        late = topology.followers()[-1]
+        self.assertEqual("acc-bvn3-fol2", late["container"])
+        self.assertEqual("bvn3-6", late["dir"])
+        self.assertEqual(max(topology.all_node_ports()), late["port"])
 
     def test_the_follower_is_declared_last(self):
         """Host ports are allocated in declaration order, so a follower

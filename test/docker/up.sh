@@ -27,7 +27,12 @@ $compose up -d
 # How many containers to expect comes from the topology, not a literal. The
 # hardcoded 13 was written for the 3-BVN network; against the 2-BVN one it can
 # never be reached, so this loop span forever on a network that was already up.
-want=$(python3 -c 'import sys,json; sys.path.insert(0,"'"$here"'"); import topology; print(topology.node_count() + 1)')
+#
+# The nodes `up` STARTS, plus the bootstrap — not every node declared. The
+# added follower (#4364) is declared and sits behind a compose profile that the
+# `up -d` above does not activate; counting it made this one more than can ever
+# be healthy, so the loop never ended and the monitor below never started.
+want=$(python3 -c 'import sys,json; sys.path.insert(0,"'"$here"'"); import topology; print(topology.started_count() + 1)')
 echo "waiting for health ($want containers)..."
 until [ "$(docker ps --filter name=acc- --filter health=healthy -q | wc -l)" -ge "$want" ]; do sleep 5; done
 docker ps --filter name=acc- --format '{{.Names}} {{.Status}}'
