@@ -329,12 +329,12 @@ func (s *Source) readLocked(ctx context.Context) error {
 	// (review re-check, finding 1).
 	//
 	// So: a count BELOW the cursor is that peer's condition and not this
-	// node's business, and nothing happens — unless every peer says so, for
-	// doubtRounds reads in a row, in which case the cursor is what is wrong
-	// and it resumes at the end of the chain rather than re-reading a
-	// window. And the cursor is not this node's until a page has actually
-	// been consumed, so a first read against a peer that serves nothing at
-	// the window it named is re-anchored next round against another peer.
+	// node's business, and nothing happens — unless doubtRounds peers say so
+	// in a row, in which case the cursor is what is wrong and it re-anchors
+	// to the window, exactly as a cold start would. And the cursor is not
+	// this node's until a page has actually been consumed, so a first read
+	// against a peer that names a window and serves nothing at it is
+	// re-anchored next round against another peer.
 	chain, err := q.QueryChain(ctx, s.Pool, &api.ChainQuery{Name: "main"})
 	switch {
 	case err == nil:
