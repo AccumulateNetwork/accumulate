@@ -8,6 +8,7 @@ package join
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -33,21 +34,11 @@ import (
 // transitions through the same door.
 
 const (
-	// pullChunk is how many accounts are fetched before the round settles
-	// them. Every fetched account holds an open child batch until it settles
-	// (pull.MaxHeld), so the chunk bounds what a round holds in memory.
-	pullChunk = 256
-
-	// maxSettleRounds is how many rounds a fetched account is held waiting for
-	// the Directory to anchor the block it was served at, before it is thrown
-	// away and asked for again.
-	//
-	// It is bounded for two reasons: a held account keeps its state in memory
-	// (pull.MaxHeld) and its batch keeps a version of the store open (#4279).
-	// The anchor for a block arrives a few blocks later, so a handful of
-	// rounds is the whole of the wait; a peer claiming a block that will never
-	// be anchored must not stop the join for everyone.
-	maxSettleRounds = 4
+	// passLimit is how many accounts one pass fetches. Every fetched account
+	// holds an open child batch until the pass settles (pull.MaxHeld), so it
+	// bounds what a pass holds in memory; what is left over is asked for in
+	// the next pass.
+	passLimit = pull.MaxHeld / 2
 
 	// staleEvery is how often the BPT page diff runs regardless of what the
 	// block ledger named. It is the backstop, and a backstop that only runs
@@ -93,22 +84,20 @@ type PulledState struct {
 	tracker *tracker.Tracker
 	log     *slog.Logger
 
-	spine        bool   // this partition's spine has been pulled and verified
-	spinePending bool   // a spine fetch is held, waiting for its anchor
-	round        uint64 // how many rounds have run, for the backstop's cadence
-	wide         bool   // the last ledger walk could not cover (R, Q]
+	spine bool   // this partition's spine has been pulled and verified
+	round uint64 // how many rounds have run, for the backstop's cadence
+	wide  bool   // the last ledger walk could not cover (R, Q]
 
 	// executed is the block this node's EXECUTOR last executed: the number
 	// the daemon logs as lastBlock. It is read once, before anything is
 	// pulled, and never again — see localBlock.
 	executed uint64
 
-	// held is what has been fetched and not yet settled: state a peer served
-	// at a block the Directory has not anchored yet. It is HELD rather than
-	// thrown away, because a re-fetch next round is served at a newer block
-	// the Directory has not anchored either -- which is a treadmill, and is
-	// why 2,171 pull rounds in run 20260918T131713Z all ended pulled=0.
-	held []*heldBatch
+	// pass is what has been fetched and not yet settled: the peer's CURRENT
+	// state, held until the root its receipts end at is proven by the history
+	// a verified anchor carries (anchorsrc.ProveRoot). Nothing new is fetched
+	// while it is held, so a pass is never committed over a newer one.
+	pass *pass
 
 	// refused are the accounts a round could not pull — served at a block the
 	// Directory has not anchored yet, or served by a peer that could not be
@@ -241,24 +230,22 @@ func NewState(opts StateOptions) (*PulledState, error) {
 // process can run several nodes of one partition, and each has its own.
 func (s *PulledState) Machine() *nodestate.Machine { return s.machine }
 
-// Pull fetches what the blocks changed, and the Directory's spine the first
-// time. Every account is verified against the root the Directory anchored for
-// the block it was served at; one that cannot be verified is not written, and
-// is asked for again next round.
+// Pull fetches what the blocks changed, and this partition's spine the first
+// time, as ONE PASS: the peer's current state, held until the root its
+// receipts end at is proven, then written whole. Every account is verified
+// against that root; one that cannot be verified is not written, and is asked
+// for again in the next pass.
 func (s *PulledState) Pull(ctx context.Context) error {
 	s.round++
 
-	// The anchors first: they are what everything else is verified against,
-	// and reading them is what tells the tracker which roots to watch for.
+	// The anchors first: they are what everything else is verified against.
 	//
-	// A failure here ends the round, never the join. Both this and the spine
-	// below are reads addressed at a named peer now, so either can fail for
-	// the ordinary reason that the peer it picked is restarting — and under
-	// chaos that is a certainty, not a possibility. Returning an error reaches
-	// join.Run, which returns, and the daemon logs "the join did not complete"
-	// and abandons the goroutine: the node then collects forever, with no
-	// retry, until an operator restarts it. The reads on either side of these
-	// were deliberately made to log and continue; these two were missed.
+	// A failure here ends the round, never the join. Every read is addressed
+	// at a named peer, so any of them can fail for the ordinary reason that
+	// the peer it picked is restarting — and under chaos that is a certainty.
+	// Returning an error reaches join.Run, which returns, and the daemon then
+	// abandons the join for good.
+	//
 	// The sets this node trusts, before anything is judged against them.
 	s.refreshAuthority()
 
@@ -268,27 +255,17 @@ func (s *PulledState) Pull(ctx context.Context) error {
 			"partition", s.partition, "error", err)
 	}
 
-	// The spine is fetched ONCE and then waited on. ModeFullSpine replays
-	// every chain entry of four accounts, and a batch that cannot settle
-	// this round is held and settled by settleHeld when its anchor arrives —
-	// re-fetching it every round until then is a full chain replay per round
-	// on a network whose Directory anchors roughly one block in six (review
-	// finding 5).
-	if !s.spine && !s.spinePending {
-		err := s.pullSpine(ctx)
-		if err != nil {
-			s.log.Info("The spine could not be pulled this round; it is asked for again",
-				"partition", s.partition, "error", err)
-		}
+	// A pass that is held settles first, and nothing new is fetched while it
+	// waits: the state it holds is the peer's at one root, and a second pass
+	// fetched now would be at a later one.
+	if s.pass != nil {
+		s.settlePass(ctx)
+		return nil
 	}
 
-	// What earlier rounds fetched and could not verify yet is settled first,
-	// against the block it was served at.
-	pulled, refused := s.settleHeld(ctx)
-
-	// What could not be pulled last round is asked for again, with whatever
+	// What the last pass could not pull is asked for again, with whatever
 	// this round's blocks changed.
-	accounts := append(refused, s.refused...)
+	accounts := s.refused
 	s.refused = nil
 
 	changed, err := s.changedAccounts(ctx)
@@ -315,34 +292,13 @@ func (s *PulledState) Pull(ctx context.Context) error {
 		accounts = append(accounts, stale...)
 	}
 
-	accounts = dedupe(accounts)
-	if len(accounts) == 0 {
-		if pulled > 0 {
-			s.log.Info("Pulled the accounts held from an earlier round",
-				"partition", s.partition, "pulled", pulled)
-		}
-		return nil
+	s.fetchPass(ctx, dedupe(accounts))
+	if s.pass != nil {
+		s.settlePass(ctx)
 	}
-
-	got, missed := s.fetch(ctx, accounts)
-	pulled += got
-	s.refused = missed
-	s.log.Info("Pulled the accounts the block ledger named", "partition", s.partition,
-		"asked", len(accounts), "pulled", pulled, "refused", len(missed), "held", s.heldCount())
 	return nil
 }
 
-// heldCount is how many fetched accounts are waiting for their anchor.
-func (s *PulledState) heldCount() int {
-	n := 0
-	for _, h := range s.held {
-		n += len(h.accounts)
-	}
-	return n
-}
-
-// changedAccounts is the union of what the blocks in (R, Q] changed, where R
-// is the block this node's state is and Q is the block a peer's is: the block
 // ledger's answer, not the envelopes' (executor spec, "Sync", step 3).
 func (s *PulledState) changedAccounts(ctx context.Context) ([]*url.URL, error) {
 	s.wide = false
@@ -445,82 +401,172 @@ func (s *PulledState) staleAccounts(ctx context.Context) ([]*url.URL, error) {
 	return stale, nil
 }
 
-// heldBatch is one round's fetch: the accounts it pulled and the batch they
-// were pulled into. Nothing in it is written until every account in it is
-// settled or given up on, because a Pending writes into this batch when it
-// settles and a batch cannot be committed while a child of it is open.
-type heldBatch struct {
+// pass is one fetch: the accounts it pulled and the batch they were pulled
+// into. Nothing in it is written until every account in it is settled or
+// refused, because a Pending writes into this batch when it settles and a
+// batch cannot be committed while a child of it is open.
+type pass struct {
 	batch    *database.Batch
 	accounts []*heldAccount
-	rounds   int
-	since    time.Time // when it was fetched, for the give-up log
+	since    time.Time
 
-	// spine says this batch is the spine's, fetched once and waited on.
-	// When it finishes, the node either has a verified spine or asks for it
-	// again; nothing else re-fetches it in the meantime (review finding 5).
-	spine bool
-
-	// asked is how many accounts the batch set out to settle.
-	asked int
+	// spine says the pass carries this partition's spine, and spineFailed
+	// that one of its accounts could not be fetched, so the pass cannot
+	// verify the spine whatever else it settles.
+	spine       bool
+	spineFailed bool
 }
 
-// heldAccount is one fetched account waiting for its block to be anchored.
+// heldAccount is one fetched account waiting for its root to be proven.
 type heldAccount struct {
 	url     *url.URL
 	pending *pull.Pending
+	spine   bool
 }
 
-// settleHeld settles what earlier rounds fetched and could not verify yet, and
-// writes what verified.
+// settlePass settles the held pass once every root its receipts end at is
+// proven, and writes what verified.
 //
-// This is the hold the Pending/Settle split exists for (package pull). A
-// one-shot pull discards on ErrNotAnchored, and the next round re-fetches at a
-// newer block the Directory has not anchored either, so nothing ever settles.
-// What is held is settled against THE SAME BLOCK, for maxSettleRounds rounds,
-// and only then given up and asked for again.
-func (s *PulledState) settleHeld(ctx context.Context) (int, []*url.URL) {
-	pulled := 0
-	var refused []*url.URL
-	var keep []*heldBatch
-
-	for _, h := range s.held {
-		h.rounds++
-		got, missed, done := s.settleBatch(ctx, h)
-		pulled += got
-		refused = append(refused, missed...)
-		if !done {
-			keep = append(keep, h)
+// **The accounts a peer serves are current.** A peer serves an account as of
+// its current block, and the Directory anchors a BVN block only now and then,
+// so a pass that waited for an anchor OF ITS OWN BLOCK waited for one that
+// most blocks never get, and nothing a restarted node needed ever settled.
+// It does not wait for that. A signed anchor carries the producer's root
+// chain anchor, and every block records the previous block's BPT root on the
+// ledger's bpt chain, which the root chain anchors: the root a peer's state is
+// current at is proven by the history as soon as any later anchor is verified
+// (anchorsrc.ProveRoot). Nothing is thrown away while that happens; the pass
+// is held until it does.
+func (s *PulledState) settlePass(ctx context.Context) {
+	p := s.pass
+	q := s.sources.Querier(s.partition)
+	proven := map[[32]byte]bool{}
+	for _, a := range p.accounts {
+		root := a.pending.Root()
+		if proven[root] {
 			continue
 		}
-		if h.spine {
-			s.spineSettled(got, h.asked, len(missed))
+		ok, err := s.anchors.ProveRoot(ctx, q, root)
+		if err != nil {
+			// A peer served a history that does not end at a verified
+			// anchor. What it served is not written; the pass is asked for
+			// again.
+			s.log.Info("The root a pass was served at did not prove; the pass is asked for again",
+				"partition", s.partition, "root", fmt.Sprintf("%x", root[:4]), "error", err)
+			s.dropPass()
+			return
 		}
+		if !ok {
+			// The history has not reached it yet. Held.
+			s.log.Debug("The root a pass was served at is not proven yet",
+				"partition", s.partition, "root", fmt.Sprintf("%x", root[:4]),
+				"waited", time.Since(p.since).Round(time.Millisecond))
+			return
+		}
+		proven[root] = true
 	}
-	s.held = keep
-	return pulled, refused
+
+	s.pass = nil
+	pulled := 0
+	for _, a := range p.accounts {
+		if err := a.pending.Settle(a.pending.Root()); err != nil {
+			s.log.Info("A pulled account did not verify", "account", a.url, "error", err)
+			s.refused = append(s.refused, a.url)
+			if a.spine {
+				p.spineFailed = true
+			}
+			continue
+		}
+		pulled++
+	}
+
+	if pulled > 0 {
+		// The BPT, then the commit. Batch.Commit commits the BPT store and
+		// never calls Account.putBpt, so a perfectly pulled account leaves the
+		// local root exactly where it was and the tracker can never match it
+		// (#4305).
+		err := p.batch.UpdateBPT()
+		if err == nil {
+			err = p.batch.Commit()
+		} else {
+			p.batch.Discard()
+		}
+		if err != nil {
+			s.log.Info("What was pulled could not be written", "partition", s.partition, "error", err)
+			s.refused = append(s.refused, p.urls()...)
+			return
+		}
+	} else {
+		p.batch.Discard()
+	}
+
+	if p.spine {
+		s.spineSettled(p)
+	}
+	s.log.Info("Pulled the accounts the block ledger named", "partition", s.partition,
+		"asked", len(p.accounts), "pulled", pulled, "refused", len(p.accounts)-pulled, "roots", len(proven))
+	s.observe(proven)
 }
 
-// spineSettled records what became of the one spine fetch, and moves the
-// validator sets if it verified.
+// observe tells the tracker the block this node's state now is, when its
+// local root is one the pass proved. The block is read from the ledger
+// account in that state: the state hashes into the proven root, so its ledger
+// is that root's ledger, where a block number in a peer's answer would be the
+// peer's word (#4361, F1).
+func (s *PulledState) observe(proven map[[32]byte]bool) {
+	batch := s.db.Begin(false)
+	defer batch.Discard()
+	local, err := batch.GetBptRootHash()
+	if err != nil || !proven[local] {
+		return
+	}
+	var ledger *protocol.SystemLedger
+	if err := batch.Account(s.partition.JoinPath(protocol.Ledger)).Main().GetAs(&ledger); err != nil {
+		s.log.Info("The pulled ledger could not be read", "partition", s.partition, "error", err)
+		return
+	}
+	s.tracker.Observe(s.partition, ledger.Index, local)
+}
+
+// dropPass throws the held pass away and asks for all of it again.
+func (s *PulledState) dropPass() {
+	p := s.pass
+	s.pass = nil
+	for _, a := range p.accounts {
+		a.pending.Discard()
+	}
+	p.batch.Discard()
+	s.refused = append(s.refused, p.urls()...)
+}
+
+func (p *pass) urls() []*url.URL {
+	var out []*url.URL
+	for _, a := range p.accounts {
+		if !a.spine {
+			out = append(out, a.url)
+		}
+	}
+	return out
+}
+
+// spineSettled records what became of the spine, and moves the validator sets
+// if it verified.
 //
 // **This is how a joining node crosses a change to the validator sets**, and
 // on this line it is the only way. <partition>/network and /globals are
-// spine accounts, so they arrive with a receipt that ends at a root a quorum
-// of this partition's validators signed and passes through the leaf the
+// spine accounts, so they arrive with a receipt that ends at a root proven by
+// a quorum of this partition's validators and passes through the leaf the
 // pulled body hashes to; adopting them from the store afterwards is
 // therefore an induction step and not a peer's word. A change never travels
 // in an anchor past Vandenberg (#4301, review finding 1).
-func (s *PulledState) spineSettled(got, asked, refused int) {
-	s.spinePending = false
-	if refused > 0 || got < asked {
-		s.log.Info("The spine did not verify this round; it is asked for again",
-			"partition", s.partition, "settled", got, "asked", asked, "refused", refused)
+func (s *PulledState) spineSettled(p *pass) {
+	if p.spineFailed {
+		s.log.Info("The spine did not verify; it is asked for again", "partition", s.partition)
 		return
 	}
 	s.spine = true
 	s.refreshAuthority()
-	s.log.Info("Pulled the spine, verified against an anchored root",
-		"partition", s.partition, "accounts", got)
+	s.log.Info("Pulled the spine, verified against a proven root", "partition", s.partition)
 }
 
 // TrustedVersion is the network definition version this join verifies
@@ -556,157 +602,115 @@ func (s *PulledState) refreshAuthority() {
 	}
 }
 
-// settleBatch settles what it can of one held batch and reports whether the
-// batch is finished with.
-func (s *PulledState) settleBatch(ctx context.Context, h *heldBatch) (int, []*url.URL, bool) {
-	pulled := 0
-	var refused []*url.URL
-	var waiting []*heldAccount
+// fetchPass fetches one pass: the spine until it has verified, then the
+// accounts named, up to passLimit. It settles nothing.
+//
+// The spine is THIS PARTITION'S — its anchors, ledger and operators, with
+// their chains — so the chains a join reads are there at all.
+//
+// **It is verified like everything else.** It used to be settled with Keep,
+// unverified, on the rationale that it is "what the verifier reads from, and
+// there is nothing to verify it against until it is there". That rationale
+// was false and it cost #4301: a signature is verified against a KEY, and the
+// keys come from this node's own store (anchorsrc.Authority), so nothing has
+// to be pulled before verification can begin. Taking the spine on a peer's
+// word made the peer the source of both the root and the state that hashes
+// into it, and the whole scheme then proved only that the peer agreed with
+// itself.
+//
+// It does NOT take the Directory's. A BVN's state tree holds no acc://dn.acme
+// account: writing four of them into a BVN's store puts four leaves in its
+// BPT that no peer has, so the local root differs from every root the
+// Directory ever anchored for that partition, however perfectly everything
+// else is pulled. A node runs the Directory alongside its BVN and the
+// Directory's own join pulls the Directory's spine into the Directory's
+// store, where those accounts belong.
+func (s *PulledState) fetchPass(ctx context.Context, accounts []*url.URL) {
+	p := &pass{batch: s.db.Begin(true), since: time.Now(), spine: !s.spine}
 
-	for _, a := range h.accounts {
-		root, err := s.anchors.AnchoredRoot(ctx, a.pending.Partition, a.pending.Block)
-		switch {
-		case err == nil:
-			if err := a.pending.Settle(root); err != nil {
-				s.log.Info("A pulled account did not verify", "account", a.url, "error", err)
-				refused = append(refused, a.url)
-			} else {
-				pulled++
-			}
-		case errors.Is(err, anchorsrc.ErrNotAnchored):
-			// The Directory has not anchored that block yet. Held, and asked
-			// again next round against the same block.
-			waiting = append(waiting, a)
-		default:
-			a.pending.Discard()
-			s.log.Info("The anchored root for a pulled account could not be read",
-				"account", a.url, "error", err)
-			refused = append(refused, a.url)
+	spine := map[string]bool{}
+	if p.spine {
+		for _, u := range pull.SpineAccounts(s.partition) {
+			spine[strings.ToLower(u.String())] = true
+			s.fetchOne(ctx, p, u, true)
 		}
 	}
-
-	if len(waiting) > 0 && h.rounds < maxSettleRounds && ctx.Err() == nil {
-		h.accounts = waiting
-		return pulled, refused, false
-	}
-
-	// Either everything resolved, or the wait is over. Give up on the
-	// stragglers so the batch can close: a block nobody anchors is a peer's
-	// claim and not a wait (pull.AccountFrom).
-	//
-	// SAID OUT LOUD. This is the dominant failure mode and it used to be
-	// silent: the Directory anchors roughly one block in six of a BVN's, so
-	// most batches are served at a block that will never be anchored and
-	// five settle rounds in six end here. A node that has thrown away twelve
-	// held accounts after eight hundred seconds of waiting was indisting-
-	// uishable, in its log, from one that had nothing to do (#4295).
-	if len(waiting) > 0 {
-		s.log.Info("Pulled accounts were given up on unanchored: the directory never anchored the block they were served at",
-			"partition", s.partition, "accounts", len(waiting), "rounds", h.rounds,
-			"block", waiting[0].pending.Block, "waited", time.Since(h.since).Round(time.Second),
-			"first", waiting[0].url)
-	}
-	for _, a := range waiting {
-		a.pending.Discard()
-		refused = append(refused, a.url)
-	}
-	h.accounts = nil
-
-	if pulled == 0 {
-		h.batch.Discard()
-		return 0, refused, true
-	}
-
-	// The BPT, then the commit. Batch.Commit commits the BPT store and never
-	// calls Account.putBpt, so a perfectly pulled account leaves the local root
-	// exactly where it was and the tracker can never match it (#4305).
-	if err := h.batch.UpdateBPT(); err != nil {
-		s.log.Info("The state tree could not be updated", "partition", s.partition, "error", err)
-		h.batch.Discard()
-		return 0, refused, true
-	}
-	if err := h.batch.Commit(); err != nil {
-		s.log.Info("What was pulled could not be committed", "partition", s.partition, "error", err)
-		return 0, refused, true
-	}
-	return pulled, refused, true
-}
-
-// fetch pulls the accounts, in chunks, and settles what the Directory has
-// already anchored. What it has not is held for the next round.
-func (s *PulledState) fetch(ctx context.Context, accounts []*url.URL) (int, []*url.URL) {
-	pulled := 0
-	var refused []*url.URL
-
-	for len(accounts) > 0 && ctx.Err() == nil {
-		n := pullChunk
-		if n > len(accounts) {
-			n = len(accounts)
+	for i, u := range accounts {
+		if ctx.Err() != nil {
+			break
 		}
-		chunk := accounts[:n]
-		accounts = accounts[n:]
-
-		h := &heldBatch{batch: s.db.Begin(true), since: time.Now()}
-		for _, u := range chunk {
-			srcs, partition, err := s.sourcesFor(ctx, u)
-			switch {
-			case errors.Is(err, errNotThisPartition):
-				// Dropped, not refused: a peer named an account this store
-				// must not hold, and asking again will not change that.
-				s.log.Info("A named account is not this partition's and was dropped",
-					"account", u, "partition", s.partition)
-				continue
-			case err != nil:
-				s.log.Info("No peer could be found for an account", "account", u, "error", err)
-				refused = append(refused, u)
-				continue
-			}
-			p, _, err := pull.FetchFrom(ctx, srcs, h.batch, u, pull.Options{
-				Mode:      pull.ModeStateOnly,
-				Verify:    s.anchors,
-				Partition: partition,
-			})
-			if err != nil {
-				s.log.Info("An account could not be pulled", "account", u, "error", err)
-				refused = append(refused, u)
-				continue
-			}
-			if p.Past() {
-				// The node is past this peer on this account: everything the
-				// peer can give for it, the node has, and the pull took
-				// nothing. There is nothing to settle and no anchor to wait
-				// for, and holding it would hold a batch open for state the
-				// node is never going to take.
-				//
-				// It is not refused either: nothing failed. The account is
-				// named again next round if its leaf still differs from the
-				// peer's -- enumerate.Stale names a difference in either
-				// direction, so an account the node is ahead on is named
-				// every round until the network passes it (#4348).
-				p.Discard()
-				s.log.Debug("The node is past the peer on an account; nothing was pulled",
-					"account", u, "partition", s.partition)
-				continue
-			}
-			h.accounts = append(h.accounts, &heldAccount{url: u, pending: p})
+		if len(p.accounts) >= passLimit {
+			s.refused = append(s.refused, accounts[i:]...)
+			break
 		}
-
-		if len(h.accounts) == 0 {
-			h.batch.Discard()
+		if spine[strings.ToLower(u.String())] {
 			continue
 		}
+		s.fetchOne(ctx, p, u, false)
+	}
 
-		// Settle whatever is already anchored -- a restarting node is often
-		// served state at a block the Directory anchored some time ago -- and
-		// hold the rest for the next round.
-		got, missed, done := s.settleBatch(ctx, h)
-		pulled += got
-		refused = append(refused, missed...)
-		if !done {
-			s.held = append(s.held, h)
+	if len(p.accounts) == 0 {
+		p.batch.Discard()
+		if p.spine && !p.spineFailed {
+			// Everything the peers have for the spine, this node already has.
+			s.spine = true
+		}
+		return
+	}
+	s.pass = p
+}
+
+// fetchOne fetches one account into the pass, or records why it could not.
+func (s *PulledState) fetchOne(ctx context.Context, p *pass, u *url.URL, spine bool) {
+	fail := func() {
+		if spine {
+			p.spineFailed = true
+		} else {
+			s.refused = append(s.refused, u)
 		}
 	}
-	return pulled, refused
+	srcs, partition, err := s.sourcesFor(ctx, u)
+	switch {
+	case errors.Is(err, errNotThisPartition):
+		// Dropped, not refused: a peer named an account this store must not
+		// hold, and asking again will not change that.
+		s.log.Info("A named account is not this partition's and was dropped",
+			"account", u, "partition", s.partition)
+		return
+	case err != nil:
+		s.log.Info("No peer could be found for an account", "account", u, "error", err)
+		fail()
+		return
+	}
+	mode := pull.ModeStateOnly
+	if spine {
+		mode = pull.ModeFullSpine
+	}
+	pending, _, err := pull.FetchFrom(ctx, srcs, p.batch, u, pull.Options{
+		Mode:      mode,
+		Verify:    s.anchors,
+		Partition: partition,
+	})
+	if err != nil {
+		s.log.Info("An account could not be pulled", "account", u, "error", err)
+		fail()
+		return
+	}
+	if pending.Past() {
+		// The node is past this peer on this account: everything the peer
+		// can give for it, the node has, and the pull took nothing. There is
+		// nothing to settle, and holding it would hold the pass open for
+		// state the node is never going to take.
+		//
+		// It is not refused either: nothing failed. The account is named
+		// again if its leaf still differs from the peer's -- enumerate.Stale
+		// names a difference in either direction (#4348).
+		pending.Discard()
+		s.log.Debug("The node is past the peer on an account; nothing was pulled",
+			"account", u, "partition", s.partition)
+		return
+	}
+	p.accounts = append(p.accounts, &heldAccount{url: u, pending: pending, spine: spine})
 }
 
 // errNotThisPartition is an account that routes somewhere else. It is dropped
@@ -741,78 +745,6 @@ func (s *PulledState) sourcesFor(ctx context.Context, u *url.URL) ([]pull.Source
 		return nil, nil, errNotThisPartition
 	}
 	return srcs, partition, nil
-}
-
-// pullSpine takes THIS PARTITION'S spine — its anchors, ledger and operators,
-// with their chains — so the chains a join reads are there at all.
-//
-// **It is verified like everything else.** It used to be settled with Keep,
-// unverified, on the rationale that it is "what the verifier reads from, and
-// there is nothing to verify it against until it is there". That rationale
-// was false and it cost #4301: a signature is verified against a KEY, and the
-// keys come from this node's own store (anchorsrc.Authority), so nothing has
-// to be pulled before verification can begin. Taking the spine on a peer's
-// word made the peer the source of both the root and the state that hashes
-// into it, and the whole scheme then proved only that the peer agreed with
-// itself.
-//
-// It does NOT take the Directory's. A BVN's state tree holds no acc://dn.acme
-// account: writing four of them into a BVN's store puts four leaves in its
-// BPT that no peer has, so the local root differs from every root the
-// Directory ever anchored for that partition, however perfectly everything
-// else is pulled. A node runs the Directory alongside its BVN and the
-// Directory's own join pulls the Directory's spine into the Directory's
-// store, where those accounts belong.
-func (s *PulledState) pullSpine(ctx context.Context) error {
-	h := &heldBatch{batch: s.db.Begin(true), since: time.Now(), spine: true}
-	accounts := pull.SpineAccounts(s.partition)
-	for _, u := range accounts {
-		srcs, partition, err := s.sourcesFor(ctx, u)
-		if err != nil {
-			h.batch.Discard()
-			return errors.UnknownError.WithFormat("find a peer for the spine account %v: %w", u, err)
-		}
-		p, _, err := pull.FetchFrom(ctx, srcs, h.batch, u, pull.Options{
-			Mode:      pull.ModeFullSpine,
-			Verify:    s.anchors,
-			Partition: partition,
-		})
-		if err != nil {
-			h.batch.Discard()
-			return errors.UnknownError.WithFormat("pull the spine account %v: %w", u, err)
-		}
-		if p.Past() {
-			p.Discard()
-			continue
-		}
-		h.accounts = append(h.accounts, &heldAccount{url: u, pending: p})
-	}
-	h.asked = len(h.accounts)
-
-	if h.asked == 0 {
-		// Everything the peers have for the spine, this node already has.
-		h.batch.Discard()
-		s.spine = true
-		s.log.Info("The spine is already this node's", "partition", s.partition, "accounts", len(accounts))
-		return nil
-	}
-
-	// Settled against the root a quorum of this partition's validators
-	// signed, on the same hold the rest of the pull uses: the anchor for the
-	// block a peer served at arrives a few blocks later, so the spine waits
-	// for its proof rather than being taken without one.
-	got, missed, done := s.settleBatch(ctx, h)
-	if !done {
-		s.spinePending = true
-		s.held = append(s.held, h)
-		return errors.NotReady.WithFormat(
-			"the spine is held until its block is anchored: %d of %d settled", got, h.asked)
-	}
-	s.spineSettled(got, h.asked, len(missed))
-	if !s.spine {
-		return errors.NotReady.With("the spine did not verify")
-	}
-	return nil
 }
 
 // Executing records that the node is executing from a block it reached

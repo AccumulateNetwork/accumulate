@@ -7,10 +7,7 @@
 package join
 
 import (
-	"bytes"
 	"context"
-	"log/slog"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -114,100 +111,4 @@ func TestLocalBlock_IsTheExecutorsBlockAndNotThePulledLedger(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, s.wide,
 		"a node 870 blocks behind must take the page diff, not walk seventeen blocks")
-}
-
-// TestSettleBatch_SaysWhatItGaveUpOn.
-//
-// The Directory anchors a state-tree root for roughly one block in six of a
-// BVN's, and AnchoredRoot is an exact lookup on the block a peer served an
-// account at. So five settle batches in six wait maxSettleRounds rounds for an
-// anchor that is never coming and are then thrown away — the dominant failure
-// mode of a join, and it was discarded with no log line at all. A node that
-// has given up on twelve held accounts after waiting for them must say so
-// (#4295).
-func TestSettleBatch_SaysWhatItGaveUpOn(t *testing.T) {
-	ctx := context.Background()
-	here := protocol.PartitionUrl("BVN0")
-	account := protocol.AccountUrl("alice", "tokens")
-
-	peer := database.OpenInMemory(nil)
-	t.Cleanup(func() { _ = peer.Close() })
-	putLedger(t, peer, here, 946)
-	writeTokenAccount(t, peer, account)
-
-	local := database.OpenInMemory(nil)
-	t.Cleanup(func() { _ = local.Close() })
-
-	log := new(syncBuffer)
-	s := &PulledState{
-		partition: here,
-		db:        local,
-		sources: &peerSources{
-			partition: here,
-			querier:   apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"}),
-		},
-		log: slog.New(slog.NewTextHandler(log, nil)),
-	}
-	// A Directory that has anchored nothing, so nothing the peer serves can
-	// ever settle.
-	values, _ := genesisValues(t, 4)
-	s.anchors = noAnchorSource(t, here, values)
-
-	pulled, refused := s.fetch(ctx, []*url.URL{account})
-	require.Zero(t, pulled, "nothing can settle against a directory with no anchors")
-	require.Empty(t, refused, "it is held, not refused")
-	require.Equal(t, 1, s.heldCount(), "the account is held, waiting for its anchor")
-	require.NotContains(t, log.String(), "given up on unanchored",
-		"nothing has been given up on yet")
-
-	for i := 0; i < maxSettleRounds; i++ {
-		s.settleHeld(ctx)
-	}
-
-	require.Zero(t, s.heldCount(), "the wait is over and the batch is closed")
-	out := log.String()
-	require.Contains(t, out, "given up on unanchored",
-		"a node that threw away held accounts must say so: this is the dominant "+
-			"failure mode of a join and it was silent")
-	require.Contains(t, out, "accounts=1")
-	require.Contains(t, out, "block=946", "and which block nobody anchored")
-}
-
-// writeTokenAccount gives the peer something to serve, with the root index
-// entry a state receipt is reported at.
-func writeTokenAccount(t *testing.T, db *database.Database, u *url.URL) {
-	t.Helper()
-	batch := db.Begin(true)
-	defer batch.Discard()
-	require.NoError(t, batch.Account(u).Main().Put(&protocol.UnknownAccount{Url: u}))
-	require.NoError(t, batch.UpdateBPT())
-	require.NoError(t, batch.Commit())
-
-	batch2 := db.Begin(true)
-	defer batch2.Discard()
-	ledger := protocol.PartitionUrl("BVN0").JoinPath(protocol.Ledger)
-	root, err := batch2.Account(ledger).RootChain().Index().Get()
-	require.NoError(t, err)
-	data, err := (&protocol.IndexEntry{BlockIndex: 946}).MarshalBinary()
-	require.NoError(t, err)
-	require.NoError(t, root.AddEntry(data, false))
-	require.NoError(t, batch2.UpdateBPT())
-	require.NoError(t, batch2.Commit())
-}
-
-type syncBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *syncBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *syncBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
 }
