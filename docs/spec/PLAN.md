@@ -169,8 +169,9 @@ and its anchor leg stays near its floor.
 ### E11 #4205 — a node joins from the running protocol, and a restart is a join
 
 Spec: executor.md "Sync". Decided by Paul 2026-09-18: a starting node does not
-catch up through consensus. It validates the spine — the operators' key book
-and the anchors it signs — pulls the state that the verified anchor's root
+catch up through consensus. It validates the spine — the network definition
+and the anchors its validators sign (#4301 (b); the operators' book keeps
+governance and is not read) — pulls the state that the verified anchor's root
 commits to, derives staging from that state, and executes from the block after
 the root matches. A syncing node rejects every request and serves once fully
 synced (Paul, 2026-09-19; what "fully synced" is on a line with no backfill
@@ -189,8 +190,9 @@ and are left as they were written; two of their premises no longer hold.
   against until it is there. That is false — a signature is verified against a
   key, not against a root — and it is why the pull's trust terminated in one
   unauthenticated peer (#4301). `anchorsrc`, which does exactly this
-  verification against the local key page, exists on bootstrap-v3 and was not
-  ported by #4293. Porting it, with the producer-routing rule and the
+  verification (against the local key page as written on bootstrap-v3; against
+  the network definition on this line, #4301 (b)), exists on bootstrap-v3 and
+  was not ported by #4293. Porting it, with the producer-routing rule and the
   Directory's own root, is the next work.
 - **Staging is what was collected, minus what the state says executed.**
   Step 1's staging API answered a question the joining node answers for
@@ -343,7 +345,9 @@ from 2026-09-19 21:57Z, on Paul's word; #4361's join test waits for #4301):
    signatures checked against the **network definition** the node holds from
    its own execution (or genesis) — not the operators' key page, which cannot
    reach threshold for a BVN (#4301 statement (b), through the protocol
-   2026-09-19) — distinct members to threshold, one version per quorum.
+   2026-09-19) — distinct members to threshold, one trusted set per partition
+   with the declared version a floor (#4301 (c): there is no walk; the set
+   moves only by a verified `<partition>/network` leaf).
    Producer routing: a BVN's root from `dn.acme/anchors`; the Directory's own
    is there too (it anchors to itself; statement (a)), and in every BVN's
    pool. Nothing is kept and no root reaches the tracker until it passes; the

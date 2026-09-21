@@ -250,14 +250,25 @@ it cost is #4301 — the pull's chain of trust terminated in one unauthenticated
 peer, which supplied both the root and the state that hashes into it, so the
 whole scheme proved only that the peer agreed with itself.
 
-The node has a key to start from in every case. A restart holds the operators'
-key book it executed with. A node starting from genesis holds the genesis
-book. **Churn is a walk, not a hole**: each operator change is itself anchored
-and signed by the preceding set, so a book that has moved since the node's
-trusted set is walked forward one signed change at a time. The spine is pulled
-in `ModeFullSpine` — head, secondary state and **every chain entry replayed** —
-for exactly this reason: the node needs the operators' key pages *of the time*
-to check signatures made under them.
+The node has a set to start from in every case. A restart holds the network
+definition it executed with; a node starting from genesis holds the genesis
+definition. **Churn is a leaf, not a walk** (#4301 statement (c), through the
+protocol 2026-09-21): an operator change on this line is not carried by any
+anchor — the anchor of the block that changes the set is signed by the *new*
+set, and nothing signs the change in the old set's name — so a node that
+trusts an older set cannot follow the change signature by signature. It
+follows it the way the executor does: an anchor is judged by membership in
+the set the node trusts, to that set's threshold, with the anchor's declared
+version a *floor* (older is refused, newer is not a selector); and the trusted
+set moves only when `<partition>/network` is pulled as a leaf under a root a
+quorum of the trusted set signed and its version is greater. The stated
+limit, the executor's own: a change that turns over more of the set than the
+old threshold can bridge cannot be crossed from the old set, and a node that
+trusts only the old set must be re-seeded from a definition it can verify.
+The spine is pulled in `ModeFullSpine` — head, secondary state and **every
+chain entry replayed** — not for verification, which the definition and its
+signatures give, but so that the spine's every-block chains are comparable
+entry for entry with what the node executes from there.
 
 An anchor is accepted when valid signatures from **distinct members of the
 producing partition's validator set** — the network definition's, not a key
@@ -277,9 +288,15 @@ not from a run, and it was wrong. The defect was never which pool was read;
 it was that no signature was checked.
 
 **Until the spine validates, nothing is kept and no root is handed on.** A
-root that has not been verified against the key book is not a root; it is a
-number a peer sent. The spine itself is taken from independent sources and
-cross-checked, so that agreement rather than availability decides it.
+root that has not been verified against the trusted set is not a root; it is a
+number a peer sent. What one peer can still do is withhold, or serve only old
+anchors that a real quorum once signed — a slower join, never a fork — and a
+second peer is what closes that: the join draws its anchors from more than one
+peer where it has them (the cursor is per peer, and moving to another peer
+re-verifies from where it stands), so that agreement rather than availability
+decides it. A literal cross-check of two pools before any root is trusted is
+not built (#4301, stated); the quorum's signatures are the mechanism and
+withholding is its limit.
 
 #### 2. Everything else is a leaf check at an anchored height
 

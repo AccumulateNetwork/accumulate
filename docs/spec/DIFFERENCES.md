@@ -482,6 +482,11 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   uncommitted caller scan is the pin); the gauge and the daemon's `Always{}`
   are two objects nothing keeps in agreement; and `servingFor` gates two query
   kinds where the spec says every read (#4295).
+- **The ModeFullSpine rationale was wrong and is retired** (#4301 (c)): the
+  spine was pulled "explicitly unverified because it is what the verifier
+  reads from"; the definition and its signatures verify the spine like any
+  leaf, and `ModeFullSpine` stays only for comparability of the every-block
+  chains (executor.md §1).
 - **The state is not persisted** (#4300; `bootpersist` is not ported). A
   restart joins again, which reaches the same answer.
 - **It is not advertised** (#4300) in the node's service record, so
