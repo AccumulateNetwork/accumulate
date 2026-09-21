@@ -160,5 +160,134 @@ class FollowerDisturbance(unittest.TestCase):
                                  "a follower was disturbed by the validator walk: %s" % c)
 
 
+def build_step():
+    """soak.sh's build step AS WRITTEN: from `# Build BEFORE up.` to the
+    comment that opens the `up`."""
+    with open(SOAK) as f:
+        src = f.read()
+    i = src.index("\n# Build BEFORE up.")
+    j = src.index("\n# Surface the up error", i)
+    return src[i + 1:j]
+
+
+IMAGE_STUB = r"""#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUB_LOG"
+if [ "$1" = image ] && [ "$2" = inspect ]; then
+  name="${@: -1}"
+  grep -qx "$name" "$STUB_IMAGES" || exit 1
+  echo "sha256:id-of-$name [$name:latest]"
+fi
+exit 0
+"""
+
+BUILD_PRELUDE = r"""
+set -uo pipefail
+here="$SOAK_HERE"
+. "$here/soak.conf"
+. "$LAYER"
+export COMPOSE_PROJECT_NAME=disoak
+rd="$RUN_DIR"; log="$rd/soak.log"; manifest="$rd/MANIFEST.md"
+mkdir -p "$rd/config"
+compose_file="$here/../docker-compose.yml"
+compose="docker compose -f $compose_file"
+"""
+
+
+class LateFollowerImageIsBuiltAndRecorded(unittest.TestCase):
+    """Review e11.4364b.review.2: `compose build` with no profile skips the
+    late follower's service, so add-follower ran whatever disoak-bvn3-fol2
+    image was lying about (#4103), and the manifest named only bvn1-val1's.
+
+    The build step is run as soak.sh writes it, `docker` a recording stub.
+    NOT verified here: that `docker compose --profile late-follower build`
+    really builds the profiled service as well as the unprofiled ones. That
+    is compose's behaviour, and only a run with docker shows it.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="follower-image-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        bindir = os.path.join(self.tmp, "bin")
+        os.mkdir(bindir)
+        stub = os.path.join(bindir, "docker")
+        with open(stub, "w") as f:
+            f.write(IMAGE_STUB)
+        os.chmod(stub, 0o755)
+        self.stub_log = os.path.join(self.tmp, "docker.log")
+        open(self.stub_log, "w").close()
+        self.images = os.path.join(self.tmp, "images.txt")
+        self.layer = os.path.join(self.tmp, "layer.conf")
+        self.manifest = os.path.join(self.tmp, "MANIFEST.md")
+        with open(self.manifest, "w") as f:
+            f.write("| field | value |\n|---|---|\n| image | `disoak-bvn1-val1` |\n"
+                    "| image id | `sha256:id-of-disoak-bvn1-val1` |\n"
+                    "| executor version | **x** |\n")
+        self.env = dict(os.environ, PATH=bindir + os.pathsep + os.environ["PATH"],
+                        STUB_LOG=self.stub_log, STUB_IMAGES=self.images,
+                        SOAK_HERE=HERE, LAYER=self.layer, RUN_DIR=self.tmp)
+
+    def run_step(self, images, followers):
+        with open(self.images, "w") as f:
+            f.write("\n".join(images) + "\n")
+        with open(self.layer, "w") as f:
+            f.write("CHAOS_FOLLOWERS=%s\n" % followers)
+        p = subprocess.run(["bash", "-c", BUILD_PRELUDE + build_step() + "\necho REACHED-UP\n"],
+                           env=self.env, capture_output=True, text=True, timeout=60)
+        with open(self.stub_log) as f:
+            calls = f.read().splitlines()
+        with open(self.manifest) as f:
+            manifest = f.read()
+        return p, calls, manifest
+
+    def late(self):
+        late = [ln.split() for ln in subprocess.run(
+            [sys.executable, os.path.join(HERE, "followerchaos.py"), "late"],
+            capture_output=True, text=True, check=True).stdout.splitlines()]
+        self.assertTrue(late, "no follower is in the compose's late-follower profile")
+        return late
+
+    def test_the_build_names_the_late_follower_profile(self):
+        late = self.late()
+        p, calls, _ = self.run_step(
+            ["disoak-bvn1-val1"] + ["disoak-" + svc for svc, _, _ in late], "on")
+        self.assertIn("REACHED-UP", p.stdout, p.stdout + p.stderr)
+        builds = [c for c in calls if re.search(r"^compose\b.*\bbuild\b", c)]
+        self.assertTrue(builds, "the build step never ran `compose build`: %s" % calls)
+        for c in builds:
+            self.assertRegex(c, r"--profile late-follower\b.*\bbuild\b",
+                             "a build that names no profile skips the late follower's "
+                             "service, and add-follower then runs a stale image (#4103)")
+
+    def test_the_manifest_records_the_late_followers_image_id(self):
+        late = self.late()
+        p, _, manifest = self.run_step(
+            ["disoak-bvn1-val1"] + ["disoak-" + svc for svc, _, _ in late], "on")
+        self.assertIn("REACHED-UP", p.stdout, p.stdout + p.stderr)
+        for svc, container, _ in late:
+            rows = [ln for ln in manifest.splitlines()
+                    if ln.startswith("|") and container in ln]
+            self.assertEqual(1, len(rows), "no manifest row names %s:\n%s" % (container, manifest))
+            self.assertIn("sha256:id-of-disoak-" + svc, rows[0])
+        # The validators' row is still there, and still theirs.
+        self.assertIn("| image id | `sha256:id-of-disoak-bvn1-val1` |", manifest)
+        with open(os.path.join(self.tmp, "config", "image-late-follower.txt")) as f:
+            frozen = f.read()
+        for svc, _, _ in late:
+            self.assertIn("sha256:id-of-disoak-" + svc, frozen)
+
+    def test_a_follower_run_refuses_an_unidentifiable_follower_image(self):
+        p, _, _ = self.run_step(["disoak-bvn1-val1"], "on")
+        self.assertNotEqual(0, p.returncode)
+        self.assertNotIn("REACHED-UP", p.stdout,
+                         "a run that adds a follower went on with no follower image to name")
+
+    def test_a_run_that_adds_no_follower_says_unknown_and_goes_on(self):
+        late = self.late()
+        p, _, manifest = self.run_step(["disoak-bvn1-val1"], "off")
+        self.assertIn("REACHED-UP", p.stdout, p.stdout + p.stderr)
+        for _, container, _ in late:
+            self.assertRegex(manifest, r"\|[^\n]*%s[^\n]*unknown" % re.escape(container))
+
+
 if __name__ == "__main__":
     unittest.main()
