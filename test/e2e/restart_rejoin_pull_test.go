@@ -57,11 +57,12 @@ import (
 //	its local root is now 4b3dba55..., and its ledger record says block 89
 //	the peers are at block 269 and the Directory has anchored BVN0 through 67
 //
-// Two things it waits on. #4301: the spine validated by signature, so the join
-// has one verified root per anchored block to ask AT. #4362: the convergence
-// loop, which asks for each account at that block and settles it on the round
-// it was fetched, with the settle bound (maxSettleRounds, join/state.go)
-// removed because there is nothing left to wait for.
+// #4301 — the spine validated by signature, so the join has one verified root
+// per anchored block to ask AT — has since merged into the lead branch. What
+// remains is #4362: the convergence loop, which asks for each account at that
+// block and settles it on the round it was fetched, with the settle bound
+// (maxSettleRounds, join/state.go) removed because there is nothing left to
+// wait for.
 //
 // When they land, this test needs one more line than it has: the simulator
 // must run with simulator.BPTHistoryDepth set, or the peers retain nothing and
@@ -69,7 +70,11 @@ import (
 // (cmd/accumulated/run/dagbft.go); the simulator's is zero, matching a node
 // configured off.
 func TestRestartedNodeWithAPopulatedDatabaseResyncs(t *testing.T) {
-	t.Skip("the gate for #4361: serving at an anchored block is in, but the pull does not ask for one yet -- #4301 (the verified spine) and #4362 (the convergence loop) open this")
+	// The one thing that flips this is the pull asking at an anchored block.
+	// Named rather than described, so that whoever writes it can find this by
+	// grep and so that a reader is not sent to a merged issue.
+	t.Skip("#4362: the pull does not send ForHeight yet, so a restart still has nothing that can settle; " +
+		"serving at an anchored block (#4361) is in, and this test also needs simulator.BPTHistoryDepth set when it is un-skipped")
 
 	const joiner = 2 // the node that stops and comes back
 
