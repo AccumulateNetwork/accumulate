@@ -1061,22 +1061,41 @@ try:
 except OSError:
     row("stranded across disturbances", "— not measured (no `submissions.csv`)")
     raise SystemExit
-series = {}
+# A SAMPLE IS A FLEET TOTAL, so it is only a reading when every
+# (node, partition) reported. A container mid-restart answers no scrape —
+# `_scrape_one` stores an empty list and the container stays in the set, so
+# its topology-seeded rows are blank — and summing what is left makes the
+# fleet series DIP by that node's real count on exactly the sample it was
+# unreachable. The window minimum then reads the dip as the settled level:
+# a loss masked, or a negative step, at every restart of a chaos run
+# (reviewer M on #4364). An incomplete sample is dropped, not carried
+# forward — carrying forward invents a reading at a time nobody measured —
+# and the row says how many were dropped, because a node absent for a long
+# stretch is a finding and not noise.
+pairs = {(r.get("node"), r.get("partition")) for r in rows}
+series, partial = {}, {}
 for r in rows:
     v = (r.get("acceptedNeitherCertifiedTakenNorRefused") or "").strip()
+    key = (r.get("node"), r.get("partition"))
     if not v:
+        partial.setdefault(r["time"], set()).add(key)
         continue
     try:
         n = int(v)
     except ValueError:
+        partial.setdefault(r["time"], set()).add(key)
         continue
     # deduped by (time, node, partition): the forced final row can share a
     # second with a periodic one, and these are counters.
-    series.setdefault(r["time"], {})[(r.get("node"), r.get("partition"))] = n
-points = sorted((secs(t), sum(d.values())) for t, d in series.items())
+    series.setdefault(r["time"], {})[key] = n
+stamps = sorted(set(series) | set(partial))
+complete = [t for t in stamps if set(series.get(t, {})) == pairs]
+dropped = len(stamps) - len(complete)
+points = sorted((secs(t), sum(series[t].values())) for t in complete)
 if not points:
     row("stranded across disturbances",
-        "— not measured (no stranded series; #4366, #4369)")
+        "— not measured (no sample has all %d (node, partition) pairs; "
+        "%d incomplete)" % (len(pairs), dropped))
     raise SystemExit
 t0, t1 = points[0][0], points[-1][0]
 
@@ -1185,6 +1204,10 @@ if biggest_creep is not None:
         "%+d, %s%s" % (biggest_creep, biggest_creep_at,
                        "" if biggest_creep > 0 else
                        " — the figure did not climb"))
+if dropped:
+    row("samples dropped as incomplete",
+        "%d of %d — a node reported no counts at those, and a fleet total "
+        "missing one node dips by that node's count" % (dropped, len(stamps)))
 PYEOF
 }
 
@@ -1211,7 +1234,29 @@ if not rows:
 # movement over the final samples as well: falling with no new accepts is
 # draining, flat or rising is stranded.
 TREND_N = 5
-stamps = sorted({r["time"] for r in rows})
+# A fleet total is a reading only when every (node, partition) reported.
+# A container mid-restart answers no scrape and its topology-seeded rows
+# are blank, so the sum dips by that node's real count on exactly the
+# sample it was unreachable — and the headline "0 at the last sample"
+# could be that dip rather than a drained network (reviewer M on #4364).
+# Incomplete samples are skipped, here and in the trend, and the row says
+# how many.
+all_pairs = {(r.get("node"), r.get("partition")) for r in rows}
+
+
+def reported(ts):
+    return {(r.get("node"), r.get("partition")) for r in rows
+            if r["time"] == ts
+            and (r.get("acceptedNeitherCertifiedTakenNorRefused") or "").strip()}
+
+
+stamps_all = sorted({r["time"] for r in rows})
+stamps = [t for t in stamps_all if reported(t) == all_pairs]
+skipped = len(stamps_all) - len(stamps)
+if not stamps:
+    print("— not measured (no sample has all %d (node, partition) pairs; "
+          "%d incomplete)%s" % (len(all_pairs), skipped, ""))
+    raise SystemExit
 last = stamps[-1]
 
 
@@ -1319,6 +1364,12 @@ if lg_exit and last:
 if stopped_early:
     final += ("; the run was stopped by stallkill, so the load generator was "
               "killed mid-flight and this is NOT a drained sample")
+
+if skipped:
+    final += ("; %d sample%s skipped as incomplete (a node reported no "
+              "counts)" % (skipped, "" if skipped == 1 else "s"))
+    if stamps_all[-1] != last:
+        final += " — INCLUDING THE LAST, so this is not the final row"
 
 print("%d, worst %s on %s (as of %s; %s; %s)%s"
       % (total, wv, "/".join(wk), last, trend, final, missing))

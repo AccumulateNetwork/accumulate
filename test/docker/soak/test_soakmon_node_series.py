@@ -848,7 +848,16 @@ class EveryNodeHasARowForEveryPartitionItRuns(Fleet):
         self.assertEqual(6, len(rows), "3 containers x 2 partitions")
 
     def test_the_silent_partitions_row_is_empty_not_zero(self):
-        """It must not invent a 0 either: nothing was reported there."""
+        """It must not invent a 0 either: nothing was reported there.
+
+        The stranded column is the one that matters. `max(0, 0 - 0)` is 0,
+        so a topology-seeded row asserted "nothing stranded here" on a
+        partition nobody measured — and a container mid-restart answers no
+        scrape at all (`_scrape_one` stores an empty list and the container
+        stays in the set), so on a chaos run that is every restart. The
+        manifest's fleet total then dips by that node's real count on the
+        one sample it was unreachable (reviewer M on #4364).
+        """
         soakmon._scrape_one = self.bvn3_only
         m = soakmon.collect_metrics()
         soakmon.write_submissions_csv(m["nodeStats"]["submissions"])
@@ -859,6 +868,31 @@ class EveryNodeHasARowForEveryPartitionItRuns(Fleet):
                                 and x.split(",")[3] == "Directory").split(",")))
         self.assertEqual("", r["accepted"])
         self.assertEqual("", r["relayedTaken"])
+        self.assertEqual("", r["acceptedNeitherCertifiedTakenNorRefused"],
+                         "a partition nobody measured has no stranded count")
+
+    def test_a_container_that_answered_no_scrape_has_blank_rows(self):
+        """The shape a chaos restart produces: the container is in the
+        scrape set with an empty row list, so both its partitions are
+        topology-seeded and both must be blank, stranded included."""
+        def unreachable(c, out, lock):
+            out.setdefault(c, [] if "fol" in c else [
+                ("accumulate_dagbft_submissions_total",
+                 {"partition": p, "outcome": "accepted"}, 100.0)
+                for p in soakmon.PARTITIONS_OF[c]])
+        soakmon._scrape_one = unreachable
+        m = soakmon.collect_metrics()
+        soakmon.write_submissions_csv(m["nodeStats"]["submissions"])
+        head, rows = self.rows("submissions.csv")
+        cols = head.split(",")
+        fol = [dict(zip(cols, r.split(","))) for r in rows
+               if r.split(",")[1] == "acc-bvn3-fol1"]
+        self.assertEqual(2, len(fol), "it was scraped, so it has its rows")
+        for r in fol:
+            self.assertEqual(
+                "", r["acceptedNeitherCertifiedTakenNorRefused"],
+                "a node that answered nothing stranded nothing measurably")
+            self.assertEqual("", r["accepted"])
 
     def test_a_container_that_was_not_scraped_has_no_rows(self):
         """The distinction the fix exists for: silent is a row of blanks,

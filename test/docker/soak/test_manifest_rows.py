@@ -242,8 +242,7 @@ class StepsPerDisturbance(Rows):
     def test_disturbances_but_no_stranded_series_is_not_measured(self):
         self.chaos("2026-09-20T01:10:00Z restart acc-bvn3-val1")
         self.write()
-        self.assertIn("not measured (no stranded series",
-                      self.call("steps_rows follower"))
+        self.assertIn("not measured", self.call("steps_rows follower"))
 
     # --- the two window mistakes -------------------------------------------
 
@@ -380,6 +379,107 @@ class StepsPerDisturbance(Rows):
         self.ramp("2026-09-20T01:05:00Z", "2026-09-20T01:05:30Z",
                   ("2026-09-20T01:05:00Z", 0))
         self.assertIn("no sample in the", self.call("steps_rows follower"))
+
+
+class AnIncompleteSampleIsNotAReading(Rows):
+    """A fleet total is a reading only when every (node, partition)
+    reported. A container mid-restart answers no scrape — `_scrape_one`
+    stores an empty list on a failed curl and the container stays in the
+    set, so its topology-seeded rows are blank — and summing what is left
+    makes the series DIP by that node's real count on exactly the sample it
+    was unreachable.
+
+    The window minimum then reads the dip as the settled level: the loss at
+    the restart is masked, or the step goes negative. On a chaos run that
+    is every restart, which is every disturbance the table exists to
+    measure (reviewer M on #4364).
+
+    An incomplete sample is dropped, not carried forward — carrying forward
+    invents a reading at a time nobody measured — and both rows say how
+    many were dropped, because a node absent for a long stretch is a
+    finding and not noise.
+    """
+
+    A = "acc-bvn3-fol1"
+    B = "acc-bvn3-val1"
+
+    def row(self, t, node, part, stranded):
+        v = "" if stranded is None else str(stranded)
+        return ("%s,%s,follower,%s,%s,,,%s,,,,%s,periodic"
+                % (t, node, part, "10" if stranded is not None else "",
+                   "10" if stranded is not None else "", v))
+
+    def sample(self, t, a, b):
+        """One sample: node A's pair and node B's pair, either a count or
+        blank (the node answered no scrape)."""
+        return [self.row(t, self.A, "BVN3", a), self.row(t, self.B, "BVN3", b)]
+
+    def chaos(self, *lines):
+        with open(os.path.join(self.rd, "chaos.log"), "w") as f:
+            for l in lines:
+                f.write(l + "\n")
+
+    def test_a_node_unreachable_for_one_sample_does_not_mask_a_loss(self):
+        """B is unreachable at 01:10:30, the sample right after the
+        restart, and A really lost 4 there. Summing what is left reads 4
+        where the truth is 4 + B's 6 = 10 — a dip, which the window
+        minimum takes as settled and reports as no loss at all."""
+        self.chaos("2026-09-20T01:10:00Z restart acc-bvn3-val1")
+        rows = []
+        for t, a, b in (("2026-09-20T01:08:00Z", 0, 6),
+                        ("2026-09-20T01:08:30Z", 0, 6),
+                        ("2026-09-20T01:09:00Z", 0, 6),
+                        ("2026-09-20T01:09:30Z", 0, 6),
+                        ("2026-09-20T01:10:30Z", 4, None),   # B unreachable
+                        ("2026-09-20T01:11:00Z", 4, 6),
+                        ("2026-09-20T01:11:30Z", 4, 6),
+                        ("2026-09-20T01:12:00Z", 4, 6)):
+            rows += self.sample(t, a, b)
+        self.write(*rows)
+        got = self.call("steps_rows follower")
+        # 6 before, 10 after: the loss is visible and not masked by the dip.
+        self.assertIn("stranded 6 -> 10 (+4)", got)
+        self.assertIn("| samples dropped as incomplete | 1 of 8", got)
+
+    def test_a_node_with_no_row_at_all_drops_the_sample_too(self):
+        """Not only a blank: a sample where one pair has no row is the
+        same fact and must read the same way."""
+        self.chaos("2026-09-20T01:10:00Z restart acc-bvn3-val1")
+        rows = []
+        for t, a, b in (("2026-09-20T01:08:00Z", 0, 6),
+                        ("2026-09-20T01:08:30Z", 0, 6),
+                        ("2026-09-20T01:09:00Z", 0, 6),
+                        ("2026-09-20T01:09:30Z", 0, 6),
+                        ("2026-09-20T01:11:00Z", 4, 6),
+                        ("2026-09-20T01:11:30Z", 4, 6),
+                        ("2026-09-20T01:12:00Z", 4, 6)):
+            rows += self.sample(t, a, b)
+        rows += [self.row("2026-09-20T01:10:30Z", self.A, "BVN3", 4)]  # no B
+        self.write(*rows)
+        got = self.call("steps_rows follower")
+        self.assertIn("stranded 6 -> 10 (+4)", got)
+        self.assertIn("| samples dropped as incomplete | 1 of 8", got)
+
+    def test_the_stranded_row_skips_them_and_says_so(self):
+        """`sub_row`'s headline is "0 at the last sample after the drain" —
+        a dip in the FINAL row would read as a drained network."""
+        rows = []
+        for t, a, b in (("2026-09-20T01:08:00Z", 4, 6),
+                        ("2026-09-20T01:08:30Z", 4, 6),
+                        ("2026-09-20T01:09:00Z", 4, None)):   # the last one
+            rows += self.sample(t, a, b)
+        self.write(*rows)
+        got = self.call("sub_row follower 2026-09-20T01:09:00Z")
+        self.assertTrue(got.startswith("10,"), got)
+        self.assertIn("1 sample skipped as incomplete", got)
+        self.assertIn("INCLUDING THE LAST", got)
+
+    def test_no_complete_sample_at_all_is_not_measured(self):
+        rows = self.sample("2026-09-20T01:08:00Z", 4, None)
+        rows += self.sample("2026-09-20T01:08:30Z", 4, None)
+        self.write(*rows)
+        self.assertIn("not measured",
+                      self.call("sub_row follower 2026-09-20T01:09:00Z"))
 
 
 class AbsentIsNotZero(Rows):

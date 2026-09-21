@@ -1335,6 +1335,29 @@ SUBMIT_CSV_HEADER = ("time,node,role,partition,accepted,rejected,certified,"
                      "acceptedNeitherCertifiedTakenNorRefused,sample")
 
 
+def seed_rows(by_node, scraped, role, blank):
+    """A row for every partition the topology says a SCRAPED container runs.
+
+    A partition that recorded nothing exports no series, so building the
+    rows from the scrape alone dropped the follower's Directory node from
+    submissions.csv entirely (run 20260919T231856Z: 25 (node, partition)
+    pairs for a thirteen-node network). A missing row reads as a node that
+    was NOT SCRAPED, which is a different fact from a node that had nothing
+    to say — and a node mid-restart is the second kind.
+    """
+    for c in scraped or ():
+        node = by_node.setdefault(c, {"role": role, "byPartition": {}})
+        for part in PARTITIONS_OF.get(c, ()):
+            node["byPartition"].setdefault(part, dict(blank))
+    return by_node
+
+
+BLANK_ROW = {"accepted": None, "rejected": None, "certified": None,
+             "relayedTaken": None, "relayedRefused": None,
+             "relayedNotReady": None, "relayedUnreachable": None,
+             "stranded": None}
+
+
 def submissions_from(per, role="validator"):
     """Accepted / rejected / certified / relayed per (node, partition).
 
@@ -1411,20 +1434,16 @@ def submissions_from(per, role="validator"):
            "presence": {}}
     for k in fields:
         out.setdefault(k, None)
+    # Which containers answered a scrape at all, so the halves can seed
+    # each other's blanks: a follower whose own scrape failed is the ONLY
+    # member of its half, so `seen` is empty there and it would get no rows
+    # — and "no row" is this file's word for "not scraped".
+    out["scraped"] = sorted(per or {})
     if not seen:
         out["presence"] = {k: "absent" for k in fields}
         return out
 
-    # Every partition the topology says a SCRAPED container runs, whether or
-    # not it reported anything. A partition that recorded nothing exports no
-    # series, so building the rows from the scrape alone dropped the
-    # follower's Directory node from submissions.csv entirely — a missing
-    # row reads as a node that was not scraped, which is a different fact
-    # from a node that had nothing to say.
-    for c in (per or {}):
-        node = by_node.setdefault(c, {"role": role, "byPartition": {}})
-        for part in PARTITIONS_OF.get(c, ()):
-            node["byPartition"].setdefault(part, dict(blank))
+    seed_rows(by_node, out["scraped"], role, blank)
 
     # A field is `series` where some (node, partition) reported it,
     # `family` where its family was exported but this series never was
@@ -1493,7 +1512,14 @@ def submissions_from(per, role="validator"):
             # working relaying node this is ~0; before relay it was
             # everything the node accepted.
             gap = max(0, a - done)
-            p["stranded"] = gap
+            # A partition that reported NOTHING has no stranded count —
+            # `max(0, 0 - 0)` is 0, and a topology-seeded row for a
+            # container that was mid-restart at that sample would then
+            # assert "nothing stranded here" on the one sample it was
+            # unreachable. `_scrape_one` stores an empty list on a failed
+            # curl and the container stays in `per`, so this is the ordinary
+            # shape of a chaos run, not an edge (reviewer M on #4364).
+            p["stranded"] = None if p.get("accepted") is None else gap
             for k in fields:
                 n[k] += p.get(k) or 0
         node.update(n)
@@ -1538,6 +1564,17 @@ def merge_submissions(val, fol):
     # the validators' aggregate and `series` on the follower's. Merging
     # them would have labelled the validators' None as a measured 0.
     out["presence"] = dict(val.get("presence") or {})
+    # A half that measured nothing still has to show its scraped nodes,
+    # once the OTHER half proves the families exist. Without this a
+    # follower whose scrape failed has no rows at all, which this file
+    # reads as "not scraped" — the very distinction the seeding exists to
+    # keep (reviewer M on #4364).
+    if out["measured"]:
+        out["byNode"] = seed_rows(out.get("byNode") or {},
+                                  val.get("scraped"), "validator", BLANK_ROW)
+        out["followerByNode"] = seed_rows(out.get("followerByNode") or {},
+                                          fol.get("scraped"), "follower",
+                                          BLANK_ROW)
     out["impossible"] = list(val.get("impossible") or []) + list(fol.get("impossible") or [])
     unknown = dict(val.get("unknownRelayOutcomes") or {})
     for k, v in (fol.get("unknownRelayOutcomes") or {}).items():
