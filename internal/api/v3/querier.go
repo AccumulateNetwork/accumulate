@@ -443,11 +443,18 @@ func (s *Querier) queryBptPage(batch *database.Batch, scope *url.URL, query *api
 		return s.queryBptPageAt(batch, startKey, count, query.ForHeight)
 	}
 
-	page, err := bptproof.GetPage(batch, startKey, count)
+	return bptPageRecord(bptproof.GetPage(bptproof.Current(batch), startKey, count))
+}
+
+// bptPageRecord is the one place a bptproof page becomes an API record. Both
+// pages -- the current tree's and an anchored block's -- are the same leaves
+// read from a different version of the same tree, so they are the same
+// mapping; it was written twice (#4361) before bptproof took the tree as an
+// argument.
+func bptPageRecord(page *bptproof.Page, err error) (*api.BptPageRecord, error) {
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-
 	out := &api.BptPageRecord{
 		NextStart: page.NextStart,
 		BptRoot:   page.BptRoot,
@@ -480,9 +487,9 @@ func (s *Querier) queryBptPage(batch *database.Batch, scope *url.URL, query *api
 // and carries no proof for the caller to catch it with.
 //
 // The walk is the current path's — [bpt.BPT.GetRangeAt] is [bpt.BPT.GetRange]
-// with the node loads redirected to retained versions. What is duplicated from
-// bptproof.GetPage is the leaf-to-summary mapping below, because bptproof is
-// #4301's package this week; the two should be one call once it lands.
+// with the node loads redirected to retained versions — and so is the page it
+// builds: bptproof.GetPage takes the tree to read, so this path and the
+// current one are one call and one mapping.
 func (s *Querier) queryBptPageAt(batch *database.Batch, startKey [32]byte, count int, height uint64) (*api.BptPageRecord, error) {
 	entry, err := indexing.ResolveRetainedBlock(s.partition, batch, height)
 	if err != nil {
@@ -497,34 +504,7 @@ func (s *Querier) queryBptPageAt(batch *database.Batch, startKey [32]byte, count
 			"resolution and root lookup disagree: block %d against %d", entry.BlockIndex, block)
 	}
 
-	pairs, nextStart, err := batch.BPT().GetRangeAt(block, root, startKey, count)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("BPT range as of block %d: %w", block, err)
-	}
-
-	out := &api.BptPageRecord{
-		NextStart: nextStart,
-		BptRoot:   root,
-		Done:      len(pairs) < count,
-		Entries:   make([]*api.BptLeafSummary, len(pairs)),
-	}
-	for i, p := range pairs {
-		if len(p.Value) != 32 {
-			return nil, errors.InternalError.WithFormat(
-				"BPT leaf at %x has %d-byte value, want 32", p.Key.Hash(), len(p.Value))
-		}
-		e := &api.BptLeafSummary{KeyHash: p.Key.Hash()}
-		copy(e.ValueHash[:], p.Value)
-		// Account leaves are keyed ("Account", *url.URL). Other record types
-		// may be in the BPT, so this is best-effort.
-		if p.Key.Len() >= 2 {
-			if u, ok := p.Key.Get(1).(*url.URL); ok {
-				e.Account = u
-			}
-		}
-		out.Entries[i] = e
-	}
-	return out, nil
+	return bptPageRecord(bptproof.GetPage(bptproof.AsOf(batch, block, root), startKey, count))
 }
 
 func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, record *database.Account, wantReceipt *api.ReceiptOptions) (*api.AccountRecord, error) {

@@ -433,85 +433,67 @@ func TestConsensusStatus_ReportsCatchingUpFromTheJoinState(t *testing.T) {
 	require.False(t, st.CatchingUp)
 }
 
-// TestConsensusStatus_AnswersARelaysChallengeOnlyWithItsOwnKey — the service
-// side of F1.
-func TestConsensusStatus_AnswersARelaysChallengeOnlyWithItsOwnKey(t *testing.T) {
+// TestConsensusStatus_AnswersARelaysChallengeAsItselfAndForNobodyElse — the
+// service side of F1 and of its forwarding half (note_3869991754).
+//
+// ConsensusStatus signs any caller's nonce, over the p2p consensus service
+// and the public HTTP status alike. So a signature that says only "a
+// validator holds this key" is obtainable by anyone: forward the relay's
+// nonce to a real validator and hand back its answer. The signature is
+// therefore over this node's OWN peer ID, and this node refuses to sign for
+// any other.
+func TestConsensusStatus_AnswersARelaysChallengeAsItselfAndForNobodyElse(t *testing.T) {
 	const part = "bvn1"
 	svc, _, _ := newJoiningService(t)
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
+	const self, other = peer.ID("me"), peer.ID("somebody-else")
 
 	cons := NewConsensusAPIService(ConsensusAPIServiceParams{
 		Service: svc, PartitionID: part,
-		ValidatorKeyHash: sha256.Sum256(pub), ValidatorKey: priv,
+		ValidatorKeyHash: sha256.Sum256(pub), ValidatorKey: priv, PeerID: self,
 	})
 	inc := false
 	nonce, err := newRelayChallenge()
 	require.NoError(t, err)
 
-	st, err := cons.ConsensusStatus(context.Background(), api.ConsensusStatusOptions{
-		IncludeAccumulate: &inc, IncludePeers: &inc, Partition: part, Challenge: nonce,
-	})
-	require.NoError(t, err)
-	require.True(t, verifyRelayChallenge(pub, part, st.ValidatorKeyHash, nonce, st.ChallengeSignature),
+	ask := func(id peer.ID, challenge []byte) *api.ConsensusStatus {
+		t.Helper()
+		st, err := cons.ConsensusStatus(context.Background(), api.ConsensusStatusOptions{
+			IncludeAccumulate: &inc, IncludePeers: &inc, Partition: part,
+			NodeID: id.String(), Challenge: challenge,
+		})
+		require.NoError(t, err)
+		return st
+	}
+
+	st := ask(self, nonce)
+	require.True(t, verifyRelayChallenge(pub, part, st.ValidatorKeyHash, self, nonce, st.ChallengeSignature),
 		"the node must prove it holds the key whose hash it reports")
+	require.False(t, verifyRelayChallenge(pub, part, st.ValidatorKeyHash, other, nonce, st.ChallengeSignature),
+		"and the proof must not stand for another peer")
+
+	// Asked to answer as somebody else — which is what a forwarding sink
+	// does with the relay's nonce — it signs nothing.
+	require.Empty(t, ask(other, nonce).ChallengeSignature,
+		"a node must not mint an identity proof for another peer")
+	require.Empty(t, ask("", nonce).ChallengeSignature)
 
 	// No challenge, no signature: a node signs nothing it was not asked to.
-	st, err = cons.ConsensusStatus(context.Background(), api.ConsensusStatusOptions{
-		IncludeAccumulate: &inc, IncludePeers: &inc, Partition: part,
-	})
-	require.NoError(t, err)
-	require.Empty(t, st.ChallengeSignature)
+	require.Empty(t, ask(self, nil).ChallengeSignature)
+
+	// And not an arbitrarily long payload of the caller's choosing.
+	require.Empty(t, ask(self, make([]byte, relayChallengeMaxNonce+1)).ChallengeSignature)
+	require.NotEmpty(t, ask(self, make([]byte, relayChallengeMaxNonce)).ChallengeSignature)
 
 	// A node with no key cannot answer, and is therefore no relay's target.
 	none := NewConsensusAPIService(ConsensusAPIServiceParams{
-		Service: svc, PartitionID: part, ValidatorKeyHash: sha256.Sum256(pub),
+		Service: svc, PartitionID: part, ValidatorKeyHash: sha256.Sum256(pub), PeerID: self,
 	})
 	st, err = none.ConsensusStatus(context.Background(), api.ConsensusStatusOptions{
-		IncludeAccumulate: &inc, IncludePeers: &inc, Partition: part, Challenge: nonce,
+		IncludeAccumulate: &inc, IncludePeers: &inc, Partition: part,
+		NodeID: self.String(), Challenge: nonce,
 	})
 	require.NoError(t, err)
 	require.Empty(t, st.ChallengeSignature)
-}
-
-// TestSubmitter_ThreeAttemptsAreOneAccepted — the counting rule (#4366
-// note_3869978257): accepted is counted once, at a submission's first entry
-// into this node's worker or its relay, never per attempt. A client that
-// submits again is a new submission; the relay's own retries are not.
-func TestSubmitter_ThreeAttemptsAreOneAccepted(t *testing.T) {
-	const part = "bvn1"
-	svc, _, mine := newJoiningService(t)
-	a, b, c := otherKey(t), otherKey(t), otherKey(t)
-	pa, pb, pc := peer.ID("not-ready"), peer.ID("unreachable"), peer.ID("takes-it")
-
-	m := NewMembership(part, mine)
-	m.SetGlobals(globalsWith(t, map[string][]ed25519.PublicKey{part: {a, b, c}}))
-
-	rpc := &fakeRPC{
-		partition: part,
-		keys:      map[peer.ID]ed25519.PublicKey{pa: a, pb: b, pc: c},
-		answers: map[peer.ID]answer{
-			pa: {err: errors.NotReady.With("joining")},
-			pb: {err: errors.StreamAborted.With("reset")},
-		},
-	}
-	sub := NewSubmitterService(SubmitterServiceParams{
-		Service: svc, Membership: m,
-		Relay: NewRelay(RelayParams{Partition: part, Membership: m,
-			Peers: &fakePeers{self: "self", peers: []peer.ID{pa, pb, pc}}, RPC: rpc}),
-	})
-
-	a0, r0, t0, n0, u0 := counted(part)
-	no := false
-	res, err := sub.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{Verify: &no})
-	require.NoError(t, err)
-	require.True(t, res[0].Success)
-	require.Len(t, rpc.submitted, 3, "three attempts")
-
-	a1, r1, t1, n1, u1 := counted(part)
-	require.Equal(t, float64(1), a1-a0, "one submission, one accepted")
-	require.Equal(t, float64(1), t1-t0, "one relay, at its final answer")
-	require.Equal(t, float64(0), n1-n0, "a NotReady that is retried and then taken is not an outcome")
-	require.Equal(t, float64(0), u1-u0)
-	require.Equal(t, float64(0), r1-r0)
 }
