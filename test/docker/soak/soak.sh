@@ -1296,6 +1296,200 @@ if biggest_creep is not None:
 PYEOF
 }
 
+# One verdict per add-follower and per remove-follower (#4364), from the
+# run's captured files only. An add is the container's life, from its
+# `add-follower` line to the next `remove-follower`: every number on its row
+# is read inside that life, so a second add of the same container never
+# borrows the first one's. A quantity the life did not record reads `not
+# measured`, never a pass. A removal's row is followerchaos.unaffected over
+# the readings either side of it — the same judgement the chaos log states.
+follower_verdict_rows() {
+  python3 - "$rd" "$here" <<'PYEOF'
+import csv, datetime, json, os, re, sys
+
+rd, here = sys.argv[1], sys.argv[2]
+sys.path.insert(0, here)
+NM = "not measured"
+
+
+def secs(t):
+    return datetime.datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=datetime.timezone.utc).timestamp()
+
+
+def hhmm(t):
+    return t[11:16] + "Z"
+
+
+def rows_of(name):
+    try:
+        return list(csv.DictReader(open(os.path.join(rd, name))))
+    except OSError:
+        return None
+
+
+try:
+    lines = [l.rstrip("\n") for l in open(os.path.join(rd, "chaos.log")) if l.strip()]
+except OSError:
+    print("| add-follower / remove-follower | — %s (no `chaos.log`) |" % NM)
+    raise SystemExit
+
+# --- the lives, from chaos.log ----------------------------------------------
+lives, removals, cur = [], [], None
+for l in lines:
+    m = re.match(r"^(\S+Z) (.*)$", l)
+    if not m:
+        continue
+    t, rest = m.group(1), m.group(2)
+    a = re.match(r"add-follower (\S+)", rest)
+    if a:
+        cur = {"node": a.group(1), "at": t, "end": None, "active": None,
+               "activeS": None, "never": None, "match": None}
+        lives.append(cur)
+        continue
+    r = re.match(r"remove-follower (\S+)", rest)
+    if r:
+        removals.append({"node": r.group(1), "at": t, "n": len(removals) + 1})
+        if cur is not None and cur["node"] == r.group(1):
+            cur["end"] = t
+            cur = None
+        continue
+    if cur is None:
+        continue
+    m = re.match(r"follower (\S+) ACTIVE .*, (\d+)s after it was added", rest)
+    if m and m.group(1) == cur["node"]:
+        cur["active"], cur["activeS"] = t, int(m.group(2))
+    m = re.match(r"follower (\S+) NEVER ACTIVE: (.*)$", rest)
+    if m and m.group(1) == cur["node"]:
+        cur["never"] = m.group(2)
+    m = re.match(r"follower (\S+) first root match \((.*)\), (\d+)s after", rest)
+    if m and m.group(1) == cur["node"]:
+        f = dict(kv.split("=", 1) for kv in m.group(2).split() if "=" in kv)
+        cur["match"] = "block %s (source %s), %ss after the add" % (
+            f.get("block", "?"), f.get("source", "?"), m.group(3))
+
+if not lives and not removals:
+    print("| add-follower / remove-follower | none in `chaos.log` |")
+    raise SystemExit
+
+nodestate = rows_of("nodestate.csv")
+behind = rows_of("follower.csv")
+subs = rows_of("submissions.csv")
+probe = rows_of("readprobe-follower.csv")
+
+
+def in_life(rows, life, col="node"):
+    lo = secs(life["at"])
+    hi = secs(life["end"]) if life["end"] else float("inf")
+    return [r for r in rows or [] if r.get(col) == life["node"]
+            and lo <= secs(r["time"]) <= hi]
+
+
+out = []
+for life in lives:
+    parts = []
+    # container start -> ACTIVE: nodestate.csv's reached rows for the start
+    # inside this life (docker start follows the add line by a second or
+    # two), the chaos log's own seconds only when soakmon wrote none.
+    reached = [r for r in in_life(nodestate, life) if r.get("kind") == "reached"
+               and r.get("startToActiveS")
+               and secs(r["containerStarted"]) >= secs(life["at"]) - 5]
+    handoff = None
+    if reached:
+        w = max(reached, key=lambda r: float(r["startToActiveS"]))
+        handoff = max(secs(r["time"]) for r in reached)
+        parts.append("container start → ACTIVE %ss (%s)" % (
+            w["startToActiveS"], ", ".join(
+                "%s %ss" % (r["partition"], r["startToActiveS"])
+                for r in sorted(reached, key=lambda r: r["partition"]))))
+    elif life["active"]:
+        handoff = secs(life["active"])
+        parts.append("ACTIVE %ds after the add (chaos.log; no `nodestate.csv` "
+                     "row for this start)" % life["activeS"])
+    elif life["never"]:
+        parts.append("NEVER ACTIVE (%s)" % life["never"])
+    else:
+        parts.append("container start → ACTIVE %s" % NM)
+
+    # blocks behind at hand-off: the follower.csv sample nearest the moment
+    # the last partition went ACTIVE, per partition.
+    if handoff is None:
+        parts.append("behind at hand-off %s (no hand-off)" % NM)
+    else:
+        rs = in_life(behind, life, col="follower")
+        if not rs:
+            parts.append("behind at hand-off %s (no `follower.csv` sample)" % NM)
+        else:
+            near = min({r["time"] for r in rs},
+                       key=lambda t: (abs(secs(t) - handoff), -secs(t)))
+            parts.append("behind at hand-off %s blocks (sample %s)" % (
+                ", ".join("%s %s" % (r["partition"], r.get("behindBlocks") or "?")
+                          for r in sorted(rs, key=lambda r: r["partition"])
+                          if r["time"] == near), near[11:]))
+
+    parts.append("first root match %s" % life["match"] if life["match"]
+                 else "first root match %s" % NM)
+
+    # NotReady on a read before ACTIVE, and which service answered it.
+    rs = in_life(probe, life, col="follower")
+    before = [r for r in rs if handoff is None or secs(r["time"]) < handoff]
+    if not before:
+        parts.append("NotReady before ACTIVE %s (no read of it in `readprobe-follower.csv`)" % NM)
+    else:
+        nr = [r for r in before if r.get("outcome") == "not-ready"]
+        if nr:
+            parts.append("NotReady before ACTIVE on %d read(s): %s" % (
+                len(nr), ", ".join(sorted({"%s %s" % (r["partition"], r["service"])
+                                           for r in nr}))))
+        else:
+            parts.append("NO NotReady before ACTIVE (%d read(s), none refused)" % len(before))
+
+    # stranded, and relayed-taken against accepted, on THIS follower over
+    # this container's life: the last sample in it, deduped by partition.
+    rs = in_life(subs, life)
+    if not rs:
+        parts.append("accepted / relayed-taken / stranded %s (no `submissions.csv` row in its life)" % NM)
+    else:
+        last = max(r["time"] for r in rs)
+        tot = {"accepted": None, "relayedTaken": None,
+               "acceptedNeitherCertifiedTakenNorRefused": None}
+        for r in {r.get("partition"): r for r in rs if r["time"] == last}.values():
+            for k in tot:
+                v = (r.get(k) or "").strip()
+                if v.isdigit():
+                    tot[k] = (tot[k] or 0) + int(v)
+        show = lambda v: NM if v is None else str(v)
+        ratio = ""
+        if tot["accepted"] and tot["relayedTaken"] is not None:
+            ratio = " (%.1f%% of accepted)" % (100.0 * tot["relayedTaken"] / tot["accepted"])
+        parts.append("accepted %s, relayed-taken %s%s, stranded %s (as of %s)" % (
+            show(tot["accepted"]), show(tot["relayedTaken"]), ratio,
+            show(tot["acceptedNeitherCertifiedTakenNorRefused"]), last[11:]))
+
+    out.append((life["at"], "| %s add-follower %s | %s |" % (
+        hhmm(life["at"]), life["node"], "; ".join(parts))))
+
+import followerchaos
+for rm in removals:
+    pre = os.path.join(rd, "follower-removal-%d" % rm["n"])
+    snaps = []
+    for which in ("before", "at", "after"):
+        try:
+            with open("%s-%s.json" % (pre, which)) as f:
+                snaps.append(json.load(f))
+        except (OSError, ValueError):
+            snaps.append(None)
+    if any(s is None for s in snaps):
+        text = "%s (no `follower-removal-%d-{before,at,after}.json`)" % (NM, rm["n"])
+    else:
+        text = followerchaos.unaffected(*snaps)[1]
+    out.append((rm["at"], "| %s remove-follower %s (removal %d) | %s |" % (
+        hhmm(rm["at"]), rm["node"], rm["n"], text)))
+for _, row in sorted(out, key=lambda x: x[0]):
+    print(row)
+PYEOF
+}
+
 nodestate_row() {   # $1 = role: validator | follower
   python3 - "$rd/nodestate.csv" "${1:-}" <<'PYEOF'
 import csv, sys
@@ -1558,6 +1752,16 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     echo "| disturbance | stranded |"
     echo "|---|---|"
     steps_rows follower
+    echo
+    echo "**Per add-follower and remove-follower (#4364).** Each add is read"
+    echo "over that container's life only, from its \`add-follower\` line to"
+    echo "its \`remove-follower\`; a quantity the life did not record reads"
+    echo "\`not measured\`. A removal is judged on the readings"
+    echo "${FOLLOWER_WINDOW_SECS:-30}s either side of it."
+    echo
+    echo "| event | verdict |"
+    echo "|---|---|"
+    follower_verdict_rows
     echo
     echo "Full detail in \`follower-report.md\`; the per-sample series in \`follower.csv\`."
   fi
