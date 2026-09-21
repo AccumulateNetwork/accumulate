@@ -1144,6 +1144,48 @@ if biggest_creep is not None:
 PYEOF
 }
 
+nodestate_row() {   # $1 = role: validator | follower
+  python3 - "$rd/nodestate.csv" "${1:-}" <<'PYEOF'
+import csv, sys
+path, role = sys.argv[1], sys.argv[2]
+try:
+    rows = list(csv.DictReader(open(path)))
+except OSError:
+    print("— not measured (no `nodestate.csv`: no node exported accumulate_node_state, or no container start was read)")
+    raise SystemExit
+rows = [r for r in rows if not role or r.get("role") == role]
+if not rows:
+    print("— not measured (no %s row in `nodestate.csv`)" % (role or "node"))
+    raise SystemExit
+# soakmon writes a row when a start reaches ACTIVE and, on its way out, a
+# `final` row for every start that has not. soakmon is supervised and can
+# restart mid-run, so a `final` row is a start that never reached ACTIVE
+# only if no later row completed the same start.
+key = lambda r: (r["node"], r["partition"], r["containerStarted"])
+done = {key(r) for r in rows if r["kind"] in ("reached", "already")}
+reached = [r for r in rows if r["kind"] == "reached"]
+stuck = {}
+for r in rows:
+    if r["kind"] == "final" and key(r) not in done:
+        stuck[key(r)] = r
+if reached:
+    w = max(reached, key=lambda r: float(r["startToActiveS"]))
+    head = "worst %ss (%s %s) over %d start(s) seen booting" % (
+        w["startToActiveS"], w["node"], w["partition"], len(reached))
+else:
+    head = "no start inside the run was seen booting"
+already = sum(1 for r in rows if r["kind"] == "already")
+if already:
+    head += "; %d ACTIVE at first sight (started before the monitor saw them: upper bounds, not in the worst)" % already
+if stuck:
+    head += "; NEVER ACTIVE: " + ", ".join(
+        "%s %s (%s)" % (r["node"], r["partition"], r["state"]) for r in stuck.values())
+else:
+    head += "; every start reached ACTIVE"
+print(head)
+PYEOF
+}
+
 sub_row() {   # $1 = role, $2 = when the loadgen exited, $3 = "stallkill" or ""
   python3 - "$rd/submissions.csv" "${1:-}" "${2:-}" "${3:-}" <<'PYEOF'
 import csv, sys
@@ -1322,6 +1364,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
   echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
   echo "| accepted, neither certified here, taken on relay, nor refused (#, whole run, the validators) | $(sub_row validator "$lg_exit" "$stopped_early") |"
+  echo "| container start → ACTIVE (s, per node and partition, every start the monitor saw; the validators) | $(nodestate_row validator) |"
   if [ "$n_fol" -gt 0 ]; then
     echo
     echo "### Follower (#4365)"
@@ -1335,6 +1378,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     fi
     echo "| accepted, neither certified here, taken on relay, nor refused (#, whole run) | $(sub_row follower "$lg_exit" "$stopped_early") |"
     echo "| relayed (#, whole run) | $(relay_row follower) |"
+    echo "| container start → ACTIVE (s, per partition, the add-follower and every restart) | $(nodestate_row follower) |"
     echo
     echo "**Stranded across disturbances (#4364).** The criterion is that the"
     echo "figure does not climb between disturbances and that every step is"
@@ -1366,7 +1410,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     echo "Full detail in \`follower-report.md\`; the per-sample series in \`follower.csv\`."
   fi
   echo
-  echo "Raw: \`soak.log\`, \`monitor.csv\`, \`mem.csv\` (every node, with its role), \`submissions.csv\`, \`chaos.log\`, \`loadgen-stats.json\`, \`readprobe.csv\` / \`readprobe-report.md\`$([ "$n_fol" -gt 0 ] && echo ', `follower.csv` / `follower-report.md`, `network-definition.json`')."
+  echo "Raw: \`soak.log\`, \`monitor.csv\`, \`mem.csv\` (every node, with its role), \`submissions.csv\`, \`chaos.log\`, \`nodestate.csv\`, \`loadgen-stats.json\`, \`readprobe.csv\` / \`readprobe-report.md\`$([ "$n_fol" -gt 0 ] && echo ', `follower.csv` / `follower-report.md`, `network-definition.json`')."
 } >> "$manifest"
 
 # Accumulating index — one line per run, newest last, never rewritten.

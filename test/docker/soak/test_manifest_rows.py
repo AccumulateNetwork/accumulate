@@ -438,3 +438,60 @@ class SoakShPassesWhatTheHelpersNeed(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NodeStateRow(unittest.TestCase):
+    """The manifest's start-to-ACTIVE row (#4364), read from the nodestate.csv
+    soakmon writes — produced here by soakmon's own writer, so the file the
+    row parses is the file the monitor makes."""
+
+    def setUp(self):
+        import sys
+        sys.path.insert(0, HERE)
+        import soakmon
+        self.soakmon = soakmon
+        self.rd = tempfile.mkdtemp(prefix="nodestaterow-")
+        with open(SOAK) as f:
+            m = re.search(r"^nodestate_row\(\) \{.*?\nPYEOF\n\}\n", f.read(), re.S | re.M)
+        self.assertIsNotNone(m, "no nodestate_row in soak.sh")
+        self.fn = m.group(0)
+
+    def row(self, events, role):
+        if events is not None:
+            with open(os.path.join(self.rd, "nodestate.csv"), "w") as f:
+                f.write(self.soakmon.NODESTATE_CSV_HEADER + "\n")
+                for line in self.soakmon.nodestate_csv_rows(events, "2026-09-21T00:00:00Z"):
+                    f.write(line + "\n")
+        path = os.path.join(self.rd, "run.sh")
+        with open(path, "w") as f:
+            f.write('#!/usr/bin/env bash\nrd="$1"\n' + self.fn + "\nnodestate_row %s\n" % role)
+        out = subprocess.run(["bash", path, self.rd], capture_output=True, text=True, timeout=60)
+        self.assertEqual("", out.stderr.strip(), out.stderr)
+        return out.stdout.strip()
+
+    def ev(self, node, part, started, s2a, kind, state="ACTIVE", role="validator"):
+        return {"node": node, "role": role, "partition": part, "containerStarted": started,
+                "state": state, "startToActiveS": s2a, "kind": kind}
+
+    def test_no_file_is_not_measured(self):
+        self.assertIn("not measured", self.row(None, "validator"))
+
+    def test_worst_restart_and_a_start_that_never_became_active(self):
+        got = self.row([
+            self.ev("acc-bvn1-val1", "bvn1", 100, 4000.0, "already"),
+            self.ev("acc-bvn1-val2", "bvn1", 5000, 35.0, "reached"),
+            self.ev("acc-bvn1-val2", "directory", 5000, 90.0, "reached"),
+            self.ev("acc-bvn2-val1", "bvn2", 6000, None, "final", state="BOOTING"),
+            self.ev("acc-bvn3-fol1", "bvn3", 7000, 12.0, "reached", role="follower"),
+        ], "validator")
+        self.assertIn("worst 90.0s (acc-bvn1-val2 directory) over 2 start(s)", got)
+        self.assertIn("1 ACTIVE at first sight", got)
+        self.assertIn("NEVER ACTIVE: acc-bvn2-val1 bvn2 (BOOTING)", got)
+        self.assertNotIn("4000", got, "an upper bound is not the worst")
+
+    def test_a_final_row_completed_after_a_monitor_restart_is_not_stuck(self):
+        got = self.row([
+            self.ev("acc-bvn3-fol1", "bvn3", 7000, None, "final", state="BOOTING", role="follower"),
+            self.ev("acc-bvn3-fol1", "bvn3", 7000, 300.0, "already", role="follower"),
+        ], "follower")
+        self.assertIn("every start reached ACTIVE", got)
