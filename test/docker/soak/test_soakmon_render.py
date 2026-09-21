@@ -150,6 +150,34 @@ class TheMeasuredBranchRenders(unittest.TestCase):
         v = render(WITH_FOLLOWER, ns)
         self.assertIn("— not measured", v["fres"])
 
+    def test_every_reading_names_its_follower_not_a_bare_partition(self):
+        """With a follower added mid-run beside the one launched with the
+        network, `BVN3 500/500` does not say whose (#4364)."""
+        fo = json.loads(json.dumps(WITH_FOLLOWER))
+        fo["nodes"]["acc-bvn3-fol1"]["life"] = {"kind": "launched", "at": None, "adds": 0}
+        fo["nodes"]["acc-bvn3-fol2"] = {
+            "worstBehind": None, "maxBehindRun": 311, "over": False,
+            "life": {"kind": "removed", "at": "2026-09-20T01:05:00Z", "adds": 1},
+            "partitions": {"BVN3": {
+                "measured": False, "behind": None, "ahead": None,
+                "follower": None, "network": 500, "over": False,
+                "why": "removed at 01:05Z"}}}
+        v = render(fo, NODE_STATS)
+        self.assertIn("acc-bvn3-fol1 DN 499/500", v["fheight"])
+        self.assertIn("acc-bvn3-fol1 BVN3 500/500", v["fheight"])
+        self.assertIn("acc-bvn3-fol2 BVN3 removed at 01:05Z", v["fheight"])
+        for part in v["fheight"].split(" · "):
+            self.assertRegex(part, r"^acc-", "a reading with no follower named")
+        self.assertIn("acc-bvn3-fol1 (follower launched with the network)", v["fstate"])
+        self.assertIn("acc-bvn3-fol2 (follower removed 01:05Z)", v["fstate"])
+
+    def test_an_added_follower_says_when_and_which_add(self):
+        fo = json.loads(json.dumps(WITH_FOLLOWER))
+        fo["nodes"]["acc-bvn3-fol1"]["life"] = {
+            "kind": "added", "at": "2026-09-20T01:10:00Z", "adds": 2}
+        v = render(fo, NODE_STATS)
+        self.assertIn("acc-bvn3-fol1 (follower added 01:10Z (add 2))", v["fstate"])
+
     def test_no_follower_stats_is_absent_not_zero(self):
         v = render(WITH_FOLLOWER, {})
         self.assertIn("— not measured", v["fres"])

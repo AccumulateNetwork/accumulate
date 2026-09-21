@@ -332,6 +332,17 @@ port: one row per round, follower, partition and outcome, `reads` the count.
 -33504 — the join working, not a failed read), `gated`, `timeout` or
 `error`. A follower not yet added answers nothing and reads `error`.
 
+**On the board** a follower added mid-run is the same *follower* row group as
+the one launched with the network (#4365), not a second one. Every reading
+in it names its follower — `acc-bvn3-fol2 BVN3 800/823`, never a bare
+`BVN3 800/823` — and the caption says how each came to be there: launched
+with the network, added at a time (and which add), removed at a time, or not
+added yet, from the last `add-follower` / `remove-follower` line of
+`chaos.log`. A removed or not-yet-added follower is not asked and reads
+`— not measured` with that reason, never "did not answer". The stream
+matrix is unchanged: source to destination, partitions only, read from the
+validators.
+
 The consensus-status API MUST additionally report `syntheticHeals` and
 `anchorHeals` (#4075) — the coarse monitor's CSV reads them.
 

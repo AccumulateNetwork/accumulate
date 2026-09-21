@@ -15,6 +15,7 @@ window (Paul's rule: name the quantity and the window).
 """
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -110,6 +111,67 @@ class Collect(unittest.TestCase):
         self.assertFalse(v["measured"])
         self.assertEqual({}, v["nodes"])
         self.assertIn("no follower", v["why"])
+
+
+class AddedMidRun(unittest.TestCase):
+    """A follower the chaos walk adds and removes (#4364) is the same row
+    group, extended: it says how it came to be here, and a removed one is
+    not asked and not read as a follower that stopped answering."""
+
+    CHAOS = ("2026-09-20T01:00:00Z add-follower acc-bvn3-fol2 (key in no committee; databases cleared)\n"
+             "2026-09-20T01:05:00Z remove-follower acc-bvn3-fol2\n"
+             "2026-09-20T01:10:00Z add-follower acc-bvn3-fol2 (key in no committee; databases cleared)\n")
+
+    def setUp(self):
+        self._f, self._r = soakmon.FOLLOWERS, soakmon._read_ledger_index
+        self._c, self._l = soakmon.CHAOS, soakmon._LATE
+        soakmon.FOLLOWERS = [
+            {"container": "acc-bvn3-fol1", "port": 26692, "dir": "bvn3-5",
+             "bvn": "BVN3", "partitions": ["Directory", "BVN3"]},
+            {"container": "acc-bvn3-fol2", "port": 26693, "dir": "bvn3-6",
+             "bvn": "BVN3", "partitions": ["Directory", "BVN3"]}]
+        soakmon._LATE = {"acc-bvn3-fol2"}
+        soakmon.CHAOS = os.path.join(tempfile.mkdtemp(), "chaos.log")
+        soakmon._FOLLOWER_WORST.clear()
+        self.asked = []
+        soakmon._read_ledger_index = lambda port, part: (
+            self.asked.append(port), 499)[1]
+
+    def tearDown(self):
+        soakmon.FOLLOWERS, soakmon._read_ledger_index = self._f, self._r
+        soakmon.CHAOS, soakmon._LATE = self._c, self._l
+        soakmon._FOLLOWER_WORST.clear()
+
+    def chaos(self, text):
+        with open(soakmon.CHAOS, "w") as f:
+            f.write(text)
+
+    def test_before_its_first_add_it_is_waiting_and_not_asked(self):
+        v = soakmon.collect_follower({"Directory": 500, "BVN3": 500}, now=1.0)
+        n = v["nodes"]["acc-bvn3-fol2"]
+        self.assertEqual("waiting", n["life"]["kind"])
+        self.assertEqual("not added yet", n["partitions"]["BVN3"]["why"])
+        self.assertNotIn(26693, self.asked)
+        self.assertEqual("launched", v["nodes"]["acc-bvn3-fol1"]["life"]["kind"])
+
+    def test_added_it_is_read_and_says_when(self):
+        self.chaos(self.CHAOS)
+        v = soakmon.collect_follower({"Directory": 500, "BVN3": 500}, now=1.0)
+        n = v["nodes"]["acc-bvn3-fol2"]
+        self.assertEqual({"kind": "added", "at": "2026-09-20T01:10:00Z", "adds": 2},
+                         n["life"])
+        self.assertEqual(1, n["partitions"]["BVN3"]["behind"])
+        self.assertIn(26693, self.asked)
+
+    def test_removed_it_is_named_as_removed_and_not_asked(self):
+        self.chaos(self.CHAOS.rsplit("2026-09-20T01:10", 1)[0])
+        v = soakmon.collect_follower({"Directory": 500, "BVN3": 500}, now=1.0)
+        n = v["nodes"]["acc-bvn3-fol2"]
+        self.assertEqual("removed", n["life"]["kind"])
+        self.assertFalse(n["partitions"]["BVN3"]["measured"])
+        self.assertEqual("removed at 01:05Z", n["partitions"]["BVN3"]["why"])
+        self.assertIsNone(n["worstBehind"])
+        self.assertNotIn(26693, self.asked)
 
 
 class CsvRows(unittest.TestCase):
