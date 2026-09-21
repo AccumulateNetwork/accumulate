@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -42,6 +43,7 @@ type NetworkService struct {
 	database   database.Viewer
 	partition  string
 	nodeStatus NodeStatusClient
+	nodeState  nodestate.Serving
 }
 
 var _ api.NetworkService = (*NetworkService)(nil)
@@ -54,6 +56,12 @@ type NetworkServiceParams struct {
 	// NodeStatus is optional; if provided, NetworkStatus will include
 	// staleness detection fields (LastBlockTime and CatchingUp).
 	NodeStatus NodeStatusClient
+
+	// NodeState is this node's join state. A network status is a READ -- the
+	// globals, the oracle and the routing table, out of the store -- so a
+	// joining node refuses it like any other (executor.md, "Sync", step 6;
+	// #4295 F1). Nil means the node never joined.
+	NodeState nodestate.Serving
 }
 
 func NewNetworkService(params NetworkServiceParams) *NetworkService {
@@ -62,6 +70,7 @@ func NewNetworkService(params NetworkServiceParams) *NetworkService {
 	s.database = params.Database
 	s.partition = params.Partition
 	s.nodeStatus = params.NodeStatus
+	s.nodeState = params.NodeState
 	events.SubscribeAsync(params.EventBus, func(e events.WillChangeGlobals) {
 		s.values.Store(e.New)
 	})
@@ -71,6 +80,16 @@ func NewNetworkService(params NetworkServiceParams) *NetworkService {
 func (s *NetworkService) Type() api.ServiceType { return api.ServiceTypeNetwork }
 
 func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusOptions) (*api.NetworkStatus, error) {
+	// A joining node refuses every read, and this is one: the routing table
+	// it would answer with is the half-filled store's, and an external client
+	// builds its router out of it (pkg/api/v3/p2p/client.go) and keeps it.
+	// How a peer learns this node is not ready is ConsensusStatus.CatchingUp,
+	// which is a different service and is not gated (#4295 F1).
+	if s.nodeState != nil && !s.nodeState.CanServeCurrent() {
+		return nil, errors.NotReady.WithFormat(
+			"%s is joining and cannot answer for state it has not executed", s.partition)
+	}
+
 	values := s.values.Load()
 	if values == nil {
 		values = new(core.GlobalValues)

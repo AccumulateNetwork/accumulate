@@ -30,7 +30,14 @@ var (
 
 	networkNeedsEvents  = ioc.Needs[*events.Bus](func(n *NetworkService) string { return n.Partition })
 	networkNeedsStorage = ioc.Needs[keyvalue.Beginner](func(n *NetworkService) string { return n.Partition })
-	networkProvides     = ioc.Provides[v3.NetworkService](func(n *NetworkService) string { return n.Partition })
+
+	// The partition's join state. A network status is the globals, the
+	// oracle and the ROUTING TABLE read out of the store, and while the node
+	// is joining that store is the one the pull is filling -- an external
+	// client builds its router from this answer (pkg/api/v3/p2p/client.go),
+	// so a stale one misroutes for as long as the client lives (#4295 F1).
+	networkWantsNodeState = ioc.Wants[nodestate.Serving](func(n *NetworkService) string { return n.Partition })
+	networkProvides       = ioc.Provides[v3.NetworkService](func(n *NetworkService) string { return n.Partition })
 
 	metricsNeedsConsensus = ioc.Needs[v3.ConsensusService](func(m *MetricsService) string { return m.Partition })
 	metricsNeedsQuerier   = ioc.Needs[v3.Querier](func(m *MetricsService) string { return m.Partition })
@@ -90,6 +97,7 @@ func (n *NetworkService) Requires() []ioc.Requirement {
 	return []ioc.Requirement{
 		networkNeedsEvents.Requirement(n),
 		networkNeedsStorage.Requirement(n),
+		networkWantsNodeState.Requirement(n),
 	}
 }
 
@@ -110,11 +118,17 @@ func (n *NetworkService) start(inst *Instance) error {
 		return err
 	}
 
+	nodeState, err := networkWantsNodeState.Get(inst.services, n)
+	if err != nil {
+		return err
+	}
+
 	impl := api.NewNetworkService(api.NetworkServiceParams{
 		Logger:    logging.NewSlogLogger(inst.logger).With("module", "api"),
 		Partition: n.Partition,
 		Database:  database.New(store, logging.NewSlogLogger(inst.logger)).Deep(),
 		EventBus:  events,
+		NodeState: nodeState,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(n.Partition), message.NetworkService{NetworkService: impl})
 	return networkProvides.Register(inst.services, n, impl)

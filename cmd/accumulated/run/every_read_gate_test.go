@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	apiv3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -88,8 +89,11 @@ func TestAJoiningNodeRefusesEveryRead(t *testing.T) {
 	svc, err := querierProvides.Get(inst.services, q)
 	require.NoError(t, err)
 
-	// Every read, by the kind of query it is. The first two are the ones
-	// #4297 gated; the rest were answered from the half-filled store.
+	// EVERY read: one of each query kind the querier answers. The list is
+	// checked against api.QueryType below, so a kind added to the querier
+	// that this test does not drive is a failure rather than a silence — the
+	// gate used to be a switch, and a switch that exempts six search kinds
+	// stays green against a test that drives seven.
 	type read struct {
 		name  string
 		scope *url.URL
@@ -97,14 +101,38 @@ func TestAJoiningNodeRefusesEveryRead(t *testing.T) {
 	}
 	count := uint64(4)
 	minor := uint64(1)
+	hash := [32]byte{1}
 	every := []read{
 		{"bpt-page", partUrl, &apiv3.BptPageQuery{Count: 4}},
 		{"account-with-receipt", alice, &apiv3.DefaultQuery{IncludeReceipt: &apiv3.ReceiptOptions{ForAny: true}}},
 		{"ordinary-account", alice, &apiv3.DefaultQuery{}},
 		{"chain", alice, &apiv3.ChainQuery{Name: "main"}},
+		{"data", alice, &apiv3.DataQuery{Range: &apiv3.RangeOptions{Count: &count}}},
 		{"directory", alice, &apiv3.DirectoryQuery{Range: &apiv3.RangeOptions{Count: &count}}},
 		{"pending", alice, &apiv3.PendingQuery{Range: &apiv3.RangeOptions{Count: &count}}},
 		{"block", partUrl, &apiv3.BlockQuery{Minor: &minor}},
+		{"anchor-search", partUrl, &apiv3.AnchorSearchQuery{Anchor: hash[:]}},
+		{"public-key-search", alice, &apiv3.PublicKeySearchQuery{PublicKey: hash[:], Type: protocol.SignatureTypeED25519}},
+		{"public-key-hash-search", alice, &apiv3.PublicKeyHashSearchQuery{PublicKeyHash: hash[:]}},
+		{"delegate-search", alice, &apiv3.DelegateSearchQuery{Delegate: protocol.AccountUrl("bob")}},
+		{"message-hash-search", alice, &apiv3.MessageHashSearchQuery{Hash: hash}},
+	}
+
+	// The list is complete: every QueryType the querier's own switch names is
+	// driven above. This is what makes "every read" a claim rather than a
+	// sample (test audit, gap 4 / M4).
+	driven := map[apiv3.QueryType]bool{}
+	for _, r := range every {
+		driven[r.query.QueryType()] = true
+	}
+	for _, qt := range []apiv3.QueryType{
+		apiv3.QueryTypeDefault, apiv3.QueryTypeChain, apiv3.QueryTypeData,
+		apiv3.QueryTypeDirectory, apiv3.QueryTypePending, apiv3.QueryTypeBlock,
+		apiv3.QueryTypeAnchorSearch, apiv3.QueryTypePublicKeySearch,
+		apiv3.QueryTypePublicKeyHashSearch, apiv3.QueryTypeDelegateSearch,
+		apiv3.QueryTypeMessageHashSearch, apiv3.QueryTypeBptPage,
+	} {
+		require.True(t, driven[qt], "no read of kind %v is driven: the gate is not proved for it", qt)
 	}
 
 	for _, r := range every {
@@ -144,4 +172,65 @@ func TestAJoiningNodeRefusesEveryRead(t *testing.T) {
 	// than the store having gone empty.
 	_, err = svc.Query(ctx, partUrl, &apiv3.BptPageQuery{Count: 4})
 	require.NoError(t, err, "a node whose root matches an anchored root refused a BPT page")
+}
+
+// NETWORK STATUS IS A READ (#4295 F1).
+//
+// executor.md, "Sync", step 6: a syncing node refuses every read. A node's
+// network status is its globals, its ORACLE and its ROUTING TABLE, read out
+// of the store — and while the node is joining that store is the one its own
+// pull is filling, so the routing table it answers with is part one block's
+// and part another's. It is not a monitoring read that a peer needs in order
+// to skip this node: a peer learns that from ConsensusStatus.CatchingUp,
+// which is a different service and is not gated. It is a read a WALLET takes:
+// pkg/api/v3/p2p/client.go builds an external client's router out of it, so a
+// client that happens to connect to a joining node routes by a stale table
+// for as long as it holds the client.
+//
+// Production wiring: the daemon's own (*NetworkService).start against an
+// Instance, and the service start registered. By hand: the machine starts at
+// BOOTING because nothing here runs a join.
+func TestAJoiningNodeRefusesNetworkStatus(t *testing.T) {
+	const part = "BVN0"
+	ctx := context.Background()
+
+	node, err := p2p.New(p2p.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = node.Close() })
+	inst := &Instance{
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		services: ioc.Registry{},
+		p2p:      node,
+	}
+	require.NoError(t, ioc.Register[keyvalue.Beginner](inst.services, part, memory.New(nil)))
+	require.NoError(t, ioc.Register[*events.Bus](inst.services, part, events.NewBus(nil)))
+
+	machine := nodestate.New(protocol.PartitionUrl(part))
+	n := &NetworkService{Partition: part}
+	require.NoError(t, networkWantsNodeState.Register(inst.services, n, machine))
+	require.NoError(t, n.start(inst))
+	svc, err := networkProvides.Get(inst.services, n)
+	require.NoError(t, err)
+
+	_, err = svc.NetworkStatus(ctx, apiv3.NetworkStatusOptions{Partition: part})
+	require.Error(t, err, "a joining node answered for the network's routing table")
+	require.True(t, errors.Is(err, errors.NotReady), "got %v", err)
+	require.Contains(t, err.Error(), "is joining")
+
+	// And a node that never joined answers, so the test is not satisfied by a
+	// service that refuses everything.
+	inst2 := &Instance{
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		services: ioc.Registry{},
+		p2p:      node,
+	}
+	require.NoError(t, ioc.Register[keyvalue.Beginner](inst2.services, part, memory.New(nil)))
+	require.NoError(t, ioc.Register[*events.Bus](inst2.services, part, events.NewBus(nil)))
+	n2 := &NetworkService{Partition: part}
+	require.NoError(t, networkWantsNodeState.Register(inst2.services, n2, nodestate.Always{}))
+	require.NoError(t, n2.start(inst2))
+	svc2, err := networkProvides.Get(inst2.services, n2)
+	require.NoError(t, err)
+	_, err = svc2.NetworkStatus(ctx, apiv3.NetworkStatusOptions{Partition: part})
+	require.False(t, errors.Is(err, errors.NotReady), "a node that never joined refused its network status: %v", err)
 }
