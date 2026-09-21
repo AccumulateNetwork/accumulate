@@ -9,6 +9,7 @@ package api
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -172,6 +173,24 @@ func TestSequencer_AJoinedNodeNamesItsJoinBlockAndNeverSaysNotFound(t *testing.T
 		require.True(t, errors.Is(err, errors.NotReady), "%s: got %v", c.name, err)
 		require.Contains(t, err.Error(), "joined at block 10",
 			"%s must name the block it joined at, so the asker knows who to ask", c.name)
+
+		// And name it where a REQUESTER can read it. In the message only, it
+		// is indistinguishable from a busy peer, and the two want opposite
+		// responses: ask someone else, versus ask this one later.
+		block, ok := private.JoinedAtBlock(err)
+		require.True(t, ok, "%s: the join block is in the message and nowhere a caller can parse it", c.name)
+		require.Equal(t, uint64(joinBlock), block, "%s", c.name)
+
+		// It survives the wire, both ways a peer receives it.
+		var wire *errors.Error
+		require.True(t, errors.As(err, &wire))
+		enc, merr := json.Marshal(wire)
+		require.NoError(t, merr)
+		var back errors.Error
+		require.NoError(t, json.Unmarshal(enc, &back))
+		block, ok = private.JoinedAtBlock(&back)
+		require.True(t, ok, "%s: the join block did not survive JSON", c.name)
+		require.Equal(t, uint64(joinBlock), block)
 		require.Equal(t, before, misses(), "%s counted a miss for a block it never produced", c.name)
 		require.Equal(t, beforeAnchor, anchorMisses(), "%s counted an anchor miss for a block it never produced", c.name)
 	}
@@ -208,6 +227,8 @@ func TestSequencer_AJoinedNodeNamesItsJoinBlockAndNeverSaysNotFound(t *testing.T
 			"%s: a number this node produced after it joined and lost is a MISS, not \"not from me\": %v", c.name, err)
 		require.NotContains(t, err.Error(), "joined at block",
 			"%s named its join block for a number it produced after joining", c.name)
+		_, marked := private.JoinedAtBlock(err)
+		require.False(t, marked, "%s marked a miss of its own as 'not from me'", c.name)
 		if c.kind == "entry" {
 			require.Equal(t, before+1, misses(), "%s did not count the miss", c.name)
 		} else {

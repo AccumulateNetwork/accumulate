@@ -103,7 +103,11 @@ func (s *Sequencer) refusedForJoin(joined uint64, ok bool, produced string) erro
 	if !ok {
 		return nil
 	}
-	return errors.NotReady.WithFormat("%v joined at block %d and produced %s at or before it; ask a node that did", s.partitionID, joined, produced)
+	// The block is in the message for a person and in Data for a requester:
+	// a message nobody parses is the same as no answer at all (#4295).
+	return private.MarkJoinedAt(
+		errors.NotReady.WithFormat("%v joined at block %d and produced %s at or before it; ask a node that did", s.partitionID, joined, produced),
+		joined)
 }
 
 func (s *Sequencer) getSynthFromCache(globals *core.GlobalValues, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {

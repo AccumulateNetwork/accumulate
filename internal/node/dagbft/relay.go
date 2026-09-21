@@ -179,7 +179,7 @@ func (r *Relay) Submit(ctx context.Context, env *messaging.Envelope, opts api.Su
 			"cannot relay for %s: no peer is known to handle its submissions", r.partition)
 	}
 
-	var sawNotReady, sawAny bool
+	var sawNotReady, sawAny, sawCatchingUp bool
 	for _, p := range candidates {
 		if ctx.Err() != nil {
 			break
@@ -206,13 +206,20 @@ func (r *Relay) Submit(ctx context.Context, env *messaging.Envelope, opts api.Su
 		hash, catchingUp, sig, err := r.standing(ctx, p, nonce)
 		if err != nil {
 			r.logger.Debug("Relay candidate did not answer", "peer", p, "partition", r.partition, "error", err)
+			r.skipped(metrics.SkipNoAnswer)
 			continue
 		}
 		if catchingUp {
+			// Counted, not silent. A validator that says this for ever while
+			// voting normally opts out of relay duty, and a bare continue
+			// left nothing to read (#4295, threat review finding 5).
+			sawCatchingUp = true
+			r.skipped(metrics.SkipCatchingUp)
 			continue
 		}
 		key, ok := r.membership.ActiveKey(hash)
 		if !ok {
+			r.skipped(metrics.SkipNotAValidator)
 			continue
 		}
 		if !verifyRelayChallenge(key, r.partition, hash, p, nonce, sig) {
@@ -221,6 +228,7 @@ func (r *Relay) Submit(ctx context.Context, env *messaging.Envelope, opts api.Su
 			// as one.
 			r.logger.Info("Relay candidate could not prove it is the holder of the key it claims",
 				"peer", p, "partition", r.partition)
+			r.skipped(metrics.SkipUnprovenKey)
 			continue
 		}
 		sawAny = true
@@ -261,8 +269,23 @@ func (r *Relay) Submit(ctx context.Context, env *messaging.Envelope, opts api.Su
 		return nil, metrics.RelayUnreachable, errors.NoPeer.WithFormat(
 			"relayed %s to every validator it could reach and none answered", r.partition)
 	}
+	if sawCatchingUp {
+		// Every validator that answered is catching up. That is the NETWORK
+		// saying "later", which is NotReady — the same thing the caller is
+		// told when every target answers NotReady. NoPeer says no validator
+		// was found, which is a different fault and sends an operator
+		// looking at discovery (#4295, threat review finding 5).
+		return nil, metrics.RelayNotReady, errors.NotReady.WithFormat(
+			"every validator of %s that answered is still catching up", r.partition)
+	}
 	return nil, metrics.RelayUnreachable, errors.NoPeer.WithFormat(
 		"cannot relay for %s: no peer that can propose was found", r.partition)
+}
+
+// skipped counts a candidate the relay passed over before handing it
+// anything.
+func (r *Relay) skipped(reason string) {
+	metrics.RelaySkippedTotal.WithLabelValues(r.partition, reason).Inc()
 }
 
 // standing and submit are the two calls a relay makes, each under its own

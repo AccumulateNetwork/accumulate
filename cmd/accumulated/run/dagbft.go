@@ -676,6 +676,26 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("register node state: %w", err)
 	}
+
+	// THE ONE THING NO TEST IN THIS PROCESS CAN REACH. A node that must join
+	// answers by the join's own machine; handing it nodestate.Always{}
+	// instead makes it answer every read out of the store its pull is
+	// filling, and that mutation stays green in every suite, because no test
+	// here joins — the netsim starts every node from genesis and the restart
+	// path is #4362's, still skipped (#4295 test audit M3). Read back out of
+	// the registry rather than from the variable, so it is what the services
+	// will be given, and refuse to start rather than run wrong.
+	if joining {
+		got, err := dagbftProvidesNodeState.Get(inst.services, s)
+		if err != nil {
+			return errors.UnknownError.WithFormat("read back node state: %w", err)
+		}
+		if _, ok := got.(*nodestate.Machine); !ok {
+			return errors.InternalError.WithFormat(
+				"%s must join, but its services were given %T rather than the join's own state machine",
+				s.Partition.ID, got)
+		}
+	}
 	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache, staging, serving)
 	if err != nil {
 		return err

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -756,4 +757,75 @@ func TestRelay_ManyAttemptsAreOneSubmission(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, metrics.RelayTaken, outcome, "one outcome, at the submission's final answer")
 	require.Equal(t, []peer.ID{pa, pb, pc}, rpc.submitted, "three attempts")
+}
+
+// TestRelay_EveryValidatorCatchingUpIsNotReadyAndIsCounted — #4295, threat
+// review finding 5.
+//
+// Two things were wrong when every validator says it is catching up. The
+// caller was told NoPeer — "no peer that can propose was found" — which is
+// what a node says when discovery found nothing, and it sends an operator
+// looking in the wrong place: the validators were found, they answered, and
+// they said "later". That is NotReady, the same answer as when every target
+// refuses for being busy.
+//
+// And the skip itself was silent. A bare `continue`, no counter, no log: a
+// validator that reports CatchingUp for ever while voting normally opts out
+// of relay duty and nothing anywhere says so. The fleet carries one fewer
+// relay target than its operator believes, and every submission still lands,
+// so no outcome moves.
+func TestRelay_EveryValidatorCatchingUpIsNotReadyAndIsCounted(t *testing.T) {
+	const part = "BVN4"
+	mine := otherKey(t)
+	a, b := otherKey(t), otherKey(t)
+	pa, pb := peer.ID("catching-up-a"), peer.ID("catching-up-b")
+
+	g := globalsWith(t, map[string][]ed25519.PublicKey{part: {a, b}})
+	rpc := &fakeRPC{
+		keys:       map[peer.ID]ed25519.PublicKey{pa: a, pb: b},
+		catchingUp: map[peer.ID]bool{pa: true, pb: true},
+	}
+	r := relayFor(t, part, mine, g, &fakePeers{self: "self", peers: []peer.ID{pa, pb}}, rpc)
+
+	before := relaySkipped(t, part, metrics.SkipCatchingUp)
+
+	_, outcome, err := r.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{})
+	require.Error(t, err)
+	require.Equal(t, metrics.RelayNotReady, outcome,
+		"every validator answering 'catching up' is the network saying later, not a missing peer")
+	require.True(t, errors.Is(err, errors.NotReady), "got %v", err)
+	require.False(t, errors.Is(err, errors.NoPeer),
+		"NoPeer sends an operator looking at discovery; the validators were found and answered")
+	require.Empty(t, rpc.submitted, "a catching-up validator was handed a submission")
+
+	require.Equal(t, before+2, relaySkipped(t, part, metrics.SkipCatchingUp),
+		"the skip is not counted, so a validator can opt out of relay duty with no signal")
+}
+
+// relaySkipped reads accumulate_dagbft_relay_candidates_skipped_total for one
+// partition and reason out of the process's own registry.
+func relaySkipped(t *testing.T, partition, reason string) float64 {
+	t.Helper()
+	mfs, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+	for _, mf := range mfs {
+		if !strings.HasSuffix(mf.GetName(), "relay_candidates_skipped_total") {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			var p, rs string
+			for _, l := range m.GetLabel() {
+				switch l.GetName() {
+				case "partition":
+					p = l.GetValue()
+				case "reason":
+					rs = l.GetValue()
+				}
+			}
+			if p == partition && rs == reason {
+				return m.GetCounter().GetValue()
+			}
+		}
+	}
+	return 0
 }

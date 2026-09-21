@@ -732,6 +732,34 @@ var (
 		Name:      "relayed_total",
 		Help:      "Submissions this node could not propose and relayed, by the outcome of the relay",
 	}, []string{"partition", "outcome"})
+
+	// RelaySkippedTotal counts candidates the relay PASSED OVER before it
+	// handed them anything, by the reason.
+	//
+	// Every one of these was a bare `continue` with no counter and no log,
+	// so a validator could opt out of relay duty — by reporting CatchingUp
+	// for ever while voting normally — and nothing anywhere said so. The
+	// submission still went somewhere, so no outcome moved; the fleet simply
+	// carried one fewer relay target than its operator believed (#4295,
+	// threat review finding 5).
+	RelaySkippedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "relay_candidates_skipped_total",
+		Help:      "Relay candidates passed over before anything was handed to them, by reason",
+	}, []string{"partition", "reason"})
+)
+
+// The reasons of RelaySkippedTotal.
+const (
+	// SkipNoAnswer: the candidate did not answer the standing call.
+	SkipNoAnswer = "no-answer"
+	// SkipCatchingUp: the candidate says it cannot propose yet.
+	SkipCatchingUp = "catching-up"
+	// SkipNotAValidator: the key it names is in no active committee.
+	SkipNotAValidator = "not-a-validator"
+	// SkipUnprovenKey: it named a validator's key and could not sign for it.
+	SkipUnprovenKey = "unproven-key"
 )
 
 // The outcomes of RelayedTotal. One word per outcome, and the same word
