@@ -27,11 +27,14 @@ import datetime
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOAK = os.path.join(HERE, "soak.sh")
+sys.path.insert(0, HERE)
+import runseries
 
 HEADER = ("time,node,role,partition,accepted,rejected,certified,relayedTaken,"
           "relayedRefused,relayedNotReady,relayedUnreachable,"
@@ -65,7 +68,11 @@ class Rows(unittest.TestCase):
                 f.write(r + "\n")
 
     def call(self, what):
-        script = '#!/usr/bin/env bash\nrd="$1"\n' + self.fns + "\n" + what + "\n"
+        # `here` is soak.sh's own variable, and the helpers pass it so they
+        # can import runseries — the series is built in one place for the
+        # stranded row and the step table both (#4364).
+        script = ('#!/usr/bin/env bash\nrd="$1"\nhere="%s"\n' % HERE
+                  + self.fns + "\n" + what + "\n")
         path = os.path.join(self.rd, "run.sh")
         with open(path, "w") as f:
             f.write(script)
@@ -378,7 +385,11 @@ class StepsPerDisturbance(Rows):
                    "2026-09-20T01:10:30Z restart acc-bvn2-val1")
         self.ramp("2026-09-20T01:05:00Z", "2026-09-20T01:05:30Z",
                   ("2026-09-20T01:05:00Z", 0))
-        self.assertIn("no sample in the", self.call("steps_rows follower"))
+        got = self.call("steps_rows follower")
+        self.assertIn("no complete sample in the", got)
+        # And an unmeasured disturbance does not vanish from the summary:
+        # it used to leave both rows silent about it (#4364, F1).
+        self.assertIn("2 of 2 disturbances not measured", got)
 
 
 class AnIncompleteSampleIsNotAReading(Rows):
@@ -480,6 +491,274 @@ class AnIncompleteSampleIsNotAReading(Rows):
         self.write(*rows)
         self.assertIn("not measured",
                       self.call("sub_row follower 2026-09-20T01:09:00Z"))
+
+
+class ARemovedAndReAddedNode(Rows):
+    """#4364's own run removes and re-adds the follower, so this is the
+    run and not an edge case.
+
+    Prometheus counters are process-local: a re-added node starts again at
+    0, its pre-restart cumulative loss LEAVES the fleet series, and the
+    floor steps down. Two consequences, both silent:
+
+    - a later loss of that size is masked — the series only has to climb
+      back to where it was before anything reads as a climb;
+    - "the figure does not climb between disturbances" is satisfied by
+      construction at every re-add, which is the criterion the whole table
+      exists to judge.
+
+    A decrease in a pair's `accepted` is the reset signal (counters are
+    monotone within a process), and from then on the pair carries an
+    offset of everything it had stranded before.
+    """
+
+    P = "acc-bvn3-fol1"
+
+    def chaos(self, *lines):
+        with open(os.path.join(self.rd, "chaos.log"), "w") as f:
+            for l in lines:
+                f.write(l + "\n")
+
+    def write_run(self, *pts):
+        """(time, accepted, stranded) — either both numbers or both blank."""
+        self.write(*[
+            "%s,%s,follower,BVN3,%s,,,%s,,,,%s,periodic"
+            % (t, self.P, "" if a is None else a, "" if a is None else a,
+               "" if x is None else x)
+            for t, a, x in pts])
+
+    REVIEWERS_CASE = (
+        # stranded 4, settled, before the disturbance
+        ("2026-09-20T01:18:00Z", 100, 4), ("2026-09-20T01:18:30Z", 110, 4),
+        ("2026-09-20T01:19:00Z", 120, 4), ("2026-09-20T01:19:30Z", 130, 4),
+        # removed at 01:20 — four samples with nothing to report
+        ("2026-09-20T01:20:30Z", None, None), ("2026-09-20T01:21:00Z", None, None),
+        ("2026-09-20T01:21:30Z", None, None), ("2026-09-20T01:22:00Z", None, None),
+        # re-added: a NEW process, so the counters start again at 0
+        ("2026-09-20T01:22:30Z", 5, 0), ("2026-09-20T01:23:00Z", 12, 0),
+        ("2026-09-20T01:23:30Z", 20, 0),
+        # and then it loses two
+        ("2026-09-20T01:24:00Z", 28, 2), ("2026-09-20T01:24:30Z", 35, 2),
+        ("2026-09-20T01:25:00Z", 42, 2), ("2026-09-20T01:25:30Z", 50, 2),
+        ("2026-09-20T01:26:00Z", 57, 2), ("2026-09-20T01:26:30Z", 64, 2))
+
+    def test_the_series_does_not_step_down_at_the_re_add(self):
+        self.chaos("2026-09-20T01:20:00Z restart acc-bvn3-fol1")
+        self.write_run(*self.REVIEWERS_CASE)
+        got = self.call("steps_rows follower")
+        # 4 before, 4 after: the re-add cost nothing, and the 4 it had
+        # stranded before is still in the series.
+        self.assertIn("| 01:20Z restart acc-bvn3-fol1 | stranded 4 -> 4 (+0)",
+                      got)
+        self.assertIn("| largest step at a disturbance | +0,", got)
+
+    def test_the_loss_after_the_re_add_is_a_creep(self):
+        self.chaos("2026-09-20T01:20:00Z restart acc-bvn3-fol1")
+        self.write_run(*self.REVIEWERS_CASE)
+        got = self.call("steps_rows follower")
+        self.assertIn("crept +2", got)
+        self.assertIn("| largest climb between disturbances | +2,", got)
+
+    def test_the_reset_is_stated(self):
+        """A reader who does not know a reset happened cannot account for
+        the floor, so it is a row and not a silent correction."""
+        self.chaos("2026-09-20T01:20:00Z restart acc-bvn3-fol1")
+        self.write_run(*self.REVIEWERS_CASE)
+        got = self.call("steps_rows follower")
+        self.assertIn("| counter resets seen | 1 (acc-bvn3-fol1/BVN3 at "
+                      "01:22Z carrying 4)", got)
+        self.assertIn("does not step down", got)
+        self.assertIn("| samples dropped as incomplete | 4 of", got)
+
+    def test_without_the_offset_the_loss_is_masked(self):
+        """What the uncorrected series reads, so the test says what the
+        correction is worth: the floor drops to 0 at the re-add, the step
+        is -4, and the later loss of 2 never reaches 4 — so nothing
+        climbs and the criterion passes on a run that lost two."""
+        S = self.series()
+        raw = [s["total"] - sum(
+            S["resets"] and [4] or [0]) for s in runseries.complete(S)]
+        self.assertEqual(4, runseries.complete(S)[0]["total"])
+        self.assertEqual(4, runseries.complete(S)[4]["total"],
+                         "corrected: the re-added node still carries its 4")
+        self.assertEqual(6, runseries.complete(S)[-1]["total"],
+                         "corrected: 4 carried plus the 2 it just lost")
+        self.assertEqual(0, raw[4], "uncorrected, the floor steps down to 0")
+        self.assertLess(raw[-1], 4,
+                        "uncorrected, the later loss never reaches the "
+                        "old floor, so nothing reads as a climb")
+
+    def series(self):
+        self.write_run(*self.REVIEWERS_CASE)
+        return runseries.load(os.path.join(self.rd, "submissions.csv"),
+                              "follower")
+
+    def test_the_stranded_row_carries_the_reset_too(self):
+        self.write_run(*self.REVIEWERS_CASE)
+        got = self.call("sub_row follower 2026-09-20T01:26:30Z")
+        self.assertTrue(got.startswith("6,"), got)
+        self.assertIn("1 counter reset carried forward", got)
+        self.assertIn("4 samples skipped as incomplete", got)
+
+
+class TheAfterFloorIsTheWholeWindow(Rows):
+    """reviewer M1. The after-floor took the first two complete samples
+    from the settle, on the reasoning that a later loss should not be
+    billed to the disturbance. A minimum already ignores a later loss — a
+    loss RAISES the figure — so all that could do was exclude later,
+    LOWER readings, overstating the step and understating the creep
+    beside it.
+
+    This is also the CALL SITE's test, which the reviewer asked for by
+    name: remove the argument from `floor_of` alone and the suite stayed
+    green, because the earlier mutation changed the function and not its
+    caller. These fixtures fail either way, because they read the number
+    the manifest prints.
+    """
+
+    P = "acc-bvn3-fol1"
+
+    def chaos(self, *lines):
+        with open(os.path.join(self.rd, "chaos.log"), "w") as f:
+            for l in lines:
+                f.write(l + "\n")
+
+    def write_run(self, *pts):
+        self.write(*[
+            "%s,%s,follower,BVN3,%s,,,%s,,,,%s,periodic"
+            % (t, self.P, "" if a is None else a, "" if a is None else a,
+               "" if x is None else x)
+            for t, a, x in pts])
+
+    # 4 settled before; after the disturbance the relays drain: 5, 4, 3, 3.
+    # The settled level after is 3 — so the disturbance cost nothing and
+    # the figure came DOWN. With the first two samples it reads 4, the
+    # step reads +0 instead of -1, and the creep after it is understated
+    # by the same 1.
+    DRAINING = (("2026-09-20T01:18:00Z", 100, 4),
+                ("2026-09-20T01:18:30Z", 110, 4),
+                ("2026-09-20T01:19:00Z", 120, 4),
+                ("2026-09-20T01:19:30Z", 130, 4),
+                ("2026-09-20T01:21:00Z", 140, 5),
+                ("2026-09-20T01:21:30Z", 150, 4),
+                ("2026-09-20T01:22:00Z", 160, 3),
+                ("2026-09-20T01:22:30Z", 170, 3),
+                ("2026-09-20T01:23:00Z", 180, 3),
+                ("2026-09-20T01:23:30Z", 190, 3))
+
+    WIDE = "STEP_WINDOW_SECS=180 STEP_SETTLE_SECS=60"
+
+    def test_a_lower_later_sample_is_part_of_the_floor(self):
+        """Read at a window wide enough to hold more than two samples —
+        see `test_the_shipped_window_holds_exactly_two_samples` for why
+        that matters."""
+        self.chaos("2026-09-20T01:20:00Z restart acc-bvn3-fol1")
+        self.write_run(*self.DRAINING)
+        got = self.call(self.WIDE + " steps_rows follower")
+        self.assertIn("| 01:20Z restart acc-bvn3-fol1 | stranded 4 -> 3 (-1)",
+                      got, "the settled level after is 3, not 4")
+        self.assertNotIn("stranded 4 -> 4 (+0)", got)
+
+    def test_the_window_still_ends_at_W(self):
+        """A sample past the window is not in the floor, however low: the
+        window is chosen by its BOUNDS, which is what `first_n` was
+        reaching for and got wrong."""
+        self.chaos("2026-09-20T01:20:00Z restart acc-bvn3-fol1")
+        self.write_run(*(self.DRAINING[:4] + (
+            ("2026-09-20T01:21:00Z", 140, 9),
+            ("2026-09-20T01:21:30Z", 150, 9),
+            ("2026-09-20T01:22:00Z", 155, 9),
+            ("2026-09-20T01:22:30Z", 158, 9),
+            ("2026-09-20T01:23:30Z", 160, 0),   # past t + W
+            ("2026-09-20T01:24:00Z", 170, 0))))
+        got = self.call(self.WIDE + " steps_rows follower")
+        self.assertIn("stranded 4 -> 9 (+5)", got)
+
+    def test_the_shipped_window_holds_exactly_two_samples(self):
+        """Worth recording rather than leaving to be rediscovered: at the
+        shipped `STEP_WINDOW_SECS=120` and `STEP_SETTLE_SECS=60` the
+        after-window is [t+60, t+120), which at the 30s submissions.csv
+        cadence holds exactly TWO samples — so `first_n=2` was a no-op on
+        today's configuration and the overstatement it caused could not
+        occur. It would the moment either knob moved, which is why the
+        argument is gone rather than left because it happens to be
+        harmless."""
+        self.chaos("2026-09-20T01:20:00Z restart acc-bvn3-fol1")
+        self.write_run(*self.DRAINING)
+        got = self.call("steps_rows follower")          # the shipped knobs
+        self.assertIn("stranded 4 -> 4 (+0)", got)
+        wide = self.call(self.WIDE + " steps_rows follower")
+        self.assertIn("stranded 4 -> 3 (-1)", wide)
+
+
+class ANodeAwayThroughTheSettleWindow(Rows):
+    """F1. A node unreachable through the whole settle window used to give
+    `— not measured` on its step and then VANISH from both summary rows,
+    with the creep after it never measured at all — so a disturbance
+    nobody could measure read as a run with nothing to report."""
+
+    P = "acc-bvn3-fol1"
+
+    def chaos(self, *lines):
+        with open(os.path.join(self.rd, "chaos.log"), "w") as f:
+            for l in lines:
+                f.write(l + "\n")
+
+    def write_run(self, *pts):
+        self.write(*[
+            "%s,%s,follower,BVN3,%s,,,%s,,,,%s,periodic"
+            % (t, self.P, "" if a is None else a, "" if a is None else a,
+               "" if x is None else x)
+            for t, a, x in pts])
+
+    def test_a_late_after_floor_is_taken_and_says_how_late(self):
+        """Back at 01:22:30, which is 90s past the settle and past the
+        window. The floor is the first two complete samples from there."""
+        self.chaos("2026-09-20T01:20:00Z restart acc-bvn3-fol1")
+        self.write_run(("2026-09-20T01:18:30Z", 100, 4),
+                 ("2026-09-20T01:19:00Z", 110, 4),
+                 ("2026-09-20T01:19:30Z", 120, 4),
+                 ("2026-09-20T01:20:30Z", None, None),
+                 ("2026-09-20T01:21:00Z", None, None),
+                 ("2026-09-20T01:21:30Z", None, None),
+                 ("2026-09-20T01:22:00Z", None, None),
+                 ("2026-09-20T01:22:30Z", 130, 9),
+                 ("2026-09-20T01:23:00Z", 140, 9),
+                 ("2026-09-20T01:23:30Z", 150, 9))
+        got = self.call("steps_rows follower")
+        self.assertIn("stranded 4 -> 9 (+5)", got)
+        self.assertIn("after-floor is 90s late", got)
+        self.assertNotIn("not measured", got)
+
+    def test_an_unmeasured_disturbance_stays_in_the_summary(self):
+        """The node is there for the first disturbance and never comes
+        back after the second, so the second's step cannot be taken at
+        all. It used to vanish from both summary rows; now they say how
+        many were not measured, beside the ones that were.
+
+        An event is unmeasurable only when the node is absent from the
+        settle right through to the next disturbance — and since that also
+        empties the NEXT one's before-window, the only way to have one of
+        two is for the absence to run to the end of the run."""
+        self.chaos("2026-09-20T01:20:00Z restart acc-bvn3-fol1",
+                   "2026-09-20T01:30:00Z restart acc-bvn2-val1")
+        self.write_run(("2026-09-20T01:18:30Z", 100, 4),
+                       ("2026-09-20T01:19:00Z", 110, 4),
+                       ("2026-09-20T01:19:30Z", 120, 4),
+                       ("2026-09-20T01:21:00Z", 130, 4),
+                       ("2026-09-20T01:21:30Z", 140, 4),
+                       ("2026-09-20T01:28:30Z", 200, 4),
+                       ("2026-09-20T01:29:00Z", 210, 4),
+                       ("2026-09-20T01:29:30Z", 220, 4),
+                       ("2026-09-20T01:30:30Z", None, None),
+                       ("2026-09-20T01:31:00Z", None, None),
+                       ("2026-09-20T01:31:30Z", None, None))
+        got = self.call("steps_rows follower")
+        self.assertIn("| 01:20Z restart acc-bvn3-fol1 | stranded 4 -> 4 (+0)",
+                      got)
+        self.assertIn("| 01:30Z restart acc-bvn2-val1 | — not measured", got)
+        self.assertIn("1 of 2 disturbances not measured", got)
+        self.assertIn("| largest step at a disturbance | +0,", got)
 
 
 class AbsentIsNotZero(Rows):
@@ -584,6 +863,18 @@ class SoakShPassesWhatTheHelpersNeed(unittest.TestCase):
         self.assertIn("untracked (in no patch)", self.SRC)
         self.assertIn("the capture failed", self.SRC)
         self.assertNotIn('diff > "$rd/config/uncommitted.patch"', self.SRC)
+
+    def test_both_helpers_are_given_the_path_to_runseries(self):
+        """The series is built in one place or the two rows drift apart —
+        which is how one of them printed a violation as compliance while
+        the other said nothing (#4364). Both helpers import `runseries`,
+        and both are handed `$here` to find it."""
+        for fn in ("sub_row", "steps_rows"):
+            body = re.search(r"^%s\(\) \{.*?\nPYEOF\n\}" % fn,
+                             self.SRC, re.S | re.M)
+            self.assertIsNotNone(body, fn)
+            self.assertIn('"$here"', body.group(0), fn)
+            self.assertIn("import runseries", body.group(0), fn)
 
     def test_the_steps_table_is_in_the_manifest(self):
         """A helper nothing calls measures nothing."""

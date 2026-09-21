@@ -995,37 +995,30 @@ PYEOF
 # disturbance's effective moment is the timestamp plus p.
 steps_rows() {   # $1 = role: validator | follower
   python3 - "$rd/submissions.csv" "$rd/chaos.log" "${1:-}" \
-           "${STEP_WINDOW_SECS:-120}" "${STEP_SETTLE_SECS:-60}" <<'PYEOF'
-import csv, datetime, re, sys
+           "${STEP_WINDOW_SECS:-120}" "${STEP_SETTLE_SECS:-60}" "$here" <<'PYEOF'
+import re, sys
+sys.path.insert(0, sys.argv[6])
+import runseries
 
 subs, chaos, role = sys.argv[1], sys.argv[2], sys.argv[3]
 W = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else 120
 S = int(sys.argv[5]) if len(sys.argv) > 5 and sys.argv[5] else 60
-# A misconfiguration this table cannot survive, said once rather than as
-# "no sample in the window" against every disturbance in the run. Anything
-# that closes the after-window makes every step unmeasurable; a settle
-# check catches it here because a settle at or past the window is the only
-# way to get there (the neighbouring-event clamp is already reported per
-# row, and never closes the BEFORE-window).
-if S >= W:
-    print("| stranded across disturbances | — not measured "
-          "(STEP_SETTLE_SECS=%d is not less than STEP_WINDOW_SECS=%d, so "
-          "there is no after-window and no step can be taken) |" % (S, W))
-    raise SystemExit
 
 
-def secs(t):
-    return datetime.datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ").replace(
-        tzinfo=datetime.timezone.utc).timestamp()
+def row(a, b):
+    print("| %s | %s |" % (a, b))
 
 
 def hhmm(t):
     return t[11:16] + "Z"
 
 
-def row(a, b):
-    print("| %s | %s |" % (a, b))
-
+if S >= W:
+    row("stranded across disturbances",
+        "— not measured (STEP_SETTLE_SECS=%d is not less than "
+        "STEP_WINDOW_SECS=%d, so there is no after-window and no step can "
+        "be taken)" % (S, W))
+    raise SystemExit
 
 # --- the disturbances, at the moment they take effect -----------------------
 try:
@@ -1037,13 +1030,14 @@ events = []
 for l in lines:
     m = re.match(r"^(\S+Z) restart (\S+)", l)
     if m:
-        events.append([secs(m.group(1)), hhmm(m.group(1)), "restart", m.group(2)])
+        events.append([runseries._epoch(m.group(1)), hhmm(m.group(1)),
+                       "restart", m.group(2)])
         continue
     m = re.match(r"^(\S+Z) pause (\S+) (\d+)s", l)
     if m:
         # at the UN-pause: chaos logs the start and never the end
-        t = secs(m.group(1)) + int(m.group(3))
-        events.append([t, hhmm(m.group(1)), "pause", m.group(2)])
+        events.append([runseries._epoch(m.group(1)) + int(m.group(3)),
+                       hhmm(m.group(1)), "pause", m.group(2)])
 if not events:
     if any(" DISABLED " in l for l in lines):
         row("stranded across disturbances",
@@ -1054,82 +1048,32 @@ if not events:
     raise SystemExit
 events.sort()
 
-# --- the stranded series ----------------------------------------------------
-try:
-    rows = [r for r in csv.DictReader(open(subs))
-            if not role or r.get("role") == role]
-except OSError:
-    row("stranded across disturbances", "— not measured (no `submissions.csv`)")
+# --- the series, built once, in runseries.py --------------------------------
+SER = runseries.load(subs, role, W)
+if SER["error"]:
+    row("stranded across disturbances", "— not measured (%s)" % SER["error"])
     raise SystemExit
-# A SAMPLE IS A FLEET TOTAL, so it is only a reading when every
-# (node, partition) reported. A container mid-restart answers no scrape —
-# `_scrape_one` stores an empty list and the container stays in the set, so
-# its topology-seeded rows are blank — and summing what is left makes the
-# fleet series DIP by that node's real count on exactly the sample it was
-# unreachable. The window minimum then reads the dip as the settled level:
-# a loss masked, or a negative step, at every restart of a chaos run
-# (reviewer M on #4364). An incomplete sample is dropped, not carried
-# forward — carrying forward invents a reading at a time nobody measured —
-# and the row says how many were dropped, because a node absent for a long
-# stretch is a finding and not noise.
-pairs = {(r.get("node"), r.get("partition")) for r in rows}
-series, partial = {}, {}
-for r in rows:
-    v = (r.get("acceptedNeitherCertifiedTakenNorRefused") or "").strip()
-    key = (r.get("node"), r.get("partition"))
-    if not v:
-        partial.setdefault(r["time"], set()).add(key)
-        continue
-    try:
-        n = int(v)
-    except ValueError:
-        partial.setdefault(r["time"], set()).add(key)
-        continue
-    # deduped by (time, node, partition): the forced final row can share a
-    # second with a periodic one, and these are counters.
-    series.setdefault(r["time"], {})[key] = n
-stamps = sorted(set(series) | set(partial))
-complete = [t for t in stamps if set(series.get(t, {})) == pairs]
-dropped = len(stamps) - len(complete)
-points = sorted((secs(t), sum(series[t].values())) for t in complete)
-if not points:
+pts = runseries.points(SER)
+if not pts:
     row("stranded across disturbances",
         "— not measured (no sample has all %d (node, partition) pairs; "
-        "%d incomplete)" % (len(pairs), dropped))
+        "%d incomplete)" % (len(SER["pairs"]), SER["dropped"]))
     raise SystemExit
-t0, t1 = points[0][0], points[-1][0]
+t0, t1 = pts[0][0], pts[-1][0]
 
-
-def floor_of(lo, hi):
-    """The settled level over [lo, hi): what did NOT come back.
-
-    The figure jitters by whatever is in flight, so its floor over a few
-    samples is the level and any single reading is not.
-    """
-    vals = [v for t, v in points if lo <= t < hi]
-    return min(vals) if vals else None
-
-
-# Windows are LOCAL to each disturbance, and clamped so two never meet.
-# A minimum taken over a whole interval sits at the interval's start, so a
-# rise in the middle of a quiet stretch first appears as the NEXT
-# interval's minimum and is billed to the next disturbance — printing a
-# violation as compliance (reviewer on #4364). Local windows measure the
-# step at the disturbance; the stretch between two of them is measured
-# separately, below, and that is the criterion's number.
-# THE AFTER-WINDOW STARTS S SECONDS AFTER THE DISTURBANCE, and that is the
-# mirror of the same mistake. The sample stamped at the disturbance's own
-# second still reads the PRE-EFFECT level — a relay has to time out before
-# it gives up, so a restart's loss shows one sample later — and a floor
-# taken from that second picks the pre-effect reading up: the step prints
-# +0 and the loss appears as the creep after it, so an ordinary lossy
-# restart reads as a criterion violation. The acceptance run's first lossy
-# restart would have failed the gate for the wrong reason.
+# THE WINDOWS ARE LOCAL TO EACH DISTURBANCE, and the after-window starts S
+# seconds late: the sample stamped at the disturbance's own second still
+# reads the pre-effect level, because a relay has to time out before it
+# gives up. The two mistakes are mirrors and a table built with either is
+# wrong in the opposite direction.
 #
-# The sample AT t goes in neither window: it is pre-effect for a relay that
-# times out and post-effect for a loss that is instant, and nothing here
-# can tell which.
-nbr = [None] + [e[0] for e in events] + [None]    # neighbouring disturbances
+# The after-floor takes the FIRST TWO complete samples at or after t + S,
+# bounded by the next disturbance — not everything up to it. A node
+# unreachable through the settle window used to give `— not measured` and
+# then vanish from both summary rows, with the creep after it never
+# measured at all; now the floor is taken from the samples nearest the
+# disturbance whenever they arrive, and the row says how late.
+nbr = [None] + [e[0] for e in events] + [None]
 win = []
 for i, e in enumerate(events):
     lo, hi = e[0] - W, e[0] + W
@@ -1138,11 +1082,11 @@ for i, e in enumerate(events):
         lo, by_event = nbr[i], True
     if nbr[i + 2] is not None and nbr[i + 2] < hi:
         hi, by_event = nbr[i + 2], True
-    lo, hi = max(lo, t0 - 1), min(hi, t1 + 1)
-    # Two different notes. Clipped by the run's edge is ordinary — the
-    # window is short but it is still this disturbance's. Clipped by
-    # another disturbance is not: the step and the creep beside it are
-    # then measured over the same samples and cannot be told apart.
+    lo = max(lo, t0 - 1)
+    # The after-window may run past W when the node was away: it is
+    # bounded by the next disturbance, or by the end of the run.
+    a_hi = nbr[i + 2] if nbr[i + 2] is not None else t1 + 1
+    hi = min(hi, t1 + 1)
     if by_event:
         note = (" (window met a neighbouring disturbance — its step and the "
                 "creep beside it are not separable)")
@@ -1150,35 +1094,54 @@ for i, e in enumerate(events):
         note = " (window shortened by the run's start or end)"
     else:
         note = ""
-    win.append((lo, hi, note))
+    win.append((lo, a_hi, note))
 
 biggest_step = biggest_step_at = None
 biggest_creep = biggest_creep_at = None
-prev_after = None
-prev_label = None
+prev_after = prev_label = None
+unmeasured = 0
 
-head = floor_of(t0, min(events[0][0], t0 + W))
+head, _ = runseries.floor_of(pts, t0, min(events[0][0], t0 + W))
 if head is not None:
     row("baseline (the first %ds of the run)" % W, "%d" % head)
 
 for i, (t, at, kind, node) in enumerate(events):
-    lo, hi, note = win[i]
-    before, after = floor_of(lo, t), floor_of(t + S, hi)
+    lo, a_hi, note = win[i]
+    before, _ = runseries.floor_of(pts, lo, t)
+    # The after-window is [t + S, t + W), bounded by the next disturbance.
+    # A minimum already ignores a later loss — a loss RAISES the figure —
+    # so taking only the first few samples could only exclude later, LOWER
+    # readings and overstate the step (reviewer M1). When the window is
+    # EMPTY the node was away: start a window of the same length at the
+    # first complete sample from the settle, and say how late it was.
+    after, a_t = runseries.floor_of(pts, t + S, min(t + W, a_hi))
+    if after is None:
+        back = [tt for tt, _ in pts if t + S <= tt < a_hi]
+        if back:
+            after, a_t = runseries.floor_of(pts, back[0],
+                                            min(back[0] + W, a_hi))
+    if a_t is not None and a_t > t + W:
+        note += " (the after-floor is %ds late — no complete sample sooner)" % (
+            int(a_t - (t + S)))
     # the quiet stretch that ENDS at this disturbance
     start_floor = prev_after if prev_after is not None else head
     start_label = prev_label if prev_label is not None else "the run's start"
     if start_floor is not None and before is not None:
         creep = before - start_floor
-        row("between %s and %s" % (start_label, at),
-            "crept %+d" % creep)
+        row("between %s and %s" % (start_label, at), "crept %+d" % creep)
         if biggest_creep is None or creep > biggest_creep:
-            biggest_creep = creep
-            biggest_creep_at = "%s to %s" % (start_label, at)
+            biggest_creep, biggest_creep_at = creep, "%s to %s" % (start_label, at)
     if before is None or after is None:
+        unmeasured += 1
         row("%s %s %s" % (at, kind, node),
-            "— not measured (no sample in the %ds before or the %ds-%ds "
-            "after)%s" % (W, S, W, note))
-        prev_after, prev_label = None, at
+            "— not measured (no complete sample in the %ds before, or "
+            "between the settle and the next disturbance)%s" % (W, note))
+        # The creep AFTER an unmeasured disturbance is still measurable:
+        # start it at the first complete sample from here, or it and every
+        # later loss in that stretch go unreported.
+        nxt = [v for tt, v in pts if t <= tt < a_hi]
+        prev_after = nxt[0] if nxt else None
+        prev_label = at
         continue
     step = after - before
     row("%s %s %s" % (at, kind, node),
@@ -1187,7 +1150,7 @@ for i, (t, at, kind, node) in enumerate(events):
         biggest_step, biggest_step_at = step, "%s %s %s" % (at, kind, node)
     prev_after, prev_label = after, at
 
-tail = floor_of(max(t1 - W, events[-1][0] + S), t1 + 1)
+tail, _ = runseries.floor_of(pts, max(t1 - W, events[-1][0] + S), t1 + 1)
 if prev_after is not None and tail is not None:
     creep = tail - prev_after
     row("between %s and the end of the run" % prev_label, "crept %+d" % creep)
@@ -1195,133 +1158,69 @@ if prev_after is not None and tail is not None:
         biggest_creep = creep
         biggest_creep_at = "%s to the end of the run" % prev_label
 
+miss = "" if not unmeasured else " (%d of %d disturbances not measured)" % (
+    unmeasured, len(events))
 if biggest_step is not None:
     row("largest step at a disturbance",
-        "%+d, at %s%s" % (biggest_step, biggest_step_at,
-                          "" if biggest_step else " — no disturbance cost anything"))
+        "%+d, at %s%s%s" % (biggest_step, biggest_step_at,
+                            "" if biggest_step else
+                            " — no disturbance cost anything", miss))
+elif unmeasured:
+    row("largest step at a disturbance",
+        "— not measured (%d of %d disturbances not measured)"
+        % (unmeasured, len(events)))
 if biggest_creep is not None:
     row("largest climb between disturbances",
-        "%+d, %s%s" % (biggest_creep, biggest_creep_at,
-                       "" if biggest_creep > 0 else
-                       " — the figure did not climb"))
-if dropped:
+        "%+d, %s%s%s" % (biggest_creep, biggest_creep_at,
+                         "" if biggest_creep > 0 else
+                         " — the figure did not climb", miss))
+elif unmeasured:
+    row("largest climb between disturbances",
+        "— not measured (%d of %d disturbances not measured)"
+        % (unmeasured, len(events)))
+if SER["dropped"]:
     row("samples dropped as incomplete",
         "%d of %d — a node reported no counts at those, and a fleet total "
-        "missing one node dips by that node's count" % (dropped, len(stamps)))
+        "missing one node dips by that node's count"
+        % (SER["dropped"], len(SER["samples"])))
+reset = runseries.resets_row(SER)
+if reset:
+    row("counter resets seen", reset)
 PYEOF
 }
 
 sub_row() {   # $1 = role, $2 = when the loadgen exited, $3 = "stallkill" or ""
-  python3 - "$rd/submissions.csv" "${1:-}" "${2:-}" "${3:-}" <<'PYEOF'
-import csv, sys
+  python3 - "$rd/submissions.csv" "${1:-}" "${2:-}" "${3:-}" "$here" \
+           "${STEP_WINDOW_SECS:-120}" <<'PYEOF'
+import sys
+sys.path.insert(0, sys.argv[5])
+import runseries
+
 path, role = sys.argv[1], sys.argv[2]
 lg_exit = sys.argv[3] if len(sys.argv) > 3 else ""
 stopped_early = sys.argv[4] if len(sys.argv) > 4 else ""
-try:
-    rows = list(csv.DictReader(open(path)))
-except OSError:
-    print("— not measured (no `submissions.csv`; soakmon wrote none)"); raise SystemExit
-rows = [r for r in rows if not role or r.get("role") == role]
-if not rows:
-    print("— not measured (no node exports `accumulate_dagbft_submissions_total`; #4366, #4369)")
+W = int(sys.argv[6]) if len(sys.argv) > 6 and sys.argv[6] else 120
+
+# The series is built in runseries.py, once, for this row and the step
+# table both: completeness, the counter-reset offsets and the "a level is
+# a minimum" rule are one implementation or they drift (#4364).
+S = runseries.load(path, role, W)
+if S["error"]:
+    print("— not measured (%s; soakmon wrote none)" % S["error"])
     raise SystemExit
-# THE LAST SAMPLE, and the trend into it (reviewer M3). soakmon writes a
-# final row when it is stopped, which soak.sh does after the load
-# generator's grace drain and any IDLE_AFTER tail — so the last row is the
-# only one taken with nothing in flight, and "must be 0" is read against
-# it. At any earlier sample a relay not yet answered and a transaction
-# nobody will ever take are the same number, so the row states the
-# movement over the final samples as well: falling with no new accepts is
-# draining, flat or rising is stranded.
-TREND_N = 5
-# A fleet total is a reading only when every (node, partition) reported.
-# A container mid-restart answers no scrape and its topology-seeded rows
-# are blank, so the sum dips by that node's real count on exactly the
-# sample it was unreachable — and the headline "0 at the last sample"
-# could be that dip rather than a drained network (reviewer M on #4364).
-# Incomplete samples are skipped, here and in the trend, and the row says
-# how many.
-all_pairs = {(r.get("node"), r.get("partition")) for r in rows}
-
-
-def reported(ts):
-    return {(r.get("node"), r.get("partition")) for r in rows
-            if r["time"] == ts
-            and (r.get("acceptedNeitherCertifiedTakenNorRefused") or "").strip()}
-
-
-stamps_all = sorted({r["time"] for r in rows})
-stamps = [t for t in stamps_all if reported(t) == all_pairs]
-skipped = len(stamps_all) - len(stamps)
-if not stamps:
+rows_at = runseries.complete(S)
+if not rows_at:
     print("— not measured (no sample has all %d (node, partition) pairs; "
-          "%d incomplete)%s" % (len(all_pairs), skipped, ""))
+          "%d incomplete)" % (len(S["pairs"]), S["dropped"]))
     raise SystemExit
-last = stamps[-1]
 
-
-def at(ts):
-    """The rows of one sample, deduped by (time, node, partition).
-
-    The final row is forced past the 30s interval, timestamps are whole
-    seconds, so about one run in thirty puts it in the same second as a
-    periodic one. These are counters: two readings of one counter are one
-    reading. Summing both made the headline contradict its own trend, in
-    the direction of a false "stranded" (reviewer N1). Last row wins — the
-    forced one, which is the fresher scrape.
-    """
-    keep = {}
-    for r in rows:
-        if r["time"] == ts:
-            keep[(r.get("node"), r.get("partition"))] = r
-    return list(keep.values())
-
-
-def totals(ts):
-    """(stranded, accepted) at one sample; stranded is None if nobody counted."""
-    st = acc = None
-    blanks = 0
-    for r in at(ts):
-        # An EMPTY field is a counter that node never created — one family
-        # exported and not the other. Summing it as 0 would report "nothing
-        # stranded here" for a partition nobody measured (REPORTING-SPEC 1).
-        v = (r.get("acceptedNeitherCertifiedTakenNorRefused") or "").strip()
-        if v:
-            try:
-                st = (st or 0) + int(v)
-            except ValueError:
-                blanks += 1
-        else:
-            blanks += 1
-        a = (r.get("accepted") or "").strip()
-        if a:
-            try:
-                acc = (acc or 0) + int(a)
-            except ValueError:
-                pass
-    return st, acc, blanks
-
-
-per, blank = {}, 0
-for r in at(last):
-    v = (r.get("acceptedNeitherCertifiedTakenNorRefused") or "").strip()
-    if not v:
-        blank += 1
-        continue
-    try:
-        per[(r["node"], r["partition"])] = int(v)
-    except ValueError:
-        blank += 1
-missing = "" if not blank else ", %d (node, partition) without a count" % blank
-if not per:
-    print("— not measured (rows at %s but no counts%s)" % (last, missing or ""))
-    raise SystemExit
-(wv, wk) = max((v, k) for k, v in per.items())
+TREND_N = 5
+last = rows_at[-1]
+per = last["byPair"]
 total = sum(per.values())
+(wv, wk) = max((v, k) for k, v in per.items())
 
-series = [totals(t) for t in stamps[-TREND_N:]]
-vals = [x[0] for x in series if x[0] is not None]
-accs = [x[1] for x in series if x[1] is not None]
+vals = [s["total"] for s in rows_at[-TREND_N:]]
 if len(vals) < 2:
     trend = "no trend (one sample)"
 elif vals[-1] == 0:
@@ -1329,20 +1228,21 @@ elif vals[-1] == 0:
 elif vals[-1] < vals[0]:
     trend = "falling %d -> %d over the last %d samples (draining)" % (
         vals[0], vals[-1], len(vals))
-elif len(accs) >= 2 and accs[-1] == accs[0]:
-    trend = "%s %d -> %d over the last %d samples with NO new accepts (stranded)" % (
-        "flat at" if vals[-1] == vals[0] else "rising", vals[0], vals[-1], len(vals))
 else:
-    trend = "%s %d -> %d over the last %d samples, still accepting" % (
-        "flat at" if vals[-1] == vals[0] else "rising", vals[0], vals[-1], len(vals))
+    trend = "%s %d -> %d over the last %d samples" % (
+        "flat at" if vals[-1] == vals[0] else "rising", vals[0], vals[-1],
+        len(vals))
 
 # WAS THE FINAL ROW WRITTEN, AND IS IT A DRAINED SAMPLE (reviewer N2).
 # "0 at the last sample after the drain" is unreadable if a reader cannot
 # tell. Two separate facts, and neither is inferred from the other: the
 # `sample` column says whether soakmon's exit write landed, and the
-# timestamp says whether it postdates the load generator. A lost final
-# write otherwise reads as the drained sample in silence.
-kinds = {(r.get("sample") or "").strip() for r in at(last)}
+# timestamp says whether it postdates the load generator.
+import csv as _csv
+raw = [r for r in _csv.DictReader(open(path))
+       if not role or r.get("role") == role]
+kinds = {(r.get("sample") or "").strip() for r in raw
+         if r["time"] == last["time"]}
 if "final" in kinds:
     final = "final row written"
 elif not any(kinds):
@@ -1350,29 +1250,27 @@ elif not any(kinds):
 else:
     final = ("FINAL ROW MISSING — soakmon's exit write did not land; "
              "this reading is mid-drain and up to 30s stale")
-if lg_exit and last:
-    def secs(t):
-        import datetime
-        return datetime.datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ").replace(
-            tzinfo=datetime.timezone.utc).timestamp()
+if lg_exit:
     try:
-        d = secs(last) - secs(lg_exit)
+        d = int(runseries._epoch(last["time"]) - runseries._epoch(lg_exit))
         final += (", %ds after the load generator exited" % d if d >= 0 else
                   ", but %ds BEFORE the load generator exited — mid-drain" % -d)
     except ValueError:
         pass
+if S["dropped"]:
+    final += ("; %d sample%s skipped as incomplete (a node reported no "
+              "counts)" % (S["dropped"], "" if S["dropped"] == 1 else "s"))
+    if S["samples"][-1]["time"] != last["time"]:
+        final += " — INCLUDING THE LAST, so this is not the final row"
+if S["resets"]:
+    final += "; %d counter reset%s carried forward" % (
+        len(S["resets"]), "" if len(S["resets"]) == 1 else "s")
 if stopped_early:
     final += ("; the run was stopped by stallkill, so the load generator was "
               "killed mid-flight and this is NOT a drained sample")
 
-if skipped:
-    final += ("; %d sample%s skipped as incomplete (a node reported no "
-              "counts)" % (skipped, "" if skipped == 1 else "s"))
-    if stamps_all[-1] != last:
-        final += " — INCLUDING THE LAST, so this is not the final row"
-
-print("%d, worst %s on %s (as of %s; %s; %s)%s"
-      % (total, wv, "/".join(wk), last, trend, final, missing))
+print("%d, worst %s on %s (as of %s; %s; %s)"
+      % (total, wv, "/".join(wk), last["time"], trend, final))
 PYEOF
 }
 
