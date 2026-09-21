@@ -440,7 +440,15 @@ func deliveredFrom(batch *database.Batch, id execute.StreamID) (uint64, error) {
 // produced nothing for anyone has no synthetic ledger to read, and zero is
 // the right bound — every number asked for is then above it and a miss is a
 // miss.
-func producedAt(batch *database.Batch, describe execute.DescribeShim) (map[string]uint64, uint64, error) {
+//
+// It reads through a CHILD batch that is discarded. Reading a chain record
+// creates it, which marks the batch dirty, and the settle writes nothing —
+// staging is memory, and the tests assert that the batch it was handed is
+// clean when it returns.
+func producedAt(parent *database.Batch, describe execute.DescribeShim) (map[string]uint64, uint64, error) {
+	batch := parent.Begin(false)
+	defer batch.Discard()
+
 	produced := map[string]uint64{}
 	var ledger *protocol.SyntheticLedger
 	switch err := batch.Account(describe.Synthetic()).Main().GetAs(&ledger); {
