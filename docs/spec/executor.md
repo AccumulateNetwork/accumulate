@@ -299,13 +299,19 @@ chains standing still (#4350). At a fixed anchored height the question does
 not come up: the account either hashes into the anchored root or it is asked
 of somebody else.
 
-This is also what a peer must be able to answer. Serving an account **as of an
-anchored block**, rather than as of the peer's own current block, is a
-capability this line does not have and the join cannot work without: accounts
-that change every block can otherwise only be served at a height no anchor
-covers, so their verification can never settle, which is why a node joining
-from an empty store converges on its cold accounts and a restart converges on
-nothing at all.
+This is also what a peer must be able to answer. A peer serves an account
+**as of an anchored block** — the body as of that block and a receipt that
+terminates at that block's `StateTreeAnchor`, the body and the receipt
+coherent or the answer a refusal — and a BPT page as of that block; a block
+outside what it retains is refused as such (#4361). Without it the join
+cannot work: accounts that change every block can otherwise only be served at
+a height no anchor covers, so their verification never settles, which is why
+a node joining from an empty store converged on its cold accounts and a
+restart converged on nothing at all. What the receipt proves is the body
+under that root and nothing beside it: the components as of that block are
+pulled, never read off the receipt; and the block an account is checked
+against is the block the puller *asked* at, never a number the answer
+carries.
 
 **A body served with a proof is the stored body, byte for byte.** Nothing
 derived may be filled into an account on the way out of the API, because the

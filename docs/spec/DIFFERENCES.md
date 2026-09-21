@@ -257,10 +257,19 @@ Two departures the rewritten section names that this entry did not:
 - **The authority is the network definition, not the operators' page**
   (#4301 statement (b)): the spec now says so; the operators' page keeps its
   governance role and is never read by a join.
-- **Anchored-height serving** — a peer serves an account with a receipt to
-  its *current* root, never as of a caller-named anchored block, so a hot
-  account never settles and a restart converges on nothing (#4361;
-  `repro-4205-restart-rejoin` @ `03916816b`).
+- **Anchored-height serving** — *retired 2026-09-19 (#4361, merged
+  `b0ec6e0fd`)*: a peer now serves an account and a BPT page as of a block
+  the Directory anchored, with a receipt terminating at that block's
+  `StateTreeAnchor` and the body as of that block (a mismatch is a refusal,
+  never a wrong answer); out-of-window is `IncompleteChain`; retention 1024
+  blocks on by default. What remains different: the *pull* still sends no
+  `ForHeight`, so the join's gate (`TestRestartedNodeWithAPopulatedDatabaseResyncs`,
+  on the branch, skipped) fails exactly as before until #4362 asks at the
+  anchored block; the consumer keys its anchor lookup on the peer-asserted
+  `LocalBlock` (`pull.go:285`) and is safe only because that comparison
+  refuses every historical answer — #4362's loop must key on the block it
+  asked at (threat review, #4361 note_3870022466); retention's cost on
+  BlockchainDB is unmeasured (#4165).
 
 **Code**: a node starts from genesis or from a snapshot file it was given, and
 consensus "catches up" by fetching batches from peers' retention
