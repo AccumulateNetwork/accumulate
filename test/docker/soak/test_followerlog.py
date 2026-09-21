@@ -931,5 +931,32 @@ class AFollowerThatSendsNothingIsStillCompared(unittest.TestCase):
         self.assertEqual("00000000", f["bpt"])
 
 
+class FirstRootMatch(unittest.TestCase):
+    """When an added follower is first seen computing the network's state
+    (#4364): the earliest block whose (root, bpt) equals a validator's."""
+
+    def test_the_earliest_agreeing_block_is_named(self):
+        log = []
+        log += bvn_node(FOL, "2026-09-19T18:01:00Z", 100, "DEAD", "b00")
+        log += bvn_node(VALS[0], "2026-09-19T18:01:00Z", 100, "r00", "b00")
+        log += bvn_node(FOL, "2026-09-19T18:01:01Z", 101, "r01", "b01")
+        log += bvn_node(VALS[0], "2026-09-19T18:01:01Z", 101, "r01", "b01")
+        log += bvn_node(FOL, "2026-09-19T18:01:02Z", 102, "r02", "b02")
+        log += bvn_node(VALS[1], "2026-09-19T18:01:02Z", 102, "r02", "b02")
+        r = followerlog.read(IDENT + log)
+        self.assertEqual(("BVN3", 101, "r01"),
+                         followerlog.first_root_match(r, FOL, VALS),
+                         "block 100 differs, so 101 is the first match")
+
+    def test_a_block_only_the_follower_anchored_is_no_match(self):
+        log = bvn_node(FOL, "2026-09-19T18:01:00Z", 100, "r00", "b00")
+        r = followerlog.read(IDENT + log)
+        self.assertIsNone(followerlog.first_root_match(r, FOL, VALS))
+
+    def test_a_silent_follower_has_no_match(self):
+        r = followerlog.read(IDENT + _run(VALS))
+        self.assertIsNone(followerlog.first_root_match(r, FOL, VALS))
+
+
 if __name__ == "__main__":
     unittest.main()

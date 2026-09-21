@@ -337,6 +337,28 @@ def compare_roots(report, follower, validators):
             "why": None}
 
 
+def first_root_match(report, follower, validators):
+    """The earliest block at which the follower's (root, bpt) equals a
+    validator's for the same source partition — the moment an added
+    follower is first seen computing the network's state (#4364).
+
+    Returns (source, block, root) or None. Blocks are taken in order, per
+    source; a block only one side anchored is skipped, and so is a block
+    where the two differ: that is compare_roots' finding, not this one's.
+    """
+    mine = report.anchors.get(follower, {})
+    theirs = {}
+    for v in validators:
+        for k, val in report.anchors.get(v, {}).items():
+            theirs.setdefault(k, val)
+    best = None
+    for (part, blk) in sorted(mine, key=lambda k: (k[1], k[0])):
+        if theirs.get((part, blk)) == mine[(part, blk)]:
+            best = (part, blk, mine[(part, blk)][0])
+            break
+    return best
+
+
 def committee_check(report, follower, validators):
     """The committee every node built, and every change to one during the run.
 
