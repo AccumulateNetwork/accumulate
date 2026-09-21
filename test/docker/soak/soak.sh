@@ -149,7 +149,16 @@ compose="docker compose -f $compose_file"
 git_head=$(git -C "$repo" rev-parse HEAD 2>/dev/null || echo unknown)
 git_desc=$(git -C "$repo" describe --tags --always --dirty 2>/dev/null || echo unknown)
 git_branch=$(git -C "$repo" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
-git_dirty=$(git -C "$repo" status --porcelain 2>/dev/null | wc -l)
+# The count and the patch have to be the same set, or the manifest says
+# "uncommitted files | 1" beside a zero-byte patch and a reader cannot tell
+# whether the tree was dirty or the capture broke (run 20260919T231856Z).
+# `status --porcelain` counts tracked changes AND untracked files; `git
+# diff` captured only UNSTAGED tracked ones. So: capture `git diff HEAD`,
+# which is every tracked change staged or not, and count the two kinds
+# apart. An untracked file is not in any patch and the row says so.
+git_tracked=$(git -C "$repo" status --porcelain --untracked-files=no 2>/dev/null | wc -l)
+git_untracked=$(git -C "$repo" ls-files --others --exclude-standard 2>/dev/null | wc -l)
+git_dirty=$(( git_tracked + git_untracked ))
 exec_ver=$(grep -E '^\s*executorVersion:' "$here/../docker-network.yml" | head -1 | sed 's/.*: *//; s/"//g')
 # From v1.4.5 healing has no configuration — the conductor always heals. Older
 # trees injected enable-*-healing into accumulate.toml, so keep reading it: a
@@ -242,7 +251,7 @@ fi
 # what changed between two runs.
 cp "$compose_file" "$here/../docker-network.yml" "$0" "$here/soak.conf" "$rd/config/" 2>/dev/null
 [ -n "$conf_override" ] && cp "$conf_override" "$rd/config/override.conf" 2>/dev/null
-git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
+git -C "$repo" diff HEAD > "$rd/config/uncommitted.patch" 2>/dev/null
 
 {
   echo "# Soak run $run_id"
@@ -254,7 +263,16 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "| commit | \`$git_head\` |"
   echo "| describe | \`$git_desc\` |"
   echo "| branch | \`$git_branch\` |"
-  echo "| uncommitted files | $git_dirty $([ "$git_dirty" -gt 0 ] && echo '(see config/uncommitted.patch)') |"
+  echo "| uncommitted files | $(
+    if [ "$git_dirty" -eq 0 ]; then echo 0
+    else
+      printf '%s: %s tracked' "$git_dirty" "$git_tracked"
+      [ "$git_tracked" -gt 0 ] && printf ' (in `config/uncommitted.patch`)'
+      [ "$git_untracked" -gt 0 ] && printf ', %s untracked (in no patch)' "$git_untracked"
+      if [ "$git_tracked" -gt 0 ] && [ ! -s "$rd/config/uncommitted.patch" ]; then
+        printf ' — WARNING: the patch is empty though %s tracked files differ; the capture failed' "$git_tracked"
+      fi
+    fi) |"
   echo "| image | \`$soak_image\` |"
   echo "| image id | \`$image_id\` |"
   echo "| executor version | **$exec_ver** |"
@@ -273,15 +291,21 @@ git -C "$repo" diff > "$rd/config/uncommitted.patch" 2>/dev/null
   echo "| chaos | $CHAOS_ENABLED |"
   echo "| target duration | $DURATION |"
   echo "| target TPS | $TPS |"
-  echo "| storage | $(sed -nE 's/^database: *([a-z]+).*/\1/p' "$here/../docker-network.yml" | head -1) (docker-network.yml) |"
+  # `[a-z]+` matched nothing against `database: BlockchainDB` and the row
+  # went out BLANK on run 20260919T231856Z — a provenance field that says
+  # nothing about a run that was, verifiably from storage-stats.csv, on
+  # BlockchainDB. The backend's name is mixed case and always has been
+  # (#4165); match what the file can hold, and say so when it holds
+  # nothing rather than printing an empty cell.
+  echo "| storage | $(sed -nE 's/^database: *([A-Za-z0-9_.-]+).*/\1/p' "$here/../docker-network.yml" | head -1 | grep . || echo '— not measured (no `database:` line in docker-network.yml)') (docker-network.yml) |"
   echo "| block interval | ${ACC_BLOCK_INTERVAL:-1s} |"
   echo "| memory budget | mem_limit ${ACC_MEM_LIMIT:-1536m}, GOMEMLIMIT ${GOMEMLIMIT:-1200MiB} |"
   echo
   echo "Config as run is frozen in \`config/\` (soak.conf${conf_override:+ + override.conf}, the compose and network files). Results appended below on exit."
 } > "$manifest"
 
-printf '{"runId":"%s","startedUtc":"%s","image":"%s","imageId":"%s","commit":"%s","describe":"%s","branch":"%s","uncommittedFiles":%s,"executorVersion":"%s","healing":"%s","faultModel":"%s","bvns":%s,"nodes":%s,"validators":%s,"followers":%s,"followerContainers":"%s","followerPorts":"%s","followerPartitions":"%s","followerKeyForm":"pending","partitions":"%s","chaos":"%s","duration":"%s","tps":"%s","note":"%s"}\n' \
-  "$run_id" "$(date -u +%FT%TZ)" "$soak_image" "$image_id" "$git_head" "$git_desc" "$git_branch" "$git_dirty" \
+printf '{"runId":"%s","startedUtc":"%s","image":"%s","imageId":"%s","commit":"%s","describe":"%s","branch":"%s","uncommittedFiles":%s,"uncommittedTracked":%s,"uncommittedUntracked":%s,"executorVersion":"%s","healing":"%s","faultModel":"%s","bvns":%s,"nodes":%s,"validators":%s,"followers":%s,"followerContainers":"%s","followerPorts":"%s","followerPartitions":"%s","followerKeyForm":"pending","partitions":"%s","chaos":"%s","duration":"%s","tps":"%s","note":"%s"}\n' \
+  "$run_id" "$(date -u +%FT%TZ)" "$soak_image" "$image_id" "$git_head" "$git_desc" "$git_branch" "$git_dirty" "$git_tracked" "$git_untracked" \
   "$exec_ver" "$heal_flags" "$fault_model" "$n_bvn" "$n_node" "$n_val" "$n_fol" \
   "$FOL_LIST" "$FOL_PORTS" "$FOL_PARTS" \
   "$PARTS" "$CHAOS_ENABLED" "$DURATION" "$TPS" "$NOTE" > "$runjson"
@@ -898,21 +922,41 @@ at_last = {}
 for r in rows:
     if r["time"] == last:
         at_last[(r["time"], r.get("node"), r.get("partition"))] = r
+# ABSENT, ZERO AND NEVER-INCREMENTED ARE THREE DIFFERENT FACTS. A labelled
+# counter has no child series until it is first incremented, so an empty
+# `relayedRefused` beside a populated `relayedTaken` is a real 0 — the
+# family is exported and nothing was refused — while an empty one with no
+# relay column populated ANYWHERE in the run is not measured at all. Run
+# 20260919T231856Z printed both as `0` and the reader had to open relay.go
+# to learn which (REPORTING-SPEC 1). Family presence is judged over the
+# WHOLE file, not the last sample: a counter first incremented mid-run is
+# exported from then on.
+family = any((r.get(k) or "").strip() for r in rows for k in KEYS)
 tot = {k: 0 for k in KEYS}
-seen = False
+seen = {k: False for k in KEYS}
 for r in at_last.values():
     for k in KEYS:
         v = (r.get(k) or "").strip()
         if v:
             try:
-                tot[k] += int(v); seen = True
+                tot[k] += int(v); seen[k] = True
             except ValueError:
                 pass
-if not seen:
-    print("— not measured (rows at %s carry no relay counts)" % last); raise SystemExit
-print("%d taken / %d refused / %d target not ready / %d unreachable (as of %s)"
-      % (tot["relayedTaken"], tot["relayedRefused"], tot["relayedNotReady"],
-         tot["relayedUnreachable"], last))
+if not family:
+    print("— not measured (no node exports `accumulate_dagbft_relayed_total`; "
+          "#4366, #4369)")
+    raise SystemExit
+
+
+def cell(k):
+    if seen[k]:
+        return str(tot[k])
+    return "0 (series present)" if family else "— not measured"
+
+
+print("%s taken / %s refused / %s target not ready / %s unreachable (as of %s)"
+      % (cell("relayedTaken"), cell("relayedRefused"), cell("relayedNotReady"),
+         cell("relayedUnreachable"), last))
 PYEOF
 }
 
@@ -1017,22 +1061,41 @@ try:
 except OSError:
     row("stranded across disturbances", "— not measured (no `submissions.csv`)")
     raise SystemExit
-series = {}
+# A SAMPLE IS A FLEET TOTAL, so it is only a reading when every
+# (node, partition) reported. A container mid-restart answers no scrape —
+# `_scrape_one` stores an empty list and the container stays in the set, so
+# its topology-seeded rows are blank — and summing what is left makes the
+# fleet series DIP by that node's real count on exactly the sample it was
+# unreachable. The window minimum then reads the dip as the settled level:
+# a loss masked, or a negative step, at every restart of a chaos run
+# (reviewer M on #4364). An incomplete sample is dropped, not carried
+# forward — carrying forward invents a reading at a time nobody measured —
+# and the row says how many were dropped, because a node absent for a long
+# stretch is a finding and not noise.
+pairs = {(r.get("node"), r.get("partition")) for r in rows}
+series, partial = {}, {}
 for r in rows:
     v = (r.get("acceptedNeitherCertifiedTakenNorRefused") or "").strip()
+    key = (r.get("node"), r.get("partition"))
     if not v:
+        partial.setdefault(r["time"], set()).add(key)
         continue
     try:
         n = int(v)
     except ValueError:
+        partial.setdefault(r["time"], set()).add(key)
         continue
     # deduped by (time, node, partition): the forced final row can share a
     # second with a periodic one, and these are counters.
-    series.setdefault(r["time"], {})[(r.get("node"), r.get("partition"))] = n
-points = sorted((secs(t), sum(d.values())) for t, d in series.items())
+    series.setdefault(r["time"], {})[key] = n
+stamps = sorted(set(series) | set(partial))
+complete = [t for t in stamps if set(series.get(t, {})) == pairs]
+dropped = len(stamps) - len(complete)
+points = sorted((secs(t), sum(series[t].values())) for t in complete)
 if not points:
     row("stranded across disturbances",
-        "— not measured (no stranded series; #4366, #4369)")
+        "— not measured (no sample has all %d (node, partition) pairs; "
+        "%d incomplete)" % (len(pairs), dropped))
     raise SystemExit
 t0, t1 = points[0][0], points[-1][0]
 
@@ -1141,6 +1204,10 @@ if biggest_creep is not None:
         "%+d, %s%s" % (biggest_creep, biggest_creep_at,
                        "" if biggest_creep > 0 else
                        " — the figure did not climb"))
+if dropped:
+    row("samples dropped as incomplete",
+        "%d of %d — a node reported no counts at those, and a fleet total "
+        "missing one node dips by that node's count" % (dropped, len(stamps)))
 PYEOF
 }
 
@@ -1167,7 +1234,29 @@ if not rows:
 # movement over the final samples as well: falling with no new accepts is
 # draining, flat or rising is stranded.
 TREND_N = 5
-stamps = sorted({r["time"] for r in rows})
+# A fleet total is a reading only when every (node, partition) reported.
+# A container mid-restart answers no scrape and its topology-seeded rows
+# are blank, so the sum dips by that node's real count on exactly the
+# sample it was unreachable — and the headline "0 at the last sample"
+# could be that dip rather than a drained network (reviewer M on #4364).
+# Incomplete samples are skipped, here and in the trend, and the row says
+# how many.
+all_pairs = {(r.get("node"), r.get("partition")) for r in rows}
+
+
+def reported(ts):
+    return {(r.get("node"), r.get("partition")) for r in rows
+            if r["time"] == ts
+            and (r.get("acceptedNeitherCertifiedTakenNorRefused") or "").strip()}
+
+
+stamps_all = sorted({r["time"] for r in rows})
+stamps = [t for t in stamps_all if reported(t) == all_pairs]
+skipped = len(stamps_all) - len(stamps)
+if not stamps:
+    print("— not measured (no sample has all %d (node, partition) pairs; "
+          "%d incomplete)%s" % (len(all_pairs), skipped, ""))
+    raise SystemExit
 last = stamps[-1]
 
 
@@ -1275,6 +1364,12 @@ if lg_exit and last:
 if stopped_early:
     final += ("; the run was stopped by stallkill, so the load generator was "
               "killed mid-flight and this is NOT a drained sample")
+
+if skipped:
+    final += ("; %d sample%s skipped as incomplete (a node reported no "
+              "counts)" % (skipped, "" if skipped == 1 else "s"))
+    if stamps_all[-1] != last:
+        final += " — INCLUDING THE LAST, so this is not the final row"
 
 print("%d, worst %s on %s (as of %s; %s; %s)%s"
       % (total, wv, "/".join(wk), last, trend, final, missing))
