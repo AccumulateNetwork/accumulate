@@ -63,13 +63,10 @@ type QuerierParams struct {
 	// has been sighted. Nil falls back to the registered one for Partition.
 	Staging *execute.Staging
 
-	// NodeState is this node's join state. While it is joining, the querier
-	// refuses the two things a joining node must not answer -- a BPT page and
-	// an account read carrying a receipt -- because those are what another
-	// node's pull reads, and this node's store is the one the pull is filling
-	// (#4297). Plain reads stay open: gating them would stop a node answering
-	// ordinary questions about itself, which is the cost #4297 weighs. Nil
-	// means the node never joined.
+	// NodeState is this node's join state. While it is joining the querier
+	// refuses EVERY read, because every read is a read of the store its own
+	// pull is half filling (executor.md, "Sync", step 6; #4295). Nil means
+	// the node never joined.
 	NodeState nodestate.Serving
 }
 
@@ -111,9 +108,8 @@ func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (a
 		fixRange(query.EntryRange)
 	}
 
-	// A joining node does not answer what another node's pull reads. Before
-	// the gate, because a refusal costs nothing and the point is not to touch
-	// the store at all.
+	// A joining node does not answer a read at all. Before the gate, because
+	// a refusal costs nothing and the point is not to touch the store.
 	if err := s.servingFor(query); err != nil {
 		return nil, err
 	}
@@ -136,36 +132,53 @@ func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (a
 	return r, err
 }
 
-// servingFor refuses the queries a joining node must not answer.
+// servingFor refuses every read while this node is joining.
 //
-// Two of them, and the reason is the same for both: they are what a pull
-// reads. A BPT page says what the peer's leaves are, and an account read with
-// a receipt says the account hashes into the peer's root -- and a joining
-// node's leaves and root are the half-filled ones the pull is building. A
-// second joining node taking its spine from the first, unverified by
-// construction, and then never pulling the spine again, is the compounding
-// case (#4297).
+// "In this phase a syncing node refuses every read and answers once it is
+// fully synced": BOOTING refuses with NotReady, ACTIVE serves (executor.md,
+// "Sync", step 6; Paul, 2026-09-19). A joining node's store is the one its own
+// pull is filling, so there is no read of it that is an answer about a block:
+// what it holds is some of one block's state and some of another's until the
+// local root equals a root the Directory anchored.
 //
-// NotReady, so the caller asks another node.
+// Two reads compound rather than merely mislead, and they are why this gate
+// existed at all: a BPT page says what the peer's leaves are, and an account
+// read with a receipt says the account hashes into the peer's root, so a
+// second joining node takes its spine from the first, unverified by
+// construction, and never pulls the spine again (#4297). The rest — an
+// ordinary account read, a chain, a directory listing, a block — were left
+// open because gating them would stop a joining node answering ordinary
+// questions about itself. Under the settled rule that is no longer a reason:
+// BOOTING now ends at the root match rather than at a backfill that never
+// comes, so the node is answering again within the join rather than never
+// (#4295, and #4368's resolution).
+//
+// NotReady, so the caller asks another node rather than believing the answer.
 func (s *Querier) servingFor(query api.Query) error {
 	if s.nodeState == nil || s.nodeState.CanServeCurrent() {
 		return nil
 	}
-	var call string
-	switch q := query.(type) {
-	case *api.BptPageQuery:
-		call = "BptPageQuery"
-	case *api.DefaultQuery:
-		if !q.IncludeReceipt.Yes() {
-			return nil
-		}
-		call = "QueryAccountWithReceipt"
-	default:
-		return nil
-	}
-	mNotQuerying.WithLabelValues(strings.ToLower(s.partition.PartitionID()), call).Inc()
+	mNotQuerying.WithLabelValues(strings.ToLower(s.partition.PartitionID()), queryCall(query)).Inc()
 	return errors.NotReady.WithFormat(
 		"%s is joining and cannot answer for state it has not executed", s.partition.PartitionID())
+}
+
+// queryCall is the label a refusal is counted under. The two reads a pull
+// takes keep the names they have been counted under since #4297, so a
+// dashboard that matches on them keeps working; every other read is counted
+// under its query type.
+func queryCall(query api.Query) string {
+	switch q := query.(type) {
+	case nil:
+		return "unknown"
+	case *api.BptPageQuery:
+		return "BptPageQuery"
+	case *api.DefaultQuery:
+		if q.IncludeReceipt.Yes() {
+			return "QueryAccountWithReceipt"
+		}
+	}
+	return query.QueryType().String()
 }
 
 func (s *Querier) getLastBlockTime(ctx context.Context, batch *database.Batch) *time.Time {

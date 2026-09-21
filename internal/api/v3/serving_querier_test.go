@@ -36,13 +36,16 @@ func joiningQuerier(t *testing.T) *Querier {
 	})
 }
 
-// TestQuerier_AJoiningNodeDoesNotServeAPull — #4297.
+// TestQuerier_AJoiningNodeDoesNotServeAPull — #4297, the two reads that
+// compound.
 //
 // A joining node's leaves and root are the half-filled ones its own pull is
 // building. The two things another node's pull reads from a peer are a BPT
 // page and an account with a receipt, and a joining node must answer neither:
 // a second joining node would otherwise take its spine — unverified by
-// construction — from the first, and never pull the spine again.
+// construction — from the first, and never pull the spine again. (Since #4295
+// it answers no read at all; these two are the ones whose refusal was
+// already there.)
 //
 // NotReady, so the caller asks another node rather than believing the answer.
 func TestQuerier_AJoiningNodeDoesNotServeAPull(t *testing.T) {
@@ -60,16 +63,36 @@ func TestQuerier_AJoiningNodeDoesNotServeAPull(t *testing.T) {
 	require.True(t, errors.Is(err, errors.NotReady), "account with a receipt: got %v", err)
 }
 
-// TestQuerier_AJoiningNodeStillAnswersForItself — the cost #4297 weighs.
-// Gating everything would stop a node answering ordinary questions about
-// itself, on a node people query. A plain read is not what a pull takes, so it
-// stays open; the answer here is the store's (the account does not exist),
-// which is the point.
-func TestQuerier_AJoiningNodeStillAnswersForItself(t *testing.T) {
+// TestQuerier_AJoiningNodeRefusesAPlainReadToo — what #4295 changed.
+//
+// #4297 left a plain read open, weighing the cost of a joining node not
+// answering ordinary questions about itself against the hazard of the two
+// reads a pull takes. The spec settled it the other way: "in this phase a
+// syncing node refuses every read and answers once it is fully synced"
+// (executor.md, "Sync", step 6), because a plain read out of a half-filled
+// store is some of one block's state and some of another's, and because
+// BOOTING now ends at the root match rather than at a backfill that never
+// comes. So the account here is not reported missing — the node declines to
+// look.
+func TestQuerier_AJoiningNodeRefusesAPlainReadToo(t *testing.T) {
 	q := joiningQuerier(t)
-	_, err := q.Query(context.Background(), protocol.AccountUrl("alice"), &api.DefaultQuery{})
-	require.Error(t, err)
-	require.False(t, errors.Is(err, errors.NotReady), "a plain read was refused by the join gate: %v", err)
+	ctx := context.Background()
+	count := uint64(4)
+
+	for _, q2 := range []struct {
+		name  string
+		query api.Query
+	}{
+		{"plain account", &api.DefaultQuery{}},
+		{"chain", &api.ChainQuery{Name: "main"}},
+		{"directory", &api.DirectoryQuery{Range: &api.RangeOptions{Count: &count}}},
+		{"pending", &api.PendingQuery{Range: &api.RangeOptions{Count: &count}}},
+	} {
+		_, err := q.Query(ctx, protocol.AccountUrl("alice"), q2.query)
+		require.Error(t, err, "%s was answered by a joining node", q2.name)
+		require.True(t, errors.Is(err, errors.NotReady), "%s: got %v", q2.name, err)
+		require.Contains(t, err.Error(), "is joining", "%s: it must say why it refused", q2.name)
+	}
 }
 
 // TestQuerier_ANodeThatNeverJoinedAnswersEverything — no node state means the
