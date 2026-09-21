@@ -306,10 +306,18 @@ func AccountFirstIndexedBlock(account *database.Account) (block uint64, ok bool,
 // THIS IS RE-DERIVED ON THIS LINE, NOT INHERITED. The alignment is a property
 // of this line's block_end and its genesis, both of which differ from `main`'s,
 // and ElementIndex-style positional assumptions are what #4321/#4327/#4328/
-// #4330 are about. TestTheBptChainAndTheRootIndexChainAlignOnThisLine asserts
-// it block by block against the StateTreeAnchor the Directory holds. Anything
-// it misses is caught rather than served: GetReceiptAt refuses when the tree
-// reconstructed from retained nodes does not hash to the root passed here.
+// #4330 are about. What asserts it is
+// TestAnAccountIsServedAsOfTheBlockTheDirectoryAnchored
+// (cmd/accumulated/run): for every block the Directory anchored, the receipt
+// this root produces must end at the StateTreeAnchor that anchor carries, and
+// a refusal after the first block the node could serve fails the test rather
+// than being logged — an off-by-one here is a hole in an otherwise contiguous
+// window, and logging it is how this claim went unasserted while this comment
+// said a test made it.
+//
+// Anything that slips past is caught rather than served: GetReceiptAt refuses
+// when the tree reconstructed from retained nodes does not hash to the root
+// passed here.
 //
 // WHAT THIS ROOT IS ON THIS LINE. It is the value the partition's anchor for
 // that block carries as its StateTreeAnchor: the anchor is built in the
@@ -369,6 +377,18 @@ func BPTRootAt(partition config.NetworkUrl, batch *database.Batch, height uint64
 //
 // It never returns the current block for a historical request.
 func ResolveHistoricalAccountState(partition config.NetworkUrl, batch *database.Batch, account *database.Account, height uint64) (*protocol.IndexEntry, error) {
+	// THE HEIGHT IS JUDGED BEFORE THE ACCOUNT IS. A height of zero, one before
+	// this node's horizon, or one beyond its latest indexed block is a fact
+	// about the request or about this node; asking the account question first
+	// turns all three into NotFound for any account younger than the height,
+	// and NotFound is the one answer a requester reads as a fact about the
+	// record (`join/sources.go`). Ported from main, which had the order right,
+	// and pinned by TestResolveHistoricalAccountState_Refusals.
+	_, entry, err := ResolveBlockAtOrBefore(partition, batch, height)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	// Did the account exist? Ask about the height the caller asked about, not
 	// the resolved one: an account created between the two did not exist at the
 	// height in question, and proving it existed later answers a different
@@ -382,7 +402,11 @@ func ResolveHistoricalAccountState(partition config.NetworkUrl, batch *database.
 			"this node's earliest record of %v is block %d, so it has none at block %d", account.Url(), first, height)
 	}
 
-	return ResolveRetainedBlock(partition, batch, height)
+	err = requireRetained(partition, batch, entry)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return entry, nil
 }
 
 // ResolveRetainedBlock resolves a requested minor block height to the last
@@ -398,15 +422,23 @@ func ResolveRetainedBlock(partition config.NetworkUrl, batch *database.Batch, he
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-
-	retained, err := RetainedBlockRange(partition, batch)
+	err = requireRetained(partition, batch, entry)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+	return entry, nil
+}
+
+// requireRetained refuses a block this node keeps no BPT history for, naming
+// the window so a client is told where it ends rather than left to probe.
+func requireRetained(partition config.NetworkUrl, batch *database.Batch, entry *protocol.IndexEntry) error {
+	retained, err := RetainedBlockRange(partition, batch)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
 	if !retained.Contains(entry.BlockIndex) {
-		return nil, errors.IncompleteChain.WithFormat(
+		return errors.IncompleteChain.WithFormat(
 			"no BPT history retained for block %d; this node's retained range is %v", entry.BlockIndex, retained)
 	}
-
-	return entry, nil
+	return nil
 }

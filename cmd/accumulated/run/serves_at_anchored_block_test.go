@@ -51,15 +51,23 @@ func TestAnAccountIsServedAsOfTheBlockTheDirectoryAnchored(t *testing.T) {
 
 	ledger := protocol.PartitionUrl("BVN1").JoinPath(protocol.Ledger)
 	served := 0
+	var lastServed uint64
 	for _, a := range anchors {
 		r, err := c.QueryAccount(ctx, ledger, &apiv3.DefaultQuery{
 			IncludeReceipt: &apiv3.ReceiptOptions{ForHeight: a.block},
 		})
 		if err != nil {
-			// A block below the node's horizon, or one whose root the bpt
-			// chain has not recorded yet, is a refusal this test accepts --
-			// what it does not accept is an answer against the wrong root.
-			t.Logf("block %d: %v", a.block, err)
+			// A refusal is accepted only BEFORE the first block the node
+			// could serve. The retained window is a range with one floor, so
+			// once a block has been answered every later one must be too; a
+			// refusal after that is a hole, and a hole is what an off-by-one
+			// between the bpt chain and the root index chain would look like.
+			// Logging it and moving on is how the alignment claim went
+			// unasserted while the comment said a test made it.
+			require.Zerof(t, served,
+				"block %d was refused after block %d was served, so the retained window has a hole in it: %v",
+				a.block, lastServed, err)
+			t.Logf("block %d (before the node's first answerable block): %v", a.block, err)
 			continue
 		}
 		require.NotNil(t, r.Receipt, "block %d was answered with no receipt", a.block)
@@ -90,9 +98,10 @@ func TestAnAccountIsServedAsOfTheBlockTheDirectoryAnchored(t *testing.T) {
 				"the receipt for block %d claims to start at the main state, but not at the main state it served", a.block)
 		}
 		served++
+		lastServed = a.block
 	}
 	require.NotZero(t, served, "not one anchored block could be served")
-	t.Logf("served %d of %d anchored blocks", served, len(anchors))
+	t.Logf("served %d of %d anchored blocks, last %d", served, len(anchors), lastServed)
 }
 
 // THE PAST IS NOT ANSWERED WITH THE PRESENT.
@@ -188,7 +197,9 @@ func TestABptPageIsServedAsOfTheBlockTheDirectoryAnchored(t *testing.T) {
 	for _, a := range anchors {
 		r, err := c.Query(ctx, part, &apiv3.BptPageQuery{Count: whole, ForHeight: a.block})
 		if err != nil {
-			t.Logf("block %d: %v", a.block, err)
+			require.Zerof(t, served,
+				"block %d's page was refused after an earlier block's was served: %v", a.block, err)
+			t.Logf("block %d (before the node's first answerable block): %v", a.block, err)
 			continue
 		}
 		page, ok := r.(*apiv3.BptPageRecord)
