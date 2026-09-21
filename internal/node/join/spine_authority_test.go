@@ -7,6 +7,7 @@
 package join
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -42,24 +43,40 @@ func newJoiningNode(t *testing.T, n int) (*PulledState, *database.Database, *cor
 // `spineSettled` is what decides whether the join has a spine it may build
 // on. Marking it verified when some of it was refused would let the node go
 // on with accounts it could not prove, and would stop it asking for them
-// again — the re-fetch path exists precisely because a spine served at a
-// block nobody anchors is given up on after four rounds.
+// again: fetchPass asks for the spine for as long as it is not verified.
 func TestTheSpineIsNotVerifiedUntilEveryAccountSettled(t *testing.T) {
 	s, _, _ := newJoiningNode(t, 4)
 
-	s.spinePending = true
-	s.spineSettled(3, 4, 1)
+	s.spineSettled(&pass{spine: true, spineFailed: true})
 	require.False(t, s.spine, "the spine was marked verified with an account refused")
-	require.False(t, s.spinePending, "the fetch is finished with, so the next round must be free to ask again")
 
-	s.spinePending = true
-	s.spineSettled(2, 4, 0)
-	require.False(t, s.spine, "the spine was marked verified with accounts still unsettled")
-
-	s.spinePending = true
-	s.spineSettled(4, 4, 0)
+	s.spineSettled(&pass{spine: true})
 	require.True(t, s.spine, "every account settled and the spine was still not verified")
-	require.False(t, s.spinePending)
+}
+
+// TestASpineAccountFetchedAgainFailsTheSpine.
+//
+// A pass is one root, so settlePass takes out of it what was served at another
+// root or at none. When that is a spine account the pass no longer carries the
+// whole spine, and proving the rest of it must not verify the spine.
+func TestASpineAccountFetchedAgainFailsTheSpine(t *testing.T) {
+	a, b := protocol.AccountUrl("alice", "tokens"), protocol.AccountUrl("bob", "tokens")
+	s := heldPass(t, deadPeers{}, map[string][32]byte{a.String(): {1}}, a, b)
+	s.spine = false
+	s.pass.spine = true
+	for _, h := range s.pass.accounts {
+		h.spine = true
+	}
+
+	s.settlePass(context.Background())
+
+	require.NotNil(t, s.pass)
+	require.True(t, s.pass.spineFailed, "a spine account left the pass and the pass can still verify the spine")
+	require.Empty(t, s.refused, "a spine account is asked for with the spine, not by name")
+	p := s.pass
+	s.dropPass()
+	s.spineSettled(p)
+	require.False(t, s.spine, "the spine was marked verified with an account of it fetched again")
 }
 
 // TestTheTrustedSetsFollowTheStore.
