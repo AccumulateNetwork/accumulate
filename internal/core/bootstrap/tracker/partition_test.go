@@ -14,12 +14,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// TestCheck_PromotesFromWaiting — nodestate documents BOOTING → WAITING →
-// ACTIVE and PromoteToActive accepts WAITING, but Check refused to look at a
-// machine past BOOTING: a node that had said "the state is local, no anchored
-// root matches it yet" could never be told that one now does. It read as "not
-// yet" and was a permanent stall.
-func TestCheck_PromotesFromWaiting(t *testing.T) {
+// TestCheck_IgnoresAMachineAlreadyActive — the states are two (#4368), so
+// BOOTING is the one state Check promotes out of. A machine already ACTIVE
+// has nothing left to do, and Check must say so rather than promote again.
+//
+// This replaces TestCheck_PromotesFromWaiting, which pinned the WAITING step
+// nothing ever took: nodestate documented BOOTING → WAITING → ACTIVE and no
+// production caller ever moved a machine to WAITING (callers_test.go).
+func TestCheck_IgnoresAMachineAlreadyActive(t *testing.T) {
 	db := newTrackerDB(t)
 	root := fillN(t, db, 5)
 
@@ -28,9 +30,6 @@ func TestCheck_PromotesFromWaiting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !m.PromoteToWaiting(root, 0) {
-		t.Fatal("BOOTING to WAITING refused")
-	}
 
 	tr.Observe(part(), 42, root)
 	promoted, err := tr.Check(context.Background())
@@ -38,13 +37,26 @@ func TestCheck_PromotesFromWaiting(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !promoted {
-		t.Fatal("a WAITING node was never promoted, although the anchored root matched")
+		t.Fatal("a BOOTING node was never promoted, although the anchored root matched")
 	}
 	if m.State() != nodestate.StateActive {
 		t.Fatalf("state = %v, want ACTIVE", m.State())
 	}
 	if got := m.Get().SinceBlock; got != 42 {
 		t.Fatalf("SinceBlock = %d, want 42", got)
+	}
+
+	// A second look promotes nothing and moves nothing.
+	tr.Observe(part(), 99, root)
+	promoted, err = tr.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if promoted {
+		t.Fatal("an ACTIVE node was promoted again")
+	}
+	if got := m.Get().SinceBlock; got != 42 {
+		t.Fatalf("SinceBlock moved to %d after the machine was already ACTIVE", got)
 	}
 }
 

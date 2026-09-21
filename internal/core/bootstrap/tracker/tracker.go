@@ -150,18 +150,14 @@ func (t *Tracker) Observe(partition *url.URL, block uint64, anchor [32]byte) {
 // Check reads the current local BPT root and updates the consecutive-match
 // streak. On reaching MatchThreshold it promotes the state machine. Returns
 // (true, nil) on the promoting call; (false, nil) if not yet, or if the
-// machine is already past WAITING.
+// machine is already ACTIVE.
 func (t *Tracker) Check(ctx context.Context) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	// BOOTING and WAITING are both states a node promotes out of
-	// (nodestate: BOOTING → WAITING → ACTIVE). Refusing WAITING made the
-	// documented path a permanent stall that read as "not yet".
-	switch t.machine.State() {
-	case nodestate.StateBooting, nodestate.StateWaiting:
-		// Still joining
-	default:
+	// BOOTING is the one state a node promotes out of: the states are two
+	// (#4368). A machine already ACTIVE has nothing to do here.
+	if t.machine.State() != nodestate.StateBooting {
 		return false, nil
 	}
 
@@ -193,8 +189,7 @@ func (t *Tracker) Check(ctx context.Context) (bool, error) {
 	}
 
 	// PromoteToActive returns false if a concurrent caller already
-	// transitioned us past BOOTING/WAITING. Not our promotion, same
-	// destination.
+	// transitioned us out of BOOTING. Not our promotion, same destination.
 	if !t.machine.PromoteToActive(local, block) {
 		return false, nil
 	}

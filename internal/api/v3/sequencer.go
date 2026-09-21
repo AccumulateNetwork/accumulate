@@ -314,15 +314,14 @@ var mNotServing = promauto.NewCounterVec(prometheus.CounterOpts{
 // healing reads as "the source has nothing", strands the entry, and spends
 // the requester's retry budget on a node that cannot help (#4287). It says
 // NotReady instead, and the requester asks the next validator (executor spec,
-// "Sync", step 5).
+// "Sync", step 6).
 func (s *Sequencer) serving(call string) error {
 	// A node with no state of its own never joined: it has always executed
 	// what it holds, and it answers for itself.
 	if s.nodeState == nil {
 		return nil
 	}
-	switch s.nodeState.State() {
-	case nodestate.StateActive, nodestate.StateComplete:
+	if s.nodeState.State() == nodestate.StateActive {
 		return nil
 	}
 	mNotServing.WithLabelValues(strings.ToLower(s.partitionID), call).Inc()

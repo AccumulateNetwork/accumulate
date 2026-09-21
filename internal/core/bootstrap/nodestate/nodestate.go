@@ -5,31 +5,37 @@
 // https://opensource.org/licenses/MIT.
 
 // Package nodestate is the state a node is in while it joins, and the
-// advertisement that says so (executor.md, "Sync", step 5: a node serves
+// advertisement that says so (executor.md, "Sync", step 6: a node serves
 // last, and says what it can answer).
 //
-// Four states:
+// TWO states, because fully synced is a verified state and not a backfilled
+// history:
 //
-//   - BOOTING:  pulling the spine and the state. Cannot serve queries,
-//     cannot validate.
-//   - WAITING:  the state is local, but no anchored root has been seen that
-//     matches it yet. Still cannot serve queries.
-//   - ACTIVE:   the local root equals a root the Directory anchored, so the
-//     state is verified. Can serve current-state queries and take part in
-//     consensus.
-//   - COMPLETE: ACTIVE plus the history backfilled — the producer cache
-//     filled and the chains the node lacked fetched — so it can answer the
-//     sequencer and healing too.
+//   - BOOTING: from the start of a join until the local root matches a root
+//     the Directory anchored. It refuses every read and cannot validate.
+//   - ACTIVE:  from that block on. The state is some block's state and the
+//     node answers for it.
 //
-// Transitions are forward only: BOOTING → WAITING → ACTIVE → COMPLETE. A node
-// never regresses; a verification that breaks means starting over.
+// A node that never joined has no machine at all and serves as ACTIVE
+// (nodestate.Always). The transition is forward only and there is one of
+// them: a verification that breaks means starting over.
+//
+// WAITING and COMPLETE are gone. COMPLETE meant "ACTIVE plus the history
+// backfilled — the producer cache filled and the chains the node lacked
+// fetched"; this line has no backfill, so nothing could reach it, and keying
+// serving on it would have meant every node that ever joined or restarted
+// refused every read for the rest of its life. WAITING was a step between a
+// local root and an anchored one that no caller ever took. Neither had a
+// production caller; both are retired by the spec (#4368, and the scan in
+// callers_test.go, which fails if either returns). The gauge keeps its
+// numbering — 0 booting, 2 active — because a monitor matches on the value.
 //
 // A machine is per partition. A node serves two of them, and every block
 // number it advertises is a block of one partition or the other (#4205).
 //
 // Ported from bootstrap-v3 (issue #4293). Changed on this line: the states are
-// the partition's, not the node's, and the doc comment named a snapshot this
-// line no longer has.
+// the partition's, not the node's; the doc comment named a snapshot this
+// line no longer has; and two of the four states are retired (#4295).
 package nodestate
 
 import (
@@ -45,41 +51,32 @@ type State int
 
 const (
 	// StateUnknown is the zero value. Treat as "not advertised" for
-	// routing purposes — equivalent to a pre-design legacy node,
-	// which is itself treated as COMPLETE for legacy queries.
+	// routing purposes.
 	StateUnknown State = iota
 	StateBooting
-	StateWaiting
+	// 2 was WAITING, retired (#4368). The constant is not reused, so the
+	// gauge's numbering — 0 booting, 2 active — is unchanged and a monitor
+	// that matches on it keeps working.
+	_
 	StateActive
-	StateComplete
 )
 
 func (s State) String() string {
 	switch s {
 	case StateBooting:
 		return "BOOTING"
-	case StateWaiting:
-		return "WAITING"
 	case StateActive:
 		return "ACTIVE"
-	case StateComplete:
-		return "COMPLETE"
 	default:
 		return "UNKNOWN"
 	}
 }
 
-// CanServeCurrent reports whether the state can serve current-state
-// queries (current account state, validator participation, bootstrap
-// data for new launchers). True for ACTIVE and COMPLETE.
+// CanServeCurrent reports whether the node may answer for the state it holds.
+// True for ACTIVE, and for ACTIVE alone: a node that is BOOTING refuses every
+// read (executor.md, "Sync", step 6).
 func (s State) CanServeCurrent() bool {
-	return s == StateActive || s == StateComplete
-}
-
-// CanServeHistory reports whether the state can serve historical
-// queries beyond the rolling window. True for COMPLETE only.
-func (s State) CanServeHistory() bool {
-	return s == StateComplete
+	return s == StateActive
 }
 
 // Serving is what a service asks before it answers for the state this node
@@ -124,11 +121,6 @@ type Advertisement struct {
 	// own root matched. Empty for BOOTING.
 	VerifiedAnchor [32]byte
 
-	// HistoryDepth is the oldest block fully retained, for COMPLETE.
-	// Zero means full history (no retention limit). Unused for
-	// BOOTING / ACTIVE.
-	HistoryDepth uint64
-
 	// LastUpdated is the wall-clock time the advertisement was
 	// generated; consumers discard advertisements older than 2 ×
 	// the publishing heartbeat to avoid stale routing.
@@ -138,7 +130,7 @@ type Advertisement struct {
 // Validate reports a malformed-payload error.
 func (a *Advertisement) Validate() error {
 	switch a.State {
-	case StateBooting, StateWaiting, StateActive, StateComplete:
+	case StateBooting, StateActive:
 		// ok
 	default:
 		return fmt.Errorf("nodestate: invalid state %d", a.State)
@@ -146,10 +138,8 @@ func (a *Advertisement) Validate() error {
 	if a.Partition == nil {
 		return fmt.Errorf("nodestate: an advertisement must name its partition")
 	}
-	if a.State == StateActive || a.State == StateComplete {
-		if a.VerifiedAnchor == ([32]byte{}) {
-			return fmt.Errorf("nodestate: ACTIVE/COMPLETE advertisement must carry VerifiedAnchor")
-		}
+	if a.State == StateActive && a.VerifiedAnchor == ([32]byte{}) {
+		return fmt.Errorf("nodestate: an ACTIVE advertisement must carry VerifiedAnchor")
 	}
 	return nil
 }
@@ -163,7 +153,6 @@ type Machine struct {
 	state    State
 	since    uint64
 	anchor   [32]byte
-	depth    uint64
 	last     time.Time
 	onChange []func(Advertisement)
 }
@@ -179,49 +168,6 @@ func New(partition *url.URL) *Machine {
 
 // Partition reports the partition this machine is the state of.
 func (m *Machine) Partition() *url.URL { return m.partition }
-
-// Restore reconstructs a Machine from a persisted state record.
-// state must be one of StateBooting, StateWaiting, StateActive, or
-// StateComplete. ACTIVE / COMPLETE require a non-zero verifiedAnchor.
-func Restore(partition *url.URL, state State, sinceBlock uint64, verifiedAnchor [32]byte, historyDepth uint64) (*Machine, error) {
-	if partition == nil {
-		return nil, fmt.Errorf("nodestate.Restore: partition required")
-	}
-	switch state {
-	case StateBooting, StateWaiting, StateActive, StateComplete:
-		// ok
-	default:
-		return nil, fmt.Errorf("nodestate.Restore: invalid state %d", state)
-	}
-	if (state == StateActive || state == StateComplete) && verifiedAnchor == ([32]byte{}) {
-		return nil, fmt.Errorf("nodestate.Restore: ACTIVE/COMPLETE requires non-zero verifiedAnchor")
-	}
-	return &Machine{
-		partition: partition,
-		state:     state,
-		since:     sinceBlock,
-		anchor:    verifiedAnchor,
-		depth:     historyDepth,
-		last:      time.Now(),
-	}, nil
-}
-
-// ParseState maps the persisted string form to the typed State.
-// Unrecognized strings return StateUnknown plus an error.
-func ParseState(s string) (State, error) {
-	switch s {
-	case "BOOTING":
-		return StateBooting, nil
-	case "WAITING":
-		return StateWaiting, nil
-	case "ACTIVE":
-		return StateActive, nil
-	case "COMPLETE":
-		return StateComplete, nil
-	default:
-		return StateUnknown, fmt.Errorf("nodestate: unknown state %q", s)
-	}
-}
 
 // Get returns the current advertisement payload.
 func (m *Machine) Get() Advertisement {
@@ -246,12 +192,12 @@ func (m *Machine) State() State {
 	return m.state
 }
 
-// PromoteToWaiting transitions BOOTING → WAITING: the state is local and the
-// node knows what root it thinks it has, but no anchored root matching it has
-// been seen yet. claimedAnchor is the local BPT root and sinceBlock is the
-// block it was taken at. Returns false if the transition is invalid.
-func (m *Machine) PromoteToWaiting(claimedAnchor [32]byte, sinceBlock uint64) bool {
-	if claimedAnchor == ([32]byte{}) {
+// PromoteToActive transitions BOOTING → ACTIVE, the one transition there is.
+// anchor is the root the Directory anchored that the local root now equals
+// (non-zero), and sinceBlock is the block it was anchored for — block Q of
+// executor.md, "Sync". Returns false if the transition is invalid.
+func (m *Machine) PromoteToActive(anchor [32]byte, sinceBlock uint64) bool {
+	if anchor == ([32]byte{}) {
 		return false
 	}
 	m.mu.Lock()
@@ -259,59 +205,8 @@ func (m *Machine) PromoteToWaiting(claimedAnchor [32]byte, sinceBlock uint64) bo
 		m.mu.Unlock()
 		return false
 	}
-	m.state = StateWaiting
-	m.anchor = claimedAnchor
-	m.since = sinceBlock
-	m.last = time.Now()
-	cbs := append([]func(Advertisement){}, m.onChange...)
-	ad := m.adLocked()
-	m.mu.Unlock()
-
-	for _, cb := range cbs {
-		cb(ad)
-	}
-	return true
-}
-
-// PromoteToActive transitions WAITING → ACTIVE, or BOOTING → ACTIVE for a
-// caller that skips WAITING. anchor is the root the Directory anchored that
-// the local root now equals (non-zero), and sinceBlock is the block it was
-// anchored for — block Q of executor.md, "Sync". Returns false if the
-// transition is invalid.
-func (m *Machine) PromoteToActive(anchor [32]byte, sinceBlock uint64) bool {
-	if anchor == ([32]byte{}) {
-		return false
-	}
-	m.mu.Lock()
-	if m.state != StateBooting && m.state != StateWaiting {
-		m.mu.Unlock()
-		return false
-	}
 	m.state = StateActive
 	m.anchor = anchor
-	m.since = sinceBlock
-	m.last = time.Now()
-	cbs := append([]func(Advertisement){}, m.onChange...)
-	ad := m.adLocked()
-	m.mu.Unlock()
-
-	for _, cb := range cbs {
-		cb(ad)
-	}
-	return true
-}
-
-// PromoteToComplete transitions ACTIVE → COMPLETE. historyDepth is
-// the oldest block fully retained (zero for unlimited). Returns
-// false if the transition is invalid.
-func (m *Machine) PromoteToComplete(historyDepth, sinceBlock uint64) bool {
-	m.mu.Lock()
-	if m.state != StateActive {
-		m.mu.Unlock()
-		return false
-	}
-	m.state = StateComplete
-	m.depth = historyDepth
 	m.since = sinceBlock
 	m.last = time.Now()
 	cbs := append([]func(Advertisement){}, m.onChange...)
@@ -350,7 +245,6 @@ func (m *Machine) adLocked() Advertisement {
 		Partition:      m.partition,
 		SinceBlock:     m.since,
 		VerifiedAnchor: m.anchor,
-		HistoryDepth:   m.depth,
 		LastUpdated:    m.last,
 	}
 }
