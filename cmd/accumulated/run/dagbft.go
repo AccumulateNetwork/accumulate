@@ -756,6 +756,10 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		Partition:    s.Partition.ID,
 		ValidatorKey: validatorKey,
 	})
+	inst.cleanup("sequencer", func(context.Context) error {
+		sequencerSvc.Close()
+		return nil
+	})
 	registerRpcService(inst, sequencerSvc.Type().AddressFor(s.Partition.ID), message.Sequencer{Sequencer: sequencerSvc})
 	err = dagbftProvidesSequencer.Register(inst.services, s, sequencerSvc)
 	if err != nil {
