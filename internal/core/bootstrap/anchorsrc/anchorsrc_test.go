@@ -808,3 +808,49 @@ func TestAnotherPartitionsAnchorIsNeitherVerifiedNorRefused(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, root(0x70), got)
 }
+
+// Rewind makes the source read its window again.
+//
+// The join calls it when the trusted sets move, and this is the case it is
+// for: a network that ADDS validators produces anchors the new set signs,
+// and those do not reach the old set's threshold. Under the old definition
+// such an anchor is refused and the cursor moves past it, so without a
+// rewind the roots in flight across the change are lost and the node waits
+// for anchors that come after it.
+func TestRewindReadsTheWindowAgain(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1, 2) // four seated, two the network has not seated
+	pool := dn().JoinPath(protocol.AnchorPool)
+
+	// Signed by two of the old set and the two the change seats: two of six
+	// under the old definition, where three of four are needed.
+	entry := f.anchor(t, anchorOpts{
+		source: bvn0(), destination: dn(), block: 500, root: root(0x50),
+		signers: []int{0, 1, 4, 5}, version: 2,
+	})
+	q := &poolQuerier{pool: pool, entries: []*api.MessageRecord[messaging.Message]{entry}}
+
+	a := f.authority(t)
+	s, err := New(q, pool, bvn0(), a)
+	require.NoError(t, err)
+
+	_, err = s.AnchoredRoot(ctx, bvn0(), 500)
+	require.ErrorIs(t, err, ErrNotAnchored, "the old set's threshold was reached by keys it does not name")
+
+	// Reading again takes nothing: the cursor has moved past it.
+	served := q.served
+	require.NoError(t, s.Read(ctx))
+	require.Equal(t, served, q.served, "the cursor did not move past what it read")
+
+	// The node adopts the new definition out of verified state, which is the
+	// only way the sets ever move, and the window is read again.
+	require.True(t, a.Update(f.withActive(t, 2, 0, 1, 2, 3, 4, 5)))
+	set, err := a.SetFor("BVN0")
+	require.NoError(t, err)
+	require.Equal(t, uint64(4), set.Threshold, "2/3 of six is four")
+
+	s.Rewind()
+	got, err := s.AnchoredRoot(ctx, bvn0(), 500)
+	require.NoError(t, err, "the anchor refused under the old set was never read again")
+	require.Equal(t, root(0x50), got)
+}
