@@ -9,6 +9,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"strings"
 	"time"
@@ -111,8 +112,7 @@ func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (a
 		fixRange(query.EntryRange)
 	}
 
-	// A joining node does not answer what another node's pull reads. Before
-	// the gate, because a refusal costs nothing and the point is not to touch
+	// A joining node answers nothing (see servingFor). Before the gate, because a refusal costs nothing and the point is not to touch
 	// the store at all.
 	if err := s.servingFor(query); err != nil {
 		return nil, err
@@ -136,36 +136,39 @@ func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (a
 	return r, err
 }
 
-// servingFor refuses the queries a joining node must not answer.
+// servingFor refuses every query while this node cannot serve current state
+// (executor.md, "Sync", step 6; #4368).
 //
-// Two of them, and the reason is the same for both: they are what a pull
-// reads. A BPT page says what the peer's leaves are, and an account read with
-// a receipt says the account hashes into the peer's root -- and a joining
-// node's leaves and root are the half-filled ones the pull is building. A
-// second joining node taking its spine from the first, unverified by
-// construction, and then never pulling the spine again, is the compounding
-// case (#4297).
+// A BOOTING node's store is whatever its pull has filled so far: its leaves
+// and root are half-built, and an account, a chain entry or a block read from
+// it is an answer about state it has not verified, just as much as a BPT page
+// or a receipt is. The pull reads are the compounding case -- a second joining
+// node taking its spine from the first, unverified by construction, and never
+// pulling the spine again (#4297) -- but not the only wrong answer.
 //
-// NotReady, so the caller asks another node.
+// Only the querier. Submit and Validate are not reads and a BOOTING node
+// relays them (#4366); node info and consensus status must keep answering, or
+// a relay's standing check and peer discovery break. The join reads from
+// peers, never from this querier, so refusing here cannot starve it.
+//
+// A nil machine is a node that took nothing from a peer, and serves
+// everything. NotReady, so the caller asks another node.
 func (s *Querier) servingFor(query api.Query) error {
 	if s.nodeState == nil || s.nodeState.CanServeCurrent() {
 		return nil
 	}
-	var call string
-	switch q := query.(type) {
-	case *api.BptPageQuery:
-		call = "BptPageQuery"
-	case *api.DefaultQuery:
-		if !q.IncludeReceipt.Yes() {
-			return nil
-		}
-		call = "QueryAccountWithReceipt"
-	default:
-		return nil
-	}
-	mNotQuerying.WithLabelValues(strings.ToLower(s.partition.PartitionID()), call).Inc()
+	mNotQuerying.WithLabelValues(strings.ToLower(s.partition.PartitionID()), queryCall(query)).Inc()
 	return errors.NotReady.WithFormat(
 		"%s is joining and cannot answer for state it has not executed", s.partition.PartitionID())
+}
+
+// queryCall names a query for the not-querying metric by its type, with an
+// account read carrying a receipt named apart since that is what a pull takes.
+func queryCall(query api.Query) string {
+	if q, ok := query.(*api.DefaultQuery); ok && q.IncludeReceipt.Yes() {
+		return "QueryAccountWithReceipt"
+	}
+	return strings.TrimPrefix(fmt.Sprintf("%T", query), "*api.")
 }
 
 func (s *Querier) getLastBlockTime(ctx context.Context, batch *database.Batch) *time.Time {

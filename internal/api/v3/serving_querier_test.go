@@ -60,18 +60,6 @@ func TestQuerier_AJoiningNodeDoesNotServeAPull(t *testing.T) {
 	require.True(t, errors.Is(err, errors.NotReady), "account with a receipt: got %v", err)
 }
 
-// TestQuerier_AJoiningNodeStillAnswersForItself — the cost #4297 weighs.
-// Gating everything would stop a node answering ordinary questions about
-// itself, on a node people query. A plain read is not what a pull takes, so it
-// stays open; the answer here is the store's (the account does not exist),
-// which is the point.
-func TestQuerier_AJoiningNodeStillAnswersForItself(t *testing.T) {
-	q := joiningQuerier(t)
-	_, err := q.Query(context.Background(), protocol.AccountUrl("alice"), &api.DefaultQuery{})
-	require.Error(t, err)
-	require.False(t, errors.Is(err, errors.NotReady), "a plain read was refused by the join gate: %v", err)
-}
-
 // TestQuerier_ANodeThatNeverJoinedAnswersEverything — no node state means the
 // node has always executed what it holds, here as for the sequencer.
 func TestQuerier_ANodeThatNeverJoinedAnswersEverything(t *testing.T) {
