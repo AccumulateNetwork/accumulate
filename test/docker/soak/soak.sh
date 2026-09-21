@@ -143,6 +143,20 @@ export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-disoak}"
 # "no drops" whether or not drops were configured (#4126).
 compose_file="$here/../docker-compose.yml"
 compose="docker compose -f $compose_file"
+# The follower the chaos walk adds (#4364) is in the compose's late-follower
+# profile, which `down` does not activate: a container of it left up — a run
+# that ended between its add and its remove, or a killed run — would outlive
+# the network and hold the config volume. Removed by name, its log kept.
+rm_late_followers() {   # $1 = why, for the log
+  local c
+  for c in $(python3 "$here/followerchaos.py" late 2>/dev/null | awk '{print $2}'); do
+    docker inspect "$c" >/dev/null 2>&1 || continue
+    docker logs "$c" 2>&1 | sed "s/^/$c | /" > "$rd/node-logs-$c-$1.txt"
+    docker rm -f -v "$c" >/dev/null 2>&1
+    echo "$(date -u +%FT%TZ) $c removed ($1)" | tee -a "$log"
+  done
+  return 0
+}
 
 # ---- provenance -------------------------------------------------------------
 # Capture what is being tested BEFORE starting, because the tree will move on.
@@ -168,7 +182,12 @@ heal_flags="${heal_flags:-unconditional (DI conductor, #4105)}"
 if [ "$CHAOS_ENABLED" = off ]; then
   fault_model="none (CHAOS=off)"
 else
-  fault_model="restart or pause one BVN container every ${CHAOS_MIN}s + 0-${CHAOS_JITTER}s"
+  fault_kinds="restart or pause one BVN validator container"
+  [ "${CHAOS_VALIDATORS:-on}" = off ] && fault_kinds=""
+  if [ "${CHAOS_FOLLOWERS:-off}" = on ]; then
+    fault_kinds="${fault_kinds:+$fault_kinds, alternating with }add-follower then remove-follower (CHAOS_FOLLOWER_CYCLES=${CHAOS_FOLLOWER_CYCLES:-0}, 0 unbounded)"
+  fi
+  fault_model="${fault_kinds:-nothing (CHAOS_VALIDATORS=off, CHAOS_FOLLOWERS=off)} every ${CHAOS_MIN}s + 0-${CHAOS_JITTER}s"
 fi
 # Compose names built images "<project>-<service>", and the project is pinned to
 # $COMPOSE_PROJECT_NAME above. This default was "docker-bvn1-val1", the name
@@ -313,6 +332,7 @@ if [ "$live" -gt 0 ] && [ "${SOAK_FORCE:-0}" != 1 ]; then
   exit 1
 fi
 echo $$ > "$pidfile"
+rm_late_followers "left over before this run"
 $compose down -v --remove-orphans >/dev/null 2>&1
 
 # Preflight the host ports the compose publishes. A single stray process on one
@@ -620,26 +640,130 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
   mapfile -t nodes < <(docker ps --filter name=acc-bvn --format '{{.Names}}' \
     | grep -Fxf <(printf '%s\n' "${vals[@]}") \
     | awk -F- '{print $3, $2, $0}' | sort -k1,1 -k2,2 | awk '{print $3}')
-  if [ "${#nodes[@]}" -eq 0 ]; then
-    echo "$(date -u +%FT%TZ) NO validator containers matched the topology — chaos is doing nothing" >> "$chaos"
+  val_on=1; [ "${CHAOS_VALIDATORS:-on}" = off ] && val_on=0
+  if [ "$val_on" -eq 1 ] && [ "${#nodes[@]}" -eq 0 ]; then
+    echo "$(date -u +%FT%TZ) NO validator containers matched the topology — chaos is doing nothing to validators" >> "$chaos"
+    val_on=0
   fi
-  echo "$(date -u +%FT%TZ) order: ${nodes[*]}" >> "$chaos"
+  [ "$val_on" -eq 1 ] && echo "$(date -u +%FT%TZ) order: ${nodes[*]}" >> "$chaos"
+  [ "$val_on" -eq 0 ] && echo "$(date -u +%FT%TZ) validators: not disturbed (CHAOS_VALIDATORS=${CHAOS_VALIDATORS:-on})" >> "$chaos"
+
+  # The follower kinds (#4364), when CHAOS_FOLLOWERS=on: add-follower starts
+  # the follower whose compose service is in the `late-follower` profile — a
+  # node `compose up` did not start, with its own key in no committee, its
+  # peers from the bootstrap and its storage from docker-network.yml — and
+  # remove-follower stops and removes it. They alternate, one follower up at
+  # a time, CHAOS_FOLLOWER_CYCLES pairs (0: for the whole run). With the
+  # validator walk on too, the slots alternate validator, follower, so each
+  # kind keeps its turn.
+  #
+  # Each add clears the follower's two databases first (bvnN-M/{dnn,bvnn}/
+  # data/accumulate.db, in the shared config volume that outlives the
+  # container), so every add is a node that has never run, not a restart.
+  #
+  # While it is up, every wait below polls it: the chaos log gets a line when
+  # accumulate_node_state reads ACTIVE on every partition it runs, and one at
+  # its first block whose root equals a validator's, each with the seconds
+  # since the add. The removal is bracketed by readings FOLLOWER_WINDOW_SECS
+  # before and after it, and the log states whether every partition's block
+  # cadence and every stream's delivered count were unaffected. The readings
+  # are followerchaos.py's; it is tested there.
+  fol_on=0; fol_svc=""; fol=""; fol_dir=""
+  if [ "${CHAOS_FOLLOWERS:-off}" = on ]; then
+    read -r fol_svc fol fol_dir < <(python3 "$here/followerchaos.py" late 2>/dev/null | head -1)
+    if [ -n "$fol" ]; then
+      fol_on=1
+      echo "$(date -u +%FT%TZ) followers: $fol (service $fol_svc, data $fol_dir) is added and removed in turn, ${CHAOS_FOLLOWER_CYCLES:-0} pair(s) (0: unbounded)" >> "$chaos"
+    else
+      echo "$(date -u +%FT%TZ) followers: CHAOS_FOLLOWERS=on but no follower is in the compose's late-follower profile — none will be added" >> "$chaos"
+    fi
+  fi
+  added=""; added_at=""; added_s=0; seen_active=0; seen_match=0; pairs=0; fol_done=0
+
+  # Poll the added follower once: ACTIVE, then its first root match.
+  follower_watch() {
+    [ -n "$added" ] || return 0
+    local out
+    if [ "$seen_active" -eq 0 ]; then
+      if out=$(python3 "$here/followerchaos.py" state "$added" 2>/dev/null); then
+        seen_active=1
+        echo "$(date -u +%FT%TZ) follower $added ACTIVE ($out), $(( $(date +%s) - added_s ))s after it was added" >> "$chaos"
+      fi
+    fi
+    if [ "$seen_match" -eq 0 ]; then
+      if out=$(python3 "$here/followerchaos.py" rootmatch "$added" "$added_at" 2>/dev/null); then
+        seen_match=1
+        echo "$(date -u +%FT%TZ) follower $added first root match ($out), $(( $(date +%s) - added_s ))s after it was added" >> "$chaos"
+      fi
+    fi
+  }
+  # Wait $1 seconds, polling the follower every 10.
+  chaos_wait() {
+    local left=$1 step
+    while [ "$left" -gt 0 ]; do
+      step=$(( left < 10 ? left : 10 ))
+      sleep "$step"; left=$(( left - step ))
+      follower_watch
+    done
+  }
+  add_follower() {
+    $compose run --rm --no-deps --entrypoint sh "$fol_svc" -c \
+      "rm -rf /root/.accumulate/$fol_dir/dnn/data/accumulate.db /root/.accumulate/$fol_dir/bvnn/data/accumulate.db" >/dev/null 2>&1
+    $compose --profile late-follower create --no-recreate "$fol_svc" >/dev/null 2>&1
+    added_at=$(date -u +%FT%TZ); added_s=$(date +%s)
+    echo "$added_at add-follower $fol (key in no committee; databases cleared)" >> "$chaos"
+    docker start "$fol" >/dev/null 2>&1
+    added=$fol; seen_active=0; seen_match=0
+  }
+  remove_follower() {
+    local n=$((pairs + 1)) w=${FOLLOWER_WINDOW_SECS:-30}
+    local pre="$rd/follower-removal-$n"
+    python3 "$here/followerchaos.py" snapshot "$pre-before.json" 2>/dev/null
+    chaos_wait "$w"
+    python3 "$here/followerchaos.py" snapshot "$pre-at.json" 2>/dev/null
+    [ "$seen_active" -eq 0 ] && echo "$(date -u +%FT%TZ) follower $added NEVER ACTIVE: removed $(( $(date +%s) - added_s ))s after it was added" >> "$chaos"
+    [ "$seen_match" -eq 0 ] && echo "$(date -u +%FT%TZ) follower $added never matched a validator's root before its removal" >> "$chaos"
+    echo "$(date -u +%FT%TZ) remove-follower $added" >> "$chaos"
+    docker stop "$added" >/dev/null 2>&1
+    # Its log goes with the container, and the run's live log capture only
+    # follows the containers `up` started: keep it, in followerlog's shape.
+    docker logs "$added" 2>&1 | sed "s/^/$added | /" > "$rd/node-logs-$added-$n.txt"
+    docker rm -v "$added" >/dev/null 2>&1
+    added=""; pairs=$n
+    sleep "$w"
+    python3 "$here/followerchaos.py" snapshot "$pre-after.json" 2>/dev/null
+    echo "$(date -u +%FT%TZ) follower removal $n, ${w}s either side: $(python3 "$here/followerchaos.py" unaffected "$pre-before.json" "$pre-at.json" "$pre-after.json" 2>&1)" >> "$chaos"
+  }
+
   i=0; slot=0
   while [ "$(date +%s)" -lt "$end" ]; do
     w=$(( CHAOS_MIN + RANDOM % CHAOS_JITTER ))
     echo "$(date -u +%FT%TZ) sleeping ${w}s until the next disturbance" >> "$chaos"
-    sleep "$w"
+    chaos_wait "$w"
     slot=$((slot+1))
     if [ "${CHAOS_SKIP_ONE_IN:-0}" -gt 0 ] && [ $((slot % CHAOS_SKIP_ONE_IN)) -eq 0 ]; then
       echo "$(date -u +%FT%TZ) skip (slot $slot, CHAOS_SKIP_ONE_IN=$CHAOS_SKIP_ONE_IN)" >> "$chaos"; continue
     fi
+    # Whose slot: with both walks on, even slots are the follower's.
+    fslot=0
+    if [ "$fol_on" -eq 1 ] && { [ "$val_on" -eq 0 ] || [ $((slot % 2)) -eq 0 ]; }; then fslot=1; fi
+    if [ "$fslot" -eq 1 ] && [ -z "$added" ] && [ "${CHAOS_FOLLOWER_CYCLES:-0}" -gt 0 ] \
+       && [ "$pairs" -ge "${CHAOS_FOLLOWER_CYCLES:-0}" ]; then
+      [ "$fol_done" -eq 0 ] && echo "$(date -u +%FT%TZ) followers: done, $pairs pair(s) (CHAOS_FOLLOWER_CYCLES=$CHAOS_FOLLOWER_CYCLES)" >> "$chaos"
+      fol_done=1; fslot=0
+    fi
+    if [ "$fslot" -eq 1 ]; then
+      if [ -z "$added" ]; then add_follower; else remove_follower; fi
+      continue
+    fi
+    [ "$val_on" -eq 1 ] || continue
     n=${nodes[$((i % ${#nodes[@]}))]}; cyc=$((i / ${#nodes[@]})); kind=$(( (i + cyc) % 2 )); i=$((i+1))
     if [ "$kind" -eq 0 ]; then
       echo "$(date -u +%FT%TZ) restart $n" >> "$chaos"; docker restart "$n" >/dev/null 2>&1
     else
       p=$((60 + RANDOM % 120))
       echo "$(date -u +%FT%TZ) pause $n ${p}s" >> "$chaos"
-      docker pause "$n" >/dev/null 2>&1; sleep "$p"; docker unpause "$n" >/dev/null 2>&1
+      docker pause "$n" >/dev/null 2>&1; chaos_wait "$p"; docker unpause "$n" >/dev/null 2>&1
     fi
   done ) &
 CHAOS=$!
@@ -791,6 +915,9 @@ for p in "${CHAOS:-}" "${MON:-}" "${MONLOOP:-}" "${STORELOOP:-}" "${PROFLOOP:-}"
   [ -n "$p" ] && kill -0 "$p" 2>/dev/null \
     && echo "WARNING: background job $p survived teardown: $(ps -o args= -p "$p" 2>/dev/null | head -c 100)" | tee -a "$log"
 done
+# The chaos walk is stopped; an added follower it had not yet removed is
+# still up and is not a service `down` knows about.
+rm_late_followers "still up at teardown"
 ended=$(date -u +%FT%TZ)
 echo "== soak finished $(date -u) driver-exit=$rc ==" | tee -a "$log"
 
