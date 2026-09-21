@@ -166,6 +166,17 @@ type Cache struct {
 	// them (executor spec, "Sync"; #4294).
 	joinedAt uint64
 
+	// what each stream, and this partition's anchor sequence, had produced by
+	// joinedAt. THE BOUND ON "not mine": a number at or below these was
+	// produced before this node joined and is not its to hold, but a number
+	// ABOVE them this node produced itself, so its absence IS a miss and must
+	// be counted and answered NotFound. Without the bound a node that ever
+	// restarted — which is every node — never reports a miss again, and
+	// nothing shows a stranded stream (healing spec, "Stranded streams";
+	// #4295, threat review finding 2).
+	joinedProduced map[string]uint64
+	joinedAnchors  uint64
+
 	// how far this node's executor is behind consensus, nil until wired.
 	// The in-flight window is measured against it (#4248).
 	executionLag atomic.Pointer[func() int]
@@ -669,16 +680,58 @@ func (c *Cache) Joined() uint64 {
 	return c.joinedAt
 }
 
-// JoinedAt records the block a node that joined stands at: it executed no
-// block at or below it (executor spec, "Sync", step 4). Nothing of those
-// blocks was this node's to produce, so a request for one is not a miss and
-// its absence is not a defect.
-func (c *Cache) JoinedAt(block uint64) {
+// JoinedAt records the block a node that joined stands at, and what its
+// streams had produced by then: it executed no block at or below that block
+// (executor spec, "Sync", step 4), so nothing of those blocks was its to
+// produce and a request for one is not a miss.
+//
+// produced maps each destination — lower-cased URL, as the entry map keys
+// them — to the number of synthetic entries this partition had produced for
+// it as of block, and anchors is the same for this partition's anchor
+// sequence. They are the BOUND: above them the node produced the entries
+// itself, and their absence is a miss like any other. A caller that cannot
+// supply them cannot mark a join, which is deliberate — an unbounded mark
+// silences the miss counters for the life of the process (#4295).
+func (c *Cache) JoinedAt(block uint64, produced map[string]uint64, anchors uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if block > c.joinedAt {
-		c.joinedAt = block
+	if block <= c.joinedAt {
+		return
 	}
+	c.joinedAt = block
+	c.joinedAnchors = anchors
+	c.joinedProduced = make(map[string]uint64, len(produced))
+	for k, v := range produced {
+		c.joinedProduced[strings.ToLower(k)] = v
+	}
+}
+
+// NotMine reports whether a synthetic number for a stream is one this node
+// never produced — it joined, and the number is at or below what the stream
+// had produced by the block it joined at — and the block it joined at, so the
+// answer can name it.
+//
+// False for a number above that count: this node produced it, and a cache
+// that does not hold it has lost it.
+func (c *Cache) NotMine(stream *url.URL, number uint64) (uint64, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.joinedAt == 0 || number > c.joinedProduced[streamKey(stream)] {
+		return 0, false
+	}
+	return c.joinedAt, true
+}
+
+// AnchorNotMine is [Cache.NotMine] for this partition's anchor sequence,
+// which is one counter for every destination (the anchor sequence chain's
+// height, block_begin.go).
+func (c *Cache) AnchorNotMine(number uint64) (uint64, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.joinedAt == 0 || number > c.joinedAnchors {
+		return 0, false
+	}
+	return c.joinedAt, true
 }
 
 // MarkDispatched records the Directory anchor block index's synthetics were

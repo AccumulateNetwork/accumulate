@@ -42,12 +42,21 @@ import (
 // single state bit cannot express that, which is why the gate is here and not
 // on nodestate (#4368 builder's statement, §3).
 //
-// BY HAND: the cache's join mark. In production Cache.JoinedAt(q) is set by
-// the executor at the settle (collect_block.go, "Staging settled at the block
-// the state is"), from the block the join converged on; here it is set
-// directly, and the entries above and below it are built the way
-// TestSequencer_AnswersFromTheCache builds them. Everything else — the
-// Sequencer, the cache, the answers — is the production code.
+// AND IT IS BOUNDED BY WHAT THE STREAM HAD PRODUCED BY THEN. "Not from me"
+// applies to the numbers that were produced before the join and to no
+// others: everything above them this node produced itself, so its absence is
+// a real miss and must say NotFound and be counted, or a node that has ever
+// restarted — which is every node — reports no miss for the rest of its
+// life, and healing.md "Stranded streams" has nothing left to show (threat
+// review, finding 2).
+//
+// BY HAND: the cache's join mark. In production Cache.JoinedAt is set by the
+// executor at the settle (collect_block.go, "Staging settled at the block the
+// state is") with the counts read out of the pulled synthetic ledger and the
+// anchor sequence chain; here they are passed directly, and the entries above
+// and below are built the way TestSequencer_AnswersFromTheCache builds them.
+// Everything else — the Sequencer, the cache, the answers — is the
+// production code.
 func TestSequencer_AJoinedNodeNamesItsJoinBlockAndNeverSaysNotFound(t *testing.T) {
 	const joinBlock = 10
 	const heldBlock = 20 // a block this node executed, after it joined
@@ -104,18 +113,20 @@ func TestSequencer_AJoinedNodeNamesItsJoinBlockAndNeverSaysNotFound(t *testing.T
 	cache.MarkDispatched(heldBlock, 42, &protocol.PartitionAnchorReceipt{RootChainReceipt: dnReceipt})
 	cache.Begin(heldBlock + synthcache.InFlightBlocks).Commit()
 
-	// The join mark: nothing at or below block 10 was this node's to produce.
-	cache.JoinedAt(joinBlock)
+	// The join mark: nothing at or below block 10 was this node's to produce,
+	// and by then the stream to BVN1 had produced 4 and this partition had
+	// produced 2 anchors. 5 and 3 are therefore this node's own.
+	cache.JoinedAt(joinBlock, map[string]uint64{strings.ToLower(bvn1.String()): 4}, 2)
 
-	// This node's own ledger says it has produced five for BVN1 — the count
-	// the stream reached, which a joined node reads from the state it pulled.
-	// Without it "not produced yet" would answer first and the join mark
-	// would never be reached.
+	// This node's own ledger says the stream has reached six: four before the
+	// join, then 5 (held) and 6 (produced by this node and lost). Without it
+	// "not produced yet" would answer first and the join mark would never be
+	// reached.
 	db := database.OpenInMemory(nil)
 	batch := db.Begin(true)
 	ledger := new(protocol.SyntheticLedger)
 	ledger.Url = src
-	ledger.Partition(bvn1).Produced = 5
+	ledger.Partition(bvn1).Produced = 6
 	require.NoError(t, batch.Account(src).Main().Put(ledger))
 	require.NoError(t, batch.Commit())
 
@@ -165,7 +176,52 @@ func TestSequencer_AJoinedNodeNamesItsJoinBlockAndNeverSaysNotFound(t *testing.T
 		require.Equal(t, beforeAnchor, anchorMisses(), "%s counted an anchor miss for a block it never produced", c.name)
 	}
 
-	// --- above it: the same node answers, because it produced this one -----
+	// --- above the join block, and LOST: a real miss, counted -------------
+	//
+	// Entry 6 and anchor 4 are numbers this node produced itself, after it
+	// joined. The cache does not hold them, and that is a defect of this
+	// node's — the one thing a requester must be told, because a stream no
+	// source can fill is a stranded stream and nothing else reports it.
+	for _, c := range []struct {
+		name string
+		kind string
+		call func() error
+	}{
+		{"Sequence", "entry", func() error {
+			_, err := svc.Sequence(ctx, src, bvn1, 6, private.SequenceOptions{})
+			return err
+		}},
+		{"SequenceRange", "entry", func() error {
+			_, err := svc.SequenceRange(ctx, src, bvn1, 6, 6, private.SequenceOptions{})
+			return err
+		}},
+		{"Sequence(anchor)", "anchor", func() error {
+			_, err := svc.Sequence(ctx, anchorSrc, protocol.DnUrl(), 4, private.SequenceOptions{})
+			return err
+		}},
+	} {
+		before := misses()
+		beforeAnchor := anchorMisses()
+		err := c.call()
+		require.Error(t, err, "%s answered for an entry it produced and lost", c.name)
+		require.True(t, errors.Is(err, errors.NotFound),
+			"%s: a number this node produced after it joined and lost is a MISS, not \"not from me\": %v", c.name, err)
+		require.NotContains(t, err.Error(), "joined at block",
+			"%s named its join block for a number it produced after joining", c.name)
+		if c.kind == "entry" {
+			require.Equal(t, before+1, misses(), "%s did not count the miss", c.name)
+		} else {
+			require.Equal(t, beforeAnchor+1, anchorMisses(), "%s did not count the anchor miss", c.name)
+		}
+	}
+
+	// --- and a number the stream has not reached is still "not yet" --------
+	before := misses()
+	_, err = svc.Sequence(ctx, src, bvn1, 7, private.SequenceOptions{})
+	require.True(t, errors.Is(err, errors.NotReady), "a number not produced yet: got %v", err)
+	require.Equal(t, before, misses(), "asked too soon is not a miss")
+
+	// --- above it and held: the same node answers, because it produced it --
 	r, err := svc.Sequence(ctx, src, bvn1, 5, private.SequenceOptions{})
 	require.NoError(t, err, "a joined node refused an entry it did produce")
 	require.Equal(t, uint64(5), r.Sequence.Number)

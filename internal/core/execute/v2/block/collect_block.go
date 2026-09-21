@@ -397,7 +397,19 @@ func (x *Executor) SettleStaging(batch *database.Batch, q uint64) error {
 	// synthetics: a Directory receipt for one of those blocks is not this
 	// node's to dispatch, and the cache must not count it as a miss
 	// (#4294).
-	x.synthCache().JoinedAt(q)
+	//
+	// WITH THE COUNTS THE PULLED STATE CARRIES, which bound it. Everything
+	// this node produces from Q + 1 on is its own, and a hole in THAT is a
+	// miss like any other — without the bound a node that ever restarted
+	// would report no miss again and nothing would show a stranded stream
+	// (#4295, healing spec "Stranded streams"). They are read from the state
+	// the join settled against, which is the peers' word on what the streams
+	// had reached at Q.
+	produced, anchors, err := producedAt(batch, x.Describe)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	x.synthCache().JoinedAt(q, produced, anchors)
 	x.logger.Info("Staging settled at the block the state is",
 		"module", "sync", "partition", x.Describe.PartitionId, "block", q,
 		"streams", len(streams), "released", released, "directoryAnchorBlock", through)
@@ -417,4 +429,41 @@ func deliveredFrom(batch *database.Batch, id execute.StreamID) (uint64, error) {
 		return 0, errors.UnknownError.WithFormat("load %v: %w", id.Ledger, err)
 	}
 	return ledger.Partition(id.Source).Delivered, nil
+}
+
+// producedAt is what this partition's streams had produced as of the state in
+// batch: per destination for its synthetics, and the anchor sequence chain's
+// height for its anchors, which is one counter for every destination
+// (block_begin.go, recordAnchor).
+//
+// An absent ledger is zero produced, not an error: a partition that has
+// produced nothing for anyone has no synthetic ledger to read, and zero is
+// the right bound — every number asked for is then above it and a miss is a
+// miss.
+func producedAt(batch *database.Batch, describe execute.DescribeShim) (map[string]uint64, uint64, error) {
+	produced := map[string]uint64{}
+	var ledger *protocol.SyntheticLedger
+	switch err := batch.Account(describe.Synthetic()).Main().GetAs(&ledger); {
+	case err == nil:
+		for _, p := range ledger.Sequence {
+			if p.Url != nil {
+				produced[strings.ToLower(p.Url.String())] = p.Produced
+			}
+		}
+	case errors.Is(err, errors.NotFound):
+		// nothing produced for anyone yet
+	default:
+		return nil, 0, errors.UnknownError.WithFormat("load %v: %w", describe.Synthetic(), err)
+	}
+
+	var anchors uint64
+	switch chain, err := batch.Account(describe.AnchorPool()).AnchorSequenceChain().Get(); {
+	case err == nil:
+		anchors = uint64(chain.Height())
+	case errors.Is(err, errors.NotFound):
+		// no anchor has been produced yet
+	default:
+		return nil, 0, errors.UnknownError.WithFormat("load %v's anchor sequence: %w", describe.AnchorPool(), err)
+	}
+	return produced, anchors, nil
 }

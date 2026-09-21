@@ -77,23 +77,30 @@ func (s *Sequencer) entryRecord(globals *core.GlobalValues, e *synthcache.Entry,
 	return r, nil
 }
 
-// refusedForJoin is what a node that joined answers for something the cache
-// does not hold, or nil when this node never joined.
+// refusedForJoin is what a node that joined answers for a sequenced item it
+// never produced, or nil when the item is one it did produce.
 //
 // A node that joined executed no block at or below the block it joined at, so
-// it produced none of their synthetics and none of their anchors, and it
+// it produced none of the entries or anchors those blocks produced, and it
 // never will: there is no backfill on this line (executor.md, "Sync", step
 // 6). That is not a miss — a miss says the cache failed to hold what this
 // node produced — and it must not be counted as one, because a miss is what
 // strands a stream (healing spec, "Stranded streams"). It is "not from me",
 // and naming the block sends the asker to a node that executed it.
 //
+// It is BOUNDED by what the stream had produced by that block, and the bound
+// is the whole point. A restart is a join and every node restarts, so an
+// unbounded "not from me" would make NotFound unreachable network-wide: the
+// miss counters and stranded_streams would stop moving and a hole no source
+// can fill would look like one that is merely not ready yet (threat review,
+// finding 2). Above the bound this node produced the item itself and its
+// absence is its own defect.
+//
 // It is per request and not per node: the same node answers for everything it
 // DID produce, which after a join is most of what healing asks it for
 // (#4295).
-func (s *Sequencer) refusedForJoin(produced string) error {
-	joined := s.cache.Joined()
-	if joined == 0 {
+func (s *Sequencer) refusedForJoin(joined uint64, ok bool, produced string) error {
+	if !ok {
 		return nil
 	}
 	return errors.NotReady.WithFormat("%v joined at block %d and produced %s at or before it; ask a node that did", s.partitionID, joined, produced)
@@ -101,10 +108,17 @@ func (s *Sequencer) refusedForJoin(produced string) error {
 
 func (s *Sequencer) getSynthFromCache(globals *core.GlobalValues, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
 	// Peek, not Entry: a miss is counted only once it is decided to BE a
-	// miss. An entry a node that joined never produced is not one.
+	// miss. Neither a number the source has not reached nor one a node that
+	// joined never produced is one.
 	e, ok := s.cache.Peek(dst, num)
 	if !ok {
-		if err := s.refusedForJoin(fmt.Sprintf("nothing for %v", dst)); err != nil {
+		// Asked too soon is "not yet", the same answer the range path gives
+		// (healing spec, "The answer"). This path counted it as a miss.
+		if produced, err := s.producedFor(dst); err == nil && num > produced {
+			return nil, errors.NotReady.WithFormat("synthetic %d for %v is not produced yet (%d so far)", num, dst, produced)
+		}
+		joined, notMine := s.cache.NotMine(dst, num)
+		if err := s.refusedForJoin(joined, notMine, fmt.Sprintf("nothing for %v", dst)); err != nil {
 			return nil, err
 		}
 		synthcache.Count("entry", false)
@@ -153,9 +167,10 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 			if produced, err := s.producedFor(dst); err == nil && num > produced {
 				return nil, errors.NotReady.WithFormat("synthetic %d for %v is not produced yet (%d so far)", num, dst, produced)
 			}
-			// A node that joined holds none of the entries of the blocks at
-			// or below the block it joined at, and never will.
-			if err := s.refusedForJoin(fmt.Sprintf("nothing for %v", dst)); err != nil {
+			// A node that joined holds none of the entries the blocks at or
+			// below the block it joined at produced, and never will.
+			joined, notMine := s.cache.NotMine(dst, num)
+			if err := s.refusedForJoin(joined, notMine, fmt.Sprintf("nothing for %v", dst)); err != nil {
 				return nil, err
 			}
 			synthcache.Count("entry", false)
@@ -289,7 +304,8 @@ func (s *Sequencer) anchorRecord(globals *core.GlobalValues, dst *url.URL, num u
 func (s *Sequencer) getAnchorFromCache(globals *core.GlobalValues, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
 	txn, _, ok := s.cache.PeekAnchor(num)
 	if !ok {
-		if err := s.refusedForJoin(fmt.Sprintf("no anchor for %v", dst)); err != nil {
+		joined, notMine := s.cache.AnchorNotMine(num)
+		if err := s.refusedForJoin(joined, notMine, fmt.Sprintf("no anchor for %v", dst)); err != nil {
 			return nil, err
 		}
 		synthcache.Count("anchor", false)
@@ -316,7 +332,8 @@ func (s *Sequencer) getAnchorRangeFromCache(globals *core.GlobalValues, dst *url
 			if last, ok := s.cache.LastAnchorNumber(); !ok || num > last {
 				return nil, errors.NotReady.WithFormat("anchor %d is not produced yet", num)
 			}
-			if err := s.refusedForJoin(fmt.Sprintf("no anchor for %v", dst)); err != nil {
+			joined, notMine := s.cache.AnchorNotMine(num)
+			if err := s.refusedForJoin(joined, notMine, fmt.Sprintf("no anchor for %v", dst)); err != nil {
 				return nil, err
 			}
 			synthcache.Count("anchor", false)
