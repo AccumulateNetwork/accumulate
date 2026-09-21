@@ -190,6 +190,15 @@ func (b *BPT) LastRetained() (uint64, bool, error) {
 // goes on advertising it. A query landing there is not answered wrongly
 // (GetReceiptAt refuses on a root mismatch) but it is refused as an
 // InternalError, for what is really "I do not have that".
+// TestHistory_HorizonJumpsWhenRetentionWasOff and
+// TestHistory_HorizonDoesNotMoveWhenRetentionIsContinuous pin both directions.
+// What they do NOT pin is that block_end still calls this: the call matters
+// only when retention was off for a state-changing block, and the only
+// production path that produces that today is a restart with a different depth
+// (a three-era daemon test) or the join's pull, which writes the tree outside
+// any block and is #4362/#4363's to fix. Deleting the call from block_end is
+// invisible to every test on this line, and that is stated rather than
+// pretended away (#4361).
 func (b *BPT) NoteBlock(height, prevStateChanging uint64) error {
 	if prevStateChanging == 0 {
 		return nil // No earlier state-changing block: nothing can be missing

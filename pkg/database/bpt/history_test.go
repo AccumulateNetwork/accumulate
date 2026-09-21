@@ -407,3 +407,93 @@ func FullScanStartKey() [32]byte {
 	}
 	return k
 }
+
+// commitWithGapCheck runs one block the way the executor's block_end does:
+// the tree is changed, then SetHistory names the block and the depth, then
+// NoteBlock is told the previous state-changing block, then everything
+// commits. depth 0 is retention off for that block — the executor skips
+// NoteBPTBlock entirely then, and so does this.
+func (f *historyFixture) commitWithGapCheck(height, depth, prevStateChanging uint64, fn func(*BPT)) {
+	f.t.Helper()
+	kvb := f.db.Begin(nil, true)
+	model := new(ChangeSet)
+	model.store = keyvalue.RecordStore{Store: kvb}
+	b := model.BPT()
+	fn(b)
+	b.SetHistory(height, depth)
+	if depth > 0 {
+		require.NoError(f.t, b.NoteBlock(height, prevStateChanging))
+	}
+	require.NoError(f.t, b.Commit())
+	require.NoError(f.t, kvb.Commit())
+}
+
+// TestHistory_HorizonJumpsWhenRetentionWasOff pins NoteBlock, which had no test
+// at all — on this line or on main (#4361).
+//
+// Retention is per-node configuration applied block by block, so an operator
+// can turn it off and on again by restarting with a different depth. The window
+// floor only ever advances TOWARD the configured depth, so nothing in that
+// arithmetic records that the middle of the range is gone: the node goes on
+// advertising blocks it cannot rebuild, and a query landing there is refused as
+// an InternalError — "I do not have that" dressed as a fault, which a peer
+// cannot tell from withholding.
+//
+// NoteBlock is what moves the horizon past the gap. The mutation that deletes
+// it passed every test on the branch.
+func TestHistory_HorizonJumpsWhenRetentionWasOff(t *testing.T) {
+	const depth = 1000
+	f := newHistoryFixture(t, 64, depth)
+
+	// Block 2, retention on: the horizon is the first block it ran at.
+	f.commitWithGapCheck(2, depth, 1, func(b *BPT) {
+		require.NoError(t, b.Insert(f.keys[0], f.rh.Next()))
+	})
+	h, ok, err := f.read().EarliestRetained()
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, uint64(2), h, "the horizon should be the first block retention ran at")
+
+	// Block 3 CHANGES STATE WITH RETENTION OFF. Nothing is retained for it, so
+	// the tree as it stood at 2 can no longer be rebuilt.
+	f.commitWithGapCheck(3, 0, 2, func(b *BPT) {
+		require.NoError(t, b.Insert(f.keys[1], f.rh.Next()))
+	})
+	h, _, err = f.read().EarliestRetained()
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), h, "nothing should move the horizon while retention is off")
+
+	// Block 4, retention on again, and block 3 changed state without being
+	// retained. THE CLAIM: the horizon jumps to here rather than going on
+	// advertising 2 and 3.
+	f.commitWithGapCheck(4, depth, 3, func(b *BPT) {
+		require.NoError(t, b.Insert(f.keys[2], f.rh.Next()))
+	})
+	h, ok, err = f.read().EarliestRetained()
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equalf(t, uint64(4), h,
+		"the horizon is still %d, so the node advertises a range whose middle it cannot rebuild", h)
+}
+
+// TestHistory_HorizonDoesNotMoveWhenRetentionIsContinuous is the other half:
+// NoteBlock runs on every block of every retaining node, so a version of it
+// that moved the horizon whenever it was asked would throw away the window on a
+// node that never had a gap.
+func TestHistory_HorizonDoesNotMoveWhenRetentionIsContinuous(t *testing.T) {
+	const depth = 1000
+	f := newHistoryFixture(t, 64, depth)
+
+	prev := uint64(1)
+	for h := uint64(2); h <= 8; h++ {
+		f.commitWithGapCheck(h, depth, prev, func(b *BPT) {
+			require.NoError(t, b.Insert(f.keys[int(h)%len(f.keys)], f.rh.Next()))
+		})
+		prev = h
+	}
+
+	h, ok, err := f.read().EarliestRetained()
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, uint64(2), h, "a continuously retaining node threw its window away")
+}

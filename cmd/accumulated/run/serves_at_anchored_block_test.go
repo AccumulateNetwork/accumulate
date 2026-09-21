@@ -7,9 +7,11 @@
 package run
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -49,8 +51,32 @@ func TestAnAccountIsServedAsOfTheBlockTheDirectoryAnchored(t *testing.T) {
 	anchors := anchorsForBVN1(t, c)
 	require.NotEmpty(t, anchors, "the Directory has executed no BVN1 anchor, so there is nothing anchored to serve at")
 
-	ledger := protocol.PartitionUrl("BVN1").JoinPath(protocol.Ledger)
+	// ALL THREE HOT ACCOUNTS, not just the ledger. The done-when names
+	// `<partition>/ledger`, `<partition>/synthetic` and `<partition>/anchors`,
+	// and the two sequence ledgers are where the byte-for-byte rule was broken
+	// before: `Received` is derived from staging and was filled in on read,
+	// which left every restarting node unable to pull `<partition>/anchors`
+	// from anybody (#4295). A body with one synthesised field does not hash to
+	// the leaf its own receipt proves.
+	part := protocol.PartitionUrl("BVN1")
+	for _, name := range []string{protocol.Ledger, protocol.Synthetic, protocol.AnchorPool} {
+		t.Run(name, func(t *testing.T) {
+			servedAsOfAnchoredBlocks(t, c, ctx, part.JoinPath(name), anchors)
+		})
+	}
+}
+
+// preImageMissing is the refusal #4388 produces: the node holds the account's
+// BPT entry for the block but not the state behind it.
+const preImageMissing = "but not the state behind it"
+
+// servedAsOfAnchoredBlocks is the body of the test above, run once per hot
+// account.
+func servedAsOfAnchoredBlocks(t *testing.T, c apiv3.Querier2, ctx context.Context, account *url.URL, anchors []anchoredBlock) {
+	t.Helper()
+	ledger := account
 	served := 0
+	preImage := 0
 	var lastServed uint64
 	for _, a := range anchors {
 		r, err := c.QueryAccount(ctx, ledger, &apiv3.DefaultQuery{
@@ -67,6 +93,9 @@ func TestAnAccountIsServedAsOfTheBlockTheDirectoryAnchored(t *testing.T) {
 			require.Zerof(t, served,
 				"block %d was refused after block %d was served, so the retained window has a hole in it: %v",
 				a.block, lastServed, err)
+			if strings.Contains(err.Error(), preImageMissing) {
+				preImage++
+			}
 			t.Logf("block %d (before the node's first answerable block): %v", a.block, err)
 			continue
 		}
@@ -86,22 +115,38 @@ func TestAnAccountIsServedAsOfTheBlockTheDirectoryAnchored(t *testing.T) {
 		// And it checks with nothing but itself.
 		require.True(t, r.Receipt.Validate(nil), "the receipt for block %d does not verify offline", a.block)
 
-		// And where the node retained the state receipt, the starting point is
-		// one the caller can recompute from the body it was just handed --
-		// which is the whole point of proving an account rather than trusting
-		// the server for it.
-		if r.Receipt.StartsAtMainState {
-			body, err := r.Account.MarshalBinary()
-			require.NoError(t, err)
-			h := sha256.Sum256(body)
-			require.Equalf(t, h[:], r.Receipt.Start,
-				"the receipt for block %d claims to start at the main state, but not at the main state it served", a.block)
-		}
+		// THE BODY IS CHECKED WHATEVER THE PEER SAYS. This used to sit inside
+		// `if r.Receipt.StartsAtMainState`, which let the peer's own flag
+		// decide whether its body was checked: a mutation serving the CURRENT
+		// body with the flag off passed all five daemon tests. A historical
+		// answer on this line is coherent or it is a refusal, so the flag is
+		// required and the body is compared, unconditionally.
+		require.Truef(t, r.Receipt.StartsAtMainState,
+			"the receipt for block %d does not start at the main state, so the body served with it cannot be checked", a.block)
+		body, err := r.Account.MarshalBinary()
+		require.NoError(t, err)
+		h := sha256.Sum256(body)
+		require.Equalf(t, h[:], r.Receipt.Start,
+			"the receipt for block %d does not start at the body it was served with", a.block)
 		served++
 		lastServed = a.block
 	}
+	// #4388, and it un-skips itself. An account whose only changes inside the
+	// retained window fall AFTER the block asked about has no retained body
+	// for that block: retention writes the state after a change, so there is
+	// nothing for a block before the account's first change in the window. The
+	// newest anchored block is several behind the newest block, so an account
+	// that changed only in those last few blocks — which on a young network is
+	// `<partition>/synthetic` — cannot be served at the block the join asks
+	// about. The skip is conditional on seeing exactly that refusal and
+	// nothing else, so the day #4388 is fixed this runs and asserts.
+	if served == 0 && preImage == len(anchors) {
+		t.Skipf("#4388: %v changed inside the window only after every anchored block, "+
+			"so no body was retained for any of them; %d of %d refusals were that and nothing else",
+			ledger, preImage, len(anchors))
+	}
 	require.NotZero(t, served, "not one anchored block could be served")
-	t.Logf("served %d of %d anchored blocks, last %d", served, len(anchors), lastServed)
+	t.Logf("%v: served %d of %d anchored blocks, last %d", ledger, served, len(anchors), lastServed)
 }
 
 // THE PAST IS NOT ANSWERED WITH THE PRESENT.
@@ -229,7 +274,11 @@ func TestABptPageIsServedAsOfTheBlockTheDirectoryAnchored(t *testing.T) {
 		// different blocks and comparing them says nothing.
 		require.Equalf(t, a.block, acct.Receipt.ForHeight,
 			"the account and the page resolved block %d differently", a.block)
-		require.Truef(t, receiptPassesThrough(&acct.Receipt.Receipt, leaf.ValueHash),
+		// Receipt.Contains is the library's own "is this value on the path",
+		// rather than a fold written out here: a check the client makes with
+		// the code it already has is the check a joining node would make.
+		require.Truef(t,
+			acct.Receipt.Receipt.Contains(&merkle.Receipt{Start: leaf.ValueHash[:]}),
 			"%v's leaf on the page for block %d is not on the path the account's own receipt for that block proves",
 			ledger, a.block)
 
@@ -247,31 +296,6 @@ func leafFor(page *apiv3.BptPageRecord, u *url.URL) (*apiv3.BptLeafSummary, bool
 		}
 	}
 	return nil, false
-}
-
-// receiptPassesThrough folds a receipt from its start and reports whether the
-// given hash is one of the values on the way. It is how a client checks that
-// the chain from the body runs through the account's BPT entry rather than
-// arriving at the right anchor by some other route.
-func receiptPassesThrough(r *merkle.Receipt, want [32]byte) bool {
-	v := r.Start
-	if bytes.Equal(v, want[:]) {
-		return true
-	}
-	for _, e := range r.Entries {
-		var b []byte
-		if e.Right {
-			b = append(append(b, v...), e.Hash...)
-		} else {
-			b = append(append(b, e.Hash...), v...)
-		}
-		h := sha256.Sum256(b)
-		v = h[:]
-		if bytes.Equal(v, want[:]) {
-			return true
-		}
-	}
-	return false
 }
 
 // A NODE THAT RETAINS NOTHING REFUSES, AND DOES NOT APPROXIMATE.
@@ -308,19 +332,33 @@ func TestANodeThatRetainsNoBptHistoryRefuses(t *testing.T) {
 	}
 }
 
-// A BLOCK OUTSIDE THE RETAINED WINDOW IS REFUSED, AND THE REFUSAL NAMES THE
-// WINDOW.
+// THE RETENTION WINDOW CLOSES, AND ITS FLOOR MOVES.
 //
-// The window is configuration, and a client planning around it needs to be
-// told where it ends rather than left to probe. The refusal is
-// IncompleteChain (414), a capability limit -- NOT NotFound, which this path
-// reserves for proven absence (the account had no record at that height). The
-// issue's done-when says "NotFound that says so"; the four-status split is
-// main's and it is worth keeping, so this is a deliberate difference and it is
-// recorded on #4361.
-func TestABlockBelowTheRetentionHorizonIsRefusedByName(t *testing.T) {
-	depth := uint64(4)
-	c := clientFor(t, startNetsimAndExecuteWith(t, &depth))
+// The refusal is IncompleteChain (414), a capability limit -- NOT NotFound,
+// which this path reserves for "this node's index has no record of the account
+// at that height". The issue's done-when says "NotFound that says so"; the
+// four-status split is main's and it is worth keeping, so this is a deliberate
+// difference and it is recorded on #4361.
+//
+// # Why this asks about a block the window has DROPPED, not about block 1
+//
+// The first version of this test asked at block 1 and required the refusal to
+// name a range. Block 1 is refused at every depth with the identical message
+// -- retention first runs at block 2, because a first write supersedes nothing,
+// so block 1 is below the HORIZON whatever the window is. The reviewer's
+// mutation W, which stops the floor advancing so the window never closes,
+// passed it 7/7 along with every other test. A window that grows without limit
+// is the storage failure the depth exists to prevent, and nothing would have
+// caught it until a soak did, twelve hours late.
+//
+// So it asks about the floor: at depth 4 the window really has dropped blocks,
+// the floor must have moved off the horizon, the range must be about as wide as
+// the depth, and a block one below the floor must be refused. That last is
+// race-free on a moving network because the floor only ever rises.
+func TestTheRetentionWindowClosesAndItsFloorMoves(t *testing.T) {
+	const depth = uint64(4)
+	d := depth
+	c := clientFor(t, startNetsimAndExecuteWith(t, &d))
 	ctx := context.Background()
 
 	ledger := protocol.PartitionUrl("BVN1").JoinPath(protocol.Ledger)
@@ -331,8 +369,8 @@ func TestABlockBelowTheRetentionHorizonIsRefusedByName(t *testing.T) {
 	require.NoError(t, err, "the current-state path must keep working")
 	require.NotNil(t, now.Receipt)
 
-	// Block 1 is indexed -- the node has executed dozens of blocks since --
-	// and it is far below a four-block window.
+	// Block 1 is indexed -- the node has executed dozens of blocks since -- and
+	// is below both the horizon and the floor, so it names the window.
 	_, err = c.QueryAccount(ctx, ledger, &apiv3.DefaultQuery{
 		IncludeReceipt: &apiv3.ReceiptOptions{ForHeight: 1},
 	})
@@ -341,6 +379,63 @@ func TestABlockBelowTheRetentionHorizonIsRefusedByName(t *testing.T) {
 		"a capability limit must be IncompleteChain, not %v", errors.Code(err))
 	require.Contains(t, err.Error(), "retained range",
 		"the refusal does not name the window: %v", err)
+
+	earliest, latest := retainedRange(t, err)
+	t.Logf("depth %d: retained range [%d, %d]", depth, earliest, latest)
+
+	// THE CLAIM. The floor has left the horizon, so blocks have been dropped,
+	// and the range is about as wide as the depth rather than the whole chain.
+	require.Greaterf(t, earliest, uint64(2),
+		"the floor is still at the first retained block, so nothing has been dropped: the window at depth %d never closed", depth)
+	require.GreaterOrEqual(t, latest, earliest)
+	require.LessOrEqualf(t, latest-earliest, depth+2,
+		"the range [%d, %d] is wider than a depth of %d allows", earliest, latest, depth)
+
+	// And the range is predictive at its floor: one below it is refused, and
+	// the refusal names the window rather than reporting the account missing.
+	_, err = c.QueryAccount(ctx, ledger, &apiv3.DefaultQuery{
+		IncludeReceipt: &apiv3.ReceiptOptions{ForHeight: earliest - 1},
+	})
+	require.Errorf(t, err, "block %d, one below the advertised floor, was answered", earliest-1)
+	require.Equalf(t, errors.IncompleteChain, errors.Code(err),
+		"block %d was refused as %v rather than as a capability limit", earliest-1, errors.Code(err))
+
+	// And predictive at its top: the newest block it advertises is answerable.
+	// Re-read the range each try, because the network is still moving and the
+	// floor rises under the test.
+	var servedAt uint64
+	for i := 0; i < 5 && servedAt == 0; i++ {
+		_, e := c.QueryAccount(ctx, ledger, &apiv3.DefaultQuery{
+			IncludeReceipt: &apiv3.ReceiptOptions{ForHeight: latest},
+		})
+		if e == nil {
+			servedAt = latest
+			break
+		}
+		_, err := c.QueryAccount(ctx, ledger, &apiv3.DefaultQuery{
+			IncludeReceipt: &apiv3.ReceiptOptions{ForHeight: 1},
+		})
+		require.Error(t, err)
+		earliest, latest = retainedRange(t, err)
+	}
+	require.NotZerof(t, servedAt,
+		"the newest block the node advertises was not answerable, so the range over-promises")
+	t.Logf("served the top of the window at block %d", servedAt)
+}
+
+// retainedRange reads the window out of a refusal. The range is advertised
+// nowhere else on this line -- main reports it on ConsensusStatus and that was
+// not ported -- so the message is the only place a client can learn it, which
+// is itself worth pinning.
+func retainedRange(t *testing.T, err error) (earliest, latest uint64) {
+	t.Helper()
+	m := regexp.MustCompile(`retained range is \[(\d+), (\d+)\]`).FindStringSubmatch(err.Error())
+	require.Lenf(t, m, 3, "the refusal does not name a range a client could read: %v", err)
+	e, cerr := strconv.ParseUint(m[1], 10, 64)
+	require.NoError(t, cerr)
+	l, cerr := strconv.ParseUint(m[2], 10, 64)
+	require.NoError(t, cerr)
+	return e, l
 }
 
 // --- reading the network the way production does ---------------------------

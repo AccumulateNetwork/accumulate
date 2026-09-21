@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -37,6 +38,18 @@ import (
 //
 // So: create a page, execute under version 1, move the page to version 2, and
 // then ask for the page at the block it was version 1.
+//
+// # The block it asks at is the ledger's index, not a Directory anchor
+//
+// `execBlock` is read from `<partition>/ledger`'s own Index over the client --
+// the current block, not a block the Directory has anchored. That is the right
+// question for AIP-58, whose caller knows the block a transaction executed in
+// and asks about that; it is NOT the join's question, which is always about a
+// block some anchor carries a verified root for. The anchored-block path is
+// covered where it belongs, on the daemon:
+// TestAnAccountIsServedAsOfTheBlockTheDirectoryAnchored reads the Directory's
+// anchor pool and compares the receipt's terminus with the StateTreeAnchor it
+// finds there.
 //
 // # What this asserts that main's does not
 //
@@ -233,4 +246,82 @@ func ledgerIndexOf(t *testing.T, c api.Querier2, partition string) uint64 {
 	_, err := c.QueryAccountAs(context.Background(), PartitionUrl(partition).JoinPath(Ledger), nil, &ledger)
 	require.NoError(t, err)
 	return ledger.Index
+}
+
+// AN ACCOUNT IS NOT-FOUND BEFORE IT EXISTED, AND THAT IS A MISS AND NOT A PROOF
+// (#4361, the auditor's mutation NF).
+//
+// Nothing asked about an account at a block before its first record, so the
+// branch that answers it could be deleted and every test stayed green. The
+// answer matters in both directions. It must be NotFound -- the account really
+// had no record there, and a requester that asks another peer is doing the
+// right thing -- and it must not be NotFound for any other reason, which is
+// what #4361 F2 is about: a node that could not read its own index used to say
+// the same word, and `join/sources.go` makes a NotFound that every peer gives
+// the network's answer about the record.
+//
+// So this pins the one case that earns the word, and the doc and the message
+// say the rest: NotFound reports what THIS node's index holds, never that the
+// account was proven absent.
+func TestAIP58_NotFoundBeforeTheAccountExisted(t *testing.T) {
+	liteKey := acctesting.GenerateKey(t.Name(), "lite")
+	lite := acctesting.AcmeLiteAddressStdPriv(liteKey).RootIdentity().JoinPath(ACME)
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(t.Name(), "alice")
+	keyHash := sha256.Sum256(aliceKey[32:])
+
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime),
+		simulator.BPTHistoryDepth(10_000),
+	)
+	MakeLiteTokenAccount(t, sim.DatabaseFor(lite), liteKey[32:], AcmeUrl())
+	CreditCredits(t, sim.DatabaseFor(lite), lite.RootIdentity(), 1e9)
+	CreditTokens(t, sim.DatabaseFor(lite), lite, big.NewInt(1e12))
+	sim.StepN(10)
+
+	partition, err := sim.Router().RouteAccount(alice)
+	require.NoError(t, err)
+	c := realClient(t, sim)
+	ctx := context.Background()
+
+	// A block the partition has executed, before alice exists anywhere.
+	before := ledgerIndexOf(t, c, partition)
+	require.NotZero(t, before)
+
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice).
+			Body(&CreateIdentity{Url: alice, KeyHash: keyHash[:], KeyBookUrl: alice.JoinPath("book")}).
+			SignWith(lite.RootIdentity()).Version(1).Timestamp(1).PrivateKey(liteKey))
+	sim.StepUntil(Txn(st.TxID).Succeeds())
+	sim.StepN(10)
+	after := ledgerIndexOf(t, c, partition)
+	require.Greater(t, after, before)
+
+	// The newest indexed block's root lands on the ledger's bpt chain only when
+	// the next state-changing block commits, so the range runs one entry behind
+	// and a block just read is not answerable yet. Let it catch up.
+	sim.StepN(10)
+
+	// THE CLAIM. Before it existed: NotFound, and nothing else.
+	r, err := c.QueryAccount(ctx, alice, &api.DefaultQuery{
+		IncludeReceipt: &api.ReceiptOptions{ForHeight: before},
+	})
+	require.Errorf(t, err, "alice was served as of block %d, before it was created", before)
+	require.Nil(t, r)
+	require.Equalf(t, errors.NotFound, errors.Code(err),
+		"an account with no record at that height must be NotFound, not %v: %v", errors.Code(err), err)
+	require.NotContains(t, err.Error(), "proven",
+		"the refusal claims to prove absence; it reports this node's index: %v", err)
+
+	// And after it existed, the same question is answered.
+	r, err = c.QueryAccount(ctx, alice, &api.DefaultQuery{
+		IncludeReceipt: &api.ReceiptOptions{ForHeight: after},
+	})
+	require.NoErrorf(t, err, "alice was refused as of block %d, after it was created", after)
+	require.NotNil(t, r.Receipt)
+	_, ok := r.Account.(*ADI)
+	require.True(t, ok, "the account served is not alice")
+
+	t.Logf("alice: NotFound at block %d, served at block %d", before, after)
 }

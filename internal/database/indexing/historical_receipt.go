@@ -193,13 +193,32 @@ func HistoricalAccountStateProof(partition config.NetworkUrl, batch *database.Ba
 //     the CURRENT state is the state at B. That is the same rule BPT.NodeAt
 //     applies to a node with no later version, and it is why a cold account
 //     costs nothing to serve.
-//   - Entries, but all of them after B: the account changed inside the window
-//     but not at or before B, so the state it held at B is the state it held
-//     when the window opened, and that was never written. Nothing is returned;
-//     the caller serves an entry-rooted receipt with no body and says so through
-//     StartsAtMainState. It affects accounts whose only change in the window is
-//     recent, asked about at a block older than that change — not the case a
-//     join makes, which asks about the newest anchored block.
+//   - Entries, but ALL OF THEM AFTER B: the account changed inside the window
+//     and not at or before B, so the state it held at B is the state it held
+//     when the window opened, and retention never wrote that. Nothing is
+//     returned and the caller refuses.
+//
+// # THE THIRD CASE IS A DEFECT FOR THE JOIN, NOT A CORNER (#4388)
+//
+// An earlier version of this comment said the third case was "not the case a
+// join makes, which asks about the newest anchored block". That was wrong, and
+// widening TestAnAccountIsServedAsOfTheBlockTheDirectoryAnchored to the other
+// two hot accounts showed it: the newest ANCHORED block is several behind the
+// newest block, so an account whose only changes inside the window fall in
+// those last few blocks cannot be served at it. Measured on the daemon netsim:
+//
+//	acc://bvn-BVN1.acme/synthetic cannot be served as of block 5:
+//	  this node retains its BPT entry for that block but not the state behind it
+//
+// for both anchored blocks, while `/ledger` and `/anchors` served.
+//
+// What is missing is the PRE-image. The BPT gets this right — retainSuperseded
+// keeps the value a node held BEFORE the write, so NodeAt answers for any
+// height the window covers — and this does not, because the receipt it stores
+// beside the body is built from the hasher of the NEW state and the old one is
+// gone by the time putBpt runs. Fixing it means retaining the account's hash
+// components, or its receipt, on a schedule that is not "when it changes".
+// That is #4388 and it is larger than the pass that found it.
 func retainedAccountAt(account *database.Account, block uint64) (*merkle.Receipt, protocol.Account, error) {
 	blocks, err := account.RetainedStateReceiptBlocks().Get()
 	if err != nil {
