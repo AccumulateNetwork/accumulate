@@ -322,8 +322,7 @@ func (s *Sequencer) serving(call string) error {
 	if s.nodeState == nil {
 		return nil
 	}
-	switch s.nodeState.State() {
-	case nodestate.StateActive, nodestate.StateComplete:
+	if s.nodeState.State() == nodestate.StateActive {
 		return nil
 	}
 	mNotServing.WithLabelValues(strings.ToLower(s.partitionID), call).Inc()
