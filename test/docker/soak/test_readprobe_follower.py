@@ -9,8 +9,12 @@ reading through the router, so another node answers and the follower scores
 a clean sheet without being asked, and (b) reporting "0 failed" for a
 follower nobody asked anything.
 """
+import csv
+import io
+import json
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -58,8 +62,9 @@ class Round(unittest.TestCase):
     def test_the_follower_is_read_from_its_own_port(self):
         """A read through the router proves a peer answered, not this node."""
         seen = []
-        real = readprobe.query
+        real, real_csv = readprobe.query, readprobe.FOL_CSV
         readprobe.query = lambda scope, q, url=None: (seen.append(url), ({}, 1.0, None))[1]
+        readprobe.FOL_CSV = os.path.join(tempfile.mkdtemp(), "readprobe-follower.csv")
         try:
             pr = readprobe.Probe()
             pr.fol_rounds = {FOL["container"]: []}
@@ -71,8 +76,41 @@ class Round(unittest.TestCase):
             finally:
                 readprobe.FOLLOWERS = old
         finally:
-            readprobe.query = real
+            readprobe.query, readprobe.FOL_CSV = real, real_csv
         self.assertEqual(["http://127.0.0.1:26692/v3"] * 2, seen)
+
+
+class FollowerCSV(unittest.TestCase):
+    """readprobe-follower.csv: what the follower answered, per round and
+    partition, and which service answered it — the add-follower verdict
+    reads the NotReady rows before ACTIVE out of it (#4364)."""
+
+    def test_a_not_ready_answer_is_its_own_outcome(self):
+        body = json.dumps({"jsonrpc": "2.0", "id": 1, "error": {
+            "code": -33504, "message": "not ready"}}).encode()
+        real = readprobe.urllib.request.urlopen
+        readprobe.urllib.request.urlopen = lambda req, timeout=None: io.BytesIO(body)
+        try:
+            r, _, why = readprobe.query("acc://dn.acme/ledger", {}, url="http://x/v3")
+        finally:
+            readprobe.urllib.request.urlopen = real
+        self.assertIsNone(r)
+        self.assertEqual(readprobe.WHY_NOT_READY, why)
+        self.assertEqual(1, readprobe.judge_follower_round(
+            [(False, 1.0, why)])["refused"])
+
+    def test_one_row_per_partition_and_outcome(self):
+        path = os.path.join(tempfile.mkdtemp(), "readprobe-follower.csv")
+        readprobe.write_follower_rows(path, "acc-bvn3-fol2", {
+            ("BVN3", "not-ready"): 3, ("Directory", "answered"): 2}, now=0)
+        readprobe.write_follower_rows(path, "acc-bvn3-fol2", {}, now=30)
+        with open(path) as f:
+            rows = list(csv.DictReader(f))
+        self.assertEqual(
+            [("1970-01-01T00:00:00Z", "acc-bvn3-fol2", "BVN3", "query", "not-ready", "3"),
+             ("1970-01-01T00:00:00Z", "acc-bvn3-fol2", "Directory", "query", "answered", "2")],
+            [(r["time"], r["follower"], r["partition"], r["service"],
+              r["outcome"], r["reads"]) for r in rows])
 
 
 class TheValidatorsProbeIsUnchanged(unittest.TestCase):

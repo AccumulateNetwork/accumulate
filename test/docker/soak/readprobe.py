@@ -46,6 +46,12 @@ SCOPES = topology.scopes()  # partition -> "dn" | "bvn-BVNx"
 # report and still not said whether the FOLLOWER answered.
 FOLLOWERS = topology.followers()
 CSV = os.path.join(RUN_DIR, "readprobe.csv")
+# One row per round, follower, partition and outcome: what the follower
+# answered, and which service answered it. The manifest's add-follower
+# verdict reads the NotReady rows before ACTIVE out of it (#4364).
+FOL_CSV = os.path.join(RUN_DIR, "readprobe-follower.csv")
+FOL_CSV_HEADER = "time,follower,partition,service,outcome,reads"
+FOL_SERVICE = "query"
 REPORT = os.path.join(RUN_DIR, "readprobe-report.md")
 
 
@@ -77,6 +83,11 @@ def endpoint():
 # under load ("query capacity exhausted") — a node-side limit, not a storage
 # miss. They are told apart now.
 WHY_GATED, WHY_TIMEOUT, WHY_ERROR = "gated", "timeout", "error"
+# A node that is not ACTIVE refuses a read with errors.NotReady (status 504),
+# which the v3 JSON-RPC server sends as code -33000-504 (jsonrpc/services.go).
+# It is its own outcome: the join working, not a failed read (#4364).
+WHY_NOT_READY = "not-ready"
+NOT_READY_CODE = -33504
 
 
 def query(scope, q, url=None):
@@ -96,8 +107,14 @@ def query(scope, q, url=None):
         d = json.load(urllib.request.urlopen(req, timeout=TIMEOUT))
         r = d.get("result")
         if r is None:
-            msg = str((d.get("error") or {}).get("message", d.get("error", "")))
-            why = WHY_GATED if "capacity" in msg or "retry later" in msg else WHY_ERROR
+            err = d.get("error") or {}
+            msg = str(err.get("message", err) if isinstance(err, dict) else err)
+            if isinstance(err, dict) and err.get("code") == NOT_READY_CODE:
+                why = WHY_NOT_READY
+            elif "capacity" in msg or "retry later" in msg:
+                why = WHY_GATED
+            else:
+                why = WHY_ERROR
     except Exception as e:
         r = None
         why = WHY_TIMEOUT if "timed out" in str(e).lower() else WHY_ERROR
@@ -172,12 +189,33 @@ def judge_follower_round(results):
         return {"measured": False, "reads": 0, "answered": 0, "refused": 0,
                 "why": "no sampled entry belongs to a partition this follower runs"}
     answered = sum(1 for ok, _, _ in results if ok)
-    refused = sum(1 for ok, _, why in results if not ok and why == WHY_GATED)
+    refused = sum(1 for ok, _, why in results
+                  if not ok and why in (WHY_GATED, WHY_NOT_READY))
     ms = [t for _, t, _ in results]
     return {"measured": True, "reads": len(results), "answered": answered,
             "refused": refused, "failed": len(results) - answered - refused,
             "p50": round(pct(ms, .5), 1), "p95": round(pct(ms, .95), 1),
             "max": round(max(ms), 1), "why": None}
+
+
+def follower_outcome(ok, why):
+    """One read's outcome as readprobe-follower.csv names it."""
+    if ok:
+        return "answered"
+    return why or WHY_ERROR
+
+
+def write_follower_rows(path, follower, outcomes, now=None):
+    """Append one row per (partition, outcome) of a follower's round."""
+    if not outcomes:
+        return
+    t = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+    new = not os.path.exists(path)
+    with open(path, "a") as f:
+        if new:
+            f.write(FOL_CSV_HEADER + "\n")
+        for (part, outcome), n in sorted(outcomes.items()):
+            f.write("%s,%s,%s,%s,%s,%d\n" % (t, follower, part, FOL_SERVICE, outcome, n))
 
 
 def pct(xs, p):
@@ -264,12 +302,16 @@ class Probe:
         """
         for f in FOLLOWERS:
             url = "http://127.0.0.1:%d/v3" % f["port"]
-            got = []
+            got, outcomes = [], {}
             for s in follower_targets(picks, f):
                 r, ms, why = query(s["scope"], {"queryType": "chain", "name": "main",
                                                 "range": {"start": s["index"], "count": 1}},
                                    url=url)
-                got.append((bool(r and r.get("records")), ms, why))
+                ok = bool(r and r.get("records"))
+                got.append((ok, ms, why))
+                k = (s["partition"], follower_outcome(ok, why))
+                outcomes[k] = outcomes.get(k, 0) + 1
+            write_follower_rows(FOL_CSV, f["container"], outcomes)
             row = judge_follower_round(got)
             self.fol_rounds[f["container"]].append(row)
             self.fol_reads[f["container"]].extend(got)
@@ -322,9 +364,10 @@ class Probe:
                 continue
             ms = [t for _, t, _ in reads]
             ok = sum(1 for a, _, _ in reads if a)
-            refused = sum(1 for a, _, why in reads if not a and why == WHY_GATED)
+            refused = sum(1 for a, _, why in reads
+                          if not a and why in (WHY_GATED, WHY_NOT_READY))
             lines += ["**%s** (partitions %s): %d reads of entries it holds, "
-                      "**%d answered**, %d refused by the query gate, %d failed; "
+                      "**%d answered**, %d refused (query gate or NotReady), %d failed; "
                       "p50 %.1f ms, p95 %.1f ms, max %.1f ms."
                       % (c, ", ".join(f["partitions"]), len(reads), ok, refused,
                          len(reads) - ok - refused, pct(ms, .5), pct(ms, .95), max(ms)),

@@ -292,6 +292,57 @@ row, one for the validators and one for the follower, states the worst
 `reached` figure and names every start that never reached ACTIVE; `already`
 figures are counted and kept out of the worst.
 
+### The add-follower and remove-follower verdicts (#4364)
+
+The manifest's follower section carries one row per `add-follower` and one
+per `remove-follower` in `chaos.log`, in time order, written by soak.sh's
+`follower_verdict_rows` from the run's captured files — never from a live
+network. An add is read over **that container's life only**, from its
+`add-follower` line to its `remove-follower`, matched by container name; a
+second add of the same container never borrows the first one's numbers.
+
+Per add-follower:
+
+- **container start → ACTIVE (s)**, the worst partition, from the `reached`
+  rows of `nodestate.csv` for the start inside the life (the chaos log's own
+  seconds-after-the-add only when soakmon wrote none); `NEVER ACTIVE` with
+  the chaos log's reason when the life ended first;
+- **blocks behind at hand-off**, per partition, from the `follower.csv`
+  sample nearest the moment the last partition went ACTIVE — not the lag
+  before it;
+- **first root match**, the block and the validator, from `chaos.log`;
+- **NotReady before ACTIVE**, the reads refused before the hand-off and the
+  partition and service that refused them, from `readprobe-follower.csv`;
+- **accepted, relayed-taken (as a share of accepted), stranded** on that
+  follower at the last `submissions.csv` sample inside its life.
+
+Per remove-follower: `followerchaos.unaffected` over
+`follower-removal-N-{before,at,after}.json`, the readings
+`FOLLOWER_WINDOW_SECS` either side of removal N — `unaffected`, or
+`AFFECTED` naming the partition whose cadence fell or the stream whose
+delivered count stopped or went backwards.
+
+Every quantity a life did not record reads `not measured`, never a pass.
+
+`readprobe-follower.csv` (`time,follower,partition,service,outcome,reads`)
+is the read probe's record of every follower it asks, from the follower's own
+port: one row per round, follower, partition and outcome, `reads` the count.
+`service` is the API service that answered (`query`); `outcome` is
+`answered`, `not-ready` (the node refused with `NotReady`, JSON-RPC code
+-33504 — the join working, not a failed read), `gated`, `timeout` or
+`error`. A follower not yet added answers nothing and reads `error`.
+
+**On the board** a follower added mid-run is the same *follower* row group as
+the one launched with the network (#4365), not a second one. Every reading
+in it names its follower — `acc-bvn3-fol2 BVN3 800/823`, never a bare
+`BVN3 800/823` — and the caption says how each came to be there: launched
+with the network, added at a time (and which add), removed at a time, or not
+added yet, from the last `add-follower` / `remove-follower` line of
+`chaos.log`. A removed or not-yet-added follower is not asked and reads
+`— not measured` with that reason, never "did not answer". The stream
+matrix is unchanged: source to destination, partitions only, read from the
+validators.
+
 The consensus-status API MUST additionally report `syntheticHeals` and
 `anchorHeals` (#4075) — the coarse monitor's CSV reads them.
 

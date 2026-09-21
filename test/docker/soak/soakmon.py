@@ -537,6 +537,64 @@ def _read_ledger_index(port, partition):
         return None
 
 
+# Followers added and removed mid-run (#4364). The row group is the one
+# #4365 built; a follower in the compose's late-follower profile is not up
+# until the chaos walk adds it, and is gone again after it removes it. Its
+# state comes from chaos.log, the last add-follower / remove-follower line
+# per container, so a removed follower reads "removed at", not "did not
+# answer" — and it is never asked, because a read of a container that is not
+# there measures nothing.
+_LATE = None
+
+
+def late_followers():
+    """Containers in the late-follower profile, read once."""
+    global _LATE
+    if _LATE is None:
+        try:
+            import followerchaos
+            _LATE = {f["container"] for f in followerchaos.late_followers()}
+        except Exception:
+            _LATE = set()
+    return _LATE
+
+
+def follower_lives(path=None):
+    """{container: {"added", "removed", "adds"}} from chaos.log: the last add
+    and, if it came after that add, the removal; `adds` counts them all."""
+    out = {}
+    try:
+        f = open(path or CHAOS)
+    except OSError:
+        return out
+    with f:
+        for line in f:
+            m = re.match(r"^(\S+Z) (add|remove)-follower (\S+)", line)
+            if not m:
+                continue
+            t, what, c = m.groups()
+            life = out.setdefault(c, {"added": None, "removed": None, "adds": 0})
+            if what == "add":
+                life["added"], life["removed"] = t, None
+                life["adds"] += 1
+            else:
+                life["removed"] = t
+    return out
+
+
+def follower_life(container, lives, late):
+    """How this follower came to be in the network, now: `launched` with it,
+    `added` mid-run, `removed`, or `waiting` to be added."""
+    life = lives.get(container)
+    if life and life["removed"]:
+        return {"kind": "removed", "at": life["removed"], "adds": life["adds"]}
+    if life and life["added"]:
+        return {"kind": "added", "at": life["added"], "adds": life["adds"]}
+    if container in late:
+        return {"kind": "waiting", "at": None, "adds": 0}
+    return {"kind": "launched", "at": None, "adds": 0}
+
+
 def collect_follower(heights, now=None):
     """Each follower's height per partition it serves, against the validators'.
 
@@ -550,10 +608,20 @@ def collect_follower(heights, now=None):
         return {"measured": False, "nodes": {}, "bound": BEHIND_BOUND,
                 "why": "no follower in this topology"}
     out = {}
+    lives, late = follower_lives(), late_followers()
     for f in FOLLOWERS:
         parts, worst, worst_run, worst_at = {}, None, None, None
+        life = follower_life(f["container"], lives, late)
         for p in f["partitions"]:
             if p not in heights:
+                continue
+            if life["kind"] in ("removed", "waiting"):
+                parts[p] = {"measured": False, "behind": None, "ahead": None,
+                            "follower": None, "network": heights.get(p),
+                            "over": False,
+                            "why": ("removed at %s" % life["at"][11:16] + "Z"
+                                    if life["kind"] == "removed"
+                                    else "not added yet")}
                 continue
             j = judge_behind(_read_ledger_index(f["port"], p), heights.get(p))
             parts[p] = j
@@ -570,7 +638,7 @@ def collect_follower(heights, now=None):
         out[f["container"]] = {
             "partitions": parts, "worstBehind": worst,
             "maxBehindRun": worst_run, "maxBehindAt": worst_at,
-            "bvn": f["bvn"], "port": f["port"],
+            "bvn": f["bvn"], "port": f["port"], "life": life,
             "over": bool(worst is not None and worst > BEHIND_BOUND)}
     return {"measured": True, "nodes": out, "bound": BEHIND_BOUND, "why": None}
 
@@ -2764,7 +2832,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       </div>
     </div>
     <div class=col><h4>follower</h4>
-      <div class=sub>a node in no committee, launched with the network</div>
+      <div class=sub>a node in no committee, launched with the network or added mid-run</div>
       <div class=kv>
         <b id=fbehind>—</b><span class=sl>behind (blocks, now)</span>
         <b id=fmax>—</b><span class=sl>behind (blocks, whole run)</span>
@@ -2928,8 +2996,11 @@ function followerView(fo, ns){
     const v=fo.nodes[n];
     for(const p of Object.keys(v.partitions||{})){
       const j=v.partitions[p];
-      per.push(j.measured?`${shortP(p)} ${fmt(j.follower)}/${fmt(j.network)}`
-                         :`${shortP(p)} ${j.why}`);
+      // Named as the follower it is, never as a bare partition: with a
+      // follower added mid-run beside the one launched with the network,
+      // "BVN3 800/823" does not say whose (#4364).
+      per.push(j.measured?`${n} ${shortP(p)} ${fmt(j.follower)}/${fmt(j.network)}`
+                         :`${n} ${shortP(p)} ${j.why}`);
     }
   }
   out.fheight=per.length?per.join(' · '):ABSENT;
@@ -2959,9 +3030,20 @@ function followerView(fo, ns){
      +`<span class="${fsub.relayedNotReady?'yel':''}">${fmt(fsub.relayedNotReady)}</span> / `
      +`<span class="${fsub.relayedUnreachable?'red':''}">${fmt(fsub.relayedUnreachable)}</span>`
     :ABSENT;
-  out.fstate=`${names.join(', ')} · bound ${fo.bound} blocks`
+  out.fstate=`${names.map(n=>n+followerLifeText(fo.nodes[n].life)).join(', ')} · bound ${fo.bound} blocks`
     +(over?` · OVER the bound (${who})`:'');
   return out;
+}
+// How a follower came to be here (#4364): launched with the network, added
+// mid-run by the chaos walk, removed by it, or waiting for its first add.
+function followerLifeText(life){
+  if(!life)return '';
+  const at=life.at?life.at.slice(11,16)+'Z':'';
+  const nth=life.adds>1?` (add ${life.adds})`:'';
+  if(life.kind==='added')return ` (follower added ${at}${nth})`;
+  if(life.kind==='removed')return ` (follower removed ${at})`;
+  if(life.kind==='waiting')return ' (follower not added yet)';
+  return ' (follower launched with the network)';
 }
 // The node-state row (#4364): a row per node AND partition; ACTIVE (2) is the
 // predicate, BOOTING is shown by name and is red only past the bound after its
@@ -3245,7 +3327,7 @@ const DEFS={
  fres:"The follower's own resident memory and healed entries. It is NOT in the fleet averages or the heal total beside them — those mean the validators, the same membership monitor.csv's heals column has — so it is reported here. A follower is never selected as a gap requester (cadence.go:57-66), so its heals should stay 0; 0 here is a read number, not an assumption.",
  fstrand:"Transactions the follower's Submit took responsibility for that it neither got into a certified header of its own, nor handed to a node that took it, nor had answered with a refusal: accepted minus certified minus relayed-taken minus relayed-refused, whole run. What is left had no answer of any kind — target not ready, unreachable, or still in flight. A refusal is subtracted because a validator validated the submission and declined and the caller was told so: nothing is lost, and leaving it in let whoever floods this node with garbage drive the number while the same envelope sent straight to a validator cost nothing (threat-reviewer F4 on #4366). That holds because the relay is synchronous and the refusal goes back unchanged; under accept-and-forward a refusal would be a loss again. THE number that must be 0 on an acceptance run. Say exactly what each one is: a submission this node took responsibility for and then GAVE UP ON — no target proposed it and none ever will, because the node has stopped trying. Under the synchronous relay the caller was told the network could not take it, so a user client can submit again elsewhere and often will; what this counts is the node failing to place work it accepted, not a transaction proved lost to the protocol. For a synthetic or an anchor, where the sender is the dispatcher rather than a person, it is a delivery that will have to be healed. And it never clears: the counters are monotone, so this is a cumulative loss over the run and not a level — read it as \"does it climb between disturbances\", with the manifest\'s per-disturbance steps beside it. Certified and not 'proposed': a follower does author and broadcast headers carrying its own batches (header_builder.go:35-76) and never collects the 2f+1 votes, because validators drop a header whose author is not in the committee (vote_handler.go:277-284), so certified is 0 for its whole life. And minus relayed-taken, because Paul (2026-09-19) said followers can and should relay: subtracting only certified would show a follower relaying everything perfectly as the largest red number on the board. Read it against the LAST sample, which is written when the monitor exits, after the drain — at any earlier sample a relay in flight and a stranded transaction look the same, which is why the manifest states the trend beside the value. Reads \u2014 not measured until a node exports the three families (#4366, #4369); 0 would assert the opposite of what is known.",
  frelay:"What became of the submissions this node handed on, whole run, counted once per submission at its FINAL answer: taken by a node that can propose it / a target validated it and refused / every target that answered said NotReady and the node gave up / no target answered at all. Taken is the hand-off that discharges the duty — what happens after it is the TARGET's own accepted-and-certified pair, so the same counters summed over the fleet give the network's true stranded count with nobody claiming credit for another node's work. 'Target not ready' is a statement about the network (a joining node, #4307), not about the submission, which is why it is not filed under refused; a NotReady that is retried and then succeeds is one taken, not two outcomes. What the node does about a refusal, a not-ready or an unreachable target is open for Paul on #4366. Relaying is NOT gated on being synced: a read needs local state, a relay needs none, so a node relays whether it is following or syncing (executor.md step 6).",
- fstate:"Which containers are followers and the bound the gate is judged against — two blocks: one for the two reads not being simultaneous at a one-second block interval, one for the executor being inside the block it is closing.",
+ fstate:"Which containers are followers, how each came to be here (launched with the network, added mid-run by the chaos walk, removed by it, or not added yet — from chaos.log), and the bound the gate is judged against — two blocks: one for the two reads not being simultaneous at a one-second block interval, one for the executor being inside the block it is closing.",
  lblocks:"Blocks produced by the network, summed over partitions, each partition taken as the highest count any node reported.",
  lempty:"Blocks that carried no transactions.",
  lidle:"Shown when nearly every block is empty: consensus is committing empty rounds.",
