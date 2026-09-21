@@ -259,9 +259,10 @@ in `ModeFullSpine` — head, secondary state and **every chain entry replayed** 
 for exactly this reason: the node needs the operators' key pages *of the time*
 to check signatures made under them.
 
-An anchor is accepted when valid signatures from **distinct key page entries**
-reach the threshold. Copies from one signer do not accumulate; a second copy
-from a validator is no second signature.
+An anchor is accepted when valid signatures from **distinct members of the
+producing partition's validator set** — the network definition's, not a key
+page's — reach that set's threshold. Copies from one signer do not
+accumulate; a second copy from a validator is no second signature.
 
 **Anchors are routed by producer.** To verify partition P's root, the node
 needs an anchor *produced by* P, signed by P's validators, and a produced
@@ -596,16 +597,22 @@ an anchor for it (#4367) — relaying a transaction and producing consensus
 output are different things, and the first is allowed precisely because it
 produces nothing.
 
-Open, and not settled here: what a relaying node does when the target refuses
-or is unreachable; whether it answers its caller on the relay's result or
-accepts and forwards; whether it relays only for the partitions it runs;
-whether a node that cannot propose still advertises `submit:<partition>` on
-the DHT (a record, distinct from the installed handler above); what a node
-that has not yet validated the spine, and so holds no committee to choose a
-target from, relays to; and — settled above, recorded here because it was
-open — what "fully synced"
-is: a verified anchored root, `ACTIVE` (#4368; resolution taken through the
-spec-change protocol 2026-09-19, historian: inside phase 1).
+Open when this was written, and where each stands now (2026-09-19/21): what a
+relaying node does when the target refuses or is unreachable — *decided by
+the lead for the build (#4366 note_3869841847, named as the lead's, not
+Paul's): a validator's refusal is passed back unchanged; unreachable or
+`NotReady` is tried once per committee member, then answered as such* — and
+whether it answers its caller on the relay's result or accepts and forwards —
+*decided the same way: synchronously; the harness's stranded arithmetic
+depends on it (REPORTING-SPEC §3)*; whether it relays only for the partitions
+it runs — *any partition it is asked for*; what a node that holds no
+committee to choose a target from does — *`NotReady`, counted `not-ready`*;
+what "fully synced" is — *settled above, #4368*. Still open, decided by
+nobody: whether a node that cannot propose still advertises
+`submit:<partition>` on the DHT (a record, distinct from the installed
+handler above; the build left advertising as it was and #4300/#4336 hold it).
+Each lead decision is overturnable on #4366 with evidence; none is Paul's
+word.
 
 What a restart therefore never does is replay committed blocks it did not
 execute, or rebuild staging from a source's cache: the first executes with the

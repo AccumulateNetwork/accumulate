@@ -236,8 +236,10 @@ naming, if the assumption ever stops holding.
 
 **Spec** ([executor.md](executor.md), "Sync", as rewritten 2026-09-19): a
 node that joins — or restarts, which is a join — validates the spine first
-(the operators' key book and the anchors it signs, by signature, to a
-threshold of distinct key-page entries, anchors routed by producer), pulls
+(the network definition and the anchors its validators sign, by signature,
+to a threshold of distinct members of the producing partition's set — #4301
+statement (b); the operators' book keeps governance and is not read — anchors
+routed by producer), pulls
 the state that a verified anchor's root commits to, served *as of that
 anchored block*, and collects consensus from the moment it listens; staging
 is what was collected minus what the pulled state says executed, and the
@@ -252,8 +254,10 @@ Two departures the rewritten section names that this entry did not:
 - **Producer routing** — *retired 2026-09-19 (#4301 statement (a))*: the
   Directory anchors to itself, so its own root is in `dn.acme/anchors` with
   real signatures; the inference that it was unobtainable there was wrong.
-  What was and is different: until #4301 lands, `pull.DirectoryAnchors`
-  reads roots off `dn.acme/anchors` with no signature checked at all.
+  What was different until #4301 landed (`1ea77143d`): `pull.DirectoryAnchors`
+  read roots off `dn.acme/anchors` with no signature checked at all; it is
+  deleted, and a root reaches the tracker only after a threshold of distinct
+  members of the producing partition's set have signed it.
 - **The authority is the network definition, not the operators' page**
   (#4301 statement (b)): the spec now says so; the operators' page keeps its
   governance role and is never read by a join.
@@ -416,9 +420,21 @@ is wired to the network client and does dial onward,
 advertised" would not close it: `connectedPeersDiscoverer`
 (`pkg/api/v3/p2p/dial_network.go:133-160`) finds an installed handler by
 libp2p identify ahead of the DHT. (#4366; run `20260919T191634Z`; reproduced
-in-process, 1,249 accepted, 0 committed.) Open until #4366 lands; its build
-does not wait on #4368: a relay needs no state, so what "fully synced" is
-gates only when a syncing node's reads open.
+in-process, 1,249 accepted, 0 committed.) Landed 2026-09-19 (`a09ff3e0a`):
+a node that cannot propose relays synchronously to a confirmed proposer; the
+rerun `20260919T231856Z` read heals 0 → 0 and stranded 0 with 1,146 relayed
+(#4365 note_3876639043). Still different: the relay target is bound to the
+validator key but not yet to the peer that answered — the channel binding is
+#4374's, a follow-up on the same branch; a keyless peer that never answers
+is never demoted (#4374); `NotReady` from store-full is shopped ≤10× (bound
+recorded, #4374).
+
+- **A non-committee node's primary and workers still run ungated** (#4371):
+  consensus.md "What a batch is" says such a node has no worker for the
+  partition; on this line its primary authors a header every round and
+  self-votes (`primary.go:509-585`) and its workers seal what it is handed —
+  invisible in this build (#4369) and harmless to consensus because no
+  validator votes for it, but not the spec's sentence. Open.
 
 **The gauge, though, is every node's, for every partition it runs, from
 start-up (#4345a).** It used to be created by the join and only by the join —
@@ -760,7 +776,7 @@ seventh nobody had named.
   the node is joining; plain reads stay open. Since 2026-09-19 the spec draws
   the line differently for a *transaction*: a node that cannot propose it —
   following or syncing — relays it unexamined to a node that can, and never
-  drops it (step 6; #4366) — not yet built; for a transaction the relay
+  drops it (step 6; #4366) — built and merged (`a09ff3e0a`); for a transaction the relay
   replaces `Submit`'s `NotReady` while joining, while every *read* keeps it.
   The node state reaches the
   querier, which is configured apart from consensus, through IOC
