@@ -270,3 +270,73 @@ func TestNoRootIsProvenWithoutAVerifiedAnchor(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, ok)
 }
+
+// forgingPeer is a lyingPeer that also answers for the bpt chain's index, with
+// one entry of its own choosing.
+type forgingPeer struct {
+	lyingPeer
+	indexed *protocol.IndexEntry
+}
+
+func (f *forgingPeer) Query(ctx context.Context, scope *url.URL, q api.Query) (api.Record, error) {
+	cq, ok := q.(*api.ChainQuery)
+	if !ok || cq.Name != "bpt-index" {
+		return f.lyingPeer.Query(ctx, scope, q)
+	}
+	return &api.RecordRange[api.Record]{Records: []api.Record{
+		&api.ChainEntryRecord[api.Record]{Name: "bpt-index", Value: &api.IndexEntryRecord{Value: f.indexed}},
+	}}, nil
+}
+
+// The peer that serves the receipt is the peer that says where the bpt chain
+// was anchored, so holding the receipt to the bpt chain's index holds it to
+// nothing unless the index is proven too. A transaction's true receipt, served
+// with an index entry forged to fit it, must be refused: a transaction hash is
+// something anybody can put on a chain, and a root that is one makes the state
+// served under it the peer's word (#4301).
+//
+// SKIPPED, AND IT FAILS: ProveRoot answers true here. The bpt chain's index is
+// read from the peer with no proof (index chains are not anchored), and the
+// binding cannot be made without it from what a peer serves today: a chain
+// entry's receipt always climbs to the entry's OWN first anchoring
+// (indexing.ReceiptForChainIndex), so a root and a signed StateTreeAnchor never
+// enter the root chain at one leaf. DIFFERENCES.md E11, "The bpt chain's index
+// is the peer's word".
+func TestATransactionsReceiptIsRefusedThoughThePeerForgesTheBptIndex(t *testing.T) {
+	t.Skip("fails: a peer that forges the bpt chain's index proves a transaction hash as a root (#4301, DIFFERENCES.md E11)")
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+	p := newProducer(t)
+	for i := byte(1); i <= 11; i++ {
+		p.block(root(i))
+	}
+	s := p.verified(f, 0, 1, 2)
+	height, _ := p.rootChain()
+
+	batch := p.db.Begin(false)
+	defer batch.Discard()
+	main, err := batch.Account(p.account).MainChain().Get()
+	require.NoError(t, err)
+	rootChain, err := batch.Account(bvn0().JoinPath(protocol.Ledger)).RootChain().Get()
+	require.NoError(t, err)
+
+	// Block 3's transaction is main chain entry 2, and the main chain's anchor
+	// for that block is root chain entry 4.
+	var txn [32]byte
+	copy(txn[:], entryHash("txn", 3))
+	fromTxn, err := main.Receipt(2, 2)
+	require.NoError(t, err)
+	fromLeaf, err := rootChain.Receipt(4, int64(height))
+	require.NoError(t, err)
+	fromTxn, err = fromTxn.Combine(fromLeaf)
+	require.NoError(t, err)
+	require.True(t, fromTxn.Validate(nil))
+
+	peer := &forgingPeer{
+		lyingPeer: lyingPeer{Querier: p.peer(), entry: txn, index: 2, receipt: fromTxn},
+		indexed:   &protocol.IndexEntry{BlockIndex: 3, Source: 2, Anchor: 4},
+	}
+	ok, err := s.ProveRoot(ctx, peer, txn, 0)
+	require.False(t, ok, "a transaction hash was proven as a BPT root by a peer that forged the bpt chain's index")
+	require.Error(t, err)
+}

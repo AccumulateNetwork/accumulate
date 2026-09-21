@@ -240,8 +240,11 @@ node that joins — or restarts, which is a join — validates the spine first
 to a threshold of distinct members of the producing partition's set — #4301
 statement (b); the operators' book keeps governance and is not read — anchors
 routed by producer), pulls
-the state that a verified anchor's root commits to, served *as of that
-anchored block*, and collects consensus from the moment it listens; staging
+the peers' *current* state and keeps it once the root it is served at is
+proven — an entry of the bpt chain with a receipt to the root chain anchor a
+verified anchor carries (rewritten 2026-09-21 on the owner's decision; until
+then it read "served *as of that anchored block*") — and collects consensus
+from the moment it listens; staging
 is what was collected minus what the pulled state says executed, and the
 node executes the next block when no stream has a gap, else advances the
 sync one block and asks again. **No peer is ever asked what it holds.** The
@@ -270,14 +273,41 @@ Two departures the rewritten section names that this entry did not:
   page by a leaf and every block against the one above it, and a joined
   node whose main index chain starts at its open mark answers "did this
   account exist then" from the BPT instead of turning its own store miss
-  into `NotFound`. What remains different: the *pull* still sends no
-  `ForHeight`, so the join's gate (`TestRestartedNodeWithAPopulatedDatabaseResyncs`,
-  on the branch, skipped) fails exactly as before until #4362 asks at the
-  anchored block; the consumer keys its anchor lookup on the peer-asserted
-  `LocalBlock` (`pull.go:285`) and is safe only because that comparison
-  refuses every historical answer — #4362's loop must key on the block it
-  asked at (threat review, #4361 note_3870022466); retention's cost on
-  BlockchainDB is unmeasured (#4165).
+  into `NotFound`. **The join does not use it** (#4362, the owner's decision
+  2026-09-21): a past leaf cannot be rebuilt for an account whose chains,
+  directory or pending list moved, which is every account a restarted node
+  lacks, so the pull asks for current state and proves the root it was served
+  at through the history (`anchorsrc.ProveRoot`). The hold-and-discard
+  (`maxSettleRounds`, `settleBatch`, the re-fetch of held accounts — #4352,
+  #4353) is deleted with it, and
+  `TestRestartedNodeWithAPopulatedDatabaseResyncs` runs and passes. The
+  threat-review point stands in its new form: the block the node's state *is*
+  is read from the ledger under the proven root, never from the peer-asserted
+  `LocalBlock`, which is used only to break a tie between two roots of one
+  pass and to tell a root the history has passed from one it has not reached. Retention's cost on BlockchainDB is unmeasured
+  (#4165).
+- **The bpt chain's index is the peer's word** (#4362, found 2026-09-21; open).
+  The spec holds a root's receipt to the bpt chain by proof. The code
+  (`anchorsrc/history.go`, `ProveRoot`) finds the root chain entry from the
+  signed height, which no peer can move, and then compares it with the bpt
+  chain's index entry **as the same peer serves it**, unproven — index chains
+  are not anchored. A peer that forges both the receipt and the index entry
+  proves a transaction hash as a BPT root:
+  `TestATransactionsReceiptIsRefusedThoughThePeerForgesTheBptIndex`
+  (`history_test.go`) shows it, fails, and is skipped for that reason. The
+  check does stop a peer that lies about the receipt alone
+  (`TestAReceiptThatIsNotTheBptChainsIsRefused`). It cannot be closed from the
+  join's side: the witness the spec names — a signed `StateTreeAnchor`, known
+  to be a bpt entry — never enters the root chain at the same entry as the root
+  being proven, because `indexing.ReceiptForChainIndex` builds a chain entry's
+  receipt to the entry's *own first anchoring* and `ForHeight` moves only the
+  root chain end. What closes it is that function building the bpt leg to the
+  bpt chain's anchor at the asked height. Also unverified: that the
+  `StateTreeAnchor` an anchor carries is always the value the next block
+  records on the bpt chain — read from `anchoring.go` and `block_begin.go`,
+  not run. Weaker and not closed by the above: an interior node of the bpt
+  chain can pass for an entry when the peer also chooses the chain height; it
+  is not a value a peer can choose, and the states under it are old true ones.
 
 **Code**: a node starts from genesis or from a snapshot file it was given, and
 consensus "catches up" by fetching batches from peers' retention

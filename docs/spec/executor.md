@@ -301,47 +301,98 @@ it safe. A literal cross-check of two pools before any root is trusted is not
 built (#4301, stated); the quorum's signatures are the mechanism and
 withholding is its limit.
 
-#### 2. Everything else is a leaf check at an anchored height
+#### 2. Everything else is a leaf check against a proven root
 
-Once a signed anchor for block `Q` is verified, `Q` has exactly one correct
-leaf per account. A peer serves an account with a receipt running from the
-account's state hash to that peer's BPT root, and the account is kept only if
-three things hold: the receipt is valid; it ends at the `StateTreeAnchor` the
-verified anchor carries; and it passes through the leaf the pulled state
-hashes to locally. The third is what makes the pull safe, because a peer can
-serve a true receipt for an account and a false body for it.
+**The accounts a peer serves to a join are current.** The join asks for an
+account as of the block the peer is on, and the answer carries a receipt
+running from the account's state hash to that peer's BPT root. The join asks
+no peer for an account as of a past block: a BPT is a tree of current state,
+and a node does not retain chain heads, directory lists or pending lists per
+block to rebuild an old leaf from (Paul, 2026-09-21: "The signed anchor has
+the anchor and BPT root for a block + the history. All the accounts for an
+anchor are current. So the anchor + the history is everything for the current
+block every block.").
 
-**The node hashes to the leaf or it does not, and no ordering question
-arises.** There is no "am I ahead of this peer", no level case, no chain-height
-comparison. That apparatus existed only because accounts were compared against
-a peer's *current* state, which is a moving target that no anchor covers; it
+**A signed anchor is the proven data, and the history carries it to every
+block.** A verified anchor carries, under a quorum's signatures, its block's
+`StateTreeAnchor` and the producer's `RootChainAnchor` with the root chain's
+height. Most blocks never send an anchor, so the root a peer's state is
+current at is almost never a `StateTreeAnchor`. It does not need to be: every
+block records the previous block's BPT root on `<partition>/ledger`'s bpt
+chain, and the bpt chain is anchored into the root chain every block
+(invariant 11). **A root is proven when it is an entry of the bpt chain with a
+receipt from that entry to the root chain anchor a verified anchor carries.**
+That is provable as soon as any anchor sent after the block that recorded the
+root is verified, which is a wait of a few blocks and never of an anchor for
+that block itself.
+
+**The receipt is held to the bpt chain.** Everything a partition records hangs
+under its root chain, so a receipt that merely starts at a value and ends at a
+signed root chain anchor says the value is *something* the partition recorded —
+a transaction hash has one too (#4301). The signed root chain height decides
+which step of the receipt is a root chain entry and which entry it is, with no
+peer's word in it; that entry must be the bpt chain's anchor, and the steps
+below it must have the shape of the named bpt entry's receipt in a bpt chain
+of that height. **Which root chain entry is the bpt chain's must itself be
+proven, and a peer's copy of the bpt chain's index is not proof**: index
+chains are not anchored. The proof is a `StateTreeAnchor` a quorum signed — a
+value known to be a bpt chain entry — whose receipt, asked at the same root
+chain height, enters the root chain at the same entry; for that a peer serves
+a bpt entry's receipt to the bpt chain's anchor *at the asked height*, not at
+the entry's own first anchoring.
+
+An account is kept only if three things hold: its receipt is valid; it ends at
+a root proven as above; and it passes through the leaf the pulled state hashes
+to locally. The third is what makes the pull safe, because a peer can serve a
+true receipt for an account and a false body for it.
+
+**One pass is one root, and it is written whole.** What a round fetches is
+held, unwritten, until the root its receipts end at is proven, and nothing new
+is fetched while it is held. The peers move while a pass is fetched, so its
+accounts can end at different roots, each of them true; written together they
+are a state no block ever had. The root most of the pass ends at is the pass,
+and the rest — with any account served with no receipt — are fetched again. A
+spine account that leaves a pass this way fails the spine for that pass: the
+rest of it is written, and the spine is asked for again, whole.
+
+**A pass is held only while waiting can end.** There is one wait: the root is
+not on the bpt chain yet, or no verified anchor reaches it yet, and a later
+block or anchor ends it. Peers that do not answer, a receipt that is not the
+bpt chain's or does not end at a verified anchor, and a root the history has
+*passed* — an anchor of a later block is verified and the root is still
+unproven — are not waits, because no anchor to come changes them: the pass is
+dropped and fetched again, from the next peer in rotation. **No count of rounds
+is involved**; a bound on rounds discards exactly the accounts that change
+every block, which is every account a restarted node lacks (#4352, #4353).
+
+**The node hashes to the leaf or it does not, and no ordering question arises
+in the check.** There is no "am I ahead of this peer", no level case, no
+chain-height comparison in deciding whether an account is kept; that apparatus
 carried a hole of its own, because an account's body can move with all of its
-chains standing still (#4350). At a fixed anchored height the question does
-not come up: the account either hashes into the anchored root or it is asked
-of somebody else.
+chains standing still (#4350). The block the node's state *is* comes from the
+state itself: when the local root equals the root a pass proved, the block is
+read from the ledger account in that state, which hashes into the proven root,
+and never from a block number in a peer's answer.
 
-This is also what a peer must be able to answer. A peer serves an account
-**as of an anchored block** — the body as of that block and a receipt that
-terminates at that block's `StateTreeAnchor`, the body and the receipt
-coherent or the answer a refusal — and a BPT page as of that block; a block
-outside what it retains is refused as such (#4361). A refusal is never
-disguised as a fact about the record: `IncompleteChain` names the window the
-peer retains (1024 minor blocks by default, configured per node) or a leaf
-the peer could not rebuild for that block, and the peer never answers a
+**A peer can also answer as of an anchored block, and the join does not ask
+it to** (#4361). Asked with a height, a peer serves an account's body as of
+that block with a receipt that terminates at that block's `StateTreeAnchor` —
+the body and the receipt coherent or the answer a refusal — and a BPT page as
+of that block; a block outside what it retains is refused as such. A refusal
+is never disguised as a fact about the record: `IncompleteChain` names the
+window the peer retains (1024 minor blocks by default, configured per node) or
+a leaf the peer could not rebuild for that block, and the peer never answers a
 historical ask with its current state; `NotFound` says only that this peer's
 index has no record of the account at that height, and a peer that cannot
 read its own index — a joined node holds a chain from its open mark, not from
 element 0 — answers from the BPT rather than calling its own gap an absence,
 because a requester reads `NotFound` from every peer as the network's answer
-and would drop an account they all hold. Without it the join
-cannot work: accounts that change every block can otherwise only be served at
-a height no anchor covers, so their verification never settles, which is why
-a node joining from an empty store converged on its cold accounts and a
-restart converged on nothing at all. What the receipt proves is the body
-under that root and nothing beside it: the components as of that block are
-pulled, never read off the receipt; and the block an account is checked
-against is the block the puller *asked* at, never a number the answer
-carries.
+and would drop an account they all hold. What such a receipt proves is the
+body under that root and nothing beside it: the components as of that block
+are pulled, never read off the receipt. It is a reader's capability. It is not
+what a join stands on, because the leaf of an account whose chains, directory
+or pending list have moved since that block cannot be rebuilt for it, and
+those are the accounts a restarted node lacks.
 
 **A body served with a proof is the stored body, byte for byte.** Nothing
 derived may be filled into an account on the way out of the API, because the
@@ -355,7 +406,7 @@ merges it after it has checked the proof.
 
 **BPT pages are read, never written.** A leaf enters the local tree only as
 the hash of state this node holds and has verified, because the local root is
-what the node matches against the anchored root; a leaf taken from a peer's
+what the node matches against a proven root; a leaf taken from a peer's
 word would make that root the peer's and the match would say nothing. Pages
 name accounts and say what the peer's leaves are; the difference from the
 node's own is the set to pull. A page carries no proof, so a peer can omit a
@@ -389,8 +440,9 @@ changed (see "The block ledger"), that record is a chain on the partition's
 ledger account, and the chain's anchor is part of the account's hash — so the
 state root commits to what each block changed and a receipt from the chain
 proves it. A joining node asks for the block ledger records covering
-`(R, Q]`, verifies each against the anchored root the way it verifies an
-account, and pulls the union of their accounts. That set includes the accounts
+`(R, Q]` — `Q` being the block the peers are on — verifies each against a
+proven root the way it verifies an account, and pulls the union of their
+accounts. That set includes the accounts
 a block changed as a side effect and the system accounts every block touches —
 `<partition>/ledger` and `<partition>/synthetic` — which a block's envelopes
 never name, and it contains no unroutable name, which envelopes do.
@@ -418,13 +470,13 @@ the history (#4295).
 
 **What is pulled is written into the state tree, not only into the store.**
 Committing an account does not move the root by itself; the root is what the
-node matches against the anchored root, so a pull that does not update the tree
+node matches against the proven root, so a pull that does not update the tree
 can fetch everything the network has and never move (#4305).
 
 **What is pulled is what the node executes from.** The pulled state replaces
 what the node holds for that account rather than joining with it, or a restart
-keeps entries the peer has dropped and the account never hashes into the
-anchored root again. A chain is taken with the entries of its open mark set —
+keeps entries the peer has dropped and the account never hashes into a
+proven root again. A chain is taken with the entries of its open mark set —
 the entries since its last mark point — because an append rebuilds the chain's
 tail from them, and a node that cannot append to its chains cannot execute
 block `Q + 1`.
@@ -476,7 +528,7 @@ within a few rounds the last pre-listen entry has been executed by the
 network and is in the pulled state, and every stream's run is contiguous.
 
 **The root is the check that does not depend on the sequence numbers.** After
-executing any block, the local BPT root equals that block's anchored root or
+executing any block, the local BPT root equals that block's proven root or
 it does not. A mismatch is a gap the sequence check missed — the node
 re-syncs at that block and continues — so a wrong run is caught at the block
 it happens in, never carried forward.
@@ -507,8 +559,8 @@ what the state says executed, and that is all it ever needs to be.
 
 #### 5. Converge, then execute
 
-When the local BPT root equals the `StateTreeAnchor` of the verified anchor for
-`Q`, staging is brought to `Q`: everything collected through `Q` held,
+When the local BPT root equals the root a pass proved (§2), `Q` is the block
+the ledger in that state names, and staging is brought to `Q`: everything collected through `Q` held,
 everything at or below each stream's `Delivered` at `Q` — read from the pulled
 ledgers — released, and proofs decided against the anchors executed by `Q`. `Q`
 is checked against the state, not taken on trust: staging settled against

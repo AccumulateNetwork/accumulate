@@ -63,6 +63,17 @@ func (s *Source) recordHistory(a rootChainAnchor) {
 // records as the bpt chain's anchor, and the steps below it must be the
 // receipt of the bpt entry the peer names and of no other node.
 //
+// **The index is the peer's word, so this binds against a careless peer and
+// not a lying one.** Index chains are not anchored, and the peer that serves
+// the receipt serves the index entry it is held to: one that forges both
+// proves a transaction hash as a root
+// (TestATransactionsReceiptIsRefusedThoughThePeerForgesTheBptIndex, skipped
+// because it fails). What closes it is a receipt a peer cannot serve today,
+// from a bpt entry to the bpt chain's anchor AT the asked height rather than
+// at the entry's own first anchoring: then root and a StateTreeAnchor a quorum
+// signed enter the root chain at one leaf, which splitAtLeaf finds from the
+// signed height alone (DIFFERENCES.md E11).
+//
 // q reaches the producer's peers, never this node (#4303). servedAt is the
 // block the peer said the state was served at, zero if it did not say.
 //
