@@ -697,8 +697,11 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		// that this one cannot propose yet (#4366).
 		NodeState: serving,
 		// Answers a relay's challenge, so that naming a validator's key
-		// hash is not enough to be handed its traffic (#4366 F1).
+		// hash is not enough to be handed its traffic -- and answers it as
+		// THIS peer, so forwarding somebody else's answer is not enough
+		// either (#4366 F1).
 		ValidatorKey: ed25519.PrivateKey(validatorKey),
+		PeerID:       inst.p2p.ID(),
 	})
 	if err != nil {
 		return errors.UnknownError.Wrap(err)

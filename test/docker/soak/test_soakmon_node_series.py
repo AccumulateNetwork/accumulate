@@ -161,10 +161,22 @@ class Fleet(unittest.TestCase):
         soakmon.containers = lambda: ["acc-bvn1-val1", "acc-bvn2-val1",
                                       "acc-bvn3-fol1"]
         # The follower may answer differently from a validator — it must, for
-        # the counter that matters (reviewer H1).
-        soakmon._scrape_one = lambda c, out, lock: out.setdefault(
-            c, list(self.follower_scrape if (self.follower_scrape and "fol" in c)
-                    else self.scrape))
+        # the counter that matters (reviewer H1). And every node reports its
+        # OWN BVN: the fixtures are written against BVN3, and a validator of
+        # BVN1 reporting a BVN3 partition is a shape no node can produce —
+        # which matters now that the row set is the topology's and not the
+        # scrape's (#4364, the missing Directory row).
+        def scrape(c, out, lock):
+            rows = list(self.follower_scrape
+                        if (self.follower_scrape and "fol" in c)
+                        else self.scrape)
+            own = next((p for p in soakmon.PARTITIONS_OF.get(c, ())
+                        if p != "Directory"), "BVN3")
+            out.setdefault(c, [(n, (dict(l, partition=own)
+                                    if isinstance(l, dict)
+                                    and l.get("partition") == "BVN3" else l), v)
+                               for n, l, v in rows])
+        soakmon._scrape_one = scrape
         soakmon.collect_flows_api = lambda: ({"synthetic": {}, "anchor": {}}, 0, 0)
         self.tmp = tempfile.mkdtemp(prefix="soaktest-")
         soakmon.RUN_DIR = self.tmp
@@ -329,10 +341,10 @@ class SubmissionsWhenTheFamilyAppears(Fleet):
             by[("acc-bvn3-fol1", "BVN3")]["acceptedNeitherCertifiedTakenNorRefused"])
         self.assertEqual(
             "5",
-            by[("acc-bvn1-val1", "BVN3")]["acceptedNeitherCertifiedTakenNorRefused"])
+            by[("acc-bvn1-val1", "BVN1")]["acceptedNeitherCertifiedTakenNorRefused"])
         # A partition that reported no rejections writes an empty field, not
         # a 0: the counter was never created, which is a different fact.
-        self.assertEqual("", by[("acc-bvn1-val1", "BVN3")]["rejected"])
+        self.assertEqual("", by[("acc-bvn1-val1", "BVN1")]["rejected"])
 
     def test_more_certified_than_accepted_is_an_alarm_not_a_negative(self):
         """REPORTING-SPEC 1a: a value another value on the same panel
@@ -785,6 +797,161 @@ class ARetryIsOneResponsibilityNotThree(unittest.TestCase):
         self.assertEqual([], sub["impossible"], "a real loss is not a fault")
 
 
+class EveryNodeHasARowForEveryPartitionItRuns(Fleet):
+    """Run `20260919T231856Z` wrote 25 (node, partition) pairs for a
+    thirteen-node network, and the missing one was `acc-bvn3-fol1` /
+    `Directory` — the follower's DN node. Nothing had been submitted to it,
+    so no `partition="Directory"` series existed on it, so the row was
+    simply not there. A missing row reads as a node that was not scraped,
+    which is a different fact from a node that had nothing to say, and it
+    left the relay evidenced on BVN3 only.
+
+    Every container runs TWO NODES, and the topology says which partitions.
+    A partition that reported nothing is a row of empty fields.
+    """
+
+    scrape = SCRAPE_WITH_SUBMISSIONS
+    follower_scrape = SCRAPE_FOLLOWER_RELAYING
+
+    def bvn3_only(self, c, out, lock):
+        """The follower answering for its BVN3 node and nothing else — the
+        run's shape exactly."""
+        if "fol" in c:
+            out.setdefault(c, [
+                ("accumulate_dagbft_submissions_total",
+                 {"partition": "BVN3", "outcome": "accepted"}, 1146.0),
+                ("accumulate_dagbft_relayed_total",
+                 {"partition": "BVN3", "outcome": "taken"}, 1146.0)])
+        else:
+            own = next(p for p in soakmon.PARTITIONS_OF[c] if p != "Directory")
+            out.setdefault(c, [
+                ("accumulate_dagbft_submissions_total",
+                 {"partition": p, "outcome": "accepted"}, 100.0)
+                for p in ("Directory", own)])
+
+    def test_the_followers_directory_node_has_a_row(self):
+        soakmon._scrape_one = self.bvn3_only
+        m = soakmon.collect_metrics()
+        soakmon.write_submissions_csv(m["nodeStats"]["submissions"])
+        head, rows = self.rows("submissions.csv")
+        pairs = {(r.split(",")[1], r.split(",")[3]) for r in rows}
+        self.assertIn(("acc-bvn3-fol1", "Directory"), pairs,
+                      "the follower's DN node has no row")
+        self.assertEqual(2, len([p for p in pairs if p[0] == "acc-bvn3-fol1"]),
+                         "two nodes in the container, two rows")
+
+    def test_every_scraped_container_gets_two_rows(self):
+        soakmon._scrape_one = self.bvn3_only
+        m = soakmon.collect_metrics()
+        soakmon.write_submissions_csv(m["nodeStats"]["submissions"])
+        head, rows = self.rows("submissions.csv")
+        self.assertEqual(6, len(rows), "3 containers x 2 partitions")
+
+    def test_the_silent_partitions_row_is_empty_not_zero(self):
+        """It must not invent a 0 either: nothing was reported there.
+
+        The stranded column is the one that matters. `max(0, 0 - 0)` is 0,
+        so a topology-seeded row asserted "nothing stranded here" on a
+        partition nobody measured — and a container mid-restart answers no
+        scrape at all (`_scrape_one` stores an empty list and the container
+        stays in the set), so on a chaos run that is every restart. The
+        manifest's fleet total then dips by that node's real count on the
+        one sample it was unreachable (reviewer M on #4364).
+        """
+        soakmon._scrape_one = self.bvn3_only
+        m = soakmon.collect_metrics()
+        soakmon.write_submissions_csv(m["nodeStats"]["submissions"])
+        head, rows = self.rows("submissions.csv")
+        cols = head.split(",")
+        r = dict(zip(cols, next(x for x in rows
+                                if x.split(",")[1] == "acc-bvn3-fol1"
+                                and x.split(",")[3] == "Directory").split(",")))
+        self.assertEqual("", r["accepted"])
+        self.assertEqual("", r["relayedTaken"])
+        self.assertEqual("", r["acceptedNeitherCertifiedTakenNorRefused"],
+                         "a partition nobody measured has no stranded count")
+
+    def test_a_container_that_answered_no_scrape_has_blank_rows(self):
+        """The shape a chaos restart produces: the container is in the
+        scrape set with an empty row list, so both its partitions are
+        topology-seeded and both must be blank, stranded included."""
+        def unreachable(c, out, lock):
+            out.setdefault(c, [] if "fol" in c else [
+                ("accumulate_dagbft_submissions_total",
+                 {"partition": p, "outcome": "accepted"}, 100.0)
+                for p in soakmon.PARTITIONS_OF[c]])
+        soakmon._scrape_one = unreachable
+        m = soakmon.collect_metrics()
+        soakmon.write_submissions_csv(m["nodeStats"]["submissions"])
+        head, rows = self.rows("submissions.csv")
+        cols = head.split(",")
+        fol = [dict(zip(cols, r.split(","))) for r in rows
+               if r.split(",")[1] == "acc-bvn3-fol1"]
+        self.assertEqual(2, len(fol), "it was scraped, so it has its rows")
+        for r in fol:
+            self.assertEqual(
+                "", r["acceptedNeitherCertifiedTakenNorRefused"],
+                "a node that answered nothing stranded nothing measurably")
+            self.assertEqual("", r["accepted"])
+
+    def test_a_container_that_was_not_scraped_has_no_rows(self):
+        """The distinction the fix exists for: silent is a row of blanks,
+        unscraped is no row."""
+        def only_validators(c, out, lock):
+            if "fol" not in c:
+                self.bvn3_only(c, out, lock)
+        soakmon._scrape_one = only_validators
+        m = soakmon.collect_metrics()
+        soakmon.write_submissions_csv(m["nodeStats"]["submissions"])
+        head, rows = self.rows("submissions.csv")
+        self.assertEqual([], [r for r in rows
+                              if r.split(",")[1] == "acc-bvn3-fol1"])
+
+
+class AbsentSeriesAndZeroAreDifferentFacts(Fleet):
+    """The same three facts the manifest has to keep apart, in `/data`."""
+
+    scrape = SCRAPE_WITH_SUBMISSIONS
+    follower_scrape = SCRAPE_FOLLOWER_RELAYING
+
+    def test_a_family_exported_with_no_series_for_an_outcome_is_zero(self):
+        """The follower relays and never has a relay refused: the family is
+        there, the child series is not, and that is a real 0 — the exact
+        shape run 20260919T231856Z printed as a bare `0`."""
+        fol = soakmon.collect_metrics()["nodeStats"]["submissions"]["follower"]
+        self.assertEqual("series", fol["presence"]["relayedTaken"])
+        self.assertEqual("family", fol["presence"]["relayedRefused"],
+                         "the relay family is exported; nothing was refused")
+        self.assertEqual(0, fol["relayedRefused"], "a real zero")
+
+    def test_each_half_keeps_its_own_presence(self):
+        """The aggregate is the validators' (M6) and they relay nothing, so
+        the relay family is ABSENT there — None, not 0 — while the
+        follower's is present. One map for both would have labelled the
+        validators' None as a measured zero."""
+        sub = soakmon.collect_metrics()["nodeStats"]["submissions"]
+        self.assertEqual("absent", sub["presence"]["relayedTaken"])
+        self.assertIsNone(sub["relayedTaken"])
+        self.assertEqual("series",
+                         sub["follower"]["presence"]["relayedTaken"])
+
+    def test_a_family_nobody_exports_is_not_measured(self):
+        bare = soakmon.submissions_from({"acc-bvn3-fol1": [
+            ("accumulate_dagbft_relayed_total",
+             {"partition": "BVN3", "outcome": "taken"}, 5.0)]}, "follower")
+        self.assertEqual("absent", bare["presence"]["rejected"])
+        self.assertIsNone(bare["rejected"], "absent is not zero")
+        self.assertEqual("absent", bare["presence"]["certified"])
+        self.assertIsNone(bare["certified"])
+
+    def test_the_board_renders_the_three_apart(self):
+        page = self.PAGE if hasattr(self, "PAGE") else open(
+            os.path.join(HERE, "soakmon.py")).read()
+        self.assertIn("pres[k]==='absent'?ABSENT", page)
+        self.assertIn("the family is exported and this outcome never occurred",
+                      page)
+
+
 class GarbageAtAFollowerMustNotPaintItRed(unittest.TestCase):
     """threat-reviewer F4 on #4366, decided by the lead.
 
@@ -907,7 +1074,12 @@ class OutcomesThisHarnessDoesNotKnowYet(unittest.TestCase):
         self.assertEqual(1, len(sub["impossible"]), sub["impossible"])
         self.assertIn("640 relayed and no accepted series at all",
                       sub["impossible"][0])
-        self.assertEqual(0, sub["stranded"], "floored, and therefore a lie")
+        # It used to read 0 here — floored, and therefore a lie. With
+        # `accepted` absent the difference cannot be computed at all, so it
+        # is `— not measured` and the alarm carries the finding (#4364).
+        self.assertIsNone(sub["stranded"])
+        self.assertEqual("absent", sub["presence"]["accepted"])
+        self.assertEqual("series", sub["presence"]["relayedTaken"])
 
     def test_a_reported_zero_is_not_the_same_as_no_series(self):
         """A node that says `accepted 0` beside relays is caught by the

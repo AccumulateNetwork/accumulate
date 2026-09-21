@@ -129,18 +129,24 @@ func TestNewSubmitterService_TheDaemonWiresTheCommitteeAndTheRelay(t *testing.T)
 		require.Error(t, err, "the daemon must not start a submit service with %s", name)
 	}
 
-	// And the consensus service's two, which are how another node's relay
-	// learns this one cannot propose and that it holds the key it names.
+	// And the consensus service's three, which are how another node's relay
+	// learns this one cannot propose, that it holds the key it names, and
+	// that it is the node that answered.
 	_, err = newConsensusAPIService(dagbft.ConsensusAPIServiceParams{
-		Service: svc, PartitionID: partition, ValidatorKey: priv,
+		Service: svc, PartitionID: partition, ValidatorKey: priv, PeerID: apiNode.ID(),
 	})
 	require.Error(t, err, "no node state (C5): CatchingUp would never be reported")
 	_, err = newConsensusAPIService(dagbft.ConsensusAPIServiceParams{
-		Service: svc, PartitionID: partition, NodeState: nodestate.Always{},
+		Service: svc, PartitionID: partition, NodeState: nodestate.Always{}, PeerID: apiNode.ID(),
 	})
 	require.Error(t, err, "no validator key: no relay could ever confirm this node")
 	_, err = newConsensusAPIService(dagbft.ConsensusAPIServiceParams{
 		Service: svc, PartitionID: partition, NodeState: nodestate.Always{}, ValidatorKey: priv,
+	})
+	require.Error(t, err, "no peer ID: a forwarded answer would pass")
+	_, err = newConsensusAPIService(dagbft.ConsensusAPIServiceParams{
+		Service: svc, PartitionID: partition, NodeState: nodestate.Always{},
+		ValidatorKey: priv, PeerID: apiNode.ID(),
 	})
 	require.NoError(t, err)
 

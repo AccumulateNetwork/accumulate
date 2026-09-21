@@ -215,11 +215,11 @@ func (r *Relay) Submit(ctx context.Context, env *messaging.Envelope, opts api.Su
 		if !ok {
 			continue
 		}
-		if !verifyRelayChallenge(key, r.partition, hash, nonce, sig) {
+		if !verifyRelayChallenge(key, r.partition, hash, p, nonce, sig) {
 			// Unreachable-class, not refused: nothing was said about the
 			// submission. The peer named a validator and could not answer
 			// as one.
-			r.logger.Info("Relay candidate could not prove it holds the key it claims",
+			r.logger.Info("Relay candidate could not prove it is the holder of the key it claims",
 				"peer", p, "partition", r.partition)
 			continue
 		}

@@ -131,14 +131,19 @@ func newSubmitterService(p submitterParams) (*dagbft.SubmitterService, error) {
 // node's relay knows this one cannot propose yet -- omit it and a joining
 // validator becomes a relay target again and the second hop is back.
 // ValidatorKey is what answers a relay's challenge -- omit it and this node
-// is no relay's target at all, which is quiet and wrong. Both are required,
-// so both stop the daemon at startup rather than a soak six hours in.
+// is no relay's target at all, which is quiet and wrong. PeerID is what the
+// answer is bound to -- omit it and the answer proves only that SOME
+// validator signed the nonce, which any peer can obtain by forwarding it.
+// All three are required, so each stops the daemon at startup rather than a
+// soak six hours in.
 func newConsensusAPIService(p dagbft.ConsensusAPIServiceParams) (*dagbft.ConsensusAPIService, error) {
 	switch {
 	case p.NodeState == nil:
 		return nil, errors.BadRequest.With("consensus service: no node state; a node that never joined is nodestate.Always{}")
 	case len(p.ValidatorKey) != ed25519.PrivateKeySize:
 		return nil, errors.BadRequest.With("consensus service: no validator key to answer a relay's challenge with")
+	case p.PeerID == "":
+		return nil, errors.BadRequest.With("consensus service: no peer ID, so a challenge answer would prove only that SOME validator signed it")
 	}
 	return dagbft.NewConsensusAPIService(p), nil
 }

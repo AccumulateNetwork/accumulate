@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -52,21 +53,63 @@ type Page struct {
 	BptRoot [32]byte
 }
 
-// GetPage returns the next pageSize entries of the BPT starting after
-// startKey. Use FullScanStart as the initial startKey to begin a fresh scan.
+// Tree is the BPT a page is read from, at whatever version the caller means:
+// the node's current tree, or the tree as of an anchored block. It is an
+// argument because both shapes serve the same page from the same leaves, and
+// the mapping from leaf to summary was written twice before this
+// (internal/api/v3/querier.go, #4361).
+type Tree interface {
+	// Root is what the entries of a page read from this tree are consistent
+	// with.
+	Root() ([32]byte, error)
+
+	// Range is the next pageSize entries after startKey, in BPT key order.
+	Range(startKey [32]byte, pageSize int) (entries []bpt.KeyValuePair, nextStart [32]byte, err error)
+}
+
+// Current is the node's BPT as it stands.
+func Current(batch *database.Batch) Tree { return currentTree{batch} }
+
+type currentTree struct{ batch *database.Batch }
+
+func (t currentTree) Root() ([32]byte, error) { return t.batch.GetBptRootHash() }
+func (t currentTree) Range(startKey [32]byte, pageSize int) ([]bpt.KeyValuePair, [32]byte, error) {
+	return t.batch.BPT().GetRange(startKey, pageSize)
+}
+
+// AsOf is the node's BPT as of an anchored block, whose root the caller has
+// already resolved. The walk is the current path's with the node loads
+// redirected to retained versions (#4361).
+func AsOf(batch *database.Batch, block uint64, root [32]byte) Tree {
+	return retainedTree{batch, block, root}
+}
+
+type retainedTree struct {
+	batch *database.Batch
+	block uint64
+	root  [32]byte
+}
+
+func (t retainedTree) Root() ([32]byte, error) { return t.root, nil }
+func (t retainedTree) Range(startKey [32]byte, pageSize int) ([]bpt.KeyValuePair, [32]byte, error) {
+	return t.batch.BPT().GetRangeAt(t.block, t.root, startKey, pageSize)
+}
+
+// GetPage returns the next pageSize entries of tree starting after startKey.
+// Use FullScanStart as the initial startKey to begin a fresh scan.
 //
 // pageSize must be > 0. The caller caps it for untrusted clients.
-func GetPage(batch *database.Batch, startKey [32]byte, pageSize int) (*Page, error) {
+func GetPage(tree Tree, startKey [32]byte, pageSize int) (*Page, error) {
 	if pageSize <= 0 {
 		return nil, fmt.Errorf("bptproof.GetPage: pageSize must be > 0, got %d", pageSize)
 	}
 
-	rootHash, err := batch.GetBptRootHash()
+	rootHash, err := tree.Root()
 	if err != nil {
 		return nil, fmt.Errorf("read BPT root: %w", err)
 	}
 
-	pairs, nextStart, err := batch.BPT().GetRange(startKey, pageSize)
+	pairs, nextStart, err := tree.Range(startKey, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("BPT range from %x: %w", startKey[:8], err)
 	}
