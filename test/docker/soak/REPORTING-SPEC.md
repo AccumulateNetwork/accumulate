@@ -324,6 +324,14 @@ delivered count stopped or went backwards.
 
 Every quantity a life did not record reads `not measured`, never a pass.
 
+`readprobe-follower.csv` (`time,follower,partition,service,outcome,reads`)
+is the read probe's record of every follower it asks, from the follower's own
+port: one row per round, follower, partition and outcome, `reads` the count.
+`service` is the API service that answered (`query`); `outcome` is
+`answered`, `not-ready` (the node refused with `NotReady`, JSON-RPC code
+-33504 — the join working, not a failed read), `gated`, `timeout` or
+`error`. A follower not yet added answers nothing and reads `error`.
+
 The consensus-status API MUST additionally report `syntheticHeals` and
 `anchorHeals` (#4075) — the coarse monitor's CSV reads them.
 

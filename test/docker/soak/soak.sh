@@ -1436,13 +1436,16 @@ for life in lives:
     if not before:
         parts.append("NotReady before ACTIVE %s (no read of it in `readprobe-follower.csv`)" % NM)
     else:
+        # a row is one round's reads of one partition with one outcome
+        n = lambda rs: sum(int(r["reads"]) if (r.get("reads") or "").isdigit()
+                           else 1 for r in rs)
         nr = [r for r in before if r.get("outcome") == "not-ready"]
         if nr:
             parts.append("NotReady before ACTIVE on %d read(s): %s" % (
-                len(nr), ", ".join(sorted({"%s %s" % (r["partition"], r["service"])
-                                           for r in nr}))))
+                n(nr), ", ".join(sorted({"%s %s" % (r["partition"], r["service"])
+                                         for r in nr}))))
         else:
-            parts.append("NO NotReady before ACTIVE (%d read(s), none refused)" % len(before))
+            parts.append("NO NotReady before ACTIVE (%d read(s), none refused)" % n(before))
 
     # stranded, and relayed-taken against accepted, on THIS follower over
     # this container's life: the last sample in it, deduped by partition.
@@ -1766,7 +1769,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     echo "Full detail in \`follower-report.md\`; the per-sample series in \`follower.csv\`."
   fi
   echo
-  echo "Raw: \`soak.log\`, \`monitor.csv\`, \`mem.csv\` (every node, with its role), \`submissions.csv\`, \`chaos.log\`, \`nodestate.csv\`, \`loadgen-stats.json\`, \`readprobe.csv\` / \`readprobe-report.md\`$([ "$n_fol" -gt 0 ] && echo ', `follower.csv` / `follower-report.md`, `network-definition.json`')."
+  echo "Raw: \`soak.log\`, \`monitor.csv\`, \`mem.csv\` (every node, with its role), \`submissions.csv\`, \`chaos.log\`, \`nodestate.csv\`, \`loadgen-stats.json\`, \`readprobe.csv\` / \`readprobe-report.md\`$([ "$n_fol" -gt 0 ] && echo ', `follower.csv` / `follower-report.md`, `readprobe-follower.csv`, `follower-removal-N-{before,at,after}.json`, `network-definition.json`')."
 } >> "$manifest"
 
 # Accumulating index — one line per run, newest last, never rewritten.
