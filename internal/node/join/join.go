@@ -230,6 +230,7 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 				err = opts.Buffer.Handoff(q)
 				switch {
 				case err == nil:
+					log.Info("Joined; executing from the block after the state", "block", q, "executes", q+1)
 					return Joined, nil
 				case errors.Is(err, errors.NotReady):
 					// The pull ran ahead of the blocks consensus has

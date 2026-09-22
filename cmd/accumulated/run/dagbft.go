@@ -583,10 +583,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	}
 
 	if joining {
-		stage, ok := exec.(join.Stage)
+		settler, ok := exec.(join.Settler)
 		if !ok {
-			return errors.InternalError.With("this executor cannot join: it takes no staging from a peer")
+			return errors.InternalError.With("this executor cannot join: it cannot settle staging")
 		}
+		stage := &join.ExecutorStage{Settler: settler, Staging: staging, Database: db}
 		state := joinState
 		opts := join.Options{
 			Partition: s.Partition.ID,
@@ -597,27 +598,18 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			Logger:    slog.Default(),
 		}
 		go func() {
-			outcome, err := join.Run(inst.context, opts)
-			switch {
-			case err != nil:
+			_, err := join.Run(inst.context, opts)
+			if err != nil {
 				// A join that cannot finish leaves the node collecting: it
 				// keeps up with consensus and executes nothing, which is the
 				// spec's answer and is safe. It is also an operator's
 				// problem, so it is an error and not a debug line.
 				slog.Error("The join did not complete; this node is not executing",
 					"module", "join", "partition", s.Partition.ID, "error", err)
-
-			case outcome == join.NoPeerHasStaging:
-				s.executeFromOwnState(state, s.service)
-
-			default:
-				// A join that cannot finish leaves the node collecting: it
-				// keeps up with consensus and executes nothing, which is the
-				// spec's answer and is safe. It is also an operator's
-				// problem, so it is an error and not a debug line.
-				slog.Error("The join did not complete; this node is not executing",
-					"module", "join", "partition", s.Partition.ID, "error", err)
+				return
 			}
+			// Success is join.Run's to log, at Info, with the block the node
+			// executes from: only it knows the block (#4355).
 		}()
 	}
 
