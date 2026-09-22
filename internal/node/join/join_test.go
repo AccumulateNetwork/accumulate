@@ -14,6 +14,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -28,6 +29,7 @@ type fakeBuffer struct {
 	collecting bool
 	overrun    bool
 	handedOff  uint64
+	handoffs   []uint64 // every block the join handed off at, in order
 	handoffErr error
 	applied    int // how many blocks were applied to the staging that was taken
 	starts     int // how many times the join started collecting
@@ -59,6 +61,7 @@ func (b *fakeBuffer) Handoff(q uint64) error {
 		return b.handoffErr
 	}
 	b.handedOff = q
+	b.handoffs = append(b.handoffs, q)
 	b.collecting = false
 	return nil
 }
@@ -68,6 +71,11 @@ type fakeStage struct {
 	loaded  *private.StagingSnapshot
 	settled uint64
 	loadErr error
+
+	// gaps are the blocks whose collected streams are not contiguous from
+	// Delivered + 1; gapAsked is every block HasGap was asked about.
+	gaps     map[uint64]bool
+	gapAsked []uint64
 }
 
 func (s *fakeStage) LoadStaging(snap *private.StagingSnapshot) error {
@@ -78,6 +86,13 @@ func (s *fakeStage) LoadStaging(snap *private.StagingSnapshot) error {
 	return nil
 }
 func (s *fakeStage) SettleStagingAt(q uint64) error { s.settled = q; return nil }
+
+// HasGap is the seam granted for #4362 (Stage.HasGap): whether the streams
+// collected for a block run contiguously from each stream's Delivered + 1.
+func (s *fakeStage) HasGap(block uint64) (bool, error) {
+	s.gapAsked = append(s.gapAsked, block)
+	return s.gaps[block], nil
+}
 
 // fakeState stands for the state pull and its tracker.
 type fakeState struct {
@@ -326,4 +341,70 @@ func TestJoin_FindingNoValidatorIsNotAnAnswer(t *testing.T) {
 	require.NotEqual(t, NoPeerHasStaging, outcome, "finding nobody is not the whole-network-restart answer")
 	require.Zero(t, buf.handedOff)
 	require.Nil(t, stage.loaded)
+}
+
+// gapState is a state pull that syncs to b on its first pull, and after that
+// advances the sync by one block only once the stage has reported a gap at
+// the block after it: the pull of the accounts that block's ledger names, at
+// that block's anchor (executor spec, "Sync", step 3).
+type gapState struct {
+	stage  *fakeStage
+	b      uint64
+	synced uint64 // zero until the first pull
+	pulls  int
+}
+
+func (s *gapState) Pull(context.Context) error {
+	s.pulls++
+	switch {
+	case s.synced == 0:
+		s.synced = s.b
+	case s.stage.gaps[s.synced+1] && contains(s.stage.gapAsked, s.synced+1):
+		s.synced++
+	}
+	return nil
+}
+
+func (s *gapState) Matched(context.Context) (uint64, bool, error) {
+	return s.synced, s.synced > 0, nil
+}
+
+func contains(s []uint64, v uint64) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+// A peer holds an entry from before this node was listening: B+1 carries a
+// stream's sequence 105 while the state synced at B says Delivered is 103,
+// and 104 is not in B+1. The join must not execute B+1 — Handoff(B) — but
+// advance the sync to B+1 and ask the same of B+2, which has no gap, so it
+// hands off at B+1 and B+2 is the first block this node executes (executor
+// spec, "Sync", steps 2 and 3; #4362). No peer is asked for its staging:
+// the join converges on consensus's blocks and the anchored state, and the
+// staging API is what the mechanism deletes.
+func TestJoin_APreListenEntryAdvancesTheSyncInsteadOfExecuting(t *testing.T) {
+	const b = 20
+	buf := new(fakeBuffer)
+	stage := &fakeStage{gaps: map[uint64]bool{b + 1: true}}
+	state := &gapState{stage: stage, b: b}
+	peers := &fakePeers{
+		peers: []*api.FindServiceResult{peerResult(1)},
+		snaps: map[string]*private.StagingSnapshot{peerID(1).String(): {Block: 17}},
+	}
+
+	outcome, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers})
+	require.NoError(t, err)
+	require.Equal(t, Joined, outcome)
+
+	assert.Empty(t, peers.asked, "no peer is asked for its staging")
+	assert.Nil(t, stage.loaded, "and no peer's staging is loaded")
+	assert.NotContains(t, buf.handoffs, uint64(b), "B+1 has a gap, so the join does not execute it")
+	assert.Equal(t, []uint64{b + 1}, buf.handoffs, "the join hands off once, at B+1: B+2 is the first block executed")
+	assert.Equal(t, uint64(b+1), state.synced, "the sync advanced to B+1")
+	assert.Equal(t, uint64(b+1), stage.settled, "staging settles at the block the sync reached")
+	assert.Equal(t, []uint64{b + 1, b + 2}, stage.gapAsked, "the join asked about B+1, then B+2")
 }
