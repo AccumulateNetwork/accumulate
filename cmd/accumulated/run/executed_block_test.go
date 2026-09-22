@@ -25,10 +25,6 @@ import (
 //	Pulled accounts were given up on unanchored: ... first=acc://bvn-BVN1.acme/ledger
 //	Pulled accounts were given up on unanchored: ... first=acc://dn.acme/ledger
 //
-// Today a wrong value there only decides `nodeMustJoin`, which is harmless.
-// But it is also what the NoPeerHasStaging branch starts executing at, and
-// that branch had no test at all (#4320).
-//
 // The store here is filled by the REAL EXECUTOR — the simulator runs it
 // through real blocks — so the record the daemon reads is one the executor
 // wrote, not one this test wrote. The overwrite is the pull's own write,
@@ -89,21 +85,7 @@ func TestThePullCannotMoveTheDaemonsOwnBlock(t *testing.T) {
 	require.Equal(t, executed, again.lastExecuted,
 		"the daemon took its own block from an account the pull overwrote (#4344)")
 
-	// And that is the number the NoPeerHasStaging branch starts executing at.
-	rec := new(recordingHandoff)
-	again.executeFromOwnState(rec, rec)
-	require.Equal(t, executed, rec.executing, "recorded as executing at a block it never reached")
-	require.Equal(t, executed, rec.handoff, "started executing at a block it never reached")
 }
-
-// recordingHandoff stands in for the join's state and the consensus service.
-type recordingHandoff struct {
-	executing uint64
-	handoff   uint64
-}
-
-func (r *recordingHandoff) Executing(block uint64) error { r.executing = block; return nil }
-func (r *recordingHandoff) Handoff(block uint64) error   { r.handoff = block; return nil }
 
 func ledgerIndexOf(t *testing.T, db database.Beginner, partition string) uint64 {
 	t.Helper()

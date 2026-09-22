@@ -22,7 +22,6 @@ import (
 	"log/slog"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
@@ -56,10 +55,6 @@ type Buffer interface {
 
 // A Stage is the executor's staging half of a join (#4292).
 type Stage interface {
-	// LoadStaging takes a peer's staging into this node's own. Run does not
-	// call it (#4362).
-	LoadStaging(*private.StagingSnapshot) error
-
 	// SettleStagingAt brings staging to the block the pulled state is.
 	SettleStagingAt(q uint64) error
 
@@ -93,10 +88,6 @@ type Peers interface {
 	// Validators lists the nodes serving this partition's sequencer, in no
 	// particular order.
 	Validators(ctx context.Context) ([]*api.FindServiceResult, error)
-
-	// Staging is the private API addressed to one node. Run does not call
-	// it (#4362).
-	Staging(peer *api.FindServiceResult) private.StagingSnapshotter
 }
 
 // Options are what a join needs to run.
@@ -283,70 +274,4 @@ func findValidators(ctx context.Context, opts Options, log *slog.Logger, retry t
 		log.Info("No validator of this partition has been found yet", "attempt", attempt+1, "of", rounds)
 	}
 	return 0, nil
-}
-
-// takeStaging asks the partition's validators, one by one, for their staging,
-// and loads the first answer that is usable. A validator that refuses, that
-// cannot be read, or that has executed no block itself is passed over: that
-// is that node's condition, not an answer about the snapshot, and the next
-// validator is asked.
-//
-// Run no longer calls it: the join takes no peer's staging (#4362).
-func takeStaging(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration) (uint64, bool, int, error) {
-	rounds := opts.Rounds
-	if rounds <= 0 {
-		rounds = DefaultRounds
-	}
-	// How many distinct validators were found and asked across every round.
-	// Zero means the node could not see its partition at all, which is a
-	// different thing from every validator having nothing to give (#4296).
-	asked := map[string]bool{}
-	for attempt := 0; ; attempt++ {
-		if attempt >= rounds {
-			return 0, false, len(asked), nil
-		}
-		if err := ctx.Err(); err != nil {
-			return 0, false, len(asked), errors.UnknownError.Wrap(err)
-		}
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return 0, false, len(asked), errors.UnknownError.Wrap(ctx.Err())
-			case <-time.After(retry):
-			}
-		}
-
-		peers, err := opts.Peers.Validators(ctx)
-		if err != nil {
-			log.Info("Cannot find this partition's validators yet", "error", err)
-			continue
-		}
-		if len(peers) == 0 {
-			log.Info("No validator of this partition has been found yet", "attempt", attempt+1, "of", rounds)
-		}
-		for _, peer := range peers {
-			asked[peer.PeerID.String()] = true
-			snap, err := private.FetchStagingSnapshot(ctx, opts.Peers.Staging(peer), opts.Partition)
-			if err != nil {
-				log.Info("A validator did not serve its staging", "peer", peer.PeerID, "error", err)
-				continue
-			}
-			if snap.Block == 0 {
-				continue // that node has executed no block: it is joining too
-			}
-
-			// The buffer holds every block after P, and this is why: the node
-			// entered collecting mode before it asked, so every block the
-			// peer committed after it answered — every block above P — is a
-			// block this node has collected. Everything at or below P is in
-			// the snapshot. There is no third case, and no block index to
-			// compare: a buffered group carries a leader round, not a block.
-			err = opts.Buffer.ApplyStaging(func() error { return opts.Stage.LoadStaging(snap) })
-			if err != nil {
-				log.Info("A validator's staging could not be loaded", "peer", peer.PeerID, "block", snap.Block, "error", err)
-				continue
-			}
-			return snap.Block, true, len(asked), nil
-		}
-	}
 }
