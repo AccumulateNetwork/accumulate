@@ -846,6 +846,12 @@ func (s *PulledState) Executing(block uint64) error {
 // Matched reports the block whose anchored root the local root equals. Until
 // it does, the node keeps pulling: a root that matches is the only statement
 // that the state this node holds is a block's state (executor spec, "Sync").
+//
+// It is the local root's block every time it is asked, not the block of the
+// first match. The machine goes ACTIVE once, at the first match, and a join
+// that found a gap after it pulls on, so the state moves past the block the
+// machine names; answering with that block would settle staging against a
+// state it is not (#4362).
 func (s *PulledState) Matched(ctx context.Context) (uint64, bool, error) {
 	ok, err := s.tracker.Check(ctx)
 	if err != nil {
@@ -854,7 +860,19 @@ func (s *PulledState) Matched(ctx context.Context) (uint64, bool, error) {
 	if !ok && s.machine.State() != nodestate.StateActive {
 		return 0, false, nil
 	}
-	return s.machine.Get().SinceBlock, true, nil
+
+	batch := s.db.Begin(false)
+	local, err := batch.GetBptRootHash()
+	batch.Discard()
+	if err != nil {
+		return 0, false, errors.UnknownError.WithFormat("read the local root: %w", err)
+	}
+	for _, o := range s.tracker.Snapshot() {
+		if o.Anchor == local {
+			return o.Block, true, nil
+		}
+	}
+	return 0, false, nil
 }
 
 // dedupe keeps the first of each name and drops the ones no pull can satisfy.
