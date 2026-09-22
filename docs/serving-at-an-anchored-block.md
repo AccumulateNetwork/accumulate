@@ -48,9 +48,11 @@ SHA-256 of that body, so a caller recomputes the starting point from what it
 was handed instead of taking the server's word for it. `StartsAtMainState`
 reports this and is set on every historical answer.
 
-`Directory`, `Pending` and `Sighted` are **not** carried on a historical
-answer. They are not retained per block, and a present-tense value beside a
-past body is the same mistake this exists to stop.
+`Directory` and `Pending` on a historical answer are **B's**, in full, and
+`Leaf` carries the rest of the account's BPT entry as of B (see "It is the
+whole leaf" below). `Sighted` is derived from staging, is never a block's, and
+is not carried: a present-tense value beside a past body is the same mistake
+this exists to stop.
 
 ### The BPT page
 
@@ -211,10 +213,26 @@ membership proof says an account's entry had a particular hash at a particular
 block. It says nothing about whether the transaction that produced that state
 was authorised.
 
-**It is a body, not an account.** The retained state receipt collapses the
-account's secondary state, chain anchors and pending list into sibling hashes,
-so the proof of the body is complete — but the *components* at that block are
-not retained and are not served. A node that means to write the pulled account
-into its own state tree and reproduce the leaf locally needs those too, from
-the chain and pending queries, at the same block. That is the consuming side's
-problem (#4362).
+**It is the whole leaf, not only the body.** The retained state receipt
+collapses the account's secondary state, chain anchors and pending list into
+sibling hashes, so the proof of the body is complete on its own. Beside it, for
+every account that changed in the block, the node retains in the same batch
+everything else `hashState` (`internal/database/observer_prod.go`) reads: the
+head of every chain (count and merkle state), the directory, the pending list
+with each pending transaction's validator signatures, payments, votes and
+signatures (a key page's too, for its book), and for a partition's ledgers the
+scheduled-events root and the local and cascade delivery queues. It is pruned
+on `BPTHistoryDepth` with the body (`RetainedLeaf`, `internal/database/model.yml`).
+
+A `ForHeight` answer serves them as of the block: `Directory` and `Pending` are
+that block's, in full, and `Leaf` carries the rest. An account that did not
+change in B is served from the nearest retained block at or below B. Before
+serving, the node rebuilds the entry from what it retained and checks it against
+the entry the receipt starts from; a leaf that does not rebuild it is refused
+with `IncompleteChain`, never served. A block retained before the leaf was is
+served with the body and no `Leaf`.
+
+A joiner therefore writes the pulled account and reproduces its leaf from the
+answer alone. Chain heads are retained, not rebuilt from index chains, because
+the block-ledger, the ledger's main chain and the synthetic main chain have no
+index chain (#4361).
