@@ -264,3 +264,41 @@ func TestProcessCommittedGroup_CollectingBoundsTheBuffer(t *testing.T) {
 	require.Len(t, svc.Buffered(), 2)
 	require.Empty(t, ca.blocks)
 }
+
+// The daemon starts collecting before the service starts, and the join starts
+// collecting again when it runs. Neither may cost the buffer its map onto
+// blocks (#4351): the block the node stands at is only known once Start has
+// restored it, and a group collected between Start and the join's call is
+// block R + 1 whoever calls StartCollecting after it.
+func TestHandoff_StartingToCollectTwiceKeepsTheMapOntoBlocks(t *testing.T) {
+	svc, ca, author := newJoiningService(t)
+	w := svc.node.Workers()[0]
+
+	// cmd/accumulated/run/dagbft.go: StartCollecting, then Start, which
+	// restores the block the node stands at.
+	svc.StartCollecting()
+	svc.lastBlockIndex = 40
+
+	// A group is committed before the join's goroutine runs: block 41.
+	b := types.NewBatch([][]byte{{1}})
+	require.NoError(t, w.StoreBatch(b))
+	_, err := svc.processCommittedGroup(group(commitCert(author, 2, time.Unix(100, 0),
+		[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
+	require.NoError(t, err)
+
+	// join.Run starts collecting too.
+	svc.StartCollecting()
+	require.Len(t, svc.Buffered(), 1, "what was collected is kept")
+
+	b = types.NewBatch([][]byte{{2}})
+	require.NoError(t, w.StoreBatch(b))
+	_, err = svc.processCommittedGroup(group(commitCert(author, 4, time.Unix(101, 0),
+		[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
+	require.NoError(t, err)
+
+	// The state is block 41: only block 42, the second group, is produced.
+	require.NoError(t, svc.performHandoff(41))
+	require.Len(t, ca.blocks, 1)
+	require.Equal(t, uint64(42), ca.blocks[0].Index)
+	require.Equal(t, types.Round(4), ca.blocks[0].LeaderRound, "the group committed second is block 42")
+}

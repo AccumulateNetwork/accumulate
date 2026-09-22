@@ -86,25 +86,23 @@ func (g *CollectedGroup) bytes() int {
 
 // StartCollecting puts the service in collecting mode: committed groups are
 // taken into staging and buffered instead of executed.
+//
+// Calling it while already collecting changes nothing. The daemon starts
+// collecting before the service starts and the join starts collecting when it
+// runs; emptying the buffer on the second call would drop the groups
+// committed between the two, and the handoff would then produce every block
+// after them under a number that is not theirs (#4351).
 func (s *Service) StartCollecting() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.collecting {
+		return
+	}
 	s.collecting = true
 	s.bufferOverrun = false
-
-	// A join that starts again starts clean: what was buffered belongs to a
-	// snapshot that is no longer usable, and staging is taken again from a
-	// newer one (#4294).
 	s.buffer = nil
 	s.bufferBytes = 0
 	s.stagingReady = false
-
-	// The block this node stood at when it started collecting is what maps
-	// the buffer onto block numbers: the first group buffered is the block
-	// after it, and each one after that is the next block, because a group
-	// that would have produced no block is not buffered either. The handoff
-	// needs that map to know which buffered groups the pulled state already
-	// contains (#4294).
 	s.collectFrom = s.lastBlockIndex
 }
 
@@ -215,6 +213,9 @@ func (s *Service) performHandoff(q uint64) error {
 	// producing the first of them as block q+1 would execute an old block's
 	// transactions against a newer state, under a block number that is not
 	// theirs — every node's divergence in one step.
+	if len(s.buffer) == 0 {
+		s.collectFrom = s.lastBlockIndex
+	}
 	if q < s.collectFrom {
 		s.mu.Unlock()
 		return errors.Conflict.WithFormat("%s: cannot hand off at block %d, behind the block %d this node stood at",
@@ -430,6 +431,17 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(s.buffer) == 0 {
+		// The block this node stands at is what maps the buffer onto block
+		// numbers: the first group buffered is the block after it, and each
+		// one after that is the next, because a group that would have
+		// produced no block is not buffered either. It is read here, at the
+		// first group, and not when collecting started: a node that starts
+		// collecting before the service starts does not yet know its block
+		// (#4351). A collecting node executes nothing, so the block does not
+		// move after this.
+		s.collectFrom = s.lastBlockIndex
+	}
 	s.buffer = append(s.buffer, g)
 	s.bufferBytes += g.bytes()
 	s.logger.Debug("Buffered a committed group while joining",
