@@ -458,31 +458,14 @@ func TestFullSpine_RePullIsIdempotent(t *testing.T) {
 		t.Fatalf("the chain is %d entries after two pulls of a 3-entry chain", c.CurrentState().Count)
 	}
 
-	// A peer serving a shorter chain that IS the node's own first entries is
-	// the meeting point reached early: accepted, and it does not shorten the
-	// node's chain. (This asserted a refusal until the meeting point was
-	// fixed, and that refusal was what stopped a twelve-node restart.)
+	// A peer serving a shorter chain cannot be reproduced by appending, so it
+	// is refused rather than silently left as it is.
 	shorter := newObservedDB(t)
 	buildChain(t, shorter, u, 1, 0x99)
 	b := dst.Begin(true)
-	if err := Account(context.Background(), &dbSource{db: shorter}, b, u, Options{Mode: ModeFullSpine}); err != nil {
-		t.Fatalf("a peer serving the node's own first entry was refused: %v", err)
-	}
-	if err := b.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	if h := localHeight(t, dst, u); h != 3 {
-		t.Fatalf("the chain is %d entries after meeting a peer at 1; it was 3", h)
-	}
-
-	// A peer serving a shorter chain that DISAGREES with the node's is
-	// refused, however short it is.
-	forked := newObservedDB(t)
-	buildChainForking(t, forked, u, 1, 0x99, 0)
-	b2 := dst.Begin(true)
-	defer b2.Discard()
-	if err := Account(context.Background(), &dbSource{db: forked}, b2, u, Options{Mode: ModeFullSpine}); err == nil {
-		t.Fatal("a peer whose entry 0 is not the node's entry 0 was accepted")
+	defer b.Discard()
+	if err := Account(context.Background(), &dbSource{db: shorter}, b, u, Options{Mode: ModeFullSpine}); err == nil {
+		t.Fatal("a peer serving a shorter chain than the node holds was accepted")
 	}
 }
 

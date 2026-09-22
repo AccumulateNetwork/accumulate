@@ -766,20 +766,6 @@ func (s *PulledState) fetchOne(ctx context.Context, p *pass, u *url.URL, spine b
 		fail()
 		return
 	}
-	if pending.Past() {
-		// The node is past this peer on this account: everything the peer
-		// can give for it, the node has, and the pull took nothing. There is
-		// nothing to settle, and holding it would hold the pass open for
-		// state the node is never going to take.
-		//
-		// It is not refused either: nothing failed. The account is named
-		// again if its leaf still differs from the peer's -- enumerate.Stale
-		// names a difference in either direction (#4348).
-		pending.Discard()
-		s.log.Debug("The node is past the peer on an account; nothing was pulled",
-			"account", u, "partition", s.partition)
-		return
-	}
 	p.accounts = append(p.accounts, &heldAccount{url: u, pending: pending, spine: spine})
 }
 
