@@ -93,3 +93,80 @@ BlockStateSynthTxnEntry:
     type: bytes
   - name: ChainEntry
     type: uvarint
+
+# What an account's BPT entry commits to besides its main state, retained per
+# block beside RetainedMainState so a historical answer can serve the whole
+# leaf (#4361). Each field is what hashState (observer_prod.go) reads.
+RetainedLeaf:
+  fields:
+    - name: Directory
+      type: url
+      pointer: true
+      repeatable: true
+    - name: EventsRoot
+      description: is the root of the scheduled-events BPT, for a partition ledger
+      type: hash
+    - name: LocalDeliveryQueue
+      type: txid
+      pointer: true
+      repeatable: true
+    - name: CascadeDeliveryQueue
+      type: txid
+      pointer: true
+      repeatable: true
+    - name: Chains
+      description: is the head of every chain, in the account's chain order
+      type: RetainedChainHead
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: Pending
+      description: is the account's pending transactions
+      type: RetainedPendingTransaction
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: BookPending
+      description: is the pending transactions of a key page's book, with the page's own sets
+      type: RetainedPendingTransaction
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+RetainedChainHead:
+  fields:
+    - name: Name
+      type: string
+    - name: Count
+      type: uint
+      keep-empty: true
+    - name: Pending
+      type: bytes
+      repeatable: true
+
+RetainedPendingTransaction:
+  fields:
+    - name: TxID
+      type: txid
+      pointer: true
+    - name: V1Hashes
+      description: is the hash of the legacy transaction record and its status, for a transaction stored by executor v1
+      type: hash
+      repeatable: true
+    - name: ValidatorSignatures
+      type: protocol.KeySignature
+      marshal-as: union
+      repeatable: true
+    - name: Payments
+      type: hash
+      repeatable: true
+    - name: Votes
+      type: VoteEntry
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: Signatures
+      type: SignatureSetEntry
+      marshal-as: reference
+      pointer: true
+      repeatable: true

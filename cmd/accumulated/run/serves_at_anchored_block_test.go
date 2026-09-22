@@ -10,13 +10,20 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"log/slog"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	dbmerkle "gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -397,6 +404,430 @@ func anchorsForBVN1(t *testing.T, c apiv3.Querier2) []anchoredBlock {
 			continue
 		}
 		seen[a.MinorBlockIndex] = true
+		out = append(out, anchoredBlock{block: a.MinorBlockIndex, stateTreeAnchor: a.StateTreeAnchor})
+	}
+	return out
+}
+
+// AN ACCOUNT'S WHOLE LEAF IS SERVED AS OF THE ANCHORED BLOCK (#4361, owner's
+// decision 2026-09-22).
+//
+// A joiner takes the latest signed anchor for block B, pulls every account as
+// of B, proves each by equality with the anchor's StateTreeAnchor, and then
+// executes B+1 onward. Proving the main body alone is not enough: the BPT leaf
+// is H(main, secondary, chains, pending) (internal/database/observer_prod.go,
+// hashState), so a joiner that holds only the body at B cannot rebuild the
+// leaf, and a joiner that fills the other three parts in from the peer's
+// current state executes B+1 on state no anchor covers.
+//
+// So every part of the leaf must be served as of B, and this test rebuilds the
+// leaf from what was served, by hashState's rules, and checks it three ways
+// the server cannot satisfy by copying a label: against the value the page for
+// B names, against the path the account's own historical receipt proves to
+// root(B), and against the anchor the Directory holds for B.
+//
+// The accounts are chosen so that every part moves after B:
+//
+//   - an ADI whose directory gains an account and whose pending list gains a
+//     transaction after B, and whose main chain grows with each;
+//   - the partition ledger, whose chains change every block and whose
+//     secondary state carries the scheduled-events BPT;
+//   - the synthetic ledger, whose secondary state carries the delivery
+//     queues.
+//
+// Red at base: the historical answer serves the body and blanks the rest
+// (internal/api/v3/querier.go, historicalStateReceipt), and there is no field
+// at all for chain states, events, delivery queues or the signature sets of a
+// pending transaction. servedLeafParts is the one place that reads a response;
+// whatever fields the server adds are read there, and nothing else in this
+// test needs to change.
+func TestAnAccountsWholeLeafIsServedAsOfTheAnchoredBlock(t *testing.T) {
+	c := clientFor(t, startNetsimAndExecute(t))
+	submitter := c.Querier.(*jsonrpc.Client)
+	ctx := context.Background()
+
+	faucetKey := netsimFaucetKey(t, "node-own-state")
+	faucet, err := protocol.LiteTokenAddress(faucetKey[32:], "ACME", protocol.SignatureTypeED25519)
+	require.NoError(t, err)
+
+	adi := protocol.AccountUrl("leafcheck")
+	book := adi.JoinPath("book")
+	page := book.JoinPath("1")
+	k1, k2 := newEd25519Key(t), newEd25519Key(t)
+
+	submit := func(what string, sb build.SignatureBuilder) {
+		t.Helper()
+		env, err := sb.Done()
+		require.NoError(t, err, "build %s", what)
+		subs, err := submitter.Submit(ctx, env, apiv3.SubmitOptions{})
+		require.NoError(t, err, "submit %s", what)
+		for _, s := range subs {
+			require.Truef(t, s.Success, "submit %s: %v", what, s.Message)
+		}
+	}
+	account := func(u *url.URL) *apiv3.AccountRecord {
+		r, err := c.QueryAccount(ctx, u, &apiv3.DefaultQuery{})
+		if err != nil {
+			return nil
+		}
+		return r
+	}
+	waitFor := func(what string, ok func() bool) {
+		t.Helper()
+		require.Eventuallyf(t, ok, 60*time.Second, 250*time.Millisecond, "never: %s", what)
+	}
+	ts := func() uint64 { return uint64(time.Now().UnixMicro()) }
+
+	// --- the ADI, with a two-of-two page and one transaction pending on it --
+
+	submit("create the ADI", build.Transaction().For(faucet.RootIdentity()).
+		CreateIdentity(adi).WithKeyBook(book).WithKey(k1[32:], protocol.SignatureTypeED25519).
+		SignWith(faucet.RootIdentity()).Version(1).Timestamp(ts()).
+		Type(protocol.SignatureTypeED25519).PrivateKey(faucetKey))
+	waitFor("the ADI exists", func() bool { return account(page) != nil })
+
+	submit("fund the page", build.Transaction().For(faucet).
+		AddCredits().To(page).WithOracle(1000).Spend(10).
+		SignWith(faucet.RootIdentity()).Version(1).Timestamp(ts()).
+		Type(protocol.SignatureTypeED25519).PrivateKey(faucetKey))
+	waitFor("the page has credits", func() bool {
+		r := account(page)
+		p, ok := r.Account.(*protocol.KeyPage)
+		return ok && p.CreditBalance > 0
+	})
+
+	submit("make the page two-of-two", build.Transaction().For(page).
+		UpdateKeyPage().Add().Entry().Key(k2[32:], protocol.SignatureTypeED25519).FinishEntry().FinishOperation().
+		SetThreshold(2).
+		SignWith(page).Version(1).Timestamp(ts()).
+		Type(protocol.SignatureTypeED25519).PrivateKey(k1))
+	var pageVersion uint64
+	waitFor("the page is two-of-two", func() bool {
+		r := account(page)
+		p, ok := r.Account.(*protocol.KeyPage)
+		if ok {
+			pageVersion = p.Version
+		}
+		return ok && p.AcceptThreshold == 2
+	})
+
+	createOn := func(name string, keys ...[]byte) {
+		t.Helper()
+		sb := build.Transaction().For(adi).CreateTokenAccount(adi, name).ForToken(protocol.ACME).
+			SignWith(page).Version(pageVersion).Timestamp(ts()).
+			Type(protocol.SignatureTypeED25519).PrivateKey(keys[0])
+		for _, k := range keys[1:] {
+			sb = sb.SignWith(page).Version(pageVersion).Timestamp(ts()).
+				Type(protocol.SignatureTypeED25519).PrivateKey(k)
+		}
+		submit("create "+name, sb)
+	}
+	pendingCount := func() uint64 {
+		r := account(adi)
+		if r == nil || r.Pending == nil {
+			return 0
+		}
+		return r.Pending.Total
+	}
+	createOn("held-before", k1)
+	waitFor("a transaction is pending on the ADI", func() bool { return pendingCount() == 1 })
+
+	// --- block B: the ADI as it stands now is the ADI as of B ----------------
+	//
+	// Nothing but this test writes the ADI, so what it reads now is what it
+	// was at every block until the next write. B is the first anchored block
+	// at or after this point; the ADI's parts at B are these.
+	atB := account(adi)
+	require.NotNil(t, atB)
+	dirAtB, pendingAtB := urlsOf(atB.Directory), txidsOf(atB.Pending)
+	require.NotEmpty(t, dirAtB, "the ADI has no directory at B; the test cannot tell a served directory from a blank one")
+	require.Len(t, pendingAtB, 1, "the ADI has no pending transaction at B; the test cannot tell a served pending list from a blank one")
+
+	after := ledgerIndexNow(t, c)
+	var b anchoredBlock
+	waitFor("the Directory anchors a BVN1 block at or after the ADI settled", func() bool {
+		for _, a := range latestAnchorsForBVN1(t, c) {
+			if a.block >= after {
+				b = a
+				return true
+			}
+		}
+		return false
+	})
+	t.Logf("B = %d", b.block)
+
+	// --- after B, every part of every account moves --------------------------
+
+	createOn("created-after", k1, k2)
+	createOn("held-after", k1)
+	waitFor("the ADI's directory and pending list moved past B", func() bool {
+		r := account(adi)
+		return r != nil && len(urlsOf(r.Directory)) > len(dirAtB) && pendingCount() == 2
+	})
+
+	// BVN1's synthetic ledger moves only when BVN1 produces a synthetic
+	// transaction for another partition, so buy credits for a Directory page:
+	// the deposit is appended to BVN1's synthetic chain for the Directory.
+	part := protocol.PartitionUrl("BVN1")
+	synthChains := func() map[string]uint64 {
+		cs, err := c.QueryAccountChains(ctx, part.JoinPath(protocol.Synthetic), &apiv3.ChainQuery{})
+		require.NoError(t, err)
+		m := map[string]uint64{}
+		for _, r := range cs.Records {
+			m[r.Name] = r.Count
+		}
+		return m
+	}
+	synthBefore := synthChains()
+	submit("buy credits for a Directory page", build.Transaction().For(faucet).
+		AddCredits().To(protocol.DnUrl().JoinPath(protocol.Operators, "1")).WithOracle(1000).Spend(1).
+		SignWith(faucet.RootIdentity()).Version(1).Timestamp(ts()).
+		Type(protocol.SignatureTypeED25519).PrivateKey(faucetKey))
+	waitFor("BVN1's synthetic ledger moved past B", func() bool {
+		for name, n := range synthChains() {
+			if n > synthBefore[name] {
+				return true
+			}
+		}
+		return false
+	})
+	waitFor("the partition has moved past B", func() bool { return ledgerIndexNow(t, c) > b.block+3 })
+
+	accounts := []*url.URL{adi, part.JoinPath(protocol.Ledger), part.JoinPath(protocol.Synthetic)}
+
+	// The page for B names every leaf of B's tree, by value.
+	pr, err := c.Query(ctx, part, &apiv3.BptPageQuery{Count: 4096, ForHeight: b.block})
+	require.NoError(t, err, "the BPT page for block %d was refused", b.block)
+	pageAtB, ok := pr.(*apiv3.BptPageRecord)
+	require.True(t, ok)
+	require.True(t, pageAtB.Done, "the page for block %d did not exhaust the tree", b.block)
+	require.Equal(t, b.stateTreeAnchor, pageAtB.BptRoot)
+
+	for _, u := range accounts {
+		t.Run(u.ShortString(), func(t *testing.T) {
+			r, err := c.QueryAccount(ctx, u, &apiv3.DefaultQuery{
+				IncludeReceipt: &apiv3.ReceiptOptions{ForHeight: b.block},
+			})
+			require.NoErrorf(t, err, "%v was refused at block %d", u, b.block)
+			require.NotNil(t, r.Receipt)
+			require.Equal(t, b.stateTreeAnchor[:], r.Receipt.Anchor, "the receipt does not end at root(B)")
+			require.True(t, r.Receipt.Validate(nil), "the receipt does not verify offline")
+			require.True(t, r.Receipt.StartsAtMainState, "the receipt does not start at the main state, so the leaf's parts cannot be told apart")
+
+			leafAtB, ok := leafFor(pageAtB, u)
+			require.Truef(t, ok, "the page for block %d does not name %v", b.block, u)
+
+			now, err := c.QueryAccount(ctx, u, &apiv3.DefaultQuery{IncludeReceipt: &apiv3.ReceiptOptions{ForAny: true}})
+			require.NoError(t, err)
+
+			// EACH PART IS ITS VALUE AT B, NOT NOW, where the test knows B's
+			// value by another route.
+			if u.Equal(adi) {
+				assert.Equalf(t, dirAtB, urlsOf(r.Directory),
+					"the directory served for block %d is not the directory at that block: the server must serve the Directory as of B", b.block)
+				assert.NotEqual(t, urlsOf(now.Directory), urlsOf(r.Directory),
+					"the directory served for block %d is the current one", b.block)
+				assert.Equalf(t, pendingAtB, txidsOf(r.Pending),
+					"the pending list served for block %d is not the pending list at that block: the server must serve Pending as of B", b.block)
+				assert.NotEqual(t, txidsOf(now.Pending), txidsOf(r.Pending),
+					"the pending list served for block %d is the current one", b.block)
+			}
+
+			// THE CLAIM. What was served rebuilds, by hashState's rules, the
+			// leaf of block B.
+			parts := servedLeafParts(r)
+			require.Emptyf(t, parts.missing,
+				"%v at block %d: the answer does not carry every part of the leaf, so a joiner cannot rebuild it; the server must serve, as of B: %s",
+				u, b.block, strings.Join(parts.missing, "; "))
+
+			body, err := r.Account.MarshalBinary()
+			require.NoError(t, err)
+			mainHash := sha256.Sum256(body)
+			leaf := dbmerkle.Hasher{mainHash[:], parts.secondary, parts.chains, parts.pending}.MerkleHash()
+
+			assert.Equalf(t, leafAtB.ValueHash[:], leaf,
+				"%v's leaf rebuilt from the answer for block %d is not the leaf block %d's page names", u, b.block, b.block)
+			assert.Truef(t, receiptPassesThrough(&r.Receipt.Receipt, *(*[32]byte)(leaf)),
+				"%v's leaf rebuilt from the answer for block %d is not on the path its receipt proves to root(B)", u, b.block)
+
+			// And the rebuilt parts are B's and not now's: the second half of
+			// the leaf (chains and pending) has moved since B on every one of
+			// these accounts, and the current receipt says what it is now.
+			require.GreaterOrEqual(t, len(now.Receipt.Entries), 2)
+			assert.NotEqualf(t, now.Receipt.Entries[1].Hash, dbmerkle.Hasher{parts.chains, parts.pending}.MerkleHash(),
+				"%v's chains and pending served for block %d are the current ones", u, b.block)
+		})
+	}
+}
+
+// leafParts are the three parts of an account's BPT leaf beside its main
+// state, each as hashState adds it, or the names of what the answer did not
+// carry.
+type leafParts struct {
+	secondary, chains, pending []byte
+	missing                    []string
+}
+
+// servedLeafParts rebuilds the parts of a leaf from a served account record,
+// by the rules of internal/database/observer_prod.go. It is the only place
+// that reads the response, so a field the server adds is read here.
+//
+// A nil range is not an empty one: every current answer sets Directory (on an
+// identity or key book) and Pending, so nil means the server did not say.
+func servedLeafParts(r *apiv3.AccountRecord) leafParts {
+	var p leafParts
+	u := r.Account.GetUrl()
+	_, isPartition := protocol.ParsePartitionUrl(u)
+
+	// hashSecondaryState
+	var secondary dbmerkle.Hasher
+	var dir dbmerkle.Hasher
+	switch r.Account.Type() {
+	case protocol.AccountTypeIdentity, protocol.AccountTypeKeyBook:
+		if r.Directory == nil {
+			p.missing = append(p.missing, "the directory")
+		}
+	}
+	if r.Directory != nil {
+		for _, v := range r.Directory.Records {
+			dir.AddUrl(v.Value)
+		}
+	}
+	secondary.AddValue(dir)
+	l := r.Leaf
+	if l == nil {
+		p.missing = append(p.missing, "the rest of the leaf")
+		l = new(apiv3.AccountLeaf)
+	}
+	if isPartition && u.PathEqual(protocol.Ledger) && l.EventsRoot != [32]byte{} {
+		secondary.AddHash2(l.EventsRoot)
+	}
+	if isPartition && u.PathEqual(protocol.Synthetic) && len(l.LocalDeliveryQueue)+len(l.CascadeDeliveryQueue) > 0 {
+		var q dbmerkle.Hasher
+		for _, id := range l.LocalDeliveryQueue {
+			q.AddUrl(id.AsUrl())
+		}
+		for _, id := range l.CascadeDeliveryQueue {
+			q.AddUrl(id.AsUrl())
+		}
+		secondary.AddValue(q)
+	}
+	p.secondary = secondary.MerkleHash()
+
+	// hashChains
+	var chains dbmerkle.Hasher
+	for _, c := range l.Chains {
+		st := &dbmerkle.State{Count: int64(c.Count), Pending: c.State}
+		if st.Count == 0 {
+			chains.AddHash(new([32]byte))
+		} else {
+			chains.AddHash((*[32]byte)(st.Anchor()))
+		}
+	}
+	p.chains = chains.MerkleHash()
+
+	// hashPending
+	if r.Pending == nil {
+		p.missing = append(p.missing, "the pending list")
+		return p
+	}
+	var pending dbmerkle.Hasher
+	addSets := func(s *apiv3.PendingTransactionSets) {
+		for _, sig := range s.ValidatorSignatures {
+			pending.AddHash((*[32]byte)(sig.Hash()))
+		}
+		for _, h := range s.Payments {
+			pending.AddHash2(h)
+		}
+		for _, v := range s.Votes {
+			b, _ := v.MarshalBinary()
+			pending.AddHash2(sha256.Sum256(b))
+		}
+		for _, v := range s.Signatures {
+			b, _ := v.MarshalBinary()
+			pending.AddHash2(sha256.Sum256(b))
+		}
+	}
+	for _, s := range l.Pending {
+		if len(s.V1Hashes) > 0 {
+			for _, h := range s.V1Hashes {
+				pending.AddHash2(h)
+			}
+		} else {
+			pending.AddTxID(s.TxID)
+		}
+		addSets(s)
+	}
+	for _, s := range l.BookPending {
+		addSets(s)
+	}
+	p.pending = pending.MerkleHash()
+	return p
+}
+
+func urlsOf(r *apiv3.RecordRange[*apiv3.UrlRecord]) []string {
+	var out []string
+	if r != nil {
+		for _, v := range r.Records {
+			out = append(out, v.Value.String())
+		}
+	}
+	return out
+}
+
+func txidsOf(r *apiv3.RecordRange[*apiv3.TxIDRecord]) []string {
+	var out []string
+	if r != nil {
+		for _, v := range r.Records {
+			out = append(out, v.Value.String())
+		}
+	}
+	return out
+}
+
+// netsimFaucetKey derives the faucet key a netsim started with the given P2P
+// seed funds at genesis, by the netsim's own derivation.
+func netsimFaucetKey(t *testing.T, seed string) []byte {
+	t.Helper()
+	cfg := &Config{P2P: &P2P{Key: &PrivateKeySeed{Seed: record.NewKey(seed)}}}
+	k, err := (&NetSimConfiguration{}).generateKey(&Instance{logger: slog.Default(), context: context.Background()}, cfg, "faucet")
+	require.NoError(t, err)
+	return k
+}
+
+func ledgerIndexNow(t *testing.T, c apiv3.Querier2) uint64 {
+	t.Helper()
+	l := new(protocol.SystemLedger)
+	_, err := c.QueryAccountAs(context.Background(), protocol.PartitionUrl("BVN1").JoinPath(protocol.Ledger), nil, &l)
+	require.NoError(t, err)
+	return l.Index
+}
+
+// latestAnchorsForBVN1 is anchorsForBVN1 read from the end of the pool, so a
+// network that has run long enough to fill the first page is still read.
+func latestAnchorsForBVN1(t *testing.T, c apiv3.Querier2) []anchoredBlock {
+	t.Helper()
+	pool := protocol.DnUrl().JoinPath(protocol.AnchorPool)
+	count, expand := uint64(100), true
+	page, err := c.QueryMainChainEntries(context.Background(), pool, &apiv3.ChainQuery{
+		Name:  "main",
+		Range: &apiv3.RangeOptions{Count: &count, Expand: &expand, FromEnd: true},
+	})
+	require.NoError(t, err, "the Directory's anchor pool could not be read")
+
+	var out []anchoredBlock
+	for _, rec := range page.Records {
+		if rec.Value == nil || rec.Value.Message == nil || rec.Value.Message.Transaction == nil {
+			continue
+		}
+		body, ok := rec.Value.Message.Transaction.Body.(protocol.AnchorBody)
+		if !ok {
+			continue
+		}
+		a := body.GetPartitionAnchor()
+		if a == nil || a.Source == nil || !protocol.PartitionUrl("BVN1").Equal(a.Source) || a.StateTreeAnchor == ([32]byte{}) {
+			continue
+		}
 		out = append(out, anchoredBlock{block: a.MinorBlockIndex, stateTreeAnchor: a.StateTreeAnchor})
 	}
 	return out

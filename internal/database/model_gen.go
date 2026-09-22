@@ -309,6 +309,7 @@ type Account struct {
 	retainedStateReceipt       map[accountRetainedStateReceiptMapKey]values.Value[*merkle.Receipt]
 	retainedStateReceiptBlocks values.Set[uint64]
 	retainedMainState          map[accountRetainedMainStateMapKey]values.Value[[]byte]
+	retainedLeaf               map[accountRetainedLeafMapKey]values.Value[*RetainedLeaf]
 	mainChain                  *Chain2
 	scratchChain               *Chain2
 	signatureChain             *Chain2
@@ -385,6 +386,18 @@ type accountRetainedMainStateMapKey struct {
 
 func (k accountRetainedMainStateKey) ForMap() accountRetainedMainStateMapKey {
 	return accountRetainedMainStateMapKey{k.Block}
+}
+
+type accountRetainedLeafKey struct {
+	Block uint64
+}
+
+type accountRetainedLeafMapKey struct {
+	Block uint64
+}
+
+func (k accountRetainedLeafKey) ForMap() accountRetainedLeafMapKey {
+	return accountRetainedLeafMapKey{k.Block}
 }
 
 type accountSyntheticSequenceChainKey struct {
@@ -551,6 +564,14 @@ func (c *Account) RetainedMainState(block uint64) values.Value[[]byte] {
 
 func (c *Account) newRetainedMainState(k accountRetainedMainStateKey) values.Value[[]byte] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("RetainedMainState", k.Block), false, values.Wrapped(values.BytesWrapper))
+}
+
+func (c *Account) RetainedLeaf(block uint64) values.Value[*RetainedLeaf] {
+	return values.GetOrCreateMap(c, &c.retainedLeaf, accountRetainedLeafKey{block}, (*Account).newRetainedLeaf)
+}
+
+func (c *Account) newRetainedLeaf(k accountRetainedLeafKey) values.Value[*RetainedLeaf] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("RetainedLeaf", k.Block), false, values.Struct[RetainedLeaf]())
 }
 
 func (c *Account) MainChain() *Chain2 {
@@ -751,6 +772,16 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		}
 		v := c.RetainedMainState(block)
 		return v, key.SliceI(2), nil
+	case "RetainedLeaf":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (12)")
+		}
+		block, okBlock := key.Get(1).(uint64)
+		if !okBlock {
+			return nil, nil, errors.InternalError.With("bad key for account (13)")
+		}
+		v := c.RetainedLeaf(block)
+		return v, key.SliceI(2), nil
 	case "MainChain":
 		return c.MainChain(), key.SliceI(1), nil
 	case "ScratchChain":
@@ -767,31 +798,31 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.MajorBlockChain(), key.SliceI(1), nil
 	case "SyntheticSequenceChain":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (12)")
-		}
-		partition, okPartition := key.Get(1).(string)
-		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account (13)")
-		}
-		v := c.getSyntheticSequenceChain(partition)
-		return v, key.SliceI(2), nil
-	case "SyntheticChain":
-		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (14)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.InternalError.With("bad key for account (15)")
 		}
-		v := c.getSyntheticChain(partition)
+		v := c.getSyntheticSequenceChain(partition)
 		return v, key.SliceI(2), nil
-	case "AnchorChain":
+	case "SyntheticChain":
 		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (16)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.InternalError.With("bad key for account (17)")
+		}
+		v := c.getSyntheticChain(partition)
+		return v, key.SliceI(2), nil
+	case "AnchorChain":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (18)")
+		}
+		partition, okPartition := key.Get(1).(string)
+		if !okPartition {
+			return nil, nil, errors.InternalError.With("bad key for account (19)")
 		}
 		v := c.getAnchorChain(partition)
 		return v, key.SliceI(2), nil
@@ -804,7 +835,7 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Data":
 		return c.Data(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for account (18)")
+		return nil, nil, errors.InternalError.With("bad key for account (20)")
 	}
 }
 
@@ -864,6 +895,11 @@ func (c *Account) IsDirty() bool {
 		return true
 	}
 	for _, v := range c.retainedMainState {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.retainedLeaf {
 		if v.IsDirty() {
 			return true
 		}
@@ -974,6 +1010,7 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 		values.WalkField(&err, c.retainedStateReceiptBlocks, c.newRetainedStateReceiptBlocks, opts, fn)
 	}
 	values.WalkMap(&err, c.retainedMainState, c.newRetainedMainState, nil, opts, fn)
+	values.WalkMap(&err, c.retainedLeaf, c.newRetainedLeaf, nil, opts, fn)
 	values.WalkField(&err, c.mainChain, c.newMainChain, opts, fn)
 	values.WalkField(&err, c.scratchChain, c.newScratchChain, opts, fn)
 	values.WalkField(&err, c.signatureChain, c.newSignatureChain, opts, fn)
@@ -1024,6 +1061,9 @@ func (c *Account) baseCommit() error {
 	}
 	values.Commit(&err, c.retainedStateReceiptBlocks)
 	for _, v := range c.retainedMainState {
+		values.Commit(&err, v)
+	}
+	for _, v := range c.retainedLeaf {
 		values.Commit(&err, v)
 	}
 	values.Commit(&err, c.mainChain)

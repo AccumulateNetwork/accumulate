@@ -79,6 +79,12 @@ func (a *Account) putBpt() error {
 // optimisation and not a defect — the receipt composes directly with Combine,
 // which the bare siblings would not.
 //
+// The body and the rest of the leaf are retained beside it, and they cost far
+// more: the body is the account's marshalled state, and the leaf holds every
+// chain's head (up to one hash per bit of the chain's count), the directory,
+// the pending sets and, for the ledgers, the delivery queues. That is the price
+// of serving the whole leaf as of a block rather than only proving it (#4361).
+//
 // # A dormant account keeps more than it needs
 //
 // Pruning runs here, so it runs only when an account is written. An account
@@ -102,9 +108,15 @@ func (a *Account) retainStateReceipt(hasher hash.Hasher) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("load retained state receipt blocks: %w", err)
 	}
-	if n := len(blocks); n > 0 && blocks[n-1] >= height {
-		return nil // Already retained for this block
+	// THE LAST WRITE IN A BLOCK WINS. putBpt runs more than once for an
+	// account in one block (transactionStatus.Put, then UpdateBPT), and the
+	// entry the block ends with is the last one written. Keeping the first
+	// would retain a leaf the block's root does not contain.
+	n := len(blocks)
+	if n > 0 && blocks[n-1] > height {
+		return nil
 	}
+	rewrite := n > 0 && blocks[n-1] == height
 
 	err = a.RetainedStateReceipt(height).Put(hasher.Receipt(0, len(hasher)-1))
 	if err != nil {
@@ -134,10 +146,27 @@ func (a *Account) retainStateReceipt(hasher hash.Hasher) error {
 	case errors.Is(err, errors.NotFound):
 		// An account with chains and no main state: there is no body to
 		// retain and nothing will be served for it.
+		if rewrite {
+			_ = a.RetainedMainState(height).Put(nil)
+		}
 	default:
 		return errors.UnknownError.WithFormat("load main state: %w", err)
 	}
 
+	// And the rest of the leaf, so the whole entry can be served as of the
+	// block and not only the body (#4361).
+	leaf, err := a.LeafState()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	err = a.RetainedLeaf(height).Put(leaf)
+	if err != nil {
+		return errors.UnknownError.WithFormat("retain leaf: %w", err)
+	}
+
+	if rewrite {
+		return nil
+	}
 	blocks = append(blocks, height)
 	keep, dropped := bpt.PruneHeights(blocks, height, depth)
 	for _, d := range dropped {
@@ -145,6 +174,7 @@ func (a *Account) retainStateReceipt(hasher hash.Hasher) error {
 		// not corrupt anything.
 		_ = a.RetainedStateReceipt(d).Put(nil)
 		_ = a.RetainedMainState(d).Put(nil)
+		_ = a.RetainedLeaf(d).Put(nil)
 	}
 	err = a.RetainedStateReceiptBlocks().Put(keep)
 	return errors.UnknownError.Wrap(err)

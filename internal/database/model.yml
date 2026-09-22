@@ -234,6 +234,17 @@
       - name: Block
         type: uint
       dataType: bytes
+    # The rest of the leaf: every chain's head, the directory, the pending
+    # sets and, for the ledgers, the events root and delivery queues. Without
+    # them a puller holding the body at B cannot rebuild the leaf of B (#4361).
+    - name: RetainedLeaf
+      description: is what the account's BPT entry committed to besides its main state as of a retained block
+      type: state
+      parameters:
+      - name: Block
+        type: uint
+      dataType: RetainedLeaf
+      pointer: true
 
     # Chains
     - name: MainChain
