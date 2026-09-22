@@ -54,7 +54,7 @@ func (s *Source) ProveRoot(ctx context.Context, root [32]byte, servedAt uint64) 
 			if k.partition != want {
 				continue
 			}
-			if r == root {
+			if r.root == root {
 				return true
 			}
 			if k.block > latest {

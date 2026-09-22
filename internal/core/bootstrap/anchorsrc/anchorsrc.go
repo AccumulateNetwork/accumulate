@@ -116,7 +116,7 @@ type Source struct {
 	MaxRoots int
 
 	mu      sync.Mutex
-	roots   map[anchorKey][32]byte
+	roots   map[anchorKey]verifiedAnchor
 	order   []anchorKey
 	next    uint64
 	started bool
@@ -130,6 +130,18 @@ type Source struct {
 type anchorKey struct {
 	partition string
 	block     uint64
+}
+
+// verifiedAnchor is what one verified anchor says, under a quorum's
+// signatures, about its producer at its block: the BPT root the block
+// committed, and the root chain's anchor with the index of its last entry.
+// The root is what a pass's root is proven equal to; the root chain anchor
+// is what the history from an earlier root to a later one is bound to
+// (ProveRoot).
+type verifiedAnchor struct {
+	root       [32]byte
+	rootIndex  uint64
+	rootAnchor [32]byte
 }
 
 // New constructs a Source. The pool is the receiving partition's, per
@@ -193,14 +205,14 @@ func (s *Source) AnchoredRoot(ctx context.Context, partition *url.URL, block uin
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if root, ok := s.roots[key]; ok {
-		return root, nil
+	if a, ok := s.roots[key]; ok {
+		return a.root, nil
 	}
 	if err := s.readLocked(ctx); err != nil {
 		return [32]byte{}, errors.UnknownError.Wrap(err)
 	}
-	if root, ok := s.roots[key]; ok {
-		return root, nil
+	if a, ok := s.roots[key]; ok {
+		return a.root, nil
 	}
 	return [32]byte{}, errors.NotReady.WithFormat("%v block %d: %w", partition, block, ErrNotAnchored)
 }
@@ -239,9 +251,9 @@ func (s *Source) LatestAnchor(ctx context.Context) (uint64, [32]byte, error) {
 	var best uint64
 	var root [32]byte
 	want := strings.ToLower(s.Producer.String())
-	for k, r := range s.roots {
+	for k, a := range s.roots {
 		if k.partition == want && k.block >= best {
-			best, root = k.block, r
+			best, root = k.block, a.root
 		}
 	}
 	return best, root, nil
@@ -256,27 +268,28 @@ func (s *Source) FindAnchor(ctx context.Context, expectedRoot [32]byte) (uint64,
 		return 0, false, errors.UnknownError.Wrap(err)
 	}
 	want := strings.ToLower(s.Producer.String())
-	for k, r := range s.roots {
-		if k.partition == want && r == expectedRoot {
+	for k, a := range s.roots {
+		if k.partition == want && a.root == expectedRoot {
 			return k.block, true, nil
 		}
 	}
 	return 0, false, nil
 }
 
-// record keeps a root, evicting the oldest when the map is full.
-func (s *Source) record(key anchorKey, root [32]byte) {
+// record keeps what a verified anchor says, evicting the oldest when the map
+// is full.
+func (s *Source) record(key anchorKey, a verifiedAnchor) {
 	max := s.MaxRoots
 	if max <= 0 {
 		max = DefaultMaxRoots
 	}
 	if s.roots == nil {
-		s.roots = map[anchorKey][32]byte{}
+		s.roots = map[anchorKey]verifiedAnchor{}
 	}
 	if _, ok := s.roots[key]; !ok {
 		s.order = append(s.order, key)
 	}
-	s.roots[key] = root
+	s.roots[key] = a
 	for len(s.order) > max {
 		delete(s.roots, s.order[0])
 		s.order = s.order[1:]
@@ -298,7 +311,7 @@ const doubtRounds = 8
 
 func (s *Source) readLocked(ctx context.Context) error {
 	if s.roots == nil {
-		s.roots = map[anchorKey][32]byte{}
+		s.roots = map[anchorKey]verifiedAnchor{}
 	}
 	pageSize := s.PageSize
 	if pageSize == 0 {
@@ -472,8 +485,13 @@ func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messagin
 	// account at (pull.Pending.Block), and it is what the tracker matches.
 	// MajorBlockIndex is metadata and is zero on almost every anchor. The
 	// root recorded is the one the join proves a pass's root against, by
-	// equality (ProveRoot).
-	s.record(anchorKey{strings.ToLower(pa.Source.String()), pa.MinorBlockIndex}, pa.StateTreeAnchor)
+	// equality or as the start of the history; the root chain anchor is what
+	// the history is bound to (ProveRoot).
+	s.record(anchorKey{strings.ToLower(pa.Source.String()), pa.MinorBlockIndex}, verifiedAnchor{
+		root:       pa.StateTreeAnchor,
+		rootIndex:  pa.RootChainIndex,
+		rootAnchor: pa.RootChainAnchor,
+	})
 	if s.OnAnchor != nil {
 		s.OnAnchor(pa.Source, pa.MinorBlockIndex, pa.StateTreeAnchor)
 	}
