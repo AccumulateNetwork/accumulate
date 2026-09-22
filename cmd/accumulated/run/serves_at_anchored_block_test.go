@@ -564,9 +564,35 @@ func TestAnAccountsWholeLeafIsServedAsOfTheAnchoredBlock(t *testing.T) {
 		r := account(adi)
 		return r != nil && len(urlsOf(r.Directory)) > len(dirAtB) && pendingCount() == 2
 	})
+
+	// BVN1's synthetic ledger moves only when BVN1 produces a synthetic
+	// transaction for another partition, so buy credits for a Directory page:
+	// the deposit is appended to BVN1's synthetic chain for the Directory.
+	part := protocol.PartitionUrl("BVN1")
+	synthChains := func() map[string]uint64 {
+		cs, err := c.QueryAccountChains(ctx, part.JoinPath(protocol.Synthetic), &apiv3.ChainQuery{})
+		require.NoError(t, err)
+		m := map[string]uint64{}
+		for _, r := range cs.Records {
+			m[r.Name] = r.Count
+		}
+		return m
+	}
+	synthBefore := synthChains()
+	submit("buy credits for a Directory page", build.Transaction().For(faucet).
+		AddCredits().To(protocol.DnUrl().JoinPath(protocol.Operators, "1")).WithOracle(1000).Spend(1).
+		SignWith(faucet.RootIdentity()).Version(1).Timestamp(ts()).
+		Type(protocol.SignatureTypeED25519).PrivateKey(faucetKey))
+	waitFor("BVN1's synthetic ledger moved past B", func() bool {
+		for name, n := range synthChains() {
+			if n > synthBefore[name] {
+				return true
+			}
+		}
+		return false
+	})
 	waitFor("the partition has moved past B", func() bool { return ledgerIndexNow(t, c) > b.block+3 })
 
-	part := protocol.PartitionUrl("BVN1")
 	accounts := []*url.URL{adi, part.JoinPath(protocol.Ledger), part.JoinPath(protocol.Synthetic)}
 
 	// The page for B names every leaf of B's tree, by value.
@@ -668,30 +694,74 @@ func servedLeafParts(r *apiv3.AccountRecord) leafParts {
 		}
 	}
 	secondary.AddValue(dir)
-	if isPartition && u.PathEqual(protocol.Ledger) {
-		p.missing = append(p.missing, "the root of the scheduled-events BPT")
+	l := r.Leaf
+	if l == nil {
+		p.missing = append(p.missing, "the rest of the leaf")
+		l = new(apiv3.AccountLeaf)
 	}
-	if isPartition && u.PathEqual(protocol.Synthetic) {
-		p.missing = append(p.missing, "the local and cascade delivery queues")
+	if isPartition && u.PathEqual(protocol.Ledger) && l.EventsRoot != [32]byte{} {
+		secondary.AddHash2(l.EventsRoot)
+	}
+	if isPartition && u.PathEqual(protocol.Synthetic) && len(l.LocalDeliveryQueue)+len(l.CascadeDeliveryQueue) > 0 {
+		var q dbmerkle.Hasher
+		for _, id := range l.LocalDeliveryQueue {
+			q.AddUrl(id.AsUrl())
+		}
+		for _, id := range l.CascadeDeliveryQueue {
+			q.AddUrl(id.AsUrl())
+		}
+		secondary.AddValue(q)
 	}
 	p.secondary = secondary.MerkleHash()
 
-	// hashChains: there is no field for an account's chain states.
-	p.missing = append(p.missing, "the state of every chain (the anchor of each, in the account's chain order)")
-
-	// hashPending: a pending transaction hashes with its validator
-	// signatures, payments, votes and signatures, none of which is served.
-	switch {
-	case r.Pending == nil:
-		p.missing = append(p.missing, "the pending list")
-	case r.Pending.Total > 0:
-		p.missing = append(p.missing, "the validator signatures, payments, votes and signatures of each pending transaction")
-	default:
-		if _, isPage := r.Account.(*protocol.KeyPage); isPage {
-			p.missing = append(p.missing, "the pending list of the page's book")
+	// hashChains
+	var chains dbmerkle.Hasher
+	for _, c := range l.Chains {
+		st := &dbmerkle.State{Count: int64(c.Count), Pending: c.State}
+		if st.Count == 0 {
+			chains.AddHash(new([32]byte))
+		} else {
+			chains.AddHash((*[32]byte)(st.Anchor()))
 		}
-		p.pending = dbmerkle.Hasher{}.MerkleHash()
 	}
+	p.chains = chains.MerkleHash()
+
+	// hashPending
+	if r.Pending == nil {
+		p.missing = append(p.missing, "the pending list")
+		return p
+	}
+	var pending dbmerkle.Hasher
+	addSets := func(s *apiv3.PendingTransactionSets) {
+		for _, sig := range s.ValidatorSignatures {
+			pending.AddHash((*[32]byte)(sig.Hash()))
+		}
+		for _, h := range s.Payments {
+			pending.AddHash2(h)
+		}
+		for _, v := range s.Votes {
+			b, _ := v.MarshalBinary()
+			pending.AddHash2(sha256.Sum256(b))
+		}
+		for _, v := range s.Signatures {
+			b, _ := v.MarshalBinary()
+			pending.AddHash2(sha256.Sum256(b))
+		}
+	}
+	for _, s := range l.Pending {
+		if len(s.V1Hashes) > 0 {
+			for _, h := range s.V1Hashes {
+				pending.AddHash2(h)
+			}
+		} else {
+			pending.AddTxID(s.TxID)
+		}
+		addSets(s)
+	}
+	for _, s := range l.BookPending {
+		addSets(s)
+	}
+	p.pending = pending.MerkleHash()
 	return p
 }
 
