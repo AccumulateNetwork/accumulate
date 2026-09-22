@@ -44,6 +44,14 @@ type HistoricalStateProof struct {
 	// node refuses it and a trusting one keeps state no anchor covers.
 	State protocol.Account
 
+	// Leaf is the rest of the account's BPT entry as of Block — every chain's
+	// head, the directory, the pending sets and, for the ledgers, the events
+	// root and delivery queues — so a caller rebuilds the entry the receipt
+	// proves from what it was served. It is nil when the node retained the
+	// body for Block but not the leaf, which a node that retained before the
+	// leaf was does (#4361).
+	Leaf *database.RetainedLeaf
+
 	// StartsAtMainState reports whether the receipt starts at a plain hash of
 	// the account's main state, rather than at the account's whole BPT entry.
 	//
@@ -131,7 +139,7 @@ func HistoricalAccountStateProof(partition config.NetworkUrl, batch *database.Ba
 	// a verifier recomputes the starting point from the state it was handed
 	// rather than taking the server's word for it.
 	startsAtMain := false
-	state, body, err := retainedAccountAt(account, entry.BlockIndex)
+	state, body, leaf, err := retainedAccountAt(account, entry.BlockIndex)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -165,7 +173,28 @@ func HistoricalAccountStateProof(partition config.NetworkUrl, batch *database.Ba
 			account.Url(), block)
 	}
 
+	// THE LEAF IS THE ENTRY'S OR IT IS NOT SERVED AT ALL. A leaf that does not
+	// rebuild the entry the receipt starts from is a leaf of some other state,
+	// and serving it beside a checking receipt hands a puller parts that
+	// contradict the proof they came with.
+	if leaf != nil {
+		rebuilt, err := leaf.EntryHash(state.Start)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		if !bytes.Equal(rebuilt, state.Anchor) {
+			err = debugMismatch(rebuilt, state.Anchor)
+			if err != nil {
+				return nil, err
+			}
+			return nil, errors.IncompleteChain.WithFormat(
+				"%v cannot be served as of block %d: the leaf this node retained for that block does not rebuild its BPT entry",
+				account.Url(), block)
+		}
+	}
+
 	return &HistoricalStateProof{
+		Leaf:              leaf,
 		Receipt:           full,
 		Block:             block,
 		HistoricalRoot:    root,
@@ -200,10 +229,10 @@ func HistoricalAccountStateProof(partition config.NetworkUrl, batch *database.Ba
 //     StartsAtMainState. It affects accounts whose only change in the window is
 //     recent, asked about at a block older than that change — not the case a
 //     join makes, which asks about the newest anchored block.
-func retainedAccountAt(account *database.Account, block uint64) (*merkle.Receipt, protocol.Account, error) {
+func retainedAccountAt(account *database.Account, block uint64) (*merkle.Receipt, protocol.Account, *database.RetainedLeaf, error) {
 	blocks, err := account.RetainedStateReceiptBlocks().Get()
 	if err != nil {
-		return nil, nil, errors.UnknownError.WithFormat("load retained state receipt blocks: %w", err)
+		return nil, nil, nil, errors.UnknownError.WithFormat("load retained state receipt blocks: %w", err)
 	}
 
 	if len(blocks) == 0 {
@@ -214,20 +243,24 @@ func retainedAccountAt(account *database.Account, block uint64) (*merkle.Receipt
 		case err == nil:
 			// Ok
 		case errors.Is(err, errors.NotFound):
-			return nil, nil, nil
+			return nil, nil, nil, nil
 		default:
-			return nil, nil, errors.UnknownError.WithFormat("load main state: %w", err)
+			return nil, nil, nil, errors.UnknownError.WithFormat("load main state: %w", err)
 		}
 		r, err := account.StateTreeReceipt()
 		if err != nil {
-			return nil, nil, errors.UnknownError.Wrap(err)
+			return nil, nil, nil, errors.UnknownError.Wrap(err)
 		}
-		return r, state, nil
+		leaf, err := account.LeafState()
+		if err != nil {
+			return nil, nil, nil, errors.UnknownError.Wrap(err)
+		}
+		return r, state, leaf, nil
 	}
 
 	i := sort.Search(len(blocks), func(i int) bool { return blocks[i] > block })
 	if i == 0 {
-		return nil, nil, nil // Nothing retained at or before the block
+		return nil, nil, nil, nil // Nothing retained at or before the block
 	}
 
 	r, err := account.RetainedStateReceipt(blocks[i-1]).Get()
@@ -235,9 +268,9 @@ func retainedAccountAt(account *database.Account, block uint64) (*merkle.Receipt
 	case err == nil:
 		// Ok
 	case errors.Is(err, errors.NotFound):
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	default:
-		return nil, nil, errors.UnknownError.WithFormat("load retained state receipt: %w", err)
+		return nil, nil, nil, errors.UnknownError.WithFormat("load retained state receipt: %w", err)
 	}
 
 	encoded, err := account.RetainedMainState(blocks[i-1]).Get()
@@ -246,16 +279,28 @@ func retainedAccountAt(account *database.Account, block uint64) (*merkle.Receipt
 		// Ok
 	case errors.Is(err, errors.NotFound):
 		// The receipt without the body it proves is not something to serve.
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	default:
-		return nil, nil, errors.UnknownError.WithFormat("load retained main state: %w", err)
+		return nil, nil, nil, errors.UnknownError.WithFormat("load retained main state: %w", err)
 	}
 	if len(encoded) == 0 {
-		return nil, nil, nil // Pruned out of the window
+		return nil, nil, nil, nil // Pruned out of the window
 	}
 	state, err := protocol.UnmarshalAccount(encoded)
 	if err != nil {
-		return nil, nil, errors.UnknownError.WithFormat("unmarshal retained main state: %w", err)
+		return nil, nil, nil, errors.UnknownError.WithFormat("unmarshal retained main state: %w", err)
 	}
-	return r, state, nil
+
+	// The rest of the leaf, retained with the body. Missing only on a block
+	// retained before the leaf was, which is served without it.
+	leaf, err := account.RetainedLeaf(blocks[i-1]).Get()
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.NotFound):
+		leaf = nil
+	default:
+		return nil, nil, nil, errors.UnknownError.WithFormat("load retained leaf: %w", err)
+	}
+	return r, state, leaf, nil
 }

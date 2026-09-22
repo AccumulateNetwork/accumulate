@@ -631,13 +631,20 @@ func (s *Querier) historicalStateReceipt(batch *database.Batch, record *database
 	// the sighted streams beside it. A past receipt served with a present body
 	// is two halves that do not fit: the body does not hash to the receipt's
 	// start, so a pulling node refuses it and a trusting one keeps state no
-	// anchor covers (executor.md, "Sync", §2). Directory, Pending and Sighted
-	// are not retained per block, so they are cleared rather than served as if
-	// they were the values of that block.
+	// anchor covers (executor.md, "Sync", §2). The directory, the pending list
+	// and the rest of the leaf are retained per block, so they are served as of
+	// it, in full; Sighted is derived from staging and is never a block's, so
+	// it is cleared.
 	r.Account = proof.State
 	r.Directory = nil
 	r.Pending = nil
 	r.Sighted = nil
+	if proof.Leaf != nil {
+		err = s.serveLeaf(record, r, proof.Leaf)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
 
 	r.Receipt = new(api.Receipt)
 	r.Receipt.Receipt = *proof.Receipt
@@ -653,6 +660,110 @@ func (s *Querier) historicalStateReceipt(batch *database.Batch, record *database
 	// the current directory root a `Complete` receipt promises.
 	r.Receipt.Partition = proof.Partition
 	r.Receipt.Complete = false
+	return nil
+}
+
+// serveLeaf fills in the directory, the pending list and the rest of the BPT
+// leaf from what the node retained for a block. Nothing is paged: a caller
+// rebuilds the leaf from these, and a page of a directory rebuilds nothing.
+func (s *Querier) serveLeaf(record *database.Account, r *api.AccountRecord, leaf *database.RetainedLeaf) error {
+	switch r.Account.Type() {
+	case protocol.AccountTypeIdentity, protocol.AccountTypeKeyBook:
+		r.Directory = new(api.RecordRange[*api.UrlRecord])
+	}
+	if len(leaf.Directory) > 0 && r.Directory == nil {
+		r.Directory = new(api.RecordRange[*api.UrlRecord])
+	}
+	if r.Directory != nil {
+		r.Directory.Total = uint64(len(leaf.Directory))
+		for _, u := range leaf.Directory {
+			r.Directory.Records = append(r.Directory.Records, &api.UrlRecord{Value: u})
+		}
+	}
+
+	r.Pending = new(api.RecordRange[*api.TxIDRecord])
+	r.Pending.Total = uint64(len(leaf.Pending))
+	for _, p := range leaf.Pending {
+		r.Pending.Records = append(r.Pending.Records, &api.TxIDRecord{Value: p.TxID})
+	}
+
+	l := new(api.AccountLeaf)
+	l.EventsRoot = leaf.EventsRoot
+	l.LocalDeliveryQueue = leaf.LocalDeliveryQueue
+	l.CascadeDeliveryQueue = leaf.CascadeDeliveryQueue
+	for _, c := range leaf.Chains {
+		chain, err := record.ChainByName(c.Name)
+		if err != nil {
+			return errors.UnknownError.WithFormat("get chain %s: %w", c.Name, err)
+		}
+		l.Chains = append(l.Chains, &api.ChainRecord{Name: c.Name, Type: chain.Type(), Count: c.Count, State: c.Pending})
+	}
+	for _, p := range leaf.Pending {
+		v, err := pendingSets(p)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		l.Pending = append(l.Pending, v)
+	}
+	for _, p := range leaf.BookPending {
+		v, err := pendingSets(p)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		l.BookPending = append(l.BookPending, v)
+	}
+	r.Leaf = l
+	return nil
+}
+
+// pendingSets converts a retained pending transaction to its API form. Votes
+// and signatures go through their encoding, because the encoding is what the
+// leaf hashes: an API type that did not marshal as the store's does would fail
+// here rather than serve a leaf that does not rebuild.
+func pendingSets(p *database.RetainedPendingTransaction) (*api.PendingTransactionSets, error) {
+	v := new(api.PendingTransactionSets)
+	v.TxID = p.TxID
+	v.V1Hashes = p.V1Hashes
+	v.Payments = p.Payments
+	v.ValidatorSignatures = p.ValidatorSignatures
+	for _, e := range p.Votes {
+		x := new(api.PendingVote)
+		err := reencode(e, x)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("vote: %w", err)
+		}
+		v.Votes = append(v.Votes, x)
+	}
+	for _, e := range p.Signatures {
+		x := new(api.PendingSignature)
+		err := reencode(e, x)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("signature: %w", err)
+		}
+		v.Signatures = append(v.Signatures, x)
+	}
+	return v, nil
+}
+
+func reencode(from interface{ MarshalBinary() ([]byte, error) }, to interface {
+	MarshalBinary() ([]byte, error)
+	UnmarshalBinary([]byte) error
+}) error {
+	a, err := from.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	err = to.UnmarshalBinary(a)
+	if err != nil {
+		return err
+	}
+	b, err := to.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(a, b) {
+		return errors.InternalError.With("the served form does not marshal as the stored form")
+	}
 	return nil
 }
 

@@ -182,3 +182,91 @@ MinorRootRecord:
       type: merkle.ReceiptList
       marshal-as: reference
       pointer: true
+
+AccountLeaf:
+  description: is what an account's BPT leaf commits to besides its main state, directory and pending list, as of the block a historical answer is for (#4361). With the body, the directory and the pending list served beside it, it rebuilds the leaf the answer's receipt proves
+  fields:
+    - name: Chains
+      description: is the head of every chain, in the account's chain order
+      type: ChainRecord
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: EventsRoot
+      description: is the root of the scheduled-events BPT, for a partition ledger
+      type: hash
+    - name: LocalDeliveryQueue
+      description: is the local delivery queue, for a synthetic ledger
+      type: txid
+      pointer: true
+      repeatable: true
+    - name: CascadeDeliveryQueue
+      description: is the cascade delivery queue, for a synthetic ledger
+      type: txid
+      pointer: true
+      repeatable: true
+    - name: Pending
+      description: is what the account holds for each of its pending transactions, in the order of the pending list
+      type: PendingTransactionSets
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: BookPending
+      description: is what a key page holds for each of its book's pending transactions
+      type: PendingTransactionSets
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+PendingTransactionSets:
+  description: is what an account holds for one pending transaction, as its BPT leaf hashes it
+  fields:
+    - name: TxID
+      type: txid
+      pointer: true
+    - name: V1Hashes
+      description: is the hash of the legacy transaction record and its status, for a transaction stored by executor v1; when set it replaces the transaction ID in the leaf
+      type: hash
+      repeatable: true
+    - name: ValidatorSignatures
+      type: protocol.KeySignature
+      marshal-as: union
+      repeatable: true
+    - name: Payments
+      description: is the hashes of credit payment messages
+      type: hash
+      repeatable: true
+    - name: Votes
+      type: PendingVote
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: Signatures
+      type: PendingSignature
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+PendingVote:
+  description: is an authority's vote on a pending transaction. It marshals as the store's vote entry does, and the leaf hashes that encoding
+  fields:
+    - name: Authority
+      type: url
+      pointer: true
+    - name: Hash
+      type: hash
+
+PendingSignature:
+  description: is an active signature on a pending transaction. It marshals as the store's signature set entry does, and the leaf hashes that encoding
+  fields:
+    - name: KeyIndex
+      type: uint
+      keep-empty: true
+    - name: Version
+      type: uint
+    - name: Path
+      type: url
+      pointer: true
+      repeatable: true
+    - name: Hash
+      type: hash

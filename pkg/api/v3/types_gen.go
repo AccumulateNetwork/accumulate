@@ -32,6 +32,24 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// AccountLeaf is what an account's BPT leaf commits to besides its main state, directory and pending list, as of the block a historical answer is for (#4361). With the body, the directory and the pending list served beside it, it rebuilds the leaf the answer's receipt proves.
+type AccountLeaf struct {
+	fieldsSet []bool
+	// Chains is the head of every chain, in the account's chain order.
+	Chains []*ChainRecord `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	// EventsRoot is the root of the scheduled-events BPT, for a partition ledger.
+	EventsRoot [32]byte `json:"eventsRoot,omitempty" form:"eventsRoot" query:"eventsRoot" validate:"required"`
+	// LocalDeliveryQueue is the local delivery queue, for a synthetic ledger.
+	LocalDeliveryQueue []*url.TxID `json:"localDeliveryQueue,omitempty" form:"localDeliveryQueue" query:"localDeliveryQueue" validate:"required"`
+	// CascadeDeliveryQueue is the cascade delivery queue, for a synthetic ledger.
+	CascadeDeliveryQueue []*url.TxID `json:"cascadeDeliveryQueue,omitempty" form:"cascadeDeliveryQueue" query:"cascadeDeliveryQueue" validate:"required"`
+	// Pending is what the account holds for each of its pending transactions, in the order of the pending list.
+	Pending []*PendingTransactionSets `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	// BookPending is what a key page holds for each of its book's pending transactions.
+	BookPending []*PendingTransactionSets `json:"bookPending,omitempty" form:"bookPending" query:"bookPending" validate:"required"`
+	extraData   []byte
+}
+
 type AccountRecord struct {
 	fieldsSet     []bool
 	Account       protocol.Account          `json:"account,omitempty" form:"account" query:"account" validate:"required"`
@@ -40,7 +58,9 @@ type AccountRecord struct {
 	Receipt       *Receipt                  `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 	LastBlockTime *time.Time                `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
 	// Sighted is how far each of a sequence ledger's inbound streams has been sighted, for an anchor or synthetic ledger and nothing else. It is derived from staging, never stored (#4189), and carried here rather than written into Account - a value synthesised into the body makes the body stop hashing to the leaf Receipt proves, and every proof of that account then fails (#4295).
-	Sighted   []*SightedStream `json:"sighted,omitempty" form:"sighted" query:"sighted" validate:"required"`
+	Sighted []*SightedStream `json:"sighted,omitempty" form:"sighted" query:"sighted" validate:"required"`
+	// Leaf is the rest of the account's BPT leaf as of the block a historical answer is for, set only on such an answer (#4361). Directory and Pending on the same answer are that block's, in full.
+	Leaf      *AccountLeaf `json:"leaf,omitempty" form:"leaf" query:"leaf" validate:"required"`
 	extraData []byte
 }
 
@@ -475,6 +495,38 @@ type PendingQuery struct {
 	extraData []byte
 }
 
+// PendingSignature is an active signature on a pending transaction. It marshals as the store's signature set entry does, and the leaf hashes that encoding.
+type PendingSignature struct {
+	fieldsSet []bool
+	KeyIndex  uint64     `json:"keyIndex" form:"keyIndex" query:"keyIndex" validate:"required"`
+	Version   uint64     `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Path      []*url.URL `json:"path,omitempty" form:"path" query:"path" validate:"required"`
+	Hash      [32]byte   `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData []byte
+}
+
+// PendingTransactionSets is what an account holds for one pending transaction, as its BPT leaf hashes it.
+type PendingTransactionSets struct {
+	fieldsSet []bool
+	TxID      *url.TxID `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	// V1Hashes is the hash of the legacy transaction record and its status, for a transaction stored by executor v1; when set it replaces the transaction ID in the leaf.
+	V1Hashes            [][32]byte              `json:"v1Hashes,omitempty" form:"v1Hashes" query:"v1Hashes" validate:"required"`
+	ValidatorSignatures []protocol.KeySignature `json:"validatorSignatures,omitempty" form:"validatorSignatures" query:"validatorSignatures" validate:"required"`
+	// Payments is the hashes of credit payment messages.
+	Payments   [][32]byte          `json:"payments,omitempty" form:"payments" query:"payments" validate:"required"`
+	Votes      []*PendingVote      `json:"votes,omitempty" form:"votes" query:"votes" validate:"required"`
+	Signatures []*PendingSignature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	extraData  []byte
+}
+
+// PendingVote is an authority's vote on a pending transaction. It marshals as the store's vote entry does, and the leaf hashes that encoding.
+type PendingVote struct {
+	fieldsSet []bool
+	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData []byte
+}
+
 type PublicKeyHashSearchQuery struct {
 	fieldsSet     []bool
 	PublicKeyHash []byte `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
@@ -667,6 +719,55 @@ func (*TxIDRecord) RecordType() RecordType { return RecordTypeTxID }
 
 func (*UrlRecord) RecordType() RecordType { return RecordTypeUrl }
 
+func (v *AccountLeaf) Copy() *AccountLeaf {
+	u := new(AccountLeaf)
+
+	u.Chains = make([]*ChainRecord, len(v.Chains))
+	for i, v := range v.Chains {
+		v := v
+		if v != nil {
+			u.Chains[i] = (v).Copy()
+		}
+	}
+	u.EventsRoot = v.EventsRoot
+	u.LocalDeliveryQueue = make([]*url.TxID, len(v.LocalDeliveryQueue))
+	for i, v := range v.LocalDeliveryQueue {
+		v := v
+		if v != nil {
+			u.LocalDeliveryQueue[i] = v
+		}
+	}
+	u.CascadeDeliveryQueue = make([]*url.TxID, len(v.CascadeDeliveryQueue))
+	for i, v := range v.CascadeDeliveryQueue {
+		v := v
+		if v != nil {
+			u.CascadeDeliveryQueue[i] = v
+		}
+	}
+	u.Pending = make([]*PendingTransactionSets, len(v.Pending))
+	for i, v := range v.Pending {
+		v := v
+		if v != nil {
+			u.Pending[i] = (v).Copy()
+		}
+	}
+	u.BookPending = make([]*PendingTransactionSets, len(v.BookPending))
+	for i, v := range v.BookPending {
+		v := v
+		if v != nil {
+			u.BookPending[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *AccountLeaf) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *AccountRecord) Copy() *AccountRecord {
 	u := new(AccountRecord)
 
@@ -692,6 +793,9 @@ func (v *AccountRecord) Copy() *AccountRecord {
 		if v != nil {
 			u.Sighted[i] = (v).Copy()
 		}
+	}
+	if v.Leaf != nil {
+		u.Leaf = (v.Leaf).Copy()
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -1716,6 +1820,93 @@ func (v *PendingQuery) Copy() *PendingQuery {
 
 func (v *PendingQuery) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *PendingSignature) Copy() *PendingSignature {
+	u := new(PendingSignature)
+
+	u.KeyIndex = v.KeyIndex
+	u.Version = v.Version
+	u.Path = make([]*url.URL, len(v.Path))
+	for i, v := range v.Path {
+		v := v
+		if v != nil {
+			u.Path[i] = v
+		}
+	}
+	u.Hash = v.Hash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PendingSignature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PendingTransactionSets) Copy() *PendingTransactionSets {
+	u := new(PendingTransactionSets)
+
+	if v.TxID != nil {
+		u.TxID = v.TxID
+	}
+	u.V1Hashes = make([][32]byte, len(v.V1Hashes))
+	for i, v := range v.V1Hashes {
+		v := v
+		u.V1Hashes[i] = v
+	}
+	u.ValidatorSignatures = make([]protocol.KeySignature, len(v.ValidatorSignatures))
+	for i, v := range v.ValidatorSignatures {
+		v := v
+		if v != nil {
+			u.ValidatorSignatures[i] = protocol.CopyKeySignature(v)
+		}
+	}
+	u.Payments = make([][32]byte, len(v.Payments))
+	for i, v := range v.Payments {
+		v := v
+		u.Payments[i] = v
+	}
+	u.Votes = make([]*PendingVote, len(v.Votes))
+	for i, v := range v.Votes {
+		v := v
+		if v != nil {
+			u.Votes[i] = (v).Copy()
+		}
+	}
+	u.Signatures = make([]*PendingSignature, len(v.Signatures))
+	for i, v := range v.Signatures {
+		v := v
+		if v != nil {
+			u.Signatures[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PendingTransactionSets) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PendingVote) Copy() *PendingVote {
+	u := new(PendingVote)
+
+	if v.Authority != nil {
+		u.Authority = v.Authority
+	}
+	u.Hash = v.Hash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PendingVote) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *PublicKeyHashSearchQuery) Copy() *PublicKeyHashSearchQuery {
 	u := new(PublicKeyHashSearchQuery)
 
@@ -2012,6 +2203,54 @@ func (v *ValidateOptions) Copy() *ValidateOptions {
 
 func (v *ValidateOptions) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *AccountLeaf) Equal(u *AccountLeaf) bool {
+	if len(v.Chains) != len(u.Chains) {
+		return false
+	}
+	for i := range v.Chains {
+		if !((v.Chains[i]).Equal(u.Chains[i])) {
+			return false
+		}
+	}
+	if !(v.EventsRoot == u.EventsRoot) {
+		return false
+	}
+	if len(v.LocalDeliveryQueue) != len(u.LocalDeliveryQueue) {
+		return false
+	}
+	for i := range v.LocalDeliveryQueue {
+		if !((v.LocalDeliveryQueue[i]).Equal(u.LocalDeliveryQueue[i])) {
+			return false
+		}
+	}
+	if len(v.CascadeDeliveryQueue) != len(u.CascadeDeliveryQueue) {
+		return false
+	}
+	for i := range v.CascadeDeliveryQueue {
+		if !((v.CascadeDeliveryQueue[i]).Equal(u.CascadeDeliveryQueue[i])) {
+			return false
+		}
+	}
+	if len(v.Pending) != len(u.Pending) {
+		return false
+	}
+	for i := range v.Pending {
+		if !((v.Pending[i]).Equal(u.Pending[i])) {
+			return false
+		}
+	}
+	if len(v.BookPending) != len(u.BookPending) {
+		return false
+	}
+	for i := range v.BookPending {
+		if !((v.BookPending[i]).Equal(u.BookPending[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *AccountRecord) Equal(u *AccountRecord) bool {
 	if !(protocol.EqualAccount(v.Account, u.Account)) {
 		return false
@@ -2055,6 +2294,14 @@ func (v *AccountRecord) Equal(u *AccountRecord) bool {
 		if !((v.Sighted[i]).Equal(u.Sighted[i])) {
 			return false
 		}
+	}
+	switch {
+	case v.Leaf == u.Leaf:
+		// equal
+	case v.Leaf == nil || u.Leaf == nil:
+		return false
+	case !((v.Leaf).Equal(u.Leaf)):
+		return false
 	}
 
 	return true
@@ -3153,6 +3400,97 @@ func (v *PendingQuery) Equal(u *PendingQuery) bool {
 	return true
 }
 
+func (v *PendingSignature) Equal(u *PendingSignature) bool {
+	if !(v.KeyIndex == u.KeyIndex) {
+		return false
+	}
+	if !(v.Version == u.Version) {
+		return false
+	}
+	if len(v.Path) != len(u.Path) {
+		return false
+	}
+	for i := range v.Path {
+		if !((v.Path[i]).Equal(u.Path[i])) {
+			return false
+		}
+	}
+	if !(v.Hash == u.Hash) {
+		return false
+	}
+
+	return true
+}
+
+func (v *PendingTransactionSets) Equal(u *PendingTransactionSets) bool {
+	switch {
+	case v.TxID == u.TxID:
+		// equal
+	case v.TxID == nil || u.TxID == nil:
+		return false
+	case !((v.TxID).Equal(u.TxID)):
+		return false
+	}
+	if len(v.V1Hashes) != len(u.V1Hashes) {
+		return false
+	}
+	for i := range v.V1Hashes {
+		if !(v.V1Hashes[i] == u.V1Hashes[i]) {
+			return false
+		}
+	}
+	if len(v.ValidatorSignatures) != len(u.ValidatorSignatures) {
+		return false
+	}
+	for i := range v.ValidatorSignatures {
+		if !(protocol.EqualKeySignature(v.ValidatorSignatures[i], u.ValidatorSignatures[i])) {
+			return false
+		}
+	}
+	if len(v.Payments) != len(u.Payments) {
+		return false
+	}
+	for i := range v.Payments {
+		if !(v.Payments[i] == u.Payments[i]) {
+			return false
+		}
+	}
+	if len(v.Votes) != len(u.Votes) {
+		return false
+	}
+	for i := range v.Votes {
+		if !((v.Votes[i]).Equal(u.Votes[i])) {
+			return false
+		}
+	}
+	if len(v.Signatures) != len(u.Signatures) {
+		return false
+	}
+	for i := range v.Signatures {
+		if !((v.Signatures[i]).Equal(u.Signatures[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *PendingVote) Equal(u *PendingVote) bool {
+	switch {
+	case v.Authority == u.Authority:
+		// equal
+	case v.Authority == nil || u.Authority == nil:
+		return false
+	case !((v.Authority).Equal(u.Authority)):
+		return false
+	}
+	if !(v.Hash == u.Hash) {
+		return false
+	}
+
+	return true
+}
+
 func (v *PublicKeyHashSearchQuery) Equal(u *PublicKeyHashSearchQuery) bool {
 	if !(bytes.Equal(v.PublicKeyHash, u.PublicKeyHash)) {
 		return false
@@ -3414,6 +3752,110 @@ func (v *ValidateOptions) Equal(u *ValidateOptions) bool {
 	return true
 }
 
+var fieldNames_AccountLeaf = []string{
+	1: "Chains",
+	2: "EventsRoot",
+	3: "LocalDeliveryQueue",
+	4: "CascadeDeliveryQueue",
+	5: "Pending",
+	6: "BookPending",
+}
+
+func (v *AccountLeaf) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Chains) == 0) {
+		for _, v := range v.Chains {
+			writer.WriteValue(1, v.MarshalBinary)
+		}
+	}
+	if !(v.EventsRoot == ([32]byte{})) {
+		writer.WriteHash(2, &v.EventsRoot)
+	}
+	if !(len(v.LocalDeliveryQueue) == 0) {
+		for _, v := range v.LocalDeliveryQueue {
+			writer.WriteTxid(3, v)
+		}
+	}
+	if !(len(v.CascadeDeliveryQueue) == 0) {
+		for _, v := range v.CascadeDeliveryQueue {
+			writer.WriteTxid(4, v)
+		}
+	}
+	if !(len(v.Pending) == 0) {
+		for _, v := range v.Pending {
+			writer.WriteValue(5, v.MarshalBinary)
+		}
+	}
+	if !(len(v.BookPending) == 0) {
+		for _, v := range v.BookPending {
+			writer.WriteValue(6, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_AccountLeaf)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *AccountLeaf) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Chains is missing")
+	} else if len(v.Chains) == 0 {
+		errs = append(errs, "field Chains is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field EventsRoot is missing")
+	} else if v.EventsRoot == ([32]byte{}) {
+		errs = append(errs, "field EventsRoot is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field LocalDeliveryQueue is missing")
+	} else if len(v.LocalDeliveryQueue) == 0 {
+		errs = append(errs, "field LocalDeliveryQueue is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field CascadeDeliveryQueue is missing")
+	} else if len(v.CascadeDeliveryQueue) == 0 {
+		errs = append(errs, "field CascadeDeliveryQueue is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Pending is missing")
+	} else if len(v.Pending) == 0 {
+		errs = append(errs, "field Pending is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field BookPending is missing")
+	} else if len(v.BookPending) == 0 {
+		errs = append(errs, "field BookPending is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_AccountRecord = []string{
 	1: "RecordType",
 	2: "Account",
@@ -3422,6 +3864,7 @@ var fieldNames_AccountRecord = []string{
 	5: "Receipt",
 	6: "LastBlockTime",
 	7: "Sighted",
+	8: "Leaf",
 }
 
 func (v *AccountRecord) MarshalBinary() ([]byte, error) {
@@ -3454,6 +3897,9 @@ func (v *AccountRecord) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Sighted {
 			writer.WriteValue(7, v.MarshalBinary)
 		}
+	}
+	if !(v.Leaf == nil) {
+		writer.WriteValue(8, v.Leaf.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AccountRecord)
@@ -3503,6 +3949,11 @@ func (v *AccountRecord) IsValid() error {
 		errs = append(errs, "field Sighted is missing")
 	} else if len(v.Sighted) == 0 {
 		errs = append(errs, "field Sighted is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field Leaf is missing")
+	} else if v.Leaf == nil {
+		errs = append(errs, "field Leaf is not set")
 	}
 
 	switch len(errs) {
@@ -6694,6 +7145,242 @@ func (v *PendingQuery) IsValid() error {
 	}
 }
 
+var fieldNames_PendingSignature = []string{
+	1: "KeyIndex",
+	2: "Version",
+	3: "Path",
+	4: "Hash",
+}
+
+func (v *PendingSignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, v.KeyIndex)
+	if !(v.Version == 0) {
+		writer.WriteUint(2, v.Version)
+	}
+	if !(len(v.Path) == 0) {
+		for _, v := range v.Path {
+			writer.WriteUrl(3, v)
+		}
+	}
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(4, &v.Hash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PendingSignature)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PendingSignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field KeyIndex is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Version is missing")
+	} else if v.Version == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Path is missing")
+	} else if len(v.Path) == 0 {
+		errs = append(errs, "field Path is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PendingTransactionSets = []string{
+	1: "TxID",
+	2: "V1Hashes",
+	3: "ValidatorSignatures",
+	4: "Payments",
+	5: "Votes",
+	6: "Signatures",
+}
+
+func (v *PendingTransactionSets) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.TxID == nil) {
+		writer.WriteTxid(1, v.TxID)
+	}
+	if !(len(v.V1Hashes) == 0) {
+		for _, v := range v.V1Hashes {
+			writer.WriteHash(2, &v)
+		}
+	}
+	if !(len(v.ValidatorSignatures) == 0) {
+		for _, v := range v.ValidatorSignatures {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Payments) == 0) {
+		for _, v := range v.Payments {
+			writer.WriteHash(4, &v)
+		}
+	}
+	if !(len(v.Votes) == 0) {
+		for _, v := range v.Votes {
+			writer.WriteValue(5, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Signatures) == 0) {
+		for _, v := range v.Signatures {
+			writer.WriteValue(6, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_PendingTransactionSets)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PendingTransactionSets) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field TxID is missing")
+	} else if v.TxID == nil {
+		errs = append(errs, "field TxID is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field V1Hashes is missing")
+	} else if len(v.V1Hashes) == 0 {
+		errs = append(errs, "field V1Hashes is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field ValidatorSignatures is missing")
+	} else if len(v.ValidatorSignatures) == 0 {
+		errs = append(errs, "field ValidatorSignatures is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Payments is missing")
+	} else if len(v.Payments) == 0 {
+		errs = append(errs, "field Payments is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Votes is missing")
+	} else if len(v.Votes) == 0 {
+		errs = append(errs, "field Votes is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Signatures is missing")
+	} else if len(v.Signatures) == 0 {
+		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PendingVote = []string{
+	1: "Authority",
+	2: "Hash",
+}
+
+func (v *PendingVote) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Authority == nil) {
+		writer.WriteUrl(1, v.Authority)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(2, &v.Hash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PendingVote)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *PendingVote) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Authority is missing")
+	} else if v.Authority == nil {
+		errs = append(errs, "field Authority is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_PublicKeyHashSearchQuery = []string{
 	1: "QueryType",
 	2: "PublicKeyHash",
@@ -7627,6 +8314,64 @@ func (v *ValidateOptions) IsValid() error {
 	}
 }
 
+func (v *AccountLeaf) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AccountLeaf) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x := new(ChainRecord); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+			v.Chains = append(v.Chains, x)
+		} else {
+			break
+		}
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.EventsRoot = *x
+	}
+	for {
+		if x, ok := reader.ReadTxid(3); ok {
+			v.LocalDeliveryQueue = append(v.LocalDeliveryQueue, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x, ok := reader.ReadTxid(4); ok {
+			v.CascadeDeliveryQueue = append(v.CascadeDeliveryQueue, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(PendingTransactionSets); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+			v.Pending = append(v.Pending, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(PendingTransactionSets); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+			v.BookPending = append(v.BookPending, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_AccountLeaf)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *AccountRecord) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7671,6 +8416,9 @@ func (v *AccountRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 		} else {
 			break
 		}
+	}
+	if x := new(AccountLeaf); reader.ReadValue(8, x.UnmarshalBinaryFrom) {
+		v.Leaf = x
 	}
 
 	seen, err := reader.Reset(fieldNames_AccountRecord)
@@ -9418,6 +10166,131 @@ func (v *PendingQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *PendingSignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PendingSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.KeyIndex = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Version = x
+	}
+	for {
+		if x, ok := reader.ReadUrl(3); ok {
+			v.Path = append(v.Path, x)
+		} else {
+			break
+		}
+	}
+	if x, ok := reader.ReadHash(4); ok {
+		v.Hash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_PendingSignature)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PendingTransactionSets) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PendingTransactionSets) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadTxid(1); ok {
+		v.TxID = x
+	}
+	for {
+		if x, ok := reader.ReadHash(2); ok {
+			v.V1Hashes = append(v.V1Hashes, *x)
+		} else {
+			break
+		}
+	}
+	for {
+		ok := reader.ReadValue(3, func(r io.Reader) error {
+			x, err := protocol.UnmarshalKeySignatureFrom(r)
+			if err == nil {
+				v.ValidatorSignatures = append(v.ValidatorSignatures, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+	for {
+		if x, ok := reader.ReadHash(4); ok {
+			v.Payments = append(v.Payments, *x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(PendingVote); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+			v.Votes = append(v.Votes, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(PendingSignature); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+			v.Signatures = append(v.Signatures, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_PendingTransactionSets)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PendingVote) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PendingVote) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Authority = x
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.Hash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_PendingVote)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *PublicKeyHashSearchQuery) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -9941,6 +10814,15 @@ func (v *ValidateOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("chains", "ChainRecord[]"),
+		encoding.NewTypeField("eventsRoot", "bytes32"),
+		encoding.NewTypeField("localDeliveryQueue", "string[]"),
+		encoding.NewTypeField("cascadeDeliveryQueue", "string[]"),
+		encoding.NewTypeField("pending", "PendingTransactionSets[]"),
+		encoding.NewTypeField("bookPending", "PendingTransactionSets[]"),
+	}, "AccountLeaf", "accountLeaf")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("recordType", "string"),
 		encoding.NewTypeField("account", "protocol.Account"),
 		encoding.NewTypeField("directory", "RecordRange[*UrlRecord]"),
@@ -9948,6 +10830,7 @@ func init() {
 		encoding.NewTypeField("receipt", "Receipt"),
 		encoding.NewTypeField("lastBlockTime", "string"),
 		encoding.NewTypeField("sighted", "SightedStream[]"),
+		encoding.NewTypeField("leaf", "AccountLeaf"),
 	}, "AccountRecord", "accountRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -10272,6 +11155,27 @@ func init() {
 	}, "PendingQuery", "pendingQuery")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("keyIndex", "uint64"),
+		encoding.NewTypeField("version", "uint64"),
+		encoding.NewTypeField("path", "string[]"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "PendingSignature", "pendingSignature")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("txID", "string"),
+		encoding.NewTypeField("v1Hashes", "bytes32[]"),
+		encoding.NewTypeField("validatorSignatures", "protocol.KeySignature[]"),
+		encoding.NewTypeField("payments", "bytes32[]"),
+		encoding.NewTypeField("votes", "PendingVote[]"),
+		encoding.NewTypeField("signatures", "PendingSignature[]"),
+	}, "PendingTransactionSets", "pendingTransactionSets")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("authority", "string"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "PendingVote", "pendingVote")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("queryType", "string"),
 		encoding.NewTypeField("publicKeyHash", "bytes"),
 	}, "PublicKeyHashSearchQuery", "publicKeyHashSearchQuery")
@@ -10371,6 +11275,38 @@ func init() {
 
 }
 
+func (v *AccountLeaf) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Chains               encoding.JsonList[*ChainRecord]            `json:"chains,omitempty"`
+		EventsRoot           *string                                    `json:"eventsRoot,omitempty"`
+		LocalDeliveryQueue   encoding.JsonList[*url.TxID]               `json:"localDeliveryQueue,omitempty"`
+		CascadeDeliveryQueue encoding.JsonList[*url.TxID]               `json:"cascadeDeliveryQueue,omitempty"`
+		Pending              encoding.JsonList[*PendingTransactionSets] `json:"pending,omitempty"`
+		BookPending          encoding.JsonList[*PendingTransactionSets] `json:"bookPending,omitempty"`
+		ExtraData            *string                                    `json:"$epilogue,omitempty"`
+	}{}
+	if !(len(v.Chains) == 0) {
+		u.Chains = v.Chains
+	}
+	if !(v.EventsRoot == ([32]byte{})) {
+		u.EventsRoot = encoding.ChainToJSON(&v.EventsRoot)
+	}
+	if !(len(v.LocalDeliveryQueue) == 0) {
+		u.LocalDeliveryQueue = v.LocalDeliveryQueue
+	}
+	if !(len(v.CascadeDeliveryQueue) == 0) {
+		u.CascadeDeliveryQueue = v.CascadeDeliveryQueue
+	}
+	if !(len(v.Pending) == 0) {
+		u.Pending = v.Pending
+	}
+	if !(len(v.BookPending) == 0) {
+		u.BookPending = v.BookPending
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *AccountRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		RecordType    RecordType                                    `json:"recordType"`
@@ -10380,6 +11316,7 @@ func (v *AccountRecord) MarshalJSON() ([]byte, error) {
 		Receipt       *Receipt                                      `json:"receipt,omitempty"`
 		LastBlockTime *time.Time                                    `json:"lastBlockTime,omitempty"`
 		Sighted       encoding.JsonList[*SightedStream]             `json:"sighted,omitempty"`
+		Leaf          *AccountLeaf                                  `json:"leaf,omitempty"`
 		ExtraData     *string                                       `json:"$epilogue,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
@@ -10400,6 +11337,9 @@ func (v *AccountRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Sighted) == 0) {
 		u.Sighted = v.Sighted
+	}
+	if !(v.Leaf == nil) {
+		u.Leaf = v.Leaf
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -11309,6 +12249,82 @@ func (v *PendingQuery) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *PendingSignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		KeyIndex  uint64                      `json:"keyIndex"`
+		Version   uint64                      `json:"version,omitempty"`
+		Path      encoding.JsonList[*url.URL] `json:"path,omitempty"`
+		Hash      *string                     `json:"hash,omitempty"`
+		ExtraData *string                     `json:"$epilogue,omitempty"`
+	}{}
+	u.KeyIndex = v.KeyIndex
+	if !(v.Version == 0) {
+		u.Version = v.Version
+	}
+	if !(len(v.Path) == 0) {
+		u.Path = v.Path
+	}
+	if !(v.Hash == ([32]byte{})) {
+		u.Hash = encoding.ChainToJSON(&v.Hash)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PendingTransactionSets) MarshalJSON() ([]byte, error) {
+	u := struct {
+		TxID                *url.TxID                                              `json:"txID,omitempty"`
+		V1Hashes            encoding.JsonList[*string]                             `json:"v1Hashes,omitempty"`
+		ValidatorSignatures *encoding.JsonUnmarshalListWith[protocol.KeySignature] `json:"validatorSignatures,omitempty"`
+		Payments            encoding.JsonList[*string]                             `json:"payments,omitempty"`
+		Votes               encoding.JsonList[*PendingVote]                        `json:"votes,omitempty"`
+		Signatures          encoding.JsonList[*PendingSignature]                   `json:"signatures,omitempty"`
+		ExtraData           *string                                                `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.TxID == nil) {
+		u.TxID = v.TxID
+	}
+	if !(len(v.V1Hashes) == 0) {
+		u.V1Hashes = make(encoding.JsonList[*string], len(v.V1Hashes))
+		for i, x := range v.V1Hashes {
+			u.V1Hashes[i] = encoding.ChainToJSON(&x)
+		}
+	}
+	if !(len(v.ValidatorSignatures) == 0) {
+		u.ValidatorSignatures = &encoding.JsonUnmarshalListWith[protocol.KeySignature]{Value: v.ValidatorSignatures, Func: protocol.UnmarshalKeySignatureJSON}
+	}
+	if !(len(v.Payments) == 0) {
+		u.Payments = make(encoding.JsonList[*string], len(v.Payments))
+		for i, x := range v.Payments {
+			u.Payments[i] = encoding.ChainToJSON(&x)
+		}
+	}
+	if !(len(v.Votes) == 0) {
+		u.Votes = v.Votes
+	}
+	if !(len(v.Signatures) == 0) {
+		u.Signatures = v.Signatures
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *PendingVote) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Authority *url.URL `json:"authority,omitempty"`
+		Hash      *string  `json:"hash,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Authority == nil) {
+		u.Authority = v.Authority
+	}
+	if !(v.Hash == ([32]byte{})) {
+		u.Hash = encoding.ChainToJSON(&v.Hash)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *PublicKeyHashSearchQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		QueryType     QueryType `json:"queryType"`
@@ -11469,6 +12485,43 @@ func (v *UrlRecord) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *AccountLeaf) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Chains               encoding.JsonList[*ChainRecord]            `json:"chains,omitempty"`
+		EventsRoot           *string                                    `json:"eventsRoot,omitempty"`
+		LocalDeliveryQueue   encoding.JsonList[*url.TxID]               `json:"localDeliveryQueue,omitempty"`
+		CascadeDeliveryQueue encoding.JsonList[*url.TxID]               `json:"cascadeDeliveryQueue,omitempty"`
+		Pending              encoding.JsonList[*PendingTransactionSets] `json:"pending,omitempty"`
+		BookPending          encoding.JsonList[*PendingTransactionSets] `json:"bookPending,omitempty"`
+		ExtraData            *string                                    `json:"$epilogue,omitempty"`
+	}{}
+	u.Chains = v.Chains
+	u.EventsRoot = encoding.ChainToJSON(&v.EventsRoot)
+	u.LocalDeliveryQueue = v.LocalDeliveryQueue
+	u.CascadeDeliveryQueue = v.CascadeDeliveryQueue
+	u.Pending = v.Pending
+	u.BookPending = v.BookPending
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Chains = u.Chains
+	if x, err := encoding.ChainFromJSON(u.EventsRoot); err != nil {
+		return fmt.Errorf("error decoding EventsRoot: %w", err)
+	} else {
+		v.EventsRoot = *x
+	}
+	v.LocalDeliveryQueue = u.LocalDeliveryQueue
+	v.CascadeDeliveryQueue = u.CascadeDeliveryQueue
+	v.Pending = u.Pending
+	v.BookPending = u.BookPending
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		RecordType    RecordType                                    `json:"recordType"`
@@ -11478,6 +12531,7 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 		Receipt       *Receipt                                      `json:"receipt,omitempty"`
 		LastBlockTime *time.Time                                    `json:"lastBlockTime,omitempty"`
 		Sighted       encoding.JsonList[*SightedStream]             `json:"sighted,omitempty"`
+		Leaf          *AccountLeaf                                  `json:"leaf,omitempty"`
 		ExtraData     *string                                       `json:"$epilogue,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
@@ -11487,6 +12541,7 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 	u.Receipt = v.Receipt
 	u.LastBlockTime = v.LastBlockTime
 	u.Sighted = v.Sighted
+	u.Leaf = v.Leaf
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -11503,6 +12558,7 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 	v.Receipt = u.Receipt
 	v.LastBlockTime = u.LastBlockTime
 	v.Sighted = u.Sighted
+	v.Leaf = u.Leaf
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -12688,6 +13744,120 @@ func (v *PendingQuery) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), u.QueryType)
 	}
 	v.Range = u.Range
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PendingSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		KeyIndex  uint64                      `json:"keyIndex"`
+		Version   uint64                      `json:"version,omitempty"`
+		Path      encoding.JsonList[*url.URL] `json:"path,omitempty"`
+		Hash      *string                     `json:"hash,omitempty"`
+		ExtraData *string                     `json:"$epilogue,omitempty"`
+	}{}
+	u.KeyIndex = v.KeyIndex
+	u.Version = v.Version
+	u.Path = v.Path
+	u.Hash = encoding.ChainToJSON(&v.Hash)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.KeyIndex = u.KeyIndex
+	v.Version = u.Version
+	v.Path = u.Path
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = *x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PendingTransactionSets) UnmarshalJSON(data []byte) error {
+	u := struct {
+		TxID                *url.TxID                                              `json:"txID,omitempty"`
+		V1Hashes            encoding.JsonList[*string]                             `json:"v1Hashes,omitempty"`
+		ValidatorSignatures *encoding.JsonUnmarshalListWith[protocol.KeySignature] `json:"validatorSignatures,omitempty"`
+		Payments            encoding.JsonList[*string]                             `json:"payments,omitempty"`
+		Votes               encoding.JsonList[*PendingVote]                        `json:"votes,omitempty"`
+		Signatures          encoding.JsonList[*PendingSignature]                   `json:"signatures,omitempty"`
+		ExtraData           *string                                                `json:"$epilogue,omitempty"`
+	}{}
+	u.TxID = v.TxID
+	u.V1Hashes = make(encoding.JsonList[*string], len(v.V1Hashes))
+	for i, x := range v.V1Hashes {
+		u.V1Hashes[i] = encoding.ChainToJSON(&x)
+	}
+	u.ValidatorSignatures = &encoding.JsonUnmarshalListWith[protocol.KeySignature]{Value: v.ValidatorSignatures, Func: protocol.UnmarshalKeySignatureJSON}
+	u.Payments = make(encoding.JsonList[*string], len(v.Payments))
+	for i, x := range v.Payments {
+		u.Payments[i] = encoding.ChainToJSON(&x)
+	}
+	u.Votes = v.Votes
+	u.Signatures = v.Signatures
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.TxID = u.TxID
+	v.V1Hashes = make([][32]byte, len(u.V1Hashes))
+	for i, x := range u.V1Hashes {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding V1Hashes: %w", err)
+		} else {
+			v.V1Hashes[i] = *x
+		}
+	}
+	if u.ValidatorSignatures != nil && u.ValidatorSignatures.Value != nil {
+		v.ValidatorSignatures = make([]protocol.KeySignature, len(u.ValidatorSignatures.Value))
+		for i, x := range u.ValidatorSignatures.Value {
+			v.ValidatorSignatures[i] = x
+		}
+	}
+	v.Payments = make([][32]byte, len(u.Payments))
+	for i, x := range u.Payments {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Payments: %w", err)
+		} else {
+			v.Payments[i] = *x
+		}
+	}
+	v.Votes = u.Votes
+	v.Signatures = u.Signatures
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *PendingVote) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Authority *url.URL `json:"authority,omitempty"`
+		Hash      *string  `json:"hash,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
+	}{}
+	u.Authority = v.Authority
+	u.Hash = encoding.ChainToJSON(&v.Hash)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Authority = u.Authority
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = *x
+	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

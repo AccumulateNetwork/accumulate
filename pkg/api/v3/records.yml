@@ -42,6 +42,11 @@ AccountRecord:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: Leaf
+      description: is the rest of the account's BPT leaf as of the block a historical answer is for, set only on such an answer (#4361). Directory and Pending on the same answer are that block's, in full
+      type: AccountLeaf
+      marshal-as: reference
+      pointer: true
 
 ChainRecord:
   union: { type: record }
