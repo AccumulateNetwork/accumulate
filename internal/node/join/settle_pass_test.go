@@ -13,10 +13,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -24,10 +24,14 @@ import (
 // servedAt is the production querier with a receipt stapled on that ends at
 // the root the test names for the account, zero for an account it names no
 // root for. The peer here is a store with no block index, so it cannot build a
-// real proof; what these tests are about is what settlePass does with the
-// roots a pass ends at, which is decided before any receipt is verified.
+// proof to its BPT root; the receipt is the account's own state-tree receipt,
+// which ends at the account's leaf, with the named root written over its end.
+// What these tests are about is what settlePass does with the roots a pass
+// ends at, which is decided before any receipt is verified; a test that names
+// the leaf itself as the root (leafOf) gets a receipt that verifies.
 type servedAt struct {
 	pull.Source
+	db    *database.Database
 	roots map[string][32]byte
 }
 
@@ -37,32 +41,42 @@ func (s servedAt) QueryAccount(ctx context.Context, u *url.URL, _ *api.DefaultQu
 		return nil, err
 	}
 	r.Receipt = &api.Receipt{Partition: "BVN0", LocalBlock: 7}
-	if root, ok := s.roots[strings.ToLower(u.String())]; ok {
-		r.Receipt.Anchor = root[:]
+	root, ok := s.roots[strings.ToLower(u.String())]
+	if !ok {
+		return r, nil // Served at no root
 	}
+	batch := s.db.Begin(false)
+	defer batch.Discard()
+	leaf, err := batch.Account(u).StateTreeReceipt()
+	if err != nil {
+		return nil, err
+	}
+	r.Receipt.Receipt = *leaf
+	r.Receipt.Anchor = root[:]
 	return r, nil
 }
 
-// provingPeers is the peers an account is fetched from and the peers the root
-// is proven through, which need not answer alike.
-type provingPeers struct {
-	oneSource
-	prover api.Querier
-}
-
-func (p *provingPeers) Querier(*url.URL) api.Querier { return p.prover }
-
-// deadPeers is every peer failing to answer.
-type deadPeers struct{}
-
-func (deadPeers) Query(context.Context, *url.URL, api.Query) (api.Record, error) {
-	return nil, errors.NoPeer.With("no peer answered")
+// leafOf is the leaf the account heldPass writes into the peer hashes to,
+// computed over a store of its own: the one root a receipt from the peer
+// here can be verified against.
+func leafOf(t *testing.T, u *url.URL) [32]byte {
+	t.Helper()
+	db := database.OpenInMemory(nil)
+	db.SetObserver(database.NewDatabaseObserver())
+	defer db.Close()
+	writeAccount(t, db, u, 3)
+	batch := db.Begin(false)
+	defer batch.Discard()
+	leaf, err := batch.Account(u).Hash()
+	require.NoError(t, err)
+	return leaf
 }
 
 // heldPass fetches the named accounts as one pass, each ending at the root the
-// test gives it, and returns the state holding it. prover is who ProveRoot
-// asks.
-func heldPass(t *testing.T, prover api.Querier, roots map[string][32]byte, accounts ...*url.URL) *PulledState {
+// test gives it, and returns the state holding it. anchors is where the roots
+// a pass ends at are proven; nil is a Directory that has anchored nothing,
+// so no root is proven and none is passed.
+func heldPass(t *testing.T, anchors *anchorsrc.Source, roots map[string][32]byte, accounts ...*url.URL) *PulledState {
 	t.Helper()
 	here := protocol.PartitionUrl("BVN0")
 
@@ -77,16 +91,17 @@ func heldPass(t *testing.T, prover api.Querier, roots map[string][32]byte, accou
 	for u, r := range roots {
 		keyed[strings.ToLower(u)] = r
 	}
-	s := quietState(t, here, &provingPeers{
-		oneSource: oneSource{part: here, src: servedAt{
-			Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})},
-			roots:  keyed,
-		}},
-		prover: prover,
-	})
+	s := quietState(t, here, &oneSource{part: here, src: servedAt{
+		Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})},
+		db:     peer,
+		roots:  keyed,
+	}})
 	s.db.SetObserver(database.NewDatabaseObserver())
-	values, _ := genesisValues(t, 4)
-	s.anchors = noAnchorSource(t, here, values)
+	if anchors == nil {
+		values, _ := genesisValues(t, 4)
+		anchors = noAnchorSource(t, here, values)
+	}
+	s.anchors = anchors
 	s.spine = true // the spine is not what these are about
 
 	s.fetchPass(context.Background(), accounts)
@@ -104,13 +119,13 @@ func urlsOf(us []*url.URL) []string {
 	return out
 }
 
-// A root the history has not reached is the one wait: a later anchor ends it.
-// The pass stays held, whole, and nothing is asked for again.
+// A root no verified anchor carries yet is the one wait: the next anchor may
+// carry it. The pass stays held, whole, and nothing is asked for again.
 func TestSettlePass_ARootNotProvenYetIsHeld(t *testing.T) {
 	a, b := protocol.AccountUrl("alice", "tokens"), protocol.AccountUrl("bob", "tokens")
 	before := pull.Held()
 	// No anchor is verified, so ProveRoot answers "not yet" without an error.
-	s := heldPass(t, deadPeers{}, map[string][32]byte{a.String(): {1}, b.String(): {1}}, a, b)
+	s := heldPass(t, nil, map[string][32]byte{a.String(): {1}, b.String(): {1}}, a, b)
 
 	for i := 0; i < 50; i++ {
 		s.settlePass(context.Background())
@@ -125,14 +140,16 @@ func TestSettlePass_ARootNotProvenYetIsHeld(t *testing.T) {
 }
 
 // An error from ProveRoot is not a wait -- no anchor to come changes it -- so
-// the pass is dropped and all of it is asked for again. anchorsrc pins which
-// answers are errors (peers that do not answer, a root the history has passed,
-// a receipt that is not the bpt chain's); a source with no way to reach the
-// peers at all is the one this package can make without a signed anchor.
+// the pass is dropped and all of it is asked for again. The error here is the
+// one anchorsrc pins: the pass was served at block 7, the anchor of block 8 is
+// verified and carries another root, so block 7's anchor would be verified
+// too if there were one, and no verified anchor carries this root.
 func TestSettlePass_ARootThatWillNotProveIsDroppedAndFetchedAgain(t *testing.T) {
 	a, b := protocol.AccountUrl("alice", "tokens"), protocol.AccountUrl("bob", "tokens")
 	before := pull.Held()
-	s := heldPass(t, nil, map[string][32]byte{a.String(): {1}, b.String(): {1}}, a, b)
+	values, keys := genesisValues(t, 4)
+	passed := anchoredSource(t, values, signedAnchor(t, values, keys, 8, [32]byte{2}))
+	s := heldPass(t, passed, map[string][32]byte{a.String(): {1}, b.String(): {1}}, a, b)
 
 	s.settlePass(context.Background())
 
@@ -145,7 +162,7 @@ func TestSettlePass_ARootThatWillNotProveIsDroppedAndFetchedAgain(t *testing.T) 
 // fetched again and the rest of the pass is not held up by it.
 func TestSettlePass_AnAccountServedAtNoRootIsFetchedAgain(t *testing.T) {
 	a, b := protocol.AccountUrl("alice", "tokens"), protocol.AccountUrl("bob", "tokens")
-	s := heldPass(t, deadPeers{}, map[string][32]byte{a.String(): {1}}, a, b)
+	s := heldPass(t, nil, map[string][32]byte{a.String(): {1}}, a, b)
 
 	s.settlePass(context.Background())
 
@@ -160,7 +177,7 @@ func TestSettlePass_AnAccountServedAtNoRootIsFetchedAgain(t *testing.T) {
 func TestSettlePass_APassAtNoRootIsNotHeld(t *testing.T) {
 	a := protocol.AccountUrl("alice", "tokens")
 	before := pull.Held()
-	s := heldPass(t, deadPeers{}, nil, a)
+	s := heldPass(t, nil, nil, a)
 
 	s.settlePass(context.Background())
 
@@ -174,7 +191,7 @@ func TestSettlePass_APassAtNoRootIsNotHeld(t *testing.T) {
 // pass ends at is kept and the minority is fetched again.
 func TestSettlePass_TheMinorityRootIsFetchedAgain(t *testing.T) {
 	a, b, c := protocol.AccountUrl("alice", "tokens"), protocol.AccountUrl("bob", "tokens"), protocol.AccountUrl("carol", "tokens")
-	s := heldPass(t, deadPeers{}, map[string][32]byte{a.String(): {1}, b.String(): {2}, c.String(): {1}}, a, b, c)
+	s := heldPass(t, nil, map[string][32]byte{a.String(): {1}, b.String(): {2}, c.String(): {1}}, a, b, c)
 
 	s.settlePass(context.Background())
 

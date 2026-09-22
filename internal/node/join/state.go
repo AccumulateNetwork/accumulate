@@ -94,9 +94,10 @@ type PulledState struct {
 	executed uint64
 
 	// pass is what has been fetched and not yet settled: the peer's CURRENT
-	// state, held until the root its receipts end at is proven by the history
-	// a verified anchor carries (anchorsrc.ProveRoot). Nothing new is fetched
-	// while it is held, so a pass is never committed over a newer one.
+	// state, held until the root its receipts end at equals the
+	// StateTreeAnchor of a verified signed anchor (anchorsrc.ProveRoot).
+	// Nothing new is fetched while it is held, so a pass is never committed
+	// over a newer one.
 	pass *pass
 
 	// refused are the accounts a round could not pull — served at a block the
@@ -427,21 +428,22 @@ type heldAccount struct {
 // settlePass settles the held pass once the root its receipts end at is
 // proven, and writes what verified.
 //
-// **The accounts a peer serves are current.** A peer serves an account as of
-// its current block, and the Directory anchors a BVN block only now and then,
-// so a pass that waited for an anchor OF ITS OWN BLOCK waited for one that
-// most blocks never get, and nothing a restarted node needed ever settled.
-// It does not wait for that. A signed anchor carries the producer's root
-// chain anchor, and every block records the previous block's BPT root on the
-// ledger's bpt chain, which the root chain anchors: the root a peer's state is
-// current at is proven by the history as soon as any later anchor is verified
-// (anchorsrc.ProveRoot).
+// **The accounts a peer serves are current, and the root is proven by a
+// signed anchor.** A peer serves an account as of its current block, with a
+// receipt to its current BPT root. That root is proven when it EQUALS the
+// StateTreeAnchor of an anchor a quorum signed and this node verified, and in
+// no other way (anchorsrc.ProveRoot): the anchor of block N carries the root
+// block N committed, which is the root the peer is current at while its
+// ledger says N, so the pass is proven when that anchor is verified, a few
+// blocks after it was served. Under load every block that changed an account
+// sends an anchor; idle, only a heartbeat block does, and a pass served at a
+// block that sent none is dropped and fetched again, by design.
 //
-// **A pass is held only while waiting can end.** The one wait is a root the
-// history has not reached yet, and a later anchor ends it. Peers that do not
-// answer, a receipt that is not the bpt chain's, and a root the history has
-// passed without proving are not waits -- no anchor to come changes them -- so
-// the pass is dropped and fetched again, and no count of rounds is involved.
+// **A pass is held only while waiting can end.** The one wait is a root no
+// verified anchor carries yet, and the next anchor may. A root the history
+// has PASSED -- an anchor of a later block is verified and none carries it --
+// is not a wait, because no anchor to come changes it, so the pass is dropped
+// and fetched again, and no count of rounds is involved.
 //
 // **One pass is one root.** The peers move while a pass is fetched, so its
 // accounts can end at different roots, each of them true. Written together
@@ -481,7 +483,7 @@ func (s *PulledState) settlePass(ctx context.Context) {
 		return
 	}
 	if !ok {
-		// The history has not reached it yet. Held.
+		// No verified anchor carries it yet, and the next one may. Held.
 		s.log.Debug("The root a pass was served at is not proven yet",
 			"partition", s.partition, "root", fmt.Sprintf("%x", root[:4]),
 			"waited", time.Since(p.since).Round(time.Millisecond))
@@ -492,9 +494,11 @@ func (s *PulledState) settlePass(ctx context.Context) {
 	for _, a := range p.accounts {
 		if err := a.pending.Settle(a.pending.Root()); err != nil {
 			s.log.Info("A pulled account did not verify", "account", a.url, "error", err)
-			s.refused = append(s.refused, a.url)
 			if a.spine {
+				// Asked for again with the spine, whole, and not by name.
 				p.spineFailed = true
+			} else {
+				s.refused = append(s.refused, a.url)
 			}
 			continue
 		}

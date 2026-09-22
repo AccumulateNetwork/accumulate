@@ -58,10 +58,17 @@ func TestTheSpineIsNotVerifiedUntilEveryAccountSettled(t *testing.T) {
 //
 // A pass is one root, so settlePass takes out of it what was served at another
 // root or at none. When that is a spine account the pass no longer carries the
-// whole spine, and proving the rest of it must not verify the spine.
+// whole spine, and proving the rest of it must not verify the spine. The rest
+// of it IS proven here: a verified anchor of the block it was served at
+// carries its root, so settlePass runs to the end, verifies and writes what
+// stayed, and that is where the spine must be left unverified and asked for
+// again, whole -- never by the name of the account that left.
 func TestASpineAccountFetchedAgainFailsTheSpine(t *testing.T) {
 	a, b := protocol.AccountUrl("alice", "tokens"), protocol.AccountUrl("bob", "tokens")
-	s := heldPass(t, deadPeers{}, map[string][32]byte{a.String(): {1}}, a, b)
+	values, keys := genesisValues(t, 4)
+	root := leafOf(t, a)
+	proven := anchoredSource(t, values, signedAnchor(t, values, keys, 7, root))
+	s := heldPass(t, proven, map[string][32]byte{a.String(): root}, a, b)
 	s.spine = false
 	s.pass.spine = true
 	for _, h := range s.pass.accounts {
@@ -70,13 +77,36 @@ func TestASpineAccountFetchedAgainFailsTheSpine(t *testing.T) {
 
 	s.settlePass(context.Background())
 
-	require.NotNil(t, s.pass)
-	require.True(t, s.pass.spineFailed, "a spine account left the pass and the pass can still verify the spine")
-	require.Empty(t, s.refused, "a spine account is asked for with the spine, not by name")
-	p := s.pass
-	s.dropPass()
-	s.spineSettled(p)
+	require.Nil(t, s.pass, "the root the pass was served at is what block 7's anchor carries, and the pass was not settled")
+	batch := s.db.Begin(false)
+	defer batch.Discard()
+	_, err := batch.Account(a).Main().Get()
+	require.NoError(t, err, "the account that stayed in the pass was proven and not written")
 	require.False(t, s.spine, "the spine was marked verified with an account of it fetched again")
+	require.Empty(t, s.refused, "a spine account is asked for with the spine, not by name")
+}
+
+// TestASpineAccountThatDoesNotVerifyFailsTheSpine.
+//
+// The root is proven and the account's receipt does not reach it: the peer
+// served a body that does not hash into the root. Like an account that left
+// the pass, it fails the spine, and the spine is asked for again whole; it is
+// not refused by name, because a refused account is fetched on its own and a
+// spine account is never fetched on its own.
+func TestASpineAccountThatDoesNotVerifyFailsTheSpine(t *testing.T) {
+	a := protocol.AccountUrl("alice", "tokens")
+	values, keys := genesisValues(t, 4)
+	proven := anchoredSource(t, values, signedAnchor(t, values, keys, 7, [32]byte{1}))
+	s := heldPass(t, proven, map[string][32]byte{a.String(): {1}}, a)
+	s.spine = false
+	s.pass.spine = true
+	s.pass.accounts[0].spine = true
+
+	s.settlePass(context.Background())
+
+	require.Nil(t, s.pass)
+	require.False(t, s.spine, "the spine was marked verified with an account of it unverified")
+	require.Empty(t, s.refused, "a spine account is asked for with the spine, not by name")
 }
 
 // TestTheTrustedSetsFollowTheStore.
