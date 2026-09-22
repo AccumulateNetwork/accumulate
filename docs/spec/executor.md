@@ -313,33 +313,18 @@ the anchor and BPT root for a block + the history. All the accounts for an
 anchor are current. So the anchor + the history is everything for the current
 block every block.").
 
-**A signed anchor is the proven data, and the history carries it to every
-block.** A verified anchor carries, under a quorum's signatures, its block's
-`StateTreeAnchor` and the producer's `RootChainAnchor` with the root chain's
-height. Most blocks never send an anchor, so the root a peer's state is
-current at is almost never a `StateTreeAnchor`. It does not need to be: every
-block records the previous block's BPT root on `<partition>/ledger`'s bpt
-chain, and the bpt chain is anchored into the root chain every block
-(invariant 11). **A root is proven when it is an entry of the bpt chain with a
-receipt from that entry to the root chain anchor a verified anchor carries.**
-That is provable as soon as any anchor sent after the block that recorded the
-root is verified, which is a wait of a few blocks and never of an anchor for
-that block itself.
-
-**The receipt is held to the bpt chain.** Everything a partition records hangs
-under its root chain, so a receipt that merely starts at a value and ends at a
-signed root chain anchor says the value is *something* the partition recorded —
-a transaction hash has one too (#4301). The signed root chain height decides
-which step of the receipt is a root chain entry and which entry it is, with no
-peer's word in it; that entry must be the bpt chain's anchor, and the steps
-below it must have the shape of the named bpt entry's receipt in a bpt chain
-of that height. **Which root chain entry is the bpt chain's must itself be
-proven, and a peer's copy of the bpt chain's index is not proof**: index
-chains are not anchored. The proof is a `StateTreeAnchor` a quorum signed — a
-value known to be a bpt chain entry — whose receipt, asked at the same root
-chain height, enters the root chain at the same entry; for that a peer serves
-a bpt entry's receipt to the bpt chain's anchor *at the asked height*, not at
-the entry's own first anchoring.
+**A root is proven by one thing: it equals the `StateTreeAnchor` of a signed
+anchor.** A verified anchor carries, under a quorum's signatures, the BPT root
+of the block that sent it — the root that block committed, which is the root a
+peer's state is current at while its ledger names that block
+(`TestAnAnchorsStateTreeAnchorIsTheRootOfItsBlock`). A root a pass was served
+at is proven when it equals that value on an anchor this node verified, and in
+no other way; nothing under a root no anchor signs is trusted (Paul,
+2026-09-22: "How can anything in the BPT not be proven? The BPT root is part of
+the signed anchor?"). Everything under a proven root is proven by BPT receipt
+to it. No peer is asked for anything toward the proof but the anchor pool, so
+there is nothing a peer's word enters: not a bpt chain entry, not an index, not
+a receipt to a root chain height.
 
 An account is kept only if three things hold: its receipt is valid; it ends at
 a root proven as above; and it passes through the leaf the pulled state hashes
@@ -355,15 +340,30 @@ and the rest — with any account served with no receipt — are fetched again. 
 spine account that leaves a pass this way fails the spine for that pass: the
 rest of it is written, and the spine is asked for again, whole.
 
-**A pass is held only while waiting can end.** There is one wait: the root is
-not on the bpt chain yet, or no verified anchor reaches it yet, and a later
-block or anchor ends it. Peers that do not answer, a receipt that is not the
-bpt chain's or does not end at a verified anchor, and a root the history has
-*passed* — an anchor of a later block is verified and the root is still
-unproven — are not waits, because no anchor to come changes them: the pass is
-dropped and fetched again, from the next peer in rotation. **No count of rounds
-is involved**; a bound on rounds discards exactly the accounts that change
-every block, which is every account a restarted node lacks (#4352, #4353).
+**A pass is held only while waiting can end.** There is one wait: no verified
+anchor carries the root yet, and the next one may — the anchor of the block a
+pass was served at reaches the pool a few blocks after the pass was fetched. A
+root the history has *passed* — an anchor of a later block is verified and none
+carries this root, so the block it was served at sent none — is not a wait,
+because no anchor to come changes it: the pass is dropped and fetched again,
+from the next peer in rotation. **No count of rounds is involved**; a bound on
+rounds discards exactly the accounts that change every block, which is every
+account a restarted node lacks (#4352, #4353). **Which blocks send an anchor
+is the executor's rule, not the join's**: a block that changed any account
+beyond the ledger and the anchor pool, or produced a synthetic transaction,
+or received a partition anchor, sends one; a block that only received a
+directory anchor sends one on the heartbeat, at most every fourth block
+(`shouldSendAnchor`, `anchorHeartbeatSkip`). Under load every block anchors
+and a pass is proven on the next anchor; idle, a pass served at a block that
+sent none is dropped and fetched again, and **the join settles only when a
+fetch lands on a block that anchored** — see DIFFERENCES.md E11 for what that
+means in the restart case.
+
+**The join converges by repetition.** Every round pulls what the block ledger
+says changed since the last root it settled at, plus the page diff on its
+cadence, and settles the pass when its root is proven; it is done when the
+local BPT root equals a verified anchor's `StateTreeAnchor` and the block is
+read from the ledger in that state (§5, `tracker.Check`).
 
 **The node hashes to the leaf or it does not, and no ordering question arises
 in the check.** There is no "am I ahead of this peer", no level case, no
