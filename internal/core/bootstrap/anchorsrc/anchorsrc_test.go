@@ -113,6 +113,11 @@ type anchorOpts struct {
 	// forceDirBody makes the body a DirectoryAnchor whatever the source is,
 	// which is what a forged operator change from a BVN looks like.
 	forceDirBody bool
+
+	// The producer's root chain as the anchor states it: the index of its
+	// last entry and its anchor, at the end of the anchor's block.
+	rootChainIndex  uint64
+	rootChainAnchor [32]byte
 }
 
 // anchor builds the API record for one anchor in a pool, signed the way
@@ -124,6 +129,8 @@ func (f *netFixture) anchor(t *testing.T, o anchorOpts) *api.MessageRecord[messa
 		Source:          o.source,
 		MinorBlockIndex: o.block,
 		StateTreeAnchor: o.root,
+		RootChainIndex:  o.rootChainIndex,
+		RootChainAnchor: o.rootChainAnchor,
 	}
 	var body protocol.AnchorBody
 	if o.forceDirBody || protocol.DnUrl().Equal(o.source) {
