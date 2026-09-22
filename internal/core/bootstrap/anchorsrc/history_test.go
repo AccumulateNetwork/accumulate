@@ -11,215 +11,164 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// producer is a partition's store with the chains a block end writes, built
-// the way block_end.go builds them: an account's main chain and the ledger's
-// bpt chain, each anchored into the root chain and indexed, and the root chain
-// indexed by block. It is served by the production querier.
-type producer struct {
-	t       *testing.T
-	db      *database.Database
-	account *url.URL
-	blocks  uint64
-}
-
-func newProducer(t *testing.T) *producer {
-	p := &producer{t: t, db: database.OpenInMemory(nil), account: bvn0().JoinPath("alice")}
-	batch := p.db.Begin(true)
-	defer batch.Discard()
-	require.NoError(t, batch.Account(bvn0().JoinPath(protocol.Ledger)).Main().Put(
-		&protocol.SystemLedger{Url: bvn0().JoinPath(protocol.Ledger)}))
-	require.NoError(t, batch.Account(p.account).Main().Put(&protocol.UnknownAccount{Url: p.account}))
-	require.NoError(t, batch.Commit())
-	return p
-}
-
-// block ends a block whose previous state root was bptRoot.
-func (p *producer) block(bptRoot [32]byte) {
-	p.blocks++
-	batch := p.db.Begin(true)
-	defer batch.Discard()
-	ledger := batch.Account(bvn0().JoinPath(protocol.Ledger))
-	rootChain, err := ledger.RootChain().Get()
-	require.NoError(p.t, err)
-
-	anchor := func(c *database.Chain2, entry []byte) {
-		chain, err := c.Get()
-		require.NoError(p.t, err)
-		require.NoError(p.t, chain.AddEntry(entry, false))
-		require.NoError(p.t, rootChain.AddEntry(chain.Anchor(), false))
-		p.index(c.Index(), &protocol.IndexEntry{
-			BlockIndex: p.blocks,
-			Source:     uint64(chain.Height() - 1),
-			Anchor:     uint64(rootChain.Height() - 1),
-		})
+// anchored is a source that has verified the producer's anchors for the
+// given blocks, each carrying root(block), signed by a quorum.
+func anchored(t *testing.T, f *netFixture, blocks ...byte) *Source {
+	t.Helper()
+	var entries []*api.MessageRecord[messaging.Message]
+	for _, b := range blocks {
+		entries = append(entries, f.anchor(t, anchorOpts{
+			source: bvn0(), destination: dn(), block: uint64(b), root: root(b), signers: []int{0, 1, 2},
+		}))
 	}
-	anchor(batch.Account(p.account).MainChain(), entryHash("txn", int(p.blocks)))
-	anchor(ledger.BptChain(), bptRoot[:])
-	p.index(ledger.RootChain().Index(), &protocol.IndexEntry{
-		BlockIndex: p.blocks,
-		Source:     uint64(rootChain.Height() - 1),
-	})
-	require.NoError(p.t, batch.Commit())
+	return sourceOver(t, f.authority(t), dn().JoinPath(protocol.AnchorPool), bvn0(), entries...)
 }
 
-func (p *producer) index(c *database.Chain2, e *protocol.IndexEntry) {
-	b, err := e.MarshalBinary()
-	require.NoError(p.t, err)
-	chain, err := c.Get()
-	require.NoError(p.t, err)
-	require.NoError(p.t, chain.AddEntry(b, false))
-}
-
-// rootChain is what an anchor sent now would sign: the root chain's last
-// index and its anchor.
-func (p *producer) rootChain() (uint64, [32]byte) {
-	batch := p.db.Begin(false)
-	defer batch.Discard()
-	chain, err := batch.Account(bvn0().JoinPath(protocol.Ledger)).RootChain().Get()
-	require.NoError(p.t, err)
-	return uint64(chain.Height() - 1), *(*[32]byte)(chain.Anchor())
-}
-
-func (p *producer) peer() api.Querier {
-	return apiimpl.NewQuerier(apiimpl.QuerierParams{Database: p.db, Partition: "BVN0"})
-}
-
-// verified is a source that has verified one anchor of the producer as it
-// stands.
-func (p *producer) verified(f *netFixture, signers ...int) *Source {
-	index, anchor := p.rootChain()
-	signed := f.anchor(p.t, anchorOpts{source: bvn0(), destination: dn(), block: p.blocks, root: root(0x70),
-		signers: signers, rootChainIndex: index, rootChainAnchor: anchor})
-	return sourceOver(p.t, f.authority(p.t), dn().JoinPath(protocol.AnchorPool), bvn0(), signed)
-}
-
-// A root no anchor carries -- the root a peer's state is current at -- is
-// proven by the bpt chain entry that records it and a receipt to the root
-// chain anchor a verified anchor carries. An entry the peer does not have yet
-// is a wait.
-func TestARootIsProvenByTheHistoryAVerifiedAnchorCarries(t *testing.T) {
+// A root is proven by one thing: it equals the StateTreeAnchor of an anchor a
+// quorum signed. The anchor of block N carries the root block N committed, so
+// a state a peer served at block N is proven when that anchor is verified,
+// and not before.
+func TestARootIsProvenByEqualityWithAVerifiedAnchorsStateTreeAnchor(t *testing.T) {
 	ctx := context.Background()
 	f := newNet(t, 4, 1)
-	p := newProducer(t)
-	for i := byte(1); i <= 11; i++ {
-		p.block(root(i))
-	}
-	s := p.verified(f, 0, 1, 2)
+	s := anchored(t, f, 3, 5)
 
-	for i := byte(1); i <= 11; i++ {
-		ok, err := s.ProveRoot(ctx, p.peer(), root(i), 0)
+	for _, b := range []byte{3, 5} {
+		ok, err := s.ProveRoot(ctx, root(b), uint64(b))
 		require.NoError(t, err)
-		require.True(t, ok, "root %d is on the bpt chain under a verified anchor", i)
+		require.True(t, ok, "block %d's root is what its verified anchor carries", b)
 	}
 
-	ok, err := s.ProveRoot(ctx, p.peer(), root(0x44), 0)
+	// The root a peer is current at after the latest anchored block: the
+	// next anchor may carry it, so it waits.
+	ok, err := s.ProveRoot(ctx, root(6), 6)
 	require.NoError(t, err)
-	require.False(t, ok, "a root the chain does not record yet is a wait")
+	require.False(t, ok, "a root served after the latest verified anchor waits for the next one")
 
-	// Recorded, and anchored after the only verified anchor: a wait as well.
-	p.block(root(12))
-	ok, err = s.ProveRoot(ctx, p.peer(), root(12), 0)
+	// And when that anchor arrives, it is proven.
+	pool := s.Query.(*poolQuerier)
+	pool.entries = append(pool.entries, f.anchor(t, anchorOpts{
+		source: bvn0(), destination: dn(), block: 6, root: root(6), signers: []int{0, 1, 2},
+	}))
+	ok, err = s.ProveRoot(ctx, root(6), 6)
 	require.NoError(t, err)
-	require.False(t, ok, "a root recorded after the latest verified anchor waits for the next one")
+	require.True(t, ok, "the anchor of the block the state was served at is verified")
 }
 
-// lyingPeer answers a query for a bpt entry with a receipt of its own choosing
-// and everything else honestly.
-type lyingPeer struct {
-	api.Querier
-	entry   [32]byte
-	index   uint64
-	receipt *merkle.Receipt
+// anythingPeer serves the pool honestly and answers every other query with a
+// record of its own making, so that whatever ProveRoot might ask a peer
+// besides the pool, the peer is glad to supply.
+type anythingPeer struct {
+	*poolQuerier
+	asked int
 }
 
-func (l *lyingPeer) Query(ctx context.Context, scope *url.URL, q api.Query) (api.Record, error) {
-	cq, ok := q.(*api.ChainQuery)
-	if !ok || cq.Name != "bpt" || string(cq.Entry) != string(l.entry[:]) {
-		return l.Querier.Query(ctx, scope, q)
+func (p *anythingPeer) Query(ctx context.Context, scope *url.URL, q api.Query) (api.Record, error) {
+	if scope.Equal(p.pool) {
+		return p.poolQuerier.Query(ctx, scope, q)
 	}
-	return &api.ChainEntryRecord[api.Record]{Name: "bpt", Index: l.index, Entry: l.entry,
-		Receipt: &api.Receipt{Receipt: *l.receipt}}, nil
+	p.asked++
+	return &api.ChainEntryRecord[api.Record]{Name: "bpt", Entry: root(0x44), Receipt: &api.Receipt{}}, nil
 }
 
-// Everything a partition anchors hangs under its root chain, so a valid
-// receipt to a signed root chain anchor proves only that the partition
-// recorded the hash somewhere. A root is proven by the BPT CHAIN's entry: a
-// receipt that starts at another chain's anchor, or at another chain's entry,
-// is refused though every hash in it is true (#4301).
-func TestAReceiptThatIsNotTheBptChainsIsRefused(t *testing.T) {
+// A root equal to no verified StateTreeAnchor is never proven, whatever a
+// peer serves for it: an anchor nobody signed, an anchor one validator
+// signed, a chain entry with a receipt. Nothing but a quorum's signatures on
+// that exact root is proof, and ProveRoot asks the peers for nothing else.
+func TestARootEqualToNoVerifiedStateTreeAnchorIsNeverProven(t *testing.T) {
 	ctx := context.Background()
 	f := newNet(t, 4, 1)
-	p := newProducer(t)
-	for i := byte(1); i <= 11; i++ {
-		p.block(root(i))
-	}
-	s := p.verified(f, 0, 1, 2)
-	height, _ := p.rootChain()
+	forged := root(0x44)
+	pool := &poolQuerier{pool: dn().JoinPath(protocol.AnchorPool), entries: []*api.MessageRecord[messaging.Message]{
+		// The anchor of block 4 as one peer would like it: unsigned.
+		f.anchor(t, anchorOpts{source: bvn0(), destination: dn(), block: 4, root: forged}),
+		// The same, with one validator's signature.
+		f.anchor(t, anchorOpts{source: bvn0(), destination: dn(), block: 4, root: forged, signers: []int{3}}),
+		// And a real one, for block 5.
+		f.anchor(t, anchorOpts{source: bvn0(), destination: dn(), block: 5, root: root(5), signers: []int{0, 1, 2}}),
+	}}
+	peer := &anythingPeer{poolQuerier: pool}
+	s, err := New(peer, pool.pool, bvn0(), f.authority(t))
+	require.NoError(t, err)
 
-	batch := p.db.Begin(false)
-	defer batch.Discard()
-	main, err := batch.Account(p.account).MainChain().Get()
+	ok, err := s.ProveRoot(ctx, forged, 0)
 	require.NoError(t, err)
-	rootChain, err := batch.Account(bvn0().JoinPath(protocol.Ledger)).RootChain().Get()
-	require.NoError(t, err)
+	require.False(t, ok, "a root no quorum signed was proven")
 
-	// The main chain's anchor at block 3 is root chain entry 4: a root chain
-	// leaf, and not the bpt chain's.
-	var leaf [32]byte
-	e, err := rootChain.Entry(4)
+	ok, err = s.ProveRoot(ctx, forged, 5)
 	require.NoError(t, err)
-	copy(leaf[:], e)
-	fromLeaf, err := rootChain.Receipt(4, int64(height))
-	require.NoError(t, err)
-	require.True(t, fromLeaf.Validate(nil))
+	require.False(t, ok, "a root no quorum signed was proven")
 
-	ok, err := s.ProveRoot(ctx, &lyingPeer{Querier: p.peer(), entry: leaf, index: 2, receipt: fromLeaf}, leaf, 0)
-	require.Error(t, err, "a receipt that starts at a root chain leaf the bpt chain did not write is refused")
+	// Served at block 4, and block 5's anchor is verified: if block 4 had
+	// sent an anchor it would be verified too, and it does not carry this.
+	ok, err = s.ProveRoot(ctx, forged, 4)
+	require.Error(t, err, "the history has passed a root no anchor carries, and that is not a wait")
 	require.False(t, ok)
 
-	// A transaction on the main chain, with its whole true receipt.
-	var txn [32]byte
-	copy(txn[:], entryHash("txn", 3))
-	fromTxn, err := main.Receipt(2, 2)
+	require.Zero(t, peer.asked, "ProveRoot asked a peer for something other than the pool")
+	ok, err = s.ProveRoot(ctx, root(5), 5)
 	require.NoError(t, err)
-	fromTxn, err = fromTxn.Combine(fromLeaf)
-	require.NoError(t, err)
-	require.True(t, fromTxn.Validate(nil))
-
-	ok, err = s.ProveRoot(ctx, &lyingPeer{Querier: p.peer(), entry: txn, index: 2, receipt: fromTxn}, txn, 0)
-	require.Error(t, err, "a transaction's receipt is refused as a root's")
-	require.False(t, ok)
+	require.True(t, ok, "the root the quorum did sign is proven")
 }
 
-// A receipt to an anchor no verified anchor carries is refused.
-func TestAReceiptToAnUnverifiedAnchorIsRefused(t *testing.T) {
+// Waiting is for a root no verified anchor carries yet. A state served with
+// no receipt, and a root the history has passed, are not waits: waiting on
+// them is waiting for nothing, and the state is fetched again.
+func TestWhatIsNotAWaitIsAnError(t *testing.T) {
 	ctx := context.Background()
 	f := newNet(t, 4, 1)
-	p := newProducer(t)
-	for i := byte(1); i <= 5; i++ {
-		p.block(root(i))
-	}
-	s := p.verified(f, 0, 1, 2)
+	s := anchored(t, f, 5) // The anchor of block 5
 
-	batch := p.db.Begin(false)
-	defer batch.Discard()
-	bpt, err := batch.Account(bvn0().JoinPath(protocol.Ledger)).BptChain().Get()
-	require.NoError(t, err)
-	short, err := bpt.Receipt(0, 4) // Ends at the bpt chain's anchor, which nobody signs
-	require.NoError(t, err)
+	_, err := s.ProveRoot(ctx, [32]byte{}, 0)
+	require.Error(t, err, "a zero root is a state served without a receipt")
+	require.True(t, errors.Is(err, errors.BadRequest))
 
-	ok, err := s.ProveRoot(ctx, &lyingPeer{Querier: p.peer(), entry: root(1), receipt: short}, root(1), 0)
+	ok, err := s.ProveRoot(ctx, root(0x44), 5)
+	require.NoError(t, err)
+	require.False(t, ok, "served at the latest anchored block, and not that block's root: this peer's word against the quorum's, and it waits for the next anchor")
+
+	ok, err = s.ProveRoot(ctx, root(0x44), 0)
+	require.NoError(t, err)
+	require.False(t, ok, "served at no block the peer named: a wait")
+
+	_, err = s.ProveRoot(ctx, root(0x44), 4)
+	require.Error(t, err, "served at block 4, the anchor of block 5 is verified, and no verified anchor carries it")
+	require.True(t, errors.Is(err, errors.NotFound))
+}
+
+// Nothing is proven before an anchor is verified: an unsigned anchor's
+// StateTreeAnchor is a peer's word.
+func TestNoRootIsProvenWithoutAVerifiedAnchor(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+	unsigned := f.anchor(t, anchorOpts{source: bvn0(), destination: dn(), block: 5, root: root(5)})
+	s := sourceOver(t, f.authority(t), dn().JoinPath(protocol.AnchorPool), bvn0(), unsigned)
+
+	ok, err := s.ProveRoot(ctx, root(5), 5)
+	require.NoError(t, err)
+	require.False(t, ok)
+
+	// A pool that cannot be read is an error, and the join fetches again;
+	// what was verified before the peers went away stays proven.
+	s.Query = failingPeer{}
+	_, err = s.ProveRoot(ctx, root(5), 5)
 	require.Error(t, err)
-	require.False(t, ok)
+
+	proven := anchored(t, f, 5)
+	ok, err = proven.ProveRoot(ctx, root(5), 5)
+	require.NoError(t, err)
+	require.True(t, ok)
+	proven.Query = failingPeer{}
+	ok, err = proven.ProveRoot(ctx, root(5), 5)
+	require.NoError(t, err, "a root verified already is proven whether or not the pool answers this round")
+	require.True(t, ok)
 }
 
 // failingPeer answers nothing.
@@ -227,116 +176,4 @@ type failingPeer struct{}
 
 func (failingPeer) Query(context.Context, *url.URL, api.Query) (api.Record, error) {
 	return nil, errors.NoPeer.With("no peer answered")
-}
-
-// Waiting is for a root the chain has not recorded or no anchor has reached.
-// Peers that do not answer, a state served with no receipt, and a root the
-// history has passed are not waits: waiting on them is waiting for nothing.
-func TestWhatIsNotAWaitIsAnError(t *testing.T) {
-	ctx := context.Background()
-	f := newNet(t, 4, 1)
-	p := newProducer(t)
-	for i := byte(1); i <= 5; i++ {
-		p.block(root(i))
-	}
-	s := p.verified(f, 0, 1, 2) // The anchor of block 5
-
-	_, err := s.ProveRoot(ctx, failingPeer{}, root(1), 0)
-	require.Error(t, err, "no peer answered")
-
-	_, err = s.ProveRoot(ctx, p.peer(), [32]byte{}, 0)
-	require.Error(t, err, "a zero root is a state served without a receipt")
-
-	ok, err := s.ProveRoot(ctx, p.peer(), root(0x44), 5)
-	require.NoError(t, err)
-	require.False(t, ok, "served at the latest anchored block: the next block records it")
-
-	_, err = s.ProveRoot(ctx, p.peer(), root(0x44), 4)
-	require.Error(t, err, "served at block 4, the anchor of block 5 is verified, and the chain does not record it")
-}
-
-// Nothing is proven before an anchor is verified: an unsigned anchor's root
-// chain anchor is a peer's word.
-func TestNoRootIsProvenWithoutAVerifiedAnchor(t *testing.T) {
-	ctx := context.Background()
-	f := newNet(t, 4, 1)
-	p := newProducer(t)
-	for i := byte(1); i <= 5; i++ {
-		p.block(root(i))
-	}
-	s := p.verified(f) // Nobody signed it
-
-	ok, err := s.ProveRoot(ctx, p.peer(), root(3), 0)
-	require.NoError(t, err)
-	require.False(t, ok)
-}
-
-// forgingPeer is a lyingPeer that also answers for the bpt chain's index, with
-// one entry of its own choosing.
-type forgingPeer struct {
-	lyingPeer
-	indexed *protocol.IndexEntry
-}
-
-func (f *forgingPeer) Query(ctx context.Context, scope *url.URL, q api.Query) (api.Record, error) {
-	cq, ok := q.(*api.ChainQuery)
-	if !ok || cq.Name != "bpt-index" {
-		return f.lyingPeer.Query(ctx, scope, q)
-	}
-	return &api.RecordRange[api.Record]{Records: []api.Record{
-		&api.ChainEntryRecord[api.Record]{Name: "bpt-index", Value: &api.IndexEntryRecord{Value: f.indexed}},
-	}}, nil
-}
-
-// The peer that serves the receipt is the peer that says where the bpt chain
-// was anchored, so holding the receipt to the bpt chain's index holds it to
-// nothing unless the index is proven too. A transaction's true receipt, served
-// with an index entry forged to fit it, must be refused: a transaction hash is
-// something anybody can put on a chain, and a root that is one makes the state
-// served under it the peer's word (#4301).
-//
-// SKIPPED, AND IT FAILS: ProveRoot answers true here. The bpt chain's index is
-// read from the peer with no proof (index chains are not anchored), and the
-// binding cannot be made without it from what a peer serves today: a chain
-// entry's receipt always climbs to the entry's OWN first anchoring
-// (indexing.ReceiptForChainIndex), so a root and a signed StateTreeAnchor never
-// enter the root chain at one leaf. DIFFERENCES.md E11, "The bpt chain's index
-// is the peer's word".
-func TestATransactionsReceiptIsRefusedThoughThePeerForgesTheBptIndex(t *testing.T) {
-	t.Skip("fails: a peer that forges the bpt chain's index proves a transaction hash as a root (#4301, DIFFERENCES.md E11)")
-	ctx := context.Background()
-	f := newNet(t, 4, 1)
-	p := newProducer(t)
-	for i := byte(1); i <= 11; i++ {
-		p.block(root(i))
-	}
-	s := p.verified(f, 0, 1, 2)
-	height, _ := p.rootChain()
-
-	batch := p.db.Begin(false)
-	defer batch.Discard()
-	main, err := batch.Account(p.account).MainChain().Get()
-	require.NoError(t, err)
-	rootChain, err := batch.Account(bvn0().JoinPath(protocol.Ledger)).RootChain().Get()
-	require.NoError(t, err)
-
-	// Block 3's transaction is main chain entry 2, and the main chain's anchor
-	// for that block is root chain entry 4.
-	var txn [32]byte
-	copy(txn[:], entryHash("txn", 3))
-	fromTxn, err := main.Receipt(2, 2)
-	require.NoError(t, err)
-	fromLeaf, err := rootChain.Receipt(4, int64(height))
-	require.NoError(t, err)
-	fromTxn, err = fromTxn.Combine(fromLeaf)
-	require.NoError(t, err)
-	require.True(t, fromTxn.Validate(nil))
-
-	peer := &forgingPeer{
-		lyingPeer: lyingPeer{Querier: p.peer(), entry: txn, index: 2, receipt: fromTxn},
-		indexed:   &protocol.IndexEntry{BlockIndex: 3, Source: 2, Anchor: 4},
-	}
-	ok, err := s.ProveRoot(ctx, peer, txn, 0)
-	require.False(t, ok, "a transaction hash was proven as a BPT root by a peer that forged the bpt chain's index")
-	require.Error(t, err)
 }

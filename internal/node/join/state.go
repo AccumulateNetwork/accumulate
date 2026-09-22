@@ -470,7 +470,7 @@ func (s *PulledState) settlePass(ctx context.Context) {
 		return
 	}
 
-	ok, err := s.anchors.ProveRoot(ctx, s.sources.Querier(s.partition), root, servedAt)
+	ok, err := s.anchors.ProveRoot(ctx, root, servedAt)
 	if err != nil {
 		// Nothing to come will prove this root. What was served at it is not
 		// written; the pass is asked for again, and the peers are asked in

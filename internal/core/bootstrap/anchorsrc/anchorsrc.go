@@ -125,10 +125,6 @@ type Source struct {
 	// the cursor. One is a peer that lags; doubtRounds of them is a cursor
 	// that is wrong.
 	doubt int
-	// history is the producer's root chain as its verified anchors state it:
-	// the anchor of the root chain and the index it was taken at. It is what
-	// a root that no anchor carries is proven against (ProveRoot).
-	history []rootChainAnchor
 }
 
 type anchorKey struct {
@@ -474,9 +470,10 @@ func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messagin
 
 	// The MINOR block index, always. It is the block a peer serves an
 	// account at (pull.Pending.Block), and it is what the tracker matches.
-	// MajorBlockIndex is metadata and is zero on almost every anchor.
+	// MajorBlockIndex is metadata and is zero on almost every anchor. The
+	// root recorded is the one the join proves a pass's root against, by
+	// equality (ProveRoot).
 	s.record(anchorKey{strings.ToLower(pa.Source.String()), pa.MinorBlockIndex}, pa.StateTreeAnchor)
-	s.recordHistory(rootChainAnchor{block: pa.MinorBlockIndex, index: pa.RootChainIndex, anchor: pa.RootChainAnchor})
 	if s.OnAnchor != nil {
 		s.OnAnchor(pa.Source, pa.MinorBlockIndex, pa.StateTreeAnchor)
 	}
