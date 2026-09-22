@@ -45,23 +45,26 @@ import (
 // database, with that node's peer ID excluded exactly as production excludes
 // it (#4303).
 //
-// # What it waits on (#4362)
+// # How it settles (#4362)
 //
-// The test is live. #4361 is the SERVING half: a peer can be asked for an
-// account or a BPT page as of a block the Directory anchored, and answers with
-// a body and a receipt that terminate at that block's StateTreeAnchor. #4301,
-// the spine validated by signature, gives the join one verified root per
-// anchored block to ask AT. The simulator runs with simulator.BPTHistoryDepth
-// at a node's own default of 1024 (cmd/accumulated/run/dagbft.go), so the
-// peers retain the history those requests need; the simulator's default is
-// zero, which would refuse every anchored-block request.
+// The pull asks each peer for CURRENT state and sends no ForHeight. #4301,
+// the spine validated by signature, gives the join verified signed anchors:
+// each carries the StateTreeAnchor of the block that sent it and the root
+// chain's anchor and height as of that block. A pass is written once the
+// root its receipts end at is proven: it equals a verified anchor's
+// StateTreeAnchor, or the bpt chain's history from one such root to it,
+// read from the peers, hashes into the root chain anchor a later verified
+// anchor signs (anchorsrc.ProveRoot). So a pass served at block N is proven
+// once any anchor after N is verified, whether or not block N sent one, and
+// there is no settle bound: a pass is held only until the next verified
+// anchor, or dropped and fetched again when the history has passed it.
 //
-// What is left is #4362, the convergence loop. The PULL still asks for the
-// peer's current block -- it sends no ForHeight -- so nothing the restarted
-// node pulls ever settles and this test fails with exactly that message.
-// #4362 makes the pull ask for each account at an anchored block and settle it
-// on the round it was fetched, with the settle bound (maxSettleRounds,
-// join/state.go) removed because there is nothing left to wait for.
+// #4361, a peer serving an account or a BPT page as of an anchored block, is
+// a reader's capability the pull does not use. The test still runs the
+// simulator with simulator.BPTHistoryDepth at a node's own default of 1024
+// (cmd/accumulated/run/dagbft.go), which is what a node runs with; that
+// option gates the per-block BPT retention #4361 serves from (block_end.go),
+// not the bpt chain entries and receipts the history proof reads.
 func TestRestartedNodeWithAPopulatedDatabaseResyncs(t *testing.T) {
 	const joiner = 2 // the node that stops and comes back
 

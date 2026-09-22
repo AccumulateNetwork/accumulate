@@ -241,8 +241,10 @@ to a threshold of distinct members of the producing partition's set — #4301
 statement (b); the operators' book keeps governance and is not read — anchors
 routed by producer), pulls
 the peers' *current* state and keeps it once the root it is served at is
-proven — an entry of the bpt chain with a receipt to the root chain anchor a
-verified anchor carries (rewritten 2026-09-21 on the owner's decision; until
+proven — it equals a verified anchor's `StateTreeAnchor`, or the bpt chain's
+history from one such root to it hashes into the root chain anchor a later
+verified anchor carries (rewritten 2026-09-21 on the owner's decision, the
+mechanism settled 2026-09-22; until
 then it read "served *as of that anchored block*") — and collects consensus
 from the moment it listens; staging
 is what was collected minus what the pulled state says executed, and the
@@ -286,28 +288,24 @@ Two departures the rewritten section names that this entry did not:
   `LocalBlock`, which is used only to break a tie between two roots of one
   pass and to tell a root the history has passed from one it has not reached. Retention's cost on BlockchainDB is unmeasured
   (#4165).
-- **The bpt chain's index is the peer's word** (#4362, found 2026-09-21; open).
-  The spec holds a root's receipt to the bpt chain by proof. The code
-  (`anchorsrc/history.go`, `ProveRoot`) finds the root chain entry from the
-  signed height, which no peer can move, and then compares it with the bpt
-  chain's index entry **as the same peer serves it**, unproven — index chains
-  are not anchored. A peer that forges both the receipt and the index entry
-  proves a transaction hash as a BPT root:
-  `TestATransactionsReceiptIsRefusedThoughThePeerForgesTheBptIndex`
-  (`history_test.go`) shows it, fails, and is skipped for that reason. The
-  check does stop a peer that lies about the receipt alone
-  (`TestAReceiptThatIsNotTheBptChainsIsRefused`). It cannot be closed from the
-  join's side: the witness the spec names — a signed `StateTreeAnchor`, known
-  to be a bpt entry — never enters the root chain at the same entry as the root
-  being proven, because `indexing.ReceiptForChainIndex` builds a chain entry's
-  receipt to the entry's *own first anchoring* and `ForHeight` moves only the
-  root chain end. What closes it is that function building the bpt leg to the
-  bpt chain's anchor at the asked height. Also unverified: that the
-  `StateTreeAnchor` an anchor carries is always the value the next block
-  records on the bpt chain — read from `anchoring.go` and `block_begin.go`,
-  not run. Weaker and not closed by the above: an interior node of the bpt
-  chain can pass for an entry when the peer also chooses the chain height; it
-  is not a value a peer can choose, and the states under it are old true ones.
+- **The bpt chain's index is the peer's word** — *retired 2026-09-22
+  (#4362)*. Found 2026-09-21: `ProveRoot` found the root chain entry from the
+  signed height and then compared it with the bpt chain's index entry as the
+  same peer served it, unproven, so a peer that forged both the receipt and
+  the index entry proved a transaction hash as a BPT root. The proof now reads
+  no index: the signed root chain height alone decides which step of a
+  receipt is a root chain entry (`splitAtLeaf`, `leafpath.go`), the base's
+  receipt below that step rebuilds the bpt chain's merkle state, the entries
+  from the base to the root are appended, and the rebuilt anchor must be the
+  hash the root's own receipt enters the root chain at. The index a peer
+  reports shapes the rebuild and the range asked for and enters no
+  conclusion; `TestATransactionsReceiptIsRefusedThoughThePeerForgesTheBptIndex`
+  runs and passes, and `TestAnAnchorsStateTreeAnchorIsTheRootOfItsBlock`
+  pins that an anchor's `StateTreeAnchor` is the value the next non-empty
+  block records on the bpt chain. **What stays open:** an interior node of
+  the bpt chain, whose leaves are true roots, can pass for an entry when the
+  peer also chooses the range it is asked for; it is not a value a peer can
+  choose, and the states under it are old true ones.
 
 **Code**: a node starts from genesis or from a snapshot file it was given, and
 consensus "catches up" by fetching batches from peers' retention
@@ -798,8 +796,9 @@ seventh nobody had named.
   discards on `ErrNotAnchored`, and the pull runs ahead of the anchors by
   design, so the next round re-fetched at a newer block that was not anchored
   either. `pull.FetchFrom` fetches without settling; the join holds the
-  `Pending` across rounds and settles it against the block it was served at,
-  for `maxSettleRounds` rounds, then gives up and asks again.
+  `Pending` across rounds and settles it once the root it was served at is
+  proven (until #4362 it gave up after `maxSettleRounds` rounds and asked
+  again; that bound is deleted — see "Anchored-height serving" above).
 - **The pull did not move the state root (#4305).** `UpdateBPT` before every
   commit, in the pull and in the spine.
 - **The changed set could not match (#4306).** Above, plus: the page diff runs
@@ -856,10 +855,11 @@ seventh nobody had named.
   work not done.
 - **A held fetch keeps a batch open across rounds** (#4302 section 9)**.**
   Each round's fetch holds
-  `db.Begin(true)` until everything in it settles or `maxSettleRounds` pass, so
-  a version of the store is pinned for a few rounds (#4279 is about the cost of
-  that). It is bounded by `maxSettleRounds` and by `pull.MaxHeld`; it is not
-  free.
+  `db.Begin(true)` until the root it was served at is proven or the history
+  passes it, so a version of the store is pinned for a few rounds (#4279 is
+  about the cost of that). It is bounded by the next verified anchor after
+  the served block and by `pull.MaxHeld`, not by a round count (#4362); it is
+  not free.
 - **#4298 is untouched and is still a precondition.** `<partition>/ledger`
   hashes the scheduled-events BPT and `<partition>/synthetic` hashes the
   delivery queues (`observer_prod.go`), and the pull fetches neither, so those
@@ -1314,6 +1314,16 @@ The rules the implementation holds to, pending that part:
 exists so the two calls are not mistaken for unspecified behaviour.
 
 ## A pulled account can only settle on a block the Directory anchored
+
+*Retired 2026-09-22 (#4362).* The repair the end of this section names is
+what was built, with the trust anchor it said had to be chosen: the root
+chain anchor and height a verified signed anchor carries. `anchorsrc.ProveRoot`
+proves a root served at any block by equality with a verified
+`StateTreeAnchor` or by the bpt chain's history from one to it, held to the
+later anchor's signed root chain anchor (executor.md "Sync", step 2), so the
+stride below no longer discards anything, `maxSettleRounds` is deleted, and
+`tracker.Matched` still compares this node's own root against a verified one.
+The rest of this section is kept as the record of the measurement.
 
 executor.md ("Sync", step 3) says a fetched account is held until the anchor
 for its block arrives. The implementation reads that literally:

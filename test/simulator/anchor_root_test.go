@@ -24,8 +24,9 @@ import (
 )
 
 // TestAnAnchorsStateTreeAnchorIsTheRootOfItsBlock pins which block's root a
-// signed anchor carries, because the join proves a root by equality with it
-// (executor spec, "Sync", step 2; anchorsrc.ProveRoot).
+// signed anchor carries, because the join proves a root by equality with it,
+// or by the bpt chain's history from it to the root, held to a later signed
+// anchor (executor spec, "Sync", step 2; anchorsrc.ProveRoot).
 //
 // An anchor for block N is built at the start of block N+1 from the BPT root
 // as it then stands (crosschain/anchoring.go), which is the root block N
