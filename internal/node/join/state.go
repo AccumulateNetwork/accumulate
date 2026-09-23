@@ -90,7 +90,9 @@ type PulledState struct {
 
 	// executed is the block this node's EXECUTOR last executed: the number
 	// the daemon logs as lastBlock. It is read once, before anything is
-	// pulled, and never again — see localBlock.
+	// pulled, and never from the store again — see localBlock. After the
+	// handoff it is the last block whose root matched its anchor (HandedOff,
+	// Diverged).
 	executed uint64
 
 	// pass is what has been fetched and not yet settled: the peer's CURRENT
@@ -349,9 +351,11 @@ func (s *PulledState) changedAccounts(ctx context.Context) ([]*url.URL, error) {
 // was 853 behind, s.wide was never set, the page diff never ran as the primary,
 // and the walk covered 17 blocks instead of 853 (#4295).
 //
-// Nothing moves it while the join runs: a joining node collects committed
-// blocks and executes none of them (join.Run, step 1), so its executor stands
-// still until the handoff.
+// Nothing moves it while the join converges: a joining node collects
+// committed blocks and executes none of them (join.Run, step 1), so its
+// executor stands still until the handoff. After the handoff HandedOff and
+// Diverged move it to the last block whose root matched its anchor, which is
+// where a node that syncs again starts from.
 func (s *PulledState) localBlock() (uint64, error) {
 	return s.executed, nil
 }
