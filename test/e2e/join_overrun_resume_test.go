@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -258,10 +257,6 @@ func (s *resumeSteppingState) Pull(ctx context.Context) error {
 // resumeSettler stands for the executor's settle: the simulator does not
 // expose a node's executor, and settling is not what this test is about.
 type resumeSettler struct{ settled []uint64 }
-
-func (s *resumeSettler) LoadStaging(*private.StagingSnapshot) error {
-	return errors.NotAllowed.With("a join loads no staging (#4362)")
-}
 
 func (s *resumeSettler) SettleStagingAt(q uint64) error {
 	s.settled = append(s.settled, q)
