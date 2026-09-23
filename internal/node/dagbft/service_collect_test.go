@@ -302,3 +302,52 @@ func TestHandoff_StartingToCollectTwiceKeepsTheMapOntoBlocks(t *testing.T) {
 	require.Equal(t, uint64(42), ca.blocks[0].Index)
 	require.Equal(t, types.Round(4), ca.blocks[0].LeaderRound, "the group committed second is block 42")
 }
+
+// A node whose executed block's root differs from its proven root collects
+// again and syncs again (executor spec, "Sync", step 4). The second collection
+// maps onto the blocks after the one the node had executed to, and the second
+// handoff produces only what the newer state does not have.
+func TestHandoff_CollectingAgainAfterAHandoffMapsOntoTheBlocksAfterIt(t *testing.T) {
+	svc, ca, author := newJoiningService(t)
+	w := svc.node.Workers()[0]
+	commit := func(round int, tag byte) {
+		t.Helper()
+		b := types.NewBatch([][]byte{{tag}})
+		require.NoError(t, w.StoreBatch(b))
+		_, err := svc.processCommittedGroup(group(commitCert(author, types.Round(round), time.Unix(int64(100+round), 0),
+			[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
+		require.NoError(t, err)
+	}
+
+	// Joined at 40, then executed 41 and 42.
+	svc.lastBlockIndex = 40
+	svc.StartCollecting()
+	require.NoError(t, svc.performHandoff(40))
+	commit(2, 1)
+	commit(4, 2)
+	require.Len(t, ca.blocks, 2)
+	require.Equal(t, uint64(42), svc.lastBlockIndex)
+
+	// Block 42 diverged: the join collects again. Blocks 43, 44 and 45 are
+	// collected, none executed.
+	svc.StartCollecting()
+	commit(6, 3)
+	commit(8, 4)
+	commit(10, 5)
+	require.Len(t, ca.blocks, 2, "a node syncing again executes nothing")
+	require.Len(t, svc.Buffered(), 3)
+
+	// A pull behind where the node stood cannot be handed off at: those
+	// blocks are not in the buffer.
+	err := svc.performHandoff(41)
+	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
+	require.True(t, svc.Collecting())
+
+	// The peers' state is block 44: only 45 is produced.
+	require.NoError(t, svc.performHandoff(44))
+	require.False(t, svc.Collecting())
+	require.Len(t, ca.blocks, 3)
+	require.Equal(t, uint64(45), ca.blocks[2].Index)
+	require.Equal(t, types.Round(10), ca.blocks[2].LeaderRound, "the group committed third since collecting again is block 45")
+	require.Equal(t, uint64(45), svc.lastBlockIndex)
+}
