@@ -7,7 +7,6 @@
 package join
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -17,7 +16,6 @@ import (
 // A Settler is the executor's side of a stage: it brings staging to the
 // block the pulled state is.
 type Settler interface {
-	LoadStaging(*private.StagingSnapshot) error
 	SettleStagingAt(q uint64) error
 }
 

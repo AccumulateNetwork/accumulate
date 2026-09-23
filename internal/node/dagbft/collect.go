@@ -266,16 +266,11 @@ func (g *CollectedGroup) payloadEntries() int {
 	return n
 }
 
-// ApplyStaging takes a peer's staging — `load` is the join's LoadStaging —
-// and then applies to it every block this node has buffered since it started
-// collecting, in order, and every one that arrives after.
-//
-// The order is the spec's (executor.md, "Sync", step 2): staging comes from a
-// validator as of its block P, and the buffered blocks after P are applied to
-// THAT staging. A node that collected into its own staging first would have
-// nothing to load into — a stage with entries in it is not a peer's stage —
-// and it would be holding, before it knew what its peers hold, whatever its
-// partially pulled state made of the blocks it saw.
+// ApplyStaging runs `load`, then applies to staging every block this node has
+// buffered since it started collecting, in order, and every one that arrives
+// after. No peer's staging is loaded: the join passes a load that does
+// nothing, and staging is what this node collected from consensus (executor
+// spec, "Sync", step 1; #4362 deleted the staging API).
 //
 // It runs in the block production loop, like the handoff, because that is
 // where the buffer is written: loading beside it would apply the buffered

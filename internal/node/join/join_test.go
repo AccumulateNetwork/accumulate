@@ -16,12 +16,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // fakeBuffer stands for the DAG service's collecting mode.
@@ -61,9 +58,7 @@ func (b *fakeBuffer) Handoff(q uint64) error {
 
 // fakeStage stands for the executor's staging half.
 type fakeStage struct {
-	loaded  *private.StagingSnapshot
 	settled uint64
-	loadErr error
 
 	// gaps are the blocks whose collected streams are not contiguous from
 	// Delivered + 1; gapAsked is every block HasGap was asked about.
@@ -71,13 +66,6 @@ type fakeStage struct {
 	gapAsked []uint64
 }
 
-func (s *fakeStage) LoadStaging(snap *private.StagingSnapshot) error {
-	if s.loadErr != nil {
-		return s.loadErr
-	}
-	s.loaded = snap
-	return nil
-}
 func (s *fakeStage) SettleStagingAt(q uint64) error { s.settled = q; return nil }
 
 // HasGap is the seam granted for #4362 (Stage.HasGap): whether the streams
@@ -113,37 +101,13 @@ func (s *fakeState) Matched(context.Context) (uint64, bool, error) {
 	return s.matchAt, true, nil
 }
 
-// fakePeers serves a snapshot per peer, in order.
+// fakePeers lists the partition's validators.
 type fakePeers struct {
 	peers []*api.FindServiceResult
-	snaps map[string]*private.StagingSnapshot
-	errs  map[string]error
-	asked []string
 }
 
 func (p *fakePeers) Validators(context.Context) ([]*api.FindServiceResult, error) {
 	return p.peers, nil
-}
-
-func (p *fakePeers) Staging(peer *api.FindServiceResult) private.StagingSnapshotter {
-	return &fakeSnapshotter{p: p, key: peer.PeerID.String()}
-}
-
-type fakeSnapshotter struct {
-	p   *fakePeers
-	key string
-}
-
-func (f *fakeSnapshotter) Sequence(context.Context, *url.URL, *url.URL, uint64, private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
-	return nil, errors.NotAllowed.With("not used")
-}
-
-func (f *fakeSnapshotter) StagingSnapshot(_ context.Context, _ *private.StagingSnapshotRequest) (*private.StagingSnapshot, error) {
-	f.p.asked = append(f.p.asked, f.key)
-	if err := f.p.errs[f.key]; err != nil {
-		return nil, err
-	}
-	return f.p.snaps[f.key], nil
 }
 
 // peerID is a distinct, valid peer ID per test peer: an ed25519 public key's
@@ -188,8 +152,6 @@ func TestJoin_HandsOffWhereTheNextBlockHasNoGap(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, Joined, outcome)
 
-	require.Empty(t, peers.asked, "no peer is asked for its staging")
-	require.Nil(t, stage.loaded, "and nothing is loaded into this node's own")
 	require.Equal(t, 1, buf.applied, "the node collects into its own staging")
 	require.Equal(t, []uint64{21}, stage.gapAsked, "the block after the match is checked for a gap")
 	require.Equal(t, uint64(20), stage.settled, "staging settles at the block the state is")
@@ -258,7 +220,6 @@ func TestJoin_FindingNoValidatorIsNotAnAnswer(t *testing.T) {
 	require.Error(t, err, "a node that cannot see its partition does not execute")
 	require.True(t, errors.Is(err, errors.NotReady), "and says it is not ready")
 	require.Zero(t, buf.handedOff)
-	require.Nil(t, stage.loaded)
 }
 
 // gapState is a state pull that syncs to b on its first pull, and after that
@@ -311,15 +272,12 @@ func TestJoin_APreListenEntryAdvancesTheSyncInsteadOfExecuting(t *testing.T) {
 	state := &gapState{stage: stage, b: b}
 	peers := &fakePeers{
 		peers: []*api.FindServiceResult{peerResult(1)},
-		snaps: map[string]*private.StagingSnapshot{peerID(1).String(): {Block: 17}},
 	}
 
 	outcome, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers})
 	require.NoError(t, err)
 	require.Equal(t, Joined, outcome)
 
-	assert.Empty(t, peers.asked, "no peer is asked for its staging")
-	assert.Nil(t, stage.loaded, "and no peer's staging is loaded")
 	assert.NotContains(t, buf.handoffs, uint64(b), "B+1 has a gap, so the join does not execute it")
 	assert.Equal(t, []uint64{b + 1}, buf.handoffs, "the join hands off once, at B+1: B+2 is the first block executed")
 	assert.Equal(t, uint64(b+1), state.synced, "the sync advanced to B+1")

@@ -871,8 +871,7 @@ func nodeMustJoin(lastBlock uint64) bool {
 // starts: a joining node executes nothing, so the number cannot change under
 // it, while the pull writes a peer's state into this store from the first
 // round. Everything that decides what this node does with its own height
-// reads the remembered number — `nodeMustJoin`, the metric, and the
-// NoPeerHasStaging branch that starts executing at it (#4344).
+// reads the remembered number — `nodeMustJoin` and the metric (#4344).
 func (s *DAGBFTService) noteExecutedBlock(db database.Beginner) error {
 	n, err := lastExecutedBlock(db, s.Partition.ID)
 	if err != nil {
@@ -880,43 +879,6 @@ func (s *DAGBFTService) noteExecutedBlock(db database.Beginner) error {
 	}
 	s.lastExecuted = n
 	return nil
-}
-
-// joinExecuting records that this node has started executing; blockHandoff
-// starts it. Both are interfaces so the branch below can be driven without a
-// consensus service — it had no test at all (#4320), which is how a number
-// read from an account the pull overwrites came to be what a node starts
-// executing at.
-type joinExecuting interface{ Executing(uint64) error }
-type blockHandoff interface{ Handoff(uint64) error }
-
-// executeFromOwnState is what a node does when no validator of its partition
-// has staging to give: they all restarted too, and an empty stage is what
-// every one of them holds. There is nothing to take and nothing to be exact
-// about, so this node executes from where it stands — the blocks it buffered
-// while it was asking, in order, from its own last block on.
-//
-// "Its own last block" is s.lastExecuted, read before the pull could touch it.
-func (s *DAGBFTService) executeFromOwnState(state joinExecuting, handoff blockHandoff) {
-	slog.Info("No peer had staging to give; executing from this node's own state",
-		"module", "join", "partition", s.Partition.ID, "block", s.lastExecuted)
-
-	// Its state is recorded as executing BEFORE it is, because the root
-	// recorded must be the root of the block named and one produced block
-	// changes it. A node that could not record it would refuse every request
-	// for the rest of its life (#4295), so that is a failure and not a log
-	// line.
-	err := state.Executing(s.lastExecuted)
-	if err != nil {
-		slog.Error("This node cannot record that it is executing; it will refuse requests",
-			"module", "join", "partition", s.Partition.ID, "block", s.lastExecuted, "error", err)
-		return
-	}
-	err = handoff.Handoff(s.lastExecuted)
-	if err != nil {
-		slog.Error("This node could not start executing", "module", "join",
-			"partition", s.Partition.ID, "block", s.lastExecuted, "error", err)
-	}
 }
 
 // lastExecutedBlock is the block this node's state is, or zero when it has
@@ -933,10 +895,8 @@ func (s *DAGBFTService) executeFromOwnState(state joinExecuting, handoff blockHa
 //	Pulled accounts were given up on unanchored: ... first=acc://dn.acme/ledger
 //
 // So what this read at start-up was whatever the previous process's pull left
-// behind. Today it decides `nodeMustJoin`, where a wrong value is harmless,
-// but it is also what the NoPeerHasStaging branch starts executing at — so a
-// half-finished pull could start this node executing at a peer's block over a
-// store that was only partly filled (#4344).
+// behind, and a half-finished pull could make a node that has executed a
+// week of blocks look like one that must join from somewhere else (#4344).
 //
 // The executor writes SystemData(partition).ExecutedBlock with every block it
 // commits (block_end.go). SystemData is not an account, so no pull reaches it.

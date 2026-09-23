@@ -166,15 +166,30 @@ func (a *ExecutorApp) Execute(req *ExecuteRequest) (*ExecuteResponse, error) {
 		}
 		return &ExecuteResponse{Block: collected{}}, nil
 	}
+	return a.execute(req.Params, req.Envelopes)
+}
 
-	block, err := a.Executor.Begin(req.Params)
+// Produce executes and commits one block exactly as Execute and Commit do for
+// a block consensus hands the node: what a node that has joined does with the
+// blocks it buffered past the state it pulled (join.Buffer's Handoff).
+func (a *ExecutorApp) Produce(params execute.BlockParams, envelopes []*messaging.Envelope) error {
+	res, err := a.execute(params, envelopes)
+	if err != nil {
+		return err
+	}
+	_, err = a.Commit(&CommitRequest{Block: res.Block})
+	return err
+}
+
+func (a *ExecutorApp) execute(params execute.BlockParams, envs []*messaging.Envelope) (*ExecuteResponse, error) {
+	block, err := a.Executor.Begin(params)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("begin block: %w", err)
 	}
 
 	// Copy to avoid interference between nodes
-	envelopes := make([]*messaging.Envelope, len(req.Envelopes))
-	for i, envelope := range req.Envelopes {
+	envelopes := make([]*messaging.Envelope, len(envs))
+	for i, envelope := range envs {
 		envelopes[i] = envelope.Copy()
 	}
 

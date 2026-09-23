@@ -8,14 +8,12 @@ package simulator
 
 import (
 	"bytes"
-	"context"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"io"
 	"sort"
 	"sync"
@@ -24,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -62,10 +61,11 @@ func (p *Partition) NodeDatabase(i int) *database.Database { return p.nodes[i].d
 // (executor spec, "Sync", step 1). It executes nothing until the join
 // completes; a restart IS a join (#4205, #4294).
 //
-// The simulator has no process to restart and no consensus buffer: every node
-// is handed every block, so "buffered" and "collected" are the same thing
-// here. What the join must still get right is the same: the node takes a
-// peer's staging, takes the state, and executes from the block after.
+// The simulator has no process to restart: every node is handed every block,
+// and the node's join state (NodeJoin) keeps them as the DAG service's buffer
+// does. From here the join is the production loop's — join.Run, with this
+// node's buffer, its executor's stage, and a pull addressed at its peers — and
+// it executes from the block after the state it proved.
 func (p *Partition) RestartNode(i int) {
 	p.nodes[i].staging.Reset()
 	p.nodes[i].join.leave()
@@ -74,70 +74,12 @@ func (p *Partition) RestartNode(i int) {
 // Joining reports whether node i is collecting rather than executing.
 func (p *Partition) Joining(i int) bool { return p.nodes[i].join.Joining() }
 
-// TakeStaging is step 2 of node i's join: it takes node j's staging as of j's
-// last committed block, through the same private API a real node uses
-// (#4291), and loads it. The blocks that follow are applied to it as they
-// arrive, which is what collecting has been doing since RestartNode.
-func (p *Partition) TakeStaging(i, j int) error {
-	from, ok := p.NodePrivate(j).(private.StagingSnapshotter)
-	if !ok {
-		return errors.NotAllowed.With("this node does not serve staging")
-	}
-	snap, err := private.FetchStagingSnapshot(context.Background(), from, p.ID)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	return p.nodes[i].join.takeStaging(snap)
-}
+// NodeJoin is node i's join buffer: what join.Run collects into and hands off
+// through, as cmd/accumulated/run/dagbft.go hands it the DAG service.
+func (p *Partition) NodeJoin(i int) join.Buffer { return p.nodes[i].join }
 
-// CompleteJoin is steps 3 and 4 of node i's join: the state comes from node j
-// — in the simulator by copying its store, where a real node pulls it account
-// by account and verifies each against the anchored root (#4293) — staging is
-// settled at the block that state is, and node i executes from the next block
-// as any node does.
-func (p *Partition) CompleteJoin(i, j int) error {
-	src, ok := p.nodes[j].store.(*memory.Database)
-	dst, ok2 := p.nodes[i].store.(*memory.Database)
-	if !ok || !ok2 {
-		return errors.NotAllowed.With("the simulator's join needs in-memory stores")
-	}
-	entries, err := src.Export()
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	err = dst.Import(entries)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// The block the state is: what the peer's ledger says, which is what the
-	// anchored-root match answers on a real network.
-	var q uint64
-	err = p.nodes[i].database.View(func(batch *database.Batch) error {
-		var ledger *protocol.SystemLedger
-		err := batch.Account(protocol.PartitionUrl(p.ID).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
-		if err != nil {
-			return err
-		}
-		q = ledger.Index
-		return nil
-	})
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	settler, ok := p.nodes[i].executor.(interface{ SettleStagingAt(uint64) error })
-	if !ok {
-		return errors.NotAllowed.With("this executor cannot settle staging")
-	}
-	err = settler.SettleStagingAt(q)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	p.nodes[i].join.done()
-	return nil
-}
+// NodeExecutor is node i's executor: what a join settles staging through.
+func (p *Partition) NodeExecutor(i int) execute.Executor { return p.nodes[i].executor }
 
 // NodeStaging is node i's staging, for a test that compares nodes.
 func (p *Partition) NodeStaging(i int) *coreexec.Staging { return p.nodes[i].staging }
@@ -147,8 +89,7 @@ func (p *Partition) NodeStaging(i int) *coreexec.Staging { return p.nodes[i].sta
 // stands a node where a restarted one stands needs that ID to do the same.
 func (p *Partition) NodePeerID(i int) peer.ID { return p.nodes[i].peerID }
 
-// NodePrivate is the private API as node i serves it, addressed to that node:
-// what a joining node asks a running validator for (#4291).
+// NodePrivate is the private API as node i serves it, addressed to that node.
 func (p *Partition) NodePrivate(i int) private.Sequencer {
 	addr := private.ServiceTypeSequencer.AddressFor(p.ID).Multiaddr()
 	return p.sim.services.ForPeer(p.nodes[i].peerID).ForAddress(addr).Private()

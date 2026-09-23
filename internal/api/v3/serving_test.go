@@ -49,7 +49,6 @@ func TestSequencer_RefusesWhileJoining(t *testing.T) {
 		out := map[string]error{}
 		_, out["sequence"] = s.Sequence(ctx, src, dst, 1, private.SequenceOptions{})
 		_, out["sequence-range"] = s.SequenceRange(ctx, src, dst, 1, 2, private.SequenceOptions{})
-		_, out["staging-snapshot"] = s.StagingSnapshot(ctx, &private.StagingSnapshotRequest{Partition: servingPartition})
 		_, out["major-header-range"] = s.MajorHeaderRange(ctx, dst, 1, 2, private.SequenceOptions{})
 		_, out["minor-root-range"] = s.MinorRootRange(ctx, dst, 1, 2, private.SequenceOptions{})
 		_, out["partition-root-range"] = s.PartitionRootRange(ctx, dst, [32]byte{1}, private.SequenceOptions{})

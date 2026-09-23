@@ -21,6 +21,35 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// oneSource hands the fetch loop a single peer for every account.
+type oneSource struct {
+	part *url.URL
+	src  pull.Source
+}
+
+func (o *oneSource) For(context.Context, *url.URL) ([]pull.Source, *url.URL, error) {
+	return []pull.Source{o.src}, o.part, nil
+}
+func (o *oneSource) Querier(*url.URL) api.Querier { return nil }
+
+func writeAccount(t *testing.T, db *database.Database, u *url.URL, entries int) {
+	t.Helper()
+	b := db.Begin(true)
+	defer b.Discard()
+	require.NoError(t, b.Account(u).Main().Put(&protocol.DataAccount{Url: u}))
+	c, err := b.Account(u).ChainByName("main")
+	require.NoError(t, err)
+	_, err = c.Get()
+	require.NoError(t, err)
+	for i := 0; i < entries; i++ {
+		e := make([]byte, 32)
+		e[0], e[1] = byte(i), byte(i>>8)
+		require.NoError(t, c.Inner().AddEntry(e, false))
+	}
+	require.NoError(t, b.UpdateBPT())
+	require.NoError(t, b.Commit())
+}
+
 // servedAt is the production querier with a receipt stapled on that ends at
 // the root the test names for the account, zero for an account it names no
 // root for. The peer here is a store with no block index, so it cannot build a
