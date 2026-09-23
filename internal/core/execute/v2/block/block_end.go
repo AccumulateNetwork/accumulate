@@ -79,7 +79,7 @@ func (block *Block) close() (execute.BlockState, error) {
 	// an ACCOUNT — and one of the accounts the join's pull fetches from a peer
 	// and settles into this store. So what the daemon read at start-up was
 	// whatever the previous process's pull left behind, not what this node
-	// executed, and the NoPeerHasStaging branch starts executing at it
+	// executed, and the daemon started executing at it
 	// (#4344). SystemData is not an account and not in the BPT: no pull
 	// writes it, and writing it does not move the state root.
 	//
