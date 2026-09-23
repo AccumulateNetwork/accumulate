@@ -354,47 +354,36 @@ committed-digest set, without which the first leader after every restart
 re-committed the whole rescue window below the floor (16 batches where the
 peers committed 3, run `20260918T014155Z`).
 
-**Serving staging (#4291, done)**: a running validator serves its staging as
-of its last committed block through the private API, paged by stream, with
-the block index on every page (healing.md, "Staging snapshot"). The join
-reads it (#4294). Also not done: the refusal is "this node has
-executed no block", not the node state of step 5 — a node that is `BOOTING`
-will serve its stage until that lands (#4295). And a page is as of whatever
-block the validator had committed when the call arrived; nothing is pinned
-server side (#4302), so a reader whose pages straddle a commit starts over rather
-than being served a consistent version.
-
-**Caution — the page's `Block` is not "the state of that block" (#4291)**: it
-is the consensus index of the last block the executor processed, published at
-commit, and an empty block writes no state, so `SystemLedger.Index` can lag
-it. That is deliberate and it is the safe direction — the index is at or above
-every block whose intake the page reflects — but nothing in the page says so.
-A joining node must take the entries as of that index and decide which block's
-state to converge on by the anchored-root match (#4293's tracker), on a block
-at or above the page's. Serving the last *written* block instead would
-under-report and is the dangerous direction.
-
-**`Delivered` on a page is memory, not a ledger read (#4291)**: the issue's
-trap said to read the ledger. This branch instead made block close release
-every stream the block positioned at the ledger's `Delivered`, so memory
-tracks the ledger for every stream a block has touched and the value is
-atomic with the rest of the page; a ledger read beside it would be a second,
-unpaired read. The residue (#4302): **a stream that no block has positioned
-since a restart keeps `Delivered: 0` in memory**, so a page may carry 0 for such a
-stream. It is safe, because the joining node releases through its own pulled
-ledger when it settles (#4292's `SettleStaging`), but it is not what the issue
-asked for.
+**Removed (#4362, 2026-09-23)**: the staging API a validator served
+(`Sequencer.StagingSnapshot`, the `PrivateStagingSnapshot*` messages and
+their routing, #4291), the load path that consumed it
+(`Executor.LoadStaging`, `Staging.Snapshot`/`Load`, #4292 step 2), the
+simulator's `takeStaging`/`TakeStaging`/`CompleteJoin`, the daemon's
+execute-from-own-state branch, and the pull's meeting point (ahead / level /
+disagrees, #4348, and its hole #4350) are deleted, not bypassed:
+`TestTheJoinAsksNoPeerForItsConclusions` (internal/node/join) fails on any
+of those identifiers in the module's non-test source. A join collects into
+its own staging from the first block it hears and settles on state it proved
+against a signed anchor; at an anchored height there is one correct leaf per
+account, so there is nothing to meet in the middle. The departures recorded
+here for serving staging — the unpinned page, `Block` as the last processed
+index, `Delivered` as memory — no longer exist. Closed by removal: #4322,
+#4323, #4324, #4325, #4326, #4354, #4357. Still standing outside this
+module's scan: `internal/api/private` keeps the `StagingSnapshot` types,
+`StagingSnapshotter` and `FetchStagingSnapshot`, now unreferenced.
 
 **The handoff (#4294, in progress)**: the join's orchestration exists
 (`internal/node/join`) and the DAG service can be handed off to — it leaves
 collecting mode at Q, stands at Q, and produces what it buffered from Q + 1,
 all inside the block production loop, which is the only thing that produces
 blocks. `Conductor.Rejoin`, its metric and `Executor.Collect` are gone: a
-restart is a join. The simulator's `RestartNode` starts a join and
-`TakeStaging`/`CompleteJoin` complete it, so
-`TestOneValidatorRestartDoesNotDiverge` passes by the join path, in both the
-variant where the proving anchor lands before the staging is taken and the one
-where it lands during the join. A node started by `cmd/accumulated/run` joins
+restart is a join. The simulator's `RestartNode` starts a join and the node
+is handed off through `join.Run` — the simulator's join state is the
+`join.Buffer`, replaying what it buffered from Q + 1 — so
+`TestOneValidatorRestartDoesNotDiverge` joins by the production loop, with
+the proving anchor landing during the join (it cannot land before: the held
+entries are a gap until the peers execute them, and the loop advances the
+sync instead). A node started by `cmd/accumulated/run` joins
 whenever it has executed a block before; a genesis-fresh node does not — which
 is `nodeMustJoin(lastBlock) = lastBlock > GenesisBlock`, and was
 `lastBlock > 0` until #4304. Genesis is not an execution but it does write the
@@ -704,9 +693,7 @@ restart is the same path, not a consensus replay. The five steps below are
 the record of what that first pass built; #4362 deletes the staging API and
 `takeStaging`, and what steps 3–5 keep is said there.
 
-**Collecting (#4292, done)**: the executor takes a peer's staging
-(`Executor.LoadStaging`, from #4291's snapshot, refusing a stage that is not
-empty and streams that are not this partition's), takes a committed block into
+**Collecting (#4292, done)**: the executor takes a committed block into
 staging without executing it (`Executor.CollectBlock`), and settles staging
 at the block its pulled state is (`SettleStaging`): proofs decided against
 the anchors that state has executed, every stream released through the
@@ -871,11 +858,6 @@ seventh nobody had named.
   block a peer serves is a measurement nobody has made. That measurement now
   stands ahead of any design work on #4298 in PLAN E11: it decides whether
   #4298 is "no join completes" or "a join retries a few times".
-
-- **The simulator's `CompleteJoin` still copies the peer's store wholesale**
-  (#4302 section 7), left deliberately now that the e2e test covers what it
-  stood in for. It is recorded so that `TestOneValidatorRestartDoesNotDiverge`
-  passing is never again read as evidence that the join works.
 
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.
