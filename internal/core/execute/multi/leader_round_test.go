@@ -7,6 +7,7 @@
 package execute_test
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
@@ -27,6 +28,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -60,20 +62,51 @@ func TestLeaderRound_BeforeKourouTheLedgerIsUnchanged(t *testing.T) {
 	ledger := n.ledger(t)
 	require.Zero(t, ledger.LeaderRound, "before v2-kourou the round is not recorded")
 
-	// A ledger without the field reads back as one: the old encoding is
-	// untouched, and an old record reads with a zero round.
-	old := ledger.Copy()
-	old.LeaderRound = 0
-	oldBytes, err := old.MarshalBinary()
-	require.NoError(t, err)
+	// The record carries no field 10, the LeaderRound field, so a node on the
+	// old version reads it without knowing the field exists. Comparing the
+	// ledger's encoding with a copy whose round is zeroed proved nothing: the
+	// round was already zero. The fields the record does carry are walked in
+	// their wire order, and the field after the last of them is not 10.
 	gotBytes, err := ledger.MarshalBinary()
 	require.NoError(t, err)
-	require.Equal(t, oldBytes, gotBytes, "the pre-kourou ledger encodes exactly as it did")
+	require.NotContains(t, encodedFields(t, gotBytes), uint(10), "the pre-kourou ledger encodes without a leader round")
 
 	read := new(protocol.SystemLedger)
-	require.NoError(t, read.UnmarshalBinary(oldBytes))
+	require.NoError(t, read.UnmarshalBinary(gotBytes))
 	require.Zero(t, read.LeaderRound)
 	require.Equal(t, ledger.Index, read.Index)
+}
+
+// encodedFields lists the field numbers a marshalled SystemLedger carries, in
+// wire order. It reads each field as the ledger's decoder does, so a field
+// the record does not carry is never reported as read.
+func encodedFields(t *testing.T, b []byte) []uint {
+	t.Helper()
+	reader := encoding.NewReader(bytes.NewReader(b))
+	reader.ReadEnum(1, new(protocol.AccountType))
+	reader.ReadUrl(2)
+	reader.ReadUint(3)
+	reader.ReadTime(4)
+	reader.ReadBigInt(5)
+	for reader.ReadValue(6, new(protocol.NetworkAccountUpdate).UnmarshalBinaryFrom) {
+	}
+	reader.ReadValue(7, func(r io.Reader) error {
+		_, err := protocol.UnmarshalAnchorBodyFrom(r)
+		return err
+	})
+	reader.ReadEnum(8, new(protocol.ExecutorVersion))
+	for reader.ReadValue(9, new(protocol.PartitionExecutorVersion).UnmarshalBinaryFrom) {
+	}
+	reader.ReadUint(10)
+	seen, err := reader.Reset(nil)
+	require.NoError(t, err)
+	var fields []uint
+	for i, ok := range seen {
+		if ok {
+			fields = append(fields, uint(i+1))
+		}
+	}
+	return fields
 }
 
 // A leaderRoundNode is a single-BVN executor over a real genesis.
