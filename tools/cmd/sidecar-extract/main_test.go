@@ -7,6 +7,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -143,4 +144,68 @@ func TestResume(t *testing.T) {
 		LastKey: first, Archives: []string{"b", "a"}, Seen: map[string]int64{},
 	}))
 	require.ErrorContains(t, run(out2, current, nil, archives), "progress was written for archives")
+}
+
+// corrupt overwrites the value log entry header of a key, as found in the
+// pre-reorg dn archive: the pointer is in range, the bytes there do not decode.
+func corrupt(t *testing.T, dir, k string) {
+	files, err := filepath.Glob(filepath.Join(dir, "*.vlog"))
+	require.NoError(t, err)
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		require.NoError(t, err)
+		i := bytes.Index(b, key(k))
+		if i < 0 {
+			continue
+		}
+		const header = 18 // klen, vlen, meta, user meta, expiresAt
+		for j := i - header; j < i; j++ {
+			b[j] = 0xff
+		}
+		require.NoError(t, os.WriteFile(f, b, 0600))
+		return
+	}
+	t.Fatalf("%s is not in a value log", k)
+}
+
+func TestUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	big := string(bytes.Repeat([]byte("v"), 100)) // above the value threshold, so in the log
+	writeBadger(t, filepath.Join(dir, "a"), map[string]string{
+		"ok":        "a",
+		"both":      big,
+		"only-a":    big + "a",
+		"after-bad": "a",
+	})
+	writeBadger(t, filepath.Join(dir, "b"), map[string]string{
+		"both": big,
+	})
+	corrupt(t, filepath.Join(dir, "a"), "both")
+	corrupt(t, filepath.Join(dir, "a"), "only-a")
+	writeLevel(t, filepath.Join(dir, "bvnn"))
+
+	out := filepath.Join(dir, "out")
+	require.NoError(t, run(out, []string{filepath.Join(dir, "bvnn")}, nil,
+		[]string{"a=" + filepath.Join(dir, "a"), "b=" + filepath.Join(dir, "b")}))
+
+	// The readable archive decides a key another cannot read; a key no archive
+	// can read is lost, not fatal, and both are listed
+	require.Equal(t, map[string]string{
+		hx("ok"):        "a",
+		hx("both"):      big,
+		hx("after-bad"): "a",
+	}, readLevel(t, filepath.Join(out, "sidecar.db")))
+
+	var prog Progress
+	b, err := os.ReadFile(filepath.Join(out, "progress.json"))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(b, &prog))
+	require.True(t, prog.Done)
+	require.Equal(t, map[string]int64{"a": 2}, prog.Unreadable)
+	require.EqualValues(t, 1, prog.Lost)
+
+	list, err := os.ReadFile(filepath.Join(out, "unreadable.log"))
+	require.NoError(t, err)
+	require.Contains(t, string(list), "a "+hx("both"))
+	require.Contains(t, string(list), "a "+hx("only-a"))
 }

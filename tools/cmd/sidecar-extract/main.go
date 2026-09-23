@@ -82,6 +82,11 @@ type Progress struct {
 	Bytes     int64 `json:"bytes"`     // value bytes written to the sidecar
 	Conflicts int64 `json:"conflicts"` // keys whose archives disagree
 	Odd       int64 `json:"odd"`       // keys that are not 32-byte hashes
+
+	// Values an archive holds a key for but cannot produce, per archive. Each
+	// is listed in unreadable.log.
+	Unreadable map[string]int64 `json:"unreadable"`
+	Lost       int64            `json:"lost"` // keys no archive could produce a value for
 }
 
 type archive struct {
@@ -93,10 +98,13 @@ type archive struct {
 
 func run(out string, currentPaths, writable, archiveArgs []string) error {
 	progressPath := filepath.Join(out, "progress.json")
-	prog := &Progress{Seen: map[string]int64{}}
+	prog := &Progress{Seen: map[string]int64{}, Unreadable: map[string]int64{}}
 	if b, err := os.ReadFile(progressPath); err == nil {
 		if err := json.Unmarshal(b, prog); err != nil {
 			return fmt.Errorf("read progress: %w", err)
+		}
+		if prog.Unreadable == nil {
+			prog.Unreadable = map[string]int64{}
 		}
 		if prog.Done {
 			log.Printf("already done: %s", b)
@@ -128,7 +136,9 @@ func run(out string, currentPaths, writable, archiveArgs []string) error {
 		if err != nil {
 			return fmt.Errorf("archive %s: %w", name, err)
 		}
-		defer a.close()
+		// The archives are not closed. A corrupt value log panics inside
+		// Badger with its lock held (see value), and Close then deadlocks;
+		// they are read-only or copies, so exiting without closing is safe.
 		archives = append(archives, a)
 	}
 	names := make([]string, len(archives))
@@ -152,6 +162,11 @@ func run(out string, currentPaths, writable, archiveArgs []string) error {
 		return err
 	}
 	defer conflicts.Close()
+	unreadable, err := os.OpenFile(filepath.Join(out, "unreadable.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer unreadable.Close()
 
 	// Resume after the last written key
 	var resume []byte
@@ -175,6 +190,9 @@ func run(out string, currentPaths, writable, archiveArgs []string) error {
 	flush := func() error {
 		if sideBatch.Len() == 0 && confBatch.Len() == 0 {
 			return nil
+		}
+		if err := unreadable.Sync(); err != nil {
+			return err
 		}
 		if err := conflicts.Write(confBatch, &opt.WriteOptions{Sync: true}); err != nil {
 			return err
@@ -234,25 +252,39 @@ func run(out string, currentPaths, writable, archiveArgs []string) error {
 		if present {
 			prog.Present++
 		} else {
+			// An archive whose value cannot be read is left out of the
+			// comparison; the others still decide
+			from := at[:0:0]
 			for _, a := range at {
-				v, err := a.it.Item().ValueCopy(nil)
+				v, err := value(a.it.Item())
 				if err != nil {
-					return fmt.Errorf("%s: value of %x: %w", a.name, key, err)
+					if prog.Unreadable[a.name] < 20 {
+						log.Printf("%s: value of %x: %v", a.name, key, err)
+					}
+					prog.Unreadable[a.name]++
+					if _, err := fmt.Fprintf(unreadable, "%s %x %v\n", a.name, key, err); err != nil {
+						return err
+					}
+					continue
 				}
+				from = append(from, a)
 				vals = append(vals, v)
 			}
 
 			agree := true
-			for _, v := range vals[1:] {
+			for _, v := range vals {
 				agree = agree && bytes.Equal(v, vals[0])
 			}
-			if agree {
+			switch {
+			case len(vals) == 0:
+				prog.Lost++
+			case agree:
 				sideBatch.Put(key, vals[0])
 				prog.Extracted++
 				prog.Bytes += int64(len(vals[0]))
 				batchBytes += len(key) + len(vals[0])
-			} else {
-				for i, a := range at {
+			default:
+				for i, a := range from {
 					confBatch.Put(append(key[:len(key):len(key)], byte(index(archives, a))), vals[i])
 					batchBytes += len(key) + 1 + len(vals[i])
 				}
@@ -323,10 +355,16 @@ func openArchive(name, path string, writable bool) (*archive, error) {
 	return &archive{name: name, db: db, txn: txn, it: txn.NewIterator(io)}, nil
 }
 
-func (a *archive) close() {
-	a.it.Close()
-	a.txn.Discard()
-	_ = a.db.Close()
+// value reads an item's value, turning Badger's panic on a value pointer that
+// does not decode — a corrupt or stale value log region, found in the
+// pre-reorg dn archive — into an error.
+func value(item *badger.Item) (v []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("unreadable value: %v", r)
+		}
+	}()
+	return item.ValueCopy(nil)
 }
 
 func openOutput(path string) (*leveldb.DB, error) {
