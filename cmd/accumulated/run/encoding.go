@@ -15,8 +15,32 @@ import (
 )
 
 func wMultiaddr() widget.Widget[*multiaddr.Multiaddr] { return multiaddrWidget{} }
-func wPeerID() widget.Widget[*peer.ID]                { return peerIdWidget{} }
 
+// wPeerID is the schema library's own value widget over [peerID], so this
+// package declares no MarshalJSON or UnmarshalJSON with the widget
+// signature. Copies, comparisons and both encodings are peer.ID's own.
+func wPeerID() widget.Widget[*peer.ID] {
+	return widget.ForValue(func(v *peer.ID) *peerID { return (*peerID)(v) })
+}
+
+// peerID is peer.ID with the Copy and Equal methods [widget.Value] needs.
+// Its encodings are peer.ID's, so the JSON is the base58 string and the
+// binary is the multihash.
+type peerID string
+
+func (p peerID) Copy() peerID                    { return p }
+func (p peerID) Equal(q peerID) bool             { return p == q }
+func (p peerID) IsNil() bool                     { return false }
+func (p peerID) Empty() bool                     { return p == "" }
+func (p peerID) MarshalJSON() ([]byte, error)    { return peer.ID(p).MarshalJSON() }
+func (p *peerID) UnmarshalJSON(b []byte) error   { return (*peer.ID)(p).UnmarshalJSON(b) }
+func (p peerID) MarshalBinary() ([]byte, error)  { return peer.ID(p).MarshalBinary() }
+func (p *peerID) UnmarshalBinary(b []byte) error { return (*peer.ID)(p).UnmarshalBinary(b) }
+
+// multiaddrWidget cannot be a [widget.Value]: multiaddr.Multiaddr is an
+// interface, so no defined type with a Copy method can alias the field. The
+// method names below are dictated by [widget.Widget]; go vet's stdmethods
+// check reports MarshalJSON and UnmarshalJSON for that reason.
 type multiaddrWidget struct{}
 
 func (multiaddrWidget) IsNil(v *multiaddr.Multiaddr) bool                         { return *v == nil }
@@ -36,22 +60,5 @@ func (multiaddrWidget) MarshalBinary(e *binary.Encoder, v *multiaddr.Multiaddr) 
 }
 
 func (multiaddrWidget) UnmarshalBinary(d *binary.Decoder, v *multiaddr.Multiaddr) error {
-	panic("not supported")
-}
-
-type peerIdWidget struct{}
-
-func (peerIdWidget) IsNil(v *peer.ID) bool                           { return false }
-func (peerIdWidget) Empty(v *peer.ID) bool                           { return *v == "" }
-func (peerIdWidget) CopyTo(dst, src *peer.ID)                        { *dst = *src }
-func (peerIdWidget) Equal(a, b *peer.ID) bool                        { return *a == *b }
-func (peerIdWidget) MarshalJSON(e *json.Encoder, v *peer.ID) error   { return e.Encode(v) }
-func (peerIdWidget) UnmarshalJSON(d *json.Decoder, v *peer.ID) error { return d.Decode(v) }
-
-func (peerIdWidget) MarshalBinary(e *binary.Encoder, v *peer.ID) error {
-	panic("not supported")
-}
-
-func (peerIdWidget) UnmarshalBinary(d *binary.Decoder, v *peer.ID) error {
 	panic("not supported")
 }
