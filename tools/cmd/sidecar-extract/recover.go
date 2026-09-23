@@ -101,9 +101,12 @@ func (x *extractor) recoverUnreadable(out string, workers int) error {
 	}
 	defer lost.Close()
 	txns := make([]*badger.Txn, len(x.archives))
+	moves := make([]*badger.Iterator, len(x.archives))
 	for i, a := range x.archives {
 		txns[i] = a.db.NewTransaction(false)
 		defer txns[i].Discard()
+		moves[i] = a.newMoves(txns[i])
+		defer moves[i].Close()
 	}
 
 	keys := make([]string, 0, len(misses))
@@ -132,7 +135,7 @@ func (x *extractor) recoverUnreadable(out string, workers int) error {
 				return fmt.Errorf("%s: get %x: %w", a.name, key, err)
 			}
 			held = append(held, a.name)
-			v, err := a.value(item)
+			v, err := a.resolve(item, moves[i])
 			if err != nil {
 				// Read fine during the walk, so this is not expected
 				return fmt.Errorf("%s: value of %x: %w", a.name, key, err)

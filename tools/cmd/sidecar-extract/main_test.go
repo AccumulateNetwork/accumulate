@@ -329,3 +329,67 @@ func TestStalePointer(t *testing.T) {
 	require.Equal(t, 1, prog.Recovery.Extracted)
 	require.Equal(t, 0, prog.Recovery.Lost)
 }
+
+func TestCollected(t *testing.T) {
+	// Real garbage collection: most of the log is deleted, the survivors are
+	// rewritten into new files under move entries, and the files their index
+	// entries point into are removed. Badger v1 will not collect unless it
+	// samples 10 MB of a file, hence the sizes, and never collects the file
+	// the saved log head is in.
+	if testing.Short() {
+		t.Skip("writes 200 MB and takes ~40s")
+	}
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a")
+	db, err := badger.Open(badger.DefaultOptions(a).WithLogger(nil).WithValueLogFileSize(64 << 20))
+	require.NoError(t, err)
+	value := func(i int) []byte { return bytes.Repeat([]byte{byte(i), byte(i >> 8)}, 32<<10) }
+	// One transaction per key: the log rotates only between writes
+	for i := 0; i < 3000; i++ {
+		require.NoError(t, db.Update(func(txn *badger.Txn) error { return txn.Set(key(fmt.Sprint(i)), value(i)) }))
+	}
+	for i := 0; i < 3000; i++ {
+		if i%10 != 0 {
+			require.NoError(t, db.Update(func(txn *badger.Txn) error { return txn.Delete(key(fmt.Sprint(i))) }))
+		}
+	}
+
+	// Collection needs the log head saved, which a flush of the memtable does
+	require.NoError(t, db.Close())
+	db, err = badger.Open(badger.DefaultOptions(a).WithLogger(nil).WithValueLogFileSize(64 << 20))
+	require.NoError(t, err)
+	// Collection samples from a random offset and gives up when the sample
+	// is short, so it takes a few attempts
+	var collected int
+	for i := 0; i < 100 && collected < 3; i++ {
+		if db.RunValueLogGC(0.1) == nil {
+			collected++
+		}
+	}
+	require.NotZero(t, collected, "garbage collection never ran")
+
+	var moved int
+	require.NoError(t, db.View(func(txn *badger.Txn) error {
+		it := (&archive{}).newMoves(txn)
+		defer it.Close()
+		for it.Rewind(); it.Valid(); it.Next() {
+			moved++
+		}
+		return nil
+	}))
+	require.NoError(t, db.Close())
+	require.NotZero(t, moved, "garbage collection moved nothing; the test proves nothing")
+
+	writeLevel(t, filepath.Join(dir, "bvnn"))
+	out := filepath.Join(dir, "out")
+	require.NoError(t, run(out, []string{filepath.Join(dir, "bvnn")}, nil, []string{"a=" + a}, 4))
+
+	want := map[string]string{}
+	for i := 0; i < 3000; i += 10 {
+		want[hx(fmt.Sprint(i))] = string(value(i))
+	}
+	require.Equal(t, want, readLevel(t, filepath.Join(out, "sidecar.db")))
+	prog := readProgress(t, out)
+	require.Empty(t, prog.Total.Unreadable)
+	require.Zero(t, prog.Recovery.Keys)
+}

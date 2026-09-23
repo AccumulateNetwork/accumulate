@@ -35,6 +35,8 @@ const (
 	bitValuePointer = 1 << 1
 )
 
+var errCollected = errors.New("value log file was collected")
+
 var (
 	badgerMove = []byte("!badger!move")
 	castagnoli = crc32.MakeTable(crc32.Castagnoli)
@@ -90,8 +92,7 @@ func (a *archive) value(item *badger.Item) ([]byte, error) {
 
 	f, err := a.log.file(fid)
 	if errors.Is(err, fs.ErrNotExist) {
-		// Garbage collection moved it; recovery finds the move entry
-		return nil, fmt.Errorf("vlog %d was collected", fid)
+		return nil, fmt.Errorf("vlog %d: %w", fid, errCollected)
 	}
 	if err != nil {
 		return nil, err
@@ -109,6 +110,39 @@ func (a *archive) value(item *badger.Item) ([]byte, error) {
 		return nil, fmt.Errorf("vlog %d offset %d: entry is for another key", fid, offset)
 	}
 	return append([]byte{}, v...), nil
+}
+
+// newMoves returns an iterator over the archive's move entries: where garbage
+// collection rewrote a value, the index holds the key under the move prefix,
+// at the same version, pointing into the new file.
+func (a *archive) newMoves(txn *badger.Txn) *badger.Iterator {
+	o := badger.DefaultIteratorOptions
+	o.PrefetchValues = false
+	o.AllVersions = true
+	o.InternalAccess = true
+	o.Prefix = badgerMove
+	return txn.NewIterator(o)
+}
+
+// resolve returns an item's value, following its move entry when the file it
+// points into was collected — what Badger's own read does, verified.
+func (a *archive) resolve(item *badger.Item, moves *badger.Iterator) ([]byte, error) {
+	v, err := a.value(item)
+	if !errors.Is(err, errCollected) {
+		return v, err
+	}
+	key := append(badgerMove[:len(badgerMove):len(badgerMove)], item.Key()...)
+	version := item.Version()
+	for moves.Seek(key); moves.Valid() && bytes.Equal(moves.Item().Key(), key); moves.Next() {
+		if moves.Item().Version() == version && !moves.Item().IsDeletedOrExpired() {
+			v, err := a.value(moves.Item())
+			if err != nil {
+				return nil, fmt.Errorf("move entry: %w", err)
+			}
+			return v, nil
+		}
+	}
+	return nil, fmt.Errorf("%w, and no move entry has version %d", err, version)
 }
 
 // decodeEntry decodes the log entry at the start of b, if b starts with an

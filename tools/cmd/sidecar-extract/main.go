@@ -301,6 +301,7 @@ func (x *extractor) walk(s *Shard) error {
 		*archive
 		index int
 		it    *badger.Iterator
+		moves *badger.Iterator
 	}
 	var cursors []*cursor
 	for i, a := range x.archives {
@@ -318,7 +319,9 @@ func (x *extractor) walk(s *Shard) error {
 		} else {
 			it.Seek(loKey)
 		}
-		cursors = append(cursors, &cursor{a, i, it})
+		moves := a.newMoves(txn)
+		defer moves.Close()
+		cursors = append(cursors, &cursor{a, i, it, moves})
 	}
 	valid := func(c *cursor) bool {
 		return c.it.Valid() && (len(hiKey) == 0 || bytes.Compare(c.it.Item().Key(), hiKey) < 0)
@@ -408,7 +411,7 @@ func (x *extractor) walk(s *Shard) error {
 			// An archive whose value cannot be read is left out of the
 			// comparison; the others still decide
 			for _, c := range at {
-				v, err := c.value(c.it.Item())
+				v, err := c.resolve(c.it.Item(), c.moves)
 				if err != nil {
 					counts.Unreadable[c.name]++
 					fmt.Fprintf(&unreadable, "%s %x %d %v\n", c.name, key, c.it.Item().Version(), err)
