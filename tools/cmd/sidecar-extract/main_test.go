@@ -9,9 +9,11 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"os"
 	"path/filepath"
 	"testing"
@@ -244,4 +246,86 @@ func TestUnreadable(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(list), "a "+hx("both"))
 	require.Contains(t, string(list), "a "+hx("only-a"))
+}
+
+// entryAt finds the value log entry of a key: its file, offset and bytes.
+func entryAt(t *testing.T, dir, k string) (string, int, []byte) {
+	files, err := filepath.Glob(filepath.Join(dir, "*.vlog"))
+	require.NoError(t, err)
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		require.NoError(t, err)
+		i := bytes.Index(b, key(k))
+		if i < 0 {
+			continue
+		}
+		off := i - headerSize
+		kl := binary.BigEndian.Uint32(b[off:])
+		vl := binary.BigEndian.Uint32(b[off+4:])
+		n := headerSize + int(kl) + int(vl) + crc32.Size
+		return f, off, append([]byte{}, b[off:off+n]...)
+	}
+	t.Fatalf("%s is not in a value log", k)
+	return "", 0, nil
+}
+
+func TestStalePointer(t *testing.T) {
+	// X's index entry points at a log offset that now holds Y's intact entry —
+	// what a crash leaves when the index outlives unsynced log writes. X's
+	// value survives elsewhere in the log as a garbage-collection move entry.
+	dir := t.TempDir()
+	vx := string(bytes.Repeat([]byte("x"), 100))
+	vy := string(bytes.Repeat([]byte("y"), 100))
+	a := filepath.Join(dir, "a")
+	writeBadger(t, a, map[string]string{"X": vx, "Y": vy})
+
+	file, offX, entX := entryAt(t, a, "X")
+	_, _, entY := entryAt(t, a, "Y")
+	require.Equal(t, len(entX), len(entY))
+	b, err := os.ReadFile(file)
+	require.NoError(t, err)
+	copy(b[offX:], entY)
+
+	// X's original entry, re-keyed under the move prefix, outside any txn
+	kl := binary.BigEndian.Uint32(entX[0:4])
+	moved := make([]byte, headerSize)
+	copy(moved, entX[:headerSize])
+	binary.BigEndian.PutUint32(moved[0:4], kl+uint32(len(badgerMove)))
+	moved[16] = 0 // meta
+	moved = append(moved, badgerMove...)
+	moved = append(moved, entX[headerSize:len(entX)-crc32.Size]...)
+	moved = binary.BigEndian.AppendUint32(moved, crc32.Checksum(moved, castagnoli))
+	b = append(b, moved...)
+	require.NoError(t, os.WriteFile(file, b, 0600))
+
+	// Badger itself returns Y's value for X, without complaint
+	// The appended entry is past the log head, so like the bvn0 and bvn1
+	// copies the archive must be opened writable to be replayed
+	db, err := badger.Open(badger.DefaultOptions(a).WithLogger(nil))
+	require.NoError(t, err)
+	require.NoError(t, db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(key("X"))
+		require.NoError(t, err)
+		v, err := item.ValueCopy(nil)
+		require.NoError(t, err)
+		require.Equal(t, vy, string(v))
+		return nil
+	}))
+	require.NoError(t, db.Close())
+
+	writeLevel(t, filepath.Join(dir, "bvnn"))
+	out := filepath.Join(dir, "out")
+	require.NoError(t, run(out, []string{filepath.Join(dir, "bvnn")}, []string{"a"}, []string{"a=" + a}, 2))
+
+	// The walk refuses Y's entry for X; recovery finds X's own
+	require.Equal(t, map[string]string{
+		hx("X"): vx,
+		hx("Y"): vy,
+	}, readLevel(t, filepath.Join(out, "sidecar.db")))
+	prog := readProgress(t, out)
+	require.Equal(t, map[string]int64{"a": 1}, prog.Total.Unreadable)
+	require.Equal(t, 1, prog.Recovery.Keys)
+	require.Equal(t, 1, prog.Recovery.Scans["a"].Found)
+	require.Equal(t, 1, prog.Recovery.Extracted)
+	require.Equal(t, 0, prog.Recovery.Lost)
 }

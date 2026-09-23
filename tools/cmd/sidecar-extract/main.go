@@ -18,6 +18,12 @@
 // the sidecar, which serves one value per key. Each variant goes to the
 // conflicts database under the key followed by the partition's index.
 //
+// Every value is verified: a value-log value is taken only from an intact log
+// entry for exactly its key and version (vlog.go). One that fails is listed in
+// unreadable.log, and after the walk each archive's log is scanned for it by
+// key and version and the key decided again (recover.go). What no archive can
+// produce is listed in lost.log.
+//
 // The archives and the current databases are opened read-only. A Badger v1
 // database that was not closed cleanly refuses a read-only open; pass a copy of
 // it with -writable.
@@ -125,15 +131,17 @@ type Shard struct {
 // Progress is persisted after every flushed batch, so a stopped run resumes
 // each shard after the last key it wrote.
 type Progress struct {
-	Done     bool     `json:"done"`
-	Archives []string `json:"archives"`
-	Total    Counts   `json:"total"`
-	Shards   []*Shard `json:"shards"`
+	Done     bool      `json:"done"`
+	Archives []string  `json:"archives"`
+	Total    Counts    `json:"total"`
+	Shards   []*Shard  `json:"shards"`
+	Recovery *Recovery `json:"recovery,omitempty"`
 }
 
 type archive struct {
 	name string
 	db   *badger.DB
+	log  *vlog
 }
 
 type extractor struct {
@@ -161,10 +169,9 @@ func run(out string, currentPaths, writable, archiveArgs []string, shards int) e
 		if err != nil {
 			return fmt.Errorf("archive %s: %w", name, err)
 		}
-		// The archives are not closed. A corrupt value log panics inside
-		// Badger with its lock held (see value), and Close then deadlocks;
-		// they are read-only or copies, so exiting without closing is safe.
-		x.archives = append(x.archives, &archive{name, db})
+		// The archives are not closed: they are read-only or copies, and a
+		// run that fails part way must not wait on them.
+		x.archives = append(x.archives, &archive{name: name, db: db, log: &vlog{dir: path}})
 	}
 	names := make([]string, len(x.archives))
 	for i, a := range x.archives {
@@ -241,13 +248,20 @@ func run(out string, currentPaths, writable, archiveArgs []string, shards int) e
 		return first
 	}
 
+	if err := x.recoverUnreadable(out, 8); err != nil {
+		return fmt.Errorf("recovery: %w", err)
+	}
+
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	x.prog.Done = true
 	if err := x.save(); err != nil {
 		return err
 	}
-	b, _ := json.MarshalIndent(x.prog.Total, "", "  ")
+	b, _ := json.MarshalIndent(struct {
+		Walk     Counts
+		Recovery *Recovery
+	}{x.prog.Total, x.prog.Recovery}, "", "  ")
 	log.Printf("done in %v:\n%s", time.Since(start).Round(time.Second), b)
 	return nil
 }
@@ -394,10 +408,10 @@ func (x *extractor) walk(s *Shard) error {
 			// An archive whose value cannot be read is left out of the
 			// comparison; the others still decide
 			for _, c := range at {
-				v, err := value(c.it.Item())
+				v, err := c.value(c.it.Item())
 				if err != nil {
 					counts.Unreadable[c.name]++
-					fmt.Fprintf(&unreadable, "%s %x %v\n", c.name, key, err)
+					fmt.Fprintf(&unreadable, "%s %x %d %v\n", c.name, key, c.it.Item().Version(), err)
 					continue
 				}
 				from = append(from, c)
@@ -477,18 +491,6 @@ func (x *extractor) report(start time.Time, stop <-chan struct{}) {
 			done, len(x.prog.Shards), c.Keys, c.Present, c.Extracted, float64(c.Bytes)/(1<<30), c.Conflicts, c.Unreadable, c.Lost, c.Odd, c.Seen, rate)
 		x.mu.Unlock()
 	}
-}
-
-// value reads an item's value, turning Badger's panic on a value pointer that
-// does not decode — a corrupt or stale value log region, found in the
-// pre-reorg dn archive — into an error.
-func value(item *badger.Item) (v []byte, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("unreadable value: %v", r)
-		}
-	}()
-	return item.ValueCopy(nil)
 }
 
 func loadKeys(path string, into map[[32]byte]struct{}) (int, error) {
