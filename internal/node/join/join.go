@@ -135,7 +135,8 @@ const (
 )
 
 // Run joins the partition. It returns when the node has handed off to block
-// production, or when the context is cancelled.
+// production and its state cannot check the blocks it executes, or when the
+// context is cancelled.
 //
 // It converges block by block (executor spec, "Sync", step 4):
 //
@@ -146,7 +147,12 @@ const (
 //     B + 1 executes from the buffer as any node executes a block. If it
 //     has, B + 1 is not executed; the pull advances the sync to the state
 //     that names it, whose Delivered says what the peers actually ran, and
-//     the question is asked of the block after that.
+//     the question is asked of the block after that;
+//  4. after the handoff, if the state is a RootWatch, check every executed
+//     block's root against the root the Directory anchored for it. A
+//     mismatch is a gap the sequence check missed: the node collects again,
+//     pulls, and goes back to step 3 from the state it reaches, so a wrong
+//     run is caught at the block it happens in and never carried forward.
 //
 // It ends because everything that arrived after the node started listening,
 // the node holds; a gap is only an entry from before, and the network
@@ -189,10 +195,103 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 			"no validator of %s could be found; this node is collecting and not executing", opts.Partition)
 	}
 
+	q, err := converge(ctx, opts, log, retry, false)
+	if err != nil {
+		return Joined, errors.UnknownError.Wrap(err)
+	}
+
+	// A state that can check the blocks this node executes keeps checking
+	// them for as long as the node runs; one that cannot has joined.
+	watch, ok := opts.State.(RootWatch)
+	if !ok {
+		return Joined, nil
+	}
+	for {
+		if h, ok := opts.State.(interface{ HandedOff(uint64) }); ok {
+			h.HandedOff(q)
+		}
+		n, err := watchRoots(ctx, watch, log, retry)
+		if err != nil {
+			return Joined, errors.UnknownError.Wrap(err)
+		}
+		if ctx.Err() != nil {
+			// The node is executing and is being stopped: the join ended
+			// as it should, it did not fail.
+			return Joined, nil
+		}
+
+		// Block n's root is not the root the Directory anchored for it.
+		// The node stops executing and syncs again from where it is, as
+		// it did the first time; the blocks from here are collected and
+		// none of them is executed until the root matches again.
+		log.Warn("An executed block's root differs from its proven root; syncing again", "block", n)
+		opts.Buffer.StartCollecting()
+		err = opts.Buffer.ApplyStaging(func() error { return nil })
+		if err != nil {
+			return Joined, errors.UnknownError.WithFormat("collect into staging: %w", err)
+		}
+
+		// The pull comes first: the local root still equals the block the
+		// node handed off at, and matching it again would hand off where
+		// the divergence began.
+		q, err = converge(ctx, opts, log, retry, true)
+		if err != nil {
+			return Joined, errors.UnknownError.Wrap(err)
+		}
+	}
+}
+
+// A RootWatch is a State that can say whether a block this node executed
+// after the handoff has a root other than the one the Directory anchored for
+// it. After executing any block the local root equals that block's proven
+// root or it does not, and a mismatch is a gap the sequence check missed
+// (executor spec, "Sync", step 4). A proof arrives blocks after the block it
+// proves, so "not proven yet" is not a mismatch.
+type RootWatch interface {
+	// Diverged reports the first executed block whose local root differs
+	// from its proven root, and whether there is one.
+	Diverged(ctx context.Context) (uint64, bool, error)
+}
+
+// watchRoots asks the watch every retry until a block diverges or the
+// context ends. It returns the block that diverged.
+func watchRoots(ctx context.Context, watch RootWatch, log *slog.Logger, retry time.Duration) (uint64, error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return 0, nil
+		case <-time.After(retry):
+		}
+
+		n, diverged, err := watch.Diverged(ctx)
+		switch {
+		case ctx.Err() != nil:
+			return 0, nil
+		case err != nil:
+			// A peer that cannot serve an anchor this second says nothing
+			// about this node's roots. The next round asks again.
+			log.Info("The executed blocks' roots could not be checked this round", "error", err)
+		case diverged:
+			return n, nil
+		}
+	}
+}
+
+// converge syncs to a block whose successor has no gap, settles staging there
+// and hands off, and returns that block (steps 2 and 3 of Run). pullFirst
+// pulls before the first match: a node syncing again holds a state that
+// matched once and no longer does.
+func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration, pullFirst bool) (uint64, error) {
+	if pullFirst {
+		err := opts.State.Pull(ctx)
+		if err != nil {
+			return 0, errors.UnknownError.WithFormat("pull state: %w", err)
+		}
+	}
 	overran := false
 	for {
 		if err := ctx.Err(); err != nil {
-			return Joined, errors.UnknownError.Wrap(err)
+			return 0, errors.UnknownError.Wrap(err)
 		}
 		if opts.Buffer.BufferOverrun() {
 			// A committed block is missing from the buffer, so the blocks
@@ -212,14 +311,14 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 				// off from it, so the node stays collecting and asks again.
 				select {
 				case <-ctx.Done():
-					return Joined, errors.UnknownError.Wrap(ctx.Err())
+					return 0, errors.UnknownError.Wrap(ctx.Err())
 				case <-time.After(retry):
 				}
 				continue
 			}
 			err := opts.Buffer.ApplyStaging(func() error { return nil })
 			if err != nil {
-				return Joined, errors.UnknownError.WithFormat("collect into staging again after the overrun: %w", err)
+				return 0, errors.UnknownError.WithFormat("collect into staging again after the overrun: %w", err)
 			}
 			log.Info("Collecting again after the join buffer overran")
 			overran = false
@@ -227,12 +326,12 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 
 		q, ok, err := opts.State.Matched(ctx)
 		if err != nil {
-			return Joined, errors.UnknownError.WithFormat("match the anchored root: %w", err)
+			return 0, errors.UnknownError.WithFormat("match the anchored root: %w", err)
 		}
 		if ok {
 			gap, err := opts.Stage.HasGap(q + 1)
 			if err != nil {
-				return Joined, errors.UnknownError.WithFormat("look for a gap at %d: %w", q+1, err)
+				return 0, errors.UnknownError.WithFormat("look for a gap at %d: %w", q+1, err)
 			}
 			if gap {
 				// An entry from before the node was listening: the peers
@@ -241,32 +340,38 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 			} else {
 				err = opts.Stage.SettleStagingAt(q)
 				if err != nil {
-					return Joined, errors.UnknownError.WithFormat("settle staging at %d: %w", q, err)
+					return 0, errors.UnknownError.WithFormat("settle staging at %d: %w", q, err)
 				}
 				err = opts.Buffer.Handoff(q)
 				switch {
 				case err == nil:
 					log.Info("Joined; executing from the block after the state", "block", q, "executes", q+1)
-					return Joined, nil
+					return q, nil
 				case errors.Is(err, errors.NotReady):
 					// The pull ran ahead of the blocks consensus has
 					// delivered: handing off now would give the blocks still
 					// to arrive the wrong numbers. Wait for them.
 					log.Info("The state is ahead of the blocks collected so far; waiting", "block", q, "error", err)
+				case errors.Is(err, errors.Conflict):
+					// Syncing again, the state matched a block before the
+					// one this node had executed to. Those blocks are not
+					// in the buffer, so the node cannot execute from there;
+					// the next pass is at the peers' newer state.
+					log.Info("The state is behind the block this node stood at; pulling again", "block", q, "error", err)
 				default:
-					return Joined, errors.UnknownError.WithFormat("hand off at %d: %w", q, err)
+					return 0, errors.UnknownError.WithFormat("hand off at %d: %w", q, err)
 				}
 			}
 		}
 
 		err = opts.State.Pull(ctx)
 		if err != nil {
-			return Joined, errors.UnknownError.WithFormat("pull state: %w", err)
+			return 0, errors.UnknownError.WithFormat("pull state: %w", err)
 		}
 
 		select {
 		case <-ctx.Done():
-			return Joined, errors.UnknownError.Wrap(ctx.Err())
+			return 0, errors.UnknownError.Wrap(ctx.Err())
 		case <-time.After(retry):
 		}
 	}

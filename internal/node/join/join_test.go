@@ -67,6 +67,11 @@ func (b *fakeBuffer) Handoff(q uint64) error {
 type fakeStage struct {
 	settled uint64
 
+	// loaded is never written: a Stage has no way to load a peer's staging
+	// (#4362 removed it), so a test that says nothing was loaded holds by
+	// construction.
+	loaded any
+
 	// gaps are the blocks whose collected streams are not contiguous from
 	// Delivered + 1; gapAsked is every block HasGap was asked about.
 	gaps     map[uint64]bool
@@ -118,6 +123,11 @@ func (s *fakeState) Matched(context.Context) (uint64, bool, error) {
 // fakePeers lists the partition's validators.
 type fakePeers struct {
 	peers []*api.FindServiceResult
+
+	// asked is never written: Peers has no way to ask a peer for its
+	// staging (#4362 removed it), so a test that says no peer was asked
+	// holds by construction.
+	asked []string
 }
 
 func (p *fakePeers) Validators(context.Context) ([]*api.FindServiceResult, error) {
