@@ -368,9 +368,11 @@ against a signed anchor; at an anchored height there is one correct leaf per
 account, so there is nothing to meet in the middle. The departures recorded
 here for serving staging — the unpinned page, `Block` as the last processed
 index, `Delivered` as memory — no longer exist. Closed by removal: #4322,
-#4323, #4324, #4325, #4326, #4354, #4357. Still standing outside this
-module's scan: `internal/api/private` keeps the `StagingSnapshot` types,
-`StagingSnapshotter` and `FetchStagingSnapshot`, now unreferenced.
+#4323, #4324, #4325, #4326, #4354, #4357. The private API's
+`StagingSnapshot`, `StagedStream`, `StagedEntry`, `StagedHash` and
+`StagedProof` types, `StagingSnapshotter`, `StagingSnapshotRequest` and
+`FetchStagingSnapshot` (`internal/api/private`) are deleted with them and
+regenerated out of `types_gen.go`; no message type for staging remains.
 
 **The handoff (#4294, in progress)**: the join's orchestration exists
 (`internal/node/join`) and the DAG service can be handed off to — it leaves
