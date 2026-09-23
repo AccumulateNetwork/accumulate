@@ -600,10 +600,12 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		go func() {
 			_, err := join.Run(inst.context, opts)
 			if err != nil {
-				// A join that cannot finish leaves the node collecting: it
-				// keeps up with consensus and executes nothing, which is the
-				// spec's answer and is safe. It is also an operator's
-				// problem, so it is an error and not a debug line.
+				// A buffer overrun does not end the join: Run records it and
+				// collects again. A join that cannot finish leaves the node
+				// collecting: it keeps up with consensus and executes
+				// nothing, which is the spec's answer and is safe. It is
+				// also an operator's problem, so it is an error and not a
+				// debug line.
 				slog.Error("The join did not complete; this node is not executing",
 					"module", "join", "partition", s.Partition.ID, "error", err)
 				return

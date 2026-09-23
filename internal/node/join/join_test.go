@@ -30,11 +30,18 @@ type fakeBuffer struct {
 	handoffErr error
 	applied    int // how many times collecting into staging was started
 	starts     int // how many times the join started collecting
+
+	// restarts, if set, is whether StartCollecting starts a new buffer once
+	// this one has overrun; otherwise the overrun stays.
+	restarts bool
 }
 
 func (b *fakeBuffer) StartCollecting() {
 	b.collecting = true
 	b.starts++
+	if b.restarts {
+		b.overrun = false
+	}
 }
 func (b *fakeBuffer) Collecting() bool    { return b.collecting }
 func (b *fakeBuffer) BufferOverrun() bool { return b.overrun }
@@ -85,11 +92,18 @@ type fakeState struct {
 	// already be collecting by then.
 	collectingAtPull Buffer
 	wasCollecting    bool
+
+	// overrunAtPull, if set, overruns on the first pull: the network ran
+	// past the buffer while the join was converging.
+	overrunAtPull *fakeBuffer
 }
 
 func (s *fakeState) Pull(context.Context) error {
 	if s.pulls == 0 && s.collectingAtPull != nil {
 		s.wasCollecting = s.collectingAtPull.Collecting()
+	}
+	if s.pulls == 0 && s.overrunAtPull != nil {
+		s.overrunAtPull.overrun = true
 	}
 	s.pulls++
 	return nil
@@ -162,22 +176,39 @@ func TestJoin_HandsOffWhereTheNextBlockHasNoGap(t *testing.T) {
 }
 
 // If the buffer overran, a committed block is missing from it and none of
-// the blocks after the state may be produced. Starting to collect again
-// would lose the map from buffered groups to blocks (#4351), so the join
-// does not hand off and says so; the node stays collecting.
+// the blocks after the state may be produced. While the buffer stays overrun
+// the join does not hand off and does not settle; the node stays collecting.
 func TestJoin_ABufferOverrunIsNotAHandoff(t *testing.T) {
 	buf := &fakeBuffer{overrun: true}
 	stage := new(fakeStage)
 	state := &fakeState{matchAt: 20, matchFrom: 0}
 	peers := &fakePeers{peers: []*api.FindServiceResult{peerResult(1)}}
 
-	_, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers})
-	require.Error(t, err)
-	require.True(t, errors.Is(err, errors.NotReady), "got %v", err)
-	require.Equal(t, 1, buf.starts, "the join does not start collecting again")
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err := Run(ctx, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers, Retry: time.Millisecond})
+	require.Error(t, err, "the join does not end at the overrun; only the context ends it")
+	require.False(t, errors.Is(err, errors.NotReady), "got %v", err)
+	require.Greater(t, buf.starts, 1, "the join asks the buffer to collect again")
 	require.Empty(t, buf.handoffs)
 	require.Zero(t, stage.settled)
 	require.True(t, buf.collecting, "and the node is still collecting")
+}
+
+// The daemon runs the join once, so an overrun must not end it. The join
+// starts collecting again and hands off from the new buffer.
+func TestJoin_StartsAgainAfterABufferOverrun(t *testing.T) {
+	buf := &fakeBuffer{restarts: true}
+	stage := new(fakeStage)
+	state := &fakeState{matchAt: 20, matchFrom: 1, overrunAtPull: buf}
+	peers := &fakePeers{peers: []*api.FindServiceResult{peerResult(1)}}
+
+	outcome, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers})
+	require.NoError(t, err)
+	require.Equal(t, Joined, outcome)
+	require.Equal(t, 2, buf.starts, "the join started collecting again after the overrun")
+	require.Equal(t, 2, buf.applied, "and collects into staging again")
+	require.Equal(t, []uint64{20}, buf.handoffs)
 }
 
 // Collecting starts before anything is pulled. That ordering is what makes

@@ -30,7 +30,9 @@ import (
 // block into staging and keeps it, executing none of them, until the handoff
 // (#4292's collecting mode).
 type Buffer interface {
-	// StartCollecting puts the node in collecting mode.
+	// StartCollecting puts the node in collecting mode. While collecting it
+	// keeps the buffer (#4351), unless the buffer has overrun: then it starts
+	// a new one, from the block the node stands at now.
 	StartCollecting()
 
 	// Collecting reports whether it is collecting.
@@ -187,6 +189,7 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 			"no validator of %s could be found; this node is collecting and not executing", opts.Partition)
 	}
 
+	overran := false
 	for {
 		if err := ctx.Err(); err != nil {
 			return Joined, errors.UnknownError.Wrap(err)
@@ -194,10 +197,32 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		if opts.Buffer.BufferOverrun() {
 			// A committed block is missing from the buffer, so the blocks
 			// after the state are no longer all in hand and none of them may
-			// be produced. Starting to collect again would lose the mapping
-			// from buffered groups to blocks (#4351), so the node stays
-			// collecting and says so.
-			return Joined, errors.NotReady.With("the join buffer overran; this node is collecting and not executing")
+			// be produced. The join does not end here: the daemon runs it
+			// once, so ending it would leave the node collecting until a
+			// restart. It starts collecting again, from the network's block
+			// now, and syncs to a block past it. A buffer that has not
+			// overrun keeps what it holds when asked to collect (#4351).
+			if !overran {
+				log.Warn("The join buffer overran; collecting again and syncing to a newer block")
+				overran = true
+			}
+			opts.Buffer.StartCollecting()
+			if opts.Buffer.BufferOverrun() {
+				// The buffer did not start again. Nothing may be handed
+				// off from it, so the node stays collecting and asks again.
+				select {
+				case <-ctx.Done():
+					return Joined, errors.UnknownError.Wrap(ctx.Err())
+				case <-time.After(retry):
+				}
+				continue
+			}
+			err := opts.Buffer.ApplyStaging(func() error { return nil })
+			if err != nil {
+				return Joined, errors.UnknownError.WithFormat("collect into staging again after the overrun: %w", err)
+			}
+			log.Info("Collecting again after the join buffer overran")
+			overran = false
 		}
 
 		q, ok, err := opts.State.Matched(ctx)
