@@ -10,8 +10,9 @@
 // Both backends key a record by record.Key.Hash() and store the value as is,
 // so the difference is taken on raw keys and no record is decoded. The archive
 // partitions are Badger v1; they are merged in key order, which lets one pass
-// see every partition's value for a key at once and hands the sidecar sorted
-// writes.
+// see every partition's value for a key at once. The key space is split into
+// shards walked in parallel: each value is a random value-log read, so one
+// walker is bound by read latency, not bandwidth.
 //
 // A key two archive partitions hold with different values is not written to
 // the sidecar, which serves one value per key. Each variant goes to the
@@ -21,8 +22,8 @@
 // database that was not closed cleanly refuses a read-only open; pass a copy of
 // it with -writable.
 //
-//	sidecar-extract -out <dir> -current <leveldb> [-current ...] \
-//	    [-writable] <name>=<badger> [<name>=<badger> ...]
+//	sidecar-extract -out <dir> -current <leveldb> [-current ...] [-shards n] \
+//	    [-writable <name>] <name>=<badger> [<name>=<badger> ...]
 package main
 
 import (
@@ -36,6 +37,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	badger "github.com/dgraph-io/badger"
@@ -50,6 +52,7 @@ func (l *listFlag) String() string     { return strings.Join(*l, ",") }
 func (l *listFlag) Set(s string) error { *l = append(*l, s); return nil }
 
 var flagOut = flag.String("out", "", "directory for the sidecar, the conflicts database and the progress file")
+var flagShards = flag.Int("shards", 32, "key ranges walked in parallel (at most 65536); fixed for the life of an output directory")
 var flagCurrent listFlag
 var flagWritable listFlag
 
@@ -57,31 +60,26 @@ func main() {
 	flag.Var(&flagCurrent, "current", "a current LevelDB database (repeatable); a key any of them holds is not extracted")
 	flag.Var(&flagWritable, "writable", "an archive name to open writable, for a copy that will not open read-only (repeatable)")
 	flag.Parse()
-	if *flagOut == "" || len(flagCurrent) == 0 || flag.NArg() == 0 {
+	if *flagOut == "" || len(flagCurrent) == 0 || flag.NArg() == 0 || *flagShards < 1 || *flagShards > 1<<16 {
 		flag.Usage()
 		os.Exit(2)
 	}
 
-	err := run(*flagOut, flagCurrent, flagWritable, flag.Args())
+	err := run(*flagOut, flagCurrent, flagWritable, flag.Args(), *flagShards)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-// Progress is persisted after every flushed batch, so a stopped run resumes
-// after the last key it wrote.
-type Progress struct {
-	LastKey  string           `json:"lastKey"`
-	Done     bool             `json:"done"`
-	Archives []string         `json:"archives"`
-	Seen     map[string]int64 `json:"seen"` // keys read, per archive
-
-	Keys      int64 `json:"keys"`      // distinct archive keys
-	Present   int64 `json:"present"`   // held by the current database
-	Extracted int64 `json:"extracted"` // written to the sidecar
-	Bytes     int64 `json:"bytes"`     // value bytes written to the sidecar
-	Conflicts int64 `json:"conflicts"` // keys whose archives disagree
-	Odd       int64 `json:"odd"`       // keys that are not 32-byte hashes
+// Counts are what a walk found.
+type Counts struct {
+	Seen      map[string]int64 `json:"seen"`      // keys read, per archive
+	Keys      int64            `json:"keys"`      // distinct archive keys
+	Present   int64            `json:"present"`   // held by the current database
+	Extracted int64            `json:"extracted"` // written to the sidecar
+	Bytes     int64            `json:"bytes"`     // value bytes written to the sidecar
+	Conflicts int64            `json:"conflicts"` // keys whose archives disagree
+	Odd       int64            `json:"odd"`       // keys that are not 32-byte hashes
 
 	// Values an archive holds a key for but cannot produce, per archive. Each
 	// is listed in unreadable.log.
@@ -89,136 +87,280 @@ type Progress struct {
 	Lost       int64            `json:"lost"` // keys no archive could produce a value for
 }
 
+func (c *Counts) init() {
+	if c.Seen == nil {
+		c.Seen = map[string]int64{}
+	}
+	if c.Unreadable == nil {
+		c.Unreadable = map[string]int64{}
+	}
+}
+
+func (c *Counts) add(d *Counts) {
+	c.init()
+	for k, v := range d.Seen {
+		c.Seen[k] += v
+	}
+	for k, v := range d.Unreadable {
+		c.Unreadable[k] += v
+	}
+	c.Keys += d.Keys
+	c.Present += d.Present
+	c.Extracted += d.Extracted
+	c.Bytes += d.Bytes
+	c.Conflicts += d.Conflicts
+	c.Odd += d.Odd
+	c.Lost += d.Lost
+}
+
+// Shard is one key range [Lo, Hi); an empty Hi is the end of the key space.
+type Shard struct {
+	Lo      string `json:"lo"`
+	Hi      string `json:"hi"`
+	LastKey string `json:"lastKey"` // the last key flushed; the walk resumes after it
+	Done    bool   `json:"done"`
+	Counts
+}
+
+// Progress is persisted after every flushed batch, so a stopped run resumes
+// each shard after the last key it wrote.
+type Progress struct {
+	Done     bool     `json:"done"`
+	Archives []string `json:"archives"`
+	Total    Counts   `json:"total"`
+	Shards   []*Shard `json:"shards"`
+}
+
 type archive struct {
 	name string
 	db   *badger.DB
-	txn  *badger.Txn
-	it   *badger.Iterator
 }
 
-func run(out string, currentPaths, writable, archiveArgs []string) error {
-	progressPath := filepath.Join(out, "progress.json")
-	prog := &Progress{Seen: map[string]int64{}, Unreadable: map[string]int64{}}
-	if b, err := os.ReadFile(progressPath); err == nil {
-		if err := json.Unmarshal(b, prog); err != nil {
-			return fmt.Errorf("read progress: %w", err)
-		}
-		if prog.Unreadable == nil {
-			prog.Unreadable = map[string]int64{}
-		}
-		if prog.Done {
-			log.Printf("already done: %s", b)
-			return nil
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
+type extractor struct {
+	archives  []*archive
+	current   map[[32]byte]struct{}
+	sidecar   *leveldb.DB
+	conflicts *leveldb.DB
 
-	// Load the current key set
-	current := map[[32]byte]struct{}{}
-	for _, path := range currentPaths {
-		n, err := loadKeys(path, current)
-		if err != nil {
-			return fmt.Errorf("current %s: %w", path, err)
-		}
-		log.Printf("current %s: %d keys", path, n)
-	}
-	log.Printf("current: %d distinct keys", len(current))
+	mu         sync.Mutex // guards the fields below
+	prog       *Progress
+	progPath   string
+	unreadable *os.File
+}
+
+func run(out string, currentPaths, writable, archiveArgs []string, shards int) error {
+	x := &extractor{progPath: filepath.Join(out, "progress.json")}
 
 	// Open the archives
-	var archives []*archive
 	for _, arg := range archiveArgs {
 		name, path, ok := strings.Cut(arg, "=")
 		if !ok {
 			return fmt.Errorf("archive %q: want name=path", arg)
 		}
-		a, err := openArchive(name, path, contains(writable, name))
+		db, err := badger.Open(badger.DefaultOptions(path).WithReadOnly(!contains(writable, name)).WithLogger(nil))
 		if err != nil {
 			return fmt.Errorf("archive %s: %w", name, err)
 		}
 		// The archives are not closed. A corrupt value log panics inside
 		// Badger with its lock held (see value), and Close then deadlocks;
 		// they are read-only or copies, so exiting without closing is safe.
-		archives = append(archives, a)
+		x.archives = append(x.archives, &archive{name, db})
 	}
-	names := make([]string, len(archives))
-	for i, a := range archives {
+	names := make([]string, len(x.archives))
+	for i, a := range x.archives {
 		names[i] = a.name
 	}
-	if prog.Archives == nil {
-		prog.Archives = names
-	} else if strings.Join(prog.Archives, ",") != strings.Join(names, ",") {
-		return fmt.Errorf("progress was written for archives %v, not %v", prog.Archives, names)
-	}
 
-	// Open the outputs
-	sidecar, err := openOutput(filepath.Join(out, "sidecar.db"))
-	if err != nil {
-		return err
-	}
-	defer sidecar.Close()
-	conflicts, err := openOutput(filepath.Join(out, "conflicts.db"))
-	if err != nil {
-		return err
-	}
-	defer conflicts.Close()
-	unreadable, err := os.OpenFile(filepath.Join(out, "unreadable.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer unreadable.Close()
-
-	// Resume after the last written key
-	var resume []byte
-	if prog.LastKey != "" {
-		resume, err = hex.DecodeString(prog.LastKey)
-		if err != nil {
-			return fmt.Errorf("progress last key: %w", err)
+	// Unmarshal decodes into the slices it finds, so the defaults must not
+	// share names' backing array or the comparison below compares names to
+	// itself
+	x.prog = &Progress{Archives: append([]string(nil), names...), Shards: split(shards)}
+	if b, err := os.ReadFile(x.progPath); err == nil {
+		if err := json.Unmarshal(b, x.prog); err != nil {
+			return fmt.Errorf("read progress: %w", err)
 		}
-		log.Printf("resuming after %x", resume)
-	}
-	for _, a := range archives {
-		a.it.Seek(resume)
-		if resume != nil && a.it.Valid() && bytes.Equal(a.it.Item().Key(), resume) {
-			a.it.Next()
-		}
-	}
-
-	sideBatch, confBatch := new(leveldb.Batch), new(leveldb.Batch)
-	var batchBytes int
-	var lastKey []byte
-	flush := func() error {
-		if sideBatch.Len() == 0 && confBatch.Len() == 0 {
+		if x.prog.Done {
+			log.Printf("already done: %s", b)
 			return nil
 		}
-		if err := unreadable.Sync(); err != nil {
-			return err
-		}
-		if err := conflicts.Write(confBatch, &opt.WriteOptions{Sync: true}); err != nil {
-			return err
-		}
-		if err := sidecar.Write(sideBatch, &opt.WriteOptions{Sync: true}); err != nil {
-			return err
-		}
-		sideBatch.Reset()
-		confBatch.Reset()
-		batchBytes = 0
-		prog.LastKey = hex.EncodeToString(lastKey)
-		return writeProgress(progressPath, prog)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if strings.Join(x.prog.Archives, ",") != strings.Join(names, ",") {
+		return fmt.Errorf("progress was written for archives %v, not %v", x.prog.Archives, names)
+	}
+	if len(x.prog.Shards) != shards {
+		return fmt.Errorf("progress was written for %d shards, not %d", len(x.prog.Shards), shards)
 	}
 
-	start, lastLog := time.Now(), time.Now()
-	startKeys := prog.Keys
-	at := make([]*archive, 0, len(archives))
-	vals := make([][]byte, 0, len(archives))
+	// Load the current key set
+	x.current = map[[32]byte]struct{}{}
+	for _, path := range currentPaths {
+		n, err := loadKeys(path, x.current)
+		if err != nil {
+			return fmt.Errorf("current %s: %w", path, err)
+		}
+		log.Printf("current %s: %d keys", path, n)
+	}
+	log.Printf("current: %d distinct keys", len(x.current))
+
+	// Open the outputs
+	var err error
+	x.sidecar, err = openOutput(filepath.Join(out, "sidecar.db"))
+	if err != nil {
+		return err
+	}
+	defer x.sidecar.Close()
+	x.conflicts, err = openOutput(filepath.Join(out, "conflicts.db"))
+	if err != nil {
+		return err
+	}
+	defer x.conflicts.Close()
+	x.unreadable, err = os.OpenFile(filepath.Join(out, "unreadable.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer x.unreadable.Close()
+
+	// Walk the shards
+	start := time.Now()
+	stop := make(chan struct{})
+	go x.report(start, stop)
+	errs := make(chan error, len(x.prog.Shards))
+	for _, s := range x.prog.Shards {
+		go func(s *Shard) { errs <- x.walk(s) }(s)
+	}
+	var first error
+	for range x.prog.Shards {
+		if err := <-errs; err != nil && first == nil {
+			first = err
+		}
+	}
+	close(stop)
+	if first != nil {
+		return first
+	}
+
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	x.prog.Done = true
+	if err := x.save(); err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(x.prog.Total, "", "  ")
+	log.Printf("done in %v:\n%s", time.Since(start).Round(time.Second), b)
+	return nil
+}
+
+// split divides the key space into n ranges on its first two bytes.
+func split(n int) []*Shard {
+	bound := func(i int) string {
+		if i == n {
+			return ""
+		}
+		v := i * (1 << 16) / n
+		return hex.EncodeToString([]byte{byte(v >> 8), byte(v)})
+	}
+	shards := make([]*Shard, n)
+	for i := range shards {
+		shards[i] = &Shard{Lo: bound(i), Hi: bound(i + 1)}
+	}
+	return shards
+}
+
+// walk merges every archive over one shard.
+func (x *extractor) walk(s *Shard) error {
+	x.mu.Lock()
+	done, lo, hi, last := s.Done, s.Lo, s.Hi, s.LastKey
+	x.mu.Unlock()
+	if done {
+		return nil
+	}
+	loKey, _ := hex.DecodeString(lo)
+	hiKey, _ := hex.DecodeString(hi)
+	resume, err := hex.DecodeString(last)
+	if err != nil {
+		return fmt.Errorf("shard %s: last key: %w", lo, err)
+	}
+
+	type cursor struct {
+		*archive
+		index int
+		it    *badger.Iterator
+	}
+	var cursors []*cursor
+	for i, a := range x.archives {
+		txn := a.db.NewTransaction(false)
+		defer txn.Discard()
+		io := badger.DefaultIteratorOptions
+		io.PrefetchValues = false
+		it := txn.NewIterator(io)
+		defer it.Close()
+		if len(resume) > 0 {
+			it.Seek(resume)
+			if it.Valid() && bytes.Equal(it.Item().Key(), resume) {
+				it.Next()
+			}
+		} else {
+			it.Seek(loKey)
+		}
+		cursors = append(cursors, &cursor{a, i, it})
+	}
+	valid := func(c *cursor) bool {
+		return c.it.Valid() && (len(hiKey) == 0 || bytes.Compare(c.it.Item().Key(), hiKey) < 0)
+	}
+
+	var counts Counts
+	counts.init()
+	sideBatch, confBatch := new(leveldb.Batch), new(leveldb.Batch)
+	var unreadable bytes.Buffer
+	var batchBytes int
+	var lastKey []byte
+	flush := func(done bool) error {
+		if err := x.conflicts.Write(confBatch, &opt.WriteOptions{Sync: true}); err != nil {
+			return err
+		}
+		if err := x.sidecar.Write(sideBatch, &opt.WriteOptions{Sync: true}); err != nil {
+			return err
+		}
+
+		x.mu.Lock()
+		defer x.mu.Unlock()
+		if unreadable.Len() > 0 {
+			if _, err := x.unreadable.Write(unreadable.Bytes()); err != nil {
+				return err
+			}
+			if err := x.unreadable.Sync(); err != nil {
+				return err
+			}
+		}
+		s.Counts.add(&counts)
+		x.prog.Total.add(&counts)
+		if lastKey != nil {
+			s.LastKey = hex.EncodeToString(lastKey)
+		}
+		s.Done = done
+
+		sideBatch.Reset()
+		confBatch.Reset()
+		unreadable.Reset()
+		batchBytes = 0
+		counts = Counts{}
+		counts.init()
+		return x.save()
+	}
+
+	at := make([]*cursor, 0, len(cursors))
+	from := make([]*cursor, 0, len(cursors))
+	vals := make([][]byte, 0, len(cursors))
 	for {
 		// The smallest key any archive is at
 		var min []byte
-		for _, a := range archives {
-			if !a.it.Valid() {
+		for _, c := range cursors {
+			if !valid(c) {
 				continue
 			}
-			k := a.it.Item().Key()
+			k := c.it.Item().Key()
 			if min == nil || bytes.Compare(k, min) < 0 {
 				min = k
 			}
@@ -229,45 +371,36 @@ func run(out string, currentPaths, writable, archiveArgs []string) error {
 		key := append([]byte(nil), min...)
 
 		// Every archive's value for it
-		at, vals = at[:0], vals[:0]
-		for _, a := range archives {
-			if !a.it.Valid() || !bytes.Equal(a.it.Item().Key(), key) {
-				continue
+		at, from, vals = at[:0], from[:0], vals[:0]
+		for _, c := range cursors {
+			if valid(c) && bytes.Equal(c.it.Item().Key(), key) {
+				counts.Seen[c.name]++
+				at = append(at, c)
 			}
-			prog.Seen[a.name]++
-			at = append(at, a)
 		}
-		prog.Keys++
+		counts.Keys++
 
 		var present bool
 		if len(key) == 32 {
-			_, present = current[[32]byte(key)]
+			_, present = x.current[[32]byte(key)]
 		} else {
-			if prog.Odd < 20 {
-				log.Printf("odd key %x in %s", key, at[0].name)
-			}
-			prog.Odd++
+			log.Printf("odd key %x in %s", key, at[0].name)
+			counts.Odd++
 		}
 
 		if present {
-			prog.Present++
+			counts.Present++
 		} else {
 			// An archive whose value cannot be read is left out of the
 			// comparison; the others still decide
-			from := at[:0:0]
-			for _, a := range at {
-				v, err := value(a.it.Item())
+			for _, c := range at {
+				v, err := value(c.it.Item())
 				if err != nil {
-					if prog.Unreadable[a.name] < 20 {
-						log.Printf("%s: value of %x: %v", a.name, key, err)
-					}
-					prog.Unreadable[a.name]++
-					if _, err := fmt.Fprintf(unreadable, "%s %x %v\n", a.name, key, err); err != nil {
-						return err
-					}
+					counts.Unreadable[c.name]++
+					fmt.Fprintf(&unreadable, "%s %x %v\n", c.name, key, err)
 					continue
 				}
-				from = append(from, a)
+				from = append(from, c)
 				vals = append(vals, v)
 			}
 
@@ -277,50 +410,85 @@ func run(out string, currentPaths, writable, archiveArgs []string) error {
 			}
 			switch {
 			case len(vals) == 0:
-				prog.Lost++
+				counts.Lost++
 			case agree:
 				sideBatch.Put(key, vals[0])
-				prog.Extracted++
-				prog.Bytes += int64(len(vals[0]))
+				counts.Extracted++
+				counts.Bytes += int64(len(vals[0]))
 				batchBytes += len(key) + len(vals[0])
 			default:
-				for i, a := range from {
-					confBatch.Put(append(key[:len(key):len(key)], byte(index(archives, a))), vals[i])
+				for i, c := range from {
+					confBatch.Put(append(key[:len(key):len(key)], byte(c.index)), vals[i])
 					batchBytes += len(key) + 1 + len(vals[i])
 				}
-				prog.Conflicts++
+				counts.Conflicts++
 			}
 		}
 
-		for _, a := range at {
-			a.it.Next()
+		for _, c := range at {
+			c.it.Next()
 		}
 		lastKey = key
 
-		if batchBytes >= 64<<20 || sideBatch.Len()+confBatch.Len() >= 200_000 {
-			if err := flush(); err != nil {
+		if batchBytes >= 16<<20 || sideBatch.Len()+confBatch.Len() >= 50_000 {
+			if err := flush(false); err != nil {
 				return err
 			}
 		}
+	}
+	return flush(true)
+}
 
-		if time.Since(lastLog) >= time.Minute {
-			lastLog = time.Now()
-			rate := float64(prog.Keys-startKeys) / time.Since(start).Seconds()
-			log.Printf("at %x: keys=%d present=%d extracted=%d (%.1f GiB) conflicts=%d odd=%d seen=%v %.0f keys/s",
-				key[:4], prog.Keys, prog.Present, prog.Extracted, float64(prog.Bytes)/(1<<30), prog.Conflicts, prog.Odd, prog.Seen, rate)
+// save writes the progress file. The caller holds x.mu.
+func (x *extractor) save() error {
+	b, err := json.MarshalIndent(x.prog, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := x.progPath + ".tmp"
+	if err := os.WriteFile(tmp, b, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, x.progPath)
+}
+
+func (x *extractor) report(start time.Time, stop <-chan struct{}) {
+	x.mu.Lock()
+	startKeys := x.prog.Total.Keys
+	x.mu.Unlock()
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-t.C:
 		}
+		x.mu.Lock()
+		c := x.prog.Total
+		var done int
+		for _, s := range x.prog.Shards {
+			if s.Done {
+				done++
+			}
+		}
+		rate := float64(c.Keys-startKeys) / time.Since(start).Seconds()
+		log.Printf("shards done %d/%d: keys=%d present=%d extracted=%d (%.1f GiB) conflicts=%d unreadable=%v lost=%d odd=%d seen=%v %.0f keys/s",
+			done, len(x.prog.Shards), c.Keys, c.Present, c.Extracted, float64(c.Bytes)/(1<<30), c.Conflicts, c.Unreadable, c.Lost, c.Odd, c.Seen, rate)
+		x.mu.Unlock()
 	}
+}
 
-	if err := flush(); err != nil {
-		return err
-	}
-	prog.Done = true
-	if err := writeProgress(progressPath, prog); err != nil {
-		return err
-	}
-	b, _ := json.MarshalIndent(prog, "", "  ")
-	log.Printf("done in %v:\n%s", time.Since(start).Round(time.Second), b)
-	return nil
+// value reads an item's value, turning Badger's panic on a value pointer that
+// does not decode — a corrupt or stale value log region, found in the
+// pre-reorg dn archive — into an error.
+func value(item *badger.Item) (v []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("unreadable value: %v", r)
+		}
+	}()
+	return item.ValueCopy(nil)
 }
 
 func loadKeys(path string, into map[[32]byte]struct{}) (int, error) {
@@ -343,30 +511,6 @@ func loadKeys(path string, into map[[32]byte]struct{}) (int, error) {
 	return n, it.Error()
 }
 
-func openArchive(name, path string, writable bool) (*archive, error) {
-	opts := badger.DefaultOptions(path).WithReadOnly(!writable).WithLogger(nil)
-	db, err := badger.Open(opts)
-	if err != nil {
-		return nil, err
-	}
-	txn := db.NewTransaction(false)
-	io := badger.DefaultIteratorOptions
-	io.PrefetchValues = false
-	return &archive{name: name, db: db, txn: txn, it: txn.NewIterator(io)}, nil
-}
-
-// value reads an item's value, turning Badger's panic on a value pointer that
-// does not decode — a corrupt or stale value log region, found in the
-// pre-reorg dn archive — into an error.
-func value(item *badger.Item) (v []byte, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("unreadable value: %v", r)
-		}
-	}()
-	return item.ValueCopy(nil)
-}
-
 func openOutput(path string) (*leveldb.DB, error) {
 	// The bloom filter matches the node's, so a sidecar read through an
 	// overlay answers a miss without walking the levels
@@ -378,18 +522,6 @@ func openOutput(path string) (*leveldb.DB, error) {
 	})
 }
 
-func writeProgress(path string, prog *Progress) error {
-	b, err := json.MarshalIndent(prog, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
-}
-
 func contains(l []string, s string) bool {
 	for _, t := range l {
 		if t == s {
@@ -397,13 +529,4 @@ func contains(l []string, s string) bool {
 		}
 	}
 	return false
-}
-
-func index(l []*archive, a *archive) int {
-	for i, b := range l {
-		if b == a {
-			return i
-		}
-	}
-	panic("not an archive")
 }

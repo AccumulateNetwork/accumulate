@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -78,72 +79,110 @@ func setup(t *testing.T) (dir string, current []string, archives []string) {
 	return
 }
 
-func TestExtract(t *testing.T) {
-	dir, current, archives := setup(t)
-	out := filepath.Join(dir, "out")
-	require.NoError(t, run(out, current, nil, archives))
-
-	// A key any current database holds is left out; a key the archives agree
-	// on is written once; a key they disagree on goes to conflicts, per archive
-	require.Equal(t, map[string]string{
-		hx("only-a"): "a",
-		hx("only-b"): "b",
-		hx("same"):   "same",
-	}, readLevel(t, filepath.Join(out, "sidecar.db")))
-	require.Equal(t, map[string]string{
-		hx("disagree", 0): "from-a",
-		hx("disagree", 1): "from-b",
-	}, readLevel(t, filepath.Join(out, "conflicts.db")))
-
+func readProgress(t *testing.T, out string) *Progress {
 	var prog Progress
 	b, err := os.ReadFile(filepath.Join(out, "progress.json"))
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(b, &prog))
-	require.True(t, prog.Done)
-	require.EqualValues(t, 6, prog.Keys)
-	require.EqualValues(t, 2, prog.Present)
-	require.EqualValues(t, 3, prog.Extracted)
-	require.EqualValues(t, 1, prog.Conflicts)
-	require.Equal(t, map[string]int64{"a": 4, "b": 4}, prog.Seen)
+	return &prog
+}
 
-	// A finished run is not repeated
-	require.NoError(t, run(out, current, nil, archives))
+func TestExtract(t *testing.T) {
+	for _, shards := range []int{1, 3, 256} {
+		t.Run(fmt.Sprint(shards), func(t *testing.T) {
+			dir, current, archives := setup(t)
+			out := filepath.Join(dir, "out")
+			require.NoError(t, run(out, current, nil, archives, shards))
+
+			// A key any current database holds is left out; a key the
+			// archives agree on is written once; a key they disagree on goes
+			// to conflicts, per archive
+			require.Equal(t, map[string]string{
+				hx("only-a"): "a",
+				hx("only-b"): "b",
+				hx("same"):   "same",
+			}, readLevel(t, filepath.Join(out, "sidecar.db")))
+			require.Equal(t, map[string]string{
+				hx("disagree", 0): "from-a",
+				hx("disagree", 1): "from-b",
+			}, readLevel(t, filepath.Join(out, "conflicts.db")))
+
+			prog := readProgress(t, out)
+			require.True(t, prog.Done)
+			require.EqualValues(t, 6, prog.Total.Keys)
+			require.EqualValues(t, 2, prog.Total.Present)
+			require.EqualValues(t, 3, prog.Total.Extracted)
+			require.EqualValues(t, 1, prog.Total.Conflicts)
+			require.Equal(t, map[string]int64{"a": 4, "b": 4}, prog.Total.Seen)
+			require.Len(t, prog.Shards, shards)
+			for _, s := range prog.Shards {
+				require.True(t, s.Done)
+			}
+
+			// A finished run is not repeated
+			require.NoError(t, run(out, current, nil, archives, shards))
+		})
+	}
+}
+
+func TestSplit(t *testing.T) {
+	// The ranges tile the key space with no gap and no overlap
+	for _, n := range []int{1, 2, 3, 32, 65536} {
+		s := split(n)
+		require.Len(t, s, n)
+		require.Equal(t, "0000", s[0].Lo)
+		require.Equal(t, "", s[n-1].Hi)
+		for i := 1; i < n; i++ {
+			require.Equal(t, s[i-1].Hi, s[i].Lo)
+			require.Less(t, s[i-1].Lo, s[i].Lo)
+		}
+	}
 }
 
 func TestResume(t *testing.T) {
 	dir, current, archives := setup(t)
-	out := filepath.Join(dir, "out")
+	const shards = 3
 
-	// A run that stopped after the smallest extracted key
 	full := filepath.Join(dir, "full")
-	require.NoError(t, run(full, current, nil, archives))
+	require.NoError(t, run(full, current, nil, archives, shards))
 	all := readLevel(t, filepath.Join(full, "sidecar.db"))
-	var first string
-	for k := range all {
-		if first == "" || k < first {
-			first = k
-		}
+
+	// Every shard stopped after the smallest key it extracted
+	prog := readProgress(t, full)
+	prog.Done = false
+	prog.Total = Counts{}
+	want := map[string]string{}
+	for k, v := range all {
+		want[k] = v
 	}
+	for _, s := range prog.Shards {
+		s.Done, s.LastKey, s.Counts = false, "", Counts{}
+		for k := range all {
+			if k >= s.Lo && (s.Hi == "" || k < s.Hi) && (s.LastKey == "" || k < s.LastKey) {
+				s.LastKey = k
+			}
+		}
+		delete(want, s.LastKey)
+	}
+	out := filepath.Join(dir, "out")
 	require.NoError(t, os.MkdirAll(out, 0700))
-	require.NoError(t, writeProgress(filepath.Join(out, "progress.json"), &Progress{
-		LastKey:  first,
-		Archives: []string{"a", "b"},
-		Seen:     map[string]int64{},
-	}))
+	b, err := json.Marshal(prog)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(out, "progress.json"), b, 0644))
 
-	// Resuming writes everything after it and nothing at or before it
-	require.NoError(t, run(out, current, nil, archives))
-	got := readLevel(t, filepath.Join(out, "sidecar.db"))
-	delete(all, first)
-	require.Equal(t, all, got)
+	// Resuming writes everything after those keys and nothing at or before them
+	require.NoError(t, run(out, current, nil, archives, shards))
+	require.Equal(t, want, readLevel(t, filepath.Join(out, "sidecar.db")))
 
-	// The archive list cannot change under a resume
-	out2 := filepath.Join(dir, "out2")
-	require.NoError(t, os.MkdirAll(out2, 0700))
-	require.NoError(t, writeProgress(filepath.Join(out2, "progress.json"), &Progress{
-		LastKey: first, Archives: []string{"b", "a"}, Seen: map[string]int64{},
-	}))
-	require.ErrorContains(t, run(out2, current, nil, archives), "progress was written for archives")
+	// Neither the archives nor the shards can change under a resume
+	prog.Archives = []string{"b", "a"}
+	b, _ = json.Marshal(prog)
+	require.NoError(t, os.WriteFile(filepath.Join(out, "progress.json"), b, 0644))
+	require.ErrorContains(t, run(out, current, nil, archives, shards), "progress was written for archives")
+	prog.Archives = []string{"a", "b"}
+	b, _ = json.Marshal(prog)
+	require.NoError(t, os.WriteFile(filepath.Join(out, "progress.json"), b, 0644))
+	require.ErrorContains(t, run(out, current, nil, archives, 4), "progress was written for 3 shards")
 }
 
 // corrupt overwrites the value log entry header of a key, as found in the
@@ -186,7 +225,7 @@ func TestUnreadable(t *testing.T) {
 
 	out := filepath.Join(dir, "out")
 	require.NoError(t, run(out, []string{filepath.Join(dir, "bvnn")}, nil,
-		[]string{"a=" + filepath.Join(dir, "a"), "b=" + filepath.Join(dir, "b")}))
+		[]string{"a=" + filepath.Join(dir, "a"), "b=" + filepath.Join(dir, "b")}, 4))
 
 	// The readable archive decides a key another cannot read; a key no archive
 	// can read is lost, not fatal, and both are listed
@@ -196,13 +235,10 @@ func TestUnreadable(t *testing.T) {
 		hx("after-bad"): "a",
 	}, readLevel(t, filepath.Join(out, "sidecar.db")))
 
-	var prog Progress
-	b, err := os.ReadFile(filepath.Join(out, "progress.json"))
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(b, &prog))
+	prog := readProgress(t, out)
 	require.True(t, prog.Done)
-	require.Equal(t, map[string]int64{"a": 2}, prog.Unreadable)
-	require.EqualValues(t, 1, prog.Lost)
+	require.Equal(t, map[string]int64{"a": 2}, prog.Total.Unreadable)
+	require.EqualValues(t, 1, prog.Total.Lost)
 
 	list, err := os.ReadFile(filepath.Join(out, "unreadable.log"))
 	require.NoError(t, err)
