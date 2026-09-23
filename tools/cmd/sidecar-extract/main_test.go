@@ -393,3 +393,60 @@ func TestCollected(t *testing.T) {
 	require.Empty(t, prog.Total.Unreadable)
 	require.Zero(t, prog.Recovery.Keys)
 }
+
+func TestDecide(t *testing.T) {
+	newDN, oldDN := &archive{group: "dn", name: "dn/B"}, &archive{group: "dn", name: "dn/A"}
+	yutu := &archive{group: "yutu", name: "yutu"}
+	v := func(s string) []byte { return []byte(s) }
+	cases := []struct {
+		name    string
+		holders []held
+		want    decision
+	}{
+		{"newer copy wins", []held{{newDN, v("new"), true}, {oldDN, v("old"), true}},
+			decision{value: v("new"), superseded: 1}},
+		{"copies agree", []held{{newDN, v("x"), true}, {oldDN, v("x"), true}},
+			decision{value: v("x")}},
+		{"unreadable newer falls back to older", []held{{newDN, nil, false}, {oldDN, v("old"), true}},
+			decision{value: v("old")}},
+		{"partitions agree", []held{{newDN, v("x"), true}, {yutu, v("x"), true}},
+			decision{value: v("x")}},
+		{"partitions disagree", []held{{newDN, v("a"), true}, {oldDN, v("b"), true}, {yutu, v("c"), true}},
+			decision{conflicts: []held{{newDN, v("a"), true}, {yutu, v("c"), true}}, superseded: 1}},
+		{"nothing readable", []held{{newDN, nil, false}, {yutu, nil, false}},
+			decision{lost: true}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, decide(c.holders))
+		})
+	}
+}
+
+func TestPartitions(t *testing.T) {
+	// Two copies of one partition, newest first, and another partition
+	dir := t.TempDir()
+	writeBadger(t, filepath.Join(dir, "new"), map[string]string{"changed": "new", "only-new": "n"})
+	writeBadger(t, filepath.Join(dir, "old"), map[string]string{"changed": "old", "only-old": "o", "shared": "s"})
+	writeBadger(t, filepath.Join(dir, "other"), map[string]string{"shared": "s", "changed": "other"})
+	writeLevel(t, filepath.Join(dir, "bvnn"))
+
+	out := filepath.Join(dir, "out")
+	require.NoError(t, run(out, []string{filepath.Join(dir, "bvnn")}, nil, []string{
+		"dn/B=" + filepath.Join(dir, "new"),
+		"dn/A=" + filepath.Join(dir, "old"),
+		"yutu=" + filepath.Join(dir, "other"),
+	}, 2))
+
+	require.Equal(t, map[string]string{
+		hx("only-new"): "n",
+		hx("only-old"): "o",
+		hx("shared"):   "s",
+	}, readLevel(t, filepath.Join(out, "sidecar.db")))
+	// The partitions disagree on "changed": dn's is the newer copy's
+	require.Equal(t, map[string]string{
+		hx("changed", 0): "new",
+		hx("changed", 2): "other",
+	}, readLevel(t, filepath.Join(out, "conflicts.db")))
+	require.EqualValues(t, 1, readProgress(t, out).Total.Superseded)
+}

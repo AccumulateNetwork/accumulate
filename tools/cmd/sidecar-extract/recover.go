@@ -8,7 +8,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -116,15 +115,13 @@ func (x *extractor) recoverUnreadable(out string, workers int) error {
 	sort.Strings(keys)
 	side, conf := new(leveldb.Batch), new(leveldb.Batch)
 	for _, key := range keys {
-		var vals [][]byte
-		var from []int
-		var held []string
+		var holders []held
+		var names []string
 		for i, a := range x.archives {
 			if version, ok := misses[key][a.name]; ok {
-				held = append(held, a.name)
-				if v, ok := found[a.name][string(keyWithTs([]byte(key), version))]; ok {
-					vals, from = append(vals, v), append(from, i)
-				}
+				names = append(names, a.name)
+				v, ok := found[a.name][string(keyWithTs([]byte(key), version))]
+				holders = append(holders, held{a, v, ok})
 				continue
 			}
 			item, err := txns[i].Get([]byte(key))
@@ -134,35 +131,32 @@ func (x *extractor) recoverUnreadable(out string, workers int) error {
 			if err != nil {
 				return fmt.Errorf("%s: get %x: %w", a.name, key, err)
 			}
-			held = append(held, a.name)
+			names = append(names, a.name)
 			v, err := a.resolve(item, moves[i])
 			if err != nil {
 				// Read fine during the walk, so this is not expected
 				return fmt.Errorf("%s: value of %x: %w", a.name, key, err)
 			}
-			vals, from = append(vals, v), append(from, i)
+			holders = append(holders, held{a, v, true})
 		}
 
 		side.Delete([]byte(key))
 		for i := range x.archives {
 			conf.Delete(append([]byte(key), byte(i)))
 		}
-		agree := true
-		for _, v := range vals {
-			agree = agree && bytes.Equal(v, vals[0])
-		}
+		d := decide(holders)
 		switch {
-		case len(vals) == 0:
+		case d.lost:
 			rec.Lost++
-			if _, err := fmt.Fprintf(lost, "%x %s\n", key, strings.Join(held, ",")); err != nil {
+			if _, err := fmt.Fprintf(lost, "%x %s\n", key, strings.Join(names, ",")); err != nil {
 				return err
 			}
-		case agree:
-			side.Put([]byte(key), vals[0])
+		case d.conflicts == nil:
+			side.Put([]byte(key), d.value)
 			rec.Extracted++
 		default:
-			for j, i := range from {
-				conf.Put(append([]byte(key), byte(i)), vals[j])
+			for _, h := range d.conflicts {
+				conf.Put(append([]byte(key), byte(x.index(h.archive))), h.value)
 			}
 			rec.Conflicts++
 		}

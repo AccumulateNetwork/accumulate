@@ -14,9 +14,11 @@
 // shards walked in parallel: each value is a random value-log read, so one
 // walker is bound by read latency, not bandwidth.
 //
-// A key two archive partitions hold with different values is not written to
-// the sidecar, which serves one value per key. Each variant goes to the
-// conflicts database under the key followed by the partition's index.
+// An archive is named partition/copy; copies of one partition are given newest
+// first, and for each partition the newest copy with a readable value speaks
+// (decide.go). A key two partitions hold with different values is not written
+// to the sidecar, which serves one value per key. Each partition's value goes
+// to the conflicts database under the key followed by the archive's index.
 //
 // Every value is verified: a value-log value is taken only from an intact log
 // entry for exactly its key and version (vlog.go). One that fails is listed in
@@ -29,7 +31,7 @@
 // it with -writable.
 //
 //	sidecar-extract -out <dir> -current <leveldb> [-current ...] [-shards n] \
-//	    [-writable <name>] <name>=<badger> [<name>=<badger> ...]
+//	    [-writable <name>] <partition>[/<copy>]=<badger> ...
 package main
 
 import (
@@ -79,13 +81,14 @@ func main() {
 
 // Counts are what a walk found.
 type Counts struct {
-	Seen      map[string]int64 `json:"seen"`      // keys read, per archive
-	Keys      int64            `json:"keys"`      // distinct archive keys
-	Present   int64            `json:"present"`   // held by the current database
-	Extracted int64            `json:"extracted"` // written to the sidecar
-	Bytes     int64            `json:"bytes"`     // value bytes written to the sidecar
-	Conflicts int64            `json:"conflicts"` // keys whose archives disagree
-	Odd       int64            `json:"odd"`       // keys that are not 32-byte hashes
+	Seen       map[string]int64 `json:"seen"`       // keys read, per archive
+	Keys       int64            `json:"keys"`       // distinct archive keys
+	Present    int64            `json:"present"`    // held by the current database
+	Extracted  int64            `json:"extracted"`  // written to the sidecar
+	Bytes      int64            `json:"bytes"`      // value bytes written to the sidecar
+	Conflicts  int64            `json:"conflicts"`  // keys whose archives disagree
+	Odd        int64            `json:"odd"`        // keys that are not 32-byte hashes
+	Superseded int64            `json:"superseded"` // older copies whose different value lost to a newer copy of the partition
 
 	// Values an archive holds a key for but cannot produce, per archive. Each
 	// is listed in unreadable.log.
@@ -116,6 +119,7 @@ func (c *Counts) add(d *Counts) {
 	c.Bytes += d.Bytes
 	c.Conflicts += d.Conflicts
 	c.Odd += d.Odd
+	c.Superseded += d.Superseded
 	c.Lost += d.Lost
 }
 
@@ -139,9 +143,10 @@ type Progress struct {
 }
 
 type archive struct {
-	name string
-	db   *badger.DB
-	log  *vlog
+	group string // the partition; copies of one partition share it
+	name  string
+	db    *badger.DB
+	log   *vlog
 }
 
 type extractor struct {
@@ -163,15 +168,16 @@ func run(out string, currentPaths, writable, archiveArgs []string, shards int) e
 	for _, arg := range archiveArgs {
 		name, path, ok := strings.Cut(arg, "=")
 		if !ok {
-			return fmt.Errorf("archive %q: want name=path", arg)
+			return fmt.Errorf("archive %q: want [partition/]name=path", arg)
 		}
+		group, _, _ := strings.Cut(name, "/")
 		db, err := badger.Open(badger.DefaultOptions(path).WithReadOnly(!contains(writable, name)).WithLogger(nil))
 		if err != nil {
 			return fmt.Errorf("archive %s: %w", name, err)
 		}
 		// The archives are not closed: they are read-only or copies, and a
 		// run that fails part way must not wait on them.
-		x.archives = append(x.archives, &archive{name: name, db: db, log: &vlog{dir: path}})
+		x.archives = append(x.archives, &archive{group: group, name: name, db: db, log: &vlog{dir: path}})
 	}
 	names := make([]string, len(x.archives))
 	for i, a := range x.archives {
@@ -368,8 +374,7 @@ func (x *extractor) walk(s *Shard) error {
 	}
 
 	at := make([]*cursor, 0, len(cursors))
-	from := make([]*cursor, 0, len(cursors))
-	vals := make([][]byte, 0, len(cursors))
+	holders := make([]held, 0, len(cursors))
 	for {
 		// The smallest key any archive is at
 		var min []byte
@@ -388,7 +393,7 @@ func (x *extractor) walk(s *Shard) error {
 		key := append([]byte(nil), min...)
 
 		// Every archive's value for it
-		at, from, vals = at[:0], from[:0], vals[:0]
+		at = at[:0]
 		for _, c := range cursors {
 			if valid(c) && bytes.Equal(c.it.Item().Key(), key) {
 				counts.Seen[c.name]++
@@ -408,35 +413,32 @@ func (x *extractor) walk(s *Shard) error {
 		if present {
 			counts.Present++
 		} else {
-			// An archive whose value cannot be read is left out of the
-			// comparison; the others still decide
+			// An archive whose value cannot be read is left out; recovery
+			// decides the key again once it has looked for the value
+			holders = holders[:0]
 			for _, c := range at {
 				v, err := c.resolve(c.it.Item(), c.moves)
 				if err != nil {
 					counts.Unreadable[c.name]++
 					fmt.Fprintf(&unreadable, "%s %x %d %v\n", c.name, key, c.it.Item().Version(), err)
-					continue
 				}
-				from = append(from, c)
-				vals = append(vals, v)
+				holders = append(holders, held{c.archive, v, err == nil})
 			}
 
-			agree := true
-			for _, v := range vals {
-				agree = agree && bytes.Equal(v, vals[0])
-			}
+			d := decide(holders)
+			counts.Superseded += int64(d.superseded)
 			switch {
-			case len(vals) == 0:
+			case d.lost:
 				counts.Lost++
-			case agree:
-				sideBatch.Put(key, vals[0])
+			case d.conflicts == nil:
+				sideBatch.Put(key, d.value)
 				counts.Extracted++
-				counts.Bytes += int64(len(vals[0]))
-				batchBytes += len(key) + len(vals[0])
+				counts.Bytes += int64(len(d.value))
+				batchBytes += len(key) + len(d.value)
 			default:
-				for i, c := range from {
-					confBatch.Put(append(key[:len(key):len(key)], byte(c.index)), vals[i])
-					batchBytes += len(key) + 1 + len(vals[i])
+				for _, h := range d.conflicts {
+					confBatch.Put(append(key[:len(key):len(key)], byte(x.index(h.archive))), h.value)
+					batchBytes += len(key) + 1 + len(h.value)
 				}
 				counts.Conflicts++
 			}
@@ -525,6 +527,15 @@ func openOutput(path string) (*leveldb.DB, error) {
 		CompactionTableSize: 64 * opt.MiB,
 		CompactionTotalSize: 640 * opt.MiB,
 	})
+}
+
+func (x *extractor) index(a *archive) int {
+	for i, b := range x.archives {
+		if a == b {
+			return i
+		}
+	}
+	panic("not an archive")
 }
 
 func contains(l []string, s string) bool {
