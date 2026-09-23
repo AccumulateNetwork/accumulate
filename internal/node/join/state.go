@@ -86,7 +86,7 @@ type PulledState struct {
 
 	spine bool   // this partition's spine has been pulled and verified
 	round uint64 // how many rounds have run, for the backstop's cadence
-	wide  bool   // the last ledger walk could not cover (R, Q]
+	wide  bool   // the last ledger walk could not cover (localBlock, Q]
 
 	// executed is the block this node's EXECUTOR last executed: the number
 	// the daemon logs as lastBlock. It is read once, before anything is
@@ -94,6 +94,13 @@ type PulledState struct {
 	// handoff it is the last block whose root matched its anchor (HandedOff,
 	// Diverged).
 	executed uint64
+
+	// synced is the block the pulled state is at: the ledger index of the
+	// last pass whose proven root the whole local root equals. It moves as
+	// the join converges, while executed stands still, and it is where the
+	// ledger walk starts once it is past executed — see localBlock. The
+	// handoff clears it: from there executed is the block the state is at.
+	synced uint64
 
 	// pass is what has been fetched and not yet settled: the peer's CURRENT
 	// state, held until the root its receipts end at is proven — it equals
@@ -339,8 +346,9 @@ func (s *PulledState) changedAccounts(ctx context.Context) ([]*url.URL, error) {
 }
 
 // localBlock is the block this node's state is: the block its EXECUTOR last
-// executed, remembered from before the pull started. A node that has executed
-// nothing is at zero.
+// executed, remembered from before the pull started, until a pass has synced
+// the state past it. A node that has executed nothing and synced nothing is at
+// zero.
 //
 // It is NOT read from the store each time it is asked for. `<partition>/ledger`
 // is an account, and it is one of the accounts the pull overwrites with the
@@ -351,12 +359,23 @@ func (s *PulledState) changedAccounts(ctx context.Context) ([]*url.URL, error) {
 // was 853 behind, s.wide was never set, the page diff never ran as the primary,
 // and the walk covered 17 blocks instead of 853 (#4295).
 //
-// Nothing moves it while the join converges: a joining node collects
-// committed blocks and executes none of them (join.Run, step 1), so its
-// executor stands still until the handoff. After the handoff HandedOff and
-// Diverged move it to the last block whose root matched its anchor, which is
-// where a node that syncs again starts from.
+// It is the executor's block OR the block the pulled state is synced to,
+// whichever is later. A joining node's executor stands still until the
+// handoff (join.Run, step 1), but its state does not: every pass whose proven
+// root the whole local root equals puts the state at that root's block, and
+// every block after it is all the walk has to cover. Measuring from the
+// executor's block alone made every round of a join longer than MaxLedgerSpan
+// blocks wide, and the join ran on the page diff for the rest of its life
+// (#4356). A state that is only partly pulled past synced is still covered:
+// the walk from synced names everything since.
+//
+// After the handoff HandedOff and Diverged move executed to the last block
+// whose root matched its anchor, which is where a node that syncs again
+// starts from; HandedOff clears synced so that it cannot outrun them.
 func (s *PulledState) localBlock() (uint64, error) {
+	if s.synced > s.executed {
+		return s.synced, nil
+	}
 	return s.executed, nil
 }
 
@@ -558,6 +577,9 @@ func (s *PulledState) observe(proven [32]byte) {
 		return
 	}
 	s.tracker.Observe(s.partition, ledger.Index, local)
+	if ledger.Index > s.synced {
+		s.synced = ledger.Index
+	}
 }
 
 // dropPass throws the held pass away and asks for all of it again.
