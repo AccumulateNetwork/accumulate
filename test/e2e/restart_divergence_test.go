@@ -7,16 +7,18 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
 	"math/big"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -46,12 +48,19 @@ import (
 // the three nodes' root chains are compared.
 func itoa(v uint64) string { return fmt.Sprint(v) }
 
-// The proving anchor lands AFTER the join: the node takes its peers' staging
-// and their state while they still hold the entries and their proofs wait, and
-// when the anchor arrives every node — the one that joined included — executes
-// what it holds. A join that took no staging holds nothing then, executes a
-// block its peers do not, and its root chain never matches again (#4290, run
-// 20260918T023054Z).
+// The join is the production loop's: join.Run, with the simulator's node as
+// its buffer, the executor's stage, the pull addressed at named peers with
+// this node's own ID excluded, and the partition's validators found through
+// the API — the wiring cmd/accumulated/run/dagbft.go uses. Nothing is copied
+// from a peer and no peer is asked for its staging (#4362).
+//
+// The proving anchor lands DURING the join. It cannot land before the join
+// completes: the entries the peers hold arrived before the restarted node was
+// listening, so until the peers execute them the node's next block has a gap
+// and the loop advances the sync instead of handing off (executor spec,
+// "Sync", step 4). A join that handed off across that gap would hold nothing
+// when the proving anchor arrived, execute a block its peers do not, and its
+// root chain would never match again (#4290, run 20260918T023054Z).
 func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
@@ -219,81 +228,53 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 	require.True(t, p.Joining(1))
 	t.Logf("held after the restart:  %v", []int{held(0), held(1), held(2)})
 
-	// The join happens FIRST, while the peers still hold the entries and
-	// their proofs still wait: the node takes their staging and their state,
-	// and only then do the anchors land. That ordering is what this test is
-	// for — with it, a join that skipped the staging (or collected nothing)
-	// holds nothing when the proving anchor arrives, executes a block its
-	// peers do not, and its root chain never matches again (#4290).
-	require.NoError(t, p.TakeStaging(1, 0), "take a peer's staging")
-	{
-		tx := p.NodeStaging(1).Begin()
-		n := 0
-		for _, st := range tx.Streams() {
-			n += int(st.Held)
-		}
-		tx.Discard()
-		require.Greater(t, n, 0, "the staging taken holds what the peers hold")
-	}
-	// Blocks pass between the two halves of the join, and they carry new
-	// entries: sent now, they reach BVN1 after the snapshot was taken, so
-	// they are in nobody's snapshot and the joining node can only have them
-	// by COLLECTING them. Their anchors are still held back, so the peers
-	// hold them unexecuted — which is what makes the difference visible when
-	// the anchors land.
+	// Blocks pass while the node is joining, and they carry new entries: the
+	// joining node can only have them by COLLECTING them. Their anchors are
+	// still held back, so the peers hold them unexecuted.
 	for i := uint64(18); i <= 20; i++ {
 		send(i)
 		sim.Step()
 	}
 	sim.StepN(10)
 	t.Logf("held while joining:      %v", []int{held(0), held(1), held(2)})
-	require.Greater(t, held(1), 0, "the joining node collected what arrived after the snapshot")
 
-	require.NoError(t, p.CompleteJoin(1, 0), "take the state and execute from the next block")
-	require.False(t, p.Joining(1))
+	// The join, as the daemon runs it. The simulator has no clock of its own,
+	// so the state steps the network after every pull round — which is what
+	// a restart always meets: the peers are at a later block every time. The
+	// held-back anchors are released after the first round, so the proving
+	// anchor lands while the node is collecting and before it has handed off.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	const maxRounds = 200
+	stepping := &steppingState{step: func(round int) {
+		if round == 1 {
+			dropAnchors.Store(false)
+			release.Store(true)
+		}
+		sim.StepN(3)
+		t.Logf("pull round %d: block %d, held %v", round, sim.S.BlockIndex("BVN1"), []int{held(0), held(1), held(2)})
+		if round >= maxRounds {
+			cancel()
+		}
+	}}
+	stepping.State = pulledState(t, sim, p, 1, "BVN1")
+	settler, ok := p.NodeExecutor(1).(join.Settler)
+	require.True(t, ok, "the executor must settle staging")
+	_, err := join.Run(ctx, join.Options{
+		Partition: "BVN1",
+		Buffer:    p.NodeJoin(1),
+		Stage:     &join.ExecutorStage{Settler: settler, Staging: p.NodeStaging(1), Database: p.NodeDatabase(1)},
+		State:     stepping,
+		Peers:     &join.APIPeers{Partition: "BVN1", Client: sim.S.Services(), Network: t.Name()},
+		Retry:     time.Millisecond,
+	})
+	require.NoError(t, err, "the join did not complete within %d pull rounds", maxRounds)
+	require.False(t, p.Joining(1), "the joined node executes")
+	require.Equal(t, partitionBlock(t, p.NodeDatabase(0), PartitionUrl("BVN1")), partitionBlock(t, p.NodeDatabase(1), PartitionUrl("BVN1")),
+		"the joined node stands at the block its peers stand at")
 	t.Logf("held after the join:     %v", []int{held(0), held(1), held(2)})
 	require.Equal(t, held(0), held(1), "the joined node holds what its peers hold")
 
-	// The held-back anchors land on every node in the next block: every node,
-	// the one that joined included, executes what it holds.
-	dropAnchors.Store(false)
-	release.Store(true)
-	proofs := func() string {
-		mfs, err := prometheus.DefaultGatherer.Gather()
-		require.NoError(t, err)
-		out := ""
-		for _, mf := range mfs {
-			if mf.GetName() != "accumulate_exec_staged_proofs_total" {
-				continue
-			}
-			for _, m := range mf.GetMetric() {
-				for _, l := range m.GetLabel() {
-					if l.GetName() == "outcome" {
-						out += fmt.Sprintf(" %s=%.0f", l.GetValue(), m.GetCounter().GetValue())
-					}
-				}
-			}
-		}
-		return out
-	}
-	for step := 0; step < 30; step++ {
-		require.NoError(t, sim.S.Step())
-
-		var line string
-		for i := 0; i < p.NodeCount(); i++ {
-			tx := p.NodeStaging(i).Begin()
-			for _, st := range tx.Streams() {
-				if st.ID.Source.Equal(PartitionUrl("BVN0")) && st.ID.Ledger.Equal(PartitionUrl("BVN1").JoinPath(Synthetic)) {
-					line += fmt.Sprintf(" n%d:syn(held=%d)", i, st.Held)
-				}
-				if st.ID.Source.Equal(DnUrl()) && st.ID.Ledger.Equal(PartitionUrl("BVN1").JoinPath(AnchorPool)) {
-					line += fmt.Sprintf(" n%d:anc(held=%d,sighted=%d)", i, st.Held, st.Sighted)
-				}
-			}
-			tx.Discard()
-		}
-		t.Logf("block %d:%s | proofs%s", sim.S.BlockIndex("BVN1"), line, proofs())
-	}
 	for _, st := range sts {
 		sim.StepUntil(
 			Txn(st.TxID).Succeeds(),
@@ -315,4 +296,39 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 	for i := 1; i < len(anchors); i++ {
 		require.Equal(t, anchors[0], anchors[i], "BVN1 node %d's root chain diverged from node 0's after a restart", i)
 	}
+}
+
+// steppingState is a join.State whose Pull also steps the simulated network:
+// the simulator advances only when something steps it, and a real network
+// runs on while a node pulls.
+type steppingState struct {
+	join.State
+	round int
+	step  func(round int)
+}
+
+func (s *steppingState) Pull(ctx context.Context) error {
+	err := s.State.Pull(ctx)
+	s.round++
+	s.step(s.round)
+	return err
+}
+
+// pulledState is the join's state as the daemon builds it: the production
+// pull over join.QueryPeers, addressed at named peers, with the joining
+// node's own peer ID excluded (#4303).
+func pulledState(t *testing.T, sim *Sim, p *simulator.Partition, node int, partition string) *join.PulledState {
+	t.Helper()
+	state, err := join.NewState(join.StateOptions{
+		Partition: PartitionUrl(partition),
+		Database:  p.NodeDatabase(node),
+		Sources: &join.QueryPeers{
+			Client:  sim.S.Services(),
+			Network: t.Name(),
+			Router:  sim.S.Router(),
+			Self:    p.NodePeerID(node),
+		},
+	})
+	require.NoError(t, err)
+	return state
 }

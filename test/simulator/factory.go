@@ -495,12 +495,14 @@ type abciFunc = func(*nodeFactory, execute.Executor, consensus.RestoreFunc) cons
 
 func noABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
 	node.join.exec = exec
-	return &consensus.ExecutorApp{
+	app := &consensus.ExecutorApp{
 		Executor: exec,
 		EventBus: node.getEventBus(),
 		Restore:  restore,
 		Join:     &node.join,
 	}
+	node.join.produce = app.Produce
+	return app
 }
 
 type appFunc = func(*nodeFactory) *consensus.Node
@@ -605,10 +607,9 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 			Partition:    f.networkFactory.id,
 			ValidatorKey: f.network.PrivValKey,
 			Cache:        f.getSynthCache(),
-			// The node serves what it holds unexecuted to a node that is
-			// joining (executor spec, "Sync" step 2). The simulator runs
-			// several networks in one process, so there is no registry to
-			// find it in: it is handed over.
+			// The node's staging, handed over as the querier's is: the
+			// simulator runs several networks in one process, so there is
+			// no registry to find it in.
 			Staging: f.getStaging(),
 		}),
 	})
