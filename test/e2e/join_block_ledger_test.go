@@ -203,6 +203,138 @@ func TestJoinKeepsUpFromTheBlockLedgerAlone(t *testing.T) {
 			"only the block ledger can say that a block created it (#4306)", savings)
 }
 
+// TestJoinWalksTheBlockLedgerPast128Blocks is #4356: a join that lasts more
+// than MaxLedgerSpan blocks still takes its changed set from the block ledger.
+//
+// PulledState.localBlock answers the block the executor stood at when the join
+// STARTED, and nothing moves it while the join runs. changedAccounts measures
+// the walk's span from there, so once the peers are more than 128 blocks past
+// that block every round is wide and walks nothing: the join runs on the BPT
+// page diff alone, every round, for the rest of its life. The peers move on
+// about a block a second, so that is any join longer than two minutes.
+//
+// The span the walk wants is since the block this node's state is at now, not
+// since the block it started from. This is TestJoinKeepsUpFromTheBlockLedgerAlone
+// with the network run more than 128 blocks past where the join started. After
+// phase one the node's state is a few blocks behind its peers, so a walk from
+// there is short; a walk from where the join started is not taken at all.
+//
+// It does not require the page diff to be attempted in phase two: a join that
+// walks the ledger has no reason to page on every round, and one that found
+// what it wanted in the first round never gets to the backstop's cadence.
+func TestJoinWalksTheBlockLedgerPast128Blocks(t *testing.T) {
+	alice := url.MustParse("alice")
+	bob := url.MustParse("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 3),
+		simulator.Genesis(GenesisTime),
+	)
+	sim.SetRoute(alice, "BVN0")
+	sim.SetRoute(bob, "BVN0")
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1000))
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, acctesting.GenerateKey(bob)[32:])
+	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+
+	ts := uint64(0)
+	send := func() {
+		ts++
+		st := sim.BuildAndSubmitTxnSuccessfully(
+			build.Transaction().For(alice, "tokens").
+				SendTokens(1, 0).To(bob, "tokens").
+				SignWith(alice, "book", "1").Version(1).Timestamp(ts).PrivateKey(aliceKey))
+		sim.StepUntil(Txn(st.TxID).Succeeds(), Txn(st.TxID).Produced().Succeeds())
+	}
+	for i := 0; i < 3; i++ {
+		send()
+	}
+	sim.StepN(20)
+
+	ctx := context.Background()
+	part := PartitionUrl("BVN0")
+	tokens := alice.JoinPath("tokens")
+
+	sources := &pagelessSources{inner: &join.QueryPeers{
+		Client:  sim.S.Services(),
+		Network: t.Name(),
+		Router:  sim.S.Router(),
+	}}
+
+	// The join starts where a node holding only its genesis network accounts
+	// starts: its executor has executed nothing, so localBlock is zero.
+	local := genesisOf(t, sim, "BVN0")
+	state, err := join.NewState(join.StateOptions{
+		Partition: part,
+		Database:  local,
+		Sources:   sources,
+	})
+	require.NoError(t, err)
+
+	// The network runs on past one walk's reach of where the join started,
+	// as it does under any join that lasts more than a couple of minutes.
+	sim.StepN(join.MaxLedgerSpan + 20)
+	require.Greater(t, sim.S.BlockIndex("BVN0"), uint64(join.MaxLedgerSpan),
+		"the network is not %d blocks past where the join started", join.MaxLedgerSpan)
+
+	// Phase one: the ordinary join, with the page diff available, so that
+	// phase two starts from a node that holds the partition at a block.
+	var promoted bool
+	for round := 0; round < 40 && !promoted; round++ {
+		require.NoError(t, state.Pull(ctx), "pull round %d", round)
+		sim.StepN(3)
+		_, promoted, err = state.Matched(ctx)
+		require.NoError(t, err)
+	}
+	require.True(t, promoted, "the join never caught up, so phase two has no state to start from")
+	require.NotZero(t, sources.served.Load(), "the page diff never ran in phase one")
+	require.NotNil(t, balanceOf(t, local, tokens), "the join did not pull %v at all", tokens)
+
+	// Phase two: no peer will page its BPT, and the network creates an
+	// account this node has never heard of. Only the block ledger's record of
+	// the block that created it can name it (see
+	// TestJoinKeepsUpFromTheBlockLedgerAlone for why a new account is the
+	// discriminating case).
+	sources.refuse.Store(true)
+	servedBefore := sources.served.Load()
+
+	savings := alice.JoinPath("savings")
+	ts++
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice).
+			CreateTokenAccount(alice, "savings").ForToken(AcmeUrl()).
+			SignWith(alice, "book", "1").Version(1).Timestamp(ts).PrivateKey(aliceKey))
+	sim.StepUntil(Txn(st.TxID).Succeeds())
+	send()
+	sim.StepN(20)
+
+	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+		_, err := batch.Account(savings).Main().Get()
+		require.NoError(t, err, "the partition did not create %v, so there is nothing to follow", savings)
+	})
+
+	var held bool
+	for round := 0; round < 40 && !held; round++ {
+		require.NoError(t, state.Pull(ctx), "phase two pull round %d", round)
+		sim.StepN(1)
+		View(t, local, func(batch *database.Batch) {
+			_, err := batch.Account(savings).Main().Get()
+			held = err == nil
+		})
+	}
+
+	require.Equal(t, servedBefore, sources.served.Load(), "a BPT page was served after the backstop was taken away")
+	require.True(t, held,
+		"the node never pulled %v. The network is more than %d blocks past the block the join "+
+			"started from, so every round measured from there is wide and walks no block ledger; "+
+			"the walk must start from the block the node's state is at now (#4356)",
+		savings, join.MaxLedgerSpan)
+}
+
 // balanceOf is the balance a store holds for a token account, or nil if it
 // does not hold the account at all.
 func balanceOf(t *testing.T, db database.Updater, u *url.URL) *big.Int {
