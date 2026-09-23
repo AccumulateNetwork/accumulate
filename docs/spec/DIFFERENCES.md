@@ -885,6 +885,19 @@ entry and `preImageReads` ≈ pre-existing dynamic keys touched.
 **Size**: small here (swap the call once the store has it); the store-side
 change is the work.
 
+### D11. The sidecar is built; nothing reads it
+
+*[#4273](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4273)*
+
+**Spec** ([database.md](database.md), "Recovered history: the sidecar"): a
+node reads through to the sidecar when its live store misses, writes the hit
+back, and never falls through for a pruned key or for consensus state.
+
+**Code**: `tools/cmd/sidecar-extract` builds the sidecar. `overlay.Open` reads
+through but does not write a hit back, nothing configures a node to mount a
+sidecar, and there is no rule for which keys may fall through — the overlay
+falls through for every miss.
+
 ---
 
 ## Consensus

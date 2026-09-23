@@ -417,6 +417,38 @@ hashes, integers. `Key.Hash()` reduces it to 32 bytes, which is what a store is
 keyed by. A store therefore cannot reconstruct the path from the key, which is
 why `ForEach` yields `record.KeyFromHash`.
 
+### Recovered history: the sidecar
+
+The 13 July 2025 reorg rebuilt mainnet from a filtered snapshot, and the filter
+dropped history (#4270). The pre-reorg databases survive. What they hold that
+the current database does not is carried in a **sidecar**: a separate store,
+read when the live database misses (#4273).
+
+**What the sidecar holds**: every record of the pre-reorg partitions (bvn0,
+bvn1, bvn2, dn) whose key no current partition's database holds. The
+difference is taken on raw store keys, so nothing is decoded and no record kind
+is chosen or left out; a key the live database has is the live database's,
+whatever the archive held for it. Because keys are `Key.Hash()`, one sidecar
+serves every current partition.
+
+**One value per key.** A key two pre-reorg partitions hold with different
+values is not in the sidecar. Each variant is kept in a separate conflicts
+store under the key followed by the partition's index, for a decision per
+record kind; the sidecar never picks one.
+
+**Built offline, read-only**: `tools/cmd/sidecar-extract` merges the archives
+(Badger v1) in key order against the current key set and writes a LevelDB
+sidecar with the node's bloom filter. It writes nothing to either source. The
+current databases are copied from a stopped follower.
+
+**Reading it**: the `overlay` backend composes the live store over the
+sidecar, reads falling through on a miss. A hit is written back to the live
+store, so the sidecar can be retired once what is read has been repaired.
+Which records the read path may fall through for — a key the node deliberately
+pruned must stay absent — is decided on the read side, not by what the sidecar
+holds. Records that feed `hashChains` (anchor chains, the BPT) are never served
+from it: they are consensus state, restored only by #4020's mechanism.
+
 ---
 
 Where the implementation departs from this specification, see
