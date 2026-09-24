@@ -298,10 +298,16 @@ peer where it has them, so that agreement rather than availability decides
 it. On this line the anchor source keeps ONE cursor while the peer rotates
 beneath it on every call; the cursor moves only by what was asked for and
 answered, never rewinds on a lagging peer's count (#4379), and stops just
-before an anchor a peer served without its signatures so that the next peer
-is asked for it (#4413) — reading several peers is the right answer to
-withholding, and the cursor rules are what make it cheap, not what make it
-safe. A literal cross-check of two pools before any root is trusted is not
+before an anchor a peer served without its signatures, or an entry it served
+without its body, so that the next peer is asked for it (#4413, #4418). An
+entry the cursor is held at is asked of each peer once per read, and then the
+read ends; a page a peer refuses whole is asked again, narrower, down to the
+one entry it refuses, so the cursor waits at that entry and not at the start
+of its page (#4419). A read held at an entry is a **stall**, and it is said:
+the join reports the entry on `accumulate_join_spine_stalled_entry` (−1 when
+not held) and logs it, with the peers asked, once a minute. Reading several
+peers is the right answer to withholding, and the cursor rules are what make
+it cheap, not what make it safe. A literal cross-check of two pools before any root is trusted is not
 built (#4301, stated); the quorum's signatures are the mechanism and
 withholding is its limit.
 
@@ -827,9 +833,10 @@ bare, every reader that checks them refused them as unsigned, 22 in run
 `20260924T074702Z` (#4413). The pool's anchor sequence chain is not refused:
 it holds the anchors the partition *sent*, whose signatures the receivers
 hold and the producer never does. On the reading side, **an anchor served
-with no signatures is the serving peer's gap, not a fact about the anchor**:
-the anchor source does not move its cursor past it, and the next page asks
-the next peer for it; an anchor that carries signatures and fails is refused
+with no signatures, or a pool entry served without its body (an error record
+in its place, or nothing), is the serving peer's gap, not a fact about the
+anchor**: the anchor source does not move its cursor past it, and the next
+page asks the next peer for it (#4413, #4418); an anchor that carries signatures and fails is refused
 once and passed, because every peer serves the same signatures. Until #4416
 brings the history with the pull, a joined node cannot serve its pulled range
 at all (DIFFERENCES E11). The node's state

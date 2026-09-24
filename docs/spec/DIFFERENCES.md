@@ -1081,7 +1081,13 @@ seventh nobody had named.
   joined by pull inside one 1024-entry window, no peer can serve that window
   signed, and a joiner's anchor source — whose cursor does not move past an
   anchor it could not read — waits at it until a node that executed those
-  blocks answers (#4416).
+  blocks answers (#4416). Since #4419 that wait is bounded and visible: one
+  page call per peer per round for the held entry (it was 64, with as many
+  refusal lines), the cursor held at the first entry no peer serves rather
+  than at its page's start, and the entry on
+  `accumulate_join_spine_stalled_entry` and in one log line a minute; the
+  soak's node-state row reads it as "spine stalled at entry N". It is still a
+  wait: nothing but #4416 ends it.
 
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.
