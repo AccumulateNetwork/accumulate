@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -226,4 +227,76 @@ func TestFullSpine_CountsAnAnchorBelowItsQuorumAsThePeerDoes(t *testing.T) {
 	cause, err := d.Message(txh).Cause().Get()
 	require.NoError(t, err)
 	require.Empty(t, cause, "a cause written for an anchor that has not executed")
+}
+
+// TestFullSpine_KeepsAStoredFormItBuildsItself — #4416 review F3. A stored
+// form refers to its transaction by a reference whose hash is checked when
+// the transaction is put back, and whose header no hash covers: the
+// reference is replaced whole when the message is proven. A peer that serves
+// the reference under another principal, with a memo, gets its header past
+// every check. The node keeps the stored form it builds from the proven
+// message, as the executor's storedForm builds it -- the principal the
+// transaction names and a reference by hash -- so nothing stored is the
+// peer's word.
+func TestFullSpine_KeepsAStoredFormItBuildsItself(t *testing.T) {
+	src, u, entries := spineSignedBy(t, signWith(anchorKey), true)
+	sigEntry := entries[len(entries)-1]
+	evil := url.MustParse("evil.acme/not-the-pool")
+	liar := &lying{dbSource: &dbSource{db: src}, serve: func(e *api.ChainEntryRecord[api.Record]) {
+		r, ok := e.Value.(*api.MessageRecord[messaging.Message])
+		if !ok {
+			return
+		}
+		ba, ok := r.Message.(*messaging.BlockAnchor)
+		if !ok {
+			return
+		}
+		seq := *ba.Anchor.(*messaging.SequencedMessage)
+		ref := seq.Message.(*messaging.TransactionMessage).Transaction.Copy()
+		ref.Header.Principal = evil
+		ref.Header.Memo = "the peer's word"
+		seq.Message = &messaging.TransactionMessage{Transaction: ref}
+		c := *ba
+		c.Anchor = &seq
+		r.Message = &c
+	}}
+
+	dst := newObservedDB(t)
+	b := dst.Begin(true)
+	require.NoError(t, Account(context.Background(), liar, b, u, Options{Mode: ModeFullSpine}))
+	require.NoError(t, b.Commit())
+
+	d := dst.Begin(false)
+	defer d.Discard()
+	refOf := func(msg messaging.Message) *protocol.Transaction {
+		t.Helper()
+		var seq *messaging.SequencedMessage
+		switch m := msg.(type) {
+		case *messaging.BlockAnchor:
+			seq = m.Anchor.(*messaging.SequencedMessage)
+		case *messaging.SequencedMessage:
+			seq = m
+		default:
+			t.Fatalf("a %T", msg)
+		}
+		txn := seq.Message.(*messaging.TransactionMessage).Transaction
+		require.IsType(t, (*protocol.RemoteTransaction)(nil), txn.Body, "the stored form refers to its transaction by hash")
+		return txn
+	}
+
+	stored, err := d.Message(sigEntry).Main().Get()
+	require.NoError(t, err)
+	ref := refOf(stored)
+	require.True(t, u.Equal(ref.Header.Principal), "the anchor copy is kept under the principal %v the peer served", ref.Header.Principal)
+	require.Empty(t, ref.Header.Memo, "the anchor copy is kept with the peer's memo")
+
+	txh, _ := signedAnchorIn(t, d, sigEntry)
+	cause, err := d.Message(txh).Cause().Get()
+	require.NoError(t, err)
+	require.Len(t, cause, 1)
+	seq, err := d.Message(cause[0].Hash()).Main().Get()
+	require.NoError(t, err)
+	ref = refOf(seq)
+	require.True(t, u.Equal(ref.Header.Principal), "the sequence is kept under the principal %v the peer served", ref.Header.Principal)
+	require.Empty(t, ref.Header.Memo, "the sequence is kept with the peer's memo")
 }

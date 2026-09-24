@@ -592,7 +592,11 @@ transaction is stored under its own hash (an anchor, a sequenced or synthetic
 message; the executor's stored form, #4236) — the wrapper referring to that
 transaction by hash. Such a message is checked by putting the transaction
 back, itself checked against its own hash, and hashing the result; it is kept
-in the stored form with the transaction beside it, as the peer keeps it. A
+in the stored form with the transaction beside it, as the peer keeps it — a
+stored form the node builds from the checked message, the transaction
+referred to by hash under the principal it names, and not the one served:
+the reference is replaced whole when the message is checked, so its header is
+under no hash (#4416 review F3). A
 transaction served as a remote stub is not a transaction's body: its hash is
 whatever the stub says. **A peer that serves an entry with no message behind
 it, or a message that is not the entry's, has not served the chain** — a peer

@@ -1059,7 +1059,67 @@ func (m *messages) behind(e *api.ChainEntryRecord[api.Record]) (messaging.Messag
 			return nil, err
 		}
 	}
-	return msg, nil
+	return storedForm(msg, full), nil
+}
+
+// storedForm is the form of full the node keeps, built here and not taken
+// from the peer: where the peer's stored form refers to a transaction by
+// hash, full's transaction is referred to by hash under the principal it
+// names, as the executor's storedForm refers to it. A reference is replaced
+// whole when the message is proven (expand), so its header is covered by no
+// hash, and keeping the served one would keep the peer's word for it
+// (#4416 review F3).
+func storedForm(served, full messaging.Message) messaging.Message {
+	switch f := full.(type) {
+	case *messaging.TransactionMessage:
+		s, ok := served.(*messaging.TransactionMessage)
+		if !ok || s.Transaction == nil || s.Transaction.Body == nil || s.Transaction.Body.Type() != protocol.TransactionTypeRemote {
+			return full
+		}
+		ref := new(protocol.Transaction)
+		ref.Header.Principal = f.Transaction.Header.Principal
+		ref.Body = &protocol.RemoteTransaction{Hash: *(*[32]byte)(f.Transaction.GetHash())}
+		return &messaging.TransactionMessage{Transaction: ref}
+
+	case *messaging.SequencedMessage:
+		s, ok := served.(*messaging.SequencedMessage)
+		if !ok {
+			return full
+		}
+		c := *f
+		c.Message = storedForm(s.Message, f.Message)
+		return &c
+
+	case *messaging.SyntheticMessage:
+		s, ok := served.(*messaging.SyntheticMessage)
+		if !ok {
+			return full
+		}
+		c := *f
+		c.Message = storedForm(s.Message, f.Message)
+		return &c
+
+	case *messaging.BadSyntheticMessage:
+		s, ok := served.(*messaging.BadSyntheticMessage)
+		if !ok {
+			return full
+		}
+		c := *f
+		c.Message = storedForm(s.Message, f.Message)
+		return &c
+
+	case *messaging.BlockAnchor:
+		s, ok := served.(*messaging.BlockAnchor)
+		if !ok {
+			return full
+		}
+		c := *f
+		c.Anchor = storedForm(s.Anchor, f.Anchor)
+		return &c
+
+	default:
+		return full
+	}
 }
 
 // expand is msg with every transaction it refers to by hash put back.
