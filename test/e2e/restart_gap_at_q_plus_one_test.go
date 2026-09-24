@@ -54,7 +54,9 @@ import (
 //     BVN1 anchorLag blocks after it was sent, as in Docker, where a synthetic
 //     reaches its destination before the anchor that proves it. Entries are
 //     held at every moment, so the restart loses some, and Q + 1 has a gap at
-//     exactly those numbers.
+//     exactly those numbers. The lag is ten blocks: at three, the anchor that
+//     proves a synthetic still lands no later than the synthetic, nothing is
+//     held, and this arm finds no gap either.
 //
 // So whether a restart finds a gap at Q + 1 is whether it stopped holding an
 // unexecuted entry, and that is the traffic's in-flight state at the moment
