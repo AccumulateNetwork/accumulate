@@ -10,7 +10,6 @@ import (
 	"context"
 	"testing"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -22,23 +21,22 @@ func TestObserve_IgnoresAnotherPartition(t *testing.T) {
 	db := newTrackerDB(t)
 	root := fillN(t, db, 5)
 
-	m := machine()
-	tr, _ := New(db, m)
+	tr, _ := New(db, part())
 	tr.Observe(protocol.DnUrl(), 42, root)
 	if got := tr.ObservedCount(); got != 0 {
 		t.Fatalf("ObservedCount = %d after another partition's anchor", got)
 	}
-	promoted, err := tr.Check(context.Background())
+	_, ok, err := tr.Check(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if promoted {
-		t.Fatal("another partition's anchor promoted the node")
+	if ok {
+		t.Fatal("another partition's anchor matched")
 	}
 
 	tr.Observe(part(), 42, root)
-	if promoted, err = tr.Check(context.Background()); err != nil || !promoted {
-		t.Fatalf("the partition's own anchor did not promote: %v %v", promoted, err)
+	if _, ok, err = tr.Check(context.Background()); err != nil || !ok {
+		t.Fatalf("the partition's own anchor did not match: %v %v", ok, err)
 	}
 }
 
@@ -47,7 +45,7 @@ func TestObserve_IgnoresAnotherPartition(t *testing.T) {
 // converges.
 func TestObserve_IsBounded(t *testing.T) {
 	db := newTrackerDB(t)
-	tr, _ := New(db, machine())
+	tr, _ := New(db, part())
 	tr.MaxObserved = 8
 
 	for i := 1; i <= 100; i++ {
@@ -74,7 +72,7 @@ func TestObserve_IsBounded(t *testing.T) {
 // TestNew_RequiresAPartition — a tracker matches one partition's anchors.
 func TestNew_RequiresAPartition(t *testing.T) {
 	db := newTrackerDB(t)
-	if _, err := New(db, nodestate.New(nil)); err == nil {
-		t.Fatal("a machine with no partition was accepted")
+	if _, err := New(db, nil); err == nil {
+		t.Fatal("a tracker with no partition was accepted")
 	}
 }

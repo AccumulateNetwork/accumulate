@@ -589,15 +589,8 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			return errors.InternalError.With("this executor cannot join: it cannot settle staging")
 		}
 		stage := &join.ExecutorStage{Settler: settler, Staging: staging, Database: db}
-		state := joinState
-		opts := join.Options{
-			Partition: s.Partition.ID,
-			Buffer:    s.service,
-			Stage:     stage,
-			State:     state,
-			Peers:     &join.APIPeers{Partition: s.Partition.ID, Client: client, Network: inst.config.Network},
-			Logger:    slog.Default(),
-		}
+		opts := joinOptions(s.Partition.ID, joinState, s.service, stage,
+			&join.APIPeers{Partition: s.Partition.ID, Client: client, Network: inst.config.Network})
 		go func() {
 			_, err := join.Run(inst.context, opts)
 			if err != nil {
@@ -640,19 +633,10 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("register event bus: %w", err)
 	}
 
-	// Register consensus API services
-	var nodeState *nodestate.Machine
-	if joinState != nil {
-		nodeState = joinState.Machine()
-	}
-
-	// Registered whether or not this node joined: a node that never joined
-	// answers for itself, and a service that wants the state must get an
-	// answer rather than an absence.
-	var serving nodestate.Serving = nodestate.Always{}
-	if nodeState != nil {
-		serving = nodeState
-	}
+	// Register consensus API services. Registered whether or not this node
+	// joined: a node that never joined answers for itself, and a service that
+	// wants the state must get an answer rather than an absence.
+	nodeState, serving := nodeStateOf(joinState)
 	err = dagbftProvidesNodeState.Register(inst.services, s, serving)
 	if err != nil {
 		return errors.UnknownError.WithFormat("register node state: %w", err)
@@ -664,6 +648,39 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 	inst.logger.Info(color.HiBlueString("Running DAG-BFT"), "partition", s.Partition.ID, "module", "run", "service", "dagbft")
 	return nil
+}
+
+// joinOptions is the join a joining node runs, and nodeStateOf the state its
+// services refuse by. They are built from ONE join state, and that is the
+// whole point of having them here: the join promotes the machine when its
+// handoff succeeds and DEMOTES it when the node re-syncs after a mismatch or
+// fails a handoff (executor.md, "Sync", steps 4-6; #4385), so a service handed any
+// other machine goes on serving a node whose state is known wrong — the node
+// of run 20260924T074702Z, frozen at block 661 and reading ACTIVE. The
+// daemon's start path calls both, and so does the test that proves a
+// demotion reaches the querier, the submitter and the gauge
+// (TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge).
+func joinOptions(partition string, joinState *join.PulledState, buffer join.Buffer, stage join.Stage, peers join.Peers) join.Options {
+	return join.Options{
+		Partition: partition,
+		Buffer:    buffer,
+		Stage:     stage,
+		State:     joinState,
+		Peers:     peers,
+		Logger:    slog.Default(),
+	}
+}
+
+// nodeStateOf is the node state a node's services are handed: the join's own
+// machine for a node that joins, and nodestate.Always for one that does not
+// — it has always executed what it holds (#4368). The machine is returned
+// too, for the sequencer, which asks it for ACTIVE by name.
+func nodeStateOf(joinState *join.PulledState) (*nodestate.Machine, nodestate.Serving) {
+	if joinState == nil {
+		return nil, nodestate.Always{}
+	}
+	m := joinState.Machine()
+	return m, m
 }
 
 // registerAPIServices registers the API services for DAG-BFT.

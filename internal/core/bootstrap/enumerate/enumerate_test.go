@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bptproof"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -157,19 +156,18 @@ func TestRun_LearnsWithoutWriting(t *testing.T) {
 			"the peer's leaves were written, and the tracker's proof is defeated")
 	}
 
-	// The check that matters: nothing has been pulled, so nothing may promote.
-	m := nodestate.New(scope)
-	trk, err := tracker.New(dst, m)
+	// The check that matters: nothing has been pulled, so nothing may match.
+	trk, err := tracker.New(dst, scope)
 	if err != nil {
 		t.Fatal(err)
 	}
 	trk.Observe(scope, 99, srcRoot)
-	promoted, err := trk.Check(context.Background())
+	_, matched, err := trk.Check(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if promoted || m.State() != nodestate.StateBooting {
-		t.Fatalf("the tracker promoted on an enumeration alone (state %v)", m.State())
+	if matched {
+		t.Fatal("the tracker matched on an enumeration alone")
 	}
 }
 

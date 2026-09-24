@@ -62,8 +62,16 @@ func reqProof(n uint64, hash [32]byte) *merkle.ReceiptList {
 // Tests that are about WHAT is asked for use this to get to the decision.
 func settle(r *healRequester, tx *execute.StagingTxn, delivered, block uint64) {
 	for i := uint64(0); i < probeAfter-1; i++ {
-		r.decide(tx, reqStream, delivered, block+i*healCadence)
+		activate(r, tx, delivered, block+i*healCadence)
 	}
+}
+
+// activate is one activation of the synthetic test stream as the conductor
+// runs it: every node observes the stream's stillness, then the selected
+// pair decides.
+func activate(r *healRequester, tx *execute.StagingTxn, delivered, block uint64) [][2]uint64 {
+	r.observeStill(reqStream, delivered, block)
+	return r.decide(tx, reqStream, delivered, block)
 }
 
 // Two senders are drawn from the seed, distinct, and the same for the same
@@ -92,28 +100,28 @@ func TestDecide_TwoKindsOfGap(t *testing.T) {
 	defer tx.Discard()
 
 	settle(&r, tx, 0, 8)
-	spans := r.decide(tx, reqStream, 0, 8+(probeAfter-1)*healCadence)
+	spans := activate(&r, tx, 0, 8+(probeAfter-1)*healCadence)
 	require.Equal(t, [][2]uint64{{1, 2}}, spans, "the hole and the unvalidated entry, coalesced; 3 and 4 are runnable")
 
 	base := uint64(8 + (probeAfter-1)*healCadence)
 	r.asked(reqStream, spans[0], base)
-	require.Empty(t, r.decide(tx, reqStream, 0, base+healCadence), "asked: patience")
-	require.Empty(t, r.decide(tx, reqStream, 0, base+(healPatience-1)*healCadence))
-	require.Equal(t, [][2]uint64{{1, 2}}, r.decide(tx, reqStream, 0, base+healPatience*healCadence), "patience over: asked again")
+	require.Empty(t, activate(&r, tx, 0, base+healCadence), "asked: patience")
+	require.Empty(t, activate(&r, tx, 0, base+(healPatience-1)*healCadence))
+	require.Equal(t, [][2]uint64{{1, 2}}, activate(&r, tx, 0, base+healPatience*healCadence), "patience over: asked again")
 
 	// Delivered past everything held: nothing above Delivered is known, so
 	// the span above it is asked for whole -- but only once the stream has
 	// been empty AND still for probeAfter activations (#4280). The first
 	// sightings are silent.
 	for i := uint64(0); i < probeAfter-1; i++ {
-		require.Empty(t, r.decide(tx, reqStream, 4, base+(healPatience+1+i)*healCadence),
+		require.Empty(t, activate(&r, tx, 4, base+(healPatience+1+i)*healCadence),
 			"Delivered only just arrived there: delivering, not stuck")
 	}
-	probe := r.decide(tx, reqStream, 4, base+(healPatience+probeAfter)*healCadence)
+	probe := activate(&r, tx, 4, base+(healPatience+probeAfter)*healCadence)
 	require.Equal(t, [][2]uint64{{5, 4 + protocol.MaxReceiptListElements}}, probe, "a stuck empty stream asks for the span above Delivered")
 	r.asked(reqStream, [2]uint64{5, 5}, base+(healPatience+probeAfter)*healCadence)
-	require.Empty(t, r.decide(tx, reqStream, 4, base+(healPatience+probeAfter+1)*healCadence), "asked: patience")
-	require.NotEmpty(t, r.decide(tx, reqStream, 4, base+(2*healPatience+probeAfter+1)*healCadence), "patience over: asked again")
+	require.Empty(t, activate(&r, tx, 4, base+(healPatience+probeAfter+1)*healCadence), "asked: patience")
+	require.NotEmpty(t, activate(&r, tx, 4, base+(2*healPatience+probeAfter+1)*healCadence), "patience over: asked again")
 }
 
 // A stream that is merely draining never probes. Delivered moves on every
@@ -133,7 +141,7 @@ func TestDecide_ADrainingStreamNeverProbes(t *testing.T) {
 
 	// Twenty activations, Delivered advancing each time: nothing is asked.
 	for i := uint64(0); i < 20; i++ {
-		require.Empty(t, r.decide(tx, reqStream, 100+i, 8+i*healCadence),
+		require.Empty(t, activate(&r, tx, 100+i, 8+i*healCadence),
 			"activation %d: Delivered is moving, so the stream is draining", i)
 	}
 
@@ -141,10 +149,10 @@ func TestDecide_ADrainingStreamNeverProbes(t *testing.T) {
 	// for probeAfter activations.
 	stuck := uint64(120)
 	for i := uint64(0); i < probeAfter-1; i++ {
-		require.Empty(t, r.decide(tx, reqStream, stuck, 200+i*healCadence), "still settling")
+		require.Empty(t, activate(&r, tx, stuck, 200+i*healCadence), "still settling")
 	}
 	require.Equal(t, [][2]uint64{{stuck + 1, stuck + protocol.MaxReceiptListElements}},
-		r.decide(tx, reqStream, stuck, 200+(probeAfter-1)*healCadence),
+		activate(&r, tx, stuck, 200+(probeAfter-1)*healCadence),
 		"Delivered has stopped: a lost package looks like this")
 }
 
@@ -160,13 +168,13 @@ func TestDecide_AMovingStreamIsNeverAskedAbout(t *testing.T) {
 	defer tx.Discard()
 
 	for i := uint64(0); i < 20; i++ {
-		require.Empty(t, r.decide(tx, reqStream, 100+i, 8+i*healCadence),
+		require.Empty(t, activate(&r, tx, 100+i, 8+i*healCadence),
 			"activation %d: Delivered is moving, so the stream is delivering", i)
 	}
 
 	// It stops, below the held entries, and the gaps are asked for.
 	settle(&r, tx, 0, 200)
-	require.NotEmpty(t, r.decide(tx, reqStream, 0, 200+(probeAfter-1)*healCadence),
+	require.NotEmpty(t, activate(&r, tx, 0, 200+(probeAfter-1)*healCadence),
 		"Delivered has stopped: now the holes matter")
 }
 
@@ -178,7 +186,7 @@ func TestDecide_ValidatedEntryBehindAHole(t *testing.T) {
 	tx := s.Begin()
 	defer tx.Discard()
 	settle(&r, tx, 0, 4)
-	require.Equal(t, [][2]uint64{{1, 2}}, r.decide(tx, reqStream, 0, 4+(probeAfter-1)*healCadence), "only the hole below it")
+	require.Equal(t, [][2]uint64{{1, 2}}, activate(&r, tx, 0, 4+(probeAfter-1)*healCadence), "only the hole below it")
 }
 
 // A validated hash with no entry under it is a gap of entries, even above
@@ -189,7 +197,7 @@ func TestDecide_ValidatedBeyondHeld(t *testing.T) {
 	tx := s.Begin()
 	defer tx.Discard()
 	settle(&r, tx, 0, 4)
-	require.Equal(t, [][2]uint64{{3, 5}}, r.decide(tx, reqStream, 0, 4+(probeAfter-1)*healCadence), "3 and 4 are holes, 5 is validated but not held")
+	require.Equal(t, [][2]uint64{{3, 5}}, activate(&r, tx, 0, 4+(probeAfter-1)*healCadence), "3 and 4 are holes, 5 is validated but not held")
 }
 
 // Separate holes become separate spans, oldest first, capped.
@@ -203,7 +211,7 @@ func TestDecide_Spans(t *testing.T) {
 	tx := s.Begin()
 	defer tx.Discard()
 	settle(&r, tx, 0, 4)
-	spans := r.decide(tx, reqStream, 0, 4+(probeAfter-1)*healCadence)
+	spans := activate(&r, tx, 0, 4+(probeAfter-1)*healCadence)
 	require.Len(t, spans, MaxRequestSpans)
 	require.Equal(t, [2]uint64{1, 1}, spans[0])
 	require.Equal(t, [2]uint64{31, 31}, spans[MaxRequestSpans-1])
@@ -268,5 +276,5 @@ func TestDecide_AnAnchorStreamProbesOnlyWhenOverdue(t *testing.T) {
 	require.Equal(t, uint64(7), spans[0][0], "the hole, not a probe")
 
 	// A synthetic stream at the same standing is gated by stillness, as before
-	require.Empty(t, r.decide(tx, reqStream, 5, 8), "a synthetic stream still waits for its Delivered to sit still")
+	require.Empty(t, activate(&r, tx, 5, 8), "a synthetic stream still waits for its Delivered to sit still")
 }

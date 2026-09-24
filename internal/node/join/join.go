@@ -107,6 +107,22 @@ type State interface {
 	// and whether it has been reached. It follows the state: after a pull
 	// that advanced the sync, it reports the block the sync advanced to.
 	Matched(ctx context.Context) (uint64, bool, error)
+
+	// Promote says the node handed off at block, the block Matched last
+	// reported, and is executing from the block after it: it is ACTIVE from
+	// here. A match alone is not ACTIVE — a node that matched and has not
+	// handed off executes nothing (executor spec, "Sync", step 6; #4385).
+	Promote(block uint64)
+
+	// Demote says the node stopped executing in agreement at block: its root
+	// diverged and it is syncing again, or it matched there and its handoff
+	// failed. The node is BOOTING from here — it refuses every read, serves
+	// nothing and relays every submission — until a handoff succeeds again
+	// and Promote is called (executor spec, "Sync", steps 4-6; #4385).
+	//
+	// Both are part of State, not optional extras, so that a State that
+	// wraps another cannot drop them without failing to compile.
+	Demote(block uint64)
 }
 
 // A Peers finds the partition's other validators and their private API.
@@ -244,8 +260,11 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		// Block n's root is not the root the Directory anchored for it.
 		// The node stops executing and syncs again from where it is, as
 		// it did the first time; the blocks from here are collected and
-		// none of them is executed until the root matches again.
+		// none of them is executed until the root matches again. It stops
+		// answering first: its state is known wrong, and an ACTIVE node
+		// serving it is what run 20260924T074702Z measured (#4385).
 		log.Warn("An executed block's root differs from its proven root; syncing again", "block", n)
+		opts.State.Demote(n)
 		opts.Buffer.StartCollecting()
 
 		// The pull comes first: the local root still equals the block the
@@ -406,7 +425,12 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (b
 	err = opts.Buffer.Handoff(q)
 	switch {
 	case err == nil:
+		// The node is executing from q + 1, in agreement: this, and not the
+		// match, is where it becomes ACTIVE (#4385). A handoff that is
+		// refused or fails below never promotes, so a retried handoff never
+		// flips the node's state.
 		log.Info("Joined; executing from the block after the state", "block", q, "executes", q+1)
+		opts.State.Promote(q)
 		return true, nil
 	case errors.Is(err, errors.NotReady):
 		// The pull ran ahead of the blocks consensus has delivered: handing
@@ -427,9 +451,12 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (b
 		// stops here neither executes nor collects (executor spec, "Sync",
 		// step 5; #4401). A buffer that went back to collecting keeps the
 		// groups it did not produce; one that did not starts again.
+		// The node matched at q and is not executing from it, so it is not
+		// ACTIVE: it serves nothing until the next attempt matches (#4385).
 		*failures++
 		mHandoffFailures.WithLabelValues(opts.Partition).Inc()
 		log.Error("The handoff failed; syncing again and handing off again", "block", q, "attempt", *failures, "error", err)
+		opts.State.Demote(q)
 		opts.Buffer.StartCollecting()
 		return false, nil
 	}

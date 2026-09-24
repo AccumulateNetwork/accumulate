@@ -5,10 +5,16 @@
 // https://opensource.org/licenses/MIT.
 
 // Package tracker watches the local BPT root chase a moving target — the
-// roots the Directory anchored for one partition — and flips the node's state
-// machine to ACTIVE at the first block whose anchored root the local root
-// equals. That block is Q of executor.md, "Sync", step 4: the block the node
-// then executes from.
+// roots the Directory anchored for one partition — and says which anchored
+// block, if any, the local root now equals. That block is Q of executor.md,
+// "Sync", step 4: the block the node then hands off at.
+//
+// It does not promote the node. A match says the state is block Q's state; it
+// does not say the node is executing from it, and a node is ACTIVE only while
+// it is executing in agreement (step 6). The join promotes when the handoff
+// succeeds (#4385: run 20260924T074702Z, acc-bvn1-val3 read ACTIVE from its
+// first match, never handed off, and served stale anchors to the next
+// joiner, #4413).
 //
 // The tracker is passive. Callers feed it the anchors they collect and ask it
 // to check after every commit; there is no goroutine here.
@@ -38,13 +44,12 @@ import (
 	"fmt"
 	"sync"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // DefaultMatchThreshold is the number of consecutive matching Check calls
-// required before the tracker promotes the machine. One: an anchored root is
+// required before the tracker reports a match. One: an anchored root is
 // a fact about a block, so the local root equalling it says the state is that
 // block's state, and there is nothing a second look adds.
 const DefaultMatchThreshold = 1
@@ -57,15 +62,14 @@ const DefaultMatchThreshold = 1
 const DefaultMaxObserved = 4096
 
 // Tracker compares the local BPT root against the anchors observed for its
-// partition and flips a nodestate.Machine to StateActive after MatchThreshold
-// consecutive Check calls match.
+// partition, and reports a match once MatchThreshold consecutive Check calls
+// have matched.
 type Tracker struct {
 	db        *database.Database
-	machine   *nodestate.Machine
 	partition *url.URL
 
 	// MatchThreshold is the number of consecutive matches required
-	// before promoting. Zero means use DefaultMatchThreshold.
+	// before a match is reported. Zero means use DefaultMatchThreshold.
 	MatchThreshold int
 
 	// MaxObserved bounds the observed set. Zero means DefaultMaxObserved.
@@ -74,7 +78,7 @@ type Tracker struct {
 	mu sync.Mutex
 	// observed maps anchor → the block of partition it was seen at. A map
 	// rather than a single "latest" because the local root will briefly equal
-	// an older block's anchor as it catches up, and because promotion records
+	// an older block's anchor as it catches up, and because a match reports
 	// the block the matching root was anchored for.
 	observed map[[32]byte]uint64
 	// order is the anchors in the order they were first observed, for
@@ -83,26 +87,21 @@ type Tracker struct {
 	// latestBlock is the highest block an anchor has been seen at.
 	latestBlock uint64
 	// consecutive is the current consecutive-match streak, reset on any
-	// mismatch. Promotion fires when it reaches the threshold.
+	// mismatch. A match is reported while it is at the threshold or above.
 	consecutive int
 }
 
-// New constructs a Tracker bound to db and machine, for the machine's
-// partition.
-func New(db *database.Database, machine *nodestate.Machine) (*Tracker, error) {
+// New constructs a Tracker over db's root for one partition's anchors.
+func New(db *database.Database, partition *url.URL) (*Tracker, error) {
 	if db == nil {
 		return nil, fmt.Errorf("tracker.New: db required")
 	}
-	if machine == nil {
-		return nil, fmt.Errorf("tracker.New: machine required")
-	}
-	if machine.Partition() == nil {
-		return nil, fmt.Errorf("tracker.New: the machine must name its partition")
+	if partition == nil {
+		return nil, fmt.Errorf("tracker.New: a tracker must name its partition")
 	}
 	return &Tracker{
 		db:        db,
-		machine:   machine,
-		partition: machine.Partition(),
+		partition: partition,
 		observed:  make(map[[32]byte]uint64),
 	}, nil
 }
@@ -147,25 +146,26 @@ func (t *Tracker) Observe(partition *url.URL, block uint64, anchor [32]byte) {
 	}
 }
 
+// A Match is the anchored block the local root equals, and its root.
+type Match struct {
+	Block  uint64
+	Anchor [32]byte
+}
+
 // Check reads the current local BPT root and updates the consecutive-match
-// streak. On reaching MatchThreshold it promotes the state machine. Returns
-// (true, nil) on the promoting call; (false, nil) if not yet, or if the
-// machine is already ACTIVE.
-func (t *Tracker) Check(ctx context.Context) (bool, error) {
+// streak. It reports the match on every call on which the streak is at
+// MatchThreshold or above, and nothing otherwise. It changes nothing but the
+// streak: what a match means for the node is the join's to decide.
+func (t *Tracker) Check(ctx context.Context) (Match, bool, error) {
 	if err := ctx.Err(); err != nil {
-		return false, err
-	}
-	// BOOTING is the only state a node promotes out of (executor.md, "Sync",
-	// step 6: BOOTING → ACTIVE).
-	if t.machine.State() != nodestate.StateBooting {
-		return false, nil
+		return Match{}, false, err
 	}
 
 	batch := t.db.Begin(false)
 	defer batch.Discard()
 	local, err := batch.GetBptRootHash()
 	if err != nil {
-		return false, fmt.Errorf("read local BPT root: %w", err)
+		return Match{}, false, fmt.Errorf("read local BPT root: %w", err)
 	}
 
 	threshold := t.MatchThreshold
@@ -174,27 +174,26 @@ func (t *Tracker) Check(ctx context.Context) (bool, error) {
 	}
 
 	t.mu.Lock()
+	defer t.mu.Unlock()
 	block, ok := t.observed[local]
 	if !ok {
 		t.consecutive = 0
-		t.mu.Unlock()
-		return false, nil
+		return Match{}, false, nil
 	}
 	t.consecutive++
-	streak := t.consecutive
-	t.mu.Unlock()
-
-	if streak < threshold {
-		return false, nil
+	if t.consecutive < threshold {
+		return Match{}, false, nil
 	}
+	return Match{Block: block, Anchor: local}, true, nil
+}
 
-	// PromoteToActive returns false if a concurrent caller already
-	// transitioned us past BOOTING. Not our promotion, same
-	// destination.
-	if !t.machine.PromoteToActive(local, block) {
-		return false, nil
-	}
-	return true, nil
+// ResetStreak starts the consecutive-match streak again. The join calls it
+// when it demotes the node (#4385): a streak counted before the node stopped
+// agreeing says nothing about the state it syncs to next.
+func (t *Tracker) ResetStreak() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.consecutive = 0
 }
 
 // ConsecutiveMatches reports the current consecutive-match streak

@@ -110,6 +110,12 @@ type PulledState struct {
 		at  time.Time
 	}
 
+	// matched is the last match Matched reported: the block the local root
+	// was anchored for and the root. Promote reads it, because by the time
+	// the handoff has succeeded the node has produced blocks after it and
+	// the local root is no longer the root that matched.
+	matched tracker.Match
+
 	spine bool   // this partition's spine has been pulled and verified
 	round uint64 // how many rounds have fetched, for the backstop's cadence
 	wide  bool   // the last ledger walk could not cover (localBlock, Q]
@@ -175,7 +181,7 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		return nil, errors.BadRequest.With("a join's state needs a partition, a database and peers to pull from")
 	}
 	machine := nodestate.New(opts.Partition)
-	track, err := tracker.New(opts.Database, machine)
+	track, err := tracker.New(opts.Database, opts.Partition)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -994,36 +1000,68 @@ func (s *PulledState) Executing(block uint64) error {
 	return nil
 }
 
+// Promote implements [State]: the node handed off at block and is executing
+// from the block after it, so it is ACTIVE, with the anchored root it matched
+// at block as its verified anchor (executor spec, "Sync", step 6; #4385). A
+// match alone never promotes: a node that matched and has not handed off
+// executes nothing, and one that served from there served stale state to the
+// next joiner (#4413).
+func (s *PulledState) Promote(block uint64) {
+	anchor := s.matched.Anchor
+	if s.matched.Block != block {
+		anchor = [32]byte{}
+		for _, o := range s.tracker.Snapshot() {
+			if o.Block == block {
+				anchor = o.Anchor
+				break
+			}
+		}
+	}
+	if anchor == ([32]byte{}) {
+		// Not a state the join matched. Said out loud rather than promoted
+		// on a root nothing anchored.
+		s.log.Error("The node handed off at a block it holds no anchored root for; it stays BOOTING",
+			"partition", s.partition, "block", block)
+		return
+	}
+	if s.machine.PromoteToActive(anchor, block) {
+		s.log.Info("This node is executing in agreement; it is ACTIVE",
+			"partition", s.partition, "block", block)
+	}
+}
+
+// Demote implements [State]: the node stopped executing in agreement at block,
+// so its machine goes back to BOOTING and every service that asks it refuses
+// again, and the gauge says so through the machine's OnChange (#4385). The
+// tracker's streak starts again, so the next match takes as many as the first.
+func (s *PulledState) Demote(block uint64) {
+	if !s.machine.Demote(block) {
+		return
+	}
+	s.tracker.ResetStreak()
+	s.log.Warn("This node is not executing in agreement; it is BOOTING until it hands off again",
+		"partition", s.partition, "block", block)
+}
+
 // Matched reports the block whose anchored root the local root equals. Until
 // it does, the node keeps pulling: a root that matches is the only statement
 // that the state this node holds is a block's state (executor spec, "Sync").
 //
 // It is the local root's block every time it is asked, not the block of the
-// first match. The machine goes ACTIVE once, at the first match, and a join
-// that found a gap after it pulls on, so the state moves past the block the
-// machine names; answering with that block would settle staging against a
-// state it is not (#4362).
+// first match: a join that found a gap pulls on, so the state moves past the
+// block it first matched, and answering with that block would settle staging
+// against a state it is not (#4362). It changes nothing about the node's
+// state: the join promotes when it hands off (Promote).
 func (s *PulledState) Matched(ctx context.Context) (uint64, bool, error) {
-	ok, err := s.tracker.Check(ctx)
+	m, ok, err := s.tracker.Check(ctx)
 	if err != nil {
 		return 0, false, errors.UnknownError.Wrap(err)
 	}
-	if !ok && s.machine.State() != nodestate.StateActive {
+	if !ok {
 		return 0, false, nil
 	}
-
-	batch := s.db.Begin(false)
-	local, err := batch.GetBptRootHash()
-	batch.Discard()
-	if err != nil {
-		return 0, false, errors.UnknownError.WithFormat("read the local root: %w", err)
-	}
-	for _, o := range s.tracker.Snapshot() {
-		if o.Anchor == local {
-			return o.Block, true, nil
-		}
-	}
-	return 0, false, nil
+	s.matched = m
+	return m.Block, true, nil
 }
 
 // dedupe keeps the first of each name and drops the ones no pull can satisfy.
