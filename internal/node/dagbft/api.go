@@ -485,13 +485,18 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 }
 
 // validationRefusal is the status of a submission the executor's pre-batch
-// validation refused. The code is the executor's; a refusal whose code did not
-// survive is BadRequest, because validation refuses what the envelope is, and
-// a client error is what tells a sender not to send it again unchanged.
+// validation refused. The code is the executor's: every verdict it reaches on
+// an envelope carries one. An error with no code is not a verdict on the
+// envelope but the node failing to reach one — executor.Validate's own error
+// (its store, say), which the bridge wraps "validate: %w" — so it is
+// InternalError: the dispatcher retries it to its deadline and a sender is not
+// told its envelope is bad for the node's fault (#4426 review F4). Guessing
+// wrong this way costs a bounded retry; guessing BadRequest would settle a
+// good envelope as refused, for good.
 func validationRefusal(err error) *protocol.TransactionStatus {
 	code := errors.Code(err)
 	if code == 0 || code == errors.UnknownError {
-		code = errors.BadRequest
+		code = errors.InternalError
 	}
 	return &protocol.TransactionStatus{Code: code, Error: code.WithFormat("%w", err)}
 }

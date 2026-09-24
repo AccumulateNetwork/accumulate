@@ -12,6 +12,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	stderrors "errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -217,4 +218,53 @@ type refusalDialer func(context.Context, multiaddr.Multiaddr) (message.Stream, e
 
 func (fn refusalDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
 	return fn(ctx, addr)
+}
+
+// #4426 review F4. Validation refuses what an envelope IS, and the executor
+// says so with a code. An error with no code did not come from a verdict on
+// the envelope but from the node judging it — executor.Validate failing on
+// its own store, wrapped "validate: %w" by the bridge. Answered as a client
+// error it tells every sender the envelope is bad: the dispatcher settles it
+// refused and never retries it, a wallet is told its transaction is invalid.
+// It is the node's fault, so it is a server error, and the dispatcher retries
+// it until its deadline.
+func TestSubmitter_AValidationFailureWithNoCodeIsTheNodesFault(t *testing.T) {
+	bare := fmt.Errorf("validate: %w", stderrors.New("leveldb: closed"))
+	sub := newRefusingService(t, bare)
+
+	res, err := sub.Submit(context.Background(), healEnvelope(), api.SubmitOptions{})
+	require.NoError(t, err)
+	require.Len(t, res, 1)
+	require.False(t, res[0].Success)
+	require.Equal(t, errors.InternalError, res[0].Status.Code, "no code: the node's fault, not the envelope's")
+	require.False(t, res[0].Status.Code.IsClientError())
+	require.Contains(t, res[0].Status.AsError().Error(), "leveldb: closed")
+
+	// Through the node's dispatcher: retried, never settled as refused.
+	handler, e := message.NewHandler(message.Submitter{Submitter: sub})
+	require.NoError(t, e)
+	const dest = "nodefault4426"
+	d := accumulated.NewDispatcher(t.Name(),
+		refusalRouter(func(*url.URL) (string, error) { return dest, nil }),
+		refusalDialer(func(ctx context.Context, _ multiaddr.Multiaddr) (message.Stream, error) {
+			p, q := message.DuplexPipe(ctx)
+			go handler.Handle(p)
+			return q, nil
+		}))
+	defer d.Close()
+	hooked := make(chan struct{}, 1)
+	d.OnRefused(func(string, *messaging.Envelope, error) { hooked <- struct{}{} })
+
+	refused0, retries0 := dispatcherCount(t, "refused_total", dest), dispatcherCount(t, "retries_total", dest)
+	require.NoError(t, d.Submit(context.Background(), protocol.PartitionUrl("BVN1"), healEnvelope()))
+	for range d.Send(context.Background()) { //nolint:revive // drain
+	}
+	require.Eventually(t, func() bool { return dispatcherCount(t, "retries_total", dest) > retries0 },
+		5*time.Second, 10*time.Millisecond, "a node fault is retried")
+	require.Equal(t, float64(0), dispatcherCount(t, "refused_total", dest)-refused0, "not refused")
+	select {
+	case <-hooked:
+		t.Fatal("a node fault reached the refusal hook")
+	default:
+	}
 }
