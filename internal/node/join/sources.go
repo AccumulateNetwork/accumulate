@@ -13,6 +13,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -231,8 +232,33 @@ type peerQuerier struct {
 	peers     *QueryPeers
 	partition *url.URL
 
-	mu   sync.Mutex
-	next int // rotates, so one peer does not serve every call
+	mu    sync.Mutex
+	next  int       // rotates, so one peer does not serve every call
+	asked []peer.ID // the peers the last call asked, in order
+}
+
+var _ anchorsrc.Peers = (*peerQuerier)(nil)
+
+// PeerCount is how many peers the calls rotate among, so the anchor source
+// asks each of them once for an entry it is held at (#4419).
+func (p *peerQuerier) PeerCount(ctx context.Context) int {
+	ids, err := p.peers.peersOf(ctx, p.partition)
+	if err != nil {
+		return 0
+	}
+	return len(ids)
+}
+
+// LastAsked names the peers the last call asked, so a stall can say whom it
+// asked (#4419).
+func (p *peerQuerier) LastAsked() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]string, len(p.asked))
+	for i, id := range p.asked {
+		out[i] = id.String()
+	}
+	return out
 }
 
 func (p *peerQuerier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
@@ -244,6 +270,7 @@ func (p *peerQuerier) Query(ctx context.Context, scope *url.URL, query api.Query
 	p.mu.Lock()
 	start := p.next
 	p.next++
+	p.asked = p.asked[:0]
 	p.mu.Unlock()
 
 	var last error
@@ -251,6 +278,9 @@ func (p *peerQuerier) Query(ctx context.Context, scope *url.URL, query api.Query
 	var sawNotFound int
 	for i := range ids {
 		id := ids[(start+i)%len(ids)]
+		p.mu.Lock()
+		p.asked = append(p.asked, id)
+		p.mu.Unlock()
 		rec, err := p.peers.clientFor(id, p.partition).Query(ctx, scope, query)
 		if err == nil {
 			return rec, nil

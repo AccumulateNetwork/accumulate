@@ -154,7 +154,19 @@ func TestAFollowerJoinsARunningNetworkAndLeaves(t *testing.T) {
 	defer cancel()
 	const maxRounds = 200
 	var relayed *url.TxID
+	var joiningRounds, matchedRounds int
 	stepping := &steppingState{State: state, step: func(round int) {
+		// A node that has not handed off executes nothing and is BOOTING,
+		// whether or not its root has matched yet (#4385: ACTIVE at the
+		// match served stale anchors to the next joiner, #4413).
+		if p.Joining(follower) {
+			joiningRounds++
+			if _, ok, _ := state.Matched(ctx); ok {
+				matchedRounds++
+			}
+			require.Equal(t, nodestate.StateBooting, state.Machine().State(),
+				"round %d: the follower is still joining and reads %v", round, state.Machine().State())
+		}
 		if round == 1 {
 			require.True(t, p.Joining(follower), "precondition: the follower is still joining")
 			env := send()
@@ -184,7 +196,9 @@ func TestAFollowerJoinsARunningNetworkAndLeaves(t *testing.T) {
 	require.Equal(t, join.Joined, outcome)
 	require.False(t, p.Joining(follower), "the joined follower executes")
 	require.Empty(t, entriesWithNoMessage(t, p.NodeDatabase(follower), "BVN0"), "the joined follower holds spine entries with no message behind them (#4421)")
-	require.Equal(t, nodestate.StateActive, state.Machine().State(), "the follower did not promote")
+	require.Equal(t, nodestate.StateActive, state.Machine().State(), "the follower did not promote at its handoff")
+	t.Logf("the follower read BOOTING on all %d rounds it was joining, %d of them after its root had matched",
+		joiningRounds, matchedRounds)
 
 	// The transaction handed to the follower while it joined was executed by
 	// the committee: read at the destination, from a validator's store.

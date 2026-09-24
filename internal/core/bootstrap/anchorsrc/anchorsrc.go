@@ -121,6 +121,9 @@ type Source struct {
 	next    uint64
 	started bool
 
+	// stall is the entry the read is held at, if it is (#4419).
+	stall *Stall
+
 	// doubt counts consecutive reads whose peer said the chain ends below
 	// the cursor. One is a peer that lags; doubtRounds of them is a cursor
 	// that is wrong.
@@ -389,12 +392,32 @@ func (s *Source) readLocked(ctx context.Context) error {
 		s.doubt = 0
 	}
 
+	// A held entry is asked of each peer once per read, and then the read
+	// stops (#4419). Past that every call is a peer already asked giving the
+	// answer it gave, and against a ring that cannot serve the entry the
+	// read used to spend its whole budget on it: 64 page calls and as many
+	// refusals every round, for as long as the stall lasted.
+	holdLimit := s.peerCount(ctx)
+	var holds int
+	var asked []string
+
+	// A page a peer fails whole (NotReady: a current node holding an anchor
+	// in it without its signatures) is asked again at half the size, down
+	// to the one entry at the cursor, so the cursor stops at the first entry
+	// no peer serves and not at the page's start (#4419, F3). It stays
+	// small for the rest of the read.
+	size := pageSize
+
 	for page := 0; page < maxPagesPerRead; page++ {
 		// What was ASKED FOR, kept here, because what comes back is the
 		// peer's and the cursor must not be.
 		start := s.next
-		count, expand := pageSize, true
-		rec, err := q.QueryMainChainEntries(ctx, s.Pool, &api.ChainQuery{
+		count, expand := size, true
+		// The generic form, not QueryMainChainEntries: that one drops an
+		// ErrorRecord in an entry's place and hands back an entry with no
+		// value, and what the peer said about the entry is lost with it
+		// (pkg/api/v3/querier.go, chainEntryOfMessage; #4418).
+		rec, err := q.QueryChainEntries(ctx, s.Pool, &api.ChainQuery{
 			Name:  "main",
 			Range: &api.RangeOptions{Start: start, Count: &count, Expand: &expand},
 		})
@@ -403,6 +426,14 @@ func (s *Source) readLocked(ctx context.Context) error {
 			// Ok
 		case errors.Is(err, errors.NotFound):
 			return nil // Nothing new
+		case errors.Is(err, errors.NotReady) && count > 1:
+			size = count / 2
+			continue
+		case errors.Is(err, errors.NotReady):
+			// The entry at the cursor, alone, and no peer would serve it: the
+			// querier asked every one before failing the call.
+			s.stalled(start, s.lastAsked(), err)
+			return errors.UnknownError.WithFormat("read %v's anchors: %w", s.Pool, err)
 		default:
 			return errors.UnknownError.WithFormat("read %v's anchors: %w", s.Pool, err)
 		}
@@ -414,21 +445,24 @@ func (s *Source) readLocked(ctx context.Context) error {
 		// window this peer named is real.
 		s.started = true
 
-		// **An anchor served without its signatures is this peer's gap, not a
-		// fact about the anchor, and the cursor stops in front of it.** A
-		// node that joined by pull holds its pulled range with no signatures
-		// behind it (#4416); a current one answers NotReady for it, and the
-		// read above returns with the cursor where it was, but an older one,
-		// or a liar, serves the bodies bare. Moving past them would lose
-		// those roots for this join (#4413) -- the cursor never comes back
-		// short of a Rewind. So the page is taken up to that entry, and the
-		// next page asks for it again: the peers rotate per call, so that is
-		// the next peer. An anchor that IS signed, and fails, is refused
-		// once and passed, as before: every peer serves the same signatures.
-		held := -1
+		// **An anchor served without its signatures, or an entry served
+		// without its body, is this peer's gap, not a fact about the pool,
+		// and the cursor stops in front of it.** A node that joined by pull
+		// holds its pulled range with no signatures behind it (#4416); a
+		// current one answers NotReady for it, and the read above returns
+		// with the cursor where it was, but an older one, or a liar, serves
+		// the bodies bare. A node with a hole in its store serves the entry
+		// with an ErrorRecord where the body goes (#4418). Moving past either
+		// would lose that root for this join (#4413) -- the cursor never
+		// comes back short of a Rewind. So the page is taken up to that
+		// entry, and the next page asks for it again: the peers rotate per
+		// call, so that is the next peer. An anchor that IS signed, and
+		// fails, is refused once and passed, as before: every peer serves the
+		// same signatures.
+		held, why := -1, error(nil)
 		for i, entry := range rec.Records {
-			if !s.consider(entry) {
-				held = i
+			if err := s.consider(start+uint64(i), entry); err != nil {
+				held, why = i, err
 				break
 			}
 		}
@@ -436,14 +470,97 @@ func (s *Source) readLocked(ctx context.Context) error {
 		// Advanced by what was asked for and answered, never by an index the
 		// peer chose.
 		if held >= 0 {
-			s.next = start + uint64(held)
+			at := start + uint64(held)
+			if at != start {
+				// Something before it was taken: a new entry is held.
+				holds, asked = 0, nil
+			}
+			s.next = at
+			s.passed()
+			holds++
+			asked = append(asked, s.lastAsked()...)
+			if holds >= holdLimit {
+				s.stalled(at, asked, why)
+				return nil
+			}
 			continue
 		}
 		s.next = start + uint64(len(rec.Records))
+		holds, asked = 0, nil
+		s.passed()
 
 		if uint64(len(rec.Records)) < count {
 			return nil
 		}
+	}
+	return nil
+}
+
+// Peers is what a querier that rotates among a partition's peers can say
+// about itself: join's peerQuerier implements it. With it a held entry is
+// asked of each peer once per read and the peers asked are named; without
+// it a held entry is asked doubtRounds times and nobody is named.
+type Peers interface {
+	// PeerCount is how many peers the querier rotates among.
+	PeerCount(ctx context.Context) int
+
+	// LastAsked names the peers the last call asked, in the order asked.
+	// When the call was answered, the last one named answered it.
+	LastAsked() []string
+}
+
+// Stall is an entry of the pool the read is held at: no peer asked for it
+// this read served it whole and signed, so the cursor stays in front of it
+// and the roots from there on wait (#4419). A peer that serves it moves the
+// cursor past it and the stall ends.
+type Stall struct {
+	// Entry is the index of the entry in the pool's main chain.
+	Entry uint64
+
+	// Asked names the peers asked for it by the read that last held it,
+	// when the querier can name them (Peers).
+	Asked []string
+
+	// Err is why the last answer for it could not be taken.
+	Err error
+}
+
+// Stalled reports the entry the read is held at, if it is.
+func (s *Source) Stalled() (Stall, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stall == nil {
+		return Stall{}, false
+	}
+	st := *s.stall
+	st.Asked = append([]string(nil), st.Asked...)
+	return st, true
+}
+
+// passed ends the stall once the cursor is past its entry, however it got
+// there: a page taken whole, or one taken up to a later hole (review F1).
+func (s *Source) passed() {
+	if s.stall != nil && s.next > s.stall.Entry {
+		s.stall = nil
+	}
+}
+
+func (s *Source) stalled(entry uint64, asked []string, err error) {
+	s.stall = &Stall{Entry: entry, Asked: asked, Err: err}
+}
+
+func (s *Source) peerCount(ctx context.Context) int {
+	if p, ok := s.Query.(Peers); ok {
+		if n := p.PeerCount(ctx); n > 0 {
+			return n
+		}
+	}
+	return doubtRounds
+}
+
+func (s *Source) lastAsked() []string {
+	if p, ok := s.Query.(Peers); ok {
+		return p.LastAsked()
 	}
 	return nil
 }
@@ -470,37 +587,51 @@ func (s *Source) readLocked(ctx context.Context) error {
 // way only: through Authority.Update, from a definition the join pulled and
 // verified as a leaf under a root the trusted set signed.
 //
-// It returns false only for this producer's anchor served with no signatures
-// at all: the read does not move past it, and asks another peer (readLocked).
-func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]) bool {
-	if rec == nil || rec.Value == nil || rec.Value.Message == nil || rec.Value.Message.Transaction == nil {
-		return true
+// It returns an error only when the entry is HELD: this peer's answer for it
+// cannot be taken and another peer must be asked (readLocked). That is an
+// entry served without its body -- an ErrorRecord in its place, as the API
+// serves a message it does not hold, no value at all, or something that is
+// not a transaction (#4418) -- and this producer's anchor served with no
+// signatures at all (#4413). Either is said through OnRefused: an entry
+// with no body names no block, so it is refused as block 0 and the error
+// names the pool entry.
+func (s *Source) consider(index uint64, entry *api.ChainEntryRecord[api.Record]) error {
+	rec, err := bodyOf(entry)
+	if err != nil {
+		err = errors.NotReady.WithFormat("%v entry %d: %w", s.Pool, index, err)
+		if s.OnRefused != nil {
+			s.OnRefused(0, err)
+		}
+		return err
 	}
-	body, ok := rec.Value.Message.Transaction.Body.(protocol.AnchorBody)
+	body, ok := rec.Message.Transaction.Body.(protocol.AnchorBody)
 	if !ok {
-		return true // The pool holds other transactions too
+		return nil // The pool holds other transactions too
 	}
 	pa := body.GetPartitionAnchor()
 	if pa == nil || pa.Source == nil {
-		return true
+		return nil
 	}
 
 	// The producer, not the pool. PartitionAnchor.Source is the partition
 	// that produced the anchor (acc://dn.acme), never the pool it landed in.
 	if !pa.Source.Equal(s.Producer) {
-		return true // Somebody else's anchor, in a pool that holds everyone's
+		return nil // Somebody else's anchor, in a pool that holds everyone's
 	}
 	produced, ok := protocol.ParsePartitionUrl(pa.Source)
 	if !ok {
-		return true
+		return nil
 	}
 
-	err := s.verify(produced, rec.Value)
+	err = s.verify(produced, rec)
 	if err != nil {
 		if s.OnRefused != nil {
 			s.OnRefused(pa.MinorBlockIndex, err)
 		}
-		return !unsigned(rec.Value)
+		if unsigned(rec) {
+			return errors.NotReady.WithFormat("%v entry %d, block %d: %w", s.Pool, index, pa.MinorBlockIndex, err)
+		}
+		return nil
 	}
 
 	// The MINOR block index, always. It is the block a peer serves an
@@ -517,7 +648,37 @@ func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messagin
 	if s.OnAnchor != nil {
 		s.OnAnchor(pa.Source, pa.MinorBlockIndex, pa.StateTreeAnchor)
 	}
-	return true
+	return nil
+}
+
+// bodyOf is the transaction a pool entry holds, or why this peer's answer
+// holds none. Every entry of the pool's main chain is a transaction, and the
+// read asks for it expanded, so an entry that comes back without one is the
+// serving peer's gap (#4418).
+func bodyOf(entry *api.ChainEntryRecord[api.Record]) (*api.MessageRecord[*messaging.TransactionMessage], error) {
+	if entry == nil {
+		return nil, errors.NotReady.With("the peer served an empty record")
+	}
+	switch v := entry.Value.(type) {
+	case nil:
+		return nil, errors.NotReady.With("the peer served the entry without its body")
+	case *api.ErrorRecord:
+		return nil, errors.NotReady.WithFormat("the peer served the entry without its body: %v", v.Value)
+	case *api.MessageRecord[messaging.Message]:
+		if v.Message == nil {
+			return nil, errors.NotReady.With("the peer served the entry without its body")
+		}
+		rec, err := api.MessageRecordAs[*messaging.TransactionMessage](v)
+		if err != nil || rec == nil || rec.Message == nil {
+			return nil, errors.NotReady.WithFormat("the peer served a %v message, not a transaction", v.Message.Type())
+		}
+		if rec.Message.Transaction == nil || rec.Message.Transaction.Body == nil {
+			return nil, errors.NotReady.With("the peer served a transaction without its body")
+		}
+		return rec, nil
+	default:
+		return nil, errors.NotReady.WithFormat("the peer served a %v record, not a message", v.RecordType())
+	}
 }
 
 // unsigned is an anchor record that carries no signatures at all: what a

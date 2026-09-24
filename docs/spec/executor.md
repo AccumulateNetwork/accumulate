@@ -298,10 +298,16 @@ peer where it has them, so that agreement rather than availability decides
 it. On this line the anchor source keeps ONE cursor while the peer rotates
 beneath it on every call; the cursor moves only by what was asked for and
 answered, never rewinds on a lagging peer's count (#4379), and stops just
-before an anchor a peer served without its signatures so that the next peer
-is asked for it (#4413) — reading several peers is the right answer to
-withholding, and the cursor rules are what make it cheap, not what make it
-safe. A literal cross-check of two pools before any root is trusted is not
+before an anchor a peer served without its signatures, or an entry it served
+without its body, so that the next peer is asked for it (#4413, #4418). An
+entry the cursor is held at is asked of each peer once per read, and then the
+read ends; a page a peer refuses whole is asked again, narrower, down to the
+one entry it refuses, so the cursor waits at that entry and not at the start
+of its page (#4419). A read held at an entry is a **stall**, and it is said:
+the join reports the entry on `accumulate_join_spine_stalled_entry` (−1 when
+not held) and logs it, with the peers asked, once a minute. Reading several
+peers is the right answer to withholding, and the cursor rules are what make
+it cheap, not what make it safe. A literal cross-check of two pools before any root is trusted is not
 built (#4301, stated); the quorum's signatures are the mechanism and
 withholding is its limit.
 
@@ -657,7 +663,15 @@ network and is in the pulled state, and every stream's run is contiguous.
 executing any block, the local BPT root equals that block's proven root or
 it does not. A mismatch is a gap the sequence check missed — the node
 re-syncs at that block and continues — so a wrong run is caught at the block
-it happens in, never carried forward.
+it happens in, never carried forward. **A re-sync demotes the node to
+`BOOTING`** (step 6): from the mismatch until its next handoff succeeds it
+refuses every read, serves nothing, relays every submission and signs and
+dispatches no anchor, and the handoff that succeeds makes it `ACTIVE` again,
+as the first one did. A node whose state is known wrong is not one that
+answers for it (#4385: run `20260924T074702Z`, a Directory node frozen at
+block 661 with its gauge reading `ACTIVE` served 693 pulls at that block, and
+2,944 of the run's 2,973 stranded submissions were deliveries handed to such a
+node, which accepted them and never certified or relayed them).
 
 **The bodies are content-addressed, so they come from anybody.** An entry the
 node needs and did not receive — a validated hash with no body behind it — is
@@ -712,7 +726,12 @@ carries (`Service.StageThrough`, called by the join after the match and before
 the gap check).
 
 The node then executes block `Q + 1` from the buffer as any node executes a
-block, and it is a validator or a follower from there.
+block, and it is a validator or a follower from there. **The handoff that
+succeeds is what makes it `ACTIVE`** (step 6), not the match: a node whose
+root matches `Q` and has not handed off executes nothing, and if it served
+from there it would answer for a block it is not executing past (#4413: run
+`20260924T074702Z`, a node that read `ACTIVE` from its first match, never
+handed off, and served stale anchors to the next joiner).
 
 **Which buffered group is `Q + 1` is decided by the leader round, read from
 the state.** A collected group has no block number; it has the leader round
@@ -756,7 +775,11 @@ mismatch (step 4); nothing is dropped, and the node is never left neither
 collecting nor executing (#4401: run `20260924T052134Z`, a Directory node
 whose first produced block failed sat for the rest of the run with its buffer
 discarded, refusing every later handoff as "not joining" and dropping every
-committed group). The retry has no bound, because a node that stops trying
+committed group). **A failed handoff demotes the node to `BOOTING`**, as a
+re-sync does (step 4): it matched a root, but it is not executing from it, and
+it serves nothing until a handoff succeeds (#4385). A handoff that is retried
+is `BOOTING` throughout — the match does not promote — so a failure that
+recurs on every attempt never flips the node's state. The retry has no bound, because a node that stops trying
 executes nothing and collects nothing; so **every failed attempt is counted**
 — `accumulate_join_handoff_failures_total{partition}` — and logged as an error
 with its attempt number, and a failure that recurs on every attempt is seen
@@ -816,11 +839,22 @@ next block tries again, and no block opens on a cache nothing filled. The
 spine is the one place a join takes chain entries and the messages behind
 them; nothing under this section fetches the history of any other account a
 node did not execute — that is phase 3's conversion of history, or phase 2's
-database node, not a syncing node's work. So the node states are two: **`BOOTING`**,
-from the start of a join until the local root matches a verified anchored
-root; **`ACTIVE`** from that block on, and from its first block for a node
-that took nothing from a peer — a node that never joined has no state
-machine at all and serves as `ACTIVE` (#4368). `COMPLETE` and `WAITING`, which
+database node, not a syncing node's work. So the node states are two, and
+one rule divides them: **`ACTIVE` serves while the node is executing in
+agreement; `BOOTING` refuses and relays at every other time** (#4385).
+**`BOOTING`** is from the start of a join until its handoff succeeds (step 5)
+— a root that matches is not enough, because a node that has matched and not
+handed off executes nothing — and again after any demotion: a re-sync after
+a root mismatch (step 4) and a handoff that fails (step 5) each return the
+node to `BOOTING`. **`ACTIVE`** is from a handoff that succeeds until the
+next demotion, and from its first block for a node that took nothing from a
+peer — a node that never joined has no state machine at all and serves as
+`ACTIVE` (#4368). `BOOTING` means everything below: reads refused with
+`NotReady`, the sequencer serving nothing, submissions relayed unexamined, no
+anchor signed or dispatched except for the blocks the handoff itself produces
+— those are the network's blocks, executed from the state it matched and the
+groups it collected, and their anchors are the node's to sign — and the gauge
+reading `BOOTING` until that handoff succeeds. `COMPLETE` and `WAITING`, which
 named a backfilled history, are retired: nothing reached them and nothing
 could. What a joined node cannot answer *for a block it did not execute* —
 an entry the sequencer is asked for from before it joined — it refuses per
@@ -840,9 +874,10 @@ bare, every reader that checks them refused them as unsigned, 22 in run
 `20260924T074702Z` (#4413). The pool's anchor sequence chain is not refused:
 it holds the anchors the partition *sent*, whose signatures the receivers
 hold and the producer never does. On the reading side, **an anchor served
-with no signatures is the serving peer's gap, not a fact about the anchor**:
-the anchor source does not move its cursor past it, and the next page asks
-the next peer for it; an anchor that carries signatures and fails is refused
+with no signatures, or a pool entry served without its body (an error record
+in its place, or nothing), is the serving peer's gap, not a fact about the
+anchor**: the anchor source does not move its cursor past it, and the next
+page asks the next peer for it (#4413, #4418); an anchor that carries signatures and fails is refused
 once and passed, because every peer serves the same signatures. Until #4416
 brings the history with the pull, a joined node cannot serve its pulled range
 at all (DIFFERENCES E11). The node's state

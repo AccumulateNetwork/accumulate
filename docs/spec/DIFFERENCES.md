@@ -460,14 +460,17 @@ still different, or not known:
 - **A failed seed is retried, not survived.** The seed now counts only when
   it succeeds, so a seed that fails deterministically fails every block it
   opens, loudly, instead of the first one and then running on an empty cache.
-  A failed handoff stays terminal on both sides (#4401).
+  A failed handoff is no longer terminal (#4401): the DAG service goes back
+  to collecting with the groups it did not produce, and the join demotes the
+  node, syncs again and hands off again, counted
+  (`accumulate_join_handoff_failures_total`; executor.md "Sync", step 5).
 
 **The simulator's joining node (#4363)**: `RestartNode` builds the join's
 state as `cmd/accumulated/run/dagbft.go` does at startup — `join.NewState`
 over `join.QueryPeers` with the node's own peer excluded, from its executor's
 last block — and the node's production querier refuses by that state's
 machine, so a read addressed to a restarted or following simulator node
-answers `NotReady` until the tracker promotes it to `ACTIVE`
+answers `NotReady` until its join hands off and promotes it to `ACTIVE` (#4385)
 (`TestAFollowerJoinsARunningNetworkAndLeaves`,
 `TestARestartedNodeRefusesReadsByItsJoinsMachine`). `Partition.StopNode`
 takes a node out of the consensus hub and withdraws its services. What the
@@ -634,6 +637,41 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   are two objects nothing keeps in agreement. (That `servingFor` gated two
   query kinds where the spec says every read is retired: since `08c0e413d`
   (#4368) it refuses every query while `BOOTING`.)
+- **A node is `ACTIVE` only while executing in agreement (#4385).** The
+  join promotes when a handoff succeeds (`join.State.Promote`, called by
+  `stageAndHandOff` after `Buffer.Handoff` returns nil), never at a match —
+  the tracker only matches and holds no machine — and demotes at the
+  diverged block when a re-sync starts and at the matched block when a
+  handoff fails (`join.State.Demote`). The querier, sequencer, submitter,
+  validator and consensus service ask the machine on every call, and the
+  gauge follows its OnChange. Proven by
+  `TestAReSyncingNodeIsBootingUntilItMatchesAgain` (test/e2e: while it
+  re-syncs the node's production querier refuses `NotReady`, the gauge reads
+  0, and it signs no BVN anchor), `TestAFollowerJoinsARunningNetworkAndLeaves`
+  (BOOTING on every round the follower is joining, matched or not), and
+  `TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge` (cmd/accumulated/run:
+  the daemon's querier, submitter and gauge through a failed handoff, the
+  handoff, a re-sync and the second handoff). What is still different:
+  - **Anchors are withheld by collecting mode, not by the machine.** A
+    `BOOTING` node signs and dispatches no anchor because the join has it in
+    collecting mode and a collecting node executes nothing; nothing in the
+    conductor asks the machine. The one path where they part is the handoff
+    window: `performHandoffAt` produces the buffered groups, anchors and all,
+    before `Promote(q)` runs (#4385 review F1; the re-sync test counts one
+    BOOTING-signed anchor per handoff), which is what the spec now says. Also
+    (F2): the `Demote` on a failed handoff is a no-op on `PulledState`, since a
+    node in a handoff is never ACTIVE; the transition step 5 describes cannot
+    occur and the call is kept as a guard.
+  - **The simulator gates only the querier.** Its sequencer is ungated and a
+    submission to any simulator node goes to the whole partition through the
+    hub (above), so the simulator test cannot show a relay; the relay from a
+    `BOOTING` node is shown only by the daemon's submitter.
+  - **`PulledState.Executing` still promotes on the node's own, unanchored
+    root** — the whole-network-restart path — and has no production caller
+    (#4385 note of 2026-09-24 05:51Z). It is the one promotion left that is
+    not a handoff.
+  - **A demotion is not advertised or persisted**, like every other state
+    (#4300): a peer learns it only by being refused.
 - **The ModeFullSpine rationale was wrong and is retired** (#4301 (c)): the
   spine was pulled "explicitly unverified because it is what the verifier
   reads from"; the definition and its signatures verify the spine like any
@@ -1085,7 +1123,13 @@ seventh nobody had named.
   joined by pull inside one 1024-entry window, no peer can serve that window
   signed, and a joiner's anchor source — whose cursor does not move past an
   anchor it could not read — waits at it until a node that executed those
-  blocks answers (#4416).
+  blocks answers (#4416). Since #4419 that wait is bounded and visible: one
+  page call per peer per round for the held entry (it was 64, with as many
+  refusal lines), the cursor held at the first entry no peer serves rather
+  than at its page's start, and the entry on
+  `accumulate_join_spine_stalled_entry` and in one log line a minute; the
+  soak's node-state row reads it as "spine stalled at entry N". It is still a
+  wait: nothing but #4416 ends it.
 
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.

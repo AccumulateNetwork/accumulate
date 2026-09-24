@@ -1755,7 +1755,12 @@ BOOTING_BOUND_S = 600
 NODESTATE_CSV_HEADER = ("time,node,role,partition,containerStarted,state,"
                         "startToActiveS,kind,executedBlock,partitionHeight,"
                         "startToCaughtUpS,validatorsAnswered,lastAnswered,"
-                        "partitionHeightAtLastAnswer")
+                        "partitionHeightAtLastAnswer,spineStalledAt")
+# The anchor-pool entry a join's anchor source is held at, per partition, -1
+# when it is not (#4419): no peer asked serves that anchor signed, so the
+# join reads no root after it. BOOTING says only that the node has not
+# joined; this says where it stopped.
+JOIN_SPINE_STALLED = "accumulate_join_spine_stalled_entry"
 # How far behind its partition a node may be and still count as executing
 # with it (#4404): blocks, against the highest block any of the partition's
 # validators that answered the sample executed (heights.py). soak.conf's
@@ -1804,14 +1809,18 @@ def nodestate_from(per, now=None, disturbed=None, followers=()):
         since = None
         if disturbed.get(node) is not None:
             since = max(0.0, now - float(disturbed[node]))
-        seen = {}
+        seen, stalls = {}, {}
         for name, lab, v in per[node] or ():
-            if name != NODE_STATE:
+            if name not in (NODE_STATE, JOIN_SPINE_STALLED):
                 continue
             try:
-                seen[canon_part((lab or {}).get("partition"))] = int(float(v))
+                part, iv = canon_part((lab or {}).get("partition")), int(float(v))
             except (TypeError, ValueError, AttributeError):
                 continue
+            if name == NODE_STATE:
+                seen[part] = iv
+            elif iv >= 0:
+                stalls[part] = iv
         if not seen:
             rows.append({"node": node, "role": role, "partition": None,
                          "measured": False, "value": None, "state": None,
@@ -1847,7 +1856,11 @@ def nodestate_from(per, now=None, disturbed=None, followers=()):
             if lagging:
                 why = ("ACTIVE by the gauge, executed %d vs partition %d "
                        "(%d behind; bound %d)" % (ex, ph, behind, REJOIN_MAX_BEHIND))
+            stalled = stalls.get(part)
+            if stalled is not None:
+                why = "spine stalled at entry %d; %s" % (stalled, why)
             rows.append({"node": node, "role": role, "partition": part,
+                         "spineStalledAt": stalled,
                          "measured": True, "value": v, "state": state,
                          "active": active, "alarm": alarm, "sinceStartS": since,
                          "why": why, "executed": ex, "partitionHeight": ph,
@@ -1924,6 +1937,7 @@ def track_start_to_active(track, ns, started, now, max_behind=None):
         # its frozen answer read a healthy node 10 behind.
         t["partitionHeightAtAnswer"] = r.get("partitionHeight")
         t["validatorsAnswered"] = r.get("validatorsAnswered")
+        t["spineStalledAt"] = r.get("spineStalledAt")
         if t["activeAt"] is None:
             if not r["active"]:
                 t["sawInactive"] = True
@@ -1949,6 +1963,7 @@ def _start_row(key, t, now, kind):
             "validatorsAnswered": t.get("validatorsAnswered"),
             "lastAnsweredAt": t.get("answeredAt"),
             "partitionHeightAtLastAnswer": t.get("partitionHeightAtAnswer"),
+            "spineStalledAt": t.get("spineStalledAt"),
             "sinceStartS": round(max(0.0, now - t["started"]), 1), "kind": kind}
 
 
@@ -1969,13 +1984,13 @@ def pending_starts(track, now):
 def nodestate_csv_rows(events, ts):
     iso = lambda e: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e))
     f = lambda v: "" if v is None else v
-    return ["%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" % (
+    return ["%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" % (
         ts, e["node"], e["role"], e["partition"], iso(e["containerStarted"]),
         e["state"], f(e["startToActiveS"]), e["kind"],
         f(e.get("executedBlock")), f(e.get("partitionHeight")),
         f(e.get("startToCaughtUpS")), f(e.get("validatorsAnswered")),
         "" if e.get("lastAnsweredAt") is None else iso(e["lastAnsweredAt"]),
-        f(e.get("partitionHeightAtLastAnswer"))) for e in events]
+        f(e.get("partitionHeightAtLastAnswer")), f(e.get("spineStalledAt"))) for e in events]
 
 
 def write_nodestate_csv(events, now=None):

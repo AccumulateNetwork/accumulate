@@ -184,5 +184,7 @@ func TestJoinReadsOnlyFromNamedPeers(t *testing.T) {
 	// And it worked: reads addressed at named peers are enough to join.
 	require.True(t, promoted, "the join never reached a root the Directory anchored")
 	require.NotZero(t, q)
-	require.Equal(t, nodestate.StateActive, state.Machine().State())
+	// A match is not ACTIVE: join.Run promotes when the handoff succeeds
+	// (#4385), and nothing here hands off.
+	require.Equal(t, nodestate.StateBooting, state.Machine().State())
 }
