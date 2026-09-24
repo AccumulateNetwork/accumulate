@@ -217,9 +217,32 @@ func joinPastFailedWork(t *testing.T, failing bool) {
 			"for an account with no main state that every peer answers notFound", target)
 
 	// The symptom: a name every peer answers notFound is asked again every
-	// pass. Asked once and answered, it is not asked again.
+	// pass, for the life of the process. Answered, it is not asked again.
+	//
+	// Counted from the match, not over phase two (#4397). Until the whole
+	// local root matches, the block-ledger walk runs from the last block the
+	// state was synced to and names every account written since -- by design
+	// (join.PulledState.localBlock) -- so the ghost is named again by the walk
+	// on every fetching pass while the void account, which only the page diff
+	// can name, waits for the diff's cadence. Those asks are the walk's, not
+	// the refusal loop's: with the fix nothing is refused in this test. Once
+	// the root matches, the walk starts past the block that wrote both, and a
+	// name still asked after that is being re-asked because it was refused.
 	if failing {
-		require.LessOrEqual(t, sources.roundsAsked(ghost), 1,
-			"%v, which every peer answers notFound, was re-asked in %d rounds", ghost, sources.roundsAsked(ghost))
+		ghostBefore, voidBefore := sources.roundsAsked(ghost), sources.roundsAsked(voidTokens)
+		for round := 0; round < 4*staleEveryRounds; round++ {
+			sources.round++
+			require.NoError(t, state.Pull(ctx), "after-match pull round %d", round)
+			sim.StepN(3)
+		}
+		require.Equal(t, ghostBefore, sources.roundsAsked(ghost),
+			"%v was asked again after the join matched past the block that wrote it", ghost)
+		require.Equal(t, voidBefore, sources.roundsAsked(voidTokens),
+			"%v was asked again after the join matched past the block that wrote it", voidTokens)
 	}
 }
+
+// staleEveryRounds bounds the page diff's cadence in rounds: it runs every
+// eighth fetching round (join.staleEvery), and a round that settles a pass
+// does not fetch, so a count of rounds several times that covers it.
+const staleEveryRounds = 8
