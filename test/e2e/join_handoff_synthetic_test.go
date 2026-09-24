@@ -117,7 +117,7 @@ func TestAJoinedBVNNodeCanOpenItsFirstBlockAfterARestart(t *testing.T) {
 			cancel()
 		}
 	}}
-	stepping.State = pulledState(t, sim, p, joiner, "BVN0")
+	stepping.State = p.NodeJoinState(joiner)
 	matched := &matchedAt{steppingState: stepping}
 	fresh := func(node int, cache *synthcache.Cache) coreexec.Executor {
 		_, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -201,7 +201,7 @@ func TestAJoinedBVNNodeCanOpenItsFirstBlockAfterARestart(t *testing.T) {
 	// is (SettleStaging, synthcache.JoinedAt).
 	require.Equal(t, matched.block, cache.Joined(), "the join told the process's cache the block it joined at")
 	entries, blocks := cache.Len()
-	t.Logf("the seed rebuilt %d synthetic entries in %d blocks, all above %d", entries, blocks, matched.block)
+	t.Logf("the seed rebuilt %d synthetic entries in %d blocks, none in (R, %d]", entries, blocks, matched.block)
 }
 
 // matchedAt records the block the join last matched, which is the block it

@@ -412,11 +412,18 @@ still different, or not known:
   v3 querier's expanded entries) was audited for a block at or below the join,
   and one that reads there finds `NotFound`, which §6 says must be
   `NotReady`.
-- **The join block the seed trusts is memory.** It is what the process's own
-  join recorded (`synthcache.JoinedAt`, in `SettleStaging`) before the
-  handoff's first block. Every restarted process on this line joins before it
-  opens a block, so it is always set; a process that opened a block without
-  settling a join would seed from blocks it did not execute, as before.
+- **The span the seed skips is memory.** It is what the process's own join
+  recorded (`synthcache.JoinedOver`, in `SettleStaging`) before the handoff's
+  first block: after the block the executor last executed
+  (`SystemData.ExecutedBlock`, durable, this node's own), through the join
+  block. Every restarted process on this line joins before it opens a block,
+  so it is always set; a process that opened a block without settling a join
+  would seed from blocks it did not execute, as before. A store without the
+  `ExecutedBlock` record (older than #4344) is taken to have executed none of
+  the blocks at or below the join, and seeds none of them. A first version
+  skipped every block at or below the join block, which left a restart that
+  fell nothing behind with an empty cache — the #4241/#4277 restart hole
+  (review note_3896114642, `TestAZeroGapRestartStillSeedsItsOwnBlocks`).
 - **A stored message is not content-addressed for wrappers.** The executor
   stores an anchor, sequenced or synthetic message that refers to its
   transaction by hash under the hash of the message as it arrived (#4236), so

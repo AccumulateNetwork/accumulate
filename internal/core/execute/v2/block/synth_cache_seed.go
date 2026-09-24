@@ -65,18 +65,19 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 		}
 	}
 
-	// A node that joined executed no block at or below the block it joined
-	// at, so it produced none of their synthetics and holds none of their
-	// messages: the join pulls <partition>/synthetic state-only. Those blocks
-	// are not its to rebuild, dispatch or serve (executor.md, "Sync" §6; the
-	// join records the block, SettleStaging). Rebuilding them read messages
-	// the node never had and failed the first block it opened (#4400).
-	if joined := x.synthCache().Joined(); joined >= from {
-		from = joined + 1
-	}
-
+	// The blocks a join carried this node past -- after the block its
+	// executor last executed, through the block the join settled at -- it did
+	// not execute: it produced none of their synthetics and holds none of
+	// their messages, since the join pulls <partition>/synthetic state-only.
+	// They are not its to rebuild, dispatch or serve (executor.md, "Sync" §6).
+	// Rebuilding them read messages the node never had and failed the first
+	// block it opened; skipping every block at or below the join instead left
+	// a restart that fell nothing behind with an empty cache (#4400).
 	var blocks []*synthcache.Block
 	for b := from; b < current; b++ {
+		if x.synthCache().NotExecuted(b) {
+			continue
+		}
 		blk, err := x.rebuildCacheBlock(batch, b)
 		if err != nil {
 			return errors.UnknownError.WithFormat("rebuild cache for block %d: %w", b, err)
@@ -105,7 +106,7 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 	}
 	deliveredFrom := func(dst *url.URL) uint64 { return ledger.Partition(dst).Delivered }
 	for _, r := range receipts {
-		if r.block < from {
+		if r.block < from || x.synthCache().NotExecuted(r.block) {
 			continue
 		}
 		if r.anchorBlock == receipts[0].anchorBlock {

@@ -166,6 +166,14 @@ type Cache struct {
 	// them (executor spec, "Sync"; #4294).
 	joinedAt uint64
 
+	// skipFrom and skipThrough bound the blocks this node did not execute
+	// because a join carried its state past them: after the block its
+	// executor last executed before the join, through the block the join
+	// settled at. Empty (skipThrough == 0) when the join settled at the
+	// node's own height -- a restart that fell nothing behind executed every
+	// block below it (#4400).
+	skipFrom, skipThrough uint64
+
 	// how far this node's executor is behind consensus, nil until wired.
 	// The in-flight window is measured against it (#4248).
 	executionLag atomic.Pointer[func() int]
@@ -679,6 +687,33 @@ func (c *Cache) JoinedAt(block uint64) {
 	if block > c.joinedAt {
 		c.joinedAt = block
 	}
+}
+
+// JoinedOver records a join that settled at block, from a node whose executor
+// had last executed executed: the blocks in (executed, block] are the ones it
+// did not execute. A join that settled at the node's own height records no
+// such blocks. It also records the join block as JoinedAt does.
+func (c *Cache) JoinedOver(executed, block uint64) {
+	c.JoinedAt(block)
+	if block <= executed {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.skipThrough == 0 || executed+1 < c.skipFrom {
+		c.skipFrom = executed + 1
+	}
+	if block > c.skipThrough {
+		c.skipThrough = block
+	}
+}
+
+// NotExecuted reports whether block is one a join carried this node's state
+// past without its executor executing it (JoinedOver).
+func (c *Cache) NotExecuted(block uint64) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.skipThrough != 0 && block >= c.skipFrom && block <= c.skipThrough
 }
 
 // MarkDispatched records the Directory anchor block index's synthetics were

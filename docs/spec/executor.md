@@ -701,11 +701,15 @@ Directory's receipts of its blocks, from the anchor pool's main chain; and the
 synthetics of its own blocks still in flight, from `<partition>/synthetic`.
 The first two read the spine's chains and the messages behind them, which the
 join carries (§3), and an anchor is the partition's whichever node executed
-the block that produced it. The third reads **only the blocks after the one
-the node joined at**: a node executed no block at or below it, produced none
-of its synthetics, holds none of their messages, and answers for none of them
-(below) — the join records that block in the process's cache before the first
-block opens (`SettleStaging`, #4400). A seed that fails is not a seed: the
+the block that produced it. The third skips **only the blocks the node did not
+execute** — those after the block its executor last executed before the join,
+through the block the join settled at: it produced none of their synthetics,
+holds none of their messages, and answers for none of them (below). The blocks
+at or below the one it executed are its own and are rebuilt, so a restart that
+fell nothing behind, whose join settles at its own height, skips nothing. The
+join records that span in the process's cache before the first block opens,
+from the executor's own record of the block it last executed, which no pull
+writes (`SettleStaging`, `SystemData.ExecutedBlock`; #4400). A seed that fails is not a seed: the
 next block tries again, and no block opens on a cache nothing filled. The
 spine is the one place a join takes chain entries and the messages behind
 them; nothing under this section fetches the history of any other account a
