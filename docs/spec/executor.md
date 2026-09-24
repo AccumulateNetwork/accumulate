@@ -288,37 +288,34 @@ where they disagree with it, this wins.
    is never seen, and executing without it diverges (run
    20260924T074702Z's Directory block 658, #4412).
 
-**One rule for every node** (Paul, after the #4439 report). A node — joining,
-restarted or running — just attempts to execute: synthetic transactions and
-user transactions alike, with whatever staging holds. When its root does not
-match the partition's signed anchor, it repairs from the block ledger and
-tries again. No node needs its staging or its proofs to be exact for the
-network to stay correct; a node whose staging was wrong in a block is wrong
-only in the accounts that block's record names, and the repair brings them
-back. **The repair takes accounts whole:** for every account it repairs, the
-main state, every chain with its entries (the messages behind them
-included), the pending list and the directory — not only the chain heads
-that reproduce the BPT leaf. A chain the node grew wrongly is replaced by the
-peers', not appended to. Once the node is syncing (past the match), every
-account the join took by its chain heads alone is repaired the same way, so
-the node ends holding every account's chains and entries, not only a root
-that matches.
+**Two mismatches, handled differently** (Paul). They are not the same
+failure, and the join treats them apart:
 
-**Execute, and repair on a mismatch** (Paul, after the #4438 report). Step 2
-need not be record-only. Once the walk is done, the joining node may execute
-each block's transactions as they come, like any other node, and compare its
-root with the partition's signed anchor at every block that sent one. A match
-is step 3. A mismatch does not stop the join: the node repairs its tree from
-the block ledger — for every block since its last comparison, it pulls again
-every account the partition's record names, and every account its own record
-names, deleting any the peers do not hold — and keeps executing and comparing.
-This is why staging being incomplete during the join is harmless: a block
-executed without a synthetic transaction it needed is wrong only in accounts
-its record names, and the repair brings them current. It is also why an idle
-partition needs no special case: the node executes through the quiet blocks
-and compares at the next block that anchors (the heartbeat). A node that
-executed an account into existence that no peer holds loses it at the repair,
-because its own record names it.
+1. **The BPT root does not match: re-pull.** Until the pull is proven, the
+   node executes nothing. It walks and processes block-ledger records (steps
+   1–2) and compares the root it built with the partition's own signed anchor
+   at every block that sent one; an idle partition's next anchor is its
+   heartbeat, and the records carry the tree there. A root that does not
+   match means the pull is wrong, and the only thing that fixes a wrong pull
+   is to pull again: the whole walk, every leaf, while records keep being
+   processed. The BPT has every leaf; no pull skips one.
+2. **The anchor does not match: repair, and move to the next block.** Once
+   the root has matched, the node stages and executes — synthetic and user
+   transactions, with whatever staging holds. A staging difference can make
+   the node's execution differ from its peers' in some accounts, so the
+   anchor it produces for a block may not match the partition's signed one.
+   That does not break the BPT the pull proved: the block ledger names every
+   account the block changed (invariant 14), so the node repairs those
+   accounts from the peers, whole — main state, every chain with its entries
+   and the messages behind them, the pending list, the directory; a chain it
+   grew wrongly is replaced, not appended to — and moves on to the next
+   block. This is the same for every node: joining, restarted or running
+   (#4440). No node's staging has to be exact for the network to stay
+   correct.
+
+Past the match, every account the walk took by its chain heads alone is
+filled in whole the same way, so the node ends holding every account's chains
+and entries, not only a root that matches.
 
 Invariants 13–15 are what make steps 2 and 3 sound: no leaf exists for an
 account that holds nothing, the record names every account a block changes,
@@ -444,43 +441,29 @@ store when the join starts, and again when the local root has matched; a
 change to the sets during a join is crossed at the match, by anchors the old
 set can still judge (§1's stated limit).
 
-**The node executes from the pulled state, and is proven where it executes**
-("Execute, and repair on a mismatch", "One rule for every node"). Every
-account is pulled as it is on the peer now, so the pulled state is the
-partition's only at the block the pulled ledger names, and only the anchor of
-that block could match it by equality — a block that often sent none (an idle
-partition anchors on the heartbeat). So the join does not wait for it. Once
-the walk has covered the tree and nothing is owed a retry, the node hands off
-at the block its pulled ledger names (`PulledState.Ready`), **unproven and
-`BOOTING`**, and executes the blocks it collected from there like any node,
-synthetic and user transactions alike, with whatever staging holds — a gap in
-staging is said and put on the gauge (§4) and does not hold the handoff. The
-root watch (§5) compares the root after every executed block that sent an
-anchor with the partition's own signed anchor for it: the first that equals is
-the match, step 3, and the node is `ACTIVE` from there. The join still looks
-first: `Matched` reads the anchors itself, so a node restarted a block or two
-behind that already equals a signed root is proven at once (#4411).
+**The node executes only from a pulled state that matched** ("Two
+mismatches"). Every account is pulled as it is on the peer now, so the pulled
+state is the partition's only at a block the records have carried it to.
+The node keeps processing records block by block and compares its root at
+every block that sent an anchor; an idle partition anchors on its heartbeat,
+so the records carry the tree to the next heartbeat and the comparison is
+made there. A root that does not match is a wrong pull, and the accounts are
+pulled again — every leaf — while the records go on. The first root that
+equals the partition's own signed anchor is the match, step 3; only then does
+the node stage and execute (steps 4–6).
 
-**A mismatch is repaired from the block ledger** (`PulledState.RepairFrom`).
-The node stops executing and collects again, and the next pull is a repair:
-from the last block that matched — or from where the pull began, if none has —
-it takes the partition's record of every block after it and this node's own
-record of every block it executed, and pulls every account they name again,
-**whole**: main state, every chain with every entry and the message behind
-each, the pending list and the directory. The pull goes on from the entries
-the node holds and takes a chain again from its first entry when the node's is
-not the peers' prefix, or is longer than the peers' (a chain the node grew
-wrongly is replaced, not appended to); the account's chain index becomes the
-peers'; and the entries below each chain's open mark set are brought in at
-once (`pull.Backfill`), so a repaired account is held entire. An account no
-peer holds a leaf for is deleted — its main state and its leaf
-(`Batch.ForgetAccount`) — which is how a node loses an account only its own
-execution created. The node then hands off again at the block the repaired
-ledger names and goes on executing and comparing. A block executed without a
-synthetic transaction it needed is wrong only in the accounts its record
-names, so staging need not be exact for the node to converge
-(`TestAJoinRepairsABlockExecutedWithoutItsSynthetic`,
-`TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated`).
+**After the match, an anchor mismatch is repaired from the block ledger**
+(`PulledState.RepairFrom`). The anchor a block produces that is not the
+partition's signed one means execution differed, not that the pull was wrong.
+The node takes the partition's record of that block and its own, and pulls
+every account they name again, **whole**: main state, every chain with every
+entry and the message behind each, the pending list and the directory. A
+chain is taken again from its first entry when the node's is not the peers'
+prefix, or is longer than the peers' (a chain the node grew wrongly is
+replaced, not appended to); the account's chain index becomes the peers';
+and the entries below each chain's open mark set are brought in at once
+(`pull.Backfill`), so a repaired account is held entire. Then it moves on to
+the next block.
 
 **Past the match, every account taken by its heads is brought in whole.** The
 walk and the records take an account by its chain heads and open mark set
@@ -620,22 +603,18 @@ names every account whose leaf the block changes (invariant 14), including the
 accounts a block changed as a side effect and the system accounts every block
 touches; envelopes name neither all of that nor only names that can be routed.
 
-**After the handoff, a mismatch is repaired from the block ledger; if that
-does not bring a match, the accounts are pulled again** (Paul). A node whose
-executed block's root is not its anchored root (the root watch, §5) first
-repairs from the block ledger (§2): the records from the last block that
-matched, the partition's and its own. If the next anchored block still does
-not match, the node pulls the accounts again — the whole walk, every leaf,
-while records keep being processed — because a pull that does not produce a
-matching root has to be pulled again; there is nothing else it can do. **The
-BPT has every leaf; no pull skips one.** The only thing that decides a leaf
-does not exist is execution: a transaction whose principal does not exist is
-rejected before it changes anything, leaves no leaf for that principal
-(invariants 13, 15), and its refund is a synthetic transaction logged on the
-rejecting partition's synthetic chain back to the sender. The block this
-node's executor last executed is read from `SystemData(partition).ExecutedBlock`
-— not from `<partition>/ledger`, which is an account the pull overwrites
-(#4295, #4344) — and it bounds the node's own records the repair reads.
+**After the handoff, a mismatch is an anchor mismatch** ("Two mismatches",
+2): the node repairs the accounts the block ledger names for that block —
+the partition's record and its own — and moves to the next block; it does
+not re-pull the tree, which the match proved. **The BPT has every leaf; no
+pull skips one.** The only thing that decides a leaf does not exist is
+execution: a transaction whose principal does not exist is rejected before it
+changes anything, leaves no leaf for that principal (invariants 13, 15), and
+its refund is a synthetic transaction logged on the rejecting partition's
+synthetic chain back to the sender. The block this node's executor last
+executed is read from `SystemData(partition).ExecutedBlock` — not from
+`<partition>/ledger`, which is an account the pull overwrites (#4295, #4344)
+— and it bounds the node's own records the repair reads.
 
 **What is pulled is written into the state tree, not only into the store.**
 Committing an account does not move the root by itself; the root is what the
@@ -671,8 +650,8 @@ the peer's to find where they part, since at an anchored height there is one
 correct chain. A peer that serves fewer entries than the node holds is
 behind, and is asked again — except in a repair, where the node's longer
 chain is its own wrong growth and is replaced by the peers', taken whole from
-the first entry (Paul, "One rule for every node": "A chain the node grew
-wrongly is replaced by the peers', not appended to"; this settles #4403's
+the first entry (Paul, "Two mismatches": a chain the node grew wrongly is
+replaced by the peers', not appended to; this settles #4403's
 provisional rule). The retake tracks no orphaned entries.
 
 **A pulled transaction chain carries the messages behind its entries.** The
