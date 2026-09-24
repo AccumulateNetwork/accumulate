@@ -1563,7 +1563,8 @@ nodestate_row() {   # $1 = role: validator | follower
   # failed starts as reaching ACTIVE. rejoin.py judges each start on the
   # gauge, its executed height against its partition's (nodestate.csv), and
   # its anchors against its peers' (node-logs-live.txt).
-  python3 "$here/rejoin.py" "$rd" "${1:-}" --max-behind "${REJOIN_MAX_BEHIND:-10}"
+  python3 "$here/rejoin.py" "$rd" "${1:-}" --max-behind "${REJOIN_MAX_BEHIND:-10}" \
+    --silent-after "${REJOIN_SILENT_SECS:-15}"
 }
 
 sub_row() {   # $1 = role, $2 = when the loadgen exited, $3 = "stallkill" or ""

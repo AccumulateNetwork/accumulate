@@ -349,7 +349,13 @@ when all three hold:
 
 A failing reading makes the start **NOT rejoined**; a reading that could not
 be made (no executed gauge, no final row, no anchor line after the start)
-makes it **not established**, and says which. It is never called rejoined on
+makes it **not established**, and says which. **A start's last reading is its
+last answer against the partition's height at the end** (review F3): every
+tracked start follows its partition's height at every sample whether or not
+it answered, and `lastAnswered` records when it last did. A start whose last
+answer is older than `REJOIN_SILENT_SECS` (soak.conf, 15 s — three 5 s
+scrapes) at its `final` row is **not established (silent since …)**: judged on
+its stale answer, a node that rejoined and went dark read rejoined. It is never called rejoined on
 the gauge's word. The time quoted is container start to the first sample that
 was ACTIVE and within the bound. **Only the launch goes unjudged**: a
 container started before the first sample in `nodestate.csv`. Every later
@@ -362,7 +368,7 @@ says so and claims nothing about starts.
 
 `nodestate.csv` carries, beside the columns above, `executedBlock`,
 `partitionHeight` (the highest block any answering validator of the partition
-executed), `startToCaughtUpS` and `validatorsAnswered`, read at each
+executed), `startToCaughtUpS`, `validatorsAnswered` and `lastAnswered`, read at each
 row's sample, and two more kinds: `caught-up`, the first sample ACTIVE and
 within the bound, and `superseded`, a start's last reading when its container
 started again. At exit the monitor writes a `final` row for **every** start,

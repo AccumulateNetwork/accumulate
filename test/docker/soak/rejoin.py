@@ -53,6 +53,9 @@ import followerlog  # noqa: E402
 from heights import canon_part  # noqa: E402
 
 DEFAULT_MAX_BEHIND = 10
+# A start whose last answer is older than this before its final row has no
+# reading at the end: three of soakmon's 5 s scrapes (soak.conf REJOIN_SILENT_SECS).
+DEFAULT_SILENT_AFTER = 15
 
 
 def _epoch(s):
@@ -178,7 +181,8 @@ def starts(rows):
     return out
 
 
-def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True):
+def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True,
+          silent_after=DEFAULT_SILENT_AFTER):
     """One start's verdict: {"verdict": rejoined|NOT rejoined|not established,
     "reasons": [...], "toActiveS", "toRejoinS"}."""
     node, part, started = key
@@ -207,7 +211,17 @@ def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True):
         missing.append("no last reading (the monitor wrote no final row)")
     else:
         ex, ph = _int(end.get("executedBlock")), _int(end.get("partitionHeight"))
-        if ex is None or ph is None:
+        last, at = _epoch(end.get("lastAnswered")), _epoch(end.get("time"))
+        silent = (end.get("kind") == "final" and last is not None and at is not None
+                  and at - last > silent_after)
+        if silent:
+            # Its last answer is not its state at the end (review F3): judged
+            # on it, a node that rejoined and then went dark reads rejoined.
+            missing.append("silent since %s: its last answer, %ds before the end, was executed %s; "
+                           "the partition was at %s at the end"
+                           % (end.get("lastAnswered"), at - last,
+                              "?" if ex is None else ex, "?" if ph is None else ph))
+        elif ex is None or ph is None:
             missing.append("executed height not measured (no accumulate_node_executed_block at its last reading)")
         elif ph - ex > max_behind:
             ans = _int(end.get("validatorsAnswered"))
@@ -239,7 +253,7 @@ def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True):
             "toActiveS": to_active or None, "toRejoinS": to_rejoin or None}
 
 
-def row(rows, role, max_behind=DEFAULT_MAX_BEHIND, anchors=None):
+def row(rows, role, max_behind=DEFAULT_MAX_BEHIND, anchors=None, silent_after=DEFAULT_SILENT_AFTER):
     """The manifest's cell for one role."""
     all_rows = rows
     rows = [r for r in rows if not role or r.get("role") == role]
@@ -261,7 +275,7 @@ def row(rows, role, max_behind=DEFAULT_MAX_BEHIND, anchors=None):
         started = _epoch(k[2])
         after_launch = launch is None or started is None or started > launch
         if "reached" in s or "already" not in s or after_launch:
-            judged[k] = judge(k, s, max_behind, anchors, peers, has_cols)
+            judged[k] = judge(k, s, max_behind, anchors, peers, has_cols, silent_after)
         else:
             first_sight += 1
     parts = []
@@ -294,6 +308,7 @@ def main(argv=None):
     ap.add_argument("run_dir")
     ap.add_argument("role", nargs="?", default="")
     ap.add_argument("--max-behind", type=int, default=DEFAULT_MAX_BEHIND)
+    ap.add_argument("--silent-after", type=int, default=DEFAULT_SILENT_AFTER)
     ap.add_argument("--log", default=None, help="default RUN_DIR/node-logs-live.txt")
     a = ap.parse_args(argv)
     path = os.path.join(a.run_dir, "nodestate.csv")
@@ -309,7 +324,7 @@ def main(argv=None):
     if os.path.exists(logp):
         with open(logp, errors="replace") as f:
             anchors = Anchors(anchor_events(f))
-    print(row(rows, a.role, a.max_behind, anchors))
+    print(row(rows, a.role, a.max_behind, anchors, a.silent_after))
     return 0
 
 

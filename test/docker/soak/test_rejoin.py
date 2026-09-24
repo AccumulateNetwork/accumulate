@@ -132,7 +132,7 @@ class TheRunsThreeFailedStarts(unittest.TestCase):
                                  "acc-bvn1-val1": healthy({"directory": dn, "bvn1": 214}, "bvn1"),
                                  "acc-bvn3-val1": scrape({"directory": 2, "bvn3": 0}, {"directory": 613, "bvn3": 600})}),
                      st)
-        s.finish(T0 + 1400)
+        s.finish(T0 + 1300)    # soakmon writes the final row at its last sample
         s.write(self.rd)
         with open(os.path.join(self.rd, "nodestate.csv")) as f:
             self.rows = list(csv.DictReader(f))
@@ -267,6 +267,39 @@ class AStartActiveAtFirstSightIsJudged(unittest.TestCase):
         self.assertIn("executed 320 vs partition 1395", cell)
         self.assertNotIn("never ACTIVE", cell.split("acc-bvn1-val1 bvn1")[1].split(")")[0],
                          "the new process saw it ACTIVE: the old `final BOOTING` is not the reading")
+
+
+class ASilentNodeIsNotJudgedOnItsLastAnswer(unittest.TestCase):
+    """Review F3, case G: rejoined, then no scrape answer from block 500 while
+    the partition reaches 1400. The final row used to carry the node's last
+    answer beside the partition height of that same moment — `500 / 500` —
+    and read rejoined."""
+
+    def test_silent_since(self):
+        s = Series()
+        start = {c: T0 - 3600 for c in VALS}
+        s.sample(T0, network(T0, 200, {"bvn1": 200, "bvn2": 200, "bvn3": 200}), start)
+        st = dict(start, **{"acc-bvn1-val1": T0 + 10})
+        s.sample(T0 + 15, network(0, 205, {"bvn1": 205, "bvn2": 205, "bvn3": 205},
+                                  {"acc-bvn1-val1": scrape({"directory": 0, "bvn1": 0},
+                                                           {"directory": 190, "bvn1": 190})}), st)
+        s.sample(T0 + 40, network(0, 500, {"bvn1": 500, "bvn2": 500, "bvn3": 500}), st)
+        for i, h in enumerate((800, 1100, 1400)):
+            per = network(0, h, {"bvn1": h, "bvn2": h, "bvn3": h})
+            del per["acc-bvn1-val1"]            # answers nothing from here on
+            s.sample(T0 + 100 + 60 * i, per, st)
+        s.finish(T0 + 220)
+        rd = tempfile.mkdtemp(prefix="rejoin-f3-")
+        s.write(rd)
+        with open(os.path.join(rd, "nodestate.csv")) as f:
+            rows = list(csv.DictReader(f))
+        final = [r for r in rows if r["node"] == "acc-bvn1-val1" and r["kind"] == "final"]
+        self.assertEqual({"1400"}, {r["partitionHeight"] for r in final},
+                         "the partition's height at the end, not at its last answer")
+        cell = rejoin.row(rows, "validator", 10, None)
+        self.assertIn("rejoined 0 of 2", cell)
+        self.assertIn("silent since %s: its last answer, 180s before the end, was executed 500; "
+                      "the partition was at 1400 at the end" % iso(T0 + 40), cell)
 
 
 class EveryDestinationIsCompared(unittest.TestCase):

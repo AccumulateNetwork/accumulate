@@ -1723,7 +1723,7 @@ NODE_STATE_ACTIVE = 2
 BOOTING_BOUND_S = 600
 NODESTATE_CSV_HEADER = ("time,node,role,partition,containerStarted,state,"
                         "startToActiveS,kind,executedBlock,partitionHeight,"
-                        "startToCaughtUpS,validatorsAnswered")
+                        "startToCaughtUpS,validatorsAnswered,lastAnswered")
 # How far behind its partition a node may be and still count as executing
 # with it (#4404): blocks, against the highest block any of the partition's
 # validators that answered the sample executed (heights.py). soak.conf's
@@ -1853,6 +1853,16 @@ def track_start_to_active(track, ns, started, now, max_behind=None):
     nothing; `final_starts` writes every start's last reading at exit."""
     n = REJOIN_MAX_BEHIND if max_behind is None else max_behind
     out = []
+    # Every tracked start follows its partition's height at every sample,
+    # whether or not the node answered it (review F3): the start's last
+    # reading is its last ANSWER against the partition NOW, and a node that
+    # fell silent must not be judged on the height it last reported beside
+    # the partition's height of the same stale moment.
+    for (node, part), t in track.items():
+        ph = (ns.get("partitionHeights") or {}).get(part)
+        if ph:
+            t["partitionHeight"] = ph["height"]
+            t["validatorsAnswered"] = ph["answered"]
     for r in ns.get("rows") or ():
         if not r.get("measured"):
             continue
@@ -1868,6 +1878,7 @@ def track_start_to_active(track, ns, started, now, max_behind=None):
                               "caughtUpAt": None,
                               "role": r.get("role", "validator"), "state": r["state"]}
         t["state"] = r["state"]
+        t["answeredAt"] = now
         t["executed"] = r.get("executed")
         t["partitionHeight"] = r.get("partitionHeight")
         t["validatorsAnswered"] = r.get("validatorsAnswered")
@@ -1894,6 +1905,7 @@ def _start_row(key, t, now, kind):
                                  else round(max(0.0, t["caughtUpAt"] - t["started"]), 1)),
             "executedBlock": t.get("executed"), "partitionHeight": t.get("partitionHeight"),
             "validatorsAnswered": t.get("validatorsAnswered"),
+            "lastAnsweredAt": t.get("answeredAt"),
             "sinceStartS": round(max(0.0, now - t["started"]), 1), "kind": kind}
 
 
@@ -1914,11 +1926,12 @@ def pending_starts(track, now):
 def nodestate_csv_rows(events, ts):
     iso = lambda e: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e))
     f = lambda v: "" if v is None else v
-    return ["%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" % (
+    return ["%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" % (
         ts, e["node"], e["role"], e["partition"], iso(e["containerStarted"]),
         e["state"], f(e["startToActiveS"]), e["kind"],
         f(e.get("executedBlock")), f(e.get("partitionHeight")),
-        f(e.get("startToCaughtUpS")), f(e.get("validatorsAnswered"))) for e in events]
+        f(e.get("startToCaughtUpS")), f(e.get("validatorsAnswered")),
+        "" if e.get("lastAnsweredAt") is None else iso(e["lastAnsweredAt"])) for e in events]
 
 
 def write_nodestate_csv(events, now=None):
