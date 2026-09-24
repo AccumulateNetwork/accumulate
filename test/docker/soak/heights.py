@@ -27,8 +27,11 @@ caught up on its own height (review F2 on #4404). The max can fall only when
 the leading validators all miss a sample, which is why the count that
 answered is recorded with it. Followers are not in it: a follower is expected
 to lag, and the height its lag is measured against is the validators'
-(#4365). A node executing a divergent fork past its partition would raise
-it; that node is caught by anchor agreement, not by height.
+(#4365). A validator executing a divergent fork past its partition would
+raise it, and then the HEALTHY nodes read behind — a restarted node that
+rejoined correctly would read NOT rejoined on height. The fork's own node is
+caught by anchor agreement. An executor cannot pass what its partition
+certified, so this needs a node executing uncertified blocks.
 
 **Each node's own height, in its own column** (#4345): `exec.<container>.<partition>`,
 the block THAT node's executor last executed for that partition. A node that

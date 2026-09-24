@@ -75,8 +75,11 @@ the other eleven Directory nodes went 215 → 323.
   [1000, 214], whose "majority" is 214, and the stuck node read caught up
   against its own height. The max falls only if the leading validators all
   miss a sample, which the answered count shows. Followers are not in it. A
-  node executing a divergent fork past its partition would raise it; anchor
-  agreement, not height, catches that node.
+  validator executing a divergent fork past its partition would raise it,
+  and then the **healthy** nodes read behind: a restarted node that rejoined
+  correctly would read NOT rejoined on height, while the fork's own node is
+  caught by anchor agreement. An executor cannot pass what its partition
+  certified, so this takes a node executing uncertified blocks.
 - **Each node's own executed block is its own column**, per partition. A node
   that did not answer the scrape is an empty cell, never 0.
 
