@@ -963,6 +963,46 @@ func (s *Querier) queryChain(ctx context.Context, record *database.Chain2) (*api
 	return r, nil
 }
 
+// servedSigned refuses an anchor transaction that this node holds without its
+// signatures.
+//
+// An anchor is worth only the quorum that signed it, and a node that joined by
+// pull holds the anchors in its pulled range as entries and bodies with no
+// signatures behind them: the pull does not bring the pool's signature history
+// (#4416), and the signatures are read from nowhere else (loadMessage). Served
+// as it is, the anchor is refused by every reader that checks it
+// (anchorsrc.verify) and read by any reader that does not as an anchor nobody
+// signed. So it is not served: NotReady, and the caller asks a node that
+// executed it (executor spec, "Sync", step 6; #4413).
+//
+// The pool's main chain only: it holds the anchors this partition RECEIVED
+// and executed, which are the ones a quorum's signatures were collected for.
+// The anchor-sequence chain holds the anchors this partition SENT, and a
+// producer never holds its outgoing anchors' signatures -- the receivers do --
+// so refusing those would refuse every pull of every anchor pool on every
+// node.
+func servedSigned(record *database.Chain2, v api.Record) error {
+	if record.Name() != "main" {
+		return nil
+	}
+	rec, ok := v.(*api.MessageRecord[messaging.Message])
+	if !ok || rec == nil {
+		return nil
+	}
+	txn, ok := rec.Message.(*messaging.TransactionMessage)
+	if !ok || txn.Transaction == nil || txn.Transaction.Body == nil {
+		return nil
+	}
+	if !txn.Transaction.Body.Type().IsAnchor() {
+		return nil
+	}
+	if rec.Signatures != nil && len(rec.Signatures.Records) > 0 {
+		return nil
+	}
+	return errors.NotReady.WithFormat(
+		"this node holds anchor %x without its signatures and cannot serve it", txn.Hash())
+}
+
 func (s *Querier) queryChainEntryByIndex(ctx context.Context, batch *database.Batch, record *database.Chain2, index uint64, expand bool, wantReceipt *api.ReceiptOptions) (*api.ChainEntryRecord[api.Record], error) {
 	value, err := record.Entry(int64(index))
 	if err != nil {
@@ -1017,7 +1057,9 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 			r.Value, err = s.queryMessage(ctx, batch, protocol.UnknownUrl().WithTxID(r.Entry))
 			switch {
 			case err == nil:
-				// Ok
+				if err := servedSigned(record, r.Value); err != nil {
+					return nil, err
+				}
 			case errors.Is(err, errors.NotFound):
 				r.Value = &api.ErrorRecord{
 					Value: errors.UnknownError.Wrap(err).(*errors.Error),

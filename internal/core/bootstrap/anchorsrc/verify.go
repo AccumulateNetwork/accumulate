@@ -49,7 +49,7 @@ func (s *Source) verify(producer string, rec *api.MessageRecord[*messaging.Trans
 	if rec.Sequence == nil {
 		return errors.BadRequest.With("the anchor record carries no sequenced message, so there is nothing a signature covers")
 	}
-	if rec.Signatures == nil || len(rec.Signatures.Records) == 0 {
+	if unsigned(rec) {
 		return errors.Unauthenticated.With("the anchor carries no signatures")
 	}
 
