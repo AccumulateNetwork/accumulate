@@ -268,25 +268,19 @@ where they disagree with it, this wins.
    been received and processed. Staging never needs any of them.
 5. **Only then does the node stage.** It collects synthetic transactions and
    anchors from consensus into staging, above the floor.
-6. **When staging is consistent, stop pulling and execute.** The state at B
+6. **Then execute, and request what staging lacks.** The state at B
    records, for every stream, the highest number its partition had received
    — the synthetic ledger's `Received`, and the anchor ledger's for anchor
    streams — written by every block as hashed state (Paul, 2026-09-25,
-   #4412). Staging is consistent when, for every stream, the node holds what
-   its peers hold between `Delivered + 1` and `Received` as of B. What it
-   lacks it requests from the source by number, **and the answers reach
-   staging through consensus, exactly as healing answers do — never straight
-   into this node's staging.** A number the network already holds arrives as
-   a copy its peers ignore (a later copy writes nothing, invariant 12); a
-   number that is a hole network-wide is filled in the same block on every
-   node, this one included. So a fully synced staging has the network's holes
-   too, and they fill for everyone at once (Paul, 2026-09-25). Then the node
-   stops pulling accounts from the block ledger and executes from B + 1, user
-   transactions included. The
-   highest number seen in collected blocks is not enough: an entry the peers
-   held before this node started staging, on a stream that then goes quiet,
-   is never seen, and executing without it diverges (run
-   20260924T074702Z's Directory block 658, #4412).
+   #4412). What the node lacks between `Delivered + 1` and `Received` it
+   requests from the source by number, **and the answers reach staging
+   through consensus, exactly as healing answers do — never straight into
+   this node's staging.** A number that is a hole network-wide is filled in
+   the same block on every node, this one included (Paul, 2026-09-25). The
+   node does not wait for them: it executes from B + 1, user transactions
+   included, with whatever staging holds, and an entry that arrives after
+   the block its peers executed it in is an anchor mismatch, repaired
+   ("Two mismatches", 2). Staging need not be exact (Paul).
 
 **Two mismatches, handled differently** (Paul). They are not the same
 failure, and the join treats them apart:
@@ -306,17 +300,22 @@ failure, and the join treats them apart:
    peers keep the BPT's node history by height (`bpt.NodeAt`), so a peer can
    serve the root, and the interior hashes, as of block B even after it has
    moved on. Only a block that sent an anchor proves anything; the others'
-   roots are a peer's word and only localize. When the roots differ, a peer
-   serves, in one answer, the hash of every subtree about six levels above
-   the leaves, as of B — each covers about 64 accounts. The tree is keyed by
-   hash, so its leaves sit at nearly even depth and the level is fixed from
-   the root: the tree's depth (about log2 of the number of accounts) less
-   six. The node compares the list with its own and pulls again, whole, only
-   the accounts under the subtrees that differ, and drops the leaves it holds
-   there that the peer's subtree does not. Six trades the list against the
-   re-pull: each level up halves the list (a million accounts: 512 KiB at
-   six) and doubles the accounts re-pulled per subtree that differs (Paul:
-   "maybe 5 or 6"). A repair then costs what is
+   roots are a peer's word and only localize. When the roots differ, the node locates the difference along the
+   tree's own storage: the BPT is stored in blocks of eight levels, so a
+   peer serves, as of B, the 256 hashes eight levels down (one stored
+   block), the node compares them with its own, and for each that differs
+   asks for the 256 hashes eight levels below it — at a million accounts
+   that isolates about sixteen accounts, at about 8 KiB an answer (Paul
+   asked for a cut a few levels above the leaves; this is the cut the
+   storage makes exact). The node pulls again, whole, only the accounts under
+   the branches that differ. **It deletes nothing on this comparison:** a
+   root that is not a signed anchor's is a peer's word, so a leaf the peer's
+   branch lacks is marked, and removed only when the comparison was at a
+   signed block and the match that follows confirms it. **A record is taken
+   with a receipt** to a signed root it sits under wherever the node holds
+   one, so a peer cannot drop or add accounts in it; and a source whose
+   answers were part of a re-pull that did not bring the match is moved to
+   the back of the order. A repair then costs what is
    wrong, not the size of the tree.
 2. **The anchor does not match: repair, and move to the next block.** Once
    the root has matched, the node stages and executes — synthetic and user
@@ -328,7 +327,11 @@ failure, and the join treats them apart:
    accounts from the peers, whole — main state, every chain with its entries
    and the messages behind them, the pending list, the directory; a chain it
    grew wrongly is replaced, not appended to — and moves on to the next
-   block. This is the same for every node: joining, restarted or running
+   block. Until repair pulls accounts as of the block that mismatched and
+   the executor reloads what it holds in memory across a repair (the
+   globals, the producer cache, staging's settlement), the node stops
+   executing to repair and hands off again at the repaired block, as the
+   join does (#4440). This is the same for every node: joining, restarted or running
    (#4440). No node's staging has to be exact for the network to stay
    correct.
 
@@ -430,13 +433,21 @@ the validators asked, once a minute (#4419).
 
 #### 2. Nothing is proven before the match, and the match is the proof
 
-**The accounts a peer serves to a join are current.** The join asks for an
-account as of the block the peer is on. It asks no peer for an account as of
-a past block: a BPT is a tree of current state, and a node does not retain
-chain heads, directory lists or pending lists per block to rebuild an old
-leaf from (Paul, 2026-09-21: "The signed anchor has the anchor and BPT root
-for a block + the history. All the accounts for an anchor are current. So the
-anchor + the history is everything for the current block every block.").
+**The accounts a peer serves to a join are as of a block** (decided after
+the plan review on #4438, note_3901212756; supersedes Paul's 2026-09-21
+"current" rule). An account pulled for a block's record is pulled as the
+peer held it at that block, and every page of the walk is as of one block:
+the peer's BPT history (`BptPageQuery.ForHeight`) and the historical account
+proof (`HistoricalAccountStateProof`, whose retained leaf carries each
+chain's `Count` and pending set, so the node can append) serve it. A pull of
+current state straddles blocks — the tree it builds is a mixture no block
+ever held, and equals a block's root only when the partition is quiet
+(#4411) — so after applying block B's record the local root is the root of
+B, and can be compared at every block. The bound is the peers' retention
+(`BPTHistoryDepth`, 1024 blocks by default): a walk or record the peers can
+no longer serve as of its block moves the start forward to a block they can,
+and the walk is taken again from there. Pulls run in parallel; a join that
+pulls one account at a time cannot keep up with a partition at 100 tps.
 
 **What the pull takes, it writes, and nothing is proven account by account**
 (the algorithm, step 3; #4438). There is one proof: the whole local root equal
@@ -1007,11 +1018,19 @@ node to `BOOTING`. **`ACTIVE`** is from a handoff that succeeds until the
 next demotion, and from its first block for a node that took nothing from a
 peer — a node that never joined has no state machine at all and serves as
 `ACTIVE` (#4368). `BOOTING` means everything below: reads refused with
-`NotReady`, the sequencer serving nothing, submissions relayed unexamined, no
-anchor signed or dispatched except for the blocks the handoff itself produces
-— those are the network's blocks, executed from the state it matched and the
-groups it collected, and their anchors are the node's to sign — and the gauge
-reading `BOOTING` until that handoff succeeds. `COMPLETE` and `WAITING`, which
+`NotReady`, submissions relayed unexamined, and the gauge reading `BOOTING`
+until that handoff succeeds. **Two things do not wait for `ACTIVE`**
+(decided after the plan review, note_3901212756). *The sequencer answers for
+every anchor the node itself executed and signed, whatever its state:* the
+anchor collector gathers a partition's anchors from its validators, and a
+validator that answers only while `ACTIVE` makes a partition with more than
+N − threshold validators booting at once unable to prove anything to
+anyone, forever. *A node signs and dispatches block N's anchor and
+synthetic transactions only if the newest root it could check matched*
+(lag one): a node whose last checked root did not match signs nothing,
+dispatches nothing, and repairs. A wrongly executing node then stalls
+rather than forms a wrong quorum with others like it, and a partition whose
+validators are all booting still anchors. `COMPLETE` and `WAITING`, which
 named a backfilled history, are retired: nothing reached them and nothing
 could. What a joined node cannot answer *for a block it did not execute* —
 an entry the sequencer is asked for from before it joined — it refuses per
