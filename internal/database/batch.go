@@ -94,15 +94,44 @@ func (b *Batch) DeleteAccountState_TESTONLY(url *url.URL) error {
 	return b.kvs().Put(a, nil)
 }
 
-// ForgetAccount removes an account's main state and its state-tree leaf. It
-// is what a joining node does with an account its own execution created and
-// no peer holds (executor spec, "Sync", "Execute, and repair on a mismatch"):
-// after it the executor reads the account as absent and the local root holds
-// no leaf for it. Use it on a batch of its own that has read nothing of the
-// account, since it writes beneath the batch's cached records.
+// ForgetAccount removes an account whole: its main state, every chain it
+// lists emptied (the list names its index chains), its chain list, its directory
+// and its pending list cleared, and its state-tree leaf. It is what a joining
+// node does with an account its own execution created and no peer holds
+// (executor spec, "Sync", "Execute, and repair on a mismatch"): after it the
+// executor reads the account as absent, the account holds nothing (invariant
+// 13), and the local root holds no leaf for it. The entries of an emptied
+// chain are left in the store unreachable: no head counts them. Use it on a
+// batch of its own that has read nothing of the account, since it writes the
+// main state beneath the batch's cached records.
 func (b *Batch) ForgetAccount(u *url.URL) error {
-	err := b.kvs().Delete(record.NewKey("Account", u, "Main"))
+	a := b.Account(u)
+	chains, err := a.Chains().Get()
 	if err != nil {
+		return errors.UnknownError.WithFormat("load the chains of %v: %w", u, err)
+	}
+	for _, meta := range chains {
+		c, err := a.ChainByName(meta.Name)
+		if err != nil {
+			return errors.UnknownError.WithFormat("chain %v/%s: %w", u, meta.Name, err)
+		}
+		// The list names index chains too, so each is emptied as itself.
+		// Its head is deleted beneath the batch: a chain written through
+		// the batch is listed again when the account commits.
+		if err := b.kvs().Delete(c.Inner().Key().Append("Head")); err != nil {
+			return errors.UnknownError.WithFormat("empty chain %v/%s: %w", u, meta.Name, err)
+		}
+	}
+	if err := a.Chains().Put(nil); err != nil {
+		return errors.UnknownError.WithFormat("clear the chain list of %v: %w", u, err)
+	}
+	if err := a.Directory().Put(nil); err != nil {
+		return errors.UnknownError.WithFormat("clear the directory of %v: %w", u, err)
+	}
+	if err := a.Pending().Put(nil); err != nil {
+		return errors.UnknownError.WithFormat("clear the pending list of %v: %w", u, err)
+	}
+	if err := b.kvs().Delete(record.NewKey("Account", u, "Main")); err != nil {
 		return errors.UnknownError.WithFormat("delete the main state of %v: %w", u, err)
 	}
 	err = b.BPT().Delete(record.NewKey("Account", u))

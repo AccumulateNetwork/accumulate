@@ -290,6 +290,16 @@ func TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated(t *testing.T) {
 		require.ErrorIs(t, err, errors.NotFound, "the joiner still holds %v, which no peer holds", extra)
 		_, err = batch.BPT().Get(record.NewKey("Account", extra))
 		require.ErrorIs(t, err, errors.NotFound, "the joiner's tree still holds a leaf for %v", extra)
+
+		// Removed whole: nothing of it is left to hold (invariant 13).
+		chains, err := batch.Account(extra).Chains().Get()
+		require.NoError(t, err)
+		require.Empty(t, chains, "the joiner still lists chains of %v, which it deleted", extra)
+		c, err := batch.Account(extra).ChainByName("main")
+		require.NoError(t, err)
+		head, err := c.Inner().Head().Get()
+		require.NoError(t, err)
+		require.Zero(t, head.Count, "the joiner still holds the main chain of %v, which it deleted", extra)
 	})
 	t.Logf("%d repairs before the match", counter.repairs)
 
