@@ -810,7 +810,27 @@ named a backfilled history, are retired: nothing reached them and nothing
 could. What a joined node cannot answer *for a block it did not execute* —
 an entry the sequencer is asked for from before it joined — it refuses per
 request with `NotReady` naming the block it joined at, never `NotFound`,
-which a requester counts as a miss (#4295, DIFFERENCES E11). The node's state
+which a requester counts as a miss (#4295, DIFFERENCES E11).
+
+**A node serves only what it can serve signed.** An anchor is worth the
+quorum that signed it and nothing else, so a node that holds an anchor
+without its signatures does not serve it: an expanded read of an anchor pool's
+main chain whose entry is an anchor carrying no signatures is refused with
+`NotReady` (`servedSigned`, `queryChainEntry`), and the reader asks a node
+that executed it. A node that joined holds exactly that for its pulled range:
+the join brings the pool's entries and the message behind each (§3), and not
+the signature history an anchor's signatures are read from (#4416), so an
+`ACTIVE` node refuses those anchors rather than serving them bare — served
+bare, every reader that checks them refused them as unsigned, 22 in run
+`20260924T074702Z` (#4413). The pool's anchor sequence chain is not refused:
+it holds the anchors the partition *sent*, whose signatures the receivers
+hold and the producer never does. On the reading side, **an anchor served
+with no signatures is the serving peer's gap, not a fact about the anchor**:
+the anchor source does not move its cursor past it, and the next page asks
+the next peer for it; an anchor that carries signatures and fails is refused
+once and passed, because every peer serves the same signatures. Until #4416
+brings the history with the pull, a joined node cannot serve its pulled range
+at all (DIFFERENCES E11). The node's state
 is a gauge and is advertised, but advertising is
 not what keeps a request away: a peer finds any installed handler by libp2p
 identify ahead of the DHT (`connectedPeersDiscoverer`), so what protects a
