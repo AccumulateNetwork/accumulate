@@ -472,10 +472,14 @@ never name, and it contains no unroutable name, which envelopes do.
 
 **The page diff is the backstop and it must stay reachable.** It runs on the
 first round, because a node that has just started does not know whether the
-store it holds is the state of `R`; on a cadence after that; and instead of the
-walk whenever `(R, Q]` is wider than a walk is worth. Running it only when the
-ledger named nothing makes it unreachable, because one name that can never be
-satisfied keeps the set non-empty for the life of the process (#4306). It is
+store it holds is the state of `R`; on a cadence after that, counted in rounds
+that fetch; and instead of the walk whenever `(R, Q]` is wider than a walk is
+worth. Running it only when the ledger named nothing makes it unreachable,
+because one name that can never be satisfied keeps the set non-empty for the
+life of the process (#4306). So does a cadence counted in every round: a round
+that is still settling an earlier pass fetches nothing and decides nothing, and
+a pass that settles in a fixed number of rounds can make the fetching rounds
+miss every multiple of the cadence for ever (#4395). It is
 also what covers an account whose body moved with no chain of its own moving,
 which the block ledger cannot name.
 
