@@ -431,19 +431,34 @@ func (x TransactionMessage) postProcess(batch *database.Batch, ctx *TransactionC
 		}
 	}
 
-	// Clear votes and payments
+	// Clear votes and payments. Only what holds something is cleared:
+	// writing an empty record marks the principal dirty, and a dirty account
+	// that does not exist would get a state-tree leaf hashing to nothing
+	// (executor spec, invariant 13; #4437).
 	if delivered {
 		txn := batch.Account(ctx.transaction.Header.Principal).
 			Transaction(ctx.transaction.ID().Hash())
 
-		err = txn.Payments().Put(nil)
+		payments, err := txn.Payments().Get()
 		if err != nil {
-			return errors.UnknownError.WithFormat("clear payments: %w", err)
+			return errors.UnknownError.WithFormat("load payments: %w", err)
+		}
+		if len(payments) > 0 {
+			err = txn.Payments().Put(nil)
+			if err != nil {
+				return errors.UnknownError.WithFormat("clear payments: %w", err)
+			}
 		}
 
-		err = txn.Votes().Put(nil)
+		votes, err := txn.Votes().Get()
 		if err != nil {
-			return errors.UnknownError.WithFormat("clear votes: %w", err)
+			return errors.UnknownError.WithFormat("load votes: %w", err)
+		}
+		if len(votes) > 0 {
+			err = txn.Votes().Put(nil)
+			if err != nil {
+				return errors.UnknownError.WithFormat("clear votes: %w", err)
+			}
 		}
 	}
 
