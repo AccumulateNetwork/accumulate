@@ -391,6 +391,54 @@ is `nodeMustJoin(lastBlock) = lastBlock > GenesisBlock`, and was
 `lastBlock > 0` until #4304. Genesis is not an execution but it does write the
 ledger at block 1, so the old test was true of every node ever started.
 
+**The messages behind pulled chain entries (#4400, 2026-09-24)**: until
+this, the spine pull asked for chain entries unexpanded and nothing wrote the
+message an entry names, so a restarted validator that fell one anchored block
+behind could not open its first block: the producer-cache seed and
+`lastAnchoredBlock` load the message behind anchor pool entries the node did
+not execute (run `20260924T052134Z`, acc-bvn3-val1; reproduced by
+`TestAJoinedNodeCanOpenItsFirstBlockAfterARestart`). The pull now takes a
+spine transaction chain's messages with its entries, checked as executor.md
+"Sync" §2–3 say, and the seed rebuilds a BVN's synthetics only for blocks
+after the one the node joined at (`TestAJoinedBVNNodeCanOpenItsFirstBlockAfterARestart`
+— the next failure the debugger predicted, reproduced before the fix). What is
+still different, or not known:
+
+- **Only the seed is known to keep the rule for state-only chains.** An
+  account pulled state-only (`<partition>/synthetic`, every leaf account) has
+  the entries of its open mark set and no message behind any entry of a block
+  the node did not execute. The seed no longer reads them; no other reader of
+  a message behind a chain entry (healing, the sequencer by position, the
+  v3 querier's expanded entries) was audited for a block at or below the join,
+  and one that reads there finds `NotFound`, which §6 says must be
+  `NotReady`.
+- **The join block the seed trusts is memory.** It is what the process's own
+  join recorded (`synthcache.JoinedAt`, in `SettleStaging`) before the
+  handoff's first block. Every restarted process on this line joins before it
+  opens a block, so it is always set; a process that opened a block without
+  settling a join would seed from blocks it did not execute, as before.
+- **A stored message is not content-addressed for wrappers.** The executor
+  stores an anchor, sequenced or synthetic message that refers to its
+  transaction by hash under the hash of the message as it arrived (#4236), so
+  what a peer serves under such an entry never hashes to it. The pull proves
+  it by resolving the reference — from the pass, or by `QueryMessage` to the
+  same peer — and hashing the result; a reader that checks a stored message
+  against its key without doing that will refuse every honest peer.
+- **Messages no peer holds would make the spine unpullable.** A node asks only
+  for the entries past its own height, so a restart asks only for its gap; but
+  an entry whose message no peer holds — a network started from a snapshot
+  without messages, or history pruned below a node's gap — is refused from
+  every peer and the spine never settles. Not observed and not tested.
+- **The producer's anchors are seeded from blocks the node did not execute.**
+  The anchor sequence chain's messages now come with the spine, so the seed
+  puts anchors produced while the node was away into its cache. An anchor is
+  the partition's whoever produced it, and serving it is what a destination
+  behind on the stream needs (#4277); it is stated in §6 rather than excluded.
+- **A failed seed is retried, not survived.** The seed now counts only when
+  it succeeds, so a seed that fails deterministically fails every block it
+  opens, loudly, instead of the first one and then running on an empty cache.
+  A failed handoff stays terminal on both sides (#4401).
+
 **The exception is entering the join, not a flag inside it (#4304)**. The spec
 says only a node that has executed no block may start without asking; on this
 line such a node does not ask, because the daemon does not run the join for
