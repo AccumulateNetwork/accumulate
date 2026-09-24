@@ -50,8 +50,12 @@ type Buffer interface {
 	// spec, "Sync", step 4), so the join passes a load that does nothing.
 	ApplyStaging(load func() error) error
 
-	// Handoff leaves collecting mode at block q and produces the buffered
-	// groups from q + 1 in order.
+	// Handoff leaves collecting mode at block q and produces, as q + 1,
+	// q + 2, …, the buffered groups committed at a leader round above the
+	// one q's system ledger records (executor spec, "Sync", step 5; #4362).
+	// NotReady: the groups up to that round have not all arrived, or the
+	// state records no round. Conflict: the state is behind what this node
+	// can produce from, and the join pulls again.
 	Handoff(q uint64) error
 }
 

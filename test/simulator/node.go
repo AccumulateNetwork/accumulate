@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -43,6 +44,9 @@ type Node struct {
 	store      keyvalue.Beginner
 	executor   execute.Executor
 	join       *joinState
+	nodeState  *nodeState
+	joinState  *join.PulledState
+	stopped    bool
 	conductor  *crosschain.Conductor
 	synthCache *synthcache.Cache
 	heals      *crosschain.HealCounters

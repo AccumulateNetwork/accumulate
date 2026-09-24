@@ -299,7 +299,11 @@ consensus from that round rather than from zero.
 (executor.md, "Sync"): the node collects every committed block instead of
 executing it, takes a running validator's staging, pulls the state, and
 executes from the block after its root matches. The checkpoint decides where
-the node stands in the DAG; the join decides what it executes. A node that
+the node stands in the DAG; the join decides what it executes. The round it
+restores is also what the join's handoff measures the pulled state against:
+consensus delivers the groups committed after it, so a state committed at a
+round below it would need groups the node will never be given (executor.md,
+"Sync", step 5; #4362). A node that
 executed the blocks between its last one and the network's — by replaying the
 committed log, or by catching up certificate by certificate — would execute
 them from a staging its peers do not have, and the root chain is a Merkle root

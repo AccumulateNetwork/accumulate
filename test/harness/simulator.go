@@ -97,7 +97,7 @@ func Recordings(tb testing.TB) simulator.RecordingFunc {
 // NewSimWith creates a Harness for the given simulator instance and wraps it as
 // a Sim.
 func NewSimWith(tb testing.TB, s *simulator.Simulator) *Sim {
-	return &Sim{*New(tb, s.Services(), s), s}
+	return &Sim{*New(tb, s.HarnessServices(), s), s}
 }
 
 // Sim is a Harness with some extra simulator-specific features.

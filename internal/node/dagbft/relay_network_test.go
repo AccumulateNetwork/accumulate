@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	nodehttp "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
@@ -271,6 +272,7 @@ func TestARelayCarriesWhatItCannotPropose(t *testing.T) {
 			Host:              chosts[i],
 			PubSub:            ps,
 			InitialValidators: initial,
+			Database:          database.OpenInMemory(nil),
 		})
 		require.NoError(t, err)
 

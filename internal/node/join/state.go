@@ -242,6 +242,11 @@ func NewState(opts StateOptions) (*PulledState, error) {
 // process can run several nodes of one partition, and each has its own.
 func (s *PulledState) Machine() *nodestate.Machine { return s.machine }
 
+// Sources is what this join pulls from: the peers it asks, which never include
+// this node (#4303). Exposed so a test can check the set the join itself uses
+// rather than a second one built beside it.
+func (s *PulledState) Sources() Sources { return s.sources }
+
 // Pull fetches what the blocks changed, and this partition's spine the first
 // time, as ONE PASS: the peer's current state, held until the root its
 // receipts end at is proven, then written whole. Every account is verified
