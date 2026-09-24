@@ -8,6 +8,7 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,12 +37,16 @@ func TestALeafWithNoBodyIsServedWithItsReceipt(t *testing.T) {
 	absent := url.MustParse("nobody/tokens")
 
 	db := database.OpenInMemory(nil)
+	// A signature's hash, as RecordHistory appends it. Not zero: a chain whose
+	// only entry is zero has the empty chain's anchor, and the leaf would be
+	// the empty account's.
+	sigHash := sha256.Sum256([]byte("a signature on a principal that does not exist"))
 	batch := db.Begin(true)
 	ledger := new(protocol.SystemLedger)
 	ledger.Url = sysLedger
 	ledger.Index = 9
 	require.NoError(t, batch.Account(sysLedger).Main().Put(ledger))
-	require.NoError(t, batch.Account(ghost).SignatureChain().Inner().AddEntry(make([]byte, 32), false))
+	require.NoError(t, batch.Account(ghost).SignatureChain().Inner().AddEntry(sigHash[:], false))
 	require.NoError(t, batch.Account(void).MarkDirty())
 	require.NoError(t, batch.UpdateBPT())
 	require.NoError(t, batch.Commit())
