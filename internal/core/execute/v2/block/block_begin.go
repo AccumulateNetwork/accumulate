@@ -41,20 +41,22 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	// a reader takes staging and the block it is as of together (#4291).
 	block.staging.AtBlock(params.Index)
 
-	// Once, at the first block this executor opens: rebuild the cache for the
-	// recent blocks whose anchors have not returned (genesis produced them, or
-	// the node restarted). A start-up read, by position, not a runtime path.
-	var seedErr error
-	x.cacheSeedOnce.Do(func() { seedErr = x.seedSynthCache(block.Batch, params.Index, params.IsLeader) })
-	if seedErr != nil {
-		return nil, errors.UnknownError.WithFormat("seed synthetic cache: %w", seedErr)
-	}
-
 	defer func() {
 		if err != nil {
 			block.Batch.Discard()
 		}
 	}()
+
+	// Once, at the first block this executor opens: rebuild the cache for the
+	// recent blocks whose anchors have not returned (genesis produced them, or
+	// the node restarted). A start-up read, by position, not a runtime path.
+	// Only a seed that succeeds counts: one that failed is tried again at the
+	// next open, or that block would run on a cache nothing filled (#4400).
+	// Seeding is idempotent -- what the cache already holds is kept.
+	err = x.seedCacheOnce(block.Batch, params.Index, params.IsLeader)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("seed synthetic cache: %w", err)
+	}
 
 	err = x.EventBus.Publish(execute.WillBeginBlock{BlockParams: params})
 	if err != nil {

@@ -343,3 +343,19 @@ func (x *Executor) seedProducedAnchors(batch *database.Batch, oldest uint64) err
 		"count", len(anchors), "from", anchors[len(anchors)-1].Number, "to", anchors[0].Number)
 	return nil
 }
+
+// seedCacheOnce seeds the cache unless a seed has already succeeded. A seed
+// that fails is not counted, so the next block to open tries again rather than
+// running on a cache nothing filled (#4400).
+func (x *Executor) seedCacheOnce(batch *database.Batch, current uint64, isLeader bool) error {
+	x.cacheSeedMu.Lock()
+	defer x.cacheSeedMu.Unlock()
+	if x.cacheSeeded {
+		return nil
+	}
+	if err := x.seedSynthCache(batch, current, isLeader); err != nil {
+		return err
+	}
+	x.cacheSeeded = true
+	return nil
+}
