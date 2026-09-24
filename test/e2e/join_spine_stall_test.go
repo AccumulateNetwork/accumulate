@@ -13,7 +13,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -37,19 +36,12 @@ import (
 // Through the production wiring: join.QueryPeers finds the Directory's query
 // service and addresses each peer by name over the simulator's client; each
 // node answers with its registered querier behind its join's gate.
-//
-// Since #4421 a join takes the pool whole in every pass, with the signatures
-// behind each anchor (#4416), so the joined node no longer refuses any of its
-// pulled range by itself. Its store is written here as a join before them
-// left it: the anchors of the pool's main chain past a point held without
-// their signature history, which is what its querier refuses by (#4413).
 func TestAJoinHeldAtAnAnchorNoPeerServesSaysWhereAndWhom(t *testing.T) {
 	const joiner, rebooted = 1, 2
 	sim, p, _, _ := joinADirectoryNodeByPull(t)
 	forgetPulledSignatures(t, p.NodeDatabase(joiner))
 	ctx := context.Background()
 	dnPool := DnUrl().JoinPath(AnchorPool)
-	unsignedFrom(t, p.NodeDatabase(joiner), dnPool)
 	bvn := PartitionUrl("BVN0")
 	authority, err := anchorsrc.FromStore(sim.S.Partition("BVN0").NodeDatabase(0), bvn)
 	require.NoError(t, err)
@@ -107,7 +99,7 @@ func TestAJoinHeldAtAnAnchorNoPeerServesSaysWhereAndWhom(t *testing.T) {
 	// The production join reads it the same way, and says so on the gauge
 	// (review F2): a BVN0 node restarts, and the join the simulator builds
 	// for it, as the daemon does, runs its round. Directory node 0 restarts
-	// too, so no Directory peer the BVN0 join can ask serves that entry signed.
+	// too, so no Directory peer the BVN0 join can ask serves entry 25 signed.
 	p.RestartNode(0)
 	b := sim.S.Partition("BVN0")
 	const bvnJoiner = 1
@@ -124,35 +116,6 @@ func TestAJoinHeldAtAnAnchorNoPeerServesSaysWhereAndWhom(t *testing.T) {
 	require.Equal(t, float64(-1), spineStalledGauge(t, "BVN0"), "a join built fresh is not stalled")
 	_ = b.NodeJoinState(bvnJoiner).Pull(ctx)
 	require.Equal(t, float64(first), spineStalledGauge(t, "BVN0"), "the join's round does not report the stall")
-}
-
-// unsignedFrom drops the signature history of the anchors of pool's main
-// chain from a position that is not a page boundary to its head, as a join
-// that took them state-only left them (#4421).
-func unsignedFrom(t *testing.T, db *database.Database, pool *url.URL) {
-	t.Helper()
-	require.NoError(t, db.Update(func(batch *database.Batch) error {
-		c := batch.Account(pool).MainChain()
-		head, err := c.Head().Get()
-		if err != nil {
-			return err
-		}
-		from := head.Count - 3
-		if from%int64(anchorsrc.DefaultPageSize) == 0 {
-			from--
-		}
-		require.Positive(t, from, "precondition: the pool holds anchors to drop")
-		for i := from; i < head.Count; i++ {
-			h, err := c.Entry(i)
-			if err != nil {
-				return err
-			}
-			if err := batch.Account(pool).Transaction(*(*[32]byte)(h)).History().Put(nil); err != nil {
-				return err
-			}
-		}
-		return nil
-	}))
 }
 
 // spineStalledGauge is accumulate_join_spine_stalled_entry for a partition,
