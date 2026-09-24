@@ -1059,6 +1059,16 @@ seventh nobody had named.
   serving branch, the voting and `pull.ErrDissent`/`ErrUnconfirmed` are
   deleted; a body-less answer is a failed source. Nothing is migrated: this
   line runs fresh installs, so no store holds such a leaf.
+- **The block ledger's content changed, ungated** (#4437)**.** The record now
+  names every account a block changes, with an entry naming no chain for a
+  state-only change, and it is written just before the BPT update rather
+  than before the major block. Both change the record's hash and so the
+  system ledger's leaf; ungated under this line's fresh-install rule, like
+  #4358. The pre-Jiuquan per-block account form is unchanged. The join no
+  longer adds the system ledger and the synthetic ledger to the changed set
+  by hand (#4306): it reads the record alone. A leaf with no main state that
+  holds something is kept and counted, never skipped; after #4437 nothing
+  known writes one.
 - **A lone scheduled event is not bound to its block** (#4399 review F2)**.**
   The events BPT hashes values and not keys (`bpt.leaf.getHash`), and a
   one-sided branch passes its child's hash up, so an events tree holding one

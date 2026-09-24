@@ -122,16 +122,17 @@ func (b bodyless) QueryAccount(ctx context.Context, u *url.URL, q *api.DefaultQu
 }
 
 // TestTheWritesThatMadeEmptyLeavesMakeNone: dirtying a missing account's
-// bookkeeping (void) and recording a signature chain on a principal with no
-// main state (ghost) are the two writes that used to give an account with no
-// state a leaf. Neither does (#4437).
+// bookkeeping (void) gives it no leaf (#4437). The fixture's ghost is written
+// straight onto the chain, below RecordHistory, so it keeps its leaf: an
+// account with no main state that holds a chain is never hidden from the tree
+// (it is reported instead).
 func TestTheWritesThatMadeEmptyLeavesMakeNone(t *testing.T) {
 	src, _, _, _, ghost, void, bodied, _ := mainlessFixture(t)
-	for _, u := range []*url.URL{ghost, void} {
-		_, err := rvLeaf(src, u)
-		require.Error(t, err, "%v has no main state and got a state-tree leaf", u)
-	}
-	_, err := rvLeaf(src, bodied)
+	_, err := rvLeaf(src, void)
+	require.Error(t, err, "%v holds nothing and got a state-tree leaf", void)
+	_, err = rvLeaf(src, ghost)
+	require.NoError(t, err, "a chain on %v was hidden from the tree", ghost)
+	_, err = rvLeaf(src, bodied)
 	require.NoError(t, err, "precondition: an account with main state has a leaf")
 }
 

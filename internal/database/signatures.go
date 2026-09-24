@@ -86,6 +86,23 @@ func (a *SignatureSetEntry) PathHash() [32]byte {
 
 // RecordHistory adds the message to the signature chain and history.
 func (c *AccountTransaction) RecordHistory(msg messaging.Message) error {
+	// An account that does not exist keeps no history. A signature, payment
+	// or request for a transaction whose principal is missing used to be
+	// appended to that missing account's signature chain, which gave an
+	// account with no main state a chain and so a state-tree leaf; the
+	// transaction then failed with "missing principal" and the leaf stayed
+	// (executor spec, invariant 13; #4437). The message's signer list is
+	// still recorded: it is not account state.
+	_, err := c.parent.Main().Get()
+	switch {
+	case err == nil:
+	case errors.Is(err, errors.NotFound):
+		hash := c.key.Get(3).([32]byte)
+		return errors.UnknownError.Wrap(c.parent.parent.Message(hash).Signers().Add(c.parent.Url()))
+	default:
+		return errors.UnknownError.WithFormat("load account: %w", err)
+	}
+
 	// The count now will be the index of the new entry
 	head, err := c.parent.SignatureChain().Head().Get()
 	if err != nil {

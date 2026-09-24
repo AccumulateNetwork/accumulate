@@ -22,28 +22,18 @@ func strs(urls []*url.URL) []string {
 	return out
 }
 
-// TestChangedAccounts_CarriesTheSystemAccountsTheRecordCannot — the two
-// accounts that made the root unreachable (#4306).
-//
-// <partition>/synthetic is skipped by enumerateModifiedChains outright, and
-// <partition>/ledger's own chains are anchored after the block's entry list is
-// built, so neither is reliably in a block's record. Both change their leaf on
-// every non-empty block: the ledger carries the scheduled-events BPT and the
-// block index, the synthetic account the delivery queues. A set without them
-// chases a root it can never reach, however long the node waits.
-func TestChangedAccounts_CarriesTheSystemAccountsTheRecordCannot(t *testing.T) {
+// TestChangedAccounts_IsWhatTheRecordNames — the record names every account a
+// block changes, the system ledger and the synthetic ledger included (#4437),
+// so the changed set adds nothing the record does not name. Adding the two
+// system accounts by hand (#4306) would hide a record that left them out.
+func TestChangedAccounts_IsWhatTheRecordNames(t *testing.T) {
 	part := protocol.PartitionUrl("BVN0")
 	alice := protocol.AccountUrl("alice", "tokens")
 
 	got := strs(ChangedAccounts(part, []*protocol.BlockEntry{
 		{Account: alice, Chain: "main", Index: 3},
 	}))
-
-	require.Contains(t, got, alice.String())
-	require.Contains(t, got, part.JoinPath(protocol.Ledger).String(),
-		"the partition's ledger changes every block and no block's record names it")
-	require.Contains(t, got, part.JoinPath(protocol.Synthetic).String(),
-		"the partition's synthetic account changes every block and enumerateModifiedChains skips it")
+	require.Equal(t, []string{alice.String()}, got)
 }
 
 // TestChangedAccounts_DropsWhatCannotBeRouted — acc://unknown is what
@@ -83,7 +73,6 @@ func TestChangedAccounts_IsASetInOrder(t *testing.T) {
 	require.Equal(t, []string{
 		alice.String(),
 		part.JoinPath(protocol.Ledger).String(),
-		part.JoinPath(protocol.Synthetic).String(),
 	}, got)
 }
 

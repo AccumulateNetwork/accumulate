@@ -273,6 +273,13 @@ func loadBlockEntry(batch *database.Batch, entry *protocol.BlockEntry) (*api.Cha
 	r.Name = entry.Chain
 	r.Index = entry.Index
 
+	// An entry that names no chain says the block changed the account's
+	// state without appending to any of its chains (#4437). There is no
+	// chain entry to expand; the name is the answer.
+	if entry.Chain == "" {
+		return r, nil
+	}
+
 	chain, err := batch.Account(entry.Account).ChainByName(entry.Chain)
 	if err != nil {
 		return r, errors.UnknownError.WithFormat("load %s chain: %w", entry.Chain, err)

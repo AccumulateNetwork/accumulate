@@ -10,6 +10,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -29,18 +31,30 @@ func (a *Account) VerifyHash(hash []byte) error {
 
 // PutBpt writes the record's BPT entry.
 func (a *Account) putBpt() error {
-	// The state tree holds a leaf only for an account that exists, and an
-	// account exists when it has main state (executor spec, invariant 13;
-	// #4437). A write to a missing account's bookkeeping alone — a
-	// transaction's votes, payments or signatures recorded against a
-	// principal that turns out not to exist — marks it dirty, and without
-	// this it would get a leaf hashing to nothing.
+	// The state tree holds no leaf for an account that holds nothing
+	// (executor spec, invariant 13; #4437). A write to a missing account's
+	// bookkeeping alone — a transaction's votes or payments, a vote recorded
+	// against a principal that does not exist — marks it dirty, and without
+	// this it got a leaf hashing to nothing, identical for every such
+	// account. Only an account that holds NOTHING is skipped. One with no main
+	// state that holds something else — a chain, a pending transaction, a
+	// directory entry — keeps its leaf, so no change is hidden from the tree,
+	// and is counted and logged: it is a write that should not have happened
+	// (RecordHistory no longer makes one).
 	_, err := a.Main().Get()
 	switch {
 	case err == nil:
 		// Ok
 	case errors.Is(err, errors.NotFound):
-		return nil
+		blank, err := a.holdsNothing()
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		if blank {
+			return nil
+		}
+		mStatelessAccountLeaves.Inc()
+		a.parent.logger.Error("An account with no main state holds state; its leaf is kept", "account", a.Url())
 	default:
 		return errors.UnknownError.Wrap(err)
 	}
@@ -250,3 +264,38 @@ func (a *Account) StateReceipt() (*merkle.Receipt, error) {
 
 	return receipt, nil
 }
+
+// holdsNothing is whether every part of the account its leaf hashes is empty
+// apart from the main state: no chain, no pending transaction, no directory
+// entry.
+func (a *Account) holdsNothing() (bool, error) {
+	chains, err := a.Chains().Get()
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("load chains: %w", err)
+	}
+	if len(chains) > 0 {
+		return false, nil
+	}
+	pending, err := a.Pending().Get()
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("load pending: %w", err)
+	}
+	if len(pending) > 0 {
+		return false, nil
+	}
+	dir, err := a.Directory().Get()
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("load directory: %w", err)
+	}
+	return len(dir) == 0, nil
+}
+
+// mStatelessAccountLeaves counts leaves written for an account that has no
+// main state and holds something else. Any non-zero count is a defect: some
+// write gave a missing account state (#4437).
+var mStatelessAccountLeaves = promauto.NewCounter(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "database",
+	Name:      "stateless_account_leaves_total",
+	Help:      "State-tree leaves written for an account with no main state that holds a chain, a pending transaction or a directory entry; any non-zero count is a defect",
+})

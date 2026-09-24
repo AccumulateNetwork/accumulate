@@ -525,9 +525,10 @@ because one name that can never be satisfied keeps the set non-empty for the
 life of the process (#4306). So does a cadence counted in every round: a round
 that is still settling an earlier pass fetches nothing and decides nothing, and
 a pass that settles in a fixed number of rounds can make the fetching rounds
-miss every multiple of the cadence for ever (#4395). It is
-also what covers an account whose body moved with no chain of its own moving,
-which the block ledger cannot name.
+miss every multiple of the cadence for ever (#4395). It is a backstop, not a
+second source: the block ledger names every account whose leaf a block
+changes (invariant 14), so an account the page diff finds and the ledger did
+not name is a defect in the record.
 
 **`R` is the block this node's EXECUTOR last executed, and it is read once.**
 It is not `<partition>/ledger`'s `Index` read again each round: that ledger is
@@ -1087,9 +1088,13 @@ transactions are ever candidates for a shard.
 
 ### The block ledger
 
-Every block leaves a record of which chains it changed: for block *N*, the
-list of (account, chain, index) entries the block's execution touched. This is
-the **block ledger**. It is the only place the block-to-chains direction exists
+Every block leaves a record of what it changed: for block *N*, the list of
+(account, chain, index) entries the block's execution appended, and an entry
+naming no chain for every other account whose state the block changed. This is
+the **block ledger**. It names every account whose state-tree leaf the block
+changes — the system ledger, which the record is written into, and the
+receiving side's synthetic ledger, which moves its delivered positions without
+an append, included — and no account that holds nothing (invariant 14). It is the only place the block-to-chains direction exists
 — the root chain commits to every changed chain's anchor, but an anchor is a
 hash, not a name — and it is what the block query, the block event stream and
 the metrics service answer from.
@@ -1175,13 +1180,24 @@ one thing a per-block record must never do. An empty block has no entry.
 13. **The state tree holds a leaf only for an account that exists.** An
     account exists when it has main state. A write that touches only an
     account's bookkeeping — the votes and payments recorded against a
-    transaction, a signature recorded before execution finds the principal
-    missing — does not create an account, and the block inserts no leaf for
-    it. Clearing a record that is already empty is not a write. Before this
+    transaction — does not create an account, and the block inserts no leaf
+    for an account that holds nothing. Clearing a record that is already
+    empty is not a write, and a missing account keeps no history: a
+    signature, payment or request for a transaction whose principal does not
+    exist is not appended to that principal's signature chain. An account
+    with no main state that does hold something — a chain, a pending
+    transaction, a directory entry — is a defect, and it is never hidden: it
+    keeps its leaf and is counted
+    (`accumulate_database_stateless_account_leaves_total`) and logged. Before this
     rule, every transaction that failed against a missing principal left a
     leaf hashing to nothing (`db56114e…`), identical for every such account:
     state no peer could serve with a body, which the join then had to pull
     and trust on peers' word (#4397, #4406, #4437).
+14. **The block ledger names every account whose leaf the block changes, and
+    no account that holds nothing.** A joining node follows the partition
+    block by block from the block ledger alone, so an account the record
+    leaves out is one the join never pulls again, and an account it names
+    that holds nothing is a leaf no peer can serve (#4437).
 
 ### Versioning
 
@@ -1732,8 +1748,15 @@ on any other account).
 
 1. `Account(ledger).BlockLedger(index)` — a state record keyed by the block
    index, holding `database.BlockLedger{Index, Time, Entries}`. `Entries` is
-   `block.State.ChainUpdates.Entries` as collected before this step: the
-   `BlockEntry` list of every (account, chain, index) the block changed. The
+   `block.State.ChainUpdates.Entries` — every (account, chain, index) the block
+   appended — plus one `BlockEntry{Account}` naming no chain for every other
+   account the block wrote that has main state, and the system ledger itself
+   (`blockLedgerEntries`), sorted. The chain entries are also what the root
+   chain anchors; the account entries go into the record only. It is written
+   after every other write the block makes to an account and immediately
+   before the BPT update, so no leaf changes after the record is built
+   (#4437; it used to be written before the major block, whose append to the
+   anchor pool then went unnamed). The
    block-ledger chain's own append happens after that list is collected and is
    not registered as a chain update, so the record never lists itself. The list
    is also how an append learns the block already holds an entry for its chain
