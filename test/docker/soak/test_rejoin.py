@@ -381,6 +381,36 @@ class ANodeIsNotItsOwnPartition(unittest.TestCase):
         self.assertIn("no other validator of bvn1 answered at its last reading", cell)
 
 
+class TheBoundIsJudgedAtTheLastAnswer(unittest.TestCase):
+    """Review R2, case G2: rejoined and level with its partition, then it
+    misses the last two scrapes (10 s, under the 15 s silent rule) while the
+    partition moves 10 blocks. Its frozen answer against the CURRENT height
+    read "10 behind, NOT rejoined"."""
+
+    def test_a_missed_scrape_at_the_end_is_not_a_lag(self):
+        s = Series()
+        start = {c: T0 - 3600 for c in VALS}
+        s.sample(T0, network(T0, 200, {"bvn1": 200, "bvn2": 200, "bvn3": 200}), start)
+        st = dict(start, **{"acc-bvn1-val1": T0 + 10})
+        s.sample(T0 + 15, network(0, 205, {"bvn1": 205, "bvn2": 205, "bvn3": 205},
+                                  {"acc-bvn1-val1": scrape({"directory": 0, "bvn1": 0},
+                                                           {"directory": 190, "bvn1": 190})}), st)
+        s.sample(T0 + 100, network(0, 1385, {"bvn1": 1385, "bvn2": 1385, "bvn3": 1385}), st)
+        for t, h in ((T0 + 105, 1390), (T0 + 110, 1395)):
+            per = network(0, h, {"bvn1": h, "bvn2": h, "bvn3": h})
+            del per["acc-bvn1-val1"]
+            s.sample(t, per, st)
+        s.finish(T0 + 110)
+        rd = tempfile.mkdtemp(prefix="rejoin-r2-")
+        s.write(rd)
+        with open(os.path.join(rd, "nodestate.csv")) as f:
+            rows = list(csv.DictReader(f))
+        lines = [anchor_line(c, iso(T0 + 90), src, "acc://dn.acme", 1380, 1200, "aaaaaaaa")
+                 for c in VALS for src in ("Directory", "BVN1") if src == "Directory" or c.startswith("acc-bvn1")]
+        cell = rejoin.row(rows, "validator", 5, rejoin.Anchors(rejoin.anchor_events(lines)))
+        self.assertIn("rejoined 2 of 2 start(s) after the launch", cell)
+
+
 class AnAbortedStartIsSupersededNotStuck(unittest.TestCase):
     """Review F7, case D2: two restarts 20 s apart. The first start never
     reached ACTIVE because the container started again; it read `NOT

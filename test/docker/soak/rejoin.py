@@ -244,7 +244,15 @@ def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True,
     elif end is None:
         missing.append("no last reading (the monitor wrote no final row)")
     else:
-        ex, ph = _int(end.get("executedBlock")), _int(end.get("partitionHeight"))
+        ex, ph_now = _int(end.get("executedBlock")), _int(end.get("partitionHeight"))
+        # The bound is judged on the pair taken at one answer (review R2): the
+        # node's executed block and the partition's height at that answer.
+        # Against the CURRENT height, a healthy node that missed the last
+        # scrape or two read 5-14 blocks behind. A file without the column
+        # (before R2) falls back to the current height.
+        ph = ph_now
+        if "partitionHeightAtLastAnswer" in end:
+            ph = _int(end.get("partitionHeightAtLastAnswer"))
         last, at = _epoch(end.get("lastAnswered")), _epoch(end.get("time"))
         silent = (end.get("kind") == "final" and last is not None and at is not None
                   and at - last > silent_after)
@@ -254,7 +262,7 @@ def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True,
             missing.append("silent since %s: its last answer, %ds before the end, was executed %s; "
                            "the partition was at %s at the end"
                            % (end.get("lastAnswered"), at - last,
-                              "?" if ex is None else ex, "?" if ph is None else ph))
+                              "?" if ex is None else ex, "?" if ph_now is None else ph_now))
         elif ex is None or ph is None:
             if ex is not None and _int(end.get("validatorsAnswered")) == 0:
                 missing.append("no other validator of %s answered at its last reading" % part)
@@ -262,9 +270,10 @@ def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True,
                 missing.append("executed height not measured (no accumulate_node_executed_block at its last reading)")
         elif ph - ex > max_behind:
             ans = _int(end.get("validatorsAnswered"))
-            gap = ("executed %d vs partition %d at its last reading (%d behind; bound %d%s)"
+            gap = ("executed %d vs partition %d at its last reading (%d behind; bound %d%s%s)"
                    % (ex, ph, ph - ex, max_behind,
-                      "" if ans is None else "; %d validators answered" % ans))
+                      "" if ans is None else "; %d other validators answered" % ans,
+                      "" if ph_now in (None, ph) else "; partition %d at the end" % ph_now))
             p = _in_pause(pauses, node, _epoch(end.get("time")), recovery)
             if p:
                 # A pause is a disturbance the node is expected to recover

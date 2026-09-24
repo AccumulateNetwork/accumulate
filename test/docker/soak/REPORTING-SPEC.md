@@ -376,7 +376,12 @@ be made (no executed gauge, no final row, no anchor line after the start)
 makes it **not established**, and says which. **A start's last reading is its
 last answer against the partition's height at the end** (review F3): every
 tracked start follows its partition's height at every sample whether or not
-it answered, and `lastAnswered` records when it last did. A start whose last
+it answered, and `lastAnswered` records when it last did. **The bound is judged on the pair taken at one answer** (review R2): its
+executed block and `partitionHeightAtLastAnswer`, the partition's height at
+that same sample; `partitionHeight` is the height at the end, stated beside
+it. Against the height at the end, a healthy node that missed the last scrape
+or two read 5–14 blocks behind. `validatorsAnswered` is the count of other
+validators at that last answer. A start whose last
 answer is older than `REJOIN_SILENT_SECS` (soak.conf, 15 s — three 5 s
 scrapes) at its `final` row is **not established (silent since …)**: judged on
 its stale answer, a node that rejoined and went dark read rejoined. It is never called rejoined on
@@ -395,7 +400,8 @@ next start is judged in its place.
 
 `nodestate.csv` carries, beside the columns above, `executedBlock`,
 `partitionHeight` (the highest block any answering validator of the partition
-executed), `startToCaughtUpS`, `validatorsAnswered` and `lastAnswered`, read at each
+executed), `startToCaughtUpS`, `validatorsAnswered`, `lastAnswered` and
+`partitionHeightAtLastAnswer`, read at each
 row's sample, and two more kinds: `caught-up`, the first sample ACTIVE and
 within the bound, and `superseded`, a start's last reading when its container
 started again. At exit the monitor writes a `final` row for **every** start,
