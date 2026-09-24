@@ -264,13 +264,12 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 	receipt, err := pullMain(ctx, src, sub, u, withReceipt)
 	switch {
 	case err == nil:
-	case withReceipt && errors.Is(err, errors.NotFound):
-		// Asked for a receipt, a peer answers NotFound only when its tree
-		// holds no leaf for the account (#4397). Kept apart from every other
-		// failure so FetchFrom can tell "no source holds it" from "a source
-		// did not answer". It is a stdlib wrap on purpose: the errors
-		// package's wrapping keeps a status code, not a sentinel.
-		return fail(fmt.Errorf("main %s: %w: %v", u, ErrNoLeaf, err))
+	case stderrors.Is(err, ErrNoLeaf):
+		// Kept apart from every other failure so FetchFrom can tell "no
+		// source holds it" from "a source did not answer" (#4397). It is a
+		// stdlib wrap on purpose: the errors package's wrapping keeps a
+		// status code, not a sentinel.
+		return fail(fmt.Errorf("main %s: %w", u, err))
 	default:
 		return fail(errors.UnknownError.WithFormat("main %s: %w", u, err))
 	}
@@ -450,7 +449,15 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 		query = &api.DefaultQuery{IncludeReceipt: &api.ReceiptOptions{ForAny: true}}
 	}
 	rec, err := src.QueryAccount(ctx, u, query)
-	if err != nil {
+	switch {
+	case err == nil:
+	case wantReceipt && errors.Is(err, errors.NotFound):
+		// Asked for a receipt, a peer answers NotFound only when its tree
+		// holds no leaf for the account (#4397). Only the account query's
+		// answer means that: a NotFound from any later query is a peer that
+		// could not serve part of what it holds.
+		return nil, fmt.Errorf("%w: %v", ErrNoLeaf, err)
+	default:
 		return nil, errors.UnknownError.WithFormat("query account: %w", err)
 	}
 
@@ -486,7 +493,127 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 	if err := batch.Account(u).Main().Put(rec.Account); err != nil {
 		return nil, errors.UnknownError.WithFormat("store main: %w", err)
 	}
+	if wantReceipt {
+		// The answer that carries a receipt carries the rest of the leaf the
+		// receipt proves; one without a receipt does not, and must not clear
+		// what the node holds.
+		if err := pullLeafBesideBody(ctx, src, batch, u, rec.Leaf); err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
 	return rec.Receipt, nil
+}
+
+// pullLeafBesideBody writes the part of a system account's leaf that only the
+// account answer carries (#4399): the synthetic ledger's delivery queues and
+// the partition ledger's scheduled events. It REPLACES what the node held --
+// an absent or empty set served clears the node's -- for the reason
+// pullDirectory replaces: a restarted node's own queue under the peer's body
+// hashes into nothing anyone anchored.
+//
+// Each queued local delivery is executed at the next block from its stored
+// message (block.drainDeliveryQueues), so the message is fetched too, and kept
+// only if it hashes to the ID the verified queue names.
+func pullLeafBesideBody(ctx context.Context, src Source, batch *database.Batch, u *url.URL, leaf *api.AccountLeaf) error {
+	if _, ok := protocol.ParsePartitionUrl(u); !ok {
+		return nil
+	}
+	if leaf == nil {
+		leaf = new(api.AccountLeaf)
+	}
+	account := batch.Account(u)
+	switch {
+	case u.PathEqual(protocol.Synthetic):
+		if err := account.LocalDeliveryQueue().Put(leaf.LocalDeliveryQueue); err != nil {
+			return errors.UnknownError.WithFormat("store local delivery queue: %w", err)
+		}
+		if err := account.CascadeDeliveryQueue().Put(leaf.CascadeDeliveryQueue); err != nil {
+			return errors.UnknownError.WithFormat("store cascade delivery queue: %w", err)
+		}
+		for _, id := range leaf.LocalDeliveryQueue {
+			if err := pullMessage(ctx, src, batch, id); err != nil {
+				return errors.UnknownError.WithFormat("queued local delivery %v: %w", id, err)
+			}
+		}
+
+	case u.PathEqual(protocol.Ledger):
+		if err := replaceEvents(account.Events(), leaf.Events); err != nil {
+			return errors.UnknownError.WithFormat("store scheduled events: %w", err)
+		}
+	}
+	return nil
+}
+
+// pullMessage fetches a stored message and keeps it only if it is the message
+// the ID names. The hash is the whole check: a message is its hash.
+func pullMessage(ctx context.Context, src Source, batch *database.Batch, id *url.TxID) error {
+	rec, err := src.QueryMessage(ctx, id, nil)
+	if err != nil {
+		return errors.UnknownError.WithFormat("query message: %w", err)
+	}
+	if rec == nil || rec.Message == nil {
+		return errors.Conflict.With("the peer served no message")
+	}
+	h := rec.Message.Hash()
+	if h != id.Hash() {
+		return errors.Conflict.WithFormat("the peer served a message that hashes to %x", h[:8])
+	}
+	return errors.UnknownError.Wrap(batch.Message(h).Main().Put(rec.Message))
+}
+
+// replaceEvents replaces a partition ledger's scheduled events with the ones
+// served, through the event sets, which keep the events BPT in step: the leaf
+// hashes that tree's root, and a root cannot be written, only rebuilt.
+func replaceEvents(events *database.AccountEvents, ev *api.LedgerEvents) error {
+	if ev == nil {
+		ev = new(api.LedgerEvents)
+	}
+
+	blocks, err := events.Minor().Blocks().Get()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	for _, b := range blocks {
+		if err := events.Minor().Votes(b).Put(nil); err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+	blocks, err = events.Major().Blocks().Get()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	for _, b := range blocks {
+		if err := events.Major().Pending(b).Put(nil); err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	for _, v := range ev.MinorVotes {
+		if v == nil {
+			continue
+		}
+		if err := events.Minor().Votes(v.Block).Put(v.Votes); err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+	for _, p := range ev.MajorPending {
+		if p == nil {
+			continue
+		}
+		if err := events.Major().Pending(p.Block).Put(p.Pending); err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	// The block lists last, so they are the peer's exactly and not the
+	// peer's plus whatever the sets above added.
+	if err := events.Minor().Blocks().Put(ev.MinorBlocks); err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if err := events.Major().Blocks().Put(ev.MajorBlocks); err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	return errors.UnknownError.Wrap(events.Backlog().Expired().Put(ev.Expired))
 }
 
 // pullDirectory replaces the account's directory list with the peer's. It

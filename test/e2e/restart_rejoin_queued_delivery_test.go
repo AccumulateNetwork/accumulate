@@ -163,6 +163,23 @@ func restartResyncUnderLoad(t *testing.T, pullWhileQueued bool) {
 			"deliveries were queued at the blocks it was served (%d of its pulls): %v's leaf commits\n"+
 			"to its LocalDeliveryQueue, which the querier does not serve and the pull does not write",
 		queuedAtPull, synth)
+
+	// Matching is not enough: the node executes the next block from here, and
+	// that block starts by draining the queue it pulled, which loads each
+	// queued delivery's message by hash (block.drainDeliveryQueues). A queue
+	// pulled without its messages matches and then fails at Q+1 (#4399).
+	batch := p.NodeDatabase(joiner).Begin(false)
+	defer batch.Discard()
+	queue, err := batch.Account(synth).LocalDeliveryQueue().Get()
+	require.NoError(t, err)
+	if pullWhileQueued {
+		require.NotEmpty(t, queue, "precondition: the root the node matched holds a queued delivery")
+	}
+	for _, id := range queue {
+		msg, err := batch.Message(id.Hash()).Main().Get()
+		require.NoError(t, err, "the queued delivery %v was pulled without its message", id)
+		require.Equal(t, id.Hash(), msg.Hash())
+	}
 }
 
 func localQueueLen(t *testing.T, db *database.Database, synth *url.URL) int {

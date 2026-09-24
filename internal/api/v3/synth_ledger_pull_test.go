@@ -8,12 +8,14 @@ package api
 
 import (
 	"context"
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -44,7 +46,14 @@ func TestASyntheticLedgerWithQueuedLocalDeliveriesCanBePulled(t *testing.T) {
 	sysLedger := part.JoinPath(protocol.Ledger)
 	other := protocol.PartitionUrl("Other")
 
-	queued := protocol.AccountUrl("alice", "tokens").WithTxID([32]byte{7})
+	// The queued delivery is a real message, stored as splitLocalDeliveries
+	// stores it before queueing it: the queue names destination@hash, and the
+	// drain at the next block executes the stored message (#4399).
+	deposit := &messaging.TransactionMessage{Transaction: &protocol.Transaction{
+		Header: protocol.TransactionHeader{Principal: protocol.AccountUrl("alice", "tokens")},
+		Body:   &protocol.SyntheticDepositTokens{Token: protocol.AcmeUrl(), Amount: *big.NewInt(1)},
+	}}
+	queued := protocol.AccountUrl("alice", "tokens").WithTxID(deposit.Hash())
 	stale := protocol.AccountUrl("bob", "tokens").WithTxID([32]byte{9})
 
 	for _, c := range []struct {
@@ -70,6 +79,7 @@ func TestASyntheticLedgerWithQueuedLocalDeliveriesCanBePulled(t *testing.T) {
 			require.NoError(t, batch.Account(synth).Main().Put(sl))
 			for _, id := range c.peer {
 				require.NoError(t, batch.Account(synth).LocalDeliveryQueue().Add(id))
+				require.NoError(t, batch.Message(id.Hash()).Main().Put(deposit))
 			}
 			ledger := new(protocol.SystemLedger)
 			ledger.Url = sysLedger
@@ -113,6 +123,18 @@ func TestASyntheticLedgerWithQueuedLocalDeliveriesCanBePulled(t *testing.T) {
 			// the account must settle against it.
 			require.NoError(t, p.Settle(peerRoot),
 				"an honest peer's synthetic ledger does not verify against the peer's own root")
+
+			// And the joined node can drain what it pulled at its next block:
+			// every queued delivery's message is held, and it is the message
+			// the queue names (block.drainDeliveryQueues loads it by hash).
+			got, err := jb.Account(synth).LocalDeliveryQueue().Get()
+			require.NoError(t, err)
+			require.Len(t, got, len(c.peer), "the joiner's queue is not the peer's")
+			for _, id := range got {
+				msg, err := jb.Message(id.Hash()).Main().Get()
+				require.NoError(t, err, "the queued delivery %v was pulled without its message", id)
+				require.Equal(t, id.Hash(), msg.Hash())
+			}
 		})
 	}
 }
