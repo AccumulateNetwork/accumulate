@@ -283,15 +283,15 @@ func TestSyntheticIsNamedByTheBlockLedger(t *testing.T) {
 	}
 
 	// (4) And the synthetic ledger account itself — the one account Paul's
-	//     proposal names — says nothing about the stage either. Received and
-	//     Pending are fields of the record that the v2 executor no longer
-	//     writes (stream_position.go flushStreams: "ONLY Delivered").
+	//     proposal names — says only how far the stage reaches: Received,
+	//     the highest number held, which every block writes (#4412). What it
+	//     holds (Pending) is still not written.
 	var synth *SyntheticLedger
 	require.NoError(t, batch.Account(PartitionUrl("BVN1").JoinPath(Synthetic)).Main().GetAs(&synth))
 	part := synth.Partition(PartitionUrl("BVN0"))
 	t.Logf("bvn1.acme/synthetic <- BVN0: delivered=%d received=%d pending=%d (staging holds %d)",
 		part.Delivered, part.Received, len(part.Pending), len(held))
-	require.Zero(t, part.Received, "Received is not maintained")
+	require.Equal(t, uint64(len(held)), part.Received, "Received is the highest number held (#4412): 1..12 are held")
 	require.Empty(t, part.Pending, "Pending is not maintained")
 	require.Zero(t, part.Delivered, "nothing has been delivered on this stream")
 

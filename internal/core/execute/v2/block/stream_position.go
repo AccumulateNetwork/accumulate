@@ -154,8 +154,10 @@ func heldCollectionProof(h *execute.Held) *protocol.AnnotatedReceipt {
 	return nil
 }
 
-// received is the largest number this stream has ever seen. It says the stream
-// is behind; it does not say what is missing, which is execute.Missing.
+// received is the largest number this node's staging has ever seen on the
+// stream. It says the stream is behind; it does not say what is missing, which
+// is execute.Missing. It is staging's memory, so it is this node's: what the
+// ledger records is [Block.hold]'s count, never this.
 func (p *streamPosition) received() uint64 {
 	if h := p.staging.Sighted(p.stream.id()); h > p.delivered {
 		return h
@@ -168,6 +170,18 @@ func (p *streamPosition) received() uint64 {
 type positionCache struct {
 	mu sync.Mutex
 	m  map[string]*streamPosition
+
+	// received is, per stream, the highest number this block's own
+	// execution handed to staging -- what the flush raises the ledger's
+	// Received to (#4412). Kept apart from m because a hold can come from a
+	// shard, which must not be the first to load a position.
+	received map[string]receivedMark
+}
+
+// receivedMark is the highest number a block held on one stream.
+type receivedMark struct {
+	stream stream
+	n      uint64
 }
 
 // key names the stream case-insensitively, as URLs are: one stream, one
@@ -276,7 +290,7 @@ func (b *Block) advanceStream(s stream, delivered bool, n uint64, id *url.TxID, 
 		// Held in memory, with the message itself — what runs when the
 		// number is next — through the block's staging transaction, so a
 		// discarded block leaves nothing behind (executor spec, "Sync")
-		b.staging.Hold(s.id(), n, &execute.Held{ID: id, Message: msg})
+		b.holdLocked(s, p.delivered, n, &execute.Held{ID: id, Message: msg})
 		return nil
 	}
 
@@ -285,16 +299,50 @@ func (b *Block) advanceStream(s stream, delivered bool, n uint64, id *url.TxID, 
 	return nil
 }
 
-// flushStreams writes each advanced stream's Delivered back to its ledger: one
-// read, one assignment, one put, once per stream per block. That is where the
-// O(n^2) drain went.
+// hold takes an entry of a stream into staging at its number, and counts the
+// number towards the stream's Received (executor spec, "What the stream ledger
+// is for"; #4412). Every hold the block's execution makes goes through here.
 //
-// ONLY Delivered. Received and Pending are not written and not maintained —
-// they describe what the executor has taken in, which is staging's to say, and
-// writing them here is exactly the feedback from block output into staging that
-// #4189 removes. The record is re-read rather than overwritten from a copy
-// because other things write it during the block (production bumps Produced),
-// and those must survive.
+// `delivered` is the stream's Delivered as the caller read it from the ledger.
+// The count is made HERE, from what the block's consensus messages carried,
+// and not read back from staging: staging's own Hold also consults what this
+// node's memory holds and has validated, and after a restart that memory is
+// not its peers'. Received is hashed, so it may depend only on the state and
+// on the block. A number at or below Delivered is not an arrival, and one past
+// the stage's span is not held anywhere, so neither counts.
+func (b *Block) hold(s stream, delivered, n uint64, h *execute.Held) {
+	b.positions.mu.Lock()
+	defer b.positions.mu.Unlock()
+	b.holdLocked(s, delivered, n, h)
+}
+
+func (b *Block) holdLocked(s stream, delivered, n uint64, h *execute.Held) {
+	b.staging.Hold(s.id(), n, h)
+	if n <= delivered || n-delivered > execute.MaxStageSpan {
+		return
+	}
+	k := s.key()
+	if b.positions.received == nil {
+		b.positions.received = map[string]receivedMark{}
+	}
+	if m, ok := b.positions.received[k]; !ok || n > m.n {
+		b.positions.received[k] = receivedMark{s, n}
+	}
+}
+
+// flushStreams writes each stream's Delivered and Received back to its ledger:
+// one read, one assignment, one put, once per stream per block. That is where
+// the O(n^2) drain went.
+//
+// Delivered is what the block ran. Received is the highest number that has
+// entered staging by the end of the block: the ledger's own value, raised to
+// the highest number this block held ([Block.hold]) and to Delivered (#4412).
+// It never decreases and is never below Delivered. Both are derived from the
+// state and from what consensus delivered in this block, so every validator
+// writes the same values. Pending is not written: the held set is staging's.
+// The record is re-read rather than overwritten from a copy because other
+// things write it during the block (production bumps Produced), and those must
+// survive.
 //
 // Streams are flushed in a fixed order; the state does not depend on it, but
 // every node deriving the same thing the same way is cheap insurance.
@@ -302,14 +350,31 @@ func (b *Block) flushStreams() error {
 	b.positions.mu.Lock()
 	defer b.positions.mu.Unlock()
 
-	keys := make([]string, 0, len(b.positions.m))
-	for k := range b.positions.m {
+	keys := make([]string, 0, len(b.positions.m)+len(b.positions.received))
+	streams := map[string]stream{}
+	for k, p := range b.positions.m {
 		keys = append(keys, k)
+		streams[k] = p.stream
+	}
+	for k, m := range b.positions.received {
+		if _, ok := streams[k]; !ok {
+			keys = append(keys, k)
+			streams[k] = m.stream
+		}
 	}
 	sort.Strings(keys)
 
 	for _, k := range keys {
 		p := b.positions.m[k]
+		mark := b.positions.received[k].n
+		if p == nil {
+			// Held on, never positioned: nothing to release or deliver
+			err := b.raiseReceived(streams[k], 0, mark)
+			if err != nil {
+				return err
+			}
+			continue
+		}
 
 		// Every stream the block touched releases at the ledger's Delivered,
 		// not only the ones it delivered into. Staging is memory, so after a
@@ -321,23 +386,47 @@ func (b *Block) flushStreams() error {
 		if p.delivered > 0 {
 			b.staging.Release(p.stream.id(), p.delivered)
 		}
-		if p.highest == 0 {
-			continue
+		err := b.raiseReceived(p.stream, p.highest, mark)
+		if err != nil {
+			return err
 		}
+	}
+	return nil
+}
 
-		var ledger protocol.SequenceLedger
-		err := b.Batch.Account(p.stream.ledger).Main().GetAs(&ledger)
-		if err != nil {
-			return errors.UnknownError.WithFormat("load %v: %w", p.stream.ledger, err)
-		}
-		part := ledger.Partition(p.stream.source)
-		if p.highest > part.Delivered {
-			part.Delivered = p.highest
-		}
-		err = b.Batch.Account(p.stream.ledger).Main().Put(ledger)
-		if err != nil {
-			return errors.UnknownError.WithFormat("store %v: %w", p.stream.ledger, err)
-		}
+// raiseReceived writes one stream's Delivered (when the block delivered, as
+// highest) and Received (to at least the block's mark and Delivered). A
+// stream the block neither delivered on nor raised is not written.
+//
+// A block whose only effect is a raised Received is not empty: an empty
+// block's batch is discarded, and the mark would be lost with it -- and
+// nothing node-local may carry it to a later block, because nothing
+// node-local may decide a hashed value.
+func (b *Block) raiseReceived(s stream, highest, mark uint64) error {
+	if highest == 0 && mark == 0 {
+		return nil
+	}
+	var ledger protocol.SequenceLedger
+	err := b.Batch.Account(s.ledger).Main().GetAs(&ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load %v: %w", s.ledger, err)
+	}
+	part := ledger.Partition(s.source)
+	changed := false
+	if highest > part.Delivered {
+		part.Delivered, changed = highest, true
+	}
+	received := max(part.Received, part.Delivered, mark)
+	if received != part.Received {
+		part.Received, changed = received, true
+		b.State.ReceivedRaised++
+	}
+	if !changed {
+		return nil
+	}
+	err = b.Batch.Account(s.ledger).Main().Put(ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("store %v: %w", s.ledger, err)
 	}
 	return nil
 }

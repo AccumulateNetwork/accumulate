@@ -252,6 +252,31 @@ stream for good.
 **Size**: an `ExecutorVersion` predicate in `heldOnly`, if the assumption ever
 stops holding.
 
+### E16. Writing `Received` every block is not gated on a version
+
+*[#4412](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4412)*
+
+**Spec** ([executor.md](executor.md), "Versioning"): behaviour that changes
+what a block produces is gated on an `ExecutorVersion`.
+
+**Code**: `flushStreams` writes each inbound stream's `Received` on the
+synthetic and anchor ledgers — the highest number the block held, at least
+`Delivered`, never decreasing — and a block whose only effect is that raise
+commits instead of being discarded as empty (`BlockState.ReceivedRaised`).
+Before #4412 `Received` was never written on this line. Unconditional: any
+block that held or delivered a stream entry has a different state root on
+either side of the change, and two binaries on one chain fork there.
+
+**Why it stands**: the fresh-install rule of E14 and E15, as for #4358 and
+#4437 — `dagbft-integration` runs no network that outlives a run and every
+node is rebuilt together. A network whose ledgers were written before it
+holds `Received` 0 on streams that have delivered; the first block that
+touches such a stream raises it to `Delivered`, and a stream no block has
+touched since keeps it below `Delivered` until one does.
+
+**Size**: an `ExecutorVersion` predicate in `raiseReceived` and in
+`BlockState.Empty`, if the assumption ever stops holding.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
