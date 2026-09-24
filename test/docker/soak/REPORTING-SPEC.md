@@ -532,6 +532,31 @@ advancing beyond a threshold. `13/13 healthy` over a chain that wrote nothing
 for 12 minutes (#4103) is a false report, and it is the one report everyone
 checks first.
 
+**A wedge and a delivery stall are different findings, and a capture is named
+by which it is (#4414).** The watchdogs read a partition as stalled either way
+(#4285), so the monitor keeps both clocks in `/data`'s `progress`:
+`blocksStalledFor`, seconds since the partition's height last moved, and
+`stalledFor`, which a delivery stall raises to the delivery clock
+(`deliveryStalledFor`); `stalledBy` is `blocks` when the height has not moved
+for the stall threshold and `delivery` when it has and only delivery stopped.
+
+- **Wedge** — some partition closed no block for `WEDGE_SECS`. The capture is
+  `wedge-<ts>/`.
+- **Delivery stall** — every partition closed a block within the last
+  `WEDGE_SECS`, and a synthetic flow into one of them has been red that long
+  (lagging four times its expected lag, or a backlog delivering nothing). The
+  capture is `delivery-stall-<ts>/`.
+- A partition with no height clock (its height unreadable, or a monitor older
+  than the clock) is not proven to be closing blocks, and keeps the capture a
+  wedge.
+
+`reason.txt` states the clocks the name was chosen on, and the manifest counts
+the two kinds on separate rows. Run `20260924T074702Z` named a delivery stall
+`wedge-20260924T081419Z` — `partitions stalled 121s: BVN2,BVN3,Directory` —
+while every partition's executed height advanced 26–32 blocks per monitor
+sample through the window (`monitor.csv`), and the manifest counted it as a
+wedge.
+
 ## 5. Load generators are witnesses, not referees
 
 A load generator MUST report, distinctly:

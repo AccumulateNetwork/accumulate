@@ -1734,7 +1734,10 @@ else:
   fi
   # A run that wedged and dumped is the most valuable kind of run there is;
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
-  echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
+  # Two kinds, counted apart (#4414): run 20260924T074702Z counted a
+  # delivery stall, every partition still closing blocks, as a wedge.
+  echo "| wedge captures (a partition closed no block for ${WEDGE_SECS:-120}s; #4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
+  echo "| delivery-stall captures (every partition kept closing blocks while a synthetic flow into one was red for ${WEDGE_SECS:-120}s; #4285) | $(ls -d "$rd"/delivery-stall-* 2>/dev/null | wc -l) $(ls -d "$rd"/delivery-stall-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
   echo "| accepted, neither certified here, taken on relay, nor refused (#, whole run, the validators) | $(sub_row validator "$lg_exit" "$stopped_early") |"
   echo "| restarted node rejoined (per node and partition: gauge ACTIVE, executed block within ${REJOIN_MAX_BEHIND:-5} of the highest block any of the partition's answering validators executed, through its last reading, and every anchor it stated agreeing with its peers'; s = container start to the first sample ACTIVE and within that bound; the validators) | $(nodestate_row validator) |"
   if [ "$n_fol" -gt 0 ]; then

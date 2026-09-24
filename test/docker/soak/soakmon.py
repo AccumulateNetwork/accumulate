@@ -769,14 +769,25 @@ def stalled_by_delivery(flows, now):
 
 def apply_delivery_stall(progress, red_for):
     """A partition whose inbound delivery has been red for STALL_SECS is
-    stalled for the watchdogs, whatever its height is doing (#4285)."""
+    stalled for the watchdogs, whatever its height is doing (#4285).
+
+    `stalledBy` says which: `blocks` when its height has not moved for
+    STALL_SECS (a wedge, whatever delivery is doing), `delivery` when it
+    has and only delivery stopped. `blocksStalledFor` — seconds since its
+    height last moved — is left as assess_progress set it, because
+    `stalledFor` becomes the delivery clock here, and without the height
+    clock beside it nobody reading /data could tell a delivery stall from
+    a wedge (#4414: run 20260924T074702Z's capture was named a wedge while
+    every partition kept closing blocks)."""
     for dst, secs in (red_for or {}).items():
         p = (progress or {}).get(dst)
         if p is None or secs < STALL_SECS:
             continue
         p["state"] = "stalled"
         p["stalledFor"] = max(p.get("stalledFor") or 0, round(secs, 1))
-        p["stalledBy"] = "delivery"
+        p["deliveryStalledFor"] = round(secs, 1)
+        if (p.get("blocksStalledFor") or 0) < STALL_SECS:
+            p["stalledBy"] = "delivery"
     return progress
 
 
@@ -836,10 +847,15 @@ def assess_progress(heights, now):
             "height": h,
             "state": "stalled" if stalled >= STALL_SECS else "live",
             "stalledFor": round(stalled, 1),
+            # The height clock, kept apart from `stalledFor`, which a
+            # delivery stall overwrites (apply_delivery_stall, #4414).
+            "blocksStalledFor": round(stalled, 1),
             "secPerBlock": sec_per_block,
             "avgSecPerBlock": avg_sec_per_block,
             "blocksSeen": h - h0,
         }
+        if stalled >= STALL_SECS:
+            out[part]["stalledBy"] = "blocks"
     return out
 
 
