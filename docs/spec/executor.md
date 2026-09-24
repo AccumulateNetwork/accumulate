@@ -1113,6 +1113,17 @@ one thing a per-block record must never do. An empty block has no entry.
     the root is an entry on the partition's bpt chain and that chain is anchored
     into the root chain. There is no root an account proof cannot be completed
     against, and therefore no "not yet" that means "never".
+12. **A copy of an entry that is held is not executed and nothing is recorded
+    for it: a message's status says Delivered only once its stream has moved
+    past its number.** This is invariants 4 and 8 applied to a message that
+    wraps another. A synthetic copy whose inner sequenced message is only held
+    — not next on its stream — records no status of its own, exactly as a
+    collected one does. A status is keyed by the message's hash, so a
+    Delivered written for a held copy is also the status of every
+    byte-identical copy, including the one staging holds, and that one then
+    answers "already delivered" when its number comes up and executes
+    nothing: a stream frozen with every number held and nothing missing
+    (#4423).
 
 ### Versioning
 
@@ -1137,6 +1148,15 @@ diverge, which the next anchor's BPT hash exposes. It is ungated because
 `V2Kourou` has never run a network that outlives a run: every soak starts
 from genesis, and no deployed network executes this path. **If Kourou is
 ever activated on a live network before this lands, this needs a gate.**
+
+**Ungated, likewise: a held copy records nothing (invariant 12, #4423).** Before
+it, a synthetic copy whose inner message was only held recorded its outer
+message, a Delivered status and its signer's signature at arrival; now it
+records none of them, and neither does the copy when its sequenced message
+later runs from staging, since staging runs the sequenced message and not the
+copy. That changes the state hash of any block that held a synthetic out of
+order. It is ungated under the same fresh-install rule: this line runs no
+network that outlives a run (DIFFERENCES.md, E15).
 
 ## 2. Specification — how it is implemented
 
@@ -1448,7 +1468,13 @@ Four rules govern it, and each of them is a defect that has actually happened:
 **The first sighting of a number wins.** A number can be offered twice — a block
 discarded and re-executed, a healed message racing the original — and both carry
 the same message, because the number identifies it. Keeping the first means the
-same input always produces the same staging.
+same input always produces the same staging. A later copy is not only kept out
+of staging: **a later copy writes nothing.** It records no status, no message and
+no signature, so it cannot change what the held entry does when it runs
+(invariant 12). A dispatcher resends an envelope the destination already took
+after a failed dial, and a heal answer from the original signer is
+byte-identical to what it answers for, so a second copy is the normal case, not
+a fault.
 
 **The set of streams is staging's, not the ledger's.** A stream that has only
 staged has delivered nothing, so it has no ledger entry to be found by. A
@@ -1613,6 +1639,17 @@ when (#4279). Every block therefore writes, at Info, `module=stream`:
   production, so the walk is bounded rather than growing with the backlog
   it reports. Zero with a non-zero `held` is a backlog with no gap in the
   window, not an empty stream.
+- **`Stream stopped`**, when an entry staging offered as runnable ran and
+  did not move its stream: `block`, `ledger`, `source`, `number`, `reason`
+  (`not-delivered`, or `error` with the error), and `status` — what the
+  entry's execution said of itself. Counted every time
+  (`accumulate_exec_run_stopped_total{stream,reason}`), and logged once per
+  stream and number, and again no more often than once a minute of block time
+  while the stream stays stopped there. An anchor below its quorum stops a
+  run legitimately; a synthetic entry never should. The run stops at such an
+  entry every block, and before this line nothing said so: #4423 froze a
+  stream with `waiting=0` and the entry at the head read `delivered` for as
+  long as the run lasted.
 - **`Stream produced`**, once per destination the block sequenced
   synthetics for: `block`, `destination`, `from`, `to`, `count`. One block's
   `to` and the next block's `from` are contiguous; a gap or a step backwards
