@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"strings"
 )
 
 // Anchor staging (executor spec, "Anchor staging"). A collection proof names
@@ -81,12 +80,15 @@ func (b *Block) intakeProof(source *url.URL, proof *protocol.AnnotatedReceipt, s
 	}
 
 	if n := b.staging.StagedProofBytes(source); n >= maxStagedProofBytes() {
-		mExecStagedProofs.WithLabelValues("refused").Inc()
-		if b.proofBudgetBound == nil {
-			b.proofBudgetBound = map[string]bool{}
-		}
-		b.proofBudgetBound[strings.ToLower(source.String())] = true
-		return errors.BadRequest.WithFormat("anchor staging for %v already holds %d bytes of proofs", source, n)
+		// Over budget: the proof is dropped, and that is all. The budget is
+		// this node's memory -- a restarted node's differs from its peers'
+		// -- so it decides nothing the block records: the entries the proof
+		// travelled with are held and counted as any others are (#4439).
+		// They are a gap of proof, which the requester asks the source for
+		// once their stream stops at them, and its answer brings the proof
+		// back through consensus (healing spec, "Deciding, in staging").
+		mExecStagedProofs.WithLabelValues("dropped").Inc()
+		return nil
 	}
 	if !b.staging.StageProof(source, proof.Anchor.SourceBlock, proof) {
 		// The same proof already waits under that block: every copy of a

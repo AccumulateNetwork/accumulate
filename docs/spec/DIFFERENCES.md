@@ -277,6 +277,62 @@ touched since keeps it below `Delivered` until one does.
 **Size**: an `ExecutorVersion` predicate in `raiseReceived` and in
 `BlockState.Empty`, if the assumption ever stops holding.
 
+### E17. A proof dropped for budget on one node delays that node's execution
+
+*[#4439](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4439)*
+
+**Spec** ([executor.md](executor.md), "Anchor staging"): the anchor-staging
+byte budget bounds memory and decides nothing else — not what is held, not
+what is counted, and not when an entry executes (Paul, 2026-09-24: a node
+whose staging is wrong fills in what it lacks for the right block, from the
+block ledger and API calls).
+
+**Code**: what is held and counted no longer depends on the budget (#4439):
+over budget, `intakeProof` drops the proof and the entries are held and
+counted into `Received` as on every other node. *When* they execute still
+does. A package's members travel proof-less beside one `SyntheticProof`
+(executor.md, "Dispatch"), so a held member becomes runnable only when a
+validated proof covers its number. A node that dropped the proof its peers
+staged cannot run the package when the Directory anchor lands; it runs it
+when the requester's fetched proof lands (healing.md, "Deciding, in
+staging"), blocks later, and from that block its state root is not its
+peers'. Nothing fills the proof in for the block in which the peers execute.
+
+**Evidence**: `TestProofBudgetDoesNotDecideReceived` (test/e2e), carried past
+its assertions by releasing the Directory anchors and stepping: at the first
+block after release node 0 delivered through 8 (root `3105c7…`) while node 1,
+the node over budget, stayed at 2 (root `e83f50…`); node 1 reached 8 eight
+blocks later, and the roots still differed 39 blocks after release. Before
+#4439 the same node failed the envelope outright (`proof budget for … is
+spent this block`), so the divergence is not new; only `Received`'s part of it
+is gone.
+
+**Size**: undecided, and a decision for Paul. The requester's fetch is the
+existing path and keeps the entries live (`TestADroppedProofIsFetchedAndTheEntryExecutes`),
+but it is paced by stillness (`probeAfter`) and lands through consensus, so it
+cannot land in the block the peers execute in. Either a held member keeps the
+proof it arrived with and becomes runnable when that proof's anchor executes,
+as an entry with its own receipt already does (#4294, `heldCollectionProof`)
+— which retains the bytes the budget was meant to free — or the fill-in Paul
+describes is specified and built.
+
+### E18. Holding an entry whose proof was dropped for budget is not gated on a version
+
+*[#4439](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4439)*
+
+**Spec** ([executor.md](executor.md), "Versioning"): behaviour that changes
+what a block produces is gated on an `ExecutorVersion`.
+
+**Code**: `SyntheticMessage.collect` no longer refuses an entry whose
+package's proof the block dropped for want of budget; it holds it and counts
+it into `Received`. Unconditional. It changes a block only when a source's
+waiting proofs exceed `MaxStagedProofBytes` (64 MiB).
+
+**Why it stands**: the fresh-install rule of E14–E16.
+
+**Size**: an `ExecutorVersion` predicate in `collect`, if the assumption ever
+stops holding.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
