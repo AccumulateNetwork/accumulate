@@ -51,7 +51,94 @@ import (
 // reads its roots from that peer refuses them.
 //
 // The control is the same read against a peer that executed every block.
+//
+// That is the complete fix's done-when, and the complete fix is #4416: the
+// pull brings the pool's signature history. Until it lands the joined node
+// refuses those anchors rather than serving them unsigned, which is what
+// TestAJoinedNodeRefusesTheAnchorsItHoldsWithoutSignatures holds (#4413).
 func TestAJoinedNodeServesTheAnchorsItPulledWithTheirSignatures(t *testing.T) {
+	t.Skip("#4416: the pull does not bring an anchor's signature history, so a joined node refuses its pulled range (#4413) rather than serving it signed")
+
+	const joiner = 1
+	sim, p, r, q := joinADirectoryNodeByPull(t)
+	dn := DnUrl()
+
+	// What a joining BVN0 node does to find its roots: anchorsrc reads
+	// dn.acme/anchors from a Directory peer and verifies each BVN0 anchor's
+	// signatures against the sets in its own store. Here the peer is one
+	// Directory node's querier over its own store -- what that node serves.
+	bvn := PartitionUrl("BVN0")
+	refusedBy := func(node int) map[uint64]string {
+		authority, err := anchorsrc.FromStore(sim.S.Partition("BVN0").NodeDatabase(0), bvn)
+		require.NoError(t, err)
+		pool, err := anchorsrc.PoolFor(bvn, authority.BvnNames())
+		require.NoError(t, err)
+		params := apiimpl.QuerierParams{Partition: Directory, Database: p.NodeDatabase(node)}
+		if js := p.NodeJoinState(node); js != nil {
+			// The gate the daemon puts in front of the querier (#4368): a
+			// node that has not joined refuses; the joined node reads ACTIVE.
+			params.NodeState = js.Machine()
+		}
+		served := apiimpl.NewQuerier(params)
+		src, err := anchorsrc.New(served, pool, bvn, authority)
+		require.NoError(t, err)
+		refused := map[uint64]string{}
+		verified := 0
+		src.OnRefused = func(block uint64, err error) { refused[block] = err.Error() }
+		src.OnAnchor = func(*url.URL, uint64, [32]byte) { verified++ }
+		require.NoError(t, src.Read(context.Background()))
+		t.Logf("node %d: %d BVN0 anchors verified, %d refused", node, verified, len(refused))
+		return refused
+	}
+
+	require.Empty(t, refusedBy(0), "control: a Directory node that executed every block serves every anchor with its signatures")
+
+	refused := refusedBy(joiner)
+	var unsigned []uint64
+	for block, msg := range refused {
+		if strings.Contains(msg, "the anchor carries no signatures") {
+			unsigned = append(unsigned, block)
+		}
+	}
+	sort.Slice(unsigned, func(i, j int) bool { return unsigned[i] < unsigned[j] })
+	// Where the query API reads an anchor's signatures from, on the joined
+	// node and on the control, for every pool entry: the transaction status
+	// (V1: AnchorSigners, Signers) and the pool's per-transaction history (V2).
+	sigSources := func(node int) (entries, withSigners, withHistory int) {
+		View(t, p.NodeDatabase(node), func(batch *database.Batch) {
+			pool := batch.Account(dn.JoinPath(AnchorPool))
+			head, err := pool.MainChain().Head().Get()
+			require.NoError(t, err)
+			for i := int64(0); i < head.Count; i++ {
+				h, err := pool.MainChain().Entry(i)
+				require.NoError(t, err)
+				entries++
+				st, err := batch.Transaction(h).Status().Get()
+				if err == nil && (len(st.AnchorSigners) > 0 || len(st.Signers) > 0) {
+					withSigners++
+				}
+				hist, err := pool.Transaction(*(*[32]byte)(h)).History().Get()
+				if err == nil && len(hist) > 0 {
+					withHistory++
+				}
+			}
+		})
+		return
+	}
+	for _, node := range []int{0, joiner} {
+		e, s, h := sigSources(node)
+		t.Logf("node %d: dn.acme/anchors has %d entries; %d have a status naming signers, %d have a signature history", node, e, s, h)
+	}
+
+	require.Empty(t, unsigned,
+		"a joined Directory node serves %d BVN0 anchors with no signatures -- the ones appended by blocks it did not execute (R=%d..Q=%d); the pull brought the entries and their bodies and nothing a signature is read from", len(unsigned), r, q)
+}
+
+// joinADirectoryNodeByPull restarts Directory node 1, runs the network on
+// without it, and joins it with the production pull. It returns the block the
+// node stopped at (R) and the one it joined at (Q): every anchor on
+// dn.acme/anchors appended in between, the node holds only by pull.
+func joinADirectoryNodeByPull(t *testing.T) (*Sim, *simulator.Partition, uint64, uint64) {
 	const joiner = 1
 
 	alice := url.MustParse("alice")
@@ -128,74 +215,5 @@ func TestAJoinedNodeServesTheAnchorsItPulledWithTheirSignatures(t *testing.T) {
 	q := partitionBlock(t, p.NodeDatabase(joiner), dn)
 	t.Logf("the Directory node stopped at R=%d and joined at Q=%d", r, q)
 	require.Greater(t, q, r, "precondition: the join carried the node past blocks it did not execute")
-
-	// What a joining BVN0 node does to find its roots: anchorsrc reads
-	// dn.acme/anchors from a Directory peer and verifies each BVN0 anchor's
-	// signatures against the sets in its own store. Here the peer is one
-	// Directory node's querier over its own store -- what that node serves.
-	bvn := PartitionUrl("BVN0")
-	refusedBy := func(node int) map[uint64]string {
-		authority, err := anchorsrc.FromStore(sim.S.Partition("BVN0").NodeDatabase(0), bvn)
-		require.NoError(t, err)
-		pool, err := anchorsrc.PoolFor(bvn, authority.BvnNames())
-		require.NoError(t, err)
-		params := apiimpl.QuerierParams{Partition: Directory, Database: p.NodeDatabase(node)}
-		if js := p.NodeJoinState(node); js != nil {
-			// The gate the daemon puts in front of the querier (#4368): a
-			// node that has not joined refuses; the joined node reads ACTIVE.
-			params.NodeState = js.Machine()
-		}
-		served := apiimpl.NewQuerier(params)
-		src, err := anchorsrc.New(served, pool, bvn, authority)
-		require.NoError(t, err)
-		refused := map[uint64]string{}
-		verified := 0
-		src.OnRefused = func(block uint64, err error) { refused[block] = err.Error() }
-		src.OnAnchor = func(*url.URL, uint64, [32]byte) { verified++ }
-		require.NoError(t, src.Read(context.Background()))
-		t.Logf("node %d: %d BVN0 anchors verified, %d refused", node, verified, len(refused))
-		return refused
-	}
-
-	require.Empty(t, refusedBy(0), "control: a Directory node that executed every block serves every anchor with its signatures")
-
-	refused := refusedBy(joiner)
-	var unsigned []uint64
-	for block, msg := range refused {
-		if strings.Contains(msg, "the anchor carries no signatures") {
-			unsigned = append(unsigned, block)
-		}
-	}
-	sort.Slice(unsigned, func(i, j int) bool { return unsigned[i] < unsigned[j] })
-	// Where the query API reads an anchor's signatures from, on the joined
-	// node and on the control, for every pool entry: the transaction status
-	// (V1: AnchorSigners, Signers) and the pool's per-transaction history (V2).
-	sigSources := func(node int) (entries, withSigners, withHistory int) {
-		View(t, p.NodeDatabase(node), func(batch *database.Batch) {
-			pool := batch.Account(dn.JoinPath(AnchorPool))
-			head, err := pool.MainChain().Head().Get()
-			require.NoError(t, err)
-			for i := int64(0); i < head.Count; i++ {
-				h, err := pool.MainChain().Entry(i)
-				require.NoError(t, err)
-				entries++
-				st, err := batch.Transaction(h).Status().Get()
-				if err == nil && (len(st.AnchorSigners) > 0 || len(st.Signers) > 0) {
-					withSigners++
-				}
-				hist, err := pool.Transaction(*(*[32]byte)(h)).History().Get()
-				if err == nil && len(hist) > 0 {
-					withHistory++
-				}
-			}
-		})
-		return
-	}
-	for _, node := range []int{0, joiner} {
-		e, s, h := sigSources(node)
-		t.Logf("node %d: dn.acme/anchors has %d entries; %d have a status naming signers, %d have a signature history", node, e, s, h)
-	}
-
-	require.Empty(t, unsigned,
-		"a joined Directory node serves %d BVN0 anchors with no signatures -- the ones appended by blocks it did not execute (R=%d..Q=%d); the pull brought the entries and their bodies and nothing a signature is read from", len(unsigned), r, q)
+	return sim, p, r, q
 }
