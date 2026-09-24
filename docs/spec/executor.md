@@ -369,33 +369,14 @@ message and the message is not under the root. So a message the pull takes
 beside an entry is kept only if it hashes to that entry, and nothing about the
 peer that served it is believed (§3, #4400).
 
-**A leaf is pulled whether or not the account has a body** (#4397). The leaf
-hashes the main state, the directory, the chains and the pending list, and any
-of them can be there without the others: an authority signature recorded on a
-principal that does not exist leaves a leaf with `signature` chains and no
-body, and a failed deposit leaves an empty account's leaf. Asked for an
-account with a receipt, a peer whose tree holds a leaf for it answers with no
-body and the receipt for that leaf; the join pulls the rest of the account as
-for any other and keeps it by the same three checks, the missing body hashing
-as the zero hash. A peer that answers "no body" with the receipt of an
-account that has one fails the third. The check proves less here than for a
-body, and that is stated rather than hidden: the tree hashes a leaf's value
-and not its key, and a leaf with no body carries no URL, so the receipt of
-one such leaf passes for any account whose pulled state hashes to the same
-value — every empty account's leaf is one hash. So a body-less leaf is kept
-only on the word of the peers that answer: only an answer votes — a
-body-less leaf, a body, or `NotFound` — and a peer that does not answer (one
-that is itself joining answers `NotReady`; one that is restarting does not
-dial) neither agrees nor dissents, or two nodes joining one partition would
-block each other's body-less leaves for ever. The leaf is kept when every
-answering peer served the same one and at least two answered. One dissent —
-a `NotFound`, a body, another leaf — and the name is neither written nor
-dropped but asked again, as it is with fewer than two answers, and what each
-peer answered is logged. That is trust in the peers, not proof, for the
-existence of an empty leaf, and it fails when every peer that answers lies; what then refuses the leaf
-placed under the wrong name is the whole-root match, so the exposure is a
-join that does not finish, not a node that executes from a wrong state
-(DIFFERENCES.md E11). `NotFound` means the peer's tree holds no leaf: a name every
+**Every leaf has a body.** The state tree holds a leaf only for an account
+with main state (invariant 13), so an answer that carries a receipt and no
+body describes a leaf that does not exist: it is refused as a failure of the
+source that gave it, and the next source is asked. It never counts as the
+account having no leaf, and it never drops the name. Before #4437 such leaves
+did exist — a failed transaction left one for its missing principal — and
+the join had to pull them and take their existence on peers' word (#4397,
+#4406); that is gone with them. `NotFound` means the peer's tree holds no leaf: a name every
 source answers that way is dropped rather than asked again, and the page diff
 names it again if a leaf ever appears; a name some source failed to answer is
 asked again. A spine account is never dropped: every source answering it

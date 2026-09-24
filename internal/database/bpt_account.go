@@ -29,8 +29,24 @@ func (a *Account) VerifyHash(hash []byte) error {
 
 // PutBpt writes the record's BPT entry.
 func (a *Account) putBpt() error {
+	// The state tree holds a leaf only for an account that exists, and an
+	// account exists when it has main state (executor spec, invariant 13;
+	// #4437). A write to a missing account's bookkeeping alone — a
+	// transaction's votes, payments or signatures recorded against a
+	// principal that turns out not to exist — marks it dirty, and without
+	// this it would get a leaf hashing to nothing.
+	_, err := a.Main().Get()
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.NotFound):
+		return nil
+	default:
+		return errors.UnknownError.Wrap(err)
+	}
+
 	// Ensure the URL state is populated
-	_, err := a.getUrl().Get()
+	_, err = a.getUrl().Get()
 	switch {
 	case err == nil:
 		// Ok

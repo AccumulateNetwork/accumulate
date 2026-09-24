@@ -270,6 +270,10 @@ func TestPreservationOfOldTransactions(t *testing.T) {
 	batch := db.Begin(true)
 	defer batch.Discard()
 	require.NoError(t, batch.Transaction(txn.GetHash()).Main().Put(&database.SigOrTxn{Transaction: txn}))
+	// The principal exists: an account with no main state has no state-tree
+	// leaf (executor spec, invariant 13; #4437), and the snapshot collects
+	// what the tree holds.
+	require.NoError(t, batch.Account(txn.Header.Principal).Main().Put(&protocol.TokenAccount{Url: txn.Header.Principal, TokenUrl: protocol.AcmeUrl()}))
 	require.NoError(t, batch.Account(txn.Header.Principal).MainChain().Inner().AddEntry(txn.GetHash(), false))
 	require.NoError(t, batch.UpdateBPT())
 	require.NoError(t, batch.Commit())
@@ -307,6 +311,11 @@ func TestSnapshot_PreservesQueuedLocalDeliveryBodies(t *testing.T) {
 	db := database.OpenInMemory(nil)
 	batch := db.Begin(true)
 	defer batch.Discard()
+
+	// The synthetic ledger exists, as it does from genesis on every
+	// partition: an account with no main state has no state-tree leaf
+	// (executor spec, invariant 13; #4437).
+	require.NoError(t, batch.Account(synthetic).Main().Put(&protocol.SyntheticLedger{Url: synthetic}))
 
 	// Exactly what splitLocalDeliveries writes: the body in the message
 	// store, on no chain, and the queue entry pointing at it.

@@ -4,8 +4,10 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-// The phantom-leaf question of #4397, from the review of
-// issue-4397-mainless-leaf (#4397 note_3896123320, F3).
+// The phantom-leaf question of #4397 and #4406, closed by #4437: the state
+// tree holds a leaf only for an account with main state (executor spec,
+// invariant 13), so a leaf with no body does not exist, and a peer that
+// serves one is refused as a failure of that source.
 
 package pull
 
@@ -23,31 +25,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-// chainSwap answers the chain list for one account with another account's
-// chain list (or none, when other is nil).
-type chainSwap struct {
-	Source
-	for_  *url.URL
-	other *url.URL
-}
-
-func (c chainSwap) QueryAccountChains(ctx context.Context, u *url.URL, q *api.ChainQuery) (*api.RecordRange[*api.ChainRecord], error) {
-	if u.Equal(c.for_) {
-		if c.other == nil {
-			return &api.RecordRange[*api.ChainRecord]{}, nil
-		}
-		u = c.other
-	}
-	return c.Source.QueryAccountChains(ctx, u, q)
-}
-
-func (c chainSwap) QueryChainEntries(ctx context.Context, u *url.URL, q *api.ChainQuery) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
-	if u.Equal(c.for_) && c.other != nil {
-		u = c.other
-	}
-	return c.Source.QueryChainEntries(ctx, u, q)
-}
 
 func mainlessFixture(t *testing.T) (src *database.Database, root [32]byte, block uint64, part *url.URL, ghost, void, bodied *url.URL, partitionID string) {
 	partitionID = "PhantomLeaf"
@@ -92,116 +69,6 @@ func rvLeaf(db *database.Database, u *url.URL) ([]byte, error) {
 	return b.BPT().Get(b.Account(u).Key())
 }
 
-// TestALiarAmongHonestPeersCannotPlantAPhantomLeaf (review F3). A leaf with
-// no body is not bound to its account's name -- the tree hashes values, and
-// every empty account's leaf is one hash -- so a peer can answer a name the
-// tree holds no leaf for with an empty account's receipt and pass the leaf
-// check. Before the unanimity rule the honest peer's NotFound did not stop
-// it: FetchFrom moved on, the liar answered, the phantom leaf was written,
-// and the name was later dropped on the honest peer's NotFound with the leaf
-// still there -- the join wedged until the store was wiped. Now a body-less
-// leaf is kept only when every source serves the same one, so one liar in
-// either position gets the name asked again, and nothing is written.
-func TestALiarAmongHonestPeersCannotPlantAPhantomLeaf(t *testing.T) {
-	src, root, block, part, _, void, _, partitionID := mainlessFixture(t)
-	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
-	liar := hideBody{Source: honest, swap: void}
-	opts := Options{Mode: ModeStateOnly, Verify: anchored{root: root, block: block}, Partition: part}
-	ctx := context.Background()
-	phantom := url.MustParse("nobody/tokens")
-
-	for _, c := range []struct {
-		name string
-		srcs []Source
-	}{
-		{"honest first", []Source{honest, liar}},
-		{"liar first", []Source{liar, honest}},
-		{"liar between two honest peers", []Source{honest, liar, honest}},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			dst := newObservedDB(t)
-			batch := dst.Begin(true)
-			p, _, err := FetchFrom(ctx, c.srcs, batch, phantom, opts)
-			if err == nil {
-				require.NoError(t, p.Settle(root))
-			}
-			require.Error(t, err, "a body-less leaf one peer served and another denied was kept")
-			require.True(t, stderrors.Is(err, ErrDissent), "a dissent must be retried, not dropped: %v", err)
-			require.False(t, stderrors.Is(err, ErrNoLeaf), "a dissent must not drop the name")
-			require.NoError(t, batch.UpdateBPT())
-			require.NoError(t, batch.Commit())
-			_, err = rvLeaf(dst, phantom)
-			require.Error(t, err, "a phantom leaf was written")
-		})
-	}
-
-	// And the honest case the rule must not break: every peer serves the
-	// same body-less leaf, and it is kept.
-	t.Run("every peer serves the same body-less leaf", func(t *testing.T) {
-		dst := newObservedDB(t)
-		batch := dst.Begin(true)
-		p, _, err := FetchFrom(ctx, []Source{honest, honest, honest}, batch, void, opts)
-		require.NoError(t, err)
-		require.NoError(t, p.Settle(root))
-		require.NoError(t, batch.UpdateBPT())
-		require.NoError(t, batch.Commit())
-		_, err = rvLeaf(dst, void)
-		require.NoError(t, err)
-	})
-}
-
-// TestUnanimousLiarsPlantAPhantomLeaf is THE LIMIT of the unanimity rule,
-// pinned so that it is stated rather than discovered: when every source asked
-// is a liar, the phantom leaf is kept, and nothing at the pull can tell. It is
-// trust in unsigned peers for the existence of an empty leaf, a departure from
-// "proven against the anchored root" recorded in DIFFERENCES.md E11; the
-// whole-root match still refuses the state, and the structural closing is a
-// two-way page diff that removes local-only leaves, or a key-binding hash.
-func TestUnanimousLiarsPlantAPhantomLeaf(t *testing.T) {
-	src, root, block, part, _, void, _, partitionID := mainlessFixture(t)
-	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
-	liar := hideBody{Source: honest, swap: void}
-	opts := Options{Mode: ModeStateOnly, Verify: anchored{root: root, block: block}, Partition: part}
-	phantom := url.MustParse("nobody/tokens")
-
-	dst := newObservedDB(t)
-	batch := dst.Begin(true)
-	p, _, err := FetchFrom(context.Background(), []Source{liar, liar}, batch, phantom, opts)
-	require.NoError(t, err, "if this now fails, the limit is closed: update DIFFERENCES.md E11 and flip this test")
-	require.NoError(t, p.Settle(root))
-	require.NoError(t, batch.UpdateBPT())
-	require.NoError(t, batch.Commit())
-	_, err = rvLeaf(dst, phantom)
-	require.NoError(t, err)
-}
-
-// TestTheGhostFamilyChainSetIsWhatTheLeafCheckCatches: mutations of the
-// served chain set for a signature-chain-only leaf. An empty chain set and
-// another account's chain set must both be refused by the leaf check.
-func TestTheGhostFamilyChainSetIsWhatTheLeafCheckCatches(t *testing.T) {
-	src, root, block, part, ghost, _, bodied, partitionID := mainlessFixture(t)
-	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
-	opts := Options{Mode: ModeStateOnly, Verify: anchored{root: root, block: block}, Partition: part}
-	ctx := context.Background()
-
-	for _, c := range []struct {
-		name string
-		peer Source
-	}{
-		{"empty chain set", chainSwap{Source: honest, for_: ghost}},
-		{"another account's chain set", chainSwap{Source: honest, for_: ghost, other: bodied}},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			dst := newObservedDB(t)
-			batch := dst.Begin(true)
-			defer batch.Discard()
-			err := Account(ctx, c.peer, batch, ghost, opts)
-			require.Error(t, err, "a wrong chain set for a body-less leaf was kept")
-			t.Log(err)
-		})
-	}
-}
-
 // notReady is a peer that is itself joining: its querier refuses every read
 // (querier.servingFor).
 type notReady struct{ Source }
@@ -236,81 +103,91 @@ func (s swapAll) QueryChainEntries(ctx context.Context, u *url.URL, q *api.Chain
 	return s.Source.QueryChainEntries(ctx, s.u(u), q)
 }
 
-// withBody answers one name with a body carrying that name, beside the true
-// receipt of the leaf the peer holds for it: a source that says the account
-// has a body where the others say it has none.
-type withBody struct {
+// bodyless answers every account query with no body beside the receipt the
+// honest peer gives for another account that does exist: what a peer serving
+// "a leaf with no body" looked like, and passed the leaf check with, before
+// #4437.
+type bodyless struct {
 	Source
-	for_ *url.URL
+	receiptOf *url.URL
 }
 
-func (w withBody) QueryAccount(ctx context.Context, u *url.URL, q *api.DefaultQuery) (*api.AccountRecord, error) {
-	rec, err := w.Source.QueryAccount(ctx, u, q)
-	if err != nil || !u.Equal(w.for_) {
-		return rec, err
+func (b bodyless) QueryAccount(ctx context.Context, u *url.URL, q *api.DefaultQuery) (*api.AccountRecord, error) {
+	rec, err := b.Source.QueryAccount(ctx, b.receiptOf, q)
+	if err != nil {
+		return nil, err
 	}
-	rec.Account = &protocol.TokenAccount{Url: u, TokenUrl: protocol.AcmeUrl()}
+	rec.Account = nil
 	return rec, nil
 }
 
-// TestOnlyAnAnswerVotesOnALeafWithNoBody pins the unanimity rule's arms
-// (#4397 review R1). An answer votes: a body-less leaf, a body, NotFound. A
-// source that does not answer -- a peer that is itself joining, or one that is
-// restarting -- neither agrees nor dissents; counted as dissent it let one
-// joining peer block every body-less leaf, and two joiners one partition
-// block each other for ever. The leaf is kept when every answering source
-// served the same one and at least two answered.
-func TestOnlyAnAnswerVotesOnALeafWithNoBody(t *testing.T) {
-	src, root, block, part, ghost, void, _, partitionID := mainlessFixture(t)
-	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
-	opts := Options{Mode: ModeStateOnly, Verify: anchored{root: root, block: block}, Partition: part}
-	ctx := context.Background()
+// TestTheWritesThatMadeEmptyLeavesMakeNone: dirtying a missing account's
+// bookkeeping (void) and recording a signature chain on a principal with no
+// main state (ghost) are the two writes that used to give an account with no
+// state a leaf. Neither does (#4437).
+func TestTheWritesThatMadeEmptyLeavesMakeNone(t *testing.T) {
+	src, _, _, _, ghost, void, bodied, _ := mainlessFixture(t)
+	for _, u := range []*url.URL{ghost, void} {
+		_, err := rvLeaf(src, u)
+		require.Error(t, err, "%v has no main state and got a state-tree leaf", u)
+	}
+	_, err := rvLeaf(src, bodied)
+	require.NoError(t, err, "precondition: an account with main state has a leaf")
+}
 
-	fetch := func(t *testing.T, srcs []Source, u *url.URL) error {
+// TestAPeerServingALeafWithNoBodyIsRefused: such a leaf does not exist, so an
+// answer carrying one is a lie. It is refused as that source's failure — never
+// kept, never a reason to drop the name — and the next source is asked.
+func TestAPeerServingALeafWithNoBodyIsRefused(t *testing.T) {
+	src, root, block, part, _, void, bodied, partitionID := mainlessFixture(t)
+	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
+	liar := bodyless{Source: honest, receiptOf: bodied}
+	opts := Options{Mode: ModeStateOnly, Verify: anchored{root: root, block: block}, Partition: part}
+
+	fetch := func(t *testing.T, srcs []Source, u *url.URL) (int, error) {
 		t.Helper()
 		dst := newObservedDB(t)
 		batch := dst.Begin(true)
-		p, _, err := FetchFrom(ctx, srcs, batch, u, opts)
+		p, i, err := FetchFrom(context.Background(), srcs, batch, u, opts)
 		if err == nil {
-			require.NoError(t, p.Settle(root))
+			err = p.Settle(root)
 		}
 		require.NoError(t, batch.UpdateBPT())
 		require.NoError(t, batch.Commit())
-		_, lerr := rvLeaf(dst, u)
-		if err == nil {
-			require.NoError(t, lerr, "kept, but no leaf was written")
-		} else {
-			require.Error(t, lerr, "refused, but a leaf was written")
+		if err != nil {
+			_, lerr := rvLeaf(dst, u)
+			require.Error(t, lerr, "refused, but a leaf was written for %v", u)
 		}
-		return err
+		return i, err
 	}
 
-	for _, u := range []*url.URL{void, ghost} {
-		t.Run("a peer that does not answer does not block/"+u.String(), func(t *testing.T) {
-			require.NoError(t, fetch(t, []Source{honest, honest, notReady{honest}}, u),
-				"a real body-less leaf two peers serve alike was refused because a third is joining")
-		})
-	}
-
-	t.Run("one answer is not enough", func(t *testing.T) {
-		err := fetch(t, []Source{notReady{honest}, honest, notReady{honest}}, void)
-		require.True(t, stderrors.Is(err, ErrUnconfirmed), "want ErrUnconfirmed, got %v", err)
-		require.False(t, stderrors.Is(err, ErrNoLeaf), "an unconfirmed leaf must be asked again, not dropped")
+	t.Run("a body-less answer for an account that exists", func(t *testing.T) {
+		i, err := fetch(t, []Source{liar, honest}, bodied)
+		require.NoError(t, err, "the honest peer's body was not taken after the liar's answer")
+		require.Equal(t, 1, i, "the body-less answer was kept")
 	})
 
-	t.Run("a body after a body-less answer is a dissent", func(t *testing.T) {
-		err := fetch(t, []Source{honest, honest, withBody{Source: honest, for_: void}}, void)
-		require.True(t, stderrors.Is(err, ErrDissent), "want ErrDissent, got %v", err)
+	t.Run("a body-less answer alone is refused", func(t *testing.T) {
+		_, err := fetch(t, []Source{liar}, bodied)
+		require.Error(t, err, "a leaf with no body was kept")
+		require.False(t, stderrors.Is(err, ErrNoLeaf), "a lie is a failure to ask again, not a reason to drop the name")
 	})
 
-	t.Run("another leaf is a dissent", func(t *testing.T) {
-		err := fetch(t, []Source{honest, honest, swapAll{Source: honest, for_: void, other: ghost}}, void)
-		require.True(t, stderrors.Is(err, ErrDissent), "want ErrDissent, got %v", err)
+	t.Run("a body-less answer does not drop a name the others do not hold", func(t *testing.T) {
+		_, err := fetch(t, []Source{honest, liar}, void)
+		require.Error(t, err)
+		require.False(t, stderrors.Is(err, ErrNoLeaf), "one lying source must leave the name to be asked again")
 	})
 
-	t.Run("a NotFound is a dissent", func(t *testing.T) {
-		err := fetch(t, []Source{honest, honest, swapAll{Source: honest, for_: void, other: url.MustParse("nobody/tokens")}}, void)
-		require.True(t, stderrors.Is(err, ErrDissent), "want ErrDissent, got %v", err)
+	t.Run("every source answering NotFound drops the name", func(t *testing.T) {
+		_, err := fetch(t, []Source{honest, honest}, void)
+		require.True(t, stderrors.Is(err, ErrNoLeaf), "want ErrNoLeaf, got %v", err)
+	})
+
+	t.Run("a joining peer neither blocks nor counts", func(t *testing.T) {
+		i, err := fetch(t, []Source{notReady{honest}, honest}, bodied)
+		require.NoError(t, err)
+		require.Equal(t, 1, i)
 	})
 }
 
