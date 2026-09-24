@@ -416,6 +416,14 @@ simulator still does not do as the daemon does:
   relay assertion — the committee executed what the joining follower was
   handed — therefore proves the hub and not the daemon's relay
   (`cmd/accumulated/run/submit_relay.go`, #4366).
+- `RestartNode` resets the node's staging and its join, not its executor:
+  the executor's cache seed and in-memory producer cache survive the
+  "restart", so a simulated handoff never meets what a fresh process meets on
+  its first block (the seed reading message bodies the join did not pull,
+  #4400). The rule for a handoff that fails (executor.md "Sync", step 5,
+  #4401) is therefore exercised by `internal/node/dagbft`, `internal/node/join`
+  and the simulator's `joinState` against an injected failure, not by a
+  simulated restart.
 - A simulator follower still votes and counts its own vote
   (`Node.isValidatorOn`), so stopping it cannot show that no quorum waited on
   it; the cadence assertion shows only that the partition runs on.

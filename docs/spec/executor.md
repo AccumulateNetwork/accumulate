@@ -646,6 +646,23 @@ The handoff does not happen, and the buffer is left as it is, when:
   nothing about which group is next, and the join waits for a state that
   records one (`NotReady`) rather than fall back to counting.
 
+**A handoff that cannot be performed sends the node back to syncing; it does
+not end the join.** A buffered group the executor cannot produce — it refuses
+to open or to execute the block — stops the handoff at that group. The blocks
+before it were produced and stand: the node stands at the last block it
+produced and returns to collecting mode holding the groups it did not produce,
+in order, with what it had already staged still staged. The join then syncs
+again and tries again from the state it reaches, as it does after a root
+mismatch (step 4); nothing is dropped, and the node is never left neither
+collecting nor executing (#4401: run `20260924T052134Z`, a Directory node
+whose first produced block failed sat for the rest of the run with its buffer
+discarded, refusing every later handoff as "not joining" and dropping every
+committed group). The retry has no bound, because a node that stops trying
+executes nothing and collects nothing; so **every failed attempt is counted**
+— `accumulate_join_handoff_failures_total{partition}` — and logged as an error
+with its attempt number, and a failure that recurs on every attempt is seen
+as a climbing count rather than as silence.
+
 A follower differs from
 a validator in what it does with the blocks it processes — it does not vote or
 propose — not in how it gets there; what it does with a transaction it cannot
