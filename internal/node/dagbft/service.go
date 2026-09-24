@@ -129,6 +129,13 @@ type Service struct {
 	buffer        []*CollectedGroup
 	bufferBytes   int
 	bufferOverrun bool
+	// collectedThrough is the highest leader round of any group that reached
+	// the buffer since collecting started, kept or refused. lostThrough is
+	// set from it when the buffer starts again after an overrun: the groups
+	// at or below it are in no buffer, so a state below it cannot be handed
+	// off at (#4407).
+	collectedThrough types.Round
+	lostThrough      types.Round
 	// handoff and stageThrough carry the join's requests; the block
 	// production loop serves both, because it is the only thing that
 	// produces blocks and the only thing that writes the buffer (#4294).

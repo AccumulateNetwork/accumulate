@@ -97,16 +97,29 @@ func (g *CollectedGroup) bytes() int {
 // StartCollecting puts the service in collecting mode: committed groups are
 // buffered instead of executed.
 //
-// Calling it while already collecting changes nothing. The daemon starts
+// Calling it while already collecting keeps the buffer. The daemon starts
 // collecting before the service starts and the join starts collecting when it
 // runs; emptying the buffer on the second call would drop the groups
 // committed between the two, and those blocks would then be in neither the
 // buffer nor the state (#4351).
+//
+// Unless the buffer has overrun: then it holds nothing that can be handed off,
+// and a new buffer starts from the next committed group (#4407). The groups
+// committed before it — refused by the bound, or thrown away here — are in no
+// buffer, so the handoff refuses a state that does not hold all of them.
 func (s *Service) StartCollecting() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.collecting {
+	switch {
+	case s.collecting && !s.bufferOverrun:
 		return
+	case s.collecting:
+		s.lostThrough = s.collectedThrough
+		s.logger.Info("The join buffer overran; collecting again from the next committed group",
+			"partition", s.config.Partition.ID, "discarded", len(s.buffer), "lostThroughRound", s.lostThrough)
+	default:
+		s.collectedThrough = 0
+		s.lostThrough = 0
 	}
 	s.collecting = true
 	s.bufferOverrun = false
@@ -261,13 +274,20 @@ func (s *Service) checkRound(q uint64, round types.Round) error {
 	if s.bufferOverrun {
 		return errors.NotReady.WithFormat("%s: the join buffer overran; the join must start again", s.config.Partition.ID)
 	}
-	if round < s.lastLeaderRound {
-		return errors.Conflict.WithFormat("%s: cannot hand off at block %d (round %d), behind round %d where this node stood",
-			s.config.Partition.ID, q, round, s.lastLeaderRound)
+	// The node stands at the round of the last block it produced, or, once
+	// its buffer started again after an overrun, at the last round it lost:
+	// the groups up to there are in no buffer (#4407).
+	stood := s.lastLeaderRound
+	if s.lostThrough > stood {
+		stood = s.lostThrough
+	}
+	if round < stood {
+		return errors.Conflict.WithFormat("%s: cannot hand off at block %d (round %d), behind round %d where this node's buffer starts",
+			s.config.Partition.ID, q, round, stood)
 	}
 
-	reached := s.lastLeaderRound
-	found := round == s.lastLeaderRound
+	reached := stood
+	found := round == stood
 	for _, g := range s.buffer {
 		r := g.Round()
 		if r > reached {
@@ -564,6 +584,9 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 	// longer all in hand, and nothing may be produced from a buffer with a
 	// hole in it.
 	s.mu.Lock()
+	if r := g.Round(); r > s.collectedThrough {
+		s.collectedThrough = r
+	}
 	full := len(s.buffer) >= maxCollectedGroups || s.bufferBytes+g.bytes() > maxCollectedBytes
 	if full {
 		s.bufferOverrun = true

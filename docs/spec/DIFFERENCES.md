@@ -766,8 +766,20 @@ spec**, both deliberate:
   block, and an unbounded buffer is a memory fault of the kind that ended
   runs `20260903T202621Z` and `20260904T*`. Past either bound, and after any
   block that could not be collected, the buffer is marked overrun and the
-  join must start again from a newer snapshot; nothing yet does that restart
-  (#4294).
+  join must start again from a newer state. It does (#4294, #4407): the
+  join's overrun branch asks the service to collect again, and
+  `Service.StartCollecting` — which otherwise keeps the buffer, so the
+  daemon's call and the join's on a first start lose nothing (#4351) —
+  starts a new buffer when the old one has overrun. The groups committed
+  before that restart are in no buffer, so the handoff stands at the highest
+  round the node collected or refused, and a state below it is refused
+  (`Conflict`) as a state behind the node's own round is; the join pulls
+  on. `TestJoinRun_AnOverrunDuringTheJoinResumesFromANewerBlock`
+  (`internal/node/dagbft`) drives `join.Run` against the production
+  `Service` and its block production loop through an overrun, with
+  consensus, the pull and the gap check stood in for;
+  `test/e2e/join_overrun_resume_test.go` drives the production pull with a
+  stand-in buffer.
 - A collected entry's `Collected` flag is decided against the store as it
   stands when the block is collected, which on a joining node is the state
   the pull has reached, not the state at that block. A joining node's store
