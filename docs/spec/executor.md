@@ -250,18 +250,36 @@ where they disagree with it, this wins.
    does the local root equal a root the network signed. That equality with a
    verified signed anchor's `StateTreeAnchor` (§1) proves the whole state at
    that block B. Nothing before the match is proven, and nothing before it
-   needs to be. A lying peer can delay the match; it cannot fake it.
+   needs to be. A lying peer can delay the match; it cannot fake it. **The
+   anchor is the partition's own** (Paul, 2026-09-25): a BVN's state is proven
+   by the BVN's anchor for block B, not by the Directory's copy of it, which
+   reaches the Directory's pool only after the Directory executes it — far too
+   late to sync against a partition that moves every block. Each validator of
+   the partition signs its own copy of the anchor as B closes, and a
+   partition's pool does not hold its own anchors with their signatures
+   (measured: a BVN's pool holds none of its own; only the Directory, which
+   anchors to itself, does). So the joining node collects the quorum itself:
+   it asks the partition's validators for the anchor of B — the sequencer
+   answers an anchor by number signed by the validator that answers (#4424:
+   committee members only) — and the anchor is verified when distinct members
+   reaching the partition's threshold have signed it.
 4. **The synthetic ledgers give the staging floor.** In the state at B, each
    stream's `Delivered` says every synthetic transaction at or below it has
    been received and processed. Staging never needs any of them.
 5. **Only then does the node stage.** It collects synthetic transactions and
    anchors from consensus into staging, above the floor.
-6. **When staging is consistent, stop pulling and execute.** The node stops
-   pulling accounts from the block ledger and executes from B + 1, user
-   transactions included. *Open, for Paul:* what "consistent" requires at the
-   top of each stream — contiguous from the floor to the highest number seen
-   in collected blocks, or to a per-stream received watermark the ledger
-   records (#4412).
+6. **When staging is consistent, stop pulling and execute.** The state at B
+   records, for every stream, the highest number its partition had received
+   — the synthetic ledger's `Received`, and the anchor ledger's for anchor
+   streams — written by every block as hashed state (Paul, 2026-09-25,
+   #4412). Staging is consistent when, for every stream, the node holds every
+   number from `Delivered + 1` to `Received` as of B; whatever it lacks it
+   fetches from the source by number. Then it stops pulling accounts from the
+   block ledger and executes from B + 1, user transactions included. The
+   highest number seen in collected blocks is not enough: an entry the peers
+   held before this node started staging, on a stream that then goes quiet,
+   is never seen, and executing without it diverges (run
+   20260924T074702Z's Directory block 658, #4412).
 
 Invariants 13–15 are what make steps 2 and 3 sound: no leaf exists for an
 account that holds nothing, the record names every account a block changes,
