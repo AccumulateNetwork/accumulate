@@ -367,11 +367,16 @@ body, and that is stated rather than hidden: the tree hashes a leaf's value
 and not its key, and a leaf with no body carries no URL, so the receipt of
 one such leaf passes for any account whose pulled state hashes to the same
 value — every empty account's leaf is one hash. So a body-less leaf is kept
-only when **every** source asked serves the same one for the name; one
-dissent — a `NotFound`, a body, another leaf, or no answer — and the name is
-neither written nor dropped but asked again, and what each peer answered is
-logged. That is trust in the peers, not proof, for the existence of an empty
-leaf, and it fails when every peer asked lies; what then refuses the leaf
+only on the word of the peers that answer: only an answer votes — a
+body-less leaf, a body, or `NotFound` — and a peer that does not answer (one
+that is itself joining answers `NotReady`; one that is restarting does not
+dial) neither agrees nor dissents, or two nodes joining one partition would
+block each other's body-less leaves for ever. The leaf is kept when every
+answering peer served the same one and at least two answered. One dissent —
+a `NotFound`, a body, another leaf — and the name is neither written nor
+dropped but asked again, as it is with fewer than two answers, and what each
+peer answered is logged. That is trust in the peers, not proof, for the
+existence of an empty leaf, and it fails when every peer that answers lies; what then refuses the leaf
 placed under the wrong name is the whole-root match, so the exposure is a
 join that does not finish, not a node that executes from a wrong state
 (DIFFERENCES.md E11). `NotFound` means the peer's tree holds no leaf: a name every

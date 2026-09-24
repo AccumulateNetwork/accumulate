@@ -929,15 +929,21 @@ seventh nobody had named.
   leaf for, answer it "no body" with an empty account's receipt, serve no
   chains for it, and pass the leaf check. Before #4397 this could not happen:
   a body names its own URL. **Phase 1 answers it with unanimity (the lead's
-  decision, review F3):** a body-less leaf is kept only when every source
-  asked serves the same one (`pull.FetchFrom`, `pull.ErrDissent`); one
-  dissent and the name is retried, not written and not dropped, and each
-  peer's answer is logged by peer ID. One liar among honest peers, in any
-  position, is thereby refused (`TestALiarAmongHonestPeersCannotPlantAPhantomLeaf`).
-  **This departs from "proven against the anchored root"**: it is trust in
-  unsigned peers for the existence of an empty leaf, and when every source
-  asked lies the phantom leaf is kept (`TestUnanimousLiarsPlantAPhantomLeaf`,
-  the limit). The whole-root match still refuses the state, so that is
+  decision, review F3, corrected at R1):** only an answer votes — a
+  body-less leaf, a body, or NotFound; a source that does not answer (a peer
+  that is itself joining answers NotReady) neither agrees nor dissents. A
+  body-less leaf is kept when every answering source serves the same one and
+  at least two answer (`pull.FetchFrom`); one dissent (`pull.ErrDissent`) or
+  fewer than two answers (`pull.ErrUnconfirmed`) and the name is retried, not
+  written and not dropped, and each peer's answer is logged by peer ID. One
+  liar among honest peers, in any position, is thereby refused
+  (`TestALiarAmongHonestPeersCannotPlantAPhantomLeaf`), and a joining peer
+  blocks nothing (`TestOnlyAnAnswerVotesOnALeafWithNoBody`,
+  `TestAJoiningPeerDoesNotBlockALeafWithNoBody`). **This departs from
+  "proven against the anchored root"**: it is trust in unsigned peers for the
+  existence of an empty leaf, and when every source that answers lies — two
+  liars, with the honest peers down — the phantom leaf is kept
+  (`TestUnanimousLiarsPlantAPhantomLeaf`, the limit). The whole-root match still refuses the state, so that is
   liveness, not safety — but permanent, because the page diff names the
   peer's leaves the node lacks and never the node's leaves the peer lacks,
   and nothing removes a local leaf. The structural closing is a two-way page

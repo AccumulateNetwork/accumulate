@@ -422,7 +422,7 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 	var bodyless []*Pending
 	var leaves [][]byte
 	var answers []string
-	noLeaf := 0
+	noLeaf, bodies := 0, 0
 	discard := func() {
 		for _, p := range bodyless {
 			p.Discard()
@@ -451,6 +451,7 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 			if len(bodyless) == 0 {
 				return p, i, nil
 			}
+			bodies++
 			answers = append(answers, fmt.Sprintf("%s: a body", sourceName(i, src)))
 			p.Discard()
 
@@ -470,23 +471,31 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 	// A leaf with no body is not bound to its account's name: the tree hashes
 	// values, not keys, and every empty account's leaf is one hash, so one
 	// peer can serve an empty account's receipt under a name the tree has no
-	// leaf for and pass the leaf check (#4397 review F3). It is kept only when
-	// EVERY source asked served the same body-less leaf. One dissent -- a
-	// NotFound, a body, another leaf, or no answer -- and the name is neither
-	// written nor dropped: it is asked again.
+	// leaf for and pass the leaf check (#4397 review F3). Only an ANSWER
+	// votes: a body-less leaf, a body, or NotFound. A source that did not
+	// answer -- a peer that is itself joining answers NotReady, a restarting
+	// one does not dial -- neither agrees nor dissents; counting it as dissent
+	// let one joining peer block every body-less leaf, and two joiners block
+	// each other for ever (review R1). The leaf is kept when every source
+	// that answered served the same one and at least two answered. One
+	// dissent -- a NotFound, a body, another leaf -- and the name is neither
+	// written nor dropped; with fewer than two answers it is asked again too.
 	if len(bodyless) > 0 {
-		same := len(bodyless) == len(srcs)
+		agree := noLeaf == 0 && bodies == 0
 		for _, l := range leaves {
-			same = same && bytes.Equal(l, leaves[0])
+			agree = agree && bytes.Equal(l, leaves[0])
 		}
-		if same {
+		if agree && len(bodyless) >= 2 {
 			for _, p := range bodyless[1:] {
 				p.Discard()
 			}
 			return bodyless[0], 0, nil
 		}
 		discard()
-		return nil, -1, fmt.Errorf("%v: %w: %s", u, ErrDissent, strings.Join(answers, "; "))
+		if !agree {
+			return nil, -1, fmt.Errorf("%v: %w: %s", u, ErrDissent, strings.Join(answers, "; "))
+		}
+		return nil, -1, fmt.Errorf("%v: %w: %s", u, ErrUnconfirmed, strings.Join(answers, "; "))
 	}
 
 	if noLeaf == len(srcs) {
@@ -495,11 +504,18 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 	return nil, -1, errors.Conflict.WithFormat("%v: no source served it: %w", u, stderrors.Join(refusals...))
 }
 
-// ErrDissent says the sources asked for an account did not all serve the
-// same body-less leaf for it, where one of them served one. Such a leaf is
-// only kept on every source's word (#4397 review F3), so the name is asked
-// again; the error names each source and what it answered.
+// ErrDissent says the sources that answered for an account did not all serve
+// the same body-less leaf for it, where one of them served one. Such a leaf
+// is only kept on the word of every source that answers (#4397 review F3,
+// R1), so the name is asked again; the error names each source and what it
+// answered.
 var ErrDissent = stderrors.New("the sources do not agree on a leaf with no body")
+
+// ErrUnconfirmed says one source served a body-less leaf and no second
+// source answered to confirm it: the others did not answer at all. A
+// body-less leaf is kept only on the word of at least two answering sources,
+// so the name is asked again (#4397 review R1).
+var ErrUnconfirmed = stderrors.New("only one source answered for a leaf with no body")
 
 // sourceName is how a source is named in an error: by the peer it reaches,
 // when it says, and by its place in the list otherwise.

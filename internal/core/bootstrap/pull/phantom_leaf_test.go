@@ -19,6 +19,7 @@ import (
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	apierrors "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -199,4 +200,116 @@ func TestTheGhostFamilyChainSetIsWhatTheLeafCheckCatches(t *testing.T) {
 			t.Log(err)
 		})
 	}
+}
+
+// notReady is a peer that is itself joining: its querier refuses every read
+// (querier.servingFor).
+type notReady struct{ Source }
+
+func (notReady) QueryAccount(context.Context, *url.URL, *api.DefaultQuery) (*api.AccountRecord, error) {
+	return nil, apierrors.NotReady.With("the peer is joining and cannot answer for state it has not executed")
+}
+
+// swapAll answers every query for one name with another account's answers:
+// its body or none, its receipt, its chains.
+type swapAll struct {
+	Source
+	for_, other *url.URL
+}
+
+func (s swapAll) u(u *url.URL) *url.URL {
+	if u.Equal(s.for_) {
+		return s.other
+	}
+	return u
+}
+
+func (s swapAll) QueryAccount(ctx context.Context, u *url.URL, q *api.DefaultQuery) (*api.AccountRecord, error) {
+	return s.Source.QueryAccount(ctx, s.u(u), q)
+}
+
+func (s swapAll) QueryAccountChains(ctx context.Context, u *url.URL, q *api.ChainQuery) (*api.RecordRange[*api.ChainRecord], error) {
+	return s.Source.QueryAccountChains(ctx, s.u(u), q)
+}
+
+func (s swapAll) QueryChainEntries(ctx context.Context, u *url.URL, q *api.ChainQuery) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
+	return s.Source.QueryChainEntries(ctx, s.u(u), q)
+}
+
+// withBody answers one name with a body carrying that name, beside the true
+// receipt of the leaf the peer holds for it: a source that says the account
+// has a body where the others say it has none.
+type withBody struct {
+	Source
+	for_ *url.URL
+}
+
+func (w withBody) QueryAccount(ctx context.Context, u *url.URL, q *api.DefaultQuery) (*api.AccountRecord, error) {
+	rec, err := w.Source.QueryAccount(ctx, u, q)
+	if err != nil || !u.Equal(w.for_) {
+		return rec, err
+	}
+	rec.Account = &protocol.TokenAccount{Url: u, TokenUrl: protocol.AcmeUrl()}
+	return rec, nil
+}
+
+// TestOnlyAnAnswerVotesOnALeafWithNoBody pins the unanimity rule's arms
+// (#4397 review R1). An answer votes: a body-less leaf, a body, NotFound. A
+// source that does not answer -- a peer that is itself joining, or one that is
+// restarting -- neither agrees nor dissents; counted as dissent it let one
+// joining peer block every body-less leaf, and two joiners one partition
+// block each other for ever. The leaf is kept when every answering source
+// served the same one and at least two answered.
+func TestOnlyAnAnswerVotesOnALeafWithNoBody(t *testing.T) {
+	src, root, block, part, ghost, void, _, partitionID := mainlessFixture(t)
+	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
+	opts := Options{Mode: ModeStateOnly, Verify: anchored{root: root, block: block}, Partition: part}
+	ctx := context.Background()
+
+	fetch := func(t *testing.T, srcs []Source, u *url.URL) error {
+		t.Helper()
+		dst := newObservedDB(t)
+		batch := dst.Begin(true)
+		p, _, err := FetchFrom(ctx, srcs, batch, u, opts)
+		if err == nil {
+			require.NoError(t, p.Settle(root))
+		}
+		require.NoError(t, batch.UpdateBPT())
+		require.NoError(t, batch.Commit())
+		_, lerr := rvLeaf(dst, u)
+		if err == nil {
+			require.NoError(t, lerr, "kept, but no leaf was written")
+		} else {
+			require.Error(t, lerr, "refused, but a leaf was written")
+		}
+		return err
+	}
+
+	for _, u := range []*url.URL{void, ghost} {
+		t.Run("a peer that does not answer does not block/"+u.String(), func(t *testing.T) {
+			require.NoError(t, fetch(t, []Source{honest, honest, notReady{honest}}, u),
+				"a real body-less leaf two peers serve alike was refused because a third is joining")
+		})
+	}
+
+	t.Run("one answer is not enough", func(t *testing.T) {
+		err := fetch(t, []Source{notReady{honest}, honest, notReady{honest}}, void)
+		require.True(t, stderrors.Is(err, ErrUnconfirmed), "want ErrUnconfirmed, got %v", err)
+		require.False(t, stderrors.Is(err, ErrNoLeaf), "an unconfirmed leaf must be asked again, not dropped")
+	})
+
+	t.Run("a body after a body-less answer is a dissent", func(t *testing.T) {
+		err := fetch(t, []Source{honest, honest, withBody{Source: honest, for_: void}}, void)
+		require.True(t, stderrors.Is(err, ErrDissent), "want ErrDissent, got %v", err)
+	})
+
+	t.Run("another leaf is a dissent", func(t *testing.T) {
+		err := fetch(t, []Source{honest, honest, swapAll{Source: honest, for_: void, other: ghost}}, void)
+		require.True(t, stderrors.Is(err, ErrDissent), "want ErrDissent, got %v", err)
+	})
+
+	t.Run("a NotFound is a dissent", func(t *testing.T) {
+		err := fetch(t, []Source{honest, honest, swapAll{Source: honest, for_: void, other: url.MustParse("nobody/tokens")}}, void)
+		require.True(t, stderrors.Is(err, ErrDissent), "want ErrDissent, got %v", err)
+	})
 }
