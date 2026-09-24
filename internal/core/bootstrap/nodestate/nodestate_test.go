@@ -40,7 +40,7 @@ func TestState_Capabilities(t *testing.T) {
 	}
 }
 
-func TestMachine_ForwardOnlyTransitions(t *testing.T) {
+func TestMachine_PromotionIsOnceUntilDemoted(t *testing.T) {
 	m := New(bvn0())
 	if got, want := m.State(), StateBooting; got != want {
 		t.Fatalf("initial state = %v, want %v", got, want)
@@ -57,9 +57,69 @@ func TestMachine_ForwardOnlyTransitions(t *testing.T) {
 		t.Fatal("anchor not recorded")
 	}
 
-	// ACTIVE is final.
+	// A second promotion is not one: ACTIVE leaves only by demotion.
 	if m.PromoteToActive(anchor, 200) {
 		t.Fatal("repeat PromoteToActive should fail")
+	}
+}
+
+// A node is ACTIVE only while it executes in agreement (executor.md, "Sync",
+// steps 4-6; #4385). A re-sync after a root mismatch or a failed handoff sends
+// the machine back to BOOTING: it refuses what BOOTING refuses, advertises no
+// verified anchor, says so to every OnChange listener (the gauge is one), and
+// is promoted again by the same promotion as the first time.
+func TestMachine_DemotionReturnsToBootingUntilTheNextMatch(t *testing.T) {
+	m := New(bvn0())
+	var ads []Advertisement
+	m.OnChange(func(ad Advertisement) { ads = append(ads, ad) })
+
+	if m.Demote(10) {
+		t.Fatal("a BOOTING machine has nothing to demote")
+	}
+	if len(ads) != 0 {
+		t.Fatalf("a refused demotion fired %d change(s)", len(ads))
+	}
+
+	first := [32]byte{1}
+	if !m.PromoteToActive(first, 100) {
+		t.Fatal("PromoteToActive should succeed from BOOTING")
+	}
+	if !m.Demote(104) {
+		t.Fatal("Demote should succeed from ACTIVE")
+	}
+	if m.State() != StateBooting {
+		t.Fatalf("state = %v after Demote, want BOOTING", m.State())
+	}
+	if m.CanServeCurrent() {
+		t.Fatal("a demoted machine still serves")
+	}
+	ad := m.Get()
+	if ad.VerifiedAnchor != ([32]byte{}) {
+		t.Fatalf("a demoted machine still advertises the anchor %x it no longer agrees with", ad.VerifiedAnchor)
+	}
+	if ad.SinceBlock != 104 {
+		t.Fatalf("SinceBlock = %d, want the block it was demoted at, 104", ad.SinceBlock)
+	}
+	if err := ad.Validate(); err != nil {
+		t.Fatalf("a demoted machine's advertisement is malformed: %v", err)
+	}
+	if len(ads) != 2 || ads[1].State != StateBooting {
+		t.Fatalf("OnChange saw %+v, want the promotion then the demotion", ads)
+	}
+
+	if m.Demote(105) {
+		t.Fatal("a second demotion is not one")
+	}
+
+	second := [32]byte{2}
+	if !m.PromoteToActive(second, 120) {
+		t.Fatal("a demoted machine is promoted again by the same promotion")
+	}
+	if ad := m.Get(); ad.State != StateActive || ad.VerifiedAnchor != second || ad.SinceBlock != 120 {
+		t.Fatalf("re-promoted as %+v, want ACTIVE at 120 with the new anchor", ad)
+	}
+	if len(ads) != 3 {
+		t.Fatalf("OnChange fired %d times, want 3", len(ads))
 	}
 }
 

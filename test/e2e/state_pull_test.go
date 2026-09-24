@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/enumerate"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -128,9 +127,8 @@ func TestPullReachesTheAnchoredRoot(t *testing.T) {
 
 	// The tracker sees every root the Directory anchors, as the node collecting
 	// blocks would hand it (#4292).
-	machine := nodestate.New(part)
 	local := emptyDb()
-	trk, err := tracker.New(local, machine)
+	trk, err := tracker.New(local, part)
 	require.NoError(t, err)
 	anchors := anchorSourceFor(t, sim, part)
 	// Every VERIFIED anchor is handed over; the tracker keeps the ones for
@@ -190,13 +188,12 @@ func TestPullReachesTheAnchoredRoot(t *testing.T) {
 	t.Logf("reached block Q=%d, root %x", q, rootQ)
 
 	// Step 4: the tracker says the local root equals an anchored root, so this
-	// is block Q and the node can execute from Q+1.
-	promoted, err := trk.Check(ctx)
+	// is block Q and the node can hand off and execute from Q+1.
+	match, matched, err := trk.Check(ctx)
 	require.NoError(t, err)
-	require.True(t, promoted, "the tracker did not recognise the anchored root")
-	require.Equal(t, nodestate.StateActive, machine.State())
-	require.Equal(t, q, machine.Get().SinceBlock)
-	require.Equal(t, rootQ, machine.Get().VerifiedAnchor)
+	require.True(t, matched, "the tracker did not recognise the anchored root")
+	require.Equal(t, q, match.Block)
+	require.Equal(t, rootQ, match.Anchor)
 }
 
 // TestPullSpineCarriesTheChains — the spine is pulled with its chain history,
