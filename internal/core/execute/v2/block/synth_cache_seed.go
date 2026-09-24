@@ -65,6 +65,16 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 		}
 	}
 
+	// A node that joined executed no block at or below the block it joined
+	// at, so it produced none of their synthetics and holds none of their
+	// messages: the join pulls <partition>/synthetic state-only. Those blocks
+	// are not its to rebuild, dispatch or serve (executor.md, "Sync" §6; the
+	// join records the block, SettleStaging). Rebuilding them read messages
+	// the node never had and failed the first block it opened (#4400).
+	if joined := x.synthCache().Joined(); joined >= from {
+		from = joined + 1
+	}
+
 	var blocks []*synthcache.Block
 	for b := from; b < current; b++ {
 		blk, err := x.rebuildCacheBlock(batch, b)
