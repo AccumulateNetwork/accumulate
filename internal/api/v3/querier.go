@@ -596,7 +596,90 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	// (#4274).
 	r.Receipt.Partition = s.partition.PartitionID()
 	r.Receipt.Complete = s.partition.URL.Equal(protocol.DnUrl())
+
+	// What else the leaf the receipt proves is hashed from (#4399). Read from
+	// the batch the receipt was built from, so the two cannot disagree.
+	r.Leaf, err = s.leafBesideBody(record)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 	return r, nil
+}
+
+// leafBesideBody is the part of a system account's leaf that no other query
+// serves: the synthetic ledger's delivery queues and the partition ledger's
+// scheduled events (observer_prod.go, hashSecondaryState). Without them a node
+// pulling the account rebuilds it with whatever it held itself, and under load
+// the local delivery queue is never empty, so every peer's answer was refused
+// for ever (#4399). Nil for every other account.
+func (s *Querier) leafBesideBody(record *database.Account) (*api.AccountLeaf, error) {
+	u := record.Url()
+	switch {
+	case u.Equal(s.partition.Synthetic()):
+		l := new(api.AccountLeaf)
+		var err error
+		l.LocalDeliveryQueue, err = record.LocalDeliveryQueue().Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load local delivery queue: %w", err)
+		}
+		l.CascadeDeliveryQueue, err = record.CascadeDeliveryQueue().Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load cascade delivery queue: %w", err)
+		}
+		return l, nil
+
+	case u.Equal(s.partition.Ledger()):
+		l := new(api.AccountLeaf)
+		ev, err := ledgerEvents(record.Events())
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load scheduled events: %w", err)
+		}
+		l.Events = ev
+		l.EventsRoot, err = record.Events().BPT().GetRootHash()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load scheduled events root: %w", err)
+		}
+		return l, nil
+	}
+	return nil, nil
+}
+
+// ledgerEvents reads a partition ledger's scheduled events: everything its
+// events BPT holds, and the block lists the executor finds them by.
+func ledgerEvents(events *database.AccountEvents) (*api.LedgerEvents, error) {
+	ev := new(api.LedgerEvents)
+	var err error
+	ev.MinorBlocks, err = events.Minor().Blocks().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	for _, b := range ev.MinorBlocks {
+		votes, err := events.Minor().Votes(b).Get()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		if len(votes) > 0 {
+			ev.MinorVotes = append(ev.MinorVotes, &api.BlockVotes{Block: b, Votes: votes})
+		}
+	}
+	ev.MajorBlocks, err = events.Major().Blocks().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	for _, b := range ev.MajorBlocks {
+		pending, err := events.Major().Pending(b).Get()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		if len(pending) > 0 {
+			ev.MajorPending = append(ev.MajorPending, &api.BlockPending{Block: b, Pending: pending})
+		}
+	}
+	ev.Expired, err = events.Backlog().Expired().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return ev, nil
 }
 
 // historicalStateReceipt answers a ForHeight request for an account's state

@@ -217,6 +217,57 @@ AccountLeaf:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: Events
+      description: is a partition ledger's scheduled events, which the leaf commits to through EventsRoot. Set on a current answer (#4399), where the root alone could not be written by the node pulling it
+      type: LedgerEvents
+      marshal-as: reference
+      pointer: true
+
+LedgerEvents:
+  description: is what a partition ledger's scheduled-events BPT holds, and the block lists that index it (#4399)
+  fields:
+    - name: MinorBlocks
+      type: uint
+      repeatable: true
+    - name: MinorVotes
+      description: is the authority votes held for each minor block
+      type: BlockVotes
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: MajorBlocks
+      type: uint
+      repeatable: true
+    - name: MajorPending
+      description: is the pending transactions that expire at each major block
+      type: BlockPending
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: Expired
+      description: is the backlog of expired transactions not yet processed
+      type: txid
+      pointer: true
+      repeatable: true
+
+BlockVotes:
+  fields:
+    - name: Block
+      type: uint
+    - name: Votes
+      type: protocol.AuthoritySignature
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+BlockPending:
+  fields:
+    - name: Block
+      type: uint
+    - name: Pending
+      type: txid
+      pointer: true
+      repeatable: true
 
 PendingTransactionSets:
   description: is what an account holds for one pending transaction, as its BPT leaf hashes it

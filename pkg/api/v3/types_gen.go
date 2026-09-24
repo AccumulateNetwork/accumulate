@@ -47,7 +47,9 @@ type AccountLeaf struct {
 	Pending []*PendingTransactionSets `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	// BookPending is what a key page holds for each of its book's pending transactions.
 	BookPending []*PendingTransactionSets `json:"bookPending,omitempty" form:"bookPending" query:"bookPending" validate:"required"`
-	extraData   []byte
+	// Events is a partition ledger's scheduled events, which the leaf commits to through EventsRoot. Set on a current answer (#4399), where the root alone could not be written by the node pulling it.
+	Events    *LedgerEvents `json:"events,omitempty" form:"events" query:"events" validate:"required"`
+	extraData []byte
 }
 
 type AccountRecord struct {
@@ -104,6 +106,13 @@ type BlockEvent struct {
 	extraData []byte
 }
 
+type BlockPending struct {
+	fieldsSet []bool
+	Block     uint64      `json:"block,omitempty" form:"block" query:"block" validate:"required"`
+	Pending   []*url.TxID `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	extraData []byte
+}
+
 type BlockQuery struct {
 	fieldsSet  []bool
 	Minor      *uint64       `json:"minor,omitempty" form:"minor" query:"minor"`
@@ -113,6 +122,13 @@ type BlockQuery struct {
 	EntryRange *RangeOptions `json:"entryRange,omitempty" form:"entryRange" query:"entryRange"`
 	// OmitEmpty omits empty (unrecorded) blocks from the response.
 	OmitEmpty bool `json:"omitEmpty,omitempty" form:"omitEmpty" query:"omitEmpty"`
+	extraData []byte
+}
+
+type BlockVotes struct {
+	fieldsSet []bool
+	Block     uint64                         `json:"block,omitempty" form:"block" query:"block" validate:"required"`
+	Votes     []*protocol.AuthoritySignature `json:"votes,omitempty" form:"votes" query:"votes" validate:"required"`
 	extraData []byte
 }
 
@@ -319,6 +335,20 @@ type LastBlock struct {
 	StateRoot             [32]byte  `json:"stateRoot,omitempty" form:"stateRoot" query:"stateRoot" validate:"required"`
 	DirectoryAnchorHeight uint64    `json:"directoryAnchorHeight,omitempty" form:"directoryAnchorHeight" query:"directoryAnchorHeight" validate:"required"`
 	extraData             []byte
+}
+
+// LedgerEvents is what a partition ledger's scheduled-events BPT holds, and the block lists that index it (#4399).
+type LedgerEvents struct {
+	fieldsSet   []bool
+	MinorBlocks []uint64 `json:"minorBlocks,omitempty" form:"minorBlocks" query:"minorBlocks" validate:"required"`
+	// MinorVotes is the authority votes held for each minor block.
+	MinorVotes  []*BlockVotes `json:"minorVotes,omitempty" form:"minorVotes" query:"minorVotes" validate:"required"`
+	MajorBlocks []uint64      `json:"majorBlocks,omitempty" form:"majorBlocks" query:"majorBlocks" validate:"required"`
+	// MajorPending is the pending transactions that expire at each major block.
+	MajorPending []*BlockPending `json:"majorPending,omitempty" form:"majorPending" query:"majorPending" validate:"required"`
+	// Expired is the backlog of expired transactions not yet processed.
+	Expired   []*url.TxID `json:"expired,omitempty" form:"expired" query:"expired" validate:"required"`
+	extraData []byte
 }
 
 type ListSnapshotsOptions struct {
@@ -758,6 +788,9 @@ func (v *AccountLeaf) Copy() *AccountLeaf {
 			u.BookPending[i] = (v).Copy()
 		}
 	}
+	if v.Events != nil {
+		u.Events = (v.Events).Copy()
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -882,6 +915,27 @@ func (v *BlockEvent) Copy() *BlockEvent {
 
 func (v *BlockEvent) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *BlockPending) Copy() *BlockPending {
+	u := new(BlockPending)
+
+	u.Block = v.Block
+	u.Pending = make([]*url.TxID, len(v.Pending))
+	for i, v := range v.Pending {
+		v := v
+		if v != nil {
+			u.Pending[i] = v
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BlockPending) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *BlockQuery) Copy() *BlockQuery {
 	u := new(BlockQuery)
 
@@ -912,6 +966,27 @@ func (v *BlockQuery) Copy() *BlockQuery {
 }
 
 func (v *BlockQuery) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockVotes) Copy() *BlockVotes {
+	u := new(BlockVotes)
+
+	u.Block = v.Block
+	u.Votes = make([]*protocol.AuthoritySignature, len(v.Votes))
+	for i, v := range v.Votes {
+		v := v
+		if v != nil {
+			u.Votes[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BlockVotes) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BptLeafSummary) Copy() *BptLeafSummary {
 	u := new(BptLeafSummary)
@@ -1391,6 +1466,50 @@ func (v *LastBlock) Copy() *LastBlock {
 }
 
 func (v *LastBlock) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *LedgerEvents) Copy() *LedgerEvents {
+	u := new(LedgerEvents)
+
+	u.MinorBlocks = make([]uint64, len(v.MinorBlocks))
+	for i, v := range v.MinorBlocks {
+		v := v
+		u.MinorBlocks[i] = v
+	}
+	u.MinorVotes = make([]*BlockVotes, len(v.MinorVotes))
+	for i, v := range v.MinorVotes {
+		v := v
+		if v != nil {
+			u.MinorVotes[i] = (v).Copy()
+		}
+	}
+	u.MajorBlocks = make([]uint64, len(v.MajorBlocks))
+	for i, v := range v.MajorBlocks {
+		v := v
+		u.MajorBlocks[i] = v
+	}
+	u.MajorPending = make([]*BlockPending, len(v.MajorPending))
+	for i, v := range v.MajorPending {
+		v := v
+		if v != nil {
+			u.MajorPending[i] = (v).Copy()
+		}
+	}
+	u.Expired = make([]*url.TxID, len(v.Expired))
+	for i, v := range v.Expired {
+		v := v
+		if v != nil {
+			u.Expired[i] = v
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *LedgerEvents) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ListSnapshotsOptions) Copy() *ListSnapshotsOptions {
 	u := new(ListSnapshotsOptions)
@@ -2247,6 +2366,14 @@ func (v *AccountLeaf) Equal(u *AccountLeaf) bool {
 			return false
 		}
 	}
+	switch {
+	case v.Events == u.Events:
+		// equal
+	case v.Events == nil || u.Events == nil:
+		return false
+	case !((v.Events).Equal(u.Events)):
+		return false
+	}
 
 	return true
 }
@@ -2381,6 +2508,22 @@ func (v *BlockEvent) Equal(u *BlockEvent) bool {
 	return true
 }
 
+func (v *BlockPending) Equal(u *BlockPending) bool {
+	if !(v.Block == u.Block) {
+		return false
+	}
+	if len(v.Pending) != len(u.Pending) {
+		return false
+	}
+	for i := range v.Pending {
+		if !((v.Pending[i]).Equal(u.Pending[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *BlockQuery) Equal(u *BlockQuery) bool {
 	switch {
 	case v.Minor == u.Minor:
@@ -2424,6 +2567,22 @@ func (v *BlockQuery) Equal(u *BlockQuery) bool {
 	}
 	if !(v.OmitEmpty == u.OmitEmpty) {
 		return false
+	}
+
+	return true
+}
+
+func (v *BlockVotes) Equal(u *BlockVotes) bool {
+	if !(v.Block == u.Block) {
+		return false
+	}
+	if len(v.Votes) != len(u.Votes) {
+		return false
+	}
+	for i := range v.Votes {
+		if !((v.Votes[i]).Equal(u.Votes[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -2934,6 +3093,51 @@ func (v *LastBlock) Equal(u *LastBlock) bool {
 	}
 	if !(v.DirectoryAnchorHeight == u.DirectoryAnchorHeight) {
 		return false
+	}
+
+	return true
+}
+
+func (v *LedgerEvents) Equal(u *LedgerEvents) bool {
+	if len(v.MinorBlocks) != len(u.MinorBlocks) {
+		return false
+	}
+	for i := range v.MinorBlocks {
+		if !(v.MinorBlocks[i] == u.MinorBlocks[i]) {
+			return false
+		}
+	}
+	if len(v.MinorVotes) != len(u.MinorVotes) {
+		return false
+	}
+	for i := range v.MinorVotes {
+		if !((v.MinorVotes[i]).Equal(u.MinorVotes[i])) {
+			return false
+		}
+	}
+	if len(v.MajorBlocks) != len(u.MajorBlocks) {
+		return false
+	}
+	for i := range v.MajorBlocks {
+		if !(v.MajorBlocks[i] == u.MajorBlocks[i]) {
+			return false
+		}
+	}
+	if len(v.MajorPending) != len(u.MajorPending) {
+		return false
+	}
+	for i := range v.MajorPending {
+		if !((v.MajorPending[i]).Equal(u.MajorPending[i])) {
+			return false
+		}
+	}
+	if len(v.Expired) != len(u.Expired) {
+		return false
+	}
+	for i := range v.Expired {
+		if !((v.Expired[i]).Equal(u.Expired[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -3759,6 +3963,7 @@ var fieldNames_AccountLeaf = []string{
 	4: "CascadeDeliveryQueue",
 	5: "Pending",
 	6: "BookPending",
+	7: "Events",
 }
 
 func (v *AccountLeaf) MarshalBinary() ([]byte, error) {
@@ -3798,6 +4003,9 @@ func (v *AccountLeaf) MarshalBinary() ([]byte, error) {
 		for _, v := range v.BookPending {
 			writer.WriteValue(6, v.MarshalBinary)
 		}
+	}
+	if !(v.Events == nil) {
+		writer.WriteValue(7, v.Events.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AccountLeaf)
@@ -3844,6 +4052,11 @@ func (v *AccountLeaf) IsValid() error {
 		errs = append(errs, "field BookPending is missing")
 	} else if len(v.BookPending) == 0 {
 		errs = append(errs, "field BookPending is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Events is missing")
+	} else if v.Events == nil {
+		errs = append(errs, "field Events is not set")
 	}
 
 	switch len(errs) {
@@ -4235,6 +4448,66 @@ func (v *BlockEvent) IsValid() error {
 	}
 }
 
+var fieldNames_BlockPending = []string{
+	1: "Block",
+	2: "Pending",
+}
+
+func (v *BlockPending) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Block == 0) {
+		writer.WriteUint(1, v.Block)
+	}
+	if !(len(v.Pending) == 0) {
+		for _, v := range v.Pending {
+			writer.WriteTxid(2, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockPending)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *BlockPending) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Block is missing")
+	} else if v.Block == 0 {
+		errs = append(errs, "field Block is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Pending is missing")
+	} else if len(v.Pending) == 0 {
+		errs = append(errs, "field Pending is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_BlockQuery = []string{
 	1: "QueryType",
 	2: "Minor",
@@ -4292,6 +4565,66 @@ func (v *BlockQuery) baseIsValid() error {
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field QueryType is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockVotes = []string{
+	1: "Block",
+	2: "Votes",
+}
+
+func (v *BlockVotes) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Block == 0) {
+		writer.WriteUint(1, v.Block)
+	}
+	if !(len(v.Votes) == 0) {
+		for _, v := range v.Votes {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockVotes)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *BlockVotes) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Block is missing")
+	} else if v.Block == 0 {
+		errs = append(errs, "field Block is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Votes is missing")
+	} else if len(v.Votes) == 0 {
+		errs = append(errs, "field Votes is not set")
 	}
 
 	switch len(errs) {
@@ -5857,6 +6190,101 @@ func (v *LastBlock) IsValid() error {
 		errs = append(errs, "field DirectoryAnchorHeight is missing")
 	} else if v.DirectoryAnchorHeight == 0 {
 		errs = append(errs, "field DirectoryAnchorHeight is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_LedgerEvents = []string{
+	1: "MinorBlocks",
+	2: "MinorVotes",
+	3: "MajorBlocks",
+	4: "MajorPending",
+	5: "Expired",
+}
+
+func (v *LedgerEvents) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.MinorBlocks) == 0) {
+		for _, v := range v.MinorBlocks {
+			writer.WriteUint(1, v)
+		}
+	}
+	if !(len(v.MinorVotes) == 0) {
+		for _, v := range v.MinorVotes {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+	if !(len(v.MajorBlocks) == 0) {
+		for _, v := range v.MajorBlocks {
+			writer.WriteUint(3, v)
+		}
+	}
+	if !(len(v.MajorPending) == 0) {
+		for _, v := range v.MajorPending {
+			writer.WriteValue(4, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Expired) == 0) {
+		for _, v := range v.Expired {
+			writer.WriteTxid(5, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_LedgerEvents)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *LedgerEvents) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field MinorBlocks is missing")
+	} else if len(v.MinorBlocks) == 0 {
+		errs = append(errs, "field MinorBlocks is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field MinorVotes is missing")
+	} else if len(v.MinorVotes) == 0 {
+		errs = append(errs, "field MinorVotes is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field MajorBlocks is missing")
+	} else if len(v.MajorBlocks) == 0 {
+		errs = append(errs, "field MajorBlocks is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field MajorPending is missing")
+	} else if len(v.MajorPending) == 0 {
+		errs = append(errs, "field MajorPending is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Expired is missing")
+	} else if len(v.Expired) == 0 {
+		errs = append(errs, "field Expired is not set")
 	}
 
 	switch len(errs) {
@@ -8359,6 +8787,9 @@ func (v *AccountLeaf) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x := new(LedgerEvents); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
+		v.Events = x
+	}
 
 	seen, err := reader.Reset(fieldNames_AccountLeaf)
 	if err != nil {
@@ -8580,6 +9011,36 @@ func (v *BlockEvent) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *BlockPending) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockPending) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Block = x
+	}
+	for {
+		if x, ok := reader.ReadTxid(2); ok {
+			v.Pending = append(v.Pending, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockPending)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *BlockQuery) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -8619,6 +9080,36 @@ func (v *BlockQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_BlockQuery)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BlockVotes) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockVotes) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Block = x
+	}
+	for {
+		if x := new(protocol.AuthoritySignature); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Votes = append(v.Votes, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockVotes)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -9500,6 +9991,61 @@ func (v *LastBlock) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_LastBlock)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *LedgerEvents) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *LedgerEvents) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x, ok := reader.ReadUint(1); ok {
+			v.MinorBlocks = append(v.MinorBlocks, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(BlockVotes); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.MinorVotes = append(v.MinorVotes, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x, ok := reader.ReadUint(3); ok {
+			v.MajorBlocks = append(v.MajorBlocks, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(BlockPending); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
+			v.MajorPending = append(v.MajorPending, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x, ok := reader.ReadTxid(5); ok {
+			v.Expired = append(v.Expired, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_LedgerEvents)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -10820,6 +11366,7 @@ func init() {
 		encoding.NewTypeField("cascadeDeliveryQueue", "string[]"),
 		encoding.NewTypeField("pending", "PendingTransactionSets[]"),
 		encoding.NewTypeField("bookPending", "PendingTransactionSets[]"),
+		encoding.NewTypeField("events", "LedgerEvents"),
 	}, "AccountLeaf", "accountLeaf")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -10861,6 +11408,11 @@ func init() {
 	}, "BlockEvent", "blockEvent")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("block", "uint64"),
+		encoding.NewTypeField("pending", "string[]"),
+	}, "BlockPending", "blockPending")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("queryType", "string"),
 		encoding.NewTypeField("minor", "uint64"),
 		encoding.NewTypeField("major", "uint64"),
@@ -10869,6 +11421,11 @@ func init() {
 		encoding.NewTypeField("entryRange", "RangeOptions"),
 		encoding.NewTypeField("omitEmpty", "bool"),
 	}, "BlockQuery", "blockQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("block", "uint64"),
+		encoding.NewTypeField("votes", "protocol.AuthoritySignature[]"),
+	}, "BlockVotes", "blockVotes")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("keyHash", "bytes32"),
@@ -11029,6 +11586,14 @@ func init() {
 		encoding.NewTypeField("stateRoot", "bytes32"),
 		encoding.NewTypeField("directoryAnchorHeight", "uint64"),
 	}, "LastBlock", "lastBlock")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("minorBlocks", "uint64[]"),
+		encoding.NewTypeField("minorVotes", "BlockVotes[]"),
+		encoding.NewTypeField("majorBlocks", "uint64[]"),
+		encoding.NewTypeField("majorPending", "BlockPending[]"),
+		encoding.NewTypeField("expired", "string[]"),
+	}, "LedgerEvents", "ledgerEvents")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("nodeID", "string"),
@@ -11283,6 +11848,7 @@ func (v *AccountLeaf) MarshalJSON() ([]byte, error) {
 		CascadeDeliveryQueue encoding.JsonList[*url.TxID]               `json:"cascadeDeliveryQueue,omitempty"`
 		Pending              encoding.JsonList[*PendingTransactionSets] `json:"pending,omitempty"`
 		BookPending          encoding.JsonList[*PendingTransactionSets] `json:"bookPending,omitempty"`
+		Events               *LedgerEvents                              `json:"events,omitempty"`
 		ExtraData            *string                                    `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Chains) == 0) {
@@ -11302,6 +11868,9 @@ func (v *AccountLeaf) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.BookPending) == 0) {
 		u.BookPending = v.BookPending
+	}
+	if !(v.Events == nil) {
+		u.Events = v.Events
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -11413,6 +11982,22 @@ func (v *BlockEvent) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *BlockPending) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Block     uint64                       `json:"block,omitempty"`
+		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
+		ExtraData *string                      `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Block == 0) {
+		u.Block = v.Block
+	}
+	if !(len(v.Pending) == 0) {
+		u.Pending = v.Pending
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *BlockQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		QueryType  QueryType     `json:"queryType"`
@@ -11442,6 +12027,22 @@ func (v *BlockQuery) MarshalJSON() ([]byte, error) {
 	}
 	if !(!v.OmitEmpty) {
 		u.OmitEmpty = v.OmitEmpty
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *BlockVotes) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Block     uint64                                          `json:"block,omitempty"`
+		Votes     encoding.JsonList[*protocol.AuthoritySignature] `json:"votes,omitempty"`
+		ExtraData *string                                         `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Block == 0) {
+		u.Block = v.Block
+	}
+	if !(len(v.Votes) == 0) {
+		u.Votes = v.Votes
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -11938,6 +12539,34 @@ func (v *LastBlock) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.DirectoryAnchorHeight == 0) {
 		u.DirectoryAnchorHeight = v.DirectoryAnchorHeight
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *LedgerEvents) MarshalJSON() ([]byte, error) {
+	u := struct {
+		MinorBlocks  encoding.JsonList[uint64]        `json:"minorBlocks,omitempty"`
+		MinorVotes   encoding.JsonList[*BlockVotes]   `json:"minorVotes,omitempty"`
+		MajorBlocks  encoding.JsonList[uint64]        `json:"majorBlocks,omitempty"`
+		MajorPending encoding.JsonList[*BlockPending] `json:"majorPending,omitempty"`
+		Expired      encoding.JsonList[*url.TxID]     `json:"expired,omitempty"`
+		ExtraData    *string                          `json:"$epilogue,omitempty"`
+	}{}
+	if !(len(v.MinorBlocks) == 0) {
+		u.MinorBlocks = v.MinorBlocks
+	}
+	if !(len(v.MinorVotes) == 0) {
+		u.MinorVotes = v.MinorVotes
+	}
+	if !(len(v.MajorBlocks) == 0) {
+		u.MajorBlocks = v.MajorBlocks
+	}
+	if !(len(v.MajorPending) == 0) {
+		u.MajorPending = v.MajorPending
+	}
+	if !(len(v.Expired) == 0) {
+		u.Expired = v.Expired
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -12493,6 +13122,7 @@ func (v *AccountLeaf) UnmarshalJSON(data []byte) error {
 		CascadeDeliveryQueue encoding.JsonList[*url.TxID]               `json:"cascadeDeliveryQueue,omitempty"`
 		Pending              encoding.JsonList[*PendingTransactionSets] `json:"pending,omitempty"`
 		BookPending          encoding.JsonList[*PendingTransactionSets] `json:"bookPending,omitempty"`
+		Events               *LedgerEvents                              `json:"events,omitempty"`
 		ExtraData            *string                                    `json:"$epilogue,omitempty"`
 	}{}
 	u.Chains = v.Chains
@@ -12501,6 +13131,7 @@ func (v *AccountLeaf) UnmarshalJSON(data []byte) error {
 	u.CascadeDeliveryQueue = v.CascadeDeliveryQueue
 	u.Pending = v.Pending
 	u.BookPending = v.BookPending
+	u.Events = v.Events
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -12515,6 +13146,7 @@ func (v *AccountLeaf) UnmarshalJSON(data []byte) error {
 	v.CascadeDeliveryQueue = u.CascadeDeliveryQueue
 	v.Pending = u.Pending
 	v.BookPending = u.BookPending
+	v.Events = u.Events
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -12659,6 +13291,27 @@ func (v *BlockEvent) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *BlockPending) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Block     uint64                       `json:"block,omitempty"`
+		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
+		ExtraData *string                      `json:"$epilogue,omitempty"`
+	}{}
+	u.Block = v.Block
+	u.Pending = v.Pending
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Block = u.Block
+	v.Pending = u.Pending
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *BlockQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
 		QueryType  QueryType     `json:"queryType"`
@@ -12690,6 +13343,27 @@ func (v *BlockQuery) UnmarshalJSON(data []byte) error {
 	v.MajorRange = u.MajorRange
 	v.EntryRange = u.EntryRange
 	v.OmitEmpty = u.OmitEmpty
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *BlockVotes) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Block     uint64                                          `json:"block,omitempty"`
+		Votes     encoding.JsonList[*protocol.AuthoritySignature] `json:"votes,omitempty"`
+		ExtraData *string                                         `json:"$epilogue,omitempty"`
+	}{}
+	u.Block = v.Block
+	u.Votes = v.Votes
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Block = u.Block
+	v.Votes = u.Votes
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -13379,6 +14053,36 @@ func (v *LastBlock) UnmarshalJSON(data []byte) error {
 		v.StateRoot = *x
 	}
 	v.DirectoryAnchorHeight = u.DirectoryAnchorHeight
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *LedgerEvents) UnmarshalJSON(data []byte) error {
+	u := struct {
+		MinorBlocks  encoding.JsonList[uint64]        `json:"minorBlocks,omitempty"`
+		MinorVotes   encoding.JsonList[*BlockVotes]   `json:"minorVotes,omitempty"`
+		MajorBlocks  encoding.JsonList[uint64]        `json:"majorBlocks,omitempty"`
+		MajorPending encoding.JsonList[*BlockPending] `json:"majorPending,omitempty"`
+		Expired      encoding.JsonList[*url.TxID]     `json:"expired,omitempty"`
+		ExtraData    *string                          `json:"$epilogue,omitempty"`
+	}{}
+	u.MinorBlocks = v.MinorBlocks
+	u.MinorVotes = v.MinorVotes
+	u.MajorBlocks = v.MajorBlocks
+	u.MajorPending = v.MajorPending
+	u.Expired = v.Expired
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.MinorBlocks = u.MinorBlocks
+	v.MinorVotes = u.MinorVotes
+	v.MajorBlocks = u.MajorBlocks
+	v.MajorPending = u.MajorPending
+	v.Expired = u.Expired
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
