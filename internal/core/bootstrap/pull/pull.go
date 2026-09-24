@@ -1005,6 +1005,10 @@ type messages struct {
 	// kept is what the fetch keeps, by the key it is stored under: each
 	// entry's message, and the transactions stored forms referred to.
 	kept map[[32]byte]messaging.Message
+
+	// signatures are the anchor signatures on the signature chains taken,
+	// indexed under their transactions when the account settles (#4416).
+	signatures []signature
 }
 
 // newMessages proves messages served by src; local is the node's own store,
@@ -1045,6 +1049,11 @@ func (m *messages) behind(e *api.ChainEntryRecord[api.Record]) (messaging.Messag
 	}
 	if h := full.Hash(); h != e.Entry {
 		return nil, errors.Conflict.WithFormat("the peer served a %v that hashes to %x", msg.Type(), h[:4])
+	}
+	if ba, ok := full.(*messaging.BlockAnchor); ok {
+		if err := checkAnchorSignature(ba); err != nil {
+			return nil, err
+		}
 	}
 	return msg, nil
 }
@@ -1176,7 +1185,7 @@ func (m *messages) store(batch *database.Batch) error {
 			return fmt.Errorf("store message %x: %w", h[:4], err)
 		}
 	}
-	return nil
+	return storeSignatures(batch, m.signatures)
 }
 
 // carriesMessages is whether a chain's entries are the hashes of messages the
@@ -1274,6 +1283,16 @@ func pullChainEntries(ctx context.Context, src Source, bodies *messages, dst *da
 			// Under the entry, not under the message's own hash: a stored
 			// form refers to its transaction and hashes to something else.
 			bodies.kept[*(*[32]byte)(e)] = msgs[i]
+			if c.Name == "signature" {
+				// Proven by behind; expanding again reads what it cached.
+				full, err := bodies.expand(msgs[i])
+				if err != nil {
+					return fmt.Errorf("entry %d: %w", from+int64(i), err)
+				}
+				if sig, ok := signatureOf(u, uint64(from)+uint64(i), msgs[i], full); ok {
+					bodies.signatures = append(bodies.signatures, sig)
+				}
+			}
 		}
 	}
 

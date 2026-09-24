@@ -8,6 +8,7 @@ package pull
 
 import (
 	"context"
+	"crypto/ed25519"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,11 +21,23 @@ import (
 )
 
 // spineWithMessages builds the anchor pool the way execution leaves it: main
-// chain entries that are transactions, and a signature chain entry that is an
-// anchor stored referring to its transaction by hash (the executor's
-// storedForm, #4236), with the transaction stored under its own hash and on
-// no chain of the account.
+// chain entries that are transactions, and a signature chain entry that is a
+// validator's signature of an anchor stored referring to its transaction by
+// hash (the executor's storedForm, #4236), with the transaction stored under
+// its own hash and on no chain of the account. Beside the signature entry is
+// what executing it writes and no chain holds: the transaction's history index
+// into the signature chain, the pool among its signers (RecordHistory), and
+// the sequenced message stored and named as the transaction's cause
+// (recordMessageAndStatus).
 func spineWithMessages(t *testing.T) (*database.Database, *url.URL, [][32]byte) {
+	return spineSignedBy(t, signWith(anchorKey))
+}
+
+// anchorKey signs the anchors the pull tests build.
+var anchorKey = ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))
+
+// spineSignedBy is spineWithMessages with the anchor's signature made by sign.
+func spineSignedBy(t *testing.T, sign signFunc) (*database.Database, *url.URL, [][32]byte) {
 	t.Helper()
 	u := protocol.DnUrl().JoinPath(protocol.AnchorPool)
 	db := newObservedDB(t)
@@ -40,26 +53,44 @@ func spineWithMessages(t *testing.T) (*database.Database, *url.URL, [][32]byte) 
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = u
 	txn.Body = &protocol.DirectoryAnchor{PartitionAnchor: protocol.PartitionAnchor{Source: protocol.DnUrl(), MinorBlockIndex: 7}}
-	full := &messaging.BlockAnchor{
-		Signature: &protocol.ED25519Signature{PublicKey: make([]byte, 32), Signature: make([]byte, 64), Signer: protocol.DnUrl().JoinPath(protocol.Network), TransactionHash: txn.ID().Hash()},
-		Anchor:    &messaging.SequencedMessage{Message: &messaging.TransactionMessage{Transaction: txn}, Source: protocol.DnUrl(), Destination: protocol.DnUrl(), Number: 1},
-	}
+	seq := &messaging.SequencedMessage{Message: &messaging.TransactionMessage{Transaction: txn}, Source: protocol.DnUrl(), Destination: protocol.DnUrl(), Number: 1}
+	full := &messaging.BlockAnchor{Signature: sign(t, seq), Anchor: seq}
 	h := full.Hash()
 	ref := new(protocol.Transaction)
 	ref.Header.Principal = u
 	ref.Body = &protocol.RemoteTransaction{Hash: txn.ID().Hash()}
-	stored := &messaging.BlockAnchor{
-		Signature: full.Signature,
-		Anchor:    &messaging.SequencedMessage{Message: &messaging.TransactionMessage{Transaction: ref}, Source: protocol.DnUrl(), Destination: protocol.DnUrl(), Number: 1},
-	}
+	storedSeq := &messaging.SequencedMessage{Message: &messaging.TransactionMessage{Transaction: ref}, Source: protocol.DnUrl(), Destination: protocol.DnUrl(), Number: 1}
+	stored := &messaging.BlockAnchor{Signature: full.Signature, Anchor: storedSeq}
 	require.NotEqual(t, h, stored.Hash(), "precondition: the stored form does not hash to its key")
 	require.NoError(t, b.Message(h).Main().Put(stored))
 	require.NoError(t, b.Message(txn.ID().Hash()).Main().Put(&messaging.TransactionMessage{Transaction: txn}))
-	require.NoError(t, b.Account(u).SignatureChain().Inner().AddEntry(h[:], false))
+	require.NoError(t, b.Account(u).Transaction(txn.ID().Hash()).RecordHistory(full))
+	require.NoError(t, b.Message(seq.Hash()).Main().Put(storedSeq))
+	require.NoError(t, b.Message(txn.ID().Hash()).Cause().Add(seq.ID()))
 	entries = append(entries, h)
 	require.NoError(t, b.UpdateBPT())
 	require.NoError(t, b.Commit())
 	return db, u, entries
+}
+
+// signFunc makes the signature a test anchor carries.
+type signFunc func(t *testing.T, seq *messaging.SequencedMessage) protocol.KeySignature
+
+// signWith signs seq with key, as a validator signs an anchor.
+func signWith(key ed25519.PrivateKey) signFunc {
+	return func(t *testing.T, seq *messaging.SequencedMessage) protocol.KeySignature {
+		sig := &protocol.ED25519Signature{
+			PublicKey:       key.Public().(ed25519.PublicKey),
+			Signer:          protocol.DnUrl().JoinPath(protocol.Network),
+			SignerVersion:   1,
+			Timestamp:       1,
+			TransactionHash: seq.Hash(),
+		}
+		h := seq.Hash()
+		protocol.SignED25519(sig, key, nil, h[:])
+		require.True(t, sig.Verify(nil, seq), "precondition: the signature verifies")
+		return sig
+	}
 }
 
 // TestFullSpine_TakesTheMessageBehindEachEntry — the first block a restarted
