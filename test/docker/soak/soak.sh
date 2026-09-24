@@ -1764,7 +1764,7 @@ else:
         q.get("notReadyRetriedElsewhere", 0), q.get("notReadyAtEveryEndpoint", 0),
         q.get("transportErrorRetriedElsewhere", 0), q.get("transportErrorAtEveryEndpoint", 0)))
 ' "$rd/loadgen-stats.json" 2>/dev/null) |"
-  echo "| read-back probe | $(grep -m1 '^\*\*Whole run:\*\*' "$rd/readprobe-report.md" 2>/dev/null | sed 's/\*\*//g' || echo 'no report') |"
+  echo "| read-back probe (the validators, whole run) | $(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import readprobe; print(readprobe.whole_run_row(sys.argv[2]))' "$here" "$rd/readprobe-report.md" 2>/dev/null || echo '— not measured (the reader failed)') |"
   if [ "$n_fol" -gt 0 ]; then
     echo "| follower read probe | $(grep -m1 -E '^\*\*acc-' "$rd/readprobe-report.md" 2>/dev/null | sed 's/\*\*//g' || echo '— not measured (no readprobe report)') |"
   fi

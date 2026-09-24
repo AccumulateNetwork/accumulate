@@ -105,6 +105,9 @@ WHY_GATED, WHY_TIMEOUT, WHY_ERROR = "gated", "timeout", "error"
 # It is its own outcome: the join working, not a failed read (#4364).
 WHY_NOT_READY = "not-ready"
 NOT_READY_CODE = -33504
+# The answers that are a node declining by design, not a read that failed:
+# counted in their own columns and never timed.
+REFUSALS = (WHY_GATED, WHY_NOT_READY)
 
 
 def query(scope, q, url=None):
@@ -290,16 +293,22 @@ class Probe:
                 got.append(rec)
         # A gated read is the API refusing, not storage answering slowly:
         # it is counted, but its (fast) time is kept out of the latencies.
-        timed = [g for g in got if g[5] != WHY_GATED]
+        # A NotReady is the same kind of answer (#4425): a joining node
+        # refusing by design, in under a millisecond, which is neither a
+        # failed read nor a storage latency. Run 20260924T093936Z counted
+        # its refusals as `failed` (1,541) and timed them into the median.
+        timed = [g for g in got if g[5] not in REFUSALS]
         ms = [g[1] for g in timed] or [0.0]
         worst = max(timed, key=lambda g: g[1]) if timed else got[0]
-        failed = sum(1 for g in got if not g[3] and g[5] != WHY_GATED)
+        failed = sum(1 for g in got if not g[3] and g[5] not in REFUSALS)
         gated = sum(1 for g in got if g[5] == WHY_GATED)
+        not_ready = sum(1 for g in got if g[5] == WHY_NOT_READY)
         timeouts = sum(1 for g in got if g[5] == WHY_TIMEOUT)
         row = {"time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "reads": len(got),
                "p50": round(pct(ms, 0.5), 1), "p95": round(pct(ms, 0.95), 1),
                "max": round(worst[1], 1), "maxKind": worst[2], "maxAge": worst[0],
-               "maxPartition": worst[4], "failed": failed, "gated": gated, "timeouts": timeouts,
+               "maxPartition": worst[4], "failed": failed, "notReady": not_ready,
+               "gated": gated, "timeouts": timeouts,
                "reservoir": len(self.reservoir),
                "oldestAge": max(max(0, self.heights.get(s["partition"], 0) - s["index"]) for s in self.reservoir)}
         self.rounds.append(row)
@@ -308,8 +317,8 @@ class Probe:
             if new:
                 f.write(",".join(row.keys()) + "\n")
             f.write(",".join(str(v) for v in row.values()) + "\n")
-        log("round %d: %d reads p50 %.1fms p95 %.1fms max %.1fms (%s, %s, age %d blocks) failed %d gated %d timeouts %d reservoir %d oldest %d blocks"
-            % (len(self.rounds), row["reads"], row["p50"], row["p95"], row["max"], worst[2], worst[4], worst[0], failed, gated, timeouts, len(self.reservoir), row["oldestAge"]))
+        log("round %d: %d reads p50 %.1fms p95 %.1fms max %.1fms (%s, %s, age %d blocks) failed %d notReady %d gated %d timeouts %d reservoir %d oldest %d blocks"
+            % (len(self.rounds), row["reads"], row["p50"], row["p95"], row["max"], worst[2], worst[4], worst[0], failed, not_ready, gated, timeouts, len(self.reservoir), row["oldestAge"]))
         self.run_follower_round(picks)
 
     def run_follower_round(self, picks):
@@ -349,12 +358,15 @@ class Probe:
                  % (SAMPLE_EVERY, RESERVOIR, PROBE_EVERY, PER_ROUND), ""]
         if self.reads:
             gated = sum(1 for r in self.reads if r[5] == WHY_GATED)
+            not_ready = sum(1 for r in self.reads if r[5] == WHY_NOT_READY)
             timeouts = sum(1 for r in self.reads if r[5] == WHY_TIMEOUT)
-            reads = [r for r in self.reads if r[5] != WHY_GATED]
+            reads = [r for r in self.reads if r[5] not in REFUSALS]
             ms = [r[1] for r in reads] or [0.0]
             worst = max(reads, key=lambda r: r[1]) if reads else self.reads[0]
-            lines += ["**Whole run:** %d timed reads, p50 %.1f ms, p95 %.1f ms, p99 %.1f ms, **max %.1f ms** (%s read, %s, entry %d blocks old); %d failed, %d timed out (%ds), %d refused by the API's query gate (not timed)."
-                      % (len(ms), pct(ms, .5), pct(ms, .95), pct(ms, .99), worst[1], worst[2], worst[4], worst[0], sum(1 for r in reads if not r[3]), timeouts, int(TIMEOUT), gated), ""]
+            # `failed` is an error or a timeout, and the timeouts are a
+            # subset of it; a refusal (NotReady, the query gate) is neither.
+            lines += ["**Whole run:** %d timed reads, p50 %.1f ms, p95 %.1f ms, p99 %.1f ms, **max %.1f ms** (%s read, %s, entry %d blocks old); %d failed (%d of them timed out, %ds), %d refused NotReady (a joining node's designed answer; not timed), %d refused by the API's query gate (not timed)."
+                      % (len(ms), pct(ms, .5), pct(ms, .95), pct(ms, .99), worst[1], worst[2], worst[4], worst[0], sum(1 for r in reads if not r[3]), timeouts, int(TIMEOUT), not_ready, gated), ""]
             self.reads = reads
             lines += ["## Latency by entry age", "", "| age (blocks) | reads | p50 ms | p95 ms | max ms |", "|---|---|---|---|---|"]
             buckets = [(0, 100), (100, 1000), (1000, 5000), (5000, 20000), (20000, 10**9)]
@@ -401,13 +413,42 @@ class Probe:
                       "that another node could have answered says nothing about this "
                       "one. Entries of partitions it does not run are not asked for.",
                       ""]
-        lines += ["", "## Rounds", "", "| time | reads | p50 | p95 | max | slowest was | failed | gated | timeouts | oldest in reservoir |", "|---|---|---|---|---|---|---|---|---|---|"]
+        lines += ["", "## Rounds", "", "| time | reads | p50 | p95 | max | slowest was | failed | NotReady | gated | timeouts | oldest in reservoir |", "|---|---|---|---|---|---|---|---|---|---|---|"]
         for r in self.rounds:
-            lines.append("| %s | %d | %.1f | %.1f | %.1f | %s %s age %d | %d | %d | %d | %d |"
-                         % (r["time"][11:19], r["reads"], r["p50"], r["p95"], r["max"], r["maxKind"], r["maxPartition"], r["maxAge"], r["failed"], r.get("gated", 0), r.get("timeouts", 0), r["oldestAge"]))
+            lines.append("| %s | %d | %.1f | %.1f | %.1f | %s %s age %d | %d | %d | %d | %d | %d |"
+                         % (r["time"][11:19], r["reads"], r["p50"], r["p95"], r["max"], r["maxKind"], r["maxPartition"], r["maxAge"], r["failed"], r.get("notReady", 0), r.get("gated", 0), r.get("timeouts", 0), r["oldestAge"]))
         with open(REPORT, "w") as f:
             f.write("\n".join(lines) + "\n")
         print("\n".join(lines[:8]), flush=True)
+
+
+def whole_run_row(report_path):
+    """The manifest's `read-back probe` cell: the report's whole-run line.
+
+    A report written before #4425 has no NotReady count, and its `N failed`
+    holds NotReady refusals, errors and timeouts together — nothing in such
+    a run separates them. Quoting it as `failed` is the misread (run
+    20260924T093936Z: `1541 failed`), so it is restated as what it is."""
+    import re
+    try:
+        with open(report_path) as f:
+            line = next((l for l in f if l.startswith("**Whole run:**")), None)
+    except OSError:
+        return "— not measured (no `readprobe-report.md`)"
+    if line is None:
+        return "— not measured (`readprobe-report.md` has no whole-run line)"
+    line = line.replace("**", "").strip()
+    if "refused NotReady" in line:
+        return line
+    m = re.search(r"; (\d+) failed, (\d+) timed out \((\d+)s\)", line)
+    if not m:
+        return line
+    n, t, secs = int(m.group(1)), int(m.group(2)), m.group(3)
+    return line.replace(m.group(0), (
+        "; %d not answered (%d of them timed out, %ss; the other %d are "
+        "NotReady refusals and errors together — this probe predates #4425 "
+        "and recorded no cause, and its timed reads and percentiles include "
+        "the refusals)" % (n, t, secs, n - t)), 1)
 
 
 def main():

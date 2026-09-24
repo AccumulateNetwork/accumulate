@@ -615,6 +615,19 @@ endpoint answered). Submissions are not rotated on `NotReady`: they are pinned
 to an endpoint by signer for ordering, and a submission's `NotReady` is also
 the store-full back-pressure answer.
 
+**The read-back probe counts a refusal apart from a failure (#4425).** The
+validators' read-back probe round-robins over every validator, BOOTING ones
+included, and a BOOTING node answers `NotReady` by design. `readprobe.csv`
+and the report carry `notReady` in its own column beside `gated` (the API's
+query gate); `failed` is an error or a timeout only, with the timeouts a
+subset of it; neither refusal is timed into the latencies. The manifest's
+`read-back probe (the validators, whole run)` row quotes the report's
+whole-run line; a report from before this has one `N failed` that holds
+refusals, errors and timeouts together, and the row restates it as `N not
+answered (T of them timed out; the other N-T are NotReady refusals and errors
+together …)` rather than calling it failed. Run `20260924T093936Z`'s
+`1541 failed` is that case.
+
 ## 6. Provenance
 
 Every run MUST record before load starts: commit, `git describe`, branch,
