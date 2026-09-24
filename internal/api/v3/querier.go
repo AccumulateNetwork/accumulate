@@ -499,7 +499,28 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	r := new(api.AccountRecord)
 
 	state, err := record.Main().Get()
-	if err != nil {
+	switch {
+	case err == nil:
+	case errors.Is(err, errors.NotFound) && wantReceipt.Yes() && wantReceipt.ForHeight == 0:
+		// A leaf can stand without a body (#4397): an authority signature
+		// recorded on a principal that does not exist gives it signature
+		// chains, and a failed deposit gives it an empty account's leaf. The
+		// leaf is in the root every peer anchors, so a node pulling this
+		// partition must be able to fetch it, and NotFound would tell it the
+		// account is not there. It is answered with no body and the receipt
+		// for the leaf, which starts at the zero hash the missing body hashes
+		// to; the rest of the leaf is served by the queries that serve it for
+		// any account. Only a request for a current receipt is answered so:
+		// every other reader still sees NotFound, which is what it saw before.
+		_, lerr := batch.BPT().Get(record.Key())
+		switch {
+		case errors.Is(lerr, errors.NotFound):
+			return nil, errors.UnknownError.WithFormat("load state: %w", err)
+		case lerr != nil:
+			return nil, errors.UnknownError.WithFormat("load leaf: %w", lerr)
+		}
+		state = nil
+	default:
 		return nil, errors.UnknownError.WithFormat("load state: %w", err)
 	}
 
@@ -515,7 +536,11 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	// touched.
 	r.Sighted = sighted(s.stagingFor(), record.Url(), state)
 
-	switch state.Type() {
+	var typ protocol.AccountType
+	if state != nil {
+		typ = state.Type()
+	}
+	switch typ {
 	case protocol.AccountTypeIdentity, protocol.AccountTypeKeyBook:
 		directory, err := record.Directory().Get()
 		if err != nil {
@@ -569,7 +594,90 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	// (#4274).
 	r.Receipt.Partition = s.partition.PartitionID()
 	r.Receipt.Complete = s.partition.URL.Equal(protocol.DnUrl())
+
+	// What else the leaf the receipt proves is hashed from (#4399). Read from
+	// the batch the receipt was built from, so the two cannot disagree.
+	r.Leaf, err = s.leafBesideBody(record)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 	return r, nil
+}
+
+// leafBesideBody is the part of a system account's leaf that no other query
+// serves: the synthetic ledger's delivery queues and the partition ledger's
+// scheduled events (observer_prod.go, hashSecondaryState). Without them a node
+// pulling the account rebuilds it with whatever it held itself, and under load
+// the local delivery queue is never empty, so every peer's answer was refused
+// for ever (#4399). Nil for every other account.
+func (s *Querier) leafBesideBody(record *database.Account) (*api.AccountLeaf, error) {
+	u := record.Url()
+	switch {
+	case u.Equal(s.partition.Synthetic()):
+		l := new(api.AccountLeaf)
+		var err error
+		l.LocalDeliveryQueue, err = record.LocalDeliveryQueue().Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load local delivery queue: %w", err)
+		}
+		l.CascadeDeliveryQueue, err = record.CascadeDeliveryQueue().Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load cascade delivery queue: %w", err)
+		}
+		return l, nil
+
+	case u.Equal(s.partition.Ledger()):
+		l := new(api.AccountLeaf)
+		ev, err := ledgerEvents(record.Events())
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load scheduled events: %w", err)
+		}
+		l.Events = ev
+		l.EventsRoot, err = record.Events().BPT().GetRootHash()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load scheduled events root: %w", err)
+		}
+		return l, nil
+	}
+	return nil, nil
+}
+
+// ledgerEvents reads a partition ledger's scheduled events: everything its
+// events BPT holds, and the block lists the executor finds them by.
+func ledgerEvents(events *database.AccountEvents) (*api.LedgerEvents, error) {
+	ev := new(api.LedgerEvents)
+	var err error
+	ev.MinorBlocks, err = events.Minor().Blocks().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	for _, b := range ev.MinorBlocks {
+		votes, err := events.Minor().Votes(b).Get()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		if len(votes) > 0 {
+			ev.MinorVotes = append(ev.MinorVotes, &api.BlockVotes{Block: b, Votes: votes})
+		}
+	}
+	ev.MajorBlocks, err = events.Major().Blocks().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	for _, b := range ev.MajorBlocks {
+		pending, err := events.Major().Pending(b).Get()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		if len(pending) > 0 {
+			ev.MajorPending = append(ev.MajorPending, &api.BlockPending{Block: b, Pending: pending})
+		}
+	}
+	ev.Expired, err = events.Backlog().Expired().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return ev, nil
 }
 
 // historicalStateReceipt answers a ForHeight request for an account's state

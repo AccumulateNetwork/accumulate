@@ -361,6 +361,38 @@ message and the message is not under the root. So a message the pull takes
 beside an entry is kept only if it hashes to that entry, and nothing about the
 peer that served it is believed (§3, #4400).
 
+**A leaf is pulled whether or not the account has a body** (#4397). The leaf
+hashes the main state, the directory, the chains and the pending list, and any
+of them can be there without the others: an authority signature recorded on a
+principal that does not exist leaves a leaf with `signature` chains and no
+body, and a failed deposit leaves an empty account's leaf. Asked for an
+account with a receipt, a peer whose tree holds a leaf for it answers with no
+body and the receipt for that leaf; the join pulls the rest of the account as
+for any other and keeps it by the same three checks, the missing body hashing
+as the zero hash. A peer that answers "no body" with the receipt of an
+account that has one fails the third. The check proves less here than for a
+body, and that is stated rather than hidden: the tree hashes a leaf's value
+and not its key, and a leaf with no body carries no URL, so the receipt of
+one such leaf passes for any account whose pulled state hashes to the same
+value — every empty account's leaf is one hash. So a body-less leaf is kept
+only on the word of the peers that answer: only an answer votes — a
+body-less leaf, a body, or `NotFound` — and a peer that does not answer (one
+that is itself joining answers `NotReady`; one that is restarting does not
+dial) neither agrees nor dissents, or two nodes joining one partition would
+block each other's body-less leaves for ever. The leaf is kept when every
+answering peer served the same one and at least two answered. One dissent —
+a `NotFound`, a body, another leaf — and the name is neither written nor
+dropped but asked again, as it is with fewer than two answers, and what each
+peer answered is logged. That is trust in the peers, not proof, for the
+existence of an empty leaf, and it fails when every peer that answers lies; what then refuses the leaf
+placed under the wrong name is the whole-root match, so the exposure is a
+join that does not finish, not a node that executes from a wrong state
+(DIFFERENCES.md E11). `NotFound` means the peer's tree holds no leaf: a name every
+source answers that way is dropped rather than asked again, and the page diff
+names it again if a leaf ever appears; a name some source failed to answer is
+asked again. A spine account is never dropped: every source answering it
+`NotFound` fails the spine for the pass, and the spine is asked for again.
+
 **One pass is one root, and it is written whole.** What a round fetches is
 held, unwritten, until the root its receipts end at is proven, and nothing new
 is fetched while it is held. The peers move while a pass is fetched, so its
@@ -434,6 +466,23 @@ ledger is derived from staging and was filled in on read, and it left every
 restarting node unable to pull `<partition>/anchors` from anybody (#4295). A
 derived value travels **beside** the body, in its own field, and a reader
 merges it after it has checked the proof.
+
+**The answer carries what the leaf hashes, and the pull writes what it
+carries** (#4399). Besides the body, the directory, the pending list and the
+chains, a partition's `synthetic` leaf hashes its two delivery queues and its
+`ledger` leaf the root of its scheduled events. A current answer with a
+receipt carries them in its `Leaf` — the queues, and the events themselves
+rather than their root, since a root cannot be written — read from the batch
+the receipt is built from; the pull replaces what the node held with them,
+and a queue or an event set served empty clears the node's. The block lists
+the executor finds the events by are not in the events tree, so no leaf check
+covers them: the pull derives them from the event sets it verified and never
+takes them from the answer. **What is not carried** is the signature
+material of a pending transaction (its validator signatures, payments, votes
+and signatures, which `hashPendingV2` hashes): an account holding a pending
+transaction whose sets are not empty still does not verify (#4298, DIFFERENCES.md E11). A queued local
+delivery executes from its stored message at the next block, so the pull also
+fetches each queued message and keeps it only if its hash is the queued ID.
 
 **BPT pages are read, never written.** A leaf enters the local tree only as
 the hash of state this node holds and has verified, because the local root is

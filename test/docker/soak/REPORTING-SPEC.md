@@ -57,6 +57,41 @@ and both readings, never absorbed by a high-water mark. The flow matrix's
 history MUST carry every cell's `sent`/`received`/`delivered` per sample, so
 "it was higher earlier" is a query, not a recollection (#4279).
 
+### A partition's height, and each node's own (#4404, #4345)
+
+A partition's height MUST NOT be read from one node. `monitor.csv`'s
+Directory column was the Directory ledger's `index` as host port 26680 —
+acc-bvn1-val1 — answered it, and on run `20260924T052134Z` that was the node
+chaos restarted first: the column sat at 207 from 05:26:19 to 05:27:24 while
+the other eleven Directory nodes went 215 → 323.
+
+- **A partition's height is the highest block any of its validators that
+  answered the sample executed** (their `accumulate_node_executed_block` for
+  the partition), recorded with **how many answered**. An executor cannot
+  pass what its partition certified, so the highest answer is where the
+  partition is, and stuck nodes cannot drag it down however many there are.
+  A majority of the answering set could (review F2): a 4-validator BVN with
+  one node stuck at 214, one paused and one missing a scrape answers
+  [1000, 214], whose "majority" is 214, and the stuck node read caught up
+  against its own height. The max falls only if the leading validators all
+  miss a sample, which the answered count shows. Followers are not in it. A
+  validator executing a divergent fork past its partition would raise it,
+  and then the **healthy** nodes read behind: a restarted node that rejoined
+  correctly would read NOT rejoined on height, while the fork's own node is
+  caught by anchor agreement. An executor cannot pass what its partition
+  certified, so this takes a node executing uncertified blocks.
+- **Each node's own executed block is its own column**, per partition. A node
+  that did not answer the scrape is an empty cell, never 0.
+
+`monitor.csv` (heights.py): `time,dnHeightMax,heals,cpuPct,followerHeals,
+dnValidatorsAnswered,exec.<container>.<partition>…` — one `exec.` column per partition
+of every validator and of every follower the run has (never a declared
+follower the run does not start, #4389). The column was named `dnHeight` and
+held the one-node ledger index until #4404; the two are different quantities
+and MUST NOT be compared across that change. The executed block runs ahead of
+the ledger index on an idle network, because an empty block is executed and
+never written.
+
 ## 2. The chain is the source of truth
 
 Every claim about network behaviour MUST be derived from chain state or node
@@ -292,6 +327,102 @@ row, one for the validators and one for the follower, states the worst
 `reached` figure and names every start that never reached ACTIVE; `already`
 figures are counted and kept out of the worst.
 
+**Rejoined, not ACTIVE (#4404).** The gauge cannot say a node rejoined: it
+goes ACTIVE at the join's first root match, mid-join
+(`internal/node/join/state.go:857` → `tracker.go:194`), and is never demoted.
+Run `20260924T052134Z`'s row read three failed starts as reaching ACTIVE —
+acc-bvn1-val1 bvn1 at 12.1 s, stuck at block 214 while its peers reached
+1376; acc-bvn3-val1 and acc-bvn2-val2 on the Directory 81 s and 262 s before
+handoffs that failed. A start of a node, per partition, is **rejoined** only
+when all three hold:
+
+1. the gauge read ACTIVE after the start;
+2. at some sample it was ACTIVE with its executed block within
+   `REJOIN_MAX_BEHIND` (soak.conf, blocks) of its partition's height, and it
+   was still within that bound at the start's last reading. **The height a
+   node is judged against is the highest block the OTHER validators of its
+   partition that answered the sample executed** — never its own answer
+   (review R1: with it, a node stuck at 214 whose three peers missed one
+   scrape was the partition and read caught up). A sample where no other
+   validator answered is no reading: it writes no `caught-up` row, and a
+   last reading on it is not established ("no other validator … answered");
+3. every anchor it stated for that partition after its start agrees with its
+   peers': the same (root, BPT) as the other validators at the same block, and
+   the same (block, root, BPT) under the same sequence number to the same
+   destination. Peers vote once each per value, never once per line — a node
+   re-sending one anchor 304 times is one peer. By block alone this misses a
+   node that signs another body under a sequence number at a block its peers
+   never anchored: acc-bvn2-val2 signed seq 1154 as block 1300 (root
+   `f5b4979b`) where its peers' seq 1154 is block 1301 (root `de98b6c8`), and
+   no peer anchored block 1300. **Bound (review F4):** a divergence after the
+   node's last anchor line is invisible to this reading, for at most one
+   anchor interval — anchors are per block here, and healthy nodes state the
+   same block within a second of each other.
+
+**The bound, and its two edges (review F6).** `REJOIN_MAX_BEHIND` is 5
+blocks: healthy validators on run `20260924T052134Z`, read per second from
+their anchors with disturbed nodes excluded, spread Directory p50 0 / p99 1 /
+max 3 blocks over 1,345 s and BVN p99 0. A paused node returns about 10
+blocks a second (93 behind to 0 in 9 s), so it shows on the board as behind
+for a sample or two, truthfully. The edges:
+- a start whose last reading falls inside a `pause` of that node in
+  `chaos.log`, or within 30 s after it ends, is **not established (paused at
+  its last reading)** rather than NOT rejoined on its height — the reading
+  is of the pause, not of the rejoin;
+- `monitor.csv`'s row is taken by a sequential `docker exec` loop, so its
+  `exec.` columns against `dnHeightMax` carry a few blocks of harness skew at
+  one block a second. The verdict does not read `monitor.csv`: it reads
+  soakmon's scrape, which asks every node in parallel.
+
+A failing reading makes the start **NOT rejoined**; a reading that could not
+be made (no executed gauge, no final row, no anchor line after the start)
+makes it **not established**, and says which. **A start's last reading is its
+last answer against the partition's height at the end** (review F3): every
+tracked start follows its partition's height at every sample whether or not
+it answered, and `lastAnswered` records when it last did. **The bound is judged on the pair taken at one answer** (review R2): its
+executed block and `partitionHeightAtLastAnswer`, the partition's height at
+that same sample; `partitionHeight` is the height at the end, stated beside
+it. Against the height at the end, a healthy node that missed the last scrape
+or two read 5–14 blocks behind. `validatorsAnswered` is the count of other
+validators at that last answer. A start whose last
+answer is older than `REJOIN_SILENT_SECS` (soak.conf, 15 s — three 5 s
+scrapes) at its `final` row is **not established (silent since …)**: judged on
+its stale answer, a node that rejoined and went dark read rejoined. It is never called rejoined on
+the gauge's word. The time quoted is container start to the first sample that
+was ACTIVE and within the bound. **Only the launch goes unjudged**: a
+container started before the first sample in `nodestate.csv`. Every later
+start is judged, however it was first seen — a start the monitor first sees
+already ACTIVE (a join inside one scrape interval, or a restart that spans a
+monitor restart, whose new process sees every node `already`) is judged on
+height and anchors like any other, with its gauge time given as an upper
+bound and "boot time not measured". A row with no start after the launch
+says so and claims nothing about starts. A start restarted again before it
+was ever ACTIVE is listed as **superseded** with the time of the next start
+(review F7) — not a stuck join, and not counted among the starts judged; the
+next start is judged in its place.
+
+`nodestate.csv` carries, beside the columns above, `executedBlock`,
+`partitionHeight` (the highest block any answering validator of the partition
+executed), `startToCaughtUpS`, `validatorsAnswered`, `lastAnswered` and
+`partitionHeightAtLastAnswer`, read at each
+row's sample, and two more kinds: `caught-up`, the first sample ACTIVE and
+within the bound, and `superseded`, a start's last reading when its container
+started again. At exit the monitor writes a `final` row for **every** start,
+not only those never ACTIVE: that row is the start's last reading. A start
+that never reached ACTIVE is one with no `reached` or `already` row, as
+before. The board lists a row the gauge calls ACTIVE when it is more than the
+bound behind its partition. The manifest's row is `rejoin.py`, reading
+`nodestate.csv` and `node-logs-live.txt`.
+
+**A follower of the run is one the run has (#4389).** A follower in the
+compose's late-follower profile is declared in docker-network.yml, so init
+writes its key, and `compose up` never starts it. It is a follower of the run
+only while it is up — from its `add-follower` line in `chaos.log` to its
+`remove-follower` — and the manifest counts it only when the add-follower walk
+is on, as the follower "started only by the add-follower disturbance". Outside
+that it has no `follower.csv` row, no probe read and no `exec.` column, and the
+follower report's behind figures are read from its own follower's rows only.
+
 ### The add-follower and remove-follower verdicts (#4364)
 
 The manifest's follower section carries one row per `add-follower` and one
@@ -346,6 +477,21 @@ validators.
 The consensus-status API MUST additionally report `syntheticHeals` and
 `anchorHeals` (#4075) — the coarse monitor's CSV reads them.
 
+**`accepted` and `rejected` partition Submit calls; `rejected` is not in the
+stranded figure (#4404).** Every road out of `SubmitterService.Submit`
+(`internal/node/dagbft/api.go`) moves exactly one of
+`submissions_total{outcome="accepted"}` and `{outcome="rejected"}` by one: a
+submission that enters this node's worker or its relay is `accepted` however
+the relay ends; one refused before either — undecodable, no relay, or the
+worker's own refusal (store full, execution lagging, validation) — is
+`rejected`. `TestSubmitter_EverySubmitIsAcceptedOrRejectedNeverBoth` drives
+each road and checks the sum. The two are per CALL, not per transaction: a
+client that retries a rejected transaction and is then accepted appears in
+both, once each, and only the `accepted` one enters the figure. Equal values
+are therefore two independent series crossing — acc-bvn1-val1/BVN1 read
+4,086 and 4,086 at 05:46:10 on run `20260924T052134Z`, then 4,216 and 4,322 —
+and a refused submission never inflates the stranded count.
+
 ## 4. Health means liveness
 
 A container healthcheck MUST fail when the node's partition ledger stops
@@ -363,6 +509,19 @@ A load generator MUST report, distinctly:
 
 A generator that cannot produce fee-valid work (#4107) MUST refuse to start
 rather than submit doomed transactions.
+
+**A read a node will not answer is asked of another, and counted (#4404).** A
+joining node answers every read `NotReady` ("… is joining and cannot answer for
+state it has not executed"), which is the protocol's "ask someone else". The
+generator's query pool rotates to the next endpoint on a `NotReady` exactly as
+on a transport error; run `20260924T052134Z` lost 52 reads to one joining node
+before it did. `loadgen-stats.json`'s `queries` object counts
+`notReadyRetriedElsewhere` and `transportErrorRetriedElsewhere` (answers
+handed to another endpoint) and `notReadyAtEveryEndpoint` and
+`transportErrorAtEveryEndpoint` (queries returned to the caller because no
+endpoint answered). Submissions are not rotated on `NotReady`: they are pinned
+to an endpoint by signer for ordering, and a submission's `NotReady` is also
+the store-full back-pressure answer.
 
 ## 6. Provenance
 
@@ -401,4 +560,5 @@ was rewritten to purge previously committed raw data — do not reintroduce it.
 | 5 generator honesty | met by tools/cmd/loadgen; parallel-loadtest fails all three (#4102, #4104, #4107) |
 | 6 provenance | met |
 | 7 observation | met, as of this branch |
-| 3 node-state row | met by the harness (#4364): board, `nodestate.csv`, manifest; a node without the gauge reads `— not measured` |
+| 3 node-state row | met by the harness (#4364): board, `nodestate.csv`, manifest; a node without the gauge reads `— not measured`. Since #4404 the manifest judges rejoined (gauge, executed height, anchor agreement), not ACTIVE |
+| 1b partition height | met, as of #4404: `monitor.csv`'s Directory height is the max over the validators that answered, with the count that answered, and every node's executed block has its own column |
