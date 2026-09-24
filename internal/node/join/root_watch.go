@@ -25,7 +25,8 @@ import (
 // From here executed is the last block whose root this node has checked
 // against its anchor: the executor moves after the handoff, and executed is
 // where the block ledger walk starts if the node has to sync again, which is
-// the last block its state is known to be right at.
+// the last block its state is known to be right at. The pull's synced block is
+// cleared: it described the state before the node executed anything.
 //
 // A pass still held is thrown away. The node is executing from a state that
 // matched; a pass fetched after that is at a root the node has moved on from,
@@ -33,6 +34,7 @@ import (
 // it is fetched afresh.
 func (s *PulledState) HandedOff(q uint64) {
 	s.executed = q
+	s.synced = 0
 	if s.pass != nil {
 		s.dropPass()
 	}
