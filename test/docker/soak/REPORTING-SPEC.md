@@ -223,8 +223,25 @@ and an empty row is one of two different facts, which MUST NOT be read as one
 (#4414). One scrape of a container answers for every partition it runs, so:
 
 - **unreachable** — every row of the node is empty at that sample: it answered
-  no scrape (mid-restart, paused). The sample is **incomplete** and is skipped,
+  no scrape (mid-restart). The sample is **incomplete** and is skipped,
   never summed: summing what is left dips the total by that node's real count.
+- **paused** — every row of the node is empty, and `chaos.log` records a
+  `pause <node> <p>s` whose window (the logged start to start + p, plus 5 s
+  of whole-second slack) covers the sample (#4425). That is a **known state**:
+  a paused process's counters cannot move, so each of its pairs is read at its
+  last answer in a complete sample before the pause (with any carried reset
+  offset), the sample is complete, and it is never taken as a new reading for
+  reset detection. The manifest names the node, the pause and the reading's
+  time, marks a paused pair named as the worst, and states the answering
+  nodes' own sum beside the headline. What a paused node holds is in flight in
+  a stopped process: neither lost nor drained. Without a `chaos.log` line
+  covering the sample — or with no earlier answer for every pair — a blank
+  node is unreachable. Run `20260924T093936Z` read the paused acc-bvn2-val3
+  as unreachable, skipped its final row, and its headline read `181 … as of
+  10:06:11Z; FINAL ROW MISSING` over a final row that had landed at 10:08:24Z;
+  read through the pause it is `66 … as of 10:08:24Z` = 1 in the answering
+  nodes' final row + 26 frozen in acc-bvn2-val3 at 10:06:11Z + 39 carried
+  from eight restarts.
 - **no counter** — the row is empty and the same node reported on its other
   partition at that sample: the node answered, and the counter does not exist
   in its process, because nothing was submitted to that partition since the
@@ -598,12 +615,35 @@ endpoint answered). Submissions are not rotated on `NotReady`: they are pinned
 to an endpoint by signer for ordering, and a submission's `NotReady` is also
 the store-full back-pressure answer.
 
+**The read-back probe counts a refusal apart from a failure (#4425).** The
+validators' read-back probe round-robins over every validator, BOOTING ones
+included, and a BOOTING node answers `NotReady` by design. `readprobe.csv`
+and the report carry `notReady` in its own column beside `gated` (the API's
+query gate); `failed` is an error or a timeout only, with the timeouts a
+subset of it; neither refusal is timed into the latencies. The manifest's
+`read-back probe (the validators, whole run)` row quotes the report's
+whole-run line; a report from before this has one `N failed` that holds
+refusals, errors and timeouts together, and the row restates it as `N not
+answered (T of them timed out; the other N-T are NotReady refusals and errors
+together …)` rather than calling it failed. Run `20260924T093936Z`'s
+`1541 failed` is that case.
+
 ## 6. Provenance
 
 Every run MUST record before load starts: commit, `git describe`, branch,
 uncommitted-file count and patch, image ID, executor version, topology,
 settings (duration, rate, drops, healing), and the config files as run.
 Results MUST be appended to the same manifest. (Implemented — `soak.sh`.)
+
+**A run stallkill stops is dated at the decision (#4425).** stallkill
+captures evidence before it signals the load generator, and the capture takes
+minutes (two, on run `20260924T093936Z`) while the network runs on under load
+and chaos. Its manifest section states both times, named apart: `stopped (UTC,
+the decision)` — the second of its `STOPPING:` line, which is what a timeline
+of the run is read against — and `evidence capture ended, load generator
+signalled (UTC)` with its distance from the decision. That run's manifest gave
+the capture's end, 10:08:24Z, as the stop; the decision was 10:06:16Z, and a
+chaos pause at 10:06:30Z fell between them.
 
 ## 7. Observation
 

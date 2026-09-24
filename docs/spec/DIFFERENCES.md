@@ -497,14 +497,18 @@ simulator still does not do as the daemon does:
   relay assertion — the committee executed what the joining follower was
   handed — therefore proves the hub and not the daemon's relay
   (`cmd/accumulated/run/submit_relay.go`, #4366).
-- `RestartNode` resets the node's staging and its join, not its executor:
-  the executor's cache seed and in-memory producer cache survive the
-  "restart", so a simulated handoff never meets what a fresh process meets on
-  its first block (the seed reading message bodies the join did not pull,
-  #4400). The rule for a handoff that fails (executor.md "Sync", step 5,
-  #4401) is therefore exercised by `internal/node/dagbft`, `internal/node/join`
-  and the simulator's `joinState` against an injected failure, not by a
-  simulated restart.
+- `RestartNode` resets the node's staging, its join and its executor's seed
+  latch (`Executor.ForgetSeed`, #4421), so the first block a restarted
+  simulator node opens runs the seed over the store the join left, as a new
+  process does: the anchor pool's entries and the messages behind them, and
+  #4400's skip of blocks the node did not execute. Before #4421 the latch
+  survived, a restarted simulator node never seeded again, and a join that
+  left pool entries with no message behind them "passed". It does not rebuild
+  the executor: the in-memory producer cache, the conductor, the dispatcher
+  and the executor's other memory survive the "restart". The seed adds to a
+  cache that still holds what the node produced before it (`Cache.Seed` skips
+  a block already held), so what the seed alone would have held is not what a
+  simulated restart dispatches and serves from.
 - A simulator follower still votes and counts its own vote
   (`Node.isValidatorOn`), so stopping it cannot show that no quorum waited on
   it; the cadence assertion shows only that the partition runs on.
@@ -1116,9 +1120,15 @@ seventh nobody had named.
   history, the signer, the sequenced message, the cause and the validator
   signature set from the entries it takes, so a joined node serves and counts
   its pulled range as its peers do — the capacity gap is closed for the spine
-  pass. What is still different: entries the pool gains between the spine
-  pass and the join block are pulled state-only and get none of those records
-  (#4421, in build); a joiner whose every peer serves an entry bare or bodiless
+  pass, and since #4421 for every pass: a spine account is taken whole
+  whichever pass names it, and the pass that carries the spine fetches the
+  message and those records behind any of the newest held entries that lacks
+  its message, or takes the chain whole when a position is not held at all.
+  What is still different: a store written between #4400 and #4416 holds
+  entries with their messages and without those records, and nothing repairs
+  them; a node that diverged and holds more entries than every peer is
+  refused, not retaken, and the retake is unbounded and tracks no orphans
+  (#4403, Paul's decision); a joiner whose every peer serves an entry bare or bodiless
   waits at it (#4418) — a wait that since #4419 costs one page call per peer
   per round, holds the cursor at the first entry no peer serves, and shows on
   `accumulate_join_spine_stalled_entry` and in one log line a minute, which
