@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -33,15 +32,10 @@ import (
 // 1,099, refusing "the state served does not hash into the anchored root"
 // every two seconds (#4295).
 //
-// STAGING IS REGISTERED, and that is the point. Production registers the
-// partition's staging in exactly one place — cmd/accumulated/run/dagbft.go —
-// and nowhere else in the tree did, so stagingFor() answered nil under test,
-// the derived-value path was a no-op, and every simulator test of the pull,
-// the join and the receipt contract was exercising a querier that does not
-// ship.
+// RECEIVED IS STORED (#4412). Every block writes each stream's Received, so
+// the body served carries it as stored, and nothing is derived from the
+// serving node's staging -- not into the body, and not beside it.
 func TestServedBodyHashesToItsReceipt(t *testing.T) {
-	// Its own partition name: the staging registry is global, so a name
-	// shared with another test would hand this querier that test's staging.
 	const partitionID = "ServedBody"
 	part := protocol.PartitionUrl(partitionID)
 	source := protocol.DnUrl()
@@ -52,18 +46,22 @@ func TestServedBodyHashesToItsReceipt(t *testing.T) {
 
 	db := database.OpenInMemory(nil)
 
-	// Two sequence ledgers, each with a stream that has delivered something.
-	// Both matter: withSighted switched on both, and on an idle network the
-	// synthetic ledger's Sequence is empty, so it verified by accident.
+	// Two sequence ledgers, each with a stream that has delivered something
+	// and received further. Both matter: the old derivation switched on both,
+	// and on an idle network the synthetic ledger's Sequence is empty, so it
+	// verified by accident. 222 is what the live network served for
+	// acc://dn.acme when Received was derived from staging (#4295).
 	batch := db.Begin(true)
 	al := new(protocol.AnchorLedger)
 	al.Url = anchors
 	al.Partition(source).Delivered = 3
+	al.Partition(source).Received = 222
 	require.NoError(t, batch.Account(anchors).Main().Put(al))
 
 	sl := new(protocol.SyntheticLedger)
 	sl.Url = synth
 	sl.Partition(source).Delivered = 5
+	sl.Partition(source).Received = 9
 	require.NoError(t, batch.Account(synth).Main().Put(sl))
 
 	ledger := new(protocol.SystemLedger)
@@ -84,27 +82,13 @@ func TestServedBodyHashesToItsReceipt(t *testing.T) {
 	require.NoError(t, batch.UpdateBPT())
 	require.NoError(t, batch.Commit())
 
-	// Staging sighted well ahead of what either ledger has delivered, so a
-	// value derived from it is nowhere near the stored one. 222 is what the
-	// live network served for acc://dn.acme on a stored Received of 0.
-	staging := execute.NewStaging()
-	tx := staging.Begin()
-	tx.Hold(execute.StreamID{Ledger: anchors, Source: source}, 222,
-		&execute.Held{ID: source.WithTxID([32]byte{1})})
-	tx.Hold(execute.StreamID{Ledger: synth, Source: source}, 9,
-		&execute.Held{ID: source.WithTxID([32]byte{2})})
-	tx.Commit()
-	execute.RegisterStaging(partitionID, staging)
-	require.Same(t, staging, execute.StagingFor(partitionID),
-		"the querier must find this staging the way the node's does")
-
 	q := api.Querier2{Querier: NewQuerier(QuerierParams{Database: db, Partition: partitionID})}
 	ctx := context.Background()
 
 	for _, c := range []struct {
-		name    string
-		url     *url.URL
-		sighted uint64
+		name     string
+		url      *url.URL
+		received uint64
 	}{
 		{"anchor ledger", anchors, 222},
 		{"synthetic ledger", synth, 9},
@@ -124,24 +108,11 @@ func TestServedBodyHashesToItsReceipt(t *testing.T) {
 				hex.EncodeToString(h[:]),
 				"the body served does not hash to the leaf the receipt served with it proves")
 
-			// And the derived number is still answered, beside the body. A
-			// fix that simply stopped reporting it would pass the line above
-			// and put every operator surface back to reading zero (#4189).
-			var got uint64
-			var found bool
-			for _, s := range rec.Sighted {
-				if s.Source.Equal(source) {
-					got, found = s.Received, true
-				}
-			}
-			require.True(t, found, "the stream's sighted count was not served beside the body")
-			require.Equal(t, c.sighted, got)
-
-			// And a reader that wants it merged gets it, on its own side.
-			merged := rec.SightedAccount()
-			require.Equal(t, c.sighted, receivedFrom(t, merged, source))
-			require.NotEqual(t, c.sighted, receivedFrom(t, rec.Account, source),
-				"SightedAccount must copy: the record must be left as it was served")
+			// And the number every operator surface reads -- how far the
+			// stream has arrived -- is the stored one, in the body. Nothing
+			// is served beside it (#4412).
+			require.Equal(t, c.received, receivedFrom(t, rec.Account, source))
+			require.Empty(t, rec.Sighted, "nothing derived from staging is served beside the body")
 		})
 	}
 }

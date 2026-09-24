@@ -995,30 +995,9 @@ func (t *StagingTxn) reset() {
 	t.released = map[string]uint64{}
 }
 
-var (
-	registryMu sync.Mutex
-	registry   = map[string]*Staging{}
-)
-
-// RegisterStaging names a partition's staging for readers that have only the
-// partition's name — the node's API, reporting how far a stream has been
-// sighted. A process running several networks (the simulator) does not use
-// it; it hands each service its staging directly.
-func RegisterStaging(partitionID string, s *Staging) {
-	registryMu.Lock()
-	defer registryMu.Unlock()
-	registry[strings.ToLower(partitionID)] = s
-}
-
-// StagingFor answers RegisterStaging.
-func StagingFor(partitionID string) *Staging {
-	registryMu.Lock()
-	defer registryMu.Unlock()
-	return registry[strings.ToLower(partitionID)]
-}
-
-// SightedOn answers, outside any block, how far a stream has been sighted:
-// what the API reports as Received.
+// SightedOn answers, outside any block, how far this node's staging has
+// sighted a stream. It is this node's memory; what the ledger records as
+// Received is the executor's count, written by every block (#4412).
 func (s *Staging) SightedOn(id StreamID) uint64 {
 	if s == nil {
 		return 0
