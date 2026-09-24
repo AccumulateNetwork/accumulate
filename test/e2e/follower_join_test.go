@@ -137,19 +137,15 @@ func TestAFollowerJoinsARunningNetworkAndLeaves(t *testing.T) {
 	// The join, as the daemon runs it. The simulator has no clock, so the
 	// network steps — under load — after every pull round. In the first round
 	// a transaction is handed to the follower itself, while it is joining.
-	sources := &join.QueryPeers{
-		Client:  sim.S.Services(),
-		Network: t.Name(),
-		Router:  sim.S.Router(),
-		Self:    followerID,
-	}
 	// The state is the one RestartNode built as the daemon builds it, and
 	// its machine is what the follower's querier refuses by: a state built
 	// here would be one the follower's services never see.
 	state := p.NodeJoinState(follower)
 	require.NotNil(t, state, "the restarted follower has no join state")
 
-	srcs, srcPart, err := sources.For(ctx, alice.JoinPath("tokens"))
+	// The peers the join itself pulls from, not a set built beside it: the
+	// follower must never be one of them (#4303).
+	srcs, srcPart, err := state.Sources().For(ctx, alice.JoinPath("tokens"))
 	require.NoError(t, err)
 	require.True(t, part.Equal(srcPart), "the account routed to %v, not %v", srcPart, part)
 	require.Len(t, srcs, p.NodeCount()-1, "the follower must be excluded from its own peer list")
