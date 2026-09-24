@@ -377,7 +377,8 @@ join that does not finish, not a node that executes from a wrong state
 (DIFFERENCES.md E11). `NotFound` means the peer's tree holds no leaf: a name every
 source answers that way is dropped rather than asked again, and the page diff
 names it again if a leaf ever appears; a name some source failed to answer is
-asked again.
+asked again. A spine account is never dropped: every source answering it
+`NotFound` fails the spine for the pass, and the spine is asked for again.
 
 **One pass is one root, and it is written whole.** What a round fetches is
 held, unwritten, until the root its receipts end at is proven, and nothing new
@@ -453,14 +454,20 @@ restarting node unable to pull `<partition>/anchors` from anybody (#4295). A
 derived value travels **beside** the body, in its own field, and a reader
 merges it after it has checked the proof.
 
-**The answer carries everything the leaf hashes, and the pull writes all of
-it** (#4399). Besides the body, the directory, the pending list and the
+**The answer carries what the leaf hashes, and the pull writes what it
+carries** (#4399). Besides the body, the directory, the pending list and the
 chains, a partition's `synthetic` leaf hashes its two delivery queues and its
 `ledger` leaf the root of its scheduled events. A current answer with a
 receipt carries them in its `Leaf` — the queues, and the events themselves
 rather than their root, since a root cannot be written — read from the batch
 the receipt is built from; the pull replaces what the node held with them,
-and a queue or an event set served empty clears the node's. A queued local
+and a queue or an event set served empty clears the node's. The block lists
+the executor finds the events by are not in the events tree, so no leaf check
+covers them: the pull derives them from the event sets it verified and never
+takes them from the answer. **What is not carried** is the signature
+material of a pending transaction (its validator signatures, payments, votes
+and signatures, which `hashPendingV2` hashes): an account holding a pending
+transaction whose sets are not empty still does not verify (#4298, DIFFERENCES.md E11). A queued local
 delivery executes from its stored message at the next block, so the pull also
 fetches each queued message and keeps it only if its hash is the queued ID.
 
