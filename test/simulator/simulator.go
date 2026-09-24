@@ -46,6 +46,10 @@ func New(opts ...Option) (*Simulator, error) {
 		},
 		abci: noABCI,
 
+		// A node's own default (cmd/accumulated/run/dagbft.go): peers retain
+		// enough BPT history to serve a joining node as of a block (#4442).
+		bptHistoryDepth: 1024,
+
 		// Tests like to materialize tokens, which can cause problems with the
 		// supply calculations. So start with a non-zero supply to provide a
 		// buffer.

@@ -108,6 +108,16 @@ type Options struct {
 	// #4301 closed.
 	Verify Verifier
 
+	// AsOf, when not zero, pulls the account as the peer held it at that
+	// block of its partition, not as it holds it now (executor spec, "Sync"
+	// §2, "The accounts a peer serves to a join are as of a block"): the
+	// body, directory and pending list as of the block, and each chain
+	// taken to its count at the block, from the retained leaf. A pull of
+	// current state straddles blocks, and the tree it builds is a mixture no
+	// block held (#4411). A peer that no longer retains the block refuses
+	// it, and FetchFrom says so with ErrOutOfRetention.
+	AsOf uint64
+
 	// RetakeLonger, in ModeFullSpine, takes a chain the node holds more
 	// entries of than the peer served again whole, from its first entry,
 	// instead of refusing the peer, and replaces the account's chain index
@@ -316,9 +326,11 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 	}
 
 	// 1. Main account state, with the receipt that binds it to the peer's root.
-	receipt, err := pullMain(ctx, src, sub, u, withReceipt)
+	receipt, rec, err := pullMain(ctx, src, sub, u, withReceipt, opts.AsOf)
 	switch {
 	case err == nil:
+	case stderrors.Is(err, ErrOutOfRetention):
+		return fail(fmt.Errorf("main %s: %w", u, err))
 	case stderrors.Is(err, ErrNoLeaf):
 		// Kept apart from every other failure so FetchFrom can tell "no
 		// source holds it" from "a source did not answer" (#4397). It is a
@@ -343,6 +355,17 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		if receipt.Partition != "" {
 			p.Partition = protocol.PartitionUrl(receipt.Partition)
 		}
+	}
+
+	if opts.AsOf != 0 {
+		// As of a block, everything else the leaf hashes comes in the same
+		// answer: the directory and pending list in full, and each chain's
+		// count and pending set at the block (#4361).
+		err := pullAsOf(ctx, src, sub, p, u, rec, opts, pageSize)
+		if err != nil {
+			return fail(errors.UnknownError.WithFormat("as of block %d %s: %w", opts.AsOf, u, err))
+		}
+		return p, nil
 	}
 
 	// 2. Directory entries (the secondary-state list of contained URLs).
@@ -469,7 +492,7 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 		return nil, -1, errors.BadRequest.With("pull.FetchFrom: at least one source required")
 	}
 	var refusals []error
-	noLeaf := 0
+	noLeaf, retained := 0, 0
 	for i, src := range srcs {
 		p, err := Fetch(ctx, src, batch, u, opts, opts.Verify != nil || opts.WithReceipt)
 		if ctx.Err() != nil {
@@ -484,9 +507,15 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 		if stderrors.Is(err, ErrNoLeaf) {
 			noLeaf++
 		}
+		if stderrors.Is(err, ErrOutOfRetention) {
+			retained++
+		}
 		refusals = append(refusals, errors.UnknownError.WithFormat("%s: %w", sourceName(i, src), err))
 	}
 
+	if retained == len(srcs) {
+		return nil, -1, fmt.Errorf("%v: %w, by every source asked: %v", u, ErrOutOfRetention, stderrors.Join(refusals...))
+	}
 	if noLeaf == len(srcs) {
 		return nil, -1, fmt.Errorf("%v: %w, by every source asked: %v", u, ErrNoLeaf, stderrors.Join(refusals...))
 	}
@@ -509,25 +538,38 @@ func sourceName(i int, src Source) string {
 // answer makes it an ordinary refusal, to be asked again.
 var ErrNoLeaf = stderrors.New("the peer holds no leaf for the account")
 
+// ErrOutOfRetention is a peer's answer that it no longer retains the block an
+// account was asked for as of (IncompleteChain). FetchFrom returns it only when
+// every source answered so.
+var ErrOutOfRetention = stderrors.New("the peer no longer retains that block")
+
 // pullMain stores the account body and returns the receipt the peer served
 // with it, which binds the body to the peer's BPT root. wantReceipt asks for
 // one; without it the peer does the work of building a proof nobody checks.
-func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL, wantReceipt bool) (*api.Receipt, error) {
+// asOf, when not zero, asks for the account as of that block, and the answer
+// carries the rest of its leaf as of it.
+func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL, wantReceipt bool, asOf uint64) (*api.Receipt, *api.AccountRecord, error) {
 	var query *api.DefaultQuery
-	if wantReceipt {
+	switch {
+	case asOf != 0:
+		query = &api.DefaultQuery{IncludeReceipt: &api.ReceiptOptions{ForHeight: asOf}}
+		wantReceipt = true
+	case wantReceipt:
 		query = &api.DefaultQuery{IncludeReceipt: &api.ReceiptOptions{ForAny: true}}
 	}
 	rec, err := src.QueryAccount(ctx, u, query)
 	switch {
 	case err == nil:
+	case asOf != 0 && errors.Is(err, errors.IncompleteChain):
+		return nil, nil, fmt.Errorf("%w: %v", ErrOutOfRetention, err)
 	case wantReceipt && errors.Is(err, errors.NotFound):
 		// Asked for a receipt, a peer answers NotFound only when its tree
 		// holds no leaf for the account (#4397). Only the account query's
 		// answer means that: a NotFound from any later query is a peer that
 		// could not serve part of what it holds.
-		return nil, fmt.Errorf("%w: %v", ErrNoLeaf, err)
+		return nil, nil, fmt.Errorf("%w: %v", ErrNoLeaf, err)
 	default:
-		return nil, errors.UnknownError.WithFormat("query account: %w", err)
+		return nil, nil, errors.UnknownError.WithFormat("query account: %w", err)
 	}
 
 	// A peer that answers with an empty record has served nothing, and serving
@@ -537,10 +579,10 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 	// not NotFound: that is the peer's own answer that it holds no leaf, and
 	// a name every source answers so is dropped (executor.md, "Sync", §2).
 	if rec == nil {
-		return nil, errors.Conflict.WithFormat("%v: the peer served no account", u)
+		return nil, nil, errors.Conflict.WithFormat("%v: the peer served no account", u)
 	}
 	if wantReceipt && rec.Receipt == nil {
-		return nil, errors.Conflict.WithFormat("%v: the peer served no receipt", u)
+		return nil, nil, errors.Conflict.WithFormat("%v: the peer served no receipt", u)
 	}
 
 	// A leaf with no body does not exist: the state tree holds a leaf only
@@ -550,7 +592,7 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 	// such leaves did exist, one hash for every one of them, and taking them
 	// on peers' word was the phantom-leaf hole (#4406).
 	if rec.Account == nil {
-		return nil, errors.Conflict.WithFormat("%v: the peer served no account", u)
+		return nil, nil, errors.Conflict.WithFormat("%v: the peer served no account", u)
 	}
 	// A body names its own account, and that is what binds a body's leaf to
 	// the name asked for. A body served under another name hashes to that
@@ -559,20 +601,20 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 	// such answer took the joining node down (#4408, review R4). It is a
 	// refusal of this source here, and the next is asked.
 	if got := rec.Account.GetUrl(); got == nil || !got.Equal(u) {
-		return nil, errors.Conflict.WithFormat("%v: the peer served the body of %v", u, got)
+		return nil, nil, errors.Conflict.WithFormat("%v: the peer served the body of %v", u, got)
 	}
 	if err := batch.Account(u).Main().Put(rec.Account); err != nil {
-		return nil, errors.UnknownError.WithFormat("store main: %w", err)
+		return nil, nil, errors.UnknownError.WithFormat("store main: %w", err)
 	}
 	if wantReceipt {
 		// The answer that carries a receipt carries the rest of the leaf the
 		// receipt proves; one without a receipt does not, and must not clear
 		// what the node holds.
 		if err := pullLeafBesideBody(ctx, src, batch, u, rec.Leaf); err != nil {
-			return nil, errors.UnknownError.Wrap(err)
+			return nil, nil, errors.UnknownError.Wrap(err)
 		}
 	}
-	return rec.Receipt, nil
+	return rec.Receipt, rec, nil
 }
 
 // pullLeafBesideBody writes the part of a system account's leaf that only the
@@ -810,6 +852,84 @@ func pullPending(ctx context.Context, src Source, batch *database.Batch, u *url.
 		start += uint64(len(page.Records))
 	}
 	return errors.UnknownError.Wrap(batch.Account(u).Pending().Put(all))
+}
+
+// pullAsOf writes the rest of an account's leaf as a peer held it at a block,
+// from the answer that carried the body as of it: the directory and the
+// pending list, served in full, and each chain taken to its count at the
+// block -- by its head and open mark set, or, whole, entry by entry with the
+// messages behind them. The account's chain list becomes the one it had at
+// the block.
+func pullAsOf(ctx context.Context, src Source, sub *database.Batch, p *Pending, u *url.URL, rec *api.AccountRecord, opts Options, pageSize uint64) error {
+	if rec == nil || rec.Leaf == nil {
+		return errors.Conflict.With("the peer served no leaf as of the block")
+	}
+	var dir []*url.URL
+	if rec.Directory != nil {
+		for _, r := range rec.Directory.Records {
+			if r != nil && r.Value != nil {
+				dir = append(dir, r.Value)
+			}
+		}
+	}
+	if err := sub.Account(u).Directory().Put(dir); err != nil {
+		return errors.UnknownError.WithFormat("store directory: %w", err)
+	}
+	var pending []*url.TxID
+	if rec.Pending != nil {
+		for _, r := range rec.Pending.Records {
+			if r != nil && r.Value != nil {
+				pending = append(pending, r.Value)
+			}
+		}
+	}
+	if err := sub.Account(u).Pending().Put(pending); err != nil {
+		return errors.UnknownError.WithFormat("store pending: %w", err)
+	}
+
+	var list []*protocol.ChainMetadata
+	for _, c := range rec.Leaf.Chains {
+		if c == nil || c.Name == "" {
+			continue
+		}
+		list = append(list, &protocol.ChainMetadata{Name: c.Name, Type: c.Type})
+		var err error
+		switch opts.Mode {
+		case ModeStateOnly:
+			err = restoreChainHead(ctx, src, sub, u, c, pageSize)
+		case ModeFullSpine:
+			if p.bodies == nil {
+				p.bodies = newMessages(ctx, src, sub)
+			}
+			err = pullChain(ctx, src, sub, p.bodies, u, c, pageSize, opts.CheckHeld, false)
+			if stderrors.Is(err, errNotThePeers) || stderrors.Is(err, errLongerThanThePeers) {
+				err = pullChain(ctx, src, sub, p.bodies, u, c, pageSize, false, true)
+			}
+		default:
+			err = errors.BadRequest.WithFormat("unknown pull mode %d", opts.Mode)
+		}
+		if err != nil {
+			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+		}
+	}
+	return errors.UnknownError.Wrap(sub.Account(u).Chains().Put(list))
+}
+
+// restoreChainHead sets one chain from its count and pending set plus the
+// entries of its open mark set (see pullChainHeads).
+func restoreChainHead(ctx context.Context, src Source, batch *database.Batch, u *url.URL, c *api.ChainRecord, pageSize uint64) error {
+	want := &merkle.State{Count: int64(c.Count), Pending: c.State}
+	dstChain, err := batch.Account(u).ChainByName(c.Name)
+	if err != nil {
+		return err
+	}
+	inner := dstChain.Inner()
+	lastMark := want.Count &^ inner.MarkMask()
+	open, err := chainEntries(ctx, src, u, c.Name, uint64(lastMark), uint64(want.Count), pageSize)
+	if err != nil {
+		return fmt.Errorf("open mark set: %w", err)
+	}
+	return inner.RestoreHead(want, open)
 }
 
 // pullChainHeads sets each of the account's chains from ChainRecord.{Count,

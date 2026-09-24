@@ -210,6 +210,18 @@ type syncing struct {
 	// the node holds that none named is dropped when the walk completes.
 	named map[[32]byte]bool
 
+	// expired is whether a pull found that no peer retains the block it was
+	// asked for as of: the pull starts again from the peers' block (Pull).
+	expired bool
+
+	// matchedAt is the block the records stopped at because the local root
+	// equals a verified anchor's: the match, which Matched reports.
+	matchedAt uint64
+
+	// own are the accounts this node's own block-ledger records name, by
+	// block, for a repair (startRepair).
+	own map[uint64][]*url.URL
+
 	// servedBy names the peers whose answers this pull took.
 	servedBy map[string]bool
 
@@ -483,6 +495,13 @@ func (s *PulledState) Pull(ctx context.Context) error {
 		s.log.Info("No peer could say which block the partition is at this round", "partition", s.partition, "error", err)
 		return nil
 	}
+	// The newest block a peer can serve as of is the one before the block
+	// its ledger names: a block's root is recorded on the ledger's bpt chain
+	// by the block after it, and a peer serves the tree as of a block only
+	// once that root is recorded.
+	if peer > 1 {
+		peer--
+	}
 
 	if s.sync == nil && s.repairFrom != 0 {
 		s.startRepair(ctx)
@@ -494,7 +513,7 @@ func (s *PulledState) Pull(ctx context.Context) error {
 			"partition", s.partition, "start", peer, "executed", s.executed)
 	}
 	p := s.sync
-	p.ready = false
+	p.matchedAt = 0
 
 	// The spine, whole, once: this partition's anchors, ledger, operators and
 	// network definition, with their chains and the messages behind them
@@ -506,7 +525,7 @@ func (s *PulledState) Pull(ctx context.Context) error {
 			if p.current[accountKey(u)] {
 				continue
 			}
-			if s.pullOne(ctx, p, u) != taken {
+			if s.pullOne(ctx, p, u, p.start) != taken {
 				ok = false
 			}
 		}
@@ -523,6 +542,8 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	s.processRecords(ctx, q, p, peer)
 
 	// What an earlier round could not take, once each this round.
+	// What an earlier round could not take, once each this round, as of the
+	// block the state stands at.
 	owed := p.retry
 	p.retry = map[[32]byte]*url.URL{}
 	for _, u := range owed {
@@ -530,45 +551,23 @@ func (s *PulledState) Pull(ctx context.Context) error {
 			p.retry[accountKey(u)] = u
 			continue
 		}
-		s.pullOne(ctx, p, u)
+		s.pullOne(ctx, p, u, p.last)
 	}
 
-	// Step 1, the walk: the next pages of the peer's BPT.
-	if !p.walked {
+	// Step 1, the walk: the next pages of the peer's BPT, as of the start.
+	if !p.walked && p.matchedAt == 0 {
 		s.walk(ctx, q, p)
 	}
 
-	// With the walk done and nothing owed, the state is the partition's at L
-	// if the pull is right. The node may execute from here, comparing at
-	// every block that anchors (Ready; DIFFERENCES.md E11: the spec's "Two
-	// mismatches" executes only once the root has matched).
-	p.ready = p.walked && len(p.retry) == 0
+	// A peer that no longer retains a block the pull asked for is past its
+	// retention: the pull starts again from the block the peers are at, and
+	// walks again from there (executor spec, "Sync" §2).
+	if p.expired {
+		s.log.Info("The peers no longer retain a block this pull needs; starting it again from their block",
+			"partition", s.partition, "start", p.start, "records-through", p.last)
+		s.sync = nil
+	}
 	return nil
-}
-
-// Ready reports the block the pulled state stands at once the walk has covered
-// the tree and nothing is owed a retry: the block the node may hand off at and
-// execute from, unproven, comparing its root with the partition's signed
-// anchor at every block that sends one. A match there is the proof, and
-// Diverged promotes the node at it; a mismatch is repaired from the block
-// ledger. The spec's "Two mismatches" executes nothing until the root has
-// matched; handing off unproven is today's departure from it (DIFFERENCES.md
-// E11), kept until the as-of-block pulls land (#4442).
-//
-// The block is the one the pulled ledger names, not the last record read: the
-// ledger is pulled as it is on the peer now, and the peer may have moved past
-// the last record while the round pulled. A block the records have not reached
-// is wrong only in the accounts its record names, which the repair brings
-// current if the root does not match.
-func (s *PulledState) Ready() (uint64, bool) {
-	if s.sync == nil || !s.sync.ready {
-		return 0, false
-	}
-	n, err := readExecutedBlock(s.db, s.partition)
-	if err != nil || n < s.sync.last {
-		return 0, false
-	}
-	return n, true
 }
 
 // startRepair begins the pull that repairs the state after an executed
@@ -611,14 +610,16 @@ func (s *PulledState) startRepair(ctx context.Context) {
 		}
 		executed = n
 	}
-	var own []*url.URL
+	p.own = map[uint64][]*url.URL{}
+	count := 0
 	batch := s.db.Begin(false)
 	ledger := batch.Account(s.partition.JoinPath(protocol.Ledger))
 	for n := from + 1; n <= executed; n++ {
 		_, entries, err := indexing.LoadBlockLedger(ledger, n)
 		switch {
 		case err == nil:
-			own = append(own, ChangedAccounts(s.partition, entries)...)
+			p.own[n] = ChangedAccounts(s.partition, entries)
+			count += len(p.own[n])
 		case errors.Is(err, errors.NotFound):
 			// A block this node executed empty, or did not execute.
 		default:
@@ -627,18 +628,10 @@ func (s *PulledState) startRepair(ctx context.Context) {
 	}
 	batch.Discard()
 
-	s.log.Info("Repairing the state from the block ledger: every account named since the last match, by the partition's records and this node's own",
-		"partition", s.partition, "from", from, "executed", executed, "own", len(own))
-	seen := map[[32]byte]bool{}
-	for _, u := range own {
-		k := accountKey(u)
-		if seen[k] || ctx.Err() != nil {
-			continue
-		}
-		seen[k] = true
-		p.current[k] = true
-		s.pullOne(ctx, p, u)
-	}
+	// Each block's own names are pulled with the partition's record of the
+	// same block, as of it (processRange).
+	s.log.Info("Repairing the state from the block ledger: every account named since the last comparison, by the partition's records and this node's own",
+		"partition", s.partition, "from", from, "executed", executed, "own", count)
 }
 
 // maxRecordsPerRound bounds how many blocks of records one round reads, so a
@@ -660,14 +653,17 @@ func (s *PulledState) processRecords(ctx context.Context, q api.Querier2, p *syn
 }
 
 // processRange reads the records of the blocks after after through through,
-// in block order, marks every account they name current and pulls it, and
-// returns the last block read. Every pull is of the peer's state now, which is
-// at or after every block read, so an account two blocks named is current
-// after one pull.
+// in block order, and for each block pulls every account its record names --
+// and, in a repair, every account this node's own record of it names -- as the
+// peer held it at that block, so after each block's records the local tree is
+// that block's (executor spec, "Sync" §2). It returns the last block read.
+//
+// It stops at a block whose local root equals a verified anchor's: that is the
+// match (step 3), and the records must not carry the state past it before
+// Matched reports it.
 func (s *PulledState) processRange(ctx context.Context, q api.Querier2, p *syncing, after, through uint64) uint64 {
-	var named []*url.URL
 	last := after
-	for n := after + 1; n <= through; n++ {
+	for n := after + 1; n <= through && ctx.Err() == nil; n++ {
 		entries, err := blockLedgerOf(ctx, q, s.partition, n)
 		switch {
 		case err == nil:
@@ -677,28 +673,44 @@ func (s *PulledState) processRange(ctx context.Context, q api.Querier2, p *synci
 		default:
 			s.log.Info("The block ledger could not be read; the records go on from here next round",
 				"partition", s.partition, "block", n, "error", err)
-			through = n - 1
+			return last
 		}
-		if n > through {
-			break
-		}
-		for _, u := range ChangedAccounts(s.partition, entries) {
+		named := ChangedAccounts(s.partition, entries)
+		named = append(named, p.own[n]...)
+		for _, u := range named {
 			p.current[accountKey(u)] = true
-			named = append(named, u)
+		}
+		s.pullAll(ctx, p, named, n)
+		if p.expired {
+			return last
 		}
 		last = n
-	}
+		p.last = n
 
-	seen := map[[32]byte]bool{}
-	for _, u := range named {
-		k := accountKey(u)
-		if seen[k] || ctx.Err() != nil {
-			continue
+		if p.walked && len(p.retry) == 0 && s.equalsAnAnchor() {
+			p.matchedAt = n
+			s.log.Info("After a block's records the local root is a verified anchor's", "partition", s.partition, "block", n)
+			return last
 		}
-		seen[k] = true
-		s.pullOne(ctx, p, u)
 	}
 	return last
+}
+
+// equalsAnAnchor is whether the local root equals the root of a verified
+// anchor of this partition.
+func (s *PulledState) equalsAnAnchor() bool {
+	batch := s.db.Begin(false)
+	root, err := batch.GetBptRootHash()
+	batch.Discard()
+	if err != nil {
+		return false
+	}
+	for _, o := range s.tracker.Snapshot() {
+		if o.Anchor == root {
+			return true
+		}
+	}
+	return false
 }
 
 // walk takes the next pages of the peer's BPT and pulls every account whose
@@ -720,36 +732,41 @@ func (s *PulledState) processRange(ctx context.Context, q api.Querier2, p *synci
 // is deleted (Paul: "It must also drop leaves it holds that no peer holds").
 func (s *PulledState) walk(ctx context.Context, q api.Querier2, p *syncing) {
 	for i := 0; i < walkPagesPerRound && !p.walked && ctx.Err() == nil; i++ {
-		pager, served, ok := s.pageSource(ctx)
+		pager, _, ok := s.pageSource(ctx)
 		if !ok {
-			pager, served = q, p.low
+			pager = q
 		}
 		batch := s.db.Begin(false)
-		page, err := enumerate.ReadPage(ctx, pager, s.partition, batch, p.cursor, walkPageSize)
+		page, err := enumerate.ReadPageAt(ctx, pager, s.partition, batch, p.cursor, walkPageSize, p.start)
 		batch.Discard()
-		if err != nil {
+		switch {
+		case errors.Is(err, errors.IncompleteChain):
+			s.log.Info("The peer no longer retains the block the walk is as of", "partition", s.partition, "block", p.start, "error", err)
+			p.expired = true
+			return
+		case err != nil:
 			s.log.Info("The peer's BPT could not be paged this round; the walk goes on from here next round",
 				"partition", s.partition, "pages", p.pages, "error", err)
 			return
 		}
 		p.pages++
-		if served < p.low {
-			s.log.Info("A walk page was served at a block before the records' start; the records are read from there",
-				"partition", s.partition, "page-block", served, "records-from", p.low)
-			s.processRange(ctx, q, p, served, p.low)
-			p.low = served
-		}
 
 		for _, e := range page.Record.Entries {
 			if e != nil {
 				p.named[e.KeyHash] = true
 			}
 		}
+		// Pulled as of the block the records stand at: an account no record
+		// has named since the page's block is the same there.
+		var stale []*url.URL
 		for _, u := range page.Stale {
-			if p.current[accountKey(u)] {
-				continue
+			if !p.current[accountKey(u)] {
+				stale = append(stale, u)
 			}
-			s.pullOne(ctx, p, u)
+		}
+		s.pullAll(ctx, p, stale, p.last)
+		if p.expired {
+			return
 		}
 
 		if page.Record.Done {
@@ -810,7 +827,7 @@ func (s *PulledState) dropUnnamed(ctx context.Context, p *syncing) {
 		if ctx.Err() != nil {
 			return
 		}
-		s.pullOne(ctx, p, u)
+		s.pullOne(ctx, p, u, p.last)
 	}
 }
 
@@ -834,9 +851,20 @@ const (
 // refuses -- a body served under another name (#4408), an answer with no body
 // (#4437), an entry with no message behind it (#4400) -- and the next peer is
 // asked.
-func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outcome {
+func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL, at uint64) outcome {
+	srcs, partition, out, ok := s.sourcesInOrder(ctx, p, u)
+	if !ok {
+		return out
+	}
+	return s.pullFrom(ctx, p, u, at, srcs, partition)
+}
+
+// sourcesInOrder is the peers an account is asked of, in the order it is
+// asked (order), and the partition they answer for; false with what became of
+// the account when there is none to ask.
+func (s *PulledState) sourcesInOrder(ctx context.Context, p *syncing, u *url.URL) ([]pull.Source, *url.URL, outcome, bool) {
 	if !Routable(u) {
-		return dropped
+		return nil, nil, dropped, false
 	}
 	srcs, partition, err := s.sourcesFor(ctx, u)
 	switch {
@@ -845,17 +873,20 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		// hold, and asking again will not change that.
 		s.log.Info("A named account is not this partition's and was dropped",
 			"account", u, "partition", s.partition)
-		return dropped
+		return nil, nil, dropped, false
 	case err != nil:
 		s.log.Info("No peer could be found for an account", "account", u, "error", err)
 		p.retry[accountKey(u)] = u
-		return owed
+		return nil, nil, owed, false
 	}
+	return s.order(srcs), partition, taken, true
+}
 
-	// A repair takes every account whole: main state, every chain with its
-	// entries and the messages behind them, pending and directory (executor
-	// spec, "Sync", "Two mismatches").
-	srcs = s.order(srcs)
+// pullFrom pulls one account from the peers given, in the order given, as of
+// block at, and writes it. A repair takes every account whole: main state,
+// every chain with its entries and the messages behind them, pending and
+// directory (executor spec, "Sync", "Two mismatches").
+func (s *PulledState) pullFrom(ctx context.Context, p *syncing, u *url.URL, at uint64, srcs []pull.Source, partition *url.URL) outcome {
 
 	whole := s.takenWhole(u) || p.repair
 	mode := pull.ModeStateOnly
@@ -867,6 +898,9 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 	pending, served, err := pull.FetchFrom(ctx, srcs, batch, u, pull.Options{
 		Mode:      mode,
 		Partition: partition,
+		// As the peer held it at the block the state stands at (executor
+		// spec, "Sync" §2): a pull of current state straddles blocks (#4411).
+		AsOf: at,
 		// The answer with a receipt is the one that carries the rest of the
 		// leaf beside the body (#4399), and the one whose NotFound says the
 		// peer holds no leaf (#4397).
@@ -906,6 +940,13 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 	}()
 	switch {
 	case err == nil:
+	case stderrors.Is(err, pull.ErrOutOfRetention):
+		// No peer retains the block any more: the pull starts again from a
+		// block they do (Pull).
+		s.log.Info("No peer retains the block an account was asked for as of; the pull starts again",
+			"account", u, "block", at, "partition", s.partition, "error", err)
+		p.expired = true
+		return owed
 	case stderrors.Is(err, pull.ErrNoLeaf):
 		// Dropped, not owed (#4397): every source was asked and every one
 		// answered that its tree holds no leaf for the name. Asking again
@@ -1038,6 +1079,78 @@ func (s *PulledState) refreshAuthority() {
 		s.anchors.Rewind()
 		s.log.Info("The validator set moved, taken from verified state",
 			"partition", s.partition, "version", s.authority.Version())
+	}
+}
+
+// pullWorkers is how many accounts are fetched at once.
+const pullWorkers = 16
+
+// pullAll pulls every account named, once each, as of block at.
+//
+// The pulls run in parallel (executor spec, "Sync" §2: "a join that pulls one
+// account at a time cannot keep up with a partition at 100 tps"). What is
+// fetched is fetched in parallel, into scratch stores, and every answer is
+// kept; what is written is written one account at a time, from those answers,
+// because the tree is updated and committed by one batch at a time. An account
+// taken whole resumes from what this node holds, so it is fetched only when it
+// is written.
+func (s *PulledState) pullAll(ctx context.Context, p *syncing, named []*url.URL, at uint64) {
+	type job struct {
+		u         *url.URL
+		srcs      []pull.Source
+		partition *url.URL
+	}
+	var jobs []job
+	seen := map[[32]byte]bool{}
+	for _, u := range named {
+		k := accountKey(u)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		srcs, partition, _, ok := s.sourcesInOrder(ctx, p, u)
+		if !ok {
+			continue
+		}
+		cache := newAnswers()
+		for i, src := range srcs {
+			srcs[i] = cachedSource{Source: src, answers: cache}
+		}
+		jobs = append(jobs, job{u, srcs, partition})
+	}
+
+	// Fetch in parallel what is taken by its heads: its answers do not
+	// depend on what this node holds.
+	sem := make(chan struct{}, pullWorkers)
+	var wg sync.WaitGroup
+	for _, j := range jobs {
+		if s.takenWhole(j.u) || p.repair {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(j job) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			scratch := database.OpenInMemory(nil)
+			defer scratch.Close()
+			batch := scratch.Begin(true)
+			defer batch.Discard()
+			pending, _, err := pull.FetchFrom(ctx, j.srcs, batch, j.u, pull.Options{
+				Mode: pull.ModeStateOnly, Partition: j.partition, WithReceipt: true, AsOf: at,
+			})
+			if err == nil {
+				pending.Discard()
+			}
+		}(j)
+	}
+	wg.Wait()
+
+	for _, j := range jobs {
+		if ctx.Err() != nil || p.expired {
+			return
+		}
+		s.pullFrom(ctx, p, j.u, at, j.srcs, j.partition)
 	}
 }
 

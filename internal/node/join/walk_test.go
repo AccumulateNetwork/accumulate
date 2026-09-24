@@ -69,7 +69,24 @@ func (s scriptedSource) QueryAccount(ctx context.Context, u *url.URL, q *api.Def
 		}
 		return &api.AccountRecord{Account: &protocol.SystemLedger{Url: u, Index: n}}, nil
 	}
-	return s.Source.QueryAccount(ctx, u, q)
+	if q == nil || q.IncludeReceipt == nil || q.IncludeReceipt.ForHeight == 0 {
+		return s.Source.QueryAccount(ctx, u, q)
+	}
+
+	// As of a block: the scripted store IS the peer's state at the block the
+	// test is about, so the answer is that store's, with the rest of the leaf
+	// a historical answer carries.
+	r, err := s.Source.QueryAccount(ctx, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	chains, err := s.Source.QueryAccountChains(ctx, u, &api.ChainQuery{})
+	if err != nil {
+		return nil, err
+	}
+	r.Leaf = &api.AccountLeaf{Chains: chains.Records}
+	r.Receipt = &api.Receipt{Partition: "BVN0", ForHeight: q.IncludeReceipt.ForHeight}
+	return r, nil
 }
 
 func (s scriptedSource) String() string { return "peer " + s.peer.name }

@@ -130,14 +130,6 @@ type State interface {
 	// that advanced the sync, it reports the block the sync advanced to.
 	Matched(ctx context.Context) (uint64, bool, error)
 
-	// Ready reports the block the pulled state may be executed from before it
-	// is proven: the walk is done and the records are processed through it.
-	// The node hands off there and stays BOOTING; the root watch promotes it
-	// at the first executed block whose root equals the partition's signed
-	// anchor, and the state is repaired from the block ledger at a mismatch
-	// (executor spec, "Sync", "Two mismatches").
-	Ready() (uint64, bool)
-
 	// Promote says the node handed off at block, the block Matched last
 	// reported, and is executing from the block after it: it is ACTIVE from
 	// here. A match alone is not ACTIVE — a node that matched and has not
@@ -391,14 +383,9 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 		if err != nil {
 			return 0, errors.UnknownError.WithFormat("match the anchored root: %w", err)
 		}
-		ok := proven
-		if !ok {
-			// Not proven, but the walk is done: the node may execute from
-			// here and compare at every block that anchors (executor spec,
-			// "Sync", "Two mismatches").
-			q, ok = opts.State.Ready()
-		}
-		if ok {
+		// The node executes only from a state that matched (executor spec,
+		// "Sync", "Two mismatches", 1).
+		if proven {
 			done, err := stageAndHandOff(opts, log, q, proven, &failures)
 			if err != nil {
 				return 0, errors.UnknownError.Wrap(err)

@@ -66,7 +66,7 @@ func TestFetch_DropsANameNoPeerHoldsALeafFor(t *testing.T) {
 		s := quietState(t, here, &fixedSources{partition: here, srcs: []pull.Source{peer, peer}})
 		p := newSyncing()
 
-		require.Equal(t, dropped, s.pullOne(context.Background(), p, nobody))
+		require.Equal(t, dropped, s.pullOne(context.Background(), p, nobody, 0))
 		require.Empty(t, p.retry,
 			"a name every source says it holds no leaf for is dropped, not asked again every round")
 	})
@@ -75,7 +75,7 @@ func TestFetch_DropsANameNoPeerHoldsALeafFor(t *testing.T) {
 		s := quietState(t, here, &fixedSources{partition: here, srcs: []pull.Source{peer, silent{peer}}})
 		p := newSyncing()
 
-		require.Equal(t, owed, s.pullOne(context.Background(), p, nobody))
+		require.Equal(t, owed, s.pullOne(context.Background(), p, nobody, 0))
 		require.Len(t, p.retry, 1,
 			"a name a source did not answer for may be held by that source, so it is asked again")
 	})

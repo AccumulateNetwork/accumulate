@@ -67,8 +67,8 @@ func TestFetch_ASpineAccountIsTakenWholeWheneverItIsNamed(t *testing.T) {
 	p := newSyncing()
 	s.checkedHeld = true // not the process's first whole pull
 	ctx := context.Background()
-	s.pullOne(ctx, p, pool)
-	s.pullOne(ctx, p, other)
+	s.pullOne(ctx, p, pool, 0)
+	s.pullOne(ctx, p, other, 0)
 
 	k := strings.ToLower(pool.String())
 	require.True(t, rec.asked[k], "precondition: the pool was fetched")

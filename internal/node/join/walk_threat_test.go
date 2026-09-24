@@ -90,36 +90,9 @@ func TestTheSourcesAreAskedInRotation(t *testing.T) {
 	p := newSyncing()
 
 	ctx := context.Background()
-	s.pullOne(ctx, p, alice)
-	s.pullOne(ctx, p, alice)
+	s.pullOne(ctx, p, alice, 0)
+	s.pullOne(ctx, p, alice, 0)
 	require.Equal(t, int64(5), balanceIn(t, db, alice), "the same peer was asked first both times")
-}
-
-// TestRecordsAreReadFromTheOldestPageBlock — #4438 (Paul, 2026-09-25; review
-// F1's benign cause). The pull starts at the peers' block S = 10. alice
-// changed at block 10, 5 to 7, and never again. The walk's page is read from a
-// peer that stood at 9: it shows alice at 5, which the restarted node holds
-// too, so the walk skips her, and no record after S names her. The records
-// are read from the block the page was served at, and block 10's names her.
-func TestRecordsAreReadFromTheOldestPageBlock(t *testing.T) {
-	here := protocol.PartitionUrl("BVN0")
-	alice := protocol.AccountUrl("alice", "tokens")
-	before, after := peerStore(t), peerStore(t)
-	putTokens(t, before, alice, 5)
-	putTokens(t, after, alice, 7)
-	leaf := leafIn(t, before, alice)
-
-	peer := &scriptedPeer{partition: here, block: 10, records: map[uint64][]*url.URL{10: {alice}}, state: after,
-		page: []*api.BptLeafSummary{&leaf}}
-	peer.ledger = []uint64{10, 9} // S, then the page's peer
-	s, db := joiningAt(t, peer)
-	putTokens(t, db, alice, 5) // the restarted node's own
-
-	require.NoError(t, s.Pull(context.Background()))
-	require.True(t, s.sync.walked, "precondition: the walk covered the tree")
-	require.Equal(t, uint64(9), s.sync.low, "the records were not read from the page's block")
-	require.Equal(t, int64(7), balanceIn(t, db, alice),
-		"alice changed at block 10 and the page was of block 9: the walk skipped her and no record read named her")
 }
 
 // TestARepairThatDoesNotMatchWalksAgain — #4438 review F1, Paul: "If the pull
@@ -178,24 +151,6 @@ func TestTheWalkDropsLeavesNoPeerHolds(t *testing.T) {
 	})
 }
 
-// TestReadyIsNotBehindTheRecords: the pulled ledger names the block the node
-// hands off at, and a ledger pulled from a peer behind the records read is not
-// a block the state is at: the records have brought accounts past it.
-func TestReadyIsNotBehindTheRecords(t *testing.T) {
-	here := protocol.PartitionUrl("BVN0")
-	peer := &scriptedPeer{partition: here, block: 12, records: map[uint64][]*url.URL{}, state: peerStore(t)}
-	s, db := joiningAt(t, peer)
-	s.sync = newSyncing()
-	s.sync.last, s.sync.ready = 12, true
-	putLedger(t, db, here, 10)
-	_, ok := s.Ready()
-	require.False(t, ok, "the node was ready at block 10 with the records read through 12")
-	putLedger(t, db, here, 12)
-	n, ok := s.Ready()
-	require.True(t, ok)
-	require.Equal(t, uint64(12), n)
-}
-
 // View is a read of db.
 func View(db *database.Database, fn func(*database.Batch)) {
 	batch := db.Begin(false)
@@ -224,14 +179,14 @@ func TestAPeerWhoseAnswersBroughtNoMatchIsAskedLast(t *testing.T) {
 	// The pull handed off from took bob from a, and the root after it did
 	// not match.
 	s.sync = newSyncing()
-	s.pullOne(ctx, s.sync, bob)
+	s.pullOne(ctx, s.sync, bob, 0)
 	require.Equal(t, int64(12), balanceIn(t, db, bob), "precondition: a answered first")
 	s.HandedOff(10)
 	s.RepairFrom(10)
 
 	s.sync = newSyncing()
 	for i := 0; i < 4; i++ {
-		s.pullOne(ctx, s.sync, bob)
+		s.pullOne(ctx, s.sync, bob, 0)
 		require.Equal(t, int64(5), balanceIn(t, db, bob), "pull %d asked the peer whose answers brought no match first", i)
 	}
 }

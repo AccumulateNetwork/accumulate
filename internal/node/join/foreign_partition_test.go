@@ -69,7 +69,7 @@ func TestFetch_DropsAnAccountOfAnotherPartition(t *testing.T) {
 	s := quietState(t, here, &routingSources{partition: elsewhere})
 	p := newSyncing()
 
-	require.Equal(t, dropped, s.pullOne(ctx, p, protocol.AccountUrl("alice", "tokens")),
+	require.Equal(t, dropped, s.pullOne(ctx, p, protocol.AccountUrl("alice", "tokens"), 0),
 		"nothing of another partition is ever pulled")
 	require.Empty(t, p.retry,
 		"an account of another partition is dropped, not owed: owing it asks "+
@@ -88,7 +88,7 @@ func TestFetch_StillOwesAnAccountOfThisPartition(t *testing.T) {
 	s := quietState(t, here, &routingSources{partition: here})
 	p := newSyncing()
 
-	require.Equal(t, owed, s.pullOne(ctx, p, protocol.AccountUrl("alice", "tokens")))
+	require.Equal(t, owed, s.pullOne(ctx, p, protocol.AccountUrl("alice", "tokens"), 0))
 	require.Len(t, p.retry, 1,
 		"an account of this partition that could not be pulled is asked for again")
 }

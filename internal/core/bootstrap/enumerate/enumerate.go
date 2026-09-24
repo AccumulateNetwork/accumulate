@@ -154,10 +154,17 @@ type Page struct {
 // at a time: the join, which processes block-ledger records between pages
 // (executor spec, "Sync", "The algorithm", step 1).
 func ReadPage(ctx context.Context, src Source, scope *url.URL, batch *database.Batch, start [32]byte, count uint64) (*Page, error) {
+	return ReadPageAt(ctx, src, scope, batch, start, count, 0)
+}
+
+// ReadPageAt is ReadPage of the peer's tree as of a block (BptPageQuery.
+// ForHeight); zero is the current tree. A peer that no longer retains the
+// block refuses it (IncompleteChain).
+func ReadPageAt(ctx context.Context, src Source, scope *url.URL, batch *database.Batch, start [32]byte, count, height uint64) (*Page, error) {
 	if count == 0 {
 		count = 256
 	}
-	rec, err := src.QueryBptPage(ctx, scope, &api.BptPageQuery{StartHash: start, Count: count})
+	rec, err := src.QueryBptPage(ctx, scope, &api.BptPageQuery{StartHash: start, Count: count, ForHeight: height})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
