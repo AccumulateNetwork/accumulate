@@ -188,6 +188,15 @@ func (s *Service) Handoff(q uint64) error {
 	}
 }
 
+// performHandoffAt leaves collecting mode at block q, whose system ledger
+// records the leader round it was committed at, and produces the buffered
+// groups committed at a round above that one, in order, from q + 1.
+//
+// Declared for #4362; not yet implemented.
+func (s *Service) performHandoffAt(q uint64, round types.Round) error {
+	return nil
+}
+
 // performHandoff runs in the block production loop. It takes the buffer and
 // leaves collecting mode in one step, sets the block this node stands at, and
 // produces what it collected.
