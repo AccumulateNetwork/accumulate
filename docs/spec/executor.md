@@ -1954,7 +1954,10 @@ fails at the transport, or that the destination answers "not now" (worker
 back-pressure, a full store, any server-side error), keeps the envelope queued
 and tries again after a back-off, until the envelope's retry deadline — a few
 blocks' worth — passes. A destination that refuses an envelope as invalid
-settles it: it is counted and not retried. The queue is bounded in **blocks**:
+settles it: it is logged (`Destination refused a dispatched envelope`),
+counted and not retried, and handed back to whoever registered for refusals
+— the conductor, whose requester treats a refused heal as a failed one
+(healing.md, "A refused heal is a failed heal"; #4426). The queue is bounded in **blocks**:
 envelopes from more than `dispatchQueueBlocks` blocks ago are dropped, oldest
 first, when a new block begins. Every outcome is a counter per destination —
 queued, sent, retried, refused, dropped (by reason: deadline or queue-full) —

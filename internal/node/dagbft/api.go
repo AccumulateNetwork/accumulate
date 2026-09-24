@@ -436,16 +436,17 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 			// The reason travels in the error (consensus spec, invariant 10).
 			return nil, errors.NotReady.WithFormat("submit: %w", err)
 		}
-		// Check if this is a validation error
+		// A validation refusal is answered as the refusal it is: the
+		// executor's code and message in the status, never Pending. Answered
+		// as Pending with no error, the dispatcher settled a refused heal as
+		// sent and the requester believed it landed (#4426; consensus.md,
+		// "Refusal and back-pressure").
 		if stderrors.Is(err, worker.ErrValidationFailed) {
 			s.logger.Error("TRACE-SUBMIT: validation failed, returning error submission", "error", err)
 			return []*api.Submission{{
 				Success: false,
 				Message: fmt.Sprintf("Transaction validation failed: %v", err),
-				Status: &protocol.TransactionStatus{
-					TxID: nil,
-					Code: errors.Pending,
-				},
+				Status:  validationRefusal(err),
 			}}, nil
 		}
 		if stderrors.Is(err, worker.ErrBackpressure) {
@@ -481,6 +482,18 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 	s.logger.Debug("TRACE-SUBMIT: returning result", "submission_count", len(result), "status_is_nil", result[0].Status == nil)
 
 	return result, nil
+}
+
+// validationRefusal is the status of a submission the executor's pre-batch
+// validation refused. The code is the executor's; a refusal whose code did not
+// survive is BadRequest, because validation refuses what the envelope is, and
+// a client error is what tells a sender not to send it again unchanged.
+func validationRefusal(err error) *protocol.TransactionStatus {
+	code := errors.Code(err)
+	if code == 0 || code == errors.UnknownError {
+		code = errors.BadRequest
+	}
+	return &protocol.TransactionStatus{Code: code, Error: code.WithFormat("%w", err)}
 }
 
 // ValidatorService implements api.Validator for DAG-BFT.

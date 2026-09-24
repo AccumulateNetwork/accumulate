@@ -170,6 +170,9 @@ func (c *Conductor) runExclusive(key string, task func()) {
 }
 
 func (c *Conductor) Start(bus *events.Bus) error {
+	if r, ok := c.Dispatcher.(refusalReporter); ok {
+		r.OnRefused(c.refused)
+	}
 	events.SubscribeSync(bus, c.willBeginBlock)
 	events.SubscribeSync(bus, c.willChangeGlobals)
 	return nil

@@ -202,6 +202,17 @@ asked again only when that many activations have passed without it landing.
 Asking twice for a hash is asking about an entry already held or already on its
 way — a bookkeeping defect, not traffic the stream requires.
 
+**A refused heal is a failed heal.** The requester records a span as asked
+when the source answers, and the bundle built from that answer is judged by
+the destination afterwards, on the dispatcher's queue. When the destination
+refuses it at validation, the refusal comes back to the requester as a
+refusal: it forgets the spans the bundle carried, counts the outcome
+`refused` (`accumulate_conductor_heal_requests_total`, beside `answered`,
+`not-yet`, `miss`, `lagging-miss`, `failed` and `lagging`), and asks for them
+again at the next activation. Patience is for an answer that can still
+arrive; a refused one cannot (#4426: run `20260924T093936Z` refused 141
+anchor heals, each recorded as landed and asked again only after patience).
+
 ### The answer
 
 For hashes, the source answers **entirely from its cache** (below) and nothing
