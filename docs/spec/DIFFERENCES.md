@@ -821,9 +821,10 @@ seventh nobody had named.
 - **The pull did not move the state root (#4305).** `UpdateBPT` before every
   commit, in the pull and in the spine.
 - **The changed set could not match (#4306).** Above, plus: the page diff runs
-  on the first round, on a cadence, and whenever the walk cannot cover
-  `(R, Q]` — never gated on the set being empty — and a name that cannot be
-  routed is dropped rather than retried forever.
+  on the first round, on a cadence counted in rounds that fetch (#4395),
+  and whenever the walk cannot cover `(R, Q]` — never gated on the set being
+  empty — and a name that cannot be routed is dropped rather than retried
+  forever.
 - **A block's receipt was attributed to the puller's partition (#4308).**
   `Pending.Partition` comes from `api.Receipt.Partition` when the peer names
   one.

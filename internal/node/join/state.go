@@ -85,7 +85,7 @@ type PulledState struct {
 	log     *slog.Logger
 
 	spine bool   // this partition's spine has been pulled and verified
-	round uint64 // how many rounds have run, for the backstop's cadence
+	round uint64 // how many rounds have fetched, for the backstop's cadence
 	wide  bool   // the last ledger walk could not cover (localBlock, Q]
 
 	// executed is the block this node's EXECUTOR last executed: the number
@@ -247,8 +247,6 @@ func (s *PulledState) Machine() *nodestate.Machine { return s.machine }
 // against that root; one that cannot be verified is not written, and is asked
 // for again in the next pass.
 func (s *PulledState) Pull(ctx context.Context) error {
-	s.round++
-
 	// The anchors first: they are what everything else is verified against.
 	//
 	// A failure here ends the round, never the join. Every read is addressed
@@ -273,6 +271,13 @@ func (s *PulledState) Pull(ctx context.Context) error {
 		s.settlePass(ctx)
 		return nil
 	}
+
+	// The cadence counts the rounds that fetch, and only those. A round that
+	// settles returns above without reaching the page diff, so a count of
+	// every round is decided only on the fetching ones, and a pass that
+	// always settles in a number of rounds sharing a factor with staleEvery
+	// makes those miss every multiple of it for ever (#4395).
+	s.round++
 
 	// What the last pass could not pull is asked for again, with whatever
 	// this round's blocks changed.
