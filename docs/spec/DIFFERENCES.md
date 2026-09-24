@@ -836,6 +836,15 @@ seventh nobody had named.
   can do by refusing. A receipt is possible and is the remaining work: the
   record's hash is an entry on the ledger account's `block-ledger` chain, and
   that chain's anchor is part of the account's hash.
+- **A leaf with no body is served only at the current root** (#4397)**.**
+  The querier answers "no body, and the leaf's receipt" only to a current
+  request that asks for a receipt; an ask as of an anchored block
+  (`ForHeight`) and an ask without a receipt still answer `NotFound` for such
+  an account, so API readers see what they saw before. And the pull cannot
+  remove a body the node already holds when the peer serves none (the store
+  has no delete for `Main`): such an account fails the leaf check from every
+  peer rather than being corrected. No executor path is known to take a body
+  away, so it is recorded rather than built.
 - **The page diff runs on the first round of every join** (#4302 section 8)**.**
   That is one full
   BPT page scan of the partition, names only, before the node knows whether

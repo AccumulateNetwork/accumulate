@@ -353,6 +353,20 @@ a root proven as above; and it passes through the leaf the pulled state hashes
 to locally. The third is what makes the pull safe, because a peer can serve a
 true receipt for an account and a false body for it.
 
+**A leaf is pulled whether or not the account has a body** (#4397). The leaf
+hashes the main state, the directory, the chains and the pending list, and any
+of them can be there without the others: an authority signature recorded on a
+principal that does not exist leaves a leaf with `signature` chains and no
+body, and a failed deposit leaves an empty account's leaf. Asked for an
+account with a receipt, a peer whose tree holds a leaf for it answers with no
+body and the receipt for that leaf; the join pulls the rest of the account as
+for any other and keeps it by the same three checks, the missing body hashing
+as the zero hash. A peer that answers "no body" for an account that has one
+fails the third. `NotFound` means the peer's tree holds no leaf: a name every
+source answers that way is dropped rather than asked again, and the page diff
+names it again if a leaf ever appears; a name some source failed to answer is
+asked again.
+
 **One pass is one root, and it is written whole.** What a round fetches is
 held, unwritten, until the root its receipts end at is proven, and nothing new
 is fetched while it is held. The peers move while a pass is fetched, so its
