@@ -8,6 +8,7 @@ package dagbft
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -36,6 +37,19 @@ import (
 // returned early while collecting, so converge's overrun branch asked it to
 // collect again, found it still overrun, and waited for ever without pulling.
 func TestJoinRun_AnOverrunDuringTheJoinResumesFromANewerBlock(t *testing.T) {
+	// The pull either reaches the network's block at once, or, for the
+	// first two pulls, leaves the state where the node stood: a restarted
+	// node's own root is a proven root. Then the first state the join
+	// matches after the buffer starts again is one the groups it lost are
+	// not in.
+	for _, stay := range []int{0, 2} {
+		t.Run(fmt.Sprintf("state stays %d pulls", stay), func(t *testing.T) {
+			joinThroughAnOverrun(t, stay)
+		})
+	}
+}
+
+func joinThroughAnOverrun(t *testing.T, stay int) {
 	svc, ca, author := newJoiningService(t)
 	w := svc.node.Workers()[0]
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -51,7 +65,12 @@ func TestJoinRun_AnOverrunDuringTheJoinResumesFromANewerBlock(t *testing.T) {
 	const stood = 40
 	svc.lastBlockIndex = stood
 	svc.lastLeaderRound = 1
-	roundOf := func(n uint64) types.Round { return types.Round(2 * (n - stood)) }
+	roundOf := func(n uint64) types.Round {
+		if n == stood {
+			return 1
+		}
+		return types.Round(2 * (n - stood))
+	}
 
 	// The daemon starts collecting before the service starts.
 	svc.StartCollecting()
@@ -59,7 +78,7 @@ func TestJoinRun_AnOverrunDuringTheJoinResumesFromANewerBlock(t *testing.T) {
 	go svc.blockProductionLoop()
 	defer func() { cancel(); svc.wg.Wait() }()
 
-	net := &overrunNetwork{head: stood}
+	net := &overrunNetwork{head: stood, matched: stood}
 	net.commit = func() {
 		net.head++
 		b := types.NewBatch([][]byte{{byte(net.head)}})
@@ -81,7 +100,9 @@ func TestJoinRun_AnOverrunDuringTheJoinResumesFromANewerBlock(t *testing.T) {
 		for i := 0; i < n; i++ {
 			net.commit()
 		}
-		net.matched = net.head - 1
+		if net.pulls > stay {
+			net.matched = net.head - 1
+		}
 		pullState(t, svc, net.matched, roundOf(net.matched))
 	}
 
@@ -102,7 +123,7 @@ func TestJoinRun_AnOverrunDuringTheJoinResumesFromANewerBlock(t *testing.T) {
 	require.NotEmpty(t, ca.blocks, "the join handed off from the buffer it started again")
 	for _, b := range ca.blocks {
 		require.Greater(t, b.Index, uint64(stood+maxCollectedGroups),
-			"block %d was produced from before the overrun", b.Index)
+			"block %d was produced under a number from before the overrun: the groups lost with the buffer are not in it", b.Index)
 		require.Equal(t, roundOf(b.Index), b.LeaderRound,
 			"block %d is the group committed at round %d, not %d: the join numbered the new buffer from the wrong block",
 			b.Index, roundOf(b.Index), b.LeaderRound)
