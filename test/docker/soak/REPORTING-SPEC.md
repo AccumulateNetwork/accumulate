@@ -223,8 +223,25 @@ and an empty row is one of two different facts, which MUST NOT be read as one
 (#4414). One scrape of a container answers for every partition it runs, so:
 
 - **unreachable** — every row of the node is empty at that sample: it answered
-  no scrape (mid-restart, paused). The sample is **incomplete** and is skipped,
+  no scrape (mid-restart). The sample is **incomplete** and is skipped,
   never summed: summing what is left dips the total by that node's real count.
+- **paused** — every row of the node is empty, and `chaos.log` records a
+  `pause <node> <p>s` whose window (the logged start to start + p, plus 5 s
+  of whole-second slack) covers the sample (#4425). That is a **known state**:
+  a paused process's counters cannot move, so each of its pairs is read at its
+  last answer in a complete sample before the pause (with any carried reset
+  offset), the sample is complete, and it is never taken as a new reading for
+  reset detection. The manifest names the node, the pause and the reading's
+  time, marks a paused pair named as the worst, and states the answering
+  nodes' own sum beside the headline. What a paused node holds is in flight in
+  a stopped process: neither lost nor drained. Without a `chaos.log` line
+  covering the sample — or with no earlier answer for every pair — a blank
+  node is unreachable. Run `20260924T093936Z` read the paused acc-bvn2-val3
+  as unreachable, skipped its final row, and its headline read `181 … as of
+  10:06:11Z; FINAL ROW MISSING` over a final row that had landed at 10:08:24Z;
+  read through the pause it is `66 … as of 10:08:24Z` = 1 in the answering
+  nodes' final row + 26 frozen in acc-bvn2-val3 at 10:06:11Z + 39 carried
+  from eight restarts.
 - **no counter** — the row is empty and the same node reported on its other
   partition at that sample: the node answered, and the counter does not exist
   in its process, because nothing was submitted to that partition since the

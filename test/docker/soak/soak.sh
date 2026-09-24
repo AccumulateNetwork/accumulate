@@ -1220,7 +1220,7 @@ if not events:
 events.sort()
 
 # --- the series, built once, in runseries.py --------------------------------
-SER = runseries.load(subs, role, W)
+SER = runseries.load(subs, role, W, pauses=runseries.pauses(chaos))
 if SER["error"]:
     row("stranded across disturbances", "— not measured (%s)" % SER["error"])
     raise SystemExit
@@ -1356,6 +1356,12 @@ if SER["dropped"]:
         "and a fleet total "
         "missing one node dips by that node's count"
         % (SER["dropped"], len(SER["samples"])))
+if SER.get("pausedSamples"):
+    row("samples read through a pause",
+        "%d of %d — a paused node answers no scrape; `chaos.log` names the "
+        "pause, its counters cannot move while it lasts, and its rows are "
+        "read at its last answer before it (#4425)"
+        % (SER["pausedSamples"], len(SER["samples"])))
 reset = runseries.resets_row(SER)
 if reset:
     row("counter resets seen", reset)
@@ -1571,7 +1577,7 @@ nodestate_row() {   # $1 = role: validator | follower
 
 sub_row() {   # $1 = role, $2 = when the loadgen exited, $3 = "stallkill" or ""
   python3 - "$rd/submissions.csv" "${1:-}" "${2:-}" "${3:-}" "$here" \
-           "${STEP_WINDOW_SECS:-120}" <<'PYEOF'
+           "${STEP_WINDOW_SECS:-120}" "$rd/chaos.log" <<'PYEOF'
 import sys
 sys.path.insert(0, sys.argv[5])
 import runseries
@@ -1580,11 +1586,13 @@ path, role = sys.argv[1], sys.argv[2]
 lg_exit = sys.argv[3] if len(sys.argv) > 3 else ""
 stopped_early = sys.argv[4] if len(sys.argv) > 4 else ""
 W = int(sys.argv[6]) if len(sys.argv) > 6 and sys.argv[6] else 120
+chaos = sys.argv[7] if len(sys.argv) > 7 else ""
 
 # The series is built in runseries.py, once, for this row and the step
-# table both: completeness, the counter-reset offsets and the "a level is
-# a minimum" rule are one implementation or they drift (#4364).
-S = runseries.load(path, role, W)
+# table both: completeness, the counter-reset offsets, a paused node read
+# at its last answer (#4425) and the "a level is a minimum" rule are one
+# implementation or they drift (#4364).
+S = runseries.load(path, role, W, pauses=runseries.pauses(chaos) if chaos else ())
 if S["error"]:
     print("— not measured (%s; soakmon wrote none)" % S["error"])
     raise SystemExit
@@ -1646,22 +1654,46 @@ if S["dropped"]:
               "scrape)" % (S["dropped"], "" if S["dropped"] == 1 else "s"))
     if S["samples"][-1]["time"] != last["time"]:
         final += " — INCLUDING THE LAST, so this is not the final row"
+# The row's own readings: what the nodes that answered at this sample said,
+# with nothing carried and nothing read through a pause.
+own = {}
+for r in raw:
+    if r["time"] == last["time"]:
+        v = runseries._int(r.get(runseries.STRANDED))
+        if v is not None:
+            own[(r.get("node"), r.get("partition"))] = v
+# A paused node answered no scrape, and chaos.log says why (#4425): its
+# pairs are read at their last answer, because a stopped process's
+# counters do not move. Name the node, the pause and the reading, or the
+# headline carries a number no row of the file shows.
+if last.get("pausedNodes"):
+    pn = last["pausedNodes"]
+    pp = last["paused"]
+    when = sorted({tt for tt, _ in pp.values()})
+    final += ("; %d node%s paused at this sample (%s), read at %s last "
+              "answer before the pause — a paused process's counters do not "
+              "move, and what it holds is in flight in a stopped process, "
+              "neither lost nor drained: %s, as of %s" % (
+                  len(pn), "" if len(pn) == 1 else "s",
+                  "; ".join("%s, chaos.log `pause` %sZ for %ds"
+                            % (n, st[11:19], sec)
+                            for n, (st, sec) in sorted(pn.items())),
+                  "its" if len(pn) == 1 else "their",
+                  ", ".join("%s/%s %d" % (k[0], k[1], v)
+                            for k, (_, v) in sorted(pp.items())),
+                  ", ".join(x[11:19] + "Z" for x in when)))
 if S["resets"]:
     # The headline carries every restarted counter's settled figure
     # (#4364), so it is not the sum of the row it is "as of". Say both, or
     # a reader adding up the final row finds a different number and cannot
     # tell which one is wrong (#4414: 2973 in the row, 3004 carried).
-    own = {}
-    for r in raw:
-        if r["time"] == last["time"]:
-            v = runseries._int(r.get(runseries.STRANDED))
-            if v is not None:
-                own[(r.get("node"), r.get("partition"))] = v
     carried = sum(c for _, _, _, c in S["resets"])
     final += ("; %d counter reset%s carried forward (%d stranded before a "
               "restart; the final row's own readings sum to %d)" % (
                   len(S["resets"]), "" if len(S["resets"]) == 1 else "s",
                   carried, sum(own.values())))
+elif last.get("pausedNodes"):
+    final += "; the final row's own readings sum to %d" % sum(own.values())
 # A node that answered with an empty row for a partition has no counter
 # there in that process, and it has counted 0 (#4414): joining, if the pair
 # counted earlier in the run; never counted, if it has not.
@@ -1677,8 +1709,12 @@ if stopped_early:
     final += ("; the run was stopped by stallkill, so the load generator was "
               "killed mid-flight and this is NOT a drained sample")
 
-print("%d, worst %s on %s (as of %s; %s; %s)"
-      % (total, wv, "/".join(wk), last["time"], trend, final))
+# The worst may be a paused pair's last answer; say so where it is named.
+wnote = ""
+if wk in (last.get("paused") or {}):
+    wnote = " (paused; its reading of %sZ)" % last["paused"][wk][0][11:19]
+print("%d, worst %s on %s%s (as of %s; %s; %s)"
+      % (total, wv, "/".join(wk), wnote, last["time"], trend, final))
 PYEOF
 }
 
