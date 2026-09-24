@@ -935,7 +935,12 @@ seventh nobody had named.
   body-less leaf is kept when every answering source serves the same one and
   at least two answer (`pull.FetchFrom`); one dissent (`pull.ErrDissent`) or
   fewer than two answers (`pull.ErrUnconfirmed`) and the name is retried, not
-  written and not dropped, and each peer's answer is logged by peer ID. One
+  written and not dropped, and each peer's answer is logged by peer ID. The
+  two-answer floor is a limit of its own (review, final re-check): a partition
+  with a single source — a one-validator BVN, or two with the other down —
+  can never keep a body-less leaf and never matches under failed work; no
+  current run has such a partition, and the floor is kept at two rather than
+  `min(2, sources)` because one source is no defence at all (#4406). One
   liar among honest peers, in any position, is thereby refused
   (`TestALiarAmongHonestPeersCannotPlantAPhantomLeaf`), and a joining peer
   blocks nothing (`TestOnlyAnAnswerVotesOnALeafWithNoBody`,
