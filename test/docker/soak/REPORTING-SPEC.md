@@ -345,7 +345,10 @@ when all three hold:
    node that signs another body under a sequence number at a block its peers
    never anchored: acc-bvn2-val2 signed seq 1154 as block 1300 (root
    `f5b4979b`) where its peers' seq 1154 is block 1301 (root `de98b6c8`), and
-   no peer anchored block 1300.
+   no peer anchored block 1300. **Bound (review F4):** a divergence after the
+   node's last anchor line is invisible to this reading, for at most one
+   anchor interval — anchors are per block here, and healthy nodes state the
+   same block within a second of each other.
 
 **The bound, and its two edges (review F6).** `REJOIN_MAX_BEHIND` is 5
 blocks: healthy validators on run `20260924T052134Z`, read per second from
