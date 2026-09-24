@@ -467,3 +467,42 @@ func TestStageThrough_WaitsForTheBlockAfterTheStateAndRefusesAStateItCannotHandO
 	require.True(t, svc.Collecting())
 	require.Len(t, svc.Buffered(), 1)
 }
+
+// A handoff with nothing buffered after the state still moves the node to the
+// state's round (#4362 review F3, note_3896023512). The node stands at the
+// state's block and round whether or not it has anything to produce; a node
+// that then syncs again must refuse a state behind that round as Conflict —
+// the groups between were committed before it collected again — rather than
+// wait for them as though they were still on their way.
+func TestHandoff_AnEmptyTailHandoffStandsAtTheStatesRound(t *testing.T) {
+	svc, ca, author := newJoiningService(t)
+	w := svc.node.Workers()[0]
+	commit := func(round int) {
+		t.Helper()
+		b := types.NewBatch([][]byte{{byte(round)}})
+		require.NoError(t, w.StoreBatch(b))
+		_, err := svc.processCommittedGroup(group(commitCert(author, types.Round(round), time.Unix(int64(100+round), 0),
+			[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
+		require.NoError(t, err)
+	}
+
+	// The node stood at 40, round 1, and collected 41 and 42 (rounds 2, 4).
+	svc.lastBlockIndex = 40
+	svc.lastLeaderRound = 1
+	svc.StartCollecting()
+	commit(2)
+	commit(4)
+
+	// The state is 42: everything collected is in it, nothing to produce.
+	pullState(t, svc, 42, 4)
+	require.NoError(t, svc.performHandoff(42))
+	require.Empty(t, ca.blocks)
+	require.Equal(t, uint64(42), svc.lastBlockIndex)
+	require.Equal(t, types.Round(4), svc.lastLeaderRound, "the node stands at the state's round")
+
+	// It syncs again. A state at 41 is behind where it stands.
+	svc.StartCollecting()
+	pullState(t, svc, 41, 2)
+	err := svc.performHandoff(41)
+	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
+}
