@@ -564,6 +564,13 @@ func pullMessage(ctx context.Context, src Source, batch *database.Batch, id *url
 // replaceEvents replaces a partition ledger's scheduled events with the ones
 // served, through the event sets, which keep the events BPT in step: the leaf
 // hashes that tree's root, and a root cannot be written, only rebuilt.
+//
+// The block lists the executor finds the events by are DERIVED from the
+// served sets, never taken from the answer. They are an index outside the
+// events BPT, so nothing the leaf check proves covers them: a peer that
+// served a held vote and left its block off the list would pass the check,
+// and the joined node would never release that vote at the anchor its peers
+// release it at -- a different block (#4399 review, F1).
 func replaceEvents(events *database.AccountEvents, ev *api.LedgerEvents) error {
 	if ev == nil {
 		ev = new(api.LedgerEvents)
@@ -587,9 +594,16 @@ func replaceEvents(events *database.AccountEvents, ev *api.LedgerEvents) error {
 			return errors.UnknownError.Wrap(err)
 		}
 	}
+	if err := events.Minor().Blocks().Put(nil); err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if err := events.Major().Blocks().Put(nil); err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
 
+	// Writing a non-empty set adds its block to the list (blockEventSet).
 	for _, v := range ev.MinorVotes {
-		if v == nil {
+		if v == nil || len(v.Votes) == 0 {
 			continue
 		}
 		if err := events.Minor().Votes(v.Block).Put(v.Votes); err != nil {
@@ -597,21 +611,12 @@ func replaceEvents(events *database.AccountEvents, ev *api.LedgerEvents) error {
 		}
 	}
 	for _, p := range ev.MajorPending {
-		if p == nil {
+		if p == nil || len(p.Pending) == 0 {
 			continue
 		}
 		if err := events.Major().Pending(p.Block).Put(p.Pending); err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
-	}
-
-	// The block lists last, so they are the peer's exactly and not the
-	// peer's plus whatever the sets above added.
-	if err := events.Minor().Blocks().Put(ev.MinorBlocks); err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	if err := events.Major().Blocks().Put(ev.MajorBlocks); err != nil {
-		return errors.UnknownError.Wrap(err)
 	}
 	return errors.UnknownError.Wrap(events.Backlog().Expired().Put(ev.Expired))
 }

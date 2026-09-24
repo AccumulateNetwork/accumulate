@@ -339,11 +339,13 @@ type LastBlock struct {
 
 // LedgerEvents is what a partition ledger's scheduled-events BPT holds, and the block lists that index it (#4399).
 type LedgerEvents struct {
-	fieldsSet   []bool
+	fieldsSet []bool
+	// MinorBlocks is the minor block list as the peer holds it. Informational only; the leaf does not hash it, so a node pulling the ledger derives its own from MinorVotes.
 	MinorBlocks []uint64 `json:"minorBlocks,omitempty" form:"minorBlocks" query:"minorBlocks" validate:"required"`
 	// MinorVotes is the authority votes held for each minor block.
-	MinorVotes  []*BlockVotes `json:"minorVotes,omitempty" form:"minorVotes" query:"minorVotes" validate:"required"`
-	MajorBlocks []uint64      `json:"majorBlocks,omitempty" form:"majorBlocks" query:"majorBlocks" validate:"required"`
+	MinorVotes []*BlockVotes `json:"minorVotes,omitempty" form:"minorVotes" query:"minorVotes" validate:"required"`
+	// MajorBlocks is the major block list as the peer holds it. Informational only; the leaf does not hash it, so a node pulling the ledger derives its own from MajorPending.
+	MajorBlocks []uint64 `json:"majorBlocks,omitempty" form:"majorBlocks" query:"majorBlocks" validate:"required"`
 	// MajorPending is the pending transactions that expire at each major block.
 	MajorPending []*BlockPending `json:"majorPending,omitempty" form:"majorPending" query:"majorPending" validate:"required"`
 	// Expired is the backlog of expired transactions not yet processed.

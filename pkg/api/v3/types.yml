@@ -227,6 +227,7 @@ LedgerEvents:
   description: is what a partition ledger's scheduled-events BPT holds, and the block lists that index it (#4399)
   fields:
     - name: MinorBlocks
+      description: is the minor block list as the peer holds it. Informational only; the leaf does not hash it, so a node pulling the ledger derives its own from MinorVotes
       type: uint
       repeatable: true
     - name: MinorVotes
@@ -236,6 +237,7 @@ LedgerEvents:
       pointer: true
       repeatable: true
     - name: MajorBlocks
+      description: is the major block list as the peer holds it. Informational only; the leaf does not hash it, so a node pulling the ledger derives its own from MajorPending
       type: uint
       repeatable: true
     - name: MajorPending
