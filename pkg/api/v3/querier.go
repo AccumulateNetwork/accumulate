@@ -67,6 +67,13 @@ func (q Querier2) QueryBptPage(ctx context.Context, scope *url.URL, query *BptPa
 	return recordIs[*BptPageRecord](doQuery(q, ctx, scope, query))
 }
 
+// QueryBptBlock asks the partition at scope for one stored block of its BPT,
+// for a node locating where its root differs (executor.md, "Sync", "Two
+// mismatches").
+func (q Querier2) QueryBptBlock(ctx context.Context, scope *url.URL, query *BptBlockQuery) (*BptBlockRecord, error) {
+	return recordIs[*BptBlockRecord](doQuery(q, ctx, scope, query))
+}
+
 func (q Querier2) QueryChainEntry(ctx context.Context, scope *url.URL, query *ChainQuery) (*ChainEntryRecord[Record], error) {
 	return chainEntryOf[Record](doQuery(q, ctx, scope, query))
 }

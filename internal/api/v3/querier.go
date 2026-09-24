@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -376,6 +377,9 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 	case *api.BptPageQuery:
 		return s.queryBptPage(batch, scope, query)
 
+	case *api.BptBlockQuery:
+		return s.queryBptBlock(batch, scope, query)
+
 	default:
 		return nil, errors.NotAllowed.WithFormat("unknown query type %v", query.QueryType())
 	}
@@ -486,6 +490,107 @@ func (s *Querier) queryBptPageAt(batch *database.Batch, startKey [32]byte, count
 	}
 
 	return bptPageRecord(bptproof.GetPage(bptproof.AsOf(batch, block, root), startKey, count))
+}
+
+// queryBptBlock serves one stored block of this partition's BPT -- the
+// positions eight levels below a prefix -- to a node locating where its root
+// differs from the partition's (executor.md, "Sync", "Two mismatches" 1;
+// #4441). The node compares the positions with its own and asks again only
+// under those that differ, so a repair costs what is wrong rather than the
+// size of the tree.
+//
+// As of a block it resolves and refuses exactly as a BPT page does, with one
+// answer made explicit: the newest indexed block's root is not on the ledger's
+// bpt chain until the next state-changing block commits, and a request for it
+// is NotReady -- "not yet" -- rather than the IncompleteChain the retained
+// range would give it, which a requester reads as "never, from this peer".
+func (s *Querier) queryBptBlock(batch *database.Batch, scope *url.URL, query *api.BptBlockQuery) (*api.BptBlockRecord, error) {
+	if scope == nil || !s.partition.URL.Equal(scope) {
+		return nil, errors.BadRequest.WithFormat(
+			"a BPT block is the partition's tree: this node serves %v, and the query is scoped to %v",
+			s.partition.URL, scope)
+	}
+
+	tree := batch.BPT()
+	if query.ForHeight == 0 {
+		root, err := tree.GetRootHash()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		return bptBlockRecord(0, root)(tree.GetStoredBlock(query.Prefix))
+	}
+
+	root, block, err := s.retainedRootAt(batch, query.ForHeight)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return bptBlockRecord(block, root)(tree.GetStoredBlockAt(block, root, query.Prefix))
+}
+
+// retainedRootAt resolves a height to the block and root a historical BPT
+// answer is given as of, refusing what this node cannot answer.
+func (s *Querier) retainedRootAt(batch *database.Batch, height uint64) ([32]byte, uint64, error) {
+	// Heights this node has not indexed, or indexed before its horizon, are
+	// refused as they are for every historical request.
+	_, _, err := indexing.ResolveBlockAtOrBefore(s.partition, batch, height)
+	if err != nil {
+		return [32]byte{}, 0, errors.UnknownError.Wrap(err)
+	}
+
+	// With the height resolved, the one refusal left here is the newest
+	// indexed block's: its root is recorded one block late. A node that
+	// retains history will serve it once the next state-changing block
+	// commits, so that is "not yet"; a node that retains none never will.
+	root, block, err := indexing.BPTRootAt(s.partition, batch, height)
+	switch {
+	case err == nil:
+	case errors.Is(err, errors.IncompleteChain):
+		_, retains, rerr := batch.BPT().EarliestRetained()
+		if rerr != nil {
+			return root, 0, errors.UnknownError.Wrap(rerr)
+		}
+		if !retains {
+			return root, 0, errors.IncompleteChain.WithFormat("this node retains no BPT history: %w", err)
+		}
+		return root, 0, errors.NotReady.WithFormat("%v", err)
+	default:
+		return root, 0, errors.UnknownError.Wrap(err)
+	}
+
+	entry, err := indexing.ResolveRetainedBlock(s.partition, batch, height)
+	if err != nil {
+		return root, 0, errors.UnknownError.Wrap(err)
+	}
+	if block != entry.BlockIndex {
+		return root, 0, errors.InternalError.WithFormat(
+			"resolution and root lookup disagree: block %d against %d", entry.BlockIndex, block)
+	}
+	return root, block, nil
+}
+
+// bptBlockRecord maps a stored block to its API record.
+func bptBlockRecord(block uint64, root [32]byte) func(*bpt.StoredBlock, error) (*api.BptBlockRecord, error) {
+	return func(b *bpt.StoredBlock, err error) (*api.BptBlockRecord, error) {
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		out := &api.BptBlockRecord{
+			Prefix:  b.Prefix,
+			Block:   block,
+			BptRoot: root,
+			Hash:    b.Hash,
+			Slots:   make([]*api.BptBlockSlot, len(b.Slots)),
+		}
+		for i, s := range b.Slots {
+			out.Slots[i] = &api.BptBlockSlot{
+				Index:   uint64(s.Index),
+				Branch:  s.Branch,
+				KeyHash: s.KeyHash,
+				Hash:    s.Hash,
+			}
+		}
+		return out, nil
+	}
 }
 
 func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, record *database.Account, wantReceipt *api.ReceiptOptions) (*api.AccountRecord, error) {

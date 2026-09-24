@@ -114,6 +114,19 @@ BptPageQuery:
       type: uint
       optional: true
 
+BptBlockQuery:
+  union: { type: query }
+  description: asks for one stored block of the addressed partition's BPT -- the positions eight levels below Prefix -- for a node locating where its root differs (executor.md, "Sync", "Two mismatches")
+  fields:
+    - name: Prefix
+      description: is the key bytes above the block; omitted is the root's block. Each further block is asked for under the prefix of the one above it plus the index of a position that answer named as a branch
+      type: bytes
+      optional: true
+    - name: ForHeight
+      description: asks for the block as of a named minor block, resolving backward to the last state-changing block at or before it. Zero, the default, is the current tree. A block the server retains no BPT history for is refused (IncompleteChain), and a block whose root the ledger has not recorded yet is NotReady, never answered with another tree
+      type: uint
+      optional: true
+
 AnchorSearchQuery:
   union: { type: query }
   description: queries {account}#anchor/{hash}

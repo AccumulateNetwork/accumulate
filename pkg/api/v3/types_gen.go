@@ -132,6 +132,42 @@ type BlockVotes struct {
 	extraData []byte
 }
 
+// BptBlockQuery asks for one stored block of the addressed partition's BPT -- the positions eight levels below Prefix -- for a node locating where its root differs (executor.md, "Sync", "Two mismatches").
+type BptBlockQuery struct {
+	fieldsSet []bool
+	// Prefix is the key bytes above the block; omitted is the root's block. Each further block is asked for under the prefix of the one above it plus the index of a position that answer named as a branch.
+	Prefix []byte `json:"prefix,omitempty" form:"prefix" query:"prefix"`
+	// ForHeight asks for the block as of a named minor block, resolving backward to the last state-changing block at or before it. Zero, the default, is the current tree. A block the server retains no BPT history for is refused (IncompleteChain), and a block whose root the ledger has not recorded yet is NotReady, never answered with another tree.
+	ForHeight uint64 `json:"forHeight,omitempty" form:"forHeight" query:"forHeight"`
+	extraData []byte
+}
+
+// BptBlockRecord is one stored block of a BPT; Slots are the non-empty positions eight levels below Prefix, ascending, and hash to Hash by the tree's rule.
+type BptBlockRecord struct {
+	fieldsSet []bool
+	Prefix    []byte `json:"prefix,omitempty" form:"prefix" query:"prefix" validate:"required"`
+	// Block is the minor block the answer is as of, after resolution; zero for the current tree.
+	Block uint64 `json:"block,omitempty" form:"block" query:"block" validate:"required"`
+	// BptRoot is the root of the tree the block belongs to.
+	BptRoot [32]byte `json:"bptRoot,omitempty" form:"bptRoot" query:"bptRoot" validate:"required"`
+	// Hash is the hash of the node at Prefix; the root's block has Hash equal to BptRoot.
+	Hash      [32]byte        `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	Slots     []*BptBlockSlot `json:"slots,omitempty" form:"slots" query:"slots" validate:"required"`
+	extraData []byte
+}
+
+// BptBlockSlot is one non-empty position eight levels below a stored block's prefix, the keys whose next byte is Index.
+type BptBlockSlot struct {
+	fieldsSet []bool
+	Index     uint64 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	// Branch reports that two or more keys share the position; the next answer is asked for under the prefix plus Index.
+	Branch bool `json:"branch,omitempty" form:"branch" query:"branch" validate:"required"`
+	// KeyHash is the key of the one leaf at the position, when Branch is false.
+	KeyHash   [32]byte `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
+	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData []byte
+}
+
 type BptLeafSummary struct {
 	fieldsSet []bool
 	KeyHash   [32]byte `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
@@ -701,6 +737,10 @@ func (*BlockEvent) EventType() EventType { return EventTypeBlock }
 
 func (*BlockQuery) QueryType() QueryType { return QueryTypeBlock }
 
+func (*BptBlockQuery) QueryType() QueryType { return QueryTypeBptBlock }
+
+func (*BptBlockRecord) RecordType() RecordType { return RecordTypeBptBlock }
+
 func (*BptPageQuery) QueryType() QueryType { return QueryTypeBptPage }
 
 func (*BptPageRecord) RecordType() RecordType { return RecordTypeBptPage }
@@ -989,6 +1029,62 @@ func (v *BlockVotes) Copy() *BlockVotes {
 }
 
 func (v *BlockVotes) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BptBlockQuery) Copy() *BptBlockQuery {
+	u := new(BptBlockQuery)
+
+	u.Prefix = encoding.BytesCopy(v.Prefix)
+	u.ForHeight = v.ForHeight
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BptBlockQuery) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BptBlockRecord) Copy() *BptBlockRecord {
+	u := new(BptBlockRecord)
+
+	u.Prefix = encoding.BytesCopy(v.Prefix)
+	u.Block = v.Block
+	u.BptRoot = v.BptRoot
+	u.Hash = v.Hash
+	u.Slots = make([]*BptBlockSlot, len(v.Slots))
+	for i, v := range v.Slots {
+		v := v
+		if v != nil {
+			u.Slots[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BptBlockRecord) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BptBlockSlot) Copy() *BptBlockSlot {
+	u := new(BptBlockSlot)
+
+	u.Index = v.Index
+	u.Branch = v.Branch
+	u.KeyHash = v.KeyHash
+	u.Hash = v.Hash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BptBlockSlot) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BptLeafSummary) Copy() *BptLeafSummary {
 	u := new(BptLeafSummary)
@@ -2585,6 +2681,59 @@ func (v *BlockVotes) Equal(u *BlockVotes) bool {
 		if !((v.Votes[i]).Equal(u.Votes[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *BptBlockQuery) Equal(u *BptBlockQuery) bool {
+	if !(bytes.Equal(v.Prefix, u.Prefix)) {
+		return false
+	}
+	if !(v.ForHeight == u.ForHeight) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BptBlockRecord) Equal(u *BptBlockRecord) bool {
+	if !(bytes.Equal(v.Prefix, u.Prefix)) {
+		return false
+	}
+	if !(v.Block == u.Block) {
+		return false
+	}
+	if !(v.BptRoot == u.BptRoot) {
+		return false
+	}
+	if !(v.Hash == u.Hash) {
+		return false
+	}
+	if len(v.Slots) != len(u.Slots) {
+		return false
+	}
+	for i := range v.Slots {
+		if !((v.Slots[i]).Equal(u.Slots[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *BptBlockSlot) Equal(u *BptBlockSlot) bool {
+	if !(v.Index == u.Index) {
+		return false
+	}
+	if !(v.Branch == u.Branch) {
+		return false
+	}
+	if !(v.KeyHash == u.KeyHash) {
+		return false
+	}
+	if !(v.Hash == u.Hash) {
+		return false
 	}
 
 	return true
@@ -4627,6 +4776,227 @@ func (v *BlockVotes) IsValid() error {
 		errs = append(errs, "field Votes is missing")
 	} else if len(v.Votes) == 0 {
 		errs = append(errs, "field Votes is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BptBlockQuery = []string{
+	1: "QueryType",
+	2: "Prefix",
+	3: "ForHeight",
+}
+
+func (v *BptBlockQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.QueryType())
+	if !(len(v.Prefix) == 0) {
+		writer.WriteBytes(2, v.Prefix)
+	}
+	if !(v.ForHeight == 0) {
+		writer.WriteUint(3, v.ForHeight)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BptBlockQuery)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *BptBlockQuery) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field QueryType is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BptBlockRecord = []string{
+	1: "RecordType",
+	2: "Prefix",
+	3: "Block",
+	4: "BptRoot",
+	5: "Hash",
+	6: "Slots",
+}
+
+func (v *BptBlockRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.RecordType())
+	if !(len(v.Prefix) == 0) {
+		writer.WriteBytes(2, v.Prefix)
+	}
+	if !(v.Block == 0) {
+		writer.WriteUint(3, v.Block)
+	}
+	if !(v.BptRoot == ([32]byte{})) {
+		writer.WriteHash(4, &v.BptRoot)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(5, &v.Hash)
+	}
+	if !(len(v.Slots) == 0) {
+		for _, v := range v.Slots {
+			writer.WriteValue(6, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_BptBlockRecord)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *BptBlockRecord) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field RecordType is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Prefix is missing")
+	} else if len(v.Prefix) == 0 {
+		errs = append(errs, "field Prefix is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Block is missing")
+	} else if v.Block == 0 {
+		errs = append(errs, "field Block is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field BptRoot is missing")
+	} else if v.BptRoot == ([32]byte{}) {
+		errs = append(errs, "field BptRoot is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Slots is missing")
+	} else if len(v.Slots) == 0 {
+		errs = append(errs, "field Slots is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BptBlockSlot = []string{
+	1: "Index",
+	2: "Branch",
+	3: "KeyHash",
+	4: "Hash",
+}
+
+func (v *BptBlockSlot) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Index == 0) {
+		writer.WriteUint(1, v.Index)
+	}
+	if !(!v.Branch) {
+		writer.WriteBool(2, v.Branch)
+	}
+	if !(v.KeyHash == ([32]byte{})) {
+		writer.WriteHash(3, &v.KeyHash)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(4, &v.Hash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BptBlockSlot)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *BptBlockSlot) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Branch is missing")
+	} else if !v.Branch {
+		errs = append(errs, "field Branch is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field KeyHash is missing")
+	} else if v.KeyHash == ([32]byte{}) {
+		errs = append(errs, "field KeyHash is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
 	}
 
 	switch len(errs) {
@@ -9123,6 +9493,127 @@ func (v *BlockVotes) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *BptBlockQuery) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BptBlockQuery) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vQueryType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vQueryType = *x
+	}
+	if !(v.QueryType() == vQueryType) {
+		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), vQueryType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BptBlockQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Prefix = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.ForHeight = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BptBlockQuery)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BptBlockRecord) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BptBlockRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vRecordType RecordType
+	if x := new(RecordType); reader.ReadEnum(1, x) {
+		vRecordType = *x
+	}
+	if !(v.RecordType() == vRecordType) {
+		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), vRecordType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BptBlockRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Prefix = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Block = x
+	}
+	if x, ok := reader.ReadHash(4); ok {
+		v.BptRoot = *x
+	}
+	if x, ok := reader.ReadHash(5); ok {
+		v.Hash = *x
+	}
+	for {
+		if x := new(BptBlockSlot); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+			v.Slots = append(v.Slots, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_BptBlockRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BptBlockSlot) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BptBlockSlot) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Index = x
+	}
+	if x, ok := reader.ReadBool(2); ok {
+		v.Branch = x
+	}
+	if x, ok := reader.ReadHash(3); ok {
+		v.KeyHash = *x
+	}
+	if x, ok := reader.ReadHash(4); ok {
+		v.Hash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_BptBlockSlot)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *BptLeafSummary) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11430,6 +11921,28 @@ func init() {
 	}, "BlockVotes", "blockVotes")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("prefix", "bytes"),
+		encoding.NewTypeField("forHeight", "uint64"),
+	}, "BptBlockQuery", "bptBlockQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("prefix", "bytes"),
+		encoding.NewTypeField("block", "uint64"),
+		encoding.NewTypeField("bptRoot", "bytes32"),
+		encoding.NewTypeField("hash", "bytes32"),
+		encoding.NewTypeField("slots", "BptBlockSlot[]"),
+	}, "BptBlockRecord", "bptBlockRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("branch", "bool"),
+		encoding.NewTypeField("keyHash", "bytes32"),
+		encoding.NewTypeField("hash", "bytes32"),
+	}, "BptBlockSlot", "bptBlockSlot")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("keyHash", "bytes32"),
 		encoding.NewTypeField("valueHash", "bytes32"),
 		encoding.NewTypeField("account", "string"),
@@ -12045,6 +12558,78 @@ func (v *BlockVotes) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Votes) == 0) {
 		u.Votes = v.Votes
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *BptBlockQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		QueryType QueryType `json:"queryType"`
+		Prefix    *string   `json:"prefix,omitempty"`
+		ForHeight uint64    `json:"forHeight,omitempty"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
+	}{}
+	u.QueryType = v.QueryType()
+	if !(len(v.Prefix) == 0) {
+		u.Prefix = encoding.BytesToJSON(v.Prefix)
+	}
+	if !(v.ForHeight == 0) {
+		u.ForHeight = v.ForHeight
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *BptBlockRecord) MarshalJSON() ([]byte, error) {
+	u := struct {
+		RecordType RecordType                       `json:"recordType"`
+		Prefix     *string                          `json:"prefix,omitempty"`
+		Block      uint64                           `json:"block,omitempty"`
+		BptRoot    *string                          `json:"bptRoot,omitempty"`
+		Hash       *string                          `json:"hash,omitempty"`
+		Slots      encoding.JsonList[*BptBlockSlot] `json:"slots,omitempty"`
+		ExtraData  *string                          `json:"$epilogue,omitempty"`
+	}{}
+	u.RecordType = v.RecordType()
+	if !(len(v.Prefix) == 0) {
+		u.Prefix = encoding.BytesToJSON(v.Prefix)
+	}
+	if !(v.Block == 0) {
+		u.Block = v.Block
+	}
+	if !(v.BptRoot == ([32]byte{})) {
+		u.BptRoot = encoding.ChainToJSON(&v.BptRoot)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		u.Hash = encoding.ChainToJSON(&v.Hash)
+	}
+	if !(len(v.Slots) == 0) {
+		u.Slots = v.Slots
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *BptBlockSlot) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Index     uint64  `json:"index,omitempty"`
+		Branch    bool    `json:"branch,omitempty"`
+		KeyHash   *string `json:"keyHash,omitempty"`
+		Hash      *string `json:"hash,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Index == 0) {
+		u.Index = v.Index
+	}
+	if !(!v.Branch) {
+		u.Branch = v.Branch
+	}
+	if !(v.KeyHash == ([32]byte{})) {
+		u.KeyHash = encoding.ChainToJSON(&v.KeyHash)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		u.Hash = encoding.ChainToJSON(&v.Hash)
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -13366,6 +13951,118 @@ func (v *BlockVotes) UnmarshalJSON(data []byte) error {
 	}
 	v.Block = u.Block
 	v.Votes = u.Votes
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *BptBlockQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		QueryType QueryType `json:"queryType"`
+		Prefix    *string   `json:"prefix,omitempty"`
+		ForHeight uint64    `json:"forHeight,omitempty"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
+	}{}
+	u.QueryType = v.QueryType()
+	u.Prefix = encoding.BytesToJSON(v.Prefix)
+	u.ForHeight = v.ForHeight
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.QueryType() == u.QueryType) {
+		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), u.QueryType)
+	}
+	if x, err := encoding.BytesFromJSON(u.Prefix); err != nil {
+		return fmt.Errorf("error decoding Prefix: %w", err)
+	} else {
+		v.Prefix = x
+	}
+	v.ForHeight = u.ForHeight
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *BptBlockRecord) UnmarshalJSON(data []byte) error {
+	u := struct {
+		RecordType RecordType                       `json:"recordType"`
+		Prefix     *string                          `json:"prefix,omitempty"`
+		Block      uint64                           `json:"block,omitempty"`
+		BptRoot    *string                          `json:"bptRoot,omitempty"`
+		Hash       *string                          `json:"hash,omitempty"`
+		Slots      encoding.JsonList[*BptBlockSlot] `json:"slots,omitempty"`
+		ExtraData  *string                          `json:"$epilogue,omitempty"`
+	}{}
+	u.RecordType = v.RecordType()
+	u.Prefix = encoding.BytesToJSON(v.Prefix)
+	u.Block = v.Block
+	u.BptRoot = encoding.ChainToJSON(&v.BptRoot)
+	u.Hash = encoding.ChainToJSON(&v.Hash)
+	u.Slots = v.Slots
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.RecordType() == u.RecordType) {
+		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), u.RecordType)
+	}
+	if x, err := encoding.BytesFromJSON(u.Prefix); err != nil {
+		return fmt.Errorf("error decoding Prefix: %w", err)
+	} else {
+		v.Prefix = x
+	}
+	v.Block = u.Block
+	if x, err := encoding.ChainFromJSON(u.BptRoot); err != nil {
+		return fmt.Errorf("error decoding BptRoot: %w", err)
+	} else {
+		v.BptRoot = *x
+	}
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = *x
+	}
+	v.Slots = u.Slots
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *BptBlockSlot) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Index     uint64  `json:"index,omitempty"`
+		Branch    bool    `json:"branch,omitempty"`
+		KeyHash   *string `json:"keyHash,omitempty"`
+		Hash      *string `json:"hash,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Index = v.Index
+	u.Branch = v.Branch
+	u.KeyHash = encoding.ChainToJSON(&v.KeyHash)
+	u.Hash = encoding.ChainToJSON(&v.Hash)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Index = u.Index
+	v.Branch = u.Branch
+	if x, err := encoding.ChainFromJSON(u.KeyHash); err != nil {
+		return fmt.Errorf("error decoding KeyHash: %w", err)
+	} else {
+		v.KeyHash = *x
+	}
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = *x
+	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
