@@ -652,9 +652,9 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 // joinOptions is the join a joining node runs, and nodeStateOf the state its
 // services refuse by. They are built from ONE join state, and that is the
-// whole point of having them here: the join promotes the machine at a root
-// match and DEMOTES it when the node re-syncs after a mismatch or fails a
-// handoff (executor.md, "Sync", steps 4-6; #4385), so a service handed any
+// whole point of having them here: the join promotes the machine when its
+// handoff succeeds and DEMOTES it when the node re-syncs after a mismatch or
+// fails a handoff (executor.md, "Sync", steps 4-6; #4385), so a service handed any
 // other machine goes on serving a node whose state is known wrong — the node
 // of run 20260924T074702Z, frozen at block 661 and reading ACTIVE. The
 // daemon's start path calls both, and so does the test that proves a

@@ -57,6 +57,23 @@ func TestJoin_AFailedHandoffJoinsAgain(t *testing.T) {
 	// It matched and did not start executing from there, so it is not ACTIVE
 	// (executor spec, "Sync", steps 5 and 6; #4385).
 	require.Equal(t, []uint64{20}, state.demoted, "the failed handoff demotes the node at the block it matched")
+	require.Equal(t, []uint64{20}, state.promoted, "and it is promoted once, at the handoff that succeeded")
+}
+
+// A handoff that fails over and over never promotes: the node matched, but it
+// is not executing, so it is BOOTING until a handoff succeeds (#4385).
+// Promoting at the match flipped the gauge on every retry.
+func TestJoin_ARetriedHandoffPromotesOnlyWhenItSucceeds(t *testing.T) {
+	buf := &failingHandoffBuffer{failures: 3}
+	stage := new(fakeStage)
+	state := &fakeState{matchAt: 20, matchFrom: 0}
+	peers := &fakePeers{peers: []*api.FindServiceResult{peerResult(1)}}
+
+	_, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers})
+	require.NoError(t, err)
+	require.Equal(t, []uint64{20}, buf.handoffs, "the fourth attempt hands off")
+	require.Equal(t, []uint64{20}, state.promoted, "promoted once, by the handoff that succeeded, not by any match")
+	require.Equal(t, []uint64{20, 20, 20}, state.demoted, "each failed attempt demotes")
 }
 
 // Every failed handoff is counted: the join retries without bound, so a

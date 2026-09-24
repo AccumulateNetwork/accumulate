@@ -128,11 +128,14 @@ type fakeState struct {
 	// past the buffer while the join was converging.
 	overrunAtPull *fakeBuffer
 
-	// demoted is every block the join demoted the node at.
-	demoted []uint64
+	// promoted and demoted are every block the join promoted and demoted
+	// the node at.
+	promoted []uint64
+	demoted  []uint64
 }
 
-func (s *fakeState) Demote(block uint64) { s.demoted = append(s.demoted, block) }
+func (s *fakeState) Promote(block uint64) { s.promoted = append(s.promoted, block) }
+func (s *fakeState) Demote(block uint64)  { s.demoted = append(s.demoted, block) }
 
 func (s *fakeState) Pull(context.Context) error {
 	if s.pulls == 0 && s.collectingAtPull != nil {
@@ -316,7 +319,8 @@ func (s *gapState) Pull(context.Context) error {
 	return nil
 }
 
-func (s *gapState) Demote(uint64) {}
+func (s *gapState) Promote(uint64) {}
+func (s *gapState) Demote(uint64)  {}
 
 func (s *gapState) Matched(context.Context) (uint64, bool, error) {
 	return s.synced, s.synced > 0, nil

@@ -51,8 +51,9 @@ import (
 //     them while it executed in agreement;
 //   - report BOOTING on accumulate_node_state;
 //
-// and once it matches and hands off again it answers, reports ACTIVE, and
-// signs anchors again.
+// and once it hands off again it answers, reports ACTIVE, and signs anchors
+// again. A match alone does not promote it: every reading is taken while the
+// node is collecting, matched or not (#4385).
 //
 // The join is join.Run over the node's own buffer, the executor's stage, and
 // the PulledState RestartNode built (join.QueryPeers, own peer excluded) —
@@ -291,10 +292,10 @@ func TestAReSyncingNodeIsBootingUntilItMatchesAgain(t *testing.T) {
 	// And once it matched and handed off again it is ACTIVE by the same
 	// promotion, and answers.
 	require.NotNil(t, activeAfter)
-	require.Equal(t, nodestate.StateActive, activeAfter.state, "a node that matched again is ACTIVE again")
-	require.NoError(t, activeAfter.queryErr, "a node that matched again answers again")
+	require.Equal(t, nodestate.StateActive, activeAfter.state, "a node that handed off again is ACTIVE again")
+	require.NoError(t, activeAfter.queryErr, "a node that handed off again answers again")
 	require.Equal(t, 2.0, activeAfter.gauge, "the gauge reads ACTIVE again")
-	require.NotZero(t, signedAfter, "a node that matched again signs anchors again")
+	require.NotZero(t, signedAfter, "a node that handed off again signs anchors again")
 
 	// And it is on its peers' root chain.
 	sim.StepN(10)

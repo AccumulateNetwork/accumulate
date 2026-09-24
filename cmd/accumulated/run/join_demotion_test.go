@@ -12,6 +12,7 @@ import (
 	"crypto/rand"
 	"io"
 	"log/slog"
+	"math/big"
 	"testing"
 	"time"
 
@@ -25,33 +26,48 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	apiv3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/harness"
+	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
-// A DEMOTION REACHES THE DAEMON'S SERVICES AND ITS GAUGE (#4385).
+// PROMOTION AT THE HANDOFF AND DEMOTION REACH THE DAEMON'S SERVICES AND ITS
+// GAUGE (#4385).
 //
-// The join demotes its machine when a handoff fails (executor.md, "Sync",
-// step 5), and that only stops the node serving if the services the daemon
-// built ask THAT machine. This effort's first pass went green while the
-// daemon omitted a seam of exactly this kind, so nothing here is built by
-// hand that the daemon builds: the join's options are joinOptions and the
-// services' node state is nodeStateOf, the two functions the start path
-// calls with its one join state; the querier is the one (*Querier).start
-// registers; the submitter is newSubmitterService's; the gauge is read from
-// the process's Prometheus registry, which is what /metrics serves.
+// A node is ACTIVE only while it is executing in agreement (executor.md,
+// "Sync", step 6): the join promotes it when a handoff succeeds — never at a
+// match — and demotes it when a re-sync starts or a handoff fails. That only
+// stops the node serving if the services the daemon built ask THAT machine.
+// This effort's first pass went green while the daemon omitted a seam of
+// exactly this kind, so nothing here is built by hand that the daemon builds:
+// the join's options are joinOptions and the services' node state is
+// nodeStateOf, the two functions the start path calls with its one join
+// state; the querier is the one (*Querier).start registers; the submitter is
+// newSubmitterService's; the gauge is read from the process's Prometheus
+// registry, which is what /metrics serves.
+//
+// The join runs through four phases, read at each:
+//
+//  1. It matches and its first handoff fails, as a buffered group that
+//     cannot be produced makes it fail (#4401): BOOTING throughout — the
+//     match did not promote, so a retried handoff never flips the gauge.
+//  2. The retry hands off: ACTIVE.
+//  3. Its state is corrupted as a missed gap corrupts it (#4362d) and the
+//     root watch catches it: BOOTING while it re-syncs.
+//  4. It hands off again: ACTIVE.
 //
 // What the daemon does NOT do here and a simulator does: the join state is
 // the one test/simulator's RestartNode builds over a simulated node's store
 // (join.NewState over join.QueryPeers, own peer excluded — what dagbft.go
 // builds), because a node that joins needs peers that are running, and one
-// netsim process cannot restart one of its nodes. The buffer's first
-// handoff is made to fail, as a buffered group that cannot be produced makes
-// it fail (#4401); everything else is the production join.
+// netsim process cannot restart one of its nodes.
 func TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge(t *testing.T) {
 	const joiner = 2
 	const partition = "BVN0"
@@ -59,6 +75,9 @@ func TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
+	alice := url.MustParse("alice")
+	bob := url.MustParse("bob")
+	aliceKey := acctesting.GenerateKey(alice)
 	sim := harness.NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.Genesis(harness.GenesisTime),
@@ -66,10 +85,33 @@ func TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge(t *testing.T) {
 		simulator.IgnoreCommitResults(),
 		simulator.BPTHistoryDepth(1024),
 	)
-	sim.StepN(20)
+	sim.SetRoute(alice, partition)
+	sim.SetRoute(bob, partition)
+	helpers.MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	helpers.CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	helpers.MakeAccount(t, sim.DatabaseFor(alice), &protocol.TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: protocol.AcmeUrl()})
+	helpers.CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(100000))
+	helpers.MakeIdentity(t, sim.DatabaseFor(bob), bob, acctesting.GenerateKey(bob)[32:])
+	helpers.MakeAccount(t, sim.DatabaseFor(bob), &protocol.TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: protocol.AcmeUrl()})
+	var ts uint64
+	send := func() {
+		ts++
+		sim.BuildAndSubmitTxnSuccessfully(
+			build.Transaction().For(alice, "tokens").
+				SendTokens(1, 0).To(bob, "tokens").
+				SignWith(alice, "book", "1").Version(1).Timestamp(ts).PrivateKey(aliceKey))
+	}
+	for i := 0; i < 5; i++ {
+		send()
+		sim.StepN(3)
+	}
+	sim.StepN(10)
 	p := sim.S.Partition(partition)
 	p.RestartNode(joiner)
-	sim.StepN(10)
+	for i := 0; i < 3; i++ {
+		send()
+		sim.StepN(3)
+	}
 
 	pulled := p.NodeJoinState(joiner)
 	require.NotNil(t, pulled)
@@ -128,7 +170,7 @@ func TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// --- one reading of everything the demotion must reach -----------------
+	// --- one reading of everything the node state must reach ---------------
 
 	type reading struct {
 		state     nodestate.State
@@ -149,20 +191,66 @@ func TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge(t *testing.T) {
 			gauge:     gaugeByPartition(t, "accumulate_node_state")["bvn0"],
 		}
 	}
+	booting := func(phase string, r *reading) {
+		t.Helper()
+		require.NotNil(t, r, "%s: no reading was taken", phase)
+		require.Equal(t, nodestate.StateBooting, r.state, "%s: the node reads %v", phase, r.state)
+		require.Error(t, r.queryErr, "%s: the daemon's querier answered", phase)
+		require.True(t, errors.Is(r.queryErr, errors.NotReady), "%s: got %v", phase, r.queryErr)
+		require.Error(t, r.submitErr, "%s: the submitter accepted", phase)
+		require.True(t, errors.Is(r.submitErr, errors.NoPeer),
+			"%s: a BOOTING committee member must relay, not propose (the relay finds nobody here): %v", phase, r.submitErr)
+		require.Equal(t, 0.0, r.gauge, "%s: accumulate_node_state reads %v", phase, r.gauge)
+	}
+	active := func(phase string, r *reading) {
+		t.Helper()
+		require.NotNil(t, r, "%s: no reading was taken", phase)
+		require.Equal(t, nodestate.StateActive, r.state, "%s: the node reads %v", phase, r.state)
+		require.False(t, errors.Is(r.queryErr, errors.NotReady), "%s: the querier refused: %v", phase, r.queryErr)
+		require.ErrorContains(t, r.submitErr, "node not started",
+			"%s: an ACTIVE committee member proposes (this fixture's consensus node is not started)", phase)
+		require.Equal(t, 2.0, r.gauge, "%s: accumulate_node_state reads %v", phase, r.gauge)
+	}
 
-	var atFailure, demoted, rejoined *reading
-	buf.failing = func() { r := read(); atFailure = &r }
-	state := &steppedJoinState{PulledState: pulled, step: sim.Step}
+	var matchedFailing, retried, handedOff, resyncing, rejoined *reading
+	buf.failing = func() { r := read(); matchedFailing = &r }
+	state := &steppedJoinState{PulledState: pulled}
+	watches := 0
+	state.step = func() {
+		if state.steps%4 == 0 {
+			send()
+		}
+		state.steps++
+		sim.Step()
+	}
 	state.pulled = func() {
-		if buf.failed && buf.handedOff == 0 && demoted == nil {
+		switch {
+		case buf.failed && buf.handedOff == 0 && retried == nil:
 			r := read()
-			demoted = &r
+			retried = &r
+		case buf.handedOff == 1 && buf.Collecting() && resyncing == nil:
+			r := read()
+			resyncing = &r
 		}
 	}
 	state.watched = func() {
-		if buf.handedOff > 0 && rejoined == nil {
+		watches++
+		switch {
+		case buf.handedOff == 1 && handedOff == nil:
+			r := read()
+			handedOff = &r
+			helpers.Update(t, p.NodeDatabase(joiner), func(batch *database.Batch) {
+				var tokens *protocol.TokenAccount
+				require.NoError(t, batch.Account(bob.JoinPath("tokens")).Main().GetAs(&tokens))
+				tokens.Balance.Add(&tokens.Balance, big.NewInt(7))
+				require.NoError(t, batch.Account(bob.JoinPath("tokens")).Main().Put(tokens))
+				require.NoError(t, batch.UpdateBPT())
+			})
+		case buf.handedOff == 2 && rejoined == nil:
 			r := read()
 			rejoined = &r
+			cancel()
+		case watches > 400:
 			cancel()
 		}
 	}
@@ -172,31 +260,11 @@ func TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge(t *testing.T) {
 	_, err = join.Run(ctx, opts)
 	require.NoError(t, err)
 
-	// Matched and about to hand off: ACTIVE, and every service answers.
-	require.NotNil(t, atFailure, "precondition: the join never reached a handoff")
-	require.Equal(t, nodestate.StateActive, atFailure.state, "precondition: a node that matched is ACTIVE")
-	require.False(t, errors.Is(atFailure.queryErr, errors.NotReady),
-		"precondition: an ACTIVE node's querier refused: %v", atFailure.queryErr)
-	require.ErrorContains(t, atFailure.submitErr, "node not started",
-		"precondition: an ACTIVE committee member proposes (this fixture's consensus node is not started)")
-	require.Equal(t, 2.0, atFailure.gauge, "precondition: the gauge reads ACTIVE")
-
-	// The handoff failed: BOOTING, and the daemon's services say so.
-	require.NotNil(t, demoted, "no reading was taken after the handoff failed")
-	require.Equal(t, nodestate.StateBooting, demoted.state, "a node whose handoff failed is still %v", demoted.state)
-	require.Error(t, demoted.queryErr, "the daemon's querier answered for a node whose handoff failed")
-	require.True(t, errors.Is(demoted.queryErr, errors.NotReady), "got %v", demoted.queryErr)
-	require.Error(t, demoted.submitErr)
-	require.True(t, errors.Is(demoted.submitErr, errors.NoPeer),
-		"a demoted node must relay, not propose: the relay finds nobody here, got %v", demoted.submitErr)
-	require.Equal(t, 0.0, demoted.gauge, "accumulate_node_state reads %v for a node whose handoff failed", demoted.gauge)
-
-	// Matched again and handed off: ACTIVE again by the same promotion.
-	require.NotNil(t, rejoined, "the join never handed off after the failure")
-	require.Equal(t, nodestate.StateActive, rejoined.state)
-	require.False(t, errors.Is(rejoined.queryErr, errors.NotReady), "a rejoined node's querier refused: %v", rejoined.queryErr)
-	require.ErrorContains(t, rejoined.submitErr, "node not started", "a rejoined committee member proposes again")
-	require.Equal(t, 2.0, rejoined.gauge, "the gauge reads ACTIVE again")
+	booting("1. matched, handoff failing", matchedFailing)
+	booting("1. retrying after the failed handoff", retried)
+	active("2. handed off", handedOff)
+	booting("3. re-syncing after the root diverged", resyncing)
+	active("4. handed off again", rejoined)
 }
 
 // failFirstHandoff fails its first handoff as a buffered group that cannot be
@@ -223,9 +291,10 @@ func (b *failFirstHandoff) Handoff(q uint64) error {
 
 // steppedJoinState is the production join state with the simulator stepped
 // on every pull and every root check. It embeds the concrete
-// *join.PulledState, so Run sees its Demote, HandedOff and Diverged.
+// *join.PulledState, so Run sees its Promote, Demote, HandedOff and Diverged.
 type steppedJoinState struct {
 	*join.PulledState
+	steps   int
 	step    func()
 	pulled  func()
 	watched func()

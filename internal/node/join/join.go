@@ -108,13 +108,20 @@ type State interface {
 	// that advanced the sync, it reports the block the sync advanced to.
 	Matched(ctx context.Context) (uint64, bool, error)
 
+	// Promote says the node handed off at block, the block Matched last
+	// reported, and is executing from the block after it: it is ACTIVE from
+	// here. A match alone is not ACTIVE — a node that matched and has not
+	// handed off executes nothing (executor spec, "Sync", step 6; #4385).
+	Promote(block uint64)
+
 	// Demote says the node stopped executing in agreement at block: its root
 	// diverged and it is syncing again, or it matched there and its handoff
 	// failed. The node is BOOTING from here — it refuses every read, serves
-	// nothing and relays every submission — until Matched reaches a root
-	// again and promotes it as the first match did (executor spec, "Sync",
-	// steps 4-6; #4385). It is part of State, not an optional extra, so that
-	// a State that wraps another cannot drop it without failing to compile.
+	// nothing and relays every submission — until a handoff succeeds again
+	// and Promote is called (executor spec, "Sync", steps 4-6; #4385).
+	//
+	// Both are part of State, not optional extras, so that a State that
+	// wraps another cannot drop them without failing to compile.
 	Demote(block uint64)
 }
 
@@ -418,7 +425,12 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (b
 	err = opts.Buffer.Handoff(q)
 	switch {
 	case err == nil:
+		// The node is executing from q + 1, in agreement: this, and not the
+		// match, is where it becomes ACTIVE (#4385). A handoff that is
+		// refused or fails below never promotes, so a retried handoff never
+		// flips the node's state.
 		log.Info("Joined; executing from the block after the state", "block", q, "executes", q+1)
+		opts.State.Promote(q)
 		return true, nil
 	case errors.Is(err, errors.NotReady):
 		// The pull ran ahead of the blocks consensus has delivered: handing

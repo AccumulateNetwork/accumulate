@@ -36,11 +36,13 @@ type divergingState struct {
 	divergedAsked      int  // how many times Diverged was asked after the first handoff
 	collectingAtRePull bool // whether the node was collecting when it pulled after the handoff
 
+	promoted          []uint64 // every block the join promoted the node at
 	demoted           []uint64 // every block the join demoted the node at
 	demotedBeforePull bool     // whether the node was demoted when it pulled after the handoff
 }
 
-func (s *divergingState) Demote(block uint64) { s.demoted = append(s.demoted, block) }
+func (s *divergingState) Promote(block uint64) { s.promoted = append(s.promoted, block) }
+func (s *divergingState) Demote(block uint64)  { s.demoted = append(s.demoted, block) }
 
 func (s *divergingState) Pull(context.Context) error {
 	switch {
@@ -122,4 +124,5 @@ func TestJoin_ReSyncsWhenAnExecutedBlocksRootDoesNotMatchTheProvenRoot(t *testin
 	// before it pulls again, and once only.
 	require.Equal(t, []uint64{b + 2}, state.demoted, "the re-sync demotes the node at the diverged block")
 	require.True(t, state.demotedBeforePull, "and it is demoted before it syncs again")
+	require.Equal(t, []uint64{b, b + 2}, state.promoted, "and promoted at each handoff, and nowhere else")
 }

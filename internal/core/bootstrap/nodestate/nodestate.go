@@ -10,17 +10,17 @@
 //
 // Two states (executor.md, "Sync", step 6):
 //
-//   - BOOTING: from the start of a join until the local root matches a
-//     verified anchored root. Cannot serve queries, cannot validate.
-//   - ACTIVE:  the local root equals a root the Directory anchored, so the
-//     state is verified. Serves and takes part in consensus.
+//   - BOOTING: from the start of a join until its handoff succeeds, and
+//     after any demotion. Refuses every read, serves nothing, relays.
+//   - ACTIVE:  executing in agreement — handed off at a block whose anchored
+//     root the local root equalled. Serves and takes part in consensus.
 //
 // A node is ACTIVE only while it executes in agreement, so the machine moves
-// both ways: BOOTING → ACTIVE when the local root matches an anchored root,
-// and ACTIVE → BOOTING when the join finds the node's root no longer matches
-// (a re-sync, step 4) or a handoff fails (step 5). A demoted node serves
-// nothing until the join matches again, and it is promoted by the same
-// promotion as the first time (#4385).
+// both ways: BOOTING → ACTIVE when the join's handoff succeeds (a match alone
+// executes nothing and is not ACTIVE), and ACTIVE → BOOTING when the join
+// finds the node's root no longer matches (a re-sync, step 4) or a handoff
+// fails (step 5). A demoted node serves nothing until a handoff succeeds
+// again (#4385).
 //
 // WAITING and COMPLETE are retired (#4368): they named a backfilled history
 // this line does not have, and nothing reached them. Their numbers stay
@@ -138,8 +138,9 @@ func (a *Advertisement) Validate() error {
 	return nil
 }
 
-// Machine is the in-process state machine: promoted at a root match, demoted
-// when the node stops executing in agreement. Persistence is the caller's.
+// Machine is the in-process state machine: promoted when the join hands off,
+// demoted when the node stops executing in agreement. Persistence is the
+// caller's.
 type Machine struct {
 	partition *url.URL
 
@@ -239,9 +240,10 @@ func (m *Machine) State() State {
 	return m.state
 }
 
-// PromoteToActive transitions BOOTING → ACTIVE. anchor is the root the Directory anchored that
-// the local root now equals (non-zero), and sinceBlock is the block it was
-// anchored for — block Q of executor.md, "Sync". Returns false if the
+// PromoteToActive transitions BOOTING → ACTIVE. The join calls it when its
+// handoff succeeds (#4385). anchor is the root the Directory anchored that the
+// local root equalled at the handoff (non-zero), and sinceBlock is the block
+// it was anchored for — block Q of executor.md, "Sync". Returns false if the
 // transition is invalid.
 func (m *Machine) PromoteToActive(anchor [32]byte, sinceBlock uint64) bool {
 	if anchor == ([32]byte{}) {
