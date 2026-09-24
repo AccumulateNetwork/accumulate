@@ -35,7 +35,14 @@ type divergingState struct {
 
 	divergedAsked      int  // how many times Diverged was asked after the first handoff
 	collectingAtRePull bool // whether the node was collecting when it pulled after the handoff
+
+	promoted          []uint64 // every block the join promoted the node at
+	demoted           []uint64 // every block the join demoted the node at
+	demotedBeforePull bool     // whether the node was demoted when it pulled after the handoff
 }
+
+func (s *divergingState) Promote(block uint64) { s.promoted = append(s.promoted, block) }
+func (s *divergingState) Demote(block uint64)  { s.demoted = append(s.demoted, block) }
 
 func (s *divergingState) Pull(context.Context) error {
 	switch {
@@ -43,6 +50,7 @@ func (s *divergingState) Pull(context.Context) error {
 		s.synced = s.b
 	case len(s.buf.handoffs) > 0 && !s.resynced:
 		s.collectingAtRePull = s.buf.collecting
+		s.demotedBeforePull = len(s.demoted) > 0
 		if s.buf.collecting {
 			s.synced = s.diverged
 			s.resynced = true
@@ -110,4 +118,11 @@ func TestJoin_ReSyncsWhenAnExecutedBlocksRootDoesNotMatchTheProvenRoot(t *testin
 	require.Contains(t, stage.gapAsked, uint64(b+3), "the block after the re-sync is checked for a gap")
 	require.Empty(t, peers.asked, "no peer is asked for its staging")
 	require.Nil(t, stage.loaded)
+
+	// A node whose root is known wrong is not ACTIVE (executor spec, "Sync",
+	// steps 4 and 6; #4385): the join demotes it at the block that diverged,
+	// before it pulls again, and once only.
+	require.Equal(t, []uint64{b + 2}, state.demoted, "the re-sync demotes the node at the diverged block")
+	require.True(t, state.demotedBeforePull, "and it is demoted before it syncs again")
+	require.Equal(t, []uint64{b, b + 2}, state.promoted, "and promoted at each handoff, and nowhere else")
 }

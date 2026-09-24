@@ -29,6 +29,14 @@ import (
 // an answer's entries.
 var acceptAll = entryOutcome(func(uint64) string { return "applied" })
 
+// activateStream is one activation of a stream as the conductor runs it:
+// every node observes the stream's stillness (observeStreams), then the
+// selected pair asks (requestStream).
+func activateStream(c *Conductor, staged *execute.StagingTxn, block uint64, backoff *url.URL, a streamAsk) {
+	c.requester.observeStill(a.stream, a.delivered, block)
+	c.requestStream(context.Background(), staged, block, backoff, a)
+}
+
 // A requester for tests: the partition it asks for, and nothing else.
 func testConductor() *Conductor {
 	return &Conductor{Partition: &protocol.PartitionInfo{ID: "BVN0", Type: protocol.PartitionTypeBlockValidator}}
@@ -64,13 +72,13 @@ func TestRequester_LaggingDestination(t *testing.T) {
 	staged := s.Begin()
 	defer staged.Discard()
 	for block := uint64(healCadence); block <= 30; block += healCadence {
-		c.requestStream(context.Background(), staged, block, reqSource, ask)
+		activateStream(c, staged, block, reqSource, ask)
 	}
 	require.Zero(t, asks, "entries whose proof is waiting for its anchor are not gaps")
 
 	// The anchor disproves the proof: now the entries are held unproven
 	staged.DropProofs(reqSource, 50)
-	c.requestStream(context.Background(), staged, 32, reqSource, ask)
+	activateStream(c, staged, 32, reqSource, ask)
 	require.Equal(t, 1, asks, "one span for the whole run, once the proof is gone")
 }
 
@@ -94,7 +102,7 @@ func TestRequester_ProbeOncePerPatience(t *testing.T) {
 	defer staged.Discard()
 	const activations = 12
 	for i := uint64(1); i <= activations; i++ {
-		c.requestStream(context.Background(), staged, i*healCadence, reqSource, ask)
+		activateStream(c, staged, i*healCadence, reqSource, ask)
 	}
 	// Probes land at activations probeAfter, +healPatience, +2*healPatience...
 	want := (activations-probeAfter)/healPatience + 1
@@ -173,7 +181,7 @@ func TestRequester_StrandedStream(t *testing.T) {
 	block := uint64(0)
 	for i := 0; i < 400; i++ {
 		block += healCadence
-		c.requestStream(context.Background(), staged, block, reqSource, ask)
+		activateStream(c, staged, block, reqSource, ask)
 	}
 	require.Equal(t, strandedAfter, asks, "asked through the back-off, then never again")
 	require.Equal(t, []string{streamKey(reqStream)}, c.requester.Stranded())
@@ -183,7 +191,7 @@ func TestRequester_StrandedStream(t *testing.T) {
 
 	// The stream moves: sync delivered past the hole
 	ask.delivered = 100
-	c.requestStream(context.Background(), staged, block+healCadence, reqSource, ask)
+	activateStream(c, staged, block+healCadence, reqSource, ask)
 	require.Empty(t, c.requester.Stranded(), "Delivered moved past the stranded point")
 	require.Equal(t, 0.0, gaugeValue(t, g))
 
@@ -194,7 +202,7 @@ func TestRequester_StrandedStream(t *testing.T) {
 	require.Equal(t, strandedAfter, asks, "Delivered just moved: draining, not stuck")
 	for i := uint64(0); i < probeAfter; i++ {
 		block += healCadence
-		c.requestStream(context.Background(), staged, block+healCadence, reqSource, ask)
+		activateStream(c, staged, block+healCadence, reqSource, ask)
 	}
 	require.Equal(t, strandedAfter+1, asks, "still again at the new Delivered: asked")
 }
@@ -234,7 +242,7 @@ func TestRequester_LaggingNodeDoesNotAsk(t *testing.T) {
 		staged := execute.NewStaging().Begin()
 		defer staged.Discard()
 		staged.Hold(anchorStream, 3, reqHeld(3, false))
-		c.requestStream(context.Background(), staged, healCadence, reqSource, ask)
+		activateStream(c, staged, healCadence, reqSource, ask)
 		return asks
 	}
 	require.Zero(t, asksAt(max+1), "beyond MaxExecutionLag: the gap is in our own backlog")
@@ -356,7 +364,7 @@ func TestRequester_MissWhileLaggingIsNotAMiss(t *testing.T) {
 	block := uint64(0)
 	for i := 0; i < 400; i++ {
 		block += healCadence
-		c.requestStream(context.Background(), staged, block, reqSource, ask)
+		activateStream(c, staged, block, reqSource, ask)
 	}
 	require.NotZero(t, asks, "one behind is a working node: it asks")
 	require.Empty(t, c.requester.Stranded(), "NotFound while behind consensus does not strand")
@@ -365,7 +373,7 @@ func TestRequester_MissWhileLaggingIsNotAMiss(t *testing.T) {
 	before := asks
 	for i := 0; i < 400; i++ {
 		block += healCadence
-		c.requestStream(context.Background(), staged, block, reqSource, ask)
+		activateStream(c, staged, block, reqSource, ask)
 	}
 	require.Equal(t, strandedAfter, asks-before, "caught up: misses count, and the stream strands")
 	require.Equal(t, []string{streamKey(reqStream)}, c.requester.Stranded())

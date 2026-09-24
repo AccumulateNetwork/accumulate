@@ -160,6 +160,10 @@ func (p *Partition) Heals() *crosschain.HealCounters { return p.nodes[0].heals }
 // counters are the whole process's (#4367).
 func (p *Partition) NodeHeals(i int) *crosschain.HealCounters { return p.nodes[i].heals }
 
+// NodeConductor is node i's conductor, as the simulator wired it: its key,
+// its globals, its store.
+func (p *Partition) NodeConductor(i int) *crosschain.Conductor { return p.nodes[i].conductor }
+
 // SynthCache is the partition's producer cache (node 0's).
 func (p *Partition) SynthCache() *synthcache.Cache { return p.nodes[0].synthCache }
 

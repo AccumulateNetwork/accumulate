@@ -44,8 +44,9 @@ import (
 //     block's envelopes name (#4306). Nothing is handed in.
 //
 // It asserts the two things a join must do and never did on a real network:
-// accounts are pulled, and the tracker promotes at the block whose anchored
-// root the local root equals.
+// accounts are pulled, and the tracker matches the block whose anchored root
+// the local root equals — which does not promote the node until it hands off
+// there (#4385).
 func TestJoinPullsFromPeersAndPromotes(t *testing.T) {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
@@ -131,9 +132,17 @@ func TestJoinPullsFromPeersAndPromotes(t *testing.T) {
 	require.True(t, ok,
 		"the join never reached a root the Directory anchored: the local root did not become a block's root")
 	require.NotZero(t, q)
-	require.Equal(t, nodestate.StateActive, state.Machine().State(),
-		"the node did not promote at the block its state is")
+
+	// A match is not ACTIVE: the node has not handed off and executes
+	// nothing (#4385). join.Run promotes when its handoff succeeds, with the
+	// root this match found as the verified anchor.
+	require.Equal(t, nodestate.StateBooting, state.Machine().State(),
+		"a match alone promoted the node; it is ACTIVE only once it hands off")
+	state.Promote(q)
+	require.Equal(t, nodestate.StateActive, state.Machine().State())
 	require.Equal(t, q, state.Machine().Get().SinceBlock)
+	require.Equal(t, bptRoot(t, local), state.Machine().Get().VerifiedAnchor,
+		"the verified anchor is the root the match found")
 
 	// And the state it holds is the partition's, not a subset: the accounts a
 	// block changed as a side effect and the system accounts no envelope names.

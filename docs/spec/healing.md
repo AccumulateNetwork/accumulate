@@ -125,6 +125,17 @@ an activation; two rather than all because a request is fungible — whoever ask
 the answer heals every validator — so further askers are only load. The pair
 rotates with every activation.
 
+**The hash is the partition's root chain anchor as the block begins**, read
+from the store the way the anchor the block sends reads it
+(`ConstructLastAnchor`: the ledger's root chain, `Anchor()`); a partition with
+no root chain yet draws from the ledger's block index. It is *not* the anchor
+the ledger stores: the executor stores that anchor without its root chain
+fields, which cannot be known until the block closes, so reading it drew from 32 zero bytes on every block that anchored and
+named the same two validators for a busy partition's whole life — on run
+`20260924T074702Z` two of the Directory's twelve validators made nearly every
+request, and when one of them stopped executing the Directory had one requester
+(#4415).
+
 Selection applies to every request, anchors included. The test: does another
 node's action make mine unnecessary? If yes it is a pull and a pair is enough.
 
@@ -422,8 +433,11 @@ per entry; the asked-once memory is one record per span, not per index.
 Anchors are a stage like any other (executor.md, "One chain per pair, one
 stage per chain"): a missing anchor below a validated one is a gap of entries
 and is requested the same way. Sender selection is a function
-of the previous block's hash over the validator set yielding two indices; a
-node compares them against its own position.
+of the previous block's hash (the root chain anchor, above)
+over the validator set yielding two indices; a node compares them against its
+own position. Every node, selected or not, records at each activation whether
+each synthetic stream's `Delivered` moved; the selected pair reads that count
+when it decides.
 
 ### Requesting and answering
 
@@ -621,6 +635,15 @@ window the next probe would pull.
 The two are told apart by what a lost package actually does: it stops
 `Delivered`. So the requester asks for nothing until a stream's `Delivered`
 has sat still for `probeAfter` (8) activations — thirty-two blocks.
+
+**Stillness is observed on every node at every activation**, whether or not
+the node is in that activation's pair; the pair only decides who asks once the
+stream has been still long enough. Counting only on the activations a node was
+selected for made a node's count grow at the rate it was selected, so once the
+pair rotated a shared hole waited for some node to have been selected
+`probeAfter` times: measured in the simulator, 44–60 blocks on a
+four-validator BVN and 77–128 on a twelve-validator Directory, against 32–33
+on both when every node counts (#4415).
 
 **The wait must clear the time normal delivery takes.** A block's synthetics
 do not leave until a Directory receipt covering that block returns, so the
