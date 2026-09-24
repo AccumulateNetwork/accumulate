@@ -188,6 +188,18 @@ summary is logged at most once a second per worker.
 The inbound queue already applies back-pressure at its byte budget (it drops
 the newest batch and lets the author re-broadcast); that is the model.
 
+**A validation refusal is answered as the refusal.** An envelope the
+executor's pre-batch validation refuses (`ErrValidationFailed`) is not
+back-pressure and not `Pending`: `SubmitterService.Submit` answers it with
+`Success: false` and a status carrying the executor's code and message, so
+`Status.AsError()` is the refusal. An error with no code is not a verdict on
+the envelope but the node failing to reach one (the executor's own `Validate`
+error), and is answered `InternalError`: the dispatcher retries it, and no
+sender is told a good envelope is bad. A sender that reads the status sees it;
+the dispatcher settles it as refused, not sent (executor.md, "Dispatch").
+What an accepted submission returns is unchanged. Answered as `Pending` with
+no error, a refused heal was counted sent and believed landed (#4426).
+
 ### Re-proposal
 
 `ReproposeAfter` re-broadcasts an own batch that has waited without a

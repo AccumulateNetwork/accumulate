@@ -46,9 +46,10 @@ type dispatcher struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
-	mu     sync.Mutex
-	block  uint64 // block generation; Send advances it
-	queues map[string]*destQueue
+	mu        sync.Mutex
+	block     uint64 // block generation; Send advances it
+	queues    map[string]*destQueue
+	onRefused func(partition string, env *messaging.Envelope, err error)
 }
 
 // dispatchTiming is the retry schedule of a destination queue.
@@ -124,6 +125,18 @@ func NewDispatcher(network string, router routing.Router, dialer message.Dialer)
 func (d *dispatcher) Close() {
 	d.cancel()
 	d.wg.Wait()
+}
+
+// OnRefused registers fn to be told of every envelope a destination refuses
+// as invalid. A refusal settles the envelope here — it is not retried — so
+// whoever submitted it learns of it only this way: the healing requester
+// forgets a refused heal and asks for the span again (healing.md, "A refused
+// heal is a failed heal"; #4426). fn is called from a destination's queue
+// goroutine and must not block.
+func (d *dispatcher) OnRefused(fn func(partition string, env *messaging.Envelope, err error)) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.onRefused = fn
 }
 
 // Submit routes the account URL and hands the envelope to the destination's
@@ -343,10 +356,17 @@ func (q *destQueue) attempt(batch []*queued) bool {
 		case "sent":
 			dispatchSent.WithLabelValues(q.partition).Inc()
 		case "refused":
+			env := item.req.Message.(*message.SubmitRequest).Envelope
 			dispatchRefused.WithLabelValues(q.partition).Inc()
 			slog.Warn("Destination refused a dispatched envelope",
 				"module", "dispatcher", "destination", q.partition, "error", err,
-				"kind", envelopeKind(item.req.Message.(*message.SubmitRequest).Envelope))
+				"kind", envelopeKind(env))
+			q.d.mu.Lock()
+			fn := q.d.onRefused
+			q.d.mu.Unlock()
+			if fn != nil {
+				fn(q.partition, env, err)
+			}
 		}
 	}
 

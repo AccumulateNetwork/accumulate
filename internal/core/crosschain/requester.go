@@ -120,7 +120,7 @@ var mHealRequests = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
 	Subsystem: "conductor",
 	Name:      "heal_requests_total",
-	Help:      "Span requests by outcome: answered, not-yet (the span is in flight at the source), miss (the source's cache lacks the span and this node is caught up), lagging-miss (the source lacks it but this node is behind consensus, so it may be in its own backlog: asked again later, not a miss), failed, lagging (not asked: this node's executor is more than MaxExecutionLag behind consensus, #4260, #4284)",
+	Help:      "Span requests by outcome: answered, not-yet (the span is in flight at the source), miss (the source's cache lacks the span and this node is caught up), lagging-miss (the source lacks it but this node is behind consensus, so it may be in its own backlog: asked again later, not a miss), failed, refused (the destination refused an envelope built from an answer, so its spans are forgotten and asked again; refused counts envelopes, not requests: one request may be sent as several envelopes, #4426), lagging (not asked: this node's executor is more than MaxExecutionLag behind consensus, #4260, #4284)",
 }, []string{"outcome", "destination", "source"})
 
 // An entryOutcome says what became of one entry an answer carried: whether it
@@ -438,11 +438,16 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 			}
 			return "applied"
 		}
+		// The span is recorded as asked BEFORE the ask: the ask hands its
+		// answer to the dispatcher, whose destination may refuse it before
+		// the ask returns, and a refusal can only un-ask what is recorded
+		// (#4426 review F2). Each outcome below settles the record.
+		c.requester.asked(a.stream, span, blockIndex)
 		n, served, err := a.ask(span[0], span[1], classify)
 		switch {
 		case err == nil:
 			asked++
-			c.requester.asked(a.stream, [2]uint64{span[0], served}, blockIndex)
+			c.requester.trimAsk(a.stream, span, blockIndex, served)
 			mHealRequests.WithLabelValues("answered", c.Partition.ID, partitionLabel(source)).Inc()
 			if c.Heals != nil {
 				c.Heals.Requests.Add(1)
@@ -455,8 +460,7 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 			// within the last few blocks: the entries are on their way.
 			// Not a gap yet, not a failure. Remembered like an answer, so a
 			// quiet stream's probe fires once per patience window rather
-			// than every activation.
-			c.requester.asked(a.stream, span, blockIndex)
+			// than every activation. The record made before the ask stands.
 			mHealRequests.WithLabelValues("not-yet", c.Partition.ID, partitionLabel(source)).Inc()
 			slog.InfoContext(ctx, "Missing "+a.what+" are still in flight at the source", "module", "conductor",
 				"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "error", err)
@@ -468,8 +472,7 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 			// evidence of a defect at the source. Remembered like an answer
 			// and asked again once the backlog has run; it does not count
 			// toward stranding, which is decided on misses taken while
-			// caught up (#4284).
-			c.requester.asked(a.stream, span, blockIndex)
+			// caught up (#4284). The record made before the ask stands.
 			mHealRequests.WithLabelValues("lagging-miss", c.Partition.ID, partitionLabel(source)).Inc()
 			slog.InfoContext(ctx, "Source does not hold missing "+a.what+" and this node is behind consensus; asking again after the backlog", "module", "conductor",
 				"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "lag", c.executionLagBlocks(), "error", err)
@@ -477,6 +480,7 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 			// The source's cache does not hold the span, and this node is
 			// caught up, so the span is not in its own backlog. Deterministic:
 			// asking again does not help. A miss is a defect at the source.
+			c.requester.dropAsk(a.stream, span, blockIndex)
 			failed++
 			missed++
 			mHealRequests.WithLabelValues("miss", c.Partition.ID, partitionLabel(source)).Inc()
@@ -487,6 +491,7 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 			slog.ErrorContext(ctx, "Source cannot serve missing "+a.what, "module", "conductor",
 				"source", source, "destination", c.Url(), "start", span[0], "end", span[1], "error", err)
 		default:
+			c.requester.dropAsk(a.stream, span, blockIndex)
 			failed++
 			mHealRequests.WithLabelValues("failed", c.Partition.ID, partitionLabel(source)).Inc()
 			if c.Heals != nil {

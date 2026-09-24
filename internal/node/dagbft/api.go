@@ -436,16 +436,17 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 			// The reason travels in the error (consensus spec, invariant 10).
 			return nil, errors.NotReady.WithFormat("submit: %w", err)
 		}
-		// Check if this is a validation error
+		// A validation refusal is answered as the refusal it is: the
+		// executor's code and message in the status, never Pending. Answered
+		// as Pending with no error, the dispatcher settled a refused heal as
+		// sent and the requester believed it landed (#4426; consensus.md,
+		// "Refusal and back-pressure").
 		if stderrors.Is(err, worker.ErrValidationFailed) {
 			s.logger.Error("TRACE-SUBMIT: validation failed, returning error submission", "error", err)
 			return []*api.Submission{{
 				Success: false,
 				Message: fmt.Sprintf("Transaction validation failed: %v", err),
-				Status: &protocol.TransactionStatus{
-					TxID: nil,
-					Code: errors.Pending,
-				},
+				Status:  validationRefusal(err),
 			}}, nil
 		}
 		if stderrors.Is(err, worker.ErrBackpressure) {
@@ -481,6 +482,23 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 	s.logger.Debug("TRACE-SUBMIT: returning result", "submission_count", len(result), "status_is_nil", result[0].Status == nil)
 
 	return result, nil
+}
+
+// validationRefusal is the status of a submission the executor's pre-batch
+// validation refused. The code is the executor's: every verdict it reaches on
+// an envelope carries one. An error with no code is not a verdict on the
+// envelope but the node failing to reach one — executor.Validate's own error
+// (its store, say), which the bridge wraps "validate: %w" — so it is
+// InternalError: the dispatcher retries it to its deadline and a sender is not
+// told its envelope is bad for the node's fault (#4426 review F4). Guessing
+// wrong this way costs a bounded retry; guessing BadRequest would settle a
+// good envelope as refused, for good.
+func validationRefusal(err error) *protocol.TransactionStatus {
+	code := errors.Code(err)
+	if code == 0 || code == errors.UnknownError {
+		code = errors.InternalError
+	}
+	return &protocol.TransactionStatus{Code: code, Error: code.WithFormat("%w", err)}
 }
 
 // ValidatorService implements api.Validator for DAG-BFT.

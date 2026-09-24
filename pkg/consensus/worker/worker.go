@@ -441,7 +441,9 @@ func (w *Worker) submit(tx []byte, bounded bool) error {
 			slog.Debug("Transaction validation failed",
 				"error", err,
 				"workerID", w.config.ID)
-			return fmt.Errorf("%w: %v", ErrValidationFailed, err)
+			// Both are wrapped: the caller tests for ErrValidationFailed and
+			// answers the submitter with the executor's own code (#4426).
+			return fmt.Errorf("%w: %w", ErrValidationFailed, err)
 		}
 		w.txnsValidated.Add(1)
 	}
