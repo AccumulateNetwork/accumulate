@@ -112,6 +112,9 @@ def load(path, role="", window=120):
     # recent raw stranded readings (whose FLOOR the offset takes on when a
     # reset happens — one reading could be a jitter spike).
     off, prev_acc, recent = {}, {}, {}
+    # A joining carry not yet confirmed: pair -> (the `accepted` it had,
+    # what was carried, the reset entry, its readings before the gap).
+    unconfirmed = {}
     resets, samples, dropped = [], [], 0
     ever = set()  # pairs that have reported a count at some sample
 
@@ -145,6 +148,8 @@ def load(path, role="", window=120):
                 carried = min(hist) if hist else 0
                 off[k] = off.get(k, 0) + carried
                 resets.append((t, k[0], k[1], carried))
+                unconfirmed[k] = (prev_acc[k], carried, resets[-1],
+                                  recent.get(k, []))
                 recent[k] = []
                 prev_acc[k] = None
             by_pair[k] = off.get(k, 0)
@@ -153,6 +158,18 @@ def load(path, role="", window=120):
                 continue
             raw = _int(r.get(STRANDED))
             acc = _int(r.get("accepted"))
+            # The counter is back after a joining carry. HIGHER than it was
+            # is the same process — a new one starts at 0 and cannot be —
+            # so the row was lost, not the process: `_scrape_one` parses a
+            # curl body cut by its timeout, and a cut between two
+            # partitions' label sets empties one of them (reviewer F2 on
+            # #4414). Unwind the carry and the reset it recorded; LOWER, it
+            # stands.
+            u = unconfirmed.pop(k, None)
+            if u is not None and acc is not None and acc >= u[0]:
+                off[k] -= u[1]
+                resets.remove(u[2])
+                prev_acc[k], recent[k] = u[0], u[3]
             # A counter that went BACKWARDS is a new process, not a
             # correction: carry forward what the old one had SETTLED at —
             # the floor of its last `window` of readings, because one

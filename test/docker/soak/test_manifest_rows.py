@@ -589,6 +589,37 @@ class AJoiningNodeIsAReading(Rows):
         self.assertEqual([("2026-09-24T08:01:00Z", self.J, "Directory", 3)],
                          [r for r in S["resets"] if r[2] == "Directory"])
 
+    def test_a_row_lost_for_one_sample_in_the_same_process_is_not_a_reset(self):
+        """Reviewer F2, series T1. `_scrape_one` parses a curl body cut by
+        its timeout, so one partition's row can be empty beside a reported
+        one while the process lives on. The next sample it is back, HIGHER
+        — which a new process cannot be — so the carry is unwound: the
+        truth is 6 throughout, and without the unwind the headline read
+        6,6,6,6,6,6,8,8,8,8 for ever, with a restart that never happened."""
+        rows = []
+        for i in range(10):
+            t = "2026-09-24T08:%02d:%02dZ" % (i // 2, (i % 2) * 30)
+            jd = None if i == 5 else (40 + 10 * i, 2)
+            rows += self.sample(t, (100 + 10 * i, 1), (50 + 10 * i, 3), jd)
+        self.write(*rows)
+        S = runseries.load(os.path.join(self.rd, "submissions.csv"), "validator")
+        self.assertEqual([(self.J, "Directory")], S["samples"][5]["joining"])
+        self.assertEqual([6] * 10, [s["total"] for s in S["samples"]])
+        self.assertEqual([], S["resets"])
+
+    def test_a_lower_reappearance_keeps_the_carry(self):
+        """The same gap, but the counter comes back LOWER: a new process,
+        and its old figure stays carried."""
+        rows = []
+        for i in range(4):
+            t = "2026-09-24T08:00:%02dZ" % (i * 10)
+            jd = {0: (40, 2), 1: (45, 2), 2: None, 3: (3, 0)}[i]
+            rows += self.sample(t, (100 + 10 * i, 1), (50 + 10 * i, 3), jd)
+        self.write(*rows)
+        S = runseries.load(os.path.join(self.rd, "submissions.csv"), "validator")
+        self.assertEqual([6, 6, 6, 6], [s["total"] for s in S["samples"]])
+        self.assertEqual([("2026-09-24T08:00:20Z", self.J, "Directory", 2)], S["resets"])
+
     def test_the_last_sample_with_a_joining_node_is_the_final_row(self):
         rows = []
         rows += self.sample("2026-09-24T08:00:00Z", (100, 4), (50, 0), (40, 0))

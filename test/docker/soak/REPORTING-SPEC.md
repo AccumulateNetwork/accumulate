@@ -235,6 +235,9 @@ and an empty row is one of two different facts, which MUST NOT be read as one
     has not rejoined. A counter that disappears is a new process, and it
     carries its settled figure forward exactly as a counter going backwards
     does — once: the counter's later reappearance is not a second reset.
+    And if it reappears at an `accepted` no lower than it had, it is the
+    same process — a new one starts at 0 — whose row was lost (a scrape
+    body cut mid-stream), so the carry and its reset are unwound.
   - **never submitted to** — the pair has not counted at any sample of the
     run: the follower's Directory, on every run.
 
