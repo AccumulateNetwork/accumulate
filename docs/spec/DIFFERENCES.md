@@ -845,6 +845,19 @@ seventh nobody had named.
   has no delete for `Main`): such an account fails the leaf check from every
   peer rather than being corrected. No executor path is known to take a body
   away, so it is recorded rather than built.
+- **A leaf with no body is not bound to its account** (#4397)**.** The BPT
+  hashes a leaf's value and not its key (`bpt.leaf.getHash`), and a body-less
+  leaf's value holds no URL, so one peer can name an account the tree has no
+  leaf for, answer it "no body" with an empty account's receipt, serve no
+  chains for it, and have it kept: the leaf check passes and the leaf lands in
+  the local tree (`TestALeafWithNoBodyIsPulledAndVerified`, "the limit"). The
+  whole-root match still refuses the state, so it is liveness, not safety —
+  but it is permanent, because the page diff names the peer's leaves the node
+  lacks and never the node's leaves the peer lacks, and nothing removes a
+  local leaf. Before #4397 this could not happen: a body names its own URL.
+  Closing it needs either a proof that binds a key to its leaf or a page diff
+  that names and removes local-only leaves (the "mismatch must name what it
+  could not account for" of "Sync" §2).
 - **The page diff runs on the first round of every join** (#4302 section 8)**.**
   That is one full
   BPT page scan of the partition, names only, before the node knows whether

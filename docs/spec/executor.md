@@ -361,8 +361,15 @@ body, and a failed deposit leaves an empty account's leaf. Asked for an
 account with a receipt, a peer whose tree holds a leaf for it answers with no
 body and the receipt for that leaf; the join pulls the rest of the account as
 for any other and keeps it by the same three checks, the missing body hashing
-as the zero hash. A peer that answers "no body" for an account that has one
-fails the third. `NotFound` means the peer's tree holds no leaf: a name every
+as the zero hash. A peer that answers "no body" with the receipt of an
+account that has one fails the third. The check proves less here than for a
+body, and that is stated rather than hidden: the tree hashes a leaf's value
+and not its key, and a leaf with no body carries no URL, so the receipt of
+one such leaf passes for any account whose pulled state hashes to the same
+value — every empty account's leaf is one hash. What refuses a leaf placed
+under the wrong name is the whole-root match, so the exposure is a join that
+does not finish, not a node that executes from a wrong state (DIFFERENCES.md
+E11). `NotFound` means the peer's tree holds no leaf: a name every
 source answers that way is dropped rather than asked again, and the page diff
 names it again if a leaf ever appears; a name some source failed to answer is
 asked again.
