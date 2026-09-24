@@ -9,6 +9,7 @@ package join
 import (
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -52,4 +53,23 @@ func TestJoin_AFailedHandoffJoinsAgain(t *testing.T) {
 	require.Equal(t, Joined, outcome)
 	require.NotEmpty(t, buf.handoffs, "the node joined again and handed off")
 	require.GreaterOrEqual(t, buf.starts, 2, "it started collecting again after the failure")
+}
+
+// Every failed handoff is counted: the join retries without bound, so a
+// failure that recurs on every attempt must show as a climbing count
+// (executor spec, "Sync", step 5; #4401).
+func TestJoin_AFailedHandoffIsCounted(t *testing.T) {
+	const partition = "TestJoin_AFailedHandoffIsCounted"
+	before := testutil.ToFloat64(mHandoffFailures.WithLabelValues(partition))
+
+	buf := &failingHandoffBuffer{failures: 3}
+	stage := new(fakeStage)
+	state := &fakeState{matchAt: 20, matchFrom: 0}
+	peers := &fakePeers{peers: []*api.FindServiceResult{peerResult(1)}}
+
+	_, err := run(t, Options{Partition: partition, Buffer: buf, Stage: stage, State: state, Peers: peers})
+	require.NoError(t, err)
+	require.Equal(t, []uint64{20}, buf.handoffs, "the fourth attempt hands off")
+	require.Equal(t, 3.0, testutil.ToFloat64(mHandoffFailures.WithLabelValues(partition))-before,
+		"each of the three failed attempts is counted")
 }

@@ -33,9 +33,7 @@ type joinState struct {
 	mu      sync.Mutex
 	joining bool
 	buffer  []joinedBlock
-	// staged is how many buffered blocks, from the first, are in staging.
-	staged int
-	exec   execute.Executor
+	exec    execute.Executor
 
 	// produce executes and commits one block as the consensus app does for
 	// a block it is handed: what Handoff does with what it buffered.
@@ -47,6 +45,7 @@ var _ join.Buffer = (*joinState)(nil)
 type joinedBlock struct {
 	params    coreexec.BlockParams
 	envelopes []*messaging.Envelope
+	staged    bool // taken into staging by StageThrough
 }
 
 // A blockCollector is an executor that can take a committed block into staging
@@ -73,7 +72,7 @@ func (j *joinState) BufferOverrun() bool { return false }
 func (j *joinState) leave() {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	j.joining, j.staged, j.buffer = true, 0, nil
+	j.joining, j.buffer = true, nil
 }
 
 // StartCollecting implements [join.Buffer]. A node that is already
@@ -85,7 +84,7 @@ func (j *joinState) StartCollecting() {
 	if j.joining {
 		return
 	}
-	j.joining, j.staged, j.buffer = true, 0, nil
+	j.joining, j.buffer = true, nil
 }
 
 // Collect keeps a block. It does not take it into staging: StageThrough does
@@ -93,7 +92,7 @@ func (j *joinState) StartCollecting() {
 func (j *joinState) Collect(params coreexec.BlockParams, envelopes []*messaging.Envelope) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	j.buffer = append(j.buffer, joinedBlock{params, envelopes})
+	j.buffer = append(j.buffer, joinedBlock{params: params, envelopes: envelopes})
 	return nil
 }
 
@@ -133,20 +132,24 @@ func (j *joinState) StageThrough(block uint64) error {
 		j.mu.Unlock()
 		return errors.NotReady.WithFormat("block %d has not been collected: only %d blocks have been since %d", block, len(j.buffer), from)
 	}
-	start := j.staged
-	var take []joinedBlock
-	if start < through {
-		take = j.buffer[start:through]
+	// By position: the buffer only grows while the node is joining, so a
+	// position names the same block after Collect has appended.
+	var take []int
+	for i := range j.buffer[:through] {
+		if !j.buffer[i].staged {
+			take = append(take, i)
+		}
 	}
+	blocks := append([]joinedBlock(nil), j.buffer[:through]...)
 	j.mu.Unlock()
 
-	for i, b := range take {
-		err := j.apply(b.params, b.envelopes)
+	for _, i := range take {
+		err := j.apply(blocks[i].params, blocks[i].envelopes)
 		if err != nil {
-			return errors.UnknownError.WithFormat("stage buffered block %d: %w", b.params.Index, err)
+			return errors.UnknownError.WithFormat("stage buffered block %d: %w", blocks[i].params.Index, err)
 		}
 		j.mu.Lock()
-		j.staged = start + i + 1
+		j.buffer[i].staged = true
 		j.mu.Unlock()
 	}
 	return nil
@@ -170,7 +173,9 @@ func (j *joinState) from() (uint64, error) {
 // produces every buffered block after q, in order. The blocks at or below q
 // are in the state the pull put there and are not produced again; a q past
 // the last block collected is not ready, because the blocks up to it have not
-// been handed to this node yet.
+// been handed to this node yet. A block that fails to produce puts the node
+// back into collecting mode holding it and the blocks after it, as the DAG
+// service does (#4401).
 func (j *joinState) Handoff(q uint64) error {
 	j.mu.Lock()
 	if !j.joining {
@@ -192,15 +197,19 @@ func (j *joinState) Handoff(q uint64) error {
 		return errors.NotReady.WithFormat("the state is block %d and only %d blocks have been collected since %d", q, len(j.buffer), from)
 	}
 	blocks := j.buffer[skip:]
-	j.joining, j.staged, j.buffer = false, 0, nil
-	j.mu.Unlock()
-
 	if j.produce == nil {
+		j.mu.Unlock()
 		return errors.NotAllowed.With("this node cannot produce a block")
 	}
-	for _, b := range blocks {
+	j.joining, j.buffer = false, nil
+	j.mu.Unlock()
+
+	for i, b := range blocks {
 		err := j.produce(b.params, b.envelopes)
 		if err != nil {
+			j.mu.Lock()
+			j.joining, j.buffer = true, append([]joinedBlock(nil), blocks[i:]...)
+			j.mu.Unlock()
 			return errors.UnknownError.WithFormat("produce buffered block %d: %w", b.params.Index, err)
 		}
 	}

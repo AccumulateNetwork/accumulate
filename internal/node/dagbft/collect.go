@@ -45,6 +45,11 @@ type CollectedGroup struct {
 	Batches  []*types.Batch
 	Leader   *types.Certificate
 	IsLeader bool
+
+	// staged says the join has taken this group into staging
+	// (StageThrough). It travels with the group, so a group put back in the
+	// buffer by a failed handoff is not taken in again (#4401).
+	staged bool
 }
 
 // Round is the leader round this group was committed at: the buffer's order,
@@ -107,7 +112,6 @@ func (s *Service) StartCollecting() {
 	s.bufferOverrun = false
 	s.buffer = nil
 	s.bufferBytes = 0
-	s.staged = 0
 }
 
 // Collecting reports whether this node is joining: buffering committed
@@ -152,7 +156,6 @@ func (s *Service) StopCollecting() []*CollectedGroup {
 	s.collecting = false
 	s.bufferOverrun = false
 	s.bufferBytes = 0
-	s.staged = 0
 	out := s.buffer
 	s.buffer = nil
 	return out
@@ -308,11 +311,13 @@ func (s *Service) checkRound(q uint64, round types.Round) error {
 // A round above that one that no buffered group was committed at is a state
 // this node's consensus did not produce, and is refused too (Conflict).
 //
-// A group that fails to produce stops the handoff with the buffer already
-// taken: the node is no longer collecting and no longer joining, and the
-// groups that were not produced are gone. That is a fault, not a state to
-// recover from in place — the node must join again — so it is returned to the
-// caller and logged as an error rather than swallowed.
+// A group that fails to produce stops the handoff there (executor spec,
+// "Sync", step 5; #4401). The groups before it were produced and stand; the
+// node goes back to collecting mode at the last block it produced, holding
+// the groups it did not produce, in order, so a committed group arriving from
+// here is buffered and neither executed nor anchored (#4402), and the join
+// can sync again and hand off again. The error is returned so the join
+// counts the attempt.
 func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 	s.mu.Lock()
 	if err := s.checkRound(q, round); err != nil {
@@ -331,7 +336,6 @@ func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 	inState := len(s.buffer) - len(groups)
 	s.buffer = nil
 	s.bufferBytes = 0
-	s.staged = 0
 	s.collecting = false
 	s.lastBlockIndex = q
 	s.lastLeaderRound = round
@@ -344,6 +348,7 @@ func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 	for i, g := range groups {
 		err := s.produce(g.Certs, g.Batches, g.Leader, g.IsLeader, g.payloadEntries(), false)
 		if err != nil {
+			s.resumeCollecting(groups[i:])
 			return errors.UnknownError.WithFormat("produce buffered group %d of %d (round %d): %w",
 				i+1, len(groups), g.Round(), err)
 		}
@@ -354,6 +359,25 @@ func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 		s.node.ReportExecuted()
 	}
 	return nil
+}
+
+// resumeCollecting puts the service back into collecting mode after a failed
+// handoff, with rest — the groups it did not produce — as the buffer. The
+// block index and leader round stay where the last produced block put them:
+// a block that failed to produce was not committed.
+func (s *Service) resumeCollecting(rest []*CollectedGroup) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.collecting = true
+	s.bufferOverrun = false
+	s.buffer = append([]*CollectedGroup(nil), rest...)
+	s.bufferBytes = 0
+	for _, g := range s.buffer {
+		s.bufferBytes += g.bytes()
+	}
+	s.logger.Error("Handoff failed; collecting again with the groups not produced",
+		"partition", s.config.Partition.ID, "block", s.lastBlockIndex,
+		"round", s.lastLeaderRound, "buffered", len(s.buffer))
 }
 
 // payloadEntries is how many batches the group's certificates named: what
@@ -449,10 +473,11 @@ func (s *Service) stageThroughNow(block uint64) error {
 			s.config.Partition.ID, q, round, block)
 	}
 	nextRound, after := s.buffer[next].Round(), len(s.buffer)-next-1
-	from := s.staged
 	var take []*CollectedGroup
-	if from <= next {
-		take = append(take, s.buffer[from:next+1]...)
+	for _, g := range s.buffer[:next+1] {
+		if !g.staged {
+			take = append(take, g)
+		}
 	}
 	s.mu.Unlock()
 
@@ -460,10 +485,10 @@ func (s *Service) stageThroughNow(block uint64) error {
 		err := s.collectIntoStaging(g)
 		if err != nil {
 			return errors.UnknownError.WithFormat("collect buffered group %d of %d (round %d): %w",
-				from+i+1, next+1, g.Round(), err)
+				i+1, len(take), g.Round(), err)
 		}
 		s.mu.Lock()
-		s.staged = from + i + 1
+		g.staged = true
 		s.mu.Unlock()
 	}
 	s.logger.Info("Staged the buffered groups through the block after the state",

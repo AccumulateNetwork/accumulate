@@ -129,9 +129,6 @@ type Service struct {
 	buffer        []*CollectedGroup
 	bufferBytes   int
 	bufferOverrun bool
-	// staged is how many of the buffered groups, from the first, the join
-	// has taken into staging (StageThrough, #4398).
-	staged int
 	// handoff and stageThrough carry the join's requests; the block
 	// production loop serves both, because it is the only thing that
 	// produces blocks and the only thing that writes the buffer (#4294).
@@ -572,7 +569,7 @@ func (s *Service) blockProductionLoop() {
 			// nothing else is producing blocks (#4294).
 			err := s.performHandoff(req.q)
 			if err != nil {
-				s.logger.Error("Handoff failed; this node must join again",
+				s.logger.Error("Handoff failed; the join syncs again",
 					"partition", s.config.Partition.ID, "block", req.q, "error", err)
 			}
 			req.done <- err

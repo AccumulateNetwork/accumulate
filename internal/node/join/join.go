@@ -22,9 +22,22 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
+
+// mHandoffFailures counts the handoffs that could not be performed. A join
+// retries a failed handoff without bound (executor spec, "Sync", step 5;
+// #4401), so a failure that recurs on every attempt shows as this count
+// climbing, not as silence.
+var mHandoffFailures = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "join",
+	Name:      "handoff_failures_total",
+	Help:      "Handoffs that failed and sent the join back to syncing",
+}, []string{"partition"})
 
 // A Buffer is the consensus side of a join: the node keeps every committed
 // block, executing none of them, until the handoff (#4292's collecting mode).
@@ -59,7 +72,10 @@ type Buffer interface {
 	// one q's system ledger records (executor spec, "Sync", step 5; #4362).
 	// NotReady: the groups up to that round have not all arrived, or the
 	// state records no round. Conflict: the state is behind what this node
-	// can produce from, and the join pulls again.
+	// can produce from, and the join pulls again. Any other error is a
+	// group that could not be produced: the buffer is collecting again,
+	// holding the groups it did not produce, and the join syncs again
+	// (#4401).
 	Handoff(q uint64) error
 }
 
@@ -290,6 +306,7 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 		}
 	}
 	overran := false
+	failures := 0
 	for {
 		if err := ctx.Err(); err != nil {
 			return 0, errors.UnknownError.Wrap(err)
@@ -326,7 +343,7 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			return 0, errors.UnknownError.WithFormat("match the anchored root: %w", err)
 		}
 		if ok {
-			done, err := stageAndHandOff(opts, log, q)
+			done, err := stageAndHandOff(opts, log, q, &failures)
 			if err != nil {
 				return 0, errors.UnknownError.Wrap(err)
 			}
@@ -351,8 +368,8 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 // stageAndHandOff is step 3 at the block q the state matched: stage the kept
 // blocks through q + 1, ask whether q + 1 has a gap, and if not settle staging
 // at q and hand off. It reports whether the node handed off; false with no
-// error means the join pulls again.
-func stageAndHandOff(opts Options, log *slog.Logger, q uint64) (bool, error) {
+// error means the join pulls again. failures counts the handoffs that failed.
+func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (bool, error) {
 	// Staging holds everything collected through q + 1 and nothing after it
 	// (#4398): the gap check asks what q + 1 carries, and a block delivers
 	// the run it can from what is held, so a staging that also held what
@@ -405,7 +422,16 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64) (bool, error) {
 		log.Info("The state is behind the block this node stood at; pulling again", "block", q, "error", err)
 		return false, nil
 	default:
-		return false, errors.UnknownError.WithFormat("hand off at %d: %w", q, err)
+		// A group could not be produced. The join does not end: the node
+		// syncs again and hands off again, counted, because a node that
+		// stops here neither executes nor collects (executor spec, "Sync",
+		// step 5; #4401). A buffer that went back to collecting keeps the
+		// groups it did not produce; one that did not starts again.
+		*failures++
+		mHandoffFailures.WithLabelValues(opts.Partition).Inc()
+		log.Error("The handoff failed; syncing again and handing off again", "block", q, "attempt", *failures, "error", err)
+		opts.Buffer.StartCollecting()
+		return false, nil
 	}
 }
 
