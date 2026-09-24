@@ -551,7 +551,10 @@ for the stall threshold and `delivery` when it has and only delivery stopped.
   wedge.
 
 `reason.txt` states the clocks the name was chosen on, and the manifest counts
-the two kinds on separate rows. Run `20260924T074702Z` named a delivery stall
+the two kinds on separate rows. Each kind has its own cooldown **and its own
+budget** (`WEDGE_MAX` captures of each): a delivery stall recurring through a
+long run MUST NOT spend the captures a later wedge needs, and a spent budget
+stops the capturing, never the watching and logging. Run `20260924T074702Z` named a delivery stall
 `wedge-20260924T081419Z` — `partitions stalled 121s: BVN2,BVN3,Directory` —
 while every partition's executed height advanced 26–32 blocks per monitor
 sample through the window (`monitor.csv`), and the manifest counted it as a

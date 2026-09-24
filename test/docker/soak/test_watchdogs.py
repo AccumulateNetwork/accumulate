@@ -178,5 +178,52 @@ class TheMonitorKeepsTheHeightClock(unittest.TestCase):
         self.assertEqual("wedge", classify(pg)[2])
 
 
+def capture_decisions(events, max_per_kind=3, cooldown=900):
+    """Drive wedgewatch's own capture bookkeeping (`due`/`taken`, lifted
+    from the script) through (kind, epoch) readings past the threshold;
+    returns which of them captured."""
+    src = open(os.path.join(HERE, "wedgewatch.sh")).read()
+    m = re.search(r"^# --- capture bookkeeping.*?^# --- end capture bookkeeping$",
+                  src, re.S | re.M)
+    if m is None:
+        raise AssertionError("no capture bookkeeping block in wedgewatch.sh")
+    body = ["MAX=%d" % max_per_kind, "COOLDOWN=%d" % cooldown, m.group(0)]
+    for kind, t in events:
+        body.append('if due %s %d; then taken %s %d; echo "%s %d yes"; '
+                    'else echo "%s %d no"; fi' % (kind, t, kind, t, kind, t, kind, t))
+    p = subprocess.run(["bash", "-c", "\n".join(body)], capture_output=True, text=True)
+    if p.returncode:
+        raise AssertionError(p.stderr)
+    return [l.endswith("yes") for l in p.stdout.split("\n") if l]
+
+
+class CaptureBudgetAndCooldownPerKind(unittest.TestCase):
+    """Reviewer F1 on #4414. The cooldown was per kind but the budget
+    (WEDGE_MAX) was shared, and a spent budget stopped the loop reading
+    /data at all: a delivery stall recurring for 45 minutes took all three
+    captures, and a wedge after it was never captured or even logged."""
+
+    def test_a_spent_delivery_budget_does_not_cost_the_wedge_its_capture(self):
+        got = capture_decisions([("delivery-stall", 1000), ("delivery-stall", 1900),
+                                 ("delivery-stall", 2800), ("delivery-stall", 3700),
+                                 ("wedge", 3710)])
+        self.assertEqual([True, True, True, False, True], got)
+
+    def test_the_wedge_budget_is_its_own_cap(self):
+        got = capture_decisions([("wedge", 1000), ("wedge", 1900),
+                                 ("wedge", 2800), ("wedge", 3700)])
+        self.assertEqual([True, True, True, False], got)
+
+    def test_a_delivery_capture_does_not_hold_off_a_wedge_inside_the_cooldown(self):
+        got = capture_decisions([("delivery-stall", 1000), ("wedge", 1010),
+                                 ("delivery-stall", 1020), ("wedge", 1030)])
+        self.assertEqual([True, True, False, False], got)
+
+    def test_a_spent_budget_does_not_stop_the_watching(self):
+        with open(os.path.join(HERE, "wedgewatch.sh")) as f:
+            src = f.read()
+        self.assertNotIn('[ "$n" -ge "$MAX" ] && continue', src)
+
+
 if __name__ == "__main__":
     unittest.main()

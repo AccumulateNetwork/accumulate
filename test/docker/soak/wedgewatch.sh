@@ -25,7 +25,7 @@ RUN_DIR="${RUN_DIR:-$here/runs/latest}"
 MON="${MON_URL:-http://127.0.0.1:8099/data}"
 POLL="${WEDGE_POLL:-10}"          # seconds between checks
 WEDGE_SECS="${WEDGE_SECS:-120}"   # a partition must be stalled this long
-MAX="${WEDGE_MAX:-3}"             # captures per run, so disk cannot run away
+MAX="${WEDGE_MAX:-3}"             # captures per run PER KIND, so disk cannot run away
 COOLDOWN="${WEDGE_COOLDOWN:-900}" # seconds between captures
 PPROF_PORT="${PPROF_PORT:-6060}"
 
@@ -121,13 +121,29 @@ if [ "${1:-}" = "--now" ]; then
   exit 0
 fi
 
-log "wedgewatch: following $MON — dump after ${WEDGE_SECS}s stalled, max $MAX, run dir $RUN_DIR"
-n=0
-last_wedge=0
-last_delivery=0
+# --- capture bookkeeping (#4414, reviewer F1) ------------------------------
+# A cooldown AND a budget per kind. With one budget, a delivery stall
+# recurring every COOLDOWN spent all MAX captures in 45 minutes and a wedge
+# after it was never captured — and the loop stopped reading /data, so it
+# was not even logged. A wedge capture is the run's most valuable artefact
+# (#4125); a delivery stall must not be able to cost it one.
+n_wedge=0; n_delivery=0; last_wedge=0; last_delivery=0
+due() {     # $1 = kind, $2 = now: is a capture of this kind due?
+  local n last
+  if [ "$1" = "wedge" ]; then n=$n_wedge; last=$last_wedge
+  else n=$n_delivery; last=$last_delivery; fi
+  [ "$n" -lt "$MAX" ] || return 1
+  [ "$last" -eq 0 ] || [ $(( $2 - last )) -ge "$COOLDOWN" ]
+}
+taken() {   # $1 = kind, $2 = when
+  if [ "$1" = "wedge" ]; then n_wedge=$(( n_wedge + 1 )); last_wedge=$2
+  else n_delivery=$(( n_delivery + 1 )); last_delivery=$2; fi
+}
+# --- end capture bookkeeping
+
+log "wedgewatch: following $MON — dump after ${WEDGE_SECS}s stalled, max $MAX per kind, run dir $RUN_DIR"
 while :; do
   sleep "$POLL"
-  [ "$n" -ge "$MAX" ] && continue   # keep the loop alive, stop spending disk
 
   d="$(curl -sf -m 8 "$MON" 2>/dev/null)" || continue
   # Which partitions are stalled, and for how long. "unknown" is NOT a wedge:
@@ -175,7 +191,7 @@ print("%d %s %d %d %s %s" % (worst, names, lf.get("blocks") or 0,
   # be explained after the fact instead of guessed at.
   ticks=$(( ${ticks:-0} + 1 ))
   if [ $(( ticks % 6 )) -eq 1 ]; then
-    log "watching: worstStall=${worst}s (${names}) kind=${kind} threshold=${WEDGE_SECS}s blocks=${blocks} empty=${empties} captures=${n}/${MAX}"
+    log "watching: worstStall=${worst}s (${names}) kind=${kind} threshold=${WEDGE_SECS}s blocks=${blocks} empty=${empties} captures wedge=${n_wedge}/${MAX} delivery-stall=${n_delivery}/${MAX}"
   fi
 
   # Track block production for the log line only. Do NOT use "empty blocks are
@@ -190,14 +206,11 @@ print("%d %s %d %d %s %s" % (worst, names, lf.get("blocks") or 0,
 
   if [ "$worst" -ge "$WEDGE_SECS" ]; then
     now=$(date +%s)
-    # One cooldown per kind: a delivery stall's capture must not hold off
-    # the capture of a wedge that follows it inside COOLDOWN.
-    if [ "$kind" = "wedge" ]; then prev=$last_wedge; else prev=$last_delivery; fi
-    if [ $(( now - prev )) -ge "$COOLDOWN" ] || [ "$prev" -eq 0 ]; then
+    if due "$kind" "$now"; then
       capture "$why" "$kind"
-      if [ "$kind" = "wedge" ]; then last_wedge=$(date +%s); else last_delivery=$(date +%s); fi
-      n=$(( n + 1 ))
-      [ "$n" -ge "$MAX" ] && log "wedgewatch: $MAX captures taken, no more will be written"
+      taken "$kind" "$(date +%s)"
+      due "$kind" "$(( $(date +%s) + COOLDOWN ))" || \
+        log "wedgewatch: $MAX $kind captures taken, no more of that kind will be written"
     fi
   fi
 done
