@@ -101,6 +101,7 @@ type nodeFactory struct {
 	peerID     peer.ID
 	store      keyvalue.Beginner
 	join       joinState
+	nodeState  nodeState
 	database   *database.Database
 	eventBus   *events.Bus
 	svcHandler *message.Handler
@@ -126,6 +127,19 @@ func (f *simFactory) Build() *Simulator {
 	for _, net := range f.getNetworkFactories() {
 		s.partitions[net.id] = net.Build(s)
 		s.partIDs = append(s.partIDs, net.id)
+	}
+
+	// A routed call that names no peer goes to a node that can answer for its
+	// state, never to one that is joining (services.Network.Dial).
+	serving := map[peer.ID]*nodeState{}
+	for _, p := range s.partitions {
+		for _, n := range p.nodes {
+			serving[n.peerID] = n.nodeState
+		}
+	}
+	s.services.Serving = func(id peer.ID) bool {
+		st, ok := serving[id]
+		return !ok || st.CanServeCurrent()
 	}
 	return s
 }
@@ -176,6 +190,7 @@ func (f *nodeFactory) Build(p *Partition) *Node {
 	n.staging = f.getStaging()
 	n.store = f.getStore()
 	n.join = &f.join
+	n.nodeState = &f.nodeState
 	n.executor = f.executor
 	n.conductor = f.conductor
 	n.synthCache = f.getSynthCache()
@@ -575,6 +590,13 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 			// path was a no-op, and the defect that stopped every restarted
 			// node rejoining could not appear here (#4295).
 			Staging: f.getStaging(),
+			// The node's join state, as the daemon hands the querier its
+			// join's machine: a joining node refuses every read with
+			// NotReady until its root matches a verified anchored root
+			// (executor spec, "Sync", step 6; #4363). Without it a joining
+			// simulator node answered reads from the store its pull was
+			// still filling.
+			NodeState: &f.nodeState,
 		}),
 	})
 

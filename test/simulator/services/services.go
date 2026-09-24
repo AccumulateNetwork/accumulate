@@ -22,6 +22,11 @@ import (
 type Network struct {
 	Services Services
 	*message.Client
+
+	// Serving reports whether a peer can answer for the state it holds. A
+	// call that names no peer is sent to one that can: see [Network.Dial].
+	// Nil means every peer can.
+	Serving func(peer.ID) bool
 }
 
 type Services map[string]map[peer.ID]Handler
@@ -34,7 +39,7 @@ func NewNetwork(networkId string, router routing.Router) *Network {
 	n.Client = &message.Client{Transport: &message.RoutedTransport{
 		Network:  networkId,
 		Attempts: 1,
-		Dialer:   n.Services,
+		Dialer:   n,
 		Router:   &routing.MessageRouter{Router: router},
 	}}
 	return n
@@ -57,6 +62,14 @@ func (s Services) Register(id peer.ID, address *api.ServiceAddress, handler Hand
 
 	m[id] = handler
 	return true
+}
+
+// Unregister withdraws every service the given peer registered: a stopped
+// node answers nothing.
+func (s Services) Unregister(id peer.ID) {
+	for _, m := range s {
+		delete(m, id)
+	}
 }
 
 // GetHandler returns a handler for the given service address.
@@ -82,7 +95,27 @@ func (s Services) Replace(id peer.ID, address *api.ServiceAddress, handler Handl
 	m[id] = handler
 }
 
+// Dial implements [message.Dialer] for the simulator's routed client. A call
+// that names a peer goes to that peer, whatever its state: a joining node
+// answers it, with NotReady for a read, as the daemon's does. A call that
+// names none goes to a peer that can answer for its state (Serving).
+//
+// That is the simulator's stand-in for the daemon's local-first dial: a node's
+// routed client answers from the node itself when it serves the partition
+// (p2p/dial newNetworkStream), so a validator's own reads never reach a
+// joining peer. The simulator has one client for every node and the harness,
+// and without this a routed read would land on a joining node at random and
+// fail — which no validator's read does. What it does not model: a joining
+// node's OWN routed reads, which the daemon answers locally, NotReady.
+func (n *Network) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
+	return n.Services.dial(ctx, addr, n.Serving)
+}
+
 func (s Services) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
+	return s.dial(ctx, addr, nil)
+}
+
+func (s Services) dial(ctx context.Context, addr multiaddr.Multiaddr, serving func(peer.ID) bool) (message.Stream, error) {
 	_, peer, sa, _, err := api.UnpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -100,8 +133,11 @@ func (s Services) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.S
 	if peer != "" {
 		handler = m[peer]
 	} else {
-		for _, handler = range m {
-			break
+		for id, h := range m {
+			if serving == nil || serving(id) {
+				handler = h
+				break
+			}
 		}
 	}
 	if handler == nil {

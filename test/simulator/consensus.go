@@ -71,6 +71,9 @@ func (s *Simulator) Step() error {
 	// Verify every node completed
 	for _, p := range s.partitions {
 		for _, n := range p.nodes {
+			if n.stopped {
+				continue
+			}
 			h := sha256.Sum256(n.privValKey[32:])
 			if !done[p.ID][h] {
 				panic("block did not complete")

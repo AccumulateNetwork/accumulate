@@ -257,7 +257,7 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 			cancel()
 		}
 	}}
-	stepping.State = pulledState(t, sim, p, 1, "BVN1")
+	stepping.State = p.NodeJoinState(1)
 	settler, ok := p.NodeExecutor(1).(join.Settler)
 	require.True(t, ok, "the executor must settle staging")
 	_, err := join.Run(ctx, join.Options{
@@ -312,23 +312,4 @@ func (s *steppingState) Pull(ctx context.Context) error {
 	s.round++
 	s.step(s.round)
 	return err
-}
-
-// pulledState is the join's state as the daemon builds it: the production
-// pull over join.QueryPeers, addressed at named peers, with the joining
-// node's own peer ID excluded (#4303).
-func pulledState(t *testing.T, sim *Sim, p *simulator.Partition, node int, partition string) *join.PulledState {
-	t.Helper()
-	state, err := join.NewState(join.StateOptions{
-		Partition: PartitionUrl(partition),
-		Database:  p.NodeDatabase(node),
-		Sources: &join.QueryPeers{
-			Client:  sim.S.Services(),
-			Network: t.Name(),
-			Router:  sim.S.Router(),
-			Self:    p.NodePeerID(node),
-		},
-	})
-	require.NoError(t, err)
-	return state
 }

@@ -8,6 +8,7 @@ package simulator
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -63,12 +64,64 @@ func (p *Partition) NodeDatabase(i int) *database.Database { return p.nodes[i].d
 //
 // The simulator has no process to restart: every node is handed every block,
 // and the node's join state (NodeJoin) keeps them as the DAG service's buffer
-// does. From here the join is the production loop's — join.Run, with this
-// node's buffer, its executor's stage, and a pull addressed at its peers — and
-// it executes from the block after the state it proved.
+// does. What the daemon does at startup for a joining node it does here, as
+// cmd/accumulated/run/dagbft.go does it: the join's state is built by
+// join.NewState over join.QueryPeers — named peers, this node's own ID
+// excluded (#4303) — from the block this node's executor last executed, and
+// that state's machine is what the node's querier refuses by (#4295, #4363).
+// So from here a read addressed to this node answers NotReady until the join
+// promotes it to ACTIVE, by the production querier's own gate.
+//
+// From here the join is the production loop's — join.Run, with this node's
+// buffer, its executor's stage, and NodeJoinState — and it executes from the
+// block after the state it proved. The simulator has no clock, so the test
+// runs that loop; it must run it over NodeJoinState, because a state it builds
+// itself is a machine this node's services never see.
 func (p *Partition) RestartNode(i int) {
-	p.nodes[i].staging.Reset()
-	p.nodes[i].join.leave()
+	n := p.nodes[i]
+	n.staging.Reset()
+	n.join.leave()
+
+	last, _, err := n.executor.LastBlock()
+	if err != nil {
+		panic(fmt.Errorf("restart node %d of %s: read its last block: %w", i, p.ID, err))
+	}
+	state, err := join.NewState(join.StateOptions{
+		Partition: protocol.PartitionUrl(p.ID),
+		Database:  n.database,
+		Sources: &join.QueryPeers{
+			Client:  p.sim.services.Client,
+			Network: p.sim.networkId,
+			Router:  p.sim.router,
+			Self:    n.peerID,
+		},
+		ExecutedBlock: last.Index,
+	})
+	if err != nil {
+		panic(fmt.Errorf("restart node %d of %s: prepare the join: %w", i, p.ID, err))
+	}
+	n.joinState = state
+	n.nodeState.machine.Store(state.Machine())
+}
+
+// NodeJoinState is the join state RestartNode built for node i, as the daemon
+// builds it: what join.Run must be handed, and whose machine the node's
+// services refuse by. Nil for a node that has not restarted.
+func (p *Partition) NodeJoinState(i int) *join.PulledState { return p.nodes[i].joinState }
+
+// StopNode stops node i as stopping its process would: from here it is handed
+// no block and no submission, casts no vote, and answers nothing — every
+// service it registered is withdrawn, so a call addressed to it finds no peer
+// and a routed call finds only the nodes still running (#4363). Its store is
+// left as it stood. A stopped node does not start again.
+func (p *Partition) StopNode(i int) {
+	n := p.nodes[i]
+	if n.stopped {
+		return
+	}
+	n.stopped = true
+	p.sim.hub.Unregister(n.consensus)
+	p.sim.services.Services.Unregister(n.peerID)
 }
 
 // Joining reports whether node i is collecting rather than executing.
