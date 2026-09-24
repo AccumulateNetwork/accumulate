@@ -1674,9 +1674,11 @@ when (#4279). Every block therefore writes, at Info, `module=stream`:
   entry's execution said of itself. Counted every time
   (`accumulate_exec_run_stopped_total{stream,reason}`), and logged once per
   stream and number, and again no more often than once a minute of block time
-  while the stream stays stopped there. An anchor below its quorum stops a
-  run legitimately; a synthetic entry never should. The run stops at such an
-  entry every block, and before this line nothing said so: #4423 froze a
+  while the stream stays stopped there. Nothing stops a run legitimately: an
+  anchor below its quorum is never offered, because it is not runnable, and a
+  synthetic entry offered as runnable must move its stream — any non-zero
+  count, under either label, is a defect. The run stops at such an entry
+  every block, and before this line nothing said so: #4423 froze a
   stream with `waiting=0` and the entry at the head read `delivered` for as
   long as the run lasted.
 - **`Stream produced`**, once per destination the block sequenced

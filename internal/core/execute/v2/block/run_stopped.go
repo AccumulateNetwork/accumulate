@@ -17,10 +17,12 @@ import (
 )
 
 // mExecRunStopped counts staged entries that ran and did not move their
-// stream (executor spec, "What a stream logs"). An anchor below its quorum
-// does this legitimately; a synthetic entry staging offered as runnable
-// never should. #4423 froze a stream this way for good, with every number
-// held and nothing logged.
+// stream (executor spec, "What a stream logs"). Nothing does this
+// legitimately: an anchor below its quorum is never offered (it is not
+// runnable), and a synthetic entry staging offered as runnable must move
+// its stream. Any non-zero count, under either label, is a defect. #4423
+// froze a stream this way for good, with every number held and nothing
+// logged.
 var mExecRunStopped = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
 	Subsystem: "exec",
