@@ -46,9 +46,11 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -138,6 +140,10 @@ type Pending struct {
 	receipt *api.Receipt
 	batch   *database.Batch
 	done    bool
+
+	// bodyless says the peer served the account with no main state (#4397),
+	// whose leaf the receipt cannot bind to the account's name.
+	bodyless bool
 }
 
 // Root is the root the peer's receipt ends at: the peer's word, until the
@@ -261,11 +267,20 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 	}
 
 	// 1. Main account state, with the receipt that binds it to the peer's root.
-	receipt, err := pullMain(ctx, src, sub, u, withReceipt)
-	if err != nil {
+	receipt, bodyless, err := pullMain(ctx, src, sub, u, withReceipt)
+	switch {
+	case err == nil:
+	case stderrors.Is(err, ErrNoLeaf):
+		// Kept apart from every other failure so FetchFrom can tell "no
+		// source holds it" from "a source did not answer" (#4397). It is a
+		// stdlib wrap on purpose: the errors package's wrapping keeps a
+		// status code, not a sentinel.
+		return fail(fmt.Errorf("main %s: %w", u, err))
+	default:
 		return fail(errors.UnknownError.WithFormat("main %s: %w", u, err))
 	}
 	p.receipt = receipt
+	p.bodyless = bodyless
 	if receipt != nil {
 		p.Block = receipt.LocalBlock
 
@@ -405,46 +420,361 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 		return nil, -1, errors.BadRequest.With("pull.FetchFrom: at least one source required")
 	}
 	var refusals []error
+	var bodyless []*Pending
+	var leaves [][]byte
+	var answers []string
+	noLeaf, bodies := 0, 0
+	discard := func() {
+		for _, p := range bodyless {
+			p.Discard()
+		}
+	}
 	for i, src := range srcs {
 		p, err := Fetch(ctx, src, batch, u, opts, opts.Verify != nil)
-		if err == nil {
-			return p, i, nil
-		}
 		if ctx.Err() != nil {
-			return nil, -1, errors.UnknownError.Wrap(err)
+			if p != nil {
+				p.Discard()
+			}
+			discard()
+			return nil, -1, errors.UnknownError.Wrap(ctx.Err())
 		}
-		refusals = append(refusals, errors.UnknownError.WithFormat("source %d: %w", i, err))
+		switch {
+		case err != nil:
+			if stderrors.Is(err, ErrNoLeaf) {
+				noLeaf++
+				answers = append(answers, fmt.Sprintf("%s: no leaf", sourceName(i, src)))
+			} else {
+				answers = append(answers, fmt.Sprintf("%s: failed", sourceName(i, src)))
+			}
+			refusals = append(refusals, errors.UnknownError.WithFormat("%s: %w", sourceName(i, src), err))
+
+		case !p.bodyless:
+			if len(bodyless) == 0 {
+				return p, i, nil
+			}
+			bodies++
+			answers = append(answers, fmt.Sprintf("%s: a body", sourceName(i, src)))
+			p.Discard()
+
+		default:
+			leaf, err := p.batch.Account(u).StateTreeReceipt()
+			if err != nil {
+				p.Discard()
+				discard()
+				return nil, -1, errors.UnknownError.WithFormat("%v: hash the pulled state: %w", u, err)
+			}
+			bodyless = append(bodyless, p)
+			leaves = append(leaves, leaf.Anchor)
+			answers = append(answers, fmt.Sprintf("%s: no body, leaf %x", sourceName(i, src), leaf.Anchor[:8]))
+		}
+	}
+
+	// A leaf with no body is not bound to its account's name: the tree hashes
+	// values, not keys, and every empty account's leaf is one hash, so one
+	// peer can serve an empty account's receipt under a name the tree has no
+	// leaf for and pass the leaf check (#4397 review F3). Only an ANSWER
+	// votes: a body-less leaf, a body, or NotFound. A source that did not
+	// answer -- a peer that is itself joining answers NotReady, a restarting
+	// one does not dial -- neither agrees nor dissents; counting it as dissent
+	// let one joining peer block every body-less leaf, and two joiners block
+	// each other for ever (review R1). The leaf is kept when every source
+	// that answered served the same one and at least two answered. One
+	// dissent -- a NotFound, a body, another leaf -- and the name is neither
+	// written nor dropped; with fewer than two answers it is asked again too.
+	if len(bodyless) > 0 {
+		agree := noLeaf == 0 && bodies == 0
+		for _, l := range leaves {
+			agree = agree && bytes.Equal(l, leaves[0])
+		}
+		if agree && len(bodyless) >= 2 {
+			for _, p := range bodyless[1:] {
+				p.Discard()
+			}
+			return bodyless[0], 0, nil
+		}
+		discard()
+		if !agree {
+			return nil, -1, fmt.Errorf("%v: %w: %s", u, ErrDissent, strings.Join(answers, "; "))
+		}
+		return nil, -1, fmt.Errorf("%v: %w: %s", u, ErrUnconfirmed, strings.Join(answers, "; "))
+	}
+
+	if noLeaf == len(srcs) {
+		return nil, -1, fmt.Errorf("%v: %w, by every source asked: %v", u, ErrNoLeaf, stderrors.Join(refusals...))
 	}
 	return nil, -1, errors.Conflict.WithFormat("%v: no source served it: %w", u, stderrors.Join(refusals...))
 }
 
+// ErrDissent says the sources that answered for an account did not all serve
+// the same body-less leaf for it, where one of them served one. Such a leaf
+// is only kept on the word of every source that answers (#4397 review F3,
+// R1), so the name is asked again; the error names each source and what it
+// answered.
+var ErrDissent = stderrors.New("the sources do not agree on a leaf with no body")
+
+// ErrUnconfirmed says one source served a body-less leaf and no second
+// source answered to confirm it: the others did not answer at all. A
+// body-less leaf is kept only on the word of at least two answering sources,
+// so the name is asked again (#4397 review R1).
+var ErrUnconfirmed = stderrors.New("only one source answered for a leaf with no body")
+
+// sourceName is how a source is named in an error: by the peer it reaches,
+// when it says, and by its place in the list otherwise.
+func sourceName(i int, src Source) string {
+	if s, ok := src.(fmt.Stringer); ok {
+		return fmt.Sprintf("source %d (%s)", i, s.String())
+	}
+	return fmt.Sprintf("source %d", i)
+}
+
+// ErrNoLeaf is a peer's answer that its state tree holds no leaf for an
+// account: NotFound to a request for the account with a receipt, which a peer
+// that holds a leaf never gives (executor.md, "Sync", §2; #4397). FetchFrom
+// returns it only when every source answered so; one source that failed to
+// answer makes it an ordinary refusal, to be asked again.
+var ErrNoLeaf = stderrors.New("the peer holds no leaf for the account")
+
 // pullMain stores the account body and returns the receipt the peer served
 // with it, which binds the body to the peer's BPT root. wantReceipt asks for
 // one; without it the peer does the work of building a proof nobody checks.
-func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL, wantReceipt bool) (*api.Receipt, error) {
+func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL, wantReceipt bool) (_ *api.Receipt, bodyless bool, _ error) {
 	var query *api.DefaultQuery
 	if wantReceipt {
 		query = &api.DefaultQuery{IncludeReceipt: &api.ReceiptOptions{ForAny: true}}
 	}
 	rec, err := src.QueryAccount(ctx, u, query)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("query account: %w", err)
+	switch {
+	case err == nil:
+	case wantReceipt && errors.Is(err, errors.NotFound):
+		// Asked for a receipt, a peer answers NotFound only when its tree
+		// holds no leaf for the account (#4397). Only the account query's
+		// answer means that: a NotFound from any later query is a peer that
+		// could not serve part of what it holds.
+		return nil, false, fmt.Errorf("%w: %v", ErrNoLeaf, err)
+	default:
+		return nil, false, errors.UnknownError.WithFormat("query account: %w", err)
 	}
 
 	// A peer that answers with an empty record has served nothing, and serving
 	// nothing is a failure of that source, not an account with no state. It
 	// used to return success with no receipt, and a fetch with no receipt
-	// settles against any root at all, including one nobody anchored.
-	if rec == nil || rec.Account == nil {
-		return nil, errors.NotFound.WithFormat("%v: the peer served no account", u)
+	// settles against any root at all, including one nobody anchored. It is
+	// not NotFound: that is the peer's own answer that it holds no leaf, and
+	// a name every source answers so is dropped (executor.md, "Sync", §2).
+	if rec == nil {
+		return nil, false, errors.Conflict.WithFormat("%v: the peer served no account", u)
 	}
 	if wantReceipt && rec.Receipt == nil {
-		return nil, errors.Conflict.WithFormat("%v: the peer served no receipt", u)
+		return nil, false, errors.Conflict.WithFormat("%v: the peer served no receipt", u)
+	}
+
+	// A leaf with no body (#4397): the peer's tree holds a leaf for an account
+	// with no main state, and it served the receipt for that leaf. Nothing is
+	// stored for the body, which hashes as the zero hash; the account is
+	// marked dirty so its leaf is written when the pass is, and the rest of
+	// it is pulled as for any account. Settle's leaf check is what decides:
+	// a peer that serves no body for an account that has one serves a receipt
+	// that does not pass through the leaf this state hashes to. The check
+	// cannot say the leaf is this account's, so FetchFrom keeps it only on
+	// every source's word.
+	if rec.Account == nil {
+		if !wantReceipt {
+			return nil, false, errors.Conflict.WithFormat("%v: the peer served no account", u)
+		}
+		if err := batch.Account(u).MarkDirty(); err != nil {
+			return nil, false, errors.UnknownError.WithFormat("mark dirty: %w", err)
+		}
+		return rec.Receipt, true, nil
+	}
+	// A body names its own account, and that is what binds a body's leaf to
+	// the name asked for. A body served under another name hashes to that
+	// other account's true leaf and passes the leaf check; the store then
+	// refuses it only at commit, where a mismatched URL is a panic, and one
+	// such answer took the joining node down (#4408, review R4). It is a
+	// refusal of this source here, and the next is asked.
+	if got := rec.Account.GetUrl(); got == nil || !got.Equal(u) {
+		return nil, false, errors.Conflict.WithFormat("%v: the peer served the body of %v", u, got)
 	}
 	if err := batch.Account(u).Main().Put(rec.Account); err != nil {
-		return nil, errors.UnknownError.WithFormat("store main: %w", err)
+		return nil, false, errors.UnknownError.WithFormat("store main: %w", err)
 	}
-	return rec.Receipt, nil
+	if wantReceipt {
+		// The answer that carries a receipt carries the rest of the leaf the
+		// receipt proves; one without a receipt does not, and must not clear
+		// what the node holds.
+		if err := pullLeafBesideBody(ctx, src, batch, u, rec.Leaf); err != nil {
+			return nil, false, errors.UnknownError.Wrap(err)
+		}
+	}
+	return rec.Receipt, false, nil
+}
+
+// pullLeafBesideBody writes the part of a system account's leaf that only the
+// account answer carries (#4399): the synthetic ledger's delivery queues and
+// the partition ledger's scheduled events. It REPLACES what the node held --
+// an absent or empty set served clears the node's -- for the reason
+// pullDirectory replaces: a restarted node's own queue under the peer's body
+// hashes into nothing anyone anchored.
+//
+// Each queued local delivery is executed at the next block from its stored
+// message (block.drainDeliveryQueues), so the message is fetched too, and kept
+// only if it hashes to the ID the verified queue names.
+func pullLeafBesideBody(ctx context.Context, src Source, batch *database.Batch, u *url.URL, leaf *api.AccountLeaf) error {
+	if _, ok := protocol.ParsePartitionUrl(u); !ok {
+		return nil
+	}
+	if leaf == nil {
+		leaf = new(api.AccountLeaf)
+	}
+	account := batch.Account(u)
+	switch {
+	case u.PathEqual(protocol.Synthetic):
+		if err := account.LocalDeliveryQueue().Put(leaf.LocalDeliveryQueue); err != nil {
+			return errors.UnknownError.WithFormat("store local delivery queue: %w", err)
+		}
+		if err := account.CascadeDeliveryQueue().Put(leaf.CascadeDeliveryQueue); err != nil {
+			return errors.UnknownError.WithFormat("store cascade delivery queue: %w", err)
+		}
+		for _, id := range leaf.LocalDeliveryQueue {
+			if err := pullMessage(ctx, src, batch, id); err != nil {
+				return errors.UnknownError.WithFormat("queued local delivery %v: %w", id, err)
+			}
+		}
+
+	case u.PathEqual(protocol.Ledger):
+		if err := replaceEvents(account.Events(), leaf.Events); err != nil {
+			return errors.UnknownError.WithFormat("store scheduled events: %w", err)
+		}
+	}
+	return nil
+}
+
+// pullMessage fetches a stored message and keeps it only if it is the message
+// the ID names. The hash is the whole check: a message is its hash.
+func pullMessage(ctx context.Context, src Source, batch *database.Batch, id *url.TxID) error {
+	rec, err := src.QueryMessage(ctx, id, nil)
+	if err != nil {
+		return errors.UnknownError.WithFormat("query message: %w", err)
+	}
+	if rec == nil || rec.Message == nil {
+		return errors.Conflict.With("the peer served no message")
+	}
+	h := rec.Message.Hash()
+	if h != id.Hash() {
+		return errors.Conflict.WithFormat("the peer served a message that hashes to %x", h[:8])
+	}
+	return errors.UnknownError.Wrap(batch.Message(h).Main().Put(rec.Message))
+}
+
+// replaceEvents replaces a partition ledger's scheduled events with the ones
+// served, through the event sets, which keep the events BPT in step: the leaf
+// hashes that tree's root, and a root cannot be written, only rebuilt.
+//
+// The block lists the executor finds the events by are DERIVED from the
+// served sets, never taken from the answer. They are an index outside the
+// events BPT, so nothing the leaf check proves covers them: a peer that
+// served a held vote and left its block off the list would pass the check,
+// and the joined node would never release that vote at the anchor its peers
+// release it at -- a different block (#4399 review, F1).
+func replaceEvents(events *database.AccountEvents, ev *api.LedgerEvents) error {
+	if ev == nil {
+		ev = new(api.LedgerEvents)
+	}
+
+	blocks, err := events.Minor().Blocks().Get()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	for _, b := range blocks {
+		if err := events.Minor().Votes(b).Put(nil); err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+	blocks, err = events.Major().Blocks().Get()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	for _, b := range blocks {
+		if err := events.Major().Pending(b).Put(nil); err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+	if err := events.Minor().Blocks().Put(nil); err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if err := events.Major().Blocks().Put(nil); err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Each set is written once per block, with each entry once. The events
+	// BPT is keyed by entry, so an entry served twice leaves the root -- and
+	// the leaf check -- unchanged, while the set itself would hold it twice
+	// and the executor would process it twice (review R2). A block served
+	// twice is one block. Writing a non-empty set adds its block to the list
+	// (blockEventSet).
+	votes := map[uint64][]*protocol.AuthoritySignature{}
+	var voteBlocks []uint64
+	for _, v := range ev.MinorVotes {
+		if v == nil {
+			continue
+		}
+		if _, ok := votes[v.Block]; !ok {
+			voteBlocks = append(voteBlocks, v.Block)
+		}
+		votes[v.Block] = append(votes[v.Block], v.Votes...)
+	}
+	for _, b := range voteBlocks {
+		set := uniqueBy(votes[b], func(v *protocol.AuthoritySignature) [32]byte {
+			return record.NewKey(v.Authority, v.TxID.Hash()).Hash()
+		})
+		if len(set) == 0 {
+			continue
+		}
+		if err := events.Minor().Votes(b).Put(set); err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+	pending := map[uint64][]*url.TxID{}
+	var pendingBlocks []uint64
+	for _, p := range ev.MajorPending {
+		if p == nil {
+			continue
+		}
+		if _, ok := pending[p.Block]; !ok {
+			pendingBlocks = append(pendingBlocks, p.Block)
+		}
+		pending[p.Block] = append(pending[p.Block], p.Pending...)
+	}
+	for _, b := range pendingBlocks {
+		set := uniqueBy(pending[b], (*url.TxID).Hash)
+		if len(set) == 0 {
+			continue
+		}
+		if err := events.Major().Pending(b).Put(set); err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+	return errors.UnknownError.Wrap(events.Backlog().Expired().Put(uniqueBy(ev.Expired, (*url.TxID).Hash)))
+}
+
+// uniqueBy keeps the first of each entry with the same key, and drops nil
+// entries, in the order served.
+func uniqueBy[T comparable](in []T, key func(T) [32]byte) []T {
+	seen := map[[32]byte]bool{}
+	var out []T
+	var zero T
+	for _, v := range in {
+		if v == zero {
+			continue
+		}
+		k := key(v)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, v)
+	}
+	return out
 }
 
 // pullDirectory replaces the account's directory list with the peer's. It

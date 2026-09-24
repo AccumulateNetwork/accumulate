@@ -665,11 +665,11 @@ reaches the root the Directory anchored for `Q`; the tracker then promotes.
 - **An account's leaf is only reproduced for the state the pull fetches**
   (#4298)**.** The account hash covers a pending transaction's
   `ValidatorSignatures`, `Payments`, `Votes` and `Signatures`
-  (`observer_prod.hashPendingV2`; `History` is *not* hashed), the scheduled-
-  events BPT on a partition ledger, and the delivery queues on the synthetic
-  account; the pull fetches none of them. An account carrying any of them
-  cannot be verified, so it cannot be pulled, so a partition holding one
-  cannot be joined. The v3 API has no surface for most of it.
+  (`observer_prod.hashPendingV2`; `History` is *not* hashed); the pull
+  fetches none of it. An account carrying any of it cannot be verified, so it
+  cannot be pulled, so a partition holding one cannot be joined. (The
+  scheduled events on a partition ledger and the delivery queues on the
+  synthetic account were in this list; #4399 serves and pulls them.)
 - **Per-account verification assumes accounts are independent, and they are
   not** (#4298)**.** A key page's hash covers the *book's* pending
   transactions and their signature material (`hashPending`: a page walks
@@ -914,6 +914,54 @@ seventh nobody had named.
   can do by refusing. A receipt is possible and is the remaining work: the
   record's hash is an entry on the ledger account's `block-ledger` chain, and
   that chain's anchor is part of the account's hash.
+- **A leaf with no body is served only at the current root** (#4397)**.**
+  The querier answers "no body, and the leaf's receipt" only to a current
+  request that asks for a receipt; an ask as of an anchored block
+  (`ForHeight`) and an ask without a receipt still answer `NotFound` for such
+  an account, so API readers see what they saw before. And the pull cannot
+  remove a body the node already holds when the peer serves none (the store
+  has no delete for `Main`): such an account fails the leaf check from every
+  peer rather than being corrected. No executor path is known to take a body
+  away, so it is recorded rather than built.
+- **A leaf with no body is not bound to its account** (#4397)**.** The BPT
+  hashes a leaf's value and not its key (`bpt.leaf.getHash`), and a body-less
+  leaf's value holds no URL, so a peer can name an account the tree has no
+  leaf for, answer it "no body" with an empty account's receipt, serve no
+  chains for it, and pass the leaf check. Before #4397 this could not happen:
+  a body names its own URL. **Phase 1 answers it with unanimity (the lead's
+  decision, review F3, corrected at R1):** only an answer votes — a
+  body-less leaf, a body, or NotFound; a source that does not answer (a peer
+  that is itself joining answers NotReady) neither agrees nor dissents. A
+  body-less leaf is kept when every answering source serves the same one and
+  at least two answer (`pull.FetchFrom`); one dissent (`pull.ErrDissent`) or
+  fewer than two answers (`pull.ErrUnconfirmed`) and the name is retried, not
+  written and not dropped, and each peer's answer is logged by peer ID. One
+  liar among honest peers, in any position, is thereby refused
+  (`TestALiarAmongHonestPeersCannotPlantAPhantomLeaf`), and a joining peer
+  blocks nothing (`TestOnlyAnAnswerVotesOnALeafWithNoBody`,
+  `TestAJoiningPeerDoesNotBlockALeafWithNoBody`). **This departs from
+  "proven against the anchored root"**: it is trust in unsigned peers for the
+  existence of an empty leaf, and when every source that answers lies — two
+  liars, with the honest peers down — the phantom leaf is kept
+  (`TestUnanimousLiarsPlantAPhantomLeaf`, the limit). The whole-root match still refuses the state, so that is
+  liveness, not safety — but permanent, because the page diff names the
+  peer's leaves the node lacks and never the node's leaves the peer lacks,
+  and nothing removes a local leaf. The structural closing is a two-way page
+  diff that names local-only leaves and removes them (`BPT.Delete` exists;
+  the "mismatch must name what it could not account for" of "Sync" §2), or a
+  hash that binds a leaf to its key; the lead files that issue.
+- **A lone scheduled event is not bound to its block** (#4399 review F2)**.**
+  The events BPT hashes values and not keys (`bpt.leaf.getHash`), and a
+  one-sided branch passes its child's hash up, so an events tree holding one
+  entry has a root equal to that entry's hash wherever its key sits. A peer
+  can serve the one held vote (or the one pending expiry) under another block
+  and the ledger's leaf check passes; the joined node then releases it at a
+  different anchor from its peers. With two or more entries the positions
+  bind. It is the realistic case — one pending multisig transaction — and it
+  cannot be closed at the pull: the events leaf must hash its key, a
+  consensus hash change. `TestALoneScheduledEventIsBoundToItsBlock` states
+  the property and is skipped until then. The block lists themselves are no
+  longer taken from the answer (F1); they are derived from the verified sets.
 - **The page diff runs on the first round of every join** (#4302 section 8)**.**
   That is one full
   BPT page scan of the partition, names only, before the node knows whether
@@ -928,10 +976,14 @@ seventh nobody had named.
   about the cost of that). It is bounded by the next verified anchor after
   the served block and by `pull.MaxHeld`, not by a round count (#4362); it is
   not free.
-- **#4298 is untouched and is still a precondition.** `<partition>/ledger`
-  hashes the scheduled-events BPT and `<partition>/synthetic` hashes the
-  delivery queues (`observer_prod.go`), and the pull fetches neither, so those
-  two accounts verify only while both are empty. This change set makes them
+- **#4298 is untouched and is still a precondition** — for the pending
+  transactions' signature sets. The other half is done by #4399:
+  `<partition>/ledger` hashes the scheduled-events BPT and
+  `<partition>/synthetic` hashes the delivery queues (`observer_prod.go`), and
+  until #4399 the pull fetched neither, so those two accounts verified only
+  while both were empty — and under load the local delivery queue is never
+  empty, so `/synthetic` was refused by every peer on every pass (run
+  `20260924T052134Z`). What follows was written before that. This change set makes them
   **asked for** — which is #4306 — and does nothing to make them **verifiable**.
   One observation for whoever takes #4298, offered as an observation and not a
   finding: both are skipped when empty, and the local delivery queue is drained

@@ -8,6 +8,7 @@ package join
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -797,7 +798,27 @@ func (s *PulledState) fetchOne(ctx context.Context, p *pass, u *url.URL, spine b
 		Verify:    s.anchors,
 		Partition: partition,
 	})
-	if err != nil {
+	switch {
+	case err == nil:
+	case !spine && stderrors.Is(err, pull.ErrNoLeaf):
+		// Dropped, not refused (#4397): every source was asked and every one
+		// answered that its tree holds no leaf for the name. Asking again
+		// every pass changes nothing, and the page diff names it again if a
+		// leaf ever appears. A name some source failed to answer is refused
+		// below and asked again.
+		s.log.Info("No peer holds a leaf for a named account; it was dropped",
+			"account", u, "partition", s.partition)
+		return
+	case stderrors.Is(err, pull.ErrDissent), stderrors.Is(err, pull.ErrUnconfirmed):
+		// A leaf with no body is kept only when every peer that answers
+		// serves the same one, and at least two answer (#4397 review F3,
+		// R1). They did not: it is asked again, and what each peer answered
+		// is logged so a peer that dissents from the others can be seen.
+		s.log.Info("Peers disagree about a leaf with no body, or too few answered; asked again",
+			"account", u, "answers", err)
+		fail()
+		return
+	default:
 		s.log.Info("An account could not be pulled", "account", u, "error", err)
 		fail()
 		return

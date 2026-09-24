@@ -123,10 +123,19 @@ func (q *QueryPeers) ForPartition(ctx context.Context, partition *url.URL) ([]pu
 	}
 	srcs := make([]pull.Source, 0, len(peers))
 	for _, p := range peers {
-		srcs = append(srcs, api.Querier2{Querier: q.clientFor(p, partition)})
+		srcs = append(srcs, peerSource{api.Querier2{Querier: q.clientFor(p, partition)}, p})
 	}
 	return srcs, nil
 }
+
+// peerSource is one peer's querier, named by the peer, so that the pull can
+// say which peer answered what (#4397 review F3).
+type peerSource struct {
+	api.Querier2
+	peer peer.ID
+}
+
+func (p peerSource) String() string { return "peer " + p.peer.String() }
 
 // Querier implements [Sources].
 func (q *QueryPeers) Querier(partition *url.URL) api.Querier {
