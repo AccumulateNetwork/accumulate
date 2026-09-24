@@ -625,8 +625,10 @@ been processed, which starts at `S`. Each round, in this order:
    (`TestTheWalkNeverOverwritesWhatARecordWrote`,
    `TestAWalkPageNewerThanTheRecordsIsCaughtUpByTheRecord`).
 
-Once the walk has covered the tree and nothing is owed, the node may execute
-from the block its pulled ledger names (§2). The set of accounts is the block
+Once the walk has covered the tree and nothing is owed, the node compares its
+root with the partition's signed anchor at every block that sent one, and it
+executes only from a root that matched (§2, "Two mismatches", 1). The set of
+accounts is the block
 ledger's, not the block's envelopes': every block records `(account, chain,
 index)` for every chain its execution changed (see "The block ledger"), and it
 names every account whose leaf the block changes (invariant 14), including the
@@ -775,11 +777,12 @@ there is nothing in staging to worry about.**
 **A gap is an entry that arrived before the node was listening.** `B + 1`
 delivers #105 while the node's `Delivered` is 103 and #104 is not in `B + 1`:
 the peers held #104 from a block before `B`, and executing `B + 1` without it
-is the #4290 divergence. **The node executes anyway** ("One rule for every
-node"): a block executed without an entry it needed is wrong only in the
-accounts its record names, the root check finds it at the next block that
-anchors, and the repair brings those accounts — the synthetic ledger's
-`Delivered` among them — to what the peers ran (§2). The gap is said and put on
+is the #4290 divergence. **The node executes anyway** ("The algorithm", step
+6; "Two mismatches", 2): it requests the missing number from the source, and
+a block executed without an entry it needed is wrong only in the accounts its
+record names; the anchor check finds it at the next block that anchors, and
+the repair brings those accounts — the synthetic ledger's `Delivered` among
+them — to what the peers ran (§2). The gap is said and put on
 the gauge (below); it no longer holds the handoff. Before, the node advanced
 the sync one block at a time until a block had no gap (#4362).
 
@@ -788,8 +791,8 @@ unexecuted entry.** Staging is memory: whatever the node held unexecuted when
 it stopped — a synthetic waiting on the anchor that proves it — is lost, it
 arrived before the node was listening again, and the first check at `Q + 1`
 finds a gap at those numbers once a later number on that stream has been
-sighted; with nothing later collected the check sees no gap and the node hands
-off with the hole, which the root check after the handoff catches (§4). A node restarted with nothing held loses nothing
+sighted; with nothing later collected the check sees no gap, and the hole is
+an anchor mismatch after the handoff ("Two mismatches", 2). A node restarted with nothing held loses nothing
 and finds none. So whether a restart meets a gap is the traffic's in-flight
 state at the moment it stopped, not the code: an entry is held only while
 the anchor that proves it has not arrived
@@ -818,12 +821,11 @@ it does not. A mismatch — a gap in staging, a pulled state that was a
 mixture, an account only this node's execution touched — is repaired from the
 block ledger (§2) and the node goes on, so a wrong run is caught at the next
 block that anchors, never carried forward. **A mismatch demotes the node to
-`BOOTING`** (step 6): from the mismatch until an executed block's root matches
+`BOOTING`** (§6): from the mismatch until an executed block's root matches
 again it refuses every read, serves nothing and relays every submission, and
-the match makes it `ACTIVE` again. A node that hands off from an unproven
-pulled state is `BOOTING` from the start and becomes `ACTIVE` at its first
-match; one that hands off from a state that already matched is `ACTIVE` at the
-handoff. A node whose state is known wrong is not one that
+the match makes it `ACTIVE` again. A node hands off only from a state that
+matched ("Two mismatches", 1) and is `ACTIVE` at that handoff. What a
+`BOOTING` node emits besides is §6's rule. A node whose state is known wrong is not one that
 answers for it (#4385: run `20260924T074702Z`, a Directory node frozen at
 block 661 with its gauge reading `ACTIVE` served 693 pulls at that block, and
 2,944 of the run's 2,973 stranded submissions were deliveries handed to such a
@@ -868,7 +870,7 @@ the failure the join exists to prevent.
 nothing collected after it.** The buffered groups up to and including the one
 that is `Q + 1` — by leader round, below — are taken into staging in the order
 consensus committed them, before the gap check, because the gap check asks
-what `Q + 1` carries (step 4). The groups after `Q + 1` reach staging only by
+what `Q + 1` carries (§4). The groups after `Q + 1` reach staging only by
 being executed, as they reach a peer's: a peer executing `Q + 1` holds nothing
 that arrived in `Q + 2`, and a block delivers the contiguous run from what is
 held, so a node whose staging already held the arrivals of `Q + 2`, `Q + 3`, …
@@ -895,7 +897,7 @@ entry the node did not hold; the reason says whether its peers held it either
 
 The node then executes block `Q + 1` from the buffer as any node executes a
 block, and it is a validator or a follower from there. **The handoff that
-succeeds is what makes it `ACTIVE`** (step 6), not the match: a node whose
+succeeds is what makes it `ACTIVE`** (§6), not the match: a node whose
 root matches `Q` and has not handed off executes nothing, and if it served
 from there it would answer for a block it is not executing past (#4413: run
 `20260924T074702Z`, a node that read `ACTIVE` from its first match, never
@@ -939,12 +941,12 @@ before it were produced and stand: the node stands at the last block it
 produced and returns to collecting mode holding the groups it did not produce,
 in order, with what it had already staged still staged. The join then syncs
 again and tries again from the state it reaches, as it does after a root
-mismatch (step 4); nothing is dropped, and the node is never left neither
+mismatch ("Two mismatches"); nothing is dropped, and the node is never left neither
 collecting nor executing (#4401: run `20260924T052134Z`, a Directory node
 whose first produced block failed sat for the rest of the run with its buffer
 discarded, refusing every later handoff as "not joining" and dropping every
 committed group). **A failed handoff demotes the node to `BOOTING`**, as a
-re-sync does (step 4): it matched a root, but it is not executing from it, and
+re-sync does ("Two mismatches"): it matched a root, but it is not executing from it, and
 it serves nothing until a handoff succeeds (#4385). A handoff that is retried
 is `BOOTING` throughout — the match does not promote — so a failure that
 recurs on every attempt never flips the node's state. The retry has no bound, because a node that stops trying
@@ -956,7 +958,7 @@ as a climbing count rather than as silence.
 A follower differs from
 a validator in what it does with the blocks it processes — it does not vote or
 propose — not in how it gets there; what it does with a transaction it cannot
-propose is step 6's rule: it relays it, and never drops it.
+propose is §6's rule: it relays it, and never drops it.
 
 While all of this runs the node **listens**: it subscribes to consensus and
 takes every committed block from then on into a buffer — collected, not
@@ -1010,10 +1012,10 @@ node did not execute — that is phase 3's conversion of history, or phase 2's
 database node, not a syncing node's work. So the node states are two, and
 one rule divides them: **`ACTIVE` serves while the node is executing in
 agreement; `BOOTING` refuses and relays at every other time** (#4385).
-**`BOOTING`** is from the start of a join until its handoff succeeds (step 5)
+**`BOOTING`** is from the start of a join until its handoff succeeds (§5)
 — a root that matches is not enough, because a node that has matched and not
 handed off executes nothing — and again after any demotion: a re-sync after
-a root mismatch (step 4) and a handoff that fails (step 5) each return the
+a root mismatch ("Two mismatches") and a handoff that fails (§5) each return the
 node to `BOOTING`. **`ACTIVE`** is from a handoff that succeeds until the
 next demotion, and from its first block for a node that took nothing from a
 peer — a node that never joined has no state machine at all and serves as
@@ -1030,7 +1032,11 @@ synthetic transactions only if the newest root it could check matched*
 (lag one): a node whose last checked root did not match signs nothing,
 dispatches nothing, and repairs. A wrongly executing node then stalls
 rather than forms a wrong quorum with others like it, and a partition whose
-validators are all booting still anchors. `COMPLETE` and `WAITING`, which
+validators are all booting still anchors. *What `BOOTING` emits today:* every
+block a node executes has its anchor signed and sent and its synthetic
+transactions dispatched, whatever the node's state — the conductor's gate is
+committee membership alone and dispatch reads no node state — until #4443
+builds the lag-one gate (DIFFERENCES.md E11). `COMPLETE` and `WAITING`, which
 named a backfilled history, are retired: nothing reached them and nothing
 could. What a joined node cannot answer *for a block it did not execute* —
 an entry the sequencer is asked for from before it joined — it refuses per
@@ -1257,10 +1263,12 @@ one thing a per-block record must never do. An empty block has no entry.
    in staging reads it.
 6. **Staging is identical on every node.** It is fed only by consensus, so it
    is a deterministic function of the same input everywhere. A node that joins
-   or restarts syncs first — it replays the committed stream from its last
-   executed block and rebuilds staging as it goes — and executes nothing until
-   it has caught up. A node whose staging differs from its peers' will execute
-   a different run and produce a different block hash.
+   or restarts pulls the state and collects consensus from the moment it
+   listens ("Sync", "The algorithm"); what it lacks between `Delivered + 1`
+   and `Received` it requests by number, and the answers reach its staging
+   through consensus. A node whose staging differs from its peers' will
+   execute a different run and produce a different block hash, and that is
+   an anchor mismatch, repaired ("Two mismatches", 2).
 7. **State changes only as a side effect of execution**, and become durable only
    at the block's single commit.
 8. **A ready message executes; a not-ready message executes nothing.**

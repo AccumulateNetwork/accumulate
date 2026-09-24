@@ -309,8 +309,7 @@ is gone.
 
 **Size**: decided by Paul: no fill-in and no kept proof. Every node attempts
 to execute, and a node whose root misses its partition's anchor repairs from
-the block ledger and tries again (executor.md Sync, "One rule for every
-node"). Until #4440 builds that repair for a running node, the node that
+the block ledger and tries again (executor.md Sync, "Two mismatches"). Until #4440 builds that repair for a running node, the node that
 dropped a proof executes the package when the requester's fetch lands. That
 happens only while the source still serves the span, which is its
 `RejoinGrace` of 300 blocks (`synthcache`). Past that the ask is `NotFound`,
@@ -368,24 +367,39 @@ the accounts the block ledger names, move to the next block). Where the code
 departs:
 
 - **The code executes before the pulled root has matched.** It hands off
-  unproven, `BOOTING`, once the walk is done, executes, and treats every
-  mismatch as an anchor mismatch. The spec executes nothing until the pulled
-  root matches, keeps processing records to the next anchored block
-  (the heartbeat on an idle partition), and answers a root mismatch by
-  pulling again.
-- **Nothing serves BPT interior hashes as of a block, and the join compares
-  its root only at anchored blocks.** The spec checks every block's root and
-  locates a miss by subtree hashes (`bpt.NodeAt` holds the history; no API
-  query exposes it).
-- **A root mismatch never re-walks.** `startRepair` re-pulls only what the
-  records name, so a leaf the walk got wrong for an account no later record
-  names is never fixed and the node repairs forever (review note_3900866799
-  F1, threat review note_3900841689 F5).
-- **Record processing starts at S, the first peer's block, not at the oldest
-  block any walk page was served at**, so a page from a peer behind S can hold
-  an account's value from before a change no processed record names.
-- **The repair reaches back to the last match, not to the block that
-  mismatched.**
+  unproven, `BOOTING`, once the walk is done and nothing is owed
+  (`PulledState.Ready`), executes, and treats every mismatch as an anchor
+  mismatch; the root watch (`Diverged`) promotes it at the first executed
+  block whose root equals the partition's signed anchor. The spec executes
+  nothing until the pulled root matches, keeps processing records to the next
+  anchored block, and answers a root mismatch by pulling again. Kept, by
+  decision, until the as-of-block pulls land (#4442).
+- **A repair stops executing, repairs, and hands off again** at the block the
+  repaired ledger names, rather than repairing and moving to the next block;
+  the spec allows this until #4440. A repair reaches back to the last
+  comparison (the last block that matched, or the block handed off at).
+- **Accounts are pulled as the peer holds them now, not as of the block**
+  (#4442), so a block's records bring the tree to that block's root only in
+  a lull.
+- **A root mismatch re-pulls only after a repair from the block ledger
+  brought no match.** The repair after one that did not match walks the tree
+  again (`startRepair`), taking whole every account whose leaf differs from a
+  page's (Paul, 2026-09-25: "the joining node has to pull the accounts
+  again"); the spec re-pulls at the first root mismatch.
+- **Nothing serves BPT interior hashes as of a block** (#4441), so the join
+  compares its root only at anchored blocks and cannot locate a miss by
+  subtree; a re-pull is the whole walk.
+- **Records are read without a receipt** to a signed root, so a peer can
+  drop or add names in a record; the match detects it, the repair or re-walk
+  recovers it.
+- **A leaf no page named is deleted only when every peer answers NotFound**
+  for it (`dropUnnamed`, `forget`); the spec's other way — at a signed
+  block, confirmed by the match that follows — is not built.
+- **Pulls are sequential**, about one account at a time; at 100 tps a block
+  names hundreds of accounts, and a pull slower than the partition changes
+  them does not converge (#4411).
+- **A retaken chain keeps the element-index entries of what it held** (the
+  #4327 shape; #4444).
 - **The repair is the join's only.** A running validator whose anchor differs
   does not repair (#4440).
 - **The backfill past the match runs inside the root watch**, 64 accounts per
@@ -394,10 +408,15 @@ departs:
   and an element index only where none is held. That the writes never meet the
   executor's has been reasoned, not tested under a concurrent executor; the
   simulator runs the join and the blocks on one goroutine.
-- **A node executing from an unproven state is `BOOTING`, and whether it signs
-  or dispatches anchors and synthetic transactions while `BOOTING` is the
-  executor's existing gating, not verified here.** A node whose state is wrong
-  until its first match could otherwise send what its peers do not.
+- **A `BOOTING` node signs and dispatches.** The spec (§6) signs and
+  dispatches block N only if the newest root the node could check matched.
+  Today the conductor signs and sends every block's anchor gated only by
+  `inCommittee()` (`crosschain/conductor.go`), and the executor dispatches
+  synthetic transactions regardless of the node's state
+  (`block_begin.go`); nothing in `internal/core/crosschain` or
+  `internal/core/execute` reads `nodestate` (threat review F7, code review
+  F3). A node executing from an unproven or wrong state therefore signs its
+  roots with its committee key. The gating is #4443.
 
 
 **Spec** ([executor.md](executor.md), "Sync", as rewritten 2026-09-19): a
