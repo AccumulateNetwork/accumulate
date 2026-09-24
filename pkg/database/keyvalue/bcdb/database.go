@@ -92,6 +92,15 @@ type Database struct {
 	undo         map[uint64]map[[32]byte][]byte
 	undoVersions []uint64 // keys of undo, ascending
 
+	// writing is the version a commit is writing through, and zero when
+	// none is. A batch that begins then is at the version before, and it
+	// reads the store as the write-through leaves it unless an overlay for
+	// the commit holds the keys it has overwritten -- and a commit that
+	// began with no reader open took none. Such a batch waits on written
+	// for the commit to end, and begins at the version it made (#4434).
+	writing uint64
+	written *sync.Cond // on mu
+
 	// views counts the open batches at each version, so flushing knows
 	// what the oldest reader can still see. viewOpened is when the first
 	// batch at each version was begun, so the age of the oldest open view
@@ -165,6 +174,7 @@ type Database struct {
 	maintErr     error  // the last maintenance run's outcome
 	maintErrs    uint64 // how many runs failed
 	maintainHook func() // tests: runs at the start of a maintenance run
+	putHook      func() // tests: runs after each key a commit writes through
 
 	// TallySample is the sampling rate: one key in TallySample is
 	// remembered.  One is every key.
@@ -344,6 +354,7 @@ func Open(path string) (*Database, error) {
 		metricLabel:    metricLabelFor(path),
 		ViewWarnAfter:  10 * time.Second,
 	}
+	d.written = sync.NewCond(&d.mu)
 
 	// A commit seals the permanent layer at its version, and the store
 	// refuses to seal a block it has already closed -- so the version
@@ -525,6 +536,11 @@ func (d *Database) BeginUnisolated(prefix *record.Key, writable bool) keyvalue.C
 
 func (d *Database) begin(prefix *record.Key, writable, deep bool) keyvalue.ChangeSet {
 	d.mu.Lock()
+	// A commit writing through with no overlay: the version before it is
+	// not there to read (see writing).
+	for d.writing != 0 && d.undo[d.writing] == nil {
+		d.written.Wait()
+	}
 	at := d.version
 	d.views[at]++
 	if d.viewOpened == nil {
@@ -602,6 +618,9 @@ func (d *Database) writeThrough(s *staged) error {
 	for key, e := range s.entries {
 		if err := d.putRouted(key, e); err != nil {
 			return errors.UnknownError.WithFormat("put: %w", err)
+		}
+		if d.putHook != nil {
+			d.putHook()
 		}
 	}
 
@@ -1079,6 +1098,7 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 		staged.entries[h] = e
 	}
 	readers := len(d.views) > 0
+	d.writing = version
 	d.mu.Unlock()
 
 	// Isolation, only when someone needs it: with no reader open there is
@@ -1099,6 +1119,8 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.writing = 0
+	defer d.written.Broadcast()
 	if err != nil {
 		// The store may hold part of the batch; the version does not move
 		// and the overlay stays for its readers. The caller stops the node.
