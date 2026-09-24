@@ -740,8 +740,9 @@ func (r *healRequester) anchorOverdueLocked(key string, delivered, blockIndex ui
 //
 // Every node calls it at every activation, selected to ask or not. Counting
 // only when selected made the wait for the probe as long as the rotation took
-// to name a node probeAfter times -- about the committee's size over two
-// times longer -- and a node never named never counted at all (#4415).
+// to name a node probeAfter times, and a node never named never counted at
+// all: a shared hole took 77-128 blocks on a twelve-validator Directory in the
+// simulator, against 32-33 counted here (#4415).
 func (r *healRequester) observeStill(stream execute.StreamID, delivered, blockIndex uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
