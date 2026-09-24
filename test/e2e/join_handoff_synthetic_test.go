@@ -73,7 +73,9 @@ func TestAJoinedBVNNodeCanOpenItsFirstBlockAfterARestart(t *testing.T) {
 			build.Transaction().For(alice, "tokens").
 				SendTokens(1, 0).To(bob, "tokens").
 				SignWith(alice, "book", "1").Version(1).Timestamp(ts).PrivateKey(aliceKey))
-		sim.StepUntil(Txn(st.TxID).Succeeds(), Txn(st.TxID).Produced().Succeeds())
+		// Up to 200 blocks: while a validator is joining, 50 was not always
+		// enough for a cross-partition send to produce.
+		sim.StepUntilN(200, Txn(st.TxID).Succeeds(), Txn(st.TxID).Produced().Succeeds())
 	}
 	for i := uint64(1); i <= 5; i++ {
 		send(i)
