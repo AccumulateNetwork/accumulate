@@ -60,6 +60,9 @@ QueryType:
   BptPage:
     description: paginated BPT enumeration, for a node pulling the state (executor.md, "Sync")
     value: 0x06
+  BptBlock:
+    description: one stored block of the BPT as of a block, for a node locating a root mismatch (executor.md, "Sync", "Two mismatches")
+    value: 0x07
 
   AnchorSearch:
     value: 0x10
@@ -84,6 +87,9 @@ RecordType:
   BptPage:
     description: one page of a BPT enumeration
     value: 0x05
+  BptBlock:
+    description: one stored block of the BPT, the positions eight levels below a prefix
+    value: 0x06
 
   Message:
     value: 0x10

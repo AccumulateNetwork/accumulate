@@ -302,6 +302,27 @@ BptPageRecord:
       description: reports that this page exhausts the BPT
       type: bool
 
+BptBlockRecord:
+  union: { type: record }
+  description: is one stored block of a BPT; Slots are the non-empty positions eight levels below Prefix, ascending, and hash to Hash by the tree's rule
+  fields:
+    - name: Prefix
+      type: bytes
+    - name: Block
+      description: is the minor block the answer is as of, after resolution; zero for the current tree
+      type: uint
+    - name: BptRoot
+      description: is the root of the tree the block belongs to
+      type: hash
+    - name: Hash
+      description: is the hash of the node at Prefix; the root's block has Hash equal to BptRoot
+      type: hash
+    - name: Slots
+      type: BptBlockSlot
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
 ErrorRecord:
   union: { type: record }
   fields:

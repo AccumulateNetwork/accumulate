@@ -80,6 +80,20 @@ BptLeafSummary:
       type: url
       pointer: true
 
+BptBlockSlot:
+  description: is one non-empty position eight levels below a stored block's prefix, the keys whose next byte is Index
+  fields:
+    - name: Index
+      type: uint
+    - name: Branch
+      description: reports that two or more keys share the position; the next answer is asked for under the prefix plus Index
+      type: bool
+    - name: KeyHash
+      description: is the key of the one leaf at the position, when Branch is false
+      type: hash
+    - name: Hash
+      type: hash
+
 ServiceAddress:
   incomparable: true
   fields:

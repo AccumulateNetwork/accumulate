@@ -333,6 +333,49 @@ waiting proofs exceed `MaxStagedProofBytes` (64 MiB).
 **Size**: an `ExecutorVersion` predicate in `collect`, if the assumption ever
 stops holding.
 
+### E19. A peer's stored-block answer is not every block's, and is not 256 bare hashes
+
+*[#4441](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4441)*
+
+**Spec** ([executor.md](executor.md), "Sync", "Two mismatches" 1, on branch
+`issue-4438-join-follows-the-algorithm`): "Every block has one: the peers keep
+the BPT's node history by height (`bpt.NodeAt`), so a peer can serve the root,
+and the interior hashes, as of block B even after it has moved on", as "the
+256 hashes eight levels down (one stored block)", "about 8 KiB an answer".
+
+**Code**: `BptBlockQuery{Prefix, ForHeight}` (API v3) over
+`bpt.GetStoredBlockAt` (`pkg/database/bpt/stored_block.go`). Three
+departures:
+
+- **Not every block.** A peer answers for a block inside its retained window
+  only. Below the horizon it refuses with `IncompleteChain` and names the
+  window; the horizon is the first block retention *ran* at, so on a fresh
+  network block 1 is refused though its nodes are held. The newest indexed
+  block is refused with `NotReady`: its root is recorded on the ledger's bpt
+  chain only when the next state-changing block commits. A node that retains
+  nothing refuses every block with `IncompleteChain`.
+- **Not 256 bare hashes.** The answer lists the non-empty positions only
+  (index, whether a stored block sits there, and its hash); an omitted
+  position is empty. A position holding one leaf also carries the leaf's key,
+  because a leaf can sit higher in the block than its eighth level and a
+  differing leaf position cannot be descended: the key is what names the
+  account to pull. The positions fold to the block's hash by the tree's rule,
+  so each answer checks against the position the answer above it gave, and
+  the root's against the signed `StateTreeAnchor`.
+- **Size.** Measured, binary encoding: a full block of 256 branch positions
+  is 10,178 bytes, and of 256 leaf positions 18,114 (JSON: 26,178 and 42,306).
+  At a million accounts the root's block is all branches and the blocks below
+  it hold about sixteen positions each, so the second answer is small.
+
+**Why it stands**: the first two are what the retained history can say
+truthfully; the spec's sentence is the design and does not state the window.
+The join does not use the query yet (#4438's "Nothing serves BPT interior
+hashes as of a block" is now half true: the query exists, the join does not
+call it).
+
+**Size**: the spec's sentence could name the window and the newest block's
+`NotReady`; no code change is implied.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
