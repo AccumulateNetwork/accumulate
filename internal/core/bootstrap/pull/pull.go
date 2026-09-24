@@ -113,7 +113,25 @@ type Options struct {
 	// receipt proves the state as of a block, and block numbers collide
 	// across partitions (#4205).
 	Partition *url.URL
+
+	// CheckHeld, in ModeFullSpine, also checks the newest HeldCheckDepth
+	// entries the node already holds on each transaction chain, and fetches
+	// the message behind every one that has none. A full pull resumes from
+	// the local head, so without it an entry a node took without its message
+	// stays that way for good: a node that joined before #4421 holds its
+	// pool's entries past its first pass so, and its seed fails at every
+	// process start. It is a read of the node's own store per entry, so the
+	// join asks for it once per process, in the pass that carries the spine.
+	CheckHeld bool
 }
+
+// HeldCheckDepth is how many of a chain's newest held entries CheckHeld
+// checks for their messages. It reaches past what the first block a process
+// opens reads of the anchor pool: the seed walks the pool newest-first down
+// to at most synthcache.DefaultHorizon (600) of the partition's own blocks,
+// and a Directory's pool takes about one anchor a block from each partition,
+// so 600 blocks of a network of up to five partitions is under 4096 entries.
+const HeldCheckDepth = 4096
 
 // Pending is state pulled from a peer and not yet kept. It sits in a batch of
 // its own; nothing reaches the caller's batch until Settle says the Directory
@@ -332,7 +350,7 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		}
 	case ModeFullSpine:
 		p.bodies = newMessages(ctx, src, sub)
-		err = pullChainsFull(ctx, src, sub, p.bodies, u, pageSize)
+		err = pullChainsFull(ctx, src, sub, p.bodies, u, pageSize, opts.CheckHeld)
 		if err != nil {
 			return fail(errors.UnknownError.WithFormat("chains full %s: %w", u, err))
 		}
@@ -1214,7 +1232,7 @@ func addChainToIndex(batch *database.Batch, u *url.URL, c *api.ChainRecord) erro
 // A local chain that holds a different prefix, or more entries than the peer
 // served, cannot be made the peer's by appending and is refused; the pull
 // asks another peer, or this one again once it has moved on.
-func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodies *messages, u *url.URL, pageSize uint64) error {
+func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodies *messages, u *url.URL, pageSize uint64, checkHeld bool) error {
 	// Empty ChainQuery: list-all-chains. See pullChainHeads.
 	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{})
 	if err != nil {
@@ -1230,6 +1248,11 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodi
 		dstChain, err := batch.Account(u).ChainByName(c.Name)
 		if err != nil {
 			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+		}
+		if checkHeld && carriesMessages(c) {
+			if err := fetchHeldMessages(ctx, src, bodies, dstChain.Inner(), u, c, pageSize); err != nil {
+				return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+			}
 		}
 		if err := pullChainEntries(ctx, src, bodies, dstChain.Inner(), u, c, pageSize); err != nil {
 			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
@@ -1288,6 +1311,72 @@ func pullChainEntries(ctx context.Context, src Source, bodies *messages, dst *da
 		return errors.Conflict.WithFormat(
 			"the local chain of %d entries is not a prefix of the peer's: after replaying the peer's entries [%d, %d) the chain anchors to %x and the peer's head to %x",
 			from, from, c.Count, got.Anchor(), want.Anchor())
+	}
+	return nil
+}
+
+// fetchHeldMessages fetches the message behind each of the newest
+// HeldCheckDepth entries the node holds on a transaction chain that has none
+// (Options.CheckHeld). Each is asked of the peer by position and proven like
+// any other: the peer's entry at that position must be the one held, and its
+// message must hash to it. A peer that does not serve it has not served the
+// chain, and the fetch fails so the next peer is asked; a hash is never kept
+// without its message (executor.md, "Sync" §3).
+func fetchHeldMessages(ctx context.Context, src Source, bodies *messages, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, pageSize uint64) error {
+	head, err := dst.Head().Get()
+	if err != nil {
+		return fmt.Errorf("load the local head: %w", err)
+	}
+	held := head.Count
+	if held > int64(c.Count) {
+		// pullChainEntries refuses this chain; there is nothing to repair.
+		return nil
+	}
+	from := held - HeldCheckDepth
+	if from < 0 {
+		from = 0
+	}
+
+	// The runs of held entries with no message behind them.
+	type run struct {
+		start  int64
+		hashes [][]byte
+	}
+	var runs []*run
+	var last *run
+	for i := from; i < held; i++ {
+		h, err := dst.Entry(i)
+		if err != nil {
+			return fmt.Errorf("load held entry %d: %w", i, err)
+		}
+		_, err = bodies.local.Message2(h).Main().Get()
+		switch {
+		case err == nil:
+			last = nil
+			continue
+		case errors.Is(err, errors.NotFound):
+		default:
+			return fmt.Errorf("load the message behind held entry %d: %w", i, err)
+		}
+		if last == nil {
+			last = &run{start: i}
+			runs = append(runs, last)
+		}
+		last.hashes = append(last.hashes, h)
+	}
+
+	for _, r := range runs {
+		end := r.start + int64(len(r.hashes))
+		entries, msgs, err := chainEntriesWith(ctx, src, u, c.Name, uint64(r.start), uint64(end), pageSize, bodies)
+		if err != nil {
+			return fmt.Errorf("the messages behind held entries %d..%d: %w", r.start, end-1, err)
+		}
+		for i, e := range entries {
+			if !bytes.Equal(e, r.hashes[i]) {
+				return errors.Conflict.WithFormat("the peer's entry %d is %x and the node holds %x", r.start+int64(i), e[:4], r.hashes[i][:4])
+			}
+			bodies.kept[*(*[32]byte)(e)] = msgs[i]
+		}
 	}
 	return nil
 }

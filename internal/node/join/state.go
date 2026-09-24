@@ -768,6 +768,16 @@ func (s *PulledState) fetchPass(ctx context.Context, accounts []*url.URL) {
 }
 
 // fetchOne fetches one account into the pass, or records why it could not.
+//
+// spine is the pass that carries the spine: a failure fails the spine, and
+// the entries already held are checked for their messages (pull.CheckHeld),
+// once a process. A spine account named in any later pass -- the block ledger
+// names <partition>/anchors in every one, since every block writes the pool
+// -- is still taken whole, resuming from the local head so each pass brings
+// only the new entries and the messages behind them. Taken state-only, those
+// entries arrived with no message behind them and the first block the node
+// opened failed reading the newest (#4421). A failure there is refused by
+// name and asked again; the spine has settled and is not failed by it.
 func (s *PulledState) fetchOne(ctx context.Context, p *pass, u *url.URL, spine bool) {
 	fail := func() {
 		if spine {
@@ -790,13 +800,14 @@ func (s *PulledState) fetchOne(ctx context.Context, p *pass, u *url.URL, spine b
 		return
 	}
 	mode := pull.ModeStateOnly
-	if spine {
+	if spine || s.isSpine(u) {
 		mode = pull.ModeFullSpine
 	}
 	pending, _, err := pull.FetchFrom(ctx, srcs, p.batch, u, pull.Options{
 		Mode:      mode,
 		Verify:    s.anchors,
 		Partition: partition,
+		CheckHeld: spine,
 	})
 	switch {
 	case err == nil:
@@ -824,6 +835,16 @@ func (s *PulledState) fetchOne(ctx context.Context, p *pass, u *url.URL, spine b
 		return
 	}
 	p.accounts = append(p.accounts, &heldAccount{url: u, pending: pending, spine: spine})
+}
+
+// isSpine is whether u is one of this partition's spine accounts.
+func (s *PulledState) isSpine(u *url.URL) bool {
+	for _, a := range pull.SpineAccounts(s.partition) {
+		if a.Equal(u) {
+			return true
+		}
+	}
+	return false
 }
 
 // errNotThisPartition is an account that routes somewhere else. It is dropped

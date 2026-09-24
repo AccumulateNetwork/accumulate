@@ -9,14 +9,17 @@ package e2e
 import (
 	"context"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -28,22 +31,65 @@ import (
 // TestAFreshBVNNodeJoinsByPull — #4421. A BVN0 node with a genesis store
 // joins a running network by the production join.Run and hands off.
 //
-// On issue-4205-lead @ b67bf3b21 it pulls and then fails every handoff:
+// On issue-4205-lead @ b67bf3b21 it pulled and then failed every handoff:
 //
 //	produce buffered block N: begin block: seed synthetic cache: load
 //	Directory receipts: load anchor pool main chain entry K: Message.… not found
 //
-// The fresh node takes bvn-BVN0.acme/anchors in full (with the message behind
+// The fresh node took bvn-BVN0.acme/anchors in full (with the message behind
 // every entry) in the spine pass. Every later pass names the pool again -- the
 // pool is written every block, so the block ledger names it -- and fetchPass
-// skips the spine accounts only in the spine pass, so the later passes pull the
-// pool STATE-ONLY: chain heads and the open mark set's entries, no message
-// behind any of them (internal/node/join/state.go fetchPass/fetchOne,
-// internal/core/bootstrap/pull/pull.go pullChainHeads). The pool's main chain
-// then holds entries past the spine pass with no message, and the seed reads
-// the message behind every newest entry with no skip (ownReceipts,
-// internal/core/execute/v2/block/synth_cache_seed.go).
+// skipped the spine accounts only in the spine pass, so the later passes pulled
+// the pool STATE-ONLY: chain heads and the open mark set's entries, no message
+// behind any of them. The pool's main chain then held entries past the spine
+// pass with no message, and the seed reads the message behind the newest
+// (ownReceipts, internal/core/execute/v2/block/synth_cache_seed.go).
 func TestAFreshBVNNodeJoinsByPull(t *testing.T) {
+	freshNodeJoinsByPull(t, "BVN0", nil)
+}
+
+// TestAFreshDirectoryNodeJoinsByPull — #4421. The same for the Directory: it
+// failed 2 of 2 on the lead (dn.acme/anchors at 409 entries, 384 without a
+// message). #4416's rolling-restart test joined a fresh Directory node only
+// because that join happened to hand off in the spine pass.
+func TestAFreshDirectoryNodeJoinsByPull(t *testing.T) {
+	freshNodeJoinsByPull(t, Directory, nil)
+}
+
+// TestANodeHoldingPoolEntriesWithNoMessageJoins — #4421. A node that joined
+// on the lead before the fix holds its pool's entries past its first pass
+// with no message behind them, and a full pull resumes from the local head,
+// so it brings nothing back for them: the node's seed would fail at every
+// process start. The store here is written that way, by the pull itself --
+// the pool taken whole, the network moved on, the pool taken state-only --
+// and the join must fetch the missing messages and hand off.
+func TestANodeHoldingPoolEntriesWithNoMessageJoins(t *testing.T) {
+	freshNodeJoinsByPull(t, "BVN0", func(sim *Sim, part *simulator.Partition, node int, send func()) {
+		pool := PartitionUrl("BVN0").JoinPath(AnchorPool)
+		peer := api.Querier2{Querier: sim.S.Services().ForPeer(part.NodePeerID(0)).ForAddress(api.ServiceTypeQuery.AddressFor("BVN0").Multiaddr())}
+		take := func(mode pull.Mode) {
+			batch := part.NodeDatabase(node).Begin(true)
+			defer batch.Discard()
+			require.NoError(t, pull.Account(context.Background(), peer, batch, pool, pull.Options{Mode: mode}))
+			require.NoError(t, batch.Commit())
+		}
+		take(pull.ModeFullSpine)
+		for i := 0; i < 3; i++ {
+			send()
+		}
+		sim.StepN(10)
+		take(pull.ModeStateOnly)
+		require.NotEmpty(t, entriesWithNoMessage(t, part.NodeDatabase(node), "BVN0")[strings.ToLower(pool.String())+"#main"],
+			"precondition: the store holds pool entries with no message behind them")
+	})
+}
+
+// freshNodeJoinsByPull stands the follower's node of the partition on a
+// genesis store, lets the network run, drops what the node collected (a
+// process start), optionally damages its store, and runs the production join
+// under load. The node must hand off, and hold no entry of a spine account's
+// transaction chain without the message behind it.
+func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, part *simulator.Partition, node int, send func())) {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
 	aliceKey := acctesting.GenerateKey(alice)
@@ -66,13 +112,13 @@ func TestAFreshBVNNodeJoinsByPull(t *testing.T) {
 	MakeIdentity(t, sim.DatabaseFor(bob), bob, acctesting.GenerateKey(bob)[32:])
 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
-	bvnPart := sim.S.Partition("BVN0")
+	part := sim.S.Partition(partition)
 	const fresh = 3 // networkWithAFollower appends it after the validators
-	require.Equal(t, 4, bvnPart.NodeCount())
+	require.Equal(t, 4, part.NodeCount())
 
-	// The fresh node: its BVN0 half starts its join before any block, so it
-	// has executed nothing beyond genesis.
-	bvnPart.RestartNode(fresh)
+	// The fresh node: it starts its join before any block, so it has
+	// executed nothing beyond genesis.
+	part.RestartNode(fresh)
 
 	var ts uint64
 	send := func() {
@@ -87,14 +133,16 @@ func TestAFreshBVNNodeJoinsByPull(t *testing.T) {
 		send()
 	}
 	sim.StepN(10)
+	if damage != nil {
+		damage(sim, part, fresh, send)
+	}
 
-	// A process start: what the node collected is dropped, so it holds
-	// genesis and nothing after it, and must pull.
-	bvnPart.RestartNode(fresh)
+	// A process start: what the node collected is dropped, so it must pull.
+	part.RestartNode(fresh)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	const maxRounds = 200
-	stepping := &steppingState{State: bvnPart.NodeJoinState(fresh), step: func(round int) {
+	stepping := &steppingState{State: part.NodeJoinState(fresh), step: func(round int) {
 		if round%5 == 0 {
 			send()
 		}
@@ -103,43 +151,68 @@ func TestAFreshBVNNodeJoinsByPull(t *testing.T) {
 			cancel()
 		}
 	}}
-	settler, ok := bvnPart.NodeExecutor(fresh).(join.Settler)
+	settler, ok := part.NodeExecutor(fresh).(join.Settler)
 	require.True(t, ok)
 	outcome, err := join.Run(ctx, join.Options{
-		Partition: "BVN0",
-		Buffer:    bvnPart.NodeJoin(fresh),
-		Stage:     &join.ExecutorStage{Settler: settler, Staging: bvnPart.NodeStaging(fresh), Database: bvnPart.NodeDatabase(fresh)},
+		Partition: partition,
+		Buffer:    part.NodeJoin(fresh),
+		Stage:     &join.ExecutorStage{Settler: settler, Staging: part.NodeStaging(fresh), Database: part.NodeDatabase(fresh)},
 		State:     stepping,
-		Peers:     &join.APIPeers{Partition: "BVN0", Client: sim.S.Services(), Network: t.Name()},
+		Peers:     &join.APIPeers{Partition: partition, Client: sim.S.Services(), Network: t.Name()},
 		Retry:     time.Millisecond,
 	})
+	missing := entriesWithNoMessage(t, part.NodeDatabase(fresh), partition)
+	require.NoError(t, err, "a fresh %s node did not join within %d pull rounds", partition, maxRounds)
+	require.Equal(t, join.Joined, outcome)
+	require.False(t, part.Joining(fresh))
 
-	// Which entries of the pool's main chain the fresh node holds without the
-	// message behind them.
-	pool := PartitionUrl("BVN0").JoinPath(AnchorPool)
-	var missing []int64
-	var count int64
-	View(t, bvnPart.NodeDatabase(fresh), func(batch *database.Batch) {
-		c := batch.Account(pool).MainChain()
-		head, err := c.Head().Get()
-		require.NoError(t, err)
-		count = head.Count
-		for i := int64(0); i < head.Count; i++ {
-			h, err := c.Entry(i)
-			if err != nil {
-				missing = append(missing, i)
-				continue
-			}
-			var msg messaging.Message
-			if batch.Message2(h).Main().GetAs(&msg) != nil {
-				missing = append(missing, i)
+	// The handoff executes blocks, and the first opens the seed. Run on so
+	// the node executes past it.
+	for i := 0; i < 3; i++ {
+		send()
+	}
+	sim.StepN(10)
+	require.Empty(t, missing, "the joined node holds spine entries with no message behind them")
+	require.Empty(t, entriesWithNoMessage(t, part.NodeDatabase(fresh), partition),
+		"after executing, the node holds spine entries with no message behind them")
+}
+
+// entriesWithNoMessage is the store invariant #4421 broke (executor.md,
+// "Sync" §3: a hash is never kept without its message): for every chain of
+// every spine account of the partition whose entries are the hashes of
+// messages, the positions held with no message behind them, keyed
+// "<account>#<chain>". A position the store does not hold at all counts too.
+func entriesWithNoMessage(t *testing.T, db *database.Database, partition string) map[string][]int64 {
+	t.Helper()
+	out := map[string][]int64{}
+	View(t, db, func(batch *database.Batch) {
+		for _, u := range pull.SpineAccounts(PartitionUrl(partition)) {
+			chains, err := batch.Account(u).Chains().Get()
+			require.NoError(t, err)
+			for _, meta := range chains {
+				if meta.Type != merkle.ChainTypeTransaction || strings.HasPrefix(meta.Name, "synthetic-sequence(") {
+					continue
+				}
+				c, err := batch.Account(u).ChainByName(meta.Name)
+				require.NoError(t, err)
+				head, err := c.Head().Get()
+				require.NoError(t, err)
+				k := strings.ToLower(u.String()) + "#" + meta.Name
+				for i := int64(0); i < head.Count; i++ {
+					h, err := c.Inner().Entry(i)
+					if err != nil {
+						out[k] = append(out[k], i)
+						continue
+					}
+					if _, err := batch.Message2(h).Main().Get(); err != nil {
+						out[k] = append(out[k], i)
+					}
+				}
 			}
 		}
 	})
-	t.Logf("fresh BVN0 node: %v main chain has %d entries, %d without a message: %v", pool, count, len(missing), missing)
-
-	require.NoError(t, err, "a fresh BVN0 node did not join within %d pull rounds", maxRounds)
-	require.Equal(t, join.Joined, outcome)
-	require.False(t, bvnPart.Joining(fresh))
-	require.Empty(t, missing, "the joined node holds pool entries with no message behind them")
+	for k, v := range out {
+		t.Logf("%s: %d entries with no message behind them: %v", k, len(v), v)
+	}
+	return out
 }
