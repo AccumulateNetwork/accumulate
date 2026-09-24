@@ -122,6 +122,16 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	// Reset transient values
 	ledgerState.Index = block.Index
 	ledgerState.Timestamp = block.Time
+
+	// From v2-kourou the ledger records the leader round that committed the
+	// block, so a node that pulls this state knows which of the groups it
+	// collected are the blocks after it (executor spec, "Sync", step 5;
+	// #4362). Before it the field is never written, and the ledger encodes
+	// exactly as it did.
+	ledgerState.LeaderRound = 0
+	if x.globals().Active.ExecutorVersion.V2KourouEnabled() {
+		ledgerState.LeaderRound = block.LeaderRound
+	}
 	ledgerState.PendingUpdates = nil
 	ledgerState.AcmeBurnt = *big.NewInt(0)
 	ledgerState.Anchor = nil
