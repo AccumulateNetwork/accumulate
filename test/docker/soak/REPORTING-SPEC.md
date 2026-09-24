@@ -218,6 +218,36 @@ flat or rising is stranded. The requirement is therefore **0 at the last sample
 after the drain, or the residue and its trend** — never "a small number is
 fine", which teaches a reader to excuse a slow strand.
 
+**A sample is a reading when every (node, partition) is accounted for** —
+and an empty row is one of two different facts, which MUST NOT be read as one
+(#4414). One scrape of a container answers for every partition it runs, so:
+
+- **unreachable** — every row of the node is empty at that sample: it answered
+  no scrape (mid-restart, paused). The sample is **incomplete** and is skipped,
+  never summed: summing what is left dips the total by that node's real count.
+- **no counter** — the row is empty and the same node reported on its other
+  partition at that sample: the node answered, and the counter does not exist
+  in its process, because nothing was submitted to that partition since the
+  process started. It has counted **0**, which is a reading, and the sample is
+  complete. Two kinds, named apart:
+  - **joining** — the pair counted earlier in the run, so its node restarted
+    and has not created the counter again: a restarted node whose Directory
+    has not rejoined. A counter that disappears is a new process, and it
+    carries its settled figure forward exactly as a counter going backwards
+    does — once: the counter's later reappearance is not a second reset.
+  - **never submitted to** — the pair has not counted at any sample of the
+    run: the follower's Directory, on every run.
+
+Run `20260924T074702Z` read the second kind as the first: three Directory joins
+that never finished left every sample after 08:05 "incomplete", and the
+manifest's headline read `1413 … as of 08:05:42Z; FINAL ROW MISSING` over a
+final row that had landed at 08:21:00Z. The manifest names the joining and
+never-submitted-to pairs at the sample it quotes, and **when counter resets
+were carried it states the final row's own sum beside the carried headline**
+(`3004 … 31 stranded before a restart; the final row's own readings sum to
+2973`), so a reader adding up the row does not find a second number with no
+account of the difference.
+
 **The relay leg is not optional arithmetic.** Paul, 2026-09-19: *"Followers can
 relay txs. And should."* `accepted - certified` on a node in no committee is
 everything it took, by construction, so without the third term a follower
