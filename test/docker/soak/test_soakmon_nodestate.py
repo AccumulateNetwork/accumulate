@@ -173,5 +173,87 @@ class StartToActive(unittest.TestCase):
         self.assertIsNone(soakmon._parse_started("0001-01-01T00:00:00Z"))
 
 
+class EveryTrackedStartGetsAFinalRow(unittest.TestCase):
+    """#4414: the manifest's rejoin verdict reads each start's `final` row
+    from nodestate.csv, and a start with none has no last reading.
+
+    Run 20260924T074702Z's review reported acc-bvn3-val1/bvn3 without one.
+    That file has one (08:21:00Z, `ACTIVE,16.4,final,1926`), and every one
+    of its 26 tracked pairs has one (`test_the_run_has_one_for_every_pair`).
+    What was really fragile is the exit hook: the submissions, mem and
+    node-state final writes shared one `try`, so a fault in either of the
+    first two dropped the node-state final rows for EVERY node — the one
+    file whose last reading decides "rejoined"."""
+
+    RUN = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "runs", "20260924T074702Z", "nodestate.csv")
+
+    def setUp(self):
+        import tempfile
+        self._saved = (soakmon.RUN_DIR, dict(soakmon._NODESTATE_TRACK),
+                       soakmon.write_submissions_csv, soakmon.write_mem_csv,
+                       dict(soakmon.STATE))
+        soakmon.RUN_DIR = tempfile.mkdtemp(prefix="nodestatefinal-")
+        soakmon._NODESTATE_TRACK.clear()
+
+    def tearDown(self):
+        (soakmon.RUN_DIR, track, soakmon.write_submissions_csv,
+         soakmon.write_mem_csv, state) = self._saved
+        soakmon._NODESTATE_TRACK.clear()
+        soakmon._NODESTATE_TRACK.update(track)
+        soakmon.STATE.clear()
+        soakmon.STATE.update(state)
+
+    def track(self):
+        """Two nodes, both partitions each, one of them restarted — the
+        restarted start is the one tracked at exit."""
+        for node, started, when in (("acc-bvn3-val2", NOW, NOW + 5),
+                                    ("acc-bvn3-val1", NOW, NOW + 5),
+                                    ("acc-bvn3-val1", NOW + 600, NOW + 620)):
+            per = {node: scrape(bvn3=2, directory=2)}
+            ns = soakmon.nodestate_from(per, now=when, disturbed={node: started})
+            soakmon.track_start_to_active(soakmon._NODESTATE_TRACK, ns,
+                                          {node: started}, when)
+        return {("acc-bvn3-val1", "bvn3"), ("acc-bvn3-val1", "directory"),
+                ("acc-bvn3-val2", "bvn3"), ("acc-bvn3-val2", "directory")}
+
+    def finals(self):
+        import csv
+        path = os.path.join(soakmon.RUN_DIR, "nodestate.csv")
+        if not os.path.exists(path):
+            return set()
+        with open(path) as f:
+            return {(r["node"], r["partition"]) for r in csv.DictReader(f)
+                    if r["kind"] == "final"}
+
+    def test_every_tracked_pair_gets_one(self):
+        want = self.track()
+        soakmon.STATE["nodeStats"] = {}
+        soakmon._final_rows()
+        self.assertEqual(want, self.finals())
+
+    def test_a_fault_in_another_final_write_does_not_drop_them(self):
+        want = self.track()
+        soakmon.STATE["nodeStats"] = {"submissions": {"byNode": {}},
+                                      "mem": {"byNode": {}}}
+
+        def boom(*a, **k):
+            raise OSError("disk full")
+        soakmon.write_submissions_csv = boom
+        soakmon.write_mem_csv = boom
+        soakmon._final_rows()     # must not raise either
+        self.assertEqual(want, self.finals())
+
+    def test_the_run_has_one_for_every_pair(self):
+        import csv
+        with open(self.RUN) as f:
+            rows = list(csv.DictReader(f))
+        pairs = {(r["node"], r["partition"]) for r in rows}
+        finals = {(r["node"], r["partition"]) for r in rows if r["kind"] == "final"}
+        self.assertEqual(26, len(pairs))
+        self.assertEqual(pairs, finals)
+        self.assertIn(("acc-bvn3-val1", "bvn3"), finals)
+
+
 if __name__ == "__main__":
     unittest.main()

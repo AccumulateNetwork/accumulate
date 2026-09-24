@@ -438,7 +438,10 @@ executed), `startToCaughtUpS`, `validatorsAnswered`, `lastAnswered` and
 row's sample, and two more kinds: `caught-up`, the first sample ACTIVE and
 within the bound, and `superseded`, a start's last reading when its container
 started again. At exit the monitor writes a `final` row for **every** start,
-not only those never ACTIVE: that row is the start's last reading. A start
+not only those never ACTIVE: that row is the start's last reading, and its
+write stands alone — a fault writing the other files' final rows MUST NOT
+drop it (#4414: the three shared one `try`, so one fault in `submissions.csv`
+or `mem.csv` would have left every start with no last reading). A start
 that never reached ACTIVE is one with no `reached` or `already` row, as
 before. The board lists a row the gauge calls ACTIVE when it is more than the
 bound behind its partition. The manifest's row is `rejoin.py`, reading

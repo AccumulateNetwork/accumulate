@@ -71,6 +71,7 @@ def _final_rows():
     the process is already going, and a monitor that hangs on the way out
     keeps its port for the next run.
     """
+    ns = {}
     try:
         # NEVER a blocking acquire: this also runs from the signal handler,
         # and if the signal lands while the collector holds LOCK the monitor
@@ -84,16 +85,30 @@ def _final_rows():
         finally:
             if got:
                 LOCK.release()
-        if ns.get("submissions"):
-            write_submissions_csv(ns["submissions"], force=True)
-        if ns.get("mem"):
-            write_mem_csv(ns["mem"], force=True)
-        write_nodestate_csv(final_starts(_NODESTATE_TRACK, time.time()))
     except Exception as e:
+        _final_fault("reading the state", e)
+    # Each file's final write stands alone (#4414): they shared one `try`,
+    # so a fault writing submissions.csv or mem.csv dropped nodestate.csv's
+    # final rows for every node, and each start's last reading is what the
+    # manifest's rejoin verdict is judged on.
+    for what, write in (
+            ("submissions.csv", lambda: ns.get("submissions") and
+             write_submissions_csv(ns["submissions"], force=True)),
+            ("mem.csv", lambda: ns.get("mem") and
+             write_mem_csv(ns["mem"], force=True)),
+            ("nodestate.csv", lambda: write_nodestate_csv(
+                final_starts(_NODESTATE_TRACK, time.time())))):
         try:
-            sys.stderr.write("final rows: %r\n" % (e,))
-        except Exception:
-            pass
+            write()
+        except Exception as e:
+            _final_fault(what, e)
+
+
+def _final_fault(what, e):
+    try:
+        sys.stderr.write("final rows: %s: %r\n" % (what, e))
+    except Exception:
+        pass
 
 
 def _on_signal(sig, _frame):
