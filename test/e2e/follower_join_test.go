@@ -196,6 +196,7 @@ func TestAFollowerJoinsARunningNetworkAndLeaves(t *testing.T) {
 	require.Equal(t, join.Joined, outcome)
 	require.False(t, p.Joining(follower), "the joined follower executes")
 	require.Empty(t, entriesWithNoMessage(t, p.NodeDatabase(follower), "BVN0"), "the joined follower holds spine entries with no message behind them (#4421)")
+	require.Empty(t, anchorsNotRecordedAsByAValidator(t, p.NodeDatabase(follower), p.NodeDatabase(0), "BVN0"), "the joined follower holds pool anchors without what executing them wrote (#4416)")
 	require.Equal(t, nodestate.StateActive, state.Machine().State(), "the follower did not promote at its handoff")
 	t.Logf("the follower read BOOTING on all %d rounds it was joining, %d of them after its root had matched",
 		joiningRounds, matchedRounds)

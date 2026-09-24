@@ -8,6 +8,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"strings"
 	"testing"
@@ -21,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -181,6 +183,77 @@ func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, 
 	require.Empty(t, missing, "the joined node holds spine entries with no message behind them")
 	require.Empty(t, entriesWithNoMessage(t, part.NodeDatabase(fresh), partition),
 		"after executing, the node holds spine entries with no message behind them")
+	require.Empty(t, anchorsNotRecordedAsByAValidator(t, part.NodeDatabase(fresh), part.NodeDatabase(0), partition),
+		"the joined node holds pool anchors without what executing them wrote (#4416)")
+}
+
+// anchorsNotRecordedAsByAValidator is the other half of the invariant: for
+// every entry of the partition's anchor pool signature chain that is an
+// anchor's signature, what executing it wrote beside the entry -- the
+// transaction's history index into the chain, its validator signature set,
+// and its cause -- is on the node as it is on a validator that executed it
+// (#4416). A hash held with its message and without these is served with no
+// signatures (#4413). Keyed by the entry's position, with what differs.
+func anchorsNotRecordedAsByAValidator(t *testing.T, node, validator *database.Database, partition string) map[int64]string {
+	t.Helper()
+	pool := PartitionUrl(partition).JoinPath(AnchorPool)
+	out := map[int64]string{}
+	n := node.Begin(false)
+	defer n.Discard()
+	v := validator.Begin(false)
+	defer v.Discard()
+
+	c := n.Account(pool).SignatureChain()
+	head, err := c.Head().Get()
+	require.NoError(t, err)
+	for i := int64(0); i < head.Count; i++ {
+		h, err := c.Entry(i)
+		if err != nil {
+			out[i] = "not held"
+			continue
+		}
+		var ba *messaging.BlockAnchor
+		if n.Message2(h).Main().GetAs(&ba) != nil {
+			continue // not an anchor's signature, or no message (the first half)
+		}
+		seq, ok := ba.Anchor.(*messaging.SequencedMessage)
+		if !ok {
+			continue
+		}
+		txh := seq.Message.ID().Hash()
+
+		nh, err := n.Account(pool).Transaction(txh).History().Get()
+		require.NoError(t, err)
+		vh, err := v.Account(pool).Transaction(txh).History().Get()
+		require.NoError(t, err)
+		if fmt.Sprint(nh) != fmt.Sprint(vh) {
+			out[i] = fmt.Sprintf("history %v, the validator's %v", nh, vh)
+			continue
+		}
+		ns, err := n.Account(pool).Transaction(txh).ValidatorSignatures().Get()
+		require.NoError(t, err)
+		vs, err := v.Account(pool).Transaction(txh).ValidatorSignatures().Get()
+		require.NoError(t, err)
+		same := len(ns) == len(vs)
+		for j := 0; same && j < len(ns); j++ {
+			same = EqualKeySignature(ns[j], vs[j])
+		}
+		if !same {
+			out[i] = fmt.Sprintf("%d validator signatures, the validator's %d", len(ns), len(vs))
+			continue
+		}
+		nc, err := n.Message(txh).Cause().Get()
+		require.NoError(t, err)
+		vc, err := v.Message(txh).Cause().Get()
+		require.NoError(t, err)
+		if fmt.Sprint(nc) != fmt.Sprint(vc) {
+			out[i] = fmt.Sprintf("cause %v, the validator's %v", nc, vc)
+		}
+	}
+	for k, v := range out {
+		t.Logf("%v signature entry %d: %s", pool, k, v)
+	}
+	return out
 }
 
 // handoffCounting counts the join's handoffs that failed to produce a block:

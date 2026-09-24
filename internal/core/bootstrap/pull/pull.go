@@ -1296,16 +1296,21 @@ func addChainToIndex(batch *database.Batch, u *url.URL, c *api.ChainRecord) erro
 }
 
 // pullChainsFull replays every entry of every chain the node does not already
-// hold. It starts from where the node's chain meets the peer's, not from zero,
-// so a second pull of an account is a no-op rather than a chain of twice the
-// height — a restarting node re-pulls the spine, and a pull that is not
-// idempotent doubles it.
+// hold. It starts from the local height, not from zero, so a second pull of an
+// account is a no-op rather than a chain of twice the height — a restarting
+// node re-pulls the spine, and a pull that is not idempotent doubles it.
 //
 // The result is held to the peer's word for the chain's head: after the
 // replay the local anchor must equal the anchor of the head the peer served.
-// A peer whose chain is shorter than what the node holds and agrees with it is
-// behind, and is refused; the pull asks another peer, or this one again once
-// it has moved on.
+// A chain the node holds more of than the peer served is refused; the pull
+// asks another peer, or this one again once it has moved on. A chain that is
+// not the peer's once the peer's entries are appended to it — a node that
+// executed from a wrong state appended entries of its own — is taken again,
+// whole, from its first entry (#4421): it cannot be brought to the peer's by
+// appending, and refusing it left a node the root check had stopped unable
+// ever to sync again. The node's history is not compared with the peer's to
+// find where they part: at an anchored height there is one correct chain, and
+// it is the peer's, proven by the root the account settles against.
 func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodies *messages, u *url.URL, pageSize uint64, checkHeld bool) error {
 	// Empty ChainQuery: list-all-chains. See pullChainHeads.
 	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{})
@@ -1319,11 +1324,11 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodi
 		if c == nil || c.Name == "" {
 			continue
 		}
-		dstChain, err := batch.Account(u).ChainByName(c.Name)
-		if err != nil {
-			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+		err := pullChain(ctx, src, batch, bodies, u, c, pageSize, checkHeld, false)
+		if stderrors.Is(err, errNotThePeers) {
+			err = pullChain(ctx, src, batch, bodies, u, c, pageSize, false, true)
 		}
-		if err := pullChainEntries(ctx, src, bodies, dstChain.Inner(), u, c, pageSize, checkHeld); err != nil {
+		if err != nil {
 			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
 		if err := addChainToIndex(batch, u, c); err != nil {
@@ -1333,19 +1338,45 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodi
 	return nil
 }
 
+// errNotThePeers is a chain that is not the peer's after the peer's entries
+// are appended to what the node holds.
+var errNotThePeers = stderrors.New("the local chain is not a prefix of the peer's")
+
+// pullChain takes one chain in a batch of its own, which is kept only if the
+// chain comes out the peer's, with what the fetch proved on the way; whole
+// takes it from its first entry, over whatever the node held.
+func pullChain(ctx context.Context, src Source, batch *database.Batch, bodies *messages, u *url.URL, c *api.ChainRecord, pageSize uint64, checkHeld, whole bool) error {
+	sub := batch.Begin(true)
+	defer sub.Discard()
+	dstChain, err := sub.Account(u).ChainByName(c.Name)
+	if err != nil {
+		return err
+	}
+	dst := dstChain.Inner()
+	if whole {
+		// Every entry is replayed from here, so the chain's elements, mark
+		// points and tail are rewritten position by position.
+		if err := dst.RestoreHead(new(merkle.State), nil); err != nil {
+			return fmt.Errorf("start the chain over: %w", err)
+		}
+	}
+	took := bodies.fork()
+	if err := pullChainEntries(ctx, src, took, dst, u, c, pageSize, checkHeld); err != nil {
+		return err
+	}
+	if err := sub.Commit(); err != nil {
+		return err
+	}
+	bodies.absorb(took)
+	return nil
+}
+
 // pullChainEntries brings one chain up to the height the peer served, from
-// where the node's chain meets the peer's, and checks the result against the
-// peer's head. A transaction chain's entries come with the messages they
-// name, each checked against its entry and kept in bodies, which is written
-// when the account settles and dropped with it when it is refused (#4400).
-//
-// The meeting point is the height below which the node's entries are the
-// peer's (meetingPoint). It is the node's own height unless the node executed
-// blocks from a wrong state and appended entries of its own, in which case
-// the chain is rewound to it: those entries cannot be brought to the peer's
-// by appending, and a pull that refused them left the node unable to sync
-// again (#4421). checkHeld also fetches the messages held entries below the
-// meeting point lack (Options.CheckHeld).
+// whatever the node already holds, and checks the result against the peer's
+// head. A transaction chain's entries come with the messages they name, each
+// checked against its entry and kept in bodies, which is written when the
+// account settles and dropped with it when it is refused (#4400). checkHeld
+// also fetches what the held entries lack (Options.CheckHeld).
 func pullChainEntries(ctx context.Context, src Source, bodies *messages, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, pageSize uint64, checkHeld bool) error {
 	head, err := dst.Head().Get()
 	if err != nil {
@@ -1353,20 +1384,10 @@ func pullChainEntries(ctx context.Context, src Source, bodies *messages, dst *da
 	}
 	// Taken as a number before anything is appended: Head().Get() hands back
 	// the manager's own state, and every AddEntry below advances it.
-	held := head.Count
-	from, err := meetingPoint(ctx, src, dst, u, c, held, pageSize)
-	if err != nil {
-		return err
-	}
-	if held > int64(c.Count) && from == int64(c.Count) {
-		// The peer's chain is a prefix of the node's: the peer is behind.
+	from := head.Count
+	if from > int64(c.Count) {
 		return errors.Conflict.WithFormat(
-			"the local chain is at %d and the peer served %d; it cannot be re-pulled", held, c.Count)
-	}
-	if from < held {
-		if err := rewind(dst, from); err != nil {
-			return fmt.Errorf("rewind from %d to %d, where the local chain meets the peer's: %w", held, from, err)
-		}
+			"the local chain is at %d and the peer served %d; it cannot be re-pulled", from, c.Count)
 	}
 
 	if !carriesMessages(c) {
@@ -1386,21 +1407,8 @@ func pullChainEntries(ctx context.Context, src Source, bodies *messages, dst *da
 			return fmt.Errorf("add entry %d: %w", from+int64(i), err)
 		}
 		if bodies != nil {
-			// Under the entry, not under the message's own hash: a stored
-			// form refers to its transaction and hashes to something else.
-			bodies.kept[*(*[32]byte)(e)] = msgs[i]
-			if c.Name == "main" {
-				bodies.executed[*(*[32]byte)(e)] = true
-			}
-			if c.Name == "signature" {
-				// Proven by behind; expanding again reads what it cached.
-				full, err := bodies.expand(msgs[i])
-				if err != nil {
-					return fmt.Errorf("entry %d: %w", from+int64(i), err)
-				}
-				if sig, ok := signatureOf(u, uint64(from)+uint64(i), msgs[i], full); ok {
-					bodies.signatures = append(bodies.signatures, sig)
-				}
+			if err := bodies.took(u, c.Name, uint64(from)+uint64(i), e, msgs[i]); err != nil {
+				return err
 			}
 		}
 	}
@@ -1413,135 +1421,66 @@ func pullChainEntries(ctx context.Context, src Source, bodies *messages, dst *da
 	}
 	want := &merkle.State{Count: int64(c.Count), Pending: c.State}
 	if !bytes.Equal(got.Anchor(), want.Anchor()) {
-		return errors.Conflict.WithFormat(
-			"the local chain of %d entries, taken from %d, is not the peer's: after replaying the peer's entries [%d, %d) the chain anchors to %x and the peer's head to %x",
-			held, from, from, c.Count, got.Anchor(), want.Anchor())
+		return fmt.Errorf("%w: after replaying the peer's entries [%d, %d) onto the %d the node holds, the chain anchors to %x and the peer's head to %x",
+			errNotThePeers, from, c.Count, from, got.Anchor(), want.Anchor())
 	}
 	return nil
 }
 
-// meetingPoint is the height at which the node's chain meets the peer's: the
-// number of entries, counted from the start, that the two hold alike.
-//
-// It is judged by the chain's state after an entry, which the peer serves
-// with every entry (the querier's ChainEntryRecord.State) and which commits to
-// every entry up to it -- not by the entries: a node that executed from a
-// wrong state appends many entries its peers append too (the root chain
-// records the anchors of chains the wrong state did not touch), so an entry
-// both hold says nothing about the ones below it. The newest height both
-// hold is asked first, which on a node that has not diverged is the answer,
-// for one entry asked of the peer; only a node that diverged walks back.
-//
-// The peer's states choose where the replay starts and nothing more: the
-// replay is held to the peer's head, and the head to the proven root.
-func meetingPoint(ctx context.Context, src Source, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, held int64, pageSize uint64) (int64, error) {
-	top := held
-	if top > int64(c.Count) {
-		top = int64(c.Count)
-	}
-	if top == 0 {
-		return 0, nil
-	}
-	same := func(i int64, peer [][]byte) (bool, error) {
-		local, err := dst.StateAt(i)
+// took keeps what the fetch proved behind entry index of u's chain, and what
+// executing it wrote beside the entry (#4416).
+func (m *messages) took(u *url.URL, chain string, index uint64, entry []byte, msg messaging.Message) error {
+	// Under the entry, not under the message's own hash: a stored form refers
+	// to its transaction and hashes to something else.
+	m.kept[*(*[32]byte)(entry)] = msg
+	switch chain {
+	case "main":
+		m.executed[*(*[32]byte)(entry)] = true
+	case "signature":
+		// Proven by behind; expanding again reads what it cached.
+		full, err := m.expand(msg)
 		if err != nil {
-			return false, fmt.Errorf("load the local state at %d: %w", i, err)
+			return fmt.Errorf("entry %d: %w", index, err)
 		}
-		theirs := &merkle.State{Count: i + 1, Pending: peer}
-		return bytes.Equal(local.Anchor(), theirs.Anchor()), nil
-	}
-
-	// The newest height both hold.
-	probe, err := chainStates(ctx, src, u, c.Name, uint64(top-1), uint64(top), 1)
-	if err != nil {
-		return 0, err
-	}
-	if ok, err := same(top-1, probe[0]); err != nil || ok {
-		return top, err
-	}
-
-	// Diverged: walk back a page at a time.
-	for hi := top - 1; hi > 0; {
-		lo := hi - int64(pageSize)
-		if lo < 0 {
-			lo = 0
+		if sig, ok := signatureOf(u, index, msg, full); ok {
+			m.signatures = append(m.signatures, sig)
 		}
-		page, err := chainStates(ctx, src, u, c.Name, uint64(lo), uint64(hi), pageSize)
-		if err != nil {
-			return 0, err
-		}
-		for i := hi - 1; i >= lo; i-- {
-			ok, err := same(i, page[i-lo])
-			if err != nil {
-				return 0, err
-			}
-			if ok {
-				return i + 1, nil
-			}
-		}
-		hi = lo
 	}
-	return 0, nil
+	return nil
 }
 
-// chainStates reads the peer's chain state after each of the entries
-// [start, end) of one of its chains.
-func chainStates(ctx context.Context, src Source, u *url.URL, chainName string, start, end, pageSize uint64) ([][][]byte, error) {
-	var out [][][]byte
-	for start < end {
-		count := pageSize
-		if count > end-start {
-			count = end - start
-		}
-		expand := false
-		page, err := src.QueryChainEntries(ctx, u, &api.ChainQuery{
-			Name:  chainName,
-			Range: &api.RangeOptions{Start: start, Count: &count, Expand: &expand},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("query entries from %d: %w", start, err)
-		}
-		if page == nil || len(page.Records) == 0 {
-			return nil, fmt.Errorf("the peer served no entry at %d of %d", start, end)
-		}
-		for _, e := range page.Records {
-			if e == nil || e.Index != start {
-				return nil, fmt.Errorf("the peer served no entry %d", start)
-			}
-			if len(e.State) == 0 {
-				return nil, fmt.Errorf("the peer served entry %d with no chain state", start)
-			}
-			out = append(out, e.State)
-			start++
-			if start >= end {
-				break
-			}
-		}
+// fork is an empty record of what a fetch proves, over the same peer, store
+// and proven transactions, for one chain taken in a batch of its own.
+func (m *messages) fork() *messages {
+	if m == nil {
+		return nil
 	}
-	return out, nil
+	return &messages{ctx: m.ctx, src: m.src, local: m.local, txns: m.txns, kept: map[[32]byte]messaging.Message{}, executed: map[[32]byte]bool{}}
 }
 
-// rewind sets the chain back to its first n entries, which the node and the
-// peer hold alike, so the peer's entries can be appended from there. The
-// entries above n are overwritten as the replay reaches them.
-func rewind(dst *database.MerkleManager, n int64) error {
-	st, err := dst.StateAt(n - 1)
-	if err != nil {
-		return fmt.Errorf("the state at %d: %w", n, err)
+// absorb keeps what a fork proved, once its chain is kept.
+func (m *messages) absorb(f *messages) {
+	if m == nil || f == nil {
+		return
 	}
-	open := st.HashList
-	st = st.Copy()
-	st.HashList = nil
-	return dst.RestoreHead(st, open)
+	for k, v := range f.kept {
+		m.kept[k] = v
+	}
+	for k := range f.executed {
+		m.executed[k] = true
+	}
+	m.signatures = append(m.signatures, f.signatures...)
 }
 
 // fetchHeldMessages fetches the message behind each of the newest
 // HeldCheckDepth entries below height the node holds on a transaction chain
-// that has none (Options.CheckHeld). Each is asked of the peer by position and
-// proven like any other: the peer's entry at that position must be the one
-// held, and its message must hash to it. A peer that does not serve it has not
-// served the chain, and the fetch fails so the next peer is asked; a hash is
-// never kept without its message (executor.md, "Sync" §3).
+// that has none (Options.CheckHeld), and what executing it wrote beside the
+// entry. Each is asked of the peer by position and proven like any other: its
+// message must hash to its entry. A peer that does not serve it has not served
+// the chain, and the fetch fails so the next peer is asked; a hash is never
+// kept without its message (executor.md, "Sync" §3). A peer whose entry at
+// that position is not the one held is not the chain the node holds, and the
+// chain is taken whole.
 func fetchHeldMessages(ctx context.Context, src Source, bodies *messages, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, height int64, pageSize uint64) error {
 	from := height - HeldCheckDepth
 	if from < 0 {
@@ -1584,9 +1523,11 @@ func fetchHeldMessages(ctx context.Context, src Source, bodies *messages, dst *d
 		}
 		for i, e := range entries {
 			if !bytes.Equal(e, r.hashes[i]) {
-				return errors.Conflict.WithFormat("the peer's entry %d is %x and the node holds %x", r.start+int64(i), e[:4], r.hashes[i][:4])
+				return fmt.Errorf("%w: the peer's entry %d is %x and the node holds %x", errNotThePeers, r.start+int64(i), e[:4], r.hashes[i][:4])
 			}
-			bodies.kept[*(*[32]byte)(e)] = msgs[i]
+			if err := bodies.took(u, c.Name, uint64(r.start)+uint64(i), e, msgs[i]); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

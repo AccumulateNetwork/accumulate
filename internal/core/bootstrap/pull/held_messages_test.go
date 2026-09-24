@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // messagelessTail is the store #4421 left behind: the pool taken whole once,
@@ -113,16 +114,17 @@ func TestFullSpine_AHeldEntryWithNoMessageAtThePeerIsRefused(t *testing.T) {
 	require.Empty(t, messagesMissing(t, node, u))
 }
 
-// TestFullSpine_ADivergedChainIsTakenFromWhereItMeetsThePeers — a node that
-// executed blocks from a wrong state appended its own entries to the spine's
-// chains, so its chain is not a prefix of the peer's and cannot be brought up
-// to the peer's by appending. The pull meets the peer's chain where the two
-// last agree, rewinds to there, and takes the peer's entries and their
-// messages from there (executor.md, "Sync" §3: the walk fills back until it
-// meets data it already has). Before #4421 a spine account named in a later
-// pass was taken state-only, which replaced the head; taken whole, a diverged
-// chain was refused in every pass and the node never synced again.
-func TestFullSpine_ADivergedChainIsTakenFromWhereItMeetsThePeers(t *testing.T) {
+// TestFullSpine_ADivergedChainIsTakenWhole — a node that executed blocks from
+// a wrong state appended its own entries to the spine's chains, so its chain
+// is not a prefix of the peer's and cannot be brought up to the peer's by
+// appending. Before #4421 a spine account named in a later pass was taken
+// state-only, which replaced the head; taken whole in every pass, a diverged
+// chain was refused in every pass and the node never synced again
+// (TestJoin_AnExecutedBlockWhoseRootDivergesIsSyncedAgainThroughTheProductionPull).
+// Such a chain is taken again from its first entry, with the messages behind
+// its entries; the node's history is not compared with the peer's to find
+// where they part.
+func TestFullSpine_ADivergedChainIsTakenWhole(t *testing.T) {
 	peer, u, _ := spineWithMessages(t)
 	node := newObservedDB(t)
 	b := node.Begin(true)
@@ -161,9 +163,10 @@ func TestFullSpine_ADivergedChainIsTakenFromWhereItMeetsThePeers(t *testing.T) {
 	require.Empty(t, messagesMissing(t, node, u))
 }
 
-// TestFullSpine_APeerBehindTheNodeIsRefused — meeting the peer's chain is for
-// a node that diverged, not for a peer that is behind: a peer whose chain is
-// a prefix of the node's is refused, and the node's entries are kept.
+// TestFullSpine_APeerBehindTheNodeIsRefused — taking a chain whole is for a
+// chain that is not the peer's once the peer's entries are appended, not for
+// a peer that is behind: a peer that serves fewer entries than the node holds
+// is refused, and the node's entries are kept.
 func TestFullSpine_APeerBehindTheNodeIsRefused(t *testing.T) {
 	peer, u, _ := spineWithMessages(t)
 	node := newObservedDB(t)
@@ -178,5 +181,66 @@ func TestFullSpine_APeerBehindTheNodeIsRefused(t *testing.T) {
 	b = node.Begin(true)
 	defer b.Discard()
 	_, _, err := FetchFrom(context.Background(), []Source{&dbSource{db: peer}}, b, u, Options{Mode: ModeFullSpine})
-	require.Error(t, err, "a peer behind the node was taken, and the node's chain rewound to it")
+	require.Error(t, err, "a peer behind the node was taken, and the node's chain cut back to it")
+}
+
+// TestFullSpine_AHeldEntryWithNoMessageHasItsRecordsRebuilt — an entry the
+// node took state-only has neither its message nor what executing it wrote
+// beside the entry: an anchor signature's history index, signer and the
+// validator signature set, and an executed anchor's sequence and cause
+// (#4416). Fetching the message alone left a node serving those anchors with
+// no signatures (#4413). The repair writes them as a full pull does.
+func TestFullSpine_AHeldEntryWithNoMessageHasItsRecordsRebuilt(t *testing.T) {
+	for _, check := range []bool{false, true} {
+		peer, u, entries := spineSignedBy(t, signWith(anchorKey), true)
+		sigEntry := entries[len(entries)-1]
+
+		// The whole account taken state-only: every entry is held, and
+		// nothing behind any of them.
+		node := newObservedDB(t)
+		b := node.Begin(true)
+		require.NoError(t, Account(context.Background(), &dbSource{db: peer}, b, u, Options{Mode: ModeStateOnly}))
+		require.NoError(t, b.Commit())
+		require.NotEmpty(t, messagesMissing(t, node, u), "precondition")
+
+		b = node.Begin(true)
+		p, _, err := FetchFrom(context.Background(), []Source{&dbSource{db: peer}}, b, u, Options{Mode: ModeFullSpine, CheckHeld: check})
+		require.NoError(t, err)
+		require.NoError(t, p.Keep())
+		require.NoError(t, b.Commit())
+
+		s := peer.Begin(false)
+		d := node.Begin(false)
+		txh, _ := signedAnchorIn(t, s, sigEntry)
+		wantHist, err := s.Account(u).Transaction(txh).History().Get()
+		require.NoError(t, err)
+		gotHist, err := d.Account(u).Transaction(txh).History().Get()
+		require.NoError(t, err)
+		wantSet, err := s.Account(u).Transaction(txh).ValidatorSignatures().Get()
+		require.NoError(t, err)
+		gotSet, err := d.Account(u).Transaction(txh).ValidatorSignatures().Get()
+		require.NoError(t, err)
+		wantCause, err := s.Message(txh).Cause().Get()
+		require.NoError(t, err)
+		gotCause, err := d.Message(txh).Cause().Get()
+		require.NoError(t, err)
+		gotSigners, err := d.Message(txh).Signers().Get()
+		require.NoError(t, err)
+		s.Discard()
+		d.Discard()
+
+		if !check {
+			require.Empty(t, gotHist, "precondition: a pull that does not check what it holds rebuilds nothing for it")
+			continue
+		}
+		require.Empty(t, messagesMissing(t, node, u))
+		require.Equal(t, wantHist, gotHist, "the repaired anchor's signatures are not indexed where the peer indexes them")
+		require.Len(t, gotSigners, 1)
+		require.Len(t, gotSet, len(wantSet), "the repaired anchor's quorum is counted from another set than the peer's")
+		for i := range wantSet {
+			require.True(t, protocol.EqualKeySignature(wantSet[i], gotSet[i]), "signature %d", i)
+		}
+		require.Len(t, gotCause, 1, "the repaired anchor names no cause")
+		require.True(t, wantCause[0].Equal(gotCause[0]))
+	}
 }

@@ -155,12 +155,6 @@ func (s *dbSource) QueryChainEntries(_ context.Context, u *url.URL, q *api.Chain
 			Index:   i,
 			Entry:   hashArr,
 		}
-		// The chain's state after the entry, as the querier serves it.
-		ms, err := c2.Inner().StateAt(int64(i))
-		if err != nil {
-			return nil, err
-		}
-		r.State = ms.Pending
 		// Expanded, a transaction chain's entry carries the message behind
 		// it, or an error record when there is none -- the querier's shape
 		// (internal/api/v3/querier.go queryChainEntry).
