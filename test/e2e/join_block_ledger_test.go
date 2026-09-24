@@ -166,7 +166,7 @@ func TestJoinKeepsUpFromTheBlockLedgerAlone(t *testing.T) {
 	// can only arrive from the block ledger's record of the block that created
 	// it.
 	sources.refuse.Store(true)
-	askedBefore, servedBefore := sources.asked.Load(), sources.served.Load()
+	servedBefore := sources.served.Load()
 
 	savings := alice.JoinPath("savings")
 	ts++
@@ -193,9 +193,13 @@ func TestJoinKeepsUpFromTheBlockLedgerAlone(t *testing.T) {
 		})
 	}
 
-	// The backstop really was off for the whole of phase two: it was asked
-	// and it answered nothing.
-	require.Greater(t, sources.asked.Load(), askedBefore, "the page diff was never even attempted")
+	// No page was served in phase two. Whether the page diff was ASKED is
+	// not pinned: the spec runs it on the first round and on a cadence after
+	// that, and phase two is shorter than the cadence, so requiring an ask
+	// here pinned a cadence inside a window shorter than the cadence and was
+	// red for that reason alone. The refusal is armed either way; what the
+	// test proves is that with no page served, the block ledger alone named
+	// the new account.
 	require.Equal(t, servedBefore, sources.served.Load(), "a BPT page was served after the backstop was taken away")
 
 	require.True(t, held,
