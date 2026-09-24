@@ -734,8 +734,8 @@ func TestALaggingPeersCountDoesNotRewindTheCursor(t *testing.T) {
 	require.Equal(t, root(uint8(299%256)), got)
 }
 
-// A cursor every peer says is past the end of the chain is re-anchored, and
-// at the chain's end rather than a window back from it.
+// A cursor every peer says is past the end of the chain is re-anchored, a
+// window back from the chain's end, as a cold start is (#4384).
 //
 // The lie-high case has two shapes. A peer that names a window and then
 // serves nothing at it is caught by the cursor not being this node's until a
@@ -860,4 +860,103 @@ func TestRewindReadsTheWindowAgain(t *testing.T) {
 	got, err := s.AnchoredRoot(ctx, bvn0(), 500)
 	require.NoError(t, err, "the anchor refused under the old set was never read again")
 	require.Equal(t, root(0x50), got)
+}
+
+// ringQuerier is peerQuerier's rotation (join/sources.go): each call starts
+// at the next peer and takes the first answer that is not an error. A peer
+// that serves a page, however bare, answers the call.
+type ringQuerier struct {
+	peers []api.Querier
+	next  int
+}
+
+func (r *ringQuerier) Query(ctx context.Context, scope *url.URL, q api.Query) (api.Record, error) {
+	start := r.next
+	r.next++
+	var last error
+	for i := range r.peers {
+		rec, err := r.peers[(start+i)%len(r.peers)].Query(ctx, scope, q)
+		if err == nil {
+			return rec, nil
+		}
+		last = err
+	}
+	return nil, last
+}
+
+// paged serves at most the page asked for, as the API does; poolQuerier
+// serves everything from the start.
+type paged struct{ *poolQuerier }
+
+func (p paged) Query(ctx context.Context, scope *url.URL, q api.Query) (api.Record, error) {
+	rec, err := p.poolQuerier.Query(ctx, scope, q)
+	if err != nil {
+		return nil, err
+	}
+	cq := q.(*api.ChainQuery)
+	if rr, ok := rec.(*api.RecordRange[api.Record]); ok && cq.Range != nil && cq.Range.Count != nil && uint64(len(rr.Records)) > *cq.Range.Count {
+		rr.Records = rr.Records[:*cq.Range.Count]
+	}
+	return rec, nil
+}
+
+// (#4413) An anchor a peer serves without its signatures does not move the
+// cursor past it: the next peer is asked for it, and no root is lost.
+//
+// The peer is a node that joined by pull: it executed the blocks before its
+// restart and holds their anchors signed, and it holds the range it pulled as
+// bodies with no signatures behind them (#4416). The cursor used to move past
+// that range on the page that bare peer served, and the roots in it were never
+// read again this join. In a ring of two, and the peers rotating per call, the
+// bare peer serves every page when it is second: the count comes from the one,
+// the page from the other.
+func TestAnAnchorServedWithoutSignaturesIsAskedOfTheNextPeer(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+	a := f.authority(t)
+	pool := dn().JoinPath(protocol.AnchorPool)
+
+	const n, pulledFrom = 40, 10
+	var signed, bare []*api.MessageRecord[messaging.Message]
+	for i := 0; i < n; i++ {
+		rec := f.anchor(t, anchorOpts{
+			source: bvn0(), destination: dn(), block: uint64(100 + i),
+			root: root(byte(i)), signers: []int{0, 1, 2},
+		})
+		signed = append(signed, rec)
+		if i < pulledFrom {
+			bare = append(bare, rec)
+			continue
+		}
+		stripped := *rec
+		stripped.Signatures = new(api.RecordRange[*api.SignatureSetRecord])
+		bare = append(bare, &stripped)
+	}
+
+	for _, bareFirst := range []bool{true, false} {
+		honest := &poolQuerier{pool: pool, entries: signed}
+		joined := &poolQuerier{pool: pool, entries: bare}
+		ring := &ringQuerier{peers: []api.Querier{paged{honest}, paged{joined}}}
+		if bareFirst {
+			ring.peers = []api.Querier{paged{joined}, paged{honest}}
+		}
+		s, err := New(ring, pool, bvn0(), a)
+		require.NoError(t, err)
+		s.PageSize = 8
+
+		observed := map[uint64]bool{}
+		var refused int
+		s.OnAnchor = func(_ *url.URL, block uint64, _ [32]byte) { observed[block] = true }
+		s.OnRefused = func(uint64, error) { refused++ }
+		require.NoError(t, s.Read(ctx))
+
+		t.Logf("bare peer first=%v: %d of %d roots observed, %d bare anchors refused", bareFirst, len(observed), n, refused)
+		for i := 0; i < n; i++ {
+			require.True(t, observed[uint64(100+i)],
+				"bare peer first=%v: the root for block %d was skipped; the cursor moved past an anchor served without signatures", bareFirst, 100+i)
+			got, err := s.AnchoredRoot(ctx, bvn0(), uint64(100+i))
+			require.NoError(t, err)
+			require.Equal(t, root(byte(i)), got)
+		}
+	}
 }

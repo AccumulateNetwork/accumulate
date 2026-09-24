@@ -414,12 +414,31 @@ func (s *Source) readLocked(ctx context.Context) error {
 		// window this peer named is real.
 		s.started = true
 
-		for _, entry := range rec.Records {
-			s.consider(entry)
+		// **An anchor served without its signatures is this peer's gap, not a
+		// fact about the anchor, and the cursor stops in front of it.** A
+		// node that joined by pull holds its pulled range with no signatures
+		// behind it (#4416); a current one answers NotReady for it, and the
+		// read above returns with the cursor where it was, but an older one,
+		// or a liar, serves the bodies bare. Moving past them would lose
+		// those roots for this join (#4413) -- the cursor never comes back
+		// short of a Rewind. So the page is taken up to that entry, and the
+		// next page asks for it again: the peers rotate per call, so that is
+		// the next peer. An anchor that IS signed, and fails, is refused
+		// once and passed, as before: every peer serves the same signatures.
+		held := -1
+		for i, entry := range rec.Records {
+			if !s.consider(entry) {
+				held = i
+				break
+			}
 		}
 
 		// Advanced by what was asked for and answered, never by an index the
 		// peer chose.
+		if held >= 0 {
+			s.next = start + uint64(held)
+			continue
+		}
 		s.next = start + uint64(len(rec.Records))
 
 		if uint64(len(rec.Records)) < count {
@@ -450,27 +469,30 @@ func (s *Source) readLocked(ctx context.Context) error {
 // partition (#4301, review finding 1, threat finding F1). The sets move one
 // way only: through Authority.Update, from a definition the join pulled and
 // verified as a leaf under a root the trusted set signed.
-func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]) {
+//
+// It returns false only for this producer's anchor served with no signatures
+// at all: the read does not move past it, and asks another peer (readLocked).
+func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]) bool {
 	if rec == nil || rec.Value == nil || rec.Value.Message == nil || rec.Value.Message.Transaction == nil {
-		return
+		return true
 	}
 	body, ok := rec.Value.Message.Transaction.Body.(protocol.AnchorBody)
 	if !ok {
-		return // The pool holds other transactions too
+		return true // The pool holds other transactions too
 	}
 	pa := body.GetPartitionAnchor()
 	if pa == nil || pa.Source == nil {
-		return
+		return true
 	}
 
 	// The producer, not the pool. PartitionAnchor.Source is the partition
 	// that produced the anchor (acc://dn.acme), never the pool it landed in.
 	if !pa.Source.Equal(s.Producer) {
-		return // Somebody else's anchor, in a pool that holds everyone's
+		return true // Somebody else's anchor, in a pool that holds everyone's
 	}
 	produced, ok := protocol.ParsePartitionUrl(pa.Source)
 	if !ok {
-		return
+		return true
 	}
 
 	err := s.verify(produced, rec.Value)
@@ -478,7 +500,7 @@ func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messagin
 		if s.OnRefused != nil {
 			s.OnRefused(pa.MinorBlockIndex, err)
 		}
-		return
+		return !unsigned(rec.Value)
 	}
 
 	// The MINOR block index, always. It is the block a peer serves an
@@ -495,4 +517,11 @@ func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messagin
 	if s.OnAnchor != nil {
 		s.OnAnchor(pa.Source, pa.MinorBlockIndex, pa.StateTreeAnchor)
 	}
+	return true
+}
+
+// unsigned is an anchor record that carries no signatures at all: what a
+// node that holds the anchor without its signatures would serve (#4413).
+func unsigned(rec *api.MessageRecord[*messaging.TransactionMessage]) bool {
+	return rec.Signatures == nil || len(rec.Signatures.Records) == 0
 }
