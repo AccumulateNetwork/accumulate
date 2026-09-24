@@ -97,39 +97,22 @@ func (s *countingSources) roundsAsked(u *url.URL) int {
 	return len(s.asked[strings.ToLower(u.String())])
 }
 
-// TestJoinFollowsPastAMainlessLeaf is the reproduction for the 32,875 "An
-// account could not be pulled ... notFound" lines of run 20260924T052134Z
-// (#4205): the load generator's execution-invalid work leaves the peers'
-// state tree holding a LEAF for an account that has NO MAIN STATE.
+// TestJoinFollowsPastAMainlessLeaf: a join follows a network executing the
+// load generator's execution-invalid work — a WriteData to a principal that
+// does not exist, and a SendTokens to a token account that does not exist.
 //
-//   - A WriteData whose principal does not exist (loadgen fail:data-to-void,
-//     fail:sub-adi-on-void) fails at execution, but the authority signature was
-//     already recorded on the principal's signature chain
-//     (sig_authority.go:134, txn.RecordHistory). The account gets a
-//     `signature` and `signature-index` chain, a BPT leaf, and a block ledger
-//     entry (acc://alice/ghostdata1, chain signature).
-//   - A SendTokens to a token account that does not exist (fail:send-to-void)
-//     fails at the destination's synthetic deposit; the destination gets a
-//     BPT leaf with no main state, no chains and no pending list, and no block
-//     ledger entry -- only the page diff can name it.
-//
-// Every peer answers such an account notFound (pull.pullMain queries Main), so
-// the join refuses it, re-asks it every pass for the life of the process
-// (PulledState.refused), and -- the part that matters -- can never put its
-// leaf in the local tree. The local root then differs from every root anchored
-// after the block that wrote the leaf, and the join never matches again.
-//
-// The control subtest is identical with the failing work left out, and
-// matches. A scratch variant (not kept) ran the void send alone, let the join
-// fail to match for 40 rounds, then did nothing but MarkDirty the void account
-// in the joining node's store -- putting the same empty-account leaf the peers
-// hold into the local tree -- and the join matched within the next rounds
-// (block 170 against a target of 50). The missing leaf is the whole of the
-// blocker; the re-ask is its symptom, and dropping the name instead of
-// re-asking it would leave the join exactly as stuck.
+// It began as the reproduction for run 20260924T052134Z's 32,875 "An account
+// could not be pulled ... notFound" lines (#4397): that work used to leave the
+// peers' state tree holding a leaf for an account with no main state (the
+// WriteData's authority signature recorded on the missing principal's
+// signature chain; the failed deposit clearing its votes and payments on the
+// missing destination), which no peer could serve with a body and the join
+// could never put in its own tree. Since #4437 neither write gives the account
+// a leaf (executor spec, invariant 13), so the peers hold none, and the join
+// matches past the failed work exactly as the control does without it.
 func TestJoinFollowsPastAMainlessLeaf(t *testing.T) {
 	t.Run("Control", func(t *testing.T) { joinPastFailedWork(t, false) })
-	t.Run("MainlessLeaf", func(t *testing.T) { joinPastFailedWork(t, true) })
+	t.Run("FailedWork", func(t *testing.T) { joinPastFailedWork(t, true) })
 }
 
 func joinPastFailedWork(t *testing.T, failing bool) {
@@ -224,12 +207,14 @@ func joinPastFailedWork(t *testing.T, failing bool) {
 		if !failing {
 			return
 		}
-		// What the peers hold: a leaf, and no main state.
+		// What the peers hold: no main state and, since #4437, no leaf.
+		// Before it, both held a leaf hashing to nothing, and the join had
+		// to pull a leaf with no body.
 		for _, u := range []*url.URL{ghost, voidTokens} {
-			_, err := batch.BPT().Get(record.NewKey("Account", u))
-			require.NoError(t, err, "the peer holds no leaf for %v", u)
-			_, err = batch.Account(u).Main().Get()
+			_, err := batch.Account(u).Main().Get()
 			require.ErrorIs(t, err, errors.NotFound, "%v has main state on the peer", u)
+			_, err = batch.BPT().Get(record.NewKey("Account", u))
+			require.ErrorIs(t, err, errors.NotFound, "the peer holds a leaf for %v, which does not exist (#4437)", u)
 		}
 	})
 

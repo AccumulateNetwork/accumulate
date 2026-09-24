@@ -77,11 +77,6 @@ func ChangedAccounts(partition *url.URL, entries []*protocol.BlockEntry) []*url.
 		add(e.Account)
 	}
 
-	if partition != nil {
-		add(partition.JoinPath(protocol.Ledger))
-		add(partition.JoinPath(protocol.Synthetic))
-	}
-
 	keys := make([]string, 0, len(seen))
 	for k := range seen {
 		keys = append(keys, k)

@@ -163,10 +163,6 @@ type Pending struct {
 	// bodies are the messages behind the spine's transaction chain entries,
 	// written into the caller's batch when the account settles.
 	bodies *messages
-
-	// bodyless says the peer served the account with no main state (#4397),
-	// whose leaf the receipt cannot bind to the account's name.
-	bodyless bool
 }
 
 // Root is the root the peer's receipt ends at: the peer's word, until the
@@ -299,7 +295,7 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 	}
 
 	// 1. Main account state, with the receipt that binds it to the peer's root.
-	receipt, bodyless, err := pullMain(ctx, src, sub, u, withReceipt)
+	receipt, err := pullMain(ctx, src, sub, u, withReceipt)
 	switch {
 	case err == nil:
 	case stderrors.Is(err, ErrNoLeaf):
@@ -312,7 +308,6 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		return fail(errors.UnknownError.WithFormat("main %s: %w", u, err))
 	}
 	p.receipt = receipt
-	p.bodyless = bodyless
 	if receipt != nil {
 		p.Block = receipt.LocalBlock
 
@@ -453,83 +448,22 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 		return nil, -1, errors.BadRequest.With("pull.FetchFrom: at least one source required")
 	}
 	var refusals []error
-	var bodyless []*Pending
-	var leaves [][]byte
-	var answers []string
-	noLeaf, bodies := 0, 0
-	discard := func() {
-		for _, p := range bodyless {
-			p.Discard()
-		}
-	}
+	noLeaf := 0
 	for i, src := range srcs {
 		p, err := Fetch(ctx, src, batch, u, opts, opts.Verify != nil)
 		if ctx.Err() != nil {
 			if p != nil {
 				p.Discard()
 			}
-			discard()
 			return nil, -1, errors.UnknownError.Wrap(ctx.Err())
 		}
-		switch {
-		case err != nil:
-			if stderrors.Is(err, ErrNoLeaf) {
-				noLeaf++
-				answers = append(answers, fmt.Sprintf("%s: no leaf", sourceName(i, src)))
-			} else {
-				answers = append(answers, fmt.Sprintf("%s: failed", sourceName(i, src)))
-			}
-			refusals = append(refusals, errors.UnknownError.WithFormat("%s: %w", sourceName(i, src), err))
-
-		case !p.bodyless:
-			if len(bodyless) == 0 {
-				return p, i, nil
-			}
-			bodies++
-			answers = append(answers, fmt.Sprintf("%s: a body", sourceName(i, src)))
-			p.Discard()
-
-		default:
-			leaf, err := p.batch.Account(u).StateTreeReceipt()
-			if err != nil {
-				p.Discard()
-				discard()
-				return nil, -1, errors.UnknownError.WithFormat("%v: hash the pulled state: %w", u, err)
-			}
-			bodyless = append(bodyless, p)
-			leaves = append(leaves, leaf.Anchor)
-			answers = append(answers, fmt.Sprintf("%s: no body, leaf %x", sourceName(i, src), leaf.Anchor[:8]))
+		if err == nil {
+			return p, i, nil
 		}
-	}
-
-	// A leaf with no body is not bound to its account's name: the tree hashes
-	// values, not keys, and every empty account's leaf is one hash, so one
-	// peer can serve an empty account's receipt under a name the tree has no
-	// leaf for and pass the leaf check (#4397 review F3). Only an ANSWER
-	// votes: a body-less leaf, a body, or NotFound. A source that did not
-	// answer -- a peer that is itself joining answers NotReady, a restarting
-	// one does not dial -- neither agrees nor dissents; counting it as dissent
-	// let one joining peer block every body-less leaf, and two joiners block
-	// each other for ever (review R1). The leaf is kept when every source
-	// that answered served the same one and at least two answered. One
-	// dissent -- a NotFound, a body, another leaf -- and the name is neither
-	// written nor dropped; with fewer than two answers it is asked again too.
-	if len(bodyless) > 0 {
-		agree := noLeaf == 0 && bodies == 0
-		for _, l := range leaves {
-			agree = agree && bytes.Equal(l, leaves[0])
+		if stderrors.Is(err, ErrNoLeaf) {
+			noLeaf++
 		}
-		if agree && len(bodyless) >= 2 {
-			for _, p := range bodyless[1:] {
-				p.Discard()
-			}
-			return bodyless[0], 0, nil
-		}
-		discard()
-		if !agree {
-			return nil, -1, fmt.Errorf("%v: %w: %s", u, ErrDissent, strings.Join(answers, "; "))
-		}
-		return nil, -1, fmt.Errorf("%v: %w: %s", u, ErrUnconfirmed, strings.Join(answers, "; "))
+		refusals = append(refusals, errors.UnknownError.WithFormat("%s: %w", sourceName(i, src), err))
 	}
 
 	if noLeaf == len(srcs) {
@@ -537,19 +471,6 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 	}
 	return nil, -1, errors.Conflict.WithFormat("%v: no source served it: %w", u, stderrors.Join(refusals...))
 }
-
-// ErrDissent says the sources that answered for an account did not all serve
-// the same body-less leaf for it, where one of them served one. Such a leaf
-// is only kept on the word of every source that answers (#4397 review F3,
-// R1), so the name is asked again; the error names each source and what it
-// answered.
-var ErrDissent = stderrors.New("the sources do not agree on a leaf with no body")
-
-// ErrUnconfirmed says one source served a body-less leaf and no second
-// source answered to confirm it: the others did not answer at all. A
-// body-less leaf is kept only on the word of at least two answering sources,
-// so the name is asked again (#4397 review R1).
-var ErrUnconfirmed = stderrors.New("only one source answered for a leaf with no body")
 
 // sourceName is how a source is named in an error: by the peer it reaches,
 // when it says, and by its place in the list otherwise.
@@ -570,7 +491,7 @@ var ErrNoLeaf = stderrors.New("the peer holds no leaf for the account")
 // pullMain stores the account body and returns the receipt the peer served
 // with it, which binds the body to the peer's BPT root. wantReceipt asks for
 // one; without it the peer does the work of building a proof nobody checks.
-func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL, wantReceipt bool) (_ *api.Receipt, bodyless bool, _ error) {
+func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL, wantReceipt bool) (*api.Receipt, error) {
 	var query *api.DefaultQuery
 	if wantReceipt {
 		query = &api.DefaultQuery{IncludeReceipt: &api.ReceiptOptions{ForAny: true}}
@@ -583,9 +504,9 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 		// holds no leaf for the account (#4397). Only the account query's
 		// answer means that: a NotFound from any later query is a peer that
 		// could not serve part of what it holds.
-		return nil, false, fmt.Errorf("%w: %v", ErrNoLeaf, err)
+		return nil, fmt.Errorf("%w: %v", ErrNoLeaf, err)
 	default:
-		return nil, false, errors.UnknownError.WithFormat("query account: %w", err)
+		return nil, errors.UnknownError.WithFormat("query account: %w", err)
 	}
 
 	// A peer that answers with an empty record has served nothing, and serving
@@ -595,29 +516,20 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 	// not NotFound: that is the peer's own answer that it holds no leaf, and
 	// a name every source answers so is dropped (executor.md, "Sync", §2).
 	if rec == nil {
-		return nil, false, errors.Conflict.WithFormat("%v: the peer served no account", u)
+		return nil, errors.Conflict.WithFormat("%v: the peer served no account", u)
 	}
 	if wantReceipt && rec.Receipt == nil {
-		return nil, false, errors.Conflict.WithFormat("%v: the peer served no receipt", u)
+		return nil, errors.Conflict.WithFormat("%v: the peer served no receipt", u)
 	}
 
-	// A leaf with no body (#4397): the peer's tree holds a leaf for an account
-	// with no main state, and it served the receipt for that leaf. Nothing is
-	// stored for the body, which hashes as the zero hash; the account is
-	// marked dirty so its leaf is written when the pass is, and the rest of
-	// it is pulled as for any account. Settle's leaf check is what decides:
-	// a peer that serves no body for an account that has one serves a receipt
-	// that does not pass through the leaf this state hashes to. The check
-	// cannot say the leaf is this account's, so FetchFrom keeps it only on
-	// every source's word.
+	// A leaf with no body does not exist: the state tree holds a leaf only
+	// for an account with main state (executor spec, invariant 13; #4437).
+	// A peer that serves a receipt with no body is serving a leaf no honest
+	// peer has, and it is refused as a failure of that source. Before #4437
+	// such leaves did exist, one hash for every one of them, and taking them
+	// on peers' word was the phantom-leaf hole (#4406).
 	if rec.Account == nil {
-		if !wantReceipt {
-			return nil, false, errors.Conflict.WithFormat("%v: the peer served no account", u)
-		}
-		if err := batch.Account(u).MarkDirty(); err != nil {
-			return nil, false, errors.UnknownError.WithFormat("mark dirty: %w", err)
-		}
-		return rec.Receipt, true, nil
+		return nil, errors.Conflict.WithFormat("%v: the peer served no account", u)
 	}
 	// A body names its own account, and that is what binds a body's leaf to
 	// the name asked for. A body served under another name hashes to that
@@ -626,20 +538,20 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 	// such answer took the joining node down (#4408, review R4). It is a
 	// refusal of this source here, and the next is asked.
 	if got := rec.Account.GetUrl(); got == nil || !got.Equal(u) {
-		return nil, false, errors.Conflict.WithFormat("%v: the peer served the body of %v", u, got)
+		return nil, errors.Conflict.WithFormat("%v: the peer served the body of %v", u, got)
 	}
 	if err := batch.Account(u).Main().Put(rec.Account); err != nil {
-		return nil, false, errors.UnknownError.WithFormat("store main: %w", err)
+		return nil, errors.UnknownError.WithFormat("store main: %w", err)
 	}
 	if wantReceipt {
 		// The answer that carries a receipt carries the rest of the leaf the
 		// receipt proves; one without a receipt does not, and must not clear
 		// what the node holds.
 		if err := pullLeafBesideBody(ctx, src, batch, u, rec.Leaf); err != nil {
-			return nil, false, errors.UnknownError.Wrap(err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
-	return rec.Receipt, false, nil
+	return rec.Receipt, nil
 }
 
 // pullLeafBesideBody writes the part of a system account's leaf that only the

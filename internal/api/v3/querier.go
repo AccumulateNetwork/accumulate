@@ -498,29 +498,11 @@ func (s *Querier) queryBptPageAt(batch *database.Batch, startKey [32]byte, count
 func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, record *database.Account, wantReceipt *api.ReceiptOptions) (*api.AccountRecord, error) {
 	r := new(api.AccountRecord)
 
+	// An account with no main state has no leaf either (executor spec,
+	// invariant 13; #4437), so NotFound here is the whole answer: there is no
+	// receipt to serve for it.
 	state, err := record.Main().Get()
-	switch {
-	case err == nil:
-	case errors.Is(err, errors.NotFound) && wantReceipt.Yes() && wantReceipt.ForHeight == 0:
-		// A leaf can stand without a body (#4397): an authority signature
-		// recorded on a principal that does not exist gives it signature
-		// chains, and a failed deposit gives it an empty account's leaf. The
-		// leaf is in the root every peer anchors, so a node pulling this
-		// partition must be able to fetch it, and NotFound would tell it the
-		// account is not there. It is answered with no body and the receipt
-		// for the leaf, which starts at the zero hash the missing body hashes
-		// to; the rest of the leaf is served by the queries that serve it for
-		// any account. Only a request for a current receipt is answered so:
-		// every other reader still sees NotFound, which is what it saw before.
-		_, lerr := batch.BPT().Get(record.Key())
-		switch {
-		case errors.Is(lerr, errors.NotFound):
-			return nil, errors.UnknownError.WithFormat("load state: %w", err)
-		case lerr != nil:
-			return nil, errors.UnknownError.WithFormat("load leaf: %w", lerr)
-		}
-		state = nil
-	default:
+	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state: %w", err)
 	}
 

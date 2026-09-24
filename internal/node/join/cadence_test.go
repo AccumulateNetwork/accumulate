@@ -23,8 +23,8 @@ import (
 )
 
 // cadencePeer is a partition's peers as the join's reads see them: a ledger
-// a few blocks ahead of this node, blocks whose ledger records name nothing
-// beyond the system accounts every block changes, and a BPT whose pages are
+// a few blocks ahead of this node, blocks whose ledger records name the
+// system accounts every block changes and nothing else, and a BPT whose pages are
 // counted. It answers nothing else.
 type cadencePeer struct {
 	partition *url.URL
@@ -39,6 +39,15 @@ func (p *cadencePeer) Query(_ context.Context, scope *url.URL, q api.Query) (api
 			ledger := &protocol.SystemLedger{Url: scope, Index: p.block}
 			return &api.AccountRecord{Account: ledger}, nil
 		}
+	case *api.BlockQuery:
+		// Every block's record names the two system accounts every block
+		// changes, as the executor's record does (#4437).
+		entries := new(api.RecordRange[*api.ChainEntryRecord[api.Record]])
+		for _, u := range []*url.URL{p.partition.JoinPath(protocol.Ledger), p.partition.JoinPath(protocol.Synthetic)} {
+			entries.Records = append(entries.Records, &api.ChainEntryRecord[api.Record]{Account: u})
+		}
+		entries.Total = uint64(len(entries.Records))
+		return &api.MinorBlockRecord{Entries: entries}, nil
 	case *api.BptPageQuery:
 		p.pages++
 		return &api.BptPageRecord{Done: true}, nil

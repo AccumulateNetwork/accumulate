@@ -213,7 +213,12 @@ func TestBlockLedgerNamesWhatABlockChanged(t *testing.T) {
 		}
 		for _, e := range rec.Entries.Records {
 			require.NotNil(t, e.Account, "a block ledger entry named no account")
-			require.NotEmpty(t, e.Name, "a block ledger entry named no chain")
+			// An entry may name no chain: the block changed the account's
+			// state without appending to it (#4437). It must still name an
+			// index of zero, and no value.
+			if e.Name == "" {
+				require.Zero(t, e.Index, "an account entry carried a chain index")
+			}
 			require.Nil(t, e.Value,
 				"Expand false loaded the entry's value; the point of it is that it does not")
 			seen[e.Account.String()] = true
@@ -224,9 +229,13 @@ func TestBlockLedgerNamesWhatABlockChanged(t *testing.T) {
 	require.True(t, seen[alice.JoinPath("tokens").String()],
 		"the block ledger does not name the account the transaction moved")
 
-	// And the two the record cannot carry, which is why the set is a function
-	// of the record and not the record itself (#4306).
-	require.False(t, seen[part.JoinPath(Synthetic).String()],
-		"the synthetic account appeared in a block's record; ChangedAccounts adds it because it does not")
+	// The two the record used to leave out, which the join then added by
+	// hand (#4306): the system ledger, written by the record itself, and the
+	// synthetic ledger, which moves without a chain append on the receiving
+	// side. The record names both now (#4437), and the join reads only it.
+	require.True(t, seen[part.JoinPath(Ledger).String()],
+		"the block ledger does not name the system ledger")
+	require.True(t, seen[part.JoinPath(Synthetic).String()],
+		"the block ledger does not name the synthetic ledger")
 	require.True(t, join.Routable(part.JoinPath(Ledger)))
 }

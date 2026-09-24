@@ -304,22 +304,16 @@ func (block *Block) close() (execute.BlockState, error) {
 	// chain, so the ledger account's hash commits to what this block changed.
 	// Written once; the cost is the block's, not the chain's (executor spec,
 	// "The block ledger", invariant 9).
-	if block.Executor.globals().Active.ExecutorVersion.V2JiuquanEnabled() {
-		bl := new(database.BlockLedger)
-		bl.Index = block.Index
-		bl.Time = block.Time
-		bl.Entries = block.State.ChainUpdates.Entries
-		err = recordBlockLedger(ledger, bl)
-	} else {
+	if !block.Executor.globals().Active.ExecutorVersion.V2JiuquanEnabled() {
 		bl := new(protocol.BlockLedger)
 		bl.Url = m.Describe.Ledger().JoinPath(strconv.FormatUint(block.Index, 10))
 		bl.Index = block.Index
 		bl.Time = block.Time
 		bl.Entries = block.State.ChainUpdates.Entries
 		err = block.Batch.Account(bl.Url).Main().Put(bl)
-	}
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store block ledger: %w", err)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("store block ledger: %w", err)
+		}
 	}
 
 	// Complete the cache's block: the root chain is final, so the receipt
@@ -395,6 +389,26 @@ func (block *Block) close() (execute.BlockState, error) {
 	err = block.executePostUpdateActions()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Record the block ledger here, after every write the block makes to an
+	// account and before the BPT update, so it names every account whose leaf
+	// that update changes (#4437). It used to be written before the root
+	// chain's index, the major block and the post-update actions, and
+	// recordMajorBlock's append to the anchor pool then changed a leaf the
+	// record did not name.
+	if block.Executor.globals().Active.ExecutorVersion.V2JiuquanEnabled() {
+		bl := new(database.BlockLedger)
+		bl.Index = block.Index
+		bl.Time = block.Time
+		bl.Entries, err = blockLedgerEntries(block, ledger.Url())
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		err = recordBlockLedger(ledger, bl)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("store block ledger: %w", err)
+		}
 	}
 
 	// Retain what this block's BPT update is about to overwrite, so a peer can
@@ -1048,6 +1062,53 @@ func (x *Executor) enumerateModifiedChains(block *Block) error {
 	sort.Slice(e, func(i, j int) bool { return e[i].Compare(e[j]) < 0 })
 
 	return nil
+}
+
+// blockLedgerEntries is what the block ledger names: every chain entry the
+// block appended, and every account the block changed without appending to
+// a chain, as an entry that names no chain (executor spec, "The block
+// ledger", invariant 14; #4437). A joining node re-pulls exactly the
+// accounts this names, so an account left out is one it never re-pulls: the
+// receiving side's synthetic ledger moves its delivered positions without an
+// append, and the system ledger is written by the record itself.
+//
+// An account that holds nothing is never named: it has no leaf (invariant
+// 13). The chain entries are the block's ChainUpdates, unchanged, because
+// those are also what the root chain anchors; the account entries are added
+// to the record only.
+func blockLedgerEntries(block *Block, ledger *url.URL) ([]*protocol.BlockEntry, error) {
+	named := map[[32]byte]bool{}
+	entries := make([]*protocol.BlockEntry, 0, len(block.State.ChainUpdates.Entries)+8)
+	for _, e := range block.State.ChainUpdates.Entries {
+		entries = append(entries, e)
+		named[e.Account.AccountID32()] = true
+	}
+
+	add := func(u *url.URL) {
+		if named[u.AccountID32()] {
+			return
+		}
+		named[u.AccountID32()] = true
+		entries = append(entries, &protocol.BlockEntry{Account: u})
+	}
+
+	// The system ledger changes every block: the record goes into it.
+	add(ledger)
+
+	for _, a := range block.Batch.UpdatedAccounts() {
+		_, err := a.Main().Get()
+		switch {
+		case err == nil:
+			add(a.Url())
+		case errors.Is(err, errors.NotFound):
+			// Holds nothing, gets no leaf, is not named
+		default:
+			return nil, errors.UnknownError.WithFormat("load %v: %w", a.Url(), err)
+		}
+	}
+
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Compare(entries[j]) < 0 })
+	return entries, nil
 }
 
 // recordBlockLedger writes a block's ledger record and appends its hash to the

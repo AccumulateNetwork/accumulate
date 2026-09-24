@@ -1048,47 +1048,27 @@ seventh nobody had named.
   can do by refusing. A receipt is possible and is the remaining work: the
   record's hash is an entry on the ledger account's `block-ledger` chain, and
   that chain's anchor is part of the account's hash.
-- **A leaf with no body is served only at the current root** (#4397)**.**
-  The querier answers "no body, and the leaf's receipt" only to a current
-  request that asks for a receipt; an ask as of an anchored block
-  (`ForHeight`) and an ask without a receipt still answer `NotFound` for such
-  an account, so API readers see what they saw before. And the pull cannot
-  remove a body the node already holds when the peer serves none (the store
-  has no delete for `Main`): such an account fails the leaf check from every
-  peer rather than being corrected. No executor path is known to take a body
-  away, so it is recorded rather than built.
-- **A leaf with no body is not bound to its account** (#4397)**.** The BPT
-  hashes a leaf's value and not its key (`bpt.leaf.getHash`), and a body-less
-  leaf's value holds no URL, so a peer can name an account the tree has no
-  leaf for, answer it "no body" with an empty account's receipt, serve no
-  chains for it, and pass the leaf check. Before #4397 this could not happen:
-  a body names its own URL. **Phase 1 answers it with unanimity (the lead's
-  decision, review F3, corrected at R1):** only an answer votes — a
-  body-less leaf, a body, or NotFound; a source that does not answer (a peer
-  that is itself joining answers NotReady) neither agrees nor dissents. A
-  body-less leaf is kept when every answering source serves the same one and
-  at least two answer (`pull.FetchFrom`); one dissent (`pull.ErrDissent`) or
-  fewer than two answers (`pull.ErrUnconfirmed`) and the name is retried, not
-  written and not dropped, and each peer's answer is logged by peer ID. The
-  two-answer floor is a limit of its own (review, final re-check): a partition
-  with a single source — a one-validator BVN, or two with the other down —
-  can never keep a body-less leaf and never matches under failed work; no
-  current run has such a partition, and the floor is kept at two rather than
-  `min(2, sources)` because one source is no defence at all (#4406). One
-  liar among honest peers, in any position, is thereby refused
-  (`TestALiarAmongHonestPeersCannotPlantAPhantomLeaf`), and a joining peer
-  blocks nothing (`TestOnlyAnAnswerVotesOnALeafWithNoBody`,
-  `TestAJoiningPeerDoesNotBlockALeafWithNoBody`). **This departs from
-  "proven against the anchored root"**: it is trust in unsigned peers for the
-  existence of an empty leaf, and when every source that answers lies — two
-  liars, with the honest peers down — the phantom leaf is kept
-  (`TestUnanimousLiarsPlantAPhantomLeaf`, the limit). The whole-root match still refuses the state, so that is
-  liveness, not safety — but permanent, because the page diff names the
-  peer's leaves the node lacks and never the node's leaves the peer lacks,
-  and nothing removes a local leaf. The structural closing is a two-way page
-  diff that names local-only leaves and removes them (`BPT.Delete` exists;
-  the "mismatch must name what it could not account for" of "Sync" §2), or a
-  hash that binds a leaf to its key; the lead files that issue.
+- **Leaves with no body are gone, not defended against** (#4437)**.** From
+  #4397 to #4437 the querier served "no body, and the leaf's receipt" for an
+  account whose tree held a leaf and no main state, and the pull kept such a
+  leaf only when every answering peer served the same one (the unanimity
+  rule, #4406's hole). #4437 removed the cause — a failed transaction's
+  clearing of its votes and payments dirtied the missing principal, and block
+  close inserted a leaf for every dirty account — and the executor now
+  inserts no leaf for an account without main state (invariant 13). The
+  serving branch, the voting and `pull.ErrDissent`/`ErrUnconfirmed` are
+  deleted; a body-less answer is a failed source. Nothing is migrated: this
+  line runs fresh installs, so no store holds such a leaf.
+- **The block ledger's content changed, ungated** (#4437)**.** The record now
+  names every account a block changes, with an entry naming no chain for a
+  state-only change, and it is written just before the BPT update rather
+  than before the major block. Both change the record's hash and so the
+  system ledger's leaf; ungated under this line's fresh-install rule, like
+  #4358. The pre-Jiuquan per-block account form is unchanged. The join no
+  longer adds the system ledger and the synthetic ledger to the changed set
+  by hand (#4306): it reads the record alone. A leaf with no main state that
+  holds something is kept and counted, never skipped; after #4437 nothing
+  known writes one.
 - **A lone scheduled event is not bound to its block** (#4399 review F2)**.**
   The events BPT hashes values and not keys (`bpt.leaf.getHash`), and a
   one-sided branch passes its child's hash up, so an events tree holding one
