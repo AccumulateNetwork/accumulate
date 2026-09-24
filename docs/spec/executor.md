@@ -987,6 +987,17 @@ partition still never *proposes* for it, and still never authors or dispatches
 an anchor for it (#4367) — relaying a transaction and producing consensus
 output are different things, and the first is allowed precisely because it
 produces nothing.
+Nor does it sign an anchor's healing answer for that partition (#4424):
+asked for an anchor, it answers with only the validators' signatures it
+already holds, and "not yet" when it holds none. A synthetic it serves like
+any node that holds the entry — with its collection proof, which is what the
+destination checks, under its own signature, which the destination requires
+on the wire and does not require to be a validator's. The requester keeps
+only the anchor signatures whose keys are active on the source partition in
+its own globals before it builds the envelope, because the destination
+refuses a whole envelope at its first anchor signature by a key outside the
+committee — the quorum's good copies with it ([healing.md](healing.md), "The
+answer").
 
 Open when this was written, and where each stands now (2026-09-19/21): what a
 relaying node does when the target refuses or is unreachable — *decided by

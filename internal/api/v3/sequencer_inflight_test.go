@@ -38,6 +38,7 @@ func anchorSequencer(lag int, newest uint64) *Sequencer {
 	globals := new(core.GlobalValues)
 	globals.ExecutorVersion = protocol.ExecutorVersionLatest
 	globals.Network = &protocol.NetworkDefinition{Version: 1}
+	globals.Network.AddValidator(key.Public().(ed25519.PublicKey), "BVN0", true) // a validator signs its answers (#4424)
 	return NewSequencer(SequencerParams{
 		Database:     database.OpenInMemory(nil),
 		EventBus:     events.NewBus(nil),
@@ -54,31 +55,29 @@ func anchorSequencer(lag int, newest uint64) *Sequencer {
 // about as much, or it answers for anchors that are still to leave and the
 // destination heals every one of them (#4248).
 func TestSequencer_AnchorInFlightWindowFollowsTheSender(t *testing.T) {
-	globals := new(core.GlobalValues)
-	globals.ExecutorVersion = protocol.ExecutorVersionLatest
-	globals.Network = &protocol.NetworkDefinition{Version: 1}
+	globals := func(svc *Sequencer) *core.GlobalValues { return svc.globals.Load().(*core.GlobalValues) }
 	dn := protocol.DnUrl()
 
 	// Caught up, and the window has passed: the anchor is served.
 	svc := anchorSequencer(0, 7+synthcache.InFlightBlocks)
-	rs, err := svc.getAnchorRangeFromCache(globals, dn, 3, 3)
+	rs, err := svc.getAnchorRangeFromCache(globals(svc), dn, 3, 3)
 	require.NoError(t, err)
 	require.Len(t, rs, 1)
 
 	// Inside the window: on its way, not missing.
 	svc = anchorSequencer(0, 7+synthcache.InFlightBlocks-1)
-	_, err = svc.getAnchorRangeFromCache(globals, dn, 3, 3)
+	_, err = svc.getAnchorRangeFromCache(globals(svc), dn, 3, 3)
 	require.ErrorIs(t, err, errors.NotReady)
 
 	// Lagging by 12, and the unwidened window has passed. Before the fix
 	// this served; the leader has not sent the anchor yet.
 	svc = anchorSequencer(12, 7+synthcache.InFlightBlocks)
-	_, err = svc.getAnchorRangeFromCache(globals, dn, 3, 3)
+	_, err = svc.getAnchorRangeFromCache(globals(svc), dn, 3, 3)
 	require.ErrorIs(t, err, errors.NotReady)
 
 	// Far enough past the mark that even a leader 12 blocks behind has sent.
 	svc = anchorSequencer(12, 7+synthcache.InFlightBlocks+12)
-	rs, err = svc.getAnchorRangeFromCache(globals, dn, 3, 3)
+	rs, err = svc.getAnchorRangeFromCache(globals(svc), dn, 3, 3)
 	require.NoError(t, err)
 	require.Len(t, rs, 1)
 }

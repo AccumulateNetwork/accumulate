@@ -8,6 +8,9 @@ package api
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
@@ -17,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -25,6 +29,30 @@ import (
 // spec, "The answer", "The cache"): no chain walk, no receipt from the store,
 // no database read. An entry the cache does not hold is refused as NotFound
 // and counted as a miss by the cache; a miss is a defect.
+
+// signsAnswers reports whether this node's key is active on its partition in
+// the globals it holds, by the predicate the anchor send path asks
+// (Conductor.inCommittee). A node in no committee — a follower, an API node
+// that serves the sequencer, a validator dropped from the committee — signs
+// no ANCHOR answer: no destination accepts the signature, and the requester
+// puts every signature of an anchor in one envelope, which the destination
+// refuses whole at the first it cannot accept (#4424; run 20260924T093936Z,
+// 141 heal envelopes refused "key is not an active validator").
+func (s *Sequencer) signsAnswers(globals *core.GlobalValues) bool {
+	if len(s.valKey) != ed25519.PrivateKeySize {
+		return false
+	}
+	pub := ed25519.PrivateKey(s.valKey).Public().(ed25519.PublicKey)
+	return globals.MembershipOf(pub, s.partitionID) == network.CommitteeMember
+}
+
+// notInCommittee is the answer of a node that has no anchor signature it may
+// give. It is NotReady, and the requester today files every NotReady as "in
+// flight" and asks that span again after its patience window, by whichever
+// node the dial reaches then — it does not ask the next node at once (#4387).
+func (s *Sequencer) notInCommittee(what string) error {
+	return errors.NotReady.WithFormat("this node is not a validator of %s and holds no signature for %s; ask a validator", s.partitionID, what)
+}
 
 func (s *Sequencer) signRecord(globals *core.GlobalValues, hash []byte) (protocol.Signature, error) {
 	return new(signing.Builder).
@@ -59,6 +87,13 @@ func (s *Sequencer) entryRecord(globals *core.GlobalValues, e *synthcache.Entry,
 	r.ID = r.Message.ID()
 	r.Status = errors.Remote
 
+	// Any node that holds the entry serves it, committee or not. A healing
+	// answer travels under a collection proof, and the destination takes the
+	// proof as the authorization whatever the signer (msg_synthetic.go, "a
+	// failure must never reject a proven message"); the signature is still
+	// required on the wire ("missing signature"), so the answering node
+	// signs with its own key. Only an anchor needs a committee signature
+	// (#4424, review note_3897460300).
 	keySig, err := s.signRecord(globals, e.Hash[:])
 	if err != nil {
 		return nil, errors.InternalError.Wrap(err)
@@ -221,12 +256,19 @@ func (s *Sequencer) anchorRecord(globals *core.GlobalValues, dst *url.URL, num u
 	r.ID = txn.ID()
 	r.Status = errors.Remote
 
-	h := r.Sequence.Hash()
-	keySig, err := s.signRecord(globals, h[:])
-	if err != nil {
-		return nil, errors.InternalError.Wrap(err)
+	// This node's own signature, when it is in the committee. Outside it,
+	// the answer is the held quorum alone.
+	r.Signatures = &api.RecordRange[*api.SignatureSetRecord]{}
+	var ownKey protocol.KeySignature
+	if s.signsAnswers(globals) {
+		h := r.Sequence.Hash()
+		keySig, err := s.signRecord(globals, h[:])
+		if err != nil {
+			return nil, errors.InternalError.Wrap(err)
+		}
+		r.Signatures = signatureSet(keySig, r.ID)
+		ownKey, _ = keySig.(protocol.KeySignature)
 	}
-	r.Signatures = signatureSet(keySig, r.ID)
 
 	// The quorum the source already holds. A partition delivers its own
 	// anchor to itself with every validator's signature; the destination
@@ -240,7 +282,7 @@ func (s *Sequencer) anchorRecord(globals *core.GlobalValues, dst *url.URL, num u
 	own.Header.Principal = s.partition.URL.JoinPath(protocol.AnchorPool)
 	own.Body = produced.Body
 	var held []protocol.KeySignature
-	err = s.db.View(func(batch *database.Batch) error {
+	err := s.db.View(func(batch *database.Batch) error {
 		var err error
 		held, err = batch.Account(own.Header.Principal).Transaction(own.ID().Hash()).ValidatorSignatures().Get()
 		return err
@@ -248,7 +290,6 @@ func (s *Sequencer) anchorRecord(globals *core.GlobalValues, dst *url.URL, num u
 	if err != nil && !errors.Is(err, errors.NotFound) {
 		return nil, errors.UnknownError.WithFormat("load held anchor signatures: %w", err)
 	}
-	ownKey, _ := keySig.(protocol.KeySignature)
 	for _, sig := range held {
 		if ownKey != nil && bytes.Equal(sig.GetPublicKey(), ownKey.GetPublicKey()) {
 			continue
@@ -256,6 +297,9 @@ func (s *Sequencer) anchorRecord(globals *core.GlobalValues, dst *url.URL, num u
 		set := signatureSet(sig, r.ID)
 		r.Signatures.Records = append(r.Signatures.Records, set.Records...)
 		r.Signatures.Total++
+	}
+	if r.Signatures.Total == 0 {
+		return nil, s.notInCommittee(fmt.Sprintf("anchor %d for %v", num, dst))
 	}
 	return r, nil
 }
@@ -301,6 +345,9 @@ func (s *Sequencer) getAnchorRangeFromCache(globals *core.GlobalValues, dst *url
 		}
 		r, err := s.anchorRecord(globals, dst, num, txn)
 		if err != nil {
+			if len(records) > 0 && errors.Is(err, errors.NotReady) {
+				return records, nil // the prefix this node can answer for
+			}
 			return nil, err
 		}
 		records = append(records, r)

@@ -26,6 +26,7 @@ import (
 	dagconfig "gitlab.com/accumulatenetwork/accumulate/pkg/consensus/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -971,14 +972,21 @@ func (c *Conductor) requestAnchorSpan(ctx context.Context, ranger private.Sequen
 		return err
 	}
 	var served uint64
+	count := 0
 	for _, r := range records {
 		if r.Sequence == nil {
 			return 0, 0, errors.InvalidRecord.With("answer carries an unsequenced message")
 		}
-		sigs := keySignaturesOf(r)
+		// Only signatures by the source's committee: one the destination
+		// refuses takes the whole envelope with it (#4424).
+		sigs := c.committeeSignaturesOf(source, r)
 		if len(sigs) == 0 {
-			return 0, 0, errors.InvalidRecord.WithFormat("answer for anchor %v→%v #%d is not signed", source, c.Url(), r.Sequence.Number)
+			if count > 0 {
+				break // serve the prefix that is signed; ask again for the rest
+			}
+			return 0, 0, errors.InvalidRecord.WithFormat("answer for anchor %v→%v #%d carries no signature by a validator of the source", source, c.Url(), r.Sequence.Number)
 		}
+		count++
 		mHealEntries.WithLabelValues(classify(r.Sequence.Number), c.Partition.ID, partitionLabel(source)).Inc()
 		var add []messaging.Message
 		n := 0
@@ -1003,7 +1011,7 @@ func (c *Conductor) requestAnchorSpan(ctx context.Context, ranger private.Sequen
 	if err := flush(); err != nil {
 		return 0, 0, errors.UnknownError.WithFormat("submit anchors from %v: %w", source, err)
 	}
-	return len(records), served, nil
+	return count, served, nil
 }
 
 func marshalledSize(m messaging.Message) (int, error) {
@@ -1057,7 +1065,7 @@ func (c *Conductor) anchorAnswers(ctx context.Context, ranger private.SequenceRa
 	}
 	signers := func(r *api.MessageRecord[messaging.Message]) map[string]bool {
 		m := map[string]bool{}
-		for _, sig := range keySignaturesOf(r) {
+		for _, sig := range c.committeeSignaturesOf(source, r) {
 			m[string(sig.GetPublicKey())] = true
 		}
 		return m
@@ -1104,7 +1112,7 @@ func (c *Conductor) anchorAnswers(ctx context.Context, ranger private.SequenceRa
 						continue
 					}
 					ks, ok := sm.Signature.(protocol.KeySignature)
-					if !ok || seen[string(ks.GetPublicKey())] {
+					if !ok || seen[string(ks.GetPublicKey())] || !c.sourceCommitteeKey(source, ks) {
 						continue
 					}
 					seen[string(ks.GetPublicKey())] = true
@@ -1125,6 +1133,36 @@ func (c *Conductor) partitionOf(u *url.URL) string {
 		return id
 	}
 	return u.Authority
+}
+
+// committeeSignaturesOf is keySignaturesOf less every signature whose key is
+// not active on the source partition in this node's globals.
+//
+// An answer is not trusted to carry only those. A follower or API node that
+// serves the source's sequencer, a validator the committee has since dropped,
+// or a peer whose definition is stale can all hand back a signature the
+// destination refuses — and the destination refuses the whole envelope on the
+// first one, the quorum's good copies with it (#4424; run 20260924T093936Z,
+// 141 heal envelopes refused "key is not an active validator"). The heal is
+// submitted to this node's own partition, so this node's globals are the
+// destination's.
+func (c *Conductor) committeeSignaturesOf(source *url.URL, r *api.MessageRecord[messaging.Message]) []protocol.KeySignature {
+	var sigs []protocol.KeySignature
+	for _, sig := range keySignaturesOf(r) {
+		if c.sourceCommitteeKey(source, sig) {
+			sigs = append(sigs, sig)
+		}
+	}
+	return sigs
+}
+
+// sourceCommitteeKey reports whether sig's key is on the source partition's
+// committee, by the predicate the anchor send path asks of this node's own
+// key (inCommittee). There is no "no definition" case to decide: healing runs
+// from willBeginBlock, which returns before anything while the globals are
+// unloaded (review note_3897460300, F2).
+func (c *Conductor) sourceCommitteeKey(source *url.URL, sig protocol.KeySignature) bool {
+	return c.Globals.Load().MembershipOf(sig.GetPublicKey(), c.partitionOf(source)) == network.CommitteeMember
 }
 
 // keySignaturesOf lists every key signature an answer carries, one per signer.

@@ -218,6 +218,37 @@ execution lag, because the window belongs to the sender and the answering
 node is not it ([The in-flight window belongs to the
 sender](#the-in-flight-window-belongs-to-the-sender)). A span that is partly ready is answered as
 far as it is ready; the requester remembers only what it was given.
+
+**Only a committee member signs an anchor answer** (#4424). "The answering
+validator's signature" on an anchor is a validator's: a node whose key is not
+active on the source partition — a follower, an API node serving the
+sequencer, a validator the committee has dropped — adds no signature of its
+own to an anchor answer. It answers with the validators' signatures it holds,
+and "not yet" when it holds none. **The requester keeps only committee
+signatures on an anchor**: before it builds the envelope it drops every
+signature whose key is not active on the source partition in its own globals
+— which are the destination's, since the heal is submitted to its own
+partition — and such a signature does not count toward the quorum it asks for
+by node. The destination refuses a whole envelope at the first anchor
+signature by an outsider, so one stray signature would take the quorum's good
+copies with it (run 20260924T093936Z: 141 heal envelopes refused "key is not
+an active validator", every one carrying the follower's key).
+
+**A synthetic is served by any node that holds it.** Its answer travels under
+a collection proof, and the destination takes the proof as the authorization
+whatever the signer; the signer decides only whether the entry may be held
+before its anchor arrives (#4056, #4243). The wire still requires a signature
+on the entry ("missing signature"), so the answering node — committee or not
+— signs with its own key.
+
+**An outsider's "not yet" is not a redirect today.** The requester files every
+`NotReady` as "still in flight" and asks the span again after its patience
+window (`healPatience` × `healCadence` blocks), by whichever node the dial
+reaches then; `anchorAnswers` asks the source's validators by node only after
+a first answer that is below the quorum, not after a first answer of "not
+yet". A dial that lands on an outsider for an anchor it holds no signature for
+therefore defers that span by one patience window rather than asking the next
+node at once. That is #4387.
 It packs the entries into a **bundle** — as many anchors and synthetic transactions as fit the
 envelope budget, whatever their streams, each with the transaction it belongs to
 when it has one, and with no proof of its own — and **submits the bundle into
