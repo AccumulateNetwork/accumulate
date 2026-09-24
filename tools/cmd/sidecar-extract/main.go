@@ -62,6 +62,7 @@ func (l *listFlag) Set(s string) error { *l = append(*l, s); return nil }
 var flagOut = flag.String("out", "", "directory for the sidecar, the conflicts database and the progress file")
 var flagShards = flag.Int("shards", 32, "key ranges walked in parallel (at most 65536); fixed for the life of an output directory")
 var flagLedger = flag.Bool("ledger", false, "report the last block each archive's own system ledger records, and exit")
+var flagCheck = flag.String("check", "", "a sidecar to check: report how much of each account's main chain (the arguments) reads with and without it, and exit")
 var flagCurrent listFlag
 var flagWritable listFlag
 
@@ -71,6 +72,12 @@ func main() {
 	flag.Parse()
 	if *flagLedger {
 		if err := ledgers(flag.Args()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *flagCheck != "" {
+		if err := check(flagCurrent, *flagCheck, flag.Args()); err != nil {
 			log.Fatal(err)
 		}
 		return
