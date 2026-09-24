@@ -20,9 +20,10 @@ import (
 
 // Run 20260924T111811Z: every BVN restart logged "The next block has a gap;
 // advancing the sync block=158 synced=157" and nothing more, so no one could
-// say which stream stopped the handoff or at which number (#4432). The line
-// names every stream with a gap and its numbers, and the gauge carries the
-// first missing number per stream for the harness until the gap is gone.
+// say which stream it was or at which number (#4432). The line names every
+// stream with a gap and its numbers, and the gauge carries the first missing
+// number per stream. A gap no longer holds the handoff (executor spec, "Sync",
+// "One rule for every node"); it is still said.
 func TestJoin_TheGapLineAndGaugeNameTheStreamAndNumber(t *testing.T) {
 	const b = 157
 	const partition = "TestJoin_TheGapLineAndGaugeNameTheStreamAndNumber"
@@ -35,39 +36,16 @@ func TestJoin_TheGapLineAndGaugeNameTheStreamAndNumber(t *testing.T) {
 	var out bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&out, nil))
 
-	// The gauge is read at the moment the second check is asked for: the
-	// first check's gap is still on it then, and the second clears it.
-	var during float64
-	var present bool
 	stage := &fakeStage{gaps: map[uint64][]StreamGap{b + 1: {gap}}}
-	buf := &gaugeReadingBuffer{read: func(block uint64) {
-		if block == b+2 {
-			during, present = testutil.ToFloat64(mGapMissing.WithLabelValues(partition, gap.StreamName())), true
-		}
-	}}
+	buf := new(fakeBuffer)
 	state := &gapState{stage: stage, b: b}
 	peers := &fakePeers{peers: []*api.FindServiceResult{peerResult(1)}}
 
 	_, err := run(t, Options{Partition: partition, Buffer: buf, Stage: stage, State: state, Peers: peers, Logger: logger})
 	require.NoError(t, err)
 
-	require.Contains(t, out.String(), "The next block has a gap; advancing the sync")
+	require.Contains(t, out.String(), "The next block has a gap; executing anyway")
 	require.Contains(t, out.String(), gap.String(), "the gap line names the stream, its Delivered, the missing run and what is held")
-
-	require.True(t, present)
-	require.Equal(t, 104.0, during, "the gauge is the first missing number of the gapped stream")
-	require.Equal(t, 0, testutil.CollectAndCount(mGapMissing, "accumulate_join_gap_first_missing"),
-		"the check that found no gap clears the partition's series")
-}
-
-// gaugeReadingBuffer calls read before each StageThrough: the moment between
-// one gap check and the next.
-type gaugeReadingBuffer struct {
-	fakeBuffer
-	read func(block uint64)
-}
-
-func (b *gaugeReadingBuffer) StageThrough(block uint64) error {
-	b.read(block)
-	return b.fakeBuffer.StageThrough(block)
+	require.Equal(t, 104.0, testutil.ToFloat64(mGapMissing.WithLabelValues(partition, gap.StreamName())),
+		"the gauge is the first missing number of the gapped stream")
 }

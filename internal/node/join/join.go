@@ -453,13 +453,16 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, proven bool, fail
 	reportGaps(opts.Partition, gaps)
 	if len(gaps) > 0 {
 		// An entry from before the node was listening: the peers hold it and
-		// this node does not. The sync advances instead.
+		// this node does not. The node executes anyway, with whatever
+		// staging holds: a block executed without an entry it needed is
+		// wrong only in the accounts its record names, and the root check
+		// repairs them from the block ledger (executor spec, "Sync", "One
+		// rule for every node"). The gap is said and put on the gauge.
 		streams := make([]string, len(gaps))
 		for i, g := range gaps {
 			streams[i] = g.String()
 		}
-		log.Info("The next block has a gap; advancing the sync", "synced", q, "block", q+1, "gaps", streams)
-		return false, nil
+		log.Info("The next block has a gap; executing anyway, and repairing on a mismatch", "synced", q, "block", q+1, "gaps", streams)
 	}
 
 	err = opts.Stage.SettleStagingAt(q)
