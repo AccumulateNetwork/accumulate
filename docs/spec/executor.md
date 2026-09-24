@@ -1472,9 +1472,10 @@ same input always produces the same staging. A later copy is not only kept out
 of staging: **a later copy writes nothing.** It records no status, no message and
 no signature, so it cannot change what the held entry does when it runs
 (invariant 12). A dispatcher resends an envelope the destination already took
-after a failed dial, and a heal answer from the original signer is
-byte-identical to what it answers for, so a second copy is the normal case, not
-a fault.
+when the answer is lost after the send, and the requester submits its heal
+answers through a dispatcher too, so a byte-identical second copy is the normal
+case, not a fault. (Two separate heal answers are not byte-identical: the
+source signs each when it gives it.)
 
 **The set of streams is staging's, not the ledger's.** A stream that has only
 staged has delivered nothing, so it has no ledger entry to be found by. A
