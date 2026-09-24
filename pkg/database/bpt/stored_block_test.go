@@ -374,3 +374,40 @@ func TestAStoredBlockLocatesADifferingLeafInTwoAnswers(t *testing.T) {
 	oddHash := odd.Hash()
 	t.Logf("located %x to branch %x in two answers", oddHash[:4], oddHash[:2])
 }
+
+// TestAStoredBlockMissingFromTheStoreIsRefused covers the fold check (#4441
+// review F1). A stored block whose record is gone loads as an empty subtree;
+// its positions then fold to nothing while the block above it records a hash
+// for it. The answer must be refused, not served as an empty block that would
+// send a joining node after every account under the prefix.
+func TestAStoredBlockMissingFromTheStoreIsRefused(t *testing.T) {
+	f := newModelFixture(t, 3000, 0)
+	prefix := []byte{0x2b}
+
+	// Undisturbed, the block is served and is the model's.
+	got, err := f.read().GetStoredBlock(prefix)
+	require.NoError(t, err)
+	require.True(t, len(got.Slots) > 1, "prefix %x holds no stored block; the test proves nothing", prefix)
+	require.Equal(t, f.cur.block(prefix), got.Slots)
+
+	// Delete the block's record, leaving the root's block (which records the
+	// block's hash) alone.
+	var key [32]byte
+	key[0] = prefix[0]
+	nodeKey, ok := nodeKeyAt(8, key)
+	require.True(t, ok)
+	kvb := f.db.Begin(nil, true)
+	require.NoError(t, kvb.Delete(new(ChangeSet).BPT().key.Append(nodeKey)))
+	require.NoError(t, kvb.Commit())
+
+	got, err = f.read().GetStoredBlock(prefix)
+	require.Error(t, err, "a stored block missing from the store was served as %d positions", func() int {
+		if got == nil {
+			return 0
+		}
+		return len(got.Slots)
+	}())
+	require.Nil(t, got)
+	require.Equalf(t, errors.InternalError, errors.Code(err), "%v", err)
+	require.Contains(t, err.Error(), "but the block's hash is", "the refusal did not come from the fold check: %v", err)
+}
