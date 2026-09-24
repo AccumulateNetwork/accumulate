@@ -1445,6 +1445,36 @@ func (m *messages) took(u *url.URL, chain string, index uint64, entry []byte, ms
 		if sig, ok := signatureOf(u, index, msg, full); ok {
 			m.signatures = append(m.signatures, sig)
 		}
+	default:
+		if err := m.companion(chain, index, msg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// companion takes the transaction a synthetic names beside it: a signature
+// request, a signature or a credit payment a partition sends another is an
+// entry of the synthetic ledger's chain to it, and the transaction it is for
+// is not on the chain. The seed loads it beside the entry (synth_cache_seed.go
+// rebuildCacheBlock) and dispatch sends it with the entry, so a synthetic
+// ledger taken with its entries' messages and not their companions left the
+// seed failing on a block the node did not execute (#4434). It is proven by
+// its hash, like every transaction a stored form refers to.
+func (m *messages) companion(chain string, index uint64, msg messaging.Message) error {
+	if !strings.HasPrefix(chain, "synthetic(") {
+		return nil
+	}
+	seq, ok := msg.(*messaging.SequencedMessage)
+	if !ok {
+		return nil
+	}
+	inner, ok := seq.Message.(messaging.MessageForTransaction)
+	if !ok || seq.Message.Type() == messaging.MessageTypeBlockAnchor {
+		return nil
+	}
+	if _, err := m.transaction(inner.GetTxID().Hash()); err != nil {
+		return fmt.Errorf("entry %d: the transaction a synthetic names: %w", index, err)
 	}
 	return nil
 }
@@ -1568,6 +1598,22 @@ func SpineAccounts(partitionURL *url.URL) []*url.URL {
 		partitionURL.JoinPath(protocol.Network),
 		partitionURL.JoinPath(protocol.Globals),
 	}
+}
+
+// WholeAccounts is every account a join takes whole, in ModeFullSpine, in
+// every pass that names it: the spine, and the partition's synthetic ledger.
+//
+// The synthetic ledger is not a trust root and is not in the spine: it is
+// verified like any account, and failing to pull it fails nothing but its own
+// name. It is taken whole because the first block a new process opens reads
+// its chains back from the store -- the producer cache is seeded from the
+// entries of the partition's own recent blocks, the messages behind them, and
+// the chain's state before each block's first entry (synth_cache_seed.go
+// rebuildCacheBlock). Taken state-only, it held the peer's head and open mark
+// set and no mark point below the set, and the seed failed on the first block
+// whose entries were in that set, at every handoff (#4434).
+func WholeAccounts(partitionURL *url.URL) []*url.URL {
+	return append(SpineAccounts(partitionURL), partitionURL.JoinPath(protocol.Synthetic))
 }
 
 // DnSpineAccounts is a backward-compatible helper returning
