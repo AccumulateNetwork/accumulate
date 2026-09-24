@@ -1105,27 +1105,26 @@ seventh nobody had named.
   stands ahead of any design work on #4298 in PLAN E11: it decides whether
   #4298 is "no join completes" or "a join retries a few times".
 
-- **A joined node cannot serve the anchors it pulled** (#4413, #4416).
-  The spec (executor.md "Sync", step 6) says a node serves only what it can
-  serve signed. The pull brings an anchor pool's entries and the messages
-  behind them, never the signature history the query API reads an anchor's
-  signatures from (`loadMessage`, `internal/api/v3/load.go`), so a node that
-  joined holds every anchor appended by a block it did not execute with no
-  signatures. It used to serve them bare, and every reader refused them
-  (#4413, run `20260924T074702Z`: 22 BVN3 anchors); since #4413 it refuses
-  them with `NotReady` and the reader asks another node. What remains
-  different is the capacity: the node cannot serve its pulled range at all
-  until #4416 brings the history with the pull. If every node of a partition
-  joined by pull inside one 1024-entry window, no peer can serve that window
-  signed, and a joiner's anchor source — whose cursor does not move past an
-  anchor it could not read — waits at it until a node that executed those
-  blocks answers (#4416). Since #4419 that wait is bounded and visible: one
-  page call per peer per round for the held entry (it was 64, with as many
-  refusal lines), the cursor held at the first entry no peer serves rather
-  than at its page's start, and the entry on
-  `accumulate_join_spine_stalled_entry` and in one log line a minute; the
-  soak's node-state row reads it as "spine stalled at entry N". It is still a
-  wait: nothing but #4416 ends it.
+- **A joined node's pulled anchors, and a stalled spine** (#4413, #4416,
+  #4418, #4419). The spec (executor.md "Sync", step 6) says a node serves only
+  what it can serve signed. The pull used to bring an anchor pool's entries
+  and the messages behind them but not the signature history the query API
+  reads an anchor's signatures from (`loadMessage`, `internal/api/v3/load.go`),
+  so a node that joined served its pulled range bare and every reader refused
+  it (run `20260924T074702Z`: 22 BVN3 anchors). Since #4413 a node refuses an
+  anchor it holds unsigned with `NotReady`; since #4416 the pull rebuilds the
+  history, the signer, the sequenced message, the cause and the validator
+  signature set from the entries it takes, so a joined node serves and counts
+  its pulled range as its peers do — the capacity gap is closed for the spine
+  pass. What is still different: entries the pool gains between the spine
+  pass and the join block are pulled state-only and get none of those records
+  (#4421, in build); a joiner whose every peer serves an entry bare or bodiless
+  waits at it (#4418) — a wait that since #4419 costs one page call per peer
+  per round, holds the cursor at the first entry no peer serves, and shows on
+  `accumulate_join_spine_stalled_entry` and in one log line a minute, which
+  the soak's node-state row reads as "spine stalled at entry N"; and a peer
+  can still substitute one signed entry for another in a slot (#4384, measured
+  there: roots are lost, never misplaced).
 
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.
