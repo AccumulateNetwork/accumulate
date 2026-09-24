@@ -17,12 +17,15 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb"
@@ -120,6 +123,18 @@ func DropInitialAnchor() Option {
 func CaptureDispatchedMessages(fn DispatchInterceptor) Option {
 	return optionFunc(func(opts *simFactory) error {
 		opts.interceptDispatchedMessages = fn
+		return nil
+	})
+}
+
+// DispatchWith gives every node the dispatcher fn returns instead of the
+// simulator's in-process queue, built from the simulator's routing and its
+// service dialer: the network a real node's dispatcher dials. A test passes
+// the daemon's dispatcher to exercise its retries (#4423). Each node gets its
+// own, as each daemon does; the test owns closing them.
+func DispatchWith(fn func(network string, router routing.Router, dialer message.Dialer) execute.Dispatcher) Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.dispatchWith = fn
 		return nil
 	})
 }

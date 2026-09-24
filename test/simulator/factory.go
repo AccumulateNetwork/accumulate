@@ -19,6 +19,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
@@ -59,6 +60,7 @@ type simFactory struct {
 	executionShardsPerNode      []int
 	bptHistoryDepth             uint64
 	interceptDispatchedMessages DispatchInterceptor
+	dispatchWith                func(network string, router routing.Router, dialer message.Dialer) execute.Dispatcher
 
 	// State
 	logger           logging.Logger
@@ -345,6 +347,14 @@ func (f *simFactory) getDispatcherFunc() func() execute.Dispatcher {
 	if f.dropDispatchedMessages {
 		f.dispatcherFunc = func() execute.Dispatcher {
 			return new(fakeDispatcher)
+		}
+		return f.dispatcherFunc
+	}
+
+	if fn := f.dispatchWith; fn != nil {
+		network, router, dialer := f.network.Id, f.getRouter(), f.getServices().Services
+		f.dispatcherFunc = func() execute.Dispatcher {
+			return fn(network, router, dialer)
 		}
 		return f.dispatcherFunc
 	}
