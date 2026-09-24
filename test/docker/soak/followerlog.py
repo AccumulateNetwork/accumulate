@@ -500,8 +500,15 @@ def definition_check(status, key_prefix=None):
     return out
 
 
-def behind_summary(lines):
-    """The run's `behind` series, out of follower.csv.
+def behind_summary(lines, follower=None):
+    """The run's `behind` series, out of follower.csv, for ONE follower.
+
+    `follower` is the container the report is about. follower.csv carries a
+    row per follower per partition per sample, and summarising all of them
+    under one name folded a late follower's catch-up into fol1's numbers:
+    fol1 steady one block behind read `maxBehind 497` because fol2 had just
+    been added at height 3 (#4389). None keeps every row, for a caller that
+    has only one follower's file.
 
     Columns: time, follower, partition, followerHeight, validatorsMaxHeight,
     behindBlocks — and a sample where the follower did not answer writes an
@@ -514,6 +521,8 @@ def behind_summary(lines):
     for ln in lines:
         p = ln.rstrip("\n").split(",")
         if len(p) < 6 or p[0] == "time":
+            continue
+        if follower is not None and p[1] != follower:
             continue
         # The monitor's own high-water mark, carried in every row since M4.
         # A run directory written before that column exists has six fields;
@@ -716,7 +725,7 @@ def main(argv=None):
     if a.behind:
         try:
             with open(a.behind) as f:
-                v["behind"] = behind_summary(f)
+                v["behind"] = behind_summary(f, a.follower)
         except Exception:
             v["behind"] = behind_summary([])
     if a.rows:

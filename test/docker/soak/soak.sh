@@ -222,19 +222,29 @@ n_node=$(grep -cE '^\s*- listenAddress:' "$here/../docker-network.yml")
 # different roles in the measurement — a follower is never handed load and
 # never disturbed — and a manifest that says "13 nodes" tells a reader
 # neither how big the committees were nor that one node was not in them.
-read -r n_val n_fol FOL_LIST FOL_PORTS FOL_PARTS <<<"$(python3 -c '
+#
+# The followers THIS RUN HAS: the ones `up` starts, and the late one only
+# when the add-follower walk is on (CHAOS_FOLLOWERS=on) — never a follower
+# that is merely declared. Counting every declared follower gave run
+# 20260924T052134Z "2 follower" and 14 nodes for a network of 13, the second
+# never started (#4389). A late follower is named as such, because it is not
+# up from the start and the rows that read it say so.
+read -r n_val n_fol FOL_LIST FOL_PORTS FOL_PARTS n_late <<<"$(python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
 import topology
-f = topology.followers()
+f, late = topology.run_followers(sys.argv[2] == "on")
 print(len(topology.validator_records()), len(f),
       ",".join(x["container"] for x in f) or "-",
       ",".join(str(x["port"]) for x in f) or "-",
-      ";".join("/".join(x["partitions"]) for x in f) or "-")' "$here/.." 2>/dev/null)"
-n_val=${n_val:-$n_node}; n_fol=${n_fol:-0}
+      ";".join("/".join(x["partitions"]) for x in f) or "-", len(late))' "$here/.." \
+      "$([ "$CHAOS_ENABLED" != off ] && echo "${CHAOS_FOLLOWERS:-off}" || echo off)" 2>/dev/null)"
+n_val=${n_val:-$n_node}; n_fol=${n_fol:-0}; n_late=${n_late:-0}
 FOL_LIST=${FOL_LIST:--}; FOL_PORTS=${FOL_PORTS:--}; FOL_PARTS=${FOL_PARTS:--}
+# Nodes this run has, not nodes the file declares.
+n_node=$(( n_val + n_fol ))
 if [ "$n_fol" -gt 0 ]; then
-  topo_desc="$n_bvn BVNs, $n_val validators + $n_fol follower ($FOL_LIST, partitions ${FOL_PARTS//\// }) + bootstrap"
+  topo_desc="$n_bvn BVNs, $n_val validators + $n_fol follower ($FOL_LIST, partitions ${FOL_PARTS//\// })$([ "$n_late" -gt 0 ] && echo ", of which the last $n_late is started only by the add-follower disturbance") + bootstrap"
 else
   topo_desc="$n_bvn BVNs, $n_val validators + bootstrap"
 fi

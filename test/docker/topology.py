@@ -277,8 +277,87 @@ def validator_records(path=None):
 
 
 def followers(path=None):
-    """The follower nodes (#4365) — same wiring, key in no committee."""
+    """Every DECLARED follower (#4365) — same wiring, key in no committee —
+    whether or not anything starts it.
+
+    NOT the followers a run has. A follower in the compose's late-follower
+    profile is declared here so that init writes its key and directory, and
+    `compose up` never starts it: only the add-follower disturbance does.
+    Counting it as a follower gave run 20260924T052134Z a second follower
+    that never existed — 14 nodes in run.json, 1,206 of 1,206 probe reads
+    failed against it, and follower.csv rows every run (#4389). A consumer
+    that measures or counts followers wants `started_followers` and, while
+    one is up, the late one from `running_followers`.
+    """
     return [r for r in node_records(path) if r["role"] == "follower"]
+
+
+def started_followers(path=None, compose_path=None):
+    """The followers a plain `docker compose up -d` starts, in declaration
+    order: every declared follower but those behind a compose profile."""
+    late = profiled_containers(compose_path)
+    return [r for r in followers(path) if r["container"] not in late]
+
+
+def late_followers(path=None, compose_path=None):
+    """The declared followers `up` does NOT start — the late-follower profile
+    of #4364, started only by the add-follower disturbance."""
+    late = profiled_containers(compose_path)
+    return [r for r in followers(path) if r["container"] in late]
+
+
+def run_followers(chaos_followers=False, path=None, compose_path=None):
+    """The followers a run HAS, for its manifest and run.json: those `up`
+    starts, and the late ones only when the add-follower walk is on
+    (CHAOS_FOLLOWERS=on). Returns (followers, late) — `late` is the tail of
+    `followers` that only a disturbance starts. Never a follower that is
+    merely declared (#4389)."""
+    late = late_followers(path, compose_path) if chaos_followers else []
+    return started_followers(path, compose_path) + late, late
+
+
+_LIFE = re.compile(r"^(\S+Z) (add|remove)-follower (\S+)")
+
+
+def follower_lives(chaos_lines):
+    """{container: {"added", "removed", "adds"}} out of chaos.log's lines: the
+    last add and, if it came after that add, the removal; `adds` counts them
+    all. A container with no line is absent."""
+    out = {}
+    for line in chaos_lines or ():
+        m = _LIFE.match(line)
+        if not m:
+            continue
+        t, what, c = m.groups()
+        life = out.setdefault(c, {"added": None, "removed": None, "adds": 0})
+        if what == "add":
+            life["added"], life["removed"] = t, None
+            life["adds"] += 1
+        else:
+            life["removed"] = t
+    return out
+
+
+def running_followers(chaos_lines=(), path=None, compose_path=None, candidates=None):
+    """The followers that are up NOW: every started follower, plus a late one
+    whose last add-follower line in chaos.log has no removal after it.
+
+    This is the set a reader may ask, write rows for, or count. A declared
+    follower outside it was never there, or is gone, and reading it measures
+    nothing but the absence of a container (#4389).
+
+    `candidates` narrows the set judged (records with a ``container``);
+    default every declared follower."""
+    lives = follower_lives(chaos_lines)
+    late = profiled_containers(compose_path)
+    up = []
+    for r in (followers(path) if candidates is None else candidates):
+        if r["container"] in late:
+            life = lives.get(r["container"])
+            if not life or not life["added"] or life["removed"]:
+                continue
+        up.append(r)
+    return up
 
 
 def node_ports(path=None):

@@ -570,25 +570,14 @@ def late_followers():
 
 def follower_lives(path=None):
     """{container: {"added", "removed", "adds"}} from chaos.log: the last add
-    and, if it came after that add, the removal; `adds` counts them all."""
-    out = {}
+    and, if it came after that add, the removal; `adds` counts them all.
+    One reading for every consumer: topology.follower_lives (#4389)."""
     try:
         f = open(path or CHAOS)
     except OSError:
-        return out
+        return {}
     with f:
-        for line in f:
-            m = re.match(r"^(\S+Z) (add|remove)-follower (\S+)", line)
-            if not m:
-                continue
-            t, what, c = m.groups()
-            life = out.setdefault(c, {"added": None, "removed": None, "adds": 0})
-            if what == "add":
-                life["added"], life["removed"] = t, None
-                life["adds"] += 1
-            else:
-                life["removed"] = t
-    return out
+        return topology.follower_lives(f)
 
 
 def follower_life(container, lives, late):
@@ -675,6 +664,14 @@ def follower_csv_rows(state, ts):
     rows = []
     for c in sorted(state.get("nodes") or {}):
         node = state["nodes"][c]
+        # A follower that is not up — declared in the late-follower profile
+        # and not yet added, or added and since removed — writes NO row. Its
+        # rows were blank `behind` fields that behind_summary counted as
+        # "did not answer" against the follower the report is about, in
+        # every run, whether or not the add-follower walk ran (#4389). The
+        # board still names it, as `not added yet` or `removed at`.
+        if (node.get("life") or {}).get("kind") in ("waiting", "removed"):
+            continue
         for p in sorted(node["partitions"]):
             j = node["partitions"][p]
             hw = _FOLLOWER_WORST.get((c, p))
