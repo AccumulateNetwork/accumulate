@@ -143,8 +143,52 @@ func TestFullSpine_RefusesAMessageThatIsNotItsEntry(t *testing.T) {
 	other := new(protocol.Transaction)
 	other.Header.Principal = u
 	other.Body = &protocol.WriteData{Entry: &protocol.DoubleHashDataEntry{Data: [][]byte{[]byte("not the entry")}}}
+	otherHash := other.ID().Hash()
+	func() {
+		// The peer holds the other transaction whole, so it can serve it.
+		b := src.Begin(true)
+		defer b.Discard()
+		require.NoError(t, b.Message(otherHash).Main().Put(&messaging.TransactionMessage{Transaction: other}))
+		require.NoError(t, b.Commit())
+	}()
+
+	// The two cases below get past every check but the last: the stored
+	// form's transaction is whole and hashes to what it names, and only the
+	// hash of the whole wrapper, put back together, is not the entry
+	// (reviewer, #4400 note_3896114642).
+	anchorWith := func(e *api.ChainEntryRecord[api.Record], change func(*messaging.BlockAnchor)) {
+		r, ok := e.Value.(*api.MessageRecord[messaging.Message])
+		if !ok {
+			return
+		}
+		ba, ok := r.Message.(*messaging.BlockAnchor)
+		if !ok {
+			return
+		}
+		c := *ba
+		change(&c)
+		r.Message = &c
+	}
 
 	cases := map[string]*lying{
+		"the right transaction under another signature": {serve: func(e *api.ChainEntryRecord[api.Record]) {
+			anchorWith(e, func(ba *messaging.BlockAnchor) {
+				sig := *ba.Signature.(*protocol.ED25519Signature)
+				sig.Signature = append([]byte(nil), sig.Signature...)
+				sig.Signature[0] ^= 0xff
+				ba.Signature = &sig
+			})
+		}},
+		"a stored form naming another transaction the peer serves whole": {serve: func(e *api.ChainEntryRecord[api.Record]) {
+			anchorWith(e, func(ba *messaging.BlockAnchor) {
+				seq := *ba.Anchor.(*messaging.SequencedMessage)
+				ref := new(protocol.Transaction)
+				ref.Header.Principal = u
+				ref.Body = &protocol.RemoteTransaction{Hash: otherHash}
+				seq.Message = &messaging.TransactionMessage{Transaction: ref}
+				ba.Anchor = &seq
+			})
+		}},
 		"another message": {serve: func(e *api.ChainEntryRecord[api.Record]) {
 			if r, ok := e.Value.(*api.MessageRecord[messaging.Message]); ok {
 				if _, ok := r.Message.(*messaging.TransactionMessage); ok {
@@ -182,6 +226,8 @@ func TestFullSpine_RefusesAMessageThatIsNotItsEntry(t *testing.T) {
 				_, err := b.Message(h).Main().Get()
 				require.Error(t, err, "entry %d: a refused peer's message was kept", i)
 			}
+			_, err = b.Message(otherHash).Main().Get()
+			require.Error(t, err, "a transaction a refused peer served was kept")
 
 			p, i, err := FetchFrom(context.Background(), []Source{liar, &dbSource{db: src}}, b, u, Options{Mode: ModeFullSpine})
 			require.NoError(t, err)
