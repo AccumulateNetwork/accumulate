@@ -279,6 +279,32 @@ The code on `issue-4205-lead` departed from it in three places; the first two ar
   (#4398), and restarts the buffer on an overrun (#4407). The algorithm
   establishes the state and the floor first and stages after.
 
+**Against "Execute, and repair on a mismatch" and "One rule for every node"
+(#4438, branch `issue-4438-join-follows-the-algorithm`).** The joining node
+executes from the pulled state, compares at every anchored block, repairs from
+the block ledger whole and backfills head-only accounts past the match
+(executor.md "Sync" §2). Where the code departs:
+
+- **The repair reaches back to the last match, not the last comparison.** The
+  spec says "for every block since its last comparison". `RepairFrom` is given
+  the last block whose root matched, or where the pull began if none has, so a
+  repair after a repair that did not bring a match covers again what the
+  earlier one may have left. It costs a longer range of records on a node that
+  repairs repeatedly without a match.
+- **The repair is the join's only.** `PulledState.RepairFrom` is the entry
+  point, but only the join's root watch calls it. A running validator whose
+  root differs from its partition's anchor does not repair (#4439, E17).
+- **The backfill past the match runs inside the root watch**, 64 accounts per
+  check, only while the node is `ACTIVE`, and concurrently with the executor
+  on a running daemon. It writes only below a chain's head and open mark set,
+  and an element index only where none is held. That the writes never meet the
+  executor's has been reasoned, not tested under a concurrent executor; the
+  simulator runs the join and the blocks on one goroutine.
+- **A node executing from an unproven state is `BOOTING`, and whether it signs
+  or dispatches anchors and synthetic transactions while `BOOTING` is the
+  executor's existing gating, not verified here.** A node whose state is wrong
+  until its first match could otherwise send what its peers do not.
+
 
 **Spec** ([executor.md](executor.md), "Sync", as rewritten 2026-09-19): a
 node that joins — or restarts, which is a join — validates the spine first

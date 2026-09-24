@@ -437,22 +437,55 @@ store when the join starts, and again when the local root has matched; a
 change to the sets during a join is crossed at the match, by anchors the old
 set can still judge (§1's stated limit).
 
-**The match needs the state to stand at a block that anchored.** Every
-account is pulled as it is on the peer now, so once the walk is done and the
-records are processed through the peer's block L, the local state is the
-partition's at L and at no other block, and only the anchor *of L* can match
-it. The anchor of L is collected as L closes, but the records would move the
-state past L before it is compared. So once the walk has covered the tree and
-nothing is owed a retry, the records wait at L until an anchor of a block at
-or after L has been verified; then either the local root equals the anchor of
-L — the match — or the records go on to the peer's new block and wait there.
-A round also pulls nothing over a local root that already equals a verified
-anchor the join has not yet acted on: a restarted node one or two blocks
-behind matches its own state and hands off from there (#4411). **What is
-open** (#4438, for Paul): a block that sends no anchor cannot be matched by
-equality, and an idle partition sends one only on the heartbeat, so its head
-stands, most of the time, at a block no anchor carries; a join that lands
-there waits a cycle and tries again.
+**The node executes from the pulled state, and is proven where it executes**
+("Execute, and repair on a mismatch", "One rule for every node"). Every
+account is pulled as it is on the peer now, so the pulled state is the
+partition's only at the block the pulled ledger names, and only the anchor of
+that block could match it by equality — a block that often sent none (an idle
+partition anchors on the heartbeat). So the join does not wait for it. Once
+the walk has covered the tree and nothing is owed a retry, the node hands off
+at the block its pulled ledger names (`PulledState.Ready`), **unproven and
+`BOOTING`**, and executes the blocks it collected from there like any node,
+synthetic and user transactions alike, with whatever staging holds — a gap in
+staging is said and put on the gauge (§4) and does not hold the handoff. The
+root watch (§5) compares the root after every executed block that sent an
+anchor with the partition's own signed anchor for it: the first that equals is
+the match, step 3, and the node is `ACTIVE` from there. The join still looks
+first: `Matched` reads the anchors itself, so a node restarted a block or two
+behind that already equals a signed root is proven at once (#4411).
+
+**A mismatch is repaired from the block ledger** (`PulledState.RepairFrom`).
+The node stops executing and collects again, and the next pull is a repair:
+from the last block that matched — or from where the pull began, if none has —
+it takes the partition's record of every block after it and this node's own
+record of every block it executed, and pulls every account they name again,
+**whole**: main state, every chain with every entry and the message behind
+each, the pending list and the directory. The pull goes on from the entries
+the node holds and takes a chain again from its first entry when the node's is
+not the peers' prefix, or is longer than the peers' (a chain the node grew
+wrongly is replaced, not appended to); the account's chain index becomes the
+peers'; and the entries below each chain's open mark set are brought in at
+once (`pull.Backfill`), so a repaired account is held entire. An account no
+peer holds a leaf for is deleted — its main state and its leaf
+(`Batch.ForgetAccount`) — which is how a node loses an account only its own
+execution created. The node then hands off again at the block the repaired
+ledger names and goes on executing and comparing. A block executed without a
+synthetic transaction it needed is wrong only in the accounts its record
+names, so staging need not be exact for the node to converge
+(`TestAJoinRepairsABlockExecutedWithoutItsSynthetic`,
+`TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated`).
+
+**Past the match, every account taken by its heads is brought in whole.** The
+walk and the records take an account by its chain heads and open mark set
+(§3), which reproduce its leaf and let the node append. Once the node is
+`ACTIVE`, the root watch backfills those accounts, 64 a check, while the node
+executes (`pull.Backfill`): the entries below each chain's open mark set, the
+mark points that close their sets, and the message behind every entry. It
+writes nothing at or above a chain's head, so it does not race the blocks the
+node executes; the entries are held to the node's own head, replayed from the
+first, so a peer serving another chain is refused and the next is asked. The
+node ends holding every account's chains and entries
+(`TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock`).
 
 **A message is proven by its entry.** The leaf covers a chain's head, and the
 head covers its entries, but an entry of a transaction chain is the hash of a
@@ -572,22 +605,21 @@ been processed, which starts at `S`. Each round, in this order:
    (`TestTheWalkNeverOverwritesWhatARecordWrote`,
    `TestAWalkPageNewerThanTheRecordsIsCaughtUpByTheRecord`).
 
-Once the walk has covered the tree and nothing is owed, the round waits at
-`L` for the anchor that can match it (§2). The set of accounts is the block
+Once the walk has covered the tree and nothing is owed, the node may execute
+from the block its pulled ledger names (§2). The set of accounts is the block
 ledger's, not the block's envelopes': every block records `(account, chain,
 index)` for every chain its execution changed (see "The block ledger"), and it
 names every account whose leaf the block changes (invariant 14), including the
 accounts a block changed as a side effect and the system accounts every block
 touches; envelopes name neither all of that nor only names that can be routed.
 
-**The pull is started again after the handoff.** A node that hands off and
-later finds an executed block's root is not its anchored root (the root watch,
-§5) starts a new pull from the peer's block then: the whole walk again, and the
-records from there, because a wrong run can change accounts no peer's record
-names. The block this node's executor last executed is read once, from
-`SystemData(partition).ExecutedBlock` — not from `<partition>/ledger`, which
-is an account the pull overwrites (#4295, #4344) — and it bounds only what the
-root watch compares, never where a pull starts.
+**After the handoff, a mismatch is repaired, not re-walked.** A node whose
+executed block's root is not its anchored root (the root watch, §5) repairs
+from the block ledger (§2): the records from the last block that matched, the
+partition's and its own, and no walk. The block this node's executor last
+executed is read from `SystemData(partition).ExecutedBlock` — not from
+`<partition>/ledger`, which is an account the pull overwrites (#4295, #4344) —
+and it bounds the node's own records the repair reads.
 
 **What is pulled is written into the state tree, not only into the store.**
 Committing an account does not move the root by itself; the root is what the
@@ -621,11 +653,11 @@ from a wrong state appended entries of its own — is taken again whole, from
 its first entry, with its messages: the node's history is not compared with
 the peer's to find where they part, since at an anchored height there is one
 correct chain. A peer that serves fewer entries than the node holds is
-behind, and is asked again. *Provisional, pending #4403:* the retake is
-whole rather than a proven span, tracks no orphaned entries, and a diverged
-node that holds more entries than every peer is refused rather than retaken;
-whether this sentence stands as the rule or the healing text's span-and-
-orphans form replaces it is Paul's decision.
+behind, and is asked again — except in a repair, where the node's longer
+chain is its own wrong growth and is replaced by the peers', taken whole from
+the first entry (Paul, "One rule for every node": "A chain the node grew
+wrongly is replaced by the peers', not appended to"; this settles #4403's
+provisional rule). The retake tracks no orphaned entries.
 
 **A pulled transaction chain carries the messages behind its entries.** The
 entries are hashes, and the executor reads what they name: the first block a
@@ -718,18 +750,13 @@ there is nothing in staging to worry about.**
 **A gap is an entry that arrived before the node was listening.** `B + 1`
 delivers #105 while the node's `Delivered` is 103 and #104 is not in `B + 1`:
 the peers held #104 from a block before `B`, and executing `B + 1` without it
-is the #4290 divergence. The node does not execute. It takes `B + 1`'s block
-ledger, pulls the accounts it names at anchored `B + 1` — whose `Delivered`
-now says what the peers actually ran — keeps `B + 1`'s transactions in
-staging, takes `B + 2`'s in, and asks the same question of `B + 2`. **It advances the sync one
-block at a time until a block has no gap, then executes.**
-
-That loop ends, and quickly. The node has collected every committed block
-since it started, so an entry a peer holds that *arrived after that point*
-the node holds too; a gap can only be an entry from before. Held sets are
-small — a handful of entries at 100 tps — and clear within a few blocks, so
-within a few rounds the last pre-listen entry has been executed by the
-network and is in the pulled state, and every stream's run is contiguous.
+is the #4290 divergence. **The node executes anyway** ("One rule for every
+node"): a block executed without an entry it needed is wrong only in the
+accounts its record names, the root check finds it at the next block that
+anchors, and the repair brings those accounts — the synthetic ledger's
+`Delivered` among them — to what the peers ran (§2). The gap is said and put on
+the gauge (below); it no longer holds the handoff. Before, the node advanced
+the sync one block at a time until a block had no gap (#4362).
 
 **A restart is a join, and it finds a gap when it stopped holding an
 unexecuted entry.** Staging is memory: whatever the node held unexecuted when
@@ -751,7 +778,8 @@ stopped is not in those runs' logs, and the gap line below is what will say
 (#4423) does not enter it.
 
 **The gap line names what it found** (`join.StreamGap`, #4432). For every
-stream with a gap, `The next block has a gap; advancing the sync` carries, under
+stream with a gap, `The next block has a gap; executing anyway, and repairing on
+a mismatch` carries, under
 `gaps`, the stream as `source->ledger`, its `Delivered`, the first run of
 numbers nothing is held for (`missing=<first>-<last>`), the highest number held
 and the highest a validated hash stands at. The same first missing number is
@@ -761,13 +789,16 @@ stands.
 
 **The root is the check that does not depend on the sequence numbers.** After
 executing any block, the local BPT root equals that block's proven root or
-it does not. A mismatch is a gap the sequence check missed — the node
-re-syncs at that block and continues — so a wrong run is caught at the block
-it happens in, never carried forward. **A re-sync demotes the node to
-`BOOTING`** (step 6): from the mismatch until its next handoff succeeds it
-refuses every read, serves nothing, relays every submission and signs and
-dispatches no anchor, and the handoff that succeeds makes it `ACTIVE` again,
-as the first one did. A node whose state is known wrong is not one that
+it does not. A mismatch — a gap in staging, a pulled state that was a
+mixture, an account only this node's execution touched — is repaired from the
+block ledger (§2) and the node goes on, so a wrong run is caught at the next
+block that anchors, never carried forward. **A mismatch demotes the node to
+`BOOTING`** (step 6): from the mismatch until an executed block's root matches
+again it refuses every read, serves nothing and relays every submission, and
+the match makes it `ACTIVE` again. A node that hands off from an unproven
+pulled state is `BOOTING` from the start and becomes `ACTIVE` at its first
+match; one that hands off from a state that already matched is `ACTIVE` at the
+handoff. A node whose state is known wrong is not one that
 answers for it (#4385: run `20260924T074702Z`, a Directory node frozen at
 block 661 with its gauge reading `ACTIVE` served 693 pulls at that block, and
 2,944 of the run's 2,973 stranded submissions were deliveries handed to such a
