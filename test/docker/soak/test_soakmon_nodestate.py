@@ -255,5 +255,29 @@ class EveryTrackedStartGetsAFinalRow(unittest.TestCase):
         self.assertIn(("acc-bvn3-val1", "bvn3"), finals)
 
 
+class SpineStalledRow(unittest.TestCase):
+    """#4419: accumulate_join_spine_stalled_entry, per partition, names the
+    anchor-pool entry a join's anchor source is held at; -1 is not held. The
+    row says "spine stalled at entry N" ahead of its state."""
+
+    def test_the_held_partition_says_where(self):
+        stalled = soakmon.JOIN_SPINE_STALLED
+        per = {
+            "acc-bvn1-val2": scrape(directory=2, bvn1=0) + [
+                (stalled, {"partition": "BVN1"}, 25.0),
+                (stalled, {"partition": "Directory"}, -1.0)],
+            "acc-bvn1-val1": scrape(directory=2, bvn1=2),
+        }
+        got = soakmon.nodestate_from(per, now=NOW, disturbed={"acc-bvn1-val2": NOW - 30.0})
+        rows = {(r["node"], r["partition"]): r for r in got["rows"]}
+        held = rows[("acc-bvn1-val2", "bvn1")]
+        self.assertEqual(25, held["spineStalledAt"])
+        self.assertTrue(held["why"].startswith("spine stalled at entry 25"), held["why"])
+        self.assertEqual("BOOTING", held["state"], "the state is still the gauge's")
+        self.assertIsNone(rows[("acc-bvn1-val2", "directory")]["spineStalledAt"], "-1 is not held")
+        self.assertIsNone(rows[("acc-bvn1-val1", "bvn1")]["spineStalledAt"], "no series is not held")
+        self.assertNotIn("stalled", rows[("acc-bvn1-val1", "bvn1")]["why"])
+
+
 if __name__ == "__main__":
     unittest.main()

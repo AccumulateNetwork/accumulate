@@ -348,6 +348,17 @@ Board: *ACTIVE, now (node × partition rows)* as `n / rows`, *BOOTING, now
 (rows)*, and every row that is not ACTIVE named with its state and its time
 since its container started.
 
+**Where a join stopped (#4419).** BOOTING says a node has not joined, not
+why. A join whose anchor source is held at an anchor no peer serves signed
+(a rolling restart inside one anchor window, until #4416) exports
+`accumulate_join_spine_stalled_entry{partition}`: the anchor-pool entry it is
+held at, −1 when it is not held. A row with the gauge at N ≥ 0 reads
+**spine stalled at entry N** ahead of its state (`spineStalledAt` in `/data`),
+the start's rows in `nodestate.csv` carry it in `spineStalledAt` (empty when
+not held or not exported), and the manifest names a start that never reached
+ACTIVE as `never ACTIVE (spine stalled at entry N)` rather than
+`never ACTIVE (BOOTING)`. A file without the column reads as before.
+
 **Container start → ACTIVE (s)** is the number the verdict wants on a restart
 and on an add-follower. `nodestate.csv` (`time,node,role,partition,
 containerStarted,state,startToActiveS,kind`) holds one row per start, per
@@ -436,8 +447,8 @@ next start is judged in its place.
 
 `nodestate.csv` carries, beside the columns above, `executedBlock`,
 `partitionHeight` (the highest block any answering validator of the partition
-executed), `startToCaughtUpS`, `validatorsAnswered`, `lastAnswered` and
-`partitionHeightAtLastAnswer`, read at each
+executed), `startToCaughtUpS`, `validatorsAnswered`, `lastAnswered`,
+`partitionHeightAtLastAnswer` and `spineStalledAt` (#4419), read at each
 row's sample, and two more kinds: `caught-up`, the first sample ACTIVE and
 within the bound, and `superseded`, a start's last reading when its container
 started again. At exit the monitor writes a `final` row for **every** start,
