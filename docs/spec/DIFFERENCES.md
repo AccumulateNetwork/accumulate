@@ -548,8 +548,9 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   `PromoteToComplete`, `CanServeHistory` and `nodestate.Restore` still exist
   with no production caller (delete, or pin by test — the builder's
   uncommitted caller scan is the pin); the gauge and the daemon's `Always{}`
-  are two objects nothing keeps in agreement; and `servingFor` gates two query
-  kinds where the spec says every read (#4295).
+  are two objects nothing keeps in agreement. (That `servingFor` gated two
+  query kinds where the spec says every read is retired: since `08c0e413d`
+  (#4368) it refuses every query while `BOOTING`.)
 - **The ModeFullSpine rationale was wrong and is retired** (#4301 (c)): the
   spine was pulled "explicitly unverified because it is what the verifier
   reads from"; the definition and its signatures verify the spine like any
@@ -564,16 +565,13 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   joining node from a node whose entries are in flight, and both mean "ask
   again".
 - **The v3 querier was not gated** (#4297) when this was written; it is now
-  — `servingFor` in `internal/api/v3/querier.go:150-169` refuses a BPT page
-  and an account read carrying a receipt while joining, as the entry below
-  ("`Submit`, `Validate`, `BptPageQuery` and an account read carrying a
-  receipt answer `NotReady`") records. What was true then: a joining node
+  — `servingFor` (`internal/api/v3/querier.go`) refuses every query while
+  the node is `BOOTING` (`08c0e413d`, #4368; it first gated only a BPT page
+  and an account read carrying a receipt). What was true then: a joining node
   answered account state and BPT pages from a store the pull had half filled. The hazard is
   another joining node pulling its unverified spine from it — `pull.Account`
   in `ModeFullSpine` was explicitly unverified, because it was what the verifier
-  reads from — and then never pulling the spine again. Gating the querier
-  would also stop a joining node answering ordinary reads about itself, which
-  is why it is recorded rather than done.
+  reads from — and then never pulling the spine again.
 - **A joining sibling partition is a quiet hole.** Every node runs the
   Directory beside its BVN, and the dialer answers a service the node itself
   provides before asking the network, so while one of them is joining the
