@@ -582,5 +582,50 @@ class ThePartitionsHeight(unittest.TestCase):
         self.assertTrue('heights.py" row' in loop)
 
 
+class SpineStalled(unittest.TestCase):
+    """#4419: a join whose anchor source is held at an entry no peer serves
+    signed exports accumulate_join_spine_stalled_entry, and the rejoin row
+    says "spine stalled at entry N", not "booting". The node below restarts,
+    its BVN1 boots and never reads ACTIVE, and the gauge holds 25 throughout
+    (-1 on every other node, and on its Directory, which is not held)."""
+
+    def setUp(self):
+        s = Series()
+        start = {c: T0 - 3600 for c in VALS}
+        st = dict(start, **{"acc-bvn1-val1": T0 + 10})
+        s.sample(T0, network(T0, 200, {"bvn1": 200, "bvn2": 200, "bvn3": 200}), start)
+        for i in range(4):
+            h = 205 + 60 * i
+            me = scrape({"directory": 2, "bvn1": 0}, {"directory": h, "bvn1": 190})
+            me += [(soakmon.JOIN_SPINE_STALLED, {"partition": "BVN1"}, 25.0),
+                   (soakmon.JOIN_SPINE_STALLED, {"partition": "Directory"}, -1.0)]
+            s.sample(T0 + 15 + 60 * i, network(0, h, {"bvn1": h, "bvn2": h, "bvn3": h},
+                                               {"acc-bvn1-val1": me}), st)
+        s.finish(T0 + 15 + 60 * 3)    # at its last sample, as soakmon does
+        self.rd = tempfile.mkdtemp(prefix="rejoin-stall-")
+        s.write(self.rd)
+        with open(os.path.join(self.rd, "nodestate.csv")) as f:
+            self.rows = list(csv.DictReader(f))
+
+    def test_the_final_row_carries_the_entry(self):
+        final = [r for r in self.rows if r["kind"] == "final"
+                 and r["node"] == "acc-bvn1-val1" and r["partition"] == "bvn1"]
+        self.assertEqual(1, len(final))
+        self.assertEqual("25", final[0]["spineStalledAt"])
+        other = [r for r in self.rows if r["kind"] == "final"
+                 and r["node"] == "acc-bvn1-val1" and r["partition"] == "directory"]
+        self.assertEqual("", other[0]["spineStalledAt"], "-1 is not held")
+
+    def test_the_row_says_spine_stalled_not_booting(self):
+        cell = rejoin.row(self.rows, "validator", 10, None)
+        self.assertIn("acc-bvn1-val1 bvn1 (never ACTIVE (spine stalled at entry 25)", cell)
+        self.assertNotIn("never ACTIVE (BOOTING)", cell)
+
+    def test_a_file_without_the_column_reads_as_before(self):
+        rows = [{k: v for k, v in r.items() if k != "spineStalledAt"} for r in self.rows]
+        cell = rejoin.row(rows, "validator", 10, None)
+        self.assertIn("never ACTIVE (BOOTING)", cell)
+
+
 if __name__ == "__main__":
     unittest.main()

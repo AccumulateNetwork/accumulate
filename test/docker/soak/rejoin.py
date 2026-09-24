@@ -233,6 +233,12 @@ def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True,
         to_active = "%ss" % to_active
     if not active:
         state = (end or {}).get("state") or "state unknown"
+        # Where the join stopped, when it says (#4419): its anchor source held
+        # at an anchor no peer serves signed. BOOTING says only that it has
+        # not joined.
+        stalled = _int((end or {}).get("spineStalledAt"))
+        if stalled is not None:
+            state = "spine stalled at entry %d" % stalled
         fails.append("never ACTIVE (%s)" % state)
     if not has_cols:
         note = "executed height not measured (nodestate.csv predates #4404)"
