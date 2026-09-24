@@ -597,8 +597,29 @@ transaction served as a remote stub is not a transaction's body: its hash is
 whatever the stub says. **A peer that serves an entry with no message behind
 it, or a message that is not the entry's, has not served the chain** — a peer
 that itself joined holds the blocks it did not execute that way — and the
-next peer is asked; a hash is never kept without its message. The accounts
-pulled state-only carry no messages: their chains are taken as a head and an
+next peer is asked; a hash is never kept without its message.
+**A pulled anchor pool carries each anchor's signature history.** The query
+API reads an anchor's signatures from the pool's per-transaction history
+index into its signature chain, and the sequence they cover from the
+transaction's cause (`loadMessage`); executing an anchor writes both beside
+the signature chain entry (`RecordHistory`, `recordMessageAndStatus`), and
+neither is on a chain. A node that took the chains without them held every
+anchor appended by a block it did not execute with no signatures, and could
+serve none of its pulled range (#4413, #4416). So for each entry of a pulled
+signature chain that is a validator's signature of an anchor, the pull writes
+what executing it wrote — the history index, the signer, the sequenced
+message and the cause — **rebuilt from the entry, never taken from a peer's
+word about it**, and **each signature is checked to be a signature of the
+anchor it carries**, in the anchor's own form or the Directory's reused one
+(the executor's `checkSignature`); an entry whose signature does not verify
+has not served the chain, and the next peer is asked. Which validators may
+sign is not checked by the pull: the chain is under the root the account is
+settled against, which a quorum signed, and the pull does not hold the
+validator set of every block it takes — checked against today's set, the
+honest history of every anchor signed before a change to it would be refused
+and the pool never pulled. Membership is checked by each reader, against the
+set it trusts, when it is served the anchor (`anchorsrc.verify`). The
+accounts pulled state-only carry no messages: their chains are taken as a head and an
 open mark set, for appending (§3 above), and a block that reads a message
 behind one of those entries reads it only for a block the node executed (§6).
 
@@ -819,20 +840,19 @@ quorum that signed it and nothing else, so a node that holds an anchor
 without its signatures does not serve it: an expanded read of an anchor pool's
 main chain whose entry is an anchor carrying no signatures is refused with
 `NotReady` (`servedSigned`, `queryChainEntry`), and the reader asks a node
-that executed it. A node that joined holds exactly that for its pulled range:
-the join brings the pool's entries and the message behind each (§3), and not
-the signature history an anchor's signatures are read from (#4416), so an
-`ACTIVE` node refuses those anchors rather than serving them bare — served
-bare, every reader that checks them refused them as unsigned, 22 in run
-`20260924T074702Z` (#4413). The pool's anchor sequence chain is not refused:
+that executed it. A node that joined by a pull from before #4416 holds exactly
+that for its pulled range — that pull brought the pool's entries and the
+message behind each, not the signature history an anchor's signatures are
+read from — so an `ACTIVE` node refuses those anchors rather than serving
+them bare; served bare, every reader that checks them refused them as
+unsigned, 22 in run `20260924T074702Z` (#4413). The pull now brings the
+history (§3), so a node that joined serves its pulled range signed (#4416). The pool's anchor sequence chain is not refused:
 it holds the anchors the partition *sent*, whose signatures the receivers
 hold and the producer never does. On the reading side, **an anchor served
 with no signatures is the serving peer's gap, not a fact about the anchor**:
 the anchor source does not move its cursor past it, and the next page asks
 the next peer for it; an anchor that carries signatures and fails is refused
-once and passed, because every peer serves the same signatures. Until #4416
-brings the history with the pull, a joined node cannot serve its pulled range
-at all (DIFFERENCES E11). The node's state
+once and passed, because every peer serves the same signatures. The node's state
 is a gauge and is advertised, but advertising is
 not what keeps a request away: a peer finds any installed handler by libp2p
 identify ahead of the DHT (`connectedPeersDiscoverer`), so what protects a
