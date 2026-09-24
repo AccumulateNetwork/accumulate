@@ -49,7 +49,8 @@ type Executor struct {
 	db                 database.Beginner
 	cacheOnce          sync.Once
 	cacheDefault       *synthcache.Cache
-	cacheSeedOnce      sync.Once
+	cacheSeedMu        sync.Mutex
+	cacheSeeded        bool
 	stagingOnce        sync.Once
 	stagingDefault     *execute.Staging
 	isValidator        bool

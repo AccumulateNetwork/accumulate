@@ -266,9 +266,11 @@ limit, the executor's own: a change that turns over more of the set than the
 old threshold can bridge cannot be crossed from the old set, and a node that
 trusts only the old set must be re-seeded from a definition it can verify.
 The spine is pulled in `ModeFullSpine` — head, secondary state and **every
-chain entry replayed** — not for verification, which the definition and its
+chain entry replayed**, with the message behind each entry of a transaction
+chain (§3) — not for verification, which the definition and its
 signatures give, but so that the spine's every-block chains are comparable
-entry for entry with what the node executes from there.
+entry for entry with what the node executes from there, and so that the
+node can read what they record when it executes again.
 
 An anchor is accepted when valid signatures from **distinct members of the
 producing partition's validator set** — the network definition's, not a key
@@ -352,6 +354,12 @@ An account is kept only if three things hold: its receipt is valid; it ends at
 a root proven as above; and it passes through the leaf the pulled state hashes
 to locally. The third is what makes the pull safe, because a peer can serve a
 true receipt for an account and a false body for it.
+
+**A message is proven by its entry.** The leaf covers a chain's head, and the
+head covers its entries, but an entry of a transaction chain is the hash of a
+message and the message is not under the root. So a message the pull takes
+beside an entry is kept only if it hashes to that entry, and nothing about the
+peer that served it is believed (§3, #4400).
 
 **A leaf is pulled whether or not the account has a body** (#4397). The leaf
 hashes the main state, the directory, the chains and the pending list, and any
@@ -565,6 +573,33 @@ collects nothing. Same walk, different stopping point — which is why a defect
 at the meeting point is invisible to every bootstrap test and fatal to every
 restart.
 
+**A pulled transaction chain carries the messages behind its entries.** The
+entries are hashes, and the executor reads what they name: the first block a
+new process opens seeds its producer cache by walking the anchor pool's main
+and anchor sequence chains and loading the message behind each entry, and
+whether that block records an anchor is decided from the message behind the
+newest anchor sequence entry (`lastAnchoredBlock`) — which is consensus
+output, so the message is needed, not a fallback. A chain taken as hashes
+alone left every restarted validator that fell one anchored block behind
+unable to open its first block (#4400, run `20260924T052134Z`). So each entry
+of a spine transaction chain the pull replays comes with its message (asked
+for expanded), **each message is checked against its entry hash**, and it is
+written in the same pass as the entries and discarded with them. What a peer
+stores under an entry is the message as it arrived, or — for a wrapper whose
+transaction is stored under its own hash (an anchor, a sequenced or synthetic
+message; the executor's stored form, #4236) — the wrapper referring to that
+transaction by hash. Such a message is checked by putting the transaction
+back, itself checked against its own hash, and hashing the result; it is kept
+in the stored form with the transaction beside it, as the peer keeps it. A
+transaction served as a remote stub is not a transaction's body: its hash is
+whatever the stub says. **A peer that serves an entry with no message behind
+it, or a message that is not the entry's, has not served the chain** — a peer
+that itself joined holds the blocks it did not execute that way — and the
+next peer is asked; a hash is never kept without its message. The accounts
+pulled state-only carry no messages: their chains are taken as a head and an
+open mark set, for appending (§3 above), and a block that reads a message
+behind one of those entries reads it only for a block the node executed (§6).
+
 **An account's pending list is part of its leaf**, and the material behind it —
 validator signatures, payments, votes, signatures — must be pulled with it or
 the account's hash cannot be computed to match. An account with a non-empty
@@ -744,10 +779,29 @@ this protocol has of its own state is the signed anchor at a height ("We only
 need the signed anchor at the current height to prove the state of the entire
 protocol at that height"; Paul, 2026-09-18/19, the spine decision), and this
 line has no backfill of
-history: the producer cache fills by execution alone, a join pulls state and
-not chain entries, and nothing under this section fetches entries a node did
-not execute — that is phase 3's conversion of history, or phase 2's database
-node, not a syncing node's work. So the node states are two: **`BOOTING`**,
+history. The producer cache fills by execution, and once more at the first
+block a process opens, when it is seeded from the store by position (#4241):
+the anchors this partition produced, from the anchor sequence chain; the
+Directory's receipts of its blocks, from the anchor pool's main chain; and the
+synthetics of its own blocks still in flight, from `<partition>/synthetic`.
+The first two read the spine's chains and the messages behind them, which the
+join carries (§3), and an anchor is the partition's whichever node executed
+the block that produced it. The third skips **only the blocks the node did not
+execute**: it produced none of their synthetics, holds none of their messages,
+and answers for none of them (below). **The store says which they are**, not a
+memory of the join: a block whose synthetic entries the store holds with no
+message behind them — or whose entries it does not hold at all — is a block a
+join carried the node past, because the join pulls `<partition>/synthetic` as a
+head and an open mark set, and a node that executes a block writes its entries
+and their messages in the one batch. Every other block in the window is the
+node's own and is rebuilt, so a restart that fell nothing behind skips nothing,
+and a restart after an earlier join skips that join's blocks however many
+processes ago it was (#4400). A seed that fails is not a seed: the
+next block tries again, and no block opens on a cache nothing filled. The
+spine is the one place a join takes chain entries and the messages behind
+them; nothing under this section fetches the history of any other account a
+node did not execute — that is phase 3's conversion of history, or phase 2's
+database node, not a syncing node's work. So the node states are two: **`BOOTING`**,
 from the start of a join until the local root matches a verified anchored
 root; **`ACTIVE`** from that block on, and from its first block for a node
 that took nothing from a peer — a node that never joined has no state

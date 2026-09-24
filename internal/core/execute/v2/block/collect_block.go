@@ -355,10 +355,10 @@ func (x *Executor) SettleStaging(batch *database.Batch, q uint64) error {
 	b.staging.AtBlock(q)
 	b.staging.Commit()
 
-	// This node executed no block at or below Q, so it produced none of their
-	// synthetics: a Directory receipt for one of those blocks is not this
-	// node's to dispatch, and the cache must not count it as a miss
-	// (#4294).
+	// This node executed no block at or below Q since it started, so a
+	// Directory receipt for one of those blocks it does not hold is not a
+	// miss (#4294). Which of them its store holds the synthetics of is the
+	// store's to say, and the seed reads it there (#4400).
 	x.synthCache().JoinedAt(q)
 	x.logger.Info("Staging settled at the block the state is",
 		"module", "sync", "partition", x.Describe.PartitionId, "block", q,

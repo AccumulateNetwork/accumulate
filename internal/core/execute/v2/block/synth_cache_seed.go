@@ -7,6 +7,8 @@
 package block
 
 import (
+	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
@@ -65,17 +67,38 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 		}
 	}
 
+	// A block a join carried this node past it did not execute: it produced
+	// none of the block's synthetics and holds none of their messages, since
+	// the join pulls <partition>/synthetic state-only. Such a block is not its
+	// to rebuild, dispatch or serve (executor.md, "Sync" §6), and the store
+	// says which blocks they are: a synthetic entry of the block with no
+	// message behind it. That is the store's own fact, true after any number
+	// of restarts, where a span remembered by the process that joined dies
+	// with it (#4400). A block whose messages are there is rebuilt.
+	//
+	// Only that evidence skips a block, matched by identity: any other
+	// absence in the rebuild -- a companion transaction, the root index
+	// chain, a read past a windowed store's reach -- is a failure of a block
+	// this node did execute, and fails the seed as loudly as before.
 	var blocks []*synthcache.Block
+	notExecuted := map[uint64]bool{}
+	var skipped []uint64
 	for b := from; b < current; b++ {
 		blk, err := x.rebuildCacheBlock(batch, b)
+		if ne, ok := err.(*notExecutedError); ok {
+			notExecuted[b] = true
+			skipped = append(skipped, b)
+			x.logger.Info("Not rebuilding a block this node did not execute", "module", "synthetic", "block", b, "evidence", ne.Error())
+			continue
+		}
 		if err != nil {
 			return errors.UnknownError.WithFormat("rebuild cache for block %d: %w", b, err)
 		}
 		blocks = append(blocks, blk)
 	}
 	x.synthCache().Seed(blocks)
-	if len(blocks) > 0 {
-		x.logger.Info("Seeded the synthetic cache from the chains", "module", "synthetic", "from", from, "to", current-1, "blocks", len(blocks), "receipted", len(receipts))
+	if len(blocks) > 0 || len(skipped) > 0 {
+		x.logger.Info("Seeded the synthetic cache from the chains", "module", "synthetic", "from", from, "to", current-1, "blocks", len(blocks), "receipted", len(receipts), "skipped", len(skipped), "skipped-blocks", skipped)
 	}
 	err = x.seedProducedAnchors(batch, oldest)
 	if err != nil {
@@ -95,7 +118,7 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 	}
 	deliveredFrom := func(dst *url.URL) uint64 { return ledger.Partition(dst).Delivered }
 	for _, r := range receipts {
-		if r.block < from {
+		if r.block < from || notExecuted[r.block] {
 			continue
 		}
 		if r.anchorBlock == receipts[0].anchorBlock {
@@ -174,6 +197,21 @@ func (x *Executor) ownReceipts(batch *database.Batch, oldest uint64) ([]ownRecei
 	return receipts, nil
 }
 
+// notExecutedError is the store's evidence that this node did not execute a
+// block: a synthetic entry of it with no message behind it, or entries the
+// index names that the store does not hold (#4400). It is its own type, and
+// the seed matches it by type and only as rebuildCacheBlock returns it: a
+// status code would match every NotFound in the rebuild, and would turn a
+// block this node executed and cannot read into a silent skip.
+type notExecutedError struct {
+	dst      *url.URL
+	evidence string
+}
+
+func (e *notExecutedError) Error() string {
+	return fmt.Sprintf("this node did not execute the block: %s (stream to %v)", e.evidence, e.dst)
+}
+
 // rebuildCacheBlock reads what block b produced and what its proofs are built
 // from, by position, one destination chain at a time (executor spec, "One
 // chain per pair, one stage per chain"). A block that appended to no chain is
@@ -230,13 +268,25 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 		blk.Streams[synthcache.StreamKey(dst)] = st
 
 		hashes, err := chain.Entries(from, to+1)
-		if err != nil {
+		switch {
+		case err == nil:
+		case errors.Is(err, errors.NotFound):
+			// The index names entries the store does not hold: the chain
+			// came from a peer as a head and an open mark set.
+			return nil, &notExecutedError{dst, fmt.Sprintf("synthetic chain entries %d..%d are not held", from, to)}
+		default:
 			return nil, errors.UnknownError.WithFormat("load synthetic chain entries %d..%d for %v: %w", from, to, dst, err)
 		}
 		for i, hash := range hashes {
 			var seq *messaging.SequencedMessage
 			err := batch.Message2(hash).Main().GetAs(&seq)
-			if err != nil {
+			switch {
+			case err == nil:
+			case errors.Is(err, errors.NotFound):
+				// An entry with no message behind it: a node that executed
+				// the block wrote both in the same batch.
+				return nil, &notExecutedError{dst, fmt.Sprintf("synthetic entry %d (%x) has no message behind it", from+int64(i), hash[:4])}
+			default:
 				return nil, errors.UnknownError.WithFormat("load synthetic message: %w", err)
 			}
 			st.Segment.Append(hash)
@@ -341,5 +391,21 @@ func (x *Executor) seedProducedAnchors(batch *database.Batch, oldest uint64) err
 	x.synthCache().SeedAnchors(anchors)
 	x.logger.Info("Seeded produced anchors from the sequence chain", "module", "synthetic",
 		"count", len(anchors), "from", anchors[len(anchors)-1].Number, "to", anchors[0].Number)
+	return nil
+}
+
+// seedCacheOnce seeds the cache unless a seed has already succeeded. A seed
+// that fails is not counted, so the next block to open tries again rather than
+// running on a cache nothing filled (#4400).
+func (x *Executor) seedCacheOnce(batch *database.Batch, current uint64, isLeader bool) error {
+	x.cacheSeedMu.Lock()
+	defer x.cacheSeedMu.Unlock()
+	if x.cacheSeeded {
+		return nil
+	}
+	if err := x.seedSynthCache(batch, current, isLeader); err != nil {
+		return err
+	}
+	x.cacheSeeded = true
 	return nil
 }

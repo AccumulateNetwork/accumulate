@@ -392,6 +392,76 @@ is `nodeMustJoin(lastBlock) = lastBlock > GenesisBlock`, and was
 `lastBlock > 0` until #4304. Genesis is not an execution but it does write the
 ledger at block 1, so the old test was true of every node ever started.
 
+**The messages behind pulled chain entries (#4400, 2026-09-24)**: until
+this, the spine pull asked for chain entries unexpanded and nothing wrote the
+message an entry names, so a restarted validator that fell one anchored block
+behind could not open its first block: the producer-cache seed and
+`lastAnchoredBlock` load the message behind anchor pool entries the node did
+not execute (run `20260924T052134Z`, acc-bvn3-val1; reproduced by
+`TestAJoinedNodeCanOpenItsFirstBlockAfterARestart`). The pull now takes a
+spine transaction chain's messages with its entries, checked as executor.md
+"Sync" §2–3 say, and the seed rebuilds a BVN's synthetics only for blocks
+after the one the node joined at (`TestAJoinedBVNNodeCanOpenItsFirstBlockAfterARestart`
+— the next failure the debugger predicted, reproduced before the fix). What is
+still different, or not known:
+
+- **Only the seed is known to keep the rule for state-only chains.** An
+  account pulled state-only (`<partition>/synthetic`, every leaf account) has
+  the entries of its open mark set and no message behind any entry of a block
+  the node did not execute. The seed no longer reads them; no other reader of
+  a message behind a chain entry (healing, the sequencer by position, the
+  v3 querier's expanded entries) was audited for a block at or below the join,
+  and one that reads there finds `NotFound`, which §6 says must be
+  `NotReady`.
+- **The seed skips a block on the store's evidence.** A block in the seed's
+  window whose synthetic entries the store holds with no message behind them,
+  or whose entries it does not hold, is taken as one this node did not execute
+  and is neither rebuilt nor dispatched; each skipped block is logged with
+  that evidence. Only that evidence skips a block: any other absence in the
+  rebuild (a companion transaction, the root index chain) fails the seed
+  (`TestAnExecutedBlockMissingACompanionFailsTheSeed`). It assumes an
+  ordinary read of this node's store answers the message behind a synthetic
+  entry of a block it executed. On leveldb and the in-memory store it does.
+  **On BlockchainDB it does only within the store's read window**: nothing is
+  deleted, but an ordinary batch reads a permanent record older than the last
+  `DefaultMergeLag` (20) to 40 blocks as absent, and only `Deep()` sees it
+  (`internal/database/database.go`, `pkg/database/keyvalue/bcdb`). The seed
+  reads down to `InFlightBlocks` (8) below the newest Directory receipt of
+  this partition's blocks, which is inside that window while the Directory
+  keeps receipting; with no receipt in the horizon it reads down to
+  `DefaultHorizon` (600) blocks, and there a block this node executed reads
+  as one it did not and is skipped (and `ownReceipts`, which reads the
+  anchor pool's messages down to the same bound with hard errors, may fail
+  first). A skipped block is a dispatch this node does not make, never a
+  wrong one. Two earlier versions on this branch were wrong and are recorded here:
+  skipping every block at or below the join block left a restart that fell
+  nothing behind with an empty cache — the #4241/#4277 restart hole (review
+  note_3896114642, `TestAZeroGapRestartStillSeedsItsOwnBlocks`); skipping a
+  span the join remembered in memory lost it with the process, so the second
+  restart after a join failed its first block on the first join's gap
+  (note_3896174331, `TestASecondRestartAfterAJoinStillOpens`).
+- **A stored message is not content-addressed for wrappers.** The executor
+  stores an anchor, sequenced or synthetic message that refers to its
+  transaction by hash under the hash of the message as it arrived (#4236), so
+  what a peer serves under such an entry never hashes to it. The pull proves
+  it by resolving the reference — from the pass, or by `QueryMessage` to the
+  same peer — and hashing the result; a reader that checks a stored message
+  against its key without doing that will refuse every honest peer.
+- **Messages no peer holds would make the spine unpullable.** A node asks only
+  for the entries past its own height, so a restart asks only for its gap; but
+  an entry whose message no peer holds — a network started from a snapshot
+  without messages, or history pruned below a node's gap — is refused from
+  every peer and the spine never settles. Not observed and not tested.
+- **The producer's anchors are seeded from blocks the node did not execute.**
+  The anchor sequence chain's messages now come with the spine, so the seed
+  puts anchors produced while the node was away into its cache. An anchor is
+  the partition's whoever produced it, and serving it is what a destination
+  behind on the stream needs (#4277); it is stated in §6 rather than excluded.
+- **A failed seed is retried, not survived.** The seed now counts only when
+  it succeeds, so a seed that fails deterministically fails every block it
+  opens, loudly, instead of the first one and then running on an empty cache.
+  A failed handoff stays terminal on both sides (#4401).
+
 **The simulator's joining node (#4363)**: `RestartNode` builds the join's
 state as `cmd/accumulated/run/dagbft.go` does at startup — `join.NewState`
 over `join.QueryPeers` with the node's own peer excluded, from its executor's

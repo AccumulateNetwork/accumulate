@@ -15,6 +15,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	apierrors "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -104,11 +105,16 @@ func (s *dbSource) QueryAccountChains(_ context.Context, u *url.URL, _ *api.Chai
 	return out, nil
 }
 
-// QueryMessage is a stub: these tests use accounts whose Pending
-// chains are empty, so the production sig-material backfill path is
-// never hit. Returning NotFound is the right shape for empty pending.
-func (s *dbSource) QueryMessage(_ context.Context, _ *url.TxID, _ *api.DefaultQuery) (*api.MessageRecord[messaging.Message], error) {
-	return nil, apierrors.NotFound
+// QueryMessage serves the message stored under the ID's hash, as the querier
+// does; NotFound when there is none.
+func (s *dbSource) QueryMessage(_ context.Context, id *url.TxID, _ *api.DefaultQuery) (*api.MessageRecord[messaging.Message], error) {
+	b := s.db.Begin(false)
+	defer b.Discard()
+	msg, err := b.Message(id.Hash()).Main().Get()
+	if err != nil {
+		return nil, apierrors.NotFound.WithFormat("message %x: %w", id.Hash(), err)
+	}
+	return &api.MessageRecord[messaging.Message]{ID: id, Message: msg}, nil
 }
 
 func (s *dbSource) QueryChainEntries(_ context.Context, u *url.URL, q *api.ChainQuery) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
@@ -142,12 +148,25 @@ func (s *dbSource) QueryChainEntries(_ context.Context, u *url.URL, q *api.Chain
 		}
 		var hashArr [32]byte
 		copy(hashArr[:], entry)
-		out.Records = append(out.Records, &api.ChainEntryRecord[api.Record]{
+		r := &api.ChainEntryRecord[api.Record]{
 			Account: u,
 			Name:    q.Name,
+			Type:    c2.Type(),
 			Index:   i,
 			Entry:   hashArr,
-		})
+		}
+		// Expanded, a transaction chain's entry carries the message behind
+		// it, or an error record when there is none -- the querier's shape
+		// (internal/api/v3/querier.go queryChainEntry).
+		if q.Range != nil && q.Range.Expand != nil && *q.Range.Expand && c2.Type() == merkle.ChainTypeTransaction {
+			msg, err := b.Message(hashArr).Main().Get()
+			if err == nil {
+				r.Value = &api.MessageRecord[messaging.Message]{ID: protocol.UnknownUrl().WithTxID(hashArr), Message: msg}
+			} else {
+				r.Value = &api.ErrorRecord{Value: apierrors.NotFound.WithFormat("message %x not found", hashArr[:4])}
+			}
+		}
+		out.Records = append(out.Records, r)
 	}
 	return out, nil
 }
@@ -235,12 +254,7 @@ func TestFullSpine_ChainEntriesReplayed(t *testing.T) {
 			t.Fatal(err)
 		}
 		for i := 0; i < 5; i++ {
-			e := make([]byte, 32)
-			e[0] = byte(i)
-			e[1] = 0x99
-			if err := b.Account(u).MainChain().Inner().AddEntry(e, false); err != nil {
-				t.Fatal(err)
-			}
+			addTransactionEntry(t, b, u, i, 0x99)
 		}
 		if err := b.Commit(); err != nil {
 			t.Fatal(err)
@@ -306,17 +320,30 @@ func buildChain(t *testing.T, db *database.Database, u *url.URL, n int, salt byt
 		t.Fatal(err)
 	}
 	for i := 0; i < n; i++ {
-		e := make([]byte, 32)
-		e[0] = byte(i)
-		e[1] = byte(i >> 8)
-		e[31] = salt
-		if err := b.Account(u).MainChain().Inner().AddEntry(e, false); err != nil {
-			t.Fatal(err)
-		}
+		addTransactionEntry(t, b, u, i, salt)
 	}
 	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// addTransactionEntry stores a transaction and appends its hash to u's main
+// chain, as execution does: a transaction chain's entry names a message the
+// store holds.
+func addTransactionEntry(t *testing.T, b *database.Batch, u *url.URL, i int, salt byte) [32]byte {
+	t.Helper()
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = u
+	txn.Body = &protocol.WriteData{Entry: &protocol.DoubleHashDataEntry{Data: [][]byte{{byte(i), byte(i >> 8), salt}}}}
+	msg := &messaging.TransactionMessage{Transaction: txn}
+	h := msg.Hash()
+	if err := b.Message(h).Main().Put(msg); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Account(u).MainChain().Inner().AddEntry(h[:], false); err != nil {
+		t.Fatal(err)
+	}
+	return h
 }
 
 // TestStateOnly_PullsTheOpenMarkSetOnly — ModeStateOnly does not replay a
