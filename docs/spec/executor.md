@@ -250,7 +250,19 @@ where they disagree with it, this wins.
    does the local root equal a root the network signed. That equality with a
    verified signed anchor's `StateTreeAnchor` (§1) proves the whole state at
    that block B. Nothing before the match is proven, and nothing before it
-   needs to be. A lying peer can delay the match; it cannot fake it.
+   needs to be. A lying peer can delay the match; it cannot fake it. **The
+   anchor is the partition's own** (Paul, 2026-09-25): a BVN's state is proven
+   by the BVN's anchor for block B, not by the Directory's copy of it, which
+   reaches the Directory's pool only after the Directory executes it — far too
+   late to sync against a partition that moves every block. Each validator of
+   the partition signs its own copy of the anchor as B closes, and a
+   partition's pool does not hold its own anchors with their signatures
+   (measured: a BVN's pool holds none of its own; only the Directory, which
+   anchors to itself, does). So the joining node collects the quorum itself:
+   it asks the partition's validators for the anchor of B — the sequencer
+   answers an anchor by number signed by the validator that answers (#4424:
+   committee members only) — and the anchor is verified when distinct members
+   reaching the partition's threshold have signed it.
 4. **The synthetic ledgers give the staging floor.** In the state at B, each
    stream's `Delivered` says every synthetic transaction at or below it has
    been received and processed. Staging never needs any of them.
