@@ -8,7 +8,9 @@ package simulator
 
 import (
 	"sync"
+	"sync/atomic"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
@@ -183,4 +185,28 @@ func (j *joinState) Handoff(q uint64) error {
 		}
 	}
 	return nil
+}
+
+// nodeState is the join state a node's API services refuse by, as
+// cmd/accumulated/run/dagbft.go hands them the join's machine (#4295, #4363).
+//
+// The daemon decides at startup whether it joins and builds its services with
+// that answer: nodestate.Always for a node that did not, the join's own
+// nodestate.Machine for one that did. A simulator node is built once and
+// "restarts" later (RestartNode), so the answer is held here and set when the
+// join starts; the querier asks it, and it asks the join's machine. What a
+// request is refused by is therefore the production machine, promoted by the
+// production tracker, read by the production querier's servingFor — the
+// simulator only supplies the moment the daemon would have wired it.
+type nodeState struct {
+	machine atomic.Pointer[nodestate.Machine]
+}
+
+var _ nodestate.Serving = (*nodeState)(nil)
+
+// CanServeCurrent implements [nodestate.Serving]. A node with no join serves,
+// as nodestate.Always does.
+func (s *nodeState) CanServeCurrent() bool {
+	m := s.machine.Load()
+	return m == nil || m.CanServeCurrent()
 }

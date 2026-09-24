@@ -228,6 +228,9 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		IsLeader: params.IsLeader,
 		Index:    params.Index,
 		Time:     params.Time,
+		// The system ledger records it from v2-kourou: it is how a joining
+		// node maps the groups it collected onto blocks (#4362).
+		LeaderRound: uint64(params.LeaderRound),
 		// CommitInfo and Evidence are CometBFT-specific, not needed for DAG-BFT
 	}
 

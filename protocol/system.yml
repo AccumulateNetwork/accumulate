@@ -36,6 +36,10 @@ SystemLedger:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: LeaderRound
+      description: is the consensus round of the leader that committed the block, from v2-kourou (DAG-BFT); zero on older blocks
+      type: uint
+      optional: true
 
 SyntheticLedger:
   union: { type: account }

@@ -64,13 +64,11 @@ type QuerierParams struct {
 	// has been sighted. Nil falls back to the registered one for Partition.
 	Staging *execute.Staging
 
-	// NodeState is this node's join state. While it is joining, the querier
-	// refuses the two things a joining node must not answer -- a BPT page and
-	// an account read carrying a receipt -- because those are what another
-	// node's pull reads, and this node's store is the one the pull is filling
-	// (#4297). Plain reads stay open: gating them would stop a node answering
-	// ordinary questions about itself, which is the cost #4297 weighs. Nil
-	// means the node never joined.
+	// NodeState is this node's join state. While it is BOOTING the querier
+	// refuses every read with NotReady (servingFor; executor spec, "Sync",
+	// step 6; #4368): its store is the one the pull is filling, and another
+	// node's pull must not take an unverified spine from it (#4297). Nil
+	// means the node never joined, and it serves everything.
 	NodeState nodestate.Serving
 }
 

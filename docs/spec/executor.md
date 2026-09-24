@@ -595,7 +595,40 @@ another block than the state it is paired with executes a different block than
 the peers, which is the failure the join exists to prevent.
 
 The node then executes block `Q + 1` from the buffer as any node executes a
-block, and it is a validator or a follower from there. A follower differs from
+block, and it is a validator or a follower from there.
+
+**Which buffered group is `Q + 1` is decided by the leader round, read from
+the state.** A collected group has no block number; it has the leader round
+consensus committed it at, and consensus commits leaders in one order on
+every node. From v2-kourou the system ledger records, for each block, the
+leader round that committed it — `SystemLedger.LeaderRound`, field 10,
+written by the executor from the round the DAG service produced the block
+with; before v2-kourou the field is never written and the ledger encodes as
+it did. The pulled ledger hashes into the proven root, so the handoff reads
+`Q` and its round `P` from the same record, and a ledger whose `Index` is
+not `Q` is not the state `Q` is. The groups at or below `P` are in the
+state; the groups above it, in the order consensus committed them, are
+`Q + 1`, `Q + 2`, … (`Service.performHandoffAt`). Nothing is counted: the
+first design numbered the buffer from the block the node stood at when it
+started collecting, which depends on when collecting started relative to the
+service learning its block (#4351) and produces a second time, under numbers
+that are not theirs, any group consensus delivers again after a restart.
+The handoff does not happen, and the buffer is left as it is, when:
+
+- `P` is above every round the node has executed or collected: the groups up
+  to it are still arriving. The join waits (`NotReady`).
+- `P` is below the round the node's consensus stood at — the round of the
+  last block it produced, or the checkpoint's committed round it resumed
+  from (consensus.md, "Restart"): the groups between were committed before
+  the node listened, so they are in neither the buffer nor the state. The
+  join pulls again, to a newer state (`Conflict`).
+- No group this node's consensus committed is at `P`, or the ledger records
+  no round at all (a block written before v2-kourou). The first is a state
+  this node's consensus did not produce (`Conflict`); the second says
+  nothing about which group is next, and the join waits for a state that
+  records one (`NotReady`) rather than fall back to counting.
+
+A follower differs from
 a validator in what it does with the blocks it processes — it does not vote or
 propose — not in how it gets there; what it does with a transaction it cannot
 propose is step 6's rule: it relays it, and never drops it.
@@ -656,11 +689,9 @@ the half-filled ones its own pull is building, and a second joining node would
 otherwise take its spine from the first (#4297). Nor does it answer for
 missing data: not the sequencer, not healing. **In this phase a syncing node
 refuses every read** and answers once it is fully synced (Paul, 2026-09-19):
-`BOOTING` refuses with `NotReady`, `ACTIVE` serves. "Every read" is the rule;
-the code gates two query kinds (`servingFor`: a BPT page, an account with a
-receipt) and a joining node still answers ordinary account reads from a
-half-filled store — a code change under #4295, not a narrowing of this
-sentence. Tracking
+`BOOTING` refuses with `NotReady`, `ACTIVE` serves. "Every read" is the rule
+and, since #4368, what the code does: `servingFor` refuses every query while
+the node is `BOOTING`, counted per call. Tracking
 which nodes are not synced, so a *reader* can be sent to one that can answer,
 is the next phase's work and nothing here anticipates it.
 
