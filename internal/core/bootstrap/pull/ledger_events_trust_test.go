@@ -198,3 +198,95 @@ func TestStaleMinorVotesAreCleared(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, got, "the stale vote survived the pull")
 }
+
+// TestServedEventsAreWrittenOnce (review R2). The events BPT is keyed by
+// entry, so an entry served twice leaves its root -- and the ledger's leaf
+// check -- unchanged, while the event set itself would hold the entry twice
+// and the executor would release a vote or expire a transaction twice. Each
+// set is written with each entry once, and a block served twice is one block.
+func TestServedEventsAreWrittenOnce(t *testing.T) {
+	src, root, block, part, sysLedger, _, partitionID := ledgerWithOneVote(t)
+	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
+	opts := Options{Mode: ModeStateOnly, Verify: anchored{root: root, block: block}, Partition: part}
+	ctx := context.Background()
+
+	t.Run("the vote is served twice in its block", func(t *testing.T) {
+		liar := rewriteEvents{Source: honest, fn: func(ev *api.LedgerEvents) {
+			for _, v := range ev.MinorVotes {
+				v.Votes = append(v.Votes, v.Votes[0].Copy())
+			}
+		}}
+		dst := newObservedDB(t)
+		batch := dst.Begin(true)
+		defer batch.Discard()
+		err := Account(ctx, liar, batch, sysLedger, opts)
+		require.NoError(t, err, "an honest ledger with duplicated entries should be kept, deduplicated")
+		votes, err := batch.Account(sysLedger).Events().Minor().Votes(30).Get()
+		require.NoError(t, err)
+		require.Len(t, votes, 1, "the joined node holds the vote twice; the executor releases it twice")
+		blocks, err := batch.Account(sysLedger).Events().Minor().Blocks().Get()
+		require.NoError(t, err)
+		require.Equal(t, []uint64{30}, blocks)
+	})
+
+	t.Run("the block is served twice", func(t *testing.T) {
+		liar := rewriteEvents{Source: honest, fn: func(ev *api.LedgerEvents) {
+			ev.MinorVotes = append(ev.MinorVotes, ev.MinorVotes[0])
+		}}
+		dst := newObservedDB(t)
+		batch := dst.Begin(true)
+		defer batch.Discard()
+		require.NoError(t, Account(ctx, liar, batch, sysLedger, opts))
+		votes, err := batch.Account(sysLedger).Events().Minor().Votes(30).Get()
+		require.NoError(t, err)
+		require.Len(t, votes, 1)
+		blocks, err := batch.Account(sysLedger).Events().Minor().Blocks().Get()
+		require.NoError(t, err)
+		require.Equal(t, []uint64{30}, blocks, "a block listed twice")
+	})
+
+	t.Run("a pending expiry is served twice", func(t *testing.T) {
+		// A second peer fixture: one major pending expiry.
+		src2 := newObservedDB(t)
+		b := src2.Begin(true)
+		ledger := &protocol.SystemLedger{Url: sysLedger, Index: 204}
+		require.NoError(t, b.Account(sysLedger).Main().Put(ledger))
+		pend := protocol.AccountUrl("alice", "tokens").WithTxID([32]byte{5})
+		require.NoError(t, b.Account(sysLedger).Events().Major().Pending(7).Add(pend))
+		require.NoError(t, b.Account(sysLedger).Events().Backlog().Expired().Add(pend))
+		require.NoError(t, b.UpdateBPT())
+		require.NoError(t, b.Commit())
+		b = src2.Begin(true)
+		data, err := (&protocol.IndexEntry{BlockIndex: ledger.Index}).MarshalBinary()
+		require.NoError(t, err)
+		idx, err := b.Account(sysLedger).RootChain().Index().Get()
+		require.NoError(t, err)
+		require.NoError(t, idx.AddEntry(data, false))
+		require.NoError(t, b.UpdateBPT())
+		require.NoError(t, b.Commit())
+		b = src2.Begin(false)
+		root2, err := b.GetBptRootHash()
+		require.NoError(t, err)
+		b.Discard()
+		honest2 := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src2, Partition: partitionID})}
+		opts2 := Options{Mode: ModeStateOnly, Verify: anchored{root: root2, block: ledger.Index}, Partition: part}
+		liar := rewriteEvents{Source: honest2, fn: func(ev *api.LedgerEvents) {
+			for _, p := range ev.MajorPending {
+				p.Pending = append(p.Pending, p.Pending[0])
+			}
+			ev.Expired = append(ev.Expired, ev.Expired[0])
+		}}
+		dst := newObservedDB(t)
+		batch := dst.Begin(true)
+		defer batch.Discard()
+		err = Account(ctx, liar, batch, sysLedger, opts2)
+		require.NoError(t, err, "an honest ledger with duplicated entries should be kept, deduplicated")
+		pending, err := batch.Account(sysLedger).Events().Major().Pending(7).Get()
+		require.NoError(t, err)
+		require.Len(t, pending, 1, "the joined node holds the expiry twice")
+		expired, err := batch.Account(sysLedger).Events().Backlog().Expired().Get()
+		require.NoError(t, err)
+		require.Len(t, expired, 1, "the joined node holds the backlog entry twice")
+	})
+
+}

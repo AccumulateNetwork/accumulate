@@ -50,6 +50,7 @@ import (
 	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -705,24 +706,75 @@ func replaceEvents(events *database.AccountEvents, ev *api.LedgerEvents) error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// Writing a non-empty set adds its block to the list (blockEventSet).
+	// Each set is written once per block, with each entry once. The events
+	// BPT is keyed by entry, so an entry served twice leaves the root -- and
+	// the leaf check -- unchanged, while the set itself would hold it twice
+	// and the executor would process it twice (review R2). A block served
+	// twice is one block. Writing a non-empty set adds its block to the list
+	// (blockEventSet).
+	votes := map[uint64][]*protocol.AuthoritySignature{}
+	var voteBlocks []uint64
 	for _, v := range ev.MinorVotes {
-		if v == nil || len(v.Votes) == 0 {
+		if v == nil {
 			continue
 		}
-		if err := events.Minor().Votes(v.Block).Put(v.Votes); err != nil {
+		if _, ok := votes[v.Block]; !ok {
+			voteBlocks = append(voteBlocks, v.Block)
+		}
+		votes[v.Block] = append(votes[v.Block], v.Votes...)
+	}
+	for _, b := range voteBlocks {
+		set := uniqueBy(votes[b], func(v *protocol.AuthoritySignature) [32]byte {
+			return record.NewKey(v.Authority, v.TxID.Hash()).Hash()
+		})
+		if len(set) == 0 {
+			continue
+		}
+		if err := events.Minor().Votes(b).Put(set); err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
 	}
+	pending := map[uint64][]*url.TxID{}
+	var pendingBlocks []uint64
 	for _, p := range ev.MajorPending {
-		if p == nil || len(p.Pending) == 0 {
+		if p == nil {
 			continue
 		}
-		if err := events.Major().Pending(p.Block).Put(p.Pending); err != nil {
+		if _, ok := pending[p.Block]; !ok {
+			pendingBlocks = append(pendingBlocks, p.Block)
+		}
+		pending[p.Block] = append(pending[p.Block], p.Pending...)
+	}
+	for _, b := range pendingBlocks {
+		set := uniqueBy(pending[b], (*url.TxID).Hash)
+		if len(set) == 0 {
+			continue
+		}
+		if err := events.Major().Pending(b).Put(set); err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
 	}
-	return errors.UnknownError.Wrap(events.Backlog().Expired().Put(ev.Expired))
+	return errors.UnknownError.Wrap(events.Backlog().Expired().Put(uniqueBy(ev.Expired, (*url.TxID).Hash)))
+}
+
+// uniqueBy keeps the first of each entry with the same key, and drops nil
+// entries, in the order served.
+func uniqueBy[T comparable](in []T, key func(T) [32]byte) []T {
+	seen := map[[32]byte]bool{}
+	var out []T
+	var zero T
+	for _, v := range in {
+		if v == zero {
+			continue
+		}
+		k := key(v)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, v)
+	}
+	return out
 }
 
 // pullDirectory replaces the account's directory list with the peer's. It
