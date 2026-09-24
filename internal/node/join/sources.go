@@ -13,6 +13,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -47,6 +48,11 @@ type Sources interface {
 	// where one peer answering this call and another the next is no worse
 	// than one peer answering both.
 	Querier(partition *url.URL) api.Querier
+
+	// ValidatorsOf is the partition's validators, each reached by name --
+	// never this node. The join collects its partition's own anchors from
+	// them (executor spec, "Sync", "The algorithm", step 3).
+	anchorsrc.Validators
 }
 
 // QueryPeers finds the peers serving a partition's query service and addresses
@@ -128,6 +134,32 @@ func (q *QueryPeers) ForPartition(ctx context.Context, partition *url.URL) ([]pu
 	}
 	return srcs, nil
 }
+
+// ValidatorsOf implements [anchorsrc.Validators]: the peers serving the
+// partition's sequencer, minus this node, each addressed by name. A joining
+// node collects its partition's own anchors from them (executor spec, "Sync",
+// "The algorithm", step 3).
+func (q *QueryPeers) ValidatorsOf(ctx context.Context, partition *url.URL) ([]anchorsrc.Validator, error) {
+	if q.Client == nil {
+		return nil, errors.NotReady.With("no network client")
+	}
+	id := partitionIDOf(partition)
+	addr := private.ServiceTypeSequencer.AddressFor(id)
+	found, err := q.Client.FindService(ctx, api.FindServiceOptions{Network: q.Network, Service: addr})
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("find the validators of %s: %w", id, err)
+	}
+	var out []anchorsrc.Validator
+	for _, p := range selectPeers(found, q.Self) {
+		out = append(out, anchorsrc.Validator{
+			Name:      "peer " + p.String(),
+			Sequencer: q.Client.ForPeer(p).ForAddress(addr.Multiaddr()).Private(),
+		})
+	}
+	return out, nil
+}
+
+var _ anchorsrc.Validators = (*QueryPeers)(nil)
 
 // peerSource is one peer's querier, named by the peer, so that the pull can
 // say which peer answered what (#4397 review F3).

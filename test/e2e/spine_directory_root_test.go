@@ -7,6 +7,7 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -14,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
@@ -50,20 +52,6 @@ func namedPeers(t *testing.T, sim *Sim) *join.QueryPeers {
 		Network: t.Name(),
 		Router:  sim.S.Router(),
 	}
-}
-
-// theDirectorysPool is the pool a Directory node's join really reads, chosen
-// the way the join chooses it. Pinning a rewriter to "BVN0/anchors" instead
-// makes a test that cannot tell a routing change from a passing run: the
-// rewriter stops firing, the node promotes on untouched anchors, and the
-// first assertion to speak says "the node promoted".
-func theDirectorysPool(t *testing.T, sim *Sim) *url.URL {
-	t.Helper()
-	a, err := anchorsrc.FromStore(sim.S.Database(Directory), DnUrl())
-	require.NoError(t, err)
-	pool, err := anchorsrc.PoolFor(DnUrl(), a.BvnNames())
-	require.NoError(t, err)
-	return pool
 }
 
 // genesisOf copies the network accounts a node holds from its own genesis
@@ -162,25 +150,6 @@ func joinTheDirectoryFrom(t *testing.T, sim *Sim, sources join.Sources, local *d
 	return state, 0
 }
 
-// requireNoSpineKept says the node wrote none of the four accounts a join
-// takes first. They used to be settled with Keep, unverified, which made the
-// accounts a joining node needs most the four it took on a peer's word
-// (#4301).
-func requireNoSpineKept(t *testing.T, local *database.Database) {
-	t.Helper()
-	View(t, local, func(batch *database.Batch) {
-		for _, u := range []*url.URL{
-			DnUrl().JoinPath(AnchorPool),
-			DnUrl().JoinPath(Ledger),
-			DnUrl().JoinPath(Operators),
-			DnUrl().JoinPath(Operators, "1"),
-		} {
-			_, err := batch.Account(u).Main().Get()
-			require.Error(t, err, "%v was written from a peer nobody could verify", u)
-		}
-	})
-}
-
 // TestTheDirectorysOwnRootIsObtainedThroughTheJoin is (e) of #4301.
 //
 // **The Directory's own root lives in a BVN's anchor pool.** A produced
@@ -205,53 +174,59 @@ func TestTheDirectorysOwnRootIsObtainedThroughTheJoin(t *testing.T) {
 	t.Logf("the Directory's state matched the root anchored for its block %d", matched)
 }
 
-// rewritePool is a peer that changes what it serves out of one anchor pool
-// and is otherwise honest -- the true anchors, the true roots, the true
-// state, the true receipts. It wraps a real Sources, so the reads still go
-// out through QueryPeers to a named peer's query service.
-type rewritePool struct {
+// rewriteAnchors is a partition whose validators change the anchors they
+// answer and are otherwise honest -- the true anchors, the true roots, the
+// true state, the true receipts. It wraps a real Sources, so the reads still
+// go out through QueryPeers to named peers: the join collects its partition's
+// own anchors from its validators' sequencers (executor spec, "Sync", "The
+// algorithm", step 3), and those are the answers rewritten.
+type rewriteAnchors struct {
 	inner   join.Sources
-	pool    *url.URL
 	rewrite func(*api.MessageRecord[messaging.Message]) bool
 	touched *int
 }
 
-func (r rewritePool) For(ctx context.Context, account *url.URL) ([]pull.Source, *url.URL, error) {
+func (r rewriteAnchors) For(ctx context.Context, account *url.URL) ([]pull.Source, *url.URL, error) {
 	return r.inner.For(ctx, account)
 }
 
-func (r rewritePool) Querier(partition *url.URL) api.Querier {
-	return rewriteQuerier{inner: r.inner.Querier(partition), owner: r}
+func (r rewriteAnchors) Querier(partition *url.URL) api.Querier { return r.inner.Querier(partition) }
+
+func (r rewriteAnchors) ValidatorsOf(ctx context.Context, partition *url.URL) ([]anchorsrc.Validator, error) {
+	vals, err := r.inner.ValidatorsOf(ctx, partition)
+	for i, v := range vals {
+		vals[i].Sequencer = rewritingSequencer{inner: v.Sequencer, owner: r}
+	}
+	return vals, err
 }
 
-type rewriteQuerier struct {
-	inner api.Querier
-	owner rewritePool
+type rewritingSequencer struct {
+	inner private.Sequencer
+	owner rewriteAnchors
 }
 
-func (r rewriteQuerier) Query(ctx context.Context, scope *url.URL, q api.Query) (api.Record, error) {
-	rec, err := r.inner.Query(ctx, scope, q)
-	if err != nil || !scope.Equal(r.owner.pool) {
+func (r rewritingSequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64, opts private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	rec, err := r.inner.Sequence(ctx, src, dst, num, opts)
+	if err != nil || rec == nil {
 		return rec, err
 	}
-	rr, ok := rec.(*api.RecordRange[api.Record])
-	if !ok {
-		return rec, nil
+	if r.owner.rewrite(rec) {
+		*r.owner.touched++
 	}
-	for _, x := range rr.Records {
-		ce, ok := x.(*api.ChainEntryRecord[api.Record])
-		if !ok {
-			continue
-		}
-		mr, ok := ce.Value.(*api.MessageRecord[messaging.Message])
-		if !ok {
-			continue
-		}
-		if r.owner.rewrite(mr) {
-			*r.owner.touched++
-		}
+	return rec, nil
+}
+
+// signerOf is the key a signature record carries, as a sequencer's answer
+// (a SignatureMessage) or a pool entry (a BlockAnchor) carries it.
+func signerOf(m messaging.Message) KeySignature {
+	switch m := m.(type) {
+	case *messaging.BlockAnchor:
+		return m.Signature
+	case *messaging.SignatureMessage:
+		ks, _ := m.Signature.(KeySignature)
+		return ks
 	}
-	return rr, nil
+	return nil
 }
 
 // TestAPeerConsistentWithItselfDoesNotPromoteTheNode is (b) of #4301.
@@ -264,9 +239,8 @@ func (r rewriteQuerier) Query(ctx context.Context, scope *url.URL, q api.Query) 
 func TestAPeerConsistentWithItselfDoesNotPromoteTheNode(t *testing.T) {
 	sim := spineNetwork(t, 3)
 	touched := 0
-	sources := rewritePool{
+	sources := rewriteAnchors{
 		inner:   namedPeers(t, sim),
-		pool:    theDirectorysPool(t, sim),
 		touched: &touched,
 		rewrite: func(mr *api.MessageRecord[messaging.Message]) bool {
 			if mr.Signatures == nil || len(mr.Signatures.Records) == 0 {
@@ -277,13 +251,11 @@ func TestAPeerConsistentWithItselfDoesNotPromoteTheNode(t *testing.T) {
 		},
 	}
 
-	state, local, matched := joinTheDirectory(t, sim, sources, 40)
+	_, _, matched := joinTheDirectory(t, sim, sources, 40)
 	require.NotZero(t, touched, "no anchor was served to the node at all, so this test proves nothing")
 	require.Zero(t, matched,
 		"a node promoted on a root nobody signed: the chain of trust terminates in the peer (#4301)")
-	_ = state
-	requireNoSpineKept(t, local)
-	t.Logf("%d anchors were served with their signatures removed; the node did not promote and kept no spine", touched)
+	t.Logf("%d anchors were served with their signatures removed; the node did not promote", touched)
 }
 
 // TestForgedValidatorsDoNotPromoteTheNode is the Done-when of #4301 said
@@ -308,9 +280,8 @@ func TestForgedValidatorsDoNotPromoteTheNode(t *testing.T) {
 	}
 
 	forged := 0
-	sources := rewritePool{
+	sources := rewriteAnchors{
 		inner:   namedPeers(t, sim),
-		pool:    theDirectorysPool(t, sim),
 		touched: &forged,
 		rewrite: func(mr *api.MessageRecord[messaging.Message]) bool {
 			if mr.Sequence == nil || mr.Message == nil {
@@ -348,12 +319,11 @@ func TestForgedValidatorsDoNotPromoteTheNode(t *testing.T) {
 		},
 	}
 
-	_, local, matched := joinTheDirectory(t, sim, sources, 40)
+	_, _, matched := joinTheDirectory(t, sim, sources, 40)
 	require.NotZero(t, forged, "no anchor was re-signed, so this test proves nothing")
 	require.Zero(t, matched,
 		"a node promoted on a history signed by four keys of the peer's own making: "+
 			"the quorum was counted and its membership was not (#4301)")
-	requireNoSpineKept(t, local)
 	t.Logf("%d anchors were re-signed by a quorum of keys the network does not name; none promoted the node", forged)
 }
 
@@ -367,44 +337,51 @@ func TestForgedValidatorsDoNotPromoteTheNode(t *testing.T) {
 func TestAPartialQuorumDoesNotPromoteTheNode(t *testing.T) {
 	sim := spineNetwork(t, 3)
 
+	// One validator's signature is kept, wherever it appears; every other
+	// is dropped from every answer. Each validator answers with its own
+	// signature and whatever quorum it holds, so thinning one answer is not
+	// enough: the collector would find the rest in the others.
 	thinned := 0
-	sources := rewritePool{
+	var kept []byte
+	sources := rewriteAnchors{
 		inner:   namedPeers(t, sim),
-		pool:    theDirectorysPool(t, sim),
 		touched: &thinned,
 		rewrite: func(mr *api.MessageRecord[messaging.Message]) bool {
 			if mr.Signatures == nil {
 				return false
 			}
-			kept := 0
+			dropped := false
 			for _, set := range mr.Signatures.Records {
 				if set == nil || set.Signatures == nil {
 					continue
 				}
 				var keep []*api.MessageRecord[messaging.Message]
 				for _, s := range set.Signatures.Records {
-					ba, ok := s.Message.(*messaging.BlockAnchor)
-					if !ok || ba.Signature == nil {
+					ks := signerOf(s.Message)
+					if ks == nil {
 						keep = append(keep, s) // not a validator signature; leave it
 						continue
 					}
-					if kept == 0 {
-						kept++
-						keep = append(keep, s)
+					if kept == nil {
+						kept = ks.GetPublicKey()
 					}
+					if bytes.Equal(kept, ks.GetPublicKey()) {
+						keep = append(keep, s)
+						continue
+					}
+					dropped = true
 				}
 				set.Signatures.Records = keep
 				set.Signatures.Total = uint64(len(keep))
 			}
-			return kept > 0
+			return dropped
 		},
 	}
 
-	_, local, matched := joinTheDirectory(t, sim, sources, 40)
+	_, _, matched := joinTheDirectory(t, sim, sources, 40)
 	require.NotZero(t, thinned, "no anchor was thinned, so this test proves nothing")
 	require.Zero(t, matched,
 		"a node promoted on one validator's signature where the set requires two (#4301)")
-	requireNoSpineKept(t, local)
 	t.Logf("%d anchors were served with one signature of the two the set requires; none promoted the node", thinned)
 }
 

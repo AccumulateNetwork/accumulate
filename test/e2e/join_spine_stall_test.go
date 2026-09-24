@@ -84,6 +84,8 @@ func TestAJoinHeldAtAnAnchorNoPeerServesSaysWhereAndWhom(t *testing.T) {
 	var verified int
 	src.OnAnchor = func(*url.URL, uint64, [32]byte) { verified++ }
 
+	// This is the anchor-pool reader on its own. The join no longer reads its
+	// roots from a pool (#4438); what holds a join is below.
 	for read := 1; read <= 2; read++ {
 		err = src.Read(ctx)
 		require.Error(t, err)
@@ -96,26 +98,34 @@ func TestAJoinHeldAtAnAnchorNoPeerServesSaysWhereAndWhom(t *testing.T) {
 			"read %d: the peers asked are named", read)
 	}
 
-	// The production join reads it the same way, and says so on the gauge
-	// (review F2): a BVN0 node restarts, and the join the simulator builds
-	// for it, as the daemon does, runs its round. Directory node 0 restarts
-	// too, so no Directory peer the BVN0 join can ask serves entry 25 signed.
-	p.RestartNode(0)
+}
+
+// A joining BVN node collects its partition's own anchors from its
+// validators (executor spec, "Sync", "The algorithm", step 3; #4438), so a
+// Directory pool with holes in it no longer holds it up. What holds it is its
+// own partition's validators not signing: here one of BVN0's three nodes
+// stops and another restarts, so the joining node's own sequencer is never
+// asked (#4303), the stopped one answers nothing, and the one that answers
+// signs alone where the partition's threshold is two. The anchor is produced and no quorum
+// signed it, and the production join says so on the gauge -- in the join's
+// round and in the root watch's read (#4419, review F2).
+func TestAJoinHeldAtAnAnchorItsValidatorsDoNotSignSaysSo(t *testing.T) {
+	sim, _, _, _ := joinADirectoryNodeByPull(t)
+	ctx := context.Background()
 	b := sim.S.Partition("BVN0")
-	const bvnJoiner = 1
+	const bvnJoiner, other = 1, 2
+
+	b.StopNode(other)
+	b.RestartNode(bvnJoiner)
+	require.Equal(t, float64(-1), spineStalledGauge(t, "BVN0"), "a join built fresh is not stalled")
+	_ = b.NodeJoinState(bvnJoiner).Pull(ctx)
+	require.Greater(t, spineStalledGauge(t, "BVN0"), float64(0), "the join's round does not report the stall")
 
 	// Diverged, the root watch's read after the handoff.
 	b.RestartNode(bvnJoiner)
 	require.Equal(t, float64(-1), spineStalledGauge(t, "BVN0"), "a join built fresh is not stalled")
-	_, _, err = b.NodeJoinState(bvnJoiner).Diverged(ctx)
-	require.Error(t, err)
-	require.Equal(t, float64(first), spineStalledGauge(t, "BVN0"), "the root watch's read does not report the stall")
-
-	// Pull, the join's round.
-	b.RestartNode(bvnJoiner)
-	require.Equal(t, float64(-1), spineStalledGauge(t, "BVN0"), "a join built fresh is not stalled")
-	_ = b.NodeJoinState(bvnJoiner).Pull(ctx)
-	require.Equal(t, float64(first), spineStalledGauge(t, "BVN0"), "the join's round does not report the stall")
+	_, _, _ = b.NodeJoinState(bvnJoiner).Diverged(ctx)
+	require.Greater(t, spineStalledGauge(t, "BVN0"), float64(0), "the root watch's read does not report the stall")
 }
 
 // spineStalledGauge is accumulate_join_spine_stalled_entry for a partition,

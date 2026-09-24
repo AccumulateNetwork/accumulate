@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
@@ -52,6 +53,10 @@ func (s *countingSources) For(ctx context.Context, account *url.URL) ([]pull.Sou
 	s.asked[k][s.round]++
 	s.mu.Unlock()
 	return s.inner.For(ctx, account)
+}
+
+func (s *countingSources) ValidatorsOf(ctx context.Context, partition *url.URL) ([]anchorsrc.Validator, error) {
+	return s.inner.ValidatorsOf(ctx, partition)
 }
 
 func (s *countingSources) Querier(partition *url.URL) api.Querier {

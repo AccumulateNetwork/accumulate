@@ -22,6 +22,7 @@ import (
 
 // fixedSources hands every account the same sources, all of this partition.
 type fixedSources struct {
+	noValidators
 	partition *url.URL
 	srcs      []pull.Source
 }

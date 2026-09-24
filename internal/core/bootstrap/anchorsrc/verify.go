@@ -46,6 +46,12 @@ import (
 //     bytes, which is the only reason they do not reach the threshold on
 //     their own.
 func (s *Source) verify(producer string, rec *api.MessageRecord[*messaging.TransactionMessage]) error {
+	return verifyQuorum(s.Authority, producer, rec)
+}
+
+// verifyQuorum is verify for any reader of anchors: the pool reader and the
+// collector judge an anchor by one rule.
+func verifyQuorum(authority *Authority, producer string, rec *api.MessageRecord[*messaging.TransactionMessage]) error {
 	if rec.Sequence == nil {
 		return errors.BadRequest.With("the anchor record carries no sequenced message, so there is nothing a signature covers")
 	}
@@ -53,7 +59,7 @@ func (s *Source) verify(producer string, rec *api.MessageRecord[*messaging.Trans
 		return errors.Unauthenticated.With("the anchor carries no signatures")
 	}
 
-	set, err := s.Authority.SetFor(producer)
+	set, err := authority.SetFor(producer)
 	if err != nil {
 		return errors.Unauthenticated.WithFormat("no validator set for %s: %w", producer, err)
 	}

@@ -24,6 +24,7 @@ import (
 // routingSources answers with the partition it is told to, so a test can put an
 // account somewhere other than the joining node's own partition.
 type routingSources struct {
+	noValidators
 	partition *url.URL
 }
 

@@ -22,6 +22,7 @@ import (
 // peerSources is one peer: a real querier over a real store, reached the way
 // the join reaches a peer. Its answers are the API's, receipts and all.
 type peerSources struct {
+	noValidators
 	partition *url.URL
 	querier   api.Querier
 }

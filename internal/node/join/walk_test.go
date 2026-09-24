@@ -26,6 +26,7 @@ import (
 // walk, and each account's current state -- all set by the test, so that the
 // order a page and a record are seen in is the test's to choose.
 type scriptedPeer struct {
+	noValidators
 	partition *url.URL
 	block     uint64
 	records   map[uint64][]*url.URL

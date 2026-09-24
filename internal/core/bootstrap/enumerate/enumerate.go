@@ -117,46 +117,72 @@ func Run(
 			return res, err
 		}
 
-		page, err := src.QueryBptPage(ctx, scope, &api.BptPageQuery{
-			StartHash: start,
-			Count:     pageSize,
-		})
+		page, err := ReadPage(ctx, src, scope, batch, start, pageSize)
 		if err != nil {
 			return res, errors.UnknownError.WithFormat("page %d: %w", res.PagesPulled+1, err)
 		}
 		res.PagesPulled++
-
-		for _, e := range page.Entries {
-			if e == nil {
-				continue
-			}
-			res.LeavesSeen++
-			if e.Account == nil {
-				// A leaf that names no account cannot be pulled, so there is
-				// nothing the node can do about it either way.
-				continue
-			}
-			res.Accounts = append(res.Accounts, e.Account)
-
-			local, err := batch.BPT().Get(record.KeyFromHash(e.KeyHash))
-			switch {
-			case err == nil && len(local) == 32 && [32]byte(local) == e.ValueHash:
-				// Held, and it agrees
-			case err == nil, errors.Is(err, errors.NotFound):
-				res.Stale = append(res.Stale, e.Account)
-			default:
-				return res, errors.UnknownError.WithFormat("read local leaf %x: %w", e.KeyHash[:8], err)
-			}
-		}
-		res.LastBptRoot = page.BptRoot
+		res.LeavesSeen += page.Leaves
+		res.Accounts = append(res.Accounts, page.Accounts...)
+		res.Stale = append(res.Stale, page.Stale...)
+		res.LastBptRoot = page.Record.BptRoot
 
 		if opts.OnPage != nil {
-			opts.OnPage(res.PagesPulled, page)
+			opts.OnPage(res.PagesPulled, page.Record)
 		}
 
-		if page.Done {
+		if page.Record.Done {
 			return res, nil
 		}
-		start = page.NextStart
+		start = page.Record.NextStart
 	}
+}
+
+// A Page is one page of a walk: what the peer served, the accounts it named,
+// and those whose leaf this node does not hold or holds and does not agree
+// with.
+type Page struct {
+	Record   *api.BptPageRecord
+	Leaves   int
+	Accounts []*url.URL
+	Stale    []*url.URL
+}
+
+// ReadPage reads the page of the peer's BPT that starts at start -- zero
+// starts a walk -- and compares its leaves with the batch's. The batch is
+// read, never written. It is one step of Run, for a caller that walks a page
+// at a time: the join, which processes block-ledger records between pages
+// (executor spec, "Sync", "The algorithm", step 1).
+func ReadPage(ctx context.Context, src Source, scope *url.URL, batch *database.Batch, start [32]byte, count uint64) (*Page, error) {
+	if count == 0 {
+		count = 256
+	}
+	rec, err := src.QueryBptPage(ctx, scope, &api.BptPageQuery{StartHash: start, Count: count})
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	page := &Page{Record: rec}
+	for _, e := range rec.Entries {
+		if e == nil {
+			continue
+		}
+		page.Leaves++
+		if e.Account == nil {
+			// A leaf that names no account cannot be pulled, so there is
+			// nothing the node can do about it either way.
+			continue
+		}
+		page.Accounts = append(page.Accounts, e.Account)
+
+		local, err := batch.BPT().Get(record.KeyFromHash(e.KeyHash))
+		switch {
+		case err == nil && len(local) == 32 && [32]byte(local) == e.ValueHash:
+			// Held, and it agrees
+		case err == nil, errors.Is(err, errors.NotFound):
+			page.Stale = append(page.Stale, e.Account)
+		default:
+			return nil, errors.UnknownError.WithFormat("read local leaf %x: %w", e.KeyHash[:8], err)
+		}
+	}
+	return page, nil
 }

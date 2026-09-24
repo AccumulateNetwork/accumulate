@@ -12,15 +12,26 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// noValidators is the validators of a test's peers that reach none: the
+// join's anchor source finds no validator and takes no anchor.
+type noValidators struct{}
+
+func (noValidators) ValidatorsOf(context.Context, *url.URL) ([]anchorsrc.Validator, error) {
+	return nil, errors.NotReady.With("these test peers reach no validator")
+}
+
 // oneSource hands the fetch loop a single peer for every account.
 type oneSource struct {
+	noValidators
 	part *url.URL
 	src  pull.Source
 }

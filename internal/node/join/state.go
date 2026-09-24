@@ -18,13 +18,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/enumerate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	bpt "gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -71,10 +71,9 @@ type PulledState struct {
 	db        *database.Database
 	sources   Sources
 
-	// anchors is where this partition's verified roots come from: the pool of
-	// the partition that RECEIVES this one's anchors, because a produced
-	// anchor never lives on its own partition's pool (#4301).
-	anchors *anchorsrc.Source
+	// anchors is where this partition's verified roots come from: its own
+	// anchors, collected from its validators (anchorsrc.Collector).
+	anchors anchorSource
 
 	// authority is the validator sets this node trusts. It is seeded from
 	// this node's OWN store before anything is pulled, and it moves only
@@ -249,27 +248,23 @@ func NewState(opts StateOptions) (*PulledState, error) {
 			opts.Partition, err)
 	}
 
-	// Producer routing. To verify THIS partition's root the node needs an
-	// anchor this partition PRODUCED, and a produced anchor lives on the
-	// RECEIVING partition's pool: a BVN's in dn.acme/anchors. The Directory
-	// anchors to itself as well as to every BVN, so its own root is in both
-	// pools under the same signatures; the join reads it from a BVN's so
-	// that the copy it takes is a second partition's. What the old code
-	// could not do was not obtain the Directory's root — it was check who
-	// signed it (#4301).
-	pool, err := anchorsrc.PoolFor(opts.Partition, authority.BvnNames())
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("find the pool that holds %v's anchors: %w", opts.Partition, err)
-	}
-	// Read from a peer that has executed those anchors — never from this
-	// node, whose anchor pool is the one the pull has not filled yet (#4303).
+	// The partition's OWN anchors, collected from its validators: each
+	// signs its own copy of the anchor of block B as B closes, and the anchor
+	// is taken when distinct members reaching the partition's threshold have
+	// signed it (executor spec, "Sync", "The algorithm", step 3). Not the
+	// Directory's copy: that reaches the Directory's pool only after the
+	// Directory executes it, far too late to match a partition that moves
+	// every block (Paul, 2026-09-25). The Directory's own anchors are
+	// collected from the Directory's validators the same way. Never from this
+	// node (#4303).
 	s.authority = authority
-	s.anchors, err = anchorsrc.New(opts.Sources.Querier(pool.Identity()), pool, opts.Partition, authority)
+	collector, err := anchorsrc.NewCollector(opts.Partition, authority, opts.Sources, opts.Sources.Querier(opts.Partition))
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	s.anchors.OnAnchor = track.Observe
-	s.anchors.OnRefused = s.anchorRefused
+	collector.OnAnchor = track.Observe
+	collector.OnRefused = s.anchorRefused
+	s.anchors = collector
 
 	// Watchable from the moment the node starts joining, and on every change.
 	// The daemon has already reported this partition's state — the series
@@ -288,15 +283,24 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	return s, nil
 }
 
-// mSpineStalled is the anchor-pool entry this node's anchor source is held
-// at, or -1. A join held there reads no root after it and so settles nothing
-// after it, while every other sign of the join says only BOOTING (#4419).
+// anchorSource is what the join reads its partition's verified roots from.
+type anchorSource interface {
+	Read(ctx context.Context) error
+	Stalled() (anchorsrc.Stall, bool)
+	Rewind()
+}
+
+// mSpineStalled is the sequence number of the anchor this node's anchor
+// source is held at, or -1: an anchor a validator produced and no quorum of
+// the partition's validators signed. A join held there reads no root after it
+// and so matches nothing after it, while every other sign of the join says
+// only BOOTING (#4419).
 var mSpineStalled = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Namespace: "accumulate",
 	Subsystem: "join",
 	Name:      "spine_stalled_entry",
-	Help: "The anchor-pool entry the join's anchor source is held at because no peer asked " +
-		"serves it whole and signed; -1 when it is not held",
+	Help: "The sequence number of the partition's own anchor the join's anchor source is held at " +
+		"because no quorum of the partition's validators signed it; -1 when it is not held",
 }, []string{"partition"})
 
 // stallSayEvery is how often a stall, and a refusal repeated word for word,
@@ -323,8 +327,8 @@ func (s *PulledState) readAnchors(ctx context.Context) error {
 	if !held {
 		mSpineStalled.WithLabelValues(s.label).Set(-1)
 		if s.stallLog.on {
-			s.log.Info("The anchor source moved past the entry it was held at",
-				"partition", s.partition, "entry", s.stallLog.entry, "after", now.Sub(s.stallLog.since).Round(time.Second))
+			s.log.Info("The anchor source moved past the anchor it was held at",
+				"partition", s.partition, "anchor", s.stallLog.entry, "after", now.Sub(s.stallLog.since).Round(time.Second))
 			s.stallLog.on = false
 		}
 		return err
@@ -337,8 +341,8 @@ func (s *PulledState) readAnchors(ctx context.Context) error {
 		return err
 	}
 	s.stallLog.at = now
-	s.log.Info("This partition's spine is stalled: no peer asked serves this anchor-pool entry whole and signed, so no root after it is read",
-		"partition", s.partition, "pool", s.anchors.Pool, "entry", st.Entry,
+	s.log.Info("This partition's spine is stalled: no quorum of its validators signed this anchor, so no root after it is read",
+		"partition", s.partition, "anchor", st.Entry,
 		"for", now.Sub(s.stallLog.since).Round(time.Second), "asked", st.Asked, "error", st.Err)
 	return err
 }
@@ -402,6 +406,15 @@ func (s *PulledState) Pull(ctx context.Context) error {
 		// once a minute by readAnchors, not once a round here.
 		s.log.Info("This partition's anchors could not be read this round",
 			"partition", s.partition, "error", err)
+	}
+
+	// A state that already equals a verified anchor's root is proven, and
+	// nothing is pulled over it until Matched has reported it: a restarted
+	// node one or two blocks behind matches its own state and hands off from
+	// there (#4411), and a pull that wrote first would move it off a match
+	// to chase another.
+	if s.unreported() {
+		return nil
 	}
 
 	q := api.Querier2{Querier: s.sources.Querier(s.partition)}
@@ -480,26 +493,31 @@ func (s *PulledState) Pull(ctx context.Context) error {
 }
 
 // waiting reports whether the state is still waiting at p.waitFor for the
-// anchor that can match it. It is not, once Matched has reported this root and
-// the join still pulls -- a gap, or a handoff that could not be made there,
-// asks for the state to move on -- or once an anchor of a block at or after
-// waitFor has been read and the root is none of the anchored ones.
+// anchor that can match it: until an anchor of a block at or after waitFor has
+// been read. Once one has, the root either is an anchored one -- and the round
+// never got here, Pull stopped at unreported -- or it is not, and the records
+// go on.
 func (s *PulledState) waiting(p *syncing) bool {
+	return s.tracker.LatestObservedBlock() < p.waitFor
+}
+
+// unreported is whether the local root equals a verified anchor's root that
+// Matched has not reported yet. One it has reported and the join still pulls
+// -- a gap at the next block, or a handoff that could not be made there --
+// asks for the state to move on.
+func (s *PulledState) unreported() bool {
 	batch := s.db.Begin(false)
 	root, err := batch.GetBptRootHash()
 	batch.Discard()
-	if err != nil {
-		return false
-	}
-	if s.matched.Anchor == root {
+	if err != nil || root == s.matched.Anchor {
 		return false
 	}
 	for _, o := range s.tracker.Snapshot() {
 		if o.Anchor == root {
-			return true // Matched says so next
+			return true
 		}
 	}
-	return s.tracker.LatestObservedBlock() < p.waitFor
+	return false
 }
 
 // processRecords processes the block-ledger records of the blocks after L
@@ -558,7 +576,9 @@ func (s *PulledState) processRecords(ctx context.Context, q api.Querier2, p *syn
 // block the records have not reached, and that block's record pulls it again.
 func (s *PulledState) walk(ctx context.Context, q api.Querier2, p *syncing) {
 	for i := 0; i < walkPagesPerRound && !p.walked && ctx.Err() == nil; i++ {
-		page, err := q.QueryBptPage(ctx, s.partition, &api.BptPageQuery{StartHash: p.cursor, Count: walkPageSize})
+		batch := s.db.Begin(false)
+		page, err := enumerate.ReadPage(ctx, q, s.partition, batch, p.cursor, walkPageSize)
+		batch.Discard()
 		if err != nil {
 			s.log.Info("The peer's BPT could not be paged this round; the walk goes on from here next round",
 				"partition", s.partition, "pages", p.pages, "error", err)
@@ -566,36 +586,20 @@ func (s *PulledState) walk(ctx context.Context, q api.Querier2, p *syncing) {
 		}
 		p.pages++
 
-		var stale []*url.URL
-		batch := s.db.Begin(false)
-		for _, e := range page.Entries {
-			if e == nil || e.Account == nil || p.current[accountKey(e.Account)] {
-				continue
-			}
-			local, err := batch.BPT().Get(bpt.KeyFromHash(e.KeyHash))
-			if err == nil && len(local) == 32 && [32]byte(local) == e.ValueHash {
-				continue
-			}
-			stale = append(stale, e.Account)
-		}
-		batch.Discard()
-
-		for _, u := range stale {
-			// A record processed while this page was pulled may have named
-			// it since.
+		for _, u := range page.Stale {
 			if p.current[accountKey(u)] {
 				continue
 			}
 			s.pullOne(ctx, p, u)
 		}
 
-		if page.Done {
+		if page.Record.Done {
 			p.walked = true
 			s.log.Info("The walk has covered the peer's whole BPT", "partition", s.partition,
 				"pages", p.pages, "records-through", p.last, "start", p.start)
 			return
 		}
-		p.cursor = page.NextStart
+		p.cursor = page.Record.NextStart
 	}
 }
 
