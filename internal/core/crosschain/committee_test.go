@@ -104,7 +104,7 @@ func TestANodeOutsideTheCommitteeStatesTheRootItComputed(t *testing.T) {
 // the selection cannot name; it does not make everyone ask.
 func TestSelectionAmongTheCommitteeIsUnchanged(t *testing.T) {
 	part := &protocol.PartitionInfo{ID: "BVN1", Type: protocol.PartitionTypeBlockValidator}
-	ledger := &protocol.SystemLedger{Index: 500}
+	seed := []byte("any agreed seed")
 
 	// Eight validators, all active, and one of them is us in turn.
 	var keys []ed25519.PrivateKey
@@ -123,7 +123,7 @@ func TestSelectionAmongTheCommitteeIsUnchanged(t *testing.T) {
 	for _, k := range keys {
 		c := &Conductor{Partition: part, ValidatorKey: k}
 		c.Globals.Store(globals)
-		if c.selectedToPull(ledger) {
+		if c.selectedToPull(seed) {
 			selected++
 		}
 	}

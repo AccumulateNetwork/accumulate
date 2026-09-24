@@ -228,8 +228,15 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 		return errors.UnknownError.WithFormat("load system ledger: %w", err)
 	}
 
-	// Did anything happen last block?
-	if activate && c.Staging != nil && c.Sequencer != nil && c.selectedToPull(ledger) {
+	// Every node counts the activation toward each stream's stillness; the
+	// pair the previous block's hash selects asks (healing.md, "Who asks, and
+	// when"; #4415).
+	if activate && c.Staging != nil && c.Sequencer != nil {
+		if err := c.observeStreams(batch, e.Index); err != nil {
+			slog.ErrorContext(e.Context, "Failed to observe the synthetic streams", "module", "conductor", "block", e.Index, "error", err)
+		}
+	}
+	if activate && c.Staging != nil && c.Sequencer != nil && c.selectedToPull(c.previousBlockSeed(batch, ledger)) {
 		c.runExclusive("requestGaps", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), def(c.HealTimeout, DefaultHealTimeout))
 			defer cancel()

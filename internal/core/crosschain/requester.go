@@ -162,6 +162,7 @@ type healRequester struct {
 type stillAt struct {
 	delivered   uint64
 	activations uint
+	block       uint64 // the activation last counted, so one is counted once
 }
 
 // strandedAt is where a stream stood when it was stranded: Delivered then.
@@ -190,7 +191,7 @@ func streamKey(id execute.StreamID) string {
 // previous block's hash selects over the partition's validator set. Pulls are
 // fungible — whoever asks, the answer heals everyone — so two ask and the rest
 // stay quiet. A node with no validator key, or one not in the set, never pulls.
-func (c *Conductor) selectedToPull(ledger *protocol.SystemLedger) bool {
+func (c *Conductor) selectedToPull(seed []byte) bool {
 	if len(c.ValidatorKey) != ed25519.PrivateKeySize {
 		return false
 	}
@@ -209,7 +210,7 @@ func (c *Conductor) selectedToPull(ledger *protocol.SystemLedger) bool {
 	if me < 0 {
 		return false
 	}
-	for _, i := range pullSenders(previousBlockSeed(ledger), len(keys)) {
+	for _, i := range pullSenders(seed, len(keys)) {
 		if i == me {
 			return true
 		}
@@ -217,13 +218,20 @@ func (c *Conductor) selectedToPull(ledger *protocol.SystemLedger) bool {
 	return false
 }
 
-// previousBlockSeed is the agreed hash the selection is drawn from: the root
-// anchor of the last block, which every validator holds and nobody chooses.
-func previousBlockSeed(ledger *protocol.SystemLedger) []byte {
-	if ledger != nil && ledger.Anchor != nil {
-		if pa := ledger.Anchor.GetPartitionAnchor(); pa != nil {
-			return pa.RootChainAnchor[:]
-		}
+// previousBlockSeed is the agreed hash the selection is drawn from: the
+// partition's root chain anchor as the block begins, read the way
+// ConstructLastAnchor reads it. Every validator holds it and nobody chooses
+// it. A partition with no root chain yet draws from the ledger's block index.
+//
+// It is not the ledger's stored anchor. The executor stores that anchor
+// without its root chain fields, which are not known until the block closes
+// (block_end.go, "Do not populate the root chain anchor"), so reading it drew
+// from 32 zero bytes on every block that anchored and named the same two
+// validators for a busy partition's whole life (#4415).
+func (c *Conductor) previousBlockSeed(batch *database.Batch, ledger *protocol.SystemLedger) []byte {
+	root, err := batch.Account(c.Url(protocol.Ledger)).RootChain().Get()
+	if err == nil && root.Height() > 0 {
+		return root.Anchor()
 	}
 	var b [8]byte
 	if ledger != nil {
@@ -335,6 +343,23 @@ func (c *Conductor) requestGaps(ctx context.Context, batch *database.Batch, bloc
 	// hook's own Send ran. Send them now rather than a block later.
 	for err := range c.Dispatcher.Send(ctx) {
 		slog.ErrorContext(ctx, "Failed to dispatch healing bundle", "module", "conductor", "error", err)
+	}
+	return nil
+}
+
+// observeStreams counts this activation toward each inbound synthetic
+// stream's stillness. Every node does it at every activation, whether or not
+// it is selected to ask, so the pair that asks decides from the whole wait
+// (healing.md, "Healing is for a synthetic stream that has stopped"; #4415).
+func (c *Conductor) observeStreams(batch *database.Batch, blockIndex uint64) error {
+	var synth *protocol.SyntheticLedger
+	err := batch.Account(c.Url(protocol.Synthetic)).Main().GetAs(&synth)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
+	}
+	for _, source := range c.inboundSources(synth) {
+		stream := execute.StreamID{Ledger: c.Url(protocol.Synthetic), Source: source}
+		c.requester.observeStill(stream, synth.Partition(source).Delivered, blockIndex)
 	}
 	return nil
 }
@@ -571,6 +596,9 @@ func (r *healRequester) decide(staged *execute.StagingTxn, stream execute.Stream
 	// TestMissingBlockValidatorAnchorTxn went from 1 failure in 20 runs to
 	// 13, and stayed broken with a 600-block budget. An anchor stream is
 	// asked on sight.
+	//
+	// Stillness is counted by observeStill, on every node at every
+	// activation; this only reads it (#4415).
 	if isSyntheticStream(stream) && !r.stillLongEnough(streamKey(stream), delivered) {
 		return nil
 	}
@@ -666,12 +694,6 @@ func isSyntheticStream(id execute.StreamID) bool {
 	return id.Ledger != nil && strings.EqualFold(strings.Trim(id.Ledger.Path, "/"), protocol.Synthetic)
 }
 
-// forget drops what a stream's memory holds at or below Delivered, and what
-// has aged past patience; what was asked above Delivered keeps its asked-at.
-// stillLongEnough counts one activation on which a stream's Delivered did
-// not move, and reports whether it has now sat still for probeAfter of them.
-// Delivered moving resets the count: the stream is delivering, which is the
-// opposite of every case healing exists for (#4280).
 // anchorOverdue is how many blocks an anchor stream's Delivered may sit
 // unchanged before the next anchor is asked for, and how often it is asked
 // again while it stays unchanged: the heartbeat's at-most-one-anchor-per-four
@@ -711,22 +733,44 @@ func (r *healRequester) anchorOverdueLocked(key string, delivered, blockIndex ui
 	return true
 }
 
-func (r *healRequester) stillLongEnough(key string, delivered uint64) bool {
+// observeStill counts one activation on which a stream's Delivered did not
+// move. Delivered moving resets the count: the stream is delivering, which is
+// the opposite of every case healing exists for (#4280). A block is counted
+// once however often it is observed.
+//
+// Every node calls it at every activation, selected to ask or not. Counting
+// only when selected made the wait for the probe as long as the rotation took
+// to name a node probeAfter times -- about the committee's size over two
+// times longer -- and a node never named never counted at all (#4415).
+func (r *healRequester) observeStill(stream execute.StreamID, delivered, blockIndex uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.still == nil {
 		r.still = map[string]stillAt{}
 	}
-	at, ok := r.still[key]
-	if !ok || at.delivered != delivered {
-		r.still[key] = stillAt{delivered: delivered, activations: 1}
-		return false
+	k := streamKey(stream)
+	at, ok := r.still[k]
+	switch {
+	case !ok || at.delivered != delivered:
+		r.still[k] = stillAt{delivered: delivered, activations: 1, block: blockIndex}
+	case at.block != blockIndex:
+		at.activations++
+		at.block = blockIndex
+		r.still[k] = at
 	}
-	at.activations++
-	r.still[key] = at
-	return at.activations >= probeAfter
 }
 
+// stillLongEnough reports whether a stream's Delivered has sat at delivered
+// for probeAfter activations, as observeStill counted them.
+func (r *healRequester) stillLongEnough(key string, delivered uint64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	at, ok := r.still[key]
+	return ok && at.delivered == delivered && at.activations >= probeAfter
+}
+
+// forget drops what a stream's memory holds at or below Delivered, and what
+// has aged past patience; what was asked above Delivered keeps its asked-at.
 func (r *healRequester) forget(stream execute.StreamID, delivered uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
