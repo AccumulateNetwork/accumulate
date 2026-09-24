@@ -99,3 +99,42 @@ func (r *healRequester) unask(stream execute.StreamID, numbers []uint64) bool {
 	r.asks[k] = kept
 	return dropped
 }
+
+// trimAsk narrows the span recorded as asked before the ask to what the
+// source served: the requester remembers only what it was given. A record a
+// refusal has already dropped stays dropped.
+func (r *healRequester) trimAsk(stream execute.StreamID, span [2]uint64, blockIndex, served uint64) {
+	r.settleAsk(stream, span, blockIndex, func(a *askedSpan) bool {
+		if served < a.first {
+			return false
+		}
+		if served < a.last {
+			a.last = served
+		}
+		return true
+	})
+}
+
+// dropAsk removes the span recorded as asked before an ask that failed: a
+// failure is not an answer that can still arrive.
+func (r *healRequester) dropAsk(stream execute.StreamID, span [2]uint64, blockIndex uint64) {
+	r.settleAsk(stream, span, blockIndex, func(*askedSpan) bool { return false })
+}
+
+// settleAsk applies keep to the record of span asked at blockIndex, if it is
+// still there, and drops it when keep says so.
+func (r *healRequester) settleAsk(stream execute.StreamID, span [2]uint64, blockIndex uint64, keep func(*askedSpan) bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	k := streamKey(stream)
+	for i := range r.asks[k] {
+		a := &r.asks[k][i]
+		if a.first != span[0] || a.last != span[1] || a.at != blockIndex {
+			continue
+		}
+		if !keep(a) {
+			r.asks[k] = append(r.asks[k][:i], r.asks[k][i+1:]...)
+		}
+		return
+	}
+}
