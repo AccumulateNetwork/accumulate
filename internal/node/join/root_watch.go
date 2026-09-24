@@ -11,10 +11,12 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -78,11 +80,11 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 		if local != o.Anchor {
 			s.log.Warn("An executed block's root is not its anchored root; repairing from the block ledger",
 				"partition", s.partition, "block", o.Block, "compared", s.executed, "matched", s.provenAt)
-			s.sync = nil
-			s.repairFrom = s.provenAt
-			if s.repairFrom == 0 {
-				s.repairFrom = s.pullFrom
+			from := s.provenAt
+			if from == 0 {
+				from = s.pullFrom
 			}
+			s.RepairFrom(from)
 			return o.Block, true, nil
 		}
 		s.executed = o.Block
@@ -92,7 +94,77 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 			s.Promote(o.Block)
 		}
 	}
+	batch.Discard()
+
+	// Past the match, what the join took by its chain heads alone is
+	// brought in whole, a few accounts a check, while the node executes.
+	if s.machine.State() == nodestate.StateActive {
+		s.backfill(ctx)
+	}
 	return 0, false, nil
+}
+
+// RepairFrom makes the next pull a repair from the block ledger, from block
+// on (executor spec, "Sync", "One rule for every node"): every account the
+// partition's records name after block, and every account this node's own
+// records name through the block it last executed, is pulled again whole --
+// main state, every chain with its entries and the messages behind them,
+// pending and directory -- a chain the node grew wrongly is replaced by the
+// peers', and an account no peer holds is deleted. The node calls it when an
+// executed block's root differs from the partition's signed anchor; block is
+// the last block whose root matched, or where the pull began. It must not be
+// executing while the repair pulls: the caller collects first (join.Run).
+func (s *PulledState) RepairFrom(block uint64) {
+	// Zero is nothing to repair from: the next pull starts afresh.
+	s.sync = nil
+	s.repairFrom = block
+}
+
+// backfillPerCheck is how many head-only accounts one root check backfills.
+const backfillPerCheck = 64
+
+// backfill brings in the entries below the open mark set of accounts the join
+// took by their chain heads alone (pull.Backfill). It writes only below each
+// chain's head, so it runs while the node executes. An account that cannot be
+// backfilled now is tried again on a later check.
+func (s *PulledState) backfill(ctx context.Context) {
+	n := 0
+	for k, u := range s.headOnly {
+		if n >= backfillPerCheck || ctx.Err() != nil {
+			return
+		}
+		n++
+		if s.backfillOne(ctx, u) {
+			delete(s.headOnly, k)
+		}
+	}
+}
+
+// backfillOne backfills one account and reports whether it holds all of it
+// now (pull.Backfill).
+func (s *PulledState) backfillOne(ctx context.Context, u *url.URL) bool {
+	srcs, _, err := s.sourcesFor(ctx, u)
+	if errors.Is(err, errNotThisPartition) {
+		return true // Never this partition's to hold
+	}
+	if err != nil {
+		return false
+	}
+	batch := s.db.Begin(true)
+	defer batch.Discard()
+	err = pull.Backfill(ctx, srcs, batch, u, 0)
+	if err == nil {
+		err = batch.Commit()
+	}
+	if err != nil {
+		s.log.Info("An account's entries could not be brought in yet", "account", u, "error", err)
+		return false
+	}
+	if s.entire == nil {
+		s.entire = map[[32]byte]bool{}
+	}
+	s.entire[accountKey(u)] = true
+	return true
 }
 
 // rootAfter is the root this node's state had after block n, from the bpt

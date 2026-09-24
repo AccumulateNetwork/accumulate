@@ -134,8 +134,19 @@ type PulledState struct {
 	provenAt uint64
 
 	// repairFrom, when not zero, is where the next pull starts as a repair
-	// (Diverged; startRepair).
+	// (RepairFrom; startRepair).
 	repairFrom uint64
+
+	// headOnly are the accounts taken by their chain heads alone, whose
+	// entries below the open mark set the node does not hold yet. Once the
+	// state has matched they are backfilled while the node executes
+	// (backfill).
+	headOnly map[[32]byte]*url.URL
+
+	// entire are the accounts this node holds whole, every entry of every
+	// chain with the message behind it (backfillOne). A whole pull of one
+	// goes on from what it holds, so it stays entire.
+	entire map[[32]byte]bool
 
 	// checkedHeld is whether this process has checked the entries the node
 	// already holds on the accounts it takes whole for their messages
@@ -694,7 +705,10 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		return owed
 	}
 
-	whole := s.takenWhole(u)
+	// A repair takes every account whole: main state, every chain with its
+	// entries and the messages behind them, pending and directory (executor
+	// spec, "Sync", "One rule for every node").
+	whole := s.takenWhole(u) || p.repair
 	mode := pull.ModeStateOnly
 	if whole {
 		mode = pull.ModeFullSpine
@@ -716,6 +730,28 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		// executed: a chain of its own longer than the peer's is taken again.
 		RetakeLonger: p.repair,
 	})
+	defer func() {
+		// What was taken by its heads alone is backfilled once the state
+		// has matched (backfill). A whole pull goes on from the entries the
+		// node holds, so an account taken by its heads before stays to be
+		// backfilled below them.
+		if err != nil || whole && !p.repair {
+			return
+		}
+		if p.repair {
+			// The repair takes the account whole, entries included, now,
+			// while the node is not executing. An account already held
+			// entire needs only what the whole pull appended.
+			if s.entire[accountKey(u)] || s.backfillOne(ctx, u) {
+				delete(s.headOnly, accountKey(u))
+				return
+			}
+		}
+		if s.headOnly == nil {
+			s.headOnly = map[[32]byte]*url.URL{}
+		}
+		s.headOnly[accountKey(u)] = u
+	}()
 	switch {
 	case err == nil:
 	case stderrors.Is(err, pull.ErrNoLeaf):

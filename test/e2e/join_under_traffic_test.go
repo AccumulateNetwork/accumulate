@@ -153,6 +153,12 @@ func TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock(t *testing.T) {
 	t.Logf("joined after %d pull rounds and %d accounts asked for", stepping.round, pulled)
 	p.SetPullHook(joiner, nil)
 
+	// alice's account was taken by its chain heads alone -- the join pulls
+	// every account it did not take whole that way -- and past the match the
+	// node brings in its entries: it holds the whole chain, entry by entry
+	// (executor spec, "Sync", "One rule for every node").
+	requireSameChains(t, p.NodeDatabase(joiner), p.NodeDatabase(0), alice.JoinPath("tokens"))
+
 	// Executing from there, it stays on its peers' root chain while the
 	// traffic goes on.
 	for i := 0; i < 10; i++ {

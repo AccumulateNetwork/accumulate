@@ -79,6 +79,12 @@ func newRepairFixture(t *testing.T) *repairFixture {
 	for i := 0; i < 10; i++ {
 		f.traffic()
 	}
+	// bob acts too, so his identity and his key page hold chains on every
+	// node.
+	st := sim.BuildAndSubmitTxnSuccessfully(build.Transaction().For(bob).
+		CreateTokenAccount(bob, "savings").ForToken(AcmeUrl()).
+		SignWith(bob, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey))
+	sim.StepUntil(Txn(st.TxID).Succeeds())
 
 	// Down: it stops executing, the network runs on, and it comes back with
 	// an empty buffer, so it must pull.
@@ -94,7 +100,15 @@ func newRepairFixture(t *testing.T) *repairFixture {
 // executed block whose root differed from its signed anchor.
 type repairCounter struct {
 	*steppingState
-	repairs int
+	repairs   int
+	onHandoff func()
+}
+
+func (r *repairCounter) HandedOff(q uint64) {
+	r.steppingState.HandedOff(q)
+	if r.onHandoff != nil {
+		r.onHandoff()
+	}
 }
 
 func (r *repairCounter) Diverged(ctx context.Context) (uint64, bool, error) {
@@ -108,7 +122,7 @@ func (r *repairCounter) Diverged(ctx context.Context) (uint64, bool, error) {
 // join runs the production join for the fixture's node, with traffic in every
 // block, until the node is ACTIVE or maxRounds have passed. each runs on every
 // round, before the network steps.
-func (f *repairFixture) join(t *testing.T, each func(round int)) *repairCounter {
+func (f *repairFixture) join(t *testing.T, each func(round int), onHandoff func(*repairCounter)) *repairCounter {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -123,6 +137,9 @@ func (f *repairFixture) join(t *testing.T, each func(round int)) *repairCounter 
 			cancel()
 		}
 	}}}
+	if onHandoff != nil {
+		counter.onHandoff = func() { onHandoff(counter) }
+	}
 	settler, ok := f.p.NodeExecutor(f.joiner).(join.Settler)
 	require.True(t, ok)
 	_, err := join.Run(ctx, join.Options{
@@ -194,14 +211,29 @@ func TestAJoinRepairsABlockExecutedWithoutItsSynthetic(t *testing.T) {
 		return kept, true
 	})
 
+	// At every handoff after a repair, the repaired account is held whole
+	// already -- every entry the node's chains count, with the message
+	// behind each -- not only a head that hashes into a matching leaf.
+	checked := 0
 	counter := f.join(t, func(round int) {
 		if round == 10 {
 			withhold.Store(false)
 		}
+	}, func(c *repairCounter) {
+		if c.repairs == 0 {
+			return
+		}
+		requireHeldWhole(t, f.p.NodeDatabase(f.joiner), f.p.NodeDatabase(0), f.bob.JoinPath("tokens"))
+		checked++
 	})
+	require.NotZero(t, checked, "precondition: no handoff followed a repair")
 	require.NotZero(t, withheld.Load(), "precondition: no synthetic was withheld from the joiner")
 	require.NotZero(t, counter.repairs, "the joiner never found a mismatch, so nothing was repaired")
 	t.Logf("%d envelopes withheld; %d repairs before the match", withheld.Load(), counter.repairs)
+
+	// The account the withheld deposits were for was repaired whole: its
+	// chains are the peers', entry by entry.
+	requireSameChains(t, f.p.NodeDatabase(f.joiner), f.p.NodeDatabase(0), f.bob.JoinPath("tokens"))
 	f.requireOneRootChain(t)
 }
 
@@ -218,7 +250,7 @@ func TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated(t *testing.T) {
 
 	env := MustBuild(t, build.Transaction().For(f.bob).
 		CreateTokenAccount(f.bob, "extra").ForToken(AcmeUrl()).
-		SignWith(f.bob, "book", "1").Version(1).Timestamp(1).PrivateKey(f.bobKey))
+		SignWith(f.bob, "book", "1").Version(1).Timestamp(2).PrivateKey(f.bobKey))
 	// The next block the joiner is handed carries the creation, and no
 	// other node's does.
 	var injected atomic.Bool
@@ -229,15 +261,23 @@ func TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated(t *testing.T) {
 		return append(envelopes, env), true
 	})
 
+	// The joiner's own execution grows bob's key page's chains -- it pays
+	// for the creation -- beyond what any peer's hold.
+	page := f.bob.JoinPath("book", "1")
+	grew := false
 	created := false
 	counter := f.join(t, func(round int) {
+		if chainHeight(t, f.p.NodeDatabase(f.joiner), page, "main") > chainHeight(t, f.p.NodeDatabase(0), page, "main") ||
+			chainHeight(t, f.p.NodeDatabase(f.joiner), page, "signature") > chainHeight(t, f.p.NodeDatabase(0), page, "signature") {
+			grew = true
+		}
 		if !created {
 			View(t, f.p.NodeDatabase(f.joiner), func(batch *database.Batch) {
 				_, err := batch.Account(extra).Main().Get()
 				created = err == nil
 			})
 		}
-	})
+	}, nil)
 	require.True(t, created, "precondition: the joiner never executed its own creation of %v", extra)
 	View(t, f.sim.S.Partition("BVN1").NodeDatabase(0), func(batch *database.Batch) {
 		_, err := batch.Account(extra).Main().Get()
@@ -252,5 +292,113 @@ func TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated(t *testing.T) {
 		require.ErrorIs(t, err, errors.NotFound, "the joiner's tree still holds a leaf for %v", extra)
 	})
 	t.Logf("%d repairs before the match", counter.repairs)
+
+	// The chains the joiner grew wrongly are the peers' again, not the
+	// peers' appended to its own.
+	require.True(t, grew, "precondition: the joiner's execution never grew %v's chains beyond the peers'", page)
+	requireSameChains(t, f.p.NodeDatabase(f.joiner), f.p.NodeDatabase(0), page)
 	f.requireOneRootChain(t)
+}
+
+// requireSameChains requires an account's chains on node to equal its chains
+// on peer entry by entry: the same chains, the same heights, and the same
+// entry at every index -- not only a leaf that hashes the same (executor
+// spec, "Sync", "One rule for every node": the node ends holding every
+// account's chains and entries).
+func requireSameChains(t *testing.T, node, peer *database.Database, u *url.URL) {
+	t.Helper()
+	// The chains the account's index names, and its main and signature
+	// chains, which are read whether or not the index lists them. A chain
+	// of height zero is one the account does not hold.
+	names := func(batch *database.Batch) []string {
+		seen := map[string]bool{"main": true, "signature": true}
+		out := []string{"main", "signature"}
+		chains, err := batch.Account(u).Chains().Get()
+		require.NoError(t, err)
+		for _, meta := range chains {
+			if !seen[meta.Name] {
+				seen[meta.Name] = true
+				out = append(out, meta.Name)
+			}
+		}
+		return out
+	}
+	read := func(db *database.Database) map[string][][]byte {
+		out := map[string][][]byte{}
+		View(t, db, func(batch *database.Batch) {
+			for _, name := range names(batch) {
+				c, err := batch.Account(u).ChainByName(name)
+				require.NoError(t, err)
+				head, err := c.Inner().Head().Get()
+				require.NoError(t, err)
+				if head.Count == 0 {
+					continue
+				}
+				var entries [][]byte
+				for i := int64(0); i < head.Count; i++ {
+					e, err := c.Inner().Entry(i)
+					require.NoError(t, err, "%v chain %s entry %d of %d", u, name, i, head.Count)
+					entries = append(entries, e)
+				}
+				out[name] = entries
+			}
+		})
+		return out
+	}
+	want, got := read(peer), read(node)
+	require.NotEmpty(t, want, "precondition: the peer holds no chain of %v", u)
+	for name, entries := range want {
+		require.Equal(t, len(entries), len(got[name]), "%v chain %s: the node holds another height", u, name)
+		for i := range entries {
+			require.Equal(t, entries[i], got[name][i], "%v chain %s entry %d differs", u, name, i)
+		}
+	}
+}
+
+// chainHeight is the height of one of an account's chains in db, zero when
+// the account or chain is not there.
+func chainHeight(t *testing.T, db *database.Database, u *url.URL, name string) int64 {
+	t.Helper()
+	var n int64
+	View(t, db, func(batch *database.Batch) {
+		c, err := batch.Account(u).ChainByName(name)
+		if err != nil {
+			return
+		}
+		head, err := c.Inner().Head().Get()
+		if err == nil {
+			n = head.Count
+		}
+	})
+	return n
+}
+
+// requireHeldWhole requires every entry an account's main and signature chains
+// count on node to be held there, equal to the peer's at the same index, with
+// the message behind it: the account was taken whole, chains and entries, not
+// by its heads.
+func requireHeldWhole(t *testing.T, node, peer *database.Database, u *url.URL) {
+	t.Helper()
+	nb, pb := node.Begin(false), peer.Begin(false)
+	defer nb.Discard()
+	defer pb.Discard()
+	for _, name := range []string{"main", "signature"} {
+		nc, err := nb.Account(u).ChainByName(name)
+		require.NoError(t, err)
+		pc, err := pb.Account(u).ChainByName(name)
+		require.NoError(t, err)
+		head, err := nc.Inner().Head().Get()
+		require.NoError(t, err)
+		for i := int64(0); i < head.Count; i++ {
+			e, err := nc.Inner().Entry(i)
+			require.NoError(t, err, "%v chain %s: entry %d of %d is not held", u, name, i, head.Count)
+			want, err := pc.Inner().Entry(i)
+			if err != nil {
+				continue // The peer has not got that far
+			}
+			require.Equal(t, want, e, "%v chain %s entry %d differs from the peer's", u, name, i)
+			_, err = nb.Message([32]byte(e)).Main().Get()
+			require.NoError(t, err, "%v chain %s entry %d: the message behind it is not held", u, name, i)
+		}
+	}
 }

@@ -110,7 +110,8 @@ type Options struct {
 
 	// RetakeLonger, in ModeFullSpine, takes a chain the node holds more
 	// entries of than the peer served again whole, from its first entry,
-	// instead of refusing the peer. A joining node that executed blocks and
+	// instead of refusing the peer, and replaces the account's chain index
+	// with the peer's, so a chain only the node holds is dropped. A joining node that executed blocks and
 	// is repairing what it executed from the block ledger sets it (executor
 	// spec, "Sync", "Execute, and repair on a mismatch"): its chains may
 	// carry entries of its own that no peer has, and refusing every peer
@@ -1267,6 +1268,22 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodi
 		}
 		if err := addChainToIndex(batch, u, c); err != nil {
 			return err
+		}
+	}
+	if retakeLonger {
+		// The account is taken whole: a chain the node created that the
+		// peer's account does not have leaves the index, or the account's
+		// hash still counts it (executor spec, "Sync", "One rule for every
+		// node": "the repair takes accounts whole").
+		var list []*protocol.ChainMetadata
+		for _, c := range chains.Records {
+			if c == nil || c.Name == "" {
+				continue
+			}
+			list = append(list, &protocol.ChainMetadata{Name: c.Name, Type: c.Type})
+		}
+		if err := batch.Account(u).Chains().Put(list); err != nil {
+			return fmt.Errorf("replace the chain index of %s: %w", u, err)
 		}
 	}
 	return nil
