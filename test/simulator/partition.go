@@ -8,10 +8,12 @@ package simulator
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
@@ -27,6 +29,7 @@ import (
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 )
@@ -101,11 +104,14 @@ func (p *Partition) RestartNode(i int) {
 	state, err := join.NewState(join.StateOptions{
 		Partition: protocol.PartitionUrl(p.ID),
 		Database:  n.database,
-		Sources: &join.QueryPeers{
-			Client:  p.sim.services.Client,
-			Network: p.sim.networkId,
-			Router:  p.sim.router,
-			Self:    n.peerID,
+		Sources: &movingSources{
+			QueryPeers: &join.QueryPeers{
+				Client:  p.sim.services.Client,
+				Network: p.sim.networkId,
+				Router:  p.sim.router,
+				Self:    n.peerID,
+			},
+			node: n,
 		},
 		ExecutedBlock: last,
 	})
@@ -120,6 +126,28 @@ func (p *Partition) RestartNode(i int) {
 // builds it: what join.Run must be handed, and whose machine the node's
 // services refuse by. Nil for a node that has not restarted.
 func (p *Partition) NodeJoinState(i int) *join.PulledState { return p.nodes[i].joinState }
+
+// SetPullHook calls hook each time node i's join asks for the peers of an
+// account, which is once per account it pulls. The simulator has no clock and
+// advances only when something steps it, so a pull round otherwise runs against
+// a network standing still; a hook that steps the network is how a test makes
+// the partition move WHILE the node pulls, as a real one does (#4411). The
+// hook runs on the goroutine that runs the join, between two reads.
+func (p *Partition) SetPullHook(i int, hook func()) { p.nodes[i].pullHook = hook }
+
+// movingSources is the join's QueryPeers with the node's pull hook called
+// before each account's peers are named. Everything else is QueryPeers's.
+type movingSources struct {
+	*join.QueryPeers
+	node *Node
+}
+
+func (m *movingSources) For(ctx context.Context, account *url.URL) ([]pull.Source, *url.URL, error) {
+	if h := m.node.pullHook; h != nil {
+		h()
+	}
+	return m.QueryPeers.For(ctx, account)
+}
 
 // StopNode stops node i as stopping its process would: from here it is handed
 // no block and no submission, casts no vote, and answers nothing — every
