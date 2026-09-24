@@ -620,13 +620,22 @@ names every account whose leaf the block changes (invariant 14), including the
 accounts a block changed as a side effect and the system accounts every block
 touches; envelopes name neither all of that nor only names that can be routed.
 
-**After the handoff, a mismatch is repaired, not re-walked.** A node whose
-executed block's root is not its anchored root (the root watch, §5) repairs
-from the block ledger (§2): the records from the last block that matched, the
-partition's and its own, and no walk. The block this node's executor last
-executed is read from `SystemData(partition).ExecutedBlock` — not from
-`<partition>/ledger`, which is an account the pull overwrites (#4295, #4344) —
-and it bounds the node's own records the repair reads.
+**After the handoff, a mismatch is repaired from the block ledger; if that
+does not bring a match, the accounts are pulled again** (Paul). A node whose
+executed block's root is not its anchored root (the root watch, §5) first
+repairs from the block ledger (§2): the records from the last block that
+matched, the partition's and its own. If the next anchored block still does
+not match, the node pulls the accounts again — the whole walk, every leaf,
+while records keep being processed — because a pull that does not produce a
+matching root has to be pulled again; there is nothing else it can do. **The
+BPT has every leaf; no pull skips one.** The only thing that decides a leaf
+does not exist is execution: a transaction whose principal does not exist is
+rejected before it changes anything, leaves no leaf for that principal
+(invariants 13, 15), and its refund is a synthetic transaction logged on the
+rejecting partition's synthetic chain back to the sender. The block this
+node's executor last executed is read from `SystemData(partition).ExecutedBlock`
+— not from `<partition>/ledger`, which is an account the pull overwrites
+(#4295, #4344) — and it bounds the node's own records the repair reads.
 
 **What is pulled is written into the state tree, not only into the store.**
 Committing an account does not move the root by itself; the root is what the
