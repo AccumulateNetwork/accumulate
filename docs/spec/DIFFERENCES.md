@@ -630,6 +630,41 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   are two objects nothing keeps in agreement. (That `servingFor` gated two
   query kinds where the spec says every read is retired: since `08c0e413d`
   (#4368) it refuses every query while `BOOTING`.)
+- **A re-sync and a failed handoff demote the node (#4385)**; what that
+  leaves different from "`ACTIVE` only while executing in agreement"
+  (executor.md, "Sync", step 6). `nodestate.Machine.Demote` returns the
+  machine to `BOOTING`; `join.Run` calls it through `join.State.Demote` at
+  the diverged block before it collects again, and at the matched block when
+  a handoff fails; the querier, sequencer, submitter, validator and consensus
+  service ask the machine on every call, and the gauge follows its OnChange.
+  Proven by `TestAReSyncingNodeIsBootingUntilItMatchesAgain` (test/e2e: the
+  node's production querier refuses `NotReady`, the gauge reads 0, and it
+  signs no BVN anchor while it re-syncs) and
+  `TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge`
+  (cmd/accumulated/run: the daemon's querier, submitter and gauge on a failed
+  handoff). What is still different:
+  - **Promotion is still at the match, not at the handoff.** Between the
+    first match and a handoff that succeeds — a gap advancing the sync, a
+    `NotReady` wait for the next group, a `Conflict` pull — the node is
+    `ACTIVE` and executes nothing (#4205 note_3896008241: 81 s and 262 s on
+    run `20260924T052134Z`). A failed handoff demotes, but the next attempt
+    matches first and so promotes again before it hands off: under a failure
+    that recurs every attempt the node is `ACTIVE` for the length of each
+    stage-and-handoff attempt and `BOOTING` in between. The spec says both
+    "`ACTIVE` from that block on" (the match) and "`ACTIVE` only while it is
+    executing in agreement"; moving promotion to the handoff would make them
+    one rule, and is not done.
+  - **Anchors are withheld by collecting mode, not by the machine.** A
+    demoted node signs and dispatches no anchor because the join puts it back
+    in collecting mode and a collecting node executes nothing; nothing in
+    the conductor asks the machine. The two go together on every path the
+    join takes today.
+  - **The simulator gates only the querier.** Its sequencer is ungated and a
+    submission to any simulator node goes to the whole partition through the
+    hub (above), so the simulator test cannot show a relay; the relay on a
+    demoted machine is shown only by the daemon's submitter.
+  - **A demotion is not advertised or persisted**, like every other state
+    (#4300): a peer learns it only by being refused.
 - **The ModeFullSpine rationale was wrong and is retired** (#4301 (c)): the
   spine was pulled "explicitly unverified because it is what the verifier
   reads from"; the definition and its signatures verify the spine like any
