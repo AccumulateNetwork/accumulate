@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"strings"
 	"time"
 
@@ -44,7 +43,6 @@ var mNotQuerying = promauto.NewCounterVec(prometheus.CounterOpts{
 }, []string{"partition", "call"})
 
 type Querier struct {
-	staging   *execute.Staging
 	logger    logging.OptionalLogger
 	db        database.Viewer
 	partition config.NetworkUrl
@@ -60,10 +58,6 @@ type QuerierParams struct {
 	Partition string
 	Consensus api.ConsensusService
 
-	// Staging is the partition's staging, for reporting how far a stream
-	// has been sighted. Nil falls back to the registered one for Partition.
-	Staging *execute.Staging
-
 	// NodeState is this node's join state. While it is BOOTING the querier
 	// refuses every read with NotReady (servingFor; executor spec, "Sync",
 	// step 6; #4368): its store is the one the pull is filling, and another
@@ -76,7 +70,6 @@ func NewQuerier(params QuerierParams) *Querier {
 	s := new(Querier)
 	s.logger.L = params.Logger
 	s.db = params.Database
-	s.staging = params.Staging
 	s.consensus = params.Consensus
 	s.nodeState = params.NodeState
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
@@ -509,14 +502,11 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	// The body is served exactly as it is stored. It must be: the receipt
 	// built below is built from the stored state, so a body with anything
 	// synthesised into it does not hash to the leaf its own receipt proves,
-	// and every node pulling that account refuses it forever (#4295).
+	// and every node pulling that account refuses it forever (#4295). A
+	// sequence ledger's Received is in it: every block writes it (#4412), so
+	// nothing is derived from this node's staging and nothing is served
+	// beside the body.
 	r.Account = state
-
-	// A sequence ledger's Received is derived, not stored (#4189), so it is
-	// answered BESIDE the body. Every reader that asks an account how far a
-	// stream has been sighted still gets an answer; nothing that hashes is
-	// touched.
-	r.Sighted = sighted(s.stagingFor(), record.Url(), state)
 
 	var typ protocol.AccountType
 	if state != nil {
@@ -715,18 +705,16 @@ func (s *Querier) historicalStateReceipt(batch *database.Batch, record *database
 
 	// THE BODY IS THE BODY AT THAT BLOCK, and what cannot be said as of that
 	// block is not said at all. queryAccount filled this record from the
-	// account as it stands NOW — the body, its directory, its pending list and
-	// the sighted streams beside it. A past receipt served with a present body
+	// account as it stands NOW — the body, its directory and its pending
+	// list. A past receipt served with a present body
 	// is two halves that do not fit: the body does not hash to the receipt's
 	// start, so a pulling node refuses it and a trusting one keeps state no
 	// anchor covers (executor.md, "Sync", §2). The directory, the pending list
 	// and the rest of the leaf are retained per block, so they are served as of
-	// it, in full; Sighted is derived from staging and is never a block's, so
-	// it is cleared.
+	// it, in full.
 	r.Account = proof.State
 	r.Directory = nil
 	r.Pending = nil
-	r.Sighted = nil
 	if proof.Leaf != nil {
 		err = s.serveLeaf(record, r, proof.Leaf)
 		if err != nil {

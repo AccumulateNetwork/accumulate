@@ -252,6 +252,87 @@ stream for good.
 **Size**: an `ExecutorVersion` predicate in `heldOnly`, if the assumption ever
 stops holding.
 
+### E16. Writing `Received` every block is not gated on a version
+
+*[#4412](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4412)*
+
+**Spec** ([executor.md](executor.md), "Versioning"): behaviour that changes
+what a block produces is gated on an `ExecutorVersion`.
+
+**Code**: `flushStreams` writes each inbound stream's `Received` on the
+synthetic and anchor ledgers — the highest number the block held, at least
+`Delivered`, never decreasing — and a block whose only effect is that raise
+commits instead of being discarded as empty (`BlockState.ReceivedRaised`).
+Before #4412 `Received` was never written on this line. Unconditional: any
+block that held or delivered a stream entry has a different state root on
+either side of the change, and two binaries on one chain fork there.
+
+**Why it stands**: the fresh-install rule of E14 and E15, as for #4358 and
+#4437 — `dagbft-integration` runs no network that outlives a run and every
+node is rebuilt together. A network whose ledgers were written before it
+holds `Received` 0 on streams that have delivered; the first block that
+touches such a stream raises it to `Delivered`, and a stream no block has
+touched since keeps it below `Delivered` until one does.
+
+**Size**: an `ExecutorVersion` predicate in `raiseReceived` and in
+`BlockState.Empty`, if the assumption ever stops holding.
+
+### E17. A proof dropped for budget on one node delays that node's execution
+
+*[#4439](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4439)*
+
+**Spec** ([executor.md](executor.md), "Anchor staging"): the anchor-staging
+byte budget bounds memory and decides nothing else — not what is held, not
+what is counted, and not when an entry executes (Paul, 2026-09-24: a node
+whose staging is wrong fills in what it lacks for the right block, from the
+block ledger and API calls).
+
+**Code**: what is held and counted no longer depends on the budget (#4439):
+over budget, `intakeProof` drops the proof and the entries are held and
+counted into `Received` as on every other node. *When* they execute still
+does. A package's members travel proof-less beside one `SyntheticProof`
+(executor.md, "Dispatch"), so a held member becomes runnable only when a
+validated proof covers its number. A node that dropped the proof its peers
+staged cannot run the package when the Directory anchor lands; it runs it
+when the requester's fetched proof lands (healing.md, "Deciding, in
+staging"), blocks later, and from that block its state root is not its
+peers'. Nothing fills the proof in for the block in which the peers execute.
+
+**Evidence**: `TestProofBudgetDoesNotDecideReceived` (test/e2e), carried past
+its assertions by releasing the Directory anchors and stepping: at the first
+block after release node 0 delivered through 8 (root `3105c7…`) while node 1,
+the node over budget, stayed at 2 (root `e83f50…`); node 1 reached 8 eight
+blocks later, and the roots still differed 39 blocks after release. Before
+#4439 the same node failed the envelope outright (`proof budget for … is
+spent this block`), so the divergence is not new; only `Received`'s part of it
+is gone.
+
+**Size**: decided by Paul: no fill-in and no kept proof. Every node attempts
+to execute, and a node whose root misses its partition's anchor repairs from
+the block ledger and tries again (executor.md Sync, "One rule for every
+node"). Until #4440 builds that repair for a running node, the node that
+dropped a proof executes the package when the requester's fetch lands. That
+happens only while the source still serves the span, which is its
+`RejoinGrace` of 300 blocks (`synthcache`). Past that the ask is `NotFound`,
+the stream strands, and only a sync brings the node back.
+
+### E18. Holding an entry whose proof was dropped for budget is not gated on a version
+
+*[#4439](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4439)*
+
+**Spec** ([executor.md](executor.md), "Versioning"): behaviour that changes
+what a block produces is gated on an `ExecutorVersion`.
+
+**Code**: `SyntheticMessage.collect` no longer refuses an entry whose
+package's proof the block dropped for want of budget; it holds it and counts
+it into `Received`. Unconditional. It changes a block only when a source's
+waiting proofs exceed `MaxStagedProofBytes` (64 MiB).
+
+**Why it stands**: the fresh-install rule of E14–E16.
+
+**Size**: an `ExecutorVersion` predicate in `collect`, if the assumption ever
+stops holding.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*

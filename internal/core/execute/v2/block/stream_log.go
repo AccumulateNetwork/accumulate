@@ -9,8 +9,10 @@ package block
 import (
 	"path"
 	"sort"
+	"strings"
 	"sync"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -47,6 +49,7 @@ type streamLogState struct {
 type streamLogEntry struct {
 	block                                       uint64
 	delivered, sighted, reach, waiting, advance uint64
+	received                                    uint64
 	held                                        int
 	behind                                      bool
 }
@@ -69,8 +72,45 @@ func (b *Block) logStreams() {
 		s.last = map[string]streamLogEntry{}
 	}
 
+	// The ledger's Received, as flushStreams left it (#4412). It is logged
+	// beside staging's sighted because the two can disagree, and on a node
+	// that rejoined behind a hole its peers hold entries behind, that
+	// disagreement is the diagnosis: the state says N arrived, this node's
+	// staging has sighted less.
+	ledgers := map[string]protocol.SequenceLedger{}
+	//
+	// Delivered is the larger of staging's and the ledger's: a stage that
+	// holds nothing has no Delivered of its own (it is zero after a
+	// restart), and the ledger's is the one that counts.
+	ledgerOf := func(id execute.StreamID) (delivered, received uint64) {
+		if b.Batch == nil {
+			return 0, 0
+		}
+		lk := strings.ToLower(id.Ledger.String())
+		l, ok := ledgers[lk]
+		if !ok {
+			if err := b.Batch.Account(id.Ledger).Main().GetAs(&l); err != nil {
+				l = nil
+			}
+			ledgers[lk] = l
+		}
+		if l == nil {
+			return 0, 0
+		}
+		// FindPartition, never Partition: the ledger is the batch's
+		// memoized record, and Partition inserts an entry for a stream only
+		// this node's staging knows into hashed state (#4412 review F7).
+		part, ok := l.FindPartition(id.Source)
+		if !ok {
+			return 0, 0
+		}
+		return part.Delivered, part.Received
+	}
+
 	for _, st := range b.staging.Streams() {
 		k := stream{ledger: st.ID.Ledger, source: st.ID.Source}.key()
+		ledgerDelivered, received := ledgerOf(st.ID)
+		st.Delivered = max(st.Delivered, ledgerDelivered)
 		before, seen := from[k]
 		if !seen {
 			before = st.Delivered
@@ -80,15 +120,16 @@ func (b *Block) logStreams() {
 			advanced = st.Delivered - before
 		}
 
-		cur := streamLogEntry{block: b.Index, delivered: st.Delivered, sighted: st.Sighted,
-			reach: st.Reach, waiting: st.Waiting, advance: advanced, held: st.Held, behind: st.Behind()}
+		cur := streamLogEntry{block: b.Index, delivered: st.Delivered, sighted: st.Sighted, received: received,
+			reach: st.Reach, waiting: st.Waiting, advance: advanced, held: st.Held,
+			behind: st.Behind() || received > st.Delivered}
 		prev, known := s.last[k]
 		// A stream nobody has ever had anything to say about stays silent:
 		// caught up, not advancing, never logged.
 		if !known && advanced == 0 && !cur.behind {
 			continue
 		}
-		changed := !known || prev.delivered != cur.delivered || prev.sighted != cur.sighted ||
+		changed := !known || prev.delivered != cur.delivered || prev.sighted != cur.sighted || prev.received != cur.received ||
 			prev.reach != cur.reach || prev.waiting != cur.waiting || prev.held != cur.held ||
 			prev.behind != cur.behind
 		due := b.Index >= prev.block+StreamLogEvery
@@ -103,7 +144,7 @@ func (b *Block) logStreams() {
 		s.last[k] = cur
 		b.Executor.logger.Info("Stream position", "module", "stream",
 			"block", b.Index, "ledger", ledgerKind(st.ID.Ledger), "source", partitionLabel(st.ID.Source),
-			"delivered", st.Delivered, "advanced", advanced, "sighted", st.Sighted,
+			"delivered", st.Delivered, "advanced", advanced, "received", received, "sighted", st.Sighted,
 			"reach", st.Reach, "held", st.Held, "waiting", st.Waiting)
 	}
 }

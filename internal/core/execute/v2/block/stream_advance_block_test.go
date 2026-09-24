@@ -75,9 +75,10 @@ func TestStreamAdvance_ARecordedMessageIsVisibleWithinTheBlock(t *testing.T) {
 	assert.Equal(t, uint64(2), p.received())
 }
 
-// The proof step 7 owes, restated for #4189: closing the block leaves the
-// watermark the deliveries reached, once, over a mix of deliveries and
-// out-of-order receipts — and leaves nothing else.
+// The proof step 7 owes, restated for #4189 and #4412: closing the block
+// leaves the watermark the deliveries reached and the highest number that
+// arrived, once, over a mix of deliveries and out-of-order receipts — and
+// leaves nothing else.
 func TestStreamAdvance_FlushWritesTheWatermarkAndNothingElse(t *testing.T) {
 	ops := []advOp{
 		{1, true}, {6, false}, {2, true}, {8, false}, {3, true}, {5, false}, {4, true}, {5, true},
@@ -92,7 +93,7 @@ func TestStreamAdvance_FlushWritesTheWatermarkAndNothingElse(t *testing.T) {
 	part := partitionOf(t, b, s)
 	require.Equal(t, uint64(5), part.Delivered, "1..5 delivered, 2 and 3 from the staged tail")
 	require.Empty(t, part.Pending, "the held set is staging's, and staging is not written")
-	require.Equal(t, uint64(0), part.Received, "nor is the high-water mark")
+	require.Equal(t, uint64(8), part.Received, "Received is the highest number the block held (#4412)")
 
 	// 6 and 8 arrived past the gap and are still held. 2, 3 and 5 executed, so
 	// they are at or below the watermark and no longer count as held — no
@@ -150,10 +151,12 @@ func TestStreamAdvance_HoldsAFarFutureReceipt(t *testing.T) {
 		assert.Equalf(t, far, p.received(), "and counted as seen")
 	}
 
-	// And none of it reached the record.
+	// None of the held set reached the record; how far it reached did
+	// (#4412).
 	require.NoError(t, b.flushStreams())
 	part := partitionOf(t, b, s)
 	assert.Equal(t, uint64(10), part.Delivered)
+	assert.Equal(t, uint64(10+100_000), part.Received)
 	assert.Empty(t, part.Pending)
 }
 

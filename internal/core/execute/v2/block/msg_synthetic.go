@@ -9,7 +9,6 @@ package block
 import (
 	"bytes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
@@ -469,17 +468,14 @@ func (x SyntheticMessage) collect(batch *database.Batch, ctx *MessageContext, se
 		return nil
 	}
 
-	// An entry whose package's proof this block turned away for want of
-	// budget is refused with it. Collecting it would record it as received,
-	// which leaves no gap, and nothing re-sends a proof — so it would wait
-	// for one that already arrived and was discarded. Refused, it stays a
-	// hole the source still holds and healing asks for again (#4282).
-	if ctx.Block.proofBudgetBound[strings.ToLower(str.source.String())] {
-		return errors.NotReady.WithFormat("proof budget for %v is spent this block", str.source)
-	}
-
 	// Held in memory with the transaction that travels with it; nothing is
-	// written until it executes (executor spec, "Collection", "Sync")
+	// written until it executes (executor spec, "Collection", "Sync"). It is
+	// held whether or not its package's proof fitted the proof budget: the
+	// budget is staging's memory, which differs between a restarted node and
+	// its peers, and what is held is counted into Received, which is hashed
+	// (#4439). An entry whose proof was dropped is a gap of proof, which the
+	// requester asks the source for once its stream stops at it (healing
+	// spec, "Deciding, in staging").
 	held := &execute.Held{ID: ctx.message.ID(), Message: ctx.message, Collected: true, Hash: seq.Hash()}
 	if m, ok := seq.Message.(messaging.MessageForTransaction); ok {
 		want := m.GetTxID().Hash()
@@ -491,7 +487,7 @@ func (x SyntheticMessage) collect(batch *database.Batch, ctx *MessageContext, se
 			}
 		}
 	}
-	ctx.Block.staging.Hold(str.id(), seq.Number, held)
+	ctx.Block.hold(str, delivered, seq.Number, held)
 	mExecSyntheticAnchor.WithLabelValues("collected").Inc()
 	return errCollected
 }

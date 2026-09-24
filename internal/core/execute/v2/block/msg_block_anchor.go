@@ -163,7 +163,7 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) err
 		// transaction's canonical stored form, without a principal.
 		stored := new(protocol.Transaction)
 		stored.Body = ctx.transaction.Body
-		ctx.Block.staging.Hold(str.id(), ctx.sequenced.Number, &execute.Held{
+		ctx.Block.hold(str, pos.delivered, ctx.sequenced.Number, &execute.Held{
 			ID:        ctx.sequenced.ID(),
 			Message:   ctx.sequenced,
 			Collected: true,

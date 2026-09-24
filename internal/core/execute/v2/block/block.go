@@ -38,13 +38,6 @@ type Block struct {
 	// (healing spec, "The cache"). Serial: synthetics never shard.
 	remoteDelivered map[string]remoteAck
 
-	// proofBudgetBound names the sources whose waiting proofs already cost
-	// the budget when this block took their proof in. An entry from such a
-	// source is refused rather than collected: its proof travelled with it
-	// and was turned away, and nothing re-sends a proof, so holding the
-	// entry would strand it with no gap for healing to find (#4282).
-	proofBudgetBound map[string]bool
-
 	// anchorSigs is the block's view of each anchor's validator signatures:
 	// read once per anchor, counted in memory, written once (#4224).
 	anchorSigs map[[32]byte]*anchorSignatures

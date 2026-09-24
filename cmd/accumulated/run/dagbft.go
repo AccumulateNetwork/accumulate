@@ -278,10 +278,8 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	synthCache := synthcache.New(0)
 
 	// The partition's staging: memory, built up from consensus (executor
-	// spec, "Sync"); registered so the API can report how far each stream
-	// has been sighted
+	// spec, "Sync")
 	staging := execute.NewStaging()
-	execute.RegisterStaging(s.Partition.ID, staging)
 
 	// Create executor options
 	execOpts := multiexec.Options{

@@ -335,14 +335,23 @@ func (s *steppingState) HandedOff(q uint64) {
 func (s *steppingState) Diverged(ctx context.Context) (uint64, bool, error) {
 	w, ok := s.State.(join.RootWatch)
 	if !ok {
-		s.cancel()
+		s.stop()
 		return 0, false, nil
 	}
 	s.round++
 	s.step(s.round)
 	n, diverged, err := w.Diverged(ctx)
 	if m, ok := s.State.(interface{ Machine() *nodestate.Machine }); ok && !diverged && m.Machine().State() == nodestate.StateActive {
-		s.cancel()
+		s.stop()
 	}
 	return n, diverged, err
+}
+
+// stop ends the test's join. A steppingState built without a cancel cannot
+// end it, and that is the test's mistake: said, not a nil call.
+func (s *steppingState) stop() {
+	if s.cancel == nil {
+		panic("steppingState has no cancel: the root watch runs for as long as the node does, and only cancel ends join.Run")
+	}
+	s.cancel()
 }

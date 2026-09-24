@@ -7,7 +7,6 @@
 package block
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -165,13 +164,14 @@ func TestAnchorStaging_ProofMustCoverAMessageFromItsSource(t *testing.T) {
 }
 
 // Anchor staging is bounded: a proof claiming an anchor further ahead than the
-// horizon, or a source whose waiting proofs already cost more than the budget,
-// is refused. The budget is in bytes, so the bound binds on what a source
-// actually costs rather than on how far behind this node has fallen (#4282).
+// horizon is refused, and a source whose waiting proofs already cost more than
+// the budget has its next proof dropped. The budget is in bytes, so the bound
+// binds on what a source actually costs rather than on how far behind this
+// node has fallen (#4282).
 func TestAnchorStaging_IsBounded(t *testing.T) {
 	f := newAnchorStagingFixture(t)
 	source := protocol.PartitionUrl("BVN1")
-	refused0 := count("refused")
+	refused0, dropped0 := count("refused"), count("dropped")
 	require.Error(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, maxAnchorAhead+5), f.siblingsOf(0, 2)))
 	require.Equal(t, refused0+1, count("refused"))
 
@@ -181,19 +181,21 @@ func TestAnchorStaging_IsBounded(t *testing.T) {
 
 	require.NoError(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 1), f.siblingsOf(0, 2)),
 		"the first proof is staged: the budget is measured before it, not after")
-	require.Error(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 2), f.siblingsOf(0, 2)))
-	require.Equal(t, refused0+2, count("refused"))
+	require.NoError(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 2), f.siblingsOf(0, 2)))
+	require.Equal(t, dropped0+1, count("dropped"))
+	require.Equal(t, []uint64{1}, f.b.staging.ProofBlocks(source), "the proof over budget is not staged")
 }
 
 // A destination that has fallen behind holds proofs for many Directory blocks
 // at once. That is a backlog, not a flood: every one of them is bound to
-// entries this node has already accepted and is holding. Refusing them strands
-// those entries, because the proof travels with them and nothing re-sends it,
-// and the entries are then held with no gap for healing to find (#4282).
+// entries this node has already accepted and is holding. Dropping them leaves
+// every entry they prove waiting for its stream to stop and the proof to be
+// fetched back from the source (#4282, #4439), so the budget must not bind on
+// an honest backlog.
 func TestAnchorStaging_AnHonestBacklogIsNotRefused(t *testing.T) {
 	f := newAnchorStagingFixture(t)
 	source := protocol.PartitionUrl("BVN1")
-	refused0 := count("refused")
+	refused0, dropped0 := count("refused"), count("dropped")
 
 	for b := uint64(1); b <= stagedProofBlockBacklog; b++ {
 		err := f.b.intakeProof(source, f.proofFor(t, 0, 2, b), f.siblingsOf(0, 2))
@@ -201,6 +203,8 @@ func TestAnchorStaging_AnHonestBacklogIsNotRefused(t *testing.T) {
 	}
 	require.Equal(t, refused0, count("refused"),
 		"a proof bound to entries this node kept must not be refused")
+	require.Equal(t, dropped0, count("dropped"),
+		"a proof bound to entries this node kept must not be dropped")
 	require.Len(t, f.b.staging.ProofBlocks(source), int(stagedProofBlockBacklog))
 }
 
@@ -208,27 +212,24 @@ func TestAnchorStaging_AnHonestBacklogIsNotRefused(t *testing.T) {
 // comfortably past the old 256-block cap, and well inside maxAnchorAhead.
 const stagedProofBlockBacklog = 1024
 
-// When the byte budget does bind, the package's entries must go with its
-// proof. Keeping the entries and dropping the proof is what stranded 80,552
-// of them on run 20260917T184129Z: the entry is recorded as received, so
-// there is no gap, so healing never asks, and nothing re-sends a proof.
-// Refused together, what is left is an ordinary hole the source still holds
-// (#4282).
-func TestAnchorStaging_BudgetRefusalMarksTheSource(t *testing.T) {
+// When the byte budget does bind, the proof is dropped and nothing else
+// happens: the budget is this node's memory, and a restarted node's differs
+// from its peers', so it must not decide anything the block records (#4439).
+// The intake is not a refusal -- the envelope's entries are not refused with
+// the proof -- and the source is not marked. The entries are held as any
+// others are; the test that they are held, counted, fetched and executed is
+// TestADroppedProofIsFetchedAndTheEntryExecutes (test/e2e).
+func TestAnchorStaging_BudgetDropsOnlyTheProof(t *testing.T) {
 	f := newAnchorStagingFixture(t)
 	source := protocol.PartitionUrl("BVN1")
-	require.False(t, f.b.proofBudgetBound[strings.ToLower(source.String())],
-		"nothing is bound before the budget binds")
 
 	restore := execute.MaxStagedProofBytes
 	defer func() { execute.MaxStagedProofBytes = restore }()
 	execute.MaxStagedProofBytes = 1
 
 	require.NoError(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 1), f.siblingsOf(0, 2)))
-	require.False(t, f.b.proofBudgetBound[strings.ToLower(source.String())],
-		"a proof that was staged does not mark its source")
-
-	require.Error(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 2), f.siblingsOf(0, 2)))
-	require.True(t, f.b.proofBudgetBound[strings.ToLower(source.String())],
-		"a source whose proof was refused for budget is marked, so its entries are refused with it")
+	before := f.b.staging.StagedProofBytes(source)
+	require.NoError(t, f.b.intakeProof(source, f.proofFor(t, 0, 2, 2), f.siblingsOf(0, 2)),
+		"a proof over budget is dropped, not refused")
+	require.Equal(t, before, f.b.staging.StagedProofBytes(source), "the dropped proof costs nothing")
 }

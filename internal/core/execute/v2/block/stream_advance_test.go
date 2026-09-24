@@ -97,9 +97,10 @@ func TestStreamAdvance_ARunLeavesOneWatermark(t *testing.T) {
 	}
 }
 
-// A receipt is staging's alone. This is the property that removes the bound:
-// nothing about holding a message reaches the record, so there is no array in
-// the record to keep small.
+// The held set is staging's alone. This is the property that removes the
+// bound: WHAT is held never reaches the record, so there is no array in the
+// record to keep small. How far the stream has arrived does (#4412): one
+// number, Received.
 func TestStreamAdvance_AReceiptDoesNotTouchTheLedger(t *testing.T) {
 	b, s := applyOps(t, 0, nil, []advOp{{7, false}, {5, false}, {9, false}})
 	require.NoError(t, b.flushStreams())
@@ -107,7 +108,7 @@ func TestStreamAdvance_AReceiptDoesNotTouchTheLedger(t *testing.T) {
 	part := partitionOf(t, b, s)
 	assert.Equal(t, uint64(0), part.Delivered, "nothing was delivered")
 	assert.Empty(t, part.Pending, "and nothing about what is HELD belongs in the record")
-	assert.Equal(t, uint64(0), part.Received)
+	assert.Equal(t, uint64(9), part.Received, "but how far the stream has arrived does")
 
 	assert.Equal(t, []uint64{5, 7, 9}, heldNumbers(t, b, s, 12), "staging has them")
 	high := b.staging.Sighted(s.id())
