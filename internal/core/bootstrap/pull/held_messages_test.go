@@ -244,3 +244,42 @@ func TestFullSpine_AHeldEntryWithNoMessageHasItsRecordsRebuilt(t *testing.T) {
 		require.True(t, wantCause[0].Equal(gotCause[0]))
 	}
 }
+
+// TestFullSpine_AHeldChainWithHolesIsTakenWhole — the lead's state-only
+// re-pull restored a chain's head and its open mark set only, so a node whose
+// pool crossed a mark point between its spine pass and a later pass holds the
+// positions between not at all. A position not held is not data the node
+// already has: the chain is taken whole. Checking it as held failed the
+// fetch from every peer, for ever (#4421 review F1).
+func TestFullSpine_AHeldChainWithHolesIsTakenWhole(t *testing.T) {
+	u := protocol.DnUrl().JoinPath(protocol.AnchorPool)
+	peer := newObservedDB(t)
+	grow := func(from, to int) {
+		b := peer.Begin(true)
+		defer b.Discard()
+		if from == 0 {
+			require.NoError(t, b.Account(u).Main().Put(&protocol.AnchorLedger{Url: u}))
+		}
+		for i := from; i < to; i++ {
+			addTransactionEntry(t, b, u, i, 0x42)
+		}
+		require.NoError(t, b.UpdateBPT())
+		require.NoError(t, b.Commit())
+	}
+	grow(0, 300)
+	node := newObservedDB(t)
+	b := node.Begin(true)
+	require.NoError(t, Account(context.Background(), &dbSource{db: peer}, b, u, Options{Mode: ModeFullSpine}))
+	require.NoError(t, b.Commit())
+	grow(300, 600) // past the mark point at 512
+	b = node.Begin(true)
+	require.NoError(t, Account(context.Background(), &dbSource{db: peer}, b, u, Options{Mode: ModeStateOnly}))
+	require.NoError(t, b.Commit())
+
+	b = node.Begin(true)
+	p, _, err := FetchFrom(context.Background(), []Source{&dbSource{db: peer}, &dbSource{db: peer}}, b, u, Options{Mode: ModeFullSpine, CheckHeld: true})
+	require.NoError(t, err, "a chain with positions the node does not hold was refused by every peer")
+	require.NoError(t, p.Keep())
+	require.NoError(t, b.Commit())
+	require.Empty(t, messagesMissing(t, node, u))
+}

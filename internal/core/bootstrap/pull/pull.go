@@ -1496,7 +1496,15 @@ func fetchHeldMessages(ctx context.Context, src Source, bodies *messages, dst *d
 	var last *run
 	for i := from; i < height; i++ {
 		h, err := dst.Entry(i)
-		if err != nil {
+		switch {
+		case err == nil:
+		case errors.Is(err, errors.NotFound):
+			// A position the node does not hold is not data it already has:
+			// the lead's state-only re-pull restored a head and its open mark
+			// set, and a chain that crossed a mark point between passes kept
+			// the positions between not at all (#4421 review F1).
+			return fmt.Errorf("%w: the node does not hold entry %d: %v", errNotThePeers, i, err)
+		default:
 			return fmt.Errorf("load held entry %d: %w", i, err)
 		}
 		_, err = bodies.local.Message2(h).Main().Get()

@@ -1120,9 +1120,15 @@ seventh nobody had named.
   history, the signer, the sequenced message, the cause and the validator
   signature set from the entries it takes, so a joined node serves and counts
   its pulled range as its peers do — the capacity gap is closed for the spine
-  pass. What is still different: entries the pool gains between the spine
-  pass and the join block are pulled state-only and get none of those records
-  (#4421, in build); a joiner whose every peer serves an entry bare or bodiless
+  pass, and since #4421 for every pass: a spine account is taken whole
+  whichever pass names it, and the pass that carries the spine fetches the
+  message and those records behind any of the newest held entries that lacks
+  its message, or takes the chain whole when a position is not held at all.
+  What is still different: a store written between #4400 and #4416 holds
+  entries with their messages and without those records, and nothing repairs
+  them; a node that diverged and holds more entries than every peer is
+  refused, not retaken, and the retake is unbounded and tracks no orphans
+  (#4403, Paul's decision); a joiner whose every peer serves an entry bare or bodiless
   waits at it (#4418) — a wait that since #4419 costs one page call per peer
   per round, holds the cursor at the first entry no peer serves, and shows on
   `accumulate_join_spine_stalled_entry` and in one log line a minute, which
