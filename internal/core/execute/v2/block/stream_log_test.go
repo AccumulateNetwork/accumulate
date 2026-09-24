@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -120,4 +121,63 @@ func TestLogStreams_SilentUntilThereIsSomethingToSay(t *testing.T) {
 	for i := uint64(1); i < StreamLogEvery+5; i++ {
 		require.Zero(t, blockAt(x, i, nil), "block %d", i)
 	}
+}
+
+// #4412 review F5: the line carries the ledger's Received beside staging's
+// sighted. On a node that rejoined behind a hole its peers hold entries
+// behind, the two disagree -- the ledger, pulled from the peers, says 12
+// arrived; this node's staging has sighted nothing -- and that disagreement
+// is the whole diagnosis. Such a stream is logged even though staging
+// thinks it is caught up.
+func TestLogStreams_ShowsTheLedgersReceivedBesideSighted(t *testing.T) {
+	x, c, id := streamLogFixture(t)
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	t.Cleanup(batch.Discard)
+	ledger := new(protocol.SyntheticLedger)
+	ledger.Url = id.Ledger
+	ledger.Partition(id.Source).Delivered = 5
+	ledger.Partition(id.Source).Received = 12
+	require.NoError(t, batch.Account(id.Ledger).Main().Put(ledger))
+
+	b := &Block{positions: new(positionCache), Executor: x, Batch: batch, staging: x.staging().Begin()}
+	b.Index = 1
+	b.staging.Release(id, 5)
+	b.staging.Commit()
+	b.logStreams()
+
+	require.Len(t, c.lines, 1, "a stream whose ledger says more arrived than this node sighted is logged")
+	require.EqualValues(t, 12, c.lines[0]["received"])
+	require.EqualValues(t, 0, c.lines[0]["sighted"])
+	require.EqualValues(t, 5, c.lines[0]["delivered"])
+}
+
+// #4412 review F7: logging reads the ledger and must not write it. A stream
+// that exists only in this node's staging -- a joiner's collected blocks
+// after the state it pulled, a source first seen since -- has no entry on the
+// ledger, and a find-or-create read on the batch's memoized record would
+// insert one into hashed state on this node alone, committed with the next
+// write of that ledger.
+func TestLogStreams_DoesNotWriteTheLedger(t *testing.T) {
+	x, _, id := streamLogFixture(t)
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	other := protocol.PartitionUrl("BVN2")
+	ledger := new(protocol.SyntheticLedger)
+	ledger.Url = id.Ledger
+	ledger.Partition(other).Delivered = 5
+	require.NoError(t, batch.Account(id.Ledger).Main().Put(ledger)) // dirty, as after flushStreams
+
+	b := &Block{positions: new(positionCache), Executor: x, Batch: batch, staging: x.staging().Begin()}
+	b.Index = 1
+	b.staging.Hold(id, 3, heldAt(3)) // BVN1: staging only
+	b.staging.Commit()
+	b.logStreams()
+	require.NoError(t, batch.Commit())
+
+	batch = db.Begin(false)
+	defer batch.Discard()
+	var got *protocol.SyntheticLedger
+	require.NoError(t, batch.Account(id.Ledger).Main().GetAs(&got))
+	require.Len(t, got.Sequence, 1, "logging inserted a ledger entry for a stream only staging knows")
 }

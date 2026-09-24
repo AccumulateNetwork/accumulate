@@ -522,8 +522,9 @@ derived may be filled into an account on the way out of the API, because the
 receipt served in the same call is built from what is stored: a body with one
 synthesised field in it does not hash to the leaf its own receipt proves, so
 the check above refuses it from every peer, forever. `Received` on a sequence
-ledger is derived from staging and was filled in on read, and it left every
-restarting node unable to pull `<partition>/anchors` from anybody (#4295). A
+ledger was derived from staging and filled in on read, and it left every
+restarting node unable to pull `<partition>/anchors` from anybody (#4295);
+it is stored now (#4412), and served as stored. A
 derived value travels **beside** the body, in its own field, and a reader
 merges it after it has checked the proof.
 
@@ -1210,8 +1211,10 @@ one thing a per-block record must never do. An empty block has no entry.
    is tossed.** Nothing is written until it executes: staging is the state
    before any persistence.
 5. **Block state never feeds back into staging.** The only thing the executor
-   reads from a stream's ledger is `Delivered` — what has been processed.
-   Nothing else about an inbound stream lives there.
+   reads from a stream's ledger to place the stream is `Delivered` — what has
+   been processed. The ledger also records `Received`, how far the stream
+   has arrived (#4412); the block writes it from its own arrivals and nothing
+   in staging reads it.
 6. **Staging is identical on every node.** It is fed only by consensus, so it
    is a deterministic function of the same input everywhere. A node that joins
    or restarts syncs first — it replays the committed stream from its last
@@ -1309,6 +1312,12 @@ later runs from staging, since staging runs the sequenced message and not the
 copy. That changes the state hash of any block that held a synthetic out of
 order. It is ungated under the same fresh-install rule: this line runs no
 network that outlives a run (DIFFERENCES.md, E15).
+
+**Ungated, likewise: every block writes `Received` (#4412).** It was never
+written on this line; now every block that holds an entry or delivers one
+writes it, and a block that only held something commits rather than being
+discarded as empty. Both change state hashes. Ungated under the same
+fresh-install rule (DIFFERENCES.md, E16).
 
 ## 2. Specification — how it is implemented
 
@@ -1577,8 +1586,9 @@ of n messages cost O(n²) (`TestSequenceLedgerCostIsPerRead`).
 
 `streamPosition` is the block's working copy of one stream: `delivered`, plus a
 reference to staging for what is held. It is built once per stream per block
-from the ledger's `Delivered` and advanced in place, and at close **only
-`Delivered` is written back**. It holds a reference rather than a copy of the
+from the ledger's `Delivered` and advanced in place, and at close
+**`Delivered` and `Received` are written back** ("What the stream ledger is
+for"). It holds a reference rather than a copy of the
 held set — a copy is a moment, and a moment of what the node holds
 disagreeing with what the node holds is the whole defect.
 
@@ -1645,13 +1655,47 @@ which is the failure this whole change removes, reintroduced from the other end.
 
 ### What the stream ledger is for
 
-Exactly one field, in the inbound direction: **`Delivered`** — what has been
-processed. It is read to place the stream and written when the block closes.
+Two fields, in the inbound direction, both written when the block closes
+(`flushStreams`, step 1 of "Closing a block"):
+
+- **`Delivered`** — what has been processed. It is read to place the stream.
+- **`Received`** — the highest number that has entered staging from consensus
+  by the end of the block (Paul, 2026-09-25, #4412; "Sync", "The algorithm",
+  step 6). It is the ledger's previous `Received`, raised to the highest
+  number this block's own execution held on the stream, and to `Delivered`.
+  It never decreases and is never below `Delivered`.
+
+`Received` is counted where the block holds an entry (`Block.hold`: an entry
+held behind the next number, a synthetic collected without an anchored proof,
+an anchor copy below its quorum), from what the block's consensus messages
+carried — never read back from staging. Staging is memory, and whether it
+takes an entry also depends on what this node already holds and has
+validated, which after a restart is not what its peers hold; `Received` is
+hashed, so it may depend only on the state and on the block. A number at or
+below `Delivered` is not an arrival, and one more than `MaxStageSpan` above
+it is held nowhere, so neither counts. A heal answer counts exactly as any
+other arrival does, because it reaches the block through consensus like any
+other; nothing a node fetches or learns outside consensus raises it.
+
+**A block that raises `Received` commits.** An empty block's batch is
+discarded, so a raise in a block judged empty would be lost, and carrying it
+to a later block in memory would put a per-node value into hashed state. What
+decides it today is the held message itself: `SyntheticMessage.Process` and
+`BlockAnchor.Process` set a transaction state for every message they process,
+held or not, and merging it counts the block as having delivered something
+(`BlockState.MergeTransaction`), which `Empty` checks. `BlockState.ReceivedRaised`
+is also checked, so the rule does not rest on that bookkeeping; no block
+reaches it today.
+
+What `Received` is for: a node that joins takes the state at the matched
+block B, and its staging is consistent when it holds every number from
+`Delivered + 1` to `Received` as of B ("Sync", "The algorithm", step 6). An
+entry its peers held before it began staging, on a stream that has gone
+quiet behind a hole every node shares, is otherwise invisible to it, and
+executing without it diverges (run 20260924T074702Z, Directory block 658).
 
 Nothing else about an inbound stream lives there. There is no pending array,
-because the held set is staging's; there is no received mark, because how far a
-stream has been sighted is staging's and writing it back would put a per-node
-value into hashed state (see Restart). `Produced` remains, but it belongs to the
+because the held set is staging's. `Produced` remains, but it belongs to the
 other direction — what this partition has produced FOR that one.
 
 And a message at or below `Delivered` requires nothing at all. It is not healed,
@@ -1665,23 +1709,13 @@ zero while the ledger's does not, and a stage that said zero would report
 entries as held that the node executed blocks ago — which is exactly what a
 joining node would then take from it (healing.md, "Staging snapshot").
 
-**`Received` is answered, not stored -- BESIDE the body, never in it.** Removing
-the field from the record does not remove the question, and the question is the
-one every operator surface asks: how far is this stream behind. The API answers
-it from staging's sighted mark, computed on read and never written, so the
-account on disk carries no trace of it and nothing about consensus depends on
-the answer. It travels as `AccountRecord.Sighted`, a value beside the body, and
-a reader that wants it merges on its own side after checking whatever proof came
-with the record. Filling it INTO the body on the way out was the mistake: the
-receipt is built from the stored state, so a synthesised body does not hash to
-the leaf its own receipt proves, and no anchor ledger could ever be pulled
-(#4295). See "Sync", step 3.
-
-Writing it back instead would be the mistake. A value derived from staging,
-placed in an account, makes a staging discrepancy a divergent block hash rather
-than a wrong number on a dashboard. And simply dropping it is the other
-mistake: every reader then sees zero, which does not read as "no data" — it
-reads as "nothing ever arrived", and paints a healthy stream as stalled.
+**The API serves `Received` as stored**, in the body. Until #4412 it was not
+stored: the API answered it from the serving node's staging, beside the body
+(`AccountRecord.Sighted`), because filling a derived value into the body
+makes the body stop hashing to the leaf its own receipt proves (#4295). That
+derivation is gone; `Sighted` is no longer filled. Staging's own sighted mark
+remains what the `Stream position` log line reports as `sighted` — this
+node's memory, which after a restart can be below the ledger's `Received`.
 
 `msg_sequenced.go`, `SequencedMessage`: `isReady` asks the block's position
 whether the message is next. Ready messages execute; not-ready messages record
@@ -1694,7 +1728,8 @@ the message records has, and never on a path that discards.
 `block_end.go`, in order — the order is part of the contract, because each step
 depends on the last:
 
-1. Write each stream's advances to its ledger, once per stream (#4169 step 7).
+1. Write each stream's advances to its ledger, once per stream (#4169 step 7):
+   `Delivered`, and `Received` ("What the stream ledger is for").
 2. Decide whether this completes a major block.
 3. Process events: expiring transactions and signature sets, against the major
    block height just decided.
@@ -1772,10 +1807,17 @@ when (#4279). Every block therefore writes, at Info, `module=stream`:
 
 - **`Stream position`**, per stream, after `flushStreams` has written
   Delivered: `block`, `ledger` (synthetic or anchors), `source`,
-  `delivered`, `advanced` (by this block), `sighted` (the highest number
-  ever held), `reach` (how far validated hashes stand), `held` (entries in
-  staging), `waiting` (the first number above Delivered nothing is held
-  for, 0 when none).
+  `delivered` (the ledger's, or staging's if higher), `advanced` (by this
+  block), `received` (the ledger's `Received`, #4412), `sighted` (the
+  highest number this node's staging ever held), `reach` (how far validated
+  hashes stand), `held` (entries in staging), `waiting` (the first number
+  above Delivered nothing is held for, 0 when none). `received` and
+  `sighted` are logged side by side because they can disagree: on a node
+  that rejoined behind a hole its peers hold entries behind, the state says
+  N arrived and this node's staging has sighted less, which is #4412's
+  failure read straight off the line. A stream whose ledger `Received` is
+  above `Delivered` is behind, and is logged as such even when staging
+  holds nothing for it.
 
   **A line is written when something about the stream changed, and
   otherwise no more often than `StreamLogEvery` blocks.** A stream in

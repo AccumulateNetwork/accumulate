@@ -491,7 +491,7 @@ func (x SyntheticMessage) collect(batch *database.Batch, ctx *MessageContext, se
 			}
 		}
 	}
-	ctx.Block.staging.Hold(str.id(), seq.Number, held)
+	ctx.Block.hold(str, delivered, seq.Number, held)
 	mExecSyntheticAnchor.WithLabelValues("collected").Inc()
 	return errCollected
 }

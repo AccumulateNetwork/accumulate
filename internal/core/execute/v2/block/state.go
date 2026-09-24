@@ -31,7 +31,11 @@ type BlockState struct {
 	// content is queue movement must still COMMIT (#4155): discarding it as
 	// empty would re-execute the same work every block until unrelated
 	// traffic forces a commit.
-	LocalDeliveries   int
+	LocalDeliveries int
+	// ReceivedRaised counts the streams whose Received this block raised
+	// (#4412). A block whose only effect is that must still commit: Received
+	// is hashed, and discarding the block as empty would lose it.
+	ReceivedRaised    int
 	ChainUpdates      chain.ChainUpdates
 	ReceivedAnchors   []*chain.ReceivedAnchor
 	PreviousStateHash [32]byte
@@ -81,6 +85,7 @@ func (s *BlockState) Empty() bool {
 		s.Signed == 0 &&
 		s.Produced == 0 &&
 		s.LocalDeliveries == 0 &&
+		s.ReceivedRaised == 0 &&
 		len(s.ChainUpdates.Entries) == 0
 }
 
