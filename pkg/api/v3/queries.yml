@@ -31,10 +31,6 @@ ChainQuery:
       optional: true
       pointer: true
       marshal-as: reference
-    - name: ForHeight
-      description: asks for the chains as of a minor block, for a node pulling the state (executor.md, "Sync")
-      type: uint
-      optional: true
 
 DataQuery:
   union: { type: query }

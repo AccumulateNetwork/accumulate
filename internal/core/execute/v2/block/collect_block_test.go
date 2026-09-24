@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -246,113 +247,63 @@ func TestCollectBlock_HoldsWhatTheExecutingNodeHolds(t *testing.T) {
 	requireStagingEqual(t, s.x.staging(), j.x.staging())
 }
 
-// TEST (b) at the executor: a peer holds an entry from before the joining node
-// started listening, so the block after the state has a GAP and must not be
-// executed (executor spec, "Sync", §4; #4290, #4362).
-//
-// The whole of the join's decision is here. Block B+1's transactions are, by
-// definition, ones not executed as of B. If every stream can deliver a
-// contiguous run from Delivered + 1 through what B+1 carries, this node
-// executes B+1 exactly as its peers do. A hole in that run is an entry that
-// arrived before this node was listening -- the peers have held it since a
-// block before B -- and executing without it delivers a SHORTER run than they
-// do, after which the root chain never matches again.
-//
-// Nothing here is hand-fed. The block goes through CollectBlock, which is what
-// a collecting node does with every block consensus commits, and the reach it
-// reports is what that intake saw; Delivered comes from the pulled ledger, as
-// it does in a block.
-func TestStagingGaps_APreListenEntryIsAGapAndClearsWhenThePeersRunIt(t *testing.T) {
+// The join, end to end at the executor: a node takes a peer's staging as of
+// block P, collects the blocks after P, and once its state is the state at Q
+// it holds exactly what the peer holds (executor spec, "Sync"; #4291 serves
+// the snapshot, #4292 collects and settles).
+func TestLoadStaging_ThenCollectToQ(t *testing.T) {
 	s := newStagingSim(t, 6)
 	j := newJoiner(t, s)
 
-	// Block 1 on the peer: entries 1..3 arrive with a proof whose anchor is
-	// not here yet. The joining node is not listening, so it has none of them.
+	// Block 1 on the peer: a package arrives ahead of its anchor. The joining
+	// node is not listening yet.
 	s.packageArrives(0, 2, 3)
 	s.newBlock()
 
-	// Block 2: the joining node starts listening and collects a block that
-	// carries 4..6. Its own store says nothing has been delivered.
+	// P = 1: the joining node takes the peer's staging as of that block.
+	snap, _ := s.x.staging().Snapshot(&private.StagingSnapshotRequest{Partition: "BVN0"})
+	require.Equal(t, uint64(1), snap.Block, "the snapshot says which block it is as of")
+	require.NoError(t, j.x.LoadStaging(snap))
+	{
+		tx := j.x.staging().Begin()
+		for n := uint64(1); n <= 3; n++ {
+			h, ok := tx.IDOf(s.str.id(), n)
+			require.True(t, ok, "the peer's held entry %d came with the snapshot", n)
+			require.True(t, h.Collected)
+		}
+		require.Equal(t, []uint64{3}, tx.ProofBlocks(s.str.source), "and so did its waiting proof")
+		tx.Discard()
+	}
+
+	// Block 2: the anchor lands and the peer runs what it held. The joining
+	// node collects the same block and executes nothing.
+	s.anchorExecutes(3, s.rootAt(3))
+	require.Equal(t, []uint64{1, 2, 3}, s.run())
+	s.newBlock()
+
+	// Block 3: a second package, whose anchor is not here.
 	env := s.packageEnvelope(3, 5, 6)
 	s.packageArrives(3, 5, 6)
-	out := j.collect(t, 2, env)
+	j.collect(t, 3, env)
 	s.newBlock()
 
-	require.NotEmpty(t, out.Reach, "the block reports what it carried on each stream")
-	var reach uint64
-	for _, r := range out.Reach {
-		if r.ID.Ledger.Equal(s.str.id().Ledger) && r.ID.Source.Equal(s.str.id().Source) {
-			reach = r.High
-		}
-	}
-	require.Equal(t, uint64(6), reach, "the block carried through 6 on the stream")
-
-	// The state this node pulled says the peers have delivered NOTHING, and
-	// the block it collected starts at 4. Entries 1 to 3 arrived before it was
-	// listening: a gap, and it must not execute.
-	gaps, err := j.x.StagingGaps(out.Reach)
-	require.NoError(t, err)
-	require.Len(t, gaps, 1, "the stream whose run is not contiguous is named")
-	require.Equal(t, s.str.id().Ledger.String(), gaps[0].ID.Ledger.String())
-	require.Equal(t, s.str.id().Source.String(), gaps[0].ID.Source.String())
-	require.Equal(t, uint64(0), gaps[0].Delivered)
-	require.Equal(t, uint64(6), gaps[0].Through)
-	require.Equal(t, [][2]uint64{{1, 3}}, gaps[0].Missing,
-		"and the entries it cannot deliver are named, not just the fact of them")
-
-	// The peers' anchor lands and they run 1..3. The joining node pulls the
-	// state again: Delivered is now 3, which is what the peers actually ran.
-	s.anchorExecutes(3, s.rootAt(3))
-	require.Equal(t, []uint64{1, 2, 3}, s.run())
-	s.newBlock()
 	j.pull(t)
-
-	// Everything it lacks is now at or under Delivered, so the same block has
-	// no gap and it executes.
-	gaps, err = j.x.StagingGaps(out.Reach)
-	require.NoError(t, err)
-	require.Empty(t, gaps,
-		"once the peers have executed the pre-listen entries, the run from Delivered+1 is contiguous")
+	j.settle(t, 3)
+	requireStagingEqual(t, s.x.staging(), j.x.staging())
 }
 
-// A hole is a hole wherever the number above it came from: the run is walked
-// through everything the node holds, not only through what the block carried.
-//
-// A check made only against the block's own numbers finds nothing when the
-// block happens to carry none of the stream's entries -- and the node then
-// executes with a stream stuck below a hole it can never fill by listening,
-// while its peers run those entries in the blocks where they belong.
-// Measured on TestOneValidatorRestartDoesNotDiverge: BVN1's anchor stream held
-// five entries for thirty-eight blocks after a join that passed a per-block
-// check, and the node's root chain ended 34 entries short of its peers'.
-func TestStagingGaps_AHoleIsAHoleWhereverTheNumberAboveItCameFrom(t *testing.T) {
-	s := newStagingSim(t, 9)
-	j := newJoiner(t, s)
+// A snapshot from another partition's validator describes another partition's
+// stage. Loading it would hold entries on streams this node does not execute.
+func TestLoadStaging_RefusesAnotherPartitionsStreams(t *testing.T) {
+	f := newStagingFixture(t, 0)
+	foreign := protocol.PartitionUrl("BVN7").JoinPath(protocol.Synthetic)
 
-	// The peer runs 1..3 and the joining node pulls that state.
-	s.packageArrives(0, 2, 3)
-	s.anchorExecutes(3, s.rootAt(3))
-	require.Equal(t, []uint64{1, 2, 3}, s.run())
-	s.newBlock()
-	j.pull(t)
-
-	// It collects a block carrying 4..6, and then one carrying 8..9 -- 7 is
-	// still on its way.
-	first := j.collect(t, 2, s.packageEnvelope(3, 5, 6))
-	second := j.collect(t, 3, s.packageEnvelope(7, 8, 9))
-
-	gaps, err := j.x.StagingGaps(first.Reach)
-	require.NoError(t, err)
-	require.Len(t, gaps, 1,
-		"the first block's own numbers are contiguous, but the node holds 8 and 9 "+
-			"above a hole at 7, and that hole is a gap whichever block would have "+
-			"delivered it")
-	require.Equal(t, [][2]uint64{{7, 7}}, gaps[0].Missing)
-
-	gaps, err = j.x.StagingGaps(second.Reach)
-	require.NoError(t, err)
-	require.Len(t, gaps, 1, "and so it is when asked about the block that carried 8 and 9")
-	require.Equal(t, [][2]uint64{{7, 7}}, gaps[0].Missing)
+	err := f.x.LoadStaging(&private.StagingSnapshot{Block: 9, Streams: []*private.StagedStream{
+		{Ledger: foreign, Source: protocol.PartitionUrl("BVN1")},
+	}})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, errors.BadRequest), "got %v", err)
+	require.Contains(t, err.Error(), "BVN0", "the partition refusing is named")
 }
 
 // Collecting writes nothing: not the message, not a signature, not a ledger.

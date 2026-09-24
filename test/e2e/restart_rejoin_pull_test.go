@@ -57,12 +57,11 @@ import (
 //	its local root is now 4b3dba55..., and its ledger record says block 89
 //	the peers are at block 269 and the Directory has anchored BVN0 through 67
 //
-// #4301 — the spine validated by signature, so the join has one verified root
-// per anchored block to ask AT — has since merged into the lead branch. What
-// remains is #4362: the convergence loop, which asks for each account at that
-// block and settles it on the round it was fetched, with the settle bound
-// (maxSettleRounds, join/state.go) removed because there is nothing left to
-// wait for.
+// Two things it waits on. #4301: the spine validated by signature, so the join
+// has one verified root per anchored block to ask AT. #4362: the convergence
+// loop, which asks for each account at that block and settles it on the round
+// it was fetched, with the settle bound (maxSettleRounds, join/state.go)
+// removed because there is nothing left to wait for.
 //
 // When they land, this test needs one more line than it has: the simulator
 // must run with simulator.BPTHistoryDepth set, or the peers retain nothing and
@@ -132,6 +131,7 @@ func TestRestartedNodeWithAPopulatedDatabaseResyncs(t *testing.T) {
 			"precondition: node %d holds the same state as the node that stops", i)
 	}
 	t.Logf("node %d stops at block R=%d with root %x", joiner, r, rootAtStop)
+
 	// It restarts: staging is memory and a restart loses it, so from here the
 	// node collects the blocks it is handed and executes none of them.
 	p.RestartNode(joiner)

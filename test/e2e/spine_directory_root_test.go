@@ -15,7 +15,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
@@ -32,17 +31,11 @@ import (
 )
 
 // namedPeers is the join's Sources as the daemon builds it: a client whose
-// dialer resolves a peer's query service, and a router. Nothing here is a
-// direct handle on the network's services -- a handle answers every
-// partition from one object, which is exactly the wiring a Directory node
-// reading a BVN's pool has to get right (#4301).
-//
-// **`Self` is empty, and that is not the daemon's case.** The daemon passes
-// the node's own peer ID so `selectPeers` can drop it, because a joining
-// node in production serves the partition it is joining and would otherwise
-// read its own un-executed store (#4303). The node in these tests is not one
-// of the simulator's peers, so there is no ID to drop and this wiring cannot
-// exercise that guard; `TestSelectPeers_NeverThisNode` is what does.
+// dialer resolves a peer's query service, a router, and this node's peer ID
+// dropped from every list. Nothing here is a direct handle on the network's
+// services -- a handle answers every partition from one object, which is
+// exactly the wiring a Directory node reading a BVN's pool has to get right
+// (#4301).
 func namedPeers(t *testing.T, sim *Sim) *join.QueryPeers {
 	t.Helper()
 	return &join.QueryPeers{
@@ -50,20 +43,6 @@ func namedPeers(t *testing.T, sim *Sim) *join.QueryPeers {
 		Network: t.Name(),
 		Router:  sim.S.Router(),
 	}
-}
-
-// theDirectorysPool is the pool a Directory node's join really reads, chosen
-// the way the join chooses it. Pinning a rewriter to "BVN0/anchors" instead
-// makes a test that cannot tell a routing change from a passing run: the
-// rewriter stops firing, the node promotes on untouched anchors, and the
-// first assertion to speak says "the node promoted".
-func theDirectorysPool(t *testing.T, sim *Sim) *url.URL {
-	t.Helper()
-	a, err := anchorsrc.FromStore(sim.S.Database(Directory), DnUrl())
-	require.NoError(t, err)
-	pool, err := anchorsrc.PoolFor(DnUrl(), a.BvnNames())
-	require.NoError(t, err)
-	return pool
 }
 
 // genesisOf copies the network accounts a node holds from its own genesis
@@ -266,7 +245,7 @@ func TestAPeerConsistentWithItselfDoesNotPromoteTheNode(t *testing.T) {
 	touched := 0
 	sources := rewritePool{
 		inner:   namedPeers(t, sim),
-		pool:    theDirectorysPool(t, sim),
+		pool:    PartitionUrl("BVN0").JoinPath(AnchorPool),
 		touched: &touched,
 		rewrite: func(mr *api.MessageRecord[messaging.Message]) bool {
 			if mr.Signatures == nil || len(mr.Signatures.Records) == 0 {
@@ -278,10 +257,10 @@ func TestAPeerConsistentWithItselfDoesNotPromoteTheNode(t *testing.T) {
 	}
 
 	state, local, matched := joinTheDirectory(t, sim, sources, 40)
-	require.NotZero(t, touched, "no anchor was served to the node at all, so this test proves nothing")
 	require.Zero(t, matched,
 		"a node promoted on a root nobody signed: the chain of trust terminates in the peer (#4301)")
 	_ = state
+	require.NotZero(t, touched, "no anchor was served to the node at all, so this test proves nothing")
 	requireNoSpineKept(t, local)
 	t.Logf("%d anchors were served with their signatures removed; the node did not promote and kept no spine", touched)
 }
@@ -310,7 +289,7 @@ func TestForgedValidatorsDoNotPromoteTheNode(t *testing.T) {
 	forged := 0
 	sources := rewritePool{
 		inner:   namedPeers(t, sim),
-		pool:    theDirectorysPool(t, sim),
+		pool:    PartitionUrl("BVN0").JoinPath(AnchorPool),
 		touched: &forged,
 		rewrite: func(mr *api.MessageRecord[messaging.Message]) bool {
 			if mr.Sequence == nil || mr.Message == nil {
@@ -349,10 +328,10 @@ func TestForgedValidatorsDoNotPromoteTheNode(t *testing.T) {
 	}
 
 	_, local, matched := joinTheDirectory(t, sim, sources, 40)
-	require.NotZero(t, forged, "no anchor was re-signed, so this test proves nothing")
 	require.Zero(t, matched,
 		"a node promoted on a history signed by four keys of the peer's own making: "+
 			"the quorum was counted and its membership was not (#4301)")
+	require.NotZero(t, forged, "no anchor was re-signed, so this test proves nothing")
 	requireNoSpineKept(t, local)
 	t.Logf("%d anchors were re-signed by a quorum of keys the network does not name; none promoted the node", forged)
 }
@@ -370,7 +349,7 @@ func TestAPartialQuorumDoesNotPromoteTheNode(t *testing.T) {
 	thinned := 0
 	sources := rewritePool{
 		inner:   namedPeers(t, sim),
-		pool:    theDirectorysPool(t, sim),
+		pool:    PartitionUrl("BVN0").JoinPath(AnchorPool),
 		touched: &thinned,
 		rewrite: func(mr *api.MessageRecord[messaging.Message]) bool {
 			if mr.Signatures == nil {
@@ -401,9 +380,9 @@ func TestAPartialQuorumDoesNotPromoteTheNode(t *testing.T) {
 	}
 
 	_, local, matched := joinTheDirectory(t, sim, sources, 40)
-	require.NotZero(t, thinned, "no anchor was thinned, so this test proves nothing")
 	require.Zero(t, matched,
 		"a node promoted on one validator's signature where the set requires two (#4301)")
+	require.NotZero(t, thinned, "no anchor was thinned, so this test proves nothing")
 	requireNoSpineKept(t, local)
 	t.Logf("%d anchors were served with one signature of the two the set requires; none promoted the node", thinned)
 }

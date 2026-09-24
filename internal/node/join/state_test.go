@@ -110,28 +110,22 @@ func TestLocalBlock_IsTheExecutorsBlockAndNotThePulledLedger(t *testing.T) {
 
 	// And the round that follows knows it is 870 blocks behind, so it goes
 	// wide and the page diff runs as the primary.
-	_, err = s.changedAccounts(ctx, 946)
+	_, err = s.changedAccounts(ctx)
 	require.NoError(t, err)
 	require.True(t, s.wide,
 		"a node 870 blocks behind must take the page diff, not walk seventeen blocks")
 }
 
-// TestFetch_AnAccountThatCannotSettleIsRefusedAndNotHeld.
+// TestSettleBatch_SaysWhatItGaveUpOn.
 //
-// THERE IS NO SETTLE WINDOW ANY MORE, and that is #4362's centre. The pull
-// used to ask a peer for whatever block it was on and then HOLD what came
-// back for maxSettleRounds rounds, hoping the Directory would anchor that
-// block. The Directory anchors roughly one block in six of a BVN's, so five
-// batches in six waited for an anchor that was never coming and were thrown
-// away -- and an account that changes every block could never settle at all.
-//
-// A pass asks for a block whose root it already holds and has verified, so
-// there is nothing to wait for: an account either verifies against that root
-// now, or it is refused and asked for again next round, at the same block.
-// Nothing is held across rounds, so nothing is discarded after a wait and
-// nothing is re-fetched into a second batch whose commits race (#4352,
-// #4353).
-func TestFetch_AnAccountThatCannotSettleIsRefusedAndNotHeld(t *testing.T) {
+// The Directory anchors a state-tree root for roughly one block in six of a
+// BVN's, and AnchoredRoot is an exact lookup on the block a peer served an
+// account at. So five settle batches in six wait maxSettleRounds rounds for an
+// anchor that is never coming and are then thrown away — the dominant failure
+// mode of a join, and it was discarded with no log line at all. A node that
+// has given up on twelve held accounts after waiting for them must say so
+// (#4295).
+func TestSettleBatch_SaysWhatItGaveUpOn(t *testing.T) {
 	ctx := context.Background()
 	here := protocol.PartitionUrl("BVN0")
 	account := protocol.AccountUrl("alice", "tokens")
@@ -155,18 +149,28 @@ func TestFetch_AnAccountThatCannotSettleIsRefusedAndNotHeld(t *testing.T) {
 		log: slog.New(slog.NewTextHandler(log, nil)),
 	}
 	// A Directory that has anchored nothing, so nothing the peer serves can
-	// verify.
+	// ever settle.
 	values, _ := genesisValues(t, 4)
 	s.anchors = noAnchorSource(t, here, values)
 
-	pulled, refused := s.fetch(ctx, &syncPass{block: 946}, []*url.URL{account})
-	require.Zero(t, pulled, "nothing verifies against a root nobody signed")
-	require.Equal(t, []*url.URL{account}, refused,
-		"it is refused and asked for again, not held: an account held across "+
-			"rounds is an account re-fetched at a different block, and the two "+
-			"commits race (#4353)")
-	require.Contains(t, log.String(), "could not be pulled",
-		"a refusal says so; the hold this replaces was silent (#4295)")
+	pulled, refused := s.fetch(ctx, []*url.URL{account})
+	require.Zero(t, pulled, "nothing can settle against a directory with no anchors")
+	require.Empty(t, refused, "it is held, not refused")
+	require.Equal(t, 1, s.heldCount(), "the account is held, waiting for its anchor")
+	require.NotContains(t, log.String(), "given up on unanchored",
+		"nothing has been given up on yet")
+
+	for i := 0; i < maxSettleRounds; i++ {
+		s.settleHeld(ctx)
+	}
+
+	require.Zero(t, s.heldCount(), "the wait is over and the batch is closed")
+	out := log.String()
+	require.Contains(t, out, "given up on unanchored",
+		"a node that threw away held accounts must say so: this is the dominant "+
+			"failure mode of a join and it was silent")
+	require.Contains(t, out, "accounts=1")
+	require.Contains(t, out, "block=946", "and which block nobody anchored")
 }
 
 // writeTokenAccount gives the peer something to serve, with the root index

@@ -24,12 +24,6 @@ import (
 // root would be confidently wrong, which is worse than an error, so nothing
 // here ever falls back to the current root.
 //
-// And the refusal has to say which kind it is. On this line a requester treats
-// NotFound as a fact about the RECORD and a capability limit as a fact about
-// the PEER (`join/sources.go`), so a node that answers NotFound because it
-// could not read its own index makes the requester drop an account the network
-// holds. Nothing in this file turns a store miss into NotFound.
-//
 // Retention is per-node configuration (BPTHistoryDepth). A node running a depth
 // of zero retains nothing, refuses every historical request with
 // [errors.IncompleteChain], and is a correct, honest node — but it cannot serve
@@ -230,41 +224,11 @@ func ResolveBlockAtOrBefore(partition config.NetworkUrl, batch *database.Batch, 
 // account's main chain index.
 //
 // ok is false when this node cannot tell — the account has no indexed main
-// chain, or it has one whose beginning this node does not hold. Neither is the
-// same as the account not existing, and callers must not turn "I cannot tell"
-// into "it was not there".
-//
-// # A JOINED NODE CANNOT TELL, AND MUST NOT SAY NOT-FOUND
-//
-// A node that pulled its state holds each non-spine chain with its OPEN MARK
-// SET only (`pull.go`, ModeStateOnly: `lastMark := want.Count &^ MarkMask()`),
-// so for a main index chain longer than one mark block — 256 entries, since
-// markPower is 8 — element 0 is not in the store. Measured on this line with
-// the production pull:
-//
-//	PULLED AccountFirstIndexedBlock => ok=false
-//	  err=load acc://alice/tokens main chain index entry 0: cannot locate element 0
-//	  code=notFound
-//
-// Letting that out as an error would be worse than useless. [errors.Code] walks
-// a wrapping UnknownError down to the cause (`pkg/errors/inspect.go`), so the
-// client sees NotFound; `join/sources.go` makes a NotFound that EVERY peer
-// gives the network's answer about the record; and on a network whose reachable
-// peers have all joined, that is every peer. The requester would conclude the
-// account did not exist at that height and drop an account all of them hold.
-//
-// So a store miss on element 0 is "I cannot tell", not an error and never a
-// status. The caller then skips the existence question and answers from the
-// BPT, which is the authority for it anyway.
-// TestAJoinedNodeDoesNotCallItsOwnGapAnAbsence stands the joined node.
+// chain, which is not the same as the account not existing. Callers must not
+// turn "I cannot tell" into "it was not there".
 func AccountFirstIndexedBlock(account *database.Account) (block uint64, ok bool, err error) {
 	mainIndexChain, err := account.MainChain().Index().Get()
-	switch {
-	case err == nil:
-		// Ok
-	case errors.Is(err, errors.NotFound):
-		return 0, false, nil
-	default:
+	if err != nil {
 		return 0, false, errors.UnknownError.WithFormat("load %v main chain index: %w", account.Url(), err)
 	}
 	if mainIndexChain.Height() == 0 {
@@ -273,14 +237,10 @@ func AccountFirstIndexedBlock(account *database.Account) (block uint64, ok bool,
 
 	entry := new(protocol.IndexEntry)
 	err = mainIndexChain.EntryAs(0, entry)
-	switch {
-	case err == nil:
-		return entry.BlockIndex, true, nil
-	case errors.Is(err, errors.NotFound):
-		return 0, false, nil // The beginning of the chain is not held here
-	default:
+	if err != nil {
 		return 0, false, errors.UnknownError.WithFormat("load %v main chain index entry %d: %w", account.Url(), 0, err)
 	}
+	return entry.BlockIndex, true, nil
 }
 
 // BPTRootAt returns the BPT root as of the given minor block height, together
@@ -306,18 +266,10 @@ func AccountFirstIndexedBlock(account *database.Account) (block uint64, ok bool,
 // THIS IS RE-DERIVED ON THIS LINE, NOT INHERITED. The alignment is a property
 // of this line's block_end and its genesis, both of which differ from `main`'s,
 // and ElementIndex-style positional assumptions are what #4321/#4327/#4328/
-// #4330 are about. What asserts it is
-// TestAnAccountIsServedAsOfTheBlockTheDirectoryAnchored
-// (cmd/accumulated/run): for every block the Directory anchored, the receipt
-// this root produces must end at the StateTreeAnchor that anchor carries, and
-// a refusal after the first block the node could serve fails the test rather
-// than being logged — an off-by-one here is a hole in an otherwise contiguous
-// window, and logging it is how this claim went unasserted while this comment
-// said a test made it.
-//
-// Anything that slips past is caught rather than served: GetReceiptAt refuses
-// when the tree reconstructed from retained nodes does not hash to the root
-// passed here.
+// #4330 are about. TestTheBptChainAndTheRootIndexChainAlignOnThisLine asserts
+// it block by block against the StateTreeAnchor the Directory holds. Anything
+// it misses is caught rather than served: GetReceiptAt refuses when the tree
+// reconstructed from retained nodes does not hash to the root passed here.
 //
 // WHAT THIS ROOT IS ON THIS LINE. It is the value the partition's anchor for
 // that block carries as its StateTreeAnchor: the anchor is built in the
@@ -363,10 +315,8 @@ func BPTRootAt(partition config.NetworkUrl, batch *database.Batch, height uint64
 // It returns one of four distinguishable refusals, so a client can branch
 // without parsing prose:
 //
-//   - [errors.NotFound] — this node's index has no record of the account at
-//     that height. It is not proof of absence: it is what THIS node's index
-//     says, so a requester counts it as a miss and asks somebody else. It is
-//     never returned for anything this node merely could not read.
+//   - [errors.NotFound] — the account had no record at that height. This is
+//     proven absence, not a capability limit.
 //   - [errors.IncompleteChain] — a capability limit: the height precedes what
 //     this node has indexed, or is indexed but the node retains no BPT history
 //     for it. The message names the boundary.
@@ -377,18 +327,6 @@ func BPTRootAt(partition config.NetworkUrl, batch *database.Batch, height uint64
 //
 // It never returns the current block for a historical request.
 func ResolveHistoricalAccountState(partition config.NetworkUrl, batch *database.Batch, account *database.Account, height uint64) (*protocol.IndexEntry, error) {
-	// THE HEIGHT IS JUDGED BEFORE THE ACCOUNT IS. A height of zero, one before
-	// this node's horizon, or one beyond its latest indexed block is a fact
-	// about the request or about this node; asking the account question first
-	// turns all three into NotFound for any account younger than the height,
-	// and NotFound is the one answer a requester reads as a fact about the
-	// record (`join/sources.go`). Ported from main, which had the order right,
-	// and pinned by TestResolveHistoricalAccountState_Refusals.
-	_, entry, err := ResolveBlockAtOrBefore(partition, batch, height)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
 	// Did the account exist? Ask about the height the caller asked about, not
 	// the resolved one: an account created between the two did not exist at the
 	// height in question, and proving it existed later answers a different
@@ -399,14 +337,10 @@ func ResolveHistoricalAccountState(partition config.NetworkUrl, batch *database.
 	}
 	if ok && height < first {
 		return nil, errors.NotFound.WithFormat(
-			"this node's earliest record of %v is block %d, so it has none at block %d", account.Url(), first, height)
+			"%v did not exist at block %d; this node's earliest record of it is block %d", account.Url(), height, first)
 	}
 
-	err = requireRetained(partition, batch, entry)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	return entry, nil
+	return ResolveRetainedBlock(partition, batch, height)
 }
 
 // ResolveRetainedBlock resolves a requested minor block height to the last
@@ -422,23 +356,15 @@ func ResolveRetainedBlock(partition config.NetworkUrl, batch *database.Batch, he
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	err = requireRetained(partition, batch, entry)
+
+	retained, err := RetainedBlockRange(partition, batch)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	return entry, nil
-}
-
-// requireRetained refuses a block this node keeps no BPT history for, naming
-// the window so a client is told where it ends rather than left to probe.
-func requireRetained(partition config.NetworkUrl, batch *database.Batch, entry *protocol.IndexEntry) error {
-	retained, err := RetainedBlockRange(partition, batch)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
 	if !retained.Contains(entry.BlockIndex) {
-		return errors.IncompleteChain.WithFormat(
+		return nil, errors.IncompleteChain.WithFormat(
 			"no BPT history retained for block %d; this node's retained range is %v", entry.BlockIndex, retained)
 	}
-	return nil
+
+	return entry, nil
 }

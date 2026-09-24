@@ -86,21 +86,10 @@ type ExecutorApp struct {
 }
 
 // Joining is a node's join, as the DAG service keeps it: whether the node is
-// joining, what it does with a block while it is, and the blocks the handoff
-// hands back to be executed.
+// joining, and what it does with a block while it is.
 type Joining interface {
 	Joining() bool
 	Collect(execute.BlockParams, []*messaging.Envelope) error
-
-	// Replay is the blocks the handoff left to be executed: the ones above
-	// the block the pulled state is, in order. They are taken here, in the
-	// block path, because that is the only place blocks are executed -- the
-	// DAG service runs its handoff in the block production loop for the same
-	// reason (#4294). Taking them is once: a second call is empty.
-	Replay() []struct {
-		Params    execute.BlockParams
-		Envelopes []*messaging.Envelope
-	}
 }
 
 type RestoreFunc func(ioutil.SectionReader) error
@@ -169,27 +158,13 @@ type collected struct{}
 
 func (a *ExecutorApp) Execute(req *ExecuteRequest) (*ExecuteResponse, error) {
 	// A joining node keeps the block and executes nothing (executor spec,
-	// "Sync", §5; #4292).
+	// "Sync", step 1; #4292).
 	if a.Join != nil && a.Join.Joining() {
 		err := a.Join.Collect(req.Params, copyEnv(req.Envelopes))
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("collect block: %w", err)
 		}
 		return &ExecuteResponse{Block: collected{}}, nil
-	}
-
-	// A node that has just joined executes what it collected above the block
-	// its state is, in order, BEFORE this block. The pulled state is block
-	// Q's; the collected blocks are Q+1, Q+2, ..., and this one is the next
-	// after them. Executing this one without them would run it against a
-	// state its peers left several blocks ago.
-	if a.Join != nil {
-		for _, b := range a.Join.Replay() {
-			err := a.executeAndCommit(b.Params, b.Envelopes)
-			if err != nil {
-				return nil, errors.UnknownError.WithFormat("execute the collected block %d: %w", b.Params.Index, err)
-			}
-		}
 	}
 
 	block, err := a.Executor.Begin(req.Params)
@@ -285,48 +260,4 @@ func (a *ExecutorApp) Commit(req *CommitRequest) (*CommitResponse, error) {
 	return &CommitResponse{
 		Hash: hash,
 	}, nil
-}
-
-// executeAndCommit runs one block the join handed back, start to finish. It is
-// the ordinary block path with its own commit, because the block it stands
-// before has its commit already.
-func (a *ExecutorApp) executeAndCommit(params execute.BlockParams, envelopes []*messaging.Envelope) error {
-	block, err := a.Executor.Begin(params)
-	if err != nil {
-		return errors.UnknownError.WithFormat("begin block: %w", err)
-	}
-	envs := make([]*messaging.Envelope, len(envelopes))
-	for i, e := range envelopes {
-		envs[i] = e.Copy()
-	}
-	if pb, ok := block.(execute.ParallelBlock); ok {
-		for _, r := range pb.ProcessAll(envs) {
-			if r.Error != nil {
-				return errors.UnknownError.WithFormat("deliver envelope: %w", r.Error)
-			}
-		}
-	} else {
-		for _, e := range envs {
-			if _, err := block.Process(e); err != nil {
-				return errors.UnknownError.WithFormat("deliver envelope: %w", err)
-			}
-		}
-	}
-	state, err := block.Close()
-	if err != nil {
-		return errors.UnknownError.WithFormat("end block: %w", err)
-	}
-	err = state.Commit()
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	if state.IsEmpty() {
-		return nil
-	}
-	major, _, _ := state.DidCompleteMajorBlock()
-	return errors.UnknownError.Wrap(a.EventBus.Publish(events.DidCommitBlock{
-		Index: state.Params().Index,
-		Time:  state.Params().Time,
-		Major: major,
-	}))
 }

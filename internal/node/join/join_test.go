@@ -7,68 +7,56 @@
 package join
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
-
-// These drive the convergence loop's state machine (executor spec, "Sync",
-// §4 and §5): sync to B, ask whether the block collected as B+1 can be
-// executed, and either hand off or advance.
-//
-// What they do NOT prove is that the pull converges or that the gap check
-// reads what a block carried -- those are the state half and the executor's,
-// and they are proven where they live: test/e2e/restart_rejoin_pull_test.go
-// drives the pull through the production wiring against a restarted node's
-// own database, and internal/core/execute/v2/block's collect tests drive the
-// gap check through CollectBlock.
 
 // fakeBuffer stands for the DAG service's collecting mode.
 type fakeBuffer struct {
 	collecting bool
 	overrun    bool
 	handedOff  uint64
+	handoffErr error
+	applied    int // how many blocks were applied to the staging that was taken
+	starts     int // how many times the join started collecting
 
-	// gapsUntil is the last synced block at which the collected block b+1
-	// still has a gap. Above it the block is clean.
-	gapsUntil uint64
-
-	// notCollectedAbove is the block above which nothing has been collected
-	// yet, so GapsAt is a wait rather than an answer. Zero means everything.
-	notCollectedAbove uint64
-
-	asked []uint64
-
-	onHandoff func()
+	// clearOverrunAfter is the number of StartCollecting calls after which
+	// the buffer stops reporting an overrun.
+	clearOverrunAfter int
 }
 
+func (b *fakeBuffer) StartCollecting() {
+	b.collecting = true
+	b.starts++
+	if b.clearOverrunAfter > 0 && b.starts >= b.clearOverrunAfter {
+		b.overrun = false
+	}
+}
 func (b *fakeBuffer) Collecting() bool    { return b.collecting }
 func (b *fakeBuffer) BufferOverrun() bool { return b.overrun }
-
-func (b *fakeBuffer) GapsAt(q uint64) ([]execute.StreamGap, error) {
-	b.asked = append(b.asked, q)
-	if b.notCollectedAbove != 0 && q >= b.notCollectedAbove {
-		return nil, errors.NotReady.WithFormat("block %d has not been collected", q+1)
+func (b *fakeBuffer) ApplyStaging(load func() error) error {
+	err := load()
+	if err != nil {
+		return err
 	}
-	if q <= b.gapsUntil {
-		return []execute.StreamGap{{
-			ID:        execute.StreamID{Ledger: protocol.PartitionUrl("BVN0").JoinPath(protocol.Synthetic), Source: protocol.PartitionUrl("BVN1")},
-			Delivered: 103,
-			Through:   105,
-			Missing:   [][2]uint64{{104, 104}},
-		}}, nil
-	}
-	return nil, nil
+	b.applied++
+	return nil
 }
-
 func (b *fakeBuffer) Handoff(q uint64) error {
-	if b.onHandoff != nil {
-		b.onHandoff()
+	if b.handoffErr != nil {
+		return b.handoffErr
 	}
 	b.handedOff = q
 	b.collecting = false
@@ -77,33 +65,31 @@ func (b *fakeBuffer) Handoff(q uint64) error {
 
 // fakeStage stands for the executor's staging half.
 type fakeStage struct {
-	settled  uint64
-	onSettle func()
+	loaded  *private.StagingSnapshot
+	settled uint64
+	loadErr error
 }
 
-func (s *fakeStage) SettleStagingAt(q uint64) error {
-	if s.onSettle != nil {
-		s.onSettle()
+func (s *fakeStage) LoadStaging(snap *private.StagingSnapshot) error {
+	if s.loadErr != nil {
+		return s.loadErr
 	}
-	s.settled = q
+	s.loaded = snap
 	return nil
 }
+func (s *fakeStage) SettleStagingAt(q uint64) error { s.settled = q; return nil }
 
-// fakeState stands for the state pull. It reports a synced block once enough
-// rounds have run, and Advance moves it to the next anchored block.
+// fakeState stands for the state pull and its tracker.
 type fakeState struct {
 	pulls     int
 	matchAt   uint64
 	matchFrom int // the pull round at which the root matches
-	step      uint64
-	advances  int
-	handedOff uint64
-	handoffs  int
-	onHandoff func()
 }
 
-func (s *fakeState) Pull(context.Context) error { s.pulls++; return nil }
-
+func (s *fakeState) Pull(context.Context) error {
+	s.pulls++
+	return nil
+}
 func (s *fakeState) Matched(context.Context) (uint64, bool, error) {
 	if s.pulls < s.matchFrom {
 		return 0, false, nil
@@ -111,25 +97,68 @@ func (s *fakeState) Matched(context.Context) (uint64, bool, error) {
 	return s.matchAt, true, nil
 }
 
-func (s *fakeState) Advance() {
-	s.advances++
-	step := s.step
-	if step == 0 {
-		step = 6
-	}
-	s.matchAt += step
+// fakePeers serves a snapshot per peer, in order.
+type fakePeers struct {
+	peers []*api.FindServiceResult
+	snaps map[string]*private.StagingSnapshot
+	errs  map[string]error
+	asked []string
+
+	// collectingWhenAsked, if set, is read the first time a peer is asked for
+	// its staging: the join must already be collecting by then.
+	collectingWhenAsked Buffer
+	wasCollecting       bool
 }
 
-func (s *fakeState) Handoff(_ context.Context, q uint64) error {
-	if s.onHandoff != nil {
-		s.onHandoff()
-	}
-	s.handoffs++
-	s.handedOff = q
-	return nil
+func (p *fakePeers) Validators(context.Context) ([]*api.FindServiceResult, error) {
+	return p.peers, nil
 }
 
-func run(t *testing.T, opts Options) error {
+func (p *fakePeers) Staging(peer *api.FindServiceResult) private.StagingSnapshotter {
+	return &fakeSnapshotter{p: p, key: peer.PeerID.String()}
+}
+
+type fakeSnapshotter struct {
+	p   *fakePeers
+	key string
+}
+
+func (f *fakeSnapshotter) Sequence(context.Context, *url.URL, *url.URL, uint64, private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	return nil, errors.NotAllowed.With("not used")
+}
+
+func (f *fakeSnapshotter) StagingSnapshot(_ context.Context, _ *private.StagingSnapshotRequest) (*private.StagingSnapshot, error) {
+	f.p.asked = append(f.p.asked, f.key)
+	if f.p.collectingWhenAsked != nil && len(f.p.asked) == 1 {
+		f.p.wasCollecting = f.p.collectingWhenAsked.Collecting()
+	}
+	if err := f.p.errs[f.key]; err != nil {
+		return nil, err
+	}
+	return f.p.snaps[f.key], nil
+}
+
+// peerID is a distinct, valid peer ID per test peer: an ed25519 public key's
+// identity multihash, which is what a real FindService result carries.
+func peerID(n byte) p2p.PeerID {
+	_, pub, err := crypto.GenerateEd25519Key(bytes.NewReader(bytes.Repeat([]byte{n}, 64)))
+	if err != nil {
+		panic(err)
+	}
+	id, err := peer.IDFromPublicKey(pub)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
+func peerResult(n byte) *api.FindServiceResult {
+	r := new(api.FindServiceResult)
+	r.PeerID = peerID(n)
+	return r
+}
+
+func run(t *testing.T, opts Options) (Outcome, error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -137,116 +166,164 @@ func run(t *testing.T, opts Options) error {
 	return Run(ctx, opts)
 }
 
-// The join pulls until the root matches an anchored block, finds no gap in
-// the block after it, and hands off there.
-func TestJoin_SyncsThenExecutesTheBlockAfter(t *testing.T) {
-	buf := &fakeBuffer{collecting: true}
+// The join takes a peer's staging, pulls until the root matches an anchored
+// block at or above the snapshot's, settles there and hands off (executor
+// spec, "Sync").
+func TestJoin_TakesStagingPullsThenHandsOff(t *testing.T) {
+	buf := &fakeBuffer{}
 	stage := new(fakeStage)
 	state := &fakeState{matchAt: 20, matchFrom: 2}
+	peers := &fakePeers{
+		peers: []*api.FindServiceResult{peerResult(1)},
+		snaps: map[string]*private.StagingSnapshot{peerID(1).String(): {Block: 17}},
+	}
 
-	require.NoError(t, run(t, Options{Partition: "BVN0", Buffer: buf, Stage: stage, State: state}))
+	outcome, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers})
+	require.NoError(t, err)
+	require.Equal(t, Joined, outcome)
 
-	require.Equal(t, uint64(20), buf.handedOff, "handed off at the block the state is")
-	require.Equal(t, uint64(20), stage.settled, "staging settled at the same block")
-	require.GreaterOrEqual(t, state.pulls, 2)
-	require.Zero(t, state.advances, "nothing had a gap, so nothing advanced")
+	require.NotNil(t, stage.loaded, "staging was taken from the peer")
+	require.Equal(t, 1, buf.applied, "and the blocks buffered since were applied to it")
+	require.Equal(t, uint64(17), stage.loaded.Block)
+	require.Equal(t, uint64(20), stage.settled, "staging settles at the block the state is")
+	require.Equal(t, uint64(20), buf.handedOff, "and the handoff is at that block")
+	require.False(t, buf.collecting, "a node that has joined is not collecting")
+	require.Equal(t, 2, state.pulls,
+		"the join pulls each round; what it pulls is the pull's own business now (#4306)")
 }
 
-// TEST (b): a peer holds an entry from before this node started listening.
-//
-// The node has block B's state and the block collected as B+1 delivers #105
-// while the pulled state says 103 was delivered and nothing holds #104. That
-// entry arrived before this node was listening, and executing B+1 without it
-// delivers a shorter run than the peers do -- the #4290 divergence.
-//
-// So it does not execute. It advances the sync to the next anchored block,
-// where everything it lacks below is at or under the new Delivered, and asks
-// the same question of the block after THAT one. It executes the first block
-// with no gap, and it settles staging at the block it executes from.
-func TestJoin_AGapAdvancesTheSyncInsteadOfExecuting(t *testing.T) {
-	buf := &fakeBuffer{collecting: true, gapsUntil: 30}
+// A validator that cannot serve its staging — because it is joining itself,
+// or is too busy to finish a paged read — is passed over, not waited on. The
+// join asks the next one (#4295's refusal is what makes that answerable).
+func TestJoin_AsksTheNextValidator(t *testing.T) {
+	buf := new(fakeBuffer)
 	stage := new(fakeStage)
-	state := &fakeState{matchAt: 20, matchFrom: 1, step: 6}
+	state := &fakeState{matchAt: 9, matchFrom: 1}
+	peers := &fakePeers{
+		peers: []*api.FindServiceResult{peerResult(1), peerResult(2), peerResult(3)},
+		errs:  map[string]error{peerID(1).String(): errors.NotReady.With("booting")},
+		snaps: map[string]*private.StagingSnapshot{
+			peerID(2).String(): {Block: 0}, // has executed no block
+			peerID(3).String(): {Block: 8},
+		},
+	}
 
-	require.NoError(t, run(t, Options{Partition: "BVN0", Buffer: buf, Stage: stage, State: state}))
+	outcome, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers})
+	require.NoError(t, err)
+	require.Equal(t, Joined, outcome)
 
-	// 20, 26, 32: the first two had a gap and the third did not.
-	require.Equal(t, []uint64{20, 26, 32}, buf.asked)
-	require.Equal(t, 2, state.advances, "it advanced once per gap and no more")
-	require.Equal(t, uint64(32), buf.handedOff, "it executed from the first block with no gap")
-	require.Equal(t, uint64(32), stage.settled, "staging is settled at the block it executes from, not at the first one it synced to")
+	require.Equal(t, []string{peerID(1).String(), peerID(2).String(), peerID(3).String()}, peers.asked)
+	require.Equal(t, uint64(8), stage.loaded.Block, "the third validator's staging is the one taken")
 }
 
-// A gap never ends in executing anyway. While the block after the state has a
-// gap the node hands off nothing, whatever else happens.
-func TestJoin_AGapNeverExecutes(t *testing.T) {
-	buf := &fakeBuffer{collecting: true, gapsUntil: 1 << 40}
+// A root that matches a block BELOW the staging taken is not a handoff: the
+// node would be executing from staging as of P against state as of Q < P,
+// which is a pairing no node ever held (#4290).
+func TestJoin_WillNotHandOffBelowTheStagingItTook(t *testing.T) {
+	buf := new(fakeBuffer)
 	stage := new(fakeStage)
-	state := &fakeState{matchAt: 20, matchFrom: 1, step: 6}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-	err := Run(ctx, Options{Partition: "BVN0", Buffer: buf, Stage: stage, State: state, Retry: time.Millisecond})
-	require.Error(t, err, "the join cannot finish while every block after the state has a gap")
-	require.Zero(t, buf.handedOff)
-	require.Zero(t, stage.settled)
-	require.True(t, buf.collecting, "a node that cannot execute keeps collecting, which is the safe state")
-	require.Greater(t, state.advances, 3, "it kept advancing rather than giving up or executing")
-}
-
-// The state can run ahead of the blocks consensus has delivered. That is a
-// wait, not a gap: nothing advances and nothing is handed off.
-func TestJoin_WaitsForTheBlockAfterTheStateToBeCollected(t *testing.T) {
-	buf := &fakeBuffer{collecting: true, notCollectedAbove: 20}
-	stage := new(fakeStage)
-	state := &fakeState{matchAt: 20, matchFrom: 1}
+	state := &fakeState{matchAt: 5, matchFrom: 1} // always matches, at 5
+	peers := &fakePeers{
+		peers: []*api.FindServiceResult{peerResult(1)},
+		snaps: map[string]*private.StagingSnapshot{peerID(1).String(): {Block: 17}},
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	err := Run(ctx, Options{Partition: "BVN0", Buffer: buf, Stage: stage, State: state, Retry: time.Millisecond})
-	require.Error(t, err)
+	_, err := Run(ctx, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers, Retry: time.Millisecond})
+	require.Error(t, err, "the join does not hand off; it runs until the context ends")
 	require.Zero(t, buf.handedOff)
-	require.Zero(t, state.advances, "waiting for a block is not a gap and must not advance the sync")
+	require.Zero(t, stage.settled)
+	require.NotZero(t, state.pulls, "and it keeps pulling")
 }
 
-// TEST (d), the ordering half: the pulled definition is published BEFORE the
-// first block is executed. With #4301 (c) that is the only way a definition
-// moves, so a handoff that produced blocks first would run them on the
-// committee this node had before it went away (#4366's M3).
-func TestJoin_PublishesWhatItPulledBeforeItExecutes(t *testing.T) {
-	buf := &fakeBuffer{collecting: true}
+// If the buffer overran, the blocks since the snapshot are no longer all in
+// hand and the join cannot be exact: it starts again from a newer snapshot
+// rather than handing off or giving up. A node that gave up here would keep
+// up with consensus and execute nothing, for ever.
+func TestJoin_StartsAgainAfterABufferOverrun(t *testing.T) {
+	buf := &fakeBuffer{overrun: true}
 	stage := new(fakeStage)
-	state := &fakeState{matchAt: 20, matchFrom: 1}
+	state := &fakeState{matchAt: 20, matchFrom: 0}
+	peers := &fakePeers{
+		peers: []*api.FindServiceResult{peerResult(1)},
+		snaps: map[string]*private.StagingSnapshot{peerID(1).String(): {Block: 17}},
+	}
 
-	var order []string
-	buf.onHandoff = func() { order = append(order, "produce") }
-	state.onHandoff = func() { order = append(order, "publish") }
-	stage.onSettle = func() { order = append(order, "settle") }
+	// The overrun clears the second time staging is taken, so the join gets
+	// through on its next attempt.
+	buf.clearOverrunAfter = 2
 
-	require.NoError(t, run(t, Options{Partition: "BVN0", Buffer: buf, Stage: stage, State: state}))
-	require.Equal(t, []string{"publish", "settle", "produce"}, order)
-	require.Equal(t, uint64(20), state.handedOff)
+	outcome, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers})
+	require.NoError(t, err)
+	require.Equal(t, Joined, outcome)
+	require.GreaterOrEqual(t, buf.starts, 2, "the join started over")
+	require.Equal(t, uint64(20), buf.handedOff)
 }
 
-// A buffer that overran can no longer say which collected group is which
-// block, and guessing is the divergence the join exists to prevent. It is a
-// fault, and the node keeps collecting rather than executing.
-func TestJoin_ABufferOverrunIsAFaultNotARetry(t *testing.T) {
-	buf := &fakeBuffer{collecting: true, overrun: true}
+// Every validator asked, none able to serve: that is an answer, not a
+// failure — a network that restarted as a whole holds no staging anywhere —
+// and it must be told apart from every other NotReady the join meets, or a
+// routine "not yet" would pair a peer's staging with this node's older state.
+func TestJoin_NoPeerHasStagingIsAnAnswer(t *testing.T) {
+	buf := new(fakeBuffer)
 	stage := new(fakeStage)
-	state := &fakeState{matchAt: 20, matchFrom: 1}
+	state := &fakeState{matchAt: 20, matchFrom: 0}
+	peers := &fakePeers{
+		peers: []*api.FindServiceResult{peerResult(1)},
+		errs:  map[string]error{peerID(1).String(): errors.NotReady.With("booting")},
+	}
 
-	err := run(t, Options{Partition: "BVN0", Buffer: buf, Stage: stage, State: state})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "no longer all in hand")
+	outcome, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers, Rounds: 2})
+	require.NoError(t, err, "not a failure")
+	require.Equal(t, NoPeerHasStaging, outcome)
+	require.Zero(t, buf.handedOff, "and nothing was handed off")
+	require.Nil(t, stage.loaded)
+}
+
+// Collecting starts before anything is asked of a peer. That ordering is what
+// makes the join exact: every block above the snapshot's is one this node has
+// collected.
+func TestJoin_CollectsBeforeItAsks(t *testing.T) {
+	buf := new(fakeBuffer)
+	stage := new(fakeStage)
+	state := &fakeState{matchAt: 20, matchFrom: 0}
+	peers := &fakePeers{
+		peers: []*api.FindServiceResult{peerResult(1)},
+		snaps: map[string]*private.StagingSnapshot{peerID(1).String(): {Block: 17}},
+	}
+	peers.collectingWhenAsked = buf
+
+	_, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers})
+	require.NoError(t, err)
+	require.True(t, peers.wasCollecting, "the node was collecting before it asked for staging")
+}
+
+// Finding no validator at all is not an answer about staging. A node that
+// cannot see its partition cannot know what its peers hold, so it keeps
+// collecting and does not execute. Before this, an empty peer list was
+// indistinguishable from "every validator has nothing to give", and the join
+// executed from its own empty staging -- the divergence of #4290, seen on a
+// live network in run 20260918T124530Z, where the lookup named no network
+// and so matched a key nobody advertises (#4296).
+//
+// There is no exception, and there used to appear to be one:
+// TestJoin_AFreshNodeStartsWithoutAsking stood here, passed Options.Fresh by
+// hand and asserted that such a node executes anyway. No caller could set
+// that flag -- the daemon computed it inside a branch where it was false by
+// construction -- so it proved the library and said nothing about any node
+// (#4304). The node it described does not join at all now, so everything
+// that reaches Run has executed a block and this rule is unconditional.
+func TestJoin_FindingNoValidatorIsNotAnAnswer(t *testing.T) {
+	buf := new(fakeBuffer)
+	stage := new(fakeStage)
+	state := &fakeState{matchAt: 20, matchFrom: 0}
+	peers := &fakePeers{} // nobody found
+
+	outcome, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers, Rounds: 2})
+	require.Error(t, err, "a node that cannot see its partition does not execute")
+	require.True(t, errors.Is(err, errors.NotReady), "and says it is not ready")
+	require.NotEqual(t, NoPeerHasStaging, outcome, "finding nobody is not the whole-network-restart answer")
 	require.Zero(t, buf.handedOff)
-	require.True(t, buf.collecting)
-}
-
-// A join needs all three halves. There is no "execute anyway" and there must
-// not be one: only a node that has executed no block may execute without
-// asking anyone, and such a node does not join at all (#4304).
-func TestJoin_NeedsEveryHalf(t *testing.T) {
-	require.Error(t, run(t, Options{Partition: "BVN0"}))
-	require.Error(t, run(t, Options{Partition: "BVN0", Buffer: &fakeBuffer{}, Stage: new(fakeStage)}))
+	require.Nil(t, stage.loaded)
 }

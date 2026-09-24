@@ -202,42 +202,12 @@ func (e *branch) load() error {
 		}
 	}
 
-	if v := e.bpt.view; v != nil {
-		if e.Height == 0 {
-			// In a historical view the root's hash was never set from the
-			// parameters, so force it to be recomputed from the children that
-			// were just loaded. Those children's hashes come from the retained
-			// block, so the recomputed root is the historical one, and
-			// GetReceiptAt/GetRangeAt compare it against the root the ledger
-			// recorded for the block.
-			e.status = branchUnhashed
-		} else {
-			// EVERY DEEPER BLOCK IS CHECKED AGAINST THE ONE ABOVE IT.
-			//
-			// A boundary node is written twice: once inside its parent's block,
-			// where only its key, height and hash are kept, and once as a block
-			// of its own holding the subtree. `e.Hash` on entry here is the
-			// parent's copy; what was just loaded is the block. If the two come
-			// from different versions of the tree, they disagree.
-			//
-			// Without this the view's only check was at the root, and a stale
-			// block deeper down whose parent's version at this height was
-			// intact would have been served: the root check cannot see it,
-			// because the root is recomputed from the hashes its own block
-			// records, not from what the blocks below actually hold. A receipt
-			// would still refuse (it is rebuilt from the leaf, so any stale
-			// block moves the anchor), but a page is a read of leaves and has
-			// no such arithmetic in it -- so the page path needed this and the
-			// receipt path is now belt and braces (#4361 F1).
-			want := e.Hash
-			e.status = branchUnhashed
-			got, _ := e.getHash()
-			if got != want {
-				return errors.InternalError.WithFormat(
-					"the block retained for node %x at height %d hashes to %x, but the block above it records %x",
-					e.Key[:8], e.Height, got[:8], want[:8])
-			}
-		}
+	// In a historical view the root's hash was never set from the parameters,
+	// so force it to be recomputed from the children that were just loaded.
+	// Those children's hashes come from the retained block, so the recomputed
+	// root is the historical one.
+	if e.Height == 0 && e.bpt.view != nil {
+		e.status = branchUnhashed
 	}
 	return nil
 }

@@ -50,7 +50,7 @@ func TestGetPage_Empty(t *testing.T) {
 	batch := db.Begin(false)
 	defer batch.Discard()
 
-	page, err := GetPage(Current(batch), FullScanStart(), 10)
+	page, err := GetPage(batch, FullScanStart(), 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestGetPage_SinglePage(t *testing.T) {
 
 	batch := db.Begin(false)
 	defer batch.Discard()
-	page, err := GetPage(Current(batch), FullScanStart(), 100)
+	page, err := GetPage(batch, FullScanStart(), 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestGetPage_MultipleConsecutivePages(t *testing.T) {
 	start := FullScanStart()
 	pages := 0
 	for {
-		page, err := GetPage(Current(batch), start, 3)
+		page, err := GetPage(batch, start, 3)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -144,7 +144,7 @@ func TestGetPage_LocalRootReconstructs(t *testing.T) {
 
 	start := FullScanStart()
 	for {
-		page, err := GetPage(Current(srcBatch), start, 7)
+		page, err := GetPage(srcBatch, start, 7)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -179,7 +179,7 @@ func TestGetPage_RejectsZeroPageSize(t *testing.T) {
 	batch := db.Begin(false)
 	defer batch.Discard()
 
-	_, err := GetPage(Current(batch), FullScanStart(), 0)
+	_, err := GetPage(batch, FullScanStart(), 0)
 	if err == nil {
 		t.Fatal("expected error for pageSize=0")
 	}

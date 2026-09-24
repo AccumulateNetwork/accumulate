@@ -92,11 +92,6 @@ type fakeRPC struct {
 	// silent opens and never answers: the F2 peer.
 	silent map[peer.ID]bool
 
-	// forwards is the peer that holds no key and hands back an answer it
-	// got from the validator whose hash it names: signed by the right key,
-	// for the WRONG peer ID.
-	forwards map[peer.ID]peer.ID
-
 	probed    []peer.ID
 	submitted []peer.ID
 }
@@ -122,14 +117,8 @@ func (f *fakeRPC) Standing(ctx context.Context, p peer.ID, challenge []byte) ([3
 		return [32]byte{}, false, nil, errors.NoPeer.With("no such peer")
 	}
 	var sig []byte
-	switch {
-	case f.cannotSign[p]:
-		// names the key, cannot sign for it
-	case f.forwards[p] != "":
-		// forwarded the nonce to the real holder and hands its answer back
-		sig = signRelayChallenge(testPrivate[string(k)], f.part(), f.forwards[p], f.forwards[p].String(), challenge)
-	default:
-		sig = signRelayChallenge(testPrivate[string(k)], f.part(), p, p.String(), challenge)
+	if !f.cannotSign[p] {
+		sig = signRelayChallenge(testPrivate[string(k)], f.part(), challenge)
 	}
 	return sha256.Sum256(k), f.catchingUp[p], sig, nil
 }
@@ -430,88 +419,36 @@ func TestRelay_ACandidateMustProveItHoldsTheKeyItNames(t *testing.T) {
 	require.Empty(t, only.submitted)
 }
 
-// TestRelay_AForwardedAnswerIsNotProof — the forwarding half of F1
-// (note_3869991754).
-//
-// ConsensusStatus signs any caller's nonce, so a peer with no key at all
-// can take the relay's nonce, ask the validator whose hash it names, and
-// hand that answer back as its own: one extra round trip, well inside the
-// deadline. The signature is real, the key is right, and the peer is a
-// sink. It is refused because the signature is for the validator's peer ID
-// and the relay verifies with the ID it dialled.
-func TestRelay_AForwardedAnswerIsNotProof(t *testing.T) {
-	const part = "BVN3"
-	mine := otherKey(t)
-	val := otherKey(t)
-	sink, honest := peer.ID("forwards-the-nonce"), peer.ID("holds-the-key")
-
-	g := globalsWith(t, map[string][]ed25519.PublicKey{part: {val}})
-	rpc := &fakeRPC{
-		partition: part,
-		keys:      map[peer.ID]ed25519.PublicKey{sink: val, honest: val},
-		// The sink's answer is signed by the real key, for the real
-		// holder's peer ID.
-		forwards: map[peer.ID]peer.ID{sink: honest},
-	}
-	r := relayFor(t, part, mine, g, &fakePeers{self: "self", peers: []peer.ID{sink, honest}}, rpc)
-
-	_, outcome, err := r.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{})
-	require.NoError(t, err)
-	require.Equal(t, metrics.RelayTaken, outcome)
-	require.Equal(t, []peer.ID{honest}, rpc.submitted,
-		"a peer that forwarded somebody else's proof must never be handed a submission")
-
-	// And alone, it is unreachable-class: nothing was said about the
-	// envelope.
-	only := &fakeRPC{
-		partition: part,
-		keys:      map[peer.ID]ed25519.PublicKey{sink: val},
-		forwards:  map[peer.ID]peer.ID{sink: honest},
-	}
-	r2 := relayFor(t, part, mine, g, &fakePeers{self: "self", peers: []peer.ID{sink}}, only)
-	_, outcome, err = r2.Submit(context.Background(), new(messaging.Envelope), api.SubmitOptions{})
-	require.Equal(t, metrics.RelayUnreachable, outcome)
-	require.Error(t, err)
-	require.Empty(t, only.submitted)
-}
-
-// TestRelayChallenge_BindsTagPartitionKeyPeerAndNonce — what the signature
-// is over, what it cannot be mistaken for, and what a node refuses to sign.
-func TestRelayChallenge_BindsTagPartitionKeyPeerAndNonce(t *testing.T) {
+// TestRelayChallenge_BindsTagPartitionKeyAndNonce — what the signature is
+// over, and what it cannot be mistaken for.
+func TestRelayChallenge_BindsTagPartitionKeyAndNonce(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	hash := sha256.Sum256(pub)
-	const self, other = peer.ID("me"), peer.ID("somebody-else")
 
 	nonce, err := newRelayChallenge()
 	require.NoError(t, err)
 	require.Len(t, nonce, relayChallengeSize)
-	spare, err := newRelayChallenge()
+	other, err := newRelayChallenge()
 	require.NoError(t, err)
-	require.NotEqual(t, nonce, spare, "a nonce is fresh, never reused")
+	require.NotEqual(t, nonce, other, "a nonce is fresh, never reused")
 
-	sig := signRelayChallenge(priv, "BVN3", self, self.String(), nonce)
-	require.True(t, verifyRelayChallenge(pub, "BVN3", hash, self, nonce, sig))
+	sig := signRelayChallenge(priv, "BVN3", nonce)
+	require.True(t, verifyRelayChallenge(pub, "BVN3", hash, nonce, sig))
 
-	require.False(t, verifyRelayChallenge(pub, "BVN2", hash, self, nonce, sig), "bound to the partition")
-	require.False(t, verifyRelayChallenge(pub, "BVN3", sha256.Sum256(spare), self, nonce, sig), "bound to the claimed key")
-	require.False(t, verifyRelayChallenge(pub, "BVN3", hash, other, nonce, sig), "bound to the peer that answered")
-	require.False(t, verifyRelayChallenge(pub, "BVN3", hash, self, spare, sig), "bound to the nonce")
-	require.False(t, verifyRelayChallenge(pub, "BVN3", hash, self, nonce, nil), "no signature is no proof")
+	require.False(t, verifyRelayChallenge(pub, "BVN2", hash, nonce, sig), "bound to the partition")
+	require.False(t, verifyRelayChallenge(pub, "BVN3", sha256.Sum256(other), nonce, sig), "bound to the claimed key")
+	require.False(t, verifyRelayChallenge(pub, "BVN3", hash, other, sig), "bound to the nonce")
+	require.False(t, verifyRelayChallenge(pub, "BVN3", hash, nonce, nil), "no signature is no proof")
 
-	// What a node refuses to sign: for another peer, nothing, or a payload
-	// of the caller's own length.
-	require.Nil(t, signRelayChallenge(priv, "BVN3", self, other.String(), nonce), "never for another peer ID")
-	require.Nil(t, signRelayChallenge(priv, "BVN3", self, "", nonce))
-	require.Nil(t, signRelayChallenge(priv, "BVN3", "", "", nonce))
-	require.Nil(t, signRelayChallenge(priv, "BVN3", self, self.String(), nil))
-	require.Nil(t, signRelayChallenge(priv, "BVN3", self, self.String(), make([]byte, relayChallengeMaxNonce+1)))
-	require.NotNil(t, signRelayChallenge(priv, "BVN3", self, self.String(), make([]byte, relayChallengeMaxNonce)))
+	// A node signs nothing it was not asked to sign.
+	require.Nil(t, signRelayChallenge(priv, "BVN3", nil))
 
-	// And what it signs cannot be a consensus message. The separation is
-	// the tag, not the length: a vote signs 48 bytes and a state hash 56,
-	// so length proves nothing and the prefix proves everything.
-	msg := relayChallengeMessage("BVN3", hash, self, nonce)
+	// And what it signs cannot be a consensus message: the validator key
+	// signs 32-byte digests everywhere else, and this preimage is the whole
+	// tagged message.
+	msg := relayChallengeMessage("BVN3", hash, nonce)
+	require.Greater(t, len(msg), 32)
 	require.True(t, strings.HasPrefix(string(msg), relayChallengeTag))
 }
 

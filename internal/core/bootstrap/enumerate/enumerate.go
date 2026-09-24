@@ -65,30 +65,12 @@ type Result struct {
 	// Stale is the accounts whose leaf the node does not hold, or holds and
 	// does not agree with. Those are the accounts to pull.
 	Stale []*url.URL
-
-	// Disagree is the subset of Stale whose leaf the node HOLDS and does not
-	// agree with, as against never having held one. The difference is what a
-	// root that will not match has to be reported with: an account the node
-	// has never seen is a pull that has not run yet, and one it holds a
-	// different leaf for is a pull that ran and did not reproduce the leaf
-	// (executor.md, "Sync", §2: a mismatch must name what it could not
-	// account for).
-	Disagree []*url.URL
 }
 
 // Options configures Run.
 type Options struct {
 	// PageSize is the per-request leaf count. Default 256.
 	PageSize uint64
-
-	// AtBlock is the anchored block to read the peer's tree AS OF (#4361,
-	// #4362). Zero reads the peer's current tree, which is a moving target:
-	// the difference computed from it names leaves no anchor covers, and a
-	// pass that holds one block fixed can never finish against it. At a
-	// named block the page is the tree the anchored root commits to, so the
-	// difference IS the set the node must pull to reach that root, and it
-	// shrinks to nothing.
-	AtBlock uint64
 
 	// OnPage, if non-nil, is invoked after each page completes.
 	// Lets the caller observe progress (e.g., update a tracker
@@ -138,7 +120,6 @@ func Run(
 		page, err := src.QueryBptPage(ctx, scope, &api.BptPageQuery{
 			StartHash: start,
 			Count:     pageSize,
-			ForHeight: opts.AtBlock,
 		})
 		if err != nil {
 			return res, errors.UnknownError.WithFormat("page %d: %w", res.PagesPulled+1, err)
@@ -161,10 +142,7 @@ func Run(
 			switch {
 			case err == nil && len(local) == 32 && [32]byte(local) == e.ValueHash:
 				// Held, and it agrees
-			case err == nil:
-				res.Stale = append(res.Stale, e.Account)
-				res.Disagree = append(res.Disagree, e.Account)
-			case errors.Is(err, errors.NotFound):
+			case err == nil, errors.Is(err, errors.NotFound):
 				res.Stale = append(res.Stale, e.Account)
 			default:
 				return res, errors.UnknownError.WithFormat("read local leaf %x: %w", e.KeyHash[:8], err)

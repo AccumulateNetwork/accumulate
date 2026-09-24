@@ -230,10 +230,9 @@ func TestAFreshNetworkStartsWithoutJoining(t *testing.T) {
 	}
 	require.True(t, ready, "the API never became ready")
 
-	// Ten of the join's own retries: far more than block production needs
-	// (one second, measured), and a node that had wrongly entered the join
-	// would still be pulling at the end of it.
-	deadline := 10 * join.DefaultRetry
+	// Half the join's own budget: far more than block production needs (one
+	// second, measured) and far less than giving up on the join takes.
+	deadline := join.DefaultRounds * join.DefaultRetry / 2
 	height := map[string]uint64{}
 	done := false
 	for start := time.Now(); time.Since(start) < deadline && !done; {

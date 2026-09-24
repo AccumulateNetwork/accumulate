@@ -109,21 +109,7 @@ func HistoricalAccountStateProof(partition config.NetworkUrl, batch *database.Ba
 	// ledger recorded for it. GetReceiptAt refuses if the tree reconstructed
 	// from retained nodes does not hash to that root.
 	full, err := batch.BPT().GetReceiptAt(account.Key(), block, root)
-	switch {
-	case err == nil:
-		// Ok
-	case errors.Is(err, errors.NotFound):
-		// The leaf is not in the tree this node reconstructed for that block.
-		// That is NOT proof the account was absent: the reconstruction is
-		// checked against the recorded root only AFTER the leaf is found
-		// (bpt.GetReceiptAt), so a leaf this node failed to rebuild looks
-		// exactly like a leaf that was never there. A requester reads NotFound
-		// as a fact about the record and a unanimous one as the network's
-		// (join/sources.go), so saying it here would drop an account on the
-		// strength of a local failure. It is a capability limit and it says so.
-		return nil, errors.IncompleteChain.WithFormat(
-			"%v has no leaf in the tree this node can rebuild for block %d", account.Url(), block)
-	default:
+	if err != nil {
 		return nil, errors.UnknownError.WithFormat("historical membership receipt: %w", err)
 	}
 

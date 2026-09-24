@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -90,7 +91,6 @@ func (x *Executor) CollectBlock(batch *database.Batch, params execute.BlockParam
 			numbers = append(numbers, n)
 		}
 		sort.Slice(numbers, func(i, j int) bool { return numbers[i] < numbers[j] })
-		var high uint64
 		for _, n := range numbers {
 			held, err := b.collectArrival(str, pos.delivered, c.arrivals[k][n])
 			if err != nil {
@@ -100,21 +100,6 @@ func (x *Executor) CollectBlock(batch *database.Batch, params execute.BlockParam
 			if held {
 				out.Held++
 			}
-			// THE BLOCK'S REACH IS WHAT THE BLOCK CARRIED, held or not.
-			//
-			// A number the block carried that this node refused to hold is
-			// exactly the case the gap check exists for: the peers hold it,
-			// they will deliver it in the run from Delivered + 1, and a node
-			// that dropped it from its reach would call the block gapless
-			// and execute a shorter run than its peers (#4290). Numbers at
-			// or below what the store already delivered are not in the run
-			// and say nothing.
-			if n > pos.delivered && n > high {
-				high = n
-			}
-		}
-		if high > 0 {
-			out.Reach = append(out.Reach, execute.StreamReach{ID: str.id(), High: high})
 		}
 	}
 
@@ -294,19 +279,42 @@ func (b *Block) collectAnchor(str stream, ctx *MessageContext, a *arrival) (bool
 	return true, nil
 }
 
-// There is no LoadStaging, and there must not be one.
+// LoadStaging takes a running validator's staging, as of the block the
+// snapshot names, into this executor's own (executor spec, "Sync", step 2;
+// #4291 serves it). It is the first thing a joining node does with staging,
+// and it refuses one that is not empty: a stage with anything in it is not a
+// peer's stage, and loading on top of it would hold entries no peer held.
 //
-// A joining node's stage is what IT collected. It used to take a running
-// validator's stage as of that validator's last committed block, which
-// answered a question the node can answer for itself and answered it from one
-// unauthenticated peer with nothing to check it against: the entries, their
-// numbers, which of them were validated and how far each stream had been
-// delivered were all that peer's word, and a peer that added, dropped or
-// renumbered one made this node execute a different block from everyone else
-// (#4322-#4326). What a node may believe about its peers' staging comes from
-// two verified places instead -- the transactions come from consensus, and
-// Delivered is read from the pulled ledgers, which are hashed state under a
-// root a quorum signed.
+// Every stream the snapshot carries must be one of THIS partition's inbound
+// streams. A snapshot answered by another partition's validator describes
+// another partition's stage, and holding it here would put entries on streams
+// this node does not execute — a whole-partition version of the one-entry
+// divergence the join exists to prevent (#4290). A page carrying only a
+// source's waiting proofs has no ledger and names no stream; it is taken as
+// it is.
+func (x *Executor) LoadStaging(snap *private.StagingSnapshot) error {
+	if snap == nil {
+		return errors.BadRequest.With("missing snapshot")
+	}
+	synth, anchors := x.Describe.Synthetic(), x.Describe.AnchorPool()
+	for _, st := range snap.Streams {
+		if st.Ledger == nil {
+			continue // a source's proofs, which stand on no stream
+		}
+		if !st.Ledger.Equal(synth) && !st.Ledger.Equal(anchors) {
+			return errors.BadRequest.WithFormat("%s: %v is not a stream of this partition",
+				x.Describe.PartitionId, st.Ledger)
+		}
+	}
+	err := x.staging().Load(snap)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	x.logger.Info("Staging taken from a peer",
+		"module", "sync", "partition", x.Describe.PartitionId,
+		"block", snap.Block, "streams", len(snap.Streams))
+	return nil
+}
 
 // SettleStaging brings staging to the block the pulled state is (executor
 // spec, "Sync", step 4). The node has collected every block through Q, its
@@ -410,87 +418,3 @@ func deliveredFrom(batch *database.Batch, id execute.StreamID) (uint64, error) {
 	}
 	return ledger.Partition(id.Source).Delivered, nil
 }
-
-// StagingGaps reports the streams whose run from the PULLED Delivered is not
-// contiguous through the numbers a collected block carried (executor spec,
-// "Sync", §4).
-//
-// This is the whole of the decision the join makes about whether to execute.
-// Block B + 1's transactions are, by definition, ones not executed as of B.
-// If every stream can deliver a contiguous run from Delivered + 1 through
-// what B + 1 carries, then nothing any peer is holding is missing here and
-// this node executes B + 1 exactly as its peers did. A hole is an entry that
-// arrived before this node started listening — the peers have held it since
-// a block before B — and executing without it delivers a shorter run than
-// they do, which is #4290.
-//
-// Delivered comes from the pulled LEDGER and never from staging's memory of
-// it: what a block delivered is block output and is hashed with the rest, so
-// the pulled ledger is the peers' word on it, while staging's own copy is
-// zero on a node that has executed no block (#4291's trap).
-func (x *Executor) StagingGaps(reach []execute.StreamReach) ([]execute.StreamGap, error) {
-	batch := x.Database.Begin(false)
-	defer batch.Discard()
-
-	tx := x.staging().Begin()
-	defer tx.Discard()
-
-	var gaps []execute.StreamGap
-	for _, r := range reach {
-		delivered, err := deliveredFrom(batch, r.ID)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-		// THE RUN IS WALKED THROUGH EVERYTHING THIS NODE HOLDS, not only
-		// through what this block carried.
-		//
-		// A hole is a hole wherever the number above it came from. A
-		// restarted node's peers were holding entries before it started
-		// listening; the block after its state need not carry any of them,
-		// and if it does not, a check made only against that block's numbers
-		// finds nothing and the node executes -- and then executes every
-		// block after it with a stream stuck below a hole it can never fill
-		// by listening, while its peers run those entries in the blocks
-		// where they belong. Measured: BVN1's anchor stream held five
-		// entries for thirty-eight blocks after a join that passed a
-		// per-block check, and the node's root chain ended 34 entries short
-		// of its peers'.
-		//
-		// The block's own reach is still taken, because a number the block
-		// carried that this node REFUSED to hold is not in Sighted, and a
-		// number its peers will deliver and it will not is exactly the gap.
-		through := r.High
-		if n := tx.Sighted(r.ID); n > through {
-			through = n
-		}
-		if through <= delivered {
-			// The pulled state says the peers have executed everything this
-			// node has seen on the stream. There is no run to deliver.
-			continue
-		}
-		// Bounded, as Status is: a hole further above Delivered than this is
-		// a backlog rather than a gap, and the first hole is the whole
-		// answer.
-		if through > delivered+execute.StatusScan {
-			through = delivered + execute.StatusScan
-		}
-		missing := tx.Missing(r.ID, delivered, through, maxReportedGaps)
-		if len(missing) == 0 {
-			continue
-		}
-		gaps = append(gaps, execute.StreamGap{
-			ID:        r.ID,
-			Delivered: delivered,
-			Through:   through,
-			Missing:   missing,
-		})
-	}
-	return gaps, nil
-}
-
-// maxReportedGaps bounds what one stream's gap report walks and names. A gap
-// is a handful of entries at 100 tps; a report that walked an unbounded span
-// would put the cost of the backlog on the decision that exists to measure
-// it, and one gap is already the whole answer.
-const maxReportedGaps = 8

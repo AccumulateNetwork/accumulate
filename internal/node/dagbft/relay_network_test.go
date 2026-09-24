@@ -330,13 +330,10 @@ func TestARelayCarriesWhatItCannotPropose(t *testing.T) {
 			PartitionType:    protocol.PartitionTypeBlockValidator,
 			ValidatorKeyHash: sha256.Sum256(pubs[i]),
 			NodeState:        state,
-			// The key that answers a relay's challenge, and the peer ID
-			// it answers as: without the key a candidate can name a
-			// validator's hash and be handed submissions it never
-			// proposes, and without the ID it can forward somebody
-			// else's answer (#4366 F1).
+			// The key that answers a relay's challenge: without it a
+			// candidate can name a validator's hash and be handed
+			// submissions it never proposes (#4366 F1).
 			ValidatorKey: keys[i],
-			PeerID:       apiNode.ID(),
 		})
 
 		registerService(t, apiNode, api.ServiceTypeSubmit.AddressFor(part), message.Submitter{Submitter: sub})

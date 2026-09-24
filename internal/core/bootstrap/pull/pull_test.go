@@ -458,22 +458,21 @@ func TestFullSpine_RePullIsIdempotent(t *testing.T) {
 		t.Fatalf("the chain is %d entries after two pulls of a 3-entry chain", c.CurrentState().Count)
 	}
 
-	// A peer serving a SHORTER chain than the node holds is refused, and the
-	// node's chain is not shortened. The pull asks for a block, and a chain
-	// shorter than the node's is not that block's: either the peer answered
-	// for the wrong block or the node holds something no node held. See
-	// chains_at_block_test.go.
+	// A peer serving a shorter chain that IS the node's own first entries is
+	// the meeting point reached early: accepted, and it does not shorten the
+	// node's chain. (This asserted a refusal until the meeting point was
+	// fixed, and that refusal was what stopped a twelve-node restart.)
 	shorter := newObservedDB(t)
 	buildChain(t, shorter, u, 1, 0x99)
 	b := dst.Begin(true)
-	if err := Account(context.Background(), &dbSource{db: shorter}, b, u, Options{Mode: ModeFullSpine}); err == nil {
-		t.Fatal("a peer serving fewer entries than the node holds was accepted")
+	if err := Account(context.Background(), &dbSource{db: shorter}, b, u, Options{Mode: ModeFullSpine}); err != nil {
+		t.Fatalf("a peer serving the node's own first entry was refused: %v", err)
 	}
 	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	if h := localHeight(t, dst, u); h != 3 {
-		t.Fatalf("the chain is %d entries after a refused pull; it was 3 and must not have been shortened", h)
+		t.Fatalf("the chain is %d entries after meeting a peer at 1; it was 3", h)
 	}
 
 	// A peer serving a shorter chain that DISAGREES with the node's is

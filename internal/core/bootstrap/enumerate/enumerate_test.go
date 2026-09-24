@@ -39,7 +39,7 @@ func (s *dbSource) QueryBptPage(_ context.Context, _ *url.URL, query *api.BptPag
 
 	roBatch := s.db.Begin(false)
 	defer roBatch.Discard()
-	page, err := bptproof.GetPage(bptproof.Current(roBatch), startKey, count)
+	page, err := bptproof.GetPage(roBatch, startKey, count)
 	if err != nil {
 		return nil, err
 	}

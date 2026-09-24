@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate"
@@ -54,7 +53,6 @@ type ConsensusAPIService struct {
 	heals         *crosschain.HealCounters
 	nodeState     nodestate.Serving
 	validatorKey  ed25519.PrivateKey
-	peerID        peer.ID
 }
 
 var _ api.ConsensusService = (*ConsensusAPIService)(nil)
@@ -84,13 +82,6 @@ type ConsensusAPIServiceParams struct {
 	// it.
 	ValidatorKey ed25519.PrivateKey
 
-	// PeerID is this node's own libp2p identity. It goes into what the
-	// challenge signs, and this node refuses to sign for any other ID: a
-	// signature that says only "a validator holds this key" can be got by
-	// forwarding the nonce to that validator, and the peer that forwarded
-	// it is then handed the submission (#4366, note_3869991754).
-	PeerID peer.ID
-
 	// Heals is shared with the conductor so recoveries are reportable, not
 	// only loggable (#4075, #4105) — the soak monitor reads these fields.
 	Heals *crosschain.HealCounters
@@ -110,7 +101,6 @@ func NewConsensusAPIService(params ConsensusAPIServiceParams) *ConsensusAPIServi
 	s.heals = params.Heals
 	s.nodeState = params.NodeState
 	s.validatorKey = params.ValidatorKey
-	s.peerID = params.PeerID
 	return s
 }
 
@@ -139,12 +129,10 @@ func (s *ConsensusAPIService) ConsensusStatus(ctx context.Context, opts api.Cons
 	// (#4366).
 	res.CatchingUp = s.nodeState != nil && !s.nodeState.CanServeCurrent()
 
-	// A relay's challenge, answered with the key whose hash is above, as
-	// THIS node and for nobody else. Only when one is asked: a node signs
-	// nothing it was not asked to sign, and what it signs cannot be a
-	// consensus message (relay_challenge.go).
-	res.ChallengeSignature = signRelayChallenge(
-		s.validatorKey, s.partitionID, s.peerID, opts.NodeID, opts.Challenge)
+	// A relay's challenge, answered with the key whose hash is above. Only
+	// when one is asked: a node signs nothing it was not asked to sign, and
+	// what it signs cannot be a consensus message (relay_challenge.go).
+	res.ChallengeSignature = signRelayChallenge(s.validatorKey, s.partitionID, opts.Challenge)
 
 	// Load values from the database
 	res.LastBlock = new(api.LastBlock)

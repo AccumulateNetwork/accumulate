@@ -568,18 +568,11 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			// able to answer this question the moment the join starts
 			// (#4295).
 			ExecutedBlock: lastBlock,
-			// The definition this join pulls is published here at the
-			// handoff, before the first block executes (#4366's M3).
-			EventBus: s.eventBus,
-			Logger:   slog.Default(),
+			Logger:        slog.Default(),
 		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("prepare the join: %w", err)
 		}
-		// Collecting starts BEFORE Start(), so that no committed group is
-		// executed. The block each collected group is numbered with is
-		// seeded when the first one arrives, by which time Start() has set
-		// the number it is seeded from (#4351).
 		s.service.StartCollecting()
 	}
 
@@ -592,18 +585,32 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	if joining {
 		stage, ok := exec.(join.Stage)
 		if !ok {
-			return errors.InternalError.With("this executor cannot join: it cannot settle its staging at a block")
+			return errors.InternalError.With("this executor cannot join: it takes no staging from a peer")
 		}
+		state := joinState
 		opts := join.Options{
 			Partition: s.Partition.ID,
 			Buffer:    s.service,
 			Stage:     stage,
-			State:     joinState,
+			State:     state,
+			Peers:     &join.APIPeers{Partition: s.Partition.ID, Client: client, Network: inst.config.Network},
 			Logger:    slog.Default(),
 		}
 		go func() {
-			err := join.Run(inst.context, opts)
-			if err != nil {
+			outcome, err := join.Run(inst.context, opts)
+			switch {
+			case err != nil:
+				// A join that cannot finish leaves the node collecting: it
+				// keeps up with consensus and executes nothing, which is the
+				// spec's answer and is safe. It is also an operator's
+				// problem, so it is an error and not a debug line.
+				slog.Error("The join did not complete; this node is not executing",
+					"module", "join", "partition", s.Partition.ID, "error", err)
+
+			case outcome == join.NoPeerHasStaging:
+				s.executeFromOwnState(state, s.service)
+
+			default:
 				// A join that cannot finish leaves the node collecting: it
 				// keeps up with consensus and executes nothing, which is the
 				// spec's answer and is safe. It is also an operator's
@@ -690,11 +697,8 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		// that this one cannot propose yet (#4366).
 		NodeState: serving,
 		// Answers a relay's challenge, so that naming a validator's key
-		// hash is not enough to be handed its traffic -- and answers it as
-		// THIS peer, so forwarding somebody else's answer is not enough
-		// either (#4366 F1).
+		// hash is not enough to be handed its traffic (#4366 F1).
 		ValidatorKey: ed25519.PrivateKey(validatorKey),
-		PeerID:       inst.p2p.ID(),
 	})
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -868,8 +872,8 @@ func nodeMustJoin(lastBlock uint64) bool {
 // starts: a joining node executes nothing, so the number cannot change under
 // it, while the pull writes a peer's state into this store from the first
 // round. Everything that decides what this node does with its own height
-// reads the remembered number — `nodeMustJoin`, the metric, and the block the
-// buffer's first collected group is numbered from (#4344, #4351).
+// reads the remembered number — `nodeMustJoin`, the metric, and the
+// NoPeerHasStaging branch that starts executing at it (#4344).
 func (s *DAGBFTService) noteExecutedBlock(db database.Beginner) error {
 	n, err := lastExecutedBlock(db, s.Partition.ID)
 	if err != nil {
@@ -877,6 +881,43 @@ func (s *DAGBFTService) noteExecutedBlock(db database.Beginner) error {
 	}
 	s.lastExecuted = n
 	return nil
+}
+
+// joinExecuting records that this node has started executing; blockHandoff
+// starts it. Both are interfaces so the branch below can be driven without a
+// consensus service — it had no test at all (#4320), which is how a number
+// read from an account the pull overwrites came to be what a node starts
+// executing at.
+type joinExecuting interface{ Executing(uint64) error }
+type blockHandoff interface{ Handoff(uint64) error }
+
+// executeFromOwnState is what a node does when no validator of its partition
+// has staging to give: they all restarted too, and an empty stage is what
+// every one of them holds. There is nothing to take and nothing to be exact
+// about, so this node executes from where it stands — the blocks it buffered
+// while it was asking, in order, from its own last block on.
+//
+// "Its own last block" is s.lastExecuted, read before the pull could touch it.
+func (s *DAGBFTService) executeFromOwnState(state joinExecuting, handoff blockHandoff) {
+	slog.Info("No peer had staging to give; executing from this node's own state",
+		"module", "join", "partition", s.Partition.ID, "block", s.lastExecuted)
+
+	// Its state is recorded as executing BEFORE it is, because the root
+	// recorded must be the root of the block named and one produced block
+	// changes it. A node that could not record it would refuse every request
+	// for the rest of its life (#4295), so that is a failure and not a log
+	// line.
+	err := state.Executing(s.lastExecuted)
+	if err != nil {
+		slog.Error("This node cannot record that it is executing; it will refuse requests",
+			"module", "join", "partition", s.Partition.ID, "block", s.lastExecuted, "error", err)
+		return
+	}
+	err = handoff.Handoff(s.lastExecuted)
+	if err != nil {
+		slog.Error("This node could not start executing", "module", "join",
+			"partition", s.Partition.ID, "block", s.lastExecuted, "error", err)
+	}
 }
 
 // lastExecutedBlock is the block this node's state is, or zero when it has

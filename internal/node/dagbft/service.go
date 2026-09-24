@@ -115,19 +115,19 @@ type Service struct {
 	// Joining (#4292): while collecting, every committed group is taken into
 	// staging and kept in the buffer instead of executed, and nothing here
 	// advances the block index. See collect.go.
-	collecting bool
-	// nextCollected is the block number the next collected group is stamped
-	// with. It is seeded ONCE, when the first group arrives, from the block
-	// this node stands at then, and it only counts up from there. Nothing
-	// resets it (#4351).
-	nextCollected uint64
+	collecting    bool
+	collectFrom   uint64
 	buffer        []*CollectedGroup
 	bufferBytes   int
 	bufferOverrun bool
-	// handoff carries the join's request; the block production loop serves
-	// it, because it is the only thing that produces blocks and the only
-	// thing that writes the buffer (#4294).
-	handoff chan handoffRequest
+	// stagingReady says the peer's staging has been taken, so the blocks this
+	// node collects are applied to it; until then they are only buffered.
+	stagingReady bool
+	// handoff and applyStaging carry the join's requests; the block
+	// production loop serves both, because it is the only thing that
+	// produces blocks and the only thing that writes the buffer (#4294).
+	handoff      chan handoffRequest
+	applyStaging chan stagingRequest
 	// Validator synchronization
 	validatorUpdateHeight uint64 // Height at which validator update was detected
 
@@ -155,6 +155,7 @@ func NewService(config ServiceConfig) (*Service, error) {
 		eventBus:         config.EventBus,
 		stateHashTracker: types.NewStateHashTracker(100), // Track last 100 rounds
 		handoff:          make(chan handoffRequest, 1),
+		applyStaging:     make(chan stagingRequest, 1),
 	}
 	s.logger.L = config.Logger
 
@@ -540,6 +541,11 @@ func (s *Service) blockProductionLoop() {
 		select {
 		case <-s.ctx.Done():
 			return
+
+		case req := <-s.applyStaging:
+			// The join has a peer's staging: load it and apply what has been
+			// buffered since, here, where the buffer is written (#4294).
+			req.done <- s.applyStagingNow(req.load)
 
 		case req := <-s.handoff:
 			// The join has matched the root and settled staging: leave

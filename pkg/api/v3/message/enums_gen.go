@@ -140,6 +140,12 @@ const TypePrivatePartitionRootRangeRequest Type = 138
 // TypePrivatePartitionRootRangeResponse .
 const TypePrivatePartitionRootRangeResponse Type = 139
 
+// TypePrivateStagingSnapshotRequest .
+const TypePrivateStagingSnapshotRequest Type = 140
+
+// TypePrivateStagingSnapshotResponse .
+const TypePrivateStagingSnapshotResponse Type = 141
+
 // TypeAddressed .
 const TypeAddressed Type = 255
 
@@ -150,7 +156,7 @@ func (v Type) GetEnumValue() uint64 { return uint64(v) }
 func (v *Type) SetEnumValue(id uint64) bool {
 	u := Type(id)
 	switch u {
-	case TypeNodeInfoRequest, TypeFindServiceRequest, TypeConsensusStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeListSnapshotsRequest, TypeMajorHeaderRangeRequest, TypeMinorRootRangeRequest, TypeAnchorReceiptRequest, TypeErrorResponse, TypeNodeInfoResponse, TypeFindServiceResponse, TypeConsensusStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeListSnapshotsResponse, TypeMajorHeaderRangeResponse, TypeMinorRootRangeResponse, TypeAnchorReceiptResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypePrivateSequenceRangeRequest, TypePrivateSequenceRangeResponse, TypePrivateMajorHeaderRangeRequest, TypePrivateMajorHeaderRangeResponse, TypePrivateMinorRootRangeRequest, TypePrivateMinorRootRangeResponse, TypePrivateSnapshotRangeRequest, TypePrivateSnapshotRangeResponse, TypePrivatePartitionRootRangeRequest, TypePrivatePartitionRootRangeResponse, TypeAddressed:
+	case TypeNodeInfoRequest, TypeFindServiceRequest, TypeConsensusStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeListSnapshotsRequest, TypeMajorHeaderRangeRequest, TypeMinorRootRangeRequest, TypeAnchorReceiptRequest, TypeErrorResponse, TypeNodeInfoResponse, TypeFindServiceResponse, TypeConsensusStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeListSnapshotsResponse, TypeMajorHeaderRangeResponse, TypeMinorRootRangeResponse, TypeAnchorReceiptResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypePrivateSequenceRangeRequest, TypePrivateSequenceRangeResponse, TypePrivateMajorHeaderRangeRequest, TypePrivateMajorHeaderRangeResponse, TypePrivateMinorRootRangeRequest, TypePrivateMinorRootRangeResponse, TypePrivateSnapshotRangeRequest, TypePrivateSnapshotRangeResponse, TypePrivatePartitionRootRangeRequest, TypePrivatePartitionRootRangeResponse, TypePrivateStagingSnapshotRequest, TypePrivateStagingSnapshotResponse, TypeAddressed:
 		*v = u
 		return true
 	}
@@ -248,6 +254,10 @@ func (v Type) String() string {
 		return "privatePartitionRootRangeRequest"
 	case TypePrivatePartitionRootRangeResponse:
 		return "privatePartitionRootRangeResponse"
+	case TypePrivateStagingSnapshotRequest:
+		return "privateStagingSnapshotRequest"
+	case TypePrivateStagingSnapshotResponse:
+		return "privateStagingSnapshotResponse"
 	case TypeAddressed:
 		return "addressed"
 	}
@@ -344,6 +354,10 @@ func TypeByName(name string) (Type, bool) {
 		return TypePrivatePartitionRootRangeRequest, true
 	case "privatepartitionrootrangeresponse":
 		return TypePrivatePartitionRootRangeResponse, true
+	case "privatestagingsnapshotrequest":
+		return TypePrivateStagingSnapshotRequest, true
+	case "privatestagingsnapshotresponse":
+		return TypePrivateStagingSnapshotResponse, true
 	case "addressed":
 		return TypeAddressed, true
 	}

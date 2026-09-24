@@ -287,6 +287,16 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 		return c1.Encapsulate(c2), nil
 
+	case *message.PrivateStagingSnapshotRequest:
+		// Served by the named partition's sequencer: a joining node asks a
+		// validator of the partition it is joining what it holds (#4291)
+		service.Type = private.ServiceTypeSequencer
+		if msg.Partition == "" {
+			return nil, errors.BadRequest.With("missing partition")
+		}
+		service.Argument = msg.Partition
+		return service.Multiaddr(), nil
+
 	case *message.PrivateMajorHeaderRangeRequest:
 		// Served by the requested partition's sequencer (#4058)
 		service.Type = private.ServiceTypeSequencer

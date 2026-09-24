@@ -17,12 +17,9 @@
 //     the next block.
 //
 //   - ModeFullSpine: the same, plus every chain entry replayed. Used for the
-//     spine, and NOT for verification — verifying an anchor needs only the
-//     validator set the node already holds (anchorsrc.Authority), never a key
-//     page of the time. The chains are taken because these are the accounts
-//     every block touches: a node holding only their heads cannot show that
-//     its own history agrees with a peer's below the peer's height, and the
-//     pull refuses what it cannot compare (see meeting.past).
+//     spine — anchors, ledger, operators, operators/1 — where the node needs
+//     the chain history itself: without the operators' key pages of the time
+//     it cannot verify the signatures on the anchors it verifies against.
 //
 // Verification. An account is only as good as the root it hashes into, and a
 // node that is still pulling has no root of its own: it verifies against the
@@ -167,7 +164,19 @@ type Pending struct {
 	receipt *api.Receipt
 	batch   *database.Batch
 	done    bool
+
+	// past says the node was found to be past this peer for this account, so
+	// nothing was pulled: the batch was discarded where it was decided and
+	// there is nothing to write and nothing to verify. See Fetch.
+	past bool
 }
+
+// Past reports that the node is past the peer for this account — at or beyond
+// it on every chain the peer serves and strictly beyond on at least one — so
+// everything the peer could give for it, the node already has. Nothing was
+// pulled; Settle and Keep are no-ops and there is nothing to wait for an
+// anchor for.
+func (p *Pending) Past() bool { return p.past }
 
 // MaxHeld bounds how many fetched-but-unsettled accounts may be outstanding at
 // once, across the process. Each one holds an open child batch, so the state it
@@ -195,18 +204,23 @@ func (p *Pending) release() {
 // It cannot succeed on anything it did not verify: a fetch that carries no
 // receipt, or a root nobody anchored, is a failure, not an empty success.
 //
-// THERE IS NO EXEMPTION. Every pull either verifies against the anchored root
-// or is refused. The "past" case -- the node is beyond this peer on the
-// account, so nothing was taken and nothing was checked -- existed because
-// accounts were compared against a peer's CURRENT state, which is a moving
-// target no anchor covers. At a fixed anchored block there is one correct leaf
-// per account and no ordering question: the account hashes into that block's
-// root or it is asked of somebody else (#4348 x2, #4350).
+// The one thing it does not verify is a pull that took nothing. The past case
+// — the node is beyond this peer on the account — is structurally incompatible
+// with verification: what the node holds is not what the peer serves, so it
+// cannot hash to the leaf the peer's receipt proves, and a past pull that
+// carried the node's own state in its batch would be refused by its own
+// verifier. That is why the past case discards its batch at the point it is
+// decided (Fetch) rather than filling it with the node's own state: there is
+// nothing to write, so there is nothing to verify, and the invariant is held
+// by construction instead of by a flag that says "trust this one".
 func (p *Pending) Settle(anchoredRoot [32]byte) error {
 	if p.done {
 		return errors.NotAllowed.WithFormat("%v: already settled", p.Account)
 	}
 	p.release()
+	if p.past {
+		return nil
+	}
 	defer p.batch.Discard()
 
 	if p.receipt == nil {
@@ -223,18 +237,17 @@ func (p *Pending) Settle(anchoredRoot [32]byte) error {
 	return errors.UnknownError.Wrap(p.batch.Commit())
 }
 
-// Keep writes the state into the caller's batch without verifying it.
-//
-// **Nothing in production calls it.** It was for the spine, on the rationale
-// that the spine is what the verifier reads from; that rationale was false —
-// the verifier reads its keys from the node's own store — and it is what
-// #4301 closed. What is left is the pull-library tests, which have no anchors
-// to verify against.
+// Keep writes the state into the caller's batch without verifying it. It is
+// for the Directory spine, which is what the verifier itself is read from, and
+// for tests.
 func (p *Pending) Keep() error {
 	if p.done {
 		return errors.NotAllowed.WithFormat("%v: already settled", p.Account)
 	}
 	p.release()
+	if p.past {
+		return nil // Nothing was pulled; see Settle.
+	}
 	defer p.batch.Discard()
 	return errors.UnknownError.Wrap(p.batch.Commit())
 }
@@ -245,6 +258,9 @@ func (p *Pending) Discard() {
 		return
 	}
 	p.release()
+	if p.past {
+		return // Nothing was pulled; see Settle.
+	}
 	p.batch.Discard()
 }
 
@@ -294,44 +310,27 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 	}
 	p.receipt = receipt
 	if receipt != nil {
-		// THE BLOCK THIS STATE IS SETTLED AGAINST IS THE BLOCK THIS NODE
-		// ASKED AT, and nothing in the answer decides it (#4362, the #4361
-		// threat review's F1).
-		//
-		// The answer carries two block numbers and both are the peer's word:
-		// ForHeight, the block the peer says it resolved the request to, and
-		// LocalBlock, the peer's own present. A consumer that keys the
-		// anchored-root lookup on either of them lets the peer choose which
-		// anchored root it is checked against: it answers at an older
-		// anchored B', every account verifies because the receipt genuinely
-		// ends at a root the joiner holds, the joiner's root becomes
-		// root(B'), and it then executes a block it never collected.
-		//
-		// It costs nothing to refuse them. If the peer resolves backwards to
-		// B < AtBlock, either root(B) == root(AtBlock) -- nothing changed in
-		// between, so the state at B IS the state at AtBlock -- or the
-		// receipt does not end at the root the caller holds for AtBlock and
-		// the account is refused. Either way the puller needs no field from
-		// the peer to know it.
-		//
-		// Zero AtBlock is the caller with no verified anchor to ask at
-		// (tests). There the peer's current state is all there is, so the
-		// answer's own numbers are used, as they were before.
-		switch {
-		case opts.AtBlock != 0:
-			p.Block = opts.AtBlock
-			p.Partition = opts.Partition
-		default:
-			p.Block = receipt.LocalBlock
-			if receipt.ForHeight != 0 {
-				p.Block = receipt.ForHeight
-			}
-			// The block is the SERVING partition's, not the puller's. A
-			// receipt proves the state as of a block of the partition that
-			// built it, and block numbers collide across partitions (#4308).
-			if receipt.Partition != "" {
-				p.Partition = protocol.PartitionUrl(receipt.Partition)
-			}
+		// The block this state is FOR. On a historical answer that is
+		// ForHeight -- the block the proof was built at -- and NOT
+		// LocalBlock, which is the serving node's present and moves every
+		// block whatever was asked for. Settling against LocalBlock is what
+		// made a hot account unsettleable: the root asked of the Directory
+		// was always the peer's newest, which it has not anchored yet (#4362).
+		p.Block = receipt.LocalBlock
+		if receipt.ForHeight != 0 {
+			p.Block = receipt.ForHeight
+		}
+
+		// The block is the SERVING partition's, not the puller's. A receipt
+		// proves the state as of a block of the partition that built it
+		// (api.Receipt.Partition, internal/api/v3/querier.go), and block
+		// numbers collide across partitions -- so settling a foreign
+		// account's block against this node's partition asks the Directory
+		// for a root it never anchored for that block (#4308). Latent while
+		// every account a join pulls is its own partition's; wrong the moment
+		// one is not.
+		if receipt.Partition != "" {
+			p.Partition = protocol.PartitionUrl(receipt.Partition)
 		}
 	}
 
@@ -345,17 +344,23 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		return fail(errors.UnknownError.WithFormat("pending %s: %w", u, err))
 	}
 
-	// 4. The chains, as of the same block the body is. They are part of the
-	// account's leaf, so a body from block B beside chains from the peer's
-	// present is a value no node ever held (see queryAccountChainsAt).
+	// 4. Chains, and with them the account-level meeting point. Both modes
+	// answer it: the long tail is pulled in ModeStateOnly, and the long tail
+	// is where a restarted node spends its life. When the node is ahead,
+	// ChangedAccounts names <partition>/ledger and <partition>/synthetic
+	// unconditionally and enumerate.Stale names every account whose leaf
+	// differs from the peer's IN EITHER DIRECTION — so the ahead case is not
+	// an edge of the long tail, it is what the long tail runs every round
+	// (#4348).
+	var m *meeting
 	switch opts.Mode {
 	case ModeStateOnly:
-		err = pullChainHeads(ctx, src, sub, u, pageSize, opts)
+		m, err = pullChainHeads(ctx, src, sub, u, pageSize)
 		if err != nil {
 			return fail(errors.UnknownError.WithFormat("chain heads %s: %w", u, err))
 		}
 	case ModeFullSpine:
-		err = pullChainsFull(ctx, src, sub, u, pageSize, opts)
+		m, err = pullChainsFull(ctx, src, sub, u, pageSize)
 		if err != nil {
 			return fail(errors.UnknownError.WithFormat("chains full %s: %w", u, err))
 		}
@@ -363,22 +368,36 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		return fail(errors.BadRequest.WithFormat("unknown pull mode %d", opts.Mode))
 	}
 
+	past, err := m.past(u)
+	if err != nil {
+		return fail(errors.UnknownError.Wrap(err))
+	}
+	if past {
+		// The meeting point is the ACCOUNT's, not one chain's, and the
+		// account is its body, its directory list, its pending list and its
+		// chains together — that is what its leaf is hashed from
+		// (observer_prod.go, hashState). A node past this peer on the account
+		// is past it on all four: taking any one of them from the peer builds
+		// a leaf that is neither side's, which is the one thing a pull must
+		// never leave behind, because a node holding something no peer holds
+		// never hashes into an anchored root again.
+		//
+		// So nothing is taken. The batch is thrown away where the meeting
+		// point is decided rather than being refilled with the node's own
+		// state: refilling it writes the node's state back over itself, which
+		// is at best a no-op and at worst a leaf assembled out of two heights
+		// — and it leaves a batch that cannot verify, since what is in it is
+		// not what the peer's receipt proves (see Settle).
+		//
+		// This is not a refusal. Everything this peer can give for this
+		// account, the node has; the pull is complete and it is empty.
+		p.past = true
+		sub.Discard()
+		p.batch = nil
+	}
+
 	return p, nil
 }
-
-// The account-level meeting point is gone.
-//
-// It asked "am I ahead of this peer, level with it, or behind it" for an
-// account as a whole, and every answer it could give was wrong at least
-// sometimes: refusing the ahead case stranded every restart (#4348), taking
-// the peer's body in the level case re-stamped an anchor sequence number the
-// network had already seen, because an account's body moves with all of its
-// chains standing still (#4350), and the whole question only existed because
-// accounts were compared against a peer's CURRENT state, which is a moving
-// target that no anchor covers. At an anchored block there is one correct leaf
-// per account. The node hashes to it or it does not, and it asks somebody else
-// (executor spec, "Sync", §2).
-func removedMeetingPoint() {}
 
 // Account pulls u from src into batch per opts.Mode and, when opts.Verify is
 // set, refuses it unless it hashes into the root the Directory anchored for
@@ -400,10 +419,6 @@ func Account(ctx context.Context, src Source, batch *database.Batch, u *url.URL,
 		return errors.UnknownError.Wrap(err)
 	}
 	if opts.Verify == nil {
-		// No production caller reaches this: the join passes Verify on every
-		// path, spine included (#4301). It is kept for the pull-library
-		// tests, which build a peer and a store and have no anchors to
-		// verify against.
 		return errors.UnknownError.Wrap(p.Keep())
 	}
 
@@ -617,6 +632,55 @@ func pullPending(ctx context.Context, src Source, batch *database.Batch, u *url.
 	return errors.UnknownError.Wrap(batch.Account(u).Pending().Put(all))
 }
 
+// meeting is where the node's chains stand against one peer's, for one
+// account. It is the account-level meeting point, collected chain by chain:
+// the node may hold a chain the peer cannot serve to its end (beyond), and the
+// peer may hold entries of a chain the node did not have (filled).
+//
+// One chain of each is a contradiction, not an account state — see past.
+type meeting struct {
+	beyondChain string // the first chain the node holds past this peer's end
+	filledChain string // the first chain the peer had entries the node lacked
+}
+
+// beyond records that the node holds a chain past the end of the peer's.
+func (m *meeting) beyond(name string) {
+	if m.beyondChain == "" {
+		m.beyondChain = name
+	}
+}
+
+// filled records that the peer held entries of a chain the node did not have.
+func (m *meeting) filled(name string) {
+	if m.filledChain == "" {
+		m.filledChain = name
+	}
+}
+
+// past reports whether the node is past this peer for the account as a whole:
+// at or beyond it on every chain, and strictly beyond on at least one. That is
+// the account-level meeting point, and it is what says the state the node
+// holds is the later of the two.
+//
+// Beyond on one chain and behind on another is neither side's account, and it
+// is refused rather than written. The prior reading was that a coherent node
+// cannot be in that state — every chain of an account grows with the blocks
+// that touch it, so a node that executed further is at or beyond the peer on
+// all of them — and that reading is right about a node. It is not right about
+// a PEER: ModeFullSpine is pulled with no Verify and settled with Keep, so one
+// dishonest source that is a single entry ahead on any one chain and behind on
+// another used to choose the fall-through, and the fall-through wrote its body
+// over the node's own executed height (#4344). A source that cannot be
+// reconciled is refused, and AccountFrom asks the next one.
+func (m *meeting) past(u *url.URL) (bool, error) {
+	if m.beyondChain != "" && m.filledChain != "" {
+		return false, errors.Conflict.WithFormat(
+			"%v: the node is past this peer on %s and behind it on %s; the peer's state and the node's cannot both be this account's, and a mixture of the two is neither",
+			u, m.beyondChain, m.filledChain)
+	}
+	return m.beyondChain != "", nil
+}
+
 // localChains is the height of every chain the node already holds for the
 // account, keyed by lower-case name — ChainByName lower-cases, so the peer's
 // spelling and the node's index must be compared that way.
@@ -643,138 +707,164 @@ func localChains(batch *database.Batch, u *url.URL) (map[string]int64, error) {
 	return out, nil
 }
 
-// agreesAt checks that a local chain already at the served length holds the
-// same history: the local head against the head the peer served for that
-// length.
+// unserved records, in the meeting, every chain the node holds entries of that
+// the peer did not serve at all. A peer that cannot name a chain the node has
+// is a peer the node is past on that chain — including the peer that serves no
+// chains whatever, which would otherwise have its body installed over an
+// account the node holds in full.
 //
-// A Merkle state at height N commits to every entry below N, so a chain that
-// agrees there and forks below it is a hash collision.
-func agreesAt(head, want *merkle.State) error {
-	if !bytes.Equal(head.Anchor(), want.Anchor()) {
-		return errors.Conflict.WithFormat(
-			"the local chain of %d entries and the peer's of %d disagree at %d: the local chain anchors to %x there and the peer's head to %x",
-			head.Count, want.Count, want.Count, head.Anchor(), want.Anchor())
-	}
-	return nil
-}
-
-// pullChainHeads sets each of the account's chains from ChainRecord.{Count,
-// State} plus the entries of its open mark set, AT THE BLOCK THE PULL ASKED
-// FOR. It skips the entries below the last mark point: the BPT-leaf hash is
-// over a chain's head anchor, which is computed from Pending alone
-// (internal/database/observer_prod.go, hashChains), so the leaf is reproduced
-// without them.
-//
-// The open mark set is not optional. A chain given a head and no elements
-// cannot be appended to -- an append rebuilds its Tail chunk from the elements
-// of the open set -- so a node joined with such a chain could not execute
-// block Q+1 (merkle.Chain.RestoreHead).
-//
-// THREE CASES AND NO ORDERING QUESTION. At the block that was asked for, a
-// chain had one length and one head, and the node's chain is shorter than it,
-// equal to it, or longer than it:
-//
-//   - Shorter: the entries between are fetched and the head restored. That is
-//     the ordinary case, and for a restarted node it is a handful of entries.
-//   - Equal: the two must anchor to the same value, or the node and the peer
-//     hold different history and the account is refused.
-//   - Longer: the node holds entries the block did not. A joining node has
-//     executed nothing since it stopped, and it stopped at or before the
-//     block, so this is a peer serving a length that is not the block's, or a
-//     node holding something no node held. It is refused, never shortened:
-//     rewinding a chain the node built hashes to exactly the leaf the peer's
-//     receipt proves, so nothing downstream would catch it (#4348).
-//
-// A chain the peer serves with no entries did not exist at the block. It is
-// skipped rather than indexed, because an account's chain index is what
-// hashChains walks: indexing a chain that was not there puts an empty chain's
-// hash into a leaf that never had one.
-func pullChainHeads(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64, opts Options) error {
-	// Empty ChainQuery requests "list all chains for this account".
-	// Setting Range here triggers the v3 validator's "name is required
-	// when querying by index, entry, or range" rejection -- Range is
-	// for entries within a named chain, not for the chain list.
-	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{ForHeight: opts.AtBlock})
-	if err != nil {
-		return fmt.Errorf("list chains: %w", err)
-	}
-	mine, err := localChains(batch, u)
-	if err != nil {
-		return err
-	}
-	if chains != nil {
-		for _, c := range chains.Records {
-			if c == nil || c.Name == "" {
-				continue
-			}
-			held := mine[strings.ToLower(c.Name)]
-			delete(mine, strings.ToLower(c.Name))
-			if c.Count == 0 {
-				if held > 0 {
-					return errors.Conflict.WithFormat(
-						"chain %s/%s: the local chain holds %d entries and the peer serves none for the block asked for",
-						u, c.Name, held)
-				}
-				continue
-			}
-			want := &merkle.State{Count: int64(c.Count), Pending: c.State}
-			dstChain, err := batch.Account(u).ChainByName(c.Name)
-			if err != nil {
-				return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
-			}
-			inner := dstChain.Inner()
-			head, err := inner.Head().Get()
-			if err != nil {
-				return fmt.Errorf("chain %s/%s: load the local head: %w", u, c.Name, err)
-			}
-
-			switch {
-			case head.Count > want.Count:
-				return errors.Conflict.WithFormat(
-					"chain %s/%s: the local chain holds %d entries and the block asked for held %d; a joining node cannot be past the block it is pulling",
-					u, c.Name, head.Count, want.Count)
-
-			case head.Count == want.Count:
-				if err := agreesAt(head, want); err != nil {
-					return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
-				}
-
-			default:
-				lastMark := want.Count &^ inner.MarkMask()
-				open, err := chainEntries(ctx, src, u, c.Name, uint64(lastMark), uint64(want.Count), pageSize)
-				if err != nil {
-					return fmt.Errorf("chain %s/%s: open mark set: %w", u, c.Name, err)
-				}
-				if err := inner.RestoreHead(want, open); err != nil {
-					return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
-				}
-			}
-			if err := addChainToIndex(batch, u, c); err != nil {
-				return err
-			}
-		}
-	}
-
-	// A chain the node holds that the peer did not name at all. An account's
-	// chain index only grows, so at the block the peer served there is no such
-	// thing: this is two nodes holding different accounts.
-	return unservedChains(u, mine)
-}
-
-// unservedChains refuses an account whose chains the peer could not name.
-func unservedChains(u *url.URL, mine map[string]int64) error {
+// An account with no chains at all is not that: acc://dn.acme/ledger/1 and
+// every account created without a transaction of its own has an empty chain
+// list, legitimately, and a node bootstrapping one must take the peer's body.
+// The distinction is what the NODE holds, not what the peer serves.
+func (m *meeting) unserved(mine map[string]int64) {
 	names := make([]string, 0, len(mine))
 	for name, height := range mine {
 		if height > 0 {
 			names = append(names, name)
 		}
 	}
-	if len(names) == 0 {
-		return nil
-	}
 	sort.Strings(names) // A refusal must name the same chain every time
-	return errors.Conflict.WithFormat(
-		"%v: the local account holds chains the peer serves none of for the block asked for: %v", u, names)
+	for _, name := range names {
+		m.beyond(name)
+	}
+}
+
+// agreesAt is the meeting point for one chain, for a node at or past the
+// peer's height: the local state after the peer's Count entries against the
+// head the peer served. Below that height the two must agree; above it the
+// peer has no opinion.
+//
+// Agreement must be SHOWN. A node that cannot compute its own state at the
+// peer's height — a chain held only from a mark point on, which is what a
+// chain restored head-first is — refuses, because being ahead is only safe
+// when the prefix can be checked. StateAt says so with an error for some of
+// those and with a state of the wrong height for others, so both are checked.
+//
+// A Merkle state at height N commits to every entry below N, so a chain that
+// agrees there and forks below it is a hash collision.
+func agreesAt(dst *database.MerkleManager, head, want *merkle.State) error {
+	mine := head
+	if head.Count > want.Count {
+		var err error
+		mine, err = dst.StateAt(want.Count - 1)
+		if err == nil && mine.Count != want.Count {
+			err = errors.NotFound.WithFormat(
+				"the local chain holds no state at %d, only at %d", want.Count, mine.Count)
+		}
+		if err != nil {
+			// Without the local state at the peer's height there is no
+			// telling a node that is simply ahead from one holding
+			// different history — and that difference is what this check
+			// exists for. Refuse rather than assume.
+			return errors.Conflict.WithFormat(
+				"the local chain is at %d and the peer served %d, and the local state at %d cannot be read, so the two cannot be compared: %w",
+				head.Count, want.Count, want.Count, err)
+		}
+		// StateAt does not always say when it cannot answer. Below the first
+		// mark point it holds, it replays from an empty state and no hashes,
+		// and hands back a state of the right HEIGHT built out of nothing —
+		// which anchors to something neither side has, and would be reported
+		// as a disagreement the node has not established. The entry itself is
+		// the check that the node holds data down there at all.
+		if _, err := dst.Entry(want.Count - 1); err != nil {
+			return errors.Conflict.WithFormat(
+				"the local chain is at %d and the peer served %d, and the local entry %d cannot be read, so the two cannot be compared: %w",
+				head.Count, want.Count, want.Count-1, err)
+		}
+	}
+	if !bytes.Equal(mine.Anchor(), want.Anchor()) {
+		return errors.Conflict.WithFormat(
+			"the local chain of %d entries and the peer's of %d disagree at %d: the local chain anchors to %x there and the peer's head to %x",
+			head.Count, want.Count, want.Count, mine.Anchor(), want.Anchor())
+	}
+	return nil
+}
+
+// pullChainHeads sets each of the account's chains from ChainRecord.{Count,
+// State} plus the entries of its open mark set. It skips the entries below the
+// last mark point: the BPT-leaf hash is over a chain's head anchor, which is
+// computed from Pending alone (internal/database/observer_prod.go, hashChains),
+// so the leaf is reproduced without them.
+//
+// The open mark set is not optional. A chain given a head and no elements
+// cannot be appended to — an append rebuilds its Tail chunk from the elements
+// of the open set — so a node joined with such a chain could not execute block
+// Q+1 (merkle.Chain.RestoreHead).
+//
+// It honours the meeting point, chain by chain, as the spine fill does. It did
+// not: it restored every head the peer served unconditionally, so a node that
+// had executed further had the chain SHORTENED to the peer's height — and the
+// shortening cannot be caught downstream, because the rewound account hashes
+// to exactly the leaf the peer's receipt proves (#4348). A chain the node is
+// at or past the peer on is left alone; the head the peer served is one this
+// chain has already passed through, and a head that it has not is a
+// disagreement and is refused.
+func pullChainHeads(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64) (*meeting, error) {
+	// Empty ChainQuery requests "list all chains for this account".
+	// Setting Range here triggers the v3 validator's "name is required
+	// when querying by index, entry, or range" rejection — Range is
+	// for entries within a named chain, not for the chain list.
+	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{})
+	if err != nil {
+		return nil, fmt.Errorf("list chains: %w", err)
+	}
+	mine, err := localChains(batch, u)
+	if err != nil {
+		return nil, err
+	}
+	m := new(meeting)
+	if chains != nil {
+		for _, c := range chains.Records {
+			if c == nil || c.Name == "" {
+				continue
+			}
+			delete(mine, strings.ToLower(c.Name))
+			want := &merkle.State{
+				Count:   int64(c.Count),
+				Pending: c.State,
+			}
+			dstChain, err := batch.Account(u).ChainByName(c.Name)
+			if err != nil {
+				return nil, fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+			}
+			inner := dstChain.Inner()
+			head, err := inner.Head().Get()
+			if err != nil {
+				return nil, fmt.Errorf("chain %s/%s: load the local head: %w", u, c.Name, err)
+			}
+
+			if head.Count >= want.Count {
+				// The meeting point, reached at or before the peer's
+				// height. Nothing is fetched and nothing is written.
+				if err := agreesAt(inner, head, want); err != nil {
+					return nil, fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+				}
+				if head.Count > want.Count {
+					m.beyond(c.Name)
+				}
+				if err := addChainToIndex(batch, u, c); err != nil {
+					return nil, err
+				}
+				continue
+			}
+
+			m.filled(c.Name)
+			lastMark := want.Count &^ inner.MarkMask()
+			open, err := chainEntries(ctx, src, u, c.Name, uint64(lastMark), uint64(want.Count), pageSize)
+			if err != nil {
+				return nil, fmt.Errorf("chain %s/%s: open mark set: %w", u, c.Name, err)
+			}
+			if err := inner.RestoreHead(want, open); err != nil {
+				return nil, fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+			}
+			if err := addChainToIndex(batch, u, c); err != nil {
+				return nil, err
+			}
+		}
+	}
+	m.unserved(mine)
+	return m, nil
 }
 
 // chainEntries reads the entries [start, end) of one of the peer's chains.
@@ -836,71 +926,104 @@ func addChainToIndex(batch *database.Batch, u *url.URL, c *api.ChainRecord) erro
 }
 
 // pullChainsFull replays every entry of every chain the node does not already
-// hold, up to the length the chain held AT THE BLOCK THE PULL ASKED FOR. It
-// starts from the local height, not from zero, so a second pull of an account
-// is a no-op rather than a chain of twice the height -- a restarting node
-// re-pulls the spine, and a pull that is not idempotent doubles it.
+// hold. It starts from the local height, not from zero, so a second pull of an
+// account is a no-op rather than a chain of twice the height — a restarting
+// node re-pulls the spine, and a pull that is not idempotent doubles it.
 //
-// The result is held to the head the peer served for that block: after the
-// replay the local anchor must equal it. A local chain that holds a different
-// prefix is refused rather than extended into a chain neither side has, and
-// one longer than the block's is refused rather than shortened -- the three
-// cases are pullChainHeads's.
-func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64, opts Options) error {
-	// List-all-chains, as of the block that was asked for. See pullChainHeads.
-	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{ForHeight: opts.AtBlock})
+// The result is held to the peer's word for the chain's head: after the
+// replay the local anchor must equal the anchor of the head the peer served.
+// A local chain that holds a different prefix is refused rather than extended
+// into a chain neither side has. A local chain that is merely ahead of the
+// peer's is the meeting point reached early — see pullChainEntries.
+//
+// It collects the account-level meeting point as it goes: which chains the
+// node holds past this peer's end, and which the peer had entries for that the
+// node did not. See meeting.past.
+func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64) (*meeting, error) {
+	// Empty ChainQuery: list-all-chains. See pullChainHeads.
+	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{})
 	if err != nil {
-		return fmt.Errorf("list chains: %w", err)
+		return nil, fmt.Errorf("list chains: %w", err)
 	}
 	mine, err := localChains(batch, u)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	m := new(meeting)
 	if chains != nil {
 		for _, c := range chains.Records {
 			if c == nil || c.Name == "" {
 				continue
 			}
-			held := mine[strings.ToLower(c.Name)]
 			delete(mine, strings.ToLower(c.Name))
-			if c.Count == 0 {
-				if held > 0 {
-					return errors.Conflict.WithFormat(
-						"chain %s/%s: the local chain holds %d entries and the peer serves none for the block asked for",
-						u, c.Name, held)
-				}
-				continue
-			}
 			dstChain, err := batch.Account(u).ChainByName(c.Name)
 			if err != nil {
-				return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+				return nil, fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 			}
-			err = pullChainEntries(ctx, src, dstChain.Inner(), u, c, pageSize)
+			// came in at is the node's height for this chain BEFORE the fill.
+			cameInAt, err := pullChainEntries(ctx, src, dstChain.Inner(), u, c, pageSize)
 			if err != nil {
-				return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+				return nil, fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 			}
+			switch {
+			case cameInAt > int64(c.Count):
+				m.beyond(c.Name)
+			case cameInAt < int64(c.Count):
+				m.filled(c.Name)
+			}
+			// Equal is neither: a chain that did not move between the peer's
+			// block and the node's says nothing about which of them is later.
 			if err := addChainToIndex(batch, u, c); err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
-	return unservedChains(u, mine)
+	m.unserved(mine)
+	return m, nil
 }
 
-// pullChainEntries brings one chain up to the length it held at the block the
-// pull asked for, from whatever the node already holds, and checks the result
-// against the head the peer served for that block.
+// pullChainEntries brings one chain up to the height the peer served, from
+// whatever the node already holds, and checks the result against the peer's
+// head.
 //
 // Syncing and bootstrapping are one walk at two depths: the node fills entries
 // back from the head until it meets data it already has. A bootstrapping node
 // never meets any, so it collects everything; a restarted node meets its own
 // at once. The meeting point is therefore the only part of the walk a restart
-// exercises, and the only part a bootstrap does not -- which is why bootstrap
+// exercises, and the only part a bootstrap does not — which is why bootstrap
 // passed while a twelve-node restart could not pull a spine account at all.
-func pullChainEntries(ctx context.Context, src Source, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, pageSize uint64) error {
+//
+// Two different things can be true of a chain the node already holds, and they
+// get different answers:
+//
+//   - The local chain is AHEAD of the peer's — the peer serves c.Count
+//     entries and the node holds those same entries and more. That is the
+//     meeting point reached early. It is not an error: everything this peer
+//     can give for this chain, the node has. Nothing is fetched and nothing is
+//     appended.
+//
+//   - The local chain DISAGREES with the peer's at a position they both hold.
+//     That is two nodes holding different history, and it is refused however
+//     long either chain is. Refusing is the whole point of the check, so a
+//     case where agreement cannot be established is refused too.
+//
+// Which of the two it is, is decided at the PEER'S height, not the node's: the
+// local state after c.Count entries against the head the peer served. Below
+// that height the two must agree; above it the peer has no opinion.
+//
+// What this cannot decide is WHY the node is ahead — whether it executed
+// further before it stopped, or an earlier pull wrote a peer's entries into
+// its chain. Both leave a chain that agrees with this peer everywhere this
+// peer can speak, and nothing in a chain records which of the two put an entry
+// there. The check here is the one that can be made: agreement wherever the
+// peer has an opinion.
+//
+// It returns the height the node came in at, which the caller compares with
+// the peer's to decide the account-level meeting point.
+func pullChainEntries(ctx context.Context, src Source, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, pageSize uint64) (int64, error) {
 	head, err := dst.Head().Get()
 	if err != nil {
-		return fmt.Errorf("load the local head: %w", err)
+		return 0, fmt.Errorf("load the local head: %w", err)
 	}
 	// The height the node comes in at, taken as a number before anything is
 	// appended: Head().Get() hands back the manager's own state, and every
@@ -909,49 +1032,46 @@ func pullChainEntries(ctx context.Context, src Source, dst *database.MerkleManag
 	from := head.Count
 	want := &merkle.State{Count: int64(c.Count), Pending: c.State}
 
-	switch {
-	case from > want.Count:
-		return errors.Conflict.WithFormat(
-			"the local chain holds %d entries and the block asked for held %d; a joining node cannot be past the block it is pulling",
-			from, want.Count)
-	case from == want.Count:
-		return agreesAt(head, want)
+	// At or past the peer's height: the meeting point, discharged where the
+	// peer has something to say. The same discharge the head-only pull makes
+	// (pullChainHeads) — one rule, one implementation.
+	if from >= int64(c.Count) {
+		return from, errors.UnknownError.Wrap(agreesAt(dst, head, want))
 	}
 
 	entries, err := chainEntries(ctx, src, u, c.Name, uint64(from), c.Count, pageSize)
 	if err != nil {
-		return err
+		return from, err
 	}
 	for i, e := range entries {
 		if err := dst.AddEntry(e, false); err != nil {
-			return fmt.Errorf("add entry %d: %w", from+int64(i), err)
+			return from, fmt.Errorf("add entry %d: %w", from+int64(i), err)
 		}
 	}
 
 	// The peer's head is what the account's leaf is hashed from, so a replay
 	// that does not reproduce it has built a different chain. The fill only
 	// appended what the peer served, so the disagreement is below the height
-	// the node came in at -- the two hold different history there.
+	// the node came in at — the two hold different history there.
 	got, err := dst.Head().Get()
 	if err != nil {
-		return fmt.Errorf("load the rebuilt head: %w", err)
+		return from, fmt.Errorf("load the rebuilt head: %w", err)
 	}
 	if !bytes.Equal(got.Anchor(), want.Anchor()) {
-		return errors.Conflict.WithFormat(
+		return from, errors.Conflict.WithFormat(
 			"the local chain of %d entries is not a prefix of the peer's: after replaying the peer's entries [%d, %d) the chain anchors to %x and the peer's head to %x, so they disagree below %d",
 			from, from, c.Count, got.Anchor(), want.Anchor(), from)
 	}
-	return nil
+	return from, nil
 }
 
-// SpineAccounts is what a join takes first, in ModeFullSpine: the accounts
-// every block touches, with their chains, so the node can compare its own
-// history against a peer's and can append to them when it executes again.
+// SpineAccounts returns the four spine accounts for a given
+// partition. The launcher pulls these in ModeFullSpine because the
+// orchestrator's tracker (#3988) needs full chain history for the
+// validator keypage to verify signed major-block anchors locally.
 //
-// They are verified like every other account (#4301). The chains are not
-// taken in order to verify anything — an anchor is checked against the
-// validator set the node already holds — they are taken because a head
-// without its entries cannot be reconciled with a peer's.
+// For the DN: dn.acme/{anchors, ledger, operators, operators/1}.
+// For a BVN: <bvn>.acme/{anchors, ledger, operators, operators/1}.
 func SpineAccounts(partitionURL *url.URL) []*url.URL {
 	return []*url.URL{
 		partitionURL.JoinPath(protocol.AnchorPool),
