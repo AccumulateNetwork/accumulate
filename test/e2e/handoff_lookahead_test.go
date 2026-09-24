@@ -133,7 +133,7 @@ func handoffLookahead(t *testing.T, sendWhileJoin bool) {
 			cancel()
 		}
 	}}
-	stepping.State = pulledState(t, sim, p, 1, "BVN1")
+	stepping.State = p.NodeJoinState(1)
 	settler, ok := p.NodeExecutor(1).(join.Settler)
 	require.True(t, ok)
 	rec := &handoffRecorder{Buffer: p.NodeJoin(1)}
