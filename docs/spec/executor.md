@@ -281,6 +281,22 @@ where they disagree with it, this wins.
    is never seen, and executing without it diverges (run
    20260924T074702Z's Directory block 658, #4412).
 
+**Execute, and repair on a mismatch** (Paul, after the #4438 report). Step 2
+need not be record-only. Once the walk is done, the joining node may execute
+each block's transactions as they come, like any other node, and compare its
+root with the partition's signed anchor at every block that sent one. A match
+is step 3. A mismatch does not stop the join: the node repairs its tree from
+the block ledger — for every block since its last comparison, it pulls again
+every account the partition's record names, and every account its own record
+names, deleting any the peers do not hold — and keeps executing and comparing.
+This is why staging being incomplete during the join is harmless: a block
+executed without a synthetic transaction it needed is wrong only in accounts
+its record names, and the repair brings them current. It is also why an idle
+partition needs no special case: the node executes through the quiet blocks
+and compares at the next block that anchors (the heartbeat). A node that
+executed an account into existence that no peer holds loses it at the repair,
+because its own record names it.
+
 Invariants 13–15 are what make steps 2 and 3 sound: no leaf exists for an
 account that holds nothing, the record names every account a block changes,
 and a rejected transaction changes nothing but its record.
