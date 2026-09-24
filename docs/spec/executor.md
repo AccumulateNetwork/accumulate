@@ -235,7 +235,10 @@ where they disagree with it, this wins.
    that does not matter. An account pulled during the walk is either
    unchanged since, or named by a later record and pulled again, so once the
    walk is done and the records are processed through the present, every
-   account is current and the local BPT is the partition's.
+   account is current and the local BPT is the partition's. **The walk never
+   overwrites a value the records wrote:** an account a block-ledger record
+   has already brought current is skipped when the walk reaches it, because
+   the walk's page may be older than that record.
 2. **Keep processing the records.** Until the match, every new block's record
    is processed as it comes, in order, so the local tree stays current.
 3. **The match is the proof.** Only when every account is present and current
