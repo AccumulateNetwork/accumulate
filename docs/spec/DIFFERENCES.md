@@ -1294,6 +1294,19 @@ counter and its own alarm.
 
 ## Healing
 
+### H0. The healing pair does not rotate on a partition whose blocks are empty
+
+*[#4420](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4420)*
+
+**Spec** (healing.md, "who asks"): the pair rotates with every activation.
+**Code** (since #4415): the draw is seeded from the root chain's anchor as the
+executor writes it, with `ledger.Index` as the fallback — both move only on a
+committed block, while activation fires on the consensus index, so on a
+partition executing only empty blocks the same pair asks on every activation.
+Before #4415 the seed was a `RootChainAnchor` the executor stores as zeros, so
+the same pair asked on every anchoring block of a BUSY partition too. The
+fix is to hash the consensus index into the seed.
+
 ### H1. The producer cache exists; what it is not yet cleared by, and what still reads the store
 
 *[#4193](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4193)*
