@@ -230,6 +230,28 @@ carry a deployed network, the gate is known to be missing.
 **Size**: small — an `ExecutorVersion` predicate around the ordering and the
 naming, if the assumption ever stops holding.
 
+### E15. A held synthetic copy recording nothing is not gated on a version
+
+*[#4423](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4423)*
+
+**Spec** ([executor.md](executor.md), "Versioning"): behaviour that changes
+what a block produces is gated on an `ExecutorVersion`.
+
+**Code**: `SyntheticMessage.process` returns `errCollected` when its inner
+message comes back pending (`heldOnly`), so a synthetic copy that was only
+held records no outer message, no status and no validator signature
+(invariant 12). Before #4423 it recorded all three at arrival. Unconditional:
+any block that held a synthetic out of order has a different state root on
+either side of the change, and two binaries on one chain fork there.
+
+**Why it stands**: the fresh-install rule of E14 — `dagbft-integration` runs
+no network that outlives a run, every node is rebuilt together, so no
+mixed-binary window exists. The old behaviour is also the defect: it froze a
+stream for good.
+
+**Size**: an `ExecutorVersion` predicate in `heldOnly`, if the assumption ever
+stops holding.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*

@@ -331,8 +331,11 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 	// first arrived.
 	if syn.Proof == nil {
 		x.noteRemoteDelivered(ctx, syn)
-		_, err = ctx.callMessageExecutor(batch, syn.Message)
-		return errors.UnknownError.Wrap(err)
+		st, err := ctx.callMessageExecutor(batch, syn.Message)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		return heldOnly(st)
 	}
 
 	// Verify the proof ends with a DN anchor. Individual and collection proofs
@@ -384,9 +387,12 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 
 	// Execute the inner message
 	x.noteRemoteDelivered(ctx, syn)
-	_, err = ctx.callMessageExecutor(batch, syn.Message)
+	st, err := ctx.callMessageExecutor(batch, syn.Message)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
+	}
+	if err := heldOnly(st); err != nil {
+		return err
 	}
 
 	// Record the signature (must not fail)
@@ -403,6 +409,21 @@ func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) er
 // errCollected is process's answer when an entry has been collected into
 // staging rather than executed. It is not a failure and nothing is recorded.
 var errCollected = errors.Pending.With("collected")
+
+// heldOnly is errCollected when the inner message was only held — its stream
+// has not reached its number — and nil otherwise. A held copy is not executed
+// and nothing is recorded for it: a message's status says Delivered only once
+// its stream has moved past its number (executor spec, invariant 12). Recorded
+// Delivered, the outer status is also the status of every byte-identical copy,
+// including one collected in staging, which then answers "already delivered"
+// when its number comes up and executes nothing — a stream frozen with every
+// number held (#4423).
+func heldOnly(st *protocol.TransactionStatus) error {
+	if st != nil && st.Code == errors.Pending {
+		return errCollected
+	}
+	return nil
+}
 
 // errUnproven is check's answer for a proof-less entry the proven set does not
 // cover yet: not valid, not invalid, not yet.

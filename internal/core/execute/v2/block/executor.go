@@ -46,6 +46,7 @@ type Executor struct {
 	signatureExecutors map[protocol.SignatureType]ExecutorFactory2[protocol.SignatureType, *SignatureContext]
 	logger             logging.OptionalLogger
 	streamLog          streamLogState
+	runStopLog         runStopLogState
 	db                 database.Beginner
 	cacheOnce          sync.Once
 	cacheDefault       *synthcache.Cache

@@ -96,6 +96,9 @@ func (b *Block) executeRuns(runs []streamRun, results []*execute.ProcessResult, 
 			// entry did.
 			pos, perr := b.positionOf(sr.stream)
 			if err != nil || perr != nil || pos.delivered < entry.number {
+				if entry.bundle == nil && perr == nil {
+					b.noteRunStopped(sr.stream, entry.number, statuses, err)
+				}
 				break // this stream stops here; the rest stays for a later block
 			}
 			delivered++
