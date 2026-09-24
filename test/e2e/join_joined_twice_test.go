@@ -149,7 +149,7 @@ func TestASecondRestartAfterAJoinStillOpens(t *testing.T) {
 	require.False(t, p.Joining(joiner))
 
 	q1 := partitionBlock(t, p.NodeDatabase(joiner), bvn)
-	t.Logf("process A: stopped at R=%d, joined at Q1=%d", r, q1)
+	t.Logf("process A: stopped at R=%d, joined at %d, and produced the buffered blocks to Q1=%d", r, matched.block, q1)
 	require.Greater(t, q1, r)
 
 	// Process A opens its first block: the span (R, Q1] is skipped.
