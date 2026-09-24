@@ -379,7 +379,10 @@ already ACTIVE (a join inside one scrape interval, or a restart that spans a
 monitor restart, whose new process sees every node `already`) is judged on
 height and anchors like any other, with its gauge time given as an upper
 bound and "boot time not measured". A row with no start after the launch
-says so and claims nothing about starts.
+says so and claims nothing about starts. A start restarted again before it
+was ever ACTIVE is listed as **superseded** with the time of the next start
+(review F7) — not a stuck join, and not counted among the starts judged; the
+next start is judged in its place.
 
 `nodestate.csv` carries, beside the columns above, `executedBlock`,
 `partitionHeight` (the highest block any answering validator of the partition

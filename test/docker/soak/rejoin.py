@@ -285,6 +285,13 @@ def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True,
             fails.append("anchor disagrees with its peers: %s%s"
                          % (a["disagree"][0], "" if len(a["disagree"]) == 1
                             else " (and %d more)" % (len(a["disagree"]) - 1)))
+    sup = s.get("superseded")
+    if sup and not active:
+        # Restarted again before this start was ever ACTIVE (review F7): not
+        # a node stuck booting, and not a verdict. The next start is judged.
+        return {"verdict": "superseded", "reasons": ["restarted again at %s, before it was ACTIVE"
+                                                    % sup.get("time")],
+                "toActiveS": None, "toRejoinS": None}
     caught = s.get("caught-up")
     to_rejoin = caught.get("startToCaughtUpS") if caught else None
     if fails:
@@ -328,13 +335,14 @@ def row(rows, role, max_behind=DEFAULT_MAX_BEHIND, anchors=None, silent_after=DE
         parts.append("no start after the network's launch")
     else:
         ok = {k: v for k, v in judged.items() if v["verdict"] == "rejoined"}
-        head = "rejoined %d of %d start(s) after the launch" % (len(ok), len(judged))
+        n = sum(1 for v in judged.values() if v["verdict"] != "superseded")
+        head = "rejoined %d of %d start(s) after the launch" % (len(ok), n)
         timed = [(float(v["toRejoinS"]), k) for k, v in ok.items() if v["toRejoinS"]]
         if timed:
             w, k = max(timed)
             head += ", worst %.1fs from container start to executing with its partition (%s %s)" % (w, k[0], k[1])
         parts.append(head)
-        for label in ("NOT rejoined", "not established"):
+        for label in ("NOT rejoined", "not established", "superseded"):
             bad = [(k, v) for k, v in sorted(judged.items()) if v["verdict"] == label]
             if bad:
                 parts.append("%s: %s" % (label, "; ".join(

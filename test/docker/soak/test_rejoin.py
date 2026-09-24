@@ -343,6 +343,35 @@ class TheBoundAndItsEdges(unittest.TestCase):
         self.assertEqual("NOT rejoined", self.judge(1300, 1393, pauses)["verdict"])
 
 
+class AnAbortedStartIsSupersededNotStuck(unittest.TestCase):
+    """Review F7, case D2: two restarts 20 s apart. The first start never
+    reached ACTIVE because the container started again; it read `NOT
+    rejoined (never ACTIVE (BOOTING))`, which a reader takes for a stuck
+    join."""
+
+    def test_superseded_at(self):
+        s = Series()
+        start = {c: T0 - 3600 for c in VALS}
+        s.sample(T0, network(T0, 200, {"bvn1": 200, "bvn2": 200, "bvn3": 200}), start)
+        booting = scrape({"directory": 0, "bvn1": 0}, {"directory": 190, "bvn1": 190})
+        st1 = dict(start, **{"acc-bvn1-val1": T0 + 10})
+        s.sample(T0 + 15, network(0, 205, {"bvn1": 205, "bvn2": 205, "bvn3": 205},
+                                  {"acc-bvn1-val1": booting}), st1)
+        st2 = dict(start, **{"acc-bvn1-val1": T0 + 30})
+        s.sample(T0 + 35, network(0, 225, {"bvn1": 225, "bvn2": 225, "bvn3": 225},
+                                  {"acc-bvn1-val1": booting}), st2)
+        s.sample(T0 + 60, network(0, 250, {"bvn1": 250, "bvn2": 250, "bvn3": 250}), st2)
+        s.finish(T0 + 60)
+        rd = tempfile.mkdtemp(prefix="rejoin-f7-")
+        s.write(rd)
+        with open(os.path.join(rd, "nodestate.csv")) as f:
+            cell = rejoin.row(list(csv.DictReader(f)), "validator", 5, None)
+        self.assertIn("rejoined 0 of 2 start(s) after the launch", cell)
+        self.assertIn("superseded: acc-bvn1-val1 bvn1 (restarted again at %s, before it was ACTIVE)"
+                      % iso(T0 + 35), cell)
+        self.assertNotIn("never ACTIVE", cell)
+
+
 class EveryDestinationIsCompared(unittest.TestCase):
     """Review F5: the seen-key was (source, seq) while the peers' reading is
     keyed (source, destination, seq), so only the first destination's line at
