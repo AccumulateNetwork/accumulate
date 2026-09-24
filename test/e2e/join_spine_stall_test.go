@@ -27,6 +27,13 @@ import (
 // FIRST entry no peer serves, not at the start of the page that holds it, and
 // says so: which entry, and which peers it asked.
 //
+// Since #4416 the pull brings an anchor's signatures, so a node that joined
+// by pull serves its pulled range signed and nothing stalls. The joined node
+// is therefore made into a peer that joined with an older binary, the one the
+// stall is still possible against, by forgetting what the pull wrote beside
+// each signature of an anchor it did not execute (forgetPulledSignatures, as
+// TestAJoinedNodeRefusesTheAnchorsItHoldsWithoutSignatures does).
+//
 // Through the production wiring: join.QueryPeers finds the Directory's query
 // service and addresses each peer by name over the simulator's client; each
 // node answers with its registered querier behind its join's gate.
@@ -39,6 +46,7 @@ import (
 func TestAJoinHeldAtAnAnchorNoPeerServesSaysWhereAndWhom(t *testing.T) {
 	const joiner, rebooted = 1, 2
 	sim, p, _, _ := joinADirectoryNodeByPull(t)
+	forgetPulledSignatures(t, p.NodeDatabase(joiner))
 	ctx := context.Background()
 	dnPool := DnUrl().JoinPath(AnchorPool)
 	unsignedFrom(t, p.NodeDatabase(joiner), dnPool)

@@ -1,0 +1,152 @@
+id: "DAGBFTTest"
+
+# The storage backend every node runs on. BlockchainDB is the backend (#4165);
+# a run on anything else is not comparable and must say so in its manifest.
+database: BlockchainDB
+# Execution shards per node: user transactions execute across this many
+# identity shards; 1 is serial. 8 is the count TestShardEquivalence_Randomized
+# proves against 1 and 64 under -race (#4149). Pinned into every node's config
+# at init; there is no environment override.
+executionShards: 8
+
+# Bootstrap node configuration for Docker peer discovery
+bootstrap:
+  peerAddress: "acc-bootstrap"
+  advertizeAddress: "acc-bootstrap"
+  listenAddress: "0.0.0.0"
+  basePort: 16593
+
+# Global network configuration
+globals:
+  executorVersion: "v2-kourou"
+  oracle:
+    price: 10000000  # 1000 * AcmeOraclePrecision (devnet default: 0.10 USD per ACME)
+  globals:
+    majorBlockSchedule: "0 */12 * * *"  # Major blocks every 12 hours
+
+bvns:
+  - id: "BVN1"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val1"
+        advertizeAddress: "acc-bvn1-val1"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val2"
+        advertizeAddress: "acc-bvn1-val2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val3"
+        advertizeAddress: "acc-bvn1-val3"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn1-val4"
+        advertizeAddress: "acc-bvn1-val4"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+  - id: "BVN2"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-val1"
+        advertizeAddress: "acc-bvn2-val1"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-val2"
+        advertizeAddress: "acc-bvn2-val2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-val3"
+        advertizeAddress: "acc-bvn2-val3"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn2-val4"
+        advertizeAddress: "acc-bvn2-val4"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+  - id: "BVN3"
+    nodes:
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-val1"
+        advertizeAddress: "acc-bvn3-val1"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-val2"
+        advertizeAddress: "acc-bvn3-val2"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-val3"
+        advertizeAddress: "acc-bvn3-val3"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-val4"
+        advertizeAddress: "acc-bvn3-val4"
+        basePort: 26656
+        dnnType: "validator"
+        bvnnType: "validator"
+      # The follower (#4365). Same wiring as every node above — the same
+      # image, the same CoreValidatorConfiguration, its own generated key —
+      # and `follower` for both of its nodes, which is the ONE difference:
+      # BuildGenesisDocs enters the key in the NetworkDefinition as INACTIVE
+      # (internal/node/daemon/init.go:213-214,
+      # `AddValidator(pubKey, part, node.DnnType == config.Validator)`), and
+      # the DAG-BFT committee is built from active validators only
+      # (cmd/accumulated/run/dagbft.go:415, `IsActiveOn`). So it is in no
+      # committee: it executes every committed block and votes on and
+      # proposes nothing.
+      #
+      # Declared LAST, deliberately. Host ports are allocated in the order
+      # nodes appear in this file (topology.BASE_HOST_PORT + index), so a
+      # follower anywhere else moves a validator's port and silently
+      # repoints the load generator and the monitor. Last, it takes 26692
+      # and nothing above it moves. topology.problems() refuses the other
+      # arrangement.
+      #
+      # Its key IS in the definition, inactive — not absent from it. Absent
+      # is not reachable from these files: `init network` writes one
+      # directory, one key and one genesis per node listed here, so a key
+      # that is in no definition is a node that has no config. That is a Go
+      # change and it is the lead's (#4365 brief, item 2). What runs is the
+      # inactive form, and the manifest says so.
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-fol1"
+        advertizeAddress: "acc-bvn3-fol1"
+        basePort: 26656
+        dnnType: "follower"
+        bvnnType: "follower"
+      # The added follower (#4364). The same form as acc-bvn3-fol1 — its own
+      # key, entered in the definition as inactive, so in no committee — but
+      # its compose service sits behind the `late-follower` profile and is NOT
+      # started at `compose up`. soak.sh's chaos walk starts it against the
+      # running network (add-follower) and later stops and removes it
+      # (remove-follower); see soak.conf, CHAOS_FOLLOWERS. It finds its peers
+      # through the bootstrap like every node here, and its storage is this
+      # file's `database:`.
+      #
+      # Last, after acc-bvn3-fol1, for the reason given there: it takes 26693
+      # and no port above it moves. Its data directory is bvn3-6.
+      - listenAddress: "0.0.0.0"
+        peerAddress: "acc-bvn3-fol2"
+        advertizeAddress: "acc-bvn3-fol2"
+        basePort: 26656
+        dnnType: "follower"
+        bvnnType: "follower"
