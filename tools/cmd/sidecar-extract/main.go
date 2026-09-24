@@ -61,6 +61,7 @@ func (l *listFlag) Set(s string) error { *l = append(*l, s); return nil }
 
 var flagOut = flag.String("out", "", "directory for the sidecar, the conflicts database and the progress file")
 var flagShards = flag.Int("shards", 32, "key ranges walked in parallel (at most 65536); fixed for the life of an output directory")
+var flagLedger = flag.Bool("ledger", false, "report the last block each archive's own system ledger records, and exit")
 var flagCurrent listFlag
 var flagWritable listFlag
 
@@ -68,6 +69,12 @@ func main() {
 	flag.Var(&flagCurrent, "current", "a current LevelDB database (repeatable); a key any of them holds is not extracted")
 	flag.Var(&flagWritable, "writable", "an archive name to open writable, for a copy that will not open read-only (repeatable)")
 	flag.Parse()
+	if *flagLedger {
+		if err := ledgers(flag.Args()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if *flagOut == "" || len(flagCurrent) == 0 || flag.NArg() == 0 || *flagShards < 1 || *flagShards > 1<<16 {
 		flag.Usage()
 		os.Exit(2)
