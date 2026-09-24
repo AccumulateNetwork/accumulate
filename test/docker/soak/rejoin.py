@@ -11,7 +11,8 @@ of a node, per partition, is REJOINED when all three hold:
 2. **execution** — it was ACTIVE with its executed block within N blocks of
    the partition's height (kind `caught-up`), and it was still within N at
    the start's last reading (kind `final` or `superseded`). The partition's
-   height is the block a majority of its validators executed (heights.py);
+   height is the highest block any of its validators that answered the
+   sample executed (heights.py);
 3. **agreement** — every anchor the node wrote for that partition after its
    start agrees with its peers': the same (root, BPT) as the other
    validators' at the same block, and the same (block, root, BPT) under the
@@ -209,8 +210,10 @@ def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True):
         if ex is None or ph is None:
             missing.append("executed height not measured (no accumulate_node_executed_block at its last reading)")
         elif ph - ex > max_behind:
-            fails.append("executed %d vs partition %d at its last reading (%d behind; bound %d)"
-                         % (ex, ph, ph - ex, max_behind))
+            ans = _int(end.get("validatorsAnswered"))
+            fails.append("executed %d vs partition %d at its last reading (%d behind; bound %d%s)"
+                         % (ex, ph, ph - ex, max_behind,
+                            "" if ans is None else "; %d validators answered" % ans))
         if active and "caught-up" not in s and ex is not None and ph is not None:
             fails.append("never ACTIVE and within %d blocks of the partition at one sample" % max_behind)
     if anchors is None:

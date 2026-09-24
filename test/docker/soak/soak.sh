@@ -832,9 +832,9 @@ fi
 # followerHeals is its own column, not part of the heals sum: see the loop.
 #
 # Heights are every node's own accumulate_node_executed_block, read from the
-# same scrape as the heals (heights.py, #4404). `dnHeightMajority` is the
-# block a majority of the Directory's validators have executed and
-# `dnHeightMax` the highest; then one `exec.<container>.<partition>` column
+# same scrape as the heals (heights.py, #4404). `dnHeightMax` is the highest
+# block any Directory validator that answered executed, `dnValidatorsAnswered`
+# how many answered; then one `exec.<container>.<partition>` column
 # per node the run has. The column used to be `dnHeight`, the Directory
 # ledger index as ONE node answered it — host port 26680, acc-bvn1-val1 —
 # and on run 20260924T052134Z that was the restarted node: it read 207 for a
@@ -1677,7 +1677,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   echo "| ended (UTC) | $ended |"
   echo "| elapsed | ${elapsed_h}h |"
   echo "| driver exit | $rc $([ "$rc" -eq 0 ] && echo '(clean)' || echo '(FAILED)') |"
-  echo "| Directory height (block, the highest a majority of its validators executed; first -> last sample) | ${first_h:-— not measured} -> ${last_h:-— not measured} |"
+  echo "| Directory height (block, the highest any of its validators that answered executed; first -> last sample) | ${first_h:-— not measured} -> ${last_h:-— not measured} |"
   echo "| heals | ${first_x:-?} -> ${last_x:-?} |"
   echo "| chaos events | $n_chaos |"
   echo "| monitor samples | $(( $(wc -l < "$mon") - 1 )) |"
@@ -1705,7 +1705,7 @@ else:
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
   echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
   echo "| accepted, neither certified here, taken on relay, nor refused (#, whole run, the validators) | $(sub_row validator "$lg_exit" "$stopped_early") |"
-  echo "| restarted node rejoined (per node and partition: gauge ACTIVE, executed block within ${REJOIN_MAX_BEHIND:-10} of the block a majority of the partition's validators executed through its last reading, and every anchor it stated agreeing with its peers'; s = container start to the first sample ACTIVE and within that bound; the validators) | $(nodestate_row validator) |"
+  echo "| restarted node rejoined (per node and partition: gauge ACTIVE, executed block within ${REJOIN_MAX_BEHIND:-10} of the highest block any of the partition's answering validators executed, through its last reading, and every anchor it stated agreeing with its peers'; s = container start to the first sample ACTIVE and within that bound; the validators) | $(nodestate_row validator) |"
   if [ "$n_fol" -gt 0 ]; then
     echo
     echo "### Follower (#4365)"

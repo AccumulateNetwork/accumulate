@@ -15,16 +15,20 @@ first, and the column sat at 207 from 05:26:19 to 05:27:24 while every other
 Directory node went 215 -> 323: the restarted node's own stall, printed as the
 network's (REPORTING-SPEC 1b: one node is one point of stale truth).
 
-**The partition's height is the height a MAJORITY of its validators have
-executed** — `dnHeightMajority` for the Directory. Sort the validators' `accumulate_node_executed_block` for the
-partition from highest to lowest and take the one at position floor(n/2): at
-least floor(n/2)+1 of them — a majority — have executed that block. One node
-running ahead cannot raise it and one stuck node cannot lower it, and that is
-the whole point: the question a restart asks is "where is the partition", and
-the restarted node is the one whose answer is in doubt. The max is recorded
-beside it, so a spread between the two is visible rather than averaged away.
-Followers are not in either: a follower is expected to lag, and the height a
-follower's lag is measured against has to be the validators' (#4365).
+**The partition's height is the HIGHEST block any of its validators that
+answered in the sample has executed** — `dnHeightMax` for the Directory —
+with the number that answered beside it (`dnValidatorsAnswered`). An
+executor cannot pass what its partition certified, so the highest answer is
+where the partition is; stuck nodes cannot drag it down, however many of
+them there are. A majority of the ANSWERING set could: on a 4-validator BVN
+with one node stuck at 214, one paused and one missing one scrape, the
+answers are [1000, 214], their "majority" is 214, and the stuck node read
+caught up on its own height (review F2 on #4404). The max can fall only when
+the leading validators all miss a sample, which is why the count that
+answered is recorded with it. Followers are not in it: a follower is expected
+to lag, and the height its lag is measured against is the validators'
+(#4365). A node executing a divergent fork past its partition would raise
+it; that node is caught by anchor agreement, not by height.
 
 **Each node's own height, in its own column** (#4345): `exec.<container>.<partition>`,
 the block THAT node's executor last executed for that partition. A node that
@@ -84,26 +88,18 @@ def executed_from_rows(rows):
     return out
 
 
-def majority_height(values):
-    """The highest block a majority of these nodes have executed; None when
-    none reported. See the module docstring."""
-    xs = sorted((int(v) for v in values if v is not None), reverse=True)
-    if not xs:
-        return None
-    return xs[len(xs) // 2]
-
-
 def partition_heights(executed, validators):
-    """{partition: {"majority", "max", "reporting"}} over the VALIDATORS.
+    """{partition: {"height", "answered"}} over the VALIDATORS that answered.
 
-    `executed` is {container: {partition: block}}; `validators` the
-    containers that count. A partition no validator reported is absent."""
+    `executed` is {container: {partition: block}} for this sample;
+    `validators` the containers that count. `height` is the highest block
+    any of them executed, `answered` how many reported the partition. A
+    partition no validator reported is absent."""
     by = {}
     for c in validators:
         for p, b in (executed.get(c) or {}).items():
             by.setdefault(p, []).append(b)
-    return {p: {"majority": majority_height(v), "max": max(v), "reporting": len(v)}
-            for p, v in by.items()}
+    return {p: {"height": max(v), "answered": len(v)} for p, v in by.items()}
 
 
 def columns(followers=(), records=None):
@@ -121,17 +117,18 @@ def _fol_arg(s):
 
 
 def header(cols):
-    return ",".join(["dnHeightMajority", "heals", "cpuPct", "followerHeals", "dnHeightMax"]
+    return ",".join(["dnHeightMax", "heals", "cpuPct", "followerHeals", "dnValidatorsAnswered"]
                     + ["exec.%s.%s" % c for c in cols])
 
 
 def row(executed, validators, heals, cpu, fol_heals, cols):
-    """monitor.csv's row after `time`: the Directory's majority height, the
-    heal and CPU columns as before, the Directory's max height, then each
-    node's own executed block."""
+    """monitor.csv's row after `time`: the Directory's height (the highest
+    block any answering validator executed), the heal and CPU columns as
+    before, how many Directory validators answered, then each node's own
+    executed block."""
     dn = partition_heights(executed, validators).get("directory") or {}
     fmt = lambda v: "" if v is None else str(v)
-    return ",".join([fmt(dn.get("majority")), heals, cpu, fol_heals, fmt(dn.get("max"))]
+    return ",".join([fmt(dn.get("height")), heals, cpu, fol_heals, str(dn.get("answered", 0))]
                     + [fmt((executed.get(c) or {}).get(p)) for c, p in cols])
 
 

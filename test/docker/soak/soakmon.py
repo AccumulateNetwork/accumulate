@@ -1723,10 +1723,11 @@ NODE_STATE_ACTIVE = 2
 BOOTING_BOUND_S = 600
 NODESTATE_CSV_HEADER = ("time,node,role,partition,containerStarted,state,"
                         "startToActiveS,kind,executedBlock,partitionHeight,"
-                        "startToCaughtUpS")
+                        "startToCaughtUpS,validatorsAnswered")
 # How far behind its partition a node may be and still count as executing
-# with it (#4404): blocks, against the height a majority of the partition's
-# validators have executed (heights.py). soak.conf's REJOIN_MAX_BEHIND.
+# with it (#4404): blocks, against the highest block any of the partition's
+# validators that answered the sample executed (heights.py). soak.conf's
+# REJOIN_MAX_BEHIND.
 REJOIN_MAX_BEHIND = int(os.environ.get("REJOIN_MAX_BEHIND") or 10)
 _NODESTATE_TRACK = {}   # (node, partition) -> this start, whether it was seen not ACTIVE, when it became ACTIVE
 
@@ -1755,7 +1756,9 @@ def nodestate_from(per, now=None, disturbed=None, followers=()):
     disturbed = disturbed or {}
     fol = set(followers or ())
     # Each node's own executed block per partition, and the partition's
-    # height as the block a majority of its VALIDATORS executed (#4404). The
+    # height as the highest block any of its VALIDATORS that answered this
+    # sample executed (#4404; review F2: a majority of the answering set let
+    # a stuck node's own height be "the partition's"). The
     # gauge alone cannot say a node rejoined: it goes ACTIVE at the join's
     # first root match and is never demoted (join/state.go:857,
     # tracker.go:194), and run 20260924T052134Z read three failed starts as
@@ -1797,7 +1800,8 @@ def nodestate_from(per, now=None, disturbed=None, followers=()):
                 else:
                     why = "BOOTING %ds after its container started" % since
             ex = executed.get(node, {}).get(part)
-            ph = (part_h.get(part) or {}).get("majority")
+            ph = (part_h.get(part) or {}).get("height")
+            answered = (part_h.get(part) or {}).get("answered", 0)
             behind = None if ex is None or ph is None else ph - ex
             # ACTIVE by the gauge and not executing with its partition: the
             # state the gauge cannot show, and the one the board must.
@@ -1809,8 +1813,10 @@ def nodestate_from(per, now=None, disturbed=None, followers=()):
                          "measured": True, "value": v, "state": state,
                          "active": active, "alarm": alarm, "sinceStartS": since,
                          "why": why, "executed": ex, "partitionHeight": ph,
-                         "behind": behind, "lagging": lagging})
+                         "behind": behind, "lagging": lagging,
+                         "validatorsAnswered": answered})
     return {"rows": rows,
+            "partitionHeights": part_h,
             "allActive": bool(rows) and all(r["active"] for r in rows),
             "measured": any(r["measured"] for r in rows),
             "booting": sum(1 for r in rows if r["state"] == "BOOTING"),
@@ -1837,7 +1843,7 @@ def track_start_to_active(track, ns, started, now, max_behind=None):
                    interval): the figure is an upper bound only;
       caught-up  — the first sample of this start at which the gauge read
                    ACTIVE AND its executed block was within `max_behind` of
-                   the partition's majority height (#4404). The gauge alone
+                   the partition's height (#4404). The gauge alone
                    is not the reading: it goes ACTIVE at the join's first
                    root match, mid-join, and is never demoted;
       superseded — the start ended because the container started again:
@@ -1864,6 +1870,7 @@ def track_start_to_active(track, ns, started, now, max_behind=None):
         t["state"] = r["state"]
         t["executed"] = r.get("executed")
         t["partitionHeight"] = r.get("partitionHeight")
+        t["validatorsAnswered"] = r.get("validatorsAnswered")
         if t["activeAt"] is None:
             if not r["active"]:
                 t["sawInactive"] = True
@@ -1886,6 +1893,7 @@ def _start_row(key, t, now, kind):
             "startToCaughtUpS": (None if t.get("caughtUpAt") is None
                                  else round(max(0.0, t["caughtUpAt"] - t["started"]), 1)),
             "executedBlock": t.get("executed"), "partitionHeight": t.get("partitionHeight"),
+            "validatorsAnswered": t.get("validatorsAnswered"),
             "sinceStartS": round(max(0.0, now - t["started"]), 1), "kind": kind}
 
 
@@ -1906,11 +1914,11 @@ def pending_starts(track, now):
 def nodestate_csv_rows(events, ts):
     iso = lambda e: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e))
     f = lambda v: "" if v is None else v
-    return ["%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" % (
+    return ["%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" % (
         ts, e["node"], e["role"], e["partition"], iso(e["containerStarted"]),
         e["state"], f(e["startToActiveS"]), e["kind"],
         f(e.get("executedBlock")), f(e.get("partitionHeight")),
-        f(e.get("startToCaughtUpS"))) for e in events]
+        f(e.get("startToCaughtUpS")), f(e.get("validatorsAnswered"))) for e in events]
 
 
 def write_nodestate_csv(events, now=None):
@@ -3502,7 +3510,7 @@ const DEFS={
  nrssavg:"Resident memory of the node process, MiB, averaged over the fleet.", nrssmax:"Largest resident memory of any node, MiB.", nrssmin:"Smallest resident memory of any node, MiB.",
  nsact:"Rows of accumulate_node_state reading ACTIVE (value 2) at this sample, out of every row: one row per node AND per partition it runs, because a process runs the Directory beside its BVN and one can boot while the other serves. Only 2 is ACTIVE; a node that exports no gauge is a row that is not ACTIVE. Every node, the follower included.",
  nsboot:"Rows reading BOOTING (value 0) at this sample. BOOTING right after a restart or an add-follower is the join working; red only when a row has been BOOTING longer than the bound after its container started (State.StartedAt), which means the join is stuck.",
- nsrows:"Every row that is not ACTIVE, by node and partition, with its state by name and how long since its container started. A retired state (WAITING, COMPLETE) is named, not read as ACTIVE. No gauge reads `not measured`. A row the gauge calls ACTIVE is listed too when its executed block is more than REJOIN_MAX_BEHIND blocks under the block a majority of its partition's validators executed: the gauge goes ACTIVE at the join's first root match and is never demoted (#4404). Each start's time to ACTIVE, and to executing with its partition, is in nodestate.csv; the manifest's rejoin row adds anchor agreement from the log.",
+ nsrows:"Every row that is not ACTIVE, by node and partition, with its state by name and how long since its container started. A retired state (WAITING, COMPLETE) is named, not read as ACTIVE. No gauge reads `not measured`. A row the gauge calls ACTIVE is listed too when its executed block is more than REJOIN_MAX_BEHIND blocks under the highest block any of its partition's validators that answered the sample executed: the gauge goes ACTIVE at the join's first root match and is never demoted (#4404). Each start's time to ACTIVE, and to executing with its partition, is in nodestate.csv; the manifest's rejoin row adds anchor agreement from the log.",
  nstrand:"The largest count, on any one validator, of transactions it took responsibility for at Submit and neither certified itself, nor handed to a node that took it, nor had answered with a refusal — accepted minus certified minus relayed-taken minus relayed-refused, whole run. What is left had no answer of any kind. On a validator certification is its own job and it relays nothing, so this sits at the in-flight window, the rounds not yet certified; a number that climbs means submissions are dying in a queue nobody drains. In flight and stranded look alike at one sample: the manifest states the final value after the drain together with its trend, and that is the reading to judge on. Over the validators, the same membership as every other total in this panel.",
  nacc:"Transactions accepted at Submit across the validators, whole run — the denominator the number above is read against.",
  nstrandnode:"Which validator holds that worst count, plus the three impossible states (REPORTING-SPEC 1a): certified plus relayed-taken plus relayed-refused above what was accepted; more relayed than accepted; or any relay at all beside no accepted series. Causes, in order of likelihood: a certified count per header instead of once per transaction; a relay counted per attempt instead of once per submission at its final answer; or — and this one is a REAL EVENT, not a broken counter — a node PROMOTED mid-run that kept its own copy of a submission it had already relayed, which the contract forbids precisely because it lands here (#4364's own disturbance). Also shown: any relay outcome label this harness does not know, named rather than folded into one it does, because the relay's behaviour is still open for Paul (#4366).",

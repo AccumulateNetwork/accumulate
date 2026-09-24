@@ -65,16 +65,23 @@ acc-bvn1-val1 — answered it, and on run `20260924T052134Z` that was the node
 chaos restarted first: the column sat at 207 from 05:26:19 to 05:27:24 while
 the other eleven Directory nodes went 215 → 323.
 
-- **A partition's height is the highest block a majority of its validators
-  have executed**: their `accumulate_node_executed_block` for the partition,
-  sorted from highest, at position ⌊n/2⌋ — so ⌊n/2⌋+1 of them have executed
-  it. One node ahead cannot raise it and one stuck node cannot lower it.
-  Followers are not in it. The max is recorded beside it.
+- **A partition's height is the highest block any of its validators that
+  answered the sample executed** (their `accumulate_node_executed_block` for
+  the partition), recorded with **how many answered**. An executor cannot
+  pass what its partition certified, so the highest answer is where the
+  partition is, and stuck nodes cannot drag it down however many there are.
+  A majority of the answering set could (review F2): a 4-validator BVN with
+  one node stuck at 214, one paused and one missing a scrape answers
+  [1000, 214], whose "majority" is 214, and the stuck node read caught up
+  against its own height. The max falls only if the leading validators all
+  miss a sample, which the answered count shows. Followers are not in it. A
+  node executing a divergent fork past its partition would raise it; anchor
+  agreement, not height, catches that node.
 - **Each node's own executed block is its own column**, per partition. A node
   that did not answer the scrape is an empty cell, never 0.
 
-`monitor.csv` (heights.py): `time,dnHeightMajority,heals,cpuPct,followerHeals,
-dnHeightMax,exec.<container>.<partition>…` — one `exec.` column per partition
+`monitor.csv` (heights.py): `time,dnHeightMax,heals,cpuPct,followerHeals,
+dnValidatorsAnswered,exec.<container>.<partition>…` — one `exec.` column per partition
 of every validator and of every follower the run has (never a declared
 follower the run does not start, #4389). The column was named `dnHeight` and
 held the one-node ledger index until #4404; the two are different quantities
@@ -354,7 +361,8 @@ bound and "boot time not measured". A row with no start after the launch
 says so and claims nothing about starts.
 
 `nodestate.csv` carries, beside the columns above, `executedBlock`,
-`partitionHeight` (the majority height) and `startToCaughtUpS`, read at each
+`partitionHeight` (the highest block any answering validator of the partition
+executed), `startToCaughtUpS` and `validatorsAnswered`, read at each
 row's sample, and two more kinds: `caught-up`, the first sample ACTIVE and
 within the bound, and `superseded`, a start's last reading when its container
 started again. At exit the monitor writes a `final` row for **every** start,
@@ -511,4 +519,4 @@ was rewritten to purge previously committed raw data — do not reintroduce it.
 | 6 provenance | met |
 | 7 observation | met, as of this branch |
 | 3 node-state row | met by the harness (#4364): board, `nodestate.csv`, manifest; a node without the gauge reads `— not measured`. Since #4404 the manifest judges rejoined (gauge, executed height, anchor agreement), not ACTIVE |
-| 1b partition height | met, as of #4404: `monitor.csv`'s Directory height is the majority over its validators, and every node's executed block has its own column |
+| 1b partition height | met, as of #4404: `monitor.csv`'s Directory height is the max over the validators that answered, with the count that answered, and every node's executed block has its own column |

@@ -342,14 +342,43 @@ class ThePartitionsHeight(unittest.TestCase):
     def test_the_restarted_node_does_not_hold_the_column(self):
         for others in (215, 275, 323):
             got = heights.partition_heights(self.executed(207, others), VALS)["directory"]
-            self.assertEqual(others, got["majority"])
+            self.assertEqual({"height": others, "answered": 12}, got)
 
-    def test_a_majority_not_the_fastest_and_not_the_slowest(self):
-        self.assertEqual(5, heights.majority_height([1, 2, 5, 5, 9]))
-        self.assertEqual(5, heights.majority_height([5, 5, 5, 1000]))
-        self.assertEqual(4, heights.majority_height([4, 4, 5, 1]),
-                         "four nodes: three have executed 4, two have executed 5")
-        self.assertIsNone(heights.majority_height([]))
+    def bvn1(self, **heights_by_node):
+        """BVN1's four validators; a node absent from the kwargs did not answer."""
+        per = {}
+        for c in ("acc-bvn1-val1", "acc-bvn1-val2", "acc-bvn1-val3", "acc-bvn1-val4"):
+            k = c.replace("-", "_")
+            if k in heights_by_node:
+                per[c] = scrape({"directory": 2, "bvn1": 2},
+                                {"directory": 1000, "bvn1": heights_by_node[k]})
+        return soakmon.nodestate_from(per, now=T0)
+
+    def row_of(self, ns, node):
+        return next(r for r in ns["rows"] if r["node"] == node and r["partition"] == "bvn1")
+
+    def test_a_stuck_node_is_not_the_partition_when_others_are_missing(self):
+        """Review F2 case F: val1 stuck at 214, val2 paused, val3 missed the
+        scrape. The majority of the answering set [1000, 214] was 214 and
+        val1 read caught up against its own height."""
+        ns = self.bvn1(acc_bvn1_val1=214, acc_bvn1_val4=1000)
+        r = self.row_of(ns, "acc-bvn1-val1")
+        self.assertEqual(1000, r["partitionHeight"])
+        self.assertEqual(786, r["behind"])
+        self.assertTrue(r["lagging"])
+        self.assertEqual(2, r["validatorsAnswered"])
+
+    def test_two_stuck_of_four_are_both_flagged(self):
+        ns = self.bvn1(acc_bvn1_val1=214, acc_bvn1_val2=214, acc_bvn1_val3=1000, acc_bvn1_val4=1000)
+        self.assertEqual({"acc-bvn1-val1", "acc-bvn1-val2"},
+                         {r["node"] for r in ns["rows"] if r.get("lagging")})
+
+    def test_the_height_does_not_go_backwards_as_the_answering_set_shrinks(self):
+        seen = [heights.partition_heights({c: {"bvn1": b} for c, b in zip(VALS[:4], xs)},
+                                          VALS[:4])["bvn1"]["height"]
+                for xs in ([1000, 1000, 214, 1000], [1000, 214], [1000, 1000, 214, 214],
+                           [1010, 214])]
+        self.assertEqual([1000, 1000, 1000, 1010], seen)
 
     def test_the_row_carries_every_node_in_its_own_column(self):
         cols = heights.columns(followers=["acc-bvn3-fol1"])
@@ -359,8 +388,8 @@ class ThePartitionsHeight(unittest.TestCase):
         body = heights.row(ex, VALS, "154", "600", "0", cols).split(",")
         self.assertEqual(len(head), len(body))
         got = dict(zip(head, body))
-        self.assertEqual("323", got["dnHeightMajority"])
         self.assertEqual("323", got["dnHeightMax"])
+        self.assertEqual("12", got["dnValidatorsAnswered"])
         self.assertEqual("207", got["exec.acc-bvn1-val1.directory"])
         self.assertEqual("214", got["exec.acc-bvn1-val1.bvn1"])
         self.assertEqual("", got["exec.acc-bvn3-fol1.bvn3"],
