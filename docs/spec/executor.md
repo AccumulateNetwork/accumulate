@@ -832,7 +832,10 @@ next demotion, and from its first block for a node that took nothing from a
 peer — a node that never joined has no state machine at all and serves as
 `ACTIVE` (#4368). `BOOTING` means everything below: reads refused with
 `NotReady`, the sequencer serving nothing, submissions relayed unexamined, no
-anchor signed or dispatched, and the gauge reading `BOOTING`. `COMPLETE` and `WAITING`, which
+anchor signed or dispatched except for the blocks the handoff itself produces
+— those are the network's blocks, executed from the state it matched and the
+groups it collected, and their anchors are the node's to sign — and the gauge
+reading `BOOTING` until that handoff succeeds. `COMPLETE` and `WAITING`, which
 named a backfilled history, are retired: nothing reached them and nothing
 could. What a joined node cannot answer *for a block it did not execute* —
 an entry the sequencer is asked for from before it joined — it refuses per

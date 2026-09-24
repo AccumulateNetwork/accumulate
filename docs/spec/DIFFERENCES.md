@@ -651,8 +651,13 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   - **Anchors are withheld by collecting mode, not by the machine.** A
     `BOOTING` node signs and dispatches no anchor because the join has it in
     collecting mode and a collecting node executes nothing; nothing in the
-    conductor asks the machine. The two go together on every path the join
-    takes today.
+    conductor asks the machine. The one path where they part is the handoff
+    window: `performHandoffAt` produces the buffered groups, anchors and all,
+    before `Promote(q)` runs (#4385 review F1; the re-sync test counts one
+    BOOTING-signed anchor per handoff), which is what the spec now says. Also
+    (F2): the `Demote` on a failed handoff is a no-op on `PulledState`, since a
+    node in a handoff is never ACTIVE; the transition step 5 describes cannot
+    occur and the call is kept as a guard.
   - **The simulator gates only the querier.** Its sequencer is ungated and a
     submission to any simulator node goes to the whole partition through the
     hub (above), so the simulator test cannot show a relay; the relay from a
