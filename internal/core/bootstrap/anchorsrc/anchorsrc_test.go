@@ -1201,3 +1201,77 @@ func TestAStalledReadSaysWhereAndWhoWasAsked(t *testing.T) {
 		require.Len(t, observed, 30, "notReady=%v: blocks 110-139", notReady)
 	}
 }
+
+// (#4419, review F1) The stall ends wherever the cursor passes its entry, not
+// only on a page taken whole. Two peers that joined by pull with
+// complementary holes (#4400's shape, twice) hold every page at a hole and
+// the other serves it: the read advances on held pages alone, and it used to
+// end with the cursor 65 past the entry the stall still named.
+func TestAStallEndsWhenTheCursorPassesItOnHeldPages(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+	a := f.authority(t)
+	pool := dn().JoinPath(protocol.AnchorPool)
+
+	const n = 120
+	var signed, bare []*api.MessageRecord[messaging.Message]
+	for i := 0; i < n; i++ {
+		rec := f.anchor(t, anchorOpts{
+			source: bvn0(), destination: dn(), block: uint64(1000 + i),
+			root: root(byte(i)), signers: []int{0, 1, 2},
+		})
+		signed = append(signed, rec)
+		stripped := *rec
+		stripped.Signatures = new(api.RecordRange[*api.SignatureSetRecord])
+		if i < 10 {
+			bare = append(bare, rec)
+		} else {
+			bare = append(bare, &stripped)
+		}
+	}
+	odd, even := map[int]api.Record{}, map[int]api.Record{}
+	for i := 11; i < n; i++ {
+		hole := &api.ErrorRecord{Value: errors.NotFound.With("message not found")}
+		if i%2 == 1 {
+			odd[i] = hole
+		} else {
+			even[i] = hole
+		}
+	}
+
+	// Read 1: every peer serves entry 10 bare. Held at 10.
+	ring := &ringQuerier{peers: []api.Querier{
+		paged{&poolQuerier{pool: pool, entries: bare}},
+		paged{&poolQuerier{pool: pool, entries: bare}},
+	}}
+	s, err := New(ring, pool, bvn0(), a)
+	require.NoError(t, err)
+	s.PageSize = 8
+	observed := map[uint64]bool{}
+	s.OnAnchor = func(_ *url.URL, block uint64, _ [32]byte) { observed[block] = true }
+	require.NoError(t, s.Read(ctx))
+	st, ok := s.Stalled()
+	require.True(t, ok)
+	require.Equal(t, uint64(10), st.Entry)
+
+	// Read 2: the peers now hold 10 signed and have complementary holes
+	// from 11 on. Every page is held at a hole; the read advances anyway.
+	ring.peers = []api.Querier{
+		paged{&poolQuerier{pool: pool, entries: signed, holes: odd}},
+		paged{&poolQuerier{pool: pool, entries: signed, holes: even}},
+	}
+	require.NoError(t, s.Read(ctx))
+	var last uint64
+	for b := range observed {
+		if b > last {
+			last = b
+		}
+	}
+	st, ok = s.Stalled()
+	t.Logf("read 2: roots through block %d (entry %d), %d page calls; stalled=%v at entry %d", last, last-1000, ring.pages, ok, st.Entry)
+	require.Greater(t, last, uint64(1010), "precondition: the read moved past entry 10")
+	if ok {
+		require.Greater(t, st.Entry, last-1000,
+			"the stall names entry %d while the cursor has read through entry %d", st.Entry, last-1000)
+	}
+}

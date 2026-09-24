@@ -476,6 +476,7 @@ func (s *Source) readLocked(ctx context.Context) error {
 				holds, asked = 0, nil
 			}
 			s.next = at
+			s.passed()
 			holds++
 			asked = append(asked, s.lastAsked()...)
 			if holds >= holdLimit {
@@ -486,9 +487,7 @@ func (s *Source) readLocked(ctx context.Context) error {
 		}
 		s.next = start + uint64(len(rec.Records))
 		holds, asked = 0, nil
-		if s.stall != nil && s.next > s.stall.Entry {
-			s.stall = nil
-		}
+		s.passed()
 
 		if uint64(len(rec.Records)) < count {
 			return nil
@@ -536,6 +535,14 @@ func (s *Source) Stalled() (Stall, bool) {
 	st := *s.stall
 	st.Asked = append([]string(nil), st.Asked...)
 	return st, true
+}
+
+// passed ends the stall once the cursor is past its entry, however it got
+// there: a page taken whole, or one taken up to a later hole (review F1).
+func (s *Source) passed() {
+	if s.stall != nil && s.next > s.stall.Entry {
+		s.stall = nil
+	}
 }
 
 func (s *Source) stalled(entry uint64, asked []string, err error) {
