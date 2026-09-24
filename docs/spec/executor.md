@@ -1191,6 +1191,16 @@ one thing a per-block record must never do. An empty block has no entry.
     answers "already delivered" when its number comes up and executes
     nothing: a stream frozen with every number held and nothing missing
     (#4423).
+13. **The state tree holds a leaf only for an account that exists.** An
+    account exists when it has main state. A write that touches only an
+    account's bookkeeping — the votes and payments recorded against a
+    transaction, a signature recorded before execution finds the principal
+    missing — does not create an account, and the block inserts no leaf for
+    it. Clearing a record that is already empty is not a write. Before this
+    rule, every transaction that failed against a missing principal left a
+    leaf hashing to nothing (`db56114e…`), identical for every such account:
+    state no peer could serve with a body, which the join then had to pull
+    and trust on peers' word (#4397, #4406, #4437).
 
 ### Versioning
 
