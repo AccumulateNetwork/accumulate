@@ -1023,12 +1023,20 @@ type messages struct {
 	// kept is what the fetch keeps, by the key it is stored under: each
 	// entry's message, and the transactions stored forms referred to.
 	kept map[[32]byte]messaging.Message
+
+	// signatures are the anchor signatures on the signature chains taken,
+	// indexed under their transactions when the account settles (#4416).
+	signatures []signature
+
+	// executed are the transactions this fetch took as main chain entries:
+	// the anchors that executed.
+	executed map[[32]byte]bool
 }
 
 // newMessages proves messages served by src; local is the node's own store,
 // consulted first for a transaction a stored form refers to.
 func newMessages(ctx context.Context, src Source, local *database.Batch) *messages {
-	return &messages{ctx: ctx, src: src, local: local, txns: map[[32]byte]*protocol.Transaction{}, kept: map[[32]byte]messaging.Message{}}
+	return &messages{ctx: ctx, src: src, local: local, txns: map[[32]byte]*protocol.Transaction{}, kept: map[[32]byte]messaging.Message{}, executed: map[[32]byte]bool{}}
 }
 
 // behind is the message the peer served behind e, if it is e's.
@@ -1064,7 +1072,72 @@ func (m *messages) behind(e *api.ChainEntryRecord[api.Record]) (messaging.Messag
 	if h := full.Hash(); h != e.Entry {
 		return nil, errors.Conflict.WithFormat("the peer served a %v that hashes to %x", msg.Type(), h[:4])
 	}
-	return msg, nil
+	if ba, ok := full.(*messaging.BlockAnchor); ok {
+		if err := checkAnchorSignature(ba); err != nil {
+			return nil, err
+		}
+	}
+	return storedForm(msg, full), nil
+}
+
+// storedForm is the form of full the node keeps, built here and not taken
+// from the peer: where the peer's stored form refers to a transaction by
+// hash, full's transaction is referred to by hash under the principal it
+// names, as the executor's storedForm refers to it. A reference is replaced
+// whole when the message is proven (expand), so its header is covered by no
+// hash, and keeping the served one would keep the peer's word for it
+// (#4416 review F3).
+func storedForm(served, full messaging.Message) messaging.Message {
+	switch f := full.(type) {
+	case *messaging.TransactionMessage:
+		s, ok := served.(*messaging.TransactionMessage)
+		if !ok || s.Transaction == nil || s.Transaction.Body == nil || s.Transaction.Body.Type() != protocol.TransactionTypeRemote {
+			return full
+		}
+		ref := new(protocol.Transaction)
+		ref.Header.Principal = f.Transaction.Header.Principal
+		ref.Body = &protocol.RemoteTransaction{Hash: *(*[32]byte)(f.Transaction.GetHash())}
+		return &messaging.TransactionMessage{Transaction: ref}
+
+	case *messaging.SequencedMessage:
+		s, ok := served.(*messaging.SequencedMessage)
+		if !ok {
+			return full
+		}
+		c := *f
+		c.Message = storedForm(s.Message, f.Message)
+		return &c
+
+	case *messaging.SyntheticMessage:
+		s, ok := served.(*messaging.SyntheticMessage)
+		if !ok {
+			return full
+		}
+		c := *f
+		c.Message = storedForm(s.Message, f.Message)
+		return &c
+
+	case *messaging.BadSyntheticMessage:
+		s, ok := served.(*messaging.BadSyntheticMessage)
+		if !ok {
+			return full
+		}
+		c := *f
+		c.Message = storedForm(s.Message, f.Message)
+		return &c
+
+	case *messaging.BlockAnchor:
+		s, ok := served.(*messaging.BlockAnchor)
+		if !ok {
+			return full
+		}
+		c := *f
+		c.Anchor = storedForm(s.Anchor, f.Anchor)
+		return &c
+
+	default:
+		return full
+	}
 }
 
 // expand is msg with every transaction it refers to by hash put back.
@@ -1194,7 +1267,7 @@ func (m *messages) store(batch *database.Batch) error {
 			return fmt.Errorf("store message %x: %w", h[:4], err)
 		}
 	}
-	return nil
+	return storeSignatures(batch, m.signatures, m.executed)
 }
 
 // carriesMessages is whether a chain's entries are the hashes of messages the
@@ -1316,6 +1389,19 @@ func pullChainEntries(ctx context.Context, src Source, bodies *messages, dst *da
 			// Under the entry, not under the message's own hash: a stored
 			// form refers to its transaction and hashes to something else.
 			bodies.kept[*(*[32]byte)(e)] = msgs[i]
+			if c.Name == "main" {
+				bodies.executed[*(*[32]byte)(e)] = true
+			}
+			if c.Name == "signature" {
+				// Proven by behind; expanding again reads what it cached.
+				full, err := bodies.expand(msgs[i])
+				if err != nil {
+					return fmt.Errorf("entry %d: %w", from+int64(i), err)
+				}
+				if sig, ok := signatureOf(u, uint64(from)+uint64(i), msgs[i], full); ok {
+					bodies.signatures = append(bodies.signatures, sig)
+				}
+			}
 		}
 	}
 

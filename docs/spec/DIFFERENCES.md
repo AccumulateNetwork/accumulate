@@ -1472,6 +1472,20 @@ needs the root chain's span across blocks, which the cache does not keep, and
 is what `TestAnchorQuorumStuckRecovery` expects (skipped with this reason).
 `TestAnchorRangeRecovery` runs on the re-attestation form.
 
+**An anchor executed on a collection proof would have no signature in its
+history** (#4416). `BlockAnchor.process` records the copy it executes on the
+pool's signature chain whether it carries a signature or a proof
+(`msg_block_anchor.go`), so such an anchor's history holds one entry with no
+signature: every node would serve it, and every reader (`anchorsrc.verify`)
+would refuse it as signed by none of the set and pass it — a root that no
+joiner can take, on every node, and no stall. The path is unreachable in this
+tree and nothing is built for it: no production code constructs a
+`BlockAnchor` with a `Proof` (the tools' anchor healer, `internal/core/healing`,
+builds signed copies only), and no test does; only a client submitting one
+past Kourou would reach it (`check` accepts it). The pull keeps such an entry
+as the chain holds it (executor.md "Sync" §3). Whoever builds the proof form
+above decides what a reader takes as its authorization.
+
 **Size**: medium — the root chain span in the cache, bounded by the horizon,
 and the proof built from it.
 

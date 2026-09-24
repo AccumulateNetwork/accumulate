@@ -10,7 +10,6 @@ import (
 	"context"
 	"math/big"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
@@ -52,12 +51,12 @@ import (
 //
 // The control is the same read against a peer that executed every block.
 //
-// That is the complete fix's done-when, and the complete fix is #4416: the
-// pull brings the pool's signature history. Until it lands the joined node
-// refuses those anchors rather than serving them unsigned, which is what
-// TestAJoinedNodeRefusesTheAnchorsItHoldsWithoutSignatures holds (#4413).
+// #4416 is the fix: the signature chain is pulled with the message behind each
+// entry (#4400), and the pull now writes beside each anchor signature what
+// executing it wrote -- the history index, the signer, the sequenced message
+// and the cause -- so the joined node serves every anchor in its pulled range
+// signed, over the sequence the signatures cover.
 func TestAJoinedNodeServesTheAnchorsItPulledWithTheirSignatures(t *testing.T) {
-	t.Skip("#4416: the pull does not bring an anchor's signature history, so a joined node refuses its pulled range (#4413) rather than serving it signed")
 
 	const joiner = 1
 	sim, p, r, q := joinADirectoryNodeByPull(t)
@@ -94,13 +93,11 @@ func TestAJoinedNodeServesTheAnchorsItPulledWithTheirSignatures(t *testing.T) {
 	require.Empty(t, refusedBy(0), "control: a Directory node that executed every block serves every anchor with its signatures")
 
 	refused := refusedBy(joiner)
-	var unsigned []uint64
-	for block, msg := range refused {
-		if strings.Contains(msg, "the anchor carries no signatures") {
-			unsigned = append(unsigned, block)
-		}
+	var blocks []uint64
+	for block := range refused {
+		blocks = append(blocks, block)
 	}
-	sort.Slice(unsigned, func(i, j int) bool { return unsigned[i] < unsigned[j] })
+	sort.Slice(blocks, func(i, j int) bool { return blocks[i] < blocks[j] })
 	// Where the query API reads an anchor's signatures from, on the joined
 	// node and on the control, for every pool entry: the transaction status
 	// (V1: AnchorSigners, Signers) and the pool's per-transaction history (V2).
@@ -130,8 +127,12 @@ func TestAJoinedNodeServesTheAnchorsItPulledWithTheirSignatures(t *testing.T) {
 		t.Logf("node %d: dn.acme/anchors has %d entries; %d have a status naming signers, %d have a signature history", node, e, s, h)
 	}
 
-	require.Empty(t, unsigned,
-		"a joined Directory node serves %d BVN0 anchors with no signatures -- the ones appended by blocks it did not execute (R=%d..Q=%d); the pull brought the entries and their bodies and nothing a signature is read from", len(unsigned), r, q)
+	// Every refusal, not only "no signatures": with the history and without
+	// the sequence it covers, the joined node served each of these anchors
+	// with signatures over a sequence it could not name, and the reader
+	// counted none of them (#4416).
+	require.Empty(t, refused,
+		"a joined Directory node serves %d BVN0 anchors (blocks %v) that do not verify -- the ones appended by blocks it did not execute (R=%d..Q=%d)", len(blocks), blocks, r, q)
 }
 
 // joinADirectoryNodeByPull restarts Directory node 1, runs the network on
