@@ -23,13 +23,15 @@ import (
 // Collecting mode (executor spec, "Sync", step 1; #4292).
 //
 // A node that is joining — and a node that restarted, which is the same thing
-// (#4205) — subscribes to consensus and takes every committed block from then
-// on into TWO places: staging, collected rather than executed, and a buffer,
-// in the order consensus committed them. It executes nothing. When the join
-// has pulled the state and matched the root at a block Q, the buffered groups
+// (#4205) — subscribes to consensus and keeps every committed block from then
+// on in a buffer, in the order consensus committed them. It executes nothing.
+// When the join has pulled the state and matched the root at a block Q, the
+// buffered groups through the one that is Q + 1 are taken into staging,
+// collected rather than executed (StageThrough), and the buffered groups
 // committed at a leader round above the one Q's system ledger records are
-// produced as blocks Q + 1, Q + 2, … in order, and the node is a validator
-// from there (#4294, #4362).
+// produced as blocks Q + 1, Q + 2, … in order; the node is a validator from
+// there (#4294, #4362). The groups after Q + 1 reach staging only by being
+// produced, as they reach a peer's (#4398).
 //
 // Nothing here advances the executor's block index, saves a checkpoint,
 // records a state hash or publishes a block event: none of those happened.
@@ -43,6 +45,11 @@ type CollectedGroup struct {
 	Batches  []*types.Batch
 	Leader   *types.Certificate
 	IsLeader bool
+
+	// staged says the join has taken this group into staging
+	// (StageThrough). It travels with the group, so a group put back in the
+	// buffer by a failed handoff is not taken in again (#4401).
+	staged bool
 }
 
 // Round is the leader round this group was committed at: the buffer's order,
@@ -88,28 +95,40 @@ func (g *CollectedGroup) bytes() int {
 }
 
 // StartCollecting puts the service in collecting mode: committed groups are
-// taken into staging and buffered instead of executed.
+// buffered instead of executed.
 //
-// Calling it while already collecting changes nothing. The daemon starts
+// Calling it while already collecting keeps the buffer. The daemon starts
 // collecting before the service starts and the join starts collecting when it
 // runs; emptying the buffer on the second call would drop the groups
 // committed between the two, and those blocks would then be in neither the
 // buffer nor the state (#4351).
+//
+// Unless the buffer has overrun: then it holds nothing that can be handed off,
+// and a new buffer starts from the next committed group (#4407). The groups
+// committed before it — refused by the bound, or thrown away here — are in no
+// buffer, so the handoff refuses a state that does not hold all of them.
 func (s *Service) StartCollecting() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.collecting {
+	switch {
+	case s.collecting && !s.bufferOverrun:
 		return
+	case s.collecting:
+		s.lostThrough = s.collectedThrough
+		s.logger.Info("The join buffer overran; collecting again from the next committed group",
+			"partition", s.config.Partition.ID, "discarded", len(s.buffer), "lostThroughRound", s.lostThrough)
+	default:
+		s.collectedThrough = 0
+		s.lostThrough = 0
 	}
 	s.collecting = true
 	s.bufferOverrun = false
 	s.buffer = nil
 	s.bufferBytes = 0
-	s.stagingReady = false
 }
 
-// Collecting reports whether this node is joining: collecting committed
-// blocks into staging and executing none of them.
+// Collecting reports whether this node is joining: buffering committed
+// blocks and executing none of them.
 func (s *Service) Collecting() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -169,8 +188,9 @@ type handoffRequest struct {
 // q + 1, every buffered group committed at a leader round above the one q's
 // system ledger records. It blocks until that is done.
 //
-// The executor's state is q's state — the pull put it there — and staging has
-// been settled at q (#4292), so the next block this node executes is q + 1,
+// The executor's state is q's state — the pull put it there — and staging
+// holds the buffered groups through q + 1 (StageThrough) settled at q (#4292),
+// so the next block this node executes is q + 1,
 // which is exactly what its peers execute next. From there it is a validator
 // like any other (executor spec, "Sync", step 5).
 func (s *Service) Handoff(q uint64) error {
@@ -211,15 +231,27 @@ func (s *Service) performHandoff(q uint64) error {
 		return errors.NotReady.WithFormat("%s: the join buffer overran; the join must start again", s.config.Partition.ID)
 	}
 
+	round, err := s.pulledRound(q)
+	if err != nil {
+		return err
+	}
+	return s.performHandoffAt(q, round)
+}
+
+// pulledRound reads the system ledger of the state the join pulled and
+// returns the leader round that committed block q. A ledger that names
+// another block is not the state q is (Conflict); one that records no round
+// says nothing about which collected group is the next block (NotReady).
+func (s *Service) pulledRound(q uint64) (types.Round, error) {
 	var ledger *protocol.SystemLedger
 	err := s.config.Database.View(func(batch *database.Batch) error {
 		return batch.Account(protocol.PartitionUrl(s.config.Partition.ID).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
 	})
 	if err != nil {
-		return errors.UnknownError.WithFormat("%s: read the pulled state's system ledger: %w", s.config.Partition.ID, err)
+		return 0, errors.UnknownError.WithFormat("%s: read the pulled state's system ledger: %w", s.config.Partition.ID, err)
 	}
 	if ledger.Index != q {
-		return errors.Conflict.WithFormat("%s: cannot hand off at block %d: the state's system ledger is block %d",
+		return 0, errors.Conflict.WithFormat("%s: cannot hand off at block %d: the state's system ledger is block %d",
 			s.config.Partition.ID, q, ledger.Index)
 	}
 	if ledger.LeaderRound == 0 {
@@ -227,9 +259,53 @@ func (s *Service) performHandoff(q uint64) error {
 		// about which collected group is the next block. Counting groups
 		// from where the node stood cannot stand in for it (#4351, #4362);
 		// the join waits for a state that records one.
-		return errors.NotReady.WithFormat("%s: the state at block %d records no leader round", s.config.Partition.ID, q)
+		return 0, errors.NotReady.WithFormat("%s: the state at block %d records no leader round", s.config.Partition.ID, q)
 	}
-	return s.performHandoffAt(q, types.Round(ledger.LeaderRound))
+	return types.Round(ledger.LeaderRound), nil
+}
+
+// checkRound says whether the buffer can be handed off at block q, whose
+// state was committed at round: the refusals performHandoffAt describes. It
+// is called with the lock held.
+func (s *Service) checkRound(q uint64, round types.Round) error {
+	if !s.collecting {
+		return errors.NotAllowed.WithFormat("%s: not joining", s.config.Partition.ID)
+	}
+	if s.bufferOverrun {
+		return errors.NotReady.WithFormat("%s: the join buffer overran; the join must start again", s.config.Partition.ID)
+	}
+	// The node stands at the round of the last block it produced, or, once
+	// its buffer started again after an overrun, at the last round it lost:
+	// the groups up to there are in no buffer (#4407).
+	stood := s.lastLeaderRound
+	if s.lostThrough > stood {
+		stood = s.lostThrough
+	}
+	if round < stood {
+		return errors.Conflict.WithFormat("%s: cannot hand off at block %d (round %d), behind round %d where this node's buffer starts",
+			s.config.Partition.ID, q, round, stood)
+	}
+
+	reached := stood
+	found := round == stood
+	for _, g := range s.buffer {
+		r := g.Round()
+		if r > reached {
+			reached = r
+		}
+		if r == round {
+			found = true
+		}
+	}
+	if round > reached {
+		return errors.NotReady.WithFormat("%s: the state is block %d at round %d and this node has collected only to round %d",
+			s.config.Partition.ID, q, round, reached)
+	}
+	if !found {
+		return errors.Conflict.WithFormat("%s: the state is block %d at round %d, and this node's consensus committed no leader at that round",
+			s.config.Partition.ID, q, round)
+	}
+	return nil
 }
 
 // performHandoffAt leaves collecting mode at block q, whose system ledger
@@ -255,47 +331,18 @@ func (s *Service) performHandoff(q uint64) error {
 // A round above that one that no buffered group was committed at is a state
 // this node's consensus did not produce, and is refused too (Conflict).
 //
-// A group that fails to produce stops the handoff with the buffer already
-// taken: the node is no longer collecting and no longer joining, and the
-// groups that were not produced are gone. That is a fault, not a state to
-// recover from in place — the node must join again — so it is returned to the
-// caller and logged as an error rather than swallowed.
+// A group that fails to produce stops the handoff there (executor spec,
+// "Sync", step 5; #4401). The groups before it were produced and stand; the
+// node goes back to collecting mode at the last block it produced, holding
+// the groups it did not produce, in order, so a committed group arriving from
+// here is buffered and neither executed nor anchored (#4402), and the join
+// can sync again and hand off again. The error is returned so the join
+// counts the attempt.
 func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 	s.mu.Lock()
-	if !s.collecting {
+	if err := s.checkRound(q, round); err != nil {
 		s.mu.Unlock()
-		return errors.NotAllowed.WithFormat("%s: not joining", s.config.Partition.ID)
-	}
-	if s.bufferOverrun {
-		s.mu.Unlock()
-		return errors.NotReady.WithFormat("%s: the join buffer overran; the join must start again", s.config.Partition.ID)
-	}
-	if round < s.lastLeaderRound {
-		s.mu.Unlock()
-		return errors.Conflict.WithFormat("%s: cannot hand off at block %d (round %d), behind round %d where this node stood",
-			s.config.Partition.ID, q, round, s.lastLeaderRound)
-	}
-
-	reached := s.lastLeaderRound
-	found := round == s.lastLeaderRound
-	for _, g := range s.buffer {
-		r := g.Round()
-		if r > reached {
-			reached = r
-		}
-		if r == round {
-			found = true
-		}
-	}
-	if round > reached {
-		s.mu.Unlock()
-		return errors.NotReady.WithFormat("%s: the state is block %d at round %d and this node has collected only to round %d",
-			s.config.Partition.ID, q, round, reached)
-	}
-	if !found {
-		s.mu.Unlock()
-		return errors.Conflict.WithFormat("%s: the state is block %d at round %d, and this node's consensus committed no leader at that round",
-			s.config.Partition.ID, q, round)
+		return err
 	}
 
 	// The groups at or below the round are in the state; the rest, in the
@@ -321,6 +368,7 @@ func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 	for i, g := range groups {
 		err := s.produce(g.Certs, g.Batches, g.Leader, g.IsLeader, g.payloadEntries(), false)
 		if err != nil {
+			s.resumeCollecting(groups[i:])
 			return errors.UnknownError.WithFormat("produce buffered group %d of %d (round %d): %w",
 				i+1, len(groups), g.Round(), err)
 		}
@@ -333,6 +381,25 @@ func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 	return nil
 }
 
+// resumeCollecting puts the service back into collecting mode after a failed
+// handoff, with rest — the groups it did not produce — as the buffer. The
+// block index and leader round stay where the last produced block put them:
+// a block that failed to produce was not committed.
+func (s *Service) resumeCollecting(rest []*CollectedGroup) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.collecting = true
+	s.bufferOverrun = false
+	s.buffer = append([]*CollectedGroup(nil), rest...)
+	s.bufferBytes = 0
+	for _, g := range s.buffer {
+		s.bufferBytes += g.bytes()
+	}
+	s.logger.Error("Handoff failed; collecting again with the groups not produced",
+		"partition", s.config.Partition.ID, "block", s.lastBlockIndex,
+		"round", s.lastLeaderRound, "buffered", len(s.buffer))
+}
+
 // payloadEntries is how many batches the group's certificates named: what
 // says whether the block it produces is empty.
 func (g *CollectedGroup) payloadEntries() int {
@@ -343,22 +410,33 @@ func (g *CollectedGroup) payloadEntries() int {
 	return n
 }
 
-// ApplyStaging runs `load`, then applies to staging every block this node has
-// buffered since it started collecting, in order, and every one that arrives
-// after. No peer's staging is loaded: the join passes a load that does
-// nothing, and staging is what this node collected from consensus (executor
-// spec, "Sync", step 1; #4362 deleted the staging API).
+// StageThrough takes into staging, in the order consensus committed them, the
+// buffered groups through the one that is block `block`, and none after it
+// (executor spec, "Sync", step 5; #4398). The join calls it with Q + 1 once
+// the pulled state matches at Q, before it asks whether Q + 1 has a gap: the
+// gap check reads what Q + 1 carries, and the groups after Q + 1 reach staging
+// only by being produced, as they reach a peer's. A peer executing Q + 1 holds
+// nothing that arrived in Q + 2; a joining node whose staging did executed a
+// longer run than its peers and a different block (run 20260924T052134Z).
+//
+// The group that is Q + 1 is the first buffered group committed at a leader
+// round above the one Q's system ledger records — the handoff's rule. Staging
+// only grows: the groups already taken in are not taken in again, and a later
+// call for a later block takes in the groups between.
+//
+// NotReady: the group that is Q + 1 has not been collected yet, or the state
+// records no round; Conflict: the state is not one this node can hand off
+// from. Either leaves staging and the buffer as they are.
 //
 // It runs in the block production loop, like the handoff, because that is
-// where the buffer is written: loading beside it would apply the buffered
-// blocks and a newly committed one to staging at once, in no order.
-func (s *Service) ApplyStaging(load func() error) error {
+// where the buffer is written.
+func (s *Service) StageThrough(block uint64) error {
 	if !s.Collecting() {
 		return errors.NotAllowed.WithFormat("%s: not joining", s.config.Partition.ID)
 	}
-	req := stagingRequest{load: load, done: make(chan error, 1)}
+	req := stageRequest{block: block, done: make(chan error, 1)}
 	select {
-	case s.applyStaging <- req:
+	case s.stageThrough <- req:
 	case <-s.ctx.Done():
 		return errors.UnknownError.Wrap(s.ctx.Err())
 	}
@@ -370,46 +448,73 @@ func (s *Service) ApplyStaging(load func() error) error {
 	}
 }
 
-// A stagingRequest is the join asking to load a peer's staging and apply what
-// has been buffered to it.
-type stagingRequest struct {
-	load func() error
-	done chan error
+// A stageRequest is the join asking to take the buffer into staging through a
+// block.
+type stageRequest struct {
+	block uint64
+	done  chan error
 }
 
-// applyStagingNow runs in the block production loop.
-func (s *Service) applyStagingNow(load func() error) error {
-	s.mu.Lock()
-	if !s.collecting {
-		s.mu.Unlock()
+// stageThroughNow runs in the block production loop.
+func (s *Service) stageThroughNow(block uint64) error {
+	if block == 0 {
+		return errors.BadRequest.WithFormat("%s: block 0 is no block after a state", s.config.Partition.ID)
+	}
+	q := block - 1
+	s.mu.RLock()
+	collecting, overrun := s.collecting, s.bufferOverrun
+	s.mu.RUnlock()
+	if !collecting {
 		return errors.NotAllowed.WithFormat("%s: not joining", s.config.Partition.ID)
 	}
-	if s.stagingReady {
-		s.mu.Unlock()
-		return errors.NotAllowed.WithFormat("%s: staging has already been taken", s.config.Partition.ID)
+	if overrun {
+		return errors.NotReady.WithFormat("%s: the join buffer overran; the join must start again", s.config.Partition.ID)
 	}
-	buffered := make([]*CollectedGroup, len(s.buffer))
-	copy(buffered, s.buffer)
+	round, err := s.pulledRound(q)
+	if err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	if err := s.checkRound(q, round); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	next := -1
+	for i, g := range s.buffer {
+		if g.Round() > round {
+			next = i
+			break
+		}
+	}
+	if next < 0 {
+		s.mu.Unlock()
+		return errors.NotReady.WithFormat("%s: the state is block %d at round %d and the group that is block %d has not been collected",
+			s.config.Partition.ID, q, round, block)
+	}
+	nextRound, after := s.buffer[next].Round(), len(s.buffer)-next-1
+	var take []*CollectedGroup
+	for _, g := range s.buffer[:next+1] {
+		if !g.staged {
+			take = append(take, g)
+		}
+	}
 	s.mu.Unlock()
 
-	err := load()
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	for i, g := range buffered {
+	for i, g := range take {
 		err := s.collectIntoStaging(g)
 		if err != nil {
 			return errors.UnknownError.WithFormat("collect buffered group %d of %d (round %d): %w",
-				i+1, len(buffered), g.Round(), err)
+				i+1, len(take), g.Round(), err)
 		}
+		s.mu.Lock()
+		g.staged = true
+		s.mu.Unlock()
 	}
-
-	s.mu.Lock()
-	s.stagingReady = true
-	s.mu.Unlock()
-	s.logger.Info("Staging taken from a peer; the blocks since are applied to it",
-		"partition", s.config.Partition.ID, "applied", len(buffered))
+	s.logger.Info("Staged the buffered groups through the block after the state",
+		"partition", s.config.Partition.ID, "state", q, "round", round,
+		"block", block, "blockRound", nextRound, "staged", len(take),
+		"notStaged", after)
 	return nil
 }
 
@@ -459,13 +564,10 @@ func (s *Service) collectIntoStaging(g *CollectedGroup) error {
 	return nil
 }
 
-// collectGroup keeps one committed group, and takes it into staging if
-// staging is this node's peers' (ApplyStaging). Until then the group is only
-// buffered: nothing is held before the node knows what its peers hold.
-//
-// The buffer is appended to only after the collect succeeds: a group whose
-// staging intake failed is not a block this node may later produce as though
-// it had collected it.
+// collectGroup keeps one committed group in the buffer. It does not take it
+// into staging: the join does that through the block after the state it
+// proves (StageThrough), and the groups after that block reach staging only by
+// being produced (#4398).
 func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batch, leader *types.Certificate, isLeader bool) error {
 	// Refused here, before anything is buffered: a node whose executor cannot
 	// collect would buffer blocks it can never take into staging, and the
@@ -478,27 +580,21 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 
 	g := &CollectedGroup{Certs: certs, Batches: batches, Leader: leader, IsLeader: isLeader}
 
-	// The bounds are checked before anything is taken into staging, so a group
-	// past them is in neither the buffer nor the stage. Past a bound the join
-	// is over: the blocks since the snapshot are no longer all in hand, and
-	// nothing may be produced from a buffer with a hole in it.
+	// Past a bound the join is over: the blocks since the snapshot are no
+	// longer all in hand, and nothing may be produced from a buffer with a
+	// hole in it.
 	s.mu.Lock()
+	if r := g.Round(); r > s.collectedThrough {
+		s.collectedThrough = r
+	}
 	full := len(s.buffer) >= maxCollectedGroups || s.bufferBytes+g.bytes() > maxCollectedBytes
 	if full {
 		s.bufferOverrun = true
 	}
-	ready := s.stagingReady
 	s.mu.Unlock()
 	if full {
 		return errors.NotReady.WithFormat("%s: the join buffer is full at %d groups and %d bytes; the join must start again from a newer snapshot",
 			s.config.Partition.ID, len(s.buffer), s.bufferBytes)
-	}
-
-	if ready {
-		err := s.collectIntoStaging(g)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
 	}
 
 	s.mu.Lock()
@@ -510,7 +606,6 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 		"round", leader.Header.Round,
 		"certs", len(certs),
 		"batches", len(batches),
-		"staged", ready,
 		"buffered", len(s.buffer))
 	return nil
 }

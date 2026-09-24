@@ -122,21 +122,25 @@ type Service struct {
 	stallSince   time.Time
 	lastStallLog time.Time
 
-	// Joining (#4292): while collecting, every committed group is taken into
-	// staging and kept in the buffer instead of executed, and nothing here
+	// Joining (#4292): while collecting, every committed group is kept in
+	// the buffer instead of executed, and nothing here
 	// advances the block index. See collect.go.
 	collecting    bool
 	buffer        []*CollectedGroup
 	bufferBytes   int
 	bufferOverrun bool
-	// stagingReady says the peer's staging has been taken, so the blocks this
-	// node collects are applied to it; until then they are only buffered.
-	stagingReady bool
-	// handoff and applyStaging carry the join's requests; the block
+	// collectedThrough is the highest leader round of any group that reached
+	// the buffer since collecting started, kept or refused. lostThrough is
+	// set from it when the buffer starts again after an overrun: the groups
+	// at or below it are in no buffer, so a state below it cannot be handed
+	// off at (#4407).
+	collectedThrough types.Round
+	lostThrough      types.Round
+	// handoff and stageThrough carry the join's requests; the block
 	// production loop serves both, because it is the only thing that
 	// produces blocks and the only thing that writes the buffer (#4294).
 	handoff      chan handoffRequest
-	applyStaging chan stagingRequest
+	stageThrough chan stageRequest
 	// Validator synchronization
 	validatorUpdateHeight uint64 // Height at which validator update was detected
 
@@ -169,7 +173,7 @@ func NewService(config ServiceConfig) (*Service, error) {
 		eventBus:         config.EventBus,
 		stateHashTracker: types.NewStateHashTracker(100), // Track last 100 rounds
 		handoff:          make(chan handoffRequest, 1),
-		applyStaging:     make(chan stagingRequest, 1),
+		stageThrough:     make(chan stageRequest, 1),
 	}
 	s.logger.L = config.Logger
 
@@ -560,10 +564,11 @@ func (s *Service) blockProductionLoop() {
 		case <-s.ctx.Done():
 			return
 
-		case req := <-s.applyStaging:
-			// The join has a peer's staging: load it and apply what has been
-			// buffered since, here, where the buffer is written (#4294).
-			req.done <- s.applyStagingNow(req.load)
+		case req := <-s.stageThrough:
+			// The join has matched the root: take the buffer into staging
+			// through the block after the state, here, where the buffer is
+			// written (#4294, #4398).
+			req.done <- s.stageThroughNow(req.block)
 
 		case req := <-s.handoff:
 			// The join has matched the root and settled staging: leave
@@ -571,7 +576,7 @@ func (s *Service) blockProductionLoop() {
 			// nothing else is producing blocks (#4294).
 			err := s.performHandoff(req.q)
 			if err != nil {
-				s.logger.Error("Handoff failed; this node must join again",
+				s.logger.Error("Handoff failed; the join syncs again",
 					"partition", s.config.Partition.ID, "block", req.q, "error", err)
 			}
 			req.done <- err

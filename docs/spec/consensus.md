@@ -296,22 +296,33 @@ checkpoint whose block is the executor's last block
 consensus from that round rather than from zero.
 
 **What it does not do is execute from there.** A restart is a join
-(executor.md, "Sync"): the node collects every committed block instead of
-executing it, takes a running validator's staging, pulls the state, and
-executes from the block after its root matches. The checkpoint decides where
-the node stands in the DAG; the join decides what it executes. The round it
-restores is also what the join's handoff measures the pulled state against:
-consensus delivers the groups committed after it, so a state committed at a
-round below it would need groups the node will never be given (executor.md,
-"Sync", step 5; #4362). A node that
-executed the blocks between its last one and the network's — by replaying the
-committed log, or by catching up certificate by certificate — would execute
-them from a staging its peers do not have, and the root chain is a Merkle root
-over the history of block roots, so it would never match again (#4290).
+(executor.md, "Sync"): the node keeps every committed block in a buffer
+instead of executing it, pulls the state a signed anchor proves, takes the
+buffered blocks through the one after that state's block into its own
+staging, and produces the buffered blocks after the state from there; the
+blocks after the first reach staging only by being executed (#4398). No peer
+is asked for its staging. Which buffered group is the block after the state is
+decided by the leader round the pulled system ledger records for that block
+(`SystemLedger.LeaderRound`), never by counting from where the node stood
+(#4362). The checkpoint decides where the node stands in the DAG; the join
+decides what it executes. The round it restores is also what the join's
+handoff measures the pulled state against: consensus delivers the groups
+committed after it, so a state committed at a round below it would need
+groups the node will never be given, and the join pulls a newer one
+(executor.md, "Sync", step 5). A handoff whose block cannot be produced
+returns the node to collecting and the join tries again, counted (#4401). A
+node that executed the blocks between its last one and the network's — by
+replaying the committed log, or by catching up certificate by certificate —
+would execute them from a staging its peers do not have, and the root chain
+is a Merkle root over the history of block roots, so it would never match
+again (#4290).
 
-A node that finds no validator with staging to give — every node restarted, so
-every stage is empty — executes from its own last block instead, which is safe
-for the same reason: no peer holds an entry it lacks.
+There is no fallback to executing from the node's own last block. A node
+that can find no validator of its partition keeps collecting and executes
+nothing: it cannot know what its peers executed, and executing from its own
+state is the divergence the join exists to prevent (#4296). A node that has
+executed no block — genesis is not an execution — does not join at all
+(executor.md, "Sync", step 5; #4304).
 
 ### Retention
 
