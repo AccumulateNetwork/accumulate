@@ -1468,8 +1468,8 @@ so its number is a hole healing asks for again. A proof below what is
 validated fills in behind, so what it proves is validated wherever it lands
 and a later contradiction there is still a conflict. Outcomes are
 `accumulate_exec_staged_proofs_total{outcome}`: staged, validated, disproved,
-conflict, invalid, refused (past `maxAnchorAhead`), dropped (over the
-byte budget, below).
+conflict, invalid, unbound, duplicate, refused (past `maxAnchorAhead`),
+dropped (over the byte budget, below).
 
 **What bounds anchor staging, and in what currency.** A source's waiting
 proofs are bounded by what they cost in bytes (`maxStagedProofBytes`), not by

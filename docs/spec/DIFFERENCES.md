@@ -307,14 +307,14 @@ blocks later, and the roots still differed 39 blocks after release. Before
 spent this block`), so the divergence is not new; only `Received`'s part of it
 is gone.
 
-**Size**: undecided, and a decision for Paul. The requester's fetch is the
-existing path and keeps the entries live (`TestADroppedProofIsFetchedAndTheEntryExecutes`),
-but it is paced by stillness (`probeAfter`) and lands through consensus, so it
-cannot land in the block the peers execute in. Either a held member keeps the
-proof it arrived with and becomes runnable when that proof's anchor executes,
-as an entry with its own receipt already does (#4294, `heldCollectionProof`)
-— which retains the bytes the budget was meant to free — or the fill-in Paul
-describes is specified and built.
+**Size**: decided by Paul: no fill-in and no kept proof. Every node attempts
+to execute, and a node whose root misses its partition's anchor repairs from
+the block ledger and tries again (executor.md Sync, "One rule for every
+node"). Until #4440 builds that repair for a running node, the node that
+dropped a proof executes the package when the requester's fetch lands. That
+happens only while the source still serves the span, which is its
+`RejoinGrace` of 300 blocks (`synthcache`). Past that the ask is `NotFound`,
+the stream strands, and only a sync brings the node back.
 
 ### E18. Holding an entry whose proof was dropped for budget is not gated on a version
 
