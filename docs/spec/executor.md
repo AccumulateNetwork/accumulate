@@ -272,10 +272,17 @@ where they disagree with it, this wins.
    records, for every stream, the highest number its partition had received
    — the synthetic ledger's `Received`, and the anchor ledger's for anchor
    streams — written by every block as hashed state (Paul, 2026-09-25,
-   #4412). Staging is consistent when, for every stream, the node holds every
-   number from `Delivered + 1` to `Received` as of B; whatever it lacks it
-   fetches from the source by number. Then it stops pulling accounts from the
-   block ledger and executes from B + 1, user transactions included. The
+   #4412). Staging is consistent when, for every stream, the node holds what
+   its peers hold between `Delivered + 1` and `Received` as of B. What it
+   lacks it requests from the source by number, **and the answers reach
+   staging through consensus, exactly as healing answers do — never straight
+   into this node's staging.** A number the network already holds arrives as
+   a copy its peers ignore (a later copy writes nothing, invariant 12); a
+   number that is a hole network-wide is filled in the same block on every
+   node, this one included. So a fully synced staging has the network's holes
+   too, and they fill for everyone at once (Paul, 2026-09-25). Then the node
+   stops pulling accounts from the block ledger and executes from B + 1, user
+   transactions included. The
    highest number seen in collected blocks is not enough: an entry the peers
    held before this node started staging, on a stream that then goes quiet,
    is never seen, and executing without it diverges (run
