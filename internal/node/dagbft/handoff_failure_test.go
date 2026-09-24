@@ -46,7 +46,10 @@ func TestHandoff_AFailedHandoffLeavesTheNodeAbleToJoinAgain(t *testing.T) {
 	svc.adapter = fa
 	w := svc.node.Workers()[0]
 
+	// The node stood at block 40, committed at round 1 (#4362: the handoff
+	// reads the round from the pulled ledger).
 	svc.lastBlockIndex = 40
+	svc.lastLeaderRound = 1
 	svc.StartCollecting()
 	for i := 0; i < 3; i++ {
 		b := types.NewBatch([][]byte{{byte(i)}})
@@ -57,6 +60,7 @@ func TestHandoff_AFailedHandoffLeavesTheNodeAbleToJoinAgain(t *testing.T) {
 	}
 	require.Len(t, svc.Buffered(), 3)
 
+	pullState(t, svc, 40, 1)
 	err := svc.performHandoff(40)
 	require.Error(t, err, "precondition: the first buffered group cannot be produced")
 	require.Equal(t, 1, fa.attempts)
