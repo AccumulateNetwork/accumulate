@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // #4412: a block whose only effect is an entry held behind a hole raises the
@@ -85,4 +86,18 @@ func TestReceived_AnUnpositionedHoldIsStillWritten(t *testing.T) {
 	require.NoError(t, b.flushStreams())
 	require.Equal(t, uint64(12), partitionOf(t, b, s).Received)
 	require.Equal(t, uint64(10), partitionOf(t, b, s).Delivered)
+}
+
+// #4412 review F8: positioning a stream reads its ledger and must not write
+// it. A stream positioned by an arrival that then writes nothing (tossed,
+// refused) must not leave an entry in the committed ledger.
+func TestReceived_PositioningDoesNotWriteTheLedger(t *testing.T) {
+	b, s := positionBlock(t, 10) // the ledger is Put, so dirty
+	stranger := stream{kind: streamSynthetic, ledger: s.ledger, source: protocol.PartitionUrl("BVN7")}
+	_, err := b.positionOf(stranger)
+	require.NoError(t, err)
+
+	var ledger *protocol.SyntheticLedger
+	require.NoError(t, b.Batch.Account(s.ledger).Main().GetAs(&ledger))
+	require.Len(t, ledger.Sequence, 1, "positioning inserted an entry for a stream that wrote nothing")
 }

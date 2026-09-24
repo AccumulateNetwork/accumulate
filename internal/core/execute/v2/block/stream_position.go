@@ -237,7 +237,13 @@ func (b *Block) positionOfLocked(s stream) (*streamPosition, error) {
 	case err != nil:
 		return nil, errors.UnknownError.WithFormat("load %v: %w", s.ledger, err)
 	default:
-		delivered = ledger.Partition(s.source).Delivered
+		// A read, so FindPartition: Partition would insert an entry into
+		// the batch's memoized record for a stream positioned by an arrival
+		// that then writes nothing (#4412 review F8). An absent entry has
+		// delivered nothing.
+		if part, ok := ledger.FindPartition(s.source); ok {
+			delivered = part.Delivered
+		}
 	}
 	p := &streamPosition{
 		stream:    s,

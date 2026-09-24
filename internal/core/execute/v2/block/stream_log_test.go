@@ -151,3 +151,33 @@ func TestLogStreams_ShowsTheLedgersReceivedBesideSighted(t *testing.T) {
 	require.EqualValues(t, 0, c.lines[0]["sighted"])
 	require.EqualValues(t, 5, c.lines[0]["delivered"])
 }
+
+// #4412 review F7: logging reads the ledger and must not write it. A stream
+// that exists only in this node's staging -- a joiner's collected blocks
+// after the state it pulled, a source first seen since -- has no entry on the
+// ledger, and a find-or-create read on the batch's memoized record would
+// insert one into hashed state on this node alone, committed with the next
+// write of that ledger.
+func TestLogStreams_DoesNotWriteTheLedger(t *testing.T) {
+	x, _, id := streamLogFixture(t)
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	other := protocol.PartitionUrl("BVN2")
+	ledger := new(protocol.SyntheticLedger)
+	ledger.Url = id.Ledger
+	ledger.Partition(other).Delivered = 5
+	require.NoError(t, batch.Account(id.Ledger).Main().Put(ledger)) // dirty, as after flushStreams
+
+	b := &Block{positions: new(positionCache), Executor: x, Batch: batch, staging: x.staging().Begin()}
+	b.Index = 1
+	b.staging.Hold(id, 3, heldAt(3)) // BVN1: staging only
+	b.staging.Commit()
+	b.logStreams()
+	require.NoError(t, batch.Commit())
+
+	batch = db.Begin(false)
+	defer batch.Discard()
+	var got *protocol.SyntheticLedger
+	require.NoError(t, batch.Account(id.Ledger).Main().GetAs(&got))
+	require.Len(t, got.Sequence, 1, "logging inserted a ledger entry for a stream only staging knows")
+}

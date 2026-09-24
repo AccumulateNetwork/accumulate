@@ -97,7 +97,13 @@ func (b *Block) logStreams() {
 		if l == nil {
 			return 0, 0
 		}
-		part := l.Partition(id.Source)
+		// FindPartition, never Partition: the ledger is the batch's
+		// memoized record, and Partition inserts an entry for a stream only
+		// this node's staging knows into hashed state (#4412 review F7).
+		part, ok := l.FindPartition(id.Source)
+		if !ok {
+			return 0, 0
+		}
 		return part.Delivered, part.Received
 	}
 

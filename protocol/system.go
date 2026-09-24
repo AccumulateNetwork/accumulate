@@ -30,7 +30,22 @@ func (l *SystemLedger) SetBvnExecutorVersion(bvn string, ver ExecutorVersion) {
 
 type SequenceLedger interface {
 	Account
+	// Partition finds or CREATES the entry for a partition. It writes the
+	// record it is called on; a reader uses FindPartition.
 	Partition(url *url.URL) *PartitionSyntheticLedger
+	// FindPartition finds the entry for a partition without creating one.
+	FindPartition(url *url.URL) (*PartitionSyntheticLedger, bool)
+}
+
+// findSequence is a read-only lookup in a sorted sequence ledger.
+func findSequence(seq []*PartitionSyntheticLedger, url *url.URL) (*PartitionSyntheticLedger, bool) {
+	i, found := sortutil.Search(seq, func(entry *PartitionSyntheticLedger) int {
+		return entry.Url.Compare(url)
+	})
+	if !found {
+		return nil, false
+	}
+	return seq[i], true
 }
 
 func (e *BlockEntry) Compare(f *BlockEntry) int {
@@ -69,4 +84,17 @@ func (s *AnchorLedger) Anchor(url *url.URL) *PartitionSyntheticLedger {
 
 func (s *AnchorLedger) Partition(url *url.URL) *PartitionSyntheticLedger {
 	return s.Anchor(url)
+}
+
+// FindPartition finds the synthetic ledger entry for a partition without
+// creating one. The record from a batch is the batch's own memoized value,
+// so Partition on it inserts into hashed state; a reader uses this.
+func (s *SyntheticLedger) FindPartition(url *url.URL) (*PartitionSyntheticLedger, bool) {
+	return findSequence(s.Sequence, url)
+}
+
+// FindPartition finds the anchor ledger entry for a partition without
+// creating one.
+func (s *AnchorLedger) FindPartition(url *url.URL) (*PartitionSyntheticLedger, bool) {
+	return findSequence(s.Sequence, url)
 }
