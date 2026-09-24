@@ -12,20 +12,28 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
 
-// #4413. A Directory node that joined by pull holds the anchors in its pulled
-// range without their signatures (the pull does not bring them, #4416). It
-// used to serve them anyway, and every node reading its roots from it refused
-// them as "the anchor carries no signatures" -- 22 BVN3 anchors in run
-// 20260924T074702Z. It now refuses them with NotReady, and a joining BVN
-// reading the Directory's pool through its peers, as the daemon does, takes
-// every one of them from a node that executed them.
+// #4413. A Directory node that joined by a pull from before #4416 holds the
+// anchors in its pulled range without their signatures: that pull did not
+// bring them. It used to serve them anyway, and every node reading its roots
+// from it refused them as "the anchor carries no signatures" -- 22 BVN3
+// anchors in run 20260924T074702Z. It now refuses them with NotReady, and a
+// joining BVN reading the Directory's pool through its peers, as the daemon
+// does, takes every one of them from a node that executed them.
+//
+// Since #4416 the pull brings them, so the joined node is made into such a
+// peer -- one that joined with an older binary -- by forgetting what the pull
+// wrote beside each signature of an anchor it did not execute
+// (forgetPulledSignatures). TestAJoinedNodeServesTheAnchorsItPulledWithTheirSignatures
+// holds the pull itself.
 //
 // Everything here goes through the production wiring: each Directory node's
 // registered querier behind its join's gate (the simulator registers it as the
@@ -34,6 +42,7 @@ import (
 func TestAJoinedNodeRefusesTheAnchorsItHoldsWithoutSignatures(t *testing.T) {
 	const joiner = 1
 	sim, p, r, q := joinADirectoryNodeByPull(t)
+	forgetPulledSignatures(t, p.NodeDatabase(joiner))
 	require.True(t, p.NodeJoinState(joiner).Machine().CanServeCurrent(),
 		"precondition: the joined node reads ACTIVE, so its gate lets it serve (#4368)")
 
@@ -109,4 +118,39 @@ func TestAJoinedNodeRefusesTheAnchorsItHoldsWithoutSignatures(t *testing.T) {
 	require.Empty(t, errs)
 	require.Empty(t, refused, "an anchor reached the reader without its signatures")
 	require.Equal(t, want, got, "every anchor the control serves is taken through the peers, and no root is skipped")
+}
+
+// forgetPulledSignatures makes a node that joined by pull hold its pulled
+// anchors as a pull from before #4416 left them: the entries and their
+// messages, and nothing an anchor's signatures are read from. An anchor the
+// node executed has a delivered status; one it holds only by pull has none,
+// because the pull does not bring a status.
+func forgetPulledSignatures(t *testing.T, db *database.Database) {
+	t.Helper()
+	pool := DnUrl().JoinPath(AnchorPool)
+	var forgot int
+	Update(t, db, func(batch *database.Batch) {
+		head, err := batch.Account(pool).MainChain().Head().Get()
+		require.NoError(t, err)
+		for i := int64(0); i < head.Count; i++ {
+			h, err := batch.Account(pool).MainChain().Entry(i)
+			require.NoError(t, err)
+			st, err := batch.Transaction(h).Status().Get()
+			require.NoError(t, err)
+			if st.Delivered() {
+				continue
+			}
+			txn := batch.Account(pool).Transaction(*(*[32]byte)(h))
+			hist, err := txn.History().Get()
+			require.NoError(t, err)
+			for _, j := range hist {
+				require.NoError(t, txn.History().Remove(j))
+			}
+			if len(hist) > 0 {
+				forgot++
+			}
+		}
+	})
+	require.NotZero(t, forgot, "precondition: the node holds anchors it did not execute")
+	t.Logf("forgot the signature history of %d pulled anchors", forgot)
 }
