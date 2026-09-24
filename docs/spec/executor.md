@@ -702,11 +702,13 @@ small — a handful of entries at 100 tps — and clear within a few blocks, so
 within a few rounds the last pre-listen entry has been executed by the
 network and is in the pulled state, and every stream's run is contiguous.
 
-**A restart is a join, and it finds a gap exactly when it stopped holding an
+**A restart is a join, and it finds a gap when it stopped holding an
 unexecuted entry.** Staging is memory: whatever the node held unexecuted when
 it stopped — a synthetic waiting on the anchor that proves it — is lost, it
 arrived before the node was listening again, and the first check at `Q + 1`
-finds a gap at those numbers. A node restarted with nothing held loses nothing
+finds a gap at those numbers once a later number on that stream has been
+sighted; with nothing later collected the check sees no gap and the node hands
+off with the hole, which the root check after the handoff catches (§4). A node restarted with nothing held loses nothing
 and finds none. So whether a restart meets a gap is the traffic's in-flight
 state at the moment it stopped, not the code: an entry is held only while
 the anchor that proves it has not arrived
