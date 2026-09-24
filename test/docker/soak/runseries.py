@@ -35,6 +35,15 @@ pair's `accepted` is the reset signal (counters are monotone within a
 process), and from then on that pair carries an offset of everything it
 had stranded before.
 
+**A paused node is a known state, not an unreachable one (#4425).** A
+paused container answers no scrape, so every row of it is blank exactly as
+a restarting one's is — but `chaos.log` names the node and the window, and
+a paused process's counters cannot move. Its pairs are read at their last
+answer before the pause, and the sample is complete. Reading it as
+unreachable skipped the final row of run 20260924T093936Z, whose manifest
+then said `FINAL ROW MISSING` over a row that had landed. Without a
+`chaos.log` line covering the sample, a blank node is still unreachable.
+
 **The figure is not monotone**, though its inputs are: it rises when a
 submission is accepted and falls when the relay is answered. So a level is
 the MINIMUM over a window of samples and never a single reading.
@@ -60,7 +69,36 @@ def _int(x):
         return None
 
 
-def load(path, role="", window=120):
+# A pause is logged in whole seconds before `docker pause` runs, and the
+# un-pause follows `chaos_wait` by the time `docker unpause` takes, so a
+# sample stamped a second or two past the logged end can still have found
+# the container paused. The four blank samples at a pause's end in run
+# 20260924T093936Z were stamped 0-1 s after it.
+PAUSE_SLACK_SECS = 5
+
+
+def pauses(chaos_path):
+    """The pauses `chaos.log` records: ``[(node, start, end, start_text,
+    seconds)]`` with epochs. `soak.sh` logs `<t> pause <node> <p>s` when a
+    pause starts and never logs its end; the end is `t + p`. An absent or
+    unreadable file is no pauses — never an assumed one."""
+    import re
+    out = []
+    try:
+        with open(chaos_path) as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return out
+    for l in lines:
+        m = re.match(r"^(\S+Z) pause (\S+) (\d+)s", l)
+        if m:
+            t = _epoch(m.group(1))
+            out.append((m.group(2), t, t + int(m.group(3)), m.group(1),
+                        int(m.group(3))))
+    return out
+
+
+def load(path, role="", window=120, pauses=()):
     """Read `submissions.csv` and return the corrected series.
 
     `window` is the span a level is read over — the same
@@ -86,6 +124,16 @@ def load(path, role="", window=120):
     ``resets``    ``[(time, node, partition, carried)]``, when each was
                   detected and what it carried forward
     ``dropped``   how many samples were not complete
+    ``pausedSamples`` how many samples were completed by reading a paused
+                  node at its last answer (#4425)
+
+    Each sample also carries ``paused``: ``{(node, partition): (time of
+    the reading used, the raw figure)}`` for the pairs of a node blank
+    because `pauses` (from `pauses()`) covers it, and ``pausedNodes``:
+    ``{node: (pause start text, seconds)}``. A paused pair's figure is its
+    last answer — a stopped process's counter does not move — with any
+    carried offset added, and it is never taken as a new reading for
+    reset detection.
     ``error``     a sentence, when the file cannot be read at all
 
     A pair's rows are deduped by (time, node, partition), last row wins:
@@ -97,10 +145,10 @@ def load(path, role="", window=120):
                 if not role or r.get("role") == role]
     except OSError:
         return {"error": "no `submissions.csv`", "pairs": set(), "samples": [],
-                "resets": [], "dropped": 0}
+                "resets": [], "dropped": 0, "pausedSamples": 0}
     if not rows:
         return {"error": "no rows for this role", "pairs": set(),
-                "samples": [], "resets": [], "dropped": 0}
+                "samples": [], "resets": [], "dropped": 0, "pausedSamples": 0}
 
     pairs = {(r.get("node"), r.get("partition")) for r in rows}
     at = {}
@@ -117,6 +165,11 @@ def load(path, role="", window=120):
     unconfirmed = {}
     resets, samples, dropped = [], [], 0
     ever = set()  # pairs that have reported a count at some sample
+    # pair -> (time, raw figure) at its last answer in a complete sample;
+    # 0 for a pair that answered with no counter (joining / never counted)
+    last_known = {}
+    paused_samples = 0
+    nodes = {n for n, _ in pairs}
 
     for t in sorted(at):
         got = at[t]
@@ -126,15 +179,36 @@ def load(path, role="", window=120):
         joining = {k for k in empty if k in ever}
         uncounted = empty - joining
         ever |= reported
-        if reported | empty != pairs:
+        # A node with no answer on any partition, inside a pause chaos.log
+        # records for it, with an answer on record for every pair: read at
+        # that answer. Anything short of all three stays unreachable.
+        now = _epoch(t)
+        answered = {k for k in reported | empty}
+        paused, paused_nodes = {}, {}
+        for n in nodes:
+            mine = {k for k in pairs if k[0] == n}
+            if mine & answered:
+                continue
+            win = [p for p in pauses if p[0] == n
+                   and p[1] <= now <= p[2] + PAUSE_SLACK_SECS]
+            if not win or not all(k in last_known for k in mine):
+                continue
+            for k in mine:
+                paused[k] = last_known[k]
+            paused_nodes[n] = (win[-1][3], win[-1][4])
+        if reported | empty | set(paused) != pairs:
             dropped += 1
             samples.append({"time": t, "epoch": _epoch(t), "complete": False,
                             "byPair": {}, "total": None, "reported": reported,
                             "joining": sorted(joining),
-                            "uncounted": sorted(uncounted)})
+                            "uncounted": sorted(uncounted),
+                            "paused": {}, "pausedNodes": {}})
             continue
+        if paused:
+            paused_samples += 1
         by_pair = {}
-        now = _epoch(t)
+        for k, (_, raw) in paused.items():
+            by_pair[k] = raw + off.get(k, 0)
         for k in sorted(empty):
             # A counter that existed and is now uncreated belongs to a new
             # process: carry what the old one had settled at, exactly as a
@@ -153,8 +227,10 @@ def load(path, role="", window=120):
                 recent[k] = []
                 prev_acc[k] = None
             by_pair[k] = off.get(k, 0)
+        for k in empty:
+            last_known[k] = (t, 0)
         for k, r in got.items():
-            if k in empty:
+            if k in empty or k in paused:
                 continue
             raw = _int(r.get(STRANDED))
             acc = _int(r.get("accepted"))
@@ -185,15 +261,18 @@ def load(path, role="", window=120):
                 recent[k] = []
             if acc is not None:
                 prev_acc[k] = acc
+            last_known[k] = (t, raw)
             recent.setdefault(k, []).append((now, raw))
             recent[k] = [(tt, v) for tt, v in recent[k] if tt >= now - window]
             by_pair[k] = raw + off.get(k, 0)
         samples.append({"time": t, "epoch": _epoch(t), "complete": True,
                         "byPair": by_pair, "total": sum(by_pair.values()),
                         "reported": reported, "joining": sorted(joining),
-                        "uncounted": sorted(uncounted)})
+                        "uncounted": sorted(uncounted), "paused": paused,
+                        "pausedNodes": paused_nodes})
     return {"error": None, "pairs": pairs, "samples": samples,
-            "resets": resets, "dropped": dropped}
+            "resets": resets, "dropped": dropped,
+            "pausedSamples": paused_samples}
 
 
 def no_counter_pairs(got, reported):

@@ -648,6 +648,125 @@ class AJoiningNodeIsAReading(Rows):
         self.assertNotIn("not measured", got)
 
 
+class APausedNodeIsAKnownState(Rows):
+    """#4425. A paused container answers no scrape, so every row of it is
+    empty — and until now that read as "unreachable", the sample was
+    skipped as incomplete, and the manifest of run 20260924T093936Z read
+    `181 … as of 10:06:11Z; FINAL ROW MISSING — soakmon's exit write did
+    not land … INCLUDING THE LAST` over a final row that had landed at
+    10:08:24Z, blank only because acc-bvn2-val3 was paused.
+
+    A pause is not an absence of knowledge: `chaos.log` names the node and
+    the window, and a paused process's counters cannot move. Its pairs are
+    read at their last answer before the pause, the sample is complete, and
+    the row says which pairs were read that way and from when.
+
+    `chaos.log` is not committed evidence (the root `*.log` ignore), so the
+    run's own lines are quoted here verbatim.
+    """
+
+    RUN = os.path.join(HERE, "runs", "20260924T093936Z", "submissions.csv")
+    CHAOS = """\
+2026-09-24T09:41:09Z armed: one disturbance every 120s + 0-60s jitter
+2026-09-24T09:41:09Z order: acc-bvn1-val1 acc-bvn2-val1 acc-bvn3-val1 acc-bvn1-val2 acc-bvn2-val2 acc-bvn3-val2 acc-bvn1-val3 acc-bvn2-val3 acc-bvn3-val3 acc-bvn1-val4 acc-bvn2-val4 acc-bvn3-val4
+2026-09-24T09:41:09Z sleeping 168s until the next disturbance
+2026-09-24T09:43:57Z restart acc-bvn1-val1
+2026-09-24T09:43:58Z sleeping 163s until the next disturbance
+2026-09-24T09:46:41Z pause acc-bvn2-val1 89s
+2026-09-24T09:48:10Z sleeping 134s until the next disturbance
+2026-09-24T09:50:25Z restart acc-bvn3-val1
+2026-09-24T09:50:25Z sleeping 156s until the next disturbance
+2026-09-24T09:53:01Z pause acc-bvn1-val2 136s
+2026-09-24T09:55:18Z sleeping 156s until the next disturbance
+2026-09-24T09:57:54Z restart acc-bvn2-val2
+2026-09-24T09:57:55Z sleeping 156s until the next disturbance
+2026-09-24T10:00:31Z pause acc-bvn3-val2 71s
+2026-09-24T10:01:42Z sleeping 121s until the next disturbance
+2026-09-24T10:03:43Z restart acc-bvn1-val3
+2026-09-24T10:03:44Z sleeping 166s until the next disturbance
+2026-09-24T10:06:30Z pause acc-bvn2-val3 114s
+2026-09-24T10:08:24Z sleeping 179s until the next disturbance
+"""
+    # soak.sh's lg_exit is not in the manifest; the final row is the moment
+    # stallkill signalled the load generator (stallkill.log, 10:08:24Z).
+    LG_EXIT = "2026-09-24T10:08:24Z"
+
+    def the_run(self):
+        import shutil
+        shutil.copy(self.RUN, os.path.join(self.rd, "submissions.csv"))
+        with open(os.path.join(self.rd, "chaos.log"), "w") as f:
+            f.write(self.CHAOS)
+
+    def test_the_runs_stranded_row_reads_the_final_row(self):
+        self.the_run()
+        got = self.call("sub_row validator %s stallkill" % self.LG_EXIT)
+        self.assertIn("as of 2026-09-24T10:08:24Z", got)
+        self.assertIn("final row written", got)
+        self.assertNotIn("MISSING", got)
+        self.assertNotIn("INCLUDING THE LAST", got)
+        self.assertIn("the final row's own readings sum to 1", got)
+
+    def test_the_paused_node_is_named_with_its_window_and_its_reading(self):
+        self.the_run()
+        got = self.call("sub_row validator %s stallkill" % self.LG_EXIT)
+        self.assertIn("1 node paused at this sample (acc-bvn2-val3, "
+                      "chaos.log `pause` 10:06:30Z for 114s)", got)
+        self.assertIn("acc-bvn2-val3/BVN2 26, acc-bvn2-val3/Directory 0, "
+                      "as of 10:06:11Z", got)
+
+    def test_the_headline_is_the_final_row_plus_what_it_carries(self):
+        """1 answered in the final row, 26 frozen in the paused process at
+        its last answer, 39 carried from eight restarts: 66. Reading the
+        paused node as 0 would be the dip the completeness rule exists to
+        prevent, on the one node the chaos log says was stopped."""
+        self.the_run()
+        got = self.call("sub_row validator %s stallkill" % self.LG_EXIT)
+        self.assertTrue(got.startswith("66, worst 26 on acc-bvn2-val3/BVN2 "
+                                       "(paused; its reading of 10:06:11Z)"), got)
+        self.assertIn("(39 stranded before a restart", got)
+
+    def test_pause_windows_complete_the_samples_they_cover(self):
+        """Every other blank sample of the run was a restart: 8 skipped
+        before, 2 after (09:50:30Z and 09:58:01Z)."""
+        self.the_run()
+        S = runseries.load(os.path.join(self.rd, "submissions.csv"),
+                           "validator", 120,
+                           pauses=runseries.pauses(os.path.join(self.rd, "chaos.log")))
+        self.assertEqual(["2026-09-24T09:50:30Z", "2026-09-24T09:58:01Z"],
+                         [s["time"] for s in S["samples"] if not s["complete"]])
+
+    def test_without_the_chaos_log_it_is_still_incomplete(self):
+        """No record of a pause, no claim of one: a blank node stays
+        unreachable and the sample stays unread."""
+        import shutil
+        shutil.copy(self.RUN, os.path.join(self.rd, "submissions.csv"))
+        got = self.call("sub_row validator %s stallkill" % self.LG_EXIT)
+        self.assertIn("INCLUDING THE LAST", got)
+        self.assertNotIn("paused", got)
+
+    def test_a_blank_outside_the_pause_window_is_not_read_as_paused(self):
+        """The window is the pause and its un-pause second (plus the
+        whole-second slack), not "any time after a pause"."""
+        rows = []
+        for t, v in (("2026-09-24T08:00:00Z", (100, 2)),
+                     ("2026-09-24T08:00:30Z", None),
+                     ("2026-09-24T08:01:00Z", None)):
+            rows.append("%s,acc-bvn1-val1,validator,BVN1,%s,,%s,,,,,%s,periodic"
+                        % (t, *(("", "", "") if v is None
+                                else (v[0], v[0] - v[1], v[1]))))
+            rows.append("%s,acc-bvn1-val2,validator,BVN1,50,,50,,,,,0,periodic" % t)
+        self.write(*rows)
+        with open(os.path.join(self.rd, "chaos.log"), "w") as f:
+            f.write("2026-09-24T08:00:20Z pause acc-bvn1-val1 20s\n")
+        S = runseries.load(os.path.join(self.rd, "submissions.csv"),
+                           "validator", 120,
+                           pauses=runseries.pauses(os.path.join(self.rd, "chaos.log")))
+        self.assertEqual([True, True, False], [s["complete"] for s in S["samples"]])
+        self.assertEqual(2, S["samples"][1]["total"])
+        self.assertEqual({("acc-bvn1-val1", "BVN1"): ("2026-09-24T08:00:00Z", 2)},
+                         S["samples"][1]["paused"])
+
+
 class ARemovedAndReAddedNode(Rows):
     """#4364's own run removes and re-adds the follower, so this is the
     run and not an edge case.
