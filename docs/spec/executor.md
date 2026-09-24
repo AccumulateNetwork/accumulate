@@ -299,6 +299,20 @@ failure, and the join treats them apart:
    match means the pull is wrong, and the only thing that fixes a wrong pull
    is to pull again: the whole walk, every leaf, while records keep being
    processed. The BPT has every leaf; no pull skips one.
+
+   **Every block is checked, and a miss is located, not re-pulled whole**
+   (Paul). After the records of a block are applied, the node's root should
+   equal the partition's BPT root for that block. Every block has one: the
+   peers keep the BPT's node history by height (`bpt.NodeAt`), so a peer can
+   serve the root, and the interior hashes, as of block B even after it has
+   moved on. Only a block that sent an anchor proves anything; the others'
+   roots are a peer's word and only localize. When the roots differ, a peer
+   serves the hashes of the subtrees four levels down, as of B; the node
+   compares them with its own, and descends only into the subtrees that
+   differ, level by level, until it reaches the leaves that differ. It pulls
+   again only those accounts, and drops the leaves it holds under a differing
+   subtree that the peer's subtree does not. A repair then costs what is
+   wrong, not the size of the tree.
 2. **The anchor does not match: repair, and move to the next block.** Once
    the root has matched, the node stages and executes — synthetic and user
    transactions, with whatever staging holds. A staging difference can make

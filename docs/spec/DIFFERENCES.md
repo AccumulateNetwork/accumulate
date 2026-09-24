@@ -373,6 +373,10 @@ departs:
   root matches, keeps processing records to the next anchored block
   (the heartbeat on an idle partition), and answers a root mismatch by
   pulling again.
+- **Nothing serves BPT interior hashes as of a block, and the join compares
+  its root only at anchored blocks.** The spec checks every block's root and
+  locates a miss by subtree hashes (`bpt.NodeAt` holds the history; no API
+  query exposes it).
 - **A root mismatch never re-walks.** `startRepair` re-pulls only what the
   records name, so a leaf the walk got wrong for an account no later record
   names is never fixed and the node repairs forever (review note_3900866799
