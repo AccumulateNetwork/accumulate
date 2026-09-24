@@ -60,18 +60,57 @@ func TestHandoff_RefusesALedgerThatIsNotTheMatchedBlock(t *testing.T) {
 	svc, ca, author := newJoiningService(t)
 	w := svc.node.Workers()[0]
 	svc.StartCollecting()
-	b := types.NewBatch([][]byte{{1}})
-	require.NoError(t, w.StoreBatch(b))
-	_, err := svc.processCommittedGroup(group(commitCert(author, 4, time.Unix(100, 0),
-		[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
-	require.NoError(t, err)
+	for _, round := range []int{4, 6} {
+		b := types.NewBatch([][]byte{{byte(round)}})
+		require.NoError(t, w.StoreBatch(b))
+		_, err := svc.processCommittedGroup(group(commitCert(author, types.Round(round), time.Unix(int64(100+round), 0),
+			[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
+		require.NoError(t, err)
+	}
 
-	pullState(t, svc, 50, 2)
-	err = svc.performHandoff(51)
+	// The join matched block 51; the ledger in the store is block 50's, at a
+	// round the buffer holds. Handing off would number round 6 as 52.
+	pullState(t, svc, 50, 4)
+	err := svc.performHandoff(51)
 	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
 	require.True(t, svc.Collecting())
-	require.Len(t, svc.Buffered(), 1)
+	require.Len(t, svc.Buffered(), 2)
 	require.Empty(t, ca.blocks)
+}
+
+// A node that joined and then executed blocks stands at the round of the last
+// block it produced, not at the round it joined at. Syncing again, a state at
+// the round it first joined at is behind it: the groups it executed since are
+// in neither that state nor the new buffer (#4362).
+func TestHandoff_ANodeStandsAtTheRoundOfTheLastBlockItProduced(t *testing.T) {
+	svc, ca, author := newJoiningService(t)
+	w := svc.node.Workers()[0]
+	commit := func(round int) {
+		t.Helper()
+		b := types.NewBatch([][]byte{{byte(round)}})
+		require.NoError(t, w.StoreBatch(b))
+		_, err := svc.processCommittedGroup(group(commitCert(author, types.Round(round), time.Unix(int64(100+round), 0),
+			[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
+		require.NoError(t, err)
+	}
+
+	// Restored at block 40, round 2, and joined there.
+	svc.lastBlockIndex = 40
+	svc.lastLeaderRound = 2
+	svc.StartCollecting()
+	pullState(t, svc, 40, 2)
+	require.NoError(t, svc.performHandoff(40))
+	commit(4)
+	commit(6)
+	require.Len(t, ca.blocks, 2, "blocks 41 and 42, live")
+
+	svc.StartCollecting()
+	commit(8)
+
+	err := svc.performHandoff(40)
+	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
+	require.True(t, svc.Collecting())
+	require.Len(t, ca.blocks, 2, "round 8 is not block 41")
 }
 
 // A ledger that records no leader round — written before v2-kourou — says
@@ -119,9 +158,11 @@ func TestHandoffAtLeaderRound_RefusesARoundNoGroupWasCommittedAt(t *testing.T) {
 }
 
 // A restarted node's consensus resumes after the round its checkpoint
-// recorded, so the groups at or below it are never delivered to the buffer.
-// A pulled state below that round is refused (the join pulls again); a state
-// at it hands off, producing what was collected after it.
+// recorded, so the groups at or below it are not delivered to the buffer —
+// save one delivered again, which proves nothing about the ones beside it. A
+// pulled state below that round is refused (the join pulls again), even at
+// the round of a group the buffer holds; a state at it hands off, producing
+// what was collected after it.
 func TestHandoffAtLeaderRound_ARestartedNodeStandsAtItsCheckpointsRound(t *testing.T) {
 	svc, ca, author := newJoiningService(t)
 	w := svc.node.Workers()[0]
@@ -136,16 +177,20 @@ func TestHandoffAtLeaderRound_ARestartedNodeStandsAtItsCheckpointsRound(t *testi
 	svc.lastBlockIndex = 40
 	svc.seedFromCheckpoint()
 
+	// Round 26 is delivered again; 28 and 30 are not, and 32 is new.
 	svc.StartCollecting()
-	b := types.NewBatch([][]byte{{1}})
-	require.NoError(t, w.StoreBatch(b))
-	_, err := svc.processCommittedGroup(group(commitCert(author, 32, time.Unix(100, 0),
-		[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
-	require.NoError(t, err)
+	for _, round := range []int{26, 32} {
+		b := types.NewBatch([][]byte{{byte(round)}})
+		require.NoError(t, w.StoreBatch(b))
+		_, err := svc.processCommittedGroup(group(commitCert(author, types.Round(round), time.Unix(int64(100+round), 0),
+			[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
+		require.NoError(t, err)
+	}
 
-	err = svc.performHandoffAt(38, 26)
+	err := svc.performHandoffAt(38, 26)
 	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
 	require.True(t, svc.Collecting())
+	require.Empty(t, ca.blocks, "32 is not block 39: 28 and 30 are in neither the buffer nor the state")
 
 	require.NoError(t, svc.performHandoffAt(40, 30))
 	require.Len(t, ca.blocks, 1)
