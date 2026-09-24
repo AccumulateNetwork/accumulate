@@ -409,3 +409,15 @@ func (x *Executor) seedCacheOnce(batch *database.Batch, current uint64, isLeader
 	x.cacheSeeded = true
 	return nil
 }
+
+// ForgetSeed makes the next block to open seed the cache again, as the first
+// block of a new process does. The daemon never calls it: a process start
+// builds a new executor, whose latch is clear. The simulator has no process
+// to start, and keeps one executor per node across a restart, so without it
+// a restarted simulator node never ran the seed and a store the seed could
+// not read passed every test (#4421).
+func (x *Executor) ForgetSeed() {
+	x.cacheSeedMu.Lock()
+	defer x.cacheSeedMu.Unlock()
+	x.cacheSeeded = false
+}

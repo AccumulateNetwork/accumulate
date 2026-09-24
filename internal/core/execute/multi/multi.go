@@ -232,3 +232,11 @@ func (m *Multi) SettleStagingAt(q uint64) error {
 	}
 	return c.SettleStagingAt(q)
 }
+
+// ForgetSeed forwards to the active executor, if it seeds (see
+// block.Executor.ForgetSeed). Only the simulator calls it.
+func (m *Multi) ForgetSeed() {
+	if f, ok := (*m.active.Load()).(interface{ ForgetSeed() }); ok {
+		f.ForgetSeed()
+	}
+}

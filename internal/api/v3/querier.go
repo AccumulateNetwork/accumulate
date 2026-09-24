@@ -966,10 +966,12 @@ func (s *Querier) queryChain(ctx context.Context, record *database.Chain2) (*api
 // servedSigned refuses an anchor transaction that this node holds without its
 // signatures.
 //
-// An anchor is worth only the quorum that signed it, and a node that joined by
-// pull holds the anchors in its pulled range as entries and bodies with no
-// signatures behind them: the pull does not bring the pool's signature history
-// (#4416), and the signatures are read from nowhere else (loadMessage). Served
+// An anchor is worth only the quorum that signed it, and a node can hold an
+// anchor with no signatures behind them: since #4416 and #4421 the pull
+// rebuilds the pool's signature history from the entries it takes, but a
+// store written by an earlier join holds its pulled range as entries and
+// bodies without it, and the signatures are read from nowhere else
+// (loadMessage). Served
 // as it is, the anchor is refused by every reader that checks it
 // (anchorsrc.verify) and read by any reader that does not as an anchor nobody
 // signed. So it is not served: NotReady, and the caller asks a node that
