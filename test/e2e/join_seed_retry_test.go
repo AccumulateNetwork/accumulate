@@ -18,6 +18,7 @@ import (
 	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	multi "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -25,6 +26,12 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
+// The retry path the handoff takes since #4401: attempt 1 fails at the seed
+// (no peer held the message), the node goes back to collecting, and attempt 2
+// opens the same block again. That second open must seed rather than pass
+// unseeded, and the first must not leak its batch (#4398 review F1,
+// note_3896127189).
+//
 // A new process seeds its producer cache once, at the first block it opens
 // (block_begin.go). A seed that failed used the once up: the block after it
 // opened with no seed and an empty cache, and nothing said so -- in run
@@ -57,9 +64,10 @@ func TestAFailedSeedIsTriedAgainAtTheNextBlock(t *testing.T) {
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	cache := synthcache.New(0)
+	opened := &batchesOpened{Beginner: db}
 	x, err := multi.NewExecutor(coreexec.Options{
 		Logger:        acctesting.NewTestLogger(t),
-		Database:      db,
+		Database:      opened,
 		Key:           priv,
 		Router:        sim.S.Router(),
 		EventBus:      events.NewBus(nil),
@@ -77,6 +85,15 @@ func TestAFailedSeedIsTriedAgainAtTheNextBlock(t *testing.T) {
 	_, _, seeded := cache.PeekAnchor(1)
 	require.False(t, seeded, "precondition: a seed that failed seeded nothing")
 
+	// The failed open's write batch is discarded, not leaked: a discarded
+	// batch panics when it is used again, and a leaked one commits
+	// (#4398 review F1).
+	require.NotEmpty(t, opened.writable, "precondition: the open began a write batch")
+	for i, b := range opened.writable {
+		require.Panics(t, func() { _ = b.Commit() }, "write batch %d of the failed open was left open", i)
+	}
+	opened.writable = nil
+
 	// The message arrives (a peer served it); the next block's open seeds.
 	func() {
 		batch := db.Begin(true)
@@ -92,4 +109,18 @@ func TestAFailedSeedIsTriedAgainAtTheNextBlock(t *testing.T) {
 	require.NoError(t, err)
 	_, _, seeded = cache.PeekAnchor(1)
 	require.True(t, seeded, "a seed that failed was not tried again: the block opened with the cache it would have had if the seed had never run")
+}
+
+// batchesOpened records the write batches an executor begins.
+type batchesOpened struct {
+	database.Beginner
+	writable []*database.Batch
+}
+
+func (d *batchesOpened) Begin(writable bool) *database.Batch {
+	b := d.Beginner.Begin(writable)
+	if writable {
+		d.writable = append(d.writable, b)
+	}
+	return b
 }
