@@ -886,15 +886,30 @@ func (s *PulledState) Executing(block uint64) error {
 	return nil
 }
 
+// Demote implements [State]: the node stopped executing in agreement at block,
+// so its machine goes back to BOOTING and every service that asks it refuses
+// again, and the gauge says so through the machine's OnChange (#4385). The
+// tracker's streak starts again, so the next promotion takes the same matches
+// the first one did.
+func (s *PulledState) Demote(block uint64) {
+	if !s.machine.Demote(block) {
+		return
+	}
+	s.tracker.ResetStreak()
+	s.log.Warn("This node is not executing in agreement; it is BOOTING until its root matches again",
+		"partition", s.partition, "block", block)
+}
+
 // Matched reports the block whose anchored root the local root equals. Until
 // it does, the node keeps pulling: a root that matches is the only statement
 // that the state this node holds is a block's state (executor spec, "Sync").
 //
 // It is the local root's block every time it is asked, not the block of the
-// first match. The machine goes ACTIVE once, at the first match, and a join
-// that found a gap after it pulls on, so the state moves past the block the
-// machine names; answering with that block would settle staging against a
-// state it is not (#4362).
+// first match. The machine goes ACTIVE at a match, and a join that found a
+// gap after it pulls on, so the state moves past the block the machine names;
+// answering with that block would settle staging against a state it is not
+// (#4362). A demoted machine (Demote) is BOOTING again and reports nothing
+// until the tracker promotes it again.
 func (s *PulledState) Matched(ctx context.Context) (uint64, bool, error) {
 	ok, err := s.tracker.Check(ctx)
 	if err != nil {

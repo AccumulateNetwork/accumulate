@@ -107,6 +107,15 @@ type State interface {
 	// and whether it has been reached. It follows the state: after a pull
 	// that advanced the sync, it reports the block the sync advanced to.
 	Matched(ctx context.Context) (uint64, bool, error)
+
+	// Demote says the node stopped executing in agreement at block: its root
+	// diverged and it is syncing again, or it matched there and its handoff
+	// failed. The node is BOOTING from here — it refuses every read, serves
+	// nothing and relays every submission — until Matched reaches a root
+	// again and promotes it as the first match did (executor spec, "Sync",
+	// steps 4-6; #4385). It is part of State, not an optional extra, so that
+	// a State that wraps another cannot drop it without failing to compile.
+	Demote(block uint64)
 }
 
 // A Peers finds the partition's other validators and their private API.
@@ -244,8 +253,11 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		// Block n's root is not the root the Directory anchored for it.
 		// The node stops executing and syncs again from where it is, as
 		// it did the first time; the blocks from here are collected and
-		// none of them is executed until the root matches again.
+		// none of them is executed until the root matches again. It stops
+		// answering first: its state is known wrong, and an ACTIVE node
+		// serving it is what run 20260924T074702Z measured (#4385).
 		log.Warn("An executed block's root differs from its proven root; syncing again", "block", n)
+		opts.State.Demote(n)
 		opts.Buffer.StartCollecting()
 
 		// The pull comes first: the local root still equals the block the
@@ -427,9 +439,12 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (b
 		// stops here neither executes nor collects (executor spec, "Sync",
 		// step 5; #4401). A buffer that went back to collecting keeps the
 		// groups it did not produce; one that did not starts again.
+		// The node matched at q and is not executing from it, so it is not
+		// ACTIVE: it serves nothing until the next attempt matches (#4385).
 		*failures++
 		mHandoffFailures.WithLabelValues(opts.Partition).Inc()
 		log.Error("The handoff failed; syncing again and handing off again", "block", q, "attempt", *failures, "error", err)
+		opts.State.Demote(q)
 		opts.Buffer.StartCollecting()
 		return false, nil
 	}

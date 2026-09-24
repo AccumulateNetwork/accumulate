@@ -197,6 +197,15 @@ func (t *Tracker) Check(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// ResetStreak starts the consecutive-match streak again. The join calls it
+// when it demotes the machine (#4385): a streak counted before the node
+// stopped agreeing says nothing about the state it syncs to next.
+func (t *Tracker) ResetStreak() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.consecutive = 0
+}
+
 // ConsecutiveMatches reports the current consecutive-match streak
 // for diagnostics.
 func (t *Tracker) ConsecutiveMatches() int {

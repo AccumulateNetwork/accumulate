@@ -642,7 +642,15 @@ network and is in the pulled state, and every stream's run is contiguous.
 executing any block, the local BPT root equals that block's proven root or
 it does not. A mismatch is a gap the sequence check missed — the node
 re-syncs at that block and continues — so a wrong run is caught at the block
-it happens in, never carried forward.
+it happens in, never carried forward. **A re-sync demotes the node to
+`BOOTING`** (step 6): from the mismatch until its root matches an anchored root
+again it refuses every read, serves nothing, relays every submission and
+signs and dispatches no anchor, and it goes `ACTIVE` again by the same
+promotion as the first time. A node whose state is known wrong is not one
+that answers for it (#4385: run `20260924T074702Z`, a Directory node frozen at
+block 661 with its gauge reading `ACTIVE` served 693 pulls at that block, and
+2,944 of the run's 2,973 stranded submissions were deliveries handed to such a
+node, which accepted them and never certified or relayed them).
 
 **The bodies are content-addressed, so they come from anybody.** An entry the
 node needs and did not receive — a validated hash with no body behind it — is
@@ -741,7 +749,9 @@ mismatch (step 4); nothing is dropped, and the node is never left neither
 collecting nor executing (#4401: run `20260924T052134Z`, a Directory node
 whose first produced block failed sat for the rest of the run with its buffer
 discarded, refusing every later handoff as "not joining" and dropping every
-committed group). The retry has no bound, because a node that stops trying
+committed group). **A failed handoff demotes the node to `BOOTING`**, as a
+re-sync does (step 4): it matched a root, but it is not executing from it, and
+it serves nothing until it matches again (#4385). The retry has no bound, because a node that stops trying
 executes nothing and collects nothing; so **every failed attempt is counted**
 — `accumulate_join_handoff_failures_total{partition}` — and logged as an error
 with its attempt number, and a failure that recurs on every attempt is seen
@@ -805,7 +815,14 @@ database node, not a syncing node's work. So the node states are two: **`BOOTING
 from the start of a join until the local root matches a verified anchored
 root; **`ACTIVE`** from that block on, and from its first block for a node
 that took nothing from a peer — a node that never joined has no state
-machine at all and serves as `ACTIVE` (#4368). `COMPLETE` and `WAITING`, which
+machine at all and serves as `ACTIVE` (#4368). **A node is `ACTIVE` only while
+it is executing in agreement, so the machine goes back as well as forward**:
+a re-sync after a root mismatch (step 4) and a handoff that fails (step 5)
+each return it to `BOOTING`, with everything `BOOTING` means below — reads
+refused with `NotReady`, the sequencer serving nothing, submissions relayed
+unexamined, no anchor signed or dispatched, the gauge reading `BOOTING` —
+until the join's root matches again and it is promoted as it was the first
+time (#4385). `COMPLETE` and `WAITING`, which
 named a backfilled history, are retired: nothing reached them and nothing
 could. What a joined node cannot answer *for a block it did not execute* —
 an entry the sequencer is asked for from before it joined — it refuses per

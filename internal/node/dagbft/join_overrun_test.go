@@ -143,6 +143,8 @@ type overrunNetwork struct {
 
 func (n *overrunNetwork) Pull(context.Context) error { n.pull(); return nil }
 
+func (n *overrunNetwork) Demote(uint64) {}
+
 func (n *overrunNetwork) Matched(context.Context) (uint64, bool, error) {
 	return n.matched, n.pulls > 0, nil
 }

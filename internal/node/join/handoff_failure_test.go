@@ -53,6 +53,10 @@ func TestJoin_AFailedHandoffJoinsAgain(t *testing.T) {
 	require.Equal(t, Joined, outcome)
 	require.NotEmpty(t, buf.handoffs, "the node joined again and handed off")
 	require.GreaterOrEqual(t, buf.starts, 2, "it started collecting again after the failure")
+
+	// It matched and did not start executing from there, so it is not ACTIVE
+	// (executor spec, "Sync", steps 5 and 6; #4385).
+	require.Equal(t, []uint64{20}, state.demoted, "the failed handoff demotes the node at the block it matched")
 }
 
 // Every failed handoff is counted: the join retries without bound, so a

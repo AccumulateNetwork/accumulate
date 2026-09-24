@@ -15,8 +15,12 @@
 //   - ACTIVE:  the local root equals a root the Directory anchored, so the
 //     state is verified. Serves and takes part in consensus.
 //
-// The one transition is BOOTING → ACTIVE. A node never regresses; a
-// verification that breaks means starting over.
+// A node is ACTIVE only while it executes in agreement, so the machine moves
+// both ways: BOOTING → ACTIVE when the local root matches an anchored root,
+// and ACTIVE → BOOTING when the join finds the node's root no longer matches
+// (a re-sync, step 4) or a handoff fails (step 5). A demoted node serves
+// nothing until the join matches again, and it is promoted by the same
+// promotion as the first time (#4385).
 //
 // WAITING and COMPLETE are retired (#4368): they named a backfilled history
 // this line does not have, and nothing reached them. Their numbers stay
@@ -134,8 +138,8 @@ func (a *Advertisement) Validate() error {
 	return nil
 }
 
-// Machine is the in-process state machine. Forward-only transitions.
-// Persistence is the caller's.
+// Machine is the in-process state machine: promoted at a root match, demoted
+// when the node stops executing in agreement. Persistence is the caller's.
 type Machine struct {
 	partition *url.URL
 
@@ -251,6 +255,32 @@ func (m *Machine) PromoteToActive(anchor [32]byte, sinceBlock uint64) bool {
 	m.state = StateActive
 	m.anchor = anchor
 	m.since = sinceBlock
+	m.last = time.Now()
+	cbs := append([]func(Advertisement){}, m.onChange...)
+	ad := m.adLocked()
+	m.mu.Unlock()
+
+	for _, cb := range cbs {
+		cb(ad)
+	}
+	return true
+}
+
+// Demote transitions ACTIVE → BOOTING: the node's root no longer matches the
+// anchored one and it is syncing again, or it matched and could not start
+// executing from there (executor.md, "Sync", steps 4 and 5; #4385). atBlock is
+// the block it stopped agreeing at, advertised as SinceBlock; the verified
+// anchor is cleared, because the node no longer holds the state it names.
+// Returns false if the machine is not ACTIVE.
+func (m *Machine) Demote(atBlock uint64) bool {
+	m.mu.Lock()
+	if m.state != StateActive {
+		m.mu.Unlock()
+		return false
+	}
+	m.state = StateBooting
+	m.anchor = [32]byte{}
+	m.since = atBlock
 	m.last = time.Now()
 	cbs := append([]func(Advertisement){}, m.onChange...)
 	ad := m.adLocked()
