@@ -1145,15 +1145,31 @@ func TestANotReadyPagePinsTheCursorAtTheFirstBadEntry(t *testing.T) {
 	s.PageSize = 8
 
 	observed := map[uint64]bool{}
-	s.OnAnchor = func(_ *url.URL, block uint64, _ [32]byte) { observed[block] = true }
+	var calls int
+	s.OnAnchor = func(_ *url.URL, block uint64, _ [32]byte) { observed[block] = true; calls++ }
 	err = s.Read(ctx)
-	t.Logf("read 1: %d roots observed, %d page calls, err=%v", len(observed), ring.pages, err)
+	t.Logf("read 1: %d roots observed (%d times), %d page calls, err=%v", len(observed), calls, ring.pages, err)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, errors.NotReady), "%v", err)
 	require.Len(t, observed, 10, "entries 8 and 9 are served signed and were not read")
 	for i := 0; i < 10; i++ {
 		require.True(t, observed[uint64(100+i)], "block %d", 100+i)
 	}
+
+	// The narrowing never rewinds (#4384; review F3): each root is read
+	// once, the pages are 0-7, 8-15 (refused), 8-11 (refused), 8-9, 10-11
+	// (refused) and 10 alone (refused), and the next read asks for 10 again
+	// and nothing before it.
+	require.Equal(t, 10, calls, "a root was read twice: the narrowing moved the cursor back")
+	require.Equal(t, 6, ring.pages, "read 1: 0-7, 8-15, 8-11, 8-9, 10-11, 10")
+	ring.pages, calls = 0, 0
+	require.Error(t, s.Read(ctx))
+	t.Logf("read 2: %d roots re-observed, %d page calls", calls, ring.pages)
+	require.Zero(t, calls, "read 2 read a root before the entry it is held at")
+	require.Equal(t, 4, ring.pages, "read 2: 10-17, 10-13, 10-11, 10")
+	st, ok := s.Stalled()
+	require.True(t, ok)
+	require.Equal(t, uint64(10), st.Entry)
 }
 
 // (#4419c) A read held at an entry says so: which entry, which peers were
