@@ -413,18 +413,20 @@ still different, or not known:
   v3 querier's expanded entries) was audited for a block at or below the join,
   and one that reads there finds `NotFound`, which §6 says must be
   `NotReady`.
-- **The span the seed skips is memory.** It is what the process's own join
-  recorded (`synthcache.JoinedOver`, in `SettleStaging`) before the handoff's
-  first block: after the block the executor last executed
-  (`SystemData.ExecutedBlock`, durable, this node's own), through the join
-  block. Every restarted process on this line joins before it opens a block,
-  so it is always set; a process that opened a block without settling a join
-  would seed from blocks it did not execute, as before. A store without the
-  `ExecutedBlock` record (older than #4344) is taken to have executed none of
-  the blocks at or below the join, and seeds none of them. A first version
-  skipped every block at or below the join block, which left a restart that
-  fell nothing behind with an empty cache — the #4241/#4277 restart hole
-  (review note_3896114642, `TestAZeroGapRestartStillSeedsItsOwnBlocks`).
+- **The seed skips a block on the store's evidence.** A block in the seed's
+  window whose synthetic entries the store holds with no message behind them,
+  or whose entries it does not hold, is taken as one this node did not execute
+  and is neither rebuilt nor dispatched. It assumes a node never loses the
+  message behind a synthetic entry of a block it executed: nothing on this
+  line prunes messages, and if something did, the seed would skip that block
+  rather than fail on it — a dispatch this node would not make, not a wrong
+  one. Two earlier versions on this branch were wrong and are recorded here:
+  skipping every block at or below the join block left a restart that fell
+  nothing behind with an empty cache — the #4241/#4277 restart hole (review
+  note_3896114642, `TestAZeroGapRestartStillSeedsItsOwnBlocks`); skipping a
+  span the join remembered in memory lost it with the process, so the second
+  restart after a join failed its first block on the first join's gap
+  (note_3896174331, `TestASecondRestartAfterAJoinStillOpens`).
 - **A stored message is not content-addressed for wrappers.** The executor
   stores an anchor, sequenced or synthetic message that refers to its
   transaction by hash under the hash of the message as it arrived (#4236), so

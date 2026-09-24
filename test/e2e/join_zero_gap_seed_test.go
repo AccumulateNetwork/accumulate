@@ -123,4 +123,8 @@ func TestAZeroGapRestartStillSeedsItsOwnBlocks(t *testing.T) {
 	entries, blocks := cache.Len()
 	t.Logf("zero-gap restart (joined at %d): the seed rebuilt %d entries in %d blocks", h, entries, blocks)
 	require.Equal(t, cBlocks, blocks, "a node that executed every block at or below the block it joined at must still seed its own in-flight blocks")
+	// And the synthetics in them: a block this node executed has its
+	// messages, and is never skipped as one it did not execute (#4400).
+	require.NotZero(t, entries, "a node that executed its in-flight blocks rebuilt none of their synthetics")
+	require.Equal(t, cEntries, entries, "a node that executed every block at or below the block it joined at must still seed its own in-flight synthetics")
 }

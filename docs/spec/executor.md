@@ -738,14 +738,16 @@ synthetics of its own blocks still in flight, from `<partition>/synthetic`.
 The first two read the spine's chains and the messages behind them, which the
 join carries (§3), and an anchor is the partition's whichever node executed
 the block that produced it. The third skips **only the blocks the node did not
-execute** — those after the block its executor last executed before the join,
-through the block the join settled at: it produced none of their synthetics,
-holds none of their messages, and answers for none of them (below). The blocks
-at or below the one it executed are its own and are rebuilt, so a restart that
-fell nothing behind, whose join settles at its own height, skips nothing. The
-join records that span in the process's cache before the first block opens,
-from the executor's own record of the block it last executed, which no pull
-writes (`SettleStaging`, `SystemData.ExecutedBlock`; #4400). A seed that fails is not a seed: the
+execute**: it produced none of their synthetics, holds none of their messages,
+and answers for none of them (below). **The store says which they are**, not a
+memory of the join: a block whose synthetic entries the store holds with no
+message behind them — or whose entries it does not hold at all — is a block a
+join carried the node past, because the join pulls `<partition>/synthetic` as a
+head and an open mark set, and a node that executes a block writes its entries
+and their messages in the one batch. Every other block in the window is the
+node's own and is rebuilt, so a restart that fell nothing behind skips nothing,
+and a restart after an earlier join skips that join's blocks however many
+processes ago it was (#4400). A seed that fails is not a seed: the
 next block tries again, and no block opens on a cache nothing filled. The
 spine is the one place a join takes chain entries and the messages behind
 them; nothing under this section fetches the history of any other account a

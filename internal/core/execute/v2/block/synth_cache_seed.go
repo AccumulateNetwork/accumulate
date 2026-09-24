@@ -65,20 +65,22 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 		}
 	}
 
-	// The blocks a join carried this node past -- after the block its
-	// executor last executed, through the block the join settled at -- it did
-	// not execute: it produced none of their synthetics and holds none of
-	// their messages, since the join pulls <partition>/synthetic state-only.
-	// They are not its to rebuild, dispatch or serve (executor.md, "Sync" §6).
-	// Rebuilding them read messages the node never had and failed the first
-	// block it opened; skipping every block at or below the join instead left
-	// a restart that fell nothing behind with an empty cache (#4400).
+	// A block a join carried this node past it did not execute: it produced
+	// none of the block's synthetics and holds none of their messages, since
+	// the join pulls <partition>/synthetic state-only. Such a block is not its
+	// to rebuild, dispatch or serve (executor.md, "Sync" §6), and the store
+	// says which blocks they are: a synthetic entry of the block with no
+	// message behind it. That is the store's own fact, true after any number
+	// of restarts, where a span remembered by the process that joined dies
+	// with it (#4400). A block whose messages are there is rebuilt.
 	var blocks []*synthcache.Block
+	notExecuted := map[uint64]bool{}
 	for b := from; b < current; b++ {
-		if x.synthCache().NotExecuted(b) {
+		blk, err := x.rebuildCacheBlock(batch, b)
+		if errors.Is(err, errNotExecuted) {
+			notExecuted[b] = true
 			continue
 		}
-		blk, err := x.rebuildCacheBlock(batch, b)
 		if err != nil {
 			return errors.UnknownError.WithFormat("rebuild cache for block %d: %w", b, err)
 		}
@@ -106,7 +108,7 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 	}
 	deliveredFrom := func(dst *url.URL) uint64 { return ledger.Partition(dst).Delivered }
 	for _, r := range receipts {
-		if r.block < from || x.synthCache().NotExecuted(r.block) {
+		if r.block < from || notExecuted[r.block] {
 			continue
 		}
 		if r.anchorBlock == receipts[0].anchorBlock {
@@ -185,6 +187,10 @@ func (x *Executor) ownReceipts(batch *database.Batch, oldest uint64) ([]ownRecei
 	return receipts, nil
 }
 
+// errNotExecuted is a block whose synthetic entries the store holds without
+// the messages behind them: a block this node did not execute (#4400).
+var errNotExecuted = errors.NotFound.With("this node did not execute the block: its synthetic entries have no messages behind them")
+
 // rebuildCacheBlock reads what block b produced and what its proofs are built
 // from, by position, one destination chain at a time (executor spec, "One
 // chain per pair, one stage per chain"). A block that appended to no chain is
@@ -241,13 +247,25 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 		blk.Streams[synthcache.StreamKey(dst)] = st
 
 		hashes, err := chain.Entries(from, to+1)
-		if err != nil {
+		switch {
+		case err == nil:
+		case errors.Is(err, errors.NotFound):
+			// The index names entries the store does not hold: the chain
+			// came from a peer as a head and an open mark set.
+			return nil, errNotExecuted
+		default:
 			return nil, errors.UnknownError.WithFormat("load synthetic chain entries %d..%d for %v: %w", from, to, dst, err)
 		}
 		for i, hash := range hashes {
 			var seq *messaging.SequencedMessage
 			err := batch.Message2(hash).Main().GetAs(&seq)
-			if err != nil {
+			switch {
+			case err == nil:
+			case errors.Is(err, errors.NotFound):
+				// An entry with no message behind it: a node that executed
+				// the block wrote both in the same batch.
+				return nil, errNotExecuted
+			default:
 				return nil, errors.UnknownError.WithFormat("load synthetic message: %w", err)
 			}
 			st.Segment.Append(hash)

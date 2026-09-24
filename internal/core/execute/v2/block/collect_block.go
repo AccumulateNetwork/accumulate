@@ -355,26 +355,11 @@ func (x *Executor) SettleStaging(batch *database.Batch, q uint64) error {
 	b.staging.AtBlock(q)
 	b.staging.Commit()
 
-	// This node's executor executed nothing past the block it last executed
-	// before the join (collecting executes nothing), so the blocks after it
-	// through Q are ones it did not execute: it produced none of their
-	// synthetics, a Directory receipt for one of them is not its to dispatch,
-	// and the seed must not rebuild them. The blocks at or below the one it
-	// executed are its own, and a restart that fell nothing behind (Q equal
-	// to that block) skips nothing (#4294, #4400). The record is this node's
-	// executor's own (SystemData, block_end.go), which no pull writes.
-	executed, err := batch.SystemData(x.Describe.PartitionId).ExecutedBlock().Get()
-	switch {
-	case err == nil:
-	case errors.Is(err, errors.NotFound):
-		// A store from before the record existed: which blocks this node
-		// executed is not known, so none at or below Q is taken as its own.
-		executed = 0
-	default:
-		b.staging.Discard()
-		return errors.UnknownError.WithFormat("load this node's executed block: %w", err)
-	}
-	x.synthCache().JoinedOver(executed, q)
+	// This node executed no block at or below Q since it started, so a
+	// Directory receipt for one of those blocks it does not hold is not a
+	// miss (#4294). Which of them its store holds the synthetics of is the
+	// store's to say, and the seed reads it there (#4400).
+	x.synthCache().JoinedAt(q)
 	x.logger.Info("Staging settled at the block the state is",
 		"module", "sync", "partition", x.Describe.PartitionId, "block", q,
 		"streams", len(streams), "released", released, "directoryAnchorBlock", through)
