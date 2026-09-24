@@ -36,6 +36,11 @@ type countingSources struct {
 	mu    sync.Mutex
 	round int
 	asked map[string]map[int]int // account -> round -> asks
+
+	// inject, when set, is named by the peers' block ledger while injecting
+	// is true (namingQuerier).
+	inject    *url.URL
+	injecting bool
 }
 
 func (s *countingSources) For(ctx context.Context, account *url.URL) ([]pull.Source, *url.URL, error) {
@@ -49,7 +54,42 @@ func (s *countingSources) For(ctx context.Context, account *url.URL) ([]pull.Sou
 	return s.inner.For(ctx, account)
 }
 
-func (s *countingSources) Querier(partition *url.URL) api.Querier { return s.inner.Querier(partition) }
+func (s *countingSources) Querier(partition *url.URL) api.Querier {
+	q := s.inner.Querier(partition)
+	if s.inject == nil {
+		return q
+	}
+	return &namingQuerier{Querier: q, s: s}
+}
+
+// namingQuerier is a peer whose block ledger names one account more than the
+// block holds -- one no peer has a leaf for -- while s.injecting is set. It
+// is the peer's word the join takes a block ledger on (#4310), and it is how
+// a name every source answers NotFound for reaches the join through the
+// production walk.
+type namingQuerier struct {
+	api.Querier
+	s *countingSources
+}
+
+func (q *namingQuerier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	r, err := q.Querier.Query(ctx, scope, query)
+	bq, ok := query.(*api.BlockQuery)
+	if err != nil || !ok || bq.Minor == nil || bq.EntryRange == nil || bq.EntryRange.Start != 0 {
+		return r, err
+	}
+	q.s.mu.Lock()
+	injecting := q.s.injecting
+	q.s.mu.Unlock()
+	mb, ok := r.(*api.MinorBlockRecord)
+	if !injecting || !ok || mb.Entries == nil {
+		return r, err
+	}
+	mb.Entries.Records = append(mb.Entries.Records, &api.ChainEntryRecord[api.Record]{
+		Account: q.s.inject, Name: "main"})
+	mb.Entries.Total++
+	return mb, nil
+}
 
 func (s *countingSources) roundsAsked(u *url.URL) int {
 	s.mu.Lock()
@@ -105,6 +145,8 @@ func joinPastFailedWork(t *testing.T, failing bool) {
 	sim.SetRoute(alice, "BVN0")
 	sim.SetRoute(bob, "BVN0")
 	sim.SetRoute(void, "BVN0")
+	nobody := url.MustParse("nobody-4397")
+	sim.SetRoute(nobody, "BVN0")
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
@@ -147,6 +189,14 @@ func joinPastFailedWork(t *testing.T, failing bool) {
 		require.NoError(t, err)
 	}
 	require.True(t, matched, "phase one never matched, so phase two has nothing to start from")
+
+	// From here the peers' block ledger also names an account no peer has a
+	// leaf for, until the join matches: every source answers it NotFound.
+	if failing {
+		sources.mu.Lock()
+		sources.inject, sources.injecting = nobody.JoinPath("tokens"), true
+		sources.mu.Unlock()
+	}
 
 	// Phase two: the network executes the load generator's invalid work --
 	// or, in the control, only valid work -- and the join must follow it.
@@ -197,6 +247,9 @@ func joinPastFailedWork(t *testing.T, failing bool) {
 		}
 	}
 	rounds := sources.round - first + 1
+	sources.mu.Lock()
+	sources.injecting = false
+	sources.mu.Unlock()
 
 	if failing {
 		t.Logf("phase two ran %d rounds; %v was asked for in %d of them, %v in %d",
@@ -229,7 +282,11 @@ func joinPastFailedWork(t *testing.T, failing bool) {
 	// the root matches, the walk starts past the block that wrote both, and a
 	// name still asked after that is being re-asked because it was refused.
 	if failing {
+		nobodyTokens := nobody.JoinPath("tokens")
+		require.NotZero(t, sources.roundsAsked(nobodyTokens),
+			"precondition: the name no peer holds a leaf for reached the join")
 		ghostBefore, voidBefore := sources.roundsAsked(ghost), sources.roundsAsked(voidTokens)
+		nobodyBefore := sources.roundsAsked(nobodyTokens)
 		for round := 0; round < 4*staleEveryRounds; round++ {
 			sources.round++
 			require.NoError(t, state.Pull(ctx), "after-match pull round %d", round)
@@ -239,6 +296,14 @@ func joinPastFailedWork(t *testing.T, failing bool) {
 			"%v was asked again after the join matched past the block that wrote it", ghost)
 		require.Equal(t, voidBefore, sources.roundsAsked(voidTokens),
 			"%v was asked again after the join matched past the block that wrote it", voidTokens)
+
+		// The drop rule (#4397, clause 3): a name every source answers
+		// NotFound for is dropped, so once nothing names it again it is never
+		// asked again. Refused instead, it is asked at the front of every pass
+		// for the life of the process.
+		require.Equal(t, nobodyBefore, sources.roundsAsked(nobodyTokens),
+			"%v, which every peer answers NotFound, was asked again in %d rounds after nothing named it",
+			nobodyTokens, sources.roundsAsked(nobodyTokens)-nobodyBefore)
 	}
 }
 
