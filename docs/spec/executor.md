@@ -540,7 +540,7 @@ the peers held #104 from a block before `B`, and executing `B + 1` without it
 is the #4290 divergence. The node does not execute. It takes `B + 1`'s block
 ledger, pulls the accounts it names at anchored `B + 1` — whose `Delivered`
 now says what the peers actually ran — keeps `B + 1`'s transactions in
-staging, and asks the same question of `B + 2`. **It advances the sync one
+staging, takes `B + 2`'s in, and asks the same question of `B + 2`. **It advances the sync one
 block at a time until a block has no gap, then executes.**
 
 That loop ends, and quickly. The node has collected every committed block
@@ -583,12 +583,30 @@ what the state says executed, and that is all it ever needs to be.
 #### 5. Converge, then execute
 
 When the local BPT root equals the root a pass proved (§2), `Q` is the block
-the ledger in that state names, and staging is brought to `Q`: everything collected through `Q` held,
-everything at or below each stream's `Delivered` at `Q` — read from the pulled
-ledgers — released, and proofs decided against the anchors executed by `Q`. `Q`
-is checked against the state, not taken on trust: staging settled against
-another block than the state it is paired with executes a different block than
-the peers, which is the failure the join exists to prevent.
+the ledger in that state names, and staging is brought to `Q`: everything
+collected through `Q + 1` held, everything at or below each stream's
+`Delivered` at `Q` — read from the pulled ledgers — released, and proofs
+decided against the anchors executed by `Q`. `Q` is checked against the
+state, not taken on trust: staging settled against another block than the
+state it is paired with executes a different block than the peers, which is
+the failure the join exists to prevent.
+
+**At the handoff, staging holds everything collected through `Q + 1` and
+nothing collected after it.** The buffered groups up to and including the one
+that is `Q + 1` — by leader round, below — are taken into staging in the order
+consensus committed them, before the gap check, because the gap check asks
+what `Q + 1` carries (step 4). The groups after `Q + 1` reach staging only by
+being executed, as they reach a peer's: a peer executing `Q + 1` holds nothing
+that arrived in `Q + 2`, and a block delivers the contiguous run from what is
+held, so a node whose staging already held the arrivals of `Q + 2`, `Q + 3`, …
+executes a longer run than its peers and a different block (#4398: run
+`20260924T052134Z`, a BVN joined at 203 with eight groups buffered, and its
+block 204 delivered Directory anchors and produced synthetics its peers only
+received in 205–211). Staging only grows as the sync advances — `Q` only
+moves forward — and a group that is `Q + 1` but has not been collected yet is
+waited for (`NotReady`): a gap check without it would not see the gap it
+carries (`Service.StageThrough`, called by the join after the match and before
+the gap check).
 
 The node then executes block `Q + 1` from the buffer as any node executes a
 block, and it is a validator or a follower from there.
@@ -630,8 +648,9 @@ propose — not in how it gets there; what it does with a transaction it cannot
 propose is step 6's rule: it relays it, and never drops it.
 
 While all of this runs the node **listens**: it subscribes to consensus and
-takes every committed block from then on into a buffer, and into staging —
-collected, not executed. A collected block has no index; the node executes
+takes every committed block from then on into a buffer — collected, not
+executed. Staging is filled from that buffer only through the block after the
+state the join proves (above), never as a group arrives. A collected block has no index; the node executes
 nothing, so it does not report execution and its primary proposes no batches
 (consensus.md, invariant 9).
 

@@ -363,7 +363,8 @@ execute-from-own-state branch, and the pull's meeting point (ahead / level /
 disagrees, #4348, and its hole #4350) are deleted, not bypassed:
 `TestTheJoinAsksNoPeerForItsConclusions` (internal/node/join) fails on any
 of those identifiers in the module's non-test source. A join collects into
-its own staging from the first block it hears and settles on state it proved
+its own buffer from the first block it hears, takes the buffer into its own
+staging only through the block after the state it proved (#4398), and settles on state it proved
 against a signed anchor; at an anchored height there is one correct leaf per
 account, so there is nothing to meet in the middle. The departures recorded
 here for serving staging — the unpinned page, `Block` as the last processed
@@ -765,6 +766,12 @@ spec**, both deliberate:
   that index and the simulator's ledgers record no round. Every simulator
   join test therefore exercises a handoff rule production does not run; the
   round rule is covered only by `internal/node/dagbft` and by a live network.
+  The same holds for which buffered blocks are taken into staging before the
+  handoff (#4398): the DAG service stages the groups through the first one
+  above the pulled ledger's `LeaderRound` (`Service.StageThrough`); the
+  simulator stages the blocks whose index is at most `Q + 1`. The rule —
+  nothing collected after `Q + 1` is in staging when `Q + 1` executes — is the
+  same on both.
 - `classify` resolves a remote transaction body from the store, so a sequenced
   message carrying a remote stub whose body this node has not pulled yet is
   not classified and not held at all — a hole on the joining node where its
