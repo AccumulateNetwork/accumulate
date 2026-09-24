@@ -67,7 +67,8 @@ func (p *Partition) NodeDatabase(i int) *database.Database { return p.nodes[i].d
 // does. What the daemon does at startup for a joining node it does here, as
 // cmd/accumulated/run/dagbft.go does it: the join's state is built by
 // join.NewState over join.QueryPeers — named peers, this node's own ID
-// excluded (#4303) — from the block this node's executor last executed, and
+// excluded (#4303) — from the block join.LastExecutedBlock reads, the
+// daemon's own read, and
 // that state's machine is what the node's querier refuses by (#4295, #4363).
 // So from here a read addressed to this node answers NotReady until the join
 // promotes it to ACTIVE, by the production querier's own gate.
@@ -82,9 +83,11 @@ func (p *Partition) RestartNode(i int) {
 	n.staging.Reset()
 	n.join.leave()
 
-	last, _, err := n.executor.LastBlock()
+	// The daemon's own read: the record no pull writes (#4344), not the
+	// ledger the pull overwrites.
+	last, err := join.LastExecutedBlock(n.database, p.ID)
 	if err != nil {
-		panic(fmt.Errorf("restart node %d of %s: read its last block: %w", i, p.ID, err))
+		panic(fmt.Errorf("restart node %d of %s: read its executed block: %w", i, p.ID, err))
 	}
 	state, err := join.NewState(join.StateOptions{
 		Partition: protocol.PartitionUrl(p.ID),
@@ -95,7 +98,7 @@ func (p *Partition) RestartNode(i int) {
 			Router:  p.sim.router,
 			Self:    n.peerID,
 		},
-		ExecutedBlock: last.Index,
+		ExecutedBlock: last,
 	})
 	if err != nil {
 		panic(fmt.Errorf("restart node %d of %s: prepare the join: %w", i, p.ID, err))
