@@ -270,6 +270,7 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 	})
 	require.NoError(t, err, "the join did not complete within %d pull rounds", maxRounds)
 	require.False(t, p.Joining(1), "the joined node executes")
+	require.Empty(t, entriesWithNoMessage(t, p.NodeDatabase(1), "BVN1"), "the joined node holds spine entries with no message behind them (#4421)")
 	require.Equal(t, partitionBlock(t, p.NodeDatabase(0), PartitionUrl("BVN1")), partitionBlock(t, p.NodeDatabase(1), PartitionUrl("BVN1")),
 		"the joined node stands at the block its peers stand at")
 	t.Logf("held after the join:     %v", []int{held(0), held(1), held(2)})

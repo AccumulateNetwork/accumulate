@@ -20,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -153,9 +154,10 @@ func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, 
 	}}
 	settler, ok := part.NodeExecutor(fresh).(join.Settler)
 	require.True(t, ok)
+	buffer := &handoffCounting{Buffer: part.NodeJoin(fresh)}
 	outcome, err := join.Run(ctx, join.Options{
 		Partition: partition,
-		Buffer:    part.NodeJoin(fresh),
+		Buffer:    buffer,
 		Stage:     &join.ExecutorStage{Settler: settler, Staging: part.NodeStaging(fresh), Database: part.NodeDatabase(fresh)},
 		State:     stepping,
 		Peers:     &join.APIPeers{Partition: partition, Client: sim.S.Services(), Network: t.Name()},
@@ -165,6 +167,10 @@ func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, 
 	require.NoError(t, err, "a fresh %s node did not join within %d pull rounds", partition, maxRounds)
 	require.Equal(t, join.Joined, outcome)
 	require.False(t, part.Joining(fresh))
+	// The handoff's first block opens the seed, which reads the pool's newest
+	// entries and the messages behind them: a store holding an entry without
+	// its message fails it, and the join syncs and hands off again.
+	require.Empty(t, buffer.failed, "a handoff failed to produce a block")
 
 	// The handoff executes blocks, and the first opens the seed. Run on so
 	// the node executes past it.
@@ -175,6 +181,22 @@ func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, 
 	require.Empty(t, missing, "the joined node holds spine entries with no message behind them")
 	require.Empty(t, entriesWithNoMessage(t, part.NodeDatabase(fresh), partition),
 		"after executing, the node holds spine entries with no message behind them")
+}
+
+// handoffCounting counts the join's handoffs that failed to produce a block:
+// not the waits (NotReady) or the state being behind (Conflict), which a join
+// meets in the ordinary way, but a group that could not be produced (#4401).
+type handoffCounting struct {
+	join.Buffer
+	failed []error
+}
+
+func (b *handoffCounting) Handoff(q uint64) error {
+	err := b.Buffer.Handoff(q)
+	if err != nil && !errors.Is(err, errors.NotReady) && !errors.Is(err, errors.Conflict) {
+		b.failed = append(b.failed, err)
+	}
+	return err
 }
 
 // entriesWithNoMessage is the store invariant #4421 broke (executor.md,

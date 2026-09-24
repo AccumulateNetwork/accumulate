@@ -183,6 +183,7 @@ func TestAFollowerJoinsARunningNetworkAndLeaves(t *testing.T) {
 	require.NoError(t, err, "the follower did not join within %d pull rounds", maxRounds)
 	require.Equal(t, join.Joined, outcome)
 	require.False(t, p.Joining(follower), "the joined follower executes")
+	require.Empty(t, entriesWithNoMessage(t, p.NodeDatabase(follower), "BVN0"), "the joined follower holds spine entries with no message behind them (#4421)")
 	require.Equal(t, nodestate.StateActive, state.Machine().State(), "the follower did not promote")
 
 	// The transaction handed to the follower while it joined was executed by

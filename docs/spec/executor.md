@@ -573,7 +573,14 @@ until it **meets data it already has**. A bootstrapping node never meets any
 and collects the whole chain; a restarted node meets its own at once and
 collects nothing. Same walk, different stopping point — which is why a defect
 at the meeting point is invisible to every bootstrap test and fatal to every
-restart.
+restart. A spine account is taken this way in **every** pass that names it,
+not only in the pass that carries the spine: the block ledger names
+`<partition>/anchors` in every pass, since every block writes the pool, and a
+later pass that took it as a head and an open mark set left its new entries
+with no message behind them (#4421). What the node already has is an entry
+**and the message behind it**: an entry held without its message — a store an
+earlier join wrote that way — is not met but fetched, once per process, for
+the newest entries the first block's reads can reach.
 
 **A pulled transaction chain carries the messages behind its entries.** The
 entries are hashes, and the executor reads what they name: the first block a

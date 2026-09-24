@@ -494,14 +494,18 @@ simulator still does not do as the daemon does:
   relay assertion — the committee executed what the joining follower was
   handed — therefore proves the hub and not the daemon's relay
   (`cmd/accumulated/run/submit_relay.go`, #4366).
-- `RestartNode` resets the node's staging and its join, not its executor:
-  the executor's cache seed and in-memory producer cache survive the
-  "restart", so a simulated handoff never meets what a fresh process meets on
-  its first block (the seed reading message bodies the join did not pull,
-  #4400). The rule for a handoff that fails (executor.md "Sync", step 5,
-  #4401) is therefore exercised by `internal/node/dagbft`, `internal/node/join`
-  and the simulator's `joinState` against an injected failure, not by a
-  simulated restart.
+- `RestartNode` resets the node's staging, its join and its executor's seed
+  latch (`Executor.ForgetSeed`, #4421), so the first block a restarted
+  simulator node opens runs the seed over the store the join left, as a new
+  process does: the anchor pool's entries and the messages behind them, and
+  #4400's skip of blocks the node did not execute. Before #4421 the latch
+  survived, a restarted simulator node never seeded again, and a join that
+  left pool entries with no message behind them "passed". It does not rebuild
+  the executor: the in-memory producer cache, the conductor, the dispatcher
+  and the executor's other memory survive the "restart". The seed adds to a
+  cache that still holds what the node produced before it (`Cache.Seed` skips
+  a block already held), so what the seed alone would have held is not what a
+  simulated restart dispatches and serves from.
 - A simulator follower still votes and counts its own vote
   (`Node.isValidatorOn`), so stopping it cannot show that no quorum waited on
   it; the cadence assertion shows only that the partition runs on.
