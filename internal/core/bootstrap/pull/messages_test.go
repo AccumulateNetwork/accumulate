@@ -332,3 +332,55 @@ func TestFullSpine_ARefusedAccountKeepsNoMessage(t *testing.T) {
 		})
 	}
 }
+
+// askCounting counts the transactions a peer is asked for by hash.
+type askCounting struct {
+	*dbSource
+	asked int
+}
+
+func (c *askCounting) QueryMessage(ctx context.Context, id *url.TxID, q *api.DefaultQuery) (*api.MessageRecord[messaging.Message], error) {
+	c.asked++
+	return c.dbSource.QueryMessage(ctx, id, q)
+}
+
+// TestFullSpine_AStoredFormsTransactionTheNodeHoldsIsNotAskedFor — a stored
+// form whose transaction the node already holds (it executed the anchor
+// before its gap) is resolved from the node's own store, not by asking the
+// peer again (review finding 4, note_3896114642).
+func TestFullSpine_AStoredFormsTransactionTheNodeHoldsIsNotAskedFor(t *testing.T) {
+	src, u, entries := spineWithMessages(t)
+
+	// The anchor's transaction, as the stored form names it.
+	var anchor *messaging.BlockAnchor
+	func() {
+		b := src.Begin(false)
+		defer b.Discard()
+		require.NoError(t, b.Message(entries[len(entries)-1]).Main().GetAs(&anchor))
+	}()
+	ref := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.TransactionMessage).Transaction.Body.(*protocol.RemoteTransaction)
+	var txn *messaging.TransactionMessage
+	func() {
+		b := src.Begin(false)
+		defer b.Discard()
+		require.NoError(t, b.Message(ref.Hash).Main().GetAs(&txn))
+	}()
+
+	for _, holds := range []bool{false, true} {
+		dst := newObservedDB(t)
+		b := dst.Begin(true)
+		if holds {
+			require.NoError(t, b.Message(ref.Hash).Main().Put(txn))
+		}
+		peer := &askCounting{dbSource: &dbSource{db: src}}
+		p, _, err := FetchFrom(context.Background(), []Source{peer}, b, u, Options{Mode: ModeFullSpine})
+		require.NoError(t, err)
+		require.NoError(t, p.Keep())
+		if holds {
+			require.Zero(t, peer.asked, "the node holds the transaction and asked the peer for it anyway")
+		} else {
+			require.NotZero(t, peer.asked, "precondition: a node without the transaction asks for it")
+		}
+		b.Discard()
+	}
+}

@@ -317,7 +317,7 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 			return fail(errors.UnknownError.WithFormat("chain heads %s: %w", u, err))
 		}
 	case ModeFullSpine:
-		p.bodies = newMessages(ctx, src)
+		p.bodies = newMessages(ctx, src, sub)
 		err = pullChainsFull(ctx, src, sub, p.bodies, u, pageSize)
 		if err != nil {
 			return fail(errors.UnknownError.WithFormat("chains full %s: %w", u, err))
@@ -665,8 +665,9 @@ func chainEntriesWith(ctx context.Context, src Source, u *url.URL, chainName str
 // does not hash to the entry, has not served the chain; the fetch fails and
 // the caller asks the next peer. A hash is never kept without its message.
 type messages struct {
-	ctx context.Context
-	src Source
+	ctx   context.Context
+	src   Source
+	local *database.Batch
 
 	// txns are the transactions proven so far in this fetch, by hash: the
 	// ones a stored form refers to, and the entries that are transactions.
@@ -677,8 +678,10 @@ type messages struct {
 	kept map[[32]byte]messaging.Message
 }
 
-func newMessages(ctx context.Context, src Source) *messages {
-	return &messages{ctx: ctx, src: src, txns: map[[32]byte]*protocol.Transaction{}, kept: map[[32]byte]messaging.Message{}}
+// newMessages proves messages served by src; local is the node's own store,
+// consulted first for a transaction a stored form refers to.
+func newMessages(ctx context.Context, src Source, local *database.Batch) *messages {
+	return &messages{ctx: ctx, src: src, local: local, txns: map[[32]byte]*protocol.Transaction{}, kept: map[[32]byte]messaging.Message{}}
 }
 
 // behind is the message the peer served behind e, if it is e's.
@@ -779,10 +782,20 @@ func (m *messages) expand(msg messaging.Message) (messaging.Message, error) {
 }
 
 // transaction is the transaction whose hash is h, proven by it: from this
-// fetch if it has been seen, else asked of the same peer.
+// fetch if it has been seen, else from the node's own store -- an anchor the
+// node executed before its gap has its transaction there -- else asked of the
+// same peer. The node's own copy is held to the same check as a peer's: a
+// stored form there is not a body.
 func (m *messages) transaction(h [32]byte) (*protocol.Transaction, error) {
 	if txn, ok := m.txns[h]; ok {
 		return txn, nil
+	}
+	if m.local != nil {
+		var own *messaging.TransactionMessage
+		if m.local.Message(h).Main().GetAs(&own) == nil && wholeTransaction(own.Transaction, h) == nil {
+			m.txns[h] = own.Transaction
+			return own.Transaction, nil
+		}
 	}
 	rec, err := m.src.QueryMessage(m.ctx, protocol.UnknownUrl().WithTxID(h), nil)
 	if err != nil {
