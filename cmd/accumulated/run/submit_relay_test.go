@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
@@ -83,6 +84,7 @@ func TestNewSubmitterService_TheDaemonWiresTheCommitteeAndTheRelay(t *testing.T)
 		NodeConfig: nodeCfg,
 		Adapter:    stubAdapter{},
 		EventBus:   events.NewBus(nil),
+		Database:   database.OpenInMemory(nil),
 	})
 	require.NoError(t, err)
 

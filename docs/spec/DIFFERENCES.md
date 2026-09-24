@@ -727,6 +727,14 @@ spec**, both deliberate:
   `runnable` re-checks a collected entry's own receipt against the anchor
   chain, so runnability is a question about the entry and the state and not
   about when the entry was held (executor.md, "Collection").
+- **The simulator's join still maps by block number** (#4362). The DAG
+  service's handoff picks the buffered groups above the pulled ledger's
+  `LeaderRound` (executor.md, "Sync", step 5); the simulator's buffer
+  (`test/simulator/join.go`, `joinState.Handoff`) is handed blocks that
+  already carry an index and has no leader rounds, so it maps its buffer by
+  that index and the simulator's ledgers record no round. Every simulator
+  join test therefore exercises a handoff rule production does not run; the
+  round rule is covered only by `internal/node/dagbft` and by a live network.
 - `classify` resolves a remote transaction body from the store, so a sequenced
   message carrying a remote stub whose body this node has not pulled yet is
   not classified and not held at all — a hole on the joining node where its
