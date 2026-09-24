@@ -307,11 +307,16 @@ failure, and the join treats them apart:
    serve the root, and the interior hashes, as of block B even after it has
    moved on. Only a block that sent an anchor proves anything; the others'
    roots are a peer's word and only localize. When the roots differ, a peer
-   serves the hashes of the subtrees four levels down, as of B; the node
-   compares them with its own, and descends only into the subtrees that
-   differ, level by level, until it reaches the leaves that differ. It pulls
-   again only those accounts, and drops the leaves it holds under a differing
-   subtree that the peer's subtree does not. A repair then costs what is
+   serves, in one answer, the hash of every subtree about six levels above
+   the leaves, as of B — each covers about 64 accounts. The tree is keyed by
+   hash, so its leaves sit at nearly even depth and the level is fixed from
+   the root: the tree's depth (about log2 of the number of accounts) less
+   six. The node compares the list with its own and pulls again, whole, only
+   the accounts under the subtrees that differ, and drops the leaves it holds
+   there that the peer's subtree does not. Six trades the list against the
+   re-pull: each level up halves the list (a million accounts: 512 KiB at
+   six) and doubles the accounts re-pulled per subtree that differs (Paul:
+   "maybe 5 or 6"). A repair then costs what is
    wrong, not the size of the tree.
 2. **The anchor does not match: repair, and move to the next block.** Once
    the root has matched, the node stages and executes — synthetic and user
