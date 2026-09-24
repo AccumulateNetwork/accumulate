@@ -42,8 +42,14 @@ export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-disoak}"
 log() { echo "$(date -u +%FT%TZ) $*"; }
 
 # stop_run: evidence first, then end the run the way a clean finish does.
+#   $1 = the reason, $2 = when the decision was taken (the STOPPING line's
+#   own second). The manifest dates the stop THERE, not after the capture:
+#   run 20260924T093936Z decided at 10:06:16Z and its manifest said
+#   10:08:24Z, the capture's end, with a chaos pause at 10:06:30Z in the
+#   two minutes between (#4425).
 stop_run() {
-  local reason="$1"
+  local reason="$1" decided="${2:-}"
+  [ -n "$decided" ] || decided=$(date -u +%FT%TZ)
 
   # 1. Evidence. wedgewatch may have spent its captures already; this one is
   #    the state at the moment we decided to stop.
@@ -52,16 +58,27 @@ stop_run() {
   fi
 
   # 2. Say why in the run's own record, so a short elapsed time in INDEX.md is
-  #    not mistaken for a crash or a cancelled run.
+  #    not mistaken for a crash or a cancelled run. Two times, named apart:
+  #    the decision (what a timeline of the run is read against) and the end
+  #    of the capture, which is when the load generator is signalled below.
+  local captured
+  captured=$(date -u +%FT%TZ)
   {
     echo
     echo "## Stopped early by stallkill"
     echo
-    echo "- stopped (UTC): $(date -u +%FT%TZ)"
+    echo "- stopped (UTC, the decision): $decided"
+    echo "- evidence capture ended, load generator signalled (UTC): $captured ($(python3 -c '
+import datetime as d, sys
+f = lambda t: d.datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ")
+try: print("%d s after the decision" % (f(sys.argv[2]) - f(sys.argv[1])).total_seconds())
+except Exception: print("its distance from the decision not computed")
+' "$decided" "$captured"))"
     echo "- reason: $reason"
     echo
-    echo "Evidence was captured before stopping; see the probe-* directory"
-    echo "written at that moment."
+    echo "Evidence was captured from the decision on; see the probe-* directory"
+    echo "written as the capture began. The network ran on, under load and chaos,"
+    echo "until the capture ended."
   } >> "$RUN_DIR/manifest.md" 2>/dev/null
 
   # 3. Stop the load generator. soak.sh is waiting on it, so this makes the
@@ -127,8 +144,9 @@ while :; do
   if ! d="$(curl -sf -m 8 "$MON" 2>/dev/null)"; then
     blind=$(( blind + 1 ))
     if [ "$(( blind * POLL ))" -ge "$MON_DEAD_SECS" ]; then
-      log "STOPPING: monitor unreachable for $(( blind * POLL ))s — refusing to keep running unobserved"
-      stop_run "monitor unreachable for $(( blind * POLL ))s"
+      decided=$(date -u +%FT%TZ)
+      echo "$decided STOPPING: monitor unreachable for $(( blind * POLL ))s — refusing to keep running unobserved"
+      stop_run "monitor unreachable for $(( blind * POLL ))s" "$decided"
       exit 0
     fi
     continue
@@ -181,7 +199,8 @@ print("%d %s %d %d" % (max([x[0] for x in s]) if s else 0,
 
   [ "$worst" -lt "$KILL_SECS" ] && continue
 
-  log "STOPPING: stalled ${worst}s: $names"
-  stop_run "stalled ${worst}s: $names (threshold ${KILL_SECS}s)"
+  decided=$(date -u +%FT%TZ)
+  echo "$decided STOPPING: stalled ${worst}s: $names"
+  stop_run "stalled ${worst}s: $names (threshold ${KILL_SECS}s)" "$decided"
   exit 0
 done

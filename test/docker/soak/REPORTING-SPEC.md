@@ -635,6 +635,16 @@ uncommitted-file count and patch, image ID, executor version, topology,
 settings (duration, rate, drops, healing), and the config files as run.
 Results MUST be appended to the same manifest. (Implemented — `soak.sh`.)
 
+**A run stallkill stops is dated at the decision (#4425).** stallkill
+captures evidence before it signals the load generator, and the capture takes
+minutes (two, on run `20260924T093936Z`) while the network runs on under load
+and chaos. Its manifest section states both times, named apart: `stopped (UTC,
+the decision)` — the second of its `STOPPING:` line, which is what a timeline
+of the run is read against — and `evidence capture ended, load generator
+signalled (UTC)` with its distance from the decision. That run's manifest gave
+the capture's end, 10:08:24Z, as the stop; the decision was 10:06:16Z, and a
+chaos pause at 10:06:30Z fell between them.
+
 ## 7. Observation
 
 The monitor MUST be running and verified before load starts, and the run MUST
