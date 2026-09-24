@@ -210,7 +210,6 @@ func TestAWalkPageNewerThanTheRecordsIsCaughtUpByTheRecord(t *testing.T) {
 	peer.block = 12
 	peer.records[11] = []*url.URL{alice}
 	peer.records[12] = []*url.URL{alice}
-	s.sync.waitFor = 0 // no anchor is what this is about
 	require.NoError(t, s.Pull(ctx))
 
 	require.Equal(t, uint64(12), s.sync.last, "precondition: the records reached block 12")

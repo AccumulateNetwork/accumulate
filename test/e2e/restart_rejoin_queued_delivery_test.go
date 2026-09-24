@@ -147,6 +147,9 @@ func restartResyncUnderLoad(t *testing.T, pullWhileQueued bool) {
 		}
 
 		require.NoError(t, state.Pull(ctx), "pull round %d", round)
+		// The anchor of the block the pull stood at is signed as that block
+		// closes, one block on; the join compares when it has it.
+		sim.StepN(1)
 		_, matched, err = state.Matched(ctx)
 		require.NoError(t, err)
 	}

@@ -94,6 +94,24 @@ func (b *Batch) DeleteAccountState_TESTONLY(url *url.URL) error {
 	return b.kvs().Put(a, nil)
 }
 
+// ForgetAccount removes an account's main state and its state-tree leaf. It
+// is what a joining node does with an account its own execution created and
+// no peer holds (executor spec, "Sync", "Execute, and repair on a mismatch"):
+// after it the executor reads the account as absent and the local root holds
+// no leaf for it. Use it on a batch of its own that has read nothing of the
+// account, since it writes beneath the batch's cached records.
+func (b *Batch) ForgetAccount(u *url.URL) error {
+	err := b.kvs().Delete(record.NewKey("Account", u, "Main"))
+	if err != nil {
+		return errors.UnknownError.WithFormat("delete the main state of %v: %w", u, err)
+	}
+	err = b.BPT().Delete(record.NewKey("Account", u))
+	if err != nil && !errors.Is(err, errors.NotFound) {
+		return errors.UnknownError.WithFormat("delete the leaf of %v: %w", u, err)
+	}
+	return nil
+}
+
 // View runs the function with a read-only transaction.
 func (d *Database) View(fn func(batch *Batch) error) error {
 	batch := d.Begin(false)

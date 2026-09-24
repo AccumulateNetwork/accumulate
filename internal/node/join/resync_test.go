@@ -59,6 +59,9 @@ func (s *divergingState) Pull(context.Context) error {
 	return nil
 }
 
+// Ready: this fake's state is never executed from before it matches.
+func (s *divergingState) Ready() (uint64, bool) { return 0, false }
+
 func (s *divergingState) Matched(context.Context) (uint64, bool, error) {
 	return s.synced, s.synced > 0, nil
 }

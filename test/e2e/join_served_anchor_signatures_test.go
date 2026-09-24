@@ -191,7 +191,7 @@ func joinADirectoryNodeByPull(t *testing.T) (*Sim, *simulator.Partition, uint64,
 	// The join, as the daemon runs it, with the production pull.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stepping := &steppingState{step: func(round int) {
+	stepping := &steppingState{cancel: cancel, step: func(round int) {
 		sim.StepN(3)
 		if round >= 200 {
 			cancel()

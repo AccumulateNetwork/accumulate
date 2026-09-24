@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
@@ -246,7 +247,7 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	const maxRounds = 200
-	stepping := &steppingState{step: func(round int) {
+	stepping := &steppingState{cancel: cancel, step: func(round int) {
 		if round == 1 {
 			dropAnchors.Store(false)
 			release.Store(true)
@@ -303,10 +304,19 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 // steppingState is a join.State whose Pull also steps the simulated network:
 // the simulator advances only when something steps it, and a real network
 // runs on while a node pulls.
+//
+// It is also the root watch join.Run keeps after the handoff (join.RootWatch),
+// forwarded to the state it wraps and stepping the network as it watches: the
+// node may hand off from a state not yet proven and be promoted at the first
+// executed block whose root matches its partition's signed anchor, or repaired
+// at a mismatch (executor spec, "Sync", "Execute, and repair on a mismatch").
+// The watch runs for as long as the node does, so once the node is ACTIVE the
+// test's join ends there: cancel ends join.Run.
 type steppingState struct {
 	join.State
-	round int
-	step  func(round int)
+	round  int
+	step   func(round int)
+	cancel context.CancelFunc
 }
 
 func (s *steppingState) Pull(ctx context.Context) error {
@@ -314,4 +324,25 @@ func (s *steppingState) Pull(ctx context.Context) error {
 	s.round++
 	s.step(s.round)
 	return err
+}
+
+func (s *steppingState) HandedOff(q uint64) {
+	if h, ok := s.State.(interface{ HandedOff(uint64) }); ok {
+		h.HandedOff(q)
+	}
+}
+
+func (s *steppingState) Diverged(ctx context.Context) (uint64, bool, error) {
+	w, ok := s.State.(join.RootWatch)
+	if !ok {
+		s.cancel()
+		return 0, false, nil
+	}
+	s.round++
+	s.step(s.round)
+	n, diverged, err := w.Diverged(ctx)
+	if m, ok := s.State.(interface{ Machine() *nodestate.Machine }); ok && !diverged && m.Machine().State() == nodestate.StateActive {
+		s.cancel()
+	}
+	return n, diverged, err
 }

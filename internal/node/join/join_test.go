@@ -147,6 +147,9 @@ func (s *fakeState) Pull(context.Context) error {
 	s.pulls++
 	return nil
 }
+// Ready: this fake's state is never executed from before it matches.
+func (s *fakeState) Ready() (uint64, bool) { return 0, false }
+
 func (s *fakeState) Matched(context.Context) (uint64, bool, error) {
 	if s.pulls < s.matchFrom {
 		return 0, false, nil
@@ -321,6 +324,9 @@ func (s *gapState) Pull(context.Context) error {
 
 func (s *gapState) Promote(uint64) {}
 func (s *gapState) Demote(uint64)  {}
+
+// Ready: this fake's state is never executed from before it matches.
+func (s *gapState) Ready() (uint64, bool) { return 0, false }
 
 func (s *gapState) Matched(context.Context) (uint64, bool, error) {
 	return s.synced, s.synced > 0, nil

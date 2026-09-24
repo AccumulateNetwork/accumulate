@@ -144,24 +144,27 @@ func TestTheCollectorRefusesAnAnswerToAnotherNumber(t *testing.T) {
 
 	var vals validatorList
 	for i := 0; i < 3; i++ {
-		vals = append(vals, Validator{Name: "v", Sequencer: answering{lie: f.signedBy(t, 5, root(5), i)}})
+		vals = append(vals, Validator{Name: "v", Sequencer: answering{lie: f.signedBy(t, 99, root(99), i)}})
 	}
 	c, got := collectorOver(t, f, vals, 7)
 	require.NoError(t, c.Read(ctx))
-	require.Empty(t, got, "an anchor answered under number 5 was taken for number 7")
+	require.Empty(t, got, "an anchor answered under number 99 was taken for a number asked before it")
 }
 
-// TestTheCollectorReadsForwardFromTheNewestAnchor: the first read starts at
-// the newest anchor the partition's ledger names, and each read takes every
-// anchor produced since, in order, and stops at the first not produced yet.
-func TestTheCollectorReadsForwardFromTheNewestAnchor(t *testing.T) {
+// TestTheCollectorReadsForwardFromJustBeforeTheNewestAnchor: the first read
+// starts collectBackfill anchors before the newest the partition's ledger
+// names -- a node restarted a few blocks behind may match its own state -- and
+// each read takes every anchor produced since, in order, and stops at the
+// first not produced yet.
+func TestTheCollectorReadsForwardFromJustBeforeTheNewestAnchor(t *testing.T) {
 	ctx := context.Background()
 	f := newNet(t, 4, 1)
 
+	const newest = 30
 	answers := make([]map[uint64]*api.MessageRecord[messaging.Message], 3)
 	for i := range answers {
 		answers[i] = map[uint64]*api.MessageRecord[messaging.Message]{}
-		for n := uint64(1); n <= 9; n++ {
+		for n := uint64(1); n <= newest+3; n++ {
 			answers[i][n] = f.signedBy(t, n, root(byte(n)), i)
 		}
 	}
@@ -170,16 +173,20 @@ func TestTheCollectorReadsForwardFromTheNewestAnchor(t *testing.T) {
 		vals = append(vals, Validator{Name: "v", Sequencer: answering{answers: answers[i]}})
 	}
 
-	c, got := collectorOver(t, f, vals, 6)
+	c, got := collectorOver(t, f, vals, newest)
 	require.NoError(t, c.Read(ctx))
-	require.Equal(t, observed{6: root(6), 7: root(7), 8: root(8), 9: root(9)}, got,
-		"the first read starts at the newest anchor and takes what follows")
+	want := observed{}
+	for n := uint64(newest - collectBackfill); n <= newest+3; n++ {
+		want[n] = root(byte(n))
+	}
+	require.Equal(t, want, got,
+		"the first read starts collectBackfill before the newest anchor and takes what follows")
 	_, held := c.Stalled()
 	require.False(t, held, "a number no validator has produced yet is not a stall")
 
 	for i := range answers {
-		answers[i][10] = f.signedBy(t, 10, root(10), i)
+		answers[i][newest+4] = f.signedBy(t, newest+4, root(newest+4), i)
 	}
 	require.NoError(t, c.Read(ctx))
-	require.Equal(t, root(10), got[10], "the next read did not go on from where the last stopped")
+	require.Equal(t, root(newest+4), got[newest+4], "the next read did not go on from where the last stopped")
 }

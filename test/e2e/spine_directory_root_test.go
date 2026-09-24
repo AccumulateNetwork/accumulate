@@ -140,12 +140,14 @@ func joinTheDirectoryFrom(t *testing.T, sim *Sim, sources join.Sources, local *d
 
 	for i := 0; i < rounds; i++ {
 		require.NoError(t, state.Pull(ctx))
+		// The anchor of the block the pull stood at is signed as that
+		// block closes, one block on; the join compares when it has it.
+		sim.Step()
 		block, ok, err := state.Matched(ctx)
 		require.NoError(t, err)
 		if ok {
 			return state, block
 		}
-		sim.Step()
 	}
 	return state, 0
 }

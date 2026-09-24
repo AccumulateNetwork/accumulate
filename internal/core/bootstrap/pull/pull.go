@@ -108,6 +108,15 @@ type Options struct {
 	// #4301 closed.
 	Verify Verifier
 
+	// RetakeLonger, in ModeFullSpine, takes a chain the node holds more
+	// entries of than the peer served again whole, from its first entry,
+	// instead of refusing the peer. A joining node that executed blocks and
+	// is repairing what it executed from the block ledger sets it (executor
+	// spec, "Sync", "Execute, and repair on a mismatch"): its chains may
+	// carry entries of its own that no peer has, and refusing every peer
+	// would leave the account wrong for good.
+	RetakeLonger bool
+
 	// WithReceipt asks each source for the receipt that binds the account to
 	// its BPT root, whether or not Verify is set. The answer that carries a
 	// receipt is the one that carries the rest of the leaf beside the body
@@ -356,7 +365,7 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		}
 	case ModeFullSpine:
 		p.bodies = newMessages(ctx, src, sub)
-		err = pullChainsFull(ctx, src, sub, p.bodies, u, pageSize, opts.CheckHeld)
+		err = pullChainsFull(ctx, src, sub, p.bodies, u, pageSize, opts.CheckHeld, opts.RetakeLonger)
 		if err != nil {
 			return fail(errors.UnknownError.WithFormat("chains full %s: %w", u, err))
 		}
@@ -1226,15 +1235,17 @@ func addChainToIndex(batch *database.Batch, u *url.URL, c *api.ChainRecord) erro
 // The result is held to the peer's word for the chain's head: after the
 // replay the local anchor must equal the anchor of the head the peer served.
 // A chain the node holds more of than the peer served is refused; the pull
-// asks another peer, or this one again once it has moved on. A chain that is
-// not the peer's once the peer's entries are appended to it — a node that
+// asks another peer, or this one again once it has moved on -- unless the
+// caller repairs what it executed (Options.RetakeLonger), when it is taken
+// again whole. A chain that is not the peer's once the peer's entries are
+// appended to it — a node that
 // executed from a wrong state appended entries of its own — is taken again,
 // whole, from its first entry (#4421): it cannot be brought to the peer's by
 // appending, and refusing it left a node the root check had stopped unable
 // ever to sync again. The node's history is not compared with the peer's to
 // find where they part: at an anchored height there is one correct chain, and
 // it is the peer's, proven by the root the account settles against.
-func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodies *messages, u *url.URL, pageSize uint64, checkHeld bool) error {
+func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodies *messages, u *url.URL, pageSize uint64, checkHeld, retakeLonger bool) error {
 	// Empty ChainQuery: list-all-chains. See pullChainHeads.
 	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{})
 	if err != nil {
@@ -1248,7 +1259,7 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodi
 			continue
 		}
 		err := pullChain(ctx, src, batch, bodies, u, c, pageSize, checkHeld, false)
-		if stderrors.Is(err, errNotThePeers) {
+		if stderrors.Is(err, errNotThePeers) || retakeLonger && stderrors.Is(err, errLongerThanThePeers) {
 			err = pullChain(ctx, src, batch, bodies, u, c, pageSize, false, true)
 		}
 		if err != nil {
@@ -1264,6 +1275,10 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodi
 // errNotThePeers is a chain that is not the peer's after the peer's entries
 // are appended to what the node holds.
 var errNotThePeers = stderrors.New("the local chain is not a prefix of the peer's")
+
+// errLongerThanThePeers is a chain the node holds more entries of than the
+// peer served.
+var errLongerThanThePeers = stderrors.New("the local chain is longer than the peer's")
 
 // pullChain takes one chain in a batch of its own, which is kept only if the
 // chain comes out the peer's, with what the fetch proved on the way; whole
@@ -1309,8 +1324,7 @@ func pullChainEntries(ctx context.Context, src Source, bodies *messages, dst *da
 	// the manager's own state, and every AddEntry below advances it.
 	from := head.Count
 	if from > int64(c.Count) {
-		return errors.Conflict.WithFormat(
-			"the local chain is at %d and the peer served %d; it cannot be re-pulled", from, c.Count)
+		return fmt.Errorf("the local chain is at %d and the peer served %d; it cannot be re-pulled: %w", from, c.Count, errLongerThanThePeers)
 	}
 
 	if !carriesMessages(c) {

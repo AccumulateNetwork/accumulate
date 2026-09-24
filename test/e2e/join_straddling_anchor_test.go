@@ -153,7 +153,7 @@ func TestAJoinedNodeCountsAStraddlingAnchorAsItsPeersDo(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stepping := &steppingState{State: p.NodeJoinState(joiner), step: func(n int) {
+	stepping := &steppingState{cancel: cancel, State: p.NodeJoinState(joiner), step: func(n int) {
 		round()
 		if n >= 200 {
 			cancel()

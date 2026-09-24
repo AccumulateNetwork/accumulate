@@ -127,7 +127,7 @@ func TestABVNNodeBehindAcrossASyntheticMarkPointJoins(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	const maxRounds = 200
-	stepping := &steppingState{State: part.NodeJoinState(joiner), step: func(round int) {
+	stepping := &steppingState{cancel: cancel, State: part.NodeJoinState(joiner), step: func(round int) {
 		// Traffic continues while the node pulls, so the blocks it hands off
 		// at carry synthetics still in flight.
 		for i := 0; i < 2; i++ {

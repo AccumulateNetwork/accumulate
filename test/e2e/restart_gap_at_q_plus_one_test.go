@@ -223,7 +223,7 @@ func restartGapAtQPlusOne(t *testing.T, traffic bool, anchorLag int, wantGap boo
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	const maxRounds = 200
-	stepping := &steppingState{step: func(round int) {
+	stepping := &steppingState{cancel: cancel, step: func(round int) {
 		step(3, traffic)
 		if round >= maxRounds {
 			cancel()

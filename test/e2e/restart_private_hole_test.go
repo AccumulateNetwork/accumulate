@@ -175,7 +175,7 @@ func restartWithPrivateHole(t *testing.T, nodes, victim int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	const maxRounds = 100
-	stepping := &steppingState{step: func(round int) {
+	stepping := &steppingState{cancel: cancel, step: func(round int) {
 		sim.StepN(3)
 		if round >= maxRounds {
 			cancel()

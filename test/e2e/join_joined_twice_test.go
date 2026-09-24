@@ -98,7 +98,7 @@ func TestASecondRestartAfterAJoinStillOpens(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ts := uint64(100)
-	stepping := &steppingState{step: func(round int) {
+	stepping := &steppingState{cancel: cancel, step: func(round int) {
 		// Traffic continues while the node pulls, so the blocks it hands
 		// off at carry synthetics still in flight.
 		ts++

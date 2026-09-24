@@ -129,7 +129,7 @@ func TestARollingRestartOfTheDirectoryLeavesItsAnchorsServable(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		const maxRounds = 200
-		stepping := &steppingState{State: p.NodeJoinState(node), step: func(round int) {
+		stepping := &steppingState{cancel: cancel, State: p.NodeJoinState(node), step: func(round int) {
 			if round%5 == 0 {
 				send()
 			}

@@ -157,6 +157,16 @@ func joinPastFailedWork(t *testing.T, failing bool) {
 	}
 	sim.StepN(20)
 
+	// The join here pulls and compares; it does not execute. A pulled state
+	// matches only at a block that sent an anchor, so the partition is kept
+	// busy while the join runs -- a valid send in every round -- and every
+	// block anchors (executor spec, "Sync", "Execute, and repair on a
+	// mismatch": an idle partition is the executing join's case).
+	busy := func() {
+		send(bob.JoinPath("tokens"))
+		sim.StepN(3)
+	}
+
 	ctx := context.Background()
 	part := PartitionUrl("BVN0")
 	sources := &countingSources{
@@ -172,7 +182,7 @@ func joinPastFailedWork(t *testing.T, failing bool) {
 	for round := 0; round < 40 && !matched; round++ {
 		sources.round++
 		require.NoError(t, state.Pull(ctx), "pull round %d", round)
-		sim.StepN(3)
+		busy()
 		_, matched, err = state.Matched(ctx)
 		require.NoError(t, err)
 	}
@@ -228,7 +238,7 @@ func joinPastFailedWork(t *testing.T, failing bool) {
 	for round := 0; round < 40 && block < target; round++ {
 		sources.round++
 		require.NoError(t, state.Pull(ctx), "phase two pull round %d", round)
-		sim.StepN(3)
+		busy()
 		var ok bool
 		block, ok, err = state.Matched(ctx)
 		require.NoError(t, err)

@@ -145,7 +145,7 @@ func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	const maxRounds = 200
-	stepping := &steppingState{State: part.NodeJoinState(fresh), step: func(round int) {
+	stepping := &steppingState{cancel: cancel, State: part.NodeJoinState(fresh), step: func(round int) {
 		if round%5 == 0 {
 			send()
 		}

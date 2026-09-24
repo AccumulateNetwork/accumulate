@@ -10,6 +10,8 @@ import (
 	"context"
 	"sort"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -22,19 +24,23 @@ import (
 // and comparing an anchor from before the handoff against the first root
 // recorded after it would report a divergence that is not there.
 //
-// From here executed is the last block whose root this node has checked
-// against its anchor. The pull is over: a node that has to sync again starts a
-// new one, from the peer's block then, with the whole walk -- a wrong run can
-// change accounts no record names.
+// The state handed off at may be unproven: once the walk is done the node
+// executes and compares at every block that anchors (executor spec, "Sync",
+// "Execute, and repair on a mismatch"). From here executed is the last block
+// compared, or the block handed off at.
 func (s *PulledState) HandedOff(q uint64) {
 	s.executed = q
 	s.sync = nil
+	s.repairFrom = 0
 }
 
-// Diverged reports the first block this node executed after the handoff whose
-// local root differs from the root the Directory anchored for it, and whether
-// there is one (executor spec, "Sync", step 4: "after executing any block, the
-// local BPT root equals that block's proven root or it does not").
+// Diverged compares the root this node computed after each block it executed
+// since the handoff with the partition's signed anchor for that block, at
+// every block that sent one (executor spec, "Sync", "Execute, and repair on a
+// mismatch"). A match is the proof, step 3: a node that handed off from an
+// unproven state is promoted there. A mismatch is reported, and the next pull
+// is a repair from the block ledger, from the last block that matched -- or
+// from the start of the pull, if none has.
 //
 // The local root after block N is not read from the BPT, which moves with
 // every commit and would be compared against an anchor of another block. It is
@@ -43,10 +49,6 @@ func (s *PulledState) HandedOff(q uint64) {
 // the next non-empty block, and every block between the two is empty and
 // changed nothing, so its entry is the root after N. A block with no entry
 // after it has not been followed by one yet, and is checked on a later call.
-//
-// On a divergence the next pull starts anew (HandedOff cleared it): the whole
-// walk, and the records from the peer's block then, because a wrong run can
-// change accounts no peer's ledger names.
 func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 	err := s.readAnchors(ctx)
 	if err != nil {
@@ -74,12 +76,21 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 			break
 		}
 		if local != o.Anchor {
-			s.log.Warn("An executed block's root is not its anchored root",
-				"partition", s.partition, "block", o.Block, "matched", s.executed)
+			s.log.Warn("An executed block's root is not its anchored root; repairing from the block ledger",
+				"partition", s.partition, "block", o.Block, "compared", s.executed, "matched", s.provenAt)
 			s.sync = nil
+			s.repairFrom = s.provenAt
+			if s.repairFrom == 0 {
+				s.repairFrom = s.pullFrom
+			}
 			return o.Block, true, nil
 		}
 		s.executed = o.Block
+		s.provenAt = o.Block
+		if s.machine.State() != nodestate.StateActive {
+			s.matched = tracker.Match{Block: o.Block, Anchor: o.Anchor}
+			s.Promote(o.Block)
+		}
 	}
 	return 0, false, nil
 }

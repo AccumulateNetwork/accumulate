@@ -77,9 +77,16 @@ type Collector struct {
 	OnRefused func(block uint64, err error)
 
 	mu    sync.Mutex
-	next  uint64 // the next sequence number to collect; zero until positioned
+	next   uint64 // the next sequence number to collect; zero until positioned
+	newest uint64 // the newest number the ledger named when the read was positioned
 	stall *Stall
 }
+
+// collectBackfill is how many anchors before the newest the first read starts
+// at. A node restarted a few blocks behind may match its own state as it
+// stands (#4411), and only an anchor of a block at or before the newest can
+// say so.
+const collectBackfill = 16
 
 // maxAnchorsPerRead bounds one Read. The number to collect from moves only by
 // what was collected, so a node far behind catches up over several reads.
@@ -142,7 +149,10 @@ func (c *Collector) Read(ctx context.Context) error {
 		if last == 0 {
 			return nil // Nothing produced yet
 		}
-		c.next = last
+		c.next, c.newest = 1, last
+		if last > collectBackfill {
+			c.next = last - collectBackfill
+		}
 	}
 
 	vals, err := c.Validators.ValidatorsOf(ctx, c.Producer)
@@ -154,22 +164,26 @@ func (c *Collector) Read(ctx context.Context) error {
 	}
 
 	for i := 0; i < maxAnchorsPerRead && ctx.Err() == nil; i++ {
-		done, err := c.collect(ctx, vals, c.next)
+		done, answered, err := c.collect(ctx, vals, c.next)
 		if err != nil {
 			return err
 		}
-		if !done {
+		if !done && (answered || c.next >= c.newest) {
+			// Held at an anchor no quorum signed, or at one not produced
+			// yet: the next read asks again.
 			return nil
 		}
+		// Taken, or older than the newest and answered by nobody: a
+		// number the validators no longer hold is not a wait.
 		c.next++
 	}
 	return nil
 }
 
 // collect asks every validator for anchor number n and takes it when a quorum
-// signed it. It reports whether it took it; false with no error is a number
-// no validator has produced yet.
-func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (bool, error) {
+// signed it. It reports whether it took it, and whether any validator answered
+// it at all: one that none answered is not produced yet, or no longer held.
+func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (taken, answered bool, err error) {
 	src := c.Producer.JoinPath(protocol.AnchorPool)
 	dst := protocol.DnUrl()
 	producer, _ := protocol.ParsePartitionUrl(c.Producer)
@@ -187,7 +201,7 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (bo
 		ans, err := v.Sequencer.Sequence(ctx, src, dst, n, private.SequenceOptions{})
 		if err != nil {
 			if ctx.Err() != nil {
-				return false, errors.UnknownError.Wrap(ctx.Err())
+				return false, false, errors.UnknownError.Wrap(ctx.Err())
 			}
 			lastErr = err
 			continue
@@ -218,8 +232,8 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (bo
 	}
 	if !produced {
 		// No validator answered an anchor under this number: not produced
-		// yet, or not reachable this read. Either way the next read asks.
-		return false, nil
+		// yet, no longer held, or not reachable this read.
+		return false, false, nil
 	}
 
 	for _, h := range order {
@@ -237,11 +251,14 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (bo
 		if c.OnAnchor != nil {
 			c.OnAnchor(c.Producer, pa.MinorBlockIndex, pa.StateTreeAnchor)
 		}
-		return true, nil
+		if n > c.newest {
+			c.newest = n
+		}
+		return true, true, nil
 	}
 
 	c.stall = &Stall{Entry: n, Asked: asked, Err: lastErr}
-	return false, nil
+	return false, true, nil
 }
 
 // anchorOf is the anchor a sequencer answered, or why the answer is not one.
