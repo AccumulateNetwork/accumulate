@@ -448,6 +448,17 @@ restarting node unable to pull `<partition>/anchors` from anybody (#4295). A
 derived value travels **beside** the body, in its own field, and a reader
 merges it after it has checked the proof.
 
+**The answer carries everything the leaf hashes, and the pull writes all of
+it** (#4399). Besides the body, the directory, the pending list and the
+chains, a partition's `synthetic` leaf hashes its two delivery queues and its
+`ledger` leaf the root of its scheduled events. A current answer with a
+receipt carries them in its `Leaf` — the queues, and the events themselves
+rather than their root, since a root cannot be written — read from the batch
+the receipt is built from; the pull replaces what the node held with them,
+and a queue or an event set served empty clears the node's. A queued local
+delivery executes from its stored message at the next block, so the pull also
+fetches each queued message and keeps it only if its hash is the queued ID.
+
 **BPT pages are read, never written.** A leaf enters the local tree only as
 the hash of state this node holds and has verified, because the local root is
 what the node matches against a proven root; a leaf taken from a peer's

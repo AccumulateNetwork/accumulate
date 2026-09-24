@@ -613,11 +613,11 @@ reaches the root the Directory anchored for `Q`; the tracker then promotes.
 - **An account's leaf is only reproduced for the state the pull fetches**
   (#4298)**.** The account hash covers a pending transaction's
   `ValidatorSignatures`, `Payments`, `Votes` and `Signatures`
-  (`observer_prod.hashPendingV2`; `History` is *not* hashed), the scheduled-
-  events BPT on a partition ledger, and the delivery queues on the synthetic
-  account; the pull fetches none of them. An account carrying any of them
-  cannot be verified, so it cannot be pulled, so a partition holding one
-  cannot be joined. The v3 API has no surface for most of it.
+  (`observer_prod.hashPendingV2`; `History` is *not* hashed); the pull
+  fetches none of it. An account carrying any of it cannot be verified, so it
+  cannot be pulled, so a partition holding one cannot be joined. (The
+  scheduled events on a partition ledger and the delivery queues on the
+  synthetic account were in this list; #4399 serves and pulls them.)
 - **Per-account verification assumes accounts are independent, and they are
   not** (#4298)**.** A key page's hash covers the *book's* pending
   transactions and their signature material (`hashPending`: a page walks
@@ -872,10 +872,14 @@ seventh nobody had named.
   about the cost of that). It is bounded by the next verified anchor after
   the served block and by `pull.MaxHeld`, not by a round count (#4362); it is
   not free.
-- **#4298 is untouched and is still a precondition.** `<partition>/ledger`
-  hashes the scheduled-events BPT and `<partition>/synthetic` hashes the
-  delivery queues (`observer_prod.go`), and the pull fetches neither, so those
-  two accounts verify only while both are empty. This change set makes them
+- **#4298 is untouched and is still a precondition** — for the pending
+  transactions' signature sets. The other half is done by #4399:
+  `<partition>/ledger` hashes the scheduled-events BPT and
+  `<partition>/synthetic` hashes the delivery queues (`observer_prod.go`), and
+  until #4399 the pull fetched neither, so those two accounts verified only
+  while both were empty — and under load the local delivery queue is never
+  empty, so `/synthetic` was refused by every peer on every pass (run
+  `20260924T052134Z`). What follows was written before that. This change set makes them
   **asked for** — which is #4306 — and does nothing to make them **verifiable**.
   One observation for whoever takes #4298, offered as an observation and not a
   finding: both are skipped when empty, and the local delivery queue is drained
