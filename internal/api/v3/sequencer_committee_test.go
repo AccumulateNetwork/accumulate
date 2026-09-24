@@ -24,14 +24,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// A node whose key is not active on its partition signs no healing answer:
+// A node whose key is not active on its partition signs no anchor answer:
 // no destination accepts that signature, and the requester puts every
 // signature of an anchor in one envelope, which the destination refuses whole
 // on the first one it cannot accept (#4424; run 20260924T093936Z, 141
 // refusals "key is not an active validator", every one the follower's key).
 // It still answers an anchor with the quorum signatures it holds, and says
-// "not yet" when it holds none, so the requester asks the next node.
-func TestSequencer_OutsiderSignsNoAnswer(t *testing.T) {
+// "not yet" when it holds none. A synthetic it serves as any node does: the
+// proof, not the signer, is what the destination checks.
+func TestSequencer_OutsiderSignsNoAnchorAnswer(t *testing.T) {
 	const part = "BVN0"
 	bvn1 := protocol.PartitionUrl("BVN1")
 	pub := func(k ed25519.PrivateKey) []byte { return k.Public().(ed25519.PublicKey) }
@@ -106,12 +107,16 @@ func TestSequencer_OutsiderSignsNoAnswer(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, signedBy(r, member))
 
-	// The outsider does not.
+	// The outsider serves a synthetic it holds: the destination takes the
+	// collection proof as the authorization whatever the signer, and the
+	// wire requires a signature, so it is the outsider's own (review
+	// note_3897460300).
 	o := sequencer(outsider)
-	_, err = o.Sequence(context.Background(), synth, bvn1, 1, private.SequenceOptions{})
-	require.ErrorIs(t, err, errors.NotReady, "an outsider has no signature to give a synthetic")
-	_, err = o.SequenceRange(context.Background(), synth, bvn1, 1, 1, private.SequenceOptions{})
-	require.ErrorIs(t, err, errors.NotReady)
+	r, err = o.Sequence(context.Background(), synth, bvn1, 1, private.SequenceOptions{})
+	require.NoError(t, err, "a synthetic is served by whoever holds it")
+	require.Equal(t, [][]byte{pub(outsider)}, signers(r))
+
+	// It signs no anchor.
 
 	r, err = o.Sequence(context.Background(), anchors, protocol.DnUrl(), 1, private.SequenceOptions{})
 	require.NoError(t, err, "the outsider holds the quorum's signature for anchor 1")

@@ -41,3 +41,13 @@ func (c *Conductor) HealAnchorSpan(ctx context.Context, ranger private.SequenceR
 	}
 	return c.requestAnchorSpan(ctx, ranger, source, first, last, func(uint64) string { return "applied" })
 }
+
+// HealSpan runs the synthetic healing pull for [first, last] from source
+// against ranger — the production request and bundle building — and hands
+// each bundle to sink instead of the dispatcher.
+func (c *Conductor) HealSpan(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64, sink func(*messaging.Envelope)) (int, uint64, error) {
+	return c.requestSpanTo(ctx, ranger, source, first, last, func(uint64) string { return "applied" }, func(env *messaging.Envelope) error {
+		sink(env)
+		return nil
+	})
+}

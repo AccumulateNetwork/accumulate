@@ -1158,11 +1158,11 @@ func (c *Conductor) committeeSignaturesOf(source *url.URL, r *api.MessageRecord[
 
 // sourceCommitteeKey reports whether sig's key is on the source partition's
 // committee, by the predicate the anchor send path asks of this node's own
-// key (inCommittee). A definition this node has not loaded judges nothing:
-// the signature is kept and the destination's validation decides, rather
-// than a startup race dropping every heal.
+// key (inCommittee). There is no "no definition" case to decide: healing runs
+// from willBeginBlock, which returns before anything while the globals are
+// unloaded (review note_3897460300, F2).
 func (c *Conductor) sourceCommitteeKey(source *url.URL, sig protocol.KeySignature) bool {
-	return c.Globals.Load().MembershipOf(sig.GetPublicKey(), c.partitionOf(source)) != network.CommitteeOutsider
+	return c.Globals.Load().MembershipOf(sig.GetPublicKey(), c.partitionOf(source)) == network.CommitteeMember
 }
 
 // keySignaturesOf lists every key signature an answer carries, one per signer.

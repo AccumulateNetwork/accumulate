@@ -34,7 +34,7 @@ import (
 // the globals it holds, by the predicate the anchor send path asks
 // (Conductor.inCommittee). A node in no committee — a follower, an API node
 // that serves the sequencer, a validator dropped from the committee — signs
-// no healing answer: no destination accepts the signature, and the requester
+// no ANCHOR answer: no destination accepts the signature, and the requester
 // puts every signature of an anchor in one envelope, which the destination
 // refuses whole at the first it cannot accept (#4424; run 20260924T093936Z,
 // 141 heal envelopes refused "key is not an active validator").
@@ -46,8 +46,10 @@ func (s *Sequencer) signsAnswers(globals *core.GlobalValues) bool {
 	return globals.MembershipOf(pub, s.partitionID) == network.CommitteeMember
 }
 
-// notInCommittee is the answer of a node that has nothing it may sign: "not
-// from me", so the requester asks the next node.
+// notInCommittee is the answer of a node that has no anchor signature it may
+// give. It is NotReady, and the requester today files every NotReady as "in
+// flight" and asks that span again after its patience window, by whichever
+// node the dial reaches then — it does not ask the next node at once (#4387).
 func (s *Sequencer) notInCommittee(what string) error {
 	return errors.NotReady.WithFormat("this node is not a validator of %s and holds no signature for %s; ask a validator", s.partitionID, what)
 }
@@ -85,11 +87,13 @@ func (s *Sequencer) entryRecord(globals *core.GlobalValues, e *synthcache.Entry,
 	r.ID = r.Message.ID()
 	r.Status = errors.Remote
 
-	// A synthetic answer carries the answering node's signature and no
-	// other, so a node outside the committee has none to give.
-	if !s.signsAnswers(globals) {
-		return nil, s.notInCommittee(r.ID.String())
-	}
+	// Any node that holds the entry serves it, committee or not. A healing
+	// answer travels under a collection proof, and the destination takes the
+	// proof as the authorization whatever the signer (msg_synthetic.go, "a
+	// failure must never reject a proven message"); the signature is still
+	// required on the wire ("missing signature"), so the answering node
+	// signs with its own key. Only an anchor needs a committee signature
+	// (#4424, review note_3897460300).
 	keySig, err := s.signRecord(globals, e.Hash[:])
 	if err != nil {
 		return nil, errors.InternalError.Wrap(err)
@@ -136,9 +140,6 @@ func (s *Sequencer) producedFor(dst *url.URL) (uint64, error) {
 }
 
 func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.URL, start, end uint64, opts private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
-	if !s.signsAnswers(globals) {
-		return nil, s.notInCommittee(fmt.Sprintf("synthetics for %v", dst))
-	}
 	var records []*api.MessageRecord[messaging.Message]
 	var span *merkle.Segment
 	var last *synthcache.Block

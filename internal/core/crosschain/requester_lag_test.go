@@ -128,6 +128,14 @@ func (f fakeRanger) SequenceRange(context.Context, *url.URL, *url.URL, uint64, u
 // BlockAnchors, not six envelopes (#4229).
 func TestRequestAnchorSpan_OneEnvelope(t *testing.T) {
 	c := testConductor()
+	// The three signers are the Directory's committee: the requester keeps
+	// only committee signatures (#4424).
+	g := new(network.GlobalValues)
+	g.Network = &protocol.NetworkDefinition{}
+	for i := byte(0); i < 3; i++ {
+		g.Network.AddValidator(append(make([]byte, 31), i+1), protocol.Directory, true)
+	}
+	c.Globals.Store(g)
 	var envelopes []*messaging.Envelope
 	c.Intercept = func(_ context.Context, env *messaging.Envelope) (bool, error) {
 		envelopes = append(envelopes, env)
