@@ -129,8 +129,8 @@ func (f *simFactory) Build() *Simulator {
 		s.partIDs = append(s.partIDs, net.id)
 	}
 
-	// A routed call that names no peer goes to a node that can answer for its
-	// state, never to one that is joining (services.Network.Dial).
+	// A harness read that names no peer goes to a node that can answer for its
+	// state, never to one that is joining (services.Network.HarnessClient).
 	serving := map[peer.ID]*nodeState{}
 	for _, p := range s.partitions {
 		for _, n := range p.nodes {

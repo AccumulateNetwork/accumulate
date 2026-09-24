@@ -405,11 +405,19 @@ simulator still does not do as the daemon does:
 - Only the querier is handed the machine. The daemon hands it to the
   sequencer, the submitter, the validator and the consensus service too; the
   simulator's sequencer answers a joining node's requests ungated.
-- A routed call that names no peer goes to a node that can serve
-  (`test/simulator/services`, `Network.Dial`). That stands in for the
-  daemon's local-first dial from a validator, whose own reads never reach a
-  joining peer; it also means a joining node's *own* routed reads, which the
-  daemon answers locally with `NotReady`, are served by a peer here.
+- The harness's reads, and only the harness's, are steered to a node that
+  can serve: a read that names no peer skips a node whose join machine says
+  `BOOTING` (`services.Network.HarnessClient`, used by `harness.NewSim`).
+  The daemon has no such oracle. It reaches a serving node only by its
+  local-first dial — a client connected to a validator's API is answered by
+  that validator (`p2p/dial` `newNetworkStream`) — and a `NotReady` from a
+  joining peer is not redialed: it returns as an `ErrorResponse`, which
+  `message.typedRequest`'s callback accepts, so the dial succeeds and
+  `BadDial` is never reached. Sending a reader to a synced node is the next
+  phase's work (step 6). The nodes' own routed client (`Network.Client`) has
+  no oracle and can reach a joining node and be refused, as a daemon's
+  non-local call can; what it does not model is a joining node's *own*
+  routed reads, which the daemon answers locally with `NotReady`.
 - A submission to any simulator node goes to the whole partition through the
   consensus hub (`Node.submit` → `Partition.Submit`). The follower test's
   relay assertion — the committee executed what the joining follower was

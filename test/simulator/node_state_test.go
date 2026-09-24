@@ -83,11 +83,13 @@ func TestARestartedNodeRefusesReadsByItsJoinsMachine(t *testing.T) {
 	require.Equal(t, errors.NotReady, errors.Code(err), "a joining node must refuse a read as NotReady, got %v", err)
 	require.NoError(t, query(0), "a validator stopped answering")
 
-	// A read that names no node is answered by one that can: every one of
-	// these would land on the joining node about a quarter of the time.
+	// A harness read that names no node is answered by one that can: every
+	// one of these would land on the joining node about a quarter of the
+	// time. Only the harness's client does this; the nodes' own client, like
+	// the daemon's for a non-local call, can reach the joining node.
 	for i := 0; i < 40; i++ {
-		_, err := sim.S.Services().Query(ctx, PartitionUrl("BVN0").JoinPath(Ledger), &api.DefaultQuery{})
-		require.NoError(t, err, "a routed read reached the joining node")
+		_, err := sim.S.HarnessServices().Query(ctx, PartitionUrl("BVN0").JoinPath(Ledger), &api.DefaultQuery{})
+		require.NoError(t, err, "a harness read reached the joining node")
 	}
 }
 

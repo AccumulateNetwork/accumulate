@@ -21,12 +21,18 @@ import (
 
 type Network struct {
 	Services Services
+
+	// Client is the nodes' routed client: what every simulated node's
+	// executor, conductor and sequencer reach the network through. A call
+	// that names no peer goes to any peer that registered the service, a
+	// joining one included.
 	*message.Client
 
-	// Serving reports whether a peer can answer for the state it holds. A
-	// call that names no peer is sent to one that can: see [Network.Dial].
-	// Nil means every peer can.
+	// Serving reports whether a peer can answer for the state it holds.
+	// Only [Network.HarnessClient] consults it. Nil means every peer can.
 	Serving func(peer.ID) bool
+
+	harness *message.Client
 }
 
 type Services map[string]map[peer.ID]Handler
@@ -39,7 +45,13 @@ func NewNetwork(networkId string, router routing.Router) *Network {
 	n.Client = &message.Client{Transport: &message.RoutedTransport{
 		Network:  networkId,
 		Attempts: 1,
-		Dialer:   n,
+		Dialer:   n.Services,
+		Router:   &routing.MessageRouter{Router: router},
+	}}
+	n.harness = &message.Client{Transport: &message.RoutedTransport{
+		Network:  networkId,
+		Attempts: 1,
+		Dialer:   harnessDialer{n},
 		Router:   &routing.MessageRouter{Router: router},
 	}}
 	return n
@@ -95,20 +107,26 @@ func (s Services) Replace(id peer.ID, address *api.ServiceAddress, handler Handl
 	m[id] = handler
 }
 
-// Dial implements [message.Dialer] for the simulator's routed client. A call
-// that names a peer goes to that peer, whatever its state: a joining node
-// answers it, with NotReady for a read, as the daemon's does. A call that
-// names none goes to a peer that can answer for its state (Serving).
+// HarnessClient is the client a test's harness reads through: a call that
+// names a peer goes to that peer whatever its state, and a call that names none
+// goes to a peer that can answer for its state (Serving).
 //
-// That is the simulator's stand-in for the daemon's local-first dial: a node's
-// routed client answers from the node itself when it serves the partition
-// (p2p/dial newNetworkStream), so a validator's own reads never reach a
-// joining peer. The simulator has one client for every node and the harness,
-// and without this a routed read would land on a joining node at random and
-// fail — which no validator's read does. What it does not model: a joining
-// node's OWN routed reads, which the daemon answers locally, NotReady.
-func (n *Network) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
-	return n.Services.dial(ctx, addr, n.Serving)
+// It is the harness's, and only the harness's. It stands in for an operator's
+// client connected to a validator's API: the daemon's dialer answers a
+// service the node itself provides locally, first (p2p/dial
+// newNetworkStream), so such a client's reads never reach a joining peer. The
+// daemon has no mechanism that steers a read away from a joining peer: its
+// NotReady comes back to the caller as an ErrorResponse, which the client's
+// callback accepts (message.typedRequest), so the dial succeeds and neither
+// BadDial nor a redial happens. The nodes' own routed calls use Client, which
+// can reach a joining peer and be refused, as a non-local call in the daemon
+// can.
+func (n *Network) HarnessClient() *message.Client { return n.harness }
+
+type harnessDialer struct{ n *Network }
+
+func (d harnessDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
+	return d.n.Services.dial(ctx, addr, d.n.Serving)
 }
 
 func (s Services) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
