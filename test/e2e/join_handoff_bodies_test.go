@@ -50,9 +50,10 @@ import (
 // Expand=false and nothing else writes a body -- so every entry appended by a
 // block the node did not execute names a body the node does not hold.
 //
-// The simulator's RestartNode is not a new process: the executor, its
-// cacheSeedOnce and its in-memory cache survive, so the first block after a
-// simulated join never seeds and never reads those bodies. This test joins
+// The simulator's RestartNode is not a new process: it clears the executor's
+// seed latch (#4421), but the executor and its in-memory cache survive, so
+// the seed after a simulated join adds to a cache a fresh process would not
+// hold. This test joins
 // with the production pull, then does what the daemon does after a restart:
 // opens block Q+1 with a FRESH executor on the joined node's database.
 func TestAJoinedNodeCanOpenItsFirstBlockAfterARestart(t *testing.T) {

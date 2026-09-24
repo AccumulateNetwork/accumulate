@@ -83,6 +83,15 @@ func (p *Partition) RestartNode(i int) {
 	n.staging.Reset()
 	n.join.leave()
 
+	// A new process's executor has not seeded its cache, so the first block
+	// it opens reads the store the join left: the anchor pool's entries and
+	// the messages behind them. The executor here outlives the restart, and
+	// without this it never read them again (#4421). What else of the
+	// executor's memory survives is in DIFFERENCES.
+	if f, ok := n.executor.(interface{ ForgetSeed() }); ok {
+		f.ForgetSeed()
+	}
+
 	// The daemon's own read: the record no pull writes (#4344), not the
 	// ledger the pull overwrites.
 	last, err := join.LastExecutedBlock(n.database, p.ID)
