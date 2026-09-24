@@ -9,9 +9,9 @@ package anchorsrc
 import (
 	"context"
 	"crypto/ed25519"
-	"fmt"
 	"crypto/rand"
 	"crypto/sha256"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -905,7 +905,7 @@ func (r *ringQuerier) Query(ctx context.Context, scope *url.URL, q api.Query) (a
 
 // PeerCount and LastAsked are what join's peerQuerier says about itself.
 func (r *ringQuerier) PeerCount(context.Context) int { return len(r.peers) }
-func (r *ringQuerier) LastAsked() []string          { return append([]string(nil), r.asked...) }
+func (r *ringQuerier) LastAsked() []string           { return append([]string(nil), r.asked...) }
 
 // paged serves at most the page asked for, as the API does; poolQuerier
 // serves everything from the start.
