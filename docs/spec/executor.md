@@ -999,7 +999,12 @@ synthetic transactions only if the newest root it could check matched*
 (lag one): a node whose last checked root did not match signs nothing,
 dispatches nothing, and repairs. A wrongly executing node then stalls
 rather than forms a wrong quorum with others like it, and a partition whose
-validators are all booting still anchors. `COMPLETE` and `WAITING`, which
+validators are all booting still anchors. Neither signs for a block the node
+did not execute: the block a handoff stands at, and every block below it,
+are the peers' blocks. So the first block after a handoff at q does not sign
+q's anchor. A node that executed q wrongly, signed it, repaired and handed
+off again at q would otherwise sign one sequence number twice, under two
+roots (#4443). `COMPLETE` and `WAITING`, which
 named a backfilled history, are retired: nothing reached them and nothing
 could. What a joined node cannot answer *for a block it did not execute* —
 an entry the sequencer is asked for from before it joined — it refuses per

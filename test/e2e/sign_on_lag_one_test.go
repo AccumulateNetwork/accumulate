@@ -12,10 +12,13 @@ import (
 	"math/big"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -38,7 +41,7 @@ import (
 //
 //   - The root check. Whoever compares this node's root with the partition's
 //     signed one reports to the node's execute.RootCheck; that is the join's
-//     root watch, and it does not report yet (DIFFERENCES E19, and this
+//     root watch, and it does not report yet (DIFFERENCES E20, and this
 //     builder may not touch internal/node/join). The tests report the
 //     outcome the watch would, through NodeRootCheck -- the very value the
 //     node's conductor, executor and sequencer sign by.
@@ -271,4 +274,155 @@ func TestTwoNodesExecutingTheSameWrongBlockFormNoQuorum(t *testing.T) {
 			"the Directory executed BVN0's anchor for block %d under a root only the two wrong nodes computed", pa.MinorBlockIndex)
 	}
 	t.Logf("the Directory executed %d BVN0 anchors after block %d", executed, from)
+}
+
+// A node that executed block q wrongly and signed its anchor, then repaired
+// and handed off again at q, does not sign q's anchor a second time: one key
+// never goes on two roots under one sequence number (#4443, DIFFERENCES E20).
+//
+// At the first block after a handoff at q the conductor builds the anchor for
+// q from the pulled ledger -- the partition's sequence number for q -- and the
+// node's repaired roots. Before the fix it signed and sent it.
+//
+// Production throughout except where marked: the node's own executor opens
+// block q+1 (the conductor's hook is the executor's WillBeginBlock), the
+// handoff is the two calls join.Run makes at a handoff (the executor's
+// SettleStagingAt, then the buffer's Handoff), and the dispatch is captured
+// on its way out of the simulator's dispatcher. By hand: the wrong state (a
+// stray account), its repair (deleting it, which is what re-pulling that
+// account from a peer does), and the node's first opening of q+1 before it
+// went down -- the simulator cannot re-deliver a block a node has begun, so
+// that one Begin is made directly and discarded, as a crash before commit
+// discards it.
+func TestARepairedNodeDoesNotSignTheHandoffBlockAgain(t *testing.T) {
+	type signed struct {
+		seq  uint64
+		root [32]byte
+	}
+	var mu sync.Mutex
+	var byNode1 []signed
+	var key1 []byte
+	capture := func(_ context.Context, env *messaging.Envelope) (bool, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		msgs, err := env.Normalize()
+		if err != nil {
+			return true, nil
+		}
+		for _, m := range msgs {
+			a, ok := m.(*messaging.BlockAnchor)
+			if !ok || a.Signature == nil || key1 == nil || string(a.Signature.GetPublicKey()) != string(key1) {
+				continue
+			}
+			seq, ok := a.Anchor.(*messaging.SequencedMessage)
+			if !ok || !PartitionUrl("BVN0").Equal(seq.Source.RootIdentity()) {
+				continue
+			}
+			body := seq.Message.(*messaging.TransactionMessage).Transaction.Body.(AnchorBody).GetPartitionAnchor()
+			byNode1 = append(byNode1, signed{seq.Number, body.StateTreeAnchor})
+		}
+		return true, nil
+	}
+
+	alice := acctesting.GenerateKey("Alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 3),
+		simulator.Genesis(GenesisTime),
+		simulator.IgnoreDeliverResults(),
+		simulator.IgnoreCommitResults(),
+		simulator.CaptureDispatchedMessages(capture),
+	)
+	sim.SetRoute(aliceUrl.RootIdentity(), "BVN0")
+	bobUrl := acctesting.AcmeLiteAddressStdPriv(acctesting.GenerateKey("Bob"))
+	sim.SetRoute(bobUrl.RootIdentity(), "BVN0")
+	MakeLiteTokenAccount(t, sim.DatabaseFor(aliceUrl), alice[32:], AcmeUrl())
+	CreditCredits(t, sim.DatabaseFor(aliceUrl), aliceUrl.RootIdentity(), 1e9)
+	CreditTokens(t, sim.DatabaseFor(aliceUrl), aliceUrl, big.NewInt(1e12))
+	sim.StepN(10)
+
+	bvn := sim.S.Partition("BVN0")
+	const node = 1
+	mu.Lock()
+	key1 = []byte(bvn.NodeConductor(node).ValidatorKey.Public().(ed25519.PublicKey))
+	mu.Unlock()
+	ledgerOf := func() (index uint64, root [32]byte) {
+		View(t, bvn.NodeDatabase(node), func(batch *database.Batch) {
+			var ledger *SystemLedger
+			require.NoError(t, batch.Account(PartitionUrl("BVN0").JoinPath(Ledger)).Main().GetAs(&ledger))
+			r, err := batch.GetBptRootHash()
+			require.NoError(t, err)
+			index, root = ledger.Index, r
+		})
+		return index, root
+	}
+
+	// The node goes wrong, and executes block q with the wrong state: q is a
+	// block that changed state, so its ledger stands at q afterwards.
+	stray := &LiteIdentity{Url: acctesting.AcmeLiteAddressStdPriv(acctesting.GenerateKey("stray")).RootIdentity()}
+	require.NoError(t, bvn.NodeDatabase(node).Update(func(batch *database.Batch) error {
+		return batch.Account(stray.Url).Main().Put(stray)
+	}))
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(aliceUrl).
+			SendTokens(1, 0).To(bobUrl).
+			SignWith(aliceUrl).Version(1).Timestamp(1).PrivateKey(alice))
+	sim.StepUntil(Txn(st.TxID).Succeeds())
+	q, wrongRoot := ledgerOf()
+	var rightRoot [32]byte
+	View(t, bvn.NodeDatabase(0), func(batch *database.Batch) {
+		var err error
+		rightRoot, err = batch.GetBptRootHash()
+		require.NoError(t, err)
+	})
+	require.NotEqual(t, rightRoot, wrongRoot, "premise: node %d's state after block %d is wrong", node, q)
+
+	// It goes down with its next block begun: its conductor signed q's
+	// anchor with the wrong root, and the block was never committed.
+	bvn.RestartNode(node)
+	mu.Lock()
+	byNode1 = nil
+	mu.Unlock()
+	blk, err := bvn.NodeExecutor(node).Begin(execute.BlockParams{Context: context.Background(), Index: q + 1, Time: time.Now()})
+	require.NoError(t, err)
+	state, err := blk.Close()
+	require.NoError(t, err)
+	state.Discard()
+	mu.Lock()
+	first := append([]signed(nil), byNode1...)
+	mu.Unlock()
+	require.Len(t, first, 1, "premise: node %d signed q's anchor once when it first began block %d", node, q+1)
+	require.Equal(t, wrongRoot, first[0].root, "premise: the first signature is on the wrong root")
+	n, _ := ledgerOf()
+	require.Equal(t, q, n, "premise: the begun block was not committed")
+
+	// It repairs -- the stray account is re-pulled from a peer, which has
+	// none -- and hands off again at q, as join.Run does.
+	require.NoError(t, bvn.NodeDatabase(node).Update(func(batch *database.Batch) error {
+		if err := batch.DeleteAccountState_TESTONLY(stray.Url); err != nil {
+			return err
+		}
+		return batch.BPT().Delete(record.NewKey("Account", stray.Url))
+	}))
+	_, repaired := ledgerOf()
+	require.NotEqual(t, wrongRoot, repaired, "premise: the repair changed the root")
+	settler, ok := bvn.NodeExecutor(node).(interface{ SettleStagingAt(uint64) error })
+	require.True(t, ok)
+	require.NoError(t, settler.SettleStagingAt(q))
+	require.NoError(t, bvn.NodeJoin(node).Handoff(q))
+
+	// The network's block q+1 reaches it, and it executes it.
+	mu.Lock()
+	byNode1 = nil
+	mu.Unlock()
+	sim.StepN(1)
+	n, _ = ledgerOf()
+	require.Greater(t, n, q, "premise: node %d executed a block after the handoff", node)
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, s := range byNode1 {
+		require.NotEqualf(t, first[0].seq, s.seq,
+			"node %d signed anchor %d a second time, with root %x after %x", node, s.seq, s.root[:4], first[0].root[:4])
+	}
 }

@@ -120,7 +120,7 @@ func (p *Partition) RestartNode(i int) {
 // NodeRootCheck is what node i last learned comparing its root with the root
 // its partition signed: the value its conductor, executor and sequencer sign
 // by. The join's root watch should report to it and does not yet
-// (DIFFERENCES E19), so a test that stands a node where a check left it
+// (DIFFERENCES E20), so a test that stands a node where a check left it
 // reports here itself, and says so.
 func (p *Partition) NodeRootCheck(i int) *coreexec.RootCheck { return p.nodes[i].rootCheck }
 

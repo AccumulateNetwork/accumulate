@@ -287,7 +287,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// dispatch, the sequencer -- because a node whose newest checked root
 	// did not match signs nothing (executor spec, "Sync", §6, lag one). The
 	// join's root watch is what should report to it, and does not yet
-	// (DIFFERENCES E19): until it does, nothing is checked and every node
+	// (DIFFERENCES E20): until it does, nothing is checked and every node
 	// signs, as before.
 	rootCheck := new(execute.RootCheck)
 
@@ -355,6 +355,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Peers:        client,
 		Staging:      staging,
 		RootCheck:    rootCheck,
+		Cache:        synthCache,
 		Heals:        healCounters,
 		RunTask:      execOpts.BackgroundTaskLauncher,
 		// Healing is the ONLY retry mechanism for anchors — the conductor's

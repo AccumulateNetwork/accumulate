@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -63,6 +64,12 @@ type Conductor struct {
 	// match signs and dispatches no anchor (executor spec, "Sync", §6, lag
 	// one). Nil is "nothing checked", which signs.
 	RootCheck *execute.RootCheck
+
+	// Cache is the producer cache the executor fills and the sequencer
+	// answers from. The conductor reads one thing from it: the block the node
+	// last handed off at (Joined), at or below which it executed nothing and
+	// signs no anchor. Nil is a node that never joined.
+	Cache *synthcache.Cache
 
 	// Ready can be used to pause the conductor, for example to stop it from
 	// sending anchors while the node is catching up.
@@ -310,6 +317,31 @@ func (c *Conductor) sendAnchorForLastBlock(e execute.WillBeginBlock, batch *data
 			"bpt", logging.AsHex(pa.StateTreeAnchor).Slice(0, 4),
 			"reason", "this node is not an active validator of this partition")
 		return nil
+	}
+
+	// A node signs the anchor only of a block it executed. At the first block
+	// after a handoff at q the ledger is the pulled one, at q, so the anchor
+	// built here is for q: a block this node did not execute, under the
+	// sequence number the partition gave q's anchor. If this node once
+	// executed q itself -- wrongly, then repaired and handed off again at q
+	// -- it signed that number already, and signing it again with the
+	// repaired root is one key on two roots for one number (#4443). The
+	// handoff block is the cache's Joined, raised by every handoff, and
+	// everything at or below it is not this node's to sign; the sequencer
+	// refuses the same anchors by the same rule.
+	if c.Cache != nil {
+		if joined, block := c.Cache.Joined(), anchor.GetPartitionAnchor().MinorBlockIndex; joined > 0 && block <= joined {
+			pa := anchor.GetPartitionAnchor()
+			slog.InfoContext(e.Context, "Anchor not sent", "module", "conductor",
+				"block", pa.MinorBlockIndex,
+				"source", c.Partition.ID,
+				"seq", sequenceNumber,
+				"root", logging.AsHex(pa.RootChainAnchor).Slice(0, 4),
+				"bpt", logging.AsHex(pa.StateTreeAnchor).Slice(0, 4),
+				"joined", joined,
+				"reason", "this node handed off at or after this block and did not execute it")
+			return nil
+		}
 	}
 
 	// Lag one: block N's anchor is signed only if the newest root this node

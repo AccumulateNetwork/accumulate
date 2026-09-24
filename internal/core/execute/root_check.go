@@ -23,7 +23,7 @@ import "sync"
 // for the partition under this node's key: the conductor (anchors), the
 // executor (the leader's synthetic dispatch) and the sequencer (the anchors
 // it answers for). Whoever compares roots reports here; that is the join's
-// root watch, which does not report yet (DIFFERENCES E19).
+// root watch, which does not report yet (DIFFERENCES E20).
 //
 // A node that has checked nothing signs: a node that never joined has taken
 // nothing from a peer, and a partition whose validators are all booting must
