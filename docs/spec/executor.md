@@ -281,6 +281,22 @@ where they disagree with it, this wins.
    is never seen, and executing without it diverges (run
    20260924T074702Z's Directory block 658, #4412).
 
+**One rule for every node** (Paul, after the #4439 report). A node — joining,
+restarted or running — just attempts to execute: synthetic transactions and
+user transactions alike, with whatever staging holds. When its root does not
+match the partition's signed anchor, it repairs from the block ledger and
+tries again. No node needs its staging or its proofs to be exact for the
+network to stay correct; a node whose staging was wrong in a block is wrong
+only in the accounts that block's record names, and the repair brings them
+back. **The repair takes accounts whole:** for every account it repairs, the
+main state, every chain with its entries (the messages behind them
+included), the pending list and the directory — not only the chain heads
+that reproduce the BPT leaf. A chain the node grew wrongly is replaced by the
+peers', not appended to. Once the node is syncing (past the match), every
+account the join took by its chain heads alone is repaired the same way, so
+the node ends holding every account's chains and entries, not only a root
+that matches.
+
 **Execute, and repair on a mismatch** (Paul, after the #4438 report). Step 2
 need not be record-only. Once the walk is done, the joining node may execute
 each block's transactions as they come, like any other node, and compare its
