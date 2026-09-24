@@ -150,13 +150,13 @@ class Anchors:
                 if by_block[k1] != val:
                     bad.append("block %d root %s, its peers' %s" % (blk, val[0], by_block[k1][0]))
             k2 = (src, dest, seq)
-            if seq is not None and k2 in by_seq and ("s", src, seq) not in seen:
-                seen.add(("s", src, seq))
+            if seq is not None and k2 in by_seq and ("s",) + k2 not in seen:
+                seen.add(("s",) + k2)
                 compared += 1
                 pb, pv = by_seq[k2]
                 if (pb, pv) != (blk, val):
-                    bad.append("seq %d as block %d root %s, its peers' block %d root %s"
-                               % (seq, blk, val[0], pb, pv[0]))
+                    bad.append("seq %d to %s as block %d root %s, its peers' block %d root %s"
+                               % (seq, dest, blk, val[0], pb, pv[0]))
         if not compared:
             return {"measured": False, "compared": 0, "disagree": [],
                     "why": "none of its %d %s anchor line(s) after its start has a peer's to compare"

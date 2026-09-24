@@ -183,7 +183,7 @@ class TheRunsThreeFailedStarts(unittest.TestCase):
     def test_the_directory_that_signed_another_body_is_not_rejoined(self):
         v = self.verdict("acc-bvn2-val2", "directory")
         self.assertEqual("NOT rejoined", v["verdict"], v)
-        self.assertIn("seq 1154 as block 1300 root f5b4979b, its peers' block 1301 root de98b6c8",
+        self.assertIn("seq 1154 to acc://bvn-BVN1.acme as block 1300 root f5b4979b, its peers' block 1301 root de98b6c8",
                       " ".join(v["reasons"]))
 
     def test_the_directory_that_did_rejoin_is_rejoined(self):
@@ -207,6 +207,25 @@ class TheRunsThreeFailedStarts(unittest.TestCase):
         a = rejoin.Anchors(rejoin.anchor_events(storm + ok))
         got = a.agreement("acc-bvn1-val1", "Directory", None, None, VALS)
         self.assertEqual([], got["disagree"])
+
+
+class EveryDestinationIsCompared(unittest.TestCase):
+    """Review F5: the seen-key was (source, seq) while the peers' reading is
+    keyed (source, destination, seq), so only the first destination's line at
+    a sequence number was ever compared."""
+
+    def test_a_conflict_on_the_second_destination_is_found(self):
+        lines = []
+        for c in VALS:
+            for dest in ("acc://bvn-BVN1.acme", "acc://bvn-BVN2.acme"):
+                blk, root = 10, "aaaaaaaa"
+                if c == "acc-bvn1-val1" and dest.endswith("BVN2.acme"):
+                    blk, root = 11, "cccccccc"
+                lines.append(anchor_line(c, iso(T0 + 50), "Directory", dest, blk, 5, root))
+        a = rejoin.Anchors(rejoin.anchor_events(lines))
+        got = a.agreement("acc-bvn1-val1", "Directory", None, None, VALS)
+        self.assertEqual(["seq 5 to acc://bvn-BVN2.acme as block 11 root cccccccc, "
+                          "its peers' block 10 root aaaaaaaa"], got["disagree"])
 
 
 class TheBoardShowsActiveButBehind(unittest.TestCase):
