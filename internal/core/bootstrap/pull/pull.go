@@ -137,8 +137,13 @@ type Pending struct {
 	Block uint64
 
 	receipt *api.Receipt
+	parent  *database.Batch
 	batch   *database.Batch
 	done    bool
+
+	// bodies are the messages behind the spine's transaction chain entries,
+	// written into the caller's batch when the account settles.
+	bodies *messages
 }
 
 // Root is the root the peer's receipt ends at: the peer's word, until the
@@ -194,7 +199,16 @@ func (p *Pending) Settle(anchoredRoot [32]byte) error {
 	if err := Verify(p.batch, p.Account, p.receipt, anchoredRoot); err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	return errors.UnknownError.Wrap(p.batch.Commit())
+	return errors.UnknownError.Wrap(p.commit())
+}
+
+// commit writes the account into the caller's batch and the messages behind
+// its chains beside it.
+func (p *Pending) commit() error {
+	if err := p.batch.Commit(); err != nil {
+		return err
+	}
+	return p.bodies.store(p.parent)
 }
 
 // Keep writes the state into the caller's batch without verifying it.
@@ -210,7 +224,7 @@ func (p *Pending) Keep() error {
 	}
 	p.release()
 	defer p.batch.Discard()
-	return errors.UnknownError.Wrap(p.batch.Commit())
+	return errors.UnknownError.Wrap(p.commit())
 }
 
 // Discard throws the pulled state away.
@@ -253,7 +267,7 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 	}
 
 	sub := batch.Begin(true)
-	p := &Pending{Account: u, Partition: opts.Partition, batch: sub}
+	p := &Pending{Account: u, Partition: opts.Partition, parent: batch, batch: sub}
 
 	fail := func(err error) (*Pending, error) {
 		p.release()
@@ -303,7 +317,8 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 			return fail(errors.UnknownError.WithFormat("chain heads %s: %w", u, err))
 		}
 	case ModeFullSpine:
-		err = pullChainsFull(ctx, src, sub, u, pageSize)
+		p.bodies = newMessages(ctx, src)
+		err = pullChainsFull(ctx, src, sub, p.bodies, u, pageSize)
 		if err != nil {
 			return fail(errors.UnknownError.WithFormat("chains full %s: %w", u, err))
 		}
@@ -657,13 +672,13 @@ type messages struct {
 	// ones a stored form refers to, and the entries that are transactions.
 	txns map[[32]byte]*protocol.Transaction
 
-	// resolved are the transactions a stored form referred to, to be written
-	// beside it.
-	resolved []*protocol.Transaction
+	// kept is what the fetch keeps, by the key it is stored under: each
+	// entry's message, and the transactions stored forms referred to.
+	kept map[[32]byte]messaging.Message
 }
 
 func newMessages(ctx context.Context, src Source) *messages {
-	return &messages{ctx: ctx, src: src, txns: map[[32]byte]*protocol.Transaction{}}
+	return &messages{ctx: ctx, src: src, txns: map[[32]byte]*protocol.Transaction{}, kept: map[[32]byte]messaging.Message{}}
 }
 
 // behind is the message the peer served behind e, if it is e's.
@@ -784,7 +799,7 @@ func (m *messages) transaction(h [32]byte) (*protocol.Transaction, error) {
 		return nil, err
 	}
 	m.txns[h] = tm.Transaction
-	m.resolved = append(m.resolved, tm.Transaction)
+	m.kept[h] = tm
 	return tm.Transaction, nil
 }
 
@@ -802,16 +817,23 @@ func wholeTransaction(txn *protocol.Transaction, h [32]byte) error {
 	return nil
 }
 
-// store writes the transactions a stored form referred to under their own
-// hashes.
+// store writes what the fetch kept into batch.
+//
+// It is written when the account settles, into the caller's batch, and not
+// into the account's own pending batch: a message is not the account's. One
+// transaction is an entry on several spine accounts' chains -- a change to the
+// validator set is on the network definition's, the operators' and the
+// ledger's -- and the same key written by two pending batches of one pass
+// conflicts when the second settles.
 func (m *messages) store(batch *database.Batch) error {
-	for _, txn := range m.resolved {
-		h := *(*[32]byte)(txn.GetHash())
-		if err := batch.Message(h).Main().Put(&messaging.TransactionMessage{Transaction: txn}); err != nil {
-			return fmt.Errorf("store transaction %x: %w", h[:4], err)
+	if m == nil {
+		return nil
+	}
+	for h, msg := range m.kept {
+		if err := batch.Message(h).Main().Put(msg); err != nil {
+			return fmt.Errorf("store message %x: %w", h[:4], err)
 		}
 	}
-	m.resolved = nil
 	return nil
 }
 
@@ -850,7 +872,7 @@ func addChainToIndex(batch *database.Batch, u *url.URL, c *api.ChainRecord) erro
 // A local chain that holds a different prefix, or more entries than the peer
 // served, cannot be made the peer's by appending and is refused; the pull
 // asks another peer, or this one again once it has moved on.
-func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64) error {
+func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodies *messages, u *url.URL, pageSize uint64) error {
 	// Empty ChainQuery: list-all-chains. See pullChainHeads.
 	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{})
 	if err != nil {
@@ -859,7 +881,6 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *u
 	if chains == nil {
 		return nil
 	}
-	bodies := newMessages(ctx, src)
 	for _, c := range chains.Records {
 		if c == nil || c.Name == "" {
 			continue
@@ -868,7 +889,7 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *u
 		if err != nil {
 			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
-		if err := pullChainEntries(ctx, src, batch, bodies, dstChain.Inner(), u, c, pageSize); err != nil {
+		if err := pullChainEntries(ctx, src, bodies, dstChain.Inner(), u, c, pageSize); err != nil {
 			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
 		if err := addChainToIndex(batch, u, c); err != nil {
@@ -881,9 +902,9 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *u
 // pullChainEntries brings one chain up to the height the peer served, from
 // whatever the node already holds, and checks the result against the peer's
 // head. A transaction chain's entries come with the messages they name, each
-// checked against its entry and written into batch with the entries, so a pass
-// that is refused discards both (#4400).
-func pullChainEntries(ctx context.Context, src Source, batch *database.Batch, bodies *messages, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, pageSize uint64) error {
+// checked against its entry and kept in bodies, which is written when the
+// account settles and dropped with it when it is refused (#4400).
+func pullChainEntries(ctx context.Context, src Source, bodies *messages, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, pageSize uint64) error {
 	head, err := dst.Head().Get()
 	if err != nil {
 		return fmt.Errorf("load the local head: %w", err)
@@ -910,14 +931,7 @@ func pullChainEntries(ctx context.Context, src Source, batch *database.Batch, bo
 		if bodies != nil {
 			// Under the entry, not under the message's own hash: a stored
 			// form refers to its transaction and hashes to something else.
-			if err := batch.Message(*(*[32]byte)(e)).Main().Put(msgs[i]); err != nil {
-				return fmt.Errorf("store the message behind entry %d: %w", from+int64(i), err)
-			}
-		}
-	}
-	if bodies != nil {
-		if err := bodies.store(batch); err != nil {
-			return err
+			bodies.kept[*(*[32]byte)(e)] = msgs[i]
 		}
 	}
 

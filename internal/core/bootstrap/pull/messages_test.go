@@ -194,3 +194,45 @@ func TestFullSpine_RefusesAMessageThatIsNotItsEntry(t *testing.T) {
 		})
 	}
 }
+
+// TestFullSpine_AMessageOnTwoAccountsSettlesTwice — one transaction is an
+// entry on several spine accounts' chains (a change to the validator set is on
+// the network definition's, the operators' and the ledger's), and one pass
+// holds all of them at once. A message is not an account's: two pending
+// accounts that each wrote it into their own batch conflicted when the second
+// settled, and the spine never verified
+// (TestAJoinCrossesAChangeToTheValidatorSet).
+func TestFullSpine_AMessageOnTwoAccountsSettlesTwice(t *testing.T) {
+	a := protocol.DnUrl().JoinPath(protocol.Network)
+	b := protocol.DnUrl().JoinPath(protocol.Globals)
+	src := newObservedDB(t)
+	func() {
+		batch := src.Begin(true)
+		defer batch.Discard()
+		txn := new(protocol.Transaction)
+		txn.Header.Principal = a
+		txn.Body = &protocol.WriteData{Entry: &protocol.DoubleHashDataEntry{Data: [][]byte{[]byte("shared")}}}
+		msg := &messaging.TransactionMessage{Transaction: txn}
+		h := msg.Hash()
+		require.NoError(t, batch.Message(h).Main().Put(msg))
+		for _, u := range []*url.URL{a, b} {
+			require.NoError(t, batch.Account(u).Main().Put(&protocol.DataAccount{Url: u}))
+			require.NoError(t, batch.Account(u).MainChain().Inner().AddEntry(h[:], false)) // the same transaction on both
+		}
+		require.NoError(t, batch.Commit())
+	}()
+
+	dst := newObservedDB(t)
+	batch := dst.Begin(true)
+	defer batch.Discard()
+	var held []*Pending
+	for _, u := range []*url.URL{a, b} {
+		p, _, err := FetchFrom(context.Background(), []Source{&dbSource{db: src}}, batch, u, Options{Mode: ModeFullSpine})
+		require.NoError(t, err)
+		held = append(held, p)
+	}
+	for _, p := range held {
+		require.NoError(t, p.Keep(), "%v", p.Account)
+	}
+	require.NoError(t, batch.Commit())
+}
