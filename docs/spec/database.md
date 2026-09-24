@@ -153,6 +153,14 @@ a restore alike, and no reader relies on which occurrence it names: a receipt,
 a query by hash, a proof check and the proven set each need *an* index of the
 hash, and any serves. Writing the index is therefore a write, not a read
 followed by a write.
+An index is the hash's only while the position it names holds that hash. A
+chain replaced whole — the join's retake of a chain grown wrongly
+([executor.md](executor.md), "Sync", "Two mismatches" 2) — rewrites every
+position and re-indexes the entries it now holds, and leaves the index of a
+hash only the replaced chain held naming a position that holds another, or
+none below the head. A deduplicated append that meets such an index reads the
+element it names and appends when the position is past the head or holds
+another hash (#4444); an element it cannot read refutes nothing.
 Repeats do occur, by construction, and are appended: a root chain receives
 equal anchors from equal chains (genesis, one transaction creating several
 accounts); a signature chain records one cause per signer and every signature

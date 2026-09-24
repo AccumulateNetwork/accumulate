@@ -1378,6 +1378,44 @@ change is the work.
 
 ---
 
+### D11. A replaced chain's stale element index is refuted on a deduplicated append, and nowhere else
+
+*[#4444](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4444), [#4327](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4327)*
+
+**Spec** ([database.md](database.md), "Chains are logs"): an index is the
+hash's only while its position holds the hash; a chain replaced whole leaves
+the index of the hashes it no longer holds.
+
+**Code**: `merkle.Chain.AddEntry` with `unique` reads `Element(i)` on an index
+hit and appends when `i` is past the head or the element is another hash
+(`indexHolds`). Nothing deletes the stale records, and **`IndexOf` is not
+refuted**: every other reader of the index — `HeightOf`, a receipt from a
+hash, `provingAnchorIndex` (`internal/core/execute/v2/block/admissible.go`) deciding a proof's admissibility
+from `Root().IndexOf(anchor)` — still answers a position that holds the
+peers' entry for a hash only the node's wrong chain held (#4421 review
+note_3897401998 F3(ii); inferred, not run). An element the store cannot read
+(below the open set of a chain restored from its head, or past a windowed
+store's horizon) is taken as holding the hash, so it neither refutes nor
+confirms.
+
+**Carried constraint**: the check is value-sensitive. On this line every
+path a node takes writes the index as the last write with its element
+(`AddEntry`, `RestoreHead`, `rebuildChainIndexes`), so it refutes only a
+replaced chain's records. The v1 snapshot restore
+(`internal/database/snapshot`, `RestoreElementIndexFromMarkPoints`) writes
+indexes one mark set off (#4321); it is reached here not by a node's own
+restore (which rebuilds every index, `rebuildChainIndexes`) but by genesis
+from a v1 file, `snapshot fix`, the Factom merge, `accumulated fastsync` and
+the v1 simulators, and a store they build would now append a unique hash its
+peers skip. #4321 is to be fixed
+before a store built that way executes; the check must never reach `main`
+without it.
+
+**Size**: small — refute in `IndexOf` too (one element read per lookup), or
+clear the index of the replaced entries in the retake.
+
+---
+
 ## Consensus
 
 ### C7. Nothing refuses the synthetics a partition cannot execute

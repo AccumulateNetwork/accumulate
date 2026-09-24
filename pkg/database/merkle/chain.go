@@ -7,6 +7,7 @@
 package merkle
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"strings"
@@ -314,13 +315,19 @@ func (m *Chain) AddEntry(hash []byte, unique bool) error {
 	// duplicate branch there is the writer appending the same hash twice,
 	// which test builds record so the suites can assert which.
 	if unique {
-		_, err = m.ElementIndex(hash).Get()
+		i, err := m.ElementIndex(hash).Get()
 		switch {
 		case err == nil:
-			if OnDuplicate != nil {
-				OnDuplicate(m.key, unique)
+			held, err := m.indexHolds(head, i, hash)
+			if err != nil {
+				return err
 			}
-			return nil // Don't add duplicates
+			if held {
+				if OnDuplicate != nil {
+					OnDuplicate(m.key, unique)
+				}
+				return nil // Don't add duplicates
+			}
 		case !errors.Is(err, storage.ErrNotFound):
 			return err
 		}
@@ -376,6 +383,35 @@ func (m *Chain) AddEntry(hash []byte, unique bool) error {
 	}
 
 	return nil
+}
+
+// indexHolds reports whether the element index hit i for hash is the chain's:
+// false only when the position is past the head, or holds another hash.
+//
+// Every write of the index writes the element with it, so an index names a
+// position holding its hash -- until the chain is replaced. A chain the join
+// takes again whole (executor.md, "Sync", "Two mismatches" 2: a chain grown
+// wrongly is replaced, not appended to) rewrites every position with the
+// peers' entries and re-indexes those, but the index of a hash only the
+// wrong chain held still names where it was, and a later honest append of
+// it was skipped there and appended on the peers (#4444, #4327). An element
+// that is not held -- below the open mark set of a chain restored from its
+// head, or read past a windowed store's horizon -- refutes nothing: the
+// hash may be there, and a node's chain must not depend on what its store
+// can still read.
+func (m *Chain) indexHolds(head *State, i uint64, hash []byte) (bool, error) {
+	if i >= uint64(head.Count) {
+		return false, nil
+	}
+	e, err := m.Element(i).Get()
+	switch {
+	case err == nil:
+		return bytes.Equal(e, hash), nil
+	case errors.Is(err, storage.ErrNotFound):
+		return true, nil
+	default:
+		return false, err
+	}
 }
 
 // IndexOf
