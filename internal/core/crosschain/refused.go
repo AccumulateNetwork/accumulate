@@ -58,7 +58,13 @@ func (c *Conductor) refused(partition string, env *messaging.Envelope, err error
 		numbers[k] = append(numbers[k], seq.Number)
 	}
 	for k, stream := range streams {
-		c.requester.unask(stream, numbers[k])
+		// Only what was asked for is a heal. The Directory's own anchor to
+		// itself, or a synthetic to this partition, refused after a committee
+		// change, was never asked for: the dispatcher has counted it, and it
+		// is not a heal refusal (#4426 review F1).
+		if !c.requester.unask(stream, numbers[k]) {
+			continue
+		}
 		mHealRequests.WithLabelValues("refused", c.Partition.ID, partitionLabel(stream.Source)).Inc()
 		slog.Error("Destination refused healed entries; they will be asked for again", "module", "conductor",
 			"source", stream.Source, "destination", c.Url(), "ledger", stream.Ledger, "entries", len(numbers[k]), "error", err)
@@ -66,11 +72,15 @@ func (c *Conductor) refused(partition string, env *messaging.Envelope, err error
 }
 
 // unask drops every asked span that holds one of numbers, so the stream's
-// next activation asks for them again instead of waiting out patience.
-func (r *healRequester) unask(stream execute.StreamID, numbers []uint64) {
+// next activation asks for them again instead of waiting out patience. It
+// reports whether it dropped any: whether the refused entries were asked for.
+func (r *healRequester) unask(stream execute.StreamID, numbers []uint64) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	k := streamKey(stream)
+	if len(r.asks[k]) == 0 {
+		return false // and the map may be nil: nothing has been asked yet
+	}
 	kept := r.asks[k][:0]
 	for _, a := range r.asks[k] {
 		holds := false
@@ -84,6 +94,8 @@ func (r *healRequester) unask(stream execute.StreamID, numbers []uint64) {
 			kept = append(kept, a)
 		}
 	}
+	dropped := len(kept) < len(r.asks[k])
 	clear(r.asks[k][len(kept):])
 	r.asks[k] = kept
+	return dropped
 }

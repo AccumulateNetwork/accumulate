@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -174,4 +175,33 @@ type refusedDialer func(context.Context, multiaddr.Multiaddr) (message.Stream, e
 
 func (fn refusedDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
 	return fn(ctx, addr)
+}
+
+// #4426 review F1. Not every envelope the conductor sends to its own
+// partition is a heal: the Directory anchors itself, and a validator just
+// removed from the committee has its own anchor refused with exactly the
+// #4424 text. A refusal of an envelope nothing asked for is the dispatcher's
+// to count (refused_total); counted as a heal refusal it reports heals that
+// never happened.
+func TestRequester_ARefusedEnvelopeThatWasNoHealIsNotAHealRefusal(t *testing.T) {
+	c := &Conductor{Partition: &protocol.PartitionInfo{ID: "Directory", Type: protocol.PartitionTypeDirectory}}
+	txn := &protocol.Transaction{
+		Header: protocol.TransactionHeader{Principal: protocol.DnUrl().JoinPath(protocol.AnchorPool)},
+		Body:   &protocol.DirectoryAnchor{PartitionAnchor: protocol.PartitionAnchor{Source: protocol.DnUrl(), MinorBlockIndex: 9}},
+	}
+	own := &messaging.Envelope{Messages: []messaging.Message{&messaging.BlockAnchor{
+		Signature: &protocol.ED25519Signature{PublicKey: make([]byte, 32), Signer: protocol.DnUrl().JoinPath(protocol.Network)},
+		Anchor:    &messaging.SequencedMessage{Message: &messaging.TransactionMessage{Transaction: txn}, Source: protocol.DnUrl(), Destination: protocol.DnUrl(), Number: 9},
+	}}}
+
+	counter := mHealRequests.WithLabelValues("refused", "Directory", "Directory")
+	before := testutil.ToFloat64(counter)
+	c.refused("Directory", own, errors.Unauthorized.With("key is not an active validator for Directory"))
+	require.Equal(t, before, testutil.ToFloat64(counter), "the Directory's own anchor was never asked for: not a heal refusal")
+
+	// The same anchor, asked for as a heal, is one.
+	stream := execute.StreamID{Ledger: c.Url(protocol.AnchorPool), Source: protocol.DnUrl()}
+	c.requester.asked(stream, [2]uint64{9, 9}, 100)
+	c.refused("Directory", own, errors.Unauthorized.With("key is not an active validator for Directory"))
+	require.Equal(t, before+1, testutil.ToFloat64(counter), "a refused heal is a heal refusal")
 }
