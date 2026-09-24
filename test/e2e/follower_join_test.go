@@ -299,8 +299,26 @@ func TestAFollowerJoinsARunningNetworkAndLeaves(t *testing.T) {
 	}
 	before := cadence()
 	require.NotZero(t, before, "precondition: the partition produces blocks")
+	require.Equal(t, partitionBlock(t, p.NodeDatabase(0), part), partitionBlock(t, p.NodeDatabase(follower), part),
+		"precondition: the follower executes with its peers until it stops")
 	stopper.StopNode(follower)
+	stoppedAt := partitionBlock(t, p.NodeDatabase(follower), part)
 	after := cadence()
+
+	// What a stop is: the follower executes nothing more while its peers go on,
+	// and a call addressed to it finds no one.
+	require.Greater(t, partitionBlock(t, p.NodeDatabase(0), part), stoppedAt,
+		"precondition: the partition went on after the follower stopped")
+	require.Equal(t, stoppedAt, partitionBlock(t, p.NodeDatabase(follower), part),
+		"the stopped follower went on executing blocks")
+	_, err = followerQuery.Query(ctx, alice.JoinPath("tokens"), &api.DefaultQuery{})
+	require.Error(t, err, "the stopped follower answered a read")
+	require.Equal(t, errors.NoPeer, errors.Code(err), "a stopped follower must be absent, got %v", err)
+
+	// And the partition did not notice. In the simulator one step is one
+	// block on every partition whoever is running, so this shows only that
+	// the partition runs on; whether a real committee's cadence changes when a
+	// follower leaves is the Docker half's measurement (#4363).
 	require.Equal(t, before, after,
 		"stopping the follower changed the partition's block cadence: %d blocks in %d steps before, %d after",
 		before, window, after)
