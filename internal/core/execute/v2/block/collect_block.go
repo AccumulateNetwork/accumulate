@@ -90,16 +90,24 @@ func (x *Executor) CollectBlock(batch *database.Batch, params execute.BlockParam
 			numbers = append(numbers, n)
 		}
 		sort.Slice(numbers, func(i, j int) bool { return numbers[i] < numbers[j] })
+		counted := execute.CollectedStream{ID: str.id()}
 		for _, n := range numbers {
-			held, err := b.collectArrival(str, pos.delivered, c.arrivals[k][n])
+			notHeld, err := b.collectArrival(str, pos.delivered, c.arrivals[k][n])
 			if err != nil {
 				b.staging.Discard()
 				return nil, errors.UnknownError.Wrap(err)
 			}
-			if held {
+			if notHeld == "" {
 				out.Held++
+				counted.Held++
+				continue
 			}
+			if counted.NotHeld == nil {
+				counted.NotHeld = map[execute.NotHeldReason]int{}
+			}
+			counted.NotHeld[notHeld]++
 		}
+		out.Streams = append(out.Streams, counted)
 	}
 
 	b.staging.Commit()
@@ -124,7 +132,7 @@ func (x *Executor) SettleStagingAt(q uint64) error {
 }
 
 // collectArrival holds one arrival the way the block that executes it would
-// hold it, and answers whether it was held.
+// hold it, and answers why it was not held: empty when it was.
 //
 // The form matters as much as the fact. An entry that passes its proof is
 // held by the sequenced layer as the sequenced message itself, not collected,
@@ -133,15 +141,18 @@ func (x *Executor) SettleStagingAt(q uint64) error {
 // proof must validate, and it never runs until one does (executor spec,
 // "Collection"). Holding the wrong one either strands an entry its peers ran
 // or runs one its peers did not.
-func (b *Block) collectArrival(str stream, delivered uint64, a *arrival) (bool, error) {
-	if a.seq.Number <= delivered || a.seq.Number > delivered+maxSequenceAhead {
-		// At or below what this node's store says it delivered, or past the
-		// sanity horizon. Nothing below Delivered can ever run again, and
-		// the pulled state decides the rest at Q.
-		return false, nil
+func (b *Block) collectArrival(str stream, delivered uint64, a *arrival) (execute.NotHeldReason, error) {
+	// At or below what this node's store says it delivered, or past the
+	// sanity horizon. Nothing below Delivered can ever run again, and the
+	// pulled state decides the rest at Q.
+	if a.seq.Number <= delivered {
+		return execute.NotHeldDelivered, nil
+	}
+	if a.seq.Number > delivered+maxSequenceAhead {
+		return execute.NotHeldHorizon, nil
 	}
 	if _, already := b.staging.IDOf(str.id(), a.seq.Number); already {
-		return false, nil // first sighting wins, here as in a block
+		return execute.NotHeldDuplicate, nil // first sighting wins, here as in a block
 	}
 
 	// The message's own executor decides whether it may be held at all, here
@@ -162,24 +173,24 @@ func (b *Block) collectArrival(str stream, delivered uint64, a *arrival) (bool, 
 // would leave it: executed or held by the sequenced layer when its proof is
 // anchored here, collected when it is not, refused when its own executor
 // refuses it.
-func (b *Block) collectSynthetic(str stream, ctx *MessageContext, a *arrival) (bool, error) {
+func (b *Block) collectSynthetic(str stream, ctx *MessageContext, a *arrival) (execute.NotHeldReason, error) {
 	if _, ok := a.classifier.(*messaging.SyntheticMessage); !ok {
 		if _, ok := a.classifier.(*messaging.BadSyntheticMessage); !ok {
 			// A bare sequenced message: the replica-accepted case (#4140),
 			// admissible on its own, held as the sequenced layer holds it.
 			ok, err := b.admissibilityOf(str, a.classifier, a.seq)
 			if err != nil || !ok {
-				return false, nil
+				return execute.NotHeldRefused, nil
 			}
 			b.staging.Hold(str.id(), a.seq.Number, &execute.Held{ID: a.seq.ID(), Message: a.seq})
-			return true, nil
+			return "", nil
 		}
 	}
 
 	syn, attested, err := SyntheticMessage{}.check(b.Batch, ctx)
 	if err != nil {
 		// Refused by the rule the block refuses it by, and not held.
-		return false, nil
+		return execute.NotHeldRefused, nil
 	}
 
 	if syn.Proof == nil {
@@ -187,12 +198,12 @@ func (b *Block) collectSynthetic(str stream, ctx *MessageContext, a *arrival) (b
 		// block executes it, and holds it by the sequenced layer if it is
 		// not next.
 		b.staging.Hold(str.id(), a.seq.Number, &execute.Held{ID: a.seq.ID(), Message: a.seq})
-		return true, nil
+		return "", nil
 	}
 
 	proven, err := b.Executor.isAdmissible(b.Batch, syn.Proof)
 	if err != nil {
-		return false, errors.UnknownError.Wrap(err)
+		return "", errors.UnknownError.Wrap(err)
 	}
 	if proven {
 		// The block absorbs an accepted collection proof into the stream's
@@ -202,17 +213,17 @@ func (b *Block) collectSynthetic(str stream, ctx *MessageContext, a *arrival) (b
 		if syn.Proof.ReceiptList != nil {
 			err := b.staging.Prove(b.Executor.synthStream(a.seq.Source), syn.Proof.ReceiptList)
 			if err != nil && !errors.Is(err, errors.Conflict) {
-				return false, errors.UnknownError.Wrap(err)
+				return "", errors.UnknownError.Wrap(err)
 			}
 		}
 		b.staging.Hold(str.id(), a.seq.Number, &execute.Held{ID: a.seq.ID(), Message: a.seq})
-		return true, nil
+		return "", nil
 	}
 
 	// Not anchored here: collected, and only on a source validator's word
 	// (#4243) — the same refusal the block makes.
 	if !attested {
-		return false, nil
+		return execute.NotHeldUnattested, nil
 	}
 
 	// A source whose proof this block turned away for want of budget has its
@@ -221,7 +232,7 @@ func (b *Block) collectSynthetic(str stream, ctx *MessageContext, a *arrival) (b
 	// healing to find (#4282). Only on this path, because only this path
 	// holds an entry whose proof is still to come.
 	if b.proofBudgetBound[strings.ToLower(str.source.String())] {
-		return false, nil
+		return execute.NotHeldProofBudget, nil
 	}
 
 	h := &execute.Held{ID: a.classifier.ID(), Message: a.classifier, Collected: true, Hash: a.seq.Hash()}
@@ -236,21 +247,21 @@ func (b *Block) collectSynthetic(str stream, ctx *MessageContext, a *arrival) (b
 		}
 	}
 	b.staging.Hold(str.id(), a.seq.Number, h)
-	return true, nil
+	return "", nil
 }
 
 // collectAnchor holds one anchor copy as BlockAnchor.process would leave it:
 // held by the sequenced layer once its signatures reach the threshold,
 // collected below it, refused when its own executor refuses it.
-func (b *Block) collectAnchor(str stream, ctx *MessageContext, a *arrival) (bool, error) {
+func (b *Block) collectAnchor(str stream, ctx *MessageContext, a *arrival) (execute.NotHeldReason, error) {
 	txn, ok := a.seq.Message.(*messaging.TransactionMessage)
 	if !ok || txn.Transaction == nil {
-		return false, nil
+		return execute.NotHeldRefused, nil
 	}
 	if _, ok := a.classifier.(*messaging.BlockAnchor); ok {
 		if _, err := (BlockAnchor{}).check(ctx, b.Batch); err != nil {
 			// Refused by the rule the block refuses it by, and not held.
-			return false, nil
+			return execute.NotHeldRefused, nil
 		}
 	}
 
@@ -260,11 +271,11 @@ func (b *Block) collectAnchor(str stream, ctx *MessageContext, a *arrival) (bool
 	// anchor chain validates, which is the transaction's stored form.
 	ready, err := b.anchorIsAdmissible(b.Batch, nil, txn.Transaction, str.source)
 	if err != nil {
-		return false, nil
+		return execute.NotHeldRefused, nil
 	}
 	if ready {
 		b.staging.Hold(str.id(), a.seq.Number, &execute.Held{ID: a.seq.ID(), Message: a.seq})
-		return true, nil
+		return "", nil
 	}
 
 	stored := new(protocol.Transaction)
@@ -275,7 +286,7 @@ func (b *Block) collectAnchor(str stream, ctx *MessageContext, a *arrival) (bool
 		Collected: true,
 		Hash:      *(*[32]byte)(stored.GetHash()),
 	})
-	return true, nil
+	return "", nil
 }
 
 // SettleStaging brings staging to the block the pulled state is (executor

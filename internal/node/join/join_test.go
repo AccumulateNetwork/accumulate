@@ -87,7 +87,7 @@ type fakeStage struct {
 
 	// gaps are the blocks whose collected streams are not contiguous from
 	// Delivered + 1; gapAsked is every block HasGap was asked about.
-	gaps     map[uint64]bool
+	gaps     map[uint64][]StreamGap
 	gapAsked []uint64
 
 	log *[]string
@@ -107,7 +107,7 @@ func record(log *[]string, what string, n uint64) {
 
 // HasGap is the seam granted for #4362 (Stage.HasGap): whether the streams
 // collected for a block run contiguously from each stream's Delivered + 1.
-func (s *fakeStage) HasGap(block uint64) (bool, error) {
+func (s *fakeStage) HasGap(block uint64) ([]StreamGap, error) {
 	record(s.log, "gap", block)
 	s.gapAsked = append(s.gapAsked, block)
 	return s.gaps[block], nil
@@ -313,7 +313,7 @@ func (s *gapState) Pull(context.Context) error {
 	switch {
 	case s.synced == 0:
 		s.synced = s.b
-	case s.stage.gaps[s.synced+1] && contains(s.stage.gapAsked, s.synced+1):
+	case len(s.stage.gaps[s.synced+1]) > 0 && contains(s.stage.gapAsked, s.synced+1):
 		s.synced++
 	}
 	return nil
@@ -346,7 +346,7 @@ func contains(s []uint64, v uint64) bool {
 func TestJoin_APreListenEntryAdvancesTheSyncInsteadOfExecuting(t *testing.T) {
 	const b = 20
 	buf := new(fakeBuffer)
-	stage := &fakeStage{gaps: map[uint64]bool{b + 1: true}}
+	stage := &fakeStage{gaps: map[uint64][]StreamGap{b + 1: {{Delivered: 103, Missing: 104, MissingTo: 104, Held: 105}}}}
 	state := &gapState{stage: stage, b: b}
 	peers := &fakePeers{
 		peers: []*api.FindServiceResult{peerResult(1)},

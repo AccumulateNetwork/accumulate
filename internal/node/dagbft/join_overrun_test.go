@@ -153,8 +153,8 @@ func (n *overrunNetwork) Matched(context.Context) (uint64, bool, error) {
 // overrunStage finds no gap and settles nothing: staging is not this test's.
 type overrunStage struct{}
 
-func (overrunStage) SettleStagingAt(uint64) error { return nil }
-func (overrunStage) HasGap(uint64) (bool, error)  { return false, nil }
+func (overrunStage) SettleStagingAt(uint64) error            { return nil }
+func (overrunStage) HasGap(uint64) ([]join.StreamGap, error) { return nil, nil }
 
 type overrunPeers struct{}
 

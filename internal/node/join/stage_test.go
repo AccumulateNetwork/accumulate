@@ -48,12 +48,58 @@ func TestExecutorStage_AGapIsReadAgainstThePulledDelivered(t *testing.T) {
 	stage := &ExecutorStage{Staging: staging, Database: db}
 
 	deliver(103)
-	gap, err := stage.HasGap(21)
+	gaps, err := stage.HasGap(21)
 	require.NoError(t, err)
-	require.True(t, gap, "104 is missing between the pulled Delivered and what is held")
+	require.NotEmpty(t, gaps, "104 is missing between the pulled Delivered and what is held")
 
 	deliver(104)
-	gap, err = stage.HasGap(22)
+	gaps, err = stage.HasGap(22)
 	require.NoError(t, err)
-	require.False(t, gap, "the pulled state says 104 executed, so 105 is next")
+	require.Empty(t, gaps, "the pulled state says 104 executed, so 105 is next")
+}
+
+// Run 20260924T111811Z: "The next block has a gap; advancing the sync
+// block=158 synced=157", on every BVN restart, and nothing in the line said
+// which stream or which number (#4432). HasGap answers every stream with a
+// gap -- its pulled Delivered, the run of numbers nothing is held for, the
+// highest number held and the highest validated -- and the line prints it.
+// A stream with no gap is not in the answer.
+func TestExecutorStage_AGapNamesItsStreamAndNumbers(t *testing.T) {
+	bvn1 := protocol.PartitionUrl("BVN1")
+	synth := bvn1.JoinPath(protocol.Synthetic)
+	gapped := execute.StreamID{Ledger: synth, Source: protocol.PartitionUrl("BVN0")}
+	whole := execute.StreamID{Ledger: synth, Source: protocol.PartitionUrl("BVN2")}
+
+	staging := execute.NewStaging()
+	tx := staging.Begin()
+	hold := func(id execute.StreamID, n uint64) {
+		seq := &messaging.SequencedMessage{Number: n, Source: id.Source, Destination: bvn1}
+		tx.Hold(id, n, &execute.Held{ID: seq.ID(), Message: seq, Hash: seq.Hash()})
+	}
+	hold(gapped, 107)
+	hold(gapped, 109)
+	hold(whole, 41)
+	tx.Commit()
+
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	ledger := new(protocol.SyntheticLedger)
+	ledger.Url = synth
+	ledger.Partition(gapped.Source).Delivered = 103
+	ledger.Partition(whole.Source).Delivered = 40
+	require.NoError(t, batch.Account(synth).Main().Put(ledger))
+	require.NoError(t, batch.Commit())
+
+	stage := &ExecutorStage{Staging: staging, Database: db}
+	gaps, err := stage.HasGap(158)
+	require.NoError(t, err)
+	require.Equal(t, []StreamGap{{
+		Stream:    gapped,
+		Delivered: 103,
+		Missing:   104,
+		MissingTo: 106,
+		Held:      109,
+	}}, gaps, "one stream has a gap: 104-106 missing above Delivered 103, 109 held; BVN2's 41 follows its 40")
+	require.Equal(t, "bvn-BVN0.acme->bvn-BVN1.acme/synthetic delivered=103 missing=104-106 held=109 validated=0",
+		gaps[0].String())
 }

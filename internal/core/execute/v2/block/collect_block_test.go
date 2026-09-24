@@ -320,6 +320,46 @@ func TestCollectBlock_HoldsAnchorCopiesWithoutRecordingTheirSignatures(t *testin
 	require.False(t, ok, "an anchor copy its own executor refuses is not held")
 }
 
+// A collected block says, per stream, how many arrivals it held and why it
+// held none of the others. Run 20260924T111811Z: "Staged the buffered groups
+// through the block after the state … notStaged=5 staged=1", and the next
+// line was a gap no one could place (#4432). An arrival the node did not hold
+// is either one its peers did not hold either, or the gap -- and the reason
+// is what tells the two apart.
+func TestCollectBlock_SaysPerStreamWhatItHeldAndWhyNot(t *testing.T) {
+	f, key := newAnchorFixture(t)
+	dn := protocol.DnUrl()
+	pool := protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool)
+
+	var ledger protocol.AnchorLedger
+	ledger.Url = pool
+	ledger.Partition(dn).Delivered = 2
+	require.NoError(t, f.batch.Account(pool).Main().Put(&ledger))
+
+	unsigned := signedAnchor(key, 5)
+	unsigned.Signature = nil
+	_, err := f.x.CollectBlock(f.batch, execute.BlockParams{Index: 8},
+		[]*messaging.Envelope{{Messages: []messaging.Message{signedAnchor(key, 3)}}})
+	require.NoError(t, err)
+
+	out, err := f.x.CollectBlock(f.batch, execute.BlockParams{Index: 9},
+		[]*messaging.Envelope{{Messages: []messaging.Message{
+			signedAnchor(key, 2), signedAnchor(key, 3), signedAnchor(key, 4), unsigned,
+		}}})
+	require.NoError(t, err)
+	require.Equal(t, 1, out.Held)
+	require.Len(t, out.Streams, 1)
+	st := out.Streams[0]
+	require.True(t, st.ID.Ledger.Equal(pool) && st.ID.Source.Equal(dn), "the anchor stream from the Directory")
+	require.Equal(t, 1, st.Held, "#4")
+	require.Equal(t, map[execute.NotHeldReason]int{
+		execute.NotHeldDelivered: 1, // #2, at the store's Delivered
+		execute.NotHeldDuplicate: 1, // #3, held by block 8: first sighting wins
+		execute.NotHeldRefused:   1, // #5, signed by nobody
+	}, st.NotHeld)
+	require.Equal(t, "dn.acme->bvn-BVN0.acme/anchors held=1 delivered=1 duplicate=1 refused=1", out.Streams[0].String())
+}
+
 // SettleStaging releases every stream through the Delivered the PULLED ledger
 // names -- the peers' word on what has executed -- not through anything
 // staging remembers, which on a joining node is zero (#4291's trap).

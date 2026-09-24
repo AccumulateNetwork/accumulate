@@ -702,6 +702,32 @@ small — a handful of entries at 100 tps — and clear within a few blocks, so
 within a few rounds the last pre-listen entry has been executed by the
 network and is in the pulled state, and every stream's run is contiguous.
 
+**A restart is a join, and it finds a gap exactly when it stopped holding an
+unexecuted entry.** Staging is memory: whatever the node held unexecuted when
+it stopped — a synthetic waiting on the anchor that proves it — is lost, it
+arrived before the node was listening again, and the first check at `Q + 1`
+finds a gap at those numbers. A node restarted with nothing held loses nothing
+and finds none. So whether a restart meets a gap is the traffic's in-flight
+state at the moment it stopped, not the code: an entry is held only while
+the anchor that proves it has not arrived
+(`TestRestartGapAtQPlusOneIsAnEntryHeldBeforeTheRestart` gaps only in its arm
+where the anchors lag the synthetics, at exactly the numbers the node held
+before it stopped). Run `20260924T111811Z` gapped at `Q + 1` on 3 of 3 BVN
+restarts and runs 2 and 3 on 0 of 3; what each restarted node held when it
+stopped is not in those runs' logs, and the gap line below is what will say
+(#4432). The gap check reads staging and the pulled ledgers'
+`Delivered`, and no message's status: what a message records when it is held
+(#4423) does not enter it.
+
+**The gap line names what it found** (`join.StreamGap`, #4432). For every
+stream with a gap, `The next block has a gap; advancing the sync` carries, under
+`gaps`, the stream as `source->ledger`, its `Delivered`, the first run of
+numbers nothing is held for (`missing=<first>-<last>`), the highest number held
+and the highest a validated hash stands at. The same first missing number is
+on the gauge `accumulate_join_gap_first_missing{partition,stream}`; each check
+replaces the partition's series, so a stream is on it only while its gap
+stands.
+
 **The root is the check that does not depend on the sequence numbers.** After
 executing any block, the local BPT root equals that block's proven root or
 it does not. A mismatch is a gap the sequence check missed — the node
@@ -767,6 +793,17 @@ moves forward — and a group that is `Q + 1` but has not been collected yet is
 waited for (`NotReady`): a gap check without it would not see the gap it
 carries (`Service.StageThrough`, called by the join after the match and before
 the gap check).
+
+Its line, `Staged the buffered groups through the block after the state`, says
+how many groups it staged, how many are `after` the block — not staged, because
+they reach staging only by being produced — and, under `streams`, per stream,
+how many of the staged groups' arrivals were held and why each of the rest was
+not: `delivered` (at or below the store's `Delivered`), `horizon` (past the
+sanity horizon), `duplicate` (its number already held; first sighting wins),
+`refused` (its own executor refuses it), `unattested` (not proven here and not
+signed by a validator of its source, #4243) or `proofBudget` (its source's
+proof was turned away, #4282). A gap is an entry the node did not hold; the
+reason says whether its peers held it either (#4432).
 
 The node then executes block `Q + 1` from the buffer as any node executes a
 block, and it is a validator or a follower from there. **The handoff that
