@@ -909,6 +909,18 @@ seventh nobody had named.
   Closing it needs either a proof that binds a key to its leaf or a page diff
   that names and removes local-only leaves (the "mismatch must name what it
   could not account for" of "Sync" §2).
+- **A lone scheduled event is not bound to its block** (#4399 review F2)**.**
+  The events BPT hashes values and not keys (`bpt.leaf.getHash`), and a
+  one-sided branch passes its child's hash up, so an events tree holding one
+  entry has a root equal to that entry's hash wherever its key sits. A peer
+  can serve the one held vote (or the one pending expiry) under another block
+  and the ledger's leaf check passes; the joined node then releases it at a
+  different anchor from its peers. With two or more entries the positions
+  bind. It is the realistic case — one pending multisig transaction — and it
+  cannot be closed at the pull: the events leaf must hash its key, a
+  consensus hash change. `TestALoneScheduledEventIsBoundToItsBlock` states
+  the property and is skipped until then. The block lists themselves are no
+  longer taken from the answer (F1); they are derived from the verified sets.
 - **The page diff runs on the first round of every join** (#4302 section 8)**.**
   That is one full
   BPT page scan of the partition, names only, before the node knows whether

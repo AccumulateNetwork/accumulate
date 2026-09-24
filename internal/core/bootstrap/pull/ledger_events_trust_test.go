@@ -111,3 +111,29 @@ func TestTheEventsBlockListsAreDerivedNotTaken(t *testing.T) {
 		})
 	}
 }
+
+// TestALoneScheduledEventIsBoundToItsBlock is review F2, a known limit and
+// skipped until it is closed. The events BPT hashes values and not keys, and
+// a one-sided branch passes its child's hash up, so a tree with one entry has
+// root == that entry's hash wherever its key sits: a peer that moves the one
+// held vote from block 30 to 31 passes the leaf check. With two or more
+// entries the positions bind. Closing it needs the events leaf to hash its
+// key, a consensus hash change (DIFFERENCES.md E11).
+func TestALoneScheduledEventIsBoundToItsBlock(t *testing.T) {
+	t.Skip("known limit (DIFFERENCES.md E11, #4399 review F2): a one-entry events BPT does not bind the entry's block; needs a hash change")
+
+	src, root, block, part, sysLedger, _, partitionID := ledgerWithOneVote(t)
+	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
+	opts := Options{Mode: ModeStateOnly, Verify: anchored{root: root, block: block}, Partition: part}
+	liar := rewriteEvents{Source: honest, fn: func(ev *api.LedgerEvents) {
+		ev.MinorBlocks = []uint64{31}
+		for _, v := range ev.MinorVotes {
+			v.Block = 31
+		}
+	}}
+	dst := newObservedDB(t)
+	batch := dst.Begin(true)
+	defer batch.Discard()
+	require.Error(t, Account(context.Background(), liar, batch, sysLedger, opts),
+		"the one held vote moved from block 30 to 31 and the leaf check passed")
+}
