@@ -113,7 +113,7 @@ func TestAJoinedNodeCanOpenItsFirstBlockAfterARestart(t *testing.T) {
 			cancel()
 		}
 	}}
-	stepping.State = pulledState(t, sim, p, joiner, "Directory")
+	stepping.State = p.NodeJoinState(joiner)
 	settler, ok := p.NodeExecutor(joiner).(join.Settler)
 	require.True(t, ok)
 	_, err := join.Run(ctx, join.Options{
