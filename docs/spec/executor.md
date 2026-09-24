@@ -221,6 +221,39 @@ what it collected and what it pulled line up, execute from the next block.
 Nothing in it rests on a peer's word, and nothing in it asks a peer what it
 holds.
 
+#### The algorithm (Paul, 2026-09-25)
+
+This is the rule; the numbered sections below say how each part is done, and
+where they disagree with it, this wins.
+
+1. **Pull every account the state tree holds.** The whole BPT, page by page,
+   and every account its leaves name.
+2. **Keep up from the block ledger while pulling.** The partition moves while
+   the pull runs. The block ledger names every account whose leaf each block
+   changes (invariant 14), so for every block after an account was pulled the
+   node pulls again what that block's record names. Nothing else changes; an
+   account the record does not name is unchanged.
+3. **The match is the proof.** Only when every account is present and current
+   does the local root equal a root the network signed. That equality with a
+   verified signed anchor's `StateTreeAnchor` (§1) proves the whole state at
+   that block B. Nothing before the match is proven, and nothing before it
+   needs to be. A lying peer can delay the match; it cannot fake it.
+4. **The synthetic ledgers give the staging floor.** In the state at B, each
+   stream's `Delivered` says every synthetic transaction at or below it has
+   been received and processed. Staging never needs any of them.
+5. **Only then does the node stage.** It collects synthetic transactions and
+   anchors from consensus into staging, above the floor.
+6. **When staging is consistent, stop pulling and execute.** The node stops
+   pulling accounts from the block ledger and executes from B + 1, user
+   transactions included. *Open, for Paul:* what "consistent" requires at the
+   top of each stream — contiguous from the floor to the highest number seen
+   in collected blocks, or to a per-stream received watermark the ledger
+   records (#4412).
+
+Invariants 13–15 are what make steps 2 and 3 sound: no leaf exists for an
+account that holds nothing, the record names every account a block changes,
+and a rejected transaction changes nothing but its record.
+
 #### 1. The spine is the trust root, and it is validated first
 
 **The spine is the network definition and the anchors its validators sign.**

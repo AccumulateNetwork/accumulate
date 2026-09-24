@@ -256,6 +256,27 @@ stops holding.
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
 
+**Against the algorithm (executor.md "Sync", "The algorithm"; 2026-09-25).**
+The code on `issue-4205-lead` departs from it in three places:
+
+- **It proves each pass, not the final match** (steps 1–3). `PulledState`
+  fetches the accounts the ledger names in passes, requires every account in
+  a pass to be served at one root (`oneRoot`), proves that root
+  (`anchorsrc.ProveRoot`), and holds, drops or refetches the pass
+  (`settlePass`). The algorithm has one proof — the whole local root equal to
+  a signed anchor's — and no per-pass one. On a partition that moves every
+  block the per-pass loop never converges for a node more than a few blocks
+  behind (#4411; runs 20260924T074702Z, 20260924T093936Z, 20260924T111811Z).
+- **The full BPT walk is a backstop, not step 1.** The page diff runs on the
+  first round and on a cadence (§3, #4395); the algorithm pulls every account
+  the tree holds first.
+- **It collects before the state exists** (steps 4–5). The DAG service
+  buffers every committed group from the restart on, maps the buffer onto
+  blocks by leader round (#4362e), stages through Q + 1 at the handoff
+  (#4398), and restarts the buffer on an overrun (#4407). The algorithm
+  establishes the state and the floor first and stages after.
+
+
 **Spec** ([executor.md](executor.md), "Sync", as rewritten 2026-09-19): a
 node that joins — or restarts, which is a join — validates the spine first
 (the network definition and the anchors its validators sign, by signature,
