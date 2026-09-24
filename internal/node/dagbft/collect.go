@@ -12,10 +12,12 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Collecting mode (executor spec, "Sync", step 1; #4292).
@@ -25,8 +27,9 @@ import (
 // on into TWO places: staging, collected rather than executed, and a buffer,
 // in the order consensus committed them. It executes nothing. When the join
 // has pulled the state and matched the root at a block Q, the buffered groups
-// from Q + 1 on are produced as blocks in order and the node is a validator
-// from there (#4294).
+// committed at a leader round above the one Q's system ledger records are
+// produced as blocks Q + 1, Q + 2, … in order, and the node is a validator
+// from there (#4294, #4362).
 //
 // Nothing here advances the executor's block index, saves a checkpoint,
 // records a state hash or publishes a block event: none of those happened.
@@ -90,8 +93,8 @@ func (g *CollectedGroup) bytes() int {
 // Calling it while already collecting changes nothing. The daemon starts
 // collecting before the service starts and the join starts collecting when it
 // runs; emptying the buffer on the second call would drop the groups
-// committed between the two, and the handoff would then produce every block
-// after them under a number that is not theirs (#4351).
+// committed between the two, and those blocks would then be in neither the
+// buffer nor the state (#4351).
 func (s *Service) StartCollecting() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -103,7 +106,6 @@ func (s *Service) StartCollecting() {
 	s.buffer = nil
 	s.bufferBytes = 0
 	s.stagingReady = false
-	s.collectFrom = s.lastBlockIndex
 }
 
 // Collecting reports whether this node is joining: collecting committed
@@ -163,13 +165,14 @@ type handoffRequest struct {
 	done chan error
 }
 
-// Handoff leaves collecting mode at block q and produces every buffered group
-// in order, from q + 1. It blocks until that is done.
+// Handoff leaves collecting mode at block q and produces, in order from
+// q + 1, every buffered group committed at a leader round above the one q's
+// system ledger records. It blocks until that is done.
 //
 // The executor's state is q's state — the pull put it there — and staging has
 // been settled at q (#4292), so the next block this node executes is q + 1,
 // which is exactly what its peers execute next. From there it is a validator
-// like any other (executor spec, "Sync", step 4).
+// like any other (executor spec, "Sync", step 5).
 func (s *Service) Handoff(q uint64) error {
 	if !s.Collecting() {
 		return errors.NotAllowed.WithFormat("%s: not joining", s.config.Partition.ID)
@@ -188,25 +191,76 @@ func (s *Service) Handoff(q uint64) error {
 	}
 }
 
+// performHandoff runs in the block production loop. It reads the system
+// ledger of the state the join pulled — the block that state is and the
+// leader round that committed it — and hands off there.
+//
+// The block and the round are both read from the ledger, which hashes into
+// the root the join proved; q is the block the join matched, and a ledger
+// that names another block is not the state q is, so nothing is handed off.
+func (s *Service) performHandoff(q uint64) error {
+	// A handoff the join may not make is refused before the ledger is read:
+	// the join tells a wait from a failure by these answers.
+	s.mu.RLock()
+	collecting, overrun := s.collecting, s.bufferOverrun
+	s.mu.RUnlock()
+	if !collecting {
+		return errors.NotAllowed.WithFormat("%s: not joining", s.config.Partition.ID)
+	}
+	if overrun {
+		return errors.NotReady.WithFormat("%s: the join buffer overran; the join must start again", s.config.Partition.ID)
+	}
+
+	var ledger *protocol.SystemLedger
+	err := s.config.Database.View(func(batch *database.Batch) error {
+		return batch.Account(protocol.PartitionUrl(s.config.Partition.ID).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
+	})
+	if err != nil {
+		return errors.UnknownError.WithFormat("%s: read the pulled state's system ledger: %w", s.config.Partition.ID, err)
+	}
+	if ledger.Index != q {
+		return errors.Conflict.WithFormat("%s: cannot hand off at block %d: the state's system ledger is block %d",
+			s.config.Partition.ID, q, ledger.Index)
+	}
+	if ledger.LeaderRound == 0 {
+		// A ledger written before v2-kourou, or by no leader, says nothing
+		// about which collected group is the next block. Counting groups
+		// from where the node stood cannot stand in for it (#4351, #4362);
+		// the join waits for a state that records one.
+		return errors.NotReady.WithFormat("%s: the state at block %d records no leader round", s.config.Partition.ID, q)
+	}
+	return s.performHandoffAt(q, types.Round(ledger.LeaderRound))
+}
+
 // performHandoffAt leaves collecting mode at block q, whose system ledger
 // records the leader round it was committed at, and produces the buffered
 // groups committed at a round above that one, in order, from q + 1.
 //
-// Declared for #4362; not yet implemented.
-func (s *Service) performHandoffAt(q uint64, round types.Round) error {
-	return nil
-}
-
-// performHandoff runs in the block production loop. It takes the buffer and
-// leaves collecting mode in one step, sets the block this node stands at, and
-// produces what it collected.
+// Consensus commits leaders in one order on every node, so a group is in the
+// pulled state exactly when its round is at or below the state's round: the
+// groups above it are the blocks after q, whatever block this node stood at
+// when it started collecting and whether or not consensus delivered again
+// groups this node's store already had. Nothing is counted.
+//
+// Two states cannot be handed off at, and neither changes the buffer:
+//
+//   - a round this node has neither executed nor collected (NotReady): the
+//     groups up to it are still on their way, and the ones after it would be
+//     produced before them;
+//   - a round below the one this node's consensus stood at (Conflict): the
+//     groups between were committed before the node was listening, so they
+//     are in neither the buffer nor the state. The join pulls again, to a
+//     newer state.
+//
+// A round above that one that no buffered group was committed at is a state
+// this node's consensus did not produce, and is refused too (Conflict).
 //
 // A group that fails to produce stops the handoff with the buffer already
 // taken: the node is no longer collecting and no longer joining, and the
 // groups that were not produced are gone. That is a fault, not a state to
 // recover from in place — the node must join again — so it is returned to the
 // caller and logged as an error rather than swallowed.
-func (s *Service) performHandoff(q uint64) error {
+func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 	s.mu.Lock()
 	if !s.collecting {
 		s.mu.Unlock()
@@ -216,39 +270,53 @@ func (s *Service) performHandoff(q uint64) error {
 		s.mu.Unlock()
 		return errors.NotReady.WithFormat("%s: the join buffer overran; the join must start again", s.config.Partition.ID)
 	}
-	// The buffered groups are blocks collectFrom+1, collectFrom+2, … in
-	// order. The state is block q, so the groups at or below q are blocks
-	// this node's state already contains and must NOT be produced again:
-	// producing the first of them as block q+1 would execute an old block's
-	// transactions against a newer state, under a block number that is not
-	// theirs — every node's divergence in one step.
-	if len(s.buffer) == 0 {
-		s.collectFrom = s.lastBlockIndex
-	}
-	if q < s.collectFrom {
+	if round < s.lastLeaderRound {
 		s.mu.Unlock()
-		return errors.Conflict.WithFormat("%s: cannot hand off at block %d, behind the block %d this node stood at",
-			s.config.Partition.ID, q, s.collectFrom)
-	}
-	skip := q - s.collectFrom
-	if skip > uint64(len(s.buffer)) {
-		// The pull reached q before consensus delivered the blocks up to it.
-		// Handing off now would produce the blocks still to arrive under the
-		// wrong numbers, so the join waits and asks again.
-		s.mu.Unlock()
-		return errors.NotReady.WithFormat("%s: the state is block %d and only %d blocks have been collected since %d",
-			s.config.Partition.ID, q, len(s.buffer), s.collectFrom)
+		return errors.Conflict.WithFormat("%s: cannot hand off at block %d (round %d), behind round %d where this node stood",
+			s.config.Partition.ID, q, round, s.lastLeaderRound)
 	}
 
-	groups := s.buffer[skip:]
+	reached := s.lastLeaderRound
+	found := round == s.lastLeaderRound
+	for _, g := range s.buffer {
+		r := g.Round()
+		if r > reached {
+			reached = r
+		}
+		if r == round {
+			found = true
+		}
+	}
+	if round > reached {
+		s.mu.Unlock()
+		return errors.NotReady.WithFormat("%s: the state is block %d at round %d and this node has collected only to round %d",
+			s.config.Partition.ID, q, round, reached)
+	}
+	if !found {
+		s.mu.Unlock()
+		return errors.Conflict.WithFormat("%s: the state is block %d at round %d, and this node's consensus committed no leader at that round",
+			s.config.Partition.ID, q, round)
+	}
+
+	// The groups at or below the round are in the state; the rest, in the
+	// order consensus committed them, are the blocks after it.
+	var groups []*CollectedGroup
+	for _, g := range s.buffer {
+		if g.Round() > round {
+			groups = append(groups, g)
+		}
+	}
+	inState := len(s.buffer) - len(groups)
 	s.buffer = nil
+	s.bufferBytes = 0
 	s.collecting = false
 	s.lastBlockIndex = q
+	s.lastLeaderRound = round
 	s.mu.Unlock()
 
 	s.logger.Info("Joined: executing from the block after the state",
-		"partition", s.config.Partition.ID, "block", q,
-		"collectedFrom", s.collectFrom, "alreadyInTheState", skip, "toProduce", len(groups))
+		"partition", s.config.Partition.ID, "block", q, "round", round,
+		"alreadyInTheState", inState, "toProduce", len(groups))
 
 	for i, g := range groups {
 		err := s.produce(g.Certs, g.Batches, g.Leader, g.IsLeader, g.payloadEntries(), false)
@@ -435,17 +503,6 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.buffer) == 0 {
-		// The block this node stands at is what maps the buffer onto block
-		// numbers: the first group buffered is the block after it, and each
-		// one after that is the next, because a group that would have
-		// produced no block is not buffered either. It is read here, at the
-		// first group, and not when collecting started: a node that starts
-		// collecting before the service starts does not yet know its block
-		// (#4351). A collecting node executes nothing, so the block does not
-		// move after this.
-		s.collectFrom = s.lastBlockIndex
-	}
 	s.buffer = append(s.buffer, g)
 	s.bufferBytes += g.bytes()
 	s.logger.Debug("Buffered a committed group while joining",

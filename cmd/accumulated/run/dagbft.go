@@ -468,6 +468,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		EventBus:          s.eventBus,
 		Logger:            logger.With("module", "dagbft"),
 		Genesis:           inst.path(s.Genesis),
+		Database:          db,
 		DataDir:           inst.path("consensus", strings.ToLower(s.Partition.ID)),
 		InitialValidators: initialValidators,
 	}
