@@ -410,6 +410,18 @@ func (x *Executor) sendSyntheticTransactions(block *Block, isLeader bool) error 
 	if len(received) > 0 {
 		x.logger.Debug("Dispatching for received Directory anchors", "module", "synthetic", "anchors", len(received), "leader", isLeader)
 	}
+
+	// Lag one: the leader signs and dispatches block N's synthetics only if
+	// the newest root this node could check matched (executor spec, "Sync",
+	// §6). Every node still records what each block was dispatched under --
+	// that is memory the sequencer answers from, not a signature -- so the
+	// walk below runs; only the send is withheld.
+	if isLeader && !x.RootCheck.MaySign() {
+		checked, _, _ := x.RootCheck.Last()
+		x.logger.Info("Synthetic transactions not sent: the newest root this node checked did not match its partition's signed root",
+			"module", "synthetic", "block", block.Index, "mismatched", checked, "received", len(received))
+		isLeader = false
+	}
 	for _, r := range received {
 		anchor := r.Anchor
 		if x.Describe.NetworkType == protocol.PartitionTypeDirectory {

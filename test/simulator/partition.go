@@ -12,6 +12,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	coreexec "gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
@@ -114,6 +115,22 @@ func (p *Partition) RestartNode(i int) {
 	}
 	n.joinState = state
 	n.nodeState.machine.Store(state.Machine())
+}
+
+// NodeRootCheck is what node i last learned comparing its root with the root
+// its partition signed: the value its conductor, executor and sequencer sign
+// by. The join's root watch should report to it and does not yet
+// (DIFFERENCES E19), so a test that stands a node where a check left it
+// reports here itself, and says so.
+func (p *Partition) NodeRootCheck(i int) *coreexec.RootCheck { return p.nodes[i].rootCheck }
+
+// SetNodeMachine makes machine the node state node i's services refuse by,
+// without restarting it: the node keeps executing. It stands a node where a
+// join that handed off unproven leaves one -- BOOTING, and executing -- which
+// RestartNode cannot, because a restarted simulator node collects rather than
+// executes until its join hands off.
+func (p *Partition) SetNodeMachine(i int, machine *nodestate.Machine) {
+	p.nodes[i].nodeState.machine.Store(machine)
 }
 
 // NodeJoinState is the join state RestartNode built for node i, as the daemon

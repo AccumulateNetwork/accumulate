@@ -50,6 +50,7 @@ type Node struct {
 	conductor  *crosschain.Conductor
 	synthCache *synthcache.Cache
 	heals      *crosschain.HealCounters
+	rootCheck  *execute.RootCheck
 }
 
 // ConsensusStatus implements [api.ConsensusService].

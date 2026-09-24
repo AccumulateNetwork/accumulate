@@ -92,6 +92,7 @@ type nodeFactory struct {
 	conductor *crosschain.Conductor
 	cache     *synthcache.Cache
 	heals     *crosschain.HealCounters
+	rootCheck *coreexec.RootCheck
 
 	// Options
 	id      int
@@ -197,6 +198,7 @@ func (f *nodeFactory) Build(p *Partition) *Node {
 	n.conductor = f.conductor
 	n.synthCache = f.getSynthCache()
 	n.heals = f.getHeals()
+	n.rootCheck = f.getRootCheck()
 
 	// Register services
 	f.registerSvc(api.ServiceTypeNode, message.NodeService{NodeService: &nodeService{
@@ -570,6 +572,16 @@ func (f *nodeFactory) getHeals() *crosschain.HealCounters {
 	return f.heals
 }
 
+// getRootCheck is what the node last learned comparing its root with the
+// root its partition signed, shared by its conductor, its executor and its
+// sequencer as the daemon shares it (cmd/accumulated/run/dagbft.go).
+func (f *nodeFactory) getRootCheck() *coreexec.RootCheck {
+	if f.rootCheck == nil {
+		f.rootCheck = new(coreexec.RootCheck)
+	}
+	return f.rootCheck
+}
+
 // getSynthCache is the node's synthetic/anchor cache, shared by its executor
 // (which fills it and dispatches from it) and its sequencer (which answers
 // healing requests from it and nothing else).
@@ -634,6 +646,11 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 			// simulator runs several networks in one process, so there is
 			// no registry to find it in.
 			Staging: f.getStaging(),
+			// The node's join state, as the daemon hands the sequencer its
+			// join's machine: what it refuses while BOOTING, and what it
+			// answers whatever its state (executor spec, "Sync", §6).
+			NodeState: &f.nodeState,
+			RootCheck: f.getRootCheck(),
 		}),
 	})
 
@@ -650,6 +667,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
 		Staging:       f.getStaging(),
 		SynthCache:    f.getSynthCache(),
+		RootCheck:     f.getRootCheck(),
 
 		// Shard user-transaction execution by identity (#4145). Zero is the
 		// serial path; tests opt in via simulator.ExecutionShards, or give
@@ -685,6 +703,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Sequencer:         f.getServices().Private(),
 		Peers:             f.getServices(),
 		Staging:           f.getStaging(),
+		RootCheck:         f.getRootCheck(),
 		Heals:             f.getHeals(),
 		RunTask:           execOpts.BackgroundTaskLauncher,
 		DropInitialAnchor: f.dropInitialAnchor,

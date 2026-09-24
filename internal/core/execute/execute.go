@@ -93,6 +93,13 @@ type Options struct {
 	// Nil makes the executor keep a private one.
 	Staging *Staging
 
+	// RootCheck is what this node last learned comparing its root with the
+	// root its partition signed, shared with the conductor and the
+	// sequencer. The leader whose newest checked root did not match signs
+	// and dispatches no synthetic transaction (executor spec, "Sync", §6,
+	// lag one). Nil is "nothing checked", which dispatches.
+	RootCheck *RootCheck
+
 	// BPTHistoryDepth is how many minor blocks of superseded BPT state to
 	// retain, so this node can serve an account and a BPT page AS OF an
 	// anchored block rather than as of its own current block (#4361). Zero

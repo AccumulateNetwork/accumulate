@@ -987,11 +987,19 @@ node to `BOOTING`. **`ACTIVE`** is from a handoff that succeeds until the
 next demotion, and from its first block for a node that took nothing from a
 peer — a node that never joined has no state machine at all and serves as
 `ACTIVE` (#4368). `BOOTING` means everything below: reads refused with
-`NotReady`, the sequencer serving nothing, submissions relayed unexamined, no
-anchor signed or dispatched except for the blocks the handoff itself produces
-— those are the network's blocks, executed from the state it matched and the
-groups it collected, and their anchors are the node's to sign — and the gauge
-reading `BOOTING` until that handoff succeeds. `COMPLETE` and `WAITING`, which
+`NotReady`, submissions relayed unexamined, and the gauge reading `BOOTING`
+until that handoff succeeds. **Two things do not wait for `ACTIVE`**
+(decided after the plan review, note_3901212756). *The sequencer answers for
+every anchor the node itself executed and signed, whatever its state:* the
+anchor collector gathers a partition's anchors from its validators, and a
+validator that answers only while `ACTIVE` makes a partition with more than
+N − threshold validators booting at once unable to prove anything to
+anyone, forever. *A node signs and dispatches block N's anchor and
+synthetic transactions only if the newest root it could check matched*
+(lag one): a node whose last checked root did not match signs nothing,
+dispatches nothing, and repairs. A wrongly executing node then stalls
+rather than forms a wrong quorum with others like it, and a partition whose
+validators are all booting still anchors. `COMPLETE` and `WAITING`, which
 named a backfilled history, are retired: nothing reached them and nothing
 could. What a joined node cannot answer *for a block it did not execute* —
 an entry the sequencer is asked for from before it joined — it refuses per

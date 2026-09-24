@@ -58,6 +58,12 @@ type Conductor struct {
 	// hold, or holds unproven, is a gap (healing.md, "Deciding, in staging").
 	Staging *execute.Staging
 
+	// RootCheck is what this node last learned comparing its root with the
+	// root its partition signed. A node whose newest checked root did not
+	// match signs and dispatches no anchor (executor spec, "Sync", §6, lag
+	// one). Nil is "nothing checked", which signs.
+	RootCheck *execute.RootCheck
+
 	// Ready can be used to pause the conductor, for example to stop it from
 	// sending anchors while the node is catching up.
 	Ready func(execute.WillBeginBlock) bool
@@ -303,6 +309,26 @@ func (c *Conductor) sendAnchorForLastBlock(e execute.WillBeginBlock, batch *data
 			"root", logging.AsHex(pa.RootChainAnchor).Slice(0, 4),
 			"bpt", logging.AsHex(pa.StateTreeAnchor).Slice(0, 4),
 			"reason", "this node is not an active validator of this partition")
+		return nil
+	}
+
+	// Lag one: block N's anchor is signed only if the newest root this node
+	// could check matched (executor spec, "Sync", §6, "Two things do not wait
+	// for ACTIVE"). A node that knows its state is wrong signs nothing and
+	// repairs, so nodes executing the same wrong block stall rather than
+	// form a quorum on it. Said once per block, as the follower's line is:
+	// the root it computed is still the instrument that finds the fault.
+	if !c.RootCheck.MaySign() {
+		pa := anchor.GetPartitionAnchor()
+		checked, _, _ := c.RootCheck.Last()
+		slog.InfoContext(e.Context, "Anchor not sent", "module", "conductor",
+			"block", pa.MinorBlockIndex,
+			"source", c.Partition.ID,
+			"seq", sequenceNumber,
+			"root", logging.AsHex(pa.RootChainAnchor).Slice(0, 4),
+			"bpt", logging.AsHex(pa.StateTreeAnchor).Slice(0, 4),
+			"mismatched", checked,
+			"reason", "the newest root this node checked did not match its partition's signed root")
 		return nil
 	}
 

@@ -239,3 +239,13 @@ func (s *nodeState) CanServeCurrent() bool {
 	m := s.machine.Load()
 	return m == nil || m.CanServeCurrent()
 }
+
+// State is the join machine's state, and ACTIVE for a node with no join: the
+// sequencer's view of the same answer (apiimpl.NodeState).
+func (s *nodeState) State() nodestate.State {
+	m := s.machine.Load()
+	if m == nil {
+		return nodestate.StateActive
+	}
+	return m.State()
+}

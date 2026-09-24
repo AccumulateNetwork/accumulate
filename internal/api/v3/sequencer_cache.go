@@ -238,6 +238,19 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 // principal is the destination's anchor pool, and the Directory does not ask
 // itself to open a major block.
 func (s *Sequencer) anchorRecord(globals *core.GlobalValues, dst *url.URL, num uint64, produced *protocol.Transaction) (*api.MessageRecord[messaging.Message], error) {
+	// This node answers for the anchors of the blocks it executed, whatever
+	// its state, and for no others (executor spec, "Sync", §6). A node that
+	// joined executed no block at or below the block it joined at: an anchor
+	// for one of those is in its cache because the join pulled the anchor
+	// sequence chain, and signing it would put this node's key on a root it
+	// never computed. It is "not from me", and the collector asks the next
+	// validator.
+	if body, ok := produced.Body.(protocol.AnchorBody); ok {
+		if joined, block := s.cache.Joined(), body.GetPartitionAnchor().MinorBlockIndex; joined > 0 && block <= joined {
+			return nil, errors.NotReady.WithFormat("%v joined at block %d and did not execute block %d, which anchor %d is for; ask a node that did", s.partitionID, joined, block, num)
+		}
+	}
+
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = dst.JoinPath(protocol.AnchorPool)
 	txn.Body = produced.Body.CopyAsInterface().(protocol.TransactionBody)

@@ -281,12 +281,23 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// spec, "Sync")
 	staging := execute.NewStaging()
 
+	// What this node last learned comparing its root with the root its
+	// partition signed. One value, shared by everything that signs under
+	// this node's key for the partition -- the conductor, the executor's
+	// dispatch, the sequencer -- because a node whose newest checked root
+	// did not match signs nothing (executor spec, "Sync", §6, lag one). The
+	// join's root watch is what should report to it, and does not yet
+	// (DIFFERENCES E19): until it does, nothing is checked and every node
+	// signs, as before.
+	rootCheck := new(execute.RootCheck)
+
 	// Create executor options
 	execOpts := multiexec.Options{
 		Logger:     logger.With("module", "executor"),
 		Database:   db,
 		SynthCache: synthCache,
 		Staging:    staging,
+		RootCheck:  rootCheck,
 		Key:        validatorKey,
 		Router:     router,
 		EventBus:   s.eventBus,
@@ -343,6 +354,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Sequencer:    client.Private(),
 		Peers:        client,
 		Staging:      staging,
+		RootCheck:    rootCheck,
 		Heals:        healCounters,
 		RunTask:      execOpts.BackgroundTaskLauncher,
 		// Healing is the ONLY retry mechanism for anchors — the conductor's
@@ -639,7 +651,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("register node state: %w", err)
 	}
-	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache, staging, nodeState, serving)
+	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache, staging, rootCheck, nodeState, serving)
 	if err != nil {
 		return err
 	}
@@ -682,7 +694,7 @@ func nodeStateOf(joinState *join.PulledState) (*nodestate.Machine, nodestate.Ser
 }
 
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache, staging *execute.Staging, nodeState *nodestate.Machine, serving nodestate.Serving) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache, staging *execute.Staging, rootCheck *execute.RootCheck, nodeState *nodestate.Machine, serving nodestate.Serving) error {
 	logger := logging.NewSlogLogger(inst.logger)
 	// These are the SERVING side of the node: consensus queries, the
 	// sequencer answering a peer's healing request, the API.  They are
@@ -764,6 +776,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		Cache:        synthCache,
 		Staging:      staging,
 		NodeState:    nodeState,
+		RootCheck:    rootCheck,
 		EventBus:     s.eventBus,
 		Globals:      globals,
 		Partition:    s.Partition.ID,

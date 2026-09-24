@@ -333,6 +333,53 @@ waiting proofs exceed `MaxStagedProofBytes` (64 MiB).
 **Size**: an `ExecutorVersion` predicate in `collect`, if the assumption ever
 stops holding.
 
+### E19. Nothing reports a root check yet, and a repaired node re-signs the anchor of the block it hands off at
+
+*[#4443](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4443)*
+
+**Spec** ([executor.md](executor.md), "Sync", §6, "Two things do not wait
+for `ACTIVE`"): a node signs and dispatches block N's anchor and synthetic
+transactions only if the newest root it could check matched (lag one); the
+sequencer answers for every anchor the node itself executed and signed,
+whatever its state.
+
+**Code**: the gate exists and nothing opens or closes it but a test. Each
+node holds one `execute.RootCheck`, shared by the conductor (anchor
+dispatch), the executor (the leader's synthetic dispatch) and the sequencer
+(every answer); `Mismatched(block)` closes all three and a newer
+`Matched(block)` opens them. The daemon and the simulator wire it. The only
+thing that compares this node's root with its partition's signed one is the
+join's root watch (`internal/node/join`, `Diverged` and the match), and it
+does not report to the `RootCheck`. So in production nothing is ever
+checked, and every node signs as before #4443. The sequencer half needs no
+report and is live: an anchor is answered in any node state, and refused for
+a block at or below the block the node joined at (`synthcache.Joined`),
+which it did not execute.
+
+Two limits of the half that is built:
+
+- **A repaired node re-signs the handoff block's anchor.** At the first
+  block after any handoff at q, the conductor builds and signs the anchor
+  for q, which this node did not execute, from the pulled ledger (its
+  sequence number is the partition's for q) and the local roots. A node
+  that executed q wrongly already signed that number with the wrong root,
+  so after a repair that hands off again at q it signs the same number
+  with a second root. The lag-one gate does not stop it once the repair's
+  match is reported. (Read from the code, #4443 note, not run.)
+- **"Executed" is "above the block it joined at".** The sequencer refuses an
+  anchor for a block at or below `Joined`, which is raised by every
+  handoff. That is right for stop-repair-re-handoff (#4440). When repair
+  moves on without a handoff, the anchors the node produced while its
+  root was wrong stay in its cache, and it would answer them again after
+  a later match.
+
+**Size**: the join's root watch calls `RootCheck.Mismatched` where it
+demotes and `Matched` where it promotes (`internal/node/join`, owned by the
+join's builder). The conductor sends no anchor for a block at or below the
+block a handoff stands at, which needs the same handoff signal the
+sequencer reads from the cache. The cache drops anchors produced between a
+mismatch and the next match.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*

@@ -38,7 +38,8 @@ type Sequencer struct {
 	db          database.Viewer
 	cache       *synthcache.Cache
 	staging     *execute.Staging
-	nodeState   *nodestate.Machine
+	nodeState   NodeState
+	rootCheck   *execute.RootCheck
 	partitionID string
 	partition   config.NetworkUrl
 	valKey      []byte
@@ -63,6 +64,13 @@ type Sequencer struct {
 }
 
 var _ private.Sequencer = (*Sequencer)(nil)
+
+// NodeState is the node state a sequencer refuses by: the join's
+// [nodestate.Machine] in a daemon, or whatever stands in for it where a node
+// is built before it joins (the simulator).
+type NodeState interface {
+	State() nodestate.State
+}
 
 type blockCommit struct {
 	round uint64
@@ -93,7 +101,13 @@ type SequencerParams struct {
 	// by partition and every node of that partition would otherwise share one
 	// node's state. Nil falls back to the registry, and a node with neither
 	// has not joined and serves.
-	NodeState *nodestate.Machine
+	NodeState NodeState
+
+	// RootCheck is what this node last learned comparing its root with the
+	// root its partition signed, shared with the conductor and the executor.
+	// A node whose newest checked root did not match signs no answer
+	// (executor spec, "Sync", §6, lag one). Nil is "nothing checked".
+	RootCheck *execute.RootCheck
 
 	// Cache is the producer's synthetic/anchor cache the executor fills.
 	// With it, every answer is built from the cache and a miss is refused
@@ -117,6 +131,10 @@ func NewSequencer(params SequencerParams) *Sequencer {
 	s.cache = params.Cache
 	s.staging = params.Staging
 	s.nodeState = params.NodeState
+	if m, ok := s.nodeState.(*nodestate.Machine); ok && m == nil {
+		s.nodeState = nil // a node that never joined: no machine, and it serves
+	}
+	s.rootCheck = params.RootCheck
 	s.partitionID = params.Partition
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	s.valKey = params.ValidatorKey
@@ -149,7 +167,7 @@ func NewSequencer(params SequencerParams) *Sequencer {
 func (s *Sequencer) Type() api.ServiceType { return private.ServiceTypeSequencer }
 
 func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64, _ private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
-	if err := s.serving("sequence"); err != nil {
+	if err := s.answering("sequence", src); err != nil {
 		return nil, err
 	}
 
@@ -197,7 +215,7 @@ func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64,
 // destination, with a single collection proof (#4048) covering the whole
 // range, set as SourceReceiptList on the last record.
 func (s *Sequencer) SequenceRange(ctx context.Context, src, dst *url.URL, start, end uint64, opts private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
-	if err := s.serving("sequence-range"); err != nil {
+	if err := s.answering("sequence-range", src); err != nil {
 		return nil, err
 	}
 
@@ -306,6 +324,33 @@ var mNotServing = promauto.NewCounterVec(prometheus.CounterOpts{
 	Name:      "not_serving_total",
 	Help:      "Requests refused because this node is joining and does not hold what they ask for, by call",
 }, []string{"partition", "call"})
+
+// answering is serving for the calls that answer by sequence number, which
+// sign what they answer.
+//
+// An anchor is answered whatever this node's state (executor spec, "Sync",
+// §6, "Two things do not wait for ACTIVE"): the anchor collector gathers a
+// partition's anchors from its validators, and a validator that answered only
+// while ACTIVE made a partition with more than N - threshold validators
+// booting at once unable to prove anything to anyone, for ever. What it
+// refuses instead is decided per anchor, by whether this node executed the
+// block the anchor is for (anchorRecord). Every other source waits for
+// ACTIVE, as before.
+//
+// And nothing is answered by a node whose newest checked root did not match:
+// every answer here carries this node's signature, and a node that knows its
+// state is wrong signs nothing until it has repaired (lag one).
+func (s *Sequencer) answering(call string, src *url.URL) error {
+	if !s.rootCheck.MaySign() {
+		block, _, _ := s.rootCheck.Last()
+		mNotServing.WithLabelValues(strings.ToLower(s.partitionID), call).Inc()
+		return errors.NotReady.WithFormat("%s: this node's root after block %d did not match the signed root, and it signs nothing until it has repaired", s.partitionID, block)
+	}
+	if src != nil && s.partition.AnchorPool().Equal(src) {
+		return nil
+	}
+	return s.serving(call)
+}
 
 // serving refuses a request for data this node does not hold.
 //
