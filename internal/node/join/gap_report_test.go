@@ -48,4 +48,12 @@ func TestJoin_TheGapLineAndGaugeNameTheStreamAndNumber(t *testing.T) {
 	require.Contains(t, out.String(), gap.String(), "the gap line names the stream, its Delivered, the missing run and what is held")
 	require.Equal(t, 104.0, testutil.ToFloat64(mGapMissing.WithLabelValues(partition, gap.StreamName())),
 		"the gauge is the first missing number of the gapped stream")
+
+	// The next check that finds no gap clears the partition's series.
+	stage = &fakeStage{}
+	state = &gapState{stage: stage, b: b + 5}
+	_, err = run(t, Options{Partition: partition, Buffer: new(fakeBuffer), Stage: stage, State: state, Peers: peers, Logger: logger})
+	require.NoError(t, err)
+	require.Equal(t, 0, testutil.CollectAndCount(mGapMissing, "accumulate_join_gap_first_missing"),
+		"the check that found no gap did not clear the partition's series")
 }

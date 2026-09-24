@@ -450,3 +450,85 @@ func requireHeldWhole(t *testing.T, node, peer *database.Database, u *url.URL) {
 		}
 	}
 }
+
+// provenWatch records the node's state at every handoff, so a test can say
+// whether the node handed off from a state not yet proven.
+type provenWatch struct {
+	*steppingState
+	state    *join.PulledState
+	unproven int
+}
+
+func (w *provenWatch) HandedOff(q uint64) {
+	if w.state.Machine().State() != nodestate.StateActive {
+		w.unproven++
+	}
+	w.steppingState.HandedOff(q)
+}
+
+// TestARootWatchMatchMovesTheTrustedSets — #4438 threat review "in passing",
+// code review F5. A node that hands off from a pulled state not yet proven is
+// proven by the root watch (Diverged), not by Matched. The network definition
+// changed while the node was down; at the root watch's match the state holding
+// the new definition is proven, and the node trusts it from there. Before,
+// only Matched moved the sets, so a node proven by the root watch verified with
+// the definition it started with for as long as it ran.
+func TestARootWatchMatchMovesTheTrustedSets(t *testing.T) {
+	const joiner = 1
+	// A joining node executes nothing, so it reports no results for the
+	// blocks it collects; that is not a consensus failure.
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 3),
+		simulator.Genesis(GenesisTime),
+		simulator.IgnoreDeliverResults(),
+		simulator.IgnoreCommitResults(),
+	)
+	sim.StepN(10)
+	p := sim.S.Partition("BVN0")
+	part := PartitionUrl("BVN0")
+	p.RestartNode(joiner)
+	before := versionOf(t, p.NodeDatabase(joiner), part)
+
+	// A governance write while the node is down: a validator added.
+	current := loadDirectoryGlobals(t, sim)
+	newKey := acctesting.GenerateKey(t.Name(), "new-validator")
+	current.Network.AddValidator(newKey[32:], Directory, false)
+	current.Network.Version++
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(DnUrl(), Network).
+			Body(&WriteData{Entry: current.FormatNetwork(), WriteToState: true}).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0)).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 1)))
+	sim.StepUntil(Txn(st.TxID).Completes())
+	sim.StepN(20)
+	after := versionOf(t, p.NodeDatabase(0), part)
+	require.Greater(t, after, before, "precondition: BVN0's network definition did not change")
+	p.RestartNode(joiner)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	const maxRounds = 120
+	state := p.NodeJoinState(joiner)
+	require.Equal(t, before, state.TrustedVersion(), "precondition: the node starts trusting the definition it executed with")
+	watch := &provenWatch{state: state, steppingState: &steppingState{cancel: cancel, State: state, step: func(round int) {
+		sim.StepN(3)
+		if round >= maxRounds {
+			cancel()
+		}
+	}}}
+	settler, ok := p.NodeExecutor(joiner).(join.Settler)
+	require.True(t, ok)
+	_, err := join.Run(ctx, join.Options{
+		Partition: "BVN0",
+		Buffer:    p.NodeJoin(joiner),
+		Stage:     &join.ExecutorStage{Settler: settler, Staging: p.NodeStaging(joiner), Database: p.NodeDatabase(joiner)},
+		State:     watch,
+		Peers:     &join.APIPeers{Partition: "BVN0", Client: sim.S.Services(), Network: t.Name()},
+		Retry:     time.Millisecond,
+	})
+	require.NoError(t, err)
+	require.Equal(t, nodestate.StateActive, state.Machine().State(), "precondition: the node was never proven")
+	require.NotZero(t, watch.unproven, "precondition: the node was proven at its handoff, by Matched, not by the root watch")
+	require.Equal(t, after, state.TrustedVersion(),
+		"the root watch proved a state holding definition version %d and the node still trusts version %d", after, state.TrustedVersion())
+}

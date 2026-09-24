@@ -8,6 +8,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"sync/atomic"
 	"testing"
@@ -42,7 +43,31 @@ type pagelessSources struct {
 }
 
 func (s *pagelessSources) For(ctx context.Context, account *url.URL) ([]pull.Source, *url.URL, error) {
-	return s.inner.For(ctx, account)
+	srcs, partition, err := s.inner.For(ctx, account)
+	for i, src := range srcs {
+		srcs[i] = pagelessSource{Source: src, owner: s}
+	}
+	return srcs, partition, err
+}
+
+// pagelessSource is one named peer, whose BPT pages are counted and refused
+// as the owner says: the walk reads each page from a named peer (#4438).
+type pagelessSource struct {
+	pull.Source
+	owner *pagelessSources
+}
+
+func (s pagelessSource) String() string { return fmt.Sprint(s.Source) }
+
+func (s pagelessSource) QueryBptPage(ctx context.Context, scope *url.URL, q *api.BptPageQuery) (*api.BptPageRecord, error) {
+	s.owner.asked.Add(1)
+	if s.owner.refuse.Load() {
+		return nil, errors.NotReady.WithFormat("%v: no peer will page its BPT for this node", scope)
+	}
+	s.owner.served.Add(1)
+	return s.Source.(interface {
+		QueryBptPage(context.Context, *url.URL, *api.BptPageQuery) (*api.BptPageRecord, error)
+	}).QueryBptPage(ctx, scope, q)
 }
 
 func (s *pagelessSources) ValidatorsOf(ctx context.Context, partition *url.URL) ([]anchorsrc.Validator, error) {

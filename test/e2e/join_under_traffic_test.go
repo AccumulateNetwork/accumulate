@@ -50,6 +50,7 @@ func TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock(t *testing.T) {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
 	carol := url.MustParse("carol")
+	dave := url.MustParse("dave")
 	aliceKey := acctesting.GenerateKey(alice)
 
 	sim := NewSim(t,
@@ -60,6 +61,7 @@ func TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock(t *testing.T) {
 	)
 	sim.SetRoute(alice, "BVN0")
 	sim.SetRoute(carol, "BVN0")
+	sim.SetRoute(dave, "BVN0")
 	sim.SetRoute(bob, "BVN1")
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -70,6 +72,8 @@ func TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 	MakeIdentity(t, sim.DatabaseFor(carol), carol, acctesting.GenerateKey(carol)[32:])
 	MakeAccount(t, sim.DatabaseFor(carol), &TokenAccount{Url: carol.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	MakeIdentity(t, sim.DatabaseFor(dave), dave, acctesting.GenerateKey(dave)[32:])
+	MakeAccount(t, sim.DatabaseFor(dave), &TokenAccount{Url: dave.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
 	// Every block carries a send within BVN0 and a send from BVN0 to BVN1:
 	// alice's account, carol's, the partition's ledger and synthetic ledger,
@@ -96,7 +100,21 @@ func TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock(t *testing.T) {
 	p.RestartNode(joiner)
 	require.True(t, p.Joining(joiner))
 
-	// The network runs on without it, moving every block.
+	// The network runs on without it, moving every block. dave's account is
+	// sent to over and over while the node is down, more than one mark set
+	// of entries (256), and never after: no record after the pull starts
+	// names it, so the join takes it by its chain heads alone, and only the
+	// backfill past the match brings its entries below the open set.
+	for i := 0; i < 10; i++ {
+		for j := 0; j < 30; j++ {
+			ts++
+			sim.BuildAndSubmitTxnSuccessfully(
+				build.Transaction().For(alice, "tokens").
+					SendTokens(1, 0).To(dave, "tokens").
+					SignWith(alice, "book", "1").Version(1).Timestamp(ts).PrivateKey(aliceKey))
+		}
+		sim.Step()
+	}
 	for i := 0; i < behind; i++ {
 		traffic()
 	}
@@ -158,6 +176,9 @@ func TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock(t *testing.T) {
 	// node brings in its entries: it holds the whole chain, entry by entry
 	// (executor spec, "Sync", "Two mismatches").
 	requireSameChains(t, p.NodeDatabase(joiner), p.NodeDatabase(0), alice.JoinPath("tokens"))
+	require.Greater(t, chainHeight(t, p.NodeDatabase(0), dave.JoinPath("tokens"), "main"), int64(256),
+		"precondition: dave's chain is not past its first mark set")
+	requireSameChains(t, p.NodeDatabase(joiner), p.NodeDatabase(0), dave.JoinPath("tokens"))
 
 	// Executing from there, it stays on its peers' root chain while the
 	// traffic goes on.
