@@ -23,22 +23,12 @@ import (
 // recorded after it would report a divergence that is not there.
 //
 // From here executed is the last block whose root this node has checked
-// against its anchor: the executor moves after the handoff, and executed is
-// where the block ledger walk starts if the node has to sync again, which is
-// the last block its state is known to be right at. The pull's synced block is
-// cleared: it described the state before the node executed anything.
-//
-// A pass still held is thrown away. The node is executing from a state that
-// matched; a pass fetched after that is at a root the node has moved on from,
-// and nothing will pull again to settle it unless the node syncs again, when
-// it is fetched afresh.
+// against its anchor. The pull is over: a node that has to sync again starts a
+// new one, from the peer's block then, with the whole walk -- a wrong run can
+// change accounts no record names.
 func (s *PulledState) HandedOff(q uint64) {
 	s.executed = q
-	s.synced = 0
-	if s.pass != nil {
-		s.dropPass()
-	}
-	s.refused = nil
+	s.sync = nil
 }
 
 // Diverged reports the first block this node executed after the handoff whose
@@ -54,9 +44,9 @@ func (s *PulledState) HandedOff(q uint64) {
 // changed nothing, so its entry is the root after N. A block with no entry
 // after it has not been followed by one yet, and is checked on a later call.
 //
-// On a divergence the pull is reset to sync again from the last block that
-// matched: the block ledger walk starts there, and the page diff runs on the
-// first round, because a wrong run can change accounts no peer's ledger names.
+// On a divergence the next pull starts anew (HandedOff cleared it): the whole
+// walk, and the records from the peer's block then, because a wrong run can
+// change accounts no peer's ledger names.
 func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 	err := s.readAnchors(ctx)
 	if err != nil {
@@ -86,7 +76,7 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 		if local != o.Anchor {
 			s.log.Warn("An executed block's root is not its anchored root",
 				"partition", s.partition, "block", o.Block, "matched", s.executed)
-			s.round = 0
+			s.sync = nil
 			return o.Block, true, nil
 		}
 		s.executed = o.Block

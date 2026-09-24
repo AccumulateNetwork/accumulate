@@ -37,14 +37,13 @@ func (r *expandRecording) QueryChainEntries(ctx context.Context, u *url.URL, q *
 	return r.Source.QueryChainEntries(ctx, u, q)
 }
 
-// TestFetch_ASpineAccountIsTakenWholeInEveryPass — #4421. The block ledger
-// names <partition>/anchors in every pass after the spine's, because every
-// block writes the pool. Taken state-only there, its new entries arrive with
-// no message behind them, and the first block the node opens fails reading
-// the newest. A spine account is taken whole whichever pass names it, and a
-// failure in a later pass is refused by name and asked again: the spine has
-// already settled and is not failed by it.
-func TestFetch_ASpineAccountIsTakenWholeInEveryPass(t *testing.T) {
+// TestFetch_ASpineAccountIsTakenWholeWheneverItIsNamed — #4421. The block
+// ledger names <partition>/anchors in every record, because every block writes
+// the pool. Taken state-only there, its new entries arrive with no message
+// behind them, and the first block the node opens fails reading the newest. A
+// spine account is taken whole whoever names it, and a failure is owed by
+// name and asked again.
+func TestFetch_ASpineAccountIsTakenWholeWheneverItIsNamed(t *testing.T) {
 	here := protocol.PartitionUrl("BVN0")
 	pool := here.JoinPath(protocol.AnchorPool)
 	other := protocol.AccountUrl("alice", "tokens")
@@ -65,19 +64,15 @@ func TestFetch_ASpineAccountIsTakenWholeInEveryPass(t *testing.T) {
 	s := quietState(t, here, &oneSource{part: here, src: servedAt{Source: rec, db: peer}})
 	values, _ := genesisValues(t, 4)
 	s.anchors = noAnchorSource(t, here, values)
-	s.spine = true // a pass after the spine's
-
-	s.fetchPass(context.Background(), []*url.URL{pool, other})
+	p := newSyncing()
+	s.checkedHeld = true // not the process's first whole pull
+	ctx := context.Background()
+	s.pullOne(ctx, p, pool)
+	s.pullOne(ctx, p, other)
 
 	k := strings.ToLower(pool.String())
 	require.True(t, rec.asked[k], "precondition: the pool was fetched")
-	require.True(t, rec.expanded[k], "the pool was taken state-only in a pass after the spine's: its entries arrive with no message behind them")
+	require.True(t, rec.expanded[k], "the pool was taken state-only: its entries arrive with no message behind them")
 	require.False(t, rec.expanded[strings.ToLower(other.String())], "an account off the spine is taken state-only")
-
-	require.True(t, s.spine, "a later pass's failure un-settled the spine")
-	require.Contains(t, urlsOf(s.refused), pool.String(), "the pool's failure was not refused by name, so it is never asked again")
-	if s.pass != nil {
-		require.False(t, s.pass.spineFailed)
-		s.dropPass()
-	}
+	require.Contains(t, p.retry, accountKey(pool), "the pool's failure was not owed by name, so it is never asked again")
 }

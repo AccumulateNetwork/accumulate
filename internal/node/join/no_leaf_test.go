@@ -42,8 +42,8 @@ func (silent) QueryAccount(context.Context, *url.URL, *api.DefaultQuery) (*api.A
 // TestFetch_DropsANameNoPeerHoldsALeafFor drives the production fetch loop
 // against the querier that ships (#4397). A name every source answers
 // NotFound for -- which, asked with a receipt, a peer says only when its tree
-// holds no leaf for it -- is dropped, not refused: a refusal is asked again at
-// the front of every pass for the life of the process, and on the live run
+// holds no leaf for it -- is dropped, not owed: what is owed is asked again
+// every round for the life of the process, and on the live run
 // that was 76,752 lines in seven minutes. A name some source failed to answer
 // is refused and asked again, because that source may hold it.
 func TestFetch_DropsANameNoPeerHoldsALeafFor(t *testing.T) {
@@ -63,21 +63,19 @@ func TestFetch_DropsANameNoPeerHoldsALeafFor(t *testing.T) {
 
 	t.Run("every source answers NotFound", func(t *testing.T) {
 		s := quietState(t, here, &fixedSources{partition: here, srcs: []pull.Source{peer, peer}})
-		s.spine = true // the spine is not what this is about
-		s.fetchPass(context.Background(), []*url.URL{nobody})
+		p := newSyncing()
 
-		require.Nil(t, s.pass)
-		require.Empty(t, s.refused,
-			"a name every source says it holds no leaf for is dropped, not asked again every pass")
+		require.Equal(t, dropped, s.pullOne(context.Background(), p, nobody))
+		require.Empty(t, p.retry,
+			"a name every source says it holds no leaf for is dropped, not asked again every round")
 	})
 
 	t.Run("a source failed to answer", func(t *testing.T) {
 		s := quietState(t, here, &fixedSources{partition: here, srcs: []pull.Source{peer, silent{peer}}})
-		s.spine = true
-		s.fetchPass(context.Background(), []*url.URL{nobody})
+		p := newSyncing()
 
-		require.Nil(t, s.pass)
-		require.Len(t, s.refused, 1,
+		require.Equal(t, owed, s.pullOne(context.Background(), p, nobody))
+		require.Len(t, p.retry, 1,
 			"a name a source did not answer for may be held by that source, so it is asked again")
 	})
 }

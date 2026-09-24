@@ -108,6 +108,15 @@ type Options struct {
 	// #4301 closed.
 	Verify Verifier
 
+	// WithReceipt asks each source for the receipt that binds the account to
+	// its BPT root, whether or not Verify is set. The answer that carries a
+	// receipt is the one that carries the rest of the leaf beside the body
+	// (#4399), and the one whose NotFound means the peer holds no leaf
+	// (ErrNoLeaf, #4397). The join asks for it and verifies nothing against
+	// a root: its one proof is the whole local root matching a signed
+	// anchor's (executor spec, "Sync", "The algorithm", step 3).
+	WithReceipt bool
+
 	// Partition is the partition whose blocks the account's state belongs to.
 	// Required when Verify is set, and whenever a receipt is asked for: a
 	// receipt proves the state as of a block, and block numbers collide
@@ -230,13 +239,15 @@ func (p *Pending) commit() error {
 	return p.bodies.store(p.parent)
 }
 
-// Keep writes the state into the caller's batch without verifying it.
+// Keep writes the state into the caller's batch without verifying it against a
+// root.
 //
-// **Nothing in production calls it.** It was for the spine, on the rationale
-// that the spine is what the verifier reads from; that rationale was false —
-// the verifier reads its keys from the node's own store — and it is what
-// #4301 closed. What is left is the pull-library tests, which have no anchors
-// to verify against.
+// It is what the join does with every account it pulls (#4438): the join's
+// one proof is the whole local root equal to a signed anchor's StateTreeAnchor
+// (executor spec, "Sync", "The algorithm", step 3), and nothing before that
+// match is proven or needs to be. What Fetch refuses as malformed -- a body
+// under another name, an answer with no body, an entry with no message behind
+// it -- never reaches it.
 func (p *Pending) Keep() error {
 	if p.done {
 		return errors.NotAllowed.WithFormat("%v: already settled", p.Account)
@@ -450,7 +461,7 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 	var refusals []error
 	noLeaf := 0
 	for i, src := range srcs {
-		p, err := Fetch(ctx, src, batch, u, opts, opts.Verify != nil)
+		p, err := Fetch(ctx, src, batch, u, opts, opts.Verify != nil || opts.WithReceipt)
 		if ctx.Err() != nil {
 			if p != nil {
 				p.Discard()

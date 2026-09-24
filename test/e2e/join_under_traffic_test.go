@@ -119,7 +119,7 @@ func TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock(t *testing.T) {
 	pulled := 0
 	p.SetPullHook(joiner, func() {
 		pulled++
-		if pulled%4 == 0 {
+		if pulled%10 == 0 {
 			traffic()
 		}
 	})
