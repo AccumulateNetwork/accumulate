@@ -262,7 +262,16 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 
 	// 1. Main account state, with the receipt that binds it to the peer's root.
 	receipt, err := pullMain(ctx, src, sub, u, withReceipt)
-	if err != nil {
+	switch {
+	case err == nil:
+	case withReceipt && errors.Is(err, errors.NotFound):
+		// Asked for a receipt, a peer answers NotFound only when its tree
+		// holds no leaf for the account (#4397). Kept apart from every other
+		// failure so FetchFrom can tell "no source holds it" from "a source
+		// did not answer". It is a stdlib wrap on purpose: the errors
+		// package's wrapping keeps a status code, not a sentinel.
+		return fail(fmt.Errorf("main %s: %w: %v", u, ErrNoLeaf, err))
+	default:
 		return fail(errors.UnknownError.WithFormat("main %s: %w", u, err))
 	}
 	p.receipt = receipt
@@ -405,6 +414,7 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 		return nil, -1, errors.BadRequest.With("pull.FetchFrom: at least one source required")
 	}
 	var refusals []error
+	noLeaf := 0
 	for i, src := range srcs {
 		p, err := Fetch(ctx, src, batch, u, opts, opts.Verify != nil)
 		if err == nil {
@@ -413,10 +423,23 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 		if ctx.Err() != nil {
 			return nil, -1, errors.UnknownError.Wrap(err)
 		}
+		if stderrors.Is(err, ErrNoLeaf) {
+			noLeaf++
+		}
 		refusals = append(refusals, errors.UnknownError.WithFormat("source %d: %w", i, err))
+	}
+	if noLeaf == len(srcs) {
+		return nil, -1, fmt.Errorf("%v: %w, by every source asked: %v", u, ErrNoLeaf, stderrors.Join(refusals...))
 	}
 	return nil, -1, errors.Conflict.WithFormat("%v: no source served it: %w", u, stderrors.Join(refusals...))
 }
+
+// ErrNoLeaf is a peer's answer that its state tree holds no leaf for an
+// account: NotFound to a request for the account with a receipt, which a peer
+// that holds a leaf never gives (executor.md, "Sync", §2; #4397). FetchFrom
+// returns it only when every source answered so; one source that failed to
+// answer makes it an ordinary refusal, to be asked again.
+var ErrNoLeaf = stderrors.New("the peer holds no leaf for the account")
 
 // pullMain stores the account body and returns the receipt the peer served
 // with it, which binds the body to the peer's BPT root. wantReceipt asks for
