@@ -955,7 +955,7 @@ class NodeStateRow(unittest.TestCase):
             self.ev("acc-bvn2-val1", "bvn2", 6000, None, "final", state="BOOTING"),
         ], "validator")
         self.assertIn("NOT rejoined: acc-bvn2-val1 bvn2 (never ACTIVE (BOOTING)", got)
-        self.assertIn("1 ACTIVE at first sight", got)
+        self.assertIn("1 started before the monitor's first sample", got)
         self.assertNotIn("4000", got, "an upper bound is not the worst")
 
     def test_the_follower_row_with_no_start_claims_nothing_about_starts(self):
@@ -964,8 +964,33 @@ class NodeStateRow(unittest.TestCase):
         got = self.row([
             self.ev("acc-bvn3-fol1", "bvn3", 7000, 300.0, "already", role="follower"),
         ], "follower")
-        self.assertIn("no start inside the run was seen booting", got)
+        self.assertIn("no start after the network's launch", got)
         self.assertNotIn("every start", got)
+
+    def test_a_final_row_completed_after_a_monitor_restart_is_not_stuck(self):
+        """Restored from the merge base (review F1). soakmon is supervised and
+        restarts: the old process writes `final BOOTING` for a start, the new
+        one sees the same start ACTIVE. That start is judged, and it is not
+        "never ACTIVE". Rows are written with their own sample times, because
+        which start is the launch is read from them."""
+        path = os.path.join(self.rd, "nodestate.csv")
+        H = self.soakmon.NODESTATE_CSV_HEADER
+        started = "2026-09-21T00:05:00Z"
+        rows = [
+            ("2026-09-21T00:00:00Z", "acc-bvn1-val1,validator,bvn1,2026-09-20T00:00:00Z,ACTIVE,900.0,already,500,500,900.0"),
+            ("2026-09-21T00:05:05Z", "acc-bvn1-val2,validator,bvn1,%s,BOOTING,,final,300,800," % started),
+            ("2026-09-21T00:06:00Z", "acc-bvn1-val2,validator,bvn1,%s,ACTIVE,60.0,already,850,852," % started),
+            ("2026-09-21T00:06:00Z", "acc-bvn1-val2,validator,bvn1,%s,ACTIVE,60.0,caught-up,850,852,60.0" % started),
+            ("2026-09-21T00:20:00Z", "acc-bvn1-val2,validator,bvn1,%s,ACTIVE,60.0,final,1700,1702,60.0" % started),
+        ]
+        with open(path, "w") as f:
+            f.write(H + "\n")
+            for ts, body in rows:
+                f.write("%s,%s\n" % (ts, body))
+        got = self.row(None, "validator")
+        self.assertNotIn("never ACTIVE", got)
+        self.assertIn("acc-bvn1-val2 bvn1 (gauge ACTIVE at ≤60.0s (boot time not measured", got)
+        self.assertIn("1 started before the monitor's first sample", got)
 
 
 class LoadgenQueriesRow(unittest.TestCase):

@@ -185,6 +185,13 @@ def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True):
     end = s.get("superseded") or s.get("final")
     fails, missing = [], []
     to_active = active and active.get("startToActiveS")
+    if active and "reached" not in s:
+        # ACTIVE at the monitor's first sight of this start: its boot was
+        # not watched, so the figure is an upper bound on the gauge's time
+        # and says nothing of the join. Judged on height and anchors alike.
+        to_active = "≤%ss (boot time not measured: ACTIVE at the monitor's first sight of this start)" % to_active
+    elif to_active:
+        to_active = "%ss" % to_active
     if not active:
         state = (end or {}).get("state") or "state unknown"
         fails.append("never ACTIVE (%s)" % state)
@@ -238,18 +245,28 @@ def row(rows, role, max_behind=DEFAULT_MAX_BEHIND, anchors=None):
     peers = sorted({r["node"] for r in all_rows if r.get("role") == "validator"})
     has_cols = "executedBlock" in (rows[0] or {})
     st = starts(rows)
+    # The launch: every container started before the monitor's first
+    # sample. Only those are the network's own start and go unjudged. Any
+    # start after it is judged, however it was first seen (review F1): a
+    # join that completes inside one scrape interval, and a restart that
+    # spans a monitor restart (a new soakmon has an empty track, so it sees
+    # every node `already` ACTIVE), both read ACTIVE at first sight.
+    launch = min((t for t in (_epoch(r.get("time")) for r in all_rows) if t is not None),
+                 default=None)
     judged, first_sight = {}, 0
     for k, s in st.items():
-        if "reached" in s or not ("already" in s):
+        started = _epoch(k[2])
+        after_launch = launch is None or started is None or started > launch
+        if "reached" in s or "already" not in s or after_launch:
             judged[k] = judge(k, s, max_behind, anchors, peers, has_cols)
         else:
             first_sight += 1
     parts = []
     if not judged:
-        parts.append("no start inside the run was seen booting")
+        parts.append("no start after the network's launch")
     else:
         ok = {k: v for k, v in judged.items() if v["verdict"] == "rejoined"}
-        head = "rejoined %d of %d start(s) seen booting" % (len(ok), len(judged))
+        head = "rejoined %d of %d start(s) after the launch" % (len(ok), len(judged))
         timed = [(float(v["toRejoinS"]), k) for k, v in ok.items() if v["toRejoinS"]]
         if timed:
             w, k = max(timed)
@@ -260,11 +277,11 @@ def row(rows, role, max_behind=DEFAULT_MAX_BEHIND, anchors=None):
             if bad:
                 parts.append("%s: %s" % (label, "; ".join(
                     "%s %s (%s%s)" % (k[0], k[1],
-                                      "gauge ACTIVE at %ss; " % v["toActiveS"] if v["toActiveS"] else "",
+                                      "gauge ACTIVE at %s; " % v["toActiveS"] if v["toActiveS"] else "",
                                       "; ".join(v["reasons"]))
                     for k, v in bad)))
     if first_sight:
-        parts.append("%d ACTIVE at first sight (the network's launch, before the monitor saw them: not judged)"
+        parts.append("%d started before the monitor's first sample (the network's launch: not judged)"
                      % first_sight)
     return "; ".join(parts)
 

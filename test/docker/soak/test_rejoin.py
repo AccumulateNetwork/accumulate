@@ -192,7 +192,7 @@ class TheRunsThreeFailedStarts(unittest.TestCase):
         self.assertIsNotNone(v["toRejoinS"])
 
     def test_the_manifest_cell_says_so(self):
-        self.assertIn("rejoined 1 of 6 start(s) seen booting", self.cell)
+        self.assertIn("rejoined 1 of 6 start(s) after the launch", self.cell)
         for n in ("acc-bvn1-val1 bvn1", "acc-bvn3-val1 directory", "acc-bvn2-val2 directory"):
             self.assertIn(n, self.cell.split("NOT rejoined:")[1])
 
@@ -207,6 +207,66 @@ class TheRunsThreeFailedStarts(unittest.TestCase):
         a = rejoin.Anchors(rejoin.anchor_events(storm + ok))
         got = a.agreement("acc-bvn1-val1", "Directory", None, None, VALS)
         self.assertEqual([], got["disagree"])
+
+
+class AStartActiveAtFirstSightIsJudged(unittest.TestCase):
+    """Review F1. A start the monitor first sees already ACTIVE was filed as
+    the network's launch and never judged. Two routes reach it: a join that
+    completes inside one scrape interval, and a restart that spans a monitor
+    restart (soak.sh restarts soakmon on any exit; the new process's track is
+    empty, so every node is `already`). Both: restarted at T0+10, stuck at
+    320 on a divergent root while the partition reaches 1395."""
+
+    def stuck(self, s, t, st):
+        me = scrape({"directory": 2, "bvn1": 2}, {"directory": 1395, "bvn1": 320})
+        s.sample(t, network(0, 1395, {"bvn1": 1395, "bvn2": 1395, "bvn3": 1395},
+                            {"acc-bvn1-val1": me}), st)
+
+    def cell(self, s):
+        rd = tempfile.mkdtemp(prefix="rejoin-f1-")
+        s.write(rd)
+        with open(os.path.join(rd, "nodestate.csv")) as f:
+            return rejoin.row(list(csv.DictReader(f)), "validator", 10, None)
+
+    def launch(self, s):
+        start = {c: T0 - 3600 for c in VALS}
+        s.sample(T0, network(T0, 200, {"bvn1": 200, "bvn2": 200, "bvn3": 200}), start)
+        return start
+
+    def test_a_join_inside_one_scrape_interval(self):
+        s = Series()
+        st = dict(self.launch(s), **{"acc-bvn1-val1": T0 + 10})
+        # First sample of the start, 5 s later: already ACTIVE, already caught up.
+        me = scrape({"directory": 2, "bvn1": 2}, {"directory": 320, "bvn1": 320})
+        s.sample(T0 + 15, network(0, 320, {"bvn1": 320, "bvn2": 320, "bvn3": 320},
+                                  {"acc-bvn1-val1": me}), st)
+        self.stuck(s, T0 + 600, st)
+        s.finish(T0 + 600)
+        cell = self.cell(s)
+        self.assertIn("rejoined 0 of 2 start(s) after the launch", cell)
+        self.assertIn("acc-bvn1-val1 bvn1 (gauge ACTIVE at ≤5s (boot time not measured", cell)
+        self.assertIn("executed 320 vs partition 1395", cell)
+
+    def test_a_restart_that_spans_a_monitor_restart(self):
+        old = Series()
+        st = dict(self.launch(old), **{"acc-bvn1-val1": T0 + 10})
+        booting = scrape({"directory": 0, "bvn1": 0}, {"directory": 190, "bvn1": 190})
+        old.sample(T0 + 15, network(0, 205, {"bvn1": 205, "bvn2": 205, "bvn3": 205},
+                                    {"acc-bvn1-val1": booting}), st)
+        old.finish(T0 + 16)            # the old soakmon exits: `final BOOTING`
+        new = Series()                 # the supervisor's new soakmon: empty track
+        new.sample(T0 + 40, network(0, 330, {"bvn1": 330, "bvn2": 330, "bvn3": 330},
+                                    {"acc-bvn1-val1": scrape({"directory": 2, "bvn1": 2},
+                                                             {"directory": 330, "bvn1": 320})}), st)
+        self.stuck(new, T0 + 600, st)
+        new.finish(T0 + 600)
+        both = Series()
+        both.events = old.events + new.events
+        cell = self.cell(both)
+        self.assertIn("NOT rejoined: acc-bvn1-val1 bvn1", cell)
+        self.assertIn("executed 320 vs partition 1395", cell)
+        self.assertNotIn("never ACTIVE", cell.split("acc-bvn1-val1 bvn1")[1].split(")")[0],
+                         "the new process saw it ACTIVE: the old `final BOOTING` is not the reading")
 
 
 class EveryDestinationIsCompared(unittest.TestCase):
@@ -259,14 +319,14 @@ class TheRunsOwnNodestateCsv(unittest.TestCase):
         """Without the executed columns nothing is established — and nothing
         is called rejoined on the gauge's word."""
         cell = rejoin.row(self.rows, "validator", 10, None)
-        self.assertIn("rejoined 0 of 6 start(s) seen booting", cell)
+        self.assertIn("rejoined 0 of 6 start(s) after the launch", cell)
         self.assertIn("nodestate.csv predates #4404", cell)
         self.assertIn("NOT rejoined: acc-bvn2-val2 bvn2 (never ACTIVE (BOOTING)", cell)
 
     def test_the_follower_row_says_nothing_of_starts_that_did_not_happen(self):
         cell = rejoin.row(self.rows, "follower", 10, None)
-        self.assertEqual("no start inside the run was seen booting; 2 ACTIVE at first sight "
-                         "(the network's launch, before the monitor saw them: not judged)", cell)
+        self.assertEqual("no start after the network's launch; 2 started before the monitor's "
+                         "first sample (the network's launch: not judged)", cell)
 
 
 class ThePartitionsHeight(unittest.TestCase):

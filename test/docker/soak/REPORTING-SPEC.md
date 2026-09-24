@@ -344,9 +344,14 @@ A failing reading makes the start **NOT rejoined**; a reading that could not
 be made (no executed gauge, no final row, no anchor line after the start)
 makes it **not established**, and says which. It is never called rejoined on
 the gauge's word. The time quoted is container start to the first sample that
-was ACTIVE and within the bound. Starts ACTIVE at the monitor's first sight of
-them are the network's launch and are counted, not judged; a row with no
-start inside the run says so and claims nothing about starts.
+was ACTIVE and within the bound. **Only the launch goes unjudged**: a
+container started before the first sample in `nodestate.csv`. Every later
+start is judged, however it was first seen — a start the monitor first sees
+already ACTIVE (a join inside one scrape interval, or a restart that spans a
+monitor restart, whose new process sees every node `already`) is judged on
+height and anchors like any other, with its gauge time given as an upper
+bound and "boot time not measured". A row with no start after the launch
+says so and claims nothing about starts.
 
 `nodestate.csv` carries, beside the columns above, `executedBlock`,
 `partitionHeight` (the majority height) and `startToCaughtUpS`, read at each
