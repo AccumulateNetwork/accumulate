@@ -26,9 +26,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
-// A Buffer is the consensus side of a join: the node collects every committed
-// block into staging and keeps it, executing none of them, until the handoff
-// (#4292's collecting mode).
+// A Buffer is the consensus side of a join: the node keeps every committed
+// block, executing none of them, until the handoff (#4292's collecting mode).
+// It takes them into staging only through the block after the state the join
+// proves (#4398).
 type Buffer interface {
 	// StartCollecting puts the node in collecting mode. While collecting it
 	// keeps the buffer (#4351), unless the buffer has overrun: then it starts
@@ -43,12 +44,15 @@ type Buffer interface {
 	// all in hand.
 	BufferOverrun() bool
 
-	// ApplyStaging runs load, then applies every block buffered since this
-	// node started collecting to staging, in order, and each new one as it
-	// arrives. The join loads nothing: staging is what the node collected
-	// from consensus, minus what the pulled state says executed (executor
-	// spec, "Sync", step 4), so the join passes a load that does nothing.
-	ApplyStaging(load func() error) error
+	// StageThrough takes into staging, in order, every buffered block
+	// through block and none after it (executor spec, "Sync", step 5;
+	// #4398). The join calls it with Q + 1 once the state matches at Q:
+	// staging is what the node collected from consensus through Q + 1, minus
+	// what the pulled state says executed, and the blocks after Q + 1 reach
+	// staging only by being executed. Staging only grows: a later call takes
+	// in the blocks between. NotReady: block has not been collected yet.
+	// Conflict: the state is not one this node can hand off from.
+	StageThrough(block uint64) error
 
 	// Handoff leaves collecting mode at block q and produces, as q + 1,
 	// q + 2, …, the buffered groups committed at a leader round above the
@@ -144,10 +148,12 @@ const (
 //
 // It converges block by block (executor spec, "Sync", step 4):
 //
-//  1. listen — collecting mode, so no committed block is executed, every one
-//     is kept, and every one is taken into this node's own staging;
+//  1. listen — collecting mode, so no committed block is executed and every
+//     one is kept;
 //  2. sync to a block B: pull until the local root equals a proven root;
-//  3. ask whether B + 1 has a gap. If not, settle staging at B and hand off:
+//  3. take the kept blocks through B + 1 into this node's own staging, and
+//     none after it; ask whether B + 1 has a gap. If not, settle staging at B
+//     and hand off:
 //     B + 1 executes from the buffer as any node executes a block. If it
 //     has, B + 1 is not executed; the pull advances the sync to the state
 //     that names it, whose Delivered says what the peers actually ran, and
@@ -177,13 +183,8 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 
 	// Step 1. Collecting starts before anything is pulled, so every block
 	// committed after the state the pull reaches is one this node has
-	// collected. Staging is this node's own from the first block: nothing is
-	// loaded into it.
+	// collected. Staging is this node's own: nothing is loaded into it.
 	opts.Buffer.StartCollecting()
-	err := opts.Buffer.ApplyStaging(func() error { return nil })
-	if err != nil {
-		return Joined, errors.UnknownError.WithFormat("collect into staging: %w", err)
-	}
 
 	// A node that cannot see its partition cannot know what its peers have
 	// executed, and executing from its own state is exactly the divergence
@@ -230,10 +231,6 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		// none of them is executed until the root matches again.
 		log.Warn("An executed block's root differs from its proven root; syncing again", "block", n)
 		opts.Buffer.StartCollecting()
-		err = opts.Buffer.ApplyStaging(func() error { return nil })
-		if err != nil {
-			return Joined, errors.UnknownError.WithFormat("collect into staging: %w", err)
-		}
 
 		// The pull comes first: the local root still equals the block the
 		// node handed off at, and matching it again would hand off where
@@ -320,10 +317,6 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 				}
 				continue
 			}
-			err := opts.Buffer.ApplyStaging(func() error { return nil })
-			if err != nil {
-				return 0, errors.UnknownError.WithFormat("collect into staging again after the overrun: %w", err)
-			}
 			log.Info("Collecting again after the join buffer overran")
 			overran = false
 		}
@@ -333,38 +326,12 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			return 0, errors.UnknownError.WithFormat("match the anchored root: %w", err)
 		}
 		if ok {
-			gap, err := opts.Stage.HasGap(q + 1)
+			done, err := stageAndHandOff(opts, log, q)
 			if err != nil {
-				return 0, errors.UnknownError.WithFormat("look for a gap at %d: %w", q+1, err)
+				return 0, errors.UnknownError.Wrap(err)
 			}
-			if gap {
-				// An entry from before the node was listening: the peers
-				// hold it and this node does not. The sync advances instead.
-				log.Info("The next block has a gap; advancing the sync", "synced", q, "block", q+1)
-			} else {
-				err = opts.Stage.SettleStagingAt(q)
-				if err != nil {
-					return 0, errors.UnknownError.WithFormat("settle staging at %d: %w", q, err)
-				}
-				err = opts.Buffer.Handoff(q)
-				switch {
-				case err == nil:
-					log.Info("Joined; executing from the block after the state", "block", q, "executes", q+1)
-					return q, nil
-				case errors.Is(err, errors.NotReady):
-					// The pull ran ahead of the blocks consensus has
-					// delivered: handing off now would give the blocks still
-					// to arrive the wrong numbers. Wait for them.
-					log.Info("The state is ahead of the blocks collected so far; waiting", "block", q, "error", err)
-				case errors.Is(err, errors.Conflict):
-					// Syncing again, the state matched a block before the
-					// one this node had executed to. Those blocks are not
-					// in the buffer, so the node cannot execute from there;
-					// the next pass is at the peers' newer state.
-					log.Info("The state is behind the block this node stood at; pulling again", "block", q, "error", err)
-				default:
-					return 0, errors.UnknownError.WithFormat("hand off at %d: %w", q, err)
-				}
+			if done {
+				return q, nil
 			}
 		}
 
@@ -378,6 +345,67 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			return 0, errors.UnknownError.Wrap(ctx.Err())
 		case <-time.After(retry):
 		}
+	}
+}
+
+// stageAndHandOff is step 3 at the block q the state matched: stage the kept
+// blocks through q + 1, ask whether q + 1 has a gap, and if not settle staging
+// at q and hand off. It reports whether the node handed off; false with no
+// error means the join pulls again.
+func stageAndHandOff(opts Options, log *slog.Logger, q uint64) (bool, error) {
+	// Staging holds everything collected through q + 1 and nothing after it
+	// (#4398): the gap check asks what q + 1 carries, and a block delivers
+	// the run it can from what is held, so a staging that also held what
+	// q + 2 and later brought would execute q + 1 differently than the peers
+	// did.
+	err := opts.Buffer.StageThrough(q + 1)
+	switch {
+	case err == nil:
+	case errors.Is(err, errors.NotReady):
+		log.Info("The block after the state has not been collected yet; waiting", "synced", q, "block", q+1, "error", err)
+		return false, nil
+	case errors.Is(err, errors.Conflict):
+		log.Info("The state is not one this node can hand off from; pulling again", "block", q, "error", err)
+		return false, nil
+	default:
+		return false, errors.UnknownError.WithFormat("stage through %d: %w", q+1, err)
+	}
+
+	gap, err := opts.Stage.HasGap(q + 1)
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("look for a gap at %d: %w", q+1, err)
+	}
+	if gap {
+		// An entry from before the node was listening: the peers hold it and
+		// this node does not. The sync advances instead.
+		log.Info("The next block has a gap; advancing the sync", "synced", q, "block", q+1)
+		return false, nil
+	}
+
+	err = opts.Stage.SettleStagingAt(q)
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("settle staging at %d: %w", q, err)
+	}
+	err = opts.Buffer.Handoff(q)
+	switch {
+	case err == nil:
+		log.Info("Joined; executing from the block after the state", "block", q, "executes", q+1)
+		return true, nil
+	case errors.Is(err, errors.NotReady):
+		// The pull ran ahead of the blocks consensus has delivered: handing
+		// off now would give the blocks still to arrive the wrong numbers.
+		// Wait for them.
+		log.Info("The state is ahead of the blocks collected so far; waiting", "block", q, "error", err)
+		return false, nil
+	case errors.Is(err, errors.Conflict):
+		// Syncing again, the state matched a block before the one this node
+		// had executed to. Those blocks are not in the buffer, so the node
+		// cannot execute from there; the next pass is at the peers' newer
+		// state.
+		log.Info("The state is behind the block this node stood at; pulling again", "block", q, "error", err)
+		return false, nil
+	default:
+		return false, errors.UnknownError.WithFormat("hand off at %d: %w", q, err)
 	}
 }
 

@@ -100,18 +100,7 @@ func TestProcessCommittedGroup_CollectingBuffersInsteadOfExecuting(t *testing.T)
 
 	require.Empty(t, ca.blocks, "a joining node produces no blocks")
 	require.Empty(t, ca.collected,
-		"and holds nothing until it has its peers' staging: the blocks are buffered, not applied")
-
-	// The join takes a peer's staging; the blocks buffered since are applied
-	// to it, in order (executor spec, "Sync", step 2).
-	loaded := false
-	require.NoError(t, svc.applyStagingNow(func() error { loaded = true; return nil }))
-	require.True(t, loaded)
-	require.Len(t, ca.collected, 2, "every buffered group is applied to that staging")
-	require.Equal(t, b1.Digest(), ca.collected[0].Batches[0].Digest(), "in the order consensus committed them")
-	require.Equal(t, b2.Digest(), ca.collected[1].Batches[0].Digest())
-	require.Equal(t, uint64(0), ca.collected[0].Index, "a collected block has no index until the handoff")
-	require.Equal(t, time.Unix(100, 0).UTC(), ca.collected[0].Time, "the block time is the leader's, unclamped")
+		"and stages nothing as it collects: the blocks are buffered (#4398)")
 
 	require.Equal(t, uint64(0), svc.lastBlockIndex, "collecting does not advance the block index")
 
@@ -374,4 +363,107 @@ func TestHandoff_CollectingAgainAfterAHandoffMapsOntoTheBlocksAfterIt(t *testing
 	require.Equal(t, uint64(45), ca.blocks[2].Index)
 	require.Equal(t, types.Round(10), ca.blocks[2].LeaderRound, "the group committed third since collecting again is block 45")
 	require.Equal(t, uint64(45), svc.lastBlockIndex)
+}
+
+// Staging at the handoff holds everything collected through Q + 1 and nothing
+// after it (executor spec, "Sync", step 5; #4398). The join stages through
+// Q + 1 once the state matches at Q; the groups after Q + 1 are only buffered,
+// and reach staging by being produced, as they reach a peer's.
+//
+// Run 20260924T052134Z: every collected group went into staging as it
+// arrived, so a BVN node that joined at 203 with eight groups buffered
+// executed 204 holding what 205-211 brought, delivered more than its peers
+// and diverged on its first block.
+func TestStageThrough_StagesThroughTheBlockAfterTheStateAndNoneAfterIt(t *testing.T) {
+	svc, ca, author := newJoiningService(t)
+	w := svc.node.Workers()[0]
+	var digests []types.BatchDigest
+	commit := func(round int) {
+		t.Helper()
+		b := types.NewBatch([][]byte{{byte(round)}})
+		require.NoError(t, w.StoreBatch(b))
+		digests = append(digests, b.Digest())
+		_, err := svc.processCommittedGroup(group(commitCert(author, types.Round(round), time.Unix(int64(100+round), 0),
+			[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
+		require.NoError(t, err)
+	}
+
+	// The node stood at block 40, round 1, and collects blocks 41-44.
+	svc.lastBlockIndex = 40
+	svc.lastLeaderRound = 1
+	svc.StartCollecting()
+	commit(2)
+	commit(4)
+	commit(6)
+	commit(8)
+	require.Empty(t, ca.collected, "collecting stages nothing")
+
+	// The state matched at 41 (round 2): staging takes 41 and 42, the block
+	// after the state, and not 43 or 44.
+	pullState(t, svc, 41, 2)
+	require.NoError(t, svc.stageThroughNow(42))
+	require.Len(t, ca.collected, 2, "staged through the block after the state and no further")
+	require.Equal(t, digests[0], ca.collected[0].Batches[0].Digest(), "in the order consensus committed them")
+	require.Equal(t, digests[1], ca.collected[1].Batches[0].Digest())
+	require.Equal(t, types.Round(4), ca.collected[1].LeaderRound, "the block after the state is the first group above its round")
+	require.Equal(t, uint64(0), ca.collected[0].Index, "a collected block has no index until the handoff")
+	require.Equal(t, time.Unix(102, 0).UTC(), ca.collected[0].Time, "the block time is the leader's, unclamped")
+
+	// A group committed now is only buffered.
+	commit(10)
+	require.Len(t, ca.collected, 2, "a group collected after the block after the state is not staged")
+
+	// Asked again for the same block, staging does not take anything twice.
+	require.NoError(t, svc.stageThroughNow(42))
+	require.Len(t, ca.collected, 2)
+
+	// The sync advanced to 42 (a gap at 42): staging takes 43 and only 43.
+	pullState(t, svc, 42, 4)
+	require.NoError(t, svc.stageThroughNow(43))
+	require.Len(t, ca.collected, 3)
+	require.Equal(t, digests[2], ca.collected[2].Batches[0].Digest())
+
+	// The handoff at 42 produces 43, 44 and 45; nothing more is staged by
+	// collecting, and the groups after 43 reach staging by being produced.
+	require.NoError(t, svc.performHandoff(42))
+	require.Len(t, ca.collected, 3, "the handoff stages nothing: it produces")
+	require.Len(t, ca.blocks, 3)
+	require.Equal(t, uint64(43), ca.blocks[0].Index)
+	require.Equal(t, types.Round(6), ca.blocks[0].LeaderRound)
+	require.Equal(t, uint64(45), ca.blocks[2].Index)
+}
+
+// The block after the state not collected yet is a wait: the gap check would
+// not see what it carries. A state that is not this node's to hand off from is
+// refused as the handoff refuses it. Neither stages anything.
+func TestStageThrough_WaitsForTheBlockAfterTheStateAndRefusesAStateItCannotHandOffFrom(t *testing.T) {
+	svc, ca, author := newJoiningService(t)
+	w := svc.node.Workers()[0]
+	svc.lastBlockIndex = 40
+	svc.lastLeaderRound = 1
+	svc.StartCollecting()
+	b := types.NewBatch([][]byte{{1}})
+	require.NoError(t, w.StoreBatch(b))
+	_, err := svc.processCommittedGroup(group(commitCert(author, 2, time.Unix(100, 0),
+		[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
+	require.NoError(t, err)
+
+	// The state is 41, the only group collected; 42 has not arrived.
+	pullState(t, svc, 41, 2)
+	err = svc.stageThroughNow(42)
+	require.True(t, errors.Is(err, errors.NotReady), "got %v", err)
+	require.Empty(t, ca.collected)
+
+	// A ledger that is not block q is not the state q is.
+	err = svc.stageThroughNow(43)
+	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
+
+	// A state behind where the node stood.
+	pullState(t, svc, 39, 1)
+	svc.lastLeaderRound = 2
+	err = svc.stageThroughNow(40)
+	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
+	require.Empty(t, ca.collected)
+	require.True(t, svc.Collecting())
+	require.Len(t, svc.Buffered(), 1)
 }
