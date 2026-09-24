@@ -260,13 +260,15 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("load synthetic chain for %v: %w", dst, err)
 		}
-		before, err := chain.State(from - 1)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load synthetic chain state for %v before %d: %w", dst, from, err)
-		}
-		st := &synthcache.Stream{Destination: dst, ChainName: c.Name(), IndexIndex: indexIndex, RootPos: int64(indexEntry.Anchor), Segment: &merkle.Segment{First: from, Before: before, MarkMask: c.Inner().MarkMask()}}
-		blk.Streams[synthcache.StreamKey(dst)] = st
 
+		// The entries and the messages behind them first, and the chain's
+		// state before the block only after: they are the store's evidence
+		// of whether this node executed the block, and the state is not. A
+		// chain a join took as a head and an open mark set holds no mark
+		// point below the set, so the state before a block in it is not
+		// there to read -- and reading it first failed the whole seed on a
+		// block the skip rule was written for (#4434, run 20260924T111811Z:
+		// "mark point 1023 of …SyntheticChain.bvn2 is missing").
 		hashes, err := chain.Entries(from, to+1)
 		switch {
 		case err == nil:
@@ -277,9 +279,9 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 		default:
 			return nil, errors.UnknownError.WithFormat("load synthetic chain entries %d..%d for %v: %w", from, to, dst, err)
 		}
+		seqs := make([]*messaging.SequencedMessage, len(hashes))
 		for i, hash := range hashes {
-			var seq *messaging.SequencedMessage
-			err := batch.Message2(hash).Main().GetAs(&seq)
+			err := batch.Message2(hash).Main().GetAs(&seqs[i])
 			switch {
 			case err == nil:
 			case errors.Is(err, errors.NotFound):
@@ -289,6 +291,17 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 			default:
 				return nil, errors.UnknownError.WithFormat("load synthetic message: %w", err)
 			}
+		}
+
+		before, err := chain.State(from - 1)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load synthetic chain state for %v before %d: %w", dst, from, err)
+		}
+		st := &synthcache.Stream{Destination: dst, ChainName: c.Name(), IndexIndex: indexIndex, RootPos: int64(indexEntry.Anchor), Segment: &merkle.Segment{First: from, Before: before, MarkMask: c.Inner().MarkMask()}}
+		blk.Streams[synthcache.StreamKey(dst)] = st
+
+		for i, hash := range hashes {
+			seq := seqs[i]
 			st.Segment.Append(hash)
 			e := &synthcache.Entry{Stream: seq.Destination, Number: seq.Number, Index: from + int64(i), Block: b, Hash: seq.Hash(), Seq: seq}
 			if msg, ok := seq.Message.(messaging.MessageForTransaction); ok && seq.Message.Type() != messaging.MessageTypeBlockAnchor {

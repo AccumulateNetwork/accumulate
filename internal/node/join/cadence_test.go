@@ -95,7 +95,9 @@ func TestPull_ThePageDiffCadenceCountsFetchingRounds(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	roots := map[string][32]byte{}
 	for _, u := range named {
-		writeAccount(t, store, u, 3)
+		// No chain entries: both are taken whole (pull.WholeAccounts), and a
+		// made-up entry has no message behind it for a whole pull to take.
+		writeAccount(t, store, u, 0)
 		roots[strings.ToLower(u.String())] = [32]byte{1}
 	}
 	peer := &cadencePeer{partition: here, block: 5}

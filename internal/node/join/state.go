@@ -891,7 +891,9 @@ func (s *PulledState) fetchPass(ctx context.Context, accounts []*url.URL) {
 // only the new entries and the messages behind them. Taken state-only, those
 // entries arrived with no message behind them and the first block the node
 // opened failed reading the newest (#4421). A failure there is refused by
-// name and asked again; the spine has settled and is not failed by it.
+// name and asked again; the spine has settled and is not failed by it. The
+// partition's synthetic ledger is taken whole the same way, and is never part
+// of the spine (pull.WholeAccounts, #4434).
 func (s *PulledState) fetchOne(ctx context.Context, p *pass, u *url.URL, spine bool) {
 	fail := func() {
 		if spine {
@@ -914,14 +916,19 @@ func (s *PulledState) fetchOne(ctx context.Context, p *pass, u *url.URL, spine b
 		return
 	}
 	mode := pull.ModeStateOnly
-	if spine || s.isSpine(u) {
+	whole := spine || s.takenWhole(u)
+	if whole {
 		mode = pull.ModeFullSpine
 	}
 	pending, _, err := pull.FetchFrom(ctx, srcs, p.batch, u, pull.Options{
 		Mode:      mode,
 		Verify:    s.anchors,
 		Partition: partition,
-		CheckHeld: spine,
+		// In the pass that carries the spine, every account taken whole is
+		// checked for what an earlier join left without its message -- the
+		// synthetic ledger included, which every join before #4434 took
+		// state-only (pull.WholeAccounts).
+		CheckHeld: whole && p.spine,
 	})
 	switch {
 	case err == nil:
@@ -942,9 +949,10 @@ func (s *PulledState) fetchOne(ctx context.Context, p *pass, u *url.URL, spine b
 	p.accounts = append(p.accounts, &heldAccount{url: u, pending: pending, spine: spine})
 }
 
-// isSpine is whether u is one of this partition's spine accounts.
-func (s *PulledState) isSpine(u *url.URL) bool {
-	for _, a := range pull.SpineAccounts(s.partition) {
+// takenWhole is whether u is one of the accounts this partition's join takes
+// whole in every pass that names it (pull.WholeAccounts).
+func (s *PulledState) takenWhole(u *url.URL) bool {
+	for _, a := range pull.WholeAccounts(s.partition) {
 		if a.Equal(u) {
 			return true
 		}

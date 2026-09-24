@@ -36,8 +36,8 @@ import (
 // while the node is away. A BVN's seed reads more than the anchor pool: for
 // each of its own blocks still in flight it rebuilds the producer cache from
 // <partition>/synthetic's chains and the messages behind them
-// (synth_cache_seed.go rebuildCacheBlock), and the join pulls that account
-// state-only -- its chains' heads and open mark sets, and no messages
+// (synth_cache_seed.go rebuildCacheBlock). Until #4434 the join pulled that
+// account state-only -- its chains' heads and open mark sets, and no messages
 // (#4400, the debugger's "not verified" list).
 func TestAJoinedBVNNodeCanOpenItsFirstBlockAfterARestart(t *testing.T) {
 	const joiner = 1
@@ -163,9 +163,10 @@ func TestAJoinedBVNNodeCanOpenItsFirstBlockAfterARestart(t *testing.T) {
 	t.Logf("the node stopped at R=%d and its state is now Q=%d", r, q)
 	require.Greater(t, q, r, "precondition: the join carried the node past blocks it did not execute")
 
-	// What the seed used to read and fail on: the synthetic chain entries of
-	// blocks the node did not execute are in its store -- the open mark set
-	// comes with the chain's head -- and the messages behind them are not.
+	// What the seed reads: since #4434 the join takes the synthetic ledger
+	// whole, so the entries of blocks the node did not execute are in its
+	// store with the messages behind them. Before, they came as the open
+	// mark set with no message, and the seed had to tell them apart.
 	View(t, p.NodeDatabase(joiner), func(batch *database.Batch) {
 		c := batch.Account(bvn.JoinPath(Synthetic)).SyntheticChain(Directory)
 		head, err := c.Head().Get()
@@ -174,14 +175,15 @@ func TestAJoinedBVNNodeCanOpenItsFirstBlockAfterARestart(t *testing.T) {
 		for i := head.Count - 1; i >= 0; i-- {
 			hash, err := c.Entry(i)
 			if err != nil {
-				break // below the open mark set: not held
+				missing++
+				continue
 			}
 			if _, err := batch.Message2(hash).Main().Get(); err != nil {
 				missing++
 			}
 		}
-		t.Logf("%d of the synthetic chain entries this node holds name a message it does not", missing)
-		require.NotZero(t, missing, "precondition: the node holds synthetic chain entries of blocks it did not execute, with no message behind them")
+		t.Logf("%d of the synthetic chain's %d entries are not held with their message", missing, head.Count)
+		require.Zero(t, missing, "the joined node holds synthetic chain entries without the message behind them")
 	})
 
 	peerBlock := partitionBlock(t, p.NodeDatabase(0), bvn)
@@ -195,15 +197,12 @@ func TestAJoinedBVNNodeCanOpenItsFirstBlockAfterARestart(t *testing.T) {
 		t.Fatalf("a restarted BVN node that joined cannot open the first block after the state it joined at: %s", b)
 	}
 
-	// What the seed read: the synthetics of blocks after R, which this node
-	// did not execute. Without any, the test says nothing about them.
-	// The seed opened on what it could read: the blocks after the one the
-	// node joined at, which it executed. Nothing at or below it was this
-	// node's to produce, and the process's own join is what said where that
-	// is (SettleStaging, synthcache.JoinedAt).
+	// The process's own join says where the node joined (SettleStaging,
+	// synthcache.JoinedAt): a request for a block at or below it that the
+	// cache does not hold is not a miss.
 	require.Equal(t, matched.block, cache.Joined(), "the join told the process's cache the block it joined at")
 	entries, blocks := cache.Len()
-	t.Logf("the seed rebuilt %d synthetic entries in %d blocks, none in (R, %d]", entries, blocks, matched.block)
+	t.Logf("the seed rebuilt %d synthetic entries in %d blocks", entries, blocks)
 }
 
 // matchedAt records the block the join last matched, which is the block it
