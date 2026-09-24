@@ -9,6 +9,7 @@ package anchorsrc
 import (
 	"context"
 	"crypto/ed25519"
+	"fmt"
 	"crypto/rand"
 	"crypto/sha256"
 	"testing"
@@ -877,14 +878,23 @@ func TestRewindReadsTheWindowAgain(t *testing.T) {
 type ringQuerier struct {
 	peers []api.Querier
 	next  int
+
+	pages int      // page calls made of the ring, however many peers each tried
+	asked []string // the peers the last call asked, as peerQuerier names them
 }
 
 func (r *ringQuerier) Query(ctx context.Context, scope *url.URL, q api.Query) (api.Record, error) {
+	if cq, ok := q.(*api.ChainQuery); ok && cq.Range != nil {
+		r.pages++
+	}
 	start := r.next
 	r.next++
+	r.asked = r.asked[:0]
 	var last error
 	for i := range r.peers {
-		rec, err := r.peers[(start+i)%len(r.peers)].Query(ctx, scope, q)
+		n := (start + i) % len(r.peers)
+		r.asked = append(r.asked, fmt.Sprintf("peer%d", n))
+		rec, err := r.peers[n].Query(ctx, scope, q)
 		if err == nil {
 			return rec, nil
 		}
@@ -892,6 +902,10 @@ func (r *ringQuerier) Query(ctx context.Context, scope *url.URL, q api.Query) (a
 	}
 	return nil, last
 }
+
+// PeerCount and LastAsked are what join's peerQuerier says about itself.
+func (r *ringQuerier) PeerCount(context.Context) int { return len(r.peers) }
+func (r *ringQuerier) LastAsked() []string          { return append([]string(nil), r.asked...) }
 
 // paged serves at most the page asked for, as the API does; poolQuerier
 // serves everything from the start.
@@ -1028,5 +1042,162 @@ func TestAnEntryServedWithoutItsBodyIsAskedOfTheNextPeer(t *testing.T) {
 				require.NotEmpty(t, refusals, "%s: the holed peer's gap was passed over without a word", kind)
 			}
 		}
+	}
+}
+
+// notReadyPaged is a current node that holds the anchors from `from` on
+// without their signatures: it fails any page that reaches one of them with
+// NotReady, whole, as internal/api/v3's servedSigned does (#4413).
+type notReadyPaged struct {
+	*poolQuerier
+	from uint64
+}
+
+func (p notReadyPaged) Query(ctx context.Context, scope *url.URL, q api.Query) (api.Record, error) {
+	if cq, ok := q.(*api.ChainQuery); ok && cq.Range != nil && cq.Range.Count != nil &&
+		cq.Range.Start+*cq.Range.Count > p.from && cq.Range.Start < uint64(len(p.entries)) {
+		return nil, errors.NotReady.WithFormat("this node holds anchor %d without its signatures and cannot serve it", p.from)
+	}
+	return paged{p.poolQuerier}.Query(ctx, scope, q)
+}
+
+// stallFixture is 40 anchors of BVN0, blocks 100-139, signed, and the same
+// anchors with 10 onward stripped of their signatures: what a node that
+// joined by pull at entry 10 holds.
+func stallFixture(t *testing.T) (*Authority, *url.URL, []*api.MessageRecord[messaging.Message], []*api.MessageRecord[messaging.Message]) {
+	t.Helper()
+	f := newNet(t, 4, 1)
+	var signed, bare []*api.MessageRecord[messaging.Message]
+	for i := 0; i < 40; i++ {
+		rec := f.anchor(t, anchorOpts{
+			source: bvn0(), destination: dn(), block: uint64(100 + i),
+			root: root(byte(i)), signers: []int{0, 1, 2},
+		})
+		signed = append(signed, rec)
+		if i < 10 {
+			bare = append(bare, rec)
+			continue
+		}
+		stripped := *rec
+		stripped.Signatures = new(api.RecordRange[*api.SignatureSetRecord])
+		bare = append(bare, &stripped)
+	}
+	return f.authority(t), dn().JoinPath(protocol.AnchorPool), signed, bare
+}
+
+// (#4419a) A ring in which no peer can serve an entry signed costs one page
+// call per peer per read for that entry, not the read's whole budget.
+//
+// Measured by the reviewer of #4413 (F2, ring R1): 64 page calls and 63-64
+// refusals every read, every 2 s, for as long as the stall lasts.
+func TestARingThatCannotServeAnEntryIsAskedOncePerPeer(t *testing.T) {
+	ctx := context.Background()
+	a, pool, _, bare := stallFixture(t)
+
+	for _, peers := range []int{1, 3} {
+		ring := &ringQuerier{}
+		for i := 0; i < peers; i++ {
+			ring.peers = append(ring.peers, paged{&poolQuerier{pool: pool, entries: bare}})
+		}
+		s, err := New(ring, pool, bvn0(), a)
+		require.NoError(t, err)
+		s.PageSize = 8
+
+		observed := map[uint64]bool{}
+		var refused int
+		s.OnAnchor = func(_ *url.URL, block uint64, _ [32]byte) { observed[block] = true }
+		s.OnRefused = func(uint64, error) { refused++ }
+
+		require.NoError(t, s.Read(ctx))
+		t.Logf("%d bare peers, read 1: %d roots observed, %d page calls, %d refusals", peers, len(observed), ring.pages, refused)
+		require.Len(t, observed, 10, "the signed prefix is read")
+		// Two pages reach entry 10 (0-7, then 8-15 held at 10); every peer is
+		// then asked for it once.
+		require.LessOrEqual(t, ring.pages, 1+peers, "%d bare peers, read 1", peers)
+
+		for read := 2; read <= 3; read++ {
+			ring.pages, refused = 0, 0
+			require.NoError(t, s.Read(ctx))
+			t.Logf("%d bare peers, read %d: %d page calls, %d refusals", peers, read, ring.pages, refused)
+			require.Equal(t, peers, ring.pages, "%d bare peers, read %d: one page call per peer for the held entry", peers, read)
+			require.Equal(t, peers, refused, "%d bare peers, read %d: one refusal per peer's answer", peers, read)
+		}
+	}
+}
+
+// (#4419b) A page a peer fails whole with NotReady pins the cursor at the
+// first entry it cannot serve, not at the page's start: the entries before it
+// are served signed by the same peer and are read.
+//
+// The reviewer of #4413 (F3, ring R5): page size 8, the entries from 10 on
+// held unsigned; the read stopped at 8, and 8 and 9 were not read although
+// every peer serves them signed.
+func TestANotReadyPagePinsTheCursorAtTheFirstBadEntry(t *testing.T) {
+	ctx := context.Background()
+	a, pool, _, bare := stallFixture(t)
+
+	ring := &ringQuerier{peers: []api.Querier{
+		notReadyPaged{&poolQuerier{pool: pool, entries: bare}, 10},
+		notReadyPaged{&poolQuerier{pool: pool, entries: bare}, 10},
+	}}
+	s, err := New(ring, pool, bvn0(), a)
+	require.NoError(t, err)
+	s.PageSize = 8
+
+	observed := map[uint64]bool{}
+	s.OnAnchor = func(_ *url.URL, block uint64, _ [32]byte) { observed[block] = true }
+	err = s.Read(ctx)
+	t.Logf("read 1: %d roots observed, %d page calls, err=%v", len(observed), ring.pages, err)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, errors.NotReady), "%v", err)
+	require.Len(t, observed, 10, "entries 8 and 9 are served signed and were not read")
+	for i := 0; i < 10; i++ {
+		require.True(t, observed[uint64(100+i)], "block %d", 100+i)
+	}
+}
+
+// (#4419c) A read held at an entry says so: which entry, which peers were
+// asked for it, and why the last answer was not taken. It used to return nil
+// with nothing to show that the join had stopped. The stall ends when a peer
+// serves the entry.
+func TestAStalledReadSaysWhereAndWhoWasAsked(t *testing.T) {
+	ctx := context.Background()
+	a, pool, signed, bare := stallFixture(t)
+
+	for _, notReady := range []bool{false, true} {
+		var peer func() api.Querier
+		if notReady {
+			peer = func() api.Querier { return notReadyPaged{&poolQuerier{pool: pool, entries: bare}, 10} }
+		} else {
+			peer = func() api.Querier { return paged{&poolQuerier{pool: pool, entries: bare}} }
+		}
+		ring := &ringQuerier{peers: []api.Querier{peer(), peer(), peer()}}
+		s, err := New(ring, pool, bvn0(), a)
+		require.NoError(t, err)
+		s.PageSize = 8
+
+		_, ok := s.Stalled()
+		require.False(t, ok, "nothing read, nothing held")
+
+		for read := 1; read <= 2; read++ {
+			_ = s.Read(ctx)
+			st, ok := s.Stalled()
+			require.True(t, ok, "notReady=%v read %d: the read is held at entry 10 and does not say so", notReady, read)
+			t.Logf("notReady=%v read %d: stalled at entry %d, asked %v: %v", notReady, read, st.Entry, st.Asked, st.Err)
+			require.Equal(t, uint64(10), st.Entry, "notReady=%v", notReady)
+			require.ElementsMatch(t, []string{"peer0", "peer1", "peer2"}, st.Asked, "notReady=%v: every peer is asked, once", notReady)
+			require.Error(t, st.Err)
+		}
+
+		// A peer that holds the entry signed ends the stall.
+		observed := map[uint64]bool{}
+		s.OnAnchor = func(_ *url.URL, block uint64, _ [32]byte) { observed[block] = true }
+		ring.peers = append(ring.peers, paged{&poolQuerier{pool: pool, entries: signed}})
+		for read := 0; read < 4 && len(observed) < 30; read++ {
+			_ = s.Read(ctx)
+		}
+		_, ok = s.Stalled()
+		require.False(t, ok, "notReady=%v: the entry was served and the stall still reads", notReady)
+		require.Len(t, observed, 30, "notReady=%v: blocks 110-139", notReady)
 	}
 }

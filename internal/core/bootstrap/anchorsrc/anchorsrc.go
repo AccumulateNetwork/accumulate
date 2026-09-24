@@ -121,6 +121,9 @@ type Source struct {
 	next    uint64
 	started bool
 
+	// stall is the entry the read is held at, if it is (#4419).
+	stall *Stall
+
 	// doubt counts consecutive reads whose peer said the chain ends below
 	// the cursor. One is a peer that lags; doubtRounds of them is a cursor
 	// that is wrong.
@@ -389,11 +392,27 @@ func (s *Source) readLocked(ctx context.Context) error {
 		s.doubt = 0
 	}
 
+	// A held entry is asked of each peer once per read, and then the read
+	// stops (#4419). Past that every call is a peer already asked giving the
+	// answer it gave, and against a ring that cannot serve the entry the
+	// read used to spend its whole budget on it: 64 page calls and as many
+	// refusals every round, for as long as the stall lasted.
+	holdLimit := s.peerCount(ctx)
+	var holds int
+	var asked []string
+
+	// A page a peer fails whole (NotReady: a current node holding an anchor
+	// in it without its signatures) is asked again at half the size, down
+	// to the one entry at the cursor, so the cursor stops at the first entry
+	// no peer serves and not at the page's start (#4419, F3). It stays
+	// small for the rest of the read.
+	size := pageSize
+
 	for page := 0; page < maxPagesPerRead; page++ {
 		// What was ASKED FOR, kept here, because what comes back is the
 		// peer's and the cursor must not be.
 		start := s.next
-		count, expand := pageSize, true
+		count, expand := size, true
 		// The generic form, not QueryMainChainEntries: that one drops an
 		// ErrorRecord in an entry's place and hands back an entry with no
 		// value, and what the peer said about the entry is lost with it
@@ -407,6 +426,14 @@ func (s *Source) readLocked(ctx context.Context) error {
 			// Ok
 		case errors.Is(err, errors.NotFound):
 			return nil // Nothing new
+		case errors.Is(err, errors.NotReady) && count > 1:
+			size = count / 2
+			continue
+		case errors.Is(err, errors.NotReady):
+			// The entry at the cursor, alone, and no peer would serve it: the
+			// querier asked every one before failing the call.
+			s.stalled(start, s.lastAsked(), err)
+			return errors.UnknownError.WithFormat("read %v's anchors: %w", s.Pool, err)
 		default:
 			return errors.UnknownError.WithFormat("read %v's anchors: %w", s.Pool, err)
 		}
@@ -432,10 +459,10 @@ func (s *Source) readLocked(ctx context.Context) error {
 		// call, so that is the next peer. An anchor that IS signed, and
 		// fails, is refused once and passed, as before: every peer serves the
 		// same signatures.
-		held := -1
+		held, why := -1, error(nil)
 		for i, entry := range rec.Records {
-			if s.consider(start+uint64(i), entry) != nil {
-				held = i
+			if err := s.consider(start+uint64(i), entry); err != nil {
+				held, why = i, err
 				break
 			}
 		}
@@ -443,14 +470,90 @@ func (s *Source) readLocked(ctx context.Context) error {
 		// Advanced by what was asked for and answered, never by an index the
 		// peer chose.
 		if held >= 0 {
-			s.next = start + uint64(held)
+			at := start + uint64(held)
+			if at != start {
+				// Something before it was taken: a new entry is held.
+				holds, asked = 0, nil
+			}
+			s.next = at
+			holds++
+			asked = append(asked, s.lastAsked()...)
+			if holds >= holdLimit {
+				s.stalled(at, asked, why)
+				return nil
+			}
 			continue
 		}
 		s.next = start + uint64(len(rec.Records))
+		holds, asked = 0, nil
+		if s.stall != nil && s.next > s.stall.Entry {
+			s.stall = nil
+		}
 
 		if uint64(len(rec.Records)) < count {
 			return nil
 		}
+	}
+	return nil
+}
+
+// Peers is what a querier that rotates among a partition's peers can say
+// about itself: join's peerQuerier implements it. With it a held entry is
+// asked of each peer once per read and the peers asked are named; without
+// it a held entry is asked doubtRounds times and nobody is named.
+type Peers interface {
+	// PeerCount is how many peers the querier rotates among.
+	PeerCount(ctx context.Context) int
+
+	// LastAsked names the peers the last call asked, in the order asked.
+	// When the call was answered, the last one named answered it.
+	LastAsked() []string
+}
+
+// Stall is an entry of the pool the read is held at: no peer asked for it
+// this read served it whole and signed, so the cursor stays in front of it
+// and the roots from there on wait (#4419). A peer that serves it moves the
+// cursor past it and the stall ends.
+type Stall struct {
+	// Entry is the index of the entry in the pool's main chain.
+	Entry uint64
+
+	// Asked names the peers asked for it by the read that last held it,
+	// when the querier can name them (Peers).
+	Asked []string
+
+	// Err is why the last answer for it could not be taken.
+	Err error
+}
+
+// Stalled reports the entry the read is held at, if it is.
+func (s *Source) Stalled() (Stall, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stall == nil {
+		return Stall{}, false
+	}
+	st := *s.stall
+	st.Asked = append([]string(nil), st.Asked...)
+	return st, true
+}
+
+func (s *Source) stalled(entry uint64, asked []string, err error) {
+	s.stall = &Stall{Entry: entry, Asked: asked, Err: err}
+}
+
+func (s *Source) peerCount(ctx context.Context) int {
+	if p, ok := s.Query.(Peers); ok {
+		if n := p.PeerCount(ctx); n > 0 {
+			return n
+		}
+	}
+	return doubtRounds
+}
+
+func (s *Source) lastAsked() []string {
+	if p, ok := s.Query.(Peers); ok {
+		return p.LastAsked()
 	}
 	return nil
 }

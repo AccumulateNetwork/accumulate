@@ -58,7 +58,7 @@ func (s *PulledState) HandedOff(q uint64) {
 // matched: the block ledger walk starts there, and the page diff runs on the
 // first round, because a wrong run can change accounts no peer's ledger names.
 func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
-	err := s.anchors.Read(ctx)
+	err := s.readAnchors(ctx)
 	if err != nil {
 		return 0, false, errors.UnknownError.WithFormat("read this partition's anchors: %w", err)
 	}

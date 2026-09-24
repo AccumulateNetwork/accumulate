@@ -12,7 +12,11 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/enumerate"
@@ -84,6 +88,27 @@ type PulledState struct {
 	machine *nodestate.Machine
 	tracker *tracker.Tracker
 	log     *slog.Logger
+
+	// label is the partition as the metrics name it.
+	label string
+
+	// now is the clock the anchor source's lines are paced by; nil is
+	// time.Now.
+	now func() time.Time
+
+	// What was last said about the anchor source, so that a stall is said
+	// once a minute and not once per peer per round (#4419).
+	sayMu    sync.Mutex
+	stallLog struct {
+		on    bool
+		entry uint64
+		since time.Time
+		at    time.Time
+	}
+	refusalLog struct {
+		key string
+		at  time.Time
+	}
 
 	spine bool   // this partition's spine has been pulled and verified
 	round uint64 // how many rounds have fetched, for the backstop's cadence
@@ -214,12 +239,7 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	s.anchors.OnAnchor = track.Observe
-	s.anchors.OnRefused = func(block uint64, err error) {
-		// Said out loud. A source that records nothing looks exactly like a
-		// network that has anchored nothing, and the difference between them
-		// is the difference between a peer lying and a peer being slow.
-		s.log.Info("An anchor was refused", "partition", opts.Partition, "block", block, "error", err)
-	}
+	s.anchors.OnRefused = s.anchorRefused
 
 	// Watchable from the moment the node starts joining, and on every change.
 	// The daemon has already reported this partition's state — the series
@@ -229,11 +249,97 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	if id, ok := protocol.ParsePartitionUrl(opts.Partition); ok {
 		label = id
 	}
+	s.label = label
+	mSpineStalled.WithLabelValues(label).Set(-1)
 	nodestate.Report(label, machine.State())
 	machine.OnChange(func(ad nodestate.Advertisement) {
 		nodestate.Report(label, ad.State)
 	})
 	return s, nil
+}
+
+// mSpineStalled is the anchor-pool entry this node's anchor source is held
+// at, or -1. A join held there reads no root after it and so settles nothing
+// after it, while every other sign of the join says only BOOTING (#4419).
+var mSpineStalled = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Namespace: "accumulate",
+	Subsystem: "join",
+	Name:      "spine_stalled_entry",
+	Help: "The anchor-pool entry the join's anchor source is held at because no peer asked " +
+		"serves it whole and signed; -1 when it is not held",
+}, []string{"partition"})
+
+// stallSayEvery is how often a stall, and a refusal repeated word for word,
+// is said again.
+const stallSayEvery = time.Minute
+
+func (s *PulledState) clock() time.Time {
+	if s.now != nil {
+		return s.now()
+	}
+	return time.Now()
+}
+
+// readAnchors reads what the anchor pool has gained and says whether the read
+// is held at an entry: on the gauge every round, in the log once a minute and
+// once when it moves on (#4419).
+func (s *PulledState) readAnchors(ctx context.Context) error {
+	err := s.anchors.Read(ctx)
+
+	st, held := s.anchors.Stalled()
+	s.sayMu.Lock()
+	defer s.sayMu.Unlock()
+	now := s.clock()
+	if !held {
+		mSpineStalled.WithLabelValues(s.label).Set(-1)
+		if s.stallLog.on {
+			s.log.Info("The anchor source moved past the entry it was held at",
+				"partition", s.partition, "entry", s.stallLog.entry, "after", now.Sub(s.stallLog.since).Round(time.Second))
+			s.stallLog.on = false
+		}
+		return err
+	}
+
+	mSpineStalled.WithLabelValues(s.label).Set(float64(st.Entry))
+	if !s.stallLog.on || s.stallLog.entry != st.Entry {
+		s.stallLog.on, s.stallLog.entry, s.stallLog.since = true, st.Entry, now
+	} else if now.Sub(s.stallLog.at) < stallSayEvery {
+		return err
+	}
+	s.stallLog.at = now
+	s.log.Info("This partition's spine is stalled: no peer asked serves this anchor-pool entry whole and signed, so no root after it is read",
+		"partition", s.partition, "pool", s.anchors.Pool, "entry", st.Entry,
+		"for", now.Sub(s.stallLog.since).Round(time.Second), "asked", st.Asked, "error", st.Err)
+	return err
+}
+
+func (s *PulledState) spineStalled() bool {
+	s.sayMu.Lock()
+	defer s.sayMu.Unlock()
+	return s.stallLog.on
+}
+
+// anchorRefused says an anchor was refused. Said out loud: a source that
+// records nothing looks exactly like a network that has anchored nothing,
+// and the difference between them is the difference between a peer lying and
+// a peer being slow. Said once a minute when it is the same refusal: a held
+// entry is asked of every peer every round, and each says the same (#4419).
+func (s *PulledState) anchorRefused(block uint64, err error) {
+	s.sayMu.Lock()
+	defer s.sayMu.Unlock()
+	key := fmt.Sprint(block, err)
+	now := s.clock()
+	if key == s.refusalLog.key && now.Sub(s.refusalLog.at) < stallSayEvery {
+		return
+	}
+	s.refusalLog.key, s.refusalLog.at = key, now
+	if block == 0 {
+		// An entry served without its body names no block; the error names
+		// the entry (#4418).
+		s.log.Info("An anchor was refused", "partition", s.partition, "error", err)
+		return
+	}
+	s.log.Info("An anchor was refused", "partition", s.partition, "block", block, "error", err)
 }
 
 // Machine is the node's state — BOOTING until the root matches, ACTIVE after.
@@ -264,8 +370,10 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	// The sets this node trusts, before anything is judged against them.
 	s.refreshAuthority()
 
-	err := s.anchors.Read(ctx)
-	if err != nil {
+	err := s.readAnchors(ctx)
+	if err != nil && !(errors.Is(err, errors.NotReady) && s.spineStalled()) {
+		// A read held at an entry every peer refuses is the stall, said
+		// once a minute by readAnchors, not once a round here.
 		s.log.Info("This partition's anchors could not be read this round",
 			"partition", s.partition, "error", err)
 	}
