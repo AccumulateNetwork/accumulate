@@ -426,6 +426,13 @@ simulator still does not do as the daemon does:
 - A simulator follower still votes and counts its own vote
   (`Node.isValidatorOn`), so stopping it cannot show that no quorum waited on
   it; the cadence assertion shows only that the partition runs on.
+- A simulator node is one partition's node, not a process. Every BVN node
+  has a Directory node beside it with its own key and peer ID
+  (`test/simulator/factory.go`), and `RestartNode` and `StopNode` act on one
+  partition only: the follower test restarts and stops the follower's BVN0
+  node, and its Directory node never joins (never `BOOTING`, serves
+  everything) and never stops. The daemon is one process for both, so a
+  follower joins on both partitions and leaving stops both.
 - The follower is forced into the join by `RestartNode` from genesis; the
   daemon would not join a genesis-only node at all (#4340).
 
