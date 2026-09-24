@@ -24,20 +24,22 @@ import (
 // chain entries that are transactions, and a signature chain entry that is a
 // validator's signature of an anchor stored referring to its transaction by
 // hash (the executor's storedForm, #4236), with the transaction stored under
-// its own hash and on no chain of the account. Beside the signature entry is
-// what executing it writes and no chain holds: the transaction's history index
-// into the signature chain, the pool among its signers (RecordHistory), and
-// the sequenced message stored and named as the transaction's cause
-// (recordMessageAndStatus).
+// its own hash and on no chain of the account -- an anchor below its quorum.
+// Beside the signature entry is what executing the copy writes and no chain
+// holds: the transaction's history index into the signature chain, the pool
+// among its signers (RecordHistory), and its validator signature set.
 func spineWithMessages(t *testing.T) (*database.Database, *url.URL, [][32]byte) {
-	return spineSignedBy(t, signWith(anchorKey))
+	return spineSignedBy(t, signWith(anchorKey), false)
 }
 
 // anchorKey signs the anchors the pull tests build.
 var anchorKey = ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))
 
 // spineSignedBy is spineWithMessages with the anchor's signature made by sign.
-func spineSignedBy(t *testing.T, sign signFunc) (*database.Database, *url.URL, [][32]byte) {
+// An anchor that executed is an entry of the pool's main chain, and its
+// sequence is stored and named as its cause; one below its quorum has only
+// its signature entry, its history and its validator signature set.
+func spineSignedBy(t *testing.T, sign signFunc, executed bool) (*database.Database, *url.URL, [][32]byte) {
 	t.Helper()
 	u := protocol.DnUrl().JoinPath(protocol.AnchorPool)
 	db := newObservedDB(t)
@@ -65,8 +67,14 @@ func spineSignedBy(t *testing.T, sign signFunc) (*database.Database, *url.URL, [
 	require.NoError(t, b.Message(h).Main().Put(stored))
 	require.NoError(t, b.Message(txn.ID().Hash()).Main().Put(&messaging.TransactionMessage{Transaction: txn}))
 	require.NoError(t, b.Account(u).Transaction(txn.ID().Hash()).RecordHistory(full))
-	require.NoError(t, b.Message(seq.Hash()).Main().Put(storedSeq))
-	require.NoError(t, b.Message(txn.ID().Hash()).Cause().Add(seq.ID()))
+	require.NoError(t, b.Account(u).Transaction(txn.ID().Hash()).ValidatorSignatures().Put([]protocol.KeySignature{full.Signature}))
+	if executed {
+		txh := txn.ID().Hash()
+		require.NoError(t, b.Account(u).MainChain().Inner().AddEntry(txh[:], false))
+		entries = append(entries, txh)
+		require.NoError(t, b.Message(seq.Hash()).Main().Put(storedSeq))
+		require.NoError(t, b.Message(txn.ID().Hash()).Cause().Add(seq.ID()))
+	}
 	entries = append(entries, h)
 	require.NoError(t, b.UpdateBPT())
 	require.NoError(t, b.Commit())

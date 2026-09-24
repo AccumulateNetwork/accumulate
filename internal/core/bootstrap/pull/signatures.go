@@ -7,7 +7,9 @@
 package pull
 
 import (
+	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -46,6 +48,11 @@ type signature struct {
 	// does not have.
 	sequence   messaging.Message
 	sequenceID *url.TxID
+
+	// key is the validator's signature the entry carries, nil for a copy
+	// authorized by a proof. It is what the executor counts the anchor's
+	// quorum from (anchor_signatures.go).
+	key protocol.KeySignature
 }
 
 // signatureOf is the signature a signature chain entry is, if it is an
@@ -71,6 +78,7 @@ func signatureOf(account *url.URL, index uint64, stored, full messaging.Message)
 		txn:        *(*[32]byte)(tm.Transaction.GetHash()),
 		sequence:   sba.Anchor,
 		sequenceID: seq.ID(),
+		key:        fba.Signature,
 	}, true
 }
 
@@ -128,11 +136,30 @@ func checkAnchorSignature(ba *messaging.BlockAnchor) error {
 }
 
 // storeSignatures writes, for each pulled signature, what executing it wrote
-// beside its chain entry -- the history index and the signer as RecordHistory
-// writes them, the sequenced message and the cause as recordMessageAndStatus
-// writes them -- without appending to the chain: the pull already put the
-// entry there.
-func storeSignatures(batch *database.Batch, sigs []signature) error {
+// beside its chain entry, without appending to the chain: the pull already put
+// the entry there.
+//
+//   - The history index and the signer, as RecordHistory writes them, for
+//     every copy.
+//   - The validator signature set the executor counts the anchor's quorum
+//     from: the key signatures of the transaction's history entries, sorted
+//     by public key, one per validator (anchorSignatures.add, written by
+//     sigs.write or flushAnchorSignatures). Execution records a history entry
+//     exactly when it adds a new signer to the set, so the set is the entries'
+//     signatures -- for an anchor below its quorum as for one that executed.
+//     What the node already held from before its gap is kept and added to.
+//   - The sequenced message and the cause, as recordMessageAndStatus writes
+//     them -- only for an anchor that executed, whose transaction is an entry
+//     of the account's main chain: below its quorum the sequence has not
+//     executed, and a peer holds neither.
+func storeSignatures(batch *database.Batch, sigs []signature, executed map[[32]byte]bool) error {
+	type key struct {
+		account string
+		txn     [32]byte
+	}
+	sets := map[key][]protocol.KeySignature{}
+	accounts := map[key]*url.URL{}
+	var order []key
 	for _, s := range sigs {
 		if err := batch.Account(s.account).Transaction(s.txn).History().Add(s.index); err != nil {
 			return fmt.Errorf("store the history of %x: %w", s.txn[:4], err)
@@ -140,12 +167,52 @@ func storeSignatures(batch *database.Batch, sigs []signature) error {
 		if err := batch.Message(s.txn).Signers().Add(s.account); err != nil {
 			return fmt.Errorf("store the signers of %x: %w", s.txn[:4], err)
 		}
-		if err := batch.Message(s.sequenceID.Hash()).Main().Put(s.sequence); err != nil {
-			return fmt.Errorf("store the sequence of %x: %w", s.txn[:4], err)
+		if executed[s.txn] {
+			if err := batch.Message(s.sequenceID.Hash()).Main().Put(s.sequence); err != nil {
+				return fmt.Errorf("store the sequence of %x: %w", s.txn[:4], err)
+			}
+			if err := batch.Message(s.txn).Cause().Add(s.sequenceID); err != nil {
+				return fmt.Errorf("store the cause of %x: %w", s.txn[:4], err)
+			}
 		}
-		if err := batch.Message(s.txn).Cause().Add(s.sequenceID); err != nil {
-			return fmt.Errorf("store the cause of %x: %w", s.txn[:4], err)
+		if s.key == nil {
+			continue
+		}
+		k := key{s.account.String(), s.txn}
+		if _, ok := sets[k]; !ok {
+			order = append(order, k)
+			accounts[k] = s.account
+		}
+		sets[k] = append(sets[k], s.key)
+	}
+
+	for _, k := range order {
+		rec := batch.Account(accounts[k]).Transaction(k.txn).ValidatorSignatures()
+		held, err := rec.Get()
+		if err != nil {
+			return fmt.Errorf("load the signature set of %x: %w", k.txn[:4], err)
+		}
+		set := append([]protocol.KeySignature(nil), held...)
+		for _, sig := range sets[k] {
+			set = addSigner(set, sig)
+		}
+		if err := rec.Put(set); err != nil {
+			return fmt.Errorf("store the signature set of %x: %w", k.txn[:4], err)
 		}
 	}
 	return nil
+}
+
+// addSigner inserts sig into set, kept sorted by public key, unless its
+// validator is already there: anchorSignatures.add's rule.
+func addSigner(set []protocol.KeySignature, sig protocol.KeySignature) []protocol.KeySignature {
+	key := sig.GetPublicKey()
+	i := sort.Search(len(set), func(i int) bool { return bytes.Compare(set[i].GetPublicKey(), key) >= 0 })
+	if i < len(set) && bytes.Equal(set[i].GetPublicKey(), key) {
+		return set
+	}
+	set = append(set, nil)
+	copy(set[i+1:], set[i:])
+	set[i] = sig
+	return set
 }

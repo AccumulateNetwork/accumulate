@@ -605,11 +605,25 @@ transaction's cause (`loadMessage`); executing an anchor writes both beside
 the signature chain entry (`RecordHistory`, `recordMessageAndStatus`), and
 neither is on a chain. A node that took the chains without them held every
 anchor appended by a block it did not execute with no signatures, and could
-serve none of its pulled range (#4413, #4416). So for each entry of a pulled
+serve none of its pulled range (#4413, #4416). Executing a copy also adds
+its signature to the anchor's validator signature set, which is what the
+executor counts the anchor's quorum from (`anchorSignaturesFor`,
+`anchorIsAdmissible`); it is under the account hash only while the anchor is
+pending, and an anchor below its quorum is not recorded pending, so a pulled
+account verifies without it. A node that joined holding no set for an anchor
+its peers held one signature of counted the next copy as one where they
+counted two, held the anchor they executed, and its state diverged on a block
+after a good handoff (#4416 review F1). So for each entry of a pulled
 signature chain that is a validator's signature of an anchor, the pull writes
-what executing it wrote — the history index, the signer, the sequenced
-message and the cause — **rebuilt from the entry, never taken from a peer's
-word about it**, and **each signature is checked to be a signature of the
+what executing it wrote — the history index and the signer; the entry's
+signature added to the anchor's validator signature set, sorted by public key
+and one per validator, to what the node already held (execution records a
+history entry exactly when it adds a new signer to the set, so the set is the
+signatures of the transaction's history entries, whether the anchor executed
+or is still below its quorum); and, for an anchor that executed — its
+transaction an entry of the pool's main chain — the sequenced message, in its
+stored form, and the cause — **rebuilt from the entry, never taken from a
+peer's word about it**, and **each signature is checked to be a signature of the
 anchor it carries**, in the anchor's own form or the Directory's reused one
 (the executor's `checkSignature`); an entry whose signature does not verify
 has not served the chain, and the next peer is asked. Which validators may

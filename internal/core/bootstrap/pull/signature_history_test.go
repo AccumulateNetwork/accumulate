@@ -39,7 +39,7 @@ func signedAnchorIn(t *testing.T, b *database.Batch, entry [32]byte) ([32]byte, 
 // node holds what the peer that executed the anchor holds, and a second pull
 // of the same account changes nothing.
 func TestFullSpine_WritesEachAnchorSignatureAsExecutionDid(t *testing.T) {
-	src, u, entries := spineWithMessages(t)
+	src, u, entries := spineSignedBy(t, signWith(anchorKey), true)
 	sigEntry := entries[len(entries)-1]
 
 	dst := newObservedDB(t)
@@ -89,6 +89,15 @@ func TestFullSpine_WritesEachAnchorSignatureAsExecutionDid(t *testing.T) {
 	require.NoError(t, err, "the node holds the sequence under the hash it executed with, not the stored form's")
 	require.True(t, messaging.EqualMessage(want, got))
 
+	wantSet, err := s.Account(u).Transaction(txh).ValidatorSignatures().Get()
+	require.NoError(t, err)
+	gotSet, err := d.Account(u).Transaction(txh).ValidatorSignatures().Get()
+	require.NoError(t, err)
+	require.Len(t, gotSet, len(wantSet), "the node counts the anchor's quorum from another set than the peer")
+	for i := range wantSet {
+		require.True(t, protocol.EqualKeySignature(wantSet[i], gotSet[i]), "signature %d", i)
+	}
+
 	wantHash, err := s.Account(u).Hash()
 	require.NoError(t, err)
 	gotHash, err := d.Account(u).Hash()
@@ -129,7 +138,7 @@ func TestFullSpine_RefusesAnAnchorSignatureThatDoesNotVerify(t *testing.T) {
 	}
 	for name, sign := range cases {
 		t.Run(name, func(t *testing.T) {
-			liar, u, entries := spineSignedBy(t, sign)
+			liar, u, entries := spineSignedBy(t, sign, false)
 			honest, _, _ := spineWithMessages(t)
 
 			dst := newObservedDB(t)
@@ -181,4 +190,40 @@ func TestCheckAnchorSignature_TakesTheFormsTheExecutorTakes(t *testing.T) {
 	require.Error(t, checkAnchorSignature(&messaging.BlockAnchor{Anchor: own, Signature: signWith(anchorKey)(t, other)}))
 
 	require.Error(t, checkAnchorSignature(&messaging.BlockAnchor{Anchor: own}), "neither a signature nor a proof")
+}
+
+// TestFullSpine_CountsAnAnchorBelowItsQuorumAsThePeerDoes — #4416 review F1.
+// The executor counts an anchor's quorum from its validator signature set,
+// and an anchor below its quorum is not pending, so the set is under no hash
+// the pull verifies. A node that joins while an anchor has one of its copies
+// and not the next holds no set for it: when the next copy arrives, on every
+// node alike, the peers reach the quorum and execute and the joined node
+// counts one and holds (TestAJoinedNodeCountsAStraddlingAnchorAsItsPeersDo).
+// The pull rebuilds the set from the history entries, and writes no sequence
+// and no cause: below its quorum the sequence has not executed.
+func TestFullSpine_CountsAnAnchorBelowItsQuorumAsThePeerDoes(t *testing.T) {
+	src, u, entries := spineSignedBy(t, signWith(anchorKey), false)
+
+	dst := newObservedDB(t)
+	b := dst.Begin(true)
+	require.NoError(t, Account(context.Background(), &dbSource{db: src}, b, u, Options{Mode: ModeFullSpine}))
+	require.NoError(t, b.Commit())
+
+	s := src.Begin(false)
+	defer s.Discard()
+	d := dst.Begin(false)
+	defer d.Discard()
+	txh, _ := signedAnchorIn(t, s, entries[len(entries)-1])
+
+	want, err := s.Account(u).Transaction(txh).ValidatorSignatures().Get()
+	require.NoError(t, err)
+	require.Len(t, want, 1, "precondition: the peer holds one signature")
+	got, err := d.Account(u).Transaction(txh).ValidatorSignatures().Get()
+	require.NoError(t, err)
+	require.Len(t, got, 1, "the joined node counts the anchor's signatures from an empty set")
+	require.True(t, protocol.EqualKeySignature(want[0], got[0]))
+
+	cause, err := d.Message(txh).Cause().Get()
+	require.NoError(t, err)
+	require.Empty(t, cause, "a cause written for an anchor that has not executed")
 }
