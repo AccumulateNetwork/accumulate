@@ -120,3 +120,44 @@ func TestEveryStateTreeLeafIsAnAccountThatExists(t *testing.T) {
 		})
 	}
 }
+
+// TestARejectedDepositChangesNothingButTheRecord: a synthetic deposit to an
+// account that does not exist is checked before it makes any change. On the
+// destination it leaves its record — the message and its failed status — and
+// moves the stream; every leaf that changes is one of the partition's own
+// system accounts, and the missing principal has no record of any kind
+// (#4437). The refund lands on the sender's partition.
+func TestARejectedDepositChangesNothingButTheRecord(t *testing.T) {
+	sim, alice, key := noEmptyLeafNetwork(t)
+	missing := url.MustParse("nowhere/tokens") // on BVN1
+	dest := PartitionUrl("BVN1")
+
+	before := leafHashes(t, sim.Database("BVN1"))
+	st := sim.BuildAndSubmitTxnSuccessfully(build.Transaction().For(alice, "tokens").
+		SendTokens(1, 0).To(missing).
+		SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(key))
+	sim.StepUntil(Txn(st.TxID).Succeeds(), Txn(st.TxID).Produced().Fails())
+	sim.StepN(5)
+
+	for u, h := range leafHashes(t, sim.Database("BVN1")) {
+		if before[u] == h {
+			continue
+		}
+		require.True(t, dest.ParentOf(url.MustParse(u)) || dest.Equal(url.MustParse(u)),
+			"a rejected deposit changed the leaf of %s, which is not one of BVN1's system accounts", u)
+	}
+
+	View(t, sim.Database("BVN1"), func(batch *database.Batch) {
+		a := batch.Account(missing)
+		_, err := a.Main().Get()
+		require.ErrorIs(t, err, errors.NotFound)
+		_, err = batch.BPT().Get(a.Key())
+		require.ErrorIs(t, err, errors.NotFound, "the missing principal has a leaf")
+		chains, err := a.Chains().Get()
+		require.NoError(t, err)
+		require.Empty(t, chains, "the missing principal has chains")
+		pending, err := a.Pending().Get()
+		require.NoError(t, err)
+		require.Empty(t, pending, "the missing principal has pending transactions")
+	})
+}

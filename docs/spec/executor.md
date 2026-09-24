@@ -1198,6 +1198,13 @@ one thing a per-block record must never do. An empty block has no entry.
     block by block from the block ledger alone, so an account the record
     leaves out is one the join never pulls again, and an account it names
     that holds nothing is a leaf no peer can serve (#4437).
+15. **A transaction is checked before it changes anything.** A synthetic
+    transaction is never refused at validation — refusing it would stop its
+    stream — so it is checked when it executes, and a rejected one changes
+    nothing but its own record: the message and its failed status, the
+    stream's delivered position, and the refund it produces. Its missing or
+    wrong principal is not touched (#4437;
+    `TestARejectedDepositChangesNothingButTheRecord`).
 
 ### Versioning
 
