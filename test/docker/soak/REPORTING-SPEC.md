@@ -336,7 +336,13 @@ when all three hold:
 1. the gauge read ACTIVE after the start;
 2. at some sample it was ACTIVE with its executed block within
    `REJOIN_MAX_BEHIND` (soak.conf, blocks) of its partition's height, and it
-   was still within that bound at the start's last reading;
+   was still within that bound at the start's last reading. **The height a
+   node is judged against is the highest block the OTHER validators of its
+   partition that answered the sample executed** — never its own answer
+   (review R1: with it, a node stuck at 214 whose three peers missed one
+   scrape was the partition and read caught up). A sample where no other
+   validator answered is no reading: it writes no `caught-up` row, and a
+   last reading on it is not established ("no other validator … answered");
 3. every anchor it stated for that partition after its start agrees with its
    peers': the same (root, BPT) as the other validators at the same block, and
    the same (block, root, BPT) under the same sequence number to the same

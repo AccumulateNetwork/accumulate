@@ -343,6 +343,44 @@ class TheBoundAndItsEdges(unittest.TestCase):
         self.assertEqual("NOT rejoined", self.judge(1300, 1393, pauses)["verdict"])
 
 
+class ANodeIsNotItsOwnPartition(unittest.TestCase):
+    """Review R1, case F': stuck at 214 with agreeing anchors; the three
+    healthy BVN1 validators miss the LAST scrape. With its own answer in the
+    max, the stuck node was the partition: `caught-up 214/214 ans 1`, `final
+    214/214`, rejoined."""
+
+    def test_no_other_answer_is_no_reading(self):
+        s = Series()
+        start = {c: T0 - 3600 for c in VALS}
+        s.sample(T0, network(T0, 200, {"bvn1": 200, "bvn2": 200, "bvn3": 200}), start)
+        st = dict(start, **{"acc-bvn1-val1": T0 + 10})
+        s.sample(T0 + 15, network(0, 205, {"bvn1": 205, "bvn2": 205, "bvn3": 205},
+                                  {"acc-bvn1-val1": scrape({"directory": 0, "bvn1": 0},
+                                                           {"directory": 190, "bvn1": 190})}), st)
+        stuck = scrape({"directory": 2, "bvn1": 2}, {"directory": 1000, "bvn1": 214})
+        s.sample(T0 + 60, network(0, 1000, {"bvn1": 1000, "bvn2": 1000, "bvn3": 1000},
+                                  {"acc-bvn1-val1": stuck}), st)
+        per = network(0, 1005, {"bvn1": 1005, "bvn2": 1005, "bvn3": 1005}, {"acc-bvn1-val1": stuck})
+        for c in ("acc-bvn1-val2", "acc-bvn1-val3", "acc-bvn1-val4"):
+            del per[c]                          # three docker-exec timeouts
+        s.sample(T0 + 65, per, st)
+        s.finish(T0 + 65)
+        rd = tempfile.mkdtemp(prefix="rejoin-r1-")
+        s.write(rd)
+        with open(os.path.join(rd, "nodestate.csv")) as f:
+            rows = list(csv.DictReader(f))
+        mine = [r for r in rows if r["node"] == "acc-bvn1-val1" and r["partition"] == "bvn1"
+                and r["containerStarted"] == iso(T0 + 10)]
+        self.assertNotIn("caught-up", [r["kind"] for r in mine],
+                         "no caught-up row from a sample where no other validator answered")
+        lines = [anchor_line(c, iso(T0 + 50), "BVN1", "acc://dn.acme", 214, 190, "aaaaaaaa")
+                 for c in VALS if c.startswith("acc-bvn1")]
+        cell = rejoin.row(rows, "validator", 5, rejoin.Anchors(rejoin.anchor_events(lines)))
+        self.assertNotIn("rejoined: acc-bvn1-val1 bvn1", cell.replace("NOT rejoined", ""))
+        self.assertIn("acc-bvn1-val1 bvn1 (", cell)
+        self.assertIn("no other validator of bvn1 answered at its last reading", cell)
+
+
 class AnAbortedStartIsSupersededNotStuck(unittest.TestCase):
     """Review F7, case D2: two restarts 20 s apart. The first start never
     reached ACTIVE because the container started again; it read `NOT
@@ -469,7 +507,7 @@ class ThePartitionsHeight(unittest.TestCase):
         self.assertEqual(1000, r["partitionHeight"])
         self.assertEqual(786, r["behind"])
         self.assertTrue(r["lagging"])
-        self.assertEqual(2, r["validatorsAnswered"])
+        self.assertEqual(1, r["validatorsAnswered"], "the OTHER validators that answered")
 
     def test_two_stuck_of_four_are_both_flagged(self):
         ns = self.bvn1(acc_bvn1_val1=214, acc_bvn1_val2=214, acc_bvn1_val3=1000, acc_bvn1_val4=1000)

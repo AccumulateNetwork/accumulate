@@ -1800,8 +1800,14 @@ def nodestate_from(per, now=None, disturbed=None, followers=()):
                 else:
                     why = "BOOTING %ds after its container started" % since
             ex = executed.get(node, {}).get(part)
-            ph = (part_h.get(part) or {}).get("height")
-            answered = (part_h.get(part) or {}).get("answered", 0)
+            # Judged against the OTHER validators that answered (review R1):
+            # with its own answer in the max, a node stuck at 214 whose three
+            # peers missed one scrape was "the partition" and read caught up.
+            # A sample where no other validator answered is no reading.
+            other = heights.partition_heights(
+                executed, [n for n in executed if n not in fol and n != node]).get(part) or {}
+            ph = other.get("height")
+            answered = other.get("answered", 0)
             behind = None if ex is None or ph is None else ph - ex
             # ACTIVE by the gauge and not executing with its partition: the
             # state the gauge cannot show, and the one the board must.
