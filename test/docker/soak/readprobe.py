@@ -44,7 +44,24 @@ SCOPES = topology.scopes()  # partition -> "dn" | "bvn-BVNx"
 # measurement is simply whether it answers, and how fast. Rotating it into
 # the validators' round-robin would have changed every latency number in the
 # report and still not said whether the FOLLOWER answered.
+# Every follower that can be up in this run; which of them IS up is asked
+# each round (`running_followers`). A declared follower in the late-follower
+# profile that the add-follower walk never started was probed anyway on run
+# 20260924T052134Z: 1,206 of 1,206 reads failed against a container that did
+# not exist, and the report counted it as a follower (#4389).
 FOLLOWERS = topology.followers()
+CHAOS = os.path.join(RUN_DIR, "chaos.log")
+
+
+def running_followers():
+    """The followers up now: those `up` starts, plus a late one between its
+    add-follower and remove-follower lines in chaos.log."""
+    try:
+        with open(CHAOS) as f:
+            lines = f.readlines()
+    except OSError:
+        lines = []
+    return topology.running_followers(lines, candidates=FOLLOWERS)
 CSV = os.path.join(RUN_DIR, "readprobe.csv")
 # One row per round, follower, partition and outcome: what the follower
 # answered, and which service answered it. The manifest's add-follower
@@ -235,8 +252,10 @@ class Probe:
         self.stop = False
         # Follower reads, kept apart from the validators' so neither set's
         # numbers move because of the other (#4365).
-        self.fol_rounds = {f["container"]: [] for f in FOLLOWERS}
-        self.fol_reads = {f["container"]: [] for f in FOLLOWERS}
+        # Keyed by the followers that were up at some round: a follower that
+        # never ran has no entry, so no row and no count (#4389).
+        self.fol_rounds = {}
+        self.fol_reads = {}
 
     def take_sample(self):
         for p in SCOPES:
@@ -300,7 +319,7 @@ class Probe:
         requests. Measured, not assumed: this reads entries it holds, from
         it, and records a refusal as a refusal.
         """
-        for f in FOLLOWERS:
+        for f in running_followers():
             url = "http://127.0.0.1:%d/v3" % f["port"]
             got, outcomes = [], {}
             for s in follower_targets(picks, f):
@@ -313,8 +332,8 @@ class Probe:
                 outcomes[k] = outcomes.get(k, 0) + 1
             write_follower_rows(FOL_CSV, f["container"], outcomes)
             row = judge_follower_round(got)
-            self.fol_rounds[f["container"]].append(row)
-            self.fol_reads[f["container"]].extend(got)
+            self.fol_rounds.setdefault(f["container"], []).append(row)
+            self.fol_reads.setdefault(f["container"], []).extend(got)
             if row["measured"]:
                 log("round %d follower %s: %d reads, %d answered, %d refused "
                     "(NotReady), %d failed, p50 %.1fms max %.1fms"
@@ -356,6 +375,13 @@ class Probe:
             lines += ["— not measured: no follower in this topology.", ""]
         for f in FOLLOWERS:
             c = f["container"]
+            if c not in self.fol_reads:
+                # Declared, and never up at any round: not a follower of this
+                # run. Said once, so its absence is a statement and not a gap.
+                lines += ["**%s**: declared (late-follower profile) and not "
+                          "running at any probe round — not a follower of this "
+                          "run; not probed." % c, ""]
+                continue
             reads = self.fol_reads.get(c) or []
             if not reads:
                 lines += ["**%s** (partitions %s): — not measured; it was asked "

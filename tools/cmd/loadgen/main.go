@@ -59,9 +59,13 @@ type config struct {
 
 // env is everything an action needs to build, sign and submit.
 type env struct {
-	c   *jsonrpc.Client // primary (faucet, network/consensus status)
-	Q   api.Querier2    // rotates across all endpoints (see poolQuerier)
-	cfg config
+	c *jsonrpc.Client // primary (faucet, network/consensus status)
+	Q api.Querier2    // rotates across all endpoints (see poolQuerier)
+
+	// pool is Q's querier, kept so the stats file can say how many reads it
+	// handed to another endpoint and how many no endpoint would answer.
+	pool *poolQuerier
+	cfg  config
 
 	// clients is the pool of node endpoints; submissions and queries round-robin
 	// across them (subIdx) so a single paused/restarted/OOM'd node does not
@@ -372,7 +376,12 @@ func main() {
 		clients:      clients,
 		endpointURLs: eps,
 	}
-	e.Q = api.Querier2{Querier: &poolQuerier{clients: clients, idx: &e.subIdx}}
+	qs := make([]api.Querier, len(clients))
+	for i, c := range clients {
+		qs[i] = c
+	}
+	e.pool = &poolQuerier{clients: qs, idx: &e.subIdx}
+	e.Q = api.Querier2{Querier: e.pool}
 	e.led = newLedger(e.fees)
 	e.u.maxLites = *maxAccounts
 	e.nonce.v.Store(uint64(time.Now().UTC().UnixMilli()))
@@ -746,7 +755,10 @@ type liveStats struct {
 	Rate        float64             `json:"rate"`      // cumulative average user tx/s
 	TargetTps   float64             `json:"targetTps"` // configured -tps target
 	PerType     map[string]typeStat `json:"perType"`
-	Accounts    struct {
+	// Queries is what the endpoint pool did with reads a node would not
+	// answer (#4404): retried at another endpoint, or failed at every one.
+	Queries  queryStats `json:"queries"`
+	Accounts struct {
 		Identities   int `json:"identities"`
 		KeyBooks     int `json:"keyBooks"`
 		KeyPages     int `json:"keyPages"`
@@ -790,6 +802,9 @@ func (e *env) writeStats(path string, start time.Time, total int) {
 		Rate:        rate,
 		TargetTps:   e.currentTPS(),
 		PerType:     perType,
+	}
+	if e.pool != nil {
+		s.Queries = e.pool.counts.snapshot()
 	}
 	adis, books, pages, accts, issuers := e.u.counts()
 	s.Accounts.Identities = adis
