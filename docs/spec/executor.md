@@ -580,7 +580,13 @@ later pass that took it as a head and an open mark set left its new entries
 with no message behind them (#4421). What the node already has is an entry
 **and the message behind it**: an entry held without its message — a store an
 earlier join wrote that way — is not met but fetched, once per process, for
-the newest entries the first block's reads can reach.
+the newest entries the first block's reads can reach. And it is what the node
+holds *alike* with the peer, judged by the chain's state after an entry, which
+commits to every entry below it, and not by the entry: a node that executed
+from a wrong state has appended entries of its own, meets the peer's chain
+below its head, and is rewound to there before the peer's entries are
+replayed. A peer whose chain is a prefix of the node's is behind, and is not
+met.
 
 **A pulled transaction chain carries the messages behind its entries.** The
 entries are hashes, and the executor reads what they name: the first block a

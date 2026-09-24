@@ -112,3 +112,71 @@ func TestFullSpine_AHeldEntryWithNoMessageAtThePeerIsRefused(t *testing.T) {
 	require.NoError(t, b.Commit())
 	require.Empty(t, messagesMissing(t, node, u))
 }
+
+// TestFullSpine_ADivergedChainIsTakenFromWhereItMeetsThePeers — a node that
+// executed blocks from a wrong state appended its own entries to the spine's
+// chains, so its chain is not a prefix of the peer's and cannot be brought up
+// to the peer's by appending. The pull meets the peer's chain where the two
+// last agree, rewinds to there, and takes the peer's entries and their
+// messages from there (executor.md, "Sync" §3: the walk fills back until it
+// meets data it already has). Before #4421 a spine account named in a later
+// pass was taken state-only, which replaced the head; taken whole, a diverged
+// chain was refused in every pass and the node never synced again.
+func TestFullSpine_ADivergedChainIsTakenFromWhereItMeetsThePeers(t *testing.T) {
+	peer, u, _ := spineWithMessages(t)
+	node := newObservedDB(t)
+	b := node.Begin(true)
+	require.NoError(t, Account(context.Background(), &dbSource{db: peer}, b, u, Options{Mode: ModeFullSpine}))
+	require.NoError(t, b.Commit())
+
+	// Each side appends entries of its own.
+	for _, side := range []struct {
+		db   *database.Database
+		salt byte
+		n    int
+	}{{peer, 0x42, 3}, {node, 0x99, 2}} {
+		b := side.db.Begin(true)
+		for i := 0; i < side.n; i++ {
+			addTransactionEntry(t, b, u, 200+i, side.salt)
+		}
+		require.NoError(t, b.UpdateBPT())
+		require.NoError(t, b.Commit())
+	}
+
+	b = node.Begin(true)
+	p, _, err := FetchFrom(context.Background(), []Source{&dbSource{db: peer}}, b, u, Options{Mode: ModeFullSpine, CheckHeld: true})
+	require.NoError(t, err, "a diverged chain was refused, so the node can never be brought back to the peers' chain")
+	require.NoError(t, p.Keep())
+	require.NoError(t, b.Commit())
+
+	s := peer.Begin(false)
+	defer s.Discard()
+	d := node.Begin(false)
+	defer d.Discard()
+	want, err := s.Account(u).Hash()
+	require.NoError(t, err)
+	got, err := d.Account(u).Hash()
+	require.NoError(t, err)
+	require.Equal(t, want, got, "the node's account is not the peer's")
+	require.Empty(t, messagesMissing(t, node, u))
+}
+
+// TestFullSpine_APeerBehindTheNodeIsRefused — meeting the peer's chain is for
+// a node that diverged, not for a peer that is behind: a peer whose chain is
+// a prefix of the node's is refused, and the node's entries are kept.
+func TestFullSpine_APeerBehindTheNodeIsRefused(t *testing.T) {
+	peer, u, _ := spineWithMessages(t)
+	node := newObservedDB(t)
+	b := node.Begin(true)
+	require.NoError(t, Account(context.Background(), &dbSource{db: peer}, b, u, Options{Mode: ModeFullSpine}))
+	require.NoError(t, b.Commit())
+
+	b = node.Begin(true)
+	addTransactionEntry(t, b, u, 300, 0x42)
+	require.NoError(t, b.Commit())
+
+	b = node.Begin(true)
+	defer b.Discard()
+	_, _, err := FetchFrom(context.Background(), []Source{&dbSource{db: peer}}, b, u, Options{Mode: ModeFullSpine})
+	require.Error(t, err, "a peer behind the node was taken, and the node's chain rewound to it")
+}
