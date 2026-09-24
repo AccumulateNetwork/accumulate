@@ -226,13 +226,18 @@ holds.
 This is the rule; the numbered sections below say how each part is done, and
 where they disagree with it, this wins.
 
-1. **Pull every account the state tree holds.** The whole BPT, page by page,
-   and every account its leaves name.
-2. **Keep up from the block ledger while pulling.** The partition moves while
-   the pull runs. The block ledger names every account whose leaf each block
-   changes (invariant 14), so for every block after an account was pulled the
-   node pulls again what that block's record names. Nothing else changes; an
-   account the record does not name is unchanged.
+1. **Pull every account the state tree holds, and every block-ledger record
+   from the start of the pull to the present, in order.** The pull starts at
+   the peer's block S. The node walks the whole BPT, page by page, and pulls
+   every account its leaves name; alongside it, it takes the block-ledger
+   record of every block after S, in block order, and pulls again every
+   account each record names (invariant 14). The walk may take many blocks;
+   that does not matter. An account pulled during the walk is either
+   unchanged since, or named by a later record and pulled again, so once the
+   walk is done and the records are processed through the present, every
+   account is current and the local BPT is the partition's.
+2. **Keep processing the records.** Until the match, every new block's record
+   is processed as it comes, in order, so the local tree stays current.
 3. **The match is the proof.** Only when every account is present and current
    does the local root equal a root the network signed. That equality with a
    verified signed anchor's `StateTreeAnchor` (§1) proves the whole state at
