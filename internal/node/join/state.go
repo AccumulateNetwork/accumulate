@@ -499,7 +499,19 @@ func (s *PulledState) waiting(p *syncing) bool {
 			return true // Matched says so next
 		}
 	}
-	return s.tracker.LatestObservedBlock() < p.waitFor
+	if s.tracker.LatestObservedBlock() < p.waitFor {
+		return true
+	}
+	// EXPERIMENT (#4438): block waitFor sent no anchor, so no anchor's
+	// StateTreeAnchor can equal its root. Prove the whole local root by the
+	// bpt chain's history into a later signed anchor (anchorsrc.ProveRoot),
+	// once, at the match.
+	ok, err := s.anchors.ProveRoot(context.Background(), s.sources.Querier(s.partition), root, p.waitFor)
+	if err == nil && ok {
+		s.tracker.Observe(s.partition, p.waitFor, root)
+		return true
+	}
+	return err == nil
 }
 
 // processRecords processes the block-ledger records of the blocks after L
