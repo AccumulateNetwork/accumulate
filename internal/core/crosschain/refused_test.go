@@ -263,3 +263,12 @@ func (s *syncRefuser) Send(context.Context) <-chan error {
 }
 
 func (s *syncRefuser) Close() {}
+
+// #4426 review F5. One span request can be flushed as several envelopes under
+// the byte budget, and each refused envelope is counted once, so `refused`
+// counts envelopes. The metric's help must say so, or a dashboard reads a
+// refused count above the request count as impossible.
+func TestHealRequestsHelpSaysRefusedCountsEnvelopes(t *testing.T) {
+	desc := mHealRequests.WithLabelValues("refused", "x", "y").Desc().String()
+	require.Contains(t, desc, "refused counts envelopes, not requests")
+}

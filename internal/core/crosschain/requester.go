@@ -119,7 +119,7 @@ var mHealRequests = promauto.NewCounterVec(prometheus.CounterOpts{
 	Namespace: "accumulate",
 	Subsystem: "conductor",
 	Name:      "heal_requests_total",
-	Help:      "Span requests by outcome: answered, not-yet (the span is in flight at the source), miss (the source's cache lacks the span and this node is caught up), lagging-miss (the source lacks it but this node is behind consensus, so it may be in its own backlog: asked again later, not a miss), failed, refused (the source answered but the destination refused the envelope built from the answer: the span is forgotten and asked again, #4426), lagging (not asked: this node's executor is more than MaxExecutionLag behind consensus, #4260, #4284)",
+	Help:      "Span requests by outcome: answered, not-yet (the span is in flight at the source), miss (the source's cache lacks the span and this node is caught up), lagging-miss (the source lacks it but this node is behind consensus, so it may be in its own backlog: asked again later, not a miss), failed, refused (the destination refused an envelope built from an answer, so its spans are forgotten and asked again; refused counts envelopes, not requests: one request may be sent as several envelopes, #4426), lagging (not asked: this node's executor is more than MaxExecutionLag behind consensus, #4260, #4284)",
 }, []string{"outcome", "destination", "source"})
 
 // An entryOutcome says what became of one entry an answer carried: whether it
