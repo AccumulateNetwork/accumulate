@@ -73,3 +73,16 @@ func TestReceived_CountsOnlyWhatStagingCanHold(t *testing.T) {
 	require.Zero(t, partitionOf(t, b, s).Received)
 	require.True(t, b.State.Empty())
 }
+
+// #4412 review F4: a hold on a stream the block never positioned still
+// reaches the ledger. Production positions every stream it has an arrival
+// on before any message runs, so nothing reaches this today; the flush
+// positions the stream rather than drop the mark, because a dropped mark is
+// a wrong hashed value and not an error.
+func TestReceived_AnUnpositionedHoldIsStillWritten(t *testing.T) {
+	b, s := positionBlock(t, 10)
+	b.hold(s, 10, 12, &execute.Held{ID: txidFor(s, 12)})
+	require.NoError(t, b.flushStreams())
+	require.Equal(t, uint64(12), partitionOf(t, b, s).Received)
+	require.Equal(t, uint64(10), partitionOf(t, b, s).Delivered)
+}

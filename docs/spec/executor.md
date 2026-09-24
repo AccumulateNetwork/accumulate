@@ -1670,10 +1670,15 @@ it is held nowhere, so neither counts. A heal answer counts exactly as any
 other arrival does, because it reaches the block through consensus like any
 other; nothing a node fetches or learns outside consensus raises it.
 
-**A block whose only effect is a raised `Received` is not empty**
-(`BlockState.ReceivedRaised`). An empty block's batch is discarded, so the
-raise would be lost, and carrying it to a later block in memory would put a
-per-node value into hashed state.
+**A block that raises `Received` commits.** An empty block's batch is
+discarded, so a raise in a block judged empty would be lost, and carrying it
+to a later block in memory would put a per-node value into hashed state. What
+decides it today is the held message itself: `SyntheticMessage.Process` and
+`BlockAnchor.Process` set a transaction state for every message they process,
+held or not, and merging it counts the block as having delivered something
+(`BlockState.MergeTransaction`), which `Empty` checks. `BlockState.ReceivedRaised`
+is also checked, so the rule does not rest on that bookkeeping; no block
+reaches it today.
 
 What `Received` is for: a node that joins takes the state at the matched
 block B, and its staging is consistent when it holds every number from

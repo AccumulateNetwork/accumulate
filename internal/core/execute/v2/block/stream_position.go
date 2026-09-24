@@ -350,31 +350,27 @@ func (b *Block) flushStreams() error {
 	b.positions.mu.Lock()
 	defer b.positions.mu.Unlock()
 
-	keys := make([]string, 0, len(b.positions.m)+len(b.positions.received))
-	streams := map[string]stream{}
-	for k, p := range b.positions.m {
-		keys = append(keys, k)
-		streams[k] = p.stream
-	}
-	for k, m := range b.positions.received {
-		if _, ok := streams[k]; !ok {
-			keys = append(keys, k)
-			streams[k] = m.stream
+	// A stream held on is positioned here if it was not already. Nothing
+	// reaches that today -- the block positions every stream it has an
+	// arrival on before any message runs (exec_stage.go, stageRuns) -- but a
+	// mark with no position would otherwise be dropped silently, and a
+	// dropped mark is a wrong hashed value, not an error. Flush runs in the
+	// block's serial phase, so loading a position here is safe.
+	for _, m := range b.positions.received {
+		if _, err := b.positionOfLocked(m.stream); err != nil {
+			return errors.UnknownError.Wrap(err)
 		}
+	}
+
+	keys := make([]string, 0, len(b.positions.m))
+	for k := range b.positions.m {
+		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
 	for _, k := range keys {
 		p := b.positions.m[k]
 		mark := b.positions.received[k].n
-		if p == nil {
-			// Held on, never positioned: nothing to release or deliver
-			err := b.raiseReceived(streams[k], 0, mark)
-			if err != nil {
-				return err
-			}
-			continue
-		}
 
 		// Every stream the block touched releases at the ledger's Delivered,
 		// not only the ones it delivered into. Staging is memory, so after a
@@ -398,10 +394,12 @@ func (b *Block) flushStreams() error {
 // highest) and Received (to at least the block's mark and Delivered). A
 // stream the block neither delivered on nor raised is not written.
 //
-// A block whose only effect is a raised Received is not empty: an empty
-// block's batch is discarded, and the mark would be lost with it -- and
-// nothing node-local may carry it to a later block, because nothing
-// node-local may decide a hashed value.
+// A stream whose Received rises is counted in BlockState.ReceivedRaised, so
+// such a block is never empty: an empty block's batch is discarded, and the
+// raise would go with it. Today every hold comes from a message whose
+// processing state already makes the block non-empty (MergeTransaction), so
+// this is a guarantee that does not depend on that, not the mechanism that
+// decides it.
 func (b *Block) raiseReceived(s stream, highest, mark uint64) error {
 	if highest == 0 && mark == 0 {
 		return nil
