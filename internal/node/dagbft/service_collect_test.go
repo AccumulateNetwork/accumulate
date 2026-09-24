@@ -7,9 +7,11 @@
 package dagbft
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -29,13 +32,16 @@ import (
 type collectingAdapter struct {
 	commitAdapter
 	collected []adapter.BlockParams
+
+	// streams is what each collected block reports on its streams.
+	streams []execute.CollectedStream
 }
 
 func (a *collectingAdapter) CollectBlock(_ context.Context, params adapter.BlockParams) (*execute.CollectedBlock, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.collected = append(a.collected, params)
-	return &execute.CollectedBlock{Held: len(params.Batches)}, nil
+	return &execute.CollectedBlock{Held: len(params.Batches), Streams: a.streams}, nil
 }
 
 // newJoiningService is newCommitService with an adapter that can collect.
@@ -505,4 +511,52 @@ func TestHandoff_AnEmptyTailHandoffStandsAtTheStatesRound(t *testing.T) {
 	pullState(t, svc, 41, 2)
 	err := svc.performHandoff(41)
 	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
+}
+
+// Run 20260924T111811Z: "Staged the buffered groups through the block after
+// the state … notStaged=5 … staged=1", then a gap at the same block that the
+// log could not place (#4432). The line says, per stream, how many arrivals
+// the staged groups held and why the rest were not held, and says that the
+// groups after the block are not staged because they reach staging only by
+// being produced.
+func TestStageThrough_SaysPerStreamWhatWasStagedAndWhatWasNot(t *testing.T) {
+	svc, ca, author := newJoiningService(t)
+	var out bytes.Buffer
+	svc.logger.L = logging.NewSlogLogger(slog.New(slog.NewTextHandler(&out, nil)))
+
+	stream := execute.StreamID{
+		Ledger: protocol.PartitionUrl("bvn1").JoinPath(protocol.Synthetic),
+		Source: protocol.PartitionUrl("BVN0"),
+	}
+	ca.streams = []execute.CollectedStream{{
+		ID:      stream,
+		Held:    3,
+		NotHeld: map[execute.NotHeldReason]int{execute.NotHeldDelivered: 1, execute.NotHeldUnattested: 2},
+	}}
+
+	w := svc.node.Workers()[0]
+	commit := func(round int) {
+		t.Helper()
+		b := types.NewBatch([][]byte{{byte(round)}})
+		require.NoError(t, w.StoreBatch(b))
+		_, err := svc.processCommittedGroup(group(commitCert(author, types.Round(round), time.Unix(int64(100+round), 0),
+			[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
+		require.NoError(t, err)
+	}
+	svc.lastBlockIndex = 40
+	svc.lastLeaderRound = 1
+	svc.StartCollecting()
+	for _, r := range []int{2, 4, 6, 8, 10} {
+		commit(r)
+	}
+
+	// 41 and 42 staged, both reporting the stream; 43-45 after the block.
+	pullState(t, svc, 41, 2)
+	require.NoError(t, svc.stageThroughNow(42))
+	line := out.String()
+	require.Contains(t, line, "Staged the buffered groups through the block after the state")
+	require.Contains(t, line, "staged=2")
+	require.Contains(t, line, "after=3", "three groups are after the block: staged only by being produced")
+	require.Contains(t, line, "bvn-BVN0.acme->bvn-bvn1.acme/synthetic held=6 delivered=2 unattested=4",
+		"the stream's arrivals over both groups: held, and why the rest were not")
 }

@@ -501,8 +501,13 @@ func (s *Service) stageThroughNow(block uint64) error {
 	}
 	s.mu.Unlock()
 
+	// What the staged groups brought, per stream: what they held and why
+	// they held none of the rest. A gap at the block is an entry this node
+	// did not hold, and the reason says whether its peers held it (#4432).
+	var streams []*execute.CollectedStream
+	byStream := map[string]*execute.CollectedStream{}
 	for i, g := range take {
-		err := s.collectIntoStaging(g)
+		out, err := s.collectIntoStaging(g)
 		if err != nil {
 			return errors.UnknownError.WithFormat("collect buffered group %d of %d (round %d): %w",
 				i+1, len(take), g.Round(), err)
@@ -510,11 +515,27 @@ func (s *Service) stageThroughNow(block uint64) error {
 		s.mu.Lock()
 		g.staged = true
 		s.mu.Unlock()
+		for _, st := range out.Streams {
+			k := execute.StreamName(st.ID)
+			c, ok := byStream[k]
+			if !ok {
+				c = &execute.CollectedStream{ID: st.ID}
+				byStream[k] = c
+				streams = append(streams, c)
+			}
+			c.Add(st)
+		}
 	}
+	lines := make([]string, len(streams))
+	for i, c := range streams {
+		lines[i] = c.String()
+	}
+	// after: the groups committed after the block. They are not staged: they
+	// reach staging only by being produced, as they reach a peer's (#4398).
 	s.logger.Info("Staged the buffered groups through the block after the state",
 		"partition", s.config.Partition.ID, "state", q, "round", round,
 		"block", block, "blockRound", nextRound, "staged", len(take),
-		"notStaged", after)
+		"after", after, "streams", lines)
 	return nil
 }
 
@@ -525,10 +546,10 @@ type blockCollector interface {
 }
 
 // collectIntoStaging takes one group into staging without executing it.
-func (s *Service) collectIntoStaging(g *CollectedGroup) error {
+func (s *Service) collectIntoStaging(g *CollectedGroup) (*execute.CollectedBlock, error) {
 	collector, ok := s.adapter.(blockCollector)
 	if !ok {
-		return errors.NotAllowed.WithFormat("%s: the adapter cannot collect a block without executing it",
+		return nil, errors.NotAllowed.WithFormat("%s: the adapter cannot collect a block without executing it",
 			s.config.Partition.ID)
 	}
 
@@ -550,7 +571,7 @@ func (s *Service) collectIntoStaging(g *CollectedGroup) error {
 		s.mu.Lock()
 		s.bufferOverrun = true
 		s.mu.Unlock()
-		return fmt.Errorf("collect block: %w", err)
+		return nil, fmt.Errorf("collect block: %w", err)
 	}
 
 	s.mu.Lock()
@@ -561,7 +582,7 @@ func (s *Service) collectIntoStaging(g *CollectedGroup) error {
 		"certs", len(g.Certs),
 		"batches", len(g.Batches),
 		"held", out.Held)
-	return nil
+	return out, nil
 }
 
 // collectGroup keeps one committed group in the buffer. It does not take it

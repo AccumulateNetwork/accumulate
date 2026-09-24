@@ -39,6 +39,26 @@ var mHandoffFailures = promauto.NewCounterVec(prometheus.CounterOpts{
 	Help:      "Handoffs that failed and sent the join back to syncing",
 }, []string{"partition"})
 
+// mGapMissing is, per stream, the first number the last gap check found
+// nothing held for. A check replaces the partition's series, so a stream is
+// on the gauge only while its gap stands, and a join that found none has no
+// series (#4432).
+var mGapMissing = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Namespace: "accumulate",
+	Subsystem: "join",
+	Name:      "gap_first_missing",
+	Help: "The first sequence number above Delivered that the join's last gap check found " +
+		"nothing held for, per stream (source->ledger); absent when the stream has no gap",
+}, []string{"partition", "stream"})
+
+// reportGaps puts the gap check's answer on the gauge.
+func reportGaps(partition string, gaps []StreamGap) {
+	mGapMissing.DeletePartialMatch(prometheus.Labels{"partition": partition})
+	for _, g := range gaps {
+		mGapMissing.WithLabelValues(partition, g.StreamName()).Set(float64(g.Missing))
+	}
+}
+
 // A Buffer is the consensus side of a join: the node keeps every committed
 // block, executing none of them, until the handoff (#4292's collecting mode).
 // It takes them into staging only through the block after the state the join
@@ -90,7 +110,9 @@ type Stage interface {
 	// for. Such a number is an entry that arrived before the node was
 	// listening, and executing block without it is the #4290 divergence
 	// (executor spec, "Sync", step 4).
-	HasGap(block uint64) (bool, error)
+	// The answer is every stream with such a number, empty when there is
+	// none: the join logs it and the gauge carries it (#4432).
+	HasGap(block uint64) ([]StreamGap, error)
 }
 
 // A State is the state half: it pulls what the node lacks and says when the
@@ -407,14 +429,19 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (b
 		return false, errors.UnknownError.WithFormat("stage through %d: %w", q+1, err)
 	}
 
-	gap, err := opts.Stage.HasGap(q + 1)
+	gaps, err := opts.Stage.HasGap(q + 1)
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("look for a gap at %d: %w", q+1, err)
 	}
-	if gap {
+	reportGaps(opts.Partition, gaps)
+	if len(gaps) > 0 {
 		// An entry from before the node was listening: the peers hold it and
 		// this node does not. The sync advances instead.
-		log.Info("The next block has a gap; advancing the sync", "synced", q, "block", q+1)
+		streams := make([]string, len(gaps))
+		for i, g := range gaps {
+			streams[i] = g.String()
+		}
+		log.Info("The next block has a gap; advancing the sync", "synced", q, "block", q+1, "gaps", streams)
 		return false, nil
 	}
 
