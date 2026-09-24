@@ -856,10 +856,11 @@ they reach staging only by being produced — and, under `streams`, per stream,
 how many of the staged groups' arrivals were held and why each of the rest was
 not: `delivered` (at or below the store's `Delivered`), `horizon` (past the
 sanity horizon), `duplicate` (its number already held; first sighting wins),
-`refused` (its own executor refuses it), `unattested` (not proven here and not
-signed by a validator of its source, #4243) or `proofBudget` (its source's
-proof was turned away, #4282). A gap is an entry the node did not hold; the
-reason says whether its peers held it either (#4432).
+`refused` (its own executor refuses it) or `unattested` (not proven here and
+not signed by a validator of its source, #4243). A proof dropped for want of
+budget takes nothing with it (#4439), so it is not a reason. A gap is an
+entry the node did not hold; the reason says whether its peers held it either
+(#4432).
 
 The node then executes block `Q + 1` from the buffer as any node executes a
 block, and it is a validator or a follower from there. **The handoff that
@@ -1467,7 +1468,8 @@ so its number is a hole healing asks for again. A proof below what is
 validated fills in behind, so what it proves is validated wherever it lands
 and a later contradiction there is still a conflict. Outcomes are
 `accumulate_exec_staged_proofs_total{outcome}`: staged, validated, disproved,
-conflict, invalid.
+conflict, invalid, unbound, duplicate, refused (past `maxAnchorAhead`),
+dropped (over the byte budget, below).
 
 **What bounds anchor staging, and in what currency.** A source's waiting
 proofs are bounded by what they cost in bytes (`maxStagedProofBytes`), not by
@@ -1486,15 +1488,29 @@ and each list is capped at `MaxReceiptListElements` and must validate. Proof
 volume is therefore already proportional to traffic the destination agreed to
 accept; the byte budget bounds what remains.
 
-**A package and its proof share a fate.** When the budget does bind, the
-entries that travelled with the refused proof are refused too, rather than
-collected. A collected entry is recorded as received, which leaves no gap —
-and nothing re-sends a proof, so an entry collected without one waits for a
-proof that already arrived and was discarded. Refused together, what is left
-is an ordinary hole: the source still holds those entries as undelivered, and
-the destination asks for the span again once it has caught up and has budget.
-This is the rule the batch-bytes defect taught (#4159, #4282): a message with
-no recovery path must not be the one that is dropped.
+**The budget bounds memory and decides nothing else** (Paul, 2026-09-24,
+#4439). It is read from staging, and staging is memory: a restarted or
+joining node's staged proofs are not its peers', so whatever the budget
+decides differs between nodes. When it binds, the proof is dropped
+(`accumulate_exec_staged_proofs_total{dropped}`) and that is all. The entries
+that travelled with it are held and counted exactly as they would have been
+with the proof staged — they are consensus input, and `Received`, which is
+hashed, counts them ("What the stream ledger is for"). A dropped proof is not
+lost for good: an entry held with no validated hash and no staged proof is a
+**gap of proof**, and once its stream stops at it the requester asks the
+source for the span, whose answer — the span's proof with its entries —
+reaches staging through consensus like any other (healing.md, "Deciding, in
+staging"). So nothing is stranded waiting for a proof that arrived and was
+dropped, which is what the budget did when it was counted in Directory blocks
+(#4282: 80,552 entries held with no gap for healing to find). Until #4439 the
+entries were refused with their proof instead, which kept them a hole the
+source still held; that made whether a node counted an entry depend on its
+memory, and `Received` with it.
+
+What the budget must also not decide is *when* an entry executes, and today it
+does: a node that dropped a proof its peers staged executes the package when
+the fetched proof lands, blocks after its peers executed it on theirs, and
+from that block its state is not theirs (DIFFERENCES.md, E17).
 
 ### Collection — an unproven entry is held, never parked
 
@@ -1671,7 +1687,10 @@ an anchor copy below its quorum), from what the block's consensus messages
 carried — never read back from staging. Staging is memory, and whether it
 takes an entry also depends on what this node already holds and has
 validated, which after a restart is not what its peers hold; `Received` is
-hashed, so it may depend only on the state and on the block. A number at or
+hashed, so it may depend only on the state and on the block. For the same
+reason no hold depends on the anchor-staging budget: an entry whose package's
+proof was dropped for want of budget is held and counted like any other
+(#4439, "Anchor staging"). A number at or
 below `Delivered` is not an arrival, and one more than `MaxStageSpan` above
 it is held nowhere, so neither counts. A heal answer counts exactly as any
 other arrival does, because it reaches the block through consensus like any

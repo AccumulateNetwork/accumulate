@@ -8,7 +8,6 @@ package block
 
 import (
 	"sort"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -226,15 +225,9 @@ func (b *Block) collectSynthetic(str stream, ctx *MessageContext, a *arrival) (e
 		return execute.NotHeldUnattested, nil
 	}
 
-	// A source whose proof this block turned away for want of budget has its
-	// entries turned away with it, as collection does: nothing re-sends a
-	// proof, so holding the entry would strand it where no gap is left for
-	// healing to find (#4282). Only on this path, because only this path
-	// holds an entry whose proof is still to come.
-	if b.proofBudgetBound[strings.ToLower(str.source.String())] {
-		return execute.NotHeldProofBudget, nil
-	}
-
+	// Held whether or not its package's proof fitted the proof budget, as
+	// collection holds it: the budget bounds memory, never what is held
+	// (#4439).
 	h := &execute.Held{ID: a.classifier.ID(), Message: a.classifier, Collected: true, Hash: a.seq.Hash()}
 	if m, ok := a.seq.Message.(messaging.MessageForTransaction); ok {
 		want := m.GetTxID().Hash()

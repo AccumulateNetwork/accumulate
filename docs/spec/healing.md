@@ -468,7 +468,9 @@ arrived and is staged, waiting for its Directory anchor, is not unproven**
 (`StagedProofSpans`): the anchor is on its way, late when this partition's
 executor lags, and asking for the entry again lands it twice — the storm of
 run 20260905T134346Z, 22,642 heals with nothing dropped. It becomes a gap only
-when the proof is dropped. A stage holding nothing above
+when the proof is dropped — disproved, or dropped at intake because the
+source's waiting proofs are over the byte budget (executor.md, "Anchor
+staging", #4439); this request is then what brings the proof back. A stage holding nothing above
 `Delivered` is missing every validating hash above it and asks for the span
 above `Delivered` whole; the source answers with what it has dispatched, or
 that it has produced nothing there yet. A "not yet" is remembered like an

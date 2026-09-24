@@ -57,9 +57,6 @@ const (
 	// NotHeldUnattested: not proven here and not signed by a validator of
 	// its source (#4243).
 	NotHeldUnattested NotHeldReason = "unattested"
-	// NotHeldProofBudget: its source's proof was turned away for want of
-	// budget, and its entries with it (#4282).
-	NotHeldProofBudget NotHeldReason = "proofBudget"
 )
 
 // Add counts other's arrivals into s.
