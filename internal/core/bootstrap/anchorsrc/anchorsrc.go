@@ -394,7 +394,11 @@ func (s *Source) readLocked(ctx context.Context) error {
 		// peer's and the cursor must not be.
 		start := s.next
 		count, expand := pageSize, true
-		rec, err := q.QueryMainChainEntries(ctx, s.Pool, &api.ChainQuery{
+		// The generic form, not QueryMainChainEntries: that one drops an
+		// ErrorRecord in an entry's place and hands back an entry with no
+		// value, and what the peer said about the entry is lost with it
+		// (pkg/api/v3/querier.go, chainEntryOfMessage; #4418).
+		rec, err := q.QueryChainEntries(ctx, s.Pool, &api.ChainQuery{
 			Name:  "main",
 			Range: &api.RangeOptions{Start: start, Count: &count, Expand: &expand},
 		})
@@ -414,20 +418,23 @@ func (s *Source) readLocked(ctx context.Context) error {
 		// window this peer named is real.
 		s.started = true
 
-		// **An anchor served without its signatures is this peer's gap, not a
-		// fact about the anchor, and the cursor stops in front of it.** A
-		// node that joined by pull holds its pulled range with no signatures
-		// behind it (#4416); a current one answers NotReady for it, and the
-		// read above returns with the cursor where it was, but an older one,
-		// or a liar, serves the bodies bare. Moving past them would lose
-		// those roots for this join (#4413) -- the cursor never comes back
-		// short of a Rewind. So the page is taken up to that entry, and the
-		// next page asks for it again: the peers rotate per call, so that is
-		// the next peer. An anchor that IS signed, and fails, is refused
-		// once and passed, as before: every peer serves the same signatures.
+		// **An anchor served without its signatures, or an entry served
+		// without its body, is this peer's gap, not a fact about the pool,
+		// and the cursor stops in front of it.** A node that joined by pull
+		// holds its pulled range with no signatures behind it (#4416); a
+		// current one answers NotReady for it, and the read above returns
+		// with the cursor where it was, but an older one, or a liar, serves
+		// the bodies bare. A node with a hole in its store serves the entry
+		// with an ErrorRecord where the body goes (#4418). Moving past either
+		// would lose that root for this join (#4413) -- the cursor never
+		// comes back short of a Rewind. So the page is taken up to that
+		// entry, and the next page asks for it again: the peers rotate per
+		// call, so that is the next peer. An anchor that IS signed, and
+		// fails, is refused once and passed, as before: every peer serves the
+		// same signatures.
 		held := -1
 		for i, entry := range rec.Records {
-			if !s.consider(entry) {
+			if s.consider(start+uint64(i), entry) != nil {
 				held = i
 				break
 			}
@@ -470,37 +477,51 @@ func (s *Source) readLocked(ctx context.Context) error {
 // way only: through Authority.Update, from a definition the join pulled and
 // verified as a leaf under a root the trusted set signed.
 //
-// It returns false only for this producer's anchor served with no signatures
-// at all: the read does not move past it, and asks another peer (readLocked).
-func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]) bool {
-	if rec == nil || rec.Value == nil || rec.Value.Message == nil || rec.Value.Message.Transaction == nil {
-		return true
+// It returns an error only when the entry is HELD: this peer's answer for it
+// cannot be taken and another peer must be asked (readLocked). That is an
+// entry served without its body -- an ErrorRecord in its place, as the API
+// serves a message it does not hold, no value at all, or something that is
+// not a transaction (#4418) -- and this producer's anchor served with no
+// signatures at all (#4413). Either is said through OnRefused: an entry
+// with no body names no block, so it is refused as block 0 and the error
+// names the pool entry.
+func (s *Source) consider(index uint64, entry *api.ChainEntryRecord[api.Record]) error {
+	rec, err := bodyOf(entry)
+	if err != nil {
+		err = errors.NotReady.WithFormat("%v entry %d: %w", s.Pool, index, err)
+		if s.OnRefused != nil {
+			s.OnRefused(0, err)
+		}
+		return err
 	}
-	body, ok := rec.Value.Message.Transaction.Body.(protocol.AnchorBody)
+	body, ok := rec.Message.Transaction.Body.(protocol.AnchorBody)
 	if !ok {
-		return true // The pool holds other transactions too
+		return nil // The pool holds other transactions too
 	}
 	pa := body.GetPartitionAnchor()
 	if pa == nil || pa.Source == nil {
-		return true
+		return nil
 	}
 
 	// The producer, not the pool. PartitionAnchor.Source is the partition
 	// that produced the anchor (acc://dn.acme), never the pool it landed in.
 	if !pa.Source.Equal(s.Producer) {
-		return true // Somebody else's anchor, in a pool that holds everyone's
+		return nil // Somebody else's anchor, in a pool that holds everyone's
 	}
 	produced, ok := protocol.ParsePartitionUrl(pa.Source)
 	if !ok {
-		return true
+		return nil
 	}
 
-	err := s.verify(produced, rec.Value)
+	err = s.verify(produced, rec)
 	if err != nil {
 		if s.OnRefused != nil {
 			s.OnRefused(pa.MinorBlockIndex, err)
 		}
-		return !unsigned(rec.Value)
+		if unsigned(rec) {
+			return errors.NotReady.WithFormat("%v entry %d, block %d: %w", s.Pool, index, pa.MinorBlockIndex, err)
+		}
+		return nil
 	}
 
 	// The MINOR block index, always. It is the block a peer serves an
@@ -517,7 +538,37 @@ func (s *Source) consider(rec *api.ChainEntryRecord[*api.MessageRecord[*messagin
 	if s.OnAnchor != nil {
 		s.OnAnchor(pa.Source, pa.MinorBlockIndex, pa.StateTreeAnchor)
 	}
-	return true
+	return nil
+}
+
+// bodyOf is the transaction a pool entry holds, or why this peer's answer
+// holds none. Every entry of the pool's main chain is a transaction, and the
+// read asks for it expanded, so an entry that comes back without one is the
+// serving peer's gap (#4418).
+func bodyOf(entry *api.ChainEntryRecord[api.Record]) (*api.MessageRecord[*messaging.TransactionMessage], error) {
+	if entry == nil {
+		return nil, errors.NotReady.With("the peer served an empty record")
+	}
+	switch v := entry.Value.(type) {
+	case nil:
+		return nil, errors.NotReady.With("the peer served the entry without its body")
+	case *api.ErrorRecord:
+		return nil, errors.NotReady.WithFormat("the peer served the entry without its body: %v", v.Value)
+	case *api.MessageRecord[messaging.Message]:
+		if v.Message == nil {
+			return nil, errors.NotReady.With("the peer served the entry without its body")
+		}
+		rec, err := api.MessageRecordAs[*messaging.TransactionMessage](v)
+		if err != nil || rec == nil || rec.Message == nil {
+			return nil, errors.NotReady.WithFormat("the peer served a %v message, not a transaction", v.Message.Type())
+		}
+		if rec.Message.Transaction == nil || rec.Message.Transaction.Body == nil {
+			return nil, errors.NotReady.With("the peer served a transaction without its body")
+		}
+		return rec, nil
+	default:
+		return nil, errors.NotReady.WithFormat("the peer served a %v record, not a message", v.RecordType())
+	}
 }
 
 // unsigned is an anchor record that carries no signatures at all: what a

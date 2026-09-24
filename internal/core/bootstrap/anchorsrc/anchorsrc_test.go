@@ -244,6 +244,11 @@ type poolQuerier struct {
 
 	// served counts the entries handed out, so a re-read is visible.
 	served int
+
+	// holes are entries this peer serves without their body: the value is
+	// what it serves in the body's place -- an ErrorRecord, as the API
+	// serves a message it does not hold, or nil, no value at all (#4418).
+	holes map[int]api.Record
 }
 
 func (p *poolQuerier) Query(_ context.Context, scope *url.URL, q api.Query) (api.Record, error) {
@@ -279,10 +284,14 @@ func (p *poolQuerier) Query(_ context.Context, scope *url.URL, q api.Query) (api
 		if p.liedIndex > 0 {
 			index = p.liedIndex
 		}
+		var value api.Record = p.entries[i]
+		if hole, ok := p.holes[int(i)]; ok {
+			value = hole
+		}
 		rr.Records = append(rr.Records, &api.ChainEntryRecord[api.Record]{
 			Name:  "main",
 			Index: index,
-			Value: p.entries[i],
+			Value: value,
 		})
 		p.served++
 	}
@@ -957,6 +966,67 @@ func TestAnAnchorServedWithoutSignaturesIsAskedOfTheNextPeer(t *testing.T) {
 			got, err := s.AnchoredRoot(ctx, bvn0(), uint64(100+i))
 			require.NoError(t, err)
 			require.Equal(t, root(byte(i)), got)
+		}
+	}
+}
+
+// (#4418) An entry a peer serves without its body -- an ErrorRecord in the
+// body's place, as the API serves a message it does not hold, or no value at
+// all -- is that peer's gap, not a fact about the pool. The cursor stops in
+// front of it, the next peer is asked, and the refusal is said.
+//
+// The reviewer's ring R4 (#4413 note_3896860371, F1): one peer whose page has
+// entry 12 (block 112) without its body, an honest peer beside it. It used to
+// read 39 of 40 roots with the holed peer first, block 112 lost and nothing
+// refused.
+func TestAnEntryServedWithoutItsBodyIsAskedOfTheNextPeer(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+	a := f.authority(t)
+	pool := dn().JoinPath(protocol.AnchorPool)
+
+	const n, hole = 40, 12
+	var signed []*api.MessageRecord[messaging.Message]
+	for i := 0; i < n; i++ {
+		signed = append(signed, f.anchor(t, anchorOpts{
+			source: bvn0(), destination: dn(), block: uint64(100 + i),
+			root: root(byte(i)), signers: []int{0, 1, 2},
+		}))
+	}
+
+	holes := []struct {
+		kind   string
+		served api.Record
+	}{
+		{"error record", &api.ErrorRecord{Value: errors.NotFound.With("message not found")}},
+		{"no value", nil},
+	}
+	for _, h := range holes {
+		kind, served := h.kind, h.served
+		for _, holedFirst := range []bool{true, false} {
+			honest := &poolQuerier{pool: pool, entries: signed}
+			holed := &poolQuerier{pool: pool, entries: signed, holes: map[int]api.Record{hole: served}}
+			ring := &ringQuerier{peers: []api.Querier{paged{honest}, paged{holed}}}
+			if holedFirst {
+				ring.peers = []api.Querier{paged{holed}, paged{honest}}
+			}
+			s, err := New(ring, pool, bvn0(), a)
+			require.NoError(t, err)
+			s.PageSize = 8
+
+			observed := map[uint64]bool{}
+			var refusals []string
+			s.OnAnchor = func(_ *url.URL, block uint64, _ [32]byte) { observed[block] = true }
+			s.OnRefused = func(_ uint64, err error) { refusals = append(refusals, err.Error()) }
+			require.NoError(t, s.Read(ctx))
+
+			t.Logf("%s, holed peer first=%v: %d of %d roots observed, %d refusals %q",
+				kind, holedFirst, len(observed), n, len(refusals), refusals)
+			require.Len(t, observed, n, "%s, holed peer first=%v: a root was skipped", kind, holedFirst)
+			require.True(t, observed[100+hole], "%s, holed peer first=%v: block %d was skipped on one peer's gap", kind, holedFirst, 100+hole)
+			if holedFirst {
+				require.NotEmpty(t, refusals, "%s: the holed peer's gap was passed over without a word", kind)
+			}
 		}
 	}
 }
