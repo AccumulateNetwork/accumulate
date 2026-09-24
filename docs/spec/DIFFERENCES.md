@@ -416,11 +416,24 @@ still different, or not known:
 - **The seed skips a block on the store's evidence.** A block in the seed's
   window whose synthetic entries the store holds with no message behind them,
   or whose entries it does not hold, is taken as one this node did not execute
-  and is neither rebuilt nor dispatched. It assumes a node never loses the
-  message behind a synthetic entry of a block it executed: nothing on this
-  line prunes messages, and if something did, the seed would skip that block
-  rather than fail on it — a dispatch this node would not make, not a wrong
-  one. Two earlier versions on this branch were wrong and are recorded here:
+  and is neither rebuilt nor dispatched; each skipped block is logged with
+  that evidence. Only that evidence skips a block: any other absence in the
+  rebuild (a companion transaction, the root index chain) fails the seed
+  (`TestAnExecutedBlockMissingACompanionFailsTheSeed`). It assumes an
+  ordinary read of this node's store answers the message behind a synthetic
+  entry of a block it executed. On leveldb and the in-memory store it does.
+  **On BlockchainDB it does only within the store's read window**: nothing is
+  deleted, but an ordinary batch reads a permanent record older than the last
+  `DefaultMergeLag` (20) to 40 blocks as absent, and only `Deep()` sees it
+  (`internal/database/database.go`, `pkg/database/keyvalue/bcdb`). The seed
+  reads down to `InFlightBlocks` (8) below the newest Directory receipt of
+  this partition's blocks, which is inside that window while the Directory
+  keeps receipting; with no receipt in the horizon it reads down to
+  `DefaultHorizon` (600) blocks, and there a block this node executed reads
+  as one it did not and is skipped (and `ownReceipts`, which reads the
+  anchor pool's messages down to the same bound with hard errors, may fail
+  first). A skipped block is a dispatch this node does not make, never a
+  wrong one. Two earlier versions on this branch were wrong and are recorded here:
   skipping every block at or below the join block left a restart that fell
   nothing behind with an empty cache — the #4241/#4277 restart hole (review
   note_3896114642, `TestAZeroGapRestartStillSeedsItsOwnBlocks`); skipping a
