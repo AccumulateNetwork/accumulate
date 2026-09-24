@@ -347,6 +347,21 @@ when all three hold:
    `f5b4979b`) where its peers' seq 1154 is block 1301 (root `de98b6c8`), and
    no peer anchored block 1300.
 
+**The bound, and its two edges (review F6).** `REJOIN_MAX_BEHIND` is 5
+blocks: healthy validators on run `20260924T052134Z`, read per second from
+their anchors with disturbed nodes excluded, spread Directory p50 0 / p99 1 /
+max 3 blocks over 1,345 s and BVN p99 0. A paused node returns about 10
+blocks a second (93 behind to 0 in 9 s), so it shows on the board as behind
+for a sample or two, truthfully. The edges:
+- a start whose last reading falls inside a `pause` of that node in
+  `chaos.log`, or within 30 s after it ends, is **not established (paused at
+  its last reading)** rather than NOT rejoined on its height — the reading
+  is of the pause, not of the rejoin;
+- `monitor.csv`'s row is taken by a sequential `docker exec` loop, so its
+  `exec.` columns against `dnHeightMax` carry a few blocks of harness skew at
+  one block a second. The verdict does not read `monitor.csv`: it reads
+  soakmon's scrape, which asks every node in parallel.
+
 A failing reading makes the start **NOT rejoined**; a reading that could not
 be made (no executed gauge, no final row, no anchor line after the start)
 makes it **not established**, and says which. **A start's last reading is its

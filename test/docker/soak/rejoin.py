@@ -43,6 +43,7 @@ import argparse
 import calendar
 import csv
 import os
+import re
 import sys
 import time
 from collections import Counter
@@ -52,7 +53,39 @@ sys.path.insert(0, HERE)
 import followerlog  # noqa: E402
 from heights import canon_part  # noqa: E402
 
-DEFAULT_MAX_BEHIND = 10
+# Healthy validators' spread, measured from run 20260924T052134Z's anchors
+# per second with disturbed nodes excluded: Directory p50 0, p99 1, max 3
+# blocks over 1,345 s; BVNs p99 0 (review F6). 5 clears the max with room for
+# the scrape's own skew and still flags a node a few seconds behind.
+DEFAULT_MAX_BEHIND = 5
+# How long after a pause ends a node's last reading is still inside it: a
+# paused node returns ~10 blocks/s (93 behind to 0 in 9 s, review F6).
+DEFAULT_RECOVERY = 30
+
+
+def pauses_from(lines):
+    """{container: [(iso start, seconds)]} from chaos.log's `pause` lines. The
+    chaos walk logs the pause and never the un-pause; the un-pause is the
+    start plus the logged seconds."""
+    out = {}
+    for line in lines or ():
+        m = re.match(r"^(\S+Z) pause (\S+) (\d+)s", line)
+        if m:
+            out.setdefault(m.group(2), []).append((m.group(1), int(m.group(3))))
+    return out
+
+
+def _in_pause(pauses, node, t, recovery):
+    """The pause whose span, plus the recovery allowance, holds time t."""
+    if t is None:
+        return None
+    for start, secs in (pauses or {}).get(node, ()):
+        a = _epoch(start)
+        if a is not None and a <= t <= a + secs + recovery:
+            return (start, secs)
+    return None
+
+
 # A start whose last answer is older than this before its final row has no
 # reading at the end: three of soakmon's 5 s scrapes (soak.conf REJOIN_SILENT_SECS).
 DEFAULT_SILENT_AFTER = 15
@@ -182,10 +215,11 @@ def starts(rows):
 
 
 def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True,
-          silent_after=DEFAULT_SILENT_AFTER):
+          silent_after=DEFAULT_SILENT_AFTER, pauses=None, recovery=None):
     """One start's verdict: {"verdict": rejoined|NOT rejoined|not established,
     "reasons": [...], "toActiveS", "toRejoinS"}."""
     node, part, started = key
+    recovery = DEFAULT_RECOVERY if recovery is None else recovery
     active = s.get("reached") or s.get("already")
     end = s.get("superseded") or s.get("final")
     fails, missing = [], []
@@ -225,9 +259,19 @@ def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True,
             missing.append("executed height not measured (no accumulate_node_executed_block at its last reading)")
         elif ph - ex > max_behind:
             ans = _int(end.get("validatorsAnswered"))
-            fails.append("executed %d vs partition %d at its last reading (%d behind; bound %d%s)"
-                         % (ex, ph, ph - ex, max_behind,
-                            "" if ans is None else "; %d validators answered" % ans))
+            gap = ("executed %d vs partition %d at its last reading (%d behind; bound %d%s)"
+                   % (ex, ph, ph - ex, max_behind,
+                      "" if ans is None else "; %d validators answered" % ans))
+            p = _in_pause(pauses, node, _epoch(end.get("time")), recovery)
+            if p:
+                # A pause is a disturbance the node is expected to recover
+                # from at ~10 blocks/s (93 behind to 0 in 9 s on run
+                # 20260924T052134Z): a last reading inside one says nothing
+                # about the rejoin (review F6, first edge).
+                missing.append("paused at its last reading (paused %s for %ds, recovery allowed %ds): %s"
+                               % (p[0], p[1], recovery, gap))
+            else:
+                fails.append(gap)
         if active and "caught-up" not in s and ex is not None and ph is not None:
             fails.append("never ACTIVE and within %d blocks of the partition at one sample" % max_behind)
     if anchors is None:
@@ -253,7 +297,8 @@ def judge(key, s, max_behind, anchors=None, peers=(), has_cols=True,
             "toActiveS": to_active or None, "toRejoinS": to_rejoin or None}
 
 
-def row(rows, role, max_behind=DEFAULT_MAX_BEHIND, anchors=None, silent_after=DEFAULT_SILENT_AFTER):
+def row(rows, role, max_behind=DEFAULT_MAX_BEHIND, anchors=None, silent_after=DEFAULT_SILENT_AFTER,
+        pauses=None):
     """The manifest's cell for one role."""
     all_rows = rows
     rows = [r for r in rows if not role or r.get("role") == role]
@@ -275,7 +320,7 @@ def row(rows, role, max_behind=DEFAULT_MAX_BEHIND, anchors=None, silent_after=DE
         started = _epoch(k[2])
         after_launch = launch is None or started is None or started > launch
         if "reached" in s or "already" not in s or after_launch:
-            judged[k] = judge(k, s, max_behind, anchors, peers, has_cols, silent_after)
+            judged[k] = judge(k, s, max_behind, anchors, peers, has_cols, silent_after, pauses)
         else:
             first_sight += 1
     parts = []
@@ -324,7 +369,13 @@ def main(argv=None):
     if os.path.exists(logp):
         with open(logp, errors="replace") as f:
             anchors = Anchors(anchor_events(f))
-    print(row(rows, a.role, a.max_behind, anchors, a.silent_after))
+    pauses = {}
+    try:
+        with open(os.path.join(a.run_dir, "chaos.log")) as f:
+            pauses = pauses_from(f)
+    except OSError:
+        pass
+    print(row(rows, a.role, a.max_behind, anchors, a.silent_after, pauses))
     return 0
 
 

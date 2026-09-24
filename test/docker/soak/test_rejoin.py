@@ -302,6 +302,47 @@ class ASilentNodeIsNotJudgedOnItsLastAnswer(unittest.TestCase):
                       "the partition was at 1400 at the end" % iso(T0 + 40), cell)
 
 
+class TheBoundAndItsEdges(unittest.TestCase):
+    """Review F6. Healthy spread on run 20260924T052134Z: Directory p99 1,
+    max 3 blocks; a paused node returns 93 behind and is inside 10 within 9 s.
+    The default bound is 5, and a last reading inside a pause or its
+    recovery is not a verdict on the rejoin."""
+
+    KEY = ("acc-bvn1-val2", "bvn1", "2026-09-24T05:30:00Z")
+
+    def start(self, ex, ph, end="2026-09-24T05:46:00Z"):
+        base = {"node": "acc-bvn1-val2", "partition": "bvn1", "role": "validator",
+                "containerStarted": self.KEY[2], "state": "ACTIVE", "startToActiveS": "20",
+                "executedBlock": "500", "partitionHeight": "501", "validatorsAnswered": "4",
+                "startToCaughtUpS": "25", "lastAnswered": end}
+        return {"role": "validator",
+                "reached": dict(base, kind="reached", time="2026-09-24T05:30:20Z"),
+                "caught-up": dict(base, kind="caught-up", time="2026-09-24T05:30:25Z"),
+                "final": dict(base, kind="final", time=end, executedBlock=str(ex),
+                              partitionHeight=str(ph))}
+
+    def judge(self, ex, ph, pauses=None):
+        lines = [anchor_line(c, "2026-09-24T05:40:00Z", "BVN1", "acc://dn.acme", 900, 800, "aaaaaaaa")
+                 for c in VALS if c.startswith("acc-bvn1")]
+        return rejoin.judge(self.KEY, self.start(ex, ph), rejoin.DEFAULT_MAX_BEHIND,
+                            rejoin.Anchors(rejoin.anchor_events(lines)), VALS, pauses=pauses)
+
+    def test_the_default_is_five(self):
+        self.assertEqual(5, rejoin.DEFAULT_MAX_BEHIND)
+        self.assertEqual("rejoined", self.judge(1390, 1393)["verdict"], "the healthy max, 3")
+        self.assertEqual("NOT rejoined", self.judge(1386, 1393)["verdict"], "7 behind")
+
+    def test_a_last_reading_inside_a_pause_or_its_recovery_is_not_a_verdict(self):
+        pauses = rejoin.pauses_from(["2026-09-24T05:44:50Z pause acc-bvn1-val2 60s\n"])
+        v = self.judge(1300, 1393, pauses)
+        self.assertEqual("not established", v["verdict"], v)
+        self.assertIn("paused at its last reading (paused 2026-09-24T05:44:50Z for 60s", v["reasons"][0])
+
+    def test_a_pause_long_over_is_no_excuse(self):
+        pauses = rejoin.pauses_from(["2026-09-24T05:35:00Z pause acc-bvn1-val2 60s\n"])
+        self.assertEqual("NOT rejoined", self.judge(1300, 1393, pauses)["verdict"])
+
+
 class EveryDestinationIsCompared(unittest.TestCase):
     """Review F5: the seen-key was (source, seq) while the peers' reading is
     keyed (source, destination, seq), so only the first destination's line at
@@ -332,7 +373,7 @@ class TheBoardShowsActiveButBehind(unittest.TestCase):
         ns = soakmon.nodestate_from(per, now=T0)
         lag = [r for r in ns["rows"] if r.get("lagging")]
         self.assertEqual([("acc-bvn1-val1", "bvn1")], [(r["node"], r["partition"]) for r in lag])
-        self.assertIn("ACTIVE by the gauge, executed 214 vs partition 1376 (1162 behind; bound 10)",
+        self.assertIn("ACTIVE by the gauge, executed 214 vs partition 1376 (1162 behind; bound 5)",
                       lag[0]["why"])
         self.assertEqual(1, ns["lagging"])
 

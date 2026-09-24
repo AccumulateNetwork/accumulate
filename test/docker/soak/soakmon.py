@@ -1728,7 +1728,7 @@ NODESTATE_CSV_HEADER = ("time,node,role,partition,containerStarted,state,"
 # with it (#4404): blocks, against the highest block any of the partition's
 # validators that answered the sample executed (heights.py). soak.conf's
 # REJOIN_MAX_BEHIND.
-REJOIN_MAX_BEHIND = int(os.environ.get("REJOIN_MAX_BEHIND") or 10)
+REJOIN_MAX_BEHIND = int(os.environ.get("REJOIN_MAX_BEHIND") or 5)
 _NODESTATE_TRACK = {}   # (node, partition) -> this start, whether it was seen not ACTIVE, when it became ACTIVE
 
 

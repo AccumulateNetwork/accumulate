@@ -544,7 +544,7 @@ if stale=$(pgrep -f "$here/soakmon.py" 2>/dev/null) && [ -n "$stale" ]; then
   exit 1
 fi
 ( while kill -0 $$ 2>/dev/null; do
-    env RUN_DIR="$rd" REJOIN_MAX_BEHIND="${REJOIN_MAX_BEHIND:-10}" "$here/soakmon.py" >> "$rd/soakmon.log" 2>&1
+    env RUN_DIR="$rd" REJOIN_MAX_BEHIND="${REJOIN_MAX_BEHIND:-5}" "$here/soakmon.py" >> "$rd/soakmon.log" 2>&1
     echo "$(date -u +%FT%TZ) soakmon exited rc=$? — restarting" >> "$rd/soakmon.log"
     sleep 2
   done ) &
@@ -1563,7 +1563,7 @@ nodestate_row() {   # $1 = role: validator | follower
   # failed starts as reaching ACTIVE. rejoin.py judges each start on the
   # gauge, its executed height against its partition's (nodestate.csv), and
   # its anchors against its peers' (node-logs-live.txt).
-  python3 "$here/rejoin.py" "$rd" "${1:-}" --max-behind "${REJOIN_MAX_BEHIND:-10}" \
+  python3 "$here/rejoin.py" "$rd" "${1:-}" --max-behind "${REJOIN_MAX_BEHIND:-5}" \
     --silent-after "${REJOIN_SILENT_SECS:-15}"
 }
 
@@ -1706,7 +1706,7 @@ else:
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
   echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
   echo "| accepted, neither certified here, taken on relay, nor refused (#, whole run, the validators) | $(sub_row validator "$lg_exit" "$stopped_early") |"
-  echo "| restarted node rejoined (per node and partition: gauge ACTIVE, executed block within ${REJOIN_MAX_BEHIND:-10} of the highest block any of the partition's answering validators executed, through its last reading, and every anchor it stated agreeing with its peers'; s = container start to the first sample ACTIVE and within that bound; the validators) | $(nodestate_row validator) |"
+  echo "| restarted node rejoined (per node and partition: gauge ACTIVE, executed block within ${REJOIN_MAX_BEHIND:-5} of the highest block any of the partition's answering validators executed, through its last reading, and every anchor it stated agreeing with its peers'; s = container start to the first sample ACTIVE and within that bound; the validators) | $(nodestate_row validator) |"
   if [ "$n_fol" -gt 0 ]; then
     echo
     echo "### Follower (#4365)"
