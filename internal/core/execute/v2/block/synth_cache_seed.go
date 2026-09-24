@@ -7,6 +7,8 @@
 package block
 
 import (
+	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
@@ -73,12 +75,20 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 	// message behind it. That is the store's own fact, true after any number
 	// of restarts, where a span remembered by the process that joined dies
 	// with it (#4400). A block whose messages are there is rebuilt.
+	//
+	// Only that evidence skips a block, matched by identity: any other
+	// absence in the rebuild -- a companion transaction, the root index
+	// chain, a read past a windowed store's reach -- is a failure of a block
+	// this node did execute, and fails the seed as loudly as before.
 	var blocks []*synthcache.Block
 	notExecuted := map[uint64]bool{}
+	var skipped []uint64
 	for b := from; b < current; b++ {
 		blk, err := x.rebuildCacheBlock(batch, b)
-		if errors.Is(err, errNotExecuted) {
+		if ne, ok := err.(*notExecutedError); ok {
 			notExecuted[b] = true
+			skipped = append(skipped, b)
+			x.logger.Info("Not rebuilding a block this node did not execute", "module", "synthetic", "block", b, "evidence", ne.Error())
 			continue
 		}
 		if err != nil {
@@ -87,8 +97,8 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 		blocks = append(blocks, blk)
 	}
 	x.synthCache().Seed(blocks)
-	if len(blocks) > 0 {
-		x.logger.Info("Seeded the synthetic cache from the chains", "module", "synthetic", "from", from, "to", current-1, "blocks", len(blocks), "receipted", len(receipts))
+	if len(blocks) > 0 || len(skipped) > 0 {
+		x.logger.Info("Seeded the synthetic cache from the chains", "module", "synthetic", "from", from, "to", current-1, "blocks", len(blocks), "receipted", len(receipts), "skipped", len(skipped), "skipped-blocks", skipped)
 	}
 	err = x.seedProducedAnchors(batch, oldest)
 	if err != nil {
@@ -187,9 +197,20 @@ func (x *Executor) ownReceipts(batch *database.Batch, oldest uint64) ([]ownRecei
 	return receipts, nil
 }
 
-// errNotExecuted is a block whose synthetic entries the store holds without
-// the messages behind them: a block this node did not execute (#4400).
-var errNotExecuted = errors.NotFound.With("this node did not execute the block: its synthetic entries have no messages behind them")
+// notExecutedError is the store's evidence that this node did not execute a
+// block: a synthetic entry of it with no message behind it, or entries the
+// index names that the store does not hold (#4400). It is its own type, and
+// the seed matches it by type and only as rebuildCacheBlock returns it: a
+// status code would match every NotFound in the rebuild, and would turn a
+// block this node executed and cannot read into a silent skip.
+type notExecutedError struct {
+	dst      *url.URL
+	evidence string
+}
+
+func (e *notExecutedError) Error() string {
+	return fmt.Sprintf("this node did not execute the block: %s (stream to %v)", e.evidence, e.dst)
+}
 
 // rebuildCacheBlock reads what block b produced and what its proofs are built
 // from, by position, one destination chain at a time (executor spec, "One
@@ -252,7 +273,7 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 		case errors.Is(err, errors.NotFound):
 			// The index names entries the store does not hold: the chain
 			// came from a peer as a head and an open mark set.
-			return nil, errNotExecuted
+			return nil, &notExecutedError{dst, fmt.Sprintf("synthetic chain entries %d..%d are not held", from, to)}
 		default:
 			return nil, errors.UnknownError.WithFormat("load synthetic chain entries %d..%d for %v: %w", from, to, dst, err)
 		}
@@ -264,7 +285,7 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 			case errors.Is(err, errors.NotFound):
 				// An entry with no message behind it: a node that executed
 				// the block wrote both in the same batch.
-				return nil, errNotExecuted
+				return nil, &notExecutedError{dst, fmt.Sprintf("synthetic entry %d (%x) has no message behind it", from+int64(i), hash[:4])}
 			default:
 				return nil, errors.UnknownError.WithFormat("load synthetic message: %w", err)
 			}
