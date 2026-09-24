@@ -296,10 +296,12 @@ anchors that a real quorum once signed — a slower join, never a fork — and a
 second peer is what closes that: the join draws its anchors from more than one
 peer where it has them, so that agreement rather than availability decides
 it. On this line the anchor source keeps ONE cursor while the peer rotates
-beneath it on every call, so a lagging peer's chain count rewinds the cursor
-a full window and the entries are re-verified — reading several peers is the
-right answer to withholding and #4379 is what makes it cheap, not what makes
-it safe. A literal cross-check of two pools before any root is trusted is not
+beneath it on every call; the cursor moves only by what was asked for and
+answered, never rewinds on a lagging peer's count (#4379), and stops just
+before an anchor a peer served without its signatures so that the next peer
+is asked for it (#4413) — reading several peers is the right answer to
+withholding, and the cursor rules are what make it cheap, not what make it
+safe. A literal cross-check of two pools before any root is trusted is not
 built (#4301, stated); the quorum's signatures are the mechanism and
 withholding is its limit.
 
