@@ -147,6 +147,7 @@ func (s *fakeState) Pull(context.Context) error {
 	s.pulls++
 	return nil
 }
+
 // Ready: this fake's state is never executed from before it matches.
 func (s *fakeState) Ready() (uint64, bool) { return 0, false }
 

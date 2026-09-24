@@ -76,10 +76,10 @@ type Collector struct {
 	// OnRefused is called when a produced anchor could not be taken.
 	OnRefused func(block uint64, err error)
 
-	mu    sync.Mutex
+	mu     sync.Mutex
 	next   uint64 // the next sequence number to collect; zero until positioned
 	newest uint64 // the newest number the ledger named when the read was positioned
-	stall *Stall
+	stall  *Stall
 }
 
 // collectBackfill is how many anchors before the newest the first read starts
