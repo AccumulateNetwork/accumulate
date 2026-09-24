@@ -592,7 +592,11 @@ from a wrong state appended entries of its own — is taken again whole, from
 its first entry, with its messages: the node's history is not compared with
 the peer's to find where they part, since at an anchored height there is one
 correct chain. A peer that serves fewer entries than the node holds is
-behind, and is asked again.
+behind, and is asked again. *Provisional, pending #4403:* the retake is
+whole rather than a proven span, tracks no orphaned entries, and a diverged
+node that holds more entries than every peer is refused rather than retaken;
+whether this sentence stands as the rule or the healing text's span-and-
+orphans form replaces it is Paul's decision.
 
 **A pulled transaction chain carries the messages behind its entries.** The
 entries are hashes, and the executor reads what they name: the first block a
