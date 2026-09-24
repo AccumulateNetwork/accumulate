@@ -257,19 +257,22 @@ stops holding.
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
 
 **Against the algorithm (executor.md "Sync", "The algorithm"; 2026-09-25).**
-The code on `issue-4205-lead` departs from it in three places:
+The code on `issue-4205-lead` departed from it in three places; the first two are retired by #4438:
 
-- **It proves each pass, not the final match** (steps 1–3). `PulledState`
-  fetches the accounts the ledger names in passes, requires every account in
-  a pass to be served at one root (`oneRoot`), proves that root
-  (`anchorsrc.ProveRoot`), and holds, drops or refetches the pass
-  (`settlePass`). The algorithm has one proof — the whole local root equal to
-  a signed anchor's — and no per-pass one. On a partition that moves every
-  block the per-pass loop never converges for a node more than a few blocks
-  behind (#4411; runs 20260924T074702Z, 20260924T093936Z, 20260924T111811Z).
-- **The full BPT walk is a backstop, not step 1.** The page diff runs on the
-  first round and on a cadence (§3, #4395); the algorithm pulls every account
-  the tree holds first.
+- **It proves each pass, not the final match** (steps 1–3) — *retired
+  2026-09-25 (#4438, branch `issue-4438-join-follows-the-algorithm`)*.
+  `PulledState` fetched in passes, required one root per pass (`oneRoot`),
+  proved it (`anchorsrc.ProveRoot`) and held, dropped or refetched the pass
+  (`settlePass`); on a partition that moves every block that never converged
+  for a node more than a few blocks behind (#4411). All of it is deleted: the
+  pull writes what it takes, and its one proof is the whole local root equal to
+  the partition's own anchor, collected from its validators (executor.md
+  "Sync" §1–§2).
+- **The full BPT walk is a backstop, not step 1** — *retired 2026-09-25
+  (#4438)*. The page diff on the first round and on a cadence (#4395) is
+  deleted; the pull walks the whole tree from `S` and processes every
+  block-ledger record after `S` in block order, and the walk skips what a
+  record brought current (executor.md "Sync" §3).
 - **It collects before the state exists** (steps 4–5). The DAG service
   buffers every committed group from the restart on, maps the buffer onto
   blocks by leader round (#4362e), stages through Q + 1 at the handoff

@@ -116,13 +116,13 @@ type Stage interface {
 }
 
 // A State is the state half: it pulls what the node lacks and says when the
-// local root equals a root the Directory anchored (#4293).
+// local root equals a root the partition's validators signed (#4293).
 type State interface {
-	// Pull fetches what the node lacks, verified against the anchored root.
-	// It decides for itself what that is: the accounts the block ledger says
-	// the blocks changed, read from a peer, with the BPT page diff as the
-	// backstop (executor spec, "Sync", step 3). The caller does not supply a
-	// set, because a block's envelopes are not the set (#4306).
+	// Pull runs one round of the pull: the block-ledger records since the
+	// last one processed, then the next pages of the walk of the peer's BPT
+	// (executor spec, "Sync", "The algorithm", steps 1-2). It decides for
+	// itself what to pull; the caller does not supply a set, because a
+	// block's envelopes are not the set (#4306).
 	Pull(ctx context.Context) error
 
 	// Matched reports the block whose anchored root the local root equals,
@@ -468,7 +468,7 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (b
 	case errors.Is(err, errors.Conflict):
 		// Syncing again, the state matched a block before the one this node
 		// had executed to. Those blocks are not in the buffer, so the node
-		// cannot execute from there; the next pass is at the peers' newer
+		// cannot execute from there; the pull goes on to the peers' newer
 		// state.
 		log.Info("The state is behind the block this node stood at; pulling again", "block", q, "error", err)
 		return false, nil

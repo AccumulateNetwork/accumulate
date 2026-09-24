@@ -263,21 +263,18 @@ func joinPastFailedWork(t *testing.T, failing bool) {
 	// pass, for the life of the process. Answered, it is not asked again.
 	//
 	// Counted from the match, not over phase two (#4397). Until the whole
-	// local root matches, the block-ledger walk runs from the last block the
-	// state was synced to and names every account written since -- by design
-	// (join.PulledState.localBlock) -- so the ghost is named again by the walk
-	// on every fetching pass while the void account, which only the page diff
-	// can name, waits for the diff's cadence. Those asks are the walk's, not
-	// the refusal loop's: with the fix nothing is refused in this test. Once
-	// the root matches, the walk starts past the block that wrote both, and a
-	// name still asked after that is being re-asked because it was refused.
+	// local root matches, the records name every account each block writes,
+	// the ghost among them, and those asks are the records', not a refusal
+	// loop's: with the fix nothing is refused in this test. Once the root has
+	// matched past the block that wrote both, a name still asked after that
+	// is being re-asked because it was refused.
 	if failing {
 		nobodyTokens := nobody.JoinPath("tokens")
 		require.NotZero(t, sources.roundsAsked(nobodyTokens),
 			"precondition: the name no peer holds a leaf for reached the join")
 		ghostBefore, voidBefore := sources.roundsAsked(ghost), sources.roundsAsked(voidTokens)
 		nobodyBefore := sources.roundsAsked(nobodyTokens)
-		for round := 0; round < 4*staleEveryRounds; round++ {
+		for round := 0; round < afterMatchRounds; round++ {
 			sources.round++
 			require.NoError(t, state.Pull(ctx), "after-match pull round %d", round)
 			sim.StepN(3)
@@ -297,7 +294,7 @@ func joinPastFailedWork(t *testing.T, failing bool) {
 	}
 }
 
-// staleEveryRounds bounds the page diff's cadence in rounds: it runs every
-// eighth fetching round (join.staleEvery), and a round that settles a pass
-// does not fetch, so a count of rounds several times that covers it.
-const staleEveryRounds = 8
+// afterMatchRounds is how many rounds after the match the test watches for a
+// name asked again. What is owed is asked once a round, so a refused name
+// would show in every one of them.
+const afterMatchRounds = 32

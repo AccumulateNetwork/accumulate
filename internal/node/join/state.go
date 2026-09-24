@@ -765,7 +765,7 @@ func (s *PulledState) refreshAuthority() {
 }
 
 // takenWhole is whether u is one of the accounts this partition's join takes
-// whole in every pass that names it (pull.WholeAccounts).
+// whole whenever it pulls it (pull.WholeAccounts).
 func (s *PulledState) takenWhole(u *url.URL) bool {
 	for _, a := range pull.WholeAccounts(s.partition) {
 		if a.Equal(u) {
