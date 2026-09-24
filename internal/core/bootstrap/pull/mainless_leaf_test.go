@@ -136,7 +136,10 @@ func TestALeafWithNoBodyIsPulledAndVerified(t *testing.T) {
 		})
 	}
 
-	// THE LIMIT, pinned so that it is stated rather than discovered. A BPT
+	// THE LIMIT of one source, pinned so that it is stated rather than
+	// discovered; with several, FetchFrom's unanimity rule refuses a lone liar
+	// (TestALiarAmongHonestPeersCannotPlantAPhantomLeaf) and this is the case
+	// where every source lies (TestUnanimousLiarsPlantAPhantomLeaf). A BPT
 	// leaf is the account's state hash and nothing else -- the key is not
 	// hashed into the tree -- and a leaf with no body carries no URL, so every
 	// empty account's leaf is the same hash. A peer that names an account the

@@ -366,10 +366,15 @@ account that has one fails the third. The check proves less here than for a
 body, and that is stated rather than hidden: the tree hashes a leaf's value
 and not its key, and a leaf with no body carries no URL, so the receipt of
 one such leaf passes for any account whose pulled state hashes to the same
-value — every empty account's leaf is one hash. What refuses a leaf placed
-under the wrong name is the whole-root match, so the exposure is a join that
-does not finish, not a node that executes from a wrong state (DIFFERENCES.md
-E11). `NotFound` means the peer's tree holds no leaf: a name every
+value — every empty account's leaf is one hash. So a body-less leaf is kept
+only when **every** source asked serves the same one for the name; one
+dissent — a `NotFound`, a body, another leaf, or no answer — and the name is
+neither written nor dropped but asked again, and what each peer answered is
+logged. That is trust in the peers, not proof, for the existence of an empty
+leaf, and it fails when every peer asked lies; what then refuses the leaf
+placed under the wrong name is the whole-root match, so the exposure is a
+join that does not finish, not a node that executes from a wrong state
+(DIFFERENCES.md E11). `NotFound` means the peer's tree holds no leaf: a name every
 source answers that way is dropped rather than asked again, and the page diff
 names it again if a leaf ever appears; a name some source failed to answer is
 asked again.

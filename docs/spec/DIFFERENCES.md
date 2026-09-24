@@ -898,17 +898,25 @@ seventh nobody had named.
   away, so it is recorded rather than built.
 - **A leaf with no body is not bound to its account** (#4397)**.** The BPT
   hashes a leaf's value and not its key (`bpt.leaf.getHash`), and a body-less
-  leaf's value holds no URL, so one peer can name an account the tree has no
+  leaf's value holds no URL, so a peer can name an account the tree has no
   leaf for, answer it "no body" with an empty account's receipt, serve no
-  chains for it, and have it kept: the leaf check passes and the leaf lands in
-  the local tree (`TestALeafWithNoBodyIsPulledAndVerified`, "the limit"). The
-  whole-root match still refuses the state, so it is liveness, not safety —
-  but it is permanent, because the page diff names the peer's leaves the node
-  lacks and never the node's leaves the peer lacks, and nothing removes a
-  local leaf. Before #4397 this could not happen: a body names its own URL.
-  Closing it needs either a proof that binds a key to its leaf or a page diff
-  that names and removes local-only leaves (the "mismatch must name what it
-  could not account for" of "Sync" §2).
+  chains for it, and pass the leaf check. Before #4397 this could not happen:
+  a body names its own URL. **Phase 1 answers it with unanimity (the lead's
+  decision, review F3):** a body-less leaf is kept only when every source
+  asked serves the same one (`pull.FetchFrom`, `pull.ErrDissent`); one
+  dissent and the name is retried, not written and not dropped, and each
+  peer's answer is logged by peer ID. One liar among honest peers, in any
+  position, is thereby refused (`TestALiarAmongHonestPeersCannotPlantAPhantomLeaf`).
+  **This departs from "proven against the anchored root"**: it is trust in
+  unsigned peers for the existence of an empty leaf, and when every source
+  asked lies the phantom leaf is kept (`TestUnanimousLiarsPlantAPhantomLeaf`,
+  the limit). The whole-root match still refuses the state, so that is
+  liveness, not safety — but permanent, because the page diff names the
+  peer's leaves the node lacks and never the node's leaves the peer lacks,
+  and nothing removes a local leaf. The structural closing is a two-way page
+  diff that names local-only leaves and removes them (`BPT.Delete` exists;
+  the "mismatch must name what it could not account for" of "Sync" §2), or a
+  hash that binds a leaf to its key; the lead files that issue.
 - **A lone scheduled event is not bound to its block** (#4399 review F2)**.**
   The events BPT hashes values and not keys (`bpt.leaf.getHash`), and a
   one-sided branch passes its child's hash up, so an events tree holding one
