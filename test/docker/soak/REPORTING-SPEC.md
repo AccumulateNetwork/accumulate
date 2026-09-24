@@ -218,6 +218,39 @@ flat or rising is stranded. The requirement is therefore **0 at the last sample
 after the drain, or the residue and its trend** — never "a small number is
 fine", which teaches a reader to excuse a slow strand.
 
+**A sample is a reading when every (node, partition) is accounted for** —
+and an empty row is one of two different facts, which MUST NOT be read as one
+(#4414). One scrape of a container answers for every partition it runs, so:
+
+- **unreachable** — every row of the node is empty at that sample: it answered
+  no scrape (mid-restart, paused). The sample is **incomplete** and is skipped,
+  never summed: summing what is left dips the total by that node's real count.
+- **no counter** — the row is empty and the same node reported on its other
+  partition at that sample: the node answered, and the counter does not exist
+  in its process, because nothing was submitted to that partition since the
+  process started. It has counted **0**, which is a reading, and the sample is
+  complete. Two kinds, named apart:
+  - **joining** — the pair counted earlier in the run, so its node restarted
+    and has not created the counter again: a restarted node whose Directory
+    has not rejoined. A counter that disappears is a new process, and it
+    carries its settled figure forward exactly as a counter going backwards
+    does — once: the counter's later reappearance is not a second reset.
+    And if it reappears at an `accepted` no lower than it had, it is the
+    same process — a new one starts at 0 — whose row was lost (a scrape
+    body cut mid-stream), so the carry and its reset are unwound.
+  - **never submitted to** — the pair has not counted at any sample of the
+    run: the follower's Directory, on every run.
+
+Run `20260924T074702Z` read the second kind as the first: three Directory joins
+that never finished left every sample after 08:05 "incomplete", and the
+manifest's headline read `1413 … as of 08:05:42Z; FINAL ROW MISSING` over a
+final row that had landed at 08:21:00Z. The manifest names the joining and
+never-submitted-to pairs at the sample it quotes, and **when counter resets
+were carried it states the final row's own sum beside the carried headline**
+(`3004 … 31 stranded before a restart; the final row's own readings sum to
+2973`), so a reader adding up the row does not find a second number with no
+account of the difference.
+
 **The relay leg is not optional arithmetic.** Paul, 2026-09-19: *"Followers can
 relay txs. And should."* `accepted - certified` on a node in no committee is
 everything it took, by construction, so without the third term a follower
@@ -408,7 +441,10 @@ executed), `startToCaughtUpS`, `validatorsAnswered`, `lastAnswered` and
 row's sample, and two more kinds: `caught-up`, the first sample ACTIVE and
 within the bound, and `superseded`, a start's last reading when its container
 started again. At exit the monitor writes a `final` row for **every** start,
-not only those never ACTIVE: that row is the start's last reading. A start
+not only those never ACTIVE: that row is the start's last reading, and its
+write stands alone — a fault writing the other files' final rows MUST NOT
+drop it (#4414: the three shared one `try`, so one fault in `submissions.csv`
+or `mem.csv` would have left every start with no last reading). A start
 that never reached ACTIVE is one with no `reached` or `already` row, as
 before. The board lists a row the gauge calls ACTIVE when it is more than the
 bound behind its partition. The manifest's row is `rejoin.py`, reading
@@ -498,6 +534,34 @@ A container healthcheck MUST fail when the node's partition ledger stops
 advancing beyond a threshold. `13/13 healthy` over a chain that wrote nothing
 for 12 minutes (#4103) is a false report, and it is the one report everyone
 checks first.
+
+**A wedge and a delivery stall are different findings, and a capture is named
+by which it is (#4414).** The watchdogs read a partition as stalled either way
+(#4285), so the monitor keeps both clocks in `/data`'s `progress`:
+`blocksStalledFor`, seconds since the partition's height last moved, and
+`stalledFor`, which a delivery stall raises to the delivery clock
+(`deliveryStalledFor`); `stalledBy` is `blocks` when the height has not moved
+for the stall threshold and `delivery` when it has and only delivery stopped.
+
+- **Wedge** — some partition closed no block for `WEDGE_SECS`. The capture is
+  `wedge-<ts>/`.
+- **Delivery stall** — every partition closed a block within the last
+  `WEDGE_SECS`, and a synthetic flow into one of them has been red that long
+  (lagging four times its expected lag, or a backlog delivering nothing). The
+  capture is `delivery-stall-<ts>/`.
+- A partition with no height clock (its height unreadable, or a monitor older
+  than the clock) is not proven to be closing blocks, and keeps the capture a
+  wedge.
+
+`reason.txt` states the clocks the name was chosen on, and the manifest counts
+the two kinds on separate rows. Each kind has its own cooldown **and its own
+budget** (`WEDGE_MAX` captures of each): a delivery stall recurring through a
+long run MUST NOT spend the captures a later wedge needs, and a spent budget
+stops the capturing, never the watching and logging. Run `20260924T074702Z` named a delivery stall
+`wedge-20260924T081419Z` — `partitions stalled 121s: BVN2,BVN3,Directory` —
+while every partition's executed height advanced 26–32 blocks per monitor
+sample through the window (`monitor.csv`), and the manifest counted it as a
+wedge.
 
 ## 5. Load generators are witnesses, not referees
 

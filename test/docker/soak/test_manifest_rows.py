@@ -493,6 +493,161 @@ class AnIncompleteSampleIsNotAReading(Rows):
                       self.call("sub_row follower 2026-09-20T01:09:00Z"))
 
 
+class AJoiningNodeIsAReading(Rows):
+    """#4414. A container answers ONE scrape for both partitions it runs, so
+    when one of its rows carries counts and the other is empty, the empty
+    one is not an unreachable node: the node answered, and that partition's
+    counter does not exist in this process yet. A restarted node that has
+    not rejoined its Directory has accepted nothing there — it is joining,
+    and it has counted 0.
+
+    Reading that as an incomplete sample blanked the headline for the rest
+    of run 20260924T074702Z: the three Directory joins that never finished
+    left every sample after 08:05 "incomplete", and the stranded row read
+    `1413 … as of 08:05:42Z; FINAL ROW MISSING … INCLUDING THE LAST` over a
+    final row that had landed at 08:21:00Z and summed to 2,973.
+
+    A node whose rows are ALL empty still answered no scrape, and that
+    sample is still not a reading (AnIncompleteSampleIsNotAReading).
+    """
+
+    RUN = os.path.join(HERE, "runs", "20260924T074702Z", "submissions.csv")
+    V = "acc-bvn1-val1"
+    J = "acc-bvn1-val3"
+
+    def row(self, t, node, part, acc, stranded, sample="periodic"):
+        blank = acc is None
+        return ("%s,%s,validator,%s,%s,,%s,,,,,%s,%s"
+                % (t, node, part, "" if blank else acc,
+                   "" if blank else acc - stranded,
+                   "" if blank else stranded, sample))
+
+    def sample(self, t, v, jb, jd, sample="periodic"):
+        """V's BVN1 row, and J's BVN1 and Directory rows: each is
+        (accepted, stranded) or None for an empty row."""
+        out = [self.row(t, self.V, "BVN1", *(v or (None, None)), sample=sample)]
+        out.append(self.row(t, self.J, "BVN1", *(jb or (None, None)), sample=sample))
+        out.append(self.row(t, self.J, "Directory", *(jd or (None, None)), sample=sample))
+        return out
+
+    def test_the_runs_stranded_row_reports_its_final_row(self):
+        """The run itself: the final row landed, 0 s after the load
+        generator exited, and the row reads it."""
+        import shutil
+        shutil.copy(self.RUN, os.path.join(self.rd, "submissions.csv"))
+        got = self.call("sub_row validator 2026-09-24T08:21:00Z")
+        self.assertIn("as of 2026-09-24T08:21:00Z", got)
+        self.assertIn("final row written, 0s after the load generator exited", got)
+        self.assertNotIn("MISSING", got)
+        self.assertNotIn("INCLUDING THE LAST", got)
+        self.assertNotIn("1413", got)
+        self.assertIn("the final row's own readings sum to 2973", got)
+
+    def test_the_runs_joining_pairs_are_named(self):
+        import shutil
+        shutil.copy(self.RUN, os.path.join(self.rd, "submissions.csv"))
+        got = self.call("sub_row validator 2026-09-24T08:21:00Z")
+        self.assertIn("3 (node, partition) joining at this sample, counted 0 "
+                      "(acc-bvn1-val3/Directory, acc-bvn2-val2/Directory, "
+                      "acc-bvn3-val3/Directory)", got)
+
+    def test_an_empty_row_beside_a_reported_one_is_joining(self):
+        rows = []
+        rows += self.sample("2026-09-24T08:00:00Z", (100, 4), (50, 1), (40, 0))
+        rows += self.sample("2026-09-24T08:00:30Z", (110, 4), (5, 1), None)
+        self.write(*rows)
+        S = runseries.load(os.path.join(self.rd, "submissions.csv"), "validator")
+        last = S["samples"][-1]
+        self.assertTrue(last["complete"])
+        self.assertEqual([(self.J, "Directory")], last["joining"])
+        self.assertEqual(0, S["dropped"])
+
+    def test_a_node_with_every_row_empty_is_still_not_a_reading(self):
+        rows = []
+        rows += self.sample("2026-09-24T08:00:00Z", (100, 4), (50, 1), (40, 0))
+        rows += self.sample("2026-09-24T08:00:30Z", (110, 4), None, None)
+        self.write(*rows)
+        S = runseries.load(os.path.join(self.rd, "submissions.csv"), "validator")
+        self.assertFalse(S["samples"][-1]["complete"])
+        self.assertEqual(1, S["dropped"])
+
+    def test_a_restart_that_leaves_a_counter_uncreated_carries_it_once(self):
+        """J's Directory had 3 stranded, J restarted (its BVN1 accepted
+        went backwards), and its Directory counter is not created again
+        until later. The 3 is carried from the restart, and when the
+        counter reappears — at a LOWER accepted, as a new process's must —
+        it is not carried a second time."""
+        rows = []
+        rows += self.sample("2026-09-24T08:00:00Z", (100, 0), (50, 0), (40, 3))
+        rows += self.sample("2026-09-24T08:00:30Z", (110, 0), (60, 0), (45, 3))
+        rows += self.sample("2026-09-24T08:01:00Z", (120, 0), (2, 0), None)
+        rows += self.sample("2026-09-24T08:01:30Z", (130, 0), (9, 0), None)
+        rows += self.sample("2026-09-24T08:02:00Z", (140, 0), (15, 0), (4, 1))
+        self.write(*rows)
+        S = runseries.load(os.path.join(self.rd, "submissions.csv"), "validator")
+        self.assertEqual([3, 3, 3, 3, 4], [s["total"] for s in S["samples"]])
+        self.assertEqual([("2026-09-24T08:01:00Z", self.J, "Directory", 3)],
+                         [r for r in S["resets"] if r[2] == "Directory"])
+
+    def test_a_row_lost_for_one_sample_in_the_same_process_is_not_a_reset(self):
+        """Reviewer F2, series T1. `_scrape_one` parses a curl body cut by
+        its timeout, so one partition's row can be empty beside a reported
+        one while the process lives on. The next sample it is back, HIGHER
+        — which a new process cannot be — so the carry is unwound: the
+        truth is 6 throughout, and without the unwind the headline read
+        6,6,6,6,6,6,8,8,8,8 for ever, with a restart that never happened."""
+        rows = []
+        for i in range(10):
+            t = "2026-09-24T08:%02d:%02dZ" % (i // 2, (i % 2) * 30)
+            jd = None if i == 5 else (40 + 10 * i, 2)
+            rows += self.sample(t, (100 + 10 * i, 1), (50 + 10 * i, 3), jd)
+        self.write(*rows)
+        S = runseries.load(os.path.join(self.rd, "submissions.csv"), "validator")
+        self.assertEqual([(self.J, "Directory")], S["samples"][5]["joining"])
+        self.assertEqual([6] * 10, [s["total"] for s in S["samples"]])
+        self.assertEqual([], S["resets"])
+
+    def test_a_lower_reappearance_keeps_the_carry(self):
+        """The same gap, but the counter comes back LOWER: a new process,
+        and its old figure stays carried."""
+        rows = []
+        for i in range(4):
+            t = "2026-09-24T08:00:%02dZ" % (i * 10)
+            jd = {0: (40, 2), 1: (45, 2), 2: None, 3: (3, 0)}[i]
+            rows += self.sample(t, (100 + 10 * i, 1), (50 + 10 * i, 3), jd)
+        self.write(*rows)
+        S = runseries.load(os.path.join(self.rd, "submissions.csv"), "validator")
+        self.assertEqual([6, 6, 6, 6], [s["total"] for s in S["samples"]])
+        self.assertEqual([("2026-09-24T08:00:20Z", self.J, "Directory", 2)], S["resets"])
+
+    def test_the_last_sample_with_a_joining_node_is_the_final_row(self):
+        rows = []
+        rows += self.sample("2026-09-24T08:00:00Z", (100, 4), (50, 0), (40, 0))
+        rows += self.sample("2026-09-24T08:00:30Z", (110, 2), (5, 0), None,
+                            sample="final")
+        self.write(*rows)
+        got = self.call("sub_row validator 2026-09-24T08:00:30Z")
+        self.assertTrue(got.startswith("2,"), got)
+        self.assertIn("final row written", got)
+        self.assertNotIn("skipped", got)
+        self.assertIn("1 (node, partition) joining at this sample, counted 0 "
+                      "(acc-bvn1-val3/Directory)", got)
+
+
+    def test_a_partition_never_submitted_to_is_not_joining(self):
+        """The follower's Directory is never submitted to, on any run: its
+        row is empty beside a counted BVN3 from the first sample. That is a
+        reading of 0 too, but not a join, and it is not "the worst"."""
+        import shutil
+        shutil.copy(self.RUN, os.path.join(self.rd, "submissions.csv"))
+        got = self.call("sub_row follower 2026-09-24T08:21:00Z")
+        self.assertTrue(got.startswith("0, worst 0 on acc-bvn3-fol1/BVN3 "), got)
+        self.assertIn("1 (node, partition) never submitted to this run, "
+                      "counted 0 (acc-bvn3-fol1/Directory)", got)
+        self.assertNotIn("joining", got)
+        self.assertNotIn("not measured", got)
+
+
 class ARemovedAndReAddedNode(Rows):
     """#4364's own run removes and re-adds the follower, so this is the
     run and not an edge case.

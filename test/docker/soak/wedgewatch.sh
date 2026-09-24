@@ -25,15 +25,16 @@ RUN_DIR="${RUN_DIR:-$here/runs/latest}"
 MON="${MON_URL:-http://127.0.0.1:8099/data}"
 POLL="${WEDGE_POLL:-10}"          # seconds between checks
 WEDGE_SECS="${WEDGE_SECS:-120}"   # a partition must be stalled this long
-MAX="${WEDGE_MAX:-3}"             # captures per run, so disk cannot run away
+MAX="${WEDGE_MAX:-3}"             # captures per run PER KIND, so disk cannot run away
 COOLDOWN="${WEDGE_COOLDOWN:-900}" # seconds between captures
 PPROF_PORT="${PPROF_PORT:-6060}"
 
 log() { echo "$(date -u +%FT%TZ) $*"; }
 
 # One capture: every node's goroutines, plus enough context to read them.
-# $1 = why, $2 = directory prefix. A hand-run probe must NOT land as wedge-*:
-# the manifest verdict counts wedge-* dirs, and a baseline taken on a healthy
+# $1 = why, $2 = directory prefix: wedge, delivery-stall, or a probe's. A
+# hand-run probe must NOT land as wedge-*: the manifest verdict counts
+# wedge-* and delivery-stall-* dirs, and a baseline taken on a healthy
 # network would read as "this run wedged once".
 capture() {
   local why="$1"
@@ -120,34 +121,77 @@ if [ "${1:-}" = "--now" ]; then
   exit 0
 fi
 
-log "wedgewatch: following $MON — dump after ${WEDGE_SECS}s stalled, max $MAX, run dir $RUN_DIR"
-n=0
-last=0
+# --- capture bookkeeping (#4414, reviewer F1) ------------------------------
+# A cooldown AND a budget per kind. With one budget, a delivery stall
+# recurring every COOLDOWN spent all MAX captures in 45 minutes and a wedge
+# after it was never captured — and the loop stopped reading /data, so it
+# was not even logged. A wedge capture is the run's most valuable artefact
+# (#4125); a delivery stall must not be able to cost it one.
+n_wedge=0; n_delivery=0; last_wedge=0; last_delivery=0
+due() {     # $1 = kind, $2 = now: is a capture of this kind due?
+  local n last
+  if [ "$1" = "wedge" ]; then n=$n_wedge; last=$last_wedge
+  else n=$n_delivery; last=$last_delivery; fi
+  [ "$n" -lt "$MAX" ] || return 1
+  [ "$last" -eq 0 ] || [ $(( $2 - last )) -ge "$COOLDOWN" ]
+}
+taken() {   # $1 = kind, $2 = when
+  if [ "$1" = "wedge" ]; then n_wedge=$(( n_wedge + 1 )); last_wedge=$2
+  else n_delivery=$(( n_delivery + 1 )); last_delivery=$2; fi
+}
+# --- end capture bookkeeping
+
+log "wedgewatch: following $MON — dump after ${WEDGE_SECS}s stalled, max $MAX per kind, run dir $RUN_DIR"
 while :; do
   sleep "$POLL"
-  [ "$n" -ge "$MAX" ] && continue   # keep the loop alive, stop spending disk
 
   d="$(curl -sf -m 8 "$MON" 2>/dev/null)" || continue
   # Which partitions are stalled, and for how long. "unknown" is NOT a wedge:
   # chaos pauses a node and the API it answers on goes with it.
-  read -r worst names blocks empties <<< "$(printf '%s' "$d" | python3 -c '
+  #
+  # And what kind of stall (#4414). A WEDGE is a partition that closed no
+  # block for WEDGE_SECS. A DELIVERY STALL is every partition still closing
+  # blocks while a synthetic flow into one has been red that long (#4285).
+  # Both are worth a capture, and they are different findings: run
+  # 20260924T074702Z named a delivery stall `wedge-…` and the manifest
+  # counted it as a wedge. A partition with no height clock (unreadable, or
+  # a monitor older than the clock) is not proven to be closing blocks, so
+  # it keeps the capture a wedge.
+  read -r worst names blocks empties kind why <<< "$(printf '%s' "$d" | python3 -c '
 import json,sys
 try: d=json.load(sys.stdin)
-except Exception: print("0 - 0 0"); raise SystemExit
+except Exception: print("0 - 0 0 - -"); raise SystemExit
+W=float(sys.argv[1]) if len(sys.argv) > 1 else 120
 p=d.get("progress") or {}
 s=[(v.get("stalledFor") or 0,k) for k,v in p.items() if v.get("state")=="stalled"]
 lf=d.get("life") or {}
-print("%d %s %d %d" % (max([x[0] for x in s]) if s else 0,
-                       ",".join(sorted(k for _,k in s)) or "-",
-                       lf.get("blocks") or 0, lf.get("blocksEmpty") or 0))
-' 2>/dev/null)"
+worst=max([x[0] for x in s]) if s else 0
+names=",".join(sorted(k for _,k in s)) or "-"
+clock={k: v.get("blocksStalledFor") for k,v in p.items()}
+stopped=sorted(k for k,c in clock.items() if c is not None and c >= W)
+unknown=sorted(k for k,c in clock.items() if c is None)
+if stopped:
+    kind="wedge"
+    why="partitions stalled %ds: %s -- no block for %s" % (worst, names, ", ".join(
+        "%ds on %s" % (clock[k], k) for k in stopped))
+elif unknown or not p:
+    kind="wedge"
+    why="partitions stalled %ds: %s -- no height clock on %s, so not proven to be closing blocks" % (
+        worst, names, ",".join(unknown) or "any partition")
+else:
+    kind="delivery-stall"
+    why="delivery stalled %ds into %s; every partition closed a block within %ds (%s)" % (
+        worst, names, W, ", ".join("%s %ds" % (k, clock[k]) for k in sorted(clock)))
+print("%d %s %d %d %s %s" % (worst, names, lf.get("blocks") or 0,
+                             lf.get("blocksEmpty") or 0, kind, why))
+' "$WEDGE_SECS" 2>/dev/null)"
   [ -z "${worst:-}" ] && continue
 
   # Say what is being seen once a minute, so a capture that did not happen can
   # be explained after the fact instead of guessed at.
   ticks=$(( ${ticks:-0} + 1 ))
   if [ $(( ticks % 6 )) -eq 1 ]; then
-    log "watching: worstStall=${worst}s (${names}) threshold=${WEDGE_SECS}s blocks=${blocks} empty=${empties} captures=${n}/${MAX}"
+    log "watching: worstStall=${worst}s (${names}) kind=${kind} threshold=${WEDGE_SECS}s blocks=${blocks} empty=${empties} captures wedge=${n_wedge}/${MAX} delivery-stall=${n_delivery}/${MAX}"
   fi
 
   # Track block production for the log line only. Do NOT use "empty blocks are
@@ -162,10 +206,11 @@ print("%d %s %d %d" % (max([x[0] for x in s]) if s else 0,
 
   if [ "$worst" -ge "$WEDGE_SECS" ]; then
     now=$(date +%s)
-    if [ $(( now - last )) -ge "$COOLDOWN" ] || [ "$last" -eq 0 ]; then
-      capture "partitions stalled ${worst}s: $names"
-      last=$(date +%s); n=$(( n + 1 ))
-      [ "$n" -ge "$MAX" ] && log "wedgewatch: $MAX captures taken, no more will be written"
+    if due "$kind" "$now"; then
+      capture "$why" "$kind"
+      taken "$kind" "$(date +%s)"
+      due "$kind" "$(( $(date +%s) + COOLDOWN ))" || \
+        log "wedgewatch: $MAX $kind captures taken, no more of that kind will be written"
     fi
   fi
 done

@@ -71,6 +71,7 @@ def _final_rows():
     the process is already going, and a monitor that hangs on the way out
     keeps its port for the next run.
     """
+    ns = {}
     try:
         # NEVER a blocking acquire: this also runs from the signal handler,
         # and if the signal lands while the collector holds LOCK the monitor
@@ -84,16 +85,30 @@ def _final_rows():
         finally:
             if got:
                 LOCK.release()
-        if ns.get("submissions"):
-            write_submissions_csv(ns["submissions"], force=True)
-        if ns.get("mem"):
-            write_mem_csv(ns["mem"], force=True)
-        write_nodestate_csv(final_starts(_NODESTATE_TRACK, time.time()))
     except Exception as e:
+        _final_fault("reading the state", e)
+    # Each file's final write stands alone (#4414): they shared one `try`,
+    # so a fault writing submissions.csv or mem.csv dropped nodestate.csv's
+    # final rows for every node, and each start's last reading is what the
+    # manifest's rejoin verdict is judged on.
+    for what, write in (
+            ("submissions.csv", lambda: ns.get("submissions") and
+             write_submissions_csv(ns["submissions"], force=True)),
+            ("mem.csv", lambda: ns.get("mem") and
+             write_mem_csv(ns["mem"], force=True)),
+            ("nodestate.csv", lambda: write_nodestate_csv(
+                final_starts(_NODESTATE_TRACK, time.time())))):
         try:
-            sys.stderr.write("final rows: %r\n" % (e,))
-        except Exception:
-            pass
+            write()
+        except Exception as e:
+            _final_fault(what, e)
+
+
+def _final_fault(what, e):
+    try:
+        sys.stderr.write("final rows: %s: %r\n" % (what, e))
+    except Exception:
+        pass
 
 
 def _on_signal(sig, _frame):
@@ -754,14 +769,25 @@ def stalled_by_delivery(flows, now):
 
 def apply_delivery_stall(progress, red_for):
     """A partition whose inbound delivery has been red for STALL_SECS is
-    stalled for the watchdogs, whatever its height is doing (#4285)."""
+    stalled for the watchdogs, whatever its height is doing (#4285).
+
+    `stalledBy` says which: `blocks` when its height has not moved for
+    STALL_SECS (a wedge, whatever delivery is doing), `delivery` when it
+    has and only delivery stopped. `blocksStalledFor` — seconds since its
+    height last moved — is left as assess_progress set it, because
+    `stalledFor` becomes the delivery clock here, and without the height
+    clock beside it nobody reading /data could tell a delivery stall from
+    a wedge (#4414: run 20260924T074702Z's capture was named a wedge while
+    every partition kept closing blocks)."""
     for dst, secs in (red_for or {}).items():
         p = (progress or {}).get(dst)
         if p is None or secs < STALL_SECS:
             continue
         p["state"] = "stalled"
         p["stalledFor"] = max(p.get("stalledFor") or 0, round(secs, 1))
-        p["stalledBy"] = "delivery"
+        p["deliveryStalledFor"] = round(secs, 1)
+        if (p.get("blocksStalledFor") or 0) < STALL_SECS:
+            p["stalledBy"] = "delivery"
     return progress
 
 
@@ -821,10 +847,15 @@ def assess_progress(heights, now):
             "height": h,
             "state": "stalled" if stalled >= STALL_SECS else "live",
             "stalledFor": round(stalled, 1),
+            # The height clock, kept apart from `stalledFor`, which a
+            # delivery stall overwrites (apply_delivery_stall, #4414).
+            "blocksStalledFor": round(stalled, 1),
             "secPerBlock": sec_per_block,
             "avgSecPerBlock": avg_sec_per_block,
             "blocksSeen": h - h0,
         }
+        if stalled >= STALL_SECS:
+            out[part]["stalledBy"] = "blocks"
     return out
 
 

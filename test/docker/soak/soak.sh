@@ -1351,7 +1351,9 @@ elif unmeasured:
         % (unmeasured, len(events)))
 if SER["dropped"]:
     row("samples dropped as incomplete",
-        "%d of %d — a node reported no counts at those, and a fleet total "
+        "%d of %d — a node answered no scrape at those (every one of its rows "
+        "empty; a node empty on one partition only is joining it and counts 0), "
+        "and a fleet total "
         "missing one node dips by that node's count"
         % (SER["dropped"], len(SER["samples"])))
 reset = runseries.resets_row(SER)
@@ -1596,7 +1598,11 @@ TREND_N = 5
 last = rows_at[-1]
 per = last["byPair"]
 total = sum(per.values())
-(wv, wk) = max((v, k) for k, v in per.items())
+# The worst is a pair that REPORTED: a joining or never-submitted pair is 0
+# by construction and naming it "worst 0" says nothing about any counter.
+counted = {k: v for k, v in per.items()
+           if k not in set(last.get("joining", ())) | set(last.get("uncounted", ()))}
+(wv, wk) = max((v, k) for k, v in (counted or per).items())
 
 vals = [s["total"] for s in rows_at[-TREND_N:]]
 if len(vals) < 2:
@@ -1636,13 +1642,37 @@ if lg_exit:
     except ValueError:
         pass
 if S["dropped"]:
-    final += ("; %d sample%s skipped as incomplete (a node reported no "
-              "counts)" % (S["dropped"], "" if S["dropped"] == 1 else "s"))
+    final += ("; %d sample%s skipped as incomplete (a node answered no "
+              "scrape)" % (S["dropped"], "" if S["dropped"] == 1 else "s"))
     if S["samples"][-1]["time"] != last["time"]:
         final += " — INCLUDING THE LAST, so this is not the final row"
 if S["resets"]:
-    final += "; %d counter reset%s carried forward" % (
-        len(S["resets"]), "" if len(S["resets"]) == 1 else "s")
+    # The headline carries every restarted counter's settled figure
+    # (#4364), so it is not the sum of the row it is "as of". Say both, or
+    # a reader adding up the final row finds a different number and cannot
+    # tell which one is wrong (#4414: 2973 in the row, 3004 carried).
+    own = {}
+    for r in raw:
+        if r["time"] == last["time"]:
+            v = runseries._int(r.get(runseries.STRANDED))
+            if v is not None:
+                own[(r.get("node"), r.get("partition"))] = v
+    carried = sum(c for _, _, _, c in S["resets"])
+    final += ("; %d counter reset%s carried forward (%d stranded before a "
+              "restart; the final row's own readings sum to %d)" % (
+                  len(S["resets"]), "" if len(S["resets"]) == 1 else "s",
+                  carried, sum(own.values())))
+# A node that answered with an empty row for a partition has no counter
+# there in that process, and it has counted 0 (#4414): joining, if the pair
+# counted earlier in the run; never counted, if it has not.
+if last.get("joining"):
+    j = last["joining"]
+    final += ("; %d (node, partition) joining at this sample, counted 0 "
+              "(%s)" % (len(j), ", ".join("%s/%s" % k for k in j)))
+if last.get("uncounted"):
+    j = last["uncounted"]
+    final += ("; %d (node, partition) never submitted to this run, counted 0 "
+              "(%s)" % (len(j), ", ".join("%s/%s" % k for k in j)))
 if stopped_early:
     final += ("; the run was stopped by stallkill, so the load generator was "
               "killed mid-flight and this is NOT a drained sample")
@@ -1704,7 +1734,10 @@ else:
   fi
   # A run that wedged and dumped is the most valuable kind of run there is;
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
-  echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
+  # Two kinds, counted apart (#4414): run 20260924T074702Z counted a
+  # delivery stall, every partition still closing blocks, as a wedge.
+  echo "| wedge captures (a partition closed no block for ${WEDGE_SECS:-120}s; #4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
+  echo "| delivery-stall captures (every partition kept closing blocks while a synthetic flow into one was red for ${WEDGE_SECS:-120}s; #4285) | $(ls -d "$rd"/delivery-stall-* 2>/dev/null | wc -l) $(ls -d "$rd"/delivery-stall-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
   echo "| accepted, neither certified here, taken on relay, nor refused (#, whole run, the validators) | $(sub_row validator "$lg_exit" "$stopped_early") |"
   echo "| restarted node rejoined (per node and partition: gauge ACTIVE, executed block within ${REJOIN_MAX_BEHIND:-5} of the highest block any of the partition's answering validators executed, through its last reading, and every anchor it stated agreeing with its peers'; s = container start to the first sample ACTIVE and within that bound; the validators) | $(nodestate_row validator) |"
   if [ "$n_fol" -gt 0 ]; then

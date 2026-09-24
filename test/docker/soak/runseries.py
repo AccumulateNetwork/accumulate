@@ -14,11 +14,16 @@ so the two cannot drift apart: `soak.sh` imports it from both.
 
 Three corrections live here, each from a run or a review:
 
-**A sample is a reading only when every (node, partition) reported.** A
-container mid-restart answers no scrape, its rows are blank, and summing
-what is left dips the total by that node's real count on exactly the
-sample it was unreachable. The window minimum then takes the dip as the
-settled level: a loss masked at the restart, or a negative step.
+**A sample is a reading only when every (node, partition) reported or is
+joining.** A container mid-restart answers no scrape, its rows are blank,
+and summing what is left dips the total by that node's real count on
+exactly the sample it was unreachable. The window minimum then takes the
+dip as the settled level: a loss masked at the restart, or a negative
+step. But an empty row BESIDE a reported one on the same node is not an
+unreachable node — one scrape answers for both partitions — it is a
+counter the process has not created: the node is joining that partition
+and has counted 0 there (#4414). Reading it as incomplete blanked the
+headline of run 20260924T074702Z for its last sixteen minutes.
 
 **Prometheus counters are process-local, so a restarted or re-added node
 starts again at 0.** Its pre-restart cumulative loss leaves the fleet
@@ -71,9 +76,13 @@ def load(path, role="", window=120):
 
     ``pairs``     every (node, partition) the file mentions for this role
     ``samples``   one per timestamp, ascending, each
-                  ``{time, epoch, complete, byPair, total, reported}``
-                  where `byPair` and `total` are RESET-CORRECTED and are
-                  present only on a complete sample
+                  ``{time, epoch, complete, byPair, total, reported,
+                  joining, uncounted}`` where `byPair` and `total` are
+                  RESET-CORRECTED and are present only on a complete
+                  sample; `joining` and `uncounted` list the pairs read as
+                  0 because their node answered and their counter does not
+                  exist (`no_counter_pairs`) — joining if the pair counted
+                  earlier in the run, uncounted if it never has
     ``resets``    ``[(time, node, partition, carried)]``, when each was
                   detected and what it carried forward
     ``dropped``   how many samples were not complete
@@ -103,22 +112,64 @@ def load(path, role="", window=120):
     # recent raw stranded readings (whose FLOOR the offset takes on when a
     # reset happens — one reading could be a jitter spike).
     off, prev_acc, recent = {}, {}, {}
+    # A joining carry not yet confirmed: pair -> (the `accepted` it had,
+    # what was carried, the reset entry, its readings before the gap).
+    unconfirmed = {}
     resets, samples, dropped = [], [], 0
+    ever = set()  # pairs that have reported a count at some sample
 
     for t in sorted(at):
         got = at[t]
         reported = {k for k, r in got.items()
                     if _int(r.get(STRANDED)) is not None}
-        if reported != pairs:
+        empty = no_counter_pairs(got, reported)
+        joining = {k for k in empty if k in ever}
+        uncounted = empty - joining
+        ever |= reported
+        if reported | empty != pairs:
             dropped += 1
             samples.append({"time": t, "epoch": _epoch(t), "complete": False,
-                            "byPair": {}, "total": None, "reported": reported})
+                            "byPair": {}, "total": None, "reported": reported,
+                            "joining": sorted(joining),
+                            "uncounted": sorted(uncounted)})
             continue
         by_pair = {}
         now = _epoch(t)
+        for k in sorted(empty):
+            # A counter that existed and is now uncreated belongs to a new
+            # process: carry what the old one had settled at, exactly as a
+            # counter going backwards does, and forget its `accepted` so
+            # that the counter's reappearance — lower, as a new process's
+            # must be — is not carried a second time.
+            if prev_acc.get(k) is not None:
+                hist = [v for tt, v in recent.get(k, ())
+                        if tt >= now - window] or \
+                    [v for _, v in recent.get(k, ())][-1:]
+                carried = min(hist) if hist else 0
+                off[k] = off.get(k, 0) + carried
+                resets.append((t, k[0], k[1], carried))
+                unconfirmed[k] = (prev_acc[k], carried, resets[-1],
+                                  recent.get(k, []))
+                recent[k] = []
+                prev_acc[k] = None
+            by_pair[k] = off.get(k, 0)
         for k, r in got.items():
+            if k in empty:
+                continue
             raw = _int(r.get(STRANDED))
             acc = _int(r.get("accepted"))
+            # The counter is back after a joining carry. HIGHER than it was
+            # is the same process — a new one starts at 0 and cannot be —
+            # so the row was lost, not the process: `_scrape_one` parses a
+            # curl body cut by its timeout, and a cut between two
+            # partitions' label sets empties one of them (reviewer F2 on
+            # #4414). Unwind the carry and the reset it recorded; LOWER, it
+            # stands.
+            u = unconfirmed.pop(k, None)
+            if u is not None and acc is not None and acc >= u[0]:
+                off[k] -= u[1]
+                resets.remove(u[2])
+                prev_acc[k], recent[k] = u[0], u[3]
             # A counter that went BACKWARDS is a new process, not a
             # correction: carry forward what the old one had SETTLED at —
             # the floor of its last `window` of readings, because one
@@ -139,9 +190,35 @@ def load(path, role="", window=120):
             by_pair[k] = raw + off.get(k, 0)
         samples.append({"time": t, "epoch": _epoch(t), "complete": True,
                         "byPair": by_pair, "total": sum(by_pair.values()),
-                        "reported": reported})
+                        "reported": reported, "joining": sorted(joining),
+                        "uncounted": sorted(uncounted)})
     return {"error": None, "pairs": pairs, "samples": samples,
             "resets": resets, "dropped": dropped}
+
+
+def no_counter_pairs(got, reported):
+    """The (node, partition) rows of one sample whose counter does not exist
+    in the node's process (#4414): the row is present and empty, and the
+    same node reported a count on another partition at this sample.
+
+    One scrape of a container answers for every partition it runs, so a
+    node that reported anywhere was reachable, and an empty row beside it
+    is a counter that does not exist in that process: nothing has been
+    submitted to that partition since the process started. A restarted
+    node whose Directory has not rejoined is the case that exists — its
+    BVN relays everything it accepts while its Directory row stays empty
+    for the rest of the run — and it has counted 0 there, which is a
+    reading. A node whose rows are ALL empty answered no scrape at all;
+    that is neither, and the sample stays incomplete.
+
+    `load` names the two kinds apart: JOINING when the pair counted
+    earlier in the run (its node restarted and has not created the counter
+    again), UNCOUNTED when it never has (nothing was ever submitted to that
+    partition on that node — the follower's Directory, on every run)."""
+    answered = {n for n, _ in reported}
+    return {k for k, r in got.items()
+            if k not in reported and k[0] in answered
+            and _int(r.get(STRANDED)) is None}
 
 
 def complete(series):
